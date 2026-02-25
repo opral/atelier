@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { openLix, createCheckpoint } from "@lix-js/sdk";
+import { openLix } from "@lix-js/sdk";
 import markdownPluginV2Manifest from "../../../lix/packages/plugin-md-v2/manifest.json";
 import markdownPluginV2WasmRaw from "../../../lix/target/wasm32-wasip2/release/plugin_md_v2.wasm?raw";
 import { selectWorkingDiffFiles } from "./queries";
@@ -39,7 +39,7 @@ describe("selectWorkingDiffFiles", () => {
 			.execute();
 
 		// Establish baseline so subsequent edits appear in the working diff
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		await lix.db
 			.updateTable("file")
@@ -93,7 +93,7 @@ describe("selectWorkingDiffFiles", () => {
 		// TODO: add a regression test for deletions once file history joins are re-introduced
 
 		// Checkpointing clears the working diff
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 		const cleared = await selectWorkingDiffFiles(lix).execute();
 		expect(cleared).toHaveLength(0);
 	});

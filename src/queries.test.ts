@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { openLix, createCheckpoint } from "@lix-js/sdk";
+import { openLix } from "@lix-js/sdk";
 import {
 	selectFiles,
 	selectFilesystemEntries,
@@ -188,7 +188,7 @@ describe("selectWorkingDiffCount", () => {
 				lixcol_untracked: true,
 			})
 			.execute();
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		// Make a change in A
 		await lix.db
@@ -224,7 +224,7 @@ describe("selectWorkingDiffCount", () => {
 		expect(diffB?.total ?? 0).toBeGreaterThan(0);
 
 		// Checkpoint and expect zero for B
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 		const diffBAfter = await selectWorkingDiffCount(lix).executeTakeFirst();
 		expect(diffBAfter?.total ?? 0).toBe(0);
 	});
@@ -258,7 +258,7 @@ describe("selectWorkingDiffCount", () => {
 			})
 			.execute();
 
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		// Reorder paragraphs without editing content
 		const after = `# Title\n\nParagraph 2.\n\nParagraph 1.`;

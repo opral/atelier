@@ -8,7 +8,7 @@ import {
 	screen,
 } from "@testing-library/react";
 import { LixProvider } from "@lix-js/react-utils";
-import { openLix, createCheckpoint } from "@lix-js/sdk";
+import { openLix } from "@lix-js/sdk";
 import markdownPluginV2Manifest from "../../../lix/packages/plugin-md-v2/manifest.json";
 import markdownPluginV2WasmRaw from "../../../lix/target/wasm32-wasip2/release/plugin_md_v2.wasm?raw";
 import { CheckpointView, view as checkpointViewDefinition } from "./index";
@@ -38,6 +38,7 @@ describe("CheckpointView", () => {
 			manifestJson: markdownPluginV2Manifest,
 			wasmBytes: markdownPluginV2WasmBytes,
 		});
+
 		const fileId = "checkpoint_view_test_file";
 
 		await lix.db
@@ -49,7 +50,7 @@ describe("CheckpointView", () => {
 			})
 			.execute();
 
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		await lix.db
 			.updateTable("file")
@@ -100,7 +101,7 @@ describe("CheckpointView", () => {
 				data: new TextEncoder().encode("Initial"),
 			})
 			.execute();
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 		await lix.db
 			.updateTable("file")
 			.set({ data: new TextEncoder().encode("Changed") })
@@ -192,7 +193,7 @@ describe("CheckpointView", () => {
 			})
 			.execute();
 
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		await lix.db
 			.updateTable("file")

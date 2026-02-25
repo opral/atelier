@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { openLix, createCheckpoint } from "@lix-js/sdk";
+import { openLix } from "@lix-js/sdk";
 import { selectCheckpoints } from "@/queries";
 import { selectCheckpointFiles } from "./queries";
 import markdownPluginV2Manifest from "../../../lix/packages/plugin-md-v2/manifest.json";
@@ -31,7 +31,7 @@ describe("selectCheckpointFiles", () => {
 			.execute();
 
 		// Baseline checkpoint for initial state
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		// Modify the file to generate Markdown entity changes
 		await lix.db
@@ -43,7 +43,7 @@ describe("selectCheckpointFiles", () => {
 			.execute();
 
 		// Capture the change in a new checkpoint
-		await createCheckpoint({ lix });
+		await lix.createCheckpoint();
 
 		const checkpoints = await selectCheckpoints({ lix }).execute();
 		expect(checkpoints.length).toBeGreaterThan(0);

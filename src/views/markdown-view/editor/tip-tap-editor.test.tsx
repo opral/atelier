@@ -13,7 +13,6 @@ import {
 	type Lix,
 	createVersion,
 	switchVersion,
-	createCheckpoint,
 	selectWorkingDiff,
 } from "@lix-js/sdk";
 import { TipTapEditor } from "./tip-tap-editor";
@@ -765,7 +764,7 @@ For example:
 		})
 		.execute();
 
-	await createCheckpoint({ lix });
+	await lix.createCheckpoint();
 
 	const diffBefore = await selectWorkingDiff({ lix })
 		.select(["diff.entity_id"])

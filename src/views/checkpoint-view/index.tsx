@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Flag } from "lucide-react";
 import { LixProvider, useLix, useQuery } from "@lix-js/react-utils";
-import { createCheckpoint } from "@lix-js/sdk";
 import { selectWorkingDiffFiles } from "./queries";
 import type { ViewContext } from "../../app/types";
 import { ChangedFilesList } from "./changed-files-list";
@@ -79,7 +78,7 @@ export function CheckpointView({ context }: CheckpointViewProps) {
 		}
 		setIsCreating(true);
 		try {
-			await createCheckpoint({ lix });
+			await (lix as any).createCheckpoint();
 			setSelectedFiles(new Set());
 		} catch (error) {
 			console.error("Failed to create checkpoint", error);
