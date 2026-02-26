@@ -45,7 +45,7 @@ export function TopBar({
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(({ fn }) => [fn.count<number>("id").as("count")])
-			.where("path", "is not", "/AGENTS.md"),
+			.where("path", "!=", "/AGENTS.md"),
 	);
 
 	const hasFiles = (fileCount?.count ?? 0) > 0;

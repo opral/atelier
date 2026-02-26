@@ -260,66 +260,39 @@ async function upsertValue<T>(
 	value: T,
 	opts: { defaultVersionId: string; untracked: boolean },
 ) {
+	if (opts.untracked) {
+		const versionId =
+			opts.defaultVersionId === "active"
+				? (
+						await qb(lix)
+							.selectFrom("lix_active_version")
+							.select("version_id")
+							.executeTakeFirstOrThrow()
+					).version_id
+				: opts.defaultVersionId;
+
+		await qb(lix)
+			.insertInto("lix_key_value_by_version")
+			.values({
+				key,
+				value,
+				lixcol_version_id: versionId,
+				lixcol_untracked: true,
+			})
+			.onConflict((oc) =>
+				oc
+					.columns(["key", "lixcol_version_id"])
+					.doUpdateSet({ value, lixcol_untracked: true }),
+			)
+			.execute();
+		return;
+	}
+
 	await qb(lix)
-		.transaction()
-		.execute(async (trx) => {
-			if (opts.untracked) {
-				let versionId: string;
-				if (opts.defaultVersionId === "active") {
-					const row = await trx
-						.selectFrom("lix_active_version")
-						.select("version_id")
-						.executeTakeFirstOrThrow();
-					versionId = row.version_id as unknown as string;
-				} else {
-					versionId = opts.defaultVersionId;
-				}
-
-				const exists = await trx
-					.selectFrom("lix_key_value_by_version")
-					.where("key", "=", key)
-					.where("lixcol_version_id", "=", versionId)
-					.select("key")
-					.executeTakeFirst();
-
-				if (exists) {
-					await trx
-						.updateTable("lix_key_value_by_version")
-						.set({ value, lixcol_untracked: true })
-						.where("key", "=", key)
-						.where("lixcol_version_id", "=", versionId)
-						.execute();
-				} else {
-					await trx
-						.insertInto("lix_key_value_by_version")
-						.values({
-							key,
-							value,
-							lixcol_version_id: versionId,
-							lixcol_untracked: true,
-						})
-						.execute();
-				}
-				return;
-			}
-
-			const trackedExists = await trx
-				.selectFrom("lix_key_value")
-				.where("key", "=", key)
-				.select("key")
-				.executeTakeFirst();
-
-			if (trackedExists) {
-				await trx
-					.updateTable("lix_key_value")
-					.set({ value })
-					.where("key", "=", key)
-					.execute();
-				return;
-			}
-
-			await trx.insertInto("lix_key_value").values({ key, value }).execute();
-		});
+		.insertInto("lix_key_value")
+		.values({ key, value })
+		.onConflict((oc) => oc.column("key").doUpdateSet({ value }))
+		.execute();
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
