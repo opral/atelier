@@ -2,7 +2,7 @@ import { Editor } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import { qb } from "@lix-js/kysely";
-import { type Lix, withWriterKey } from "@lix-js/sdk";
+import { type Lix } from "@lix-js/sdk";
 import {
 	MarkdownWc,
 	astToTiptapDoc,
@@ -249,10 +249,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					: [];
 				const order = ensureTopLevelIds(children);
 				try {
-					await withWriterKey(
-						qb(lix),
-						writerKey ?? `flashtype_tiptap_editor`,
-						async (trx) => {
+					await qb(lix, {
+						writerKey: writerKey ?? `flashtype_tiptap_editor`,
+					})
+						.transaction()
+						.execute(async (trx: any) => {
 							await upsertNodes(trx, fileId, children);
 							await upsertRootOrder(trx, fileId, order);
 							const keepIds = [...order, "root"];
@@ -271,8 +272,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 									.where("entity_id", "<>", "root")
 									.execute();
 							}
-						},
-					);
+						});
 				} finally {
 					persistRunning = false;
 					if (persistQueued) {
