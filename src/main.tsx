@@ -28,7 +28,7 @@ export const AppRoot = () => {
 		let current: Lix | undefined;
 		(async () => {
 			try {
-				const instance = await openLix();
+				const instance = await openLix({});
 				await instance.installPlugin({
 					manifestJson: markdownPluginV2Manifest,
 					wasmBytes: markdownPluginV2WasmBytes,

@@ -1,5 +1,7 @@
 packages:
   - "."
   - "lix"
-  - "lix/packages/**"
+  - "lix/packages/js-sdk"
+  - "lix/packages/js-kysely"
+  - "lix/packages/react-utils"
   - "!lix/packages/**/dist"
