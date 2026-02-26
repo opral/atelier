@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import { LixProvider } from "@lix-js/react-utils";
 import { openLix, type Lix } from "@lix-js/sdk";
-import { initLixInspector } from "@lix-js/inspector";
 import { KeyValueProvider } from "./hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "./hooks/key-value/schema";
 import { ErrorFallback } from "./main.error";
@@ -42,7 +41,6 @@ export const AppRoot = () => {
 					return;
 				}
 				current = instance;
-				await initLixInspector({ lix: instance, show: false });
 				if (!cancelled) setLix(instance);
 			} catch (e) {
 				if (!cancelled) setError(e);

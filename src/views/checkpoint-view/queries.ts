@@ -1,6 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
-import { selectWorkingDiff } from "@lix-js/sdk";
-import { sql } from "@lix-js/kysely";
+import { qb, sql } from "@lix-js/kysely";
 
 export type WorkingFileSummary = {
 	id: string;
@@ -13,7 +12,8 @@ export type WorkingFileSummary = {
  * derived status and stable display path.
  */
 export function selectWorkingDiffFiles(lix: Lix) {
-	return selectWorkingDiff({ lix })
+	return qb(lix)
+		.selectFrom("lix_working_changes as diff")
 		.where("diff.status", "!=", "unchanged")
 		.where("diff.file_id", "!=", "lix")
 		.leftJoin("file", "file.id", "diff.file_id")

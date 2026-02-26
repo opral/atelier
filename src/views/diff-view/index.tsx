@@ -1,7 +1,7 @@
 import { Suspense, useMemo } from "react";
 import type { ReactNode } from "react";
 import { LixProvider, useQuery } from "@lix-js/react-utils";
-import { selectWorkingDiff } from "@lix-js/sdk";
+import { qb } from "@lix-js/kysely";
 import type { Lix } from "@lix-js/sdk";
 import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
 import { Diff as DiffIcon, Loader2 } from "lucide-react";
@@ -24,7 +24,7 @@ export function DiffView({ config }: DiffViewProps) {
 }
 
 function DiffViewContent({ config }: DiffViewProps) {
-	const queryFactory = useMemo(() => {
+	const queryFactory = useMemo<(lix: Lix) => any>(() => {
 		if (!config?.query) {
 			return (lix: Lix) => emptyDiffQuery(lix);
 		}
@@ -32,7 +32,7 @@ function DiffViewContent({ config }: DiffViewProps) {
 		return (lix: Lix) => query(lix);
 	}, [config]);
 
-	const rawDiffs = useQuery<RenderableDiff>(queryFactory);
+	const rawDiffs = useQuery(queryFactory) as RenderableDiff[];
 
 	const diffs = useMemo<RenderableDiff[]>(() => {
 		if (!Array.isArray(rawDiffs) || rawDiffs.length === 0) return [];
@@ -75,11 +75,12 @@ function DiffViewContent({ config }: DiffViewProps) {
 }
 
 function emptyDiffQuery(lix: Lix) {
-	return selectWorkingDiff({ lix })
+	return (qb(lix) as any)
+		.selectFrom("lix_working_changes as diff")
 		.where("diff.entity_id", "=", "__empty_diff__")
 		.leftJoin("change as after", "after.id", "diff.after_change_id")
 		.leftJoin("change as before", "before.id", "diff.before_change_id")
-		.select((eb) => [
+		.select((eb: any) => [
 			eb.ref("diff.entity_id").as("entity_id"),
 			eb.ref("diff.schema_key").as("schema_key"),
 			eb.ref("diff.status").as("status"),
@@ -92,8 +93,7 @@ function emptyDiffQuery(lix: Lix) {
 					eb.val(MARKDOWN_PLUGIN_KEY),
 				)
 				.as("plugin_key"),
-		])
-		.$castTo<RenderableDiff>();
+		]) as any;
 }
 
 function normalizeSnapshot(snapshot: unknown): Record<string, any> | null {

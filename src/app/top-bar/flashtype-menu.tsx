@@ -4,7 +4,6 @@ import {
 	FileDown,
 	FilePlus,
 	Hammer,
-	Search,
 	Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +17,6 @@ import {
 	DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { useLix } from "@lix-js/react-utils";
-import { toggleLixInspector } from "@lix-js/inspector";
 import { seedMarkdownFiles } from "@/seed";
 import { useCallback } from "react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
@@ -51,7 +49,10 @@ export function FlashtypeMenu() {
 	const handleExportLix = async () => {
 		if (!lix) return;
 		try {
-			const blob = await lix.toBlob();
+			const snapshotBytes = await lix.exportSnapshot();
+			const blob = new Blob([new Uint8Array(snapshotBytes)], {
+				type: "application/octet-stream",
+			});
 			const url = URL.createObjectURL(blob);
 			const anchor = document.createElement("a");
 			anchor.href = url;
@@ -69,13 +70,14 @@ export function FlashtypeMenu() {
 		}
 	};
 
-	const handleToggleInspector = async () => {
-		try {
-			await toggleLixInspector();
-		} catch (error) {
-			console.error("Failed to toggle Lix Inspector", error);
-		}
-	};
+	// Inspector is intentionally disabled for now to reduce merge conflicts.
+	// const handleToggleInspector = async () => {
+	// 	try {
+	// 		await toggleLixInspector();
+	// 	} catch (error) {
+	// 		console.error("Failed to toggle Lix Inspector", error);
+	// 	}
+	// };
 
 	const handleSeedMarkdown = async () => {
 		if (!lix) return;
@@ -119,7 +121,7 @@ export function FlashtypeMenu() {
 						<span>Developer tools</span>
 					</DropdownMenuSubTrigger>
 					<DropdownMenuSubContent className="min-w-56 text-xs">
-						<DropdownMenuItem
+						{/* <DropdownMenuItem
 							className="gap-1.5 text-xs"
 							onSelect={() => {
 								void handleToggleInspector();
@@ -127,7 +129,7 @@ export function FlashtypeMenu() {
 						>
 							<Search className="h-3.5 w-3.5" />
 							<span>Toggle Lix Inspector</span>
-						</DropdownMenuItem>
+						</DropdownMenuItem> */}
 						<DropdownMenuItem
 							className="gap-1.5 text-xs"
 							onSelect={() => {

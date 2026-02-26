@@ -1,62 +1,36 @@
-import { useEffect, useState } from "react";
-import type { RenderDiffArgs } from "@lix-js/sdk";
-import { useLix } from "@lix-js/react-utils";
+import type { RenderableDiff } from "@/app/types";
 
 export function Diff(props: {
-	diffs: RenderDiffArgs["diffs"];
+	diffs: RenderableDiff[];
 	className?: string;
 	contentClassName?: string;
 }) {
-	const lix = useLix();
-	const [renderedHtml, setRenderedHtml] = useState<string | null>(null);
-	const pluginKey = props.diffs?.[0]?.plugin_key;
-
-	useEffect(() => {
-		let cancelled = false;
-
-		const load = async () => {
-			if (!lix || !pluginKey) {
-				if (!cancelled) setRenderedHtml(null);
-				return;
-			}
-
-			try {
-				const plugins = await lix.plugin.getAll();
-				const plugin = plugins[0];
-				if (cancelled) return;
-				if (!plugin?.renderDiff) {
-					setRenderedHtml(null);
-					return;
-				}
-
-				const html = await plugin.renderDiff({ diffs: props.diffs });
-				if (!cancelled) setRenderedHtml(html ?? null);
-			} catch (error) {
-				if (!cancelled) {
-					console.error("Failed to render diff", error);
-					setRenderedHtml(null);
-				}
-			}
-		};
-
-		load();
-		return () => {
-			cancelled = true;
-		};
-	}, [lix, pluginKey, props.diffs]);
-
-	if (!renderedHtml) return null;
-
-	const contentClasses = ["lix-diff-content", props.contentClassName]
-		.filter(Boolean)
-		.join(" ");
+	if (!props.diffs.length) {
+		return null;
+	}
 
 	return (
 		<div className={props.className}>
-			<div
-				className={contentClasses}
-				dangerouslySetInnerHTML={{ __html: renderedHtml }}
-			/>
+			<div className={props.contentClassName}>
+				{props.diffs.map((diff) => (
+					<section
+						key={`${diff.entity_id}:${diff.schema_key}`}
+						className="rounded border border-border p-3 mb-3"
+					>
+						<header className="mb-2 text-xs text-muted-foreground">
+							{diff.status} • {diff.schema_key} • {diff.entity_id}
+						</header>
+						<div className="grid gap-3 md:grid-cols-2">
+							<pre className="overflow-auto rounded bg-muted p-2 text-xs">
+								{JSON.stringify(diff.before_snapshot_content, null, 2)}
+							</pre>
+							<pre className="overflow-auto rounded bg-muted p-2 text-xs">
+								{JSON.stringify(diff.after_snapshot_content, null, 2)}
+							</pre>
+						</div>
+					</section>
+				))}
+			</div>
 		</div>
 	);
 }

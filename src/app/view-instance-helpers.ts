@@ -1,4 +1,4 @@
-import { selectWorkingDiff } from "@lix-js/sdk";
+import { qb, sql } from "@lix-js/kysely";
 import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
 import type { DiffViewConfig, RenderableDiff, ViewKind } from "./types";
 
@@ -68,27 +68,25 @@ export function createWorkingVsCheckpointDiffConfig(
 ): DiffViewConfig {
 	return {
 		title,
-		query: (lix) =>
-			selectWorkingDiff({ lix })
+		query: (lix) => {
+			const db = qb(lix) as any;
+			return db
+				.selectFrom("lix_working_changes as diff")
 				.where("diff.file_id", "=", fileId)
 				.orderBy("diff.entity_id")
 				.leftJoin("change as after", "after.id", "diff.after_change_id")
 				.leftJoin("change as before", "before.id", "diff.before_change_id")
-				.select((eb) => [
-					eb.ref("diff.entity_id").as("entity_id"),
-					eb.ref("diff.schema_key").as("schema_key"),
-					eb.ref("diff.status").as("status"),
-					eb.ref("before.snapshot_content").as("before_snapshot_content"),
-					eb.ref("after.snapshot_content").as("after_snapshot_content"),
-					eb.fn
-						.coalesce(
-							eb.ref("after.plugin_key"),
-							eb.ref("before.plugin_key"),
-							eb.val(MARKDOWN_PLUGIN_KEY),
-						)
-						.as("plugin_key"),
-				])
-				.$castTo<RenderableDiff>(),
+				.select([
+					"diff.entity_id as entity_id",
+					"diff.schema_key as schema_key",
+					"diff.status as status",
+					"before.snapshot_content as before_snapshot_content",
+					"after.snapshot_content as after_snapshot_content",
+					sql<string>`COALESCE(after.plugin_key, before.plugin_key, ${MARKDOWN_PLUGIN_KEY})`.as(
+						"plugin_key",
+					),
+				]) as any;
+		},
 	};
 }
 
