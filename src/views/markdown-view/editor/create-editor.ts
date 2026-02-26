@@ -2,7 +2,7 @@ import { Editor } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import { qb } from "@lix-js/kysely";
-import { nanoId, type Lix, withWriterKey } from "@lix-js/sdk";
+import { type Lix, withWriterKey } from "@lix-js/sdk";
 import {
 	MarkdownWc,
 	astToTiptapDoc,
@@ -46,6 +46,16 @@ const snapshotFingerprint = (value: unknown): string => {
 	return `{${keys
 		.map((key) => `${JSON.stringify(key)}:${snapshotFingerprint(obj[key])}`)
 		.join(",")}}`;
+};
+
+const createNodeId = (): string => {
+	if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+		return crypto.randomUUID().replaceAll("-", "").slice(0, 10);
+	}
+	return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.slice(
+		0,
+		10,
+	);
 };
 
 // Plain TipTap Editor factory (no React). Useful for unit/integration tests.
@@ -170,14 +180,16 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	 * - Assigns a new id if missing.
 	 * - Regenerates ids for duplicates (e.g., paragraph split that cloned attrs).
 	 */
-	async function ensureTopLevelIds(children: any[]): Promise<string[]> {
+	function ensureTopLevelIds(children: any[]): string[] {
 		const order: string[] = [];
 		const seen = new Set<string>();
 		for (const node of children) {
 			node.data = node.data || {};
 			let id = (node.data.id ?? "") as string;
 			if (!id || seen.has(id)) {
-				id = await nanoId({ lix, length: 10 });
+				do {
+					id = createNodeId();
+				} while (seen.has(id));
 				node.data.id = id;
 			}
 			seen.add(id);
@@ -235,7 +247,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				const children: any[] = Array.isArray((ast as any)?.children)
 					? ((ast as any).children as any[])
 					: [];
-				const order = await ensureTopLevelIds(children);
+				const order = ensureTopLevelIds(children);
 				try {
 					await withWriterKey(
 						qb(lix),

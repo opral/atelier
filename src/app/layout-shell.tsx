@@ -23,7 +23,7 @@ import {
 } from "@dnd-kit/core";
 import { useLix } from "@lix-js/react-utils";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
-import { nanoId, normalizeFilePath } from "@lix-js/sdk";
+import { normalizeFilePath } from "@/lib/path";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
@@ -731,15 +731,15 @@ function LayoutShellContent() {
 			rows.map((row) => normalizeFilePath(row.path)),
 		);
 		const path = deriveUntitledMarkdownPath(existingPaths);
-		const id = await nanoId({ lix });
-		await qb(lix)
+		const createdFile = await qb(lix)
 			.insertInto("file")
 			.values({
-				id,
 				path,
 				data: new TextEncoder().encode(""),
 			})
-			.execute();
+			.returning("id")
+			.executeTakeFirstOrThrow();
+		const id = createdFile.id;
 		handleOpenView({
 			panel: "central",
 			kind: FILE_VIEW_KIND,

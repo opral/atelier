@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Files, FileUp, FilePlus } from "lucide-react";
 import { LixProvider, useLix, useQuery } from "@lix-js/react-utils";
-import { nanoId, normalizeDirectoryPath, normalizeFilePath } from "@lix-js/sdk";
+import { normalizeDirectoryPath, normalizeFilePath } from "@/lib/path";
 import { selectFilesystemEntries } from "@/queries";
 import { buildFilesystemTree } from "@/views/files-view/build-filesystem-tree";
 import type { ViewContext } from "../../app/types";
@@ -144,15 +144,15 @@ export function FilesView({ context }: FilesViewProps) {
 			}
 			creatingRef.current = true;
 			try {
-				const id = await nanoId({ lix });
-				await qb(lix)
+				const createdFile = await qb(lix)
 					.insertInto("file")
 					.values({
-						id,
 						path,
 						data: new TextEncoder().encode(""),
 					})
-					.execute();
+					.returning("id")
+					.executeTakeFirstOrThrow();
+				const id = createdFile.id;
 				setPendingPaths((prev) => [...prev, path]);
 				setSelectedPath(path);
 				setSelectedKind("file");
