@@ -24,7 +24,7 @@ async function generateUniqueFilePath(
 
 	while (true) {
 		const existing = await qb(context.lix)
-			.selectFrom("file")
+			.selectFrom("lix_file")
 			.where("path", "=", filePath)
 			.select(["id"])
 			.executeTakeFirst();
@@ -63,7 +63,7 @@ export async function importFile({
 
 	// Create file
 	await qb(context.lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			path: filePath,
 			data: new TextEncoder().encode(content),
@@ -72,7 +72,7 @@ export async function importFile({
 
 	// Get auto-generated file ID
 	const newFile = await qb(context.lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.select("id")
 		.where("path", "=", filePath)
 		.executeTakeFirst();

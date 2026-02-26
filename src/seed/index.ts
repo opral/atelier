@@ -27,7 +27,7 @@ const SEED_DOCS: SeedDoc[] = [
 export async function seedMarkdownFiles(lix: Lix): Promise<void> {
 	for (const doc of SEED_DOCS) {
 		const exists = await qb(lix)
-			.selectFrom("file")
+			.selectFrom("lix_file")
 			.where("path", "=", doc.path)
 			.select(["path"])
 			.executeTakeFirst();
@@ -35,13 +35,13 @@ export async function seedMarkdownFiles(lix: Lix): Promise<void> {
 		const data = encoder.encode(doc.content);
 		if (exists) {
 			await qb(lix)
-				.updateTable("file")
+				.updateTable("lix_file")
 				.set({ data })
 				.where("path", "=", doc.path)
 				.execute();
 		} else {
 			await qb(lix)
-				.insertInto("file")
+				.insertInto("lix_file")
 				.values({ path: doc.path, data })
 				.execute();
 		}
@@ -50,7 +50,7 @@ export async function seedMarkdownFiles(lix: Lix): Promise<void> {
 
 export async function ensureAgentsFile(lix: Lix): Promise<void> {
 	const exists = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("path", "=", "/AGENTS.md")
 		.select(["path"])
 		.executeTakeFirst();
@@ -59,7 +59,7 @@ export async function ensureAgentsFile(lix: Lix): Promise<void> {
 
 	const data = encoder.encode(agentsSeed);
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({ path: "/AGENTS.md", data })
 		.execute();
 }

@@ -23,7 +23,7 @@ describe("selectCheckpointFiles", () => {
 		const filePath = "/docs/commit-view.md";
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileId,
 				path: filePath,
@@ -36,7 +36,7 @@ describe("selectCheckpointFiles", () => {
 
 		// Modify the file to generate Markdown entity changes
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({
 				data: encoder.encode("# Title\n\nInitial content.\n\nNew paragraph."),
 			})

@@ -86,7 +86,7 @@ test("renders initial document content", async () => {
 	const fileId = "file_render_doc";
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/render.md",
@@ -95,7 +95,7 @@ test("renders initial document content", async () => {
 		.execute();
 
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,
@@ -144,7 +144,7 @@ test("persists state changes on edit (paragraph append)", async () => {
 	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/test.md",
@@ -178,7 +178,7 @@ test("persists state changes on edit (paragraph append)", async () => {
 	});
 
 	const rows = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.where("schema_key", "=", paraSchemaKey)
 		.select(["entity_id", "snapshot_content"])
@@ -213,7 +213,7 @@ test("renders content under React.StrictMode", async () => {
 
 	const fileId = "file_strict";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/strict.md",
@@ -222,7 +222,7 @@ test("renders content under React.StrictMode", async () => {
 		.execute();
 
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,
@@ -271,7 +271,7 @@ test("shows placeholder only while focused on an empty document", async () => {
 	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/placeholder.md",
@@ -344,7 +344,7 @@ test("clicking the surface focuses the editor even when content exists", async (
 	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/has-content.md",
@@ -397,7 +397,7 @@ test("updates editor when switching to a version with different external state",
 	// Create a file and set it active
 	const fileId = "file_switch_version";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/switch.md",
@@ -406,7 +406,7 @@ test("updates editor when switching to a version with different external state",
 		.execute();
 
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,
@@ -439,7 +439,7 @@ test("updates editor when switching to a version with different external state",
 	const paraVer = AstSchemas.schemasByType.paragraph["x-lix-version"];
 	await insertMarkdownSchemas({ lix });
 	await qb(lix)
-		.insertInto("state_by_version")
+		.insertInto("lix_state_by_version")
 		.values({
 			entity_id: "root",
 			schema_key: rootKey,
@@ -451,7 +451,7 @@ test("updates editor when switching to a version with different external state",
 		} as any)
 		.execute();
 	await qb(lix)
-		.insertInto("state_by_version")
+		.insertInto("lix_state_by_version")
 		.values({
 			entity_id: "p1",
 			schema_key: paraKey,
@@ -495,7 +495,7 @@ test("updates editor when the file's state is changed externally in the same ver
 
 	const fileId = "file_external_state_update";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/external-state.md",
@@ -505,7 +505,7 @@ test("updates editor when the file's state is changed externally in the same ver
 
 	// Set active file id
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,
@@ -531,14 +531,14 @@ test("updates editor when the file's state is changed externally in the same ver
 	const paragraphSchemaKey = AstSchemas.schemasByType.paragraph["x-lix-key"];
 
 	const paragraph = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("schema_key", "=", paragraphSchemaKey)
 		.where("file_id", "=", fileId)
 		.selectAll()
 		.executeTakeFirstOrThrow();
 
 	await qb(lix)
-		.updateTable("state")
+		.updateTable("lix_state")
 		.where("schema_key", "=", paragraph.schema_key)
 		.where("entity_id", "=", paragraph.entity_id)
 		.where("file_id", "=", paragraph.file_id)
@@ -576,7 +576,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 
 	const fileId = "file_update_blob";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/blob.md",
@@ -585,7 +585,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 		.execute();
 
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,
@@ -609,7 +609,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 
 	// External: write markdown into file.data directly (simulating lix.updateFile)
 	await qb(lix)
-		.updateTable("file")
+		.updateTable("lix_file")
 		.set({ data: new TextEncoder().encode("Hello B from file.data") })
 		.where("id", "=", fileId)
 		.execute();
@@ -639,13 +639,13 @@ test("preserves main content when switching to a new version and back", async ()
 	const fileId = "file_regression_main_preserve";
 	// Create file (empty blob; state is our truth)
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({ id: fileId, path: "/regression.md", data: new Uint8Array() })
 		.execute();
 
 	// Activate file globally
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,
@@ -656,7 +656,7 @@ test("preserves main content when switching to a new version and back", async ()
 
 	// Remember currently active version id (main)
 	const main = await qb(lix)
-		.selectFrom("active_version")
+		.selectFrom("lix_active_version")
 		.select("version_id")
 		.executeTakeFirstOrThrow();
 	const mainId = (main as any).version_id as string;
@@ -668,7 +668,7 @@ test("preserves main content when switching to a new version and back", async ()
 	const paraVer = AstSchemas.schemasByType.paragraph["x-lix-version"];
 	await insertMarkdownSchemas({ lix });
 	await qb(lix)
-		.insertInto("state")
+		.insertInto("lix_state")
 		.values({
 			entity_id: "root",
 			schema_key: rootKey,
@@ -679,7 +679,7 @@ test("preserves main content when switching to a new version and back", async ()
 		} as any)
 		.execute();
 	await qb(lix)
-		.insertInto("state")
+		.insertInto("lix_state")
 		.values({
 			entity_id: "p1",
 			schema_key: paraKey,
@@ -763,7 +763,7 @@ For example:
 	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/AGENTS.md",
@@ -772,7 +772,7 @@ For example:
 		.execute();
 
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: "flashtype_active_file_id",
 			value: fileId,

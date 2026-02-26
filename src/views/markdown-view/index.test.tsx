@@ -52,7 +52,7 @@ describe("MarkdownView", () => {
 			wasmBytes: markdownPluginV2WasmBytes,
 		});
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: "file_1",
 				path: "/docs/readme.md",
@@ -61,7 +61,7 @@ describe("MarkdownView", () => {
 			.execute();
 
 		await qb(lix)
-			.insertInto("key_value_by_version")
+			.insertInto("lix_key_value_by_version")
 			.values({
 				key: "flashtype_active_file_id",
 				value: "file_1",
@@ -87,7 +87,7 @@ describe("MarkdownView", () => {
 
 		await waitFor(async () => {
 			const rows = await qb(lix)
-				.selectFrom("key_value_by_version")
+				.selectFrom("lix_key_value_by_version")
 				.where("key", "=", "flashtype_active_file_id")
 				.select(["value"])
 				.execute();
@@ -106,7 +106,7 @@ describe("MarkdownView", () => {
 			wasmBytes: markdownPluginV2WasmBytes,
 		});
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: "file_alpha",
 				path: "/alpha.md",
@@ -115,7 +115,7 @@ describe("MarkdownView", () => {
 			.execute();
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: "file_beta",
 				path: "/beta.md",
@@ -125,7 +125,7 @@ describe("MarkdownView", () => {
 
 		// Persist a stale active file id pointing to alpha
 		await qb(lix)
-			.insertInto("key_value_by_version")
+			.insertInto("lix_key_value_by_version")
 			.values({
 				key: "flashtype_active_file_id",
 				value: "file_alpha",
@@ -156,7 +156,7 @@ describe("MarkdownView", () => {
 
 		await waitFor(async () => {
 			const record = await qb(lix)
-				.selectFrom("key_value_by_version")
+				.selectFrom("lix_key_value_by_version")
 				.select(["value"])
 				.where("key", "=", "flashtype_active_file_id")
 				.executeTakeFirst();

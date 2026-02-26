@@ -73,7 +73,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		const initialRows = await qb(lix).selectFrom("file").select("id").execute();
+		const initialRows = await qb(lix).selectFrom("lix_file").select("id").execute();
 		expect(initialRows).toHaveLength(0);
 
 		await act(async () => {
@@ -95,7 +95,7 @@ describe("FilesView", () => {
 
 		await waitFor(async () => {
 			const rows = await qb(lix)
-				.selectFrom("file")
+				.selectFrom("lix_file")
 				.select(["id", "path"])
 				.execute();
 			expect(rows).toHaveLength(1);
@@ -126,7 +126,7 @@ describe("FilesView", () => {
 			wasmBytes: markdownPluginV2WasmBytes,
 		});
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: "file_1",
 				path: "/hello.md",
@@ -158,7 +158,7 @@ describe("FilesView", () => {
 		});
 
 		await waitFor(async () => {
-			const rows = await qb(lix).selectFrom("file").select(["path"]).execute();
+			const rows = await qb(lix).selectFrom("lix_file").select(["path"]).execute();
 			expect(rows).toHaveLength(0);
 		});
 
@@ -177,7 +177,7 @@ describe("FilesView", () => {
 			wasmBytes: markdownPluginV2WasmBytes,
 		});
 		await qb(lix)
-			.insertInto("directory")
+			.insertInto("lix_directory")
 			.values({ path: "/docs/" } as any)
 			.execute();
 
@@ -206,7 +206,7 @@ describe("FilesView", () => {
 
 		await waitFor(async () => {
 			const rows = await qb(lix)
-				.selectFrom("directory")
+				.selectFrom("lix_directory")
 				.select(["path"])
 				.execute();
 			expect(rows.some((row) => row.path === "/docs/")).toBe(false);
@@ -255,7 +255,7 @@ describe("FilesView", () => {
 		});
 
 		await waitFor(async () => {
-			const rows = await qb(lix).selectFrom("file").select(["path"]).execute();
+			const rows = await qb(lix).selectFrom("lix_file").select(["path"]).execute();
 			expect(rows).toHaveLength(1);
 			expect(rows[0]?.path).toBe("/hello%20nice%20one.md");
 		});
@@ -311,7 +311,7 @@ describe("FilesView", () => {
 
 		await waitFor(async () => {
 			const rows = await qb(lix)
-				.selectFrom("directory")
+				.selectFrom("lix_directory")
 				.select(["path"])
 				.execute();
 			expect(rows.some((row) => row.path === "/docs/")).toBe(true);
@@ -348,7 +348,7 @@ describe("FilesView", () => {
 
 		expect(utils!.queryByTestId("files-view-draft-input")).toBeNull();
 
-		const rows = await qb(lix).selectFrom("file").select(["path"]).execute();
+		const rows = await qb(lix).selectFrom("lix_file").select(["path"]).execute();
 		expect(rows).toHaveLength(0);
 		expect(openView).not.toHaveBeenCalled();
 
@@ -387,7 +387,7 @@ describe("FilesView", () => {
 		expect(utils!.queryByTestId("files-view-draft-input")).toBeNull();
 
 		const rows = await qb(lix)
-			.selectFrom("directory")
+			.selectFrom("lix_directory")
 			.select(["path"])
 			.execute();
 		expect(rows).toHaveLength(0);
@@ -432,7 +432,7 @@ describe("FilesView", () => {
 			expect(utils!.queryByTestId("files-view-draft-input")).toBeNull();
 		});
 
-		const rows = await qb(lix).selectFrom("file").select(["path"]).execute();
+		const rows = await qb(lix).selectFrom("lix_file").select(["path"]).execute();
 		expect(rows).toHaveLength(0);
 		expect(openView).not.toHaveBeenCalled();
 

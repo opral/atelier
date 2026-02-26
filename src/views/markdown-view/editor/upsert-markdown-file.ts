@@ -13,21 +13,21 @@ export async function upsertMarkdownFile(args: {
 	const data = new TextEncoder().encode(markdown);
 
 	const existing = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.select(["id"])
 		.where("id", "=", fileId)
 		.executeTakeFirst();
 
 	if (existing) {
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data })
 			.where("id", "=", fileId)
 			.execute();
 	} else {
 		// Insert requires a path; use provided or fallback to /<fileId>.md
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileId,
 				path: path ?? `/${fileId}.md`,

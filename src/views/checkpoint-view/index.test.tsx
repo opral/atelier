@@ -28,7 +28,7 @@ const markdownPluginV2WasmBytes = Uint8Array.from(
 );
 
 async function countCommits(lix: Awaited<ReturnType<typeof openLix>>) {
-	const rows = await qb(lix).selectFrom("commit").select("id").execute();
+	const rows = await qb(lix).selectFrom("lix_commit").select("id").execute();
 	return rows.length;
 }
 
@@ -43,7 +43,7 @@ describe("CheckpointView", () => {
 		const fileId = "checkpoint_view_test_file";
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileId,
 				path: "/docs/checkpoint.md",
@@ -54,7 +54,7 @@ describe("CheckpointView", () => {
 		await lix.createCheckpoint();
 
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("Updated content") })
 			.where("id", "=", fileId)
 			.execute();
@@ -95,7 +95,7 @@ describe("CheckpointView", () => {
 			wasmBytes: markdownPluginV2WasmBytes,
 		});
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: "badge-file",
 				path: "/docs/example.md",
@@ -104,7 +104,7 @@ describe("CheckpointView", () => {
 			.execute();
 		await lix.createCheckpoint();
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("Changed") })
 			.where("id", "=", "badge-file")
 			.execute();
@@ -186,7 +186,7 @@ describe("CheckpointView", () => {
 		const fileId = "diff-preview-file";
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileId,
 				path: "/docs/diff-preview.md",
@@ -197,7 +197,7 @@ describe("CheckpointView", () => {
 		await lix.createCheckpoint();
 
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("# After") })
 			.where("id", "=", fileId)
 			.execute();

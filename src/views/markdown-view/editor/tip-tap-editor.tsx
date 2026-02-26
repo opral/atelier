@@ -48,7 +48,7 @@ export function TipTapEditor({
 	const initialFile = useQueryTakeFirst(
 		(lix) =>
 			qb(lix)
-				.selectFrom("file")
+				.selectFrom("lix_file")
 				.select("data")
 				.where("id", "=", activeFileId ?? ""),
 		{ subscribe: false },
@@ -161,7 +161,7 @@ export function TipTapEditor({
 
 	// Watch active version to refresh on version switches
 	const activeVersionRow = useQuery(() =>
-		qb(lix).selectFrom("active_version").select(["version_id"]).limit(1),
+		qb(lix).selectFrom("lix_active_version").select(["version_id"]).limit(1),
 	);
 	const activeVersionId =
 		Array.isArray(activeVersionRow) && activeVersionRow.length > 0

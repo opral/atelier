@@ -4,10 +4,14 @@ import { qb } from "@lix-js/kysely";
 
 type MarkdownSchemaDefinition = (typeof AstSchemas.allSchemas)[number];
 
+function normalizeSchemaVersion(version: string): string {
+	return version === "1.0" ? "1" : version;
+}
+
 /**
  * Ensures all Markdown WC schema definitions are stored in the current Lix.
  *
- * Seeds `stored_schema_by_version` with any schema definitions that are not
+ * Seeds `lix_stored_schema_by_version` with any schema definitions that are not
  * already present for the `global` version. Existing definitions are left
  * untouched, allowing schema upgrades to append newer versions safely.
  *
@@ -20,9 +24,11 @@ type MarkdownSchemaDefinition = (typeof AstSchemas.allSchemas)[number];
  */
 export async function insertMarkdownSchemas(args: { lix: Lix }): Promise<void> {
 	const { lix } = args;
+	// TODO: remove `any` cast once @lix-js/kysely exports lix_stored_schema_by_version.
+	const db = qb(lix) as any;
 
-	const rows = (await qb(lix)
-		.selectFrom("stored_schema_by_version")
+	const rows = (await db
+		.selectFrom("lix_stored_schema_by_version")
 		.select(["value"])
 		.where("lixcol_version_id", "=", "global")
 		.execute()) as Array<{ value: unknown }>;
@@ -35,7 +41,11 @@ export async function insertMarkdownSchemas(args: { lix: Lix }): Promise<void> {
 				? (JSON.parse(raw) as Record<string, unknown>)
 				: ((raw as Record<string, unknown>) ?? null);
 		const schemaKey = parsed?.["x-lix-key"];
-		const schemaVersion = parsed?.["x-lix-version"];
+		const schemaVersionRaw = parsed?.["x-lix-version"];
+		const schemaVersion =
+			typeof schemaVersionRaw === "string"
+				? normalizeSchemaVersion(schemaVersionRaw)
+				: undefined;
 		if (typeof schemaKey === "string" && typeof schemaVersion === "string") {
 			existing.add(`${schemaKey}:${schemaVersion}`);
 		}
@@ -48,23 +58,33 @@ export async function insertMarkdownSchemas(args: { lix: Lix }): Promise<void> {
 
 	for (const schema of AstSchemas.allSchemas as MarkdownSchemaDefinition[]) {
 		const schemaKey = schema["x-lix-key"];
-		const schemaVersion = schema["x-lix-version"];
+		const schemaVersionRaw = schema["x-lix-version"];
+		const schemaVersion =
+			typeof schemaVersionRaw === "string"
+				? normalizeSchemaVersion(schemaVersionRaw)
+				: undefined;
 		if (typeof schemaKey !== "string" || typeof schemaVersion !== "string") {
 			continue;
 		}
 		const fingerprint = `${schemaKey}:${schemaVersion}`;
 		if (existing.has(fingerprint)) continue;
 		existing.add(fingerprint);
+		const normalizedSchema = {
+			...schema,
+			"x-lix-version": schemaVersion,
+		} as MarkdownSchemaDefinition;
 		inserts.push({
-			value: schema,
+			value: normalizedSchema,
 			lixcol_version_id: "global",
 		});
 	}
 
 	if (inserts.length === 0) return;
 
-	await qb(lix)
-		.insertInto("stored_schema_by_version")
-		.values(inserts)
-		.execute();
+	for (const insert of inserts) {
+		await lix.execute(
+			"INSERT INTO lix_stored_schema_by_version (value, lixcol_version_id) VALUES (lix_json(?1), ?2)",
+			[JSON.stringify(insert.value), insert.lixcol_version_id],
+		);
+	}
 }

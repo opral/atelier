@@ -95,7 +95,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			const normalizedFingerprint = snapshotFingerprint(normalizedNode);
 
 			const existing = await trx
-				.selectFrom("state")
+				.selectFrom("lix_state")
 				.where("file_id", "=", fileId)
 				.where("schema_key", "=", schemaKey)
 				.where("entity_id", "=", entityId)
@@ -108,7 +108,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					continue;
 				}
 				await trx
-					.updateTable("state")
+					.updateTable("lix_state")
 					.set({ snapshot_content: normalizedNode })
 					.where("file_id", "=", fileId)
 					.where("schema_key", "=", schemaKey)
@@ -116,7 +116,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					.execute();
 			} else {
 				await trx
-					.insertInto("state")
+					.insertInto("lix_state")
 					.values({
 						entity_id: entityId,
 						file_id: fileId,
@@ -136,7 +136,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			"x-lix-version"
 		] as string;
 		const existingRoot = await trx
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId as any)
 			.where("schema_key", "=", rootKey)
 			.select(["entity_id", "snapshot_content"]) // small row
@@ -155,14 +155,14 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				return;
 			}
 			await trx
-				.updateTable("state")
+				.updateTable("lix_state")
 				.set({ snapshot_content: { order } })
 				.where("file_id", "=", fileId as any)
 				.where("schema_key", "=", rootKey)
 				.execute();
 		} else {
 			await trx
-				.insertInto("state")
+				.insertInto("lix_state")
 				.values({
 					entity_id: "root",
 					file_id: fileId as any,
@@ -259,14 +259,14 @@ export function createEditor(args: CreateEditorArgs): Editor {
 							const keepIds = [...order, "root"];
 							if (keepIds.length > 0) {
 								await trx
-									.deleteFrom("state")
+									.deleteFrom("lix_state")
 									.where("file_id", "=", fileId as any)
 									.where("plugin_key", "=", MARKDOWN_PLUGIN_KEY)
 									.where("entity_id", "not in", keepIds as any)
 									.execute();
 							} else {
 								await trx
-									.deleteFrom("state")
+									.deleteFrom("lix_state")
 									.where("file_id", "=", fileId as any)
 									.where("plugin_key", "=", MARKDOWN_PLUGIN_KEY)
 									.where("entity_id", "<>", "root")

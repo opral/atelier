@@ -33,13 +33,13 @@ describe("VersionSwitcher", () => {
 		cleanupFns.push(() => lix.close());
 
 		const activeVersion = await qb(lix)
-			.selectFrom("active_version")
-			.innerJoin("version", "version.id", "active_version.version_id")
-			.select(["version.id"])
+			.selectFrom("lix_active_version")
+			.innerJoin("lix_version", "lix_version.id", "lix_active_version.version_id")
+			.select(["lix_version.id"])
 			.executeTakeFirstOrThrow();
 
 		await qb(lix)
-			.updateTable("version")
+			.updateTable("lix_version")
 			.set({ name: "main" })
 			.where("id", "=", activeVersion.id)
 			.execute();
@@ -87,7 +87,7 @@ describe("VersionSwitcher", () => {
 		).toHaveTextContent("draft");
 
 		const active = await qb(lix)
-			.selectFrom("active_version")
+			.selectFrom("lix_active_version")
 			.select("version_id")
 			.executeTakeFirstOrThrow();
 		expect(active.version_id).toBe(newVersion.id);
@@ -127,7 +127,7 @@ describe("VersionSwitcher", () => {
 		});
 
 		const row = await qb(lix)
-			.selectFrom("version")
+			.selectFrom("lix_version")
 			.select(["id", "name"])
 			.where("id", "=", target.id)
 			.executeTakeFirstOrThrow();
@@ -179,14 +179,14 @@ describe("VersionSwitcher", () => {
 		});
 
 		const row = await qb(lix)
-			.selectFrom("version")
+			.selectFrom("lix_version")
 			.select(["id", "hidden"])
 			.where("id", "=", target.id)
 			.executeTakeFirstOrThrow();
 		expect(row.hidden).toBeTruthy();
 
 		const active = await qb(lix)
-			.selectFrom("active_version")
+			.selectFrom("lix_active_version")
 			.select("version_id")
 			.executeTakeFirstOrThrow();
 		expect(active.version_id).not.toBe(target.id);

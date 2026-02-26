@@ -43,7 +43,7 @@ export function TopBar({
 	const alphaDescriptionId = useId();
 	const fileCount = useQueryTakeFirst<{ count: number }>((lix) =>
 		qb(lix)
-			.selectFrom("file")
+			.selectFrom("lix_file")
 			.select(({ fn }) => [fn.count<number>("id").as("count")])
 			.where("path", "is not", "/AGENTS.md"),
 	);

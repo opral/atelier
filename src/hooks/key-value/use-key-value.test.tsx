@@ -27,7 +27,7 @@ test("reads a global, untracked key (test fixture)", async () => {
 
 	// Pre-insert expected value
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: UNTRACKED_TEST_KEY,
 			value: "alpha",
@@ -79,7 +79,7 @@ test("writes and reads a global, untracked key (test fixture)", async () => {
 
 	// Verify DB row persisted to key_value_by_version with lixcol_version_id = 'global'
 	const rows = (await qb(lix)
-		.selectFrom("key_value_by_version")
+		.selectFrom("lix_key_value_by_version")
 		.where("key", "=", UNTRACKED_TEST_KEY)
 		.where("lixcol_version_id", "=", "global")
 		.select(["value"])
@@ -120,7 +120,7 @@ test("writes and reads a tracked key on active version", async () => {
 
 	// Verify DB row persisted to tracked table
 	const rows = (await qb(lix)
-		.selectFrom("key_value")
+		.selectFrom("lix_key_value")
 		.where("key", "=", TEST_KEY)
 		.select(["value"])
 		.execute()) as any;
@@ -131,7 +131,7 @@ test("shows Suspense fallback first, then renders value on initial read", async 
 	const lix = await openLix({});
 	// Ensure the key exists so the initial load resolves deterministically
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: UNTRACKED_TEST_KEY,
 			value: "ready",
@@ -190,7 +190,7 @@ test("re-renders when key value changes externally", async () => {
 	// mutate externally (simulate another part of app)
 	await act(async () => {
 		await qb(lix)
-			.updateTable("key_value")
+			.updateTable("lix_key_value")
 			.set({ value: "external" })
 			.where("key", "=", TEST_KEY)
 			.execute();
@@ -214,7 +214,7 @@ test("shares optimistic updates across hook instances", async () => {
 	const lix = await openLix({});
 	const SHARED_KEY = "flashtype_test_tracked_shared_optimistic" as const;
 	await qb(lix)
-		.insertInto("key_value")
+		.insertInto("lix_key_value")
 		.values({ key: SHARED_KEY, value: "initial" })
 		.execute();
 
@@ -355,7 +355,7 @@ test("returns optimistic value immediately when setter is called", async () => {
 test("memoized children should not re-render when parent state changes", async () => {
 	const lix = await openLix({});
 	await qb(lix)
-		.insertInto("key_value_by_version")
+		.insertInto("lix_key_value_by_version")
 		.values({
 			key: UNTRACKED_TEST_KEY,
 			value: "initial",

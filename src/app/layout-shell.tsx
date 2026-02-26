@@ -54,6 +54,7 @@ import {
 	FILE_VIEW_KIND,
 } from "./view-instance-helpers";
 import {
+	DEFAULT_FLASHTYPE_UI_STATE,
 	FLASHTYPE_UI_STATE_KEY,
 	normalizeLayoutSizes,
 	type PanelLayoutSizes,
@@ -183,14 +184,12 @@ export function V2LayoutShell() {
 function LayoutShellContent() {
 	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
 	const lix = useLix();
-	if (!uiStateKV) {
-		throw new Error("Flashtype UI state is unavailable.");
-	}
+	const uiState = uiStateKV ?? DEFAULT_FLASHTYPE_UI_STATE;
 
-	const initialLayoutSizes = normalizeLayoutSizes(uiStateKV.layout?.sizes);
+	const initialLayoutSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const sanitizedPersistedPanels = useMemo(
-		() => sanitizePanels(uiStateKV.panels),
-		[uiStateKV],
+		() => sanitizePanels(uiState.panels),
+		[uiState],
 	);
 
 	const [leftPanel, setLeftPanel] = useState<PanelState>(() =>
@@ -203,7 +202,7 @@ function LayoutShellContent() {
 		hydratePanel(sanitizedPersistedPanels.right),
 	);
 	const [focusedPanel, setFocusedPanel] = useState<PanelSide>(
-		() => uiStateKV.focusedPanel,
+		() => uiState.focusedPanel,
 	);
 	const [panelSizes, setPanelSizes] = useState<PanelLayoutSizes>(
 		() => initialLayoutSizes,
@@ -244,7 +243,7 @@ function LayoutShellContent() {
 
 	const lastPersistedRef = useRef<string>(
 		JSON.stringify({
-			focusedPanel: uiStateKV.focusedPanel,
+			focusedPanel: uiState.focusedPanel,
 			panels: sanitizedPersistedPanels,
 			layout: { sizes: initialLayoutSizes },
 		} satisfies FlashtypeUiState),
@@ -726,13 +725,13 @@ function LayoutShellContent() {
 
 	const handleCreateNewFile = useCallback(async () => {
 		if (!lix) return;
-		const rows = await qb(lix).selectFrom("file").select("path").execute();
+		const rows = await qb(lix).selectFrom("lix_file").select("path").execute();
 		const existingPaths = new Set(
 			rows.map((row) => normalizeFilePath(row.path)),
 		);
 		const path = deriveUntitledMarkdownPath(existingPaths);
 		const createdFile = await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				path,
 				data: new TextEncoder().encode(""),

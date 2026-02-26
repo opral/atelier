@@ -11,7 +11,7 @@ export async function assembleMdAst(args: {
 
 	const rootKey = AstSchemas.DocumentSchema["x-lix-key"] as string;
 	const root = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.where("schema_key", "=", rootKey)
 		.select(["snapshot_content"])
@@ -23,7 +23,7 @@ export async function assembleMdAst(args: {
 	if (!order.length) return { type: "root", children: [] };
 
 	const nodes = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.select(["entity_id", "schema_key", "snapshot_content"])
 		.execute();

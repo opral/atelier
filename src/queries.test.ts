@@ -23,7 +23,7 @@ describe("selectFiles", () => {
 		});
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values([
 				{ id: "f2", path: "/b.md", data: new Uint8Array() },
 				{ id: "f1", path: "/a.md", data: new Uint8Array() },
@@ -50,17 +50,17 @@ describe("selectFilesystemEntries", () => {
 
 		// Seed directories (nested) via the view so triggers normalize inputs.
 		await qb(lix)
-			.insertInto("directory")
+			.insertInto("lix_directory")
 			.values({ path: "/docs/" } as any)
 			.returning(["id"])
 			.execute();
 		await qb(lix)
-			.insertInto("directory")
+			.insertInto("lix_directory")
 			.values({ path: "/docs/guides/" } as any)
 			.execute();
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values([
 				{ id: "f_root", path: "/README.md", data: new Uint8Array() },
 				{
@@ -107,12 +107,12 @@ describe("selectFilesystemEntries", () => {
 		});
 
 		await qb(lix)
-			.insertInto("directory")
+			.insertInto("lix_directory")
 			.values({ path: "/docs/" } as any)
 			.execute();
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values([
 				{ id: "root_file", path: "/root.md", data: new Uint8Array() },
 				{ id: "nested_file", path: "/docs/deep.md", data: new Uint8Array() },
@@ -136,12 +136,12 @@ describe("selectFilesystemEntries", () => {
 		});
 
 		await qb(lix)
-			.insertInto("directory")
+			.insertInto("lix_directory")
 			.values({ path: "/private/", hidden: true } as any)
 			.execute();
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: "hidden_file",
 				path: "/secret.md",
@@ -171,17 +171,17 @@ describe("selectWorkingDiffCount", () => {
 
 		// Seed two files
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({ id: fileA, path: "/a.md", data: new TextEncoder().encode("A") })
 			.execute();
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({ id: fileB, path: "/b.md", data: new TextEncoder().encode("B") })
 			.execute();
 
 		// Set active file to A and checkpoint initial inserts
 		await qb(lix)
-			.insertInto("key_value_by_version")
+			.insertInto("lix_key_value_by_version")
 			.values({
 				key: "flashtype_active_file_id",
 				value: fileA,
@@ -193,7 +193,7 @@ describe("selectWorkingDiffCount", () => {
 
 		// Make a change in A
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("A change") })
 			.where("id", "=", fileA)
 			.execute();
@@ -204,7 +204,7 @@ describe("selectWorkingDiffCount", () => {
 
 		// Make an additional change in B but keep active file = A
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("B change") })
 			.where("id", "=", fileB)
 			.execute();
@@ -215,7 +215,7 @@ describe("selectWorkingDiffCount", () => {
 
 		// Switch active file to B
 		await qb(lix)
-			.updateTable("key_value_by_version")
+			.updateTable("lix_key_value_by_version")
 			.set({ value: fileB })
 			.where("key", "=", "flashtype_active_file_id")
 			.where("lixcol_version_id", "=", "global")
@@ -241,7 +241,7 @@ describe("selectWorkingDiffCount", () => {
 		const before = `# Title\n\nParagraph 1.\n\nParagraph 2.`;
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileId,
 				path: "/order-only.md",
@@ -250,7 +250,7 @@ describe("selectWorkingDiffCount", () => {
 			.execute();
 
 		await qb(lix)
-			.insertInto("key_value_by_version")
+			.insertInto("lix_key_value_by_version")
 			.values({
 				key: "flashtype_active_file_id",
 				value: fileId,
@@ -264,7 +264,7 @@ describe("selectWorkingDiffCount", () => {
 		// Reorder paragraphs without editing content
 		const after = `# Title\n\nParagraph 2.\n\nParagraph 1.`;
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode(after) })
 			.where("id", "=", fileId)
 			.execute();

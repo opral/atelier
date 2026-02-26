@@ -16,16 +16,16 @@ export function selectWorkingDiffFiles(lix: Lix) {
 		.selectFrom("lix_working_changes as diff")
 		.where("diff.status", "!=", "unchanged")
 		.where("diff.file_id", "!=", "lix")
-		.leftJoin("file", "file.id", "diff.file_id")
-		.leftJoin("change as before", "before.id", "diff.before_change_id")
-		.leftJoin("change as after", "after.id", "diff.after_change_id")
-		.where(() => sql`diff.schema_key != 'lix_directory_descriptor'`)
-		.select((eb) => {
-			const pathExpr = sql<string>`COALESCE(
-				MAX(file.path),
-				MAX(CASE
-					WHEN diff.schema_key = 'lix_file_descriptor' AND json_extract(after.snapshot_content, '$.name') IS NOT NULL THEN
-						'/' || json_extract(after.snapshot_content, '$.name') ||
+		.leftJoin("lix_file", "lix_file.id", "diff.file_id")
+		.leftJoin("lix_change as before", "before.id", "diff.before_change_id")
+		.leftJoin("lix_change as after", "after.id", "diff.after_change_id")
+			.where(() => sql`diff.schema_key != 'lix_directory_descriptor'`)
+			.select((eb) => {
+				const pathExpr = sql<string>`COALESCE(
+					MAX(lix_file.path),
+					MAX(CASE
+						WHEN diff.schema_key = 'lix_file_descriptor' AND json_extract(after.snapshot_content, '$.name') IS NOT NULL THEN
+							'/' || json_extract(after.snapshot_content, '$.name') ||
 						CASE
 							WHEN json_extract(after.snapshot_content, '$.extension') IS NOT NULL AND json_extract(after.snapshot_content, '$.extension') != ''
 								THEN '.' || json_extract(after.snapshot_content, '$.extension')

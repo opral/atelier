@@ -239,17 +239,17 @@ function selectValue(
 	if (opts.untracked) {
 		const versionExpr =
 			opts.defaultVersionId === "active"
-				? qb(lix).selectFrom("active_version").select("version_id")
+				? qb(lix).selectFrom("lix_active_version").select("version_id")
 				: opts.defaultVersionId;
 		return qb(lix)
-			.selectFrom("key_value_by_version")
+			.selectFrom("lix_key_value_by_version")
 			.where("lixcol_version_id", "=", versionExpr)
 			.where("key", "=", key)
 			.select(["value"]);
 	}
 	// tracked (change-controlled) — supported on active version
 	return qb(lix)
-		.selectFrom("key_value")
+		.selectFrom("lix_key_value")
 		.where("key", "=", key)
 		.select(["value"]);
 }
@@ -267,7 +267,7 @@ async function upsertValue<T>(
 				let versionId: string;
 				if (opts.defaultVersionId === "active") {
 					const row = await trx
-						.selectFrom("active_version")
+						.selectFrom("lix_active_version")
 						.select("version_id")
 						.executeTakeFirstOrThrow();
 					versionId = row.version_id as unknown as string;
@@ -276,7 +276,7 @@ async function upsertValue<T>(
 				}
 
 				const exists = await trx
-					.selectFrom("key_value_by_version")
+					.selectFrom("lix_key_value_by_version")
 					.where("key", "=", key)
 					.where("lixcol_version_id", "=", versionId)
 					.select("key")
@@ -284,14 +284,14 @@ async function upsertValue<T>(
 
 				if (exists) {
 					await trx
-						.updateTable("key_value_by_version")
+						.updateTable("lix_key_value_by_version")
 						.set({ value, lixcol_untracked: true })
 						.where("key", "=", key)
 						.where("lixcol_version_id", "=", versionId)
 						.execute();
 				} else {
 					await trx
-						.insertInto("key_value_by_version")
+						.insertInto("lix_key_value_by_version")
 						.values({
 							key,
 							value,
@@ -304,21 +304,21 @@ async function upsertValue<T>(
 			}
 
 			const trackedExists = await trx
-				.selectFrom("key_value")
+				.selectFrom("lix_key_value")
 				.where("key", "=", key)
 				.select("key")
 				.executeTakeFirst();
 
 			if (trackedExists) {
 				await trx
-					.updateTable("key_value")
+					.updateTable("lix_key_value")
 					.set({ value })
 					.where("key", "=", key)
 					.execute();
 				return;
 			}
 
-			await trx.insertInto("key_value").values({ key, value }).execute();
+			await trx.insertInto("lix_key_value").values({ key, value }).execute();
 		});
 }
 

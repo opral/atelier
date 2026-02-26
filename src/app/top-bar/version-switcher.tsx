@@ -50,7 +50,7 @@ export function VersionSwitcher() {
 
 	const versions = useQuery<VersionRow>((lix) =>
 		qb(lix)
-			.selectFrom("version")
+			.selectFrom("lix_version")
 			.select([
 				"id",
 				"name",
@@ -66,9 +66,9 @@ export function VersionSwitcher() {
 	const activeVersion = useQueryTakeFirstOrThrow<{ id: string; name: string }>(
 		() =>
 			qb(lix)
-				.selectFrom("active_version")
-				.innerJoin("version", "version.id", "active_version.version_id")
-				.select(["version.id", "version.name"]),
+				.selectFrom("lix_active_version")
+				.innerJoin("lix_version", "lix_version.id", "lix_active_version.version_id")
+				.select(["lix_version.id", "lix_version.name"]),
 	);
 
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export function VersionSwitcher() {
 			setPendingAction(versionId);
 			try {
 				await qb(lix)
-					.updateTable("version")
+					.updateTable("lix_version")
 					.set({ name: trimmed })
 					.where("id", "=", versionId)
 					.execute();
@@ -143,7 +143,7 @@ export function VersionSwitcher() {
 			const currentActiveId = activeVersion.id;
 			try {
 				await qb(lix)
-					.updateTable("version")
+					.updateTable("lix_version")
 					.set({ hidden: true })
 					.where("id", "=", versionId)
 					.execute();

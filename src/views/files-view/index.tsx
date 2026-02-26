@@ -145,7 +145,7 @@ export function FilesView({ context }: FilesViewProps) {
 			creatingRef.current = true;
 			try {
 				const createdFile = await qb(lix)
-					.insertInto("file")
+					.insertInto("lix_file")
 					.values({
 						path,
 						data: new TextEncoder().encode(""),
@@ -187,7 +187,7 @@ export function FilesView({ context }: FilesViewProps) {
 			creatingRef.current = true;
 			try {
 				await qb(lix)
-					.insertInto("directory")
+					.insertInto("lix_directory")
 					.values({ path } as any)
 					.execute();
 				setPendingDirectoryPaths((prev) => [...prev, path]);
@@ -239,18 +239,18 @@ export function FilesView({ context }: FilesViewProps) {
 		try {
 			if (selectedKind === "file") {
 				const record = await qb(lix)
-					.selectFrom("file")
+					.selectFrom("lix_file")
 					.select(["id"])
 					.where("path", "=", normalizedPath)
 					.executeTakeFirst();
 				if (record?.id) {
 					await qb(lix)
-						.deleteFrom("state")
+						.deleteFrom("lix_state")
 						.where("file_id", "=", record.id as any)
 						.execute();
 				}
 				await qb(lix)
-					.deleteFrom("file")
+					.deleteFrom("lix_file")
 					.where("path", "=", normalizedPath)
 					.execute();
 				setPendingPaths((prev) =>
@@ -258,7 +258,7 @@ export function FilesView({ context }: FilesViewProps) {
 				);
 			} else {
 				await qb(lix)
-					.deleteFrom("directory")
+					.deleteFrom("lix_directory")
 					.where("path", "=", normalizedPath)
 					.execute();
 				setPendingDirectoryPaths((prev) =>
@@ -421,7 +421,7 @@ export function FilesView({ context }: FilesViewProps) {
 
 					// Create the file in lix
 					await qb(lix)
-						.insertInto("file")
+						.insertInto("lix_file")
 						.values({
 							path: filePath,
 							data: new TextEncoder().encode(content),
@@ -431,7 +431,7 @@ export function FilesView({ context }: FilesViewProps) {
 					// Open the first dropped file
 					if (file === markdownFiles[0]) {
 						const newFile = await qb(lix)
-							.selectFrom("file")
+							.selectFrom("lix_file")
 							.select("id")
 							.where("path", "=", filePath)
 							.executeTakeFirst();

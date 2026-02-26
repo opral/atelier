@@ -27,7 +27,7 @@ async function createEditorFromFile(args: {
 	await insertMarkdownSchemas({ lix: args.lix });
 
 	const row = await qb(args.lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", args.fileId)
 		.select(["data"])
 		.executeTakeFirst();
@@ -64,7 +64,7 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 
 	// Seed initial file content
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-start.md",
@@ -94,7 +94,7 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 	await new Promise((resolve) => setTimeout(resolve, 0));
 
 	const rootOrderAfter = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.where("schema_key", "=", AstSchemas.DocumentSchema["x-lix-key"])
 		.select(["snapshot_content"])
@@ -105,7 +105,7 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 	const orderIds = rootOrderAfter[0]?.snapshot_content.order as string[];
 
 	const paragraphsAfter = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.where("schema_key", "=", AstSchemas.ParagraphSchema["x-lix-key"])
 		.select(["entity_id", "snapshot_content"])
@@ -129,7 +129,7 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 	expect(orderedTexts).toEqual(["New", "Start"]);
 
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -150,7 +150,7 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 	const fileId = "paste_end_after";
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-end.md",
@@ -177,7 +177,7 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 	await new Promise((r) => setTimeout(r, 0));
 
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -195,7 +195,7 @@ test("replace word selection with paste (TipTap + Lix)", async () => {
 	const fileId = "paste_replace_word";
 	const initial = "Replace THIS TEXT here.";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-replace-word.md",
@@ -222,7 +222,7 @@ test("replace word selection with paste (TipTap + Lix)", async () => {
 	await new Promise((r) => setTimeout(r, 0));
 
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -240,7 +240,7 @@ test("replace entire document with paste (TipTap + Lix)", async () => {
 	const fileId = "paste_replace_all";
 	const initial = "Old content\n\nTo be replaced";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-replace-all.md",
@@ -267,7 +267,7 @@ test("replace entire document with paste (TipTap + Lix)", async () => {
 	await new Promise((r) => setTimeout(r, 0));
 
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -286,7 +286,7 @@ test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () 
 	});
 	const fileId = "paste_plain_multi";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-plain-multi.md",
@@ -314,7 +314,7 @@ test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () 
 	await new Promise((r) => setTimeout(r, 0));
 
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -333,7 +333,7 @@ test("Enter splits paragraph → assigns unique ids and root order has no duplic
 	const fileId = "enter_split_ids_unique";
 
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/enter-split.md",
@@ -366,7 +366,7 @@ test("Enter splits paragraph → assigns unique ids and root order has no duplic
 	await new Promise((r) => setTimeout(r, 0));
 
 	const root = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.where("schema_key", "=", AstSchemas.DocumentSchema["x-lix-key"])
 		.select(["snapshot_content"])
@@ -378,7 +378,7 @@ test("Enter splits paragraph → assigns unique ids and root order has no duplic
 	expect(new Set(order).size).toBe(order.length); // no duplicates
 
 	const paras = await qb(lix)
-		.selectFrom("state")
+		.selectFrom("lix_state")
 		.where("file_id", "=", fileId)
 		.where("schema_key", "=", AstSchemas.ParagraphSchema["x-lix-key"])
 		.select(["entity_id", "snapshot_content"])
@@ -398,7 +398,7 @@ test("two Enters create three paragraphs with unique ids and correct order", asy
 
 	// Seed with a single paragraph
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/enter-split-three.md",
@@ -428,7 +428,7 @@ test("two Enters create three paragraphs with unique ids and correct order", asy
 	let paras: { entity_id: string; snapshot_content: unknown }[] = [];
 	for (let i = 0; i < 40; i++) {
 		const root = await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.DocumentSchema["x-lix-key"])
 			.select(["snapshot_content"])
@@ -437,7 +437,7 @@ test("two Enters create three paragraphs with unique ids and correct order", asy
 			?.order ?? []) as string[];
 
 		paras = (await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.ParagraphSchema["x-lix-key"])
 			.select(["entity_id", "snapshot_content"])
@@ -485,7 +485,7 @@ test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 	});
 	const fileId = "paste_crlf";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-crlf.md",
@@ -509,7 +509,7 @@ test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 	});
 	await new Promise((r) => setTimeout(r, 0));
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -526,7 +526,7 @@ test("paste complex markdown with lists and code blocks (TipTap + Lix)", async (
 	});
 	const fileId = "paste_complex";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-complex.md",
@@ -550,7 +550,7 @@ test("paste complex markdown with lists and code blocks (TipTap + Lix)", async (
 	});
 	await new Promise((r) => setTimeout(r, 0));
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -571,7 +571,7 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
 	});
 	const fileId = "paste_inline_format";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/paste-inline-format.md",
@@ -595,7 +595,7 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
 	});
 	await new Promise((r) => setTimeout(r, 0));
 	const fileAfter = await qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.where("id", "=", fileId)
 		.selectAll()
 		.executeTakeFirst();
@@ -623,7 +623,7 @@ test("rapid Enter/type coalescing persists 3 paragraphs with unique ids", async 
 
 	// Seed with a single paragraph
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/rapid-enter.md",
@@ -668,7 +668,7 @@ test("rapid Enter/type coalescing persists 3 paragraphs with unique ids", async 
 	let paras: { entity_id: string; snapshot_content: unknown }[] = [];
 	for (let i = 0; i < 40; i++) {
 		const root = await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.DocumentSchema["x-lix-key"])
 			.select(["snapshot_content"])
@@ -677,7 +677,7 @@ test("rapid Enter/type coalescing persists 3 paragraphs with unique ids", async 
 			?.order ?? []) as string[];
 
 		paras = (await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.ParagraphSchema["x-lix-key"])
 			.select(["entity_id", "snapshot_content"])
@@ -719,7 +719,7 @@ test("state cleanup on delete removes row and prunes root order", async () => {
 
 	// Seed with three paragraphs
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/delete-cleanup.md",
@@ -742,7 +742,7 @@ test("state cleanup on delete removes row and prunes root order", async () => {
 	let secondId: string | null = null;
 	for (let i = 0; i < 40; i++) {
 		const paras = await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.ParagraphSchema["x-lix-key"])
 			.select(["entity_id", "snapshot_content"])
@@ -777,7 +777,7 @@ test("state cleanup on delete removes row and prunes root order", async () => {
 	let order: string[] = [];
 	for (let i = 0; i < 40; i++) {
 		const root = await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.DocumentSchema["x-lix-key"])
 			.select(["snapshot_content"])
@@ -786,7 +786,7 @@ test("state cleanup on delete removes row and prunes root order", async () => {
 			?.order ?? []) as string[];
 
 		const paras = await qb(lix)
-			.selectFrom("state")
+			.selectFrom("lix_state")
 			.where("file_id", "=", fileId)
 			.where("schema_key", "=", AstSchemas.ParagraphSchema["x-lix-key"])
 			.select(["entity_id"])

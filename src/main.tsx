@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import { LixProvider } from "@lix-js/react-utils";
@@ -66,7 +66,15 @@ export const AppRoot = () => {
 	return (
 		<LixProvider lix={lix}>
 			<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-				<V2LayoutShell />
+				<Suspense
+					fallback={
+						<div className="min-h-dvh w-full flex items-center justify-center p-6 text-sm text-muted-foreground">
+							Loading…
+						</div>
+					}
+				>
+					<V2LayoutShell />
+				</Suspense>
 			</KeyValueProvider>
 		</LixProvider>
 	);

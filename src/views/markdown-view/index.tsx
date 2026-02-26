@@ -56,7 +56,7 @@ function MarkdownViewContent({
 	const fileRow = useQueryTakeFirst(
 		(lix) =>
 			qb(lix)
-				.selectFrom("file")
+				.selectFrom("lix_file")
 				.select(["id", "path"])
 				.where(fileId ? "id" : "path", "=", fileId ?? filePath ?? "")
 				.limit(1),

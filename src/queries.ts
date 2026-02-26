@@ -6,7 +6,7 @@ import { AstSchemas } from "@opral/markdown-wc";
 // Files
 export function selectFiles(lix: Lix) {
 	return qb(lix)
-		.selectFrom("file")
+		.selectFrom("lix_file")
 		.select(["id", "path"]) // minimal row for explorer
 		.orderBy("path", "asc");
 }
@@ -29,29 +29,29 @@ export type FilesystemEntryRow = {
  */
 export function selectFilesystemEntries(lix: Lix) {
 	return qb(lix)
-		.selectFrom("directory")
+		.selectFrom("lix_directory")
 		.select((eb) => [
-			eb.ref("directory.id").as("id"),
-			eb.ref("directory.parent_id").as("parent_id"),
-			eb.ref("directory.path").as("path"),
-			eb.ref("directory.name").as("display_name"),
+			eb.ref("lix_directory.id").as("id"),
+			eb.ref("lix_directory.parent_id").as("parent_id"),
+			eb.ref("lix_directory.path").as("path"),
+			eb.ref("lix_directory.name").as("display_name"),
 			sql<string>`'directory'`.as("kind"),
-			eb.ref("directory.hidden").as("hidden"),
+			eb.ref("lix_directory.hidden").as("hidden"),
 		])
 		.unionAll(
 			qb(lix)
-				.selectFrom("file")
+				.selectFrom("lix_file")
 				.select((eb) => [
-					eb.ref("file.id").as("id"),
-					eb.ref("file.directory_id").as("parent_id"),
-					eb.ref("file.path").as("path"),
+					eb.ref("lix_file.id").as("id"),
+					eb.ref("lix_file.directory_id").as("parent_id"),
+					eb.ref("lix_file.path").as("path"),
 					sql<string>`CASE
-						WHEN file.extension IS NULL OR file.extension = ''
-							THEN file.name
-						ELSE file.name || '.' || file.extension
+						WHEN lix_file.extension IS NULL OR lix_file.extension = ''
+							THEN lix_file.name
+						ELSE lix_file.name || '.' || lix_file.extension
 					END`.as("display_name"),
 					sql<string>`'file'`.as("kind"),
-					eb.ref("file.hidden").as("hidden"),
+					eb.ref("lix_file.hidden").as("hidden"),
 				]),
 		)
 		.orderBy("path", "asc")
@@ -71,24 +71,28 @@ export function selectFilesystemEntries(lix: Lix) {
  */
 export function selectWorkingDiffCount(lix: Lix) {
 	const activeFileIdQ = qb(lix)
-		.selectFrom("key_value_by_version")
+		.selectFrom("lix_key_value_by_version")
 		.where("key", "=", "flashtype_active_file_id")
 		.where("lixcol_version_id", "=", "global")
 		.select("value");
 
 	return selectDiffCount({
 		lix,
-		changeSetId: sql.ref("commit.change_set_id"),
+		changeSetId: sql.ref("lix_commit.change_set_id"),
 	})
 		.innerJoin(
-			"commit",
-			"commit.change_set_id",
-			"change_set_element.change_set_id",
+			"lix_commit",
+			"lix_commit.change_set_id",
+			"lix_change_set_element.change_set_id",
 		)
-		.innerJoin("change_set", "change_set.id", "commit.change_set_id")
-		.innerJoin("version", "version.working_commit_id", "commit.id")
-		.innerJoin("active_version", "active_version.version_id", "version.id")
-		.where("change_set_element.file_id", "=", activeFileIdQ);
+		.innerJoin("lix_change_set", "lix_change_set.id", "lix_commit.change_set_id")
+		.innerJoin("lix_version", "lix_version.working_commit_id", "lix_commit.id")
+		.innerJoin(
+			"lix_active_version",
+			"lix_active_version.version_id",
+			"lix_version.id",
+		)
+		.where("lix_change_set_element.file_id", "=", activeFileIdQ);
 }
 
 /**
@@ -108,31 +112,31 @@ export function selectWorkingDiffCount(lix: Lix) {
 export function selectCheckpoints({ lix }: { lix: Lix }) {
 	return (
 		qb(lix)
-			.selectFrom("change_set")
+			.selectFrom("lix_change_set")
 			// Only labelled checkpoints
-			.innerJoin("commit", "commit.change_set_id", "change_set.id")
+			.innerJoin("lix_commit", "lix_commit.change_set_id", "lix_change_set.id")
 			// Join commit for metadata
-			.where(ebEntity("commit").hasLabel({ name: "checkpoint" }))
+			.where(ebEntity("lix_commit").hasLabel({ name: "checkpoint" }))
 			// Aggregate counts per file within the change set
 			.leftJoin(
-				"change_set_element",
-				"change_set.id",
-				"change_set_element.change_set_id",
+				"lix_change_set_element",
+				"lix_change_set.id",
+				"lix_change_set_element.change_set_id",
 			)
-			.leftJoin("change", "change.id", "change_set_element.change_id")
-			.groupBy(["change_set.id", "commit.id"])
-			.select(["change_set.id"])
-			.select((eb) => eb.ref("commit.id").as("commit_id"))
+			.leftJoin("lix_change", "lix_change.id", "lix_change_set_element.change_id")
+			.groupBy(["lix_change_set.id", "lix_commit.id"])
+			.select(["lix_change_set.id"])
+			.select((eb) => eb.ref("lix_commit.id").as("commit_id"))
 			// Created at of the checkpoint label
 			.select((eb) =>
 				eb
-					.selectFrom("entity_label")
-					.innerJoin("label", "label.id", "entity_label.label_id")
-					.whereRef("entity_label.entity_id", "=", "commit.id")
-					.where("entity_label.schema_key", "=", "lix_commit")
-					.where("entity_label.file_id", "=", "lix")
-					.where("label.name", "=", "checkpoint")
-					.select("entity_label.lixcol_created_at")
+					.selectFrom("lix_entity_label")
+					.innerJoin("lix_label", "lix_label.id", "lix_entity_label.label_id")
+					.whereRef("lix_entity_label.entity_id", "=", "lix_commit.id")
+					.where("lix_entity_label.schema_key", "=", "lix_commit")
+					.where("lix_entity_label.file_id", "=", "lix")
+					.where("lix_label.name", "=", "checkpoint")
+					.select("lix_entity_label.lixcol_created_at")
 					.as("checkpoint_created_at"),
 			)
 			// Aggregated diff counts
@@ -140,19 +144,19 @@ export function selectCheckpoints({ lix }: { lix: Lix }) {
 				eb.fn
 					.sum<number>(
 						sql`CASE 
-                            WHEN change.plugin_key = ${sql.lit(MARKDOWN_PLUGIN_KEY)} 
-                             AND change.schema_key != ${sql.lit(AstSchemas.DocumentSchema["x-lix-key"])} 
-                             AND change.snapshot_content IS NOT NULL 
-                        THEN 1 ELSE 0 END`,
+	                            WHEN lix_change.plugin_key = ${sql.lit(MARKDOWN_PLUGIN_KEY)} 
+	                             AND lix_change.schema_key != ${sql.lit(AstSchemas.DocumentSchema["x-lix-key"])} 
+	                             AND lix_change.snapshot_content IS NOT NULL 
+	                        THEN 1 ELSE 0 END`,
 					)
 					.as("added"),
 				eb.fn
 					.sum<number>(
 						sql`CASE 
-                            WHEN change.plugin_key = ${sql.lit(MARKDOWN_PLUGIN_KEY)} 
-                             AND change.schema_key != ${sql.lit(AstSchemas.DocumentSchema["x-lix-key"])} 
-                             AND change.snapshot_content IS NULL 
-                        THEN 1 ELSE 0 END`,
+	                            WHEN lix_change.plugin_key = ${sql.lit(MARKDOWN_PLUGIN_KEY)} 
+	                             AND lix_change.schema_key != ${sql.lit(AstSchemas.DocumentSchema["x-lix-key"])} 
+	                             AND lix_change.snapshot_content IS NULL 
+	                        THEN 1 ELSE 0 END`,
 					)
 					.as("removed"),
 			])
@@ -185,21 +189,21 @@ export function selectDiffCount({
 	changeSetId: string | any;
 }) {
 	return qb(lix)
-		.selectFrom("change_set_element")
-		.leftJoin("change", "change.id", "change_set_element.change_id")
-		.where("change_set_element.change_set_id", "=", changeSetId)
-		.where("change.plugin_key", "=", MARKDOWN_PLUGIN_KEY)
-		.where("change.schema_key", "!=", AstSchemas.DocumentSchema["x-lix-key"])
+		.selectFrom("lix_change_set_element")
+		.leftJoin("lix_change", "lix_change.id", "lix_change_set_element.change_id")
+		.where("lix_change_set_element.change_set_id", "=", changeSetId)
+		.where("lix_change.plugin_key", "=", MARKDOWN_PLUGIN_KEY)
+		.where("lix_change.schema_key", "!=", AstSchemas.DocumentSchema["x-lix-key"])
 		.select((eb) => [
-			eb.fn.count<number>("change.id").as("total"),
+			eb.fn.count<number>("lix_change.id").as("total"),
 			eb.fn
 				.sum<number>(
-					sql`CASE WHEN change.snapshot_content IS NOT NULL THEN 1 ELSE 0 END`,
+					sql`CASE WHEN lix_change.snapshot_content IS NOT NULL THEN 1 ELSE 0 END`,
 				)
 				.as("added"),
 			eb.fn
 				.sum<number>(
-					sql`CASE WHEN change.snapshot_content IS NULL THEN 1 ELSE 0 END`,
+					sql`CASE WHEN lix_change.snapshot_content IS NULL THEN 1 ELSE 0 END`,
 				)
 				.as("removed"),
 		]);
@@ -223,13 +227,13 @@ export function selectCheckpointDiffCounts({
 	const fileIdQ = fileId
 		? sql.lit(fileId)
 		: qb(lix)
-				.selectFrom("key_value_by_version")
+				.selectFrom("lix_key_value_by_version")
 				.where("key", "=", "flashtype_active_file_id")
 				.where("lixcol_version_id", "=", "global")
 				.select("value");
 
 	return selectDiffCount({ lix, changeSetId })
-		.where("change_set_element.file_id", "=", fileIdQ)
+		.where("lix_change_set_element.file_id", "=", fileIdQ)
 		.$castTo<{
 			total: number | null;
 			added: number | null;

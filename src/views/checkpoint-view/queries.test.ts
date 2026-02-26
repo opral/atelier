@@ -22,7 +22,7 @@ describe("selectWorkingDiffFiles", () => {
 		const fileB = "checkpoint_view_b";
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileA,
 				path: "/docs/alpha.md",
@@ -31,7 +31,7 @@ describe("selectWorkingDiffFiles", () => {
 			.execute();
 
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileB,
 				path: "/docs/beta.md",
@@ -43,13 +43,13 @@ describe("selectWorkingDiffFiles", () => {
 		await lix.createCheckpoint();
 
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("Alpha updated") })
 			.where("id", "=", fileA)
 			.execute();
 
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("Beta updated") })
 			.where("id", "=", fileB)
 			.execute();
@@ -62,7 +62,7 @@ describe("selectWorkingDiffFiles", () => {
 
 		// Another edit to the same file should not duplicate entries
 		await qb(lix)
-			.updateTable("file")
+			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("Alpha updated again") })
 			.where("id", "=", fileA)
 			.execute();
@@ -76,7 +76,7 @@ describe("selectWorkingDiffFiles", () => {
 		// New file appears as added
 		const fileC = "checkpoint_view_c";
 		await qb(lix)
-			.insertInto("file")
+			.insertInto("lix_file")
 			.values({
 				id: fileC,
 				path: "/docs/gamma.md",

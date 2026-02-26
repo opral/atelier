@@ -33,7 +33,7 @@ test("assembleMdAst returns ordered children from state (seeded by plugin)", asy
 	const fileId = "util_file_1";
 	const markdown = "Hello";
 	await qb(lix)
-		.insertInto("file")
+		.insertInto("lix_file")
 		.values({
 			id: fileId,
 			path: "/util.md",

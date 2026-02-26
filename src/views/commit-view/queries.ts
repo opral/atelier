@@ -33,29 +33,29 @@ export function selectCheckpointFiles({
 	changeSetId: string;
 }) {
 	const pathExpr = sql<string>`COALESCE(
-		MAX(file.path),
+		MAX(lix_file.path),
 		change_set_element.file_id
 	)`;
 
 	return qb(lix)
-		.selectFrom("change_set_element")
-		.innerJoin("change", "change.id", "change_set_element.change_id")
-		.leftJoin("file", "file.id", "change_set_element.file_id")
-		.where("change_set_element.change_set_id", "=", changeSetId)
-		.where("change.plugin_key", "=", MARKDOWN_PLUGIN_KEY)
-		.where("change.schema_key", "!=", AstSchemas.DocumentSchema["x-lix-key"])
-		.groupBy(["change_set_element.file_id"])
+		.selectFrom("lix_change_set_element")
+		.innerJoin("lix_change", "lix_change.id", "lix_change_set_element.change_id")
+		.leftJoin("lix_file", "lix_file.id", "lix_change_set_element.file_id")
+		.where("lix_change_set_element.change_set_id", "=", changeSetId)
+		.where("lix_change.plugin_key", "=", MARKDOWN_PLUGIN_KEY)
+		.where("lix_change.schema_key", "!=", AstSchemas.DocumentSchema["x-lix-key"])
+		.groupBy(["lix_change_set_element.file_id"])
 		.select((eb) => [
-			eb.ref("change_set_element.file_id").as("file_id"),
+			eb.ref("lix_change_set_element.file_id").as("file_id"),
 			pathExpr.as("path"),
 			eb.fn
 				.sum<number>(
-					sql`CASE WHEN change.snapshot_content IS NOT NULL THEN 1 ELSE 0 END`,
+					sql`CASE WHEN lix_change.snapshot_content IS NOT NULL THEN 1 ELSE 0 END`,
 				)
 				.as("added"),
 			eb.fn
 				.sum<number>(
-					sql`CASE WHEN change.snapshot_content IS NULL THEN 1 ELSE 0 END`,
+					sql`CASE WHEN lix_change.snapshot_content IS NULL THEN 1 ELSE 0 END`,
 				)
 				.as("removed"),
 		])
