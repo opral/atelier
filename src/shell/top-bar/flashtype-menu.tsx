@@ -59,6 +59,10 @@ export function FlashtypeMenu() {
 		await setThemePreference(isDarkMode ? "light" : "dark");
 	}, [isDarkMode, setThemePreference]);
 	const toggleShowHiddenFiles = useCallback(async () => {
+		console.log("[files-widget-trace] toggle hidden files", {
+			previous: showHiddenFiles,
+			next: !showHiddenFiles,
+		});
 		await setShowHiddenFiles(!showHiddenFiles);
 	}, [setShowHiddenFiles, showHiddenFiles]);
 
