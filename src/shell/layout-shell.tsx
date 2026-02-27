@@ -60,6 +60,10 @@ import {
 	FILE_WIDGET_KIND,
 } from "../widget-runtime/widget-instance-helpers";
 import {
+	installWidgetFromFiles as installWidgetFromFilesInLix,
+	uninstallWidget as uninstallWidgetInLix,
+} from "../widget-runtime/widget-installation";
+import {
 	coerceFlashtypeUiState,
 	DEFAULT_FLASHTYPE_UI_STATE,
 	FLASHTYPE_UI_STATE_KEY,
@@ -147,7 +151,7 @@ const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
 const INSTALLED_WIDGET_PATH_LIKE = "/.lix/app_data/flashtype/widgets/%";
 const INSTALLED_WIDGET_OBSERVE_SQL =
-	"SELECT path, data FROM file_by_version WHERE lixcol_version_id = ? AND path LIKE ?";
+	"SELECT path, data FROM lix_file_by_version WHERE lixcol_version_id = ? AND path LIKE ?";
 const PANEL_TRANSITION_STYLE: CSSProperties = {
 	transitionProperty: "flex-grow, flex-basis",
 	transitionDuration: "200ms",
@@ -1065,12 +1069,34 @@ function LayoutShellContent() {
 		[schedulePanelAnimation],
 	);
 
+	const handleInstallWidgetFromFiles = useCallback(
+		async (args: {
+			readonly widgetId: string;
+			readonly files: ReadonlyArray<{
+				readonly path: string;
+				readonly data: string | Uint8Array;
+			}>;
+		}) => {
+			await installWidgetFromFilesInLix(lix, args);
+		},
+		[lix],
+	);
+
+	const handleUninstallWidget = useCallback(
+		async (widgetId: string) => {
+			await uninstallWidgetInLix(lix, widgetId);
+		},
+		[lix],
+	);
+
 	const sharedViewContext = useMemo(
 		() => ({
 			openWidget: handleOpenView,
 			closeWidget: handleCloseView,
 			setTabBadgeCount: () => {},
 			moveWidgetToPanel: handleMoveViewToPanel,
+			installWidgetFromFiles: handleInstallWidgetFromFiles,
+			uninstallWidget: handleUninstallWidget,
 			resizePanel: handleResizePanel,
 			focusPanel: focusPanel,
 			lix,
@@ -1079,6 +1105,8 @@ function LayoutShellContent() {
 			handleOpenView,
 			handleCloseView,
 			handleMoveViewToPanel,
+			handleInstallWidgetFromFiles,
+			handleUninstallWidget,
 			handleResizePanel,
 			focusPanel,
 			lix,

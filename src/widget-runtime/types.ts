@@ -133,6 +133,14 @@ export interface WidgetContext {
 		targetPanel: PanelSide,
 		instance?: string,
 	) => void;
+	readonly installWidgetFromFiles?: (args: {
+		readonly widgetId: string;
+		readonly files: ReadonlyArray<{
+			readonly path: string;
+			readonly data: string | Uint8Array;
+		}>;
+	}) => Promise<void>;
+	readonly uninstallWidget?: (widgetId: string) => Promise<void>;
 	readonly resizePanel?: (side: PanelSide, size: number) => void;
 	readonly focusPanel?: (side: PanelSide) => void;
 	readonly isActiveView?: boolean;

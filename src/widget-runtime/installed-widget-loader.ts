@@ -1,10 +1,7 @@
 import type { Lix } from "@lix-js/sdk";
+import { qb } from "@lix-js/kysely";
 import { MessageSquare, Puzzle, type LucideIcon } from "lucide-react";
-import type {
-	WidgetContext,
-	WidgetDefinition,
-	WidgetInstance,
-} from "./types";
+import type { WidgetContext, WidgetDefinition, WidgetInstance } from "./types";
 
 const WIDGET_ROOT = "/.lix/app_data/flashtype/widgets/";
 const MANIFEST_SUFFIX = "/manifest.json";
@@ -36,7 +33,10 @@ type FileRow = {
 
 const textDecoder = new TextDecoder();
 const lucideByName = Object.fromEntries(
-	Object.entries({ Puzzle, MessageSquare }).map(([k, v]) => [k.toLowerCase(), v]),
+	Object.entries({ Puzzle, MessageSquare }).map(([k, v]) => [
+		k.toLowerCase(),
+		v,
+	]),
 ) as Record<string, LucideIcon>;
 
 function unwrapSerializedValue(value: unknown): unknown {
@@ -58,7 +58,8 @@ function decodeFileData(data: FileRow["data"]): string {
 	}
 	if (typeof raw === "string") return raw;
 	if (raw instanceof Uint8Array) return textDecoder.decode(raw);
-	if (raw instanceof ArrayBuffer) return textDecoder.decode(new Uint8Array(raw));
+	if (raw instanceof ArrayBuffer)
+		return textDecoder.decode(new Uint8Array(raw));
 	if (ArrayBuffer.isView(raw)) {
 		return textDecoder.decode(
 			new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength),
@@ -87,7 +88,9 @@ function normalizePath(path: string): string {
 
 function resolveWidgetEntryPath(manifestPath: string, entry: string): string {
 	const widgetDir = manifestPath.slice(0, -MANIFEST_SUFFIX.length);
-	const raw = entry.startsWith("./") ? `${widgetDir}/${entry.slice(2)}` : `${widgetDir}/${entry}`;
+	const raw = entry.startsWith("./")
+		? `${widgetDir}/${entry.slice(2)}`
+		: `${widgetDir}/${entry}`;
 	const resolved = normalizePath(raw);
 	if (!resolved.startsWith(widgetDir + "/")) {
 		throw new Error(`Widget entry escapes widget directory: ${entry}`);
@@ -95,7 +98,10 @@ function resolveWidgetEntryPath(manifestPath: string, entry: string): string {
 	return resolved;
 }
 
-function parseManifest(manifestPath: string, manifestContent: string): WidgetManifest {
+function parseManifest(
+	manifestPath: string,
+	manifestContent: string,
+): WidgetManifest {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(manifestContent);
@@ -140,10 +146,12 @@ async function importWidgetModule(
 	const blob = new Blob([sourceCode], { type: "text/javascript" });
 	const url = URL.createObjectURL(blob);
 	try {
-		const mod = (await import(/* @vite-ignore */ `${url}#${encodeURIComponent(sourcePath)}`)) as any;
-		const contract = (mod?.default && typeof mod.default === "object"
-			? mod.default
-			: mod) as Partial<WidgetModuleContract>;
+		const mod = (await import(
+			/* @vite-ignore */ `${url}#${encodeURIComponent(sourcePath)}`
+		)) as any;
+		const contract = (
+			mod?.default && typeof mod.default === "object" ? mod.default : mod
+		) as Partial<WidgetModuleContract>;
 		if (typeof contract.render !== "function") {
 			throw new Error("Widget module must export a render function.");
 		}
@@ -151,7 +159,9 @@ async function importWidgetModule(
 			contract.activate !== undefined &&
 			typeof contract.activate !== "function"
 		) {
-			throw new Error("Widget activate export must be a function when present.");
+			throw new Error(
+				"Widget activate export must be a function when present.",
+			);
 		}
 		return contract as WidgetModuleContract;
 	} finally {
@@ -162,7 +172,10 @@ async function importWidgetModule(
 export async function loadInstalledWidgetsFromLix(
 	lix: Lix,
 ): Promise<WidgetDefinition[]> {
-	const manifestRows = await selectFiles(lix, `${WIDGET_ROOT}%${MANIFEST_SUFFIX}`);
+	const manifestRows = await selectFiles(
+		lix,
+		`${WIDGET_ROOT}%${MANIFEST_SUFFIX}`,
+	);
 	const fileRows = await selectFiles(lix, `${WIDGET_ROOT}%`);
 
 	const filesByPath = new Map<string, FileRow>();
@@ -188,7 +201,8 @@ export async function loadInstalledWidgetsFromLix(
 			definitions.push({
 				kind: manifest.id,
 				label: manifest.name,
-				description: manifest.description ?? `Installed widget: ${manifest.name}`,
+				description:
+					manifest.description ?? `Installed widget: ${manifest.name}`,
 				icon,
 				activate: module.activate,
 				render: module.render,
@@ -205,12 +219,10 @@ export async function loadInstalledWidgetsFromLix(
 }
 
 async function selectFiles(lix: Lix, pathLike: string): Promise<FileRow[]> {
-	const result = await lix.execute(
-		"SELECT path, data FROM file_by_version WHERE lixcol_version_id = ? AND path LIKE ?",
-		["global", pathLike],
-	);
-	return result.rows.map((row) => ({
-		path: String(row[0] ?? ""),
-		data: row[1],
-	}));
+	return qb(lix)
+		.selectFrom("lix_file_by_version")
+		.select(["path", "data"])
+		.where("lixcol_version_id", "=", "global")
+		.where("path", "like", pathLike)
+		.execute() as Promise<FileRow[]>;
 }
