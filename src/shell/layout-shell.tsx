@@ -48,6 +48,7 @@ import {
 	WidgetRegistryProvider,
 	useWidgetRegistry,
 } from "../widget-runtime/widget-registry";
+import { loadInstalledWidgetsFromLix } from "../widget-runtime/installed-widget-loader";
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileWidgetProps,
@@ -193,7 +194,8 @@ export function V2LayoutShell() {
  * <V2LayoutShell />
  */
 function LayoutShellContent() {
-	const { widgetMap } = useWidgetRegistry();
+	const { widgetMap, replaceInstalledWidgets, clearInstalledWidgets } =
+		useWidgetRegistry();
 	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
 	const [themePreference] = useKeyValue("flashtype_theme");
 	const theme = themePreference === "dark" ? "dark" : "light";
@@ -263,6 +265,27 @@ function LayoutShellContent() {
 	useEffect(() => {
 		viewHostRegistry.pruneHosts(activeInstances);
 	}, [viewHostRegistry, activeInstances]);
+
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			try {
+				const installed = await loadInstalledWidgetsFromLix(lix);
+				if (!cancelled) {
+					replaceInstalledWidgets(installed);
+				}
+			} catch (error) {
+				console.warn("[widget-loader] failed to load installed widgets", error);
+				if (!cancelled) {
+					clearInstalledWidgets();
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [lix, replaceInstalledWidgets, clearInstalledWidgets]);
 
 	const lastPersistedRef = useRef<string>(
 		JSON.stringify({
