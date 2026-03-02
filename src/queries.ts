@@ -77,7 +77,6 @@ export function selectWorkingDiffCount(lix: Lix) {
 		)
 		.where("active_file.key", "=", "flashtype_active_file_id")
 		.where("active_file.lixcol_version_id", "=", "global")
-		.where("diff.status", "!=", "unchanged")
 		.where("diff.schema_key", "like", "markdown_v2_%")
 		.where("diff.schema_key", "!=", MARKDOWN_V2_DOCUMENT_SCHEMA_KEY)
 		.select((eb) => [

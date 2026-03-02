@@ -49,7 +49,7 @@ async function countWorkingDiffRows(args: {
 	fileId: string;
 }): Promise<number> {
 	const result = await args.lix.execute(
-		"SELECT COUNT(*) AS diff_count FROM lix_working_changes WHERE file_id = ?1 AND status != 'unchanged'",
+		"SELECT COUNT(*) AS diff_count FROM lix_working_changes WHERE file_id = ?1",
 		[args.fileId],
 	);
 	const countIndex = result.columns.indexOf("diff_count");

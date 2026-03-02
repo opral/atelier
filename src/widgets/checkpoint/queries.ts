@@ -14,7 +14,6 @@ export type WorkingFileSummary = {
 export function selectWorkingDiffFiles(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_working_changes as diff")
-		.where("diff.status", "!=", "unchanged")
 		.where("diff.file_id", "!=", "lix")
 		.leftJoin("lix_file", "lix_file.id", "diff.file_id")
 		.leftJoin("lix_change as before", "before.id", "diff.before_change_id")

@@ -45,20 +45,12 @@ export function VersionSwitcher() {
 		hidden: boolean | null;
 		inherits_from_version_id: string | null | undefined;
 		commit_id: string | null;
-		working_commit_id: string | null;
 	};
 
 	const versions = useQuery<VersionRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_version")
-			.select([
-				"id",
-				"name",
-				"hidden",
-				"inherits_from_version_id",
-				"commit_id",
-				"working_commit_id",
-			])
+			.select(["id", "name", "hidden", "inherits_from_version_id", "commit_id"])
 			.where(
 				() =>
 					sql`COALESCE(CAST(lix_version.hidden AS TEXT), 'false') NOT IN ('true', '1', 't')`,
@@ -70,7 +62,11 @@ export function VersionSwitcher() {
 		() =>
 			qb(lix)
 				.selectFrom("lix_active_version")
-				.innerJoin("lix_version", "lix_version.id", "lix_active_version.version_id")
+				.innerJoin(
+					"lix_version",
+					"lix_version.id",
+					"lix_active_version.version_id",
+				)
 				.select(["lix_version.id", "lix_version.name"]),
 	);
 
