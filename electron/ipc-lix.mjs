@@ -29,7 +29,7 @@ export function registerLixIpc() {
 		const started = performance.now();
 		try {
 			const result = await lix.execute(sql, params, options);
-			const serialized = serializeQueryResult(result);
+			const serialized = serializeExecuteResult(result, "lix.execute");
 			logSlowOperation("execute", started, {
 				sqlHash: hashString(sql),
 				sql: summarizeSql(sql),
@@ -63,7 +63,10 @@ export function registerLixIpc() {
 		const started = performance.now();
 		try {
 			const result = await lix.executeTransaction(statements, options);
-			const serialized = serializeQueryResult(result);
+			const serialized = serializeExecuteResult(
+				result,
+				"lix.executeTransaction",
+			);
 			logSlowOperation("executeTransaction", started, {
 				statementCount: statements.length,
 				statements: statements.slice(0, 5).map((statement) => ({
@@ -113,7 +116,10 @@ export function registerLixIpc() {
 		const started = performance.now();
 		try {
 			const result = await transaction.execute(sql, params);
-			const serialized = serializeQueryResult(result);
+			const serialized = serializeExecuteResult(
+				result,
+				"transaction.execute",
+			);
 			logSlowOperation("transaction:execute", started, {
 				transactionId: String(payload?.transactionId ?? ""),
 				sqlHash: hashString(sql),
@@ -492,6 +498,18 @@ function serializeQueryResult(result) {
 			? result.columns
 			: [];
 	return { rows, columns };
+}
+
+function serializeExecuteResult(result, source) {
+	const statements = result?.statements;
+	if (!Array.isArray(statements)) {
+		throw new Error(`${source} returned invalid execute result (missing statements[])`);
+	}
+	const primary = statements[statements.length - 1];
+	if (!primary || typeof primary !== "object") {
+		throw new Error(`${source} returned execute result without statements`);
+	}
+	return serializeQueryResult(primary);
 }
 
 function serializeSqlValue(value) {

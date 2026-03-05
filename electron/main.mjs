@@ -7,9 +7,15 @@ import { disposeTerminalIpc, registerTerminalIpc } from "./ipc-terminal.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL =
 	process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:4173";
+let mainWindow = null;
 
 function createMainWindow() {
-	const window = new BrowserWindow({
+	if (mainWindow && !mainWindow.isDestroyed()) {
+		mainWindow.focus();
+		return mainWindow;
+	}
+
+	mainWindow = new BrowserWindow({
 		width: 1400,
 		height: 900,
 		minWidth: 1000,
@@ -24,8 +30,45 @@ function createMainWindow() {
 		},
 	});
 
-	window.once("ready-to-show", () => {
+	const window = mainWindow;
+	const showFallback = setTimeout(() => {
+		if (window.isDestroyed() || window.isVisible()) {
+			return;
+		}
 		window.show();
+	}, 3000);
+
+	window.once("ready-to-show", () => {
+		if (window.isDestroyed()) {
+			return;
+		}
+		window.show();
+		window.focus();
+	});
+
+	window.on("closed", () => {
+		clearTimeout(showFallback);
+		if (mainWindow === window) {
+			mainWindow = null;
+		}
+	});
+
+	window.webContents.on(
+		"did-fail-load",
+		(_event, errorCode, errorDescription, validatedURL) => {
+			console.error(
+				`Failed to load ${validatedURL} (${errorCode}): ${errorDescription}`,
+			);
+			if (!window.isDestroyed() && !window.isVisible()) {
+				window.show();
+			}
+		},
+	);
+
+	window.webContents.on("render-process-gone", (_event, details) => {
+		console.error(
+			`Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
+		);
 	});
 
 	window.webContents.setWindowOpenHandler(({ url }) => {
@@ -38,6 +81,8 @@ function createMainWindow() {
 	} else {
 		void window.loadURL(DEV_SERVER_URL);
 	}
+
+	return window;
 }
 
 app.whenReady().then(() => {
