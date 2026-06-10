@@ -13,7 +13,7 @@ import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 
 type MarkdownViewProps = {
-	readonly fileId?: string;
+	readonly fileId: string;
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
 	readonly focusOnLoad?: boolean;
@@ -48,31 +48,25 @@ export function MarkdownView({
 
 function MarkdownViewContent({
 	fileId,
-	filePath,
 	isActiveView = true,
 	focusOnLoad = false,
 	syncActiveFile = true,
 }: MarkdownViewProps) {
+	assertFileId(fileId);
+
 	const fileRow = useQueryTakeFirst(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
 				.select(["id", "path"])
-				.where(fileId ? "id" : "path", "=", fileId ?? filePath ?? "")
+				.where("id", "=", fileId)
 				.limit(1),
 		{ subscribe: false },
 	);
 
 	let content: ReactNode;
-	const hasTarget = Boolean(fileId || filePath);
 
-	if (!hasTarget) {
-		content = (
-			<div className="flex h-full items-center justify-center text-sm text-neutral-500">
-				Select a Markdown file to preview.
-			</div>
-		);
-	} else if (!fileRow) {
+	if (!fileRow) {
 		content = (
 			<div className="flex h-full items-center justify-center text-sm text-neutral-500">
 				File not found in the workspace.
@@ -103,6 +97,12 @@ function MarkdownViewContent({
 			{content}
 		</div>
 	);
+}
+
+function assertFileId(fileId: unknown): asserts fileId is string {
+	if (typeof fileId !== "string" || fileId.length === 0) {
+		throw new Error("MarkdownView requires a non-empty fileId.");
+	}
 }
 
 function ActiveFileSync({
@@ -151,7 +151,7 @@ export const widget = createReactWidgetDefinition({
 	component: ({ context, instance }) => (
 		<LixProvider lix={context.lix}>
 			<MarkdownView
-				fileId={instance.state?.fileId as string | undefined}
+				fileId={instance.state?.fileId as string}
 				filePath={instance.state?.filePath as string | undefined}
 				isActiveView={context.isActiveView ?? false}
 				focusOnLoad={Boolean(instance.state?.focusOnLoad)}

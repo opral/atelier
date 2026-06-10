@@ -10,32 +10,10 @@ import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { qb } from "@/lib/lix-kysely";
 
 describe("MarkdownView", () => {
-	test("renders an empty state when no file is provided", async () => {
-		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
-
-		let utils: ReturnType<typeof render> | undefined;
-		await act(async () => {
-			utils = render(
-				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView />
-						</Suspense>
-					</KeyValueProvider>
-				</LixProvider>,
-			);
-		});
-
-		expect(
-			screen.getByText(/select a markdown file to preview/i),
-		).toBeInTheDocument();
-
-		await act(async () => {
-			utils?.unmount();
-		});
+	test("throws when no file id is provided", () => {
+		expect(() => render(<MarkdownView {...({} as any)} />)).toThrow(
+			"MarkdownView requires a non-empty fileId.",
+		);
 	});
 
 	test("renders the TipTap editor when file is found", async () => {
