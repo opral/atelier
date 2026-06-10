@@ -4,6 +4,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { FsBackend, openLix } from "@lix-js/sdk";
 
 let lixPromise = null;
+let chosenWorkspaceDir = null;
 let lifecycle = Promise.resolve();
 
 function enqueue(operation) {
@@ -16,7 +17,11 @@ async function getLixWorkspaceDir(parentWindow) {
 	if (workspacePath !== undefined) {
 		return path.resolve(workspacePath);
 	}
-	return await chooseWorkspaceDir(parentWindow);
+	if (chosenWorkspaceDir !== null) {
+		return chosenWorkspaceDir;
+	}
+	chosenWorkspaceDir = await chooseWorkspaceDir(parentWindow);
+	return chosenWorkspaceDir;
 }
 
 function getWorkspacePathArgument(argv) {
@@ -40,6 +45,9 @@ export async function ensureLixOpen(parentWindow) {
 			openingPromise.catch(() => {
 				if (lixPromise === openingPromise) {
 					lixPromise = null;
+				}
+				if (getWorkspacePathArgument(process.argv) === undefined) {
+					chosenWorkspaceDir = null;
 				}
 			});
 		}
