@@ -48,10 +48,11 @@ function TerminalView() {
 	}, []);
 
 	useEffect(() => {
-		const desktop = window.flashtypeDesktop?.terminal;
+		const desktop = window.flashtypeDesktop;
+		const terminalApi = desktop?.terminal;
 		const container = containerRef.current;
 
-		if (!desktop || !container) {
+		if (!desktop?.lix || !terminalApi || !container) {
 			return;
 		}
 
@@ -64,7 +65,7 @@ function TerminalView() {
 			lineHeight: 1.2,
 			scrollback: 3000,
 			allowTransparency: false,
-			theme: XTERM_THEMES[theme],
+			theme: XTERM_THEMES[resolveThemeFromDocument(document.documentElement)],
 		});
 		terminalRef.current = terminal;
 		const fitAddon = new FitAddon();
@@ -76,7 +77,7 @@ function TerminalView() {
 			if (disposed) return;
 			fitAddon.fit();
 			if (!terminalId) return;
-			void desktop.resize({
+			void terminalApi.resize({
 				id: terminalId,
 				cols: terminal.cols,
 				rows: terminal.rows,
@@ -88,11 +89,11 @@ function TerminalView() {
 		});
 		resizeObserver.observe(container);
 
-		const stopData = desktop.onData((event) => {
+		const stopData = terminalApi.onData((event) => {
 			if (event.id !== terminalId) return;
 			terminal.write(event.data);
 		});
-		const stopExit = desktop.onExit((event) => {
+		const stopExit = terminalApi.onExit((event) => {
 			if (event.id !== terminalId) return;
 			terminal.writeln("");
 			terminal.writeln(
@@ -102,17 +103,22 @@ function TerminalView() {
 
 		const inputDisposable = terminal.onData((data) => {
 			if (!terminalId) return;
-			void desktop.write({ id: terminalId, data });
+			void terminalApi.write({ id: terminalId, data });
 		});
 
 		void (async () => {
 			try {
-				const created = await desktop.create({
+				const cwd = await desktop.lix.workspaceDir();
+				if (disposed) {
+					return;
+				}
+				const created = await terminalApi.create({
+					cwd,
 					cols: terminal.cols,
 					rows: terminal.rows,
 				});
 				if (disposed) {
-					await desktop.kill({ id: created.id });
+					await terminalApi.kill({ id: created.id });
 					return;
 				}
 				terminalId = created.id;
@@ -131,7 +137,7 @@ function TerminalView() {
 			stopExit();
 			inputDisposable.dispose();
 			if (terminalId) {
-				void desktop.kill({ id: terminalId });
+				void terminalApi.kill({ id: terminalId });
 			}
 			terminalRef.current = null;
 			terminal.dispose();

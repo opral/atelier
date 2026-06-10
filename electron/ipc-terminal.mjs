@@ -1,7 +1,4 @@
-import { app, ipcMain } from "electron";
-import os from "node:os";
-import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { ipcMain } from "electron";
 import pty from "node-pty";
 
 const terminals = new Map();
@@ -17,7 +14,7 @@ export function registerTerminalIpc() {
 	ipcMain.handle("terminal:create", async (event, payload) => {
 		const id = `terminal:${crypto.randomUUID()}`;
 		const shell = resolveShell(payload?.shell);
-		const cwd = await resolveCwd(payload?.cwd);
+		const cwd = payload?.cwd;
 		const cols = clampInteger(payload?.cols, 80, 20, 500);
 		const rows = clampInteger(payload?.rows, 24, 5, 200);
 
@@ -136,20 +133,6 @@ function resolveShell(rawShell) {
 		return process.env.COMSPEC ?? "powershell.exe";
 	}
 	return process.env.SHELL ?? "/bin/zsh";
-}
-
-async function resolveCwd(rawCwd) {
-	if (typeof rawCwd === "string" && rawCwd.trim().length > 0) {
-		return rawCwd;
-	}
-	const documentsPath = app.getPath("documents");
-	const defaultLixPath = path.join(documentsPath, "Lix");
-	try {
-		await mkdir(defaultLixPath, { recursive: true });
-		return defaultLixPath;
-	} catch {
-		return os.homedir();
-	}
 }
 
 function clampInteger(value, fallback, min, max) {

@@ -56,6 +56,7 @@ export type DesktopObserveEvent = {
 
 export type DesktopLixApi = {
 	open(): Promise<void>;
+	workspaceDir(): Promise<string>;
 	execute(payload: {
 		sql: string;
 		params?: ReadonlyArray<unknown>;
@@ -95,7 +96,7 @@ export type DesktopLixApi = {
 };
 
 export type DesktopTerminalCreatePayload = {
-	cwd?: string;
+	cwd: string;
 	shell?: string;
 	cols?: number;
 	rows?: number;
@@ -118,7 +119,7 @@ export type DesktopTerminalExitEvent = {
 
 export type DesktopTerminalApi = {
 	create(
-		payload?: DesktopTerminalCreatePayload,
+		payload: DesktopTerminalCreatePayload,
 	): Promise<DesktopTerminalCreateResult>;
 	write(payload: { id: string; data: string }): Promise<void>;
 	resize(payload: { id: string; cols: number; rows: number }): Promise<void>;

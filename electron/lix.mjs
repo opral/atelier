@@ -1,6 +1,6 @@
 import { dialog } from "electron";
 import path from "node:path";
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { FsBackend, openLix } from "@lix-js/sdk";
 
 let lixPromise = null;
@@ -35,7 +35,6 @@ export async function ensureLixOpen(parentWindow) {
 		if (!lixPromise) {
 			const openingPromise = (async () => {
 				const workspaceDir = await getLixWorkspaceDir(parentWindow);
-				await mkdir(workspaceDir, { recursive: true });
 				const nativeLix = await openLix({
 					backend: new FsBackend({ path: workspaceDir }),
 				});
@@ -114,6 +113,9 @@ function createDesktopLixHandle(nativeLix, workspaceDir) {
 	}
 
 	return {
+		workspaceDir() {
+			return workspaceDir;
+		},
 		async execute(sql, params = []) {
 			return await runQueued(() => nativeLix.execute(sql, [...params]));
 		},

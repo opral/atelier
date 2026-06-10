@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 const lix = {
 	open: () => ipcRenderer.invoke("lix:open"),
+	workspaceDir: () => ipcRenderer.invoke("lix:workspaceDir"),
 	execute: (payload) => ipcRenderer.invoke("lix:execute", payload),
 	executeTransaction: (payload) =>
 		ipcRenderer.invoke("lix:executeTransaction", payload),
