@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Files, FileUp, FilePlus } from "lucide-react";
-import { LixProvider, useLix, useQuery } from "@lix-js/react-utils";
+import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { normalizeDirectoryPath, normalizeFilePath } from "@/lib/path";
 import { selectFilesystemEntries } from "@/queries";
 import { buildFilesystemTree } from "@/widgets/files/build-filesystem-tree";
@@ -8,7 +8,7 @@ import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import type { WidgetContext } from "../../widget-runtime/types";
 import { FileTree } from "./file-tree";
 import { createReactWidgetDefinition } from "../../widget-runtime/react-widget";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	FILE_WIDGET_KIND,
 	FILES_WIDGET_KIND,

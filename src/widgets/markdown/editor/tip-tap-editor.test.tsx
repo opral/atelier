@@ -1,7 +1,7 @@
 import React, { Suspense, StrictMode } from "react";
 import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { expect, test } from "vitest";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	render,
 	waitFor,
@@ -9,7 +9,7 @@ import {
 	act,
 	fireEvent,
 } from "@testing-library/react";
-import { LixProvider } from "@lix-js/react-utils";
+import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@lix-js/sdk";
 import { TipTapEditor } from "./tip-tap-editor";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
@@ -455,7 +455,7 @@ test("updates editor when switching to a version with different external state",
 	expect(editorA).toHaveTextContent("Hello A");
 
 	// Create a new version B from current (still showing Hello A in main)
-	const vB = await lix.createVersion();
+		const vB = await lix.createBranch({ name: "Draft" });
 
 	// Pre-seed version B's STATE to differ from main (explicit, deterministic)
 	await insertMarkdownSchemas({ lix });
@@ -489,7 +489,7 @@ test("updates editor when switching to a version with different external state",
 
 	// Switch to version B — the editor should reflect version B's content "Hello B"
 	await act(async () => {
-		await lix.switchVersion(vB.id);
+			await lix.switchBranch({ branchId: vB.id });
 	});
 
 	await waitFor(() => {
@@ -714,14 +714,14 @@ test("preserves main content when switching to a new version and back", async ()
 	expect(editorA).toHaveTextContent("Hello world");
 
 	// Create a new version from main and switch to it
-	const vB = await lix.createVersion();
+	const vB = await lix.createBranch({ name: "Draft" });
 	await act(async () => {
-		await lix.switchVersion(vB.id);
+		await lix.switchBranch({ branchId: vB.id });
 	});
 
 	// Switch back to main; the content should still be "Hello world"
 	await act(async () => {
-		await lix.switchVersion(mainId);
+		await lix.switchBranch({ branchId: mainId });
 	});
 
 	await waitFor(() => {

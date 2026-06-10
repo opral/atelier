@@ -1,5 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import { MARKDOWN_V2_SCHEMA_DEFINITIONS } from "./markdown-v2-schema";
 
 type MarkdownSchemaDefinition = Record<string, unknown>;
@@ -24,7 +24,7 @@ function normalizeSchemaVersion(version: string): string {
  */
 export async function insertMarkdownSchemas(args: { lix: Lix }): Promise<void> {
 	const { lix } = args;
-	// TODO: remove `any` cast once @lix-js/kysely exports lix_stored_schema_by_version.
+	// TODO: remove `any` cast once @/lib/lix-kysely exports lix_stored_schema_by_version.
 	const db = qb(lix) as any;
 
 	const rows = (await db

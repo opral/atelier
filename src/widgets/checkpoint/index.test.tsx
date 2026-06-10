@@ -1,7 +1,7 @@
 import React, { Suspense } from "react";
 import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { describe, expect, test, vi } from "vitest";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	render,
 	fireEvent,
@@ -9,7 +9,7 @@ import {
 	act,
 	screen,
 } from "@testing-library/react";
-import { LixProvider } from "@lix-js/react-utils";
+import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@lix-js/sdk";
 import { CheckpointView, widget as checkpointViewDefinition } from "./index";
 import type { WidgetContext, WidgetInstance } from "../../widget-runtime/types";

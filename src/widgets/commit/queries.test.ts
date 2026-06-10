@@ -3,7 +3,7 @@ import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive"
 import { openLix } from "@lix-js/sdk";
 import { selectCheckpoints } from "@/queries";
 import { selectCheckpointFiles } from "./queries";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 
 describe("selectCheckpointFiles", () => {
 	test("returns Markdown file summaries for a checkpoint", async () => {

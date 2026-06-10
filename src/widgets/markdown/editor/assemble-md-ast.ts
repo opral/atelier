@@ -1,5 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import { parseMarkdown } from "./markdown-rust";
 import { decodeMarkdownData } from "./decode-markdown-data";
 

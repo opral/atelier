@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { LixProvider, useQuery } from "@lix-js/react-utils";
+import { LixProvider, useQuery } from "@/lib/lix-react";
 import { selectCheckpoints } from "@/queries";
 import type { WidgetContext, WidgetInstance } from "../../widget-runtime/types";
 import { File, GitCommitVertical } from "lucide-react";

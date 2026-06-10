@@ -1,6 +1,6 @@
 import type { Lix } from "@lix-js/sdk";
-import { useLix, useQuery } from "@lix-js/react-utils";
-import { qb } from "@lix-js/kysely";
+import { useLix, useQuery } from "@/lib/lix-react";
+import { qb } from "@/lib/lix-kysely";
 import {
 	type KeyDef,
 	type ValueOf,
@@ -266,13 +266,10 @@ function selectValue(
 	opts: { defaultVersionId: string; untracked: boolean },
 ) {
 	if (opts.untracked) {
-		const versionExpr =
-			opts.defaultVersionId === "active"
-				? qb(lix).selectFrom("lix_active_version").select("version_id")
-				: opts.defaultVersionId;
+		const branchId = resolveUntrackedBranchId(opts.defaultVersionId);
 		return qb(lix)
-			.selectFrom("lix_key_value_by_version")
-			.where("lixcol_version_id", "=", versionExpr)
+			.selectFrom("lix_key_value_by_branch")
+			.where("lixcol_branch_id", "=", branchId)
 			.where("key", "=", key)
 			.select(["value"]);
 	}
@@ -290,32 +287,27 @@ async function upsertValue<T>(
 	opts: { defaultVersionId: string; untracked: boolean },
 ) {
 	if (opts.untracked) {
-		const versionId =
+		const branchId =
 			opts.defaultVersionId === "active"
-				? (
-						await qb(lix)
-							.selectFrom("lix_active_version")
-							.select("version_id")
-							.executeTakeFirstOrThrow()
-					).version_id
+				? await lix.activeBranchId()
 				: opts.defaultVersionId;
 
 		const updated = await qb(lix)
-			.updateTable("lix_key_value_by_version")
+			.updateTable("lix_key_value_by_branch")
 			.set({ value })
 			.where("key", "=", key)
-			.where("lixcol_version_id", "=", String(versionId))
+			.where("lixcol_branch_id", "=", String(branchId))
 			.executeTakeFirst();
 		if (Number(updated.numUpdatedRows ?? 0) > 0) {
 			return;
 		}
 		await qb(lix)
-			.insertInto("lix_key_value_by_version")
+			.insertInto("lix_key_value_by_branch")
 			.values({
 				key,
 				value,
-				lixcol_version_id: String(versionId),
-				lixcol_global: String(versionId) === "global",
+				lixcol_branch_id: String(branchId),
+				lixcol_global: String(branchId) === "global",
 				lixcol_untracked: true,
 			})
 			.execute();
@@ -334,6 +326,15 @@ async function upsertValue<T>(
 		.insertInto("lix_key_value")
 		.values({ key, value })
 		.execute();
+}
+
+function resolveUntrackedBranchId(defaultVersionId: string): string {
+	if (defaultVersionId === "active") {
+		throw new Error(
+			"active untracked key-value reads are not supported by the main Lix branch surface",
+		);
+	}
+	return defaultVersionId;
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {

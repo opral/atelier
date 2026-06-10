@@ -31,17 +31,21 @@ export type DesktopObserveQuery = {
 	params?: ReadonlyArray<unknown>;
 };
 
-export type DesktopCreateVersionOptions = {
+export type DesktopCreateBranchOptions = {
 	id?: string;
-	name?: string;
-	inheritsFromVersionId?: string;
-	hidden?: boolean;
+	name: string;
+	fromCommitId?: string;
 };
 
-export type DesktopCreateVersionResult = {
+export type DesktopCreateBranchResult = {
 	id: string;
 	name: string;
-	inheritsFromVersionId: string;
+	hidden: boolean;
+	commitId: string;
+};
+
+export type DesktopSwitchBranchResult = {
+	branchId: string;
 };
 
 export type DesktopCreateCheckpointResult = {
@@ -88,10 +92,11 @@ export type DesktopLixApi = {
 		observeId: string;
 	}): Promise<DesktopObserveEvent | undefined>;
 	observeClose(payload: { observeId: string }): Promise<void>;
-	createVersion(payload: {
-		options?: DesktopCreateVersionOptions;
-	}): Promise<DesktopCreateVersionResult>;
-	switchVersion(payload: { versionId: string }): Promise<void>;
+	activeBranchId(): Promise<string>;
+	createBranch(payload: {
+		options: DesktopCreateBranchOptions;
+	}): Promise<DesktopCreateBranchResult>;
+	switchBranch(payload: { branchId: string }): Promise<DesktopSwitchBranchResult>;
 	createCheckpoint(): Promise<DesktopCreateCheckpointResult>;
 	installPlugin(payload: DesktopInstallPluginOptions): Promise<void>;
 	exportSnapshot(): Promise<Uint8Array>;

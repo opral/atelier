@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { openLix } from "@lix-js/sdk";
 import { selectWorkingDiffFiles } from "./queries";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 
 describe("selectWorkingDiffFiles", () => {
 	test("returns changed files sorted by path and clears after checkpoint", async () => {

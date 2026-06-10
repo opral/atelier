@@ -1,6 +1,6 @@
 import React from "react";
 import { test, expect, vi } from "vitest";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	render,
 	renderHook,
@@ -8,7 +8,7 @@ import {
 	waitFor,
 	act,
 } from "@testing-library/react";
-import { LixProvider } from "@lix-js/react-utils";
+import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@lix-js/sdk";
 import { useKeyValue, KeyValueProvider } from "./use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "./schema";

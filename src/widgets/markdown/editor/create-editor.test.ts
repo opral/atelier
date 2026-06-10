@@ -7,7 +7,7 @@ import { parseMarkdown } from "./markdown-rust";
 import { handlePaste } from "./handle-paste";
 import { insertMarkdownSchemas } from "../../../lib/insert-markdown-schemas";
 import { Editor } from "@tiptap/core";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	MARKDOWN_V2_BLOCK_SCHEMA_KEY,
 	MARKDOWN_V2_DOCUMENT_SCHEMA_KEY,

@@ -7,7 +7,7 @@ import {
 } from "../../widget-runtime/widget-instance-helpers";
 
 const mockId = "cp-1";
-vi.mock("@lix-js/react-utils", () => ({
+vi.mock("@/lib/lix-react", () => ({
 	useQuery: vi.fn(() => [
 		{
 			id: mockId,

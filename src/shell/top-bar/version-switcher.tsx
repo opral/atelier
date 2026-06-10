@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
-import { qb, sql } from "@lix-js/kysely";
+import { qb, sql } from "@/lib/lix-kysely";
 import {
 	useLix,
 	useQuery,
 	useQueryTakeFirstOrThrow,
-} from "@lix-js/react-utils";
+} from "@/lib/lix-react";
 import type { Lix as JsSdkLix } from "@lix-js/sdk";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,10 +28,10 @@ import {
 import clsx from "clsx";
 
 /**
- * Dropdown trigger that lists available versions and switches the active one.
+ * Dropdown trigger that lists available branches and switches the active one.
  *
- * Versions are queried reactively from the underlying Lix store. Selecting
- * another version updates the `active_version` row via `lix.switchVersion`, which
+ * Branches are queried reactively from the underlying Lix store. Selecting
+ * another branch updates the workspace branch via `lix.switchBranch`, which
  * in turn refreshes any subscribers (e.g. editors watching the active version).
  *
  * @example
@@ -43,32 +43,35 @@ export function VersionSwitcher() {
 		id: string;
 		name: string;
 		hidden: boolean | null;
-		inherits_from_version_id: string | null | undefined;
 		commit_id: string | null;
 	};
 
 	const versions = useQuery<VersionRow>((lix) =>
 		qb(lix)
-			.selectFrom("lix_version")
-			.select(["id", "name", "hidden", "inherits_from_version_id", "commit_id"])
+			.selectFrom("lix_branch")
+			.select(["id", "name", "hidden", "commit_id"])
 			.where(
 				() =>
-					sql`COALESCE(CAST(lix_version.hidden AS TEXT), 'false') NOT IN ('true', '1', 't')`,
+					sql`COALESCE(CAST(lix_branch.hidden AS TEXT), 'false') NOT IN ('true', '1', 't')`,
 			)
 			.orderBy("name", "asc"),
 	);
 
-	const activeVersion = useQueryTakeFirstOrThrow<{ id: string; name: string }>(
+	const activeBranch = useQueryTakeFirstOrThrow<{ value: string }>(
 		() =>
 			qb(lix)
-				.selectFrom("lix_active_version")
-				.innerJoin(
-					"lix_version",
-					"lix_version.id",
-					"lix_active_version.version_id",
-				)
-				.select(["lix_version.id", "lix_version.name"]),
+				.selectFrom("lix_key_value")
+				.where("key", "=", "lix_workspace_branch_id")
+				.select(["value"]),
 	);
+	const activeVersion =
+		versions.find((version) => version.id === activeBranch.value) ??
+		({
+			id: activeBranch.value,
+			name: activeBranch.value,
+			hidden: false,
+			commit_id: null,
+		} satisfies VersionRow);
 
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
 
@@ -77,7 +80,7 @@ export function VersionSwitcher() {
 			if (!lix || versionId === activeVersion.id) return;
 			setPendingAction(versionId);
 			try {
-				await lix.switchVersion(versionId);
+				await lix.switchBranch({ branchId: versionId });
 			} catch (error) {
 				console.error("Failed to switch version", error);
 			} finally {
@@ -95,10 +98,10 @@ export function VersionSwitcher() {
 		const trimmed = entered.trim();
 		setPendingAction("create");
 		try {
-			const created = await lix.createVersion({
-				name: trimmed.length > 0 ? trimmed : undefined,
+			const created = await lix.createBranch({
+				name: trimmed.length > 0 ? trimmed : suggestion,
 			});
-			await lix.switchVersion(created.id);
+			await lix.switchBranch({ branchId: created.id });
 		} catch (error) {
 			console.error("Failed to create version", error);
 		} finally {
@@ -115,7 +118,7 @@ export function VersionSwitcher() {
 			setPendingAction(versionId);
 			try {
 				await qb(lix)
-					.updateTable("lix_version")
+					.updateTable("lix_branch")
 					.set({ name: trimmed })
 					.where("id", "=", versionId)
 					.execute();
@@ -142,12 +145,12 @@ export function VersionSwitcher() {
 			const currentActiveId = activeVersion.id;
 			try {
 				await qb(lix)
-					.updateTable("lix_version")
+					.updateTable("lix_branch")
 					.set({ hidden: true })
 					.where("id", "=", versionId)
 					.execute();
 				if (currentActiveId) {
-					await lix.switchVersion(currentActiveId);
+					await lix.switchBranch({ branchId: currentActiveId });
 				}
 			} catch (error) {
 				console.error("Failed to delete version", error);

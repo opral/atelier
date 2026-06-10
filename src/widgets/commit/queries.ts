@@ -1,7 +1,7 @@
 import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
 import { MARKDOWN_V2_DOCUMENT_SCHEMA_KEY } from "@/lib/markdown-v2-schema";
 import type { Lix } from "@lix-js/sdk";
-import { qb, sql } from "@lix-js/kysely";
+import { qb, sql } from "@/lib/lix-kysely";
 
 export type CheckpointFileChangeRow = {
 	readonly file_id: string;

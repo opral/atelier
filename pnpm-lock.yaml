@@ -20,12 +20,6 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.0)
-      '@lix-js/kysely':
-        specifier: workspace:*
-        version: link:vendor/lix-legacy/packages/js-kysely
-      '@lix-js/react-utils':
-        specifier: workspace:*
-        version: link:vendor/lix-legacy/packages/react-utils
       '@lix-js/sdk':
         specifier: workspace:*
         version: link:submodule/lix/packages/js-sdk
@@ -207,64 +201,6 @@ importers:
         version: 0.6.2
 
   submodule/markdown-wc/js: {}
-
-  vendor/lix-legacy/packages/js-kysely:
-    dependencies:
-      json-schema-to-ts:
-        specifier: ^3.1.1
-        version: 3.1.1
-      kysely:
-        specifier: ^0.28.7
-        version: 0.28.9
-    devDependencies:
-      '@lix-js/sdk':
-        specifier: workspace:*
-        version: link:../../../../submodule/lix/packages/js-sdk
-      typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.18
-        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@24.10.15)(happy-dom@18.0.1)(jiti@2.6.1)(jsdom@27.4.0)(lightningcss@1.30.2)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
-
-  vendor/lix-legacy/packages/react-utils:
-    devDependencies:
-      '@lix-js/kysely':
-        specifier: workspace:*
-        version: link:../js-kysely
-      '@lix-js/sdk':
-        specifier: workspace:*
-        version: link:../../../../submodule/lix/packages/js-sdk
-      '@testing-library/react':
-        specifier: ^16.3.0
-        version: 16.3.1(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@types/react':
-        specifier: ^19.1.8
-        version: 19.2.7
-      '@vitest/coverage-v8':
-        specifier: ^3.2.4
-        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@24.10.15)(happy-dom@18.0.1)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
-      https-proxy-agent:
-        specifier: 7.0.2
-        version: 7.0.2
-      jsdom:
-        specifier: ^26.1.0
-        version: 26.1.0
-      oxlint:
-        specifier: ^1.14.0
-        version: 1.36.0
-      react:
-        specifier: 19.2.0
-        version: 19.2.0
-      react-dom:
-        specifier: 19.2.0
-        version: 19.2.0(react@19.2.0)
-      typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.10.15)(happy-dom@18.0.1)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 

@@ -238,14 +238,21 @@ export function registerLixIpc() {
 		observeEvents.close();
 	});
 
-	ipcMain.handle("lix:createVersion", async (_event, payload) => {
+	ipcMain.handle("lix:activeBranchId", async () => {
 		const lix = await ensureLixOpen();
-		return await lix.createVersion(payload?.options ?? {});
+		return await lix.activeBranchId();
 	});
 
-	ipcMain.handle("lix:switchVersion", async (_event, payload) => {
+	ipcMain.handle("lix:createBranch", async (_event, payload) => {
 		const lix = await ensureLixOpen();
-		await lix.switchVersion(String(payload?.versionId ?? ""));
+		return await lix.createBranch(payload?.options ?? {});
+	});
+
+	ipcMain.handle("lix:switchBranch", async (_event, payload) => {
+		const lix = await ensureLixOpen();
+		return await lix.switchBranch({
+			branchId: String(payload?.branchId ?? ""),
+		});
 	});
 
 	ipcMain.handle("lix:createCheckpoint", async () => {

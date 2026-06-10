@@ -1,5 +1,5 @@
 import type { WidgetContext } from "../widget-runtime/types";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	FILE_WIDGET_KIND,
 	fileWidgetInstance,

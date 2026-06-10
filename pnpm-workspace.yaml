@@ -2,8 +2,6 @@ packages:
   - .
   - submodule/markdown-wc/js
   - submodule/lix/packages/js-sdk
-  - vendor/lix-legacy/packages/js-kysely
-  - vendor/lix-legacy/packages/react-utils
   - '!submodule/lix/packages/**/dist'
 
 onlyBuiltDependencies:

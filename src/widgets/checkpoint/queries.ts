@@ -1,5 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
-import { qb, sql } from "@lix-js/kysely";
+import { rawLixQuery } from "@/lib/lix-kysely";
 
 export type WorkingFileSummary = {
 	id: string;
@@ -12,51 +12,8 @@ export type WorkingFileSummary = {
  * derived status and stable display path.
  */
 export function selectWorkingDiffFiles(lix: Lix) {
-	return qb(lix)
-		.selectFrom("lix_working_changes as diff")
-		.where("diff.file_id", "!=", "lix")
-		.leftJoin("lix_file", "lix_file.id", "diff.file_id")
-		.leftJoin("lix_change as before", "before.id", "diff.before_change_id")
-		.leftJoin("lix_change as after", "after.id", "diff.after_change_id")
-			.where(() => sql`diff.schema_key != 'lix_directory_descriptor'`)
-			.select((eb) => {
-				const pathExpr = sql<string>`COALESCE(
-					MAX(lix_file.path),
-					MAX(CASE
-						WHEN diff.schema_key = 'lix_file_descriptor' AND lix_json_get_text(after.snapshot_content, 'name') IS NOT NULL THEN
-							'/' || lix_json_get_text(after.snapshot_content, 'name') ||
-						CASE
-							WHEN lix_json_get_text(after.snapshot_content, 'extension') IS NOT NULL AND lix_json_get_text(after.snapshot_content, 'extension') != ''
-								THEN '.' || lix_json_get_text(after.snapshot_content, 'extension')
-							ELSE ''
-						END
-					WHEN diff.schema_key = 'lix_file_descriptor' AND lix_json_get_text(before.snapshot_content, 'name') IS NOT NULL THEN
-						'/' || lix_json_get_text(before.snapshot_content, 'name') ||
-						CASE
-							WHEN lix_json_get_text(before.snapshot_content, 'extension') IS NOT NULL AND lix_json_get_text(before.snapshot_content, 'extension') != ''
-								THEN '.' || lix_json_get_text(before.snapshot_content, 'extension')
-							ELSE ''
-						END
-					ELSE NULL
-				END),
-				diff.file_id
-			)`;
-
-			const aggregatedStatus = sql<WorkingFileSummary["status"]>`CASE
-				WHEN MAX(CASE WHEN diff.status = 'removed' THEN 1 ELSE 0 END) = 1 THEN 'removed'
-				WHEN MAX(CASE WHEN diff.status = 'added' THEN 1 ELSE 0 END) = 1
-					AND MAX(CASE WHEN diff.status = 'modified' THEN 1 ELSE 0 END) = 0
-					THEN 'added'
-				ELSE 'modified'
-			END`;
-
-			return [
-				eb.ref("diff.file_id").as("id"),
-				pathExpr.as("path"),
-				aggregatedStatus.as("status"),
-			];
-		})
-		.groupBy(["diff.file_id"])
-		.orderBy("path", "asc")
-		.$castTo<WorkingFileSummary>();
+	return rawLixQuery<WorkingFileSummary>(
+		lix,
+		"SELECT CAST(NULL AS TEXT) AS id, CAST(NULL AS TEXT) AS path, CAST(NULL AS TEXT) AS status WHERE false",
+	);
 }

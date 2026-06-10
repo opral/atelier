@@ -21,14 +21,14 @@ import {
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
-import { useLix } from "@lix-js/react-utils";
+import { useLix } from "@/lib/lix-react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { normalizeFilePath } from "@/lib/path";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { StatusBar } from "./status-bar";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	WidgetHostRegistryProvider,
 	useWidgetHostRegistry,
@@ -151,7 +151,7 @@ const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
 const INSTALLED_WIDGET_PATH_LIKE = "/.lix/app_data/flashtype/widgets/%";
 const INSTALLED_WIDGET_OBSERVE_SQL =
-	"SELECT path, data FROM lix_file_by_version WHERE lixcol_version_id = ? AND path LIKE ?";
+	"SELECT path, data FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path LIKE ?";
 const PANEL_TRANSITION_STYLE: CSSProperties = {
 	transitionProperty: "flex-grow, flex-basis",
 	transitionDuration: "200ms",

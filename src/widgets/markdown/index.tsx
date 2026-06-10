@@ -1,8 +1,8 @@
 import { Suspense, useEffect } from "react";
 import type { ReactNode } from "react";
 import { FileText, Loader2 } from "lucide-react";
-import { LixProvider, useQueryTakeFirst } from "@lix-js/react-utils";
-import { qb } from "@lix-js/kysely";
+import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import { qb } from "@/lib/lix-kysely";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { EditorProvider } from "@/widgets/markdown/editor/editor-context";
 import { TipTapEditor } from "@/widgets/markdown/editor/tip-tap-editor";

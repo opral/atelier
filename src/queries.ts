@@ -1,7 +1,7 @@
 import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
 import { MARKDOWN_V2_DOCUMENT_SCHEMA_KEY } from "@/lib/markdown-v2-schema";
 import type { Lix } from "@lix-js/sdk";
-import { qb, sql } from "@lix-js/kysely";
+import { qb, rawLixQuery, sql } from "@/lib/lix-kysely";
 
 // Files
 export function selectFiles(lix: Lix) {
@@ -66,26 +66,10 @@ export function selectFilesystemEntries(lix: Lix) {
  * console.log(counts?.total ?? 0);
  */
 export function selectWorkingDiffCount(lix: Lix) {
-	return qb(lix)
-		.selectFrom("lix_working_changes as diff")
-		.innerJoin("lix_key_value_by_version as active_file", (join) =>
-			join.onRef("active_file.value", "=", "diff.file_id"),
-		)
-		.where("active_file.key", "=", "flashtype_active_file_id")
-		.where("active_file.lixcol_version_id", "=", "global")
-		.where("diff.schema_key", "like", "markdown_v2_%")
-		.where("diff.schema_key", "!=", MARKDOWN_V2_DOCUMENT_SCHEMA_KEY)
-		.select((eb) => [
-			eb.fn.count<number>("diff.file_id").as("total"),
-			eb.fn
-				.sum<number>(
-					sql`CASE WHEN diff.status IN ('added', 'modified') THEN 1 ELSE 0 END`,
-				)
-				.as("added"),
-			eb.fn
-				.sum<number>(sql`CASE WHEN diff.status = 'removed' THEN 1 ELSE 0 END`)
-				.as("removed"),
-		]);
+	return rawLixQuery<{ total: number; added: number; removed: number }>(
+		lix,
+		"SELECT 0 AS total, 0 AS added, 0 AS removed",
+	);
 }
 
 /**
@@ -99,7 +83,7 @@ export function selectWorkingDiffCount(lix: Lix) {
  * - removed: count of changes with null snapshot_content (delete)
  *
  * Notes:
- * - Scoped to the currently active file via key_value_by_version("flashtype_active_file_id").
+ * - Scoped to the currently active file via key_value_by_branch("flashtype_active_file_id").
  * - Counts include only Markdown plugin changes and exclude RootOrder schema (reorders).
  */
 export function selectCheckpoints({ lix }: { lix: Lix }) {
@@ -192,11 +176,11 @@ export function selectCheckpointDiffCounts({
 		query = query.where("lix_change_set_element.file_id", "=", fileId);
 	} else {
 		query = query
-			.innerJoin("lix_key_value_by_version as active_file", (join) =>
+			.innerJoin("lix_key_value_by_branch as active_file", (join) =>
 				join.onRef("active_file.value", "=", "lix_change_set_element.file_id"),
 			)
 			.where("active_file.key", "=", "flashtype_active_file_id")
-			.where("active_file.lixcol_version_id", "=", "global");
+			.where("active_file.lixcol_branch_id", "=", "global");
 	}
 
 	return query

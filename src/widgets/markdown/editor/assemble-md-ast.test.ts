@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 import { openLix } from "@lix-js/sdk";
 import { assembleMdAst } from "./assemble-md-ast";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 
 test("assembleMdAst returns empty root when file is missing", async () => {
 	const lix = await openLix();

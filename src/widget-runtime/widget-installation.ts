@@ -1,6 +1,6 @@
 import type { Lix } from "@lix-js/sdk";
 
-const GLOBAL_VERSION_ID = "global";
+const GLOBAL_BRANCH_ID = "global";
 const WIDGETS_ROOT = "/.lix/app_data/flashtype/widgets";
 
 function validateWidgetId(widgetId: string): string {
@@ -61,12 +61,12 @@ export async function installWidgetFromFiles(
 			const relativePath = normalizeRelativePath(file.path);
 			const fullPath = `${basePath}/${relativePath}`;
 			await tx.execute(
-				"DELETE FROM lix_file_by_version WHERE lixcol_version_id = ? AND path = ?",
-				[GLOBAL_VERSION_ID, fullPath],
+				"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path = ?",
+				[GLOBAL_BRANCH_ID, fullPath],
 			);
 			await tx.execute(
-				"INSERT INTO lix_file_by_version (path, data, lixcol_version_id, lixcol_global) VALUES (?, ?, ?, ?)",
-				[fullPath, file.data, GLOBAL_VERSION_ID, true],
+				"INSERT INTO lix_file_by_branch (path, data, lixcol_branch_id, lixcol_global) VALUES (?, ?, ?, ?)",
+				[fullPath, file.data, GLOBAL_BRANCH_ID, true],
 			);
 		}
 	});
@@ -80,12 +80,12 @@ export async function uninstallWidget(
 
 	await lix.transaction(async (tx) => {
 		await tx.execute(
-			"DELETE FROM lix_file_by_version WHERE lixcol_version_id = ? AND path LIKE ?",
-			[GLOBAL_VERSION_ID, `${basePath}/%`],
+			"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path LIKE ?",
+			[GLOBAL_BRANCH_ID, `${basePath}/%`],
 		);
 		await tx.execute(
-			"DELETE FROM lix_directory_by_version WHERE lixcol_version_id = ? AND path = ?",
-			[GLOBAL_VERSION_ID, `${basePath}/`],
+			"DELETE FROM lix_directory_by_branch WHERE lixcol_branch_id = ? AND path = ?",
+			[GLOBAL_BRANCH_ID, `${basePath}/`],
 		);
 	});
 }

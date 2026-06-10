@@ -1,7 +1,7 @@
 import { Editor } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
-import { type Lix } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
 import {
 	MarkdownWc,
 	astToTiptapDoc,

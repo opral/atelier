@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { Lix } from "@lix-js/sdk";
-import type { SelectQueryBuilder } from "kysely";
+import type { LixQueryLike } from "@/lib/lix-kysely";
 
 /**
  * Union of registry keys for views available in the layout.
@@ -52,7 +52,7 @@ export type RenderableDiff = {
 export type DiffWidgetConfig = {
 	readonly title?: string;
 	readonly subtitle?: string;
-	readonly query: (lix: Lix) => SelectQueryBuilder<any, any, RenderableDiff>;
+	readonly query: (lix: Lix) => LixQueryLike<RenderableDiff>;
 };
 
 /**

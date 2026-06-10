@@ -1,7 +1,7 @@
 import type {
+	CreateBranchOptions,
+	CreateBranchReceipt,
 	CreateCheckpointResult,
-	CreateVersionOptions,
-	CreateVersionResult,
 	ExecuteOptions,
 	Lix,
 	LixRuntimeQueryResult,
@@ -9,6 +9,8 @@ import type {
 	ObserveEvents,
 	ObserveQuery,
 	SqlTransaction,
+	SwitchBranchOptions,
+	SwitchBranchReceipt,
 	TransactionStatement,
 	InstallPluginOptions,
 } from "@lix-js/sdk";
@@ -228,16 +230,23 @@ export async function openDesktopLix(): Promise<Lix> {
 		};
 	};
 
-	const createVersion = async (
-		options: CreateVersionOptions = {},
-	): Promise<CreateVersionResult> => {
-		ensureOpen("createVersion");
-		return await runQueued(() => desktop.lix.createVersion({ options }));
+	const activeBranchId = async (): Promise<string> => {
+		ensureOpen("activeBranchId");
+		return await runQueued(() => desktop.lix.activeBranchId());
 	};
 
-	const switchVersion = async (versionId: string): Promise<void> => {
-		ensureOpen("switchVersion");
-		await runQueued(() => desktop.lix.switchVersion({ versionId }));
+	const createBranch = async (
+		options: CreateBranchOptions,
+	): Promise<CreateBranchReceipt> => {
+		ensureOpen("createBranch");
+		return await runQueued(() => desktop.lix.createBranch({ options }));
+	};
+
+	const switchBranch = async (
+		options: SwitchBranchOptions,
+	): Promise<SwitchBranchReceipt> => {
+		ensureOpen("switchBranch");
+		return await runQueued(() => desktop.lix.switchBranch(options));
 	};
 
 	const createCheckpoint = async (): Promise<CreateCheckpointResult> => {
@@ -279,9 +288,10 @@ export async function openDesktopLix(): Promise<Lix> {
 		transaction,
 		executeTransaction,
 		observe,
-		createVersion,
+		activeBranchId,
+		createBranch,
 		createCheckpoint,
-		switchVersion,
+		switchBranch,
 		installPlugin,
 		exportSnapshot,
 		close,

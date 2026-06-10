@@ -18,7 +18,6 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "src"),
-			"@lix-js/sdk": path.resolve(__dirname, "src/compat/browser-lix-sdk.ts"),
 			"@markdown-wc/wasm": path.resolve(
 				__dirname,
 				"submodule/markdown-wc/js/pkg/markdown_wc_js_bindings.js",

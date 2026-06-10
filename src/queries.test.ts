@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { openLix } from "@lix-js/sdk";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	selectFiles,
 	selectFilesystemEntries,

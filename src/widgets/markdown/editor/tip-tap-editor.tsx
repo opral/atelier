@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import { useEditorCtx } from "./editor-context";
-import { useLix, useQueryTakeFirst } from "@lix-js/react-utils";
+import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { createEditor } from "./create-editor";
 import { assembleMdAst } from "./assemble-md-ast";

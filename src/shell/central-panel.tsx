@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { LixProvider } from "@lix-js/react-utils";
+import { LixProvider } from "@/lib/lix-react";
 import type {
 	PanelState,
 	PanelSide,

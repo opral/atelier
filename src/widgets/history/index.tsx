@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { GitCommitVertical } from "lucide-react";
 import clsx from "clsx";
-import { LixProvider, useQuery } from "@lix-js/react-utils";
+import { LixProvider, useQuery } from "@/lib/lix-react";
 import { selectCheckpoints } from "@/queries";
 import type { WidgetContext } from "../../widget-runtime/types";
 import { createReactWidgetDefinition } from "../../widget-runtime/react-widget";

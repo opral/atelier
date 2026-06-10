@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	act,
 	fireEvent,
@@ -8,7 +8,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { LixProvider } from "@lix-js/react-utils";
+import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@lix-js/sdk";
 import { VersionSwitcher } from "./version-switcher";
 
@@ -64,7 +64,7 @@ describe("VersionSwitcher", () => {
 
 test("switches to another version when selected", async () => {
 		const draftName = `draft-${Math.random().toString(36).slice(2, 7)}`;
-		const newVersion = await lix.createVersion({ name: draftName });
+			const newVersion = await lix.createBranch({ name: draftName });
 
 		await renderWithProviders();
 
@@ -90,18 +90,19 @@ test("switches to another version when selected", async () => {
 		});
 
 		await waitFor(async () => {
-			const active = await qb(lix)
-				.selectFrom("lix_active_version")
-				.select("version_id")
-				.executeTakeFirstOrThrow();
-			expect(active.version_id).toBe(newVersion.id);
+				const active = await qb(lix)
+					.selectFrom("lix_key_value")
+					.where("key", "=", "lix_workspace_branch_id")
+					.select("value")
+					.executeTakeFirstOrThrow();
+				expect(active.value).toBe(newVersion.id);
+			});
 		});
-	});
 
 test("renames a version via actions menu", async () => {
 		const baseName = `docs-${Math.random().toString(36).slice(2, 7)}`;
 		const renamedName = `${baseName}-renamed`;
-		const target = await lix.createVersion({ name: baseName });
+			const target = await lix.createBranch({ name: baseName });
 		const promptSpy = vi.fn().mockReturnValue(renamedName);
 		vi.stubGlobal("prompt", promptSpy);
 
@@ -133,17 +134,17 @@ test("renames a version via actions menu", async () => {
 			expect(screen.getByText(renamedName)).toBeInTheDocument();
 		});
 
-		const row = await qb(lix)
-			.selectFrom("lix_version")
-			.select(["id", "name"])
-			.where("id", "=", target.id)
+			const row = await qb(lix)
+				.selectFrom("lix_branch")
+				.select(["id", "name"])
+				.where("id", "=", target.id)
 			.executeTakeFirstOrThrow();
 		expect(row.name).toBe(renamedName);
 	});
 
 test("deletes a version via actions menu", async () => {
 		const tempName = `temp-${Math.random().toString(36).slice(2, 7)}`;
-		const target = await lix.createVersion({ name: tempName });
+			const target = await lix.createBranch({ name: tempName });
 		const confirmSpy = vi.fn().mockReturnValue(true);
 		vi.stubGlobal("confirm", confirmSpy);
 

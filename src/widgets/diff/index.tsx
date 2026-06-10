@@ -1,7 +1,7 @@
 import { Suspense, useMemo } from "react";
 import type { ReactNode } from "react";
-import { LixProvider, useQuery } from "@lix-js/react-utils";
-import { qb } from "@lix-js/kysely";
+import { LixProvider, useQuery } from "@/lib/lix-react";
+import { rawLixQuery } from "@/lib/lix-kysely";
 import type { Lix } from "@lix-js/sdk";
 import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
 import { Diff as DiffIcon, Loader2 } from "lucide-react";
@@ -75,25 +75,10 @@ function DiffViewContent({ config }: DiffViewProps) {
 }
 
 function emptyDiffQuery(lix: Lix) {
-	return (qb(lix) as any)
-		.selectFrom("lix_working_changes as diff")
-		.where("diff.entity_id", "=", "__empty_diff__")
-		.leftJoin("change as after", "after.id", "diff.after_change_id")
-		.leftJoin("change as before", "before.id", "diff.before_change_id")
-		.select((eb: any) => [
-			eb.ref("diff.entity_id").as("entity_id"),
-			eb.ref("diff.schema_key").as("schema_key"),
-			eb.ref("diff.status").as("status"),
-			eb.ref("before.snapshot_content").as("before_snapshot_content"),
-			eb.ref("after.snapshot_content").as("after_snapshot_content"),
-			eb.fn
-				.coalesce(
-					eb.ref("after.plugin_key"),
-					eb.ref("before.plugin_key"),
-					eb.val(MARKDOWN_PLUGIN_KEY),
-				)
-				.as("plugin_key"),
-		]) as any;
+	return rawLixQuery<RenderableDiff>(
+		lix,
+		"SELECT CAST(NULL AS TEXT) AS entity_id, CAST(NULL AS TEXT) AS schema_key, CAST(NULL AS TEXT) AS status, NULL AS before_snapshot_content, NULL AS after_snapshot_content, CAST(NULL AS TEXT) AS plugin_key WHERE false",
+	);
 }
 
 function normalizeSnapshot(snapshot: unknown): Record<string, any> | null {

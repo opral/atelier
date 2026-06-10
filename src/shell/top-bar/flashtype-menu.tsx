@@ -20,7 +20,7 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import { useLix } from "@lix-js/react-utils";
+import { useLix } from "@/lib/lix-react";
 import { useCallback, useState } from "react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 

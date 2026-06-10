@@ -11,7 +11,7 @@ import changelog from "./changelog.md?raw";
 import welcome from "./welcome.md?raw";
 // eslint-disable-next-line import/no-unresolved
 import agentsSeed from "./AGENTS.md?raw";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 
 const encoder = new TextEncoder();
 

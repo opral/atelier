@@ -1,5 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
-import { qb } from "@lix-js/kysely";
+import { qb } from "@/lib/lix-kysely";
 import { MessageSquare, Puzzle, type LucideIcon } from "lucide-react";
 import type { WidgetContext, WidgetDefinition, WidgetInstance } from "./types";
 
@@ -220,9 +220,9 @@ export async function loadInstalledWidgetsFromLix(
 
 async function selectFiles(lix: Lix, pathLike: string): Promise<FileRow[]> {
 	return qb(lix)
-		.selectFrom("lix_file_by_version")
+		.selectFrom("lix_file_by_branch")
 		.select(["path", "data"])
-		.where("lixcol_version_id", "=", "global")
+		.where("lixcol_branch_id", "=", "global")
 		.where("path", "like", pathLike)
 		.execute() as Promise<FileRow[]>;
 }

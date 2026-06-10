@@ -47,19 +47,6 @@ declare module "@lix-js/sdk" {
 		close(): void;
 	};
 
-	export type CreateVersionOptions = {
-		id?: string;
-		name?: string;
-		inheritsFromVersionId?: string;
-		hidden?: boolean;
-	};
-
-	export type CreateVersionResult = {
-		id: string;
-		name: string;
-		inheritsFromVersionId: string | null;
-	};
-
 	export type CreateCheckpointResult = {
 		id: string;
 		changeSetId: string;
@@ -86,8 +73,6 @@ declare module "@lix-js/sdk" {
 			options?: ExecuteOptions,
 		): Promise<LixRuntimeQueryResult>;
 		observe(query: ObserveQuery): ObserveEvents;
-		createVersion(options?: CreateVersionOptions): Promise<CreateVersionResult>;
-		switchVersion(versionId: string): Promise<void>;
 		createCheckpoint(): Promise<CreateCheckpointResult>;
 		installPlugin(options: InstallPluginOptions): Promise<void>;
 		exportSnapshot(): Promise<Uint8Array>;

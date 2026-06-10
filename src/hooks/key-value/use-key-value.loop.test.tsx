@@ -4,12 +4,12 @@ import { render, waitFor } from "@testing-library/react";
 
 const executeMock = vi.fn(async () => undefined);
 
-vi.mock("@lix-js/react-utils", () => ({
+vi.mock("@/lib/lix-react", () => ({
 	useLix: () => ({}) as any,
 	useQuery: () => [{ value: "file-123" }],
 }));
 
-vi.mock("@lix-js/kysely", () => ({
+vi.mock("@/lib/lix-kysely", () => ({
 	qb: () => ({
 		insertInto: () => ({
 			values: () => ({

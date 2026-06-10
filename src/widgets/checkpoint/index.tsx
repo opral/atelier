@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Flag } from "lucide-react";
-import { LixProvider, useLix, useQuery } from "@lix-js/react-utils";
+import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { selectWorkingDiffFiles } from "./queries";
 import type { WidgetContext } from "../../widget-runtime/types";
 import { ChangedFilesList } from "./changed-files-list";

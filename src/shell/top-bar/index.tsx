@@ -1,7 +1,7 @@
 import { useId, useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
-import { useQueryTakeFirst } from "@lix-js/react-utils";
-import { qb } from "@lix-js/kysely";
+import { useQueryTakeFirst } from "@/lib/lix-react";
+import { qb } from "@/lib/lix-kysely";
 import { Button } from "@/components/ui/button";
 import {
 	Popover,

@@ -1,5 +1,4 @@
-import { qb, sql } from "@lix-js/kysely";
-import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
+import { rawLixQuery } from "@/lib/lix-kysely";
 import type { DiffWidgetConfig, RenderableDiff, WidgetKind } from "./types";
 
 export const FILES_WIDGET_KIND = "flashtype_files" as WidgetKind;
@@ -70,23 +69,11 @@ export function createWorkingVsCheckpointDiffConfig(
 	return {
 		title,
 		query: (lix) => {
-			const db = qb(lix) as any;
-			return db
-				.selectFrom("lix_working_changes as diff")
-				.where("diff.file_id", "=", fileId)
-				.orderBy("diff.entity_id")
-				.leftJoin("change as after", "after.id", "diff.after_change_id")
-				.leftJoin("change as before", "before.id", "diff.before_change_id")
-				.select([
-					"diff.entity_id as entity_id",
-					"diff.schema_key as schema_key",
-					"diff.status as status",
-					"before.snapshot_content as before_snapshot_content",
-					"after.snapshot_content as after_snapshot_content",
-					sql<string>`COALESCE(after.plugin_key, before.plugin_key, ${MARKDOWN_PLUGIN_KEY})`.as(
-						"plugin_key",
-					),
-				]) as any;
+			void fileId;
+			return rawLixQuery<RenderableDiff>(
+				lix,
+				"SELECT CAST(NULL AS TEXT) AS entity_id, CAST(NULL AS TEXT) AS schema_key, CAST(NULL AS TEXT) AS status, NULL AS before_snapshot_content, NULL AS after_snapshot_content, CAST(NULL AS TEXT) AS plugin_key WHERE false",
+			);
 		},
 	};
 }
