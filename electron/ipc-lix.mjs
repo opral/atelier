@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { closeLix, ensureLixOpen, wipeLixStorage } from "./lix.mjs";
+import { closeLix, ensureLixOpen } from "./lix.mjs";
 
 const observeHandles = new Map();
 const observeTraceMeta = new Map();
@@ -260,11 +260,6 @@ export function registerLixIpc() {
 	ipcMain.handle("lix:close", async () => {
 		await closeAllHandles();
 		await closeLix();
-	});
-
-	ipcMain.handle("lix:wipe", async () => {
-		await closeAllHandles();
-		await wipeLixStorage();
 	});
 }
 

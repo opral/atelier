@@ -21,7 +21,6 @@ const lix = {
 	switchBranch: (payload) => ipcRenderer.invoke("lix:switchBranch", payload),
 	exportSnapshot: () => ipcRenderer.invoke("lix:exportSnapshot"),
 	close: () => ipcRenderer.invoke("lix:close"),
-	wipe: () => ipcRenderer.invoke("lix:wipe"),
 };
 
 const terminal = {

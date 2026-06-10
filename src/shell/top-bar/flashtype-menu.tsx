@@ -5,7 +5,6 @@ import {
 	Hammer,
 	Moon,
 	Sun,
-	Trash2,
 	Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,7 @@ import {
 	DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { useLix } from "@/lib/lix-react";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 
 /**
@@ -30,7 +29,6 @@ import { useKeyValue } from "@/hooks/key-value/use-key-value";
  */
 export function FlashtypeMenu() {
 	const lix = useLix();
-	const [resettingLix, setResettingLix] = useState(false);
 	const [themePreference, setThemePreference] = useKeyValue("flashtype_theme");
 	const [deterministicMode, setDeterministicMode] = useKeyValue(
 		"lix_deterministic_mode" as any,
@@ -75,25 +73,6 @@ export function FlashtypeMenu() {
 			}, 100);
 		} catch (error) {
 			console.error("Failed to export Lix blob", error);
-		}
-	};
-
-	const handleResetLix = async () => {
-		if (resettingLix) return;
-		setResettingLix(true);
-		try {
-			const desktop = window.flashtypeDesktop?.lix;
-			if (!desktop?.wipe) {
-				console.error(
-					"Reset Lix is only available when running via Electron desktop bridge",
-				);
-				return;
-			}
-			await desktop.wipe();
-			window.location.reload();
-		} catch (error) {
-			console.error("Failed to reset Lix", error);
-			setResettingLix(false);
 		}
 	};
 
@@ -178,16 +157,6 @@ export function FlashtypeMenu() {
 									? "Turn off deterministic mode"
 									: "Turn on deterministic mode"}
 							</span>
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							disabled={resettingLix}
-							className="gap-1.5 text-xs text-destructive focus:text-destructive"
-							onSelect={() => {
-								void handleResetLix();
-							}}
-						>
-							<Trash2 className="h-3.5 w-3.5" />
-							<span>{resettingLix ? "Resetting lix..." : "Reset lix"}</span>
 						</DropdownMenuItem>
 					</DropdownMenuSubContent>
 				</DropdownMenuSub>

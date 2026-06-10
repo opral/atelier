@@ -92,7 +92,6 @@ export type DesktopLixApi = {
 	}): Promise<DesktopSwitchBranchResult>;
 	exportSnapshot(): Promise<Uint8Array>;
 	close(): Promise<void>;
-	wipe(): Promise<void>;
 };
 
 export type DesktopTerminalCreatePayload = {

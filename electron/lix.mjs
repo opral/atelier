@@ -1,6 +1,6 @@
 import { app } from "electron";
 import path from "node:path";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { FsBackend, openLix } from "@lix-js/sdk";
 
 let lixPromise = null;
@@ -50,11 +50,6 @@ export async function closeLix() {
 			lixPromise = null;
 		}
 	});
-}
-
-export async function wipeLixStorage() {
-	await closeLix();
-	await rm(getLixWorkspaceDir(), { force: true, recursive: true });
 }
 
 function createDesktopLixHandle(nativeLix, workspaceDir) {
