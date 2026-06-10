@@ -1,5 +1,4 @@
 import { describe, test, expect } from "vitest";
-import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { qb } from "@/lib/lix-kysely";
 import { selectFiles, selectFilesystemEntries } from "@/queries";
@@ -7,9 +6,6 @@ import { selectFiles, selectFilesystemEntries } from "@/queries";
 describe("selectFiles", () => {
 	test("returns minimal rows sorted by path", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -31,9 +27,6 @@ describe("selectFiles", () => {
 describe("selectFilesystemEntries", () => {
 	test("returns directories and files with hierarchy metadata", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 
 		await qb(lix)
 			.insertInto("lix_directory")
@@ -89,9 +82,6 @@ describe("selectFilesystemEntries", () => {
 
 	test("distinguishes root files from nested files", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 
 		await qb(lix)
 			.insertInto("lix_directory")

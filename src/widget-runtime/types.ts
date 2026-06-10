@@ -44,7 +44,6 @@ export type RenderableDiff = {
 	readonly entity_id: string;
 	readonly schema_key: string;
 	readonly status: "added" | "modified" | "removed";
-	readonly plugin_key: string;
 	readonly before_snapshot_content: Record<string, any> | null;
 	readonly after_snapshot_content: Record<string, any> | null;
 };

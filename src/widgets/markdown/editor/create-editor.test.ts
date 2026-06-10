@@ -1,11 +1,9 @@
 import { test, expect } from "vitest";
-import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { createEditor } from "./create-editor";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown-rust";
 import { handlePaste } from "./handle-paste";
-import { insertMarkdownSchemas } from "../../../lib/insert-markdown-schemas";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
 
@@ -53,8 +51,6 @@ async function createEditorFromFile(args: {
 	fileId: string;
 	persistDebounceMs?: number;
 }) {
-	await insertMarkdownSchemas({ lix: args.lix });
-
 	const row = await qb(args.lix)
 		.selectFrom("lix_file")
 		.where("id", "=", args.fileId)
@@ -85,9 +81,6 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 				lixcol_global: true,
 			},
 		],
-	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
 	});
 	const fileId = "paste_start_before";
 
@@ -134,9 +127,6 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 
 test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_end_after";
 
 	await qb(lix)
@@ -178,9 +168,6 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 
 test("replace word selection with paste (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_replace_word";
 	const initial = "Replace THIS TEXT here.";
 	await qb(lix)
@@ -222,9 +209,6 @@ test("replace word selection with paste (TipTap + Lix)", async () => {
 
 test("replace entire document with paste (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_replace_all";
 	const initial = "Old content\n\nTo be replaced";
 	await qb(lix)
@@ -268,9 +252,6 @@ test("replace entire document with paste (TipTap + Lix)", async () => {
 
 test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_plain_multi";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -313,9 +294,6 @@ test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () 
 
 test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "enter_split_ids_unique";
 
 	await qb(lix)
@@ -363,9 +341,6 @@ test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 
 test("two Enters create three persisted paragraphs in order", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "enter_split_three";
 
 	// Seed with a single paragraph
@@ -411,9 +386,6 @@ test("two Enters create three persisted paragraphs in order", async () => {
 
 test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_crlf";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -451,9 +423,6 @@ test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 
 test("paste complex markdown with lists and code blocks (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_complex";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -495,9 +464,6 @@ test("paste complex markdown with lists and code blocks (TipTap + Lix)", async (
 
 test("paste inline formatting markdown (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "paste_inline_format";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -544,9 +510,6 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
  */
 test("rapid Enter/type coalescing persists 3 paragraphs", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "rapid_enter_coalesce";
 
 	// Seed with a single paragraph
@@ -603,9 +566,6 @@ test("rapid Enter/type coalescing persists 3 paragraphs", async () => {
 
 test("delete removes the middle paragraph from persisted markdown", async () => {
 	const lix = await openLix();
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 	const fileId = "delete_middle_cleanup";
 
 	// Seed with three paragraphs

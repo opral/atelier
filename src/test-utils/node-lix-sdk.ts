@@ -1,6 +1,4 @@
 import { resolve } from "node:path";
-import markdownBlockSchema from "../../submodule/lix/plugins/markdown/schema/markdown_block.json";
-import markdownDocumentSchema from "../../submodule/lix/plugins/markdown/schema/markdown_document.json";
 import type {
 	ExecuteOptions,
 	Lix,
@@ -296,9 +294,6 @@ function createTestLixAdapter(nativeLix: NativeLix): Lix {
 		async switchBranch(options: Parameters<NativeLix["switchBranch"]>[0]) {
 			return await nativeLix.switchBranch(options);
 		},
-		async installPlugin() {
-			await seedMarkdownSchemas(nativeLix);
-		},
 		async exportSnapshot() {
 			return new Uint8Array();
 		},
@@ -306,15 +301,6 @@ function createTestLixAdapter(nativeLix: NativeLix): Lix {
 			await nativeLix.close();
 		},
 	};
-}
-
-async function seedMarkdownSchemas(nativeLix: NativeLix) {
-	for (const schema of [markdownDocumentSchema, markdownBlockSchema]) {
-		await nativeLix.execute(
-			"INSERT INTO lix_registered_schema (value, lixcol_global, lixcol_untracked) VALUES (lix_json($1), true, false)",
-			[JSON.stringify(schema)],
-		);
-	}
 }
 
 function emptyExecuteResult(): NativeExecuteResult {

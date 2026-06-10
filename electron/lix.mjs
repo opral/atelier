@@ -178,14 +178,6 @@ function createDesktopLixHandle(nativeLix, filename) {
 		async switchBranch(options) {
 			return await runQueued(() => nativeLix.switchBranch(options));
 		},
-		async installPlugin({ archiveBytes }) {
-			await runQueued(() =>
-				nativeLix.execute(
-					"INSERT INTO lix_file (path, data) VALUES ($1, $2)",
-					["/.lix_system/plugins/plugin_md_v2.lixplugin", archiveBytes],
-				),
-			);
-		},
 		async exportSnapshot() {
 			return await readFile(filename);
 		},

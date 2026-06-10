@@ -19,7 +19,6 @@ const lix = {
 	activeBranchId: () => ipcRenderer.invoke("lix:activeBranchId"),
 	createBranch: (payload) => ipcRenderer.invoke("lix:createBranch", payload),
 	switchBranch: (payload) => ipcRenderer.invoke("lix:switchBranch", payload),
-	installPlugin: (payload) => ipcRenderer.invoke("lix:installPlugin", payload),
 	exportSnapshot: () => ipcRenderer.invoke("lix:exportSnapshot"),
 	close: () => ipcRenderer.invoke("lix:close"),
 	wipe: () => ipcRenderer.invoke("lix:wipe"),

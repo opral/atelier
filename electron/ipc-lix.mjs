@@ -116,10 +116,7 @@ export function registerLixIpc() {
 		const started = performance.now();
 		try {
 			const result = await transaction.execute(sql, params);
-			const serialized = serializeExecuteResult(
-				result,
-				"transaction.execute",
-			);
+			const serialized = serializeExecuteResult(result, "transaction.execute");
 			logSlowOperation("transaction:execute", started, {
 				transactionId: String(payload?.transactionId ?? ""),
 				sqlHash: hashString(sql),
@@ -252,13 +249,6 @@ export function registerLixIpc() {
 		const lix = await ensureLixOpen();
 		return await lix.switchBranch({
 			branchId: String(payload?.branchId ?? ""),
-		});
-	});
-
-	ipcMain.handle("lix:installPlugin", async (_event, payload) => {
-		const lix = await ensureLixOpen();
-		await lix.installPlugin({
-			archiveBytes: normalizeArchiveBytes(payload?.archiveBytes),
 		});
 	});
 
@@ -469,25 +459,6 @@ function normalizeExecuteOptions(options) {
 	};
 }
 
-function normalizeArchiveBytes(rawBytes) {
-	if (rawBytes instanceof Uint8Array) {
-		return rawBytes;
-	}
-	if (rawBytes instanceof ArrayBuffer) {
-		return new Uint8Array(rawBytes);
-	}
-	if (ArrayBuffer.isView(rawBytes)) {
-		return new Uint8Array(
-			rawBytes.buffer,
-			rawBytes.byteOffset,
-			rawBytes.byteLength,
-		);
-	}
-	throw new Error(
-		"installPlugin requires archiveBytes as Uint8Array or ArrayBuffer",
-	);
-}
-
 function serializeQueryResult(result) {
 	const rows = Array.isArray(result?.rows)
 		? result.rows.map((row) => serializeSqlRow(row, result.columns))
@@ -509,7 +480,9 @@ function serializeExecuteResult(result, source) {
 		return serializeQueryResult(result);
 	}
 	if (!Array.isArray(statements)) {
-		throw new Error(`${source} returned invalid execute result (missing statements[])`);
+		throw new Error(
+			`${source} returned invalid execute result (missing statements[])`,
+		);
 	}
 	const primary = statements[statements.length - 1];
 	if (!primary || typeof primary !== "object") {
@@ -539,7 +512,9 @@ function serializeSqlRow(row, columns) {
 			return columns.map((column) => serializeSqlValue(object[column]));
 		}
 		if (typeof row.toObject === "function") {
-			return Object.values(row.toObject()).map((value) => serializeSqlValue(value));
+			return Object.values(row.toObject()).map((value) =>
+				serializeSqlValue(value),
+			);
 		}
 		return Object.values(row).map((value) => serializeSqlValue(value));
 	}

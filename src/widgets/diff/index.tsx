@@ -3,11 +3,13 @@ import type { ReactNode } from "react";
 import { LixProvider, useQuery } from "@/lib/lix-react";
 import { rawLixQuery } from "@/lib/lix-kysely";
 import type { Lix } from "@/lib/lix-types";
-import { MARKDOWN_PLUGIN_KEY } from "@/lib/lix-plugin-keys";
 import { Diff as DiffIcon, Loader2 } from "lucide-react";
 import { Diff } from "@/components/diff";
 import "../markdown/style.css";
-import type { DiffWidgetConfig, RenderableDiff } from "../../widget-runtime/types";
+import type {
+	DiffWidgetConfig,
+	RenderableDiff,
+} from "../../widget-runtime/types";
 import { createReactWidgetDefinition } from "../../widget-runtime/react-widget";
 import { DIFF_WIDGET_KIND } from "../../widget-runtime/widget-instance-helpers";
 
@@ -38,7 +40,6 @@ function DiffViewContent({ config }: DiffViewProps) {
 		if (!Array.isArray(rawDiffs) || rawDiffs.length === 0) return [];
 		return rawDiffs.map((diff) => ({
 			...diff,
-			plugin_key: diff.plugin_key ?? MARKDOWN_PLUGIN_KEY,
 			before_snapshot_content: normalizeSnapshot(diff.before_snapshot_content),
 			after_snapshot_content: normalizeSnapshot(diff.after_snapshot_content),
 		}));
@@ -77,7 +78,7 @@ function DiffViewContent({ config }: DiffViewProps) {
 function emptyDiffQuery(lix: Lix) {
 	return rawLixQuery<RenderableDiff>(
 		lix,
-		"SELECT CAST(NULL AS TEXT) AS entity_id, CAST(NULL AS TEXT) AS schema_key, CAST(NULL AS TEXT) AS status, NULL AS before_snapshot_content, NULL AS after_snapshot_content, CAST(NULL AS TEXT) AS plugin_key WHERE false",
+		"SELECT CAST(NULL AS TEXT) AS entity_id, CAST(NULL AS TEXT) AS schema_key, CAST(NULL AS TEXT) AS status, NULL AS before_snapshot_content, NULL AS after_snapshot_content WHERE false",
 	);
 }
 

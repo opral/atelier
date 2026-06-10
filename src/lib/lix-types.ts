@@ -63,10 +63,6 @@ export type ObserveEvents = {
 	close(): void;
 };
 
-export type InstallPluginOptions = {
-	archiveBytes: Uint8Array | ArrayBuffer;
-};
-
 export type OpenLixKeyValueEntry = {
 	key: string;
 	value: unknown;
@@ -108,7 +104,6 @@ export interface Lix {
 	switchBranch(options: SwitchBranchOptions): Promise<SwitchBranchReceipt>;
 	mergeBranchPreview?(options: MergeBranchOptions): Promise<MergeBranchPreview>;
 	mergeBranch?(options: MergeBranchOptions): Promise<MergeBranchReceipt>;
-	installPlugin(options: InstallPluginOptions): Promise<void>;
 	exportSnapshot(): Promise<Uint8Array>;
 	close(): Promise<void>;
 }

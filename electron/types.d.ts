@@ -54,10 +54,6 @@ export type DesktopObserveEvent = {
 	stateCommitSequence: number | null;
 };
 
-export type DesktopInstallPluginOptions = {
-	archiveBytes: Uint8Array | ArrayBuffer;
-};
-
 export type DesktopLixApi = {
 	open(): Promise<void>;
 	execute(payload: {
@@ -91,8 +87,9 @@ export type DesktopLixApi = {
 	createBranch(payload: {
 		options: DesktopCreateBranchOptions;
 	}): Promise<DesktopCreateBranchResult>;
-	switchBranch(payload: { branchId: string }): Promise<DesktopSwitchBranchResult>;
-	installPlugin(payload: DesktopInstallPluginOptions): Promise<void>;
+	switchBranch(payload: {
+		branchId: string;
+	}): Promise<DesktopSwitchBranchResult>;
 	exportSnapshot(): Promise<Uint8Array>;
 	close(): Promise<void>;
 	wipe(): Promise<void>;

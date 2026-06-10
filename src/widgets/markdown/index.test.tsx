@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
@@ -18,9 +17,6 @@ describe("MarkdownView", () => {
 
 	test("renders the TipTap editor when file is found", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
@@ -72,9 +68,6 @@ describe("MarkdownView", () => {
 
 	test("renders the requested file even if a different active file is stored", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
@@ -141,9 +134,6 @@ describe("MarkdownView", () => {
 
 	test("shows a not found message when the file is missing", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 
 		let utils: ReturnType<typeof render> | undefined;
 		await act(async () => {

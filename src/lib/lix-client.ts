@@ -6,7 +6,6 @@ import type {
 } from "@lix-js/sdk";
 import type {
 	ExecuteOptions,
-	InstallPluginOptions,
 	Lix,
 	LixRuntimeQueryResult,
 	ObserveEvent,
@@ -250,13 +249,6 @@ export async function openDesktopLix(): Promise<Lix> {
 		return await runQueued(() => desktop.lix.switchBranch(options));
 	};
 
-	const installPlugin = async (
-		options: InstallPluginOptions,
-	): Promise<void> => {
-		ensureOpen("installPlugin");
-		await runQueued(() => desktop.lix.installPlugin(options));
-	};
-
 	const exportSnapshot = async (): Promise<Uint8Array> => {
 		ensureOpen("exportSnapshot");
 		return await desktop.lix.exportSnapshot();
@@ -287,7 +279,6 @@ export async function openDesktopLix(): Promise<Lix> {
 		activeBranchId,
 		createBranch,
 		switchBranch,
-		installPlugin,
 		exportSnapshot,
 		close,
 	};

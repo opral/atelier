@@ -1,5 +1,4 @@
 import React, { Suspense } from "react";
-import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { beforeAll, afterAll, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { LixProvider } from "@/lib/lix-react";
@@ -54,9 +53,6 @@ describe("FilesView", () => {
 
 	test("creates an inline draft when Cmd+. is pressed", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		const openWidget = vi.fn();
 
 		let utils: ReturnType<typeof render>;
@@ -122,9 +118,6 @@ describe("FilesView", () => {
 
 	test("Cmd+Backspace deletes the selected file", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
@@ -175,9 +168,6 @@ describe("FilesView", () => {
 
 	test("Cmd+Backspace deletes the selected directory", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		await qb(lix)
 			.insertInto("lix_directory")
 			.values({ path: "/docs/" } as any)
@@ -224,9 +214,6 @@ describe("FilesView", () => {
 
 	test("shows dot-prefixed files like regular files", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
@@ -265,9 +252,6 @@ describe("FilesView", () => {
 
 	test("replaces whitespace with dashes when creating files", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		const openWidget = vi.fn();
 
 		let utils: ReturnType<typeof render>;
@@ -316,9 +300,6 @@ describe("FilesView", () => {
 
 	test("creates an inline directory draft when Shift+Cmd+. is pressed", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		const openWidget = vi.fn();
 
 		let utils: ReturnType<typeof render>;
@@ -370,9 +351,6 @@ describe("FilesView", () => {
 
 	test("ignores Ctrl+. on macOS", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		const openWidget = vi.fn();
 
 		let utils: ReturnType<typeof render>;
@@ -405,9 +383,6 @@ describe("FilesView", () => {
 
 	test("ignores Ctrl+Shift+. on macOS", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		const openWidget = vi.fn();
 
 		let utils: ReturnType<typeof render>;
@@ -445,9 +420,6 @@ describe("FilesView", () => {
 
 	test("cancels the draft when Escape is pressed", async () => {
 		const lix = await openLix();
-		await lix.installPlugin({
-			archiveBytes: markdownPluginV2ArchiveBytes,
-		});
 		const openWidget = vi.fn();
 
 		let utils: ReturnType<typeof render>;

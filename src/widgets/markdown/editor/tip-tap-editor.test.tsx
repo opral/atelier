@@ -1,5 +1,4 @@
 import React, { Suspense, StrictMode } from "react";
-import { markdownPluginV2ArchiveBytes } from "@/test-utils/plugin-md-v2-archive";
 import { expect, test } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -16,7 +15,6 @@ import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { EditorProvider } from "./editor-context";
 import type { Editor } from "@tiptap/core";
-import { insertMarkdownSchemas } from "../../../lib/insert-markdown-schemas";
 
 function Providers({
 	lix,
@@ -49,10 +47,6 @@ test("renders initial document content", async () => {
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 	const fileId = "file_render_doc";
 
 	await qb(lix)
@@ -110,10 +104,6 @@ test("persists state changes on edit (paragraph append)", async () => {
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -169,10 +159,6 @@ test("renders content under React.StrictMode", async () => {
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 
 	const fileId = "file_strict";
 	await qb(lix)
@@ -230,10 +216,6 @@ test("shows placeholder only while focused on an empty document", async () => {
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -304,10 +286,6 @@ test("clicking the surface focuses the editor even when content exists", async (
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -355,10 +333,6 @@ test("updates editor when switching to a branch with different external state", 
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 
 	// Create a file and set it active
 	const fileId = "file_switch_branch";
@@ -426,10 +400,6 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
-	await insertMarkdownSchemas({ lix });
 
 	const fileId = "file_update_blob";
 	await qb(lix)
@@ -490,9 +460,6 @@ test("preserves main content when switching to a new branch and back", async () 
 			},
 		],
 	});
-	await lix.installPlugin({
-		archiveBytes: markdownPluginV2ArchiveBytes,
-	});
 
 	const fileId = "file_regression_main_preserve";
 	await qb(lix)
@@ -518,8 +485,6 @@ test("preserves main content when switching to a new branch and back", async () 
 
 	// Remember currently active branch id (main)
 	const mainId = await lix.activeBranchId();
-
-	await insertMarkdownSchemas({ lix });
 
 	// Render editor on main
 	await act(async () => {

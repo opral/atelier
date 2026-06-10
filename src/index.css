@@ -144,7 +144,7 @@
 	--sidebar-ring: oklch(0.708 0 0);
 }
 
-/* Diff rendering helpers (scoped to plugin output) */
+/* Diff rendering helpers */
 .lix-diff-content [data-diff-status="added"] {
 	color: #1f883d;
 	text-decoration: none;
