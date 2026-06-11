@@ -12,6 +12,7 @@ import {
 	type QueryResult,
 	type SqlBool,
 } from "kysely";
+import type { ExecuteResult } from "@lix-js/sdk";
 export { sql } from "kysely";
 export { jsonArrayFrom, jsonObjectFrom } from "kysely/helpers/sqlite";
 
@@ -23,12 +24,7 @@ export type LixExecuteOptions = {
 
 export type CreateLixKyselyOptions = LixExecuteOptions;
 
-type LixQueryResult = {
-	rows?: unknown;
-	columns?: unknown;
-	statements?: unknown;
-	rowsAffected?: unknown;
-};
+type LixQueryResult = ExecuteResult;
 
 type LixExecuteLike = {
 	execute(
@@ -63,13 +59,15 @@ class LixConnection implements DatabaseConnection {
 	) {}
 
 	async executeQuery<R>(compiledQuery: CompiledQuery): Promise<QueryResult<R>> {
-		const raw = normalizeLixQueryResult(
-			await this.executeSql(compiledQuery.sql, compiledQuery.parameters),
+		const raw = await this.executeSql(
+			compiledQuery.sql,
+			compiledQuery.parameters,
 		);
-		const rawColumnNames = decodeColumnNames(raw.columns);
-		const decodedRows = decodeRows(raw.rows, rawColumnNames);
 		const columnNames =
-			rawColumnNames ?? columnNamesFromQueryNode(compiledQuery.query);
+			raw.columns.length > 0
+				? raw.columns
+				: columnNamesFromQueryNode(compiledQuery.query);
+		const decodedRows = decodeRows(raw.rows, columnNames ?? raw.columns);
 		const rows =
 			columnNames &&
 			decodedRows.every((row) => row.length === columnNames.length)
@@ -276,8 +274,8 @@ export function rawLixQuery<TRow>(
 			};
 		},
 		async execute(): Promise<TRow[]> {
-			const raw = normalizeLixQueryResult(await lix.execute(sql, params));
-			const columns = decodeColumnNames(raw.columns) ?? [];
+			const raw = await lix.execute(sql, params);
+			const columns = raw.columns;
 			return decodeRows(raw.rows, columns).map((row) =>
 				rowToObject(row, columns),
 			) as TRow[];
@@ -460,97 +458,11 @@ function writerKeyCacheKey(writerKey: string | null | undefined): string {
 	return `writer:${writerKey}`;
 }
 
-function normalizeLixQueryResult(raw: LixQueryResult): {
-	rows?: unknown;
-	columns?: unknown;
-	rowsAffected?: unknown;
-} {
-	if (Array.isArray(raw.statements)) {
-		const [statement] = raw.statements;
-		if (statement && typeof statement === "object") {
-			const candidate = statement as {
-				rows?: unknown;
-				columns?: unknown;
-				rowsAffected?: unknown;
-			};
-			return {
-				rows: candidate.rows,
-				columns: candidate.columns,
-				rowsAffected: candidate.rowsAffected,
-			};
-		}
-	}
-	return raw;
-}
-
-function decodeColumnNames(rawColumns: unknown): string[] | undefined {
-	if (!Array.isArray(rawColumns)) return undefined;
-	const names = rawColumns.filter(
-		(value): value is string => typeof value === "string",
-	);
-	return names.length > 0 ? names : undefined;
-}
-
-function decodeRows(rawRows: unknown, columns?: string[]): unknown[][] {
-	if (!Array.isArray(rawRows)) return [];
-	return rawRows.map((row) => {
-		if (Array.isArray(row)) {
-			return row.map(decodeLixValue);
-		}
-		return decodeObjectRow(row, columns);
-	});
-}
-
-function decodeObjectRow(row: unknown, columns?: string[]): unknown[] {
-	if (!row || typeof row !== "object") return [];
-	if (typeof (row as { values?: unknown }).values === "function") {
-		const values = (row as { values: () => unknown[] }).values();
-		return Array.isArray(values) ? values.map(decodeLixValue) : [];
-	}
-	const valuesByIndex = (row as { valuesByIndex?: unknown }).valuesByIndex;
-	if (Array.isArray(valuesByIndex)) {
-		return valuesByIndex.map(decodeLixValue);
-	}
-	if (typeof (row as { toObject?: unknown }).toObject === "function") {
-		const object = (
-			row as { toObject: () => Record<string, unknown> }
-		).toObject();
-		return columns?.map((column) => object[column]) ?? Object.values(object);
-	}
-	return [];
-}
-
-function decodeLixValue(value: unknown): unknown {
-	if (!value || typeof value !== "object") return value;
-	const candidate = value as {
-		kind?: unknown;
-		value?: unknown;
-		base64?: unknown;
-		asBytes?: unknown;
-		toJS?: unknown;
-	};
-	if (typeof candidate.toJS === "function") {
-		return (candidate.toJS as () => unknown)();
-	}
-	switch (candidate.kind) {
-		case "null":
-			return null;
-		case "boolean":
-		case "integer":
-		case "real":
-		case "text":
-		case "json":
-			return candidate.value;
-		case "blob":
-			if (typeof candidate.asBytes === "function") {
-				return (candidate.asBytes as () => Uint8Array | undefined)();
-			}
-			return typeof candidate.base64 === "string"
-				? Uint8Array.from(atob(candidate.base64), (char) => char.charCodeAt(0))
-				: undefined;
-		default:
-			return value;
-	}
+function decodeRows(
+	rows: ExecuteResult["rows"],
+	columns: string[],
+): unknown[][] {
+	return rows.map((row) => columns.map((column) => row.get(column)));
 }
 
 function extractIntegerValue(value: unknown): bigint | undefined {

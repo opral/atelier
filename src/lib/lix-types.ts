@@ -1,35 +1,25 @@
 import type {
+	ExecuteResult,
+	Lix as SdkLix,
+	LixTransaction as SdkLixTransaction,
+	OpenLixOptions as SdkOpenLixOptions,
+} from "@lix-js/sdk";
+
+export type {
 	CreateBranchOptions,
 	CreateBranchReceipt,
+	ExecuteResult as LixRuntimeQueryResult,
 	MergeBranchOptions,
 	MergeBranchPreview,
 	MergeBranchReceipt,
-	OpenLixOptions as JsSdkOpenLixOptions,
 	SwitchBranchOptions,
 	SwitchBranchReceipt,
 } from "@lix-js/sdk";
 
+export type LixRow = ExecuteResult["rows"][number];
+
 export type ExecuteOptions = {
 	writerKey?: string | null;
-};
-
-export type LixRow =
-	| ReadonlyArray<unknown>
-	| {
-			get(column: string): unknown;
-			toObject?(): Record<string, unknown>;
-	  }
-	| Readonly<Record<string, unknown>>;
-
-export type LixRuntimeQueryResult = {
-	rows: ReadonlyArray<LixRow>;
-	columns: string[];
-	rowsAffected: number;
-	notices: Array<{
-		code: string;
-		message: string;
-		hint?: string;
-	}>;
 };
 
 export type TransactionStatement = {
@@ -37,13 +27,14 @@ export type TransactionStatement = {
 	params?: ReadonlyArray<unknown>;
 };
 
-export type SqlTransaction = {
+export type SqlTransaction = Pick<
+	SdkLixTransaction,
+	"commit" | "rollback"
+> & {
 	execute(
 		sql: string,
 		params?: ReadonlyArray<unknown>,
-	): Promise<LixRuntimeQueryResult>;
-	commit(): Promise<void>;
-	rollback(): Promise<void>;
+	): Promise<ExecuteResult>;
 };
 
 export type ObserveQuery = {
@@ -77,16 +68,21 @@ export type OpenLixKeyValueEntry = {
 	  }
 );
 
-export type OpenLixOptions = JsSdkOpenLixOptions & {
+export type OpenLixOptions = SdkOpenLixOptions & {
 	keyValues?: ReadonlyArray<OpenLixKeyValueEntry>;
 };
 
-export interface Lix {
+type SdkLixBase = Pick<
+	SdkLix,
+	"activeBranchId" | "createBranch" | "switchBranch" | "close"
+>;
+
+export interface FlashtypeLix extends SdkLixBase {
 	execute(
 		sql: string,
 		params?: ReadonlyArray<unknown>,
 		options?: ExecuteOptions,
-	): Promise<LixRuntimeQueryResult>;
+	): Promise<ExecuteResult>;
 	beginTransaction(options?: ExecuteOptions): Promise<SqlTransaction>;
 	transaction<T>(
 		options: ExecuteOptions,
@@ -96,13 +92,11 @@ export interface Lix {
 	executeTransaction(
 		statements: ReadonlyArray<TransactionStatement>,
 		options?: ExecuteOptions,
-	): Promise<LixRuntimeQueryResult>;
+	): Promise<ExecuteResult>;
 	observe(query: ObserveQuery): ObserveEvents;
-	activeBranchId(): Promise<string>;
-	createBranch(options: CreateBranchOptions): Promise<CreateBranchReceipt>;
-	switchBranch(options: SwitchBranchOptions): Promise<SwitchBranchReceipt>;
-	mergeBranchPreview?(options: MergeBranchOptions): Promise<MergeBranchPreview>;
-	mergeBranch?(options: MergeBranchOptions): Promise<MergeBranchReceipt>;
+	mergeBranchPreview?: SdkLix["mergeBranchPreview"];
+	mergeBranch?: SdkLix["mergeBranch"];
 	exportSnapshot(): Promise<Uint8Array>;
-	close(): Promise<void>;
 }
+
+export type Lix = FlashtypeLix;

@@ -1,8 +1,14 @@
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
+import type {
+	ExecuteResult,
+	Lix as SdkLix,
+	OpenLixOptions as SdkOpenLixOptions,
+	SqlParam,
+} from "../../submodule/lix/packages/js-sdk/dist/index.js";
 import type {
 	ExecuteOptions,
 	Lix,
-	LixRuntimeQueryResult,
 	ObserveEvent,
 	ObserveEvents,
 	ObserveQuery,
@@ -13,229 +19,88 @@ import type {
 
 export type { Lix, SqlTransaction } from "@/lib/lix-types";
 
-type RawNativeValue =
-	| { kind: "null"; value: null }
-	| { kind: "boolean"; value: boolean }
-	| { kind: "integer"; value: number }
-	| { kind: "real"; value: number }
-	| { kind: "text"; value: string }
-	| { kind: "json"; value: unknown }
-	| { kind: "blob"; value?: null | Uint8Array; blob?: Uint8Array };
-
-type RawNativeResult = {
-	columns: string[];
-	rows: RawNativeValue[][];
-	rowsAffected: number;
-	notices: Array<{ code: string; message: string; hint?: string }>;
-};
-
-type RawNativeLix = {
-	execute(sql: string, params: RawNativeValue[]): RawNativeResult;
-	beginTransaction(): RawNativeTransaction;
-	activeBranchId(): string;
-	createBranch(options: { id?: string; name: string }): {
-		id: string;
-		name: string;
-		hidden: boolean;
-		commitId: string;
-	};
-	switchBranch(options: { branchId: string }): { branchId: string };
-	close(): void;
-};
-
-type RawNativeTransaction = {
-	execute(sql: string, params: RawNativeValue[]): RawNativeResult;
-	commit(): void;
-	rollback(): void;
-};
-
-type NativeExecuteResult = {
-	columns: string[];
-	rows: CompatRow[];
-	rowsAffected: number;
-	notices: Array<{ code: string; message: string; hint?: string }>;
-};
-
-type NativeLix = ReturnType<typeof createNativeLixAdapter>;
-
-type OpenLixOptions = {
-	backend?: SqliteBackend;
+type OpenTestLixOptions = SdkOpenLixOptions & {
 	keyValues?: ReadonlyArray<OpenLixKeyValueEntry>;
 };
 
-const nativeAddonPath = resolve(
-	process.cwd(),
-	"submodule/lix/packages/js-sdk/lix_js_sdk.node",
-);
-const nativeModule = { exports: {} as { Lix: any } };
-process.dlopen(nativeModule as any, nativeAddonPath);
-const addon = nativeModule.exports;
+type SdkModule = typeof import("../../submodule/lix/packages/js-sdk/dist/index.js");
 
-export class SqliteBackend {
-	readonly path: string;
+let sdkModulePromise: Promise<SdkModule> | undefined;
+const require = createRequire(import.meta.url);
 
-	constructor(options: { path: string }) {
-		if (!options || typeof options.path !== "string" || options.path === "") {
-			throw new TypeError("SqliteBackend requires a non-empty path");
-		}
-		this.path = options.path;
-	}
-}
-
-export async function openLix(options: OpenLixOptions = {}): Promise<Lix> {
-	const raw =
-		options?.backend instanceof SqliteBackend
-			? addon.Lix.openSqlite(options.backend.path)
-			: addon.Lix.openMemory();
-	const lix = createTestLixAdapter(createNativeLixAdapter(raw));
-	if (Array.isArray(options?.keyValues)) {
-		for (const entry of options.keyValues) {
-			if (!entry || typeof entry.key !== "string") {
-				continue;
-			}
-			if (typeof entry.lixcol_branch_id === "string") {
-				if (typeof entry.lixcol_global !== "boolean") {
-					throw new TypeError(
-						"branch-scoped keyValues entries require lixcol_global",
-					);
-				}
-				await lix.execute(
-					"INSERT INTO lix_key_value_by_branch (key, value, lixcol_branch_id, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4, $5)",
-					[
-						entry.key,
-						entry.value,
-						entry.lixcol_branch_id,
-						entry.lixcol_global,
-						entry.lixcol_untracked ?? true,
-					],
-				);
-				continue;
-			}
-			await lix.execute(
-				"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, true, true)",
-				[entry.key, entry.value],
-			);
-		}
+export async function openLix(
+	options: OpenTestLixOptions = {},
+): Promise<Lix> {
+	const { keyValues, ...sdkOptions } = options;
+	const sdk = await loadSdk();
+	const sdkLix = await sdk.openLix(sdkOptions);
+	const lix = createTestLixAdapter(sdkLix);
+	if (Array.isArray(keyValues)) {
+		await seedKeyValues(lix, keyValues);
 	}
 	return lix;
 }
 
-function createNativeLixAdapter(raw: RawNativeLix) {
-	return {
-		async execute(sql: string, params: ReadonlyArray<unknown> = []) {
-			return wrapNativeResult(
-				raw.execute(
-					sql,
-					params.map((param, index) => toNativeParam(param, index)),
-				),
-			);
-		},
-		async beginTransaction() {
-			const tx = raw.beginTransaction();
-			return {
-				async execute(sql: string, params: ReadonlyArray<unknown> = []) {
-					return wrapNativeResult(
-						tx.execute(
-							sql,
-							params.map((param, index) => toNativeParam(param, index)),
-						),
-					);
-				},
-				async commit() {
-					tx.commit();
-				},
-				async rollback() {
-					tx.rollback();
-				},
-			};
-		},
-		async activeBranchId() {
-			return raw.activeBranchId();
-		},
-		async createBranch(options: { id?: string; name: string }) {
-			return raw.createBranch(options);
-		},
-		async switchBranch(options: { branchId: string }) {
-			return raw.switchBranch(options);
-		},
-		async close() {
-			raw.close();
-		},
-	};
+async function loadSdk(): Promise<SdkModule> {
+	if (!sdkModulePromise) {
+		const sdkPath = resolve(
+			process.cwd(),
+			"submodule/lix/packages/js-sdk/dist/index.js",
+		);
+		// Vitest aliases @lix-js/sdk to this helper; require the built SDK entry
+		// so Node, not Vite, owns the native addon's import.meta.url handling.
+		sdkModulePromise = Promise.resolve(require(sdkPath) as SdkModule);
+	}
+	return await sdkModulePromise;
 }
 
-class CompatRow {
-	constructor(
-		private readonly columns: string[],
-		private readonly values: unknown[],
-	) {}
-
-	get(column: string): unknown {
-		return this.values[this.columns.indexOf(column)];
-	}
-
-	toObject(): Record<string, unknown> {
-		return Object.fromEntries(
-			this.columns.map((column, index) => [column, this.values[index]]),
+async function seedKeyValues(
+	lix: Lix,
+	keyValues: ReadonlyArray<OpenLixKeyValueEntry>,
+): Promise<void> {
+	for (const entry of keyValues) {
+		if (!entry || typeof entry.key !== "string") {
+			continue;
+		}
+		if (typeof entry.lixcol_branch_id === "string") {
+			if (typeof entry.lixcol_global !== "boolean") {
+				throw new TypeError(
+					"branch-scoped keyValues entries require lixcol_global",
+				);
+			}
+			await lix.execute(
+				"INSERT INTO lix_key_value_by_branch (key, value, lixcol_branch_id, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4, $5)",
+				[
+					entry.key,
+					entry.value,
+					entry.lixcol_branch_id,
+					entry.lixcol_global,
+					entry.lixcol_untracked ?? true,
+				],
+			);
+			continue;
+		}
+		await lix.execute(
+			"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, true, true)",
+			[entry.key, entry.value],
 		);
 	}
 }
 
-function wrapNativeResult(result: RawNativeResult): NativeExecuteResult {
-	return {
-		columns: result.columns,
-		rows: result.rows.map(
-			(row) => new CompatRow(result.columns, row.map(fromNativeValue)),
-		),
-		rowsAffected: result.rowsAffected,
-		notices: result.notices,
-	};
-}
-
-function toNativeParam(value: unknown, index: number): RawNativeValue {
-	if (value === null) return { kind: "null", value: null };
-	if (typeof value === "boolean") return { kind: "boolean", value };
-	if (typeof value === "string") return { kind: "text", value };
-	if (typeof value === "number") {
-		if (!Number.isFinite(value)) {
-			throw new TypeError(`SQL parameter ${index + 1} must be finite`);
-		}
-		return Number.isSafeInteger(value)
-			? { kind: "integer", value }
-			: { kind: "real", value };
-	}
-	if (value instanceof Uint8Array) {
-		return { kind: "blob", value: null, blob: new Uint8Array(value) };
-	}
-	if (typeof value === "object" && value) {
-		return { kind: "json", value };
-	}
-	throw new TypeError(
-		`Unsupported SQL parameter ${index + 1}: ${typeof value}`,
-	);
-}
-
-function fromNativeValue(value: RawNativeValue): unknown {
-	if (value.kind === "blob") {
-		return new Uint8Array(value.blob ?? value.value ?? []);
-	}
-	return value.value;
-}
-
-function createTestLixAdapter(nativeLix: NativeLix): Lix {
+function createTestLixAdapter(sdkLix: SdkLix): Lix {
 	return {
 		async execute(
 			sql: string,
 			params: ReadonlyArray<unknown> = [],
 			_options?: ExecuteOptions,
 		) {
-			return await nativeLix.execute(sql, [...params]);
+			return await sdkLix.execute(sql, toSqlParams(params));
 		},
-		async beginTransaction() {
-			const transaction = await nativeLix.beginTransaction();
+		async beginTransaction(_options?: ExecuteOptions) {
+			const transaction = await sdkLix.beginTransaction();
 			return {
 				async execute(sql: string, params: ReadonlyArray<unknown> = []) {
-					return await transaction.execute(sql, [...params]);
+					return await transaction.execute(sql, toSqlParams(params));
 				},
 				async commit() {
 					await transaction.commit();
@@ -253,7 +118,9 @@ function createTestLixAdapter(nativeLix: NativeLix): Lix {
 			if (typeof callback !== "function") {
 				throw new TypeError("transaction requires a callback");
 			}
-			const tx = await this.beginTransaction();
+			const tx = await this.beginTransaction(
+				typeof first === "function" ? undefined : first,
+			);
 			try {
 				const result = await callback(tx);
 				await tx.commit();
@@ -265,10 +132,10 @@ function createTestLixAdapter(nativeLix: NativeLix): Lix {
 		},
 		async executeTransaction(
 			statements: ReadonlyArray<TransactionStatement>,
-			_options?: ExecuteOptions,
+			options?: ExecuteOptions,
 		) {
-			const transaction = await this.beginTransaction();
-			let result: LixRuntimeQueryResult = emptyExecuteResult();
+			const transaction = await this.beginTransaction(options);
+			let result: ExecuteResult = emptyExecuteResult();
 			try {
 				for (const statement of statements) {
 					result = await transaction.execute(statement.sql, [
@@ -283,32 +150,38 @@ function createTestLixAdapter(nativeLix: NativeLix): Lix {
 			}
 		},
 		observe(query: ObserveQuery): ObserveEvents {
-			return createPollingObserve(nativeLix, query);
+			return createPollingObserve(sdkLix, query);
 		},
 		async activeBranchId() {
-			return await nativeLix.activeBranchId();
+			return await sdkLix.activeBranchId();
 		},
-		async createBranch(options: Parameters<NativeLix["createBranch"]>[0]) {
-			return await nativeLix.createBranch(options);
+		async createBranch(options) {
+			return await sdkLix.createBranch(options);
 		},
-		async switchBranch(options: Parameters<NativeLix["switchBranch"]>[0]) {
-			return await nativeLix.switchBranch(options);
+		async switchBranch(options) {
+			return await sdkLix.switchBranch(options);
+		},
+		async mergeBranchPreview(options) {
+			return await sdkLix.mergeBranchPreview(options);
+		},
+		async mergeBranch(options) {
+			return await sdkLix.mergeBranch(options);
 		},
 		async exportSnapshot() {
 			return new Uint8Array();
 		},
 		async close() {
-			await nativeLix.close();
+			await sdkLix.close();
 		},
 	};
 }
 
-function emptyExecuteResult(): NativeExecuteResult {
+function emptyExecuteResult(): ExecuteResult {
 	return { columns: [], rows: [], rowsAffected: 0, notices: [] };
 }
 
 function createPollingObserve(
-	nativeLix: NativeLix,
+	sdkLix: SdkLix,
 	query: ObserveQuery,
 ): ObserveEvents {
 	let closed = false;
@@ -323,14 +196,8 @@ function createPollingObserve(
 		if (closed || polling) return;
 		polling = true;
 		try {
-			const result = await nativeLix.execute(query.sql, [
-				...(query.params ?? []),
-			]);
-			const key = JSON.stringify(
-				result.rows.map((row: { toObject(): Record<string, unknown> }) =>
-					row.toObject(),
-				),
-			);
+			const result = await sdkLix.execute(query.sql, toSqlParams(query.params));
+			const key = JSON.stringify(result.rows.map((row) => row.toObject()));
 			if (previousKey !== undefined && key !== previousKey) {
 				pending.shift()?.resolve({
 					sequence: Date.now(),
@@ -368,4 +235,8 @@ function createPollingObserve(
 			}
 		},
 	};
+}
+
+function toSqlParams(params: ReadonlyArray<unknown> | undefined): SqlParam[] {
+	return [...(params ?? [])] as SqlParam[];
 }
