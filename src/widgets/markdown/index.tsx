@@ -1,9 +1,8 @@
 import { Suspense, useEffect } from "react";
 import type { ReactNode } from "react";
 import { FileText, Loader2 } from "lucide-react";
-import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
-import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { EditorProvider } from "@/widgets/markdown/editor/editor-context";
 import { TipTapEditor } from "@/widgets/markdown/editor/tip-tap-editor";
 import "./style.css";
@@ -112,16 +111,54 @@ function ActiveFileSync({
 	readonly fileId?: string;
 	readonly isActiveView: boolean;
 }) {
-	const [activeFileId, setActiveFileId] = useKeyValue(
-		"flashtype_active_file_id",
+	const activeFile = useQueryTakeFirst<{ value: string }>((lix) =>
+		qb(lix)
+			.selectFrom("lix_key_value_by_branch")
+			.where("lixcol_branch_id", "=", "global")
+			.where("key", "=", "flashtype_active_file_id")
+			.select(["value"]),
 	);
+
+	return (
+		<ActiveFileSyncEffect
+			fileId={fileId}
+			isActiveView={isActiveView}
+			activeFileId={
+				typeof activeFile?.value === "string" ? activeFile.value : null
+			}
+		/>
+	);
+}
+
+function ActiveFileSyncEffect({
+	fileId,
+	isActiveView,
+	activeFileId,
+}: {
+	readonly fileId?: string;
+	readonly isActiveView: boolean;
+	readonly activeFileId: string | null;
+}) {
+	const lix = useLix();
 
 	useEffect(() => {
 		if (!fileId) return;
 		if (!isActiveView) return;
 		if (activeFileId === fileId) return;
-		void setActiveFileId(fileId);
-	}, [fileId, activeFileId, setActiveFileId, isActiveView]);
+		void qb(lix)
+			.insertInto("lix_key_value_by_branch")
+			.values({
+				key: "flashtype_active_file_id",
+				value: fileId,
+				lixcol_branch_id: "global",
+				lixcol_global: true,
+				lixcol_untracked: true,
+			})
+			.onConflict((oc) =>
+				oc.columns(["key", "lixcol_branch_id"]).doUpdateSet({ value: fileId }),
+			)
+			.execute();
+	}, [lix, fileId, activeFileId, isActiveView]);
 
 	return null;
 }

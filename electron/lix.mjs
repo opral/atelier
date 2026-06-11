@@ -224,9 +224,11 @@ function emptyExecuteResult() {
 
 function createPollingObserve(nativeLix, query, runQueued) {
 	let closed = false;
+	let initialized = false;
 	let polling = false;
 	let previousKey;
 	const pending = [];
+	const queuedEvents = [];
 	let timer;
 
 	const poll = async () => {
@@ -239,7 +241,8 @@ function createPollingObserve(nativeLix, query, runQueued) {
 				nativeLix.execute(query?.sql ?? "", [...(query?.params ?? [])]),
 			);
 			const key = JSON.stringify(result.rows.map((row) => row.toObject()));
-			if (previousKey !== undefined && key !== previousKey) {
+			if (!initialized || key !== previousKey) {
+				initialized = true;
 				resolveNext({ sequence: Date.now(), rows: result });
 			}
 			previousKey = key;
@@ -259,6 +262,10 @@ function createPollingObserve(nativeLix, query, runQueued) {
 		next() {
 			if (closed) {
 				return Promise.resolve(undefined);
+			}
+			const queuedEvent = queuedEvents.shift();
+			if (queuedEvent) {
+				return Promise.resolve(queuedEvent);
 			}
 			return new Promise((resolve, reject) => {
 				pending.push({ resolve, reject });
@@ -280,6 +287,8 @@ function createPollingObserve(nativeLix, query, runQueued) {
 		const waiter = pending.shift();
 		if (waiter) {
 			waiter.resolve(event);
+		} else {
+			queuedEvents.push(event);
 		}
 	}
 

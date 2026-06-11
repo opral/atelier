@@ -22,6 +22,13 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+type BranchRow = {
+	id: string;
+	name: string;
+	hidden: boolean | null;
+	commit_id: string | null;
+};
+
 /**
  * Dropdown trigger that lists available branches and switches the active one.
  *
@@ -34,13 +41,6 @@ import clsx from "clsx";
  */
 export function BranchSwitcher() {
 	const lix = useLix();
-	type BranchRow = {
-		id: string;
-		name: string;
-		hidden: boolean | null;
-		commit_id: string | null;
-	};
-
 	const branches = useQuery<BranchRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_branch")
@@ -52,22 +52,51 @@ export function BranchSwitcher() {
 			.orderBy("name", "asc"),
 	);
 
+	return <BranchSwitcherWithActiveBranch lix={lix} branches={branches} />;
+}
+
+function BranchSwitcherWithActiveBranch({
+	lix,
+	branches,
+}: {
+	readonly lix: ReturnType<typeof useLix>;
+	readonly branches: BranchRow[];
+}) {
 	const activeBranch = useQueryTakeFirstOrThrow<{ value: string }>(() =>
 		qb(lix)
 			.selectFrom("lix_key_value")
 			.where("key", "=", "lix_workspace_branch_id")
 			.select(["value"]),
 	);
+	return (
+		<BranchSwitcherContent
+			lix={lix}
+			branches={branches}
+			activeBranchId={activeBranch.value}
+		/>
+	);
+}
+
+function BranchSwitcherContent({
+	lix,
+	branches,
+	activeBranchId,
+}: {
+	readonly lix: ReturnType<typeof useLix>;
+	readonly branches: BranchRow[];
+	readonly activeBranchId: string;
+}) {
 	const activeBranchRow =
-		branches.find((branch) => branch.id === activeBranch.value) ??
+		branches.find((branch) => branch.id === activeBranchId) ??
 		({
-			id: activeBranch.value,
-			name: activeBranch.value,
+			id: activeBranchId,
+			name: activeBranchId,
 			hidden: false,
 			commit_id: null,
 		} satisfies BranchRow);
 
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
+	const [menuOpen, setMenuOpen] = useState(false);
 
 	const handleSwitch = useCallback(
 		async (branchId: string) => {
@@ -146,6 +175,7 @@ export function BranchSwitcher() {
 				if (currentActiveId) {
 					await lix.switchBranch({ branchId: currentActiveId });
 				}
+				setMenuOpen(false);
 			} catch (error) {
 				console.error("Failed to delete branch", error);
 			} finally {
@@ -159,7 +189,7 @@ export function BranchSwitcher() {
 	const isBusy = pendingAction !== null;
 
 	return (
-		<DropdownMenu onOpenChange={(open) => open}>
+		<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 			<DropdownMenuTrigger asChild>
 				<Button
 					type="button"
@@ -261,8 +291,7 @@ export function BranchSwitcher() {
 										<DropdownMenuItem
 											className="flex items-center gap-2 text-xs"
 											variant="destructive"
-											onSelect={(event) => {
-												event.preventDefault();
+											onSelect={() => {
 												if (isDeleteDisabled) return;
 												void handleDeleteBranch(branch.id, branch.name);
 											}}

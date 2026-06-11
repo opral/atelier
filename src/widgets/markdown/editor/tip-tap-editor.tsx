@@ -77,17 +77,11 @@ function TipTapEditorWithActiveKey(props: Omit<TipTapEditorProps, "fileId">) {
 	);
 }
 
-function TipTapEditorContent({
-	activeFileId,
-	className,
-	onReady,
-	persistDebounceMs,
-	focusOnLoad,
-	isActiveView = true,
-}: Omit<TipTapEditorProps, "fileId"> & {
+type TipTapEditorContentProps = Omit<TipTapEditorProps, "fileId"> & {
 	readonly activeFileId?: string | null;
-}) {
-	const lix = useLix();
+};
+
+function TipTapEditorContent(props: TipTapEditorContentProps) {
 	const activeBranch = useQueryTakeFirst<{ value: string }>((lix) =>
 		qb(lix)
 			.selectFrom("lix_key_value")
@@ -95,22 +89,74 @@ function TipTapEditorContent({
 			.select(["value"]),
 	);
 	const activeBranchId = String(activeBranch?.value ?? "");
+
+	if (!props.activeFileId) {
+		return (
+			<TipTapEditorLoadedContent
+				{...props}
+				activeBranchId={activeBranchId}
+				hasInitialFile={false}
+				initialMarkdown=""
+			/>
+		);
+	}
+
+	return (
+		<TipTapEditorFileContent
+			{...props}
+			activeFileId={props.activeFileId}
+			activeBranchId={activeBranchId}
+		/>
+	);
+}
+
+function TipTapEditorFileContent({
+	activeBranchId,
+	activeFileId,
+	...props
+}: TipTapEditorContentProps & {
+	readonly activeBranchId: string;
+	readonly activeFileId: string;
+}) {
 	const initialFile = useQueryTakeFirst(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
 				.select("data")
 				.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
-				.where("id", "=", activeFileId ?? ""),
+				.where("id", "=", activeFileId),
 		{ subscribe: false },
 	);
-	const hasInitialFile = Boolean(initialFile);
-	const initialMarkdown = useMemo(() => {
-		return decodeMarkdownData(initialFile?.data);
-	}, [initialFile]);
+	const initialMarkdown = decodeMarkdownData(initialFile?.data);
 
+	return (
+		<TipTapEditorLoadedContent
+			{...props}
+			activeFileId={activeFileId}
+			activeBranchId={activeBranchId}
+			hasInitialFile={Boolean(initialFile)}
+			initialMarkdown={initialMarkdown}
+		/>
+	);
+}
+
+function TipTapEditorLoadedContent({
+	activeFileId,
+	activeBranchId,
+	className,
+	onReady,
+	persistDebounceMs,
+	focusOnLoad,
+	isActiveView = true,
+	hasInitialFile,
+	initialMarkdown,
+}: TipTapEditorContentProps & {
+	readonly activeBranchId: string;
+	readonly hasInitialFile: boolean;
+	readonly initialMarkdown: string;
+}) {
+	const lix = useLix();
 	const { setEditor } = useEditorCtx();
-
 	const PERSIST_DEBOUNCE_MS = persistDebounceMs ?? 500;
 	const writerKey = "flashtype_tiptap_editor";
 	const normalizePersistedMarkdown = (markdown: string): string =>
@@ -120,6 +166,7 @@ function TipTapEditorContent({
 	const [initialAstLoaded, setInitialAstLoaded] = useState(false);
 	const lastInitialAstRef = useRef<string | null>(null);
 	const hasAutoFocusedRef = useRef(false);
+	const mountedEditorRef = useRef<Editor | null>(null);
 
 	const editor = useMemo(() => {
 		if (!activeFileId || !hasInitialFile || !initialAstLoaded) return null;
@@ -146,8 +193,15 @@ function TipTapEditorContent({
 	]);
 
 	useEffect(() => {
+		mountedEditorRef.current = editor;
 		return () => {
-			editor?.destroy();
+			const editorToDestroy = editor;
+			mountedEditorRef.current = null;
+			queueMicrotask(() => {
+				if (mountedEditorRef.current !== editorToDestroy) {
+					editorToDestroy?.destroy();
+				}
+			});
 		};
 	}, [editor]);
 
@@ -194,6 +248,8 @@ function TipTapEditorContent({
 			params: [activeFileId],
 		});
 		let closed = false;
+		let sawInitialSnapshot = false;
+		const initialObservedMarkdown = normalizePersistedMarkdown(initialMarkdown);
 
 		void (async () => {
 			while (!closed) {
@@ -213,6 +269,12 @@ function TipTapEditorContent({
 				const nextMarkdown = normalizePersistedMarkdown(
 					decodeMarkdownData(firstRow[0]),
 				);
+				if (!sawInitialSnapshot) {
+					sawInitialSnapshot = true;
+					if (nextMarkdown === initialObservedMarkdown) {
+						continue;
+					}
+				}
 				const currentMarkdownAst = tiptapDocToAst(
 					editor.getJSON() as any,
 				) as any;
@@ -238,7 +300,7 @@ function TipTapEditorContent({
 			closed = true;
 			events.close();
 		};
-	}, [lix, editor, activeFileId, activeBranchId, writerKey]);
+	}, [lix, editor, activeFileId, activeBranchId, writerKey, initialMarkdown]);
 
 	useEffect(() => {
 		hasAutoFocusedRef.current = false;

@@ -1,0 +1,41 @@
+import { expect, test } from "vitest";
+import { openLix } from "./node-lix-sdk";
+
+test("polling observe buffers the current snapshot until next is called", async () => {
+	const lix = await openLix({
+		keyValues: [
+			{
+				key: "observe_current_snapshot",
+				value: "current",
+			},
+		],
+	});
+
+	const events = lix.observe({
+		sql: "SELECT value FROM lix_key_value WHERE key = $1",
+		params: ["observe_current_snapshot"],
+	});
+
+	try {
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		const event = await withTimeout(events.next(), 2_000);
+
+		expect(event?.columns).toEqual(["value"]);
+		expect(event?.rows).toEqual([["current"]]);
+	} finally {
+		events.close();
+		await lix.close();
+	}
+});
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+	return Promise.race([
+		promise,
+		new Promise<T>((_, reject) => {
+			setTimeout(
+				() => reject(new Error("timed out waiting for observe event")),
+				ms,
+			);
+		}),
+	]);
+}

@@ -185,8 +185,10 @@ function createPollingObserve(
 	query: ObserveQuery,
 ): ObserveEvents {
 	let closed = false;
+	let initialized = false;
 	let polling = false;
 	let previousKey: string | undefined;
+	const queuedEvents: ObserveEvent[] = [];
 	const pending: Array<{
 		resolve: (event: ObserveEvent | undefined) => void;
 		reject: (error: unknown) => void;
@@ -198,8 +200,9 @@ function createPollingObserve(
 		try {
 			const result = await sdkLix.execute(query.sql, toSqlParams(query.params));
 			const key = JSON.stringify(result.rows.map((row) => row.toObject()));
-			if (previousKey !== undefined && key !== previousKey) {
-				pending.shift()?.resolve({
+			if (!initialized || key !== previousKey) {
+				initialized = true;
+				resolveNext({
 					sequence: Date.now(),
 					rows: result.rows.map((row) =>
 						result.columns.map((column) => row.get(column)),
@@ -223,6 +226,8 @@ function createPollingObserve(
 	return {
 		next() {
 			if (closed) return Promise.resolve(undefined);
+			const queuedEvent = queuedEvents.shift();
+			if (queuedEvent) return Promise.resolve(queuedEvent);
 			return new Promise((resolve, reject) => {
 				pending.push({ resolve, reject });
 			});
@@ -235,6 +240,15 @@ function createPollingObserve(
 			}
 		},
 	};
+
+	function resolveNext(event: ObserveEvent) {
+		const waiter = pending.shift();
+		if (waiter) {
+			waiter.resolve(event);
+		} else {
+			queuedEvents.push(event);
+		}
+	}
 }
 
 function toSqlParams(params: ReadonlyArray<unknown> | undefined): SqlParam[] {

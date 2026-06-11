@@ -1,4 +1,11 @@
-import { createContext, use, useContext, useEffect, useState } from "react";
+import {
+	createContext,
+	use,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import type { ReactNode } from "react";
 import type { Lix } from "@/lib/lix-types";
 
@@ -20,7 +27,13 @@ export function useLix() {
 	return lix;
 }
 
-const queryPromiseCache = new Map<string, Promise<any>>();
+type QueryCacheEntry<TRow> = {
+	promise: Promise<TRow[]>;
+	rows?: TRow[];
+	error?: unknown;
+};
+
+const queryCache = new Map<string, QueryCacheEntry<any>>();
 const observeQueryCache = new Map<
 	string,
 	{ sql: string; params: ReadonlyArray<unknown> }
@@ -55,21 +68,16 @@ export function useQuery<TRow>(
 		`${compiled.sql}:${JSON.stringify(compiled.parameters)}`;
 	const observeQuery = getObserveQuery(cacheKey, compiled);
 
-	const cached = queryPromiseCache.get(cacheKey) as Promise<TRow[]> | undefined;
-	const promise =
-		cached ??
-		(() => {
-			const next = builder.execute();
-			queryPromiseCache.set(cacheKey, next);
-			return next;
-		})();
-
-	const initialRows = use(promise);
-	const [rows, setRows] = useState(initialRows);
+	const entry = getQueryCacheEntry(cacheKey, builder);
+	const cachedRows = entry.rows as TRow[] | undefined;
+	const [, setRows] = useState<TRow[]>(() => cachedRows ?? []);
+	const rowsRef = useRef<TRow[] | undefined>(cachedRows);
 
 	useEffect(() => {
-		setRows(initialRows);
-	}, [cacheKey, initialRows]);
+		if (cachedRows === undefined) return;
+		rowsRef.current = cachedRows;
+		setRows(cachedRows);
+	}, [cacheKey, cachedRows]);
 
 	useEffect(() => {
 		if (!subscribe) return;
@@ -81,11 +89,17 @@ export function useQuery<TRow>(
 				while (!closed) {
 					const event = await events.next();
 					if (closed || event === undefined) break;
-					setRows(queryResultToRows<TRow>(event));
+					const nextRows = queryResultToRows<TRow>(event);
+					cacheQueryRows(cacheKey, nextRows);
+					if (rowsEqual(rowsRef.current, nextRows)) {
+						continue;
+					}
+					rowsRef.current = nextRows;
+					setRows(nextRows);
 				}
 			} catch (error) {
 				if (closed) return;
-				queryPromiseCache.delete(cacheKey);
+				queryCache.delete(cacheKey);
 				setRows(() => {
 					throw error instanceof Error ? error : new Error(String(error));
 				});
@@ -98,7 +112,16 @@ export function useQuery<TRow>(
 		};
 	}, [cacheKey, subscribe, lix, observeQuery]);
 
-	return subscribe ? rows : initialRows;
+	if (entry.error !== undefined) {
+		throw entry.error instanceof Error
+			? entry.error
+			: new Error(String(entry.error));
+	}
+	const initialRows = cachedRows ?? use(entry.promise);
+
+	return subscribe
+		? (cachedRows ?? rowsRef.current ?? initialRows)
+		: initialRows;
 }
 
 export const useQueryTakeFirst = <TResult,>(
@@ -134,6 +157,46 @@ function queryResultToRows<TRow>(result: {
 			}
 		}
 		return output as TRow;
+	});
+}
+
+function rowsEqual(a: unknown, b: unknown): boolean {
+	if (Object.is(a, b)) return true;
+	try {
+		return JSON.stringify(a) === JSON.stringify(b);
+	} catch {
+		return false;
+	}
+}
+
+function getQueryCacheEntry<TRow>(
+	cacheKey: string,
+	builder: QueryLike<TRow>,
+): QueryCacheEntry<TRow> {
+	const cached = queryCache.get(cacheKey) as QueryCacheEntry<TRow> | undefined;
+	if (cached) return cached;
+
+	const entry: QueryCacheEntry<TRow> = {
+		promise: builder.execute().then(
+			(rows) => {
+				entry.rows = rows;
+				return rows;
+			},
+			(error: unknown) => {
+				entry.error = error;
+				queryCache.delete(cacheKey);
+				throw error;
+			},
+		),
+	};
+	queryCache.set(cacheKey, entry);
+	return entry;
+}
+
+function cacheQueryRows<TRow>(cacheKey: string, rows: TRow[]): void {
+	queryCache.set(cacheKey, {
+		promise: Promise.resolve(rows),
+		rows,
 	});
 }
 

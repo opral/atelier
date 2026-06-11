@@ -49,6 +49,7 @@ export type ObserveEvent = {
 };
 
 export type ObserveEvents = {
+	/** First event is the current result snapshot; later events are changes. */
 	next(): Promise<ObserveEvent | undefined>;
 	close(): void;
 };
