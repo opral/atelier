@@ -32,7 +32,10 @@ import type {
 import { useWidgetRegistry } from "../widget-runtime/widget-registry";
 import styles from "./panel.module.css";
 import { useWidgetContext } from "../widget-runtime/widget-context";
-import { useWidgetHostRegistry, type WidgetHostRecord } from "../widget-runtime/widget-host-registry";
+import {
+	useWidgetHostRegistry,
+	type WidgetHostRecord,
+} from "../widget-runtime/widget-host-registry";
 import { Activity } from "react";
 
 /**
@@ -247,7 +250,10 @@ export type PanelV2Props = {
 	readonly onSelectWidget: (instance: string) => void;
 	readonly onRemoveWidget: (instance: string) => void;
 	readonly viewContext: WidgetContext;
-	readonly tabLabel?: (view: WidgetDefinition, instance: WidgetInstance) => string;
+	readonly tabLabel?: (
+		view: WidgetDefinition,
+		instance: WidgetInstance,
+	) => string;
 	readonly extraTabBarContent?: ReactNode;
 	readonly emptyStatePlaceholder?: ReactNode;
 	readonly onActiveViewInteraction?: (instance: string) => void;

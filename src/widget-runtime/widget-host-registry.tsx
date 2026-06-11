@@ -28,7 +28,9 @@ type WidgetHostRegistry = {
 	pruneHosts: (activeInstances: Set<string>) => void;
 };
 
-const WidgetHostRegistryContext = createContext<WidgetHostRegistry | null>(null);
+const WidgetHostRegistryContext = createContext<WidgetHostRegistry | null>(
+	null,
+);
 
 export function WidgetHostRegistryProvider({
 	children,

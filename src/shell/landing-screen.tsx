@@ -9,7 +9,10 @@ import {
 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import type { WidgetContext } from "../widget-runtime/types";
-import { FILES_WIDGET_KIND, TERMINAL_WIDGET_KIND } from "../widget-runtime/widget-instance-helpers";
+import {
+	FILES_WIDGET_KIND,
+	TERMINAL_WIDGET_KIND,
+} from "../widget-runtime/widget-instance-helpers";
 import { importFromClipboard, importFromComputer } from "./import-file";
 import { seedStarterContent } from "@/seed";
 

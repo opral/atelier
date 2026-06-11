@@ -23,14 +23,13 @@ type OpenTestLixOptions = SdkOpenLixOptions & {
 	keyValues?: ReadonlyArray<OpenLixKeyValueEntry>;
 };
 
-type SdkModule = typeof import("../../submodule/lix/packages/js-sdk/dist/index.js");
+type SdkModule =
+	typeof import("../../submodule/lix/packages/js-sdk/dist/index.js");
 
 let sdkModulePromise: Promise<SdkModule> | undefined;
 const require = createRequire(import.meta.url);
 
-export async function openLix(
-	options: OpenTestLixOptions = {},
-): Promise<Lix> {
+export async function openLix(options: OpenTestLixOptions = {}): Promise<Lix> {
 	const { keyValues, ...sdkOptions } = options;
 	const sdk = await loadSdk();
 	const sdkLix = await sdk.openLix(sdkOptions);

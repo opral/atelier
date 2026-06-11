@@ -27,14 +27,8 @@ export type TransactionStatement = {
 	params?: ReadonlyArray<unknown>;
 };
 
-export type SqlTransaction = Pick<
-	SdkLixTransaction,
-	"commit" | "rollback"
-> & {
-	execute(
-		sql: string,
-		params?: ReadonlyArray<unknown>,
-	): Promise<ExecuteResult>;
+export type SqlTransaction = Pick<SdkLixTransaction, "commit" | "rollback"> & {
+	execute(sql: string, params?: ReadonlyArray<unknown>): Promise<ExecuteResult>;
 };
 
 export type ObserveQuery = {

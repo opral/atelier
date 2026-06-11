@@ -40,7 +40,11 @@ import {
 } from "@testing-library/react";
 import { PanelV2 } from "./panel-v2";
 import { WidgetHostRegistryProvider } from "../widget-runtime/widget-host-registry";
-import type { PanelState, WidgetContext, WidgetDefinition } from "../widget-runtime/types";
+import type {
+	PanelState,
+	WidgetContext,
+	WidgetDefinition,
+} from "../widget-runtime/types";
 import type { Lix } from "@/lib/lix-types";
 import { Flag, Search } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";

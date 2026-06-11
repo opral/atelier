@@ -51,9 +51,8 @@ const mockEntries: FilesystemEntryRow[] = [
 ];
 
 vi.mock("@/lib/lix-react", async () => {
-	const actual = await vi.importActual<typeof import("@/lib/lix-react")>(
-		"@/lib/lix-react",
-	);
+	const actual =
+		await vi.importActual<typeof import("@/lib/lix-react")>("@/lib/lix-react");
 	return {
 		...actual,
 		useQuery: () => mockEntries,

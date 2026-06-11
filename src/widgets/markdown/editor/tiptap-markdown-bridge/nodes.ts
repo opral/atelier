@@ -1,11 +1,11 @@
-import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core"
+import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core";
 
 // Extend TipTap's command types
 declare module "@tiptap/core" {
 	interface Commands<ReturnType> {
 		horizontalRule: {
-			setHorizontalRule: () => ReturnType
-		}
+			setHorizontalRule: () => ReturnType;
+		};
 	}
 }
 
@@ -22,10 +22,10 @@ export function markdownWcNodes(): Extensions {
 			group: "block",
 			content: "inline*",
 			addAttributes() {
-				return { data: { default: null } }
+				return { data: { default: null } };
 			},
 			renderHTML() {
-				return ["p", 0]
+				return ["p", 0];
 			},
 		}),
 		// heading
@@ -34,11 +34,11 @@ export function markdownWcNodes(): Extensions {
 			group: "block",
 			content: "inline*",
 			addAttributes() {
-				return { level: { default: 1 }, data: { default: null } }
+				return { level: { default: 1 }, data: { default: null } };
 			},
 			renderHTML({ node }) {
-				const level = (node as any).attrs?.level || 1
-				return ["h" + level, 0]
+				const level = (node as any).attrs?.level || 1;
+				return ["h" + level, 0];
 			},
 		}),
 		// lists
@@ -47,11 +47,11 @@ export function markdownWcNodes(): Extensions {
 			group: "block",
 			content: "listItem+",
 			addAttributes() {
-				return { isTaskList: { default: false }, data: { default: null } }
+				return { isTaskList: { default: false }, data: { default: null } };
 			},
 			renderHTML() {
 				// Match serializeToHtml default: plain <ul>
-				return ["ul", 0]
+				return ["ul", 0];
 			},
 		}),
 		Node.create({
@@ -59,13 +59,13 @@ export function markdownWcNodes(): Extensions {
 			group: "block",
 			content: "listItem+",
 			addAttributes() {
-				return { start: { default: 1 }, data: { default: null } }
+				return { start: { default: 1 }, data: { default: null } };
 			},
 			renderHTML({ node }) {
-				const attrs: any = {}
-				const start = (node as any).attrs?.start
-				if (start && start !== 1) attrs.start = start
-				return ["ol", attrs, 0]
+				const attrs: any = {};
+				const start = (node as any).attrs?.start;
+				if (start && start !== 1) attrs.start = start;
+				return ["ol", attrs, 0];
 			},
 		}),
 		// table
@@ -74,30 +74,30 @@ export function markdownWcNodes(): Extensions {
 			group: "block",
 			content: "tableRow+",
 			addAttributes() {
-				return { align: { default: [] }, data: { default: null } }
+				return { align: { default: [] }, data: { default: null } };
 			},
 			renderHTML() {
-				return ["table", ["tbody", 0]]
+				return ["table", ["tbody", 0]];
 			},
 		}),
 		Node.create({
 			name: "tableRow",
 			content: "tableCell+",
 			addAttributes() {
-				return { data: { default: null } }
+				return { data: { default: null } };
 			},
 			renderHTML() {
-				return ["tr", 0]
+				return ["tr", 0];
 			},
 		}),
 		Node.create({
 			name: "tableCell",
 			content: "inline*",
 			addAttributes() {
-				return { data: { default: null } }
+				return { data: { default: null } };
 			},
 			renderHTML() {
-				return ["td", 0]
+				return ["td", 0];
 			},
 		}),
 		Node.create({
@@ -106,60 +106,66 @@ export function markdownWcNodes(): Extensions {
 			content: "paragraph block*",
 			defining: true,
 			addAttributes() {
-				return { checked: { default: null }, data: { default: null } }
+				return { checked: { default: null }, data: { default: null } };
 			},
 			renderHTML() {
 				// Match serializeToHtml default: plain <li>
-				return ["li", 0]
+				return ["li", 0];
 			},
 			addNodeView() {
 				return ({ node, editor, getPos }) => {
-					const dom = document.createElement("li")
-					const isTask = node.attrs.checked === true || node.attrs.checked === false
-					let input: HTMLInputElement | null = null
-					const content = document.createElement("div")
+					const dom = document.createElement("li");
+					const isTask =
+						node.attrs.checked === true || node.attrs.checked === false;
+					let input: HTMLInputElement | null = null;
+					const content = document.createElement("div");
 					if (isTask) {
-						dom.setAttribute("data-task", node.attrs.checked ? "x" : " ")
-						input = document.createElement("input")
-						input.type = "checkbox"
-						input.checked = node.attrs.checked === true
-						input.style.marginRight = "6px"
+						dom.setAttribute("data-task", node.attrs.checked ? "x" : " ");
+						input = document.createElement("input");
+						input.type = "checkbox";
+						input.checked = node.attrs.checked === true;
+						input.style.marginRight = "6px";
 						input.addEventListener("mousedown", (e) => {
 							// Prevent focusing the checkbox from moving the caret unexpectedly
-							e.preventDefault()
-						})
+							e.preventDefault();
+						});
 						input.addEventListener("change", () => {
-							const pos = typeof getPos === "function" ? getPos() : null
-							if (pos == null) return
+							const pos = typeof getPos === "function" ? getPos() : null;
+							if (pos == null) return;
 							const tr = editor.view.state.tr.setNodeMarkup(pos, undefined, {
 								...node.attrs,
 								checked: !node.attrs.checked,
-							})
-							editor.view.dispatch(tr)
-						})
-						dom.appendChild(input)
+							});
+							editor.view.dispatch(tr);
+						});
+						dom.appendChild(input);
 					}
-					dom.appendChild(content)
+					dom.appendChild(content);
 					return {
 						dom,
 						contentDOM: content,
 						update: (newNode) => {
-							if (newNode.type.name !== "listItem") return false
-							const wasTask = isTask
-							const isNowTask = newNode.attrs.checked === true || newNode.attrs.checked === false
+							if (newNode.type.name !== "listItem") return false;
+							const wasTask = isTask;
+							const isNowTask =
+								newNode.attrs.checked === true ||
+								newNode.attrs.checked === false;
 							// If task-state toggled between task/non-task, recreate
-							if (wasTask !== isNowTask) return false
+							if (wasTask !== isNowTask) return false;
 							if (isNowTask) {
-								if (input) input.checked = newNode.attrs.checked === true
-								dom.setAttribute("data-task", newNode.attrs.checked ? "x" : " ")
+								if (input) input.checked = newNode.attrs.checked === true;
+								dom.setAttribute(
+									"data-task",
+									newNode.attrs.checked ? "x" : " ",
+								);
 							}
 							// Update attrs reference
 							// @ts-ignore - node is captured; we can't reassign but it's fine for event handlers
-							node = newNode
-							return true
+							node = newNode;
+							return true;
 						},
-					}
-				}
+					};
+				};
 			},
 		}),
 		// blockquote
@@ -169,10 +175,10 @@ export function markdownWcNodes(): Extensions {
 			content: "block+",
 			defining: true,
 			addAttributes() {
-				return { data: { default: null } }
+				return { data: { default: null } };
 			},
 			renderHTML() {
-				return ["blockquote", 0]
+				return ["blockquote", 0];
 			},
 		}),
 		// code block
@@ -184,13 +190,13 @@ export function markdownWcNodes(): Extensions {
 			defining: true,
 			code: true,
 			addAttributes() {
-				return { language: { default: null }, data: { default: null } }
+				return { language: { default: null }, data: { default: null } };
 			},
 			renderHTML({ node }) {
-				const lang = (node as any).attrs?.language ?? null
-				const codeAttrs: any = {}
-				if (lang) codeAttrs.class = `language-${lang}`
-				return ["pre", ["code", codeAttrs, 0]]
+				const lang = (node as any).attrs?.language ?? null;
+				const codeAttrs: any = {};
+				if (lang) codeAttrs.class = `language-${lang}`;
+				return ["pre", ["code", codeAttrs, 0]];
 			},
 		}),
 		// horizontal rule
@@ -198,20 +204,20 @@ export function markdownWcNodes(): Extensions {
 			name: "horizontalRule",
 			group: "block",
 			addAttributes() {
-				return { data: { default: null } }
+				return { data: { default: null } };
 			},
 			renderHTML() {
-				return ["hr"]
+				return ["hr"];
 			},
 			addCommands() {
-				const nodeName = this.name
+				const nodeName = this.name;
 				return {
 					setHorizontalRule:
 						() =>
 						({ commands }: CommandProps) => {
-							return commands.insertContent({ type: nodeName })
+							return commands.insertContent({ type: nodeName });
 						},
-				}
+				};
 			},
 		}),
 		// Unsupported blocks (html, yaml, etc.)
@@ -226,12 +232,15 @@ export function markdownWcNodes(): Extensions {
 					kind: { default: "html" },
 					value: { default: "" },
 					data: { default: null },
-				}
+				};
 			},
 			renderHTML({ node }) {
-				const kind = (node as any).attrs?.kind ?? "unsupported"
-				const label = kind === "yaml" ? "YAML frontmatter (read only)" : "HTML block (read only)"
-				const value = (node as any).attrs?.value ?? ""
+				const kind = (node as any).attrs?.kind ?? "unsupported";
+				const label =
+					kind === "yaml"
+						? "YAML frontmatter (read only)"
+						: "HTML block (read only)";
+				const value = (node as any).attrs?.value ?? "";
 				return [
 					"div",
 					{
@@ -240,7 +249,7 @@ export function markdownWcNodes(): Extensions {
 					},
 					["strong", label],
 					["pre", ["code", value]],
-				]
+				];
 			},
 		}),
 		// Inline HTML placeholder
@@ -254,7 +263,7 @@ export function markdownWcNodes(): Extensions {
 				return {
 					value: { default: "" },
 					data: { default: null },
-				}
+				};
 			},
 			renderHTML({ node }) {
 				return [
@@ -264,7 +273,7 @@ export function markdownWcNodes(): Extensions {
 						class: "markdown-wc-inline-html",
 					},
 					["code", (node as any).attrs?.value ?? ""],
-				]
+				];
 			},
 		}),
 		// hard break
@@ -274,35 +283,35 @@ export function markdownWcNodes(): Extensions {
 			inline: true,
 			selectable: false,
 			addAttributes() {
-				return { data: { default: null } }
+				return { data: { default: null } };
 			},
 			renderHTML() {
-				return ["br"]
+				return ["br"];
 			},
 		}),
 		// marks
 		Mark.create({
 			name: "bold",
 			renderHTML() {
-				return ["strong", 0]
+				return ["strong", 0];
 			},
 		}),
 		Mark.create({
 			name: "italic",
 			renderHTML() {
-				return ["em", 0]
+				return ["em", 0];
 			},
 		}),
 		Mark.create({
 			name: "strike",
 			renderHTML() {
-				return ["s", 0]
+				return ["s", 0];
 			},
 		}),
 		Mark.create({
 			name: "code",
 			renderHTML() {
-				return ["code", 0]
+				return ["code", 0];
 			},
 		}),
 		Mark.create({
@@ -312,15 +321,15 @@ export function markdownWcNodes(): Extensions {
 					href: { default: null },
 					title: { default: null },
 					data: { default: null },
-				}
+				};
 			},
 			renderHTML({ mark }) {
-				const attrs: any = {}
-				const href = (mark as any).attrs?.href
-				if (href) attrs.href = href
-				const title = (mark as any).attrs?.title
-				if (title) attrs.title = title
-				return ["a", attrs, 0]
+				const attrs: any = {};
+				const href = (mark as any).attrs?.href;
+				if (href) attrs.href = href;
+				const title = (mark as any).attrs?.title;
+				if (title) attrs.title = title;
+				return ["a", attrs, 0];
 			},
 		}),
 		// image (inline)
@@ -335,18 +344,18 @@ export function markdownWcNodes(): Extensions {
 					alt: { default: null },
 					title: { default: null },
 					data: { default: null },
-				}
+				};
 			},
 			renderHTML({ node }) {
-				const attrs: any = {}
-				const src = (node as any).attrs?.src
-				if (src) attrs.src = src
-				const alt = (node as any).attrs?.alt
-				if (alt) attrs.alt = alt
-				const title = (node as any).attrs?.title
-				if (title) attrs.title = title
-				return ["img", attrs]
+				const attrs: any = {};
+				const src = (node as any).attrs?.src;
+				if (src) attrs.src = src;
+				const alt = (node as any).attrs?.alt;
+				if (alt) attrs.alt = alt;
+				const title = (node as any).attrs?.title;
+				if (title) attrs.title = title;
+				return ["img", attrs];
 			},
 		}),
-	]
+	];
 }

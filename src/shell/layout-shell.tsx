@@ -70,7 +70,10 @@ import {
 	type PanelLayoutSizes,
 	type FlashtypeUiState,
 } from "./ui-state";
-import { activatePanelWidget, upsertPendingWidget } from "../widget-runtime/pending-widget";
+import {
+	activatePanelWidget,
+	upsertPendingWidget,
+} from "../widget-runtime/pending-widget";
 import { cloneWidgetInstance, reorderPanelWidgetsByIndex } from "./panel-utils";
 
 const stripLaunchArgs = (view: WidgetInstance): WidgetInstance => {
@@ -304,7 +307,10 @@ function LayoutShellContent() {
 						replaceInstalledWidgets(installed);
 					}
 				} catch (error) {
-					console.warn("[widget-loader] failed to load installed widgets", error);
+					console.warn(
+						"[widget-loader] failed to load installed widgets",
+						error,
+					);
 					if (!cancelled) {
 						clearInstalledWidgets();
 					}

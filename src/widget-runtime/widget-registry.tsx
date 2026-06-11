@@ -24,7 +24,9 @@ type WidgetRegistryValue = {
 const buildWidgetRegistry = (
 	installedDefinitions: readonly WidgetDefinition[],
 ): Pick<WidgetRegistryValue, "visibleWidgets" | "widgetMap"> => {
-	const builtinKinds = new Set(BUILTIN_WIDGET_DEFINITIONS.map((def) => def.kind));
+	const builtinKinds = new Set(
+		BUILTIN_WIDGET_DEFINITIONS.map((def) => def.kind),
+	);
 	const installedVisible = normalizeInstalledWidgetDefinitions(
 		installedDefinitions,
 	).filter((def) => !builtinKinds.has(def.kind));
@@ -45,8 +47,10 @@ const buildWidgetRegistry = (
 
 const BASE_REGISTRY = buildWidgetRegistry([]);
 
-export const WIDGET_DEFINITIONS: WidgetDefinition[] = BASE_REGISTRY.visibleWidgets;
-export const WIDGET_MAP: Map<WidgetKind, WidgetDefinition> = BASE_REGISTRY.widgetMap;
+export const WIDGET_DEFINITIONS: WidgetDefinition[] =
+	BASE_REGISTRY.visibleWidgets;
+export const WIDGET_MAP: Map<WidgetKind, WidgetDefinition> =
+	BASE_REGISTRY.widgetMap;
 
 const NOOP = () => {};
 
@@ -59,7 +63,9 @@ const WidgetRegistryContext = createContext<WidgetRegistryValue>({
 });
 
 export function WidgetRegistryProvider({ children }: { children: ReactNode }) {
-	const [installedWidgets, setInstalledWidgets] = useState<WidgetDefinition[]>([]);
+	const [installedWidgets, setInstalledWidgets] = useState<WidgetDefinition[]>(
+		[],
+	);
 
 	const replaceInstalledWidgets = useCallback(
 		(definitions: readonly WidgetDefinition[]) => {

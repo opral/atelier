@@ -1,7 +1,7 @@
-import type { Extensions } from "@tiptap/core"
-import { markdownWcNodes } from "./nodes"
-import { MarkdownWcShortcuts } from "./shortcuts"
-import { createAssignDataIdExtension } from "./assign-data-id"
+import type { Extensions } from "@tiptap/core";
+import { markdownWcNodes } from "./nodes";
+import { MarkdownWcShortcuts } from "./shortcuts";
+import { createAssignDataIdExtension } from "./assign-data-id";
 
 // --- TipTap minimal extensions (no HTML parsing, schema only) ---
 
@@ -41,5 +41,9 @@ import { createAssignDataIdExtension } from "./assign-data-id"
  * ```
  */
 export function MarkdownWc(opts?: { idProvider?: () => string }): Extensions {
-	return [...markdownWcNodes(), createAssignDataIdExtension(opts), MarkdownWcShortcuts]
+	return [
+		...markdownWcNodes(),
+		createAssignDataIdExtension(opts),
+		MarkdownWcShortcuts,
+	];
 }

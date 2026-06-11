@@ -98,7 +98,9 @@ export async function importFile({
 /**
  * Imports content from the clipboard as a new file.
  */
-export async function importFromClipboard(context: WidgetContext): Promise<void> {
+export async function importFromClipboard(
+	context: WidgetContext,
+): Promise<void> {
 	const content = await navigator.clipboard.readText();
 
 	if (!content?.trim()) {
@@ -120,7 +122,9 @@ export async function importFromClipboard(context: WidgetContext): Promise<void>
 /**
  * Opens a file picker and imports the selected file.
  */
-export async function importFromComputer(context: WidgetContext): Promise<void> {
+export async function importFromComputer(
+	context: WidgetContext,
+): Promise<void> {
 	const input = document.createElement("input");
 	input.type = "file";
 	input.accept = ".md,.txt,.markdown";

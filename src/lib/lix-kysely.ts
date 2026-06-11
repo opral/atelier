@@ -35,7 +35,10 @@ type LixExecuteLike = {
 };
 
 type LixTransactionLike = {
-	execute(sql: string, params?: ReadonlyArray<unknown>): Promise<LixQueryResult>;
+	execute(
+		sql: string,
+		params?: ReadonlyArray<unknown>,
+	): Promise<LixQueryResult>;
 	commit(): Promise<void>;
 	rollback(): Promise<void>;
 };
@@ -382,7 +385,9 @@ export function ebEntity<
 				return eb.or(entities.map((entity) => equalsExpression(eb, entity)));
 			};
 		},
-		hasLabel(label: { id: string; name?: string } | { name: string; id?: string }) {
+		hasLabel(
+			label: { id: string; name?: string } | { name: string; id?: string },
+		) {
 			return (
 				eb: ExpressionBuilder<LixDatabaseSchema, TB>,
 			): ExpressionWrapper<LixDatabaseSchema, TB, SqlBool> => {
@@ -425,7 +430,10 @@ export function ebEntity<
 }
 
 function isLixExecuteLike(value: unknown): value is LixExecuteLike {
-	return Boolean(value) && typeof (value as { execute?: unknown }).execute === "function";
+	return (
+		Boolean(value) &&
+		typeof (value as { execute?: unknown }).execute === "function"
+	);
 }
 
 function isLixTransactionalLike(value: unknown): value is LixTransactionalLike {
@@ -466,7 +474,8 @@ function decodeRows(
 }
 
 function extractIntegerValue(value: unknown): bigint | undefined {
-	if (typeof value === "number" && Number.isInteger(value)) return BigInt(value);
+	if (typeof value === "number" && Number.isInteger(value))
+		return BigInt(value);
 	if (typeof value === "bigint") return value;
 	if (typeof value === "string" && /^-?\d+$/.test(value)) return BigInt(value);
 	return undefined;
@@ -526,7 +535,10 @@ function selectSelectionNodes(
 function selectionNameFromNode(selectionNode: Record<string, unknown>): string {
 	const selection = selectionNode.selection;
 	if (!selection || typeof selection !== "object") return "column";
-	return identifierNameFromSelection(selection as Record<string, unknown>) ?? "column";
+	return (
+		identifierNameFromSelection(selection as Record<string, unknown>) ??
+		"column"
+	);
 }
 
 function identifierNameFromSelection(

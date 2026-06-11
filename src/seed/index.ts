@@ -43,7 +43,10 @@ export async function seedMarkdownFiles(lix: Lix): Promise<void> {
 						.where("path", "=", doc.path)
 						.execute();
 				} else {
-					await trx.insertInto("lix_file").values({ path: doc.path, data }).execute();
+					await trx
+						.insertInto("lix_file")
+						.values({ path: doc.path, data })
+						.execute();
 				}
 			}
 		});
@@ -70,7 +73,10 @@ export async function ensureAgentsFile(lix: Lix): Promise<void> {
 }
 
 export async function seedStarterContent(lix: Lix): Promise<void> {
-	const allSeedDocs = [{ path: "/AGENTS.md", content: agentsSeed }, ...SEED_DOCS];
+	const allSeedDocs = [
+		{ path: "/AGENTS.md", content: agentsSeed },
+		...SEED_DOCS,
+	];
 	await qb(lix)
 		.transaction()
 		.execute(async (trx) => {
