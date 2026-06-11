@@ -9,7 +9,7 @@ import { setRequestedOpenPath } from "./lix.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
-const APP_BUNDLE_ID = "ai.flashtype.app";
+const APP_BUNDLE_ID = "com.flashtype.app";
 const MARKDOWN_CONTENT_TYPES = [
 	"public.markdown",
 	"net.daringfireball.markdown",

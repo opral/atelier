@@ -1,4 +1,4 @@
-appId: ai.flashtype.app
+appId: com.flashtype.app
 productName: Flashtype
 executableName: Flashtype
 artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
