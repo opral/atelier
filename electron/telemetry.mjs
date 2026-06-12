@@ -4,7 +4,6 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 const TELEMETRY_STORE_FILE = "telemetry.json";
-const TELEMETRY_STORE_LOCK = "telemetry.lock";
 const ENV_VARIABLES_FILE = "build/env-variables.mjs";
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const POSTHOG_CAPTURE_ENDPOINT = "/capture/";
@@ -90,13 +89,13 @@ async function getOrCreateDistinctId() {
 	const storePath = path.join(userDataPath, TELEMETRY_STORE_FILE);
 
 	await fs.mkdir(userDataPath, { recursive: true });
-	return await withTelemetryStoreLock(async () => {
-		const existingDistinctId = await readDistinctId(storePath);
-		if (existingDistinctId) {
-			return existingDistinctId;
-		}
+	const existingDistinctId = await readDistinctId(storePath);
+	if (existingDistinctId) {
+		return existingDistinctId;
+	}
 
-		const distinctId = randomUUID();
+	const distinctId = randomUUID();
+	try {
 		await fs.writeFile(
 			storePath,
 			`${JSON.stringify(
@@ -107,9 +106,19 @@ async function getOrCreateDistinctId() {
 				null,
 				2,
 			)}\n`,
+			{ flag: "wx" },
 		);
 		return distinctId;
-	});
+	} catch (error) {
+		if (error?.code !== "EEXIST") {
+			throw error;
+		}
+		const racedDistinctId = await readDistinctId(storePath);
+		if (racedDistinctId) {
+			return racedDistinctId;
+		}
+		throw error;
+	}
 }
 
 async function readDistinctId(storePath) {
@@ -123,35 +132,4 @@ async function readDistinctId(storePath) {
 		return undefined;
 	}
 	return undefined;
-}
-
-async function withTelemetryStoreLock(callback) {
-	const lockPath = path.join(app.getPath("userData"), TELEMETRY_STORE_LOCK);
-	await acquireTelemetryStoreLock(lockPath);
-	try {
-		return await callback();
-	} finally {
-		await fs.rm(lockPath, { force: true, recursive: true });
-	}
-}
-
-async function acquireTelemetryStoreLock(lockPath) {
-	const deadline = Date.now() + 2000;
-	while (true) {
-		try {
-			await fs.mkdir(lockPath);
-			return;
-		} catch (error) {
-			if (error?.code !== "EEXIST" || Date.now() >= deadline) {
-				throw error;
-			}
-			await wait(25);
-		}
-	}
-}
-
-async function wait(milliseconds) {
-	await new Promise((resolve) => {
-		setTimeout(resolve, milliseconds);
-	});
 }
