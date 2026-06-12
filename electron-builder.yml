@@ -8,6 +8,7 @@ directories:
   buildResources: build
 files:
   - package.json
+  - build/env-variables.mjs
   - dist/**/*
   - electron/**/*
   - node_modules/**/*

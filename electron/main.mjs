@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { disposeLixIpc, registerLixIpc } from "./ipc-lix.mjs";
 import { disposeTerminalIpc, registerTerminalIpc } from "./ipc-terminal.mjs";
 import { setRequestedOpenPath } from "./lix.mjs";
+import { captureAppOpened } from "./telemetry.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
@@ -103,6 +104,7 @@ app.whenReady().then(() => {
 	registerLixIpc();
 	registerTerminalIpc();
 	void registerMarkdownDefaultHandler();
+	void captureAppOpened();
 	createMainWindow();
 
 	app.on("activate", () => {
