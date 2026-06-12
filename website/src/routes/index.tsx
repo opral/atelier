@@ -1,12 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const GITHUB_URL = "https://github.com/opral/flashtype";
-const DOWNLOAD_URL =
-	"mailto:samuel@opral.com" +
-	"?subject=" +
-	encodeURIComponent("Request early access for Flashtype") +
-	"&body=" +
-	encodeURIComponent("Hi, I want early access to Flashtype");
+const DOWNLOAD_URL = "https://flashtype.com";
 
 export const Route = createFileRoute("/")({
 	component: LandingPage,

@@ -1,39 +1,69 @@
-# ⚡ Flashtype
+# Flashtype
 
-**A claude code style markdown editor demo for the [Lix](https://lix.dev) version control system.**
+### The markdown editor for Claude & Codex
 
-![claude code markdown editor](./assets/product-demo.png)
+Agents edit. You review the diff. Nothing lands without you.
 
-Flashtype is a WYSIWYG markdown editor built on the Lix SDK. It serves as both a showcase for Lix's capabilities and a real-world application that drives the SDK's development—proving that embeddable version control enables powerful features like AI-assisted editing, change proposals, and full document history, all running entirely in the browser.
+[Download for macOS](https://flashtype.com) - [Website](https://flashtype.com) - [Lix](https://lix.dev) - [Discord](https://discord.gg/gdMPPWy57R)
 
-## 🎯 What This Demonstrates
+![Flashtype app screenshot](./assets/flashtype-screenshot.png)
 
-Flashtype demonstrates key Lix capabilities:
+## Write Markdown With Agents In The Loop
 
-| Lix Feature            | How Flashtype Uses It                                                         |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| **History**            | Every edit is tracked. See exactly what changed, when, and by whom.           |
-| **Branches**           | AI generates content in isolated branches, letting you review before merging. |
-| **Diffs**              | Claude Code-style accept/reject UI shows granular changes inline.             |
-| **Change Proposals**   | AI proposes edits, humans stay in control of what ships.                      |
-| **Filesystem Backend** | Desktop documents persist as real files in a Lix-backed workspace folder.     |
+Flashtype is a WYSIWYG markdown editor with Claude Code and Codex built in. Point it at a folder, open the `.md` files you already have, and run coding agents against the same files from a real terminal beside your document.
 
-## 🚀 Try It
+When an agent edits, Flashtype shows the change as an inline diff with word-level precision. Accept or reject each change before it lands, browse document history, and restore earlier versions when you need to.
 
-Visit [flashtype.com](https://flashtype.com) to try it in your browser—no installation required.
+## Features
 
-## 🔗 Learn More About Lix
+| Feature | Description |
+| --- | --- |
+| Local markdown files | Open `.md` and `.markdown` files from your disk. No imports, sync step, or duplicate document format. |
+| Claude & Codex terminal | Run CLI agents next to the document they are editing, with no copy-paste round trip. |
+| Inline diffs | Review agent edits in the editor and accept or reject changes before they land. |
+| Version history | Every edit becomes a checkpoint you can inspect and restore. |
+| Markdown as source of truth | Keep lossless markdown that works with GitHub, ChatGPT, Discord, docs, and plain text tools. |
+| Lix-powered version control | Built on the [Lix SDK](https://lix.dev), an embeddable version control system for app-level history, branches, diffs, and change proposals. |
 
-Lix is an embeddable version control system that enables Git-like features for any file format:
+## Download
 
-- **[Lix Documentation](https://lix.dev/docs)** — Full SDK reference and guides
-- **[Getting Started](https://lix.dev/docs/getting-started)** — Build your first app with Lix
-- **[GitHub](https://github.com/opral/lix-sdk)** — Report issues and contribute
-- **[Discord](https://discord.gg/gdMPPWy57R)** — Get help and join the community
+Download Flashtype for macOS at [flashtype.com](https://flashtype.com).
 
-## 📋 Features
+## Development
 
-- **WYSIWYG Markdown** — No preview tabs. Type `# Heading` and see it rendered instantly.
-- **Claude Code-style AI** — Generate content, review diffs, accept/reject changes.
-- **Browser-native** — Zero install, works offline, syncs optionally.
-- **Markdown as Source of Truth** — Lossless copy/paste between tools like GitHub, ChatGPT, and Discord.
+```sh
+git clone https://github.com/opral/flashtype.git
+cd flashtype
+pnpm install
+pnpm run dev
+```
+
+Useful commands:
+
+| Command | Description |
+| --- | --- |
+| `pnpm run dev` | Start the Electron app with the Vite renderer. |
+| `pnpm run dev:web` | Start the browser version. |
+| `pnpm run build` | Build the app. |
+| `pnpm test` | Run unit tests. |
+| `pnpm run test:e2e` | Run Playwright end-to-end tests. |
+| `pnpm run typecheck` | Check TypeScript. |
+| `pnpm run lint` | Run oxlint. |
+
+The marketing site lives in [`website`](./website).
+
+## Why Lix?
+
+Flashtype is also a real-world showcase for [Lix](https://lix.dev): version control embedded directly into an application instead of bolted on outside it.
+
+| Lix capability | How Flashtype uses it |
+| --- | --- |
+| History | Track every document edit and restore earlier versions. |
+| Branches | Let agents work in isolated branches before changes are accepted. |
+| Diffs | Show granular inline accept/reject UI for markdown changes. |
+| Change proposals | Keep humans in control of what lands. |
+| Filesystem backend | Persist desktop documents as real files in a Lix-backed workspace. |
+
+## License
+
+Flashtype is released under the [MIT License](./LICENSE).

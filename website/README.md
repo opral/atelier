@@ -1,6 +1,6 @@
 # Flashtype website
 
-Landing page for [Flashtype](https://flashtype.ai), built with
+Landing page for [Flashtype](https://flashtype.com), built with
 [TanStack Start](https://tanstack.com/start) and Tailwind CSS v4.
 
 This package is intentionally standalone (it has its own
