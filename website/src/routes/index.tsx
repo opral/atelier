@@ -37,7 +37,15 @@ const FEATURE_ROWS = [
 	{
 		title: (
 			<>
-				Claude &amp; Codex
+				<span className="inline-flex items-center gap-[10px]">
+					<img src="/claude-icon.png" alt="Claude" className="h-[40px] w-[40px] object-contain max-md:h-[30px] max-md:w-[30px]" />
+					Claude
+				</span>{" "}
+				&amp;{" "}
+				<span className="inline-flex items-center gap-[10px]">
+					<img src="/codex-icon.png" alt="Codex" className="h-[42px] w-[42px] object-contain max-md:h-[31px] max-md:w-[31px]" />
+					Codex
+				</span>
 				<br />
 				built in
 			</>
@@ -223,7 +231,8 @@ function FilesVisual() {
 function EditorVisual() {
 	return (
 		<FeatureWindow title="san-francisco.md">
-			<div className={`${miniDocument} p-[34px_40px] [&_h4]:mb-[18px] [&_h4]:text-[30px] [&_p]:text-[17px]`}>
+			<FormattingToolbar />
+			<div className={`${miniDocument} p-[26px_40px_34px] [&_h4]:mb-[18px] [&_h4]:text-[30px] [&_p]:text-[17px]`}>
 				<h4>San Francisco: City by the Bay</h4>
 				<p>
 					One of America&apos;s most iconic cities, characterized by rolling hills
@@ -231,13 +240,67 @@ function EditorVisual() {
 					<a href={GITHUB_URL}>Golden Gate Bridge</a> spans the bay as a
 					rust-colored marvel.
 				</p>
-				<h5>A city of microclimates</h5>
-				<p>
-					Pack a jacket for the Sunset and sunglasses for the Mission - often the
-					same afternoon<span className="ml-[2px] inline-block h-[19px] w-[2px] animate-[caret-blink_1.1s_steps(1)_infinite] bg-[#C2410C] align-[-3px]" />
-				</p>
+				<table className="mt-[24px] w-full max-w-[480px] border-separate border-spacing-0 overflow-hidden rounded-[10px] border border-chrome text-left text-[14px] leading-[1.35]">
+					<thead className="bg-[#F4EEE6] text-[12px] uppercase tracking-[0.08em] text-[#7C2D12]">
+						<tr>
+							<th className="border-b border-[#EAD9C8] px-[14px] py-[10px] font-bold">Neighborhood</th>
+							<th className="border-b border-[#EAD9C8] px-[14px] py-[10px] font-bold">Weather</th>
+							<th className="border-b border-[#EAD9C8] px-[14px] py-[10px] font-bold">Bring</th>
+						</tr>
+					</thead>
+					<tbody className="text-secondary">
+						<tr>
+							<td className="border-b border-chrome px-[14px] py-[11px] font-semibold text-ink">Sunset</td>
+							<td className="border-b border-chrome px-[14px] py-[11px]">Foggy</td>
+							<td className="border-b border-chrome px-[14px] py-[11px]">Jacket</td>
+						</tr>
+						<tr>
+							<td className="px-[14px] py-[11px] font-semibold text-ink">Mission</td>
+							<td className="px-[14px] py-[11px]">Sunny</td>
+							<td className="px-[14px] py-[11px]">
+								Sunglasses<span className="ml-[2px] inline-block h-[16px] w-[2px] animate-[caret-blink_1.1s_steps(1)_infinite] bg-[#C2410C] align-[-3px]" />
+							</td>
+						</tr>
+					</tbody>
+				</table>
 			</div>
 		</FeatureWindow>
+	);
+}
+
+function FormattingToolbar() {
+	return (
+		<div className="flex h-[48px] shrink-0 items-center gap-[7px] border-b border-chrome bg-[#FCFBFA] px-[28px] text-[13px] text-muted">
+			<ToolbarButton active>H1</ToolbarButton>
+			<ToolbarButton>H2</ToolbarButton>
+			<div className="mx-[4px] h-[20px] w-px bg-chrome" />
+			<ToolbarButton strong>B</ToolbarButton>
+			<ToolbarButton italic>I</ToolbarButton>
+			<ToolbarButton>U</ToolbarButton>
+			<div className="mx-[4px] h-[20px] w-px bg-chrome" />
+			<ToolbarButton>Link</ToolbarButton>
+			<ToolbarButton>• List</ToolbarButton>
+		</div>
+	);
+}
+
+function ToolbarButton({
+	children,
+	active = false,
+	strong = false,
+	italic = false,
+}: {
+	children: ReactNode;
+	active?: boolean;
+	strong?: boolean;
+	italic?: boolean;
+}) {
+	return (
+		<span
+			className={`inline-flex h-[28px] min-w-[30px] items-center justify-center rounded-[7px] px-[9px] ${active ? "bg-[#F4EEE6] text-[#C2410C] shadow-[inset_0_0_0_1px_#EAD9C8]" : "text-muted"} ${strong ? "font-bold text-ink" : "font-semibold"} ${italic ? "italic" : ""}`}
+		>
+			{children}
+		</span>
 	);
 }
 
@@ -249,6 +312,20 @@ function AgentsVisual() {
 					<div className="mb-[14px] flex items-center gap-[7px] font-semibold text-[#44403C]">
 						<img src="/claude-icon.png" alt="" className="h-[15px] w-[15px]" />
 						Claude Code
+					</div>
+					<div className="rounded-[8px] border border-dashed border-terminal/80 bg-white/70 px-[14px] py-[13px] text-center shadow-[0_12px_30px_rgba(226,114,91,0.08)]">
+						<div className="text-[12px] font-semibold text-terminal">
+							Claude Code <span className="text-muted">v2.0.0</span>
+						</div>
+						<div className="mt-[10px] text-[12.5px] font-semibold text-ink">
+							Welcome back Alec!
+						</div>
+						<ClaudeCodeMascot compact />
+						<div className="mt-[9px] text-[11.5px] leading-[1.45] text-faint">
+							Sonnet 4.6 · Claude API
+							<br />
+							~/Documents/flashtype
+						</div>
 					</div>
 					<p className="text-ink">
 						<span className="text-terminal">&gt;</span> tighten the intro and add a section
@@ -455,11 +532,32 @@ function DocumentPane() {
 			<h3 className="mt-[32px] mb-[12px] text-[28px] font-bold tracking-normal text-ink">
 				A city of microclimates
 			</h3>
-			<p className="text-[24px] leading-[1.7]">
-				Pack a jacket for the Sunset and sunglasses for the Mission - often on
-				the same afternoon
-				<span className="ml-[2px] inline-block h-[28px] w-[3px] animate-[caret-blink_1.1s_steps(1)_infinite] bg-ink align-[-4px]" />
-			</p>
+			<table className="mt-[18px] w-full max-w-[620px] border-separate border-spacing-0 overflow-hidden rounded-[12px] border border-chrome text-left text-[18px] leading-[1.35]">
+				<thead className="bg-[#F4EEE6] text-[13px] uppercase tracking-[0.08em] text-[#7C2D12]">
+					<tr>
+						<th className="border-b border-[#EAD9C8] px-[18px] py-[12px] font-bold">Neighborhood</th>
+						<th className="border-b border-[#EAD9C8] px-[18px] py-[12px] font-bold">Weather</th>
+						<th className="border-b border-[#EAD9C8] px-[18px] py-[12px] font-bold">Bring</th>
+					</tr>
+				</thead>
+				<tbody className="text-secondary">
+					<tr>
+						<td className="border-b border-chrome px-[18px] py-[14px] font-semibold text-ink">Sunset</td>
+						<td className="border-b border-chrome px-[18px] py-[14px]">Foggy</td>
+						<td className="border-b border-chrome px-[18px] py-[14px]">Jacket</td>
+					</tr>
+					<tr>
+						<td className="px-[18px] py-[14px] font-semibold text-ink">Mission</td>
+						<td className="px-[18px] py-[14px]">
+							<Del>Sunny</Del> <Ins>Warm</Ins>
+						</td>
+						<td className="px-[18px] py-[14px]">
+							Sunglasses
+							<span className="ml-[2px] inline-block h-[22px] w-[3px] animate-[caret-blink_1.1s_steps(1)_infinite] bg-ink align-[-4px]" />
+						</td>
+					</tr>
+				</tbody>
+			</table>
 		</div>
 	);
 }
@@ -473,6 +571,7 @@ function TerminalPane() {
 					Claude Code
 				</span>
 				<strong className="text-ink">Welcome back Alec!</strong>
+				<ClaudeCodeMascot />
 				<small className="text-[16px] leading-[1.5] text-faint">
 					Sonnet 4.6 · Claude API
 					<br />
@@ -488,6 +587,32 @@ function TerminalPane() {
 				<span className="text-terminal">&gt;</span> Type a task for Claude...
 			</div>
 		</aside>
+	);
+}
+
+const mascotPixels = [
+	"..ooo..",
+	".ooooo.",
+	"ooeoeoo",
+	".ooooo.",
+	"..o.o..",
+];
+
+function ClaudeCodeMascot({ compact = false }: { compact?: boolean }) {
+	return (
+		<div
+			className={`mx-auto grid grid-cols-7 ${compact ? "my-[8px]" : "my-[2px]"} drop-shadow-[0_6px_12px_rgba(226,114,91,0.18)]`}
+			aria-hidden
+		>
+			{mascotPixels.flatMap((row, rowIndex) =>
+				[...row].map((pixel, columnIndex) => (
+					<span
+						key={`${rowIndex}-${columnIndex}`}
+						className={`${compact ? "h-[5px] w-[5px]" : "h-[10px] w-[10px]"} ${pixel === "." ? "opacity-0" : pixel === "e" ? "bg-ink" : "bg-terminal"}`}
+					/>
+				)),
+			)}
+		</div>
 	);
 }
 
