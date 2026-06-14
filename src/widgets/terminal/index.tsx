@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { TerminalSquare } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
@@ -13,13 +13,8 @@ const XTERM_THEMES = {
 		cursor: "#111827",
 		selectionBackground: "#dbeafe",
 	},
-	dark: {
-		background: "#0b1020",
-		foreground: "#e5e7eb",
-		cursor: "#e5e7eb",
-		selectionBackground: "#334155",
-	},
 } as const;
+const XTERM_THEME = XTERM_THEMES.light;
 
 function TerminalView({
 	initialCommand,
@@ -30,28 +25,6 @@ function TerminalView({
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const terminalRef = useRef<Terminal | null>(null);
 	const initialCommandRef = useRef(initialCommand);
-	const [theme, setTheme] = useState<"light" | "dark">(() => {
-		if (typeof document === "undefined") {
-			return "light";
-		}
-		return resolveThemeFromDocument(document.documentElement);
-	});
-
-	useEffect(() => {
-		const root = document.documentElement;
-		const updateTheme = () => {
-			setTheme(resolveThemeFromDocument(root));
-		};
-		updateTheme();
-		const observer = new MutationObserver(updateTheme);
-		observer.observe(root, {
-			attributes: true,
-			attributeFilter: ["class", "data-theme"],
-		});
-		return () => {
-			observer.disconnect();
-		};
-	}, []);
 
 	useEffect(() => {
 		const desktop = window.flashtypeDesktop;
@@ -71,7 +44,7 @@ function TerminalView({
 			lineHeight: 1.2,
 			scrollback: 3000,
 			allowTransparency: false,
-			theme: XTERM_THEMES[resolveThemeFromDocument(document.documentElement)],
+			theme: XTERM_THEME,
 		});
 		terminalRef.current = terminal;
 		const fitAddon = new FitAddon();
@@ -155,14 +128,6 @@ function TerminalView({
 		};
 	}, []);
 
-	useEffect(() => {
-		const terminal = terminalRef.current;
-		if (!terminal) {
-			return;
-		}
-		terminal.options.theme = XTERM_THEMES[theme];
-	}, [theme]);
-
 	if (!window.flashtypeDesktop?.terminal) {
 		return (
 			<div className="flex h-full min-h-0 items-center justify-center px-4 text-sm text-neutral-600">
@@ -174,7 +139,7 @@ function TerminalView({
 	return (
 		<div
 			className="h-full min-h-0"
-			style={{ backgroundColor: XTERM_THEMES[theme].background }}
+			style={{ backgroundColor: XTERM_THEME.background }}
 		>
 			<div ref={containerRef} className="h-full w-full p-2" />
 		</div>
@@ -197,10 +162,3 @@ export const widget = createReactWidgetDefinition({
 		/>
 	),
 });
-
-function resolveThemeFromDocument(root: HTMLElement): "light" | "dark" {
-	if (root.dataset.theme === "dark" || root.classList.contains("dark")) {
-		return "dark";
-	}
-	return "light";
-}

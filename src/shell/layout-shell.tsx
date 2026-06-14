@@ -298,11 +298,9 @@ function LayoutShellContent({
 	const { widgetMap, replaceInstalledWidgets, clearInstalledWidgets } =
 		useWidgetRegistry();
 	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
-	const [themePreference] = useKeyValue("flashtype_theme");
 	const [activeFileId, setActiveFileId] = useKeyValue(
 		"flashtype_active_file_id",
 	);
-	const theme = themePreference === "dark" ? "dark" : "light";
 	const lix = useLix();
 	const uiState = useMemo(
 		() => coerceFlashtypeUiState(uiStateKV ?? DEFAULT_FLASHTYPE_UI_STATE),
@@ -351,12 +349,6 @@ function LayoutShellContent({
 	const leftPanelRef = useRef<ImperativePanelHandle | null>(null);
 	const rightPanelRef = useRef<ImperativePanelHandle | null>(null);
 	const viewHostRegistry = useWidgetHostRegistry();
-
-	useEffect(() => {
-		const root = document.documentElement;
-		root.dataset.theme = theme;
-		root.classList.toggle("dark", theme === "dark");
-	}, [theme]);
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();

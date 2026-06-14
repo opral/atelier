@@ -3,8 +3,6 @@ import {
 	CircleOff,
 	FileDown,
 	Hammer,
-	Moon,
-	Sun,
 	Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +27,6 @@ import { useKeyValue } from "@/hooks/key-value/use-key-value";
  */
 export function FlashtypeMenu() {
 	const lix = useLix();
-	const [themePreference, setThemePreference] = useKeyValue("flashtype_theme");
 	const [deterministicMode, setDeterministicMode] = useKeyValue(
 		"lix_deterministic_mode" as any,
 		{
@@ -42,15 +39,10 @@ export function FlashtypeMenu() {
 	];
 
 	const deterministicEnabled = Boolean(deterministicMode?.enabled);
-	const isDarkMode = themePreference === "dark";
 
 	const toggleDeterministicMode = useCallback(async () => {
 		await setDeterministicMode({ enabled: !deterministicEnabled });
 	}, [deterministicEnabled, setDeterministicMode]);
-
-	const toggleThemeMode = useCallback(async () => {
-		await setThemePreference(isDarkMode ? "light" : "dark");
-	}, [isDarkMode, setThemePreference]);
 
 	const handleExportLix = async () => {
 		if (!lix) return;
@@ -109,22 +101,7 @@ export function FlashtypeMenu() {
 					}}
 				>
 					<FileDown className="h-3.5 w-3.5 shrink-0" />
-					<span>Export lix file</span>
-				</DropdownMenuItem>
-				<DropdownMenuItem
-					className="flex items-center gap-1.5 text-xs"
-					onSelect={() => {
-						void toggleThemeMode();
-					}}
-				>
-					{isDarkMode ? (
-						<Sun className="h-3.5 w-3.5 shrink-0" />
-					) : (
-						<Moon className="h-3.5 w-3.5 shrink-0" />
-					)}
-					<span>
-						{isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-					</span>
+					<span>Export lix image</span>
 				</DropdownMenuItem>
 				<DropdownMenuSub>
 					<DropdownMenuSubTrigger className="flex items-center gap-1.5 text-xs">

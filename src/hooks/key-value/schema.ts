@@ -28,15 +28,6 @@ export const KEY_VALUE_DEFINITIONS = {
 		defaultValue: DEFAULT_FLASHTYPE_UI_STATE,
 	} as KeyDef<FlashtypeUiState>,
 
-	/**
-	 * Global app theme preference shared across views.
-	 */
-	flashtype_theme: {
-		defaultBranchId: "global",
-		untracked: true,
-		defaultValue: "light",
-	} as KeyDef<"light" | "dark">,
-
 	// Test-only keys used in unit tests to exercise tracked behavior
 	flashtype_test_tracked: {
 		defaultBranchId: "active",
