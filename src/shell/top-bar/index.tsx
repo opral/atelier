@@ -54,7 +54,7 @@ export function TopBar({
 	const rightShortcut = isMacPlatform ? `${modifierKey}3` : `${modifierKey}+3`;
 
 	return (
-		<header className="relative flex h-11 shrink-0 items-center px-3 text-ink-muted [-webkit-app-region:drag]">
+		<header className="relative flex h-9 shrink-0 items-center px-3 text-ink-muted [-webkit-app-region:drag]">
 			<div
 				className={`flex min-w-0 flex-1 items-center gap-1 text-sm ${
 					isMacPlatform ? "pl-[68px]" : ""

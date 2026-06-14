@@ -61,7 +61,7 @@ function createMainWindow() {
 		...(process.platform === "darwin"
 			? {
 					titleBarStyle: "hiddenInset",
-					trafficLightPosition: { x: 16, y: 14 },
+					trafficLightPosition: { x: 16, y: 10 },
 				}
 			: {}),
 		webPreferences: {
