@@ -10,6 +10,17 @@ on:
       - "**"
 
 jobs:
+  changenotes:
+    name: Changenotes
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Validate changenotes
+        run: node scripts/validate-changes.mjs
+
   ci:
     strategy:
       matrix:
