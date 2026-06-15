@@ -16,6 +16,3 @@ node_modules/
 /.pnpm-store/
 /test-results/
 /public/sqlite3.wasm
-
-# Ignore nested checkouts and generated artifacts under submodules
-/submodule/*
