@@ -4,6 +4,7 @@ const workspace = {
 	get: () => ipcRenderer.invoke("workspace:get"),
 	open: (payload) => ipcRenderer.invoke("workspace:open", payload),
 	exportLixFile: () => ipcRenderer.invoke("workspace:exportLixFile"),
+	resetLixRepository: () => ipcRenderer.invoke("workspace:resetLixRepository"),
 	// Resolves the on-disk path of a File dropped onto the window.
 	getPathForFile: (file) => webUtils.getPathForFile(file),
 };

@@ -1,8 +1,11 @@
 import { FsBackend, bundledPluginArchives, openLix } from "@lix-js/sdk";
+import path from "node:path";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { getWorkspace } from "./workspace.mjs";
 
 let lixPromise = null;
 let lifecycle = Promise.resolve();
+const LIX_DATABASE_FILES = [".lix", ".lix-wal", ".lix-shm", ".lix-journal"];
 
 function enqueue(operation) {
 	lifecycle = lifecycle.catch(() => {}).then(operation);
@@ -20,6 +23,7 @@ export async function ensureLixOpen() {
 						"No workspace is open. Open a folder before using lix.",
 					);
 				}
+				await ensureBundledPluginArchivesOnDisk(workspace.path);
 				const nativeLix = await openLix({
 					backend: new FsBackend({ path: workspace.path }),
 				});
@@ -47,19 +51,73 @@ async function ensureDefaultPluginsInstalledOnCurrentBranch(lix) {
 	}
 }
 
+async function ensureBundledPluginArchivesOnDisk(workspacePath) {
+	for (const plugin of await bundledPluginArchives()) {
+		const filePath = path.join(workspacePath, plugin.path.slice(1));
+		if (await fileBytesEqual(filePath, plugin.archiveBytes)) {
+			continue;
+		}
+		await mkdir(path.dirname(filePath), { recursive: true });
+		await writeFile(filePath, plugin.archiveBytes);
+	}
+}
+
+async function fileBytesEqual(filePath, expected) {
+	try {
+		const existing = await readFile(filePath);
+		return Buffer.compare(existing, Buffer.from(expected)) === 0;
+	} catch (error) {
+		if (error?.code === "ENOENT") {
+			return false;
+		}
+		throw error;
+	}
+}
+
 export async function closeLix() {
 	await enqueue(async () => {
-		if (!lixPromise) {
-			return;
+		await closeCurrentLix();
+	});
+}
+
+export async function resetLixRepository() {
+	await enqueue(async () => {
+		const workspace = getWorkspace();
+		if (!workspace) {
+			throw new Error(
+				"No workspace is open. Open a folder before resetting lix.",
+			);
 		}
-		const currentPromise = lixPromise;
-		try {
-			const lix = await currentPromise;
-			await lix.close();
-		} finally {
+		await closeCurrentLix({ ignoreOpenError: true });
+		await removeLixDatabaseFiles(workspace.path);
+	});
+}
+
+async function closeCurrentLix(options = {}) {
+	if (!lixPromise) {
+		return;
+	}
+	const currentPromise = lixPromise;
+	try {
+		const lix = await currentPromise;
+		await lix.close();
+	} catch (error) {
+		if (!options.ignoreOpenError) {
+			throw error;
+		}
+	} finally {
+		if (lixPromise === currentPromise) {
 			lixPromise = null;
 		}
-	});
+	}
+}
+
+async function removeLixDatabaseFiles(workspacePath) {
+	await Promise.all(
+		LIX_DATABASE_FILES.map((filename) =>
+			rm(path.join(workspacePath, filename), { force: true }),
+		),
+	);
 }
 
 function createDesktopLixHandle(nativeLix, workspaceDir) {

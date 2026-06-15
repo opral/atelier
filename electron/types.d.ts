@@ -140,6 +140,7 @@ export type DesktopWorkspaceApi = {
 	 */
 	open(payload?: { path: string }): Promise<DesktopWorkspace | null>;
 	exportLixFile(): Promise<Uint8Array>;
+	resetLixRepository(): Promise<void>;
 	getPathForFile(file: File): string;
 };
 
