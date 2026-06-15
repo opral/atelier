@@ -41,6 +41,24 @@ describe("FileTree", () => {
 
 		expect(handleOpen).toHaveBeenCalledWith("file-readme", "/README.md");
 	});
+
+	test("renders percent text literally instead of URI-decoding filenames", () => {
+		render(
+			<FileTree
+				nodes={[
+					{
+						type: "file",
+						id: "file-percent",
+						name: "%61.md",
+						path: "/%61.md",
+					},
+				]}
+			/>,
+		);
+
+		expect(screen.getByText("%61.md")).toBeInTheDocument();
+		expect(screen.queryByText("a.md")).toBeNull();
+	});
 });
 
 const mockTree: FilesystemTreeNode[] = [

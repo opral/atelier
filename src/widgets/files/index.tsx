@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Files, FileUp, FilePlus } from "lucide-react";
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
-import {
-	isMarkdownFilePath,
-	normalizeDirectoryPath,
-	normalizeFilePath,
-} from "@/lib/path";
+import { isMarkdownFilePath } from "@/widget-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
 import { buildFilesystemTree } from "@/widgets/files/build-filesystem-tree";
 import type { WidgetContext } from "../../widget-runtime/types";
@@ -27,8 +23,7 @@ type DraftState = {
 
 /**
  * Files view - Browse and pin project documents. Owns the Cmd/Ctrl + . shortcut
- * that opens the inline creation prompt for a new markdown file. File paths are
- * normalized to the canonical path shape accepted by Lix before writing.
+ * that opens the inline creation prompt for a new markdown file.
  *
  * @example
  * <FilesView context={{ openWidget: console.log }} />
@@ -55,16 +50,14 @@ export function FilesView({ context }: FilesViewProps) {
 		return new Set(
 			(entries ?? [])
 				.filter((entry) => entry.kind === "file")
-				.map((entry) => normalizeFilePath(entry.path)),
+				.map((entry) => entry.path),
 		);
 	}, [entries]);
 	const entryDirectorySet = useMemo(() => {
 		return new Set(
 			(entries ?? [])
 				.filter((entry) => entry.kind === "directory")
-				.map((entry) =>
-					entry.path === "/" ? "/" : normalizeDirectoryPath(entry.path),
-				),
+				.map((entry) => entry.path),
 		);
 	}, [entries]);
 	const existingFilePaths = useMemo(() => {
@@ -113,8 +106,7 @@ export function FilesView({ context }: FilesViewProps) {
 
 	const handleNewFile = useCallback(() => {
 		const baseDirectory = resolveDraftDirectory();
-		const directoryPath =
-			baseDirectory === "/" ? "/" : normalizeDirectoryPath(baseDirectory);
+		const directoryPath = ensureDirectoryPath(baseDirectory);
 		setDraft((prev) => {
 			if (prev) return prev;
 			setSelectedPath(null);
@@ -236,8 +228,8 @@ export function FilesView({ context }: FilesViewProps) {
 		if (!selectedPath || !selectedKind) return;
 		const normalizedPath =
 			selectedKind === "file"
-				? normalizeFilePath(selectedPath)
-				: normalizeDirectoryPath(selectedPath);
+				? selectedPath
+				: ensureDirectoryPath(selectedPath);
 		try {
 			if (selectedKind === "file") {
 				await qb(lix)
@@ -304,8 +296,7 @@ export function FilesView({ context }: FilesViewProps) {
 			) {
 				const kind = event.shiftKey ? "directory" : "file";
 				const baseDirectory = resolveDraftDirectory();
-				const directoryPath =
-					baseDirectory === "/" ? "/" : normalizeDirectoryPath(baseDirectory);
+				const directoryPath = ensureDirectoryPath(baseDirectory);
 				setDraft((prev) => {
 					if (prev) return prev;
 					setSelectedPath(null);
@@ -404,12 +395,11 @@ export function FilesView({ context }: FilesViewProps) {
 					const baseName = normalizeNameStem(
 						file.name.replace(/\.(md|markdown)$/i, ""),
 					);
-					let filePath = normalizeFilePath(`/${baseName}${extension}`);
+					let filePath = `/${baseName}${extension}`;
 
 					let counter = 2;
 					while (existingFilePaths.has(filePath)) {
 						filePath = `/${baseName}-${counter}${extension}`;
-						filePath = normalizeFilePath(filePath);
 						counter += 1;
 					}
 
@@ -573,15 +563,13 @@ function deriveMarkdownPathFromStem(
 			: directory.endsWith("/")
 				? directory
 				: `${directory}/`;
-	const primary = normalizeFilePath(`${sanitizedDirectory}${finalStem}.md`);
+	const primary = `${sanitizedDirectory}${finalStem}.md`;
 	if (!existingPaths.has(primary)) {
 		return primary;
 	}
 	let suffix = 2;
 	while (suffix < 1000) {
-		const candidate = normalizeFilePath(
-			`${sanitizedDirectory}${finalStem}-${suffix}.md`,
-		);
+		const candidate = `${sanitizedDirectory}${finalStem}-${suffix}.md`;
 		if (!existingPaths.has(candidate)) {
 			return candidate;
 		}
@@ -602,15 +590,13 @@ function deriveDirectoryPathFromStem(
 			: directory.endsWith("/")
 				? directory
 				: `${directory}/`;
-	const primary = normalizeDirectoryPath(`${sanitizedDirectory}${finalStem}/`);
+	const primary = `${sanitizedDirectory}${finalStem}/`;
 	if (!existingPaths.has(primary)) {
 		return primary;
 	}
 	let suffix = 2;
 	while (suffix < 1000) {
-		const candidate = normalizeDirectoryPath(
-			`${sanitizedDirectory}${finalStem}-${suffix}/`,
-		);
+		const candidate = `${sanitizedDirectory}${finalStem}-${suffix}/`;
 		if (!existingPaths.has(candidate)) {
 			return candidate;
 		}
@@ -620,13 +606,20 @@ function deriveDirectoryPathFromStem(
 }
 
 function normalizeNameStem(stem: string): string {
-	const normalized = (stem ?? "").normalize("NFC").trim();
-	const slashSafe = normalized.replace(/[\\/]+/g, "-");
+	const normalized = (stem ?? "").trim();
+	const slashSafe = normalized.replace(/\/+/g, "-");
 	const collapsedWhitespace = slashSafe.replace(/\s+/g, "-");
-	const cleaned = Array.from(collapsedWhitespace)
-		.filter((char) => /^[\p{L}\p{N}._~!$&'()*+,;=:@-]$/u.test(char))
-		.join("")
-		.replace(/-+/g, "-")
-		.replace(/^[.-]+|[.-]+$/g, "");
-	return cleaned.length ? cleaned : "untitled";
+	if (
+		collapsedWhitespace.length === 0 ||
+		collapsedWhitespace === "." ||
+		collapsedWhitespace === ".."
+	) {
+		return "untitled";
+	}
+	return collapsedWhitespace;
+}
+
+function ensureDirectoryPath(path: string): string {
+	if (path === "/") return "/";
+	return path.endsWith("/") ? path : `${path}/`;
 }

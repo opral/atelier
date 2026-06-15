@@ -5,6 +5,7 @@ import type { WidgetContext, WidgetDefinition, WidgetInstance } from "./types";
 import { normalizeFileExtensions } from "./file-handlers";
 
 const WIDGET_ROOT = "/.lix_system/app_data/flashtype/widgets/";
+const WIDGET_ROOT_UPPER_BOUND = "/.lix_system/app_data/flashtype/widgets0";
 const MANIFEST_SUFFIX = "/manifest.json";
 
 type WidgetManifest = {
@@ -73,31 +74,31 @@ function decodeFileData(data: FileRow["data"]): string {
 	throw new Error("Expected file data as string or binary.");
 }
 
-function normalizePath(path: string): string {
-	const normalized = path.replace(/\\/g, "/");
-	const parts = normalized.split("/");
-	const stack: string[] = [];
-	for (const part of parts) {
-		if (!part || part === ".") continue;
-		if (part === "..") {
-			stack.pop();
-			continue;
-		}
-		stack.push(part);
+function normalizePortableRelativePath(path: string, context: string): string {
+	const relative = path.startsWith("./") ? path.slice(2) : path;
+	if (!relative) {
+		throw new Error(`${context} must be non-empty.`);
 	}
-	return `/${stack.join("/")}`;
+	if (relative.startsWith("/") || relative.startsWith("\\")) {
+		throw new Error(`${context} must be relative.`);
+	}
+	if (relative.includes("\\")) {
+		throw new Error(`${context} must use forward slash separators.`);
+	}
+	const segments = relative.split("/");
+	if (segments.some((segment) => segment.length === 0)) {
+		throw new Error(`${context} must not contain empty path segments.`);
+	}
+	if (segments.some((segment) => segment === "." || segment === "..")) {
+		throw new Error(`${context} must not contain '.' or '..' segments.`);
+	}
+	return relative;
 }
 
 function resolveWidgetEntryPath(manifestPath: string, entry: string): string {
 	const widgetDir = manifestPath.slice(0, -MANIFEST_SUFFIX.length);
-	const raw = entry.startsWith("./")
-		? `${widgetDir}/${entry.slice(2)}`
-		: `${widgetDir}/${entry}`;
-	const resolved = normalizePath(raw);
-	if (!resolved.startsWith(widgetDir + "/")) {
-		throw new Error(`Widget entry escapes widget directory: ${entry}`);
-	}
-	return resolved;
+	const relativeEntry = normalizePortableRelativePath(entry, "Widget entry");
+	return `${widgetDir}/${relativeEntry}`;
 }
 
 export function parseManifest(
@@ -131,8 +132,7 @@ export function parseManifest(
 		fileExtensions: Array.isArray(m.fileExtensions)
 			? normalizeFileExtensions(
 					m.fileExtensions.filter(
-						(extension): extension is string =>
-							typeof extension === "string",
+						(extension): extension is string => typeof extension === "string",
 					),
 				)
 			: undefined,
@@ -183,11 +183,10 @@ async function importWidgetModule(
 export async function loadInstalledWidgetsFromLix(
 	lix: Lix,
 ): Promise<WidgetDefinition[]> {
-	const manifestRows = await selectFiles(
-		lix,
-		`${WIDGET_ROOT}%${MANIFEST_SUFFIX}`,
+	const fileRows = await selectFilesUnderWidgetRoot(lix);
+	const manifestRows = fileRows.filter((row) =>
+		row.path.endsWith(MANIFEST_SUFFIX),
 	);
-	const fileRows = await selectFiles(lix, `${WIDGET_ROOT}%`);
 
 	const filesByPath = new Map<string, FileRow>();
 	for (const row of fileRows) {
@@ -230,11 +229,12 @@ export async function loadInstalledWidgetsFromLix(
 	return definitions;
 }
 
-async function selectFiles(lix: Lix, pathLike: string): Promise<FileRow[]> {
+async function selectFilesUnderWidgetRoot(lix: Lix): Promise<FileRow[]> {
 	return qb(lix)
 		.selectFrom("lix_file_by_branch")
 		.select(["path", "data"])
 		.where("lixcol_branch_id", "=", "global")
-		.where("path", "like", pathLike)
+		.where("path", ">=", WIDGET_ROOT)
+		.where("path", "<", WIDGET_ROOT_UPPER_BOUND)
 		.execute() as Promise<FileRow[]>;
 }

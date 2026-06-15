@@ -1,4 +1,4 @@
-import { isMarkdownFilePath } from "@/lib/path";
+import { isMarkdownFilePath } from "./file-handlers";
 import type { DiffWidgetConfig, WidgetKind } from "./types";
 import type { WidgetInstance } from "./types";
 
@@ -19,18 +19,9 @@ export const fileWidgetInstance = (fileId: string): string =>
 export const diffWidgetInstance = (fileId: string): string =>
 	`${DIFF_WIDGET_KIND}:${fileId}`;
 
-export function decodeURIComponentSafe(value: string): string {
-	try {
-		return decodeURIComponent(value);
-	} catch {
-		return value;
-	}
-}
-
 export function diffLabelFromPath(filePath?: string): string | undefined {
 	if (!filePath) return undefined;
-	const encodedLabel = filePath.split("/").filter(Boolean).pop();
-	return encodedLabel ? decodeURIComponentSafe(encodedLabel) : undefined;
+	return filePath.split("/").filter(Boolean).pop();
 }
 
 export function fileLabelFromPath(

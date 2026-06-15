@@ -345,5 +345,5 @@ function collectDirectoryPaths(nodes: FilesystemTreeNode[]): string[] {
 }
 
 function formatDisplayName(name: string): string {
-	return decodeURIComponent(name);
+	return name;
 }

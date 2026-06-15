@@ -44,22 +44,32 @@ export async function ensureLixOpen() {
 
 async function ensureDefaultPluginsInstalledOnCurrentBranch(lix) {
 	for (const plugin of await bundledPluginArchives()) {
-		const existing = await lix.fs.readFile(plugin.path);
+		const existing = await lix.fs.readFile(pluginArchivePath(plugin));
 		if (existing === undefined) {
-			await lix.fs.writeFile(plugin.path, plugin.archiveBytes);
+			await lix.installPlugin(plugin.archiveBytes);
 		}
 	}
 }
 
 async function ensureBundledPluginArchivesOnDisk(workspacePath) {
 	for (const plugin of await bundledPluginArchives()) {
-		const filePath = path.join(workspacePath, plugin.path.slice(1));
+		const filePath = path.join(
+			workspacePath,
+			pluginArchivePath(plugin).slice(1),
+		);
 		if (await fileBytesEqual(filePath, plugin.archiveBytes)) {
 			continue;
 		}
 		await mkdir(path.dirname(filePath), { recursive: true });
 		await writeFile(filePath, plugin.archiveBytes);
 	}
+}
+
+function pluginArchivePath(plugin) {
+	if (typeof plugin.path === "string") {
+		return plugin.path;
+	}
+	return `/.lix_system/plugins/${plugin.fileName}`;
 }
 
 async function fileBytesEqual(filePath, expected) {

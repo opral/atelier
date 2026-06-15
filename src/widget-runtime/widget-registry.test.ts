@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { Puzzle } from "lucide-react";
-import { findFileHandlerWidget, normalizeFileExtensions } from "./file-handlers";
+import {
+	findFileHandlerWidget,
+	isMarkdownFilePath,
+	normalizeFileExtensions,
+} from "./file-handlers";
 import type { WidgetDefinition } from "./types";
 
 const baseWidget = {
@@ -48,5 +52,11 @@ describe("findFileHandlerWidget", () => {
 		};
 
 		expect(findFileHandlerWidget([markdown], "/data.txt")).toBeUndefined();
+	});
+
+	test("detects markdown extensions from literal path text", () => {
+		expect(isMarkdownFilePath("/docs/readme.MD")).toBe(true);
+		expect(isMarkdownFilePath("/docs/%6d.md")).toBe(true);
+		expect(isMarkdownFilePath("/docs/readme.md%20")).toBe(false);
 	});
 });

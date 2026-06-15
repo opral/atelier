@@ -92,8 +92,12 @@ describe("widget installation", () => {
 		expect(txExecute).toHaveBeenCalledTimes(2);
 		expect(txExecute).toHaveBeenNthCalledWith(
 			1,
-			"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path LIKE ?",
-			["global", "/.lix_system/app_data/flashtype/widgets/conversation/%"],
+			"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path >= ? AND path < ?",
+			[
+				"global",
+				"/.lix_system/app_data/flashtype/widgets/conversation/",
+				"/.lix_system/app_data/flashtype/widgets/conversation0",
+			],
 		);
 		expect(txExecute).toHaveBeenNthCalledWith(
 			2,
@@ -110,5 +114,38 @@ describe("widget installation", () => {
 				files: [{ path: "../escape.js", data: "export const x = 1;" }],
 			}),
 		).rejects.toThrow("must not contain '.' or '..' segments");
+	});
+
+	test("preserves opaque install file path segment text", async () => {
+		const { lix, txExecute } = createMockLix();
+
+		await installWidgetFromFiles(lix, {
+			widgetId: "conversation",
+			files: [
+				{
+					path: "nested/%61#Cafe\u0301.js",
+					data: "export const x = 1;",
+				},
+			],
+		});
+
+		expect(txExecute).toHaveBeenNthCalledWith(
+			1,
+			"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path = ?",
+			[
+				"global",
+				"/.lix_system/app_data/flashtype/widgets/conversation/nested/%61#Cafe\u0301.js",
+			],
+		);
+	});
+
+	test("rejects backslash separators in install file paths", async () => {
+		const { lix } = createMockLix();
+		await expect(
+			installWidgetFromFiles(lix, {
+				widgetId: "conversation",
+				files: [{ path: "nested\\index.js", data: "export const x = 1;" }],
+			}),
+		).rejects.toThrow("must use forward slash separators");
 	});
 });

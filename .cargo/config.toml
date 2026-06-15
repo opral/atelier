@@ -1,4 +1,67 @@
+target-applies-to-host = false
+
+[build]
+target-dir = "target"
+
 [alias]
 # requires: cargo install cargo-bash
-b = "bash export FLASHTYPE_OLDPWD=$PWD && while ! [ -f \"$PWD/package.json\" -a -d \"$PWD/assets/icons/flashtype\" ]; do cd .. && [[ \"$PWD\" != \"/\" ]] || { echo \"not in flashtype repo\" && exit 1; }; done;"
+b = "bash export FLASHTYPE_OLDPWD=$PWD && while ! [ -f \"$PWD/package.json\" ]; do cd .. && [[ \"$PWD\" != \"/\" ]] || { echo \"not in flashtype repo\" && exit 1; }; done;"
 flashtype-icons = "b ./scripts/flashtype-icons.sh"
+
+[host]
+rustflags = [
+	# https://blog.rust-lang.org/2023/11/09/parallel-rustc.html
+	"-Zthreads=8",
+]
+# keep host and generic-target rustflags in sync
+[target.'cfg(all())']
+rustflags = [
+	# https://blog.rust-lang.org/2023/11/09/parallel-rustc.html
+	"-Zthreads=8",
+]
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+	"--cfg=getrandom_backend=\"wasm_js\"",
+]
+runner = "wasm-bindgen-test-runner"
+
+[profile.dev]
+debug = "line-tables-only"
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true
+
+[profile.test]
+inherits = "release"
+debug = false
+debug-assertions = true
+
+[profile.test.build-override]
+inherits = "dev"
+debug = false
+opt-level = 0
+debug-assertions = true
+overflow-checks = true
+
+[profile.test.package."*"]
+debug = false
+debug-assertions = false
+overflow-checks = false
+[profile.test.package."log"]
+debug-assertions = true
+
+[profile.release]
+trim-paths = true
+
+[profile.bench]
+debug = "line-tables-only"
+
+[unstable]
+bindeps = true
+host-config = true
+target-applies-to-host = true
+trim-paths = true

@@ -23,7 +23,6 @@ import {
 } from "@dnd-kit/core";
 import { useLix } from "@/lib/lix-react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
-import { normalizeFilePath } from "@/lib/path";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
@@ -54,7 +53,6 @@ import { loadInstalledWidgetsFromLix } from "../widget-runtime/installed-widget-
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileWidgetProps,
-	decodeURIComponentSafe,
 	DIFF_WIDGET_KIND,
 	diffLabelFromPath,
 	fileWidgetInstance,
@@ -214,9 +212,11 @@ const DEFAULT_PANEL_FALLBACK_SIZES = {
 };
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
-const INSTALLED_WIDGET_PATH_LIKE = "/.lix_system/app_data/flashtype/widgets/%";
+const INSTALLED_WIDGET_PATH_PREFIX = "/.lix_system/app_data/flashtype/widgets/";
+const INSTALLED_WIDGET_PATH_PREFIX_UPPER_BOUND =
+	"/.lix_system/app_data/flashtype/widgets0";
 const INSTALLED_WIDGET_OBSERVE_SQL =
-	"SELECT path, data FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path LIKE ?";
+	"SELECT path, data FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path >= ? AND path < ?";
 const PANEL_TRANSITION_STYLE: CSSProperties = {
 	transitionProperty: "flex-grow, flex-basis",
 	transitionDuration: "200ms",
@@ -226,9 +226,9 @@ const PANEL_TRANSITION_STYLE: CSSProperties = {
 function deriveUntitledMarkdownPathForSuffix(suffix: number | null): string {
 	const baseStem = "new-file";
 	if (suffix === null) {
-		return normalizeFilePath(`/${baseStem}.md`);
+		return `/${baseStem}.md`;
 	}
-	return normalizeFilePath(`/${baseStem}-${suffix}.md`);
+	return `/${baseStem}-${suffix}.md`;
 }
 
 /**
@@ -260,7 +260,7 @@ async function resolveNextUntitledMarkdownPath(
 			return candidate;
 		}
 	}
-	return normalizeFilePath(`/new-file-${Date.now()}.md`);
+	return `/new-file-${Date.now()}.md`;
 }
 
 export function V2LayoutShell({
@@ -420,7 +420,11 @@ function LayoutShellContent({
 
 		const observeEvents = lix.observe({
 			sql: INSTALLED_WIDGET_OBSERVE_SQL,
-			params: ["global", INSTALLED_WIDGET_PATH_LIKE],
+			params: [
+				"global",
+				INSTALLED_WIDGET_PATH_PREFIX,
+				INSTALLED_WIDGET_PATH_PREFIX_UPPER_BOUND,
+			],
 		});
 
 		void (async () => {
@@ -1021,12 +1025,7 @@ function LayoutShellContent({
 		if (!activeCentralEntry) return null;
 		const rawPath = activeCentralEntry.state?.filePath as string | undefined;
 		if (rawPath) {
-			const parts = rawPath.split("/").map((segment, index) => {
-				if (index === 0 && segment === "") return "";
-				return decodeURIComponentSafe(segment);
-			});
-			const decoded = parts.join("/");
-			return decoded.length > 0 ? decoded : rawPath;
+			return rawPath;
 		}
 		return (
 			(activeCentralEntry.state?.flashtype?.label as string | undefined) ??

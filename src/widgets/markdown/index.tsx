@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
-import { isMarkdownFilePath } from "@/lib/path";
+import { isMarkdownFilePath } from "@/widget-runtime/file-handlers";
 import { EditorProvider } from "@/widgets/markdown/editor/editor-context";
 import { TipTapEditor } from "@/widgets/markdown/editor/tip-tap-editor";
 import "./style.css";

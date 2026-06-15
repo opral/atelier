@@ -18,21 +18,23 @@ function validateWidgetId(widgetId: string): string {
 }
 
 function normalizeRelativePath(path: string): string {
-	const normalized = path.trim().replace(/\\/g, "/");
-	if (!normalized) {
+	if (!path) {
 		throw new Error("file path must be non-empty.");
 	}
-	if (normalized.startsWith("/")) {
+	if (path.startsWith("/") || path.startsWith("\\")) {
 		throw new Error("file path must be relative to the widget directory.");
 	}
-	const parts = normalized.split("/").filter(Boolean);
-	if (parts.length === 0) {
-		throw new Error("file path must contain at least one segment.");
+	if (path.includes("\\")) {
+		throw new Error("file path must use forward slash separators.");
+	}
+	const parts = path.split("/");
+	if (parts.some((part) => part.length === 0)) {
+		throw new Error("file path must not contain empty segments.");
 	}
 	if (parts.some((part) => part === "." || part === "..")) {
 		throw new Error("file path must not contain '.' or '..' segments.");
 	}
-	return parts.join("/");
+	return path;
 }
 
 function widgetRootPath(widgetId: string): string {
@@ -82,11 +84,13 @@ export async function uninstallWidget(
 	widgetId: string,
 ): Promise<void> {
 	const basePath = widgetRootPath(widgetId);
+	const filePrefix = `${basePath}/`;
+	const filePrefixUpperBound = `${basePath}0`;
 
 	await lix.transaction(async (tx) => {
 		await tx.execute(
-			"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path LIKE ?",
-			[GLOBAL_BRANCH_ID, `${basePath}/%`],
+			"DELETE FROM lix_file_by_branch WHERE lixcol_branch_id = ? AND path >= ? AND path < ?",
+			[GLOBAL_BRANCH_ID, filePrefix, filePrefixUpperBound],
 		);
 		await tx.execute(
 			"DELETE FROM lix_directory_by_branch WHERE lixcol_branch_id = ? AND path = ?",
