@@ -650,16 +650,26 @@ const mascotPixels = [
 ];
 
 function ClaudeCodeMascot({ compact = false }: { compact?: boolean }) {
+	const pixelSize = compact ? 5 : 10;
+
 	return (
 		<div
-			className={`mx-auto grid grid-cols-7 ${compact ? "my-[8px]" : "my-[2px]"} drop-shadow-[0_6px_12px_rgba(226,114,91,0.18)]`}
+			className={`mx-auto grid ${compact ? "my-[8px]" : "my-[2px]"} drop-shadow-[0_6px_12px_rgba(226,114,91,0.18)]`}
+			style={{
+				gridTemplateColumns: `repeat(7, ${pixelSize}px)`,
+				width: pixelSize * 7,
+			}}
 			aria-hidden
 		>
 			{mascotPixels.flatMap((row, rowIndex) =>
 				[...row].map((pixel, columnIndex) => (
 					<span
 						key={`${rowIndex}-${columnIndex}`}
-						className={`${compact ? "h-[5px] w-[5px]" : "h-[10px] w-[10px]"} ${pixel === "." ? "opacity-0" : pixel === "e" ? "bg-ink" : "bg-terminal"}`}
+						className={`${pixel === "." ? "opacity-0" : pixel === "e" ? "bg-ink" : "bg-terminal"}`}
+						style={{
+							height: pixelSize,
+							width: pixelSize,
+						}}
 					/>
 				)),
 			)}
