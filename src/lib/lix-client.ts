@@ -11,7 +11,6 @@ import type {
 	LixRuntimeQueryResult,
 	ObserveEvent,
 	ObserveEvents,
-	ObserveQuery,
 	SqlTransaction,
 	TransactionStatement,
 } from "@/lib/lix-types";
@@ -188,7 +187,10 @@ export async function openDesktopLix(): Promise<Lix> {
 		);
 	};
 
-	const observe = (query: ObserveQuery): ObserveEvents => {
+	const observe = (
+		sql: string,
+		params: ReadonlyArray<unknown> = [],
+	): ObserveEvents => {
 		ensureOpen("observe");
 
 		let localClosed = false;
@@ -196,7 +198,7 @@ export async function openDesktopLix(): Promise<Lix> {
 
 		const ensureObserveId = async (): Promise<string> => {
 			if (!observeIdPromise) {
-				observeIdPromise = desktop.lix.observeStart({ query });
+				observeIdPromise = desktop.lix.observeStart({ sql, params });
 			}
 			return await observeIdPromise;
 		};
@@ -213,8 +215,8 @@ export async function openDesktopLix(): Promise<Lix> {
 				}
 				return {
 					sequence: event.sequence,
-					rows: event.rows.rows,
-					columns: event.rows.columns,
+					mutationSequence: event.mutationSequence,
+					result: toRuntimeQueryResult(event.result),
 				} as ObserveEvent;
 			},
 			close(): void {
@@ -222,6 +224,9 @@ export async function openDesktopLix(): Promise<Lix> {
 					return;
 				}
 				localClosed = true;
+				if (!observeIdPromise) {
+					return;
+				}
 				void (async () => {
 					const observeId = await ensureObserveId();
 					await desktop.lix.observeClose({ observeId });

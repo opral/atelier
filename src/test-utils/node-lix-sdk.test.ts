@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { openLix } from "./node-lix-sdk";
 
-test("polling observe buffers the current snapshot until next is called", async () => {
+test("observe returns the current result snapshot until next is called", async () => {
 	const lix = await openLix({
 		keyValues: [
 			{
@@ -11,17 +11,18 @@ test("polling observe buffers the current snapshot until next is called", async 
 		],
 	});
 
-	const events = lix.observe({
-		sql: "SELECT value FROM lix_key_value WHERE key = $1",
-		params: ["observe_current_snapshot"],
-	});
+	const events = lix.observe("SELECT value FROM lix_key_value WHERE key = $1", [
+		"observe_current_snapshot",
+	]);
 
 	try {
 		await new Promise((resolve) => setTimeout(resolve, 100));
 		const event = await withTimeout(events.next(), 2_000);
 
-		expect(event?.columns).toEqual(["value"]);
-		expect(event?.rows).toEqual([["current"]]);
+		expect(event?.result.columns).toEqual(["value"]);
+		expect(event?.result.rows.map((row) => [row.get("value")])).toEqual([
+			["current"],
+		]);
 	} finally {
 		events.close();
 		await lix.close();

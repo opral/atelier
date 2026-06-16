@@ -54,8 +54,17 @@ test("useQuery applies the first observe snapshot over the initial read", async 
 
 	resolveFirstObserve?.({
 		sequence: 1,
-		rows: [["fresh"]],
-		columns: ["value"],
+		mutationSequence: 1,
+		result: {
+			columns: ["value"],
+			rows: [
+				{
+					toObject: () => ({ value: "fresh" }),
+				},
+			] as unknown as ObserveEvent["result"]["rows"],
+			rowsAffected: 0,
+			notices: [],
+		},
 	});
 
 	await waitFor(() => {

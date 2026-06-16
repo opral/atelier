@@ -31,15 +31,10 @@ export type SqlTransaction = Pick<SdkLixTransaction, "commit" | "rollback"> & {
 	execute(sql: string, params?: ReadonlyArray<unknown>): Promise<ExecuteResult>;
 };
 
-export type ObserveQuery = {
-	sql: string;
-	params?: ReadonlyArray<unknown>;
-};
-
 export type ObserveEvent = {
 	sequence: number;
-	rows: ReadonlyArray<ReadonlyArray<unknown>>;
-	columns?: string[];
+	mutationSequence: number;
+	result: ExecuteResult;
 };
 
 export type ObserveEvents = {
@@ -88,7 +83,7 @@ export interface FlashtypeLix extends SdkLixBase {
 		statements: ReadonlyArray<TransactionStatement>,
 		options?: ExecuteOptions,
 	): Promise<ExecuteResult>;
-	observe(query: ObserveQuery): ObserveEvents;
+	observe(sql: string, params?: ReadonlyArray<unknown>): ObserveEvents;
 	mergeBranchPreview?: SdkLix["mergeBranchPreview"];
 	mergeBranch?: SdkLix["mergeBranch"];
 }

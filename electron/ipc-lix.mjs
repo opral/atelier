@@ -172,12 +172,9 @@ export function registerLixIpc() {
 
 	ipcMain.handle("lix:observe:start", async (event, payload) => {
 		const lix = await ensureLixOpenForEvent(event);
-		const sql = String(payload?.query?.sql ?? "");
-		const params = normalizeParams(payload?.query?.params);
-		const observeEvents = lix.observe({
-			sql,
-			params,
-		});
+		const sql = String(payload?.sql ?? "");
+		const params = normalizeParams(payload?.params);
+		const observeEvents = lix.observe(sql, params);
 		const observeId = createId("observe");
 		observeHandles.set(observeId, observeEvents);
 		observeTraceMeta.set(observeId, {
@@ -211,18 +208,23 @@ export function registerLixIpc() {
 				});
 				return undefined;
 			}
-			const serializedRows = serializeQueryResult(event.rows);
+			const serializedResult = serializeExecuteResult(
+				event.result,
+				"lix.observe",
+			);
 			logSlowOperation("observe:next", started, {
 				observeId,
 				...observeTraceMeta.get(observeId),
 				outcome: "event",
 				sequence: event.sequence,
-				rowCount: serializedRows.rows.length,
-				columnCount: serializedRows.columns.length,
+				mutationSequence: event.mutationSequence,
+				rowCount: serializedResult.rows.length,
+				columnCount: serializedResult.columns.length,
 			});
 			return {
 				sequence: event.sequence,
-				rows: serializedRows,
+				mutationSequence: event.mutationSequence,
+				result: serializedResult,
 			};
 		} catch (error) {
 			logOperationError("observe:next", started, {

@@ -9,9 +9,7 @@ import type {
 import type {
 	ExecuteOptions,
 	Lix,
-	ObserveEvent,
 	ObserveEvents,
-	ObserveQuery,
 	OpenLixKeyValueEntry,
 	SqlTransaction,
 	TransactionStatement,
@@ -148,8 +146,8 @@ function createTestLixAdapter(sdkLix: SdkLix): Lix {
 				throw error;
 			}
 		},
-		observe(query: ObserveQuery): ObserveEvents {
-			return createPollingObserve(sdkLix, query);
+		observe(sql: string, params: ReadonlyArray<unknown> = []): ObserveEvents {
+			return sdkLix.observe(sql, toSqlParams(params));
 		},
 		async activeBranchId() {
 			return await sdkLix.activeBranchId();
@@ -174,77 +172,6 @@ function createTestLixAdapter(sdkLix: SdkLix): Lix {
 
 function emptyExecuteResult(): ExecuteResult {
 	return { columns: [], rows: [], rowsAffected: 0, notices: [] };
-}
-
-function createPollingObserve(
-	sdkLix: SdkLix,
-	query: ObserveQuery,
-): ObserveEvents {
-	let closed = false;
-	let initialized = false;
-	let polling = false;
-	let previousKey: string | undefined;
-	const queuedEvents: ObserveEvent[] = [];
-	const pending: Array<{
-		resolve: (event: ObserveEvent | undefined) => void;
-		reject: (error: unknown) => void;
-	}> = [];
-
-	const poll = async () => {
-		if (closed || polling) return;
-		polling = true;
-		try {
-			const result = await sdkLix.execute(query.sql, toSqlParams(query.params));
-			const key = JSON.stringify(result.rows.map((row) => row.toObject()));
-			if (!initialized || key !== previousKey) {
-				initialized = true;
-				resolveNext({
-					sequence: Date.now(),
-					rows: result.rows.map((row) =>
-						result.columns.map((column) => row.get(column)),
-					),
-					columns: result.columns,
-				});
-			}
-			previousKey = key;
-		} catch (error) {
-			pending.shift()?.reject(error);
-		} finally {
-			polling = false;
-		}
-	};
-
-	const timer = setInterval(() => {
-		void poll();
-	}, 500);
-	void poll();
-
-	return {
-		next() {
-			if (closed) return Promise.resolve(undefined);
-			const queuedEvent = queuedEvents.shift();
-			if (queuedEvent) return Promise.resolve(queuedEvent);
-			return new Promise((resolve, reject) => {
-				pending.push({ resolve, reject });
-			});
-		},
-		close() {
-			closed = true;
-			clearInterval(timer);
-			while (pending.length > 0) {
-				pending.shift()?.resolve(undefined);
-			}
-		},
-	};
-
-	function resolveNext(event: ObserveEvent) {
-		const waiter = pending.shift();
-		if (waiter) {
-			waiter.resolve(event);
-		} else {
-			queuedEvents.push(event);
-		}
-	}
 }
 
 function toSqlParams(params: ReadonlyArray<unknown> | undefined): SqlParam[] {

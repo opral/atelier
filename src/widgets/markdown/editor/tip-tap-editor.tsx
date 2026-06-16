@@ -238,15 +238,15 @@ function TipTapEditorLoadedContent({
 	// Observe markdown file rows and refresh on external changes.
 	useEffect(() => {
 		if (!activeFileId || !editor) return;
-		const events = lix.observe({
-			sql: `
+		const events = lix.observe(
+			`
 				SELECT
 					data
 				FROM lix_file
 				WHERE id = ?
 			`,
-			params: [activeFileId],
-		});
+			[activeFileId],
+		);
 		let closed = false;
 		let sawInitialSnapshot = false;
 		const initialObservedMarkdown = normalizePersistedMarkdown(initialMarkdown);
@@ -257,17 +257,12 @@ function TipTapEditorLoadedContent({
 				if (!event || closed) {
 					continue;
 				}
-				const rows = Array.isArray((event.rows as any)?.rows)
-					? (event.rows as any).rows
-					: Array.isArray(event.rows)
-						? event.rows
-						: null;
-				const firstRow = Array.isArray(rows?.[0]) ? rows[0] : null;
+				const firstRow = event.result.rows[0];
 				if (!firstRow) {
 					continue;
 				}
 				const nextMarkdown = normalizePersistedMarkdown(
-					decodeMarkdownData(firstRow[0]),
+					decodeMarkdownData(firstRow.get("data")),
 				);
 				if (!sawInitialSnapshot) {
 					sawInitialSnapshot = true;

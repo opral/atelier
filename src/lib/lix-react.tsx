@@ -82,14 +82,14 @@ export function useQuery<TRow>(
 	useEffect(() => {
 		if (!subscribe) return;
 		let closed = false;
-		const events = lix.observe(observeQuery);
+		const events = lix.observe(observeQuery.sql, observeQuery.params);
 
 		void (async () => {
 			try {
 				while (!closed) {
 					const event = await events.next();
 					if (closed || event === undefined) break;
-					const nextRows = queryResultToRows<TRow>(event);
+					const nextRows = queryResultToRows<TRow>(event.result);
 					cacheQueryRows(cacheKey, nextRows);
 					if (rowsEqual(rowsRef.current, nextRows)) {
 						continue;
@@ -143,21 +143,12 @@ export const useQueryTakeFirstOrThrow = <TResult,>(
 };
 
 function queryResultToRows<TRow>(result: {
-	rows?: ReadonlyArray<ReadonlyArray<unknown>>;
-	columns?: ReadonlyArray<string>;
+	rows?: ReadonlyArray<{
+		toObject(): Record<string, unknown>;
+	}>;
 }): TRow[] {
-	const columns = Array.isArray(result?.columns) ? result.columns : [];
 	const rows = Array.isArray(result?.rows) ? result.rows : [];
-	return rows.map((row) => {
-		const output: Record<string, unknown> = {};
-		for (let index = 0; index < columns.length; index += 1) {
-			const column = columns[index];
-			if (typeof column === "string") {
-				output[column] = row[index];
-			}
-		}
-		return output as TRow;
-	});
+	return rows.map((row) => row.toObject() as TRow);
 }
 
 function rowsEqual(a: unknown, b: unknown): boolean {

@@ -176,6 +176,14 @@ function createDesktopLixHandle(nativeLix, workspaceDir) {
 		}
 	}
 
+	async function waitForOperationQueueToDrain() {
+		const currentQueue = operationQueue;
+		await currentQueue.catch(() => {});
+		if (currentQueue === operationQueue) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+	}
+
 	return {
 		workspaceDir() {
 			return workspaceDir;
@@ -239,8 +247,13 @@ function createDesktopLixHandle(nativeLix, workspaceDir) {
 				}
 			});
 		},
-		observe(query) {
-			return createPollingObserve(nativeLix, query, runQueued);
+		observe(sql, params = []) {
+			return createQueuedObserve(
+				nativeLix,
+				sql,
+				[...params],
+				waitForOperationQueueToDrain,
+			);
 		},
 		async activeBranchId() {
 			return await runQueued(() => nativeLix.activeBranchId());
@@ -277,80 +290,61 @@ function emptyExecuteResult() {
 	return { columns: [], rows: [], rowsAffected: 0, notices: [] };
 }
 
-function createPollingObserve(nativeLix, query, runQueued) {
+function createQueuedObserve(
+	nativeLix,
+	sql,
+	params,
+	waitForOperationQueueToDrain,
+) {
 	let closed = false;
-	let initialized = false;
-	let polling = false;
-	let previousKey;
-	const pending = [];
-	const queuedEvents = [];
-	let timer;
+	let events;
 
-	const poll = async () => {
-		if (closed || polling) {
-			return;
-		}
-		polling = true;
-		try {
-			const result = await runQueued(() =>
-				nativeLix.execute(query?.sql ?? "", [...(query?.params ?? [])]),
-			);
-			const key = JSON.stringify(result.rows.map((row) => row.toObject()));
-			if (!initialized || key !== previousKey) {
-				initialized = true;
-				resolveNext({ sequence: Date.now(), rows: result });
+	async function ensureEvents() {
+		while (!closed) {
+			try {
+				if (!events) {
+					events = nativeLix.observe(sql, params);
+				}
+				return events;
+			} catch (error) {
+				if (!isActiveTransactionError(error)) {
+					throw error;
+				}
+				await waitForOperationQueueToDrain();
 			}
-			previousKey = key;
-		} catch (error) {
-			rejectNext(error);
-		} finally {
-			polling = false;
 		}
-	};
-
-	timer = setInterval(() => {
-		void poll();
-	}, 500);
-	void poll();
+		return undefined;
+	}
 
 	return {
-		next() {
-			if (closed) {
-				return Promise.resolve(undefined);
+		async next() {
+			while (!closed) {
+				const currentEvents = await ensureEvents();
+				if (!currentEvents) {
+					return undefined;
+				}
+				try {
+					return await currentEvents.next();
+				} catch (error) {
+					if (!isActiveTransactionError(error)) {
+						throw error;
+					}
+					currentEvents.close();
+					if (events === currentEvents) {
+						events = undefined;
+					}
+					await waitForOperationQueueToDrain();
+				}
 			}
-			const queuedEvent = queuedEvents.shift();
-			if (queuedEvent) {
-				return Promise.resolve(queuedEvent);
-			}
-			return new Promise((resolve, reject) => {
-				pending.push({ resolve, reject });
-			});
+			return undefined;
 		},
 		close() {
-			if (closed) {
-				return;
-			}
 			closed = true;
-			clearInterval(timer);
-			while (pending.length > 0) {
-				pending.shift()?.resolve(undefined);
-			}
+			events?.close();
 		},
 	};
+}
 
-	function resolveNext(event) {
-		const waiter = pending.shift();
-		if (waiter) {
-			waiter.resolve(event);
-		} else {
-			queuedEvents.push(event);
-		}
-	}
-
-	function rejectNext(error) {
-		const waiter = pending.shift();
-		if (waiter) {
-			waiter.reject(error);
-		}
-	}
+function isActiveTransactionError(error) {
+	return error?.code === "LIX_INVALID_TRANSACTION_STATE";
 }

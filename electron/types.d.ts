@@ -26,11 +26,6 @@ export type DesktopExecuteOptions = {
 	writerKey?: string | null;
 };
 
-export type DesktopObserveQuery = {
-	sql: string;
-	params?: ReadonlyArray<unknown>;
-};
-
 export type DesktopCreateBranchOptions = {
 	id?: string;
 	name: string;
@@ -50,7 +45,8 @@ export type DesktopSwitchBranchResult = {
 
 export type DesktopObserveEvent = {
 	sequence: number;
-	rows: SerializedQueryResult;
+	mutationSequence: number;
+	result: SerializedQueryResult;
 };
 
 export type DesktopLixApi = {
@@ -78,7 +74,10 @@ export type DesktopLixApi = {
 	}): Promise<SerializedQueryResult>;
 	transactionCommit(payload: { transactionId: string }): Promise<void>;
 	transactionRollback(payload: { transactionId: string }): Promise<void>;
-	observeStart(payload: { query: DesktopObserveQuery }): Promise<string>;
+	observeStart(payload: {
+		sql: string;
+		params?: ReadonlyArray<unknown>;
+	}): Promise<string>;
 	observeNext(payload: {
 		observeId: string;
 	}): Promise<DesktopObserveEvent | undefined>;

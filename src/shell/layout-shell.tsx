@@ -418,14 +418,11 @@ function LayoutShellContent({
 
 		void reloadInstalledWidgets();
 
-		const observeEvents = lix.observe({
-			sql: INSTALLED_WIDGET_OBSERVE_SQL,
-			params: [
-				"global",
-				INSTALLED_WIDGET_PATH_PREFIX,
-				INSTALLED_WIDGET_PATH_PREFIX_UPPER_BOUND,
-			],
-		});
+		const observeEvents = lix.observe(INSTALLED_WIDGET_OBSERVE_SQL, [
+			"global",
+			INSTALLED_WIDGET_PATH_PREFIX,
+			INSTALLED_WIDGET_PATH_PREFIX_UPPER_BOUND,
+		]);
 
 		void (async () => {
 			try {
