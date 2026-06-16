@@ -28,9 +28,9 @@ type CsvParseResult = {
 	readonly warnings: readonly string[];
 };
 
-const ROW_NUMBER_COLUMN_WIDTH = 56;
-const DATA_COLUMN_WIDTH = 180;
-const ROW_HEIGHT = 32;
+const COLUMN_MIN_WIDTH = 72;
+const COLUMN_MAX_WIDTH = 320;
+const ROW_HEIGHT = 48;
 
 export function CsvView({ fileId }: CsvViewProps) {
 	return (
@@ -69,16 +69,9 @@ function CsvViewContent({ fileId }: CsvViewProps) {
 	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col bg-background px-2 py-2">
-			<div className="mb-2 flex shrink-0 items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
-				<span className="truncate font-mono">{fileRow.path}</span>
-				<span className="shrink-0">
-					{parsed.rows.length.toLocaleString()} rows ·{" "}
-					{parsed.columns.length.toLocaleString()} columns
-				</span>
-			</div>
+		<div className="flex min-h-0 flex-1 flex-col bg-background">
 			{parsed.warnings.length > 0 ? (
-				<div className="mb-2 flex shrink-0 items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+				<div className="mx-5 mt-3 flex shrink-0 items-start gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
 					<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
 					<span className="min-w-0 truncate">{parsed.warnings[0]}</span>
 				</div>
@@ -90,22 +83,16 @@ function CsvViewContent({ fileId }: CsvViewProps) {
 
 function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 	const parentRef = useRef<HTMLDivElement | null>(null);
+	const columnWidths = useMemo(() => computeColumnWidths(parsed), [parsed]);
+	const growableColumns = useMemo(() => computeGrowableColumns(parsed), [parsed]);
 	const columns = useMemo<ColumnDef<CsvRow>[]>(() => {
-		return [
-			{
-				id: "__row_number",
-				header: "#",
-				cell: ({ row }) => row.original.rowNumber.toLocaleString(),
-				size: ROW_NUMBER_COLUMN_WIDTH,
-			},
-			...parsed.columns.map((header, index) => ({
-				id: `column_${index}`,
-				header,
-				accessorFn: (row: CsvRow) => row.cells[index] ?? "",
-				size: DATA_COLUMN_WIDTH,
-			})),
-		];
-	}, [parsed.columns]);
+		return parsed.columns.map((header, index) => ({
+			id: `column_${index}`,
+			header,
+			accessorFn: (row: CsvRow) => row.cells[index] ?? "",
+			size: columnWidths[index] ?? COLUMN_MIN_WIDTH,
+		}));
+	}, [columnWidths, parsed.columns]);
 	const table = useReactTable({
 		data: [...parsed.rows],
 		columns,
@@ -116,23 +103,30 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 		count: rows.length,
 		getScrollElement: () => parentRef.current,
 		estimateSize: () => ROW_HEIGHT,
+		measureElement:
+			typeof window !== "undefined" &&
+			!navigator.userAgent.includes("Firefox")
+				? (element) => element?.getBoundingClientRect().height
+				: undefined,
 		overscan: 12,
 	});
-	const totalWidth =
-		ROW_NUMBER_COLUMN_WIDTH + parsed.columns.length * DATA_COLUMN_WIDTH;
+	const totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
 
 	return (
 		<div
 			ref={parentRef}
-			className="min-h-0 flex-1 overflow-auto rounded border border-border bg-background"
+			className="min-h-0 flex-1 overflow-auto bg-background"
 		>
-			<div style={{ minWidth: totalWidth }} className="relative">
-				<div className="sticky top-0 z-10 flex border-b border-border bg-muted text-xs font-medium text-muted-foreground">
+			<div style={{ minWidth: totalWidth }} className="relative w-full">
+				<div className="sticky top-0 z-10 flex h-10 w-full border-b border-island-divider bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.04em] text-neutral-600">
 					{table.getHeaderGroups()[0]?.headers.map((header) => (
 						<div
 							key={header.id}
-							className="border-r border-border px-2 py-2 last:border-r-0"
-							style={columnStyle(header.getSize())}
+							className="flex h-10 items-center border-r border-[#f1ece5] px-4 last:border-r-0"
+							style={columnStyle(
+								header.getSize(),
+								growableColumns[columnIndexFromId(header.id)] ?? false,
+							)}
 							title={String(header.column.columnDef.header ?? "")}
 						>
 							<div className="truncate">
@@ -154,20 +148,30 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 						return (
 							<div
 								key={row.id}
-								className="absolute left-0 flex border-b border-border text-xs text-foreground"
+								data-index={virtualRow.index}
+								ref={virtualizer.measureElement}
+								className="absolute left-0 flex w-full border-b border-[#f4f1ec] text-[13.5px] text-neutral-700 transition-colors hover:bg-[#faf6f0]"
 								style={{
-									height: virtualRow.size,
+									minHeight: virtualRow.size,
 									transform: `translateY(${virtualRow.start}px)`,
 								}}
 							>
 								{row.getVisibleCells().map((cell) => (
 									<div
 										key={cell.id}
-										className="border-r border-border px-2 py-1.5 last:border-r-0"
-										style={columnStyle(cell.column.getSize())}
+										className="border-r border-[#f4f1ec] px-4 py-0 last:border-r-0"
+										style={columnStyle(
+											cell.column.getSize(),
+											growableColumns[columnIndexFromId(cell.column.id)] ?? false,
+										)}
 										title={String(cell.getValue() ?? "")}
 									>
-										<div className="truncate">
+										<div
+											className={cellValueClassName(
+												String(cell.getValue() ?? ""),
+												cell.column.id === "column_0",
+											)}
+										>
 											{flexRender(
 												cell.column.columnDef.cell,
 												cell.getContext(),
@@ -182,6 +186,69 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 			</div>
 		</div>
 	);
+}
+
+function computeColumnWidths(parsed: CsvParseResult): number[] {
+	return parsed.columns.map((header, index) => {
+		const values = parsed.rows.slice(0, 100).map((row) => row.cells[index] ?? "");
+		const maxLength = Math.max(header.length, ...values.map(measureCellLength));
+		const numeric = values.length > 0 && values.every(isNumericValue);
+		const baseWidth = numeric ? maxLength * 11 + 36 : maxLength * 8 + 48;
+		return clamp(baseWidth, COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH);
+	});
+}
+
+function computeGrowableColumns(parsed: CsvParseResult): boolean[] {
+	const candidates = parsed.columns.map((header, index) => {
+		const values = parsed.rows.slice(0, 100).map((row) => row.cells[index] ?? "");
+		return !isLikelyNumericColumn(header, values);
+	});
+	return candidates.some(Boolean) ? candidates : parsed.columns.map(() => true);
+}
+
+function isLikelyNumericColumn(header: string, values: readonly string[]): boolean {
+	const lowerHeader = header.trim().toLowerCase();
+	if (lowerHeader === "id" || lowerHeader.endsWith("_id")) return true;
+	const presentValues = values.filter((value) => value.trim() !== "");
+	return (
+		presentValues.length > 0 &&
+		presentValues.every((value) => isNumericValue(value))
+	);
+}
+
+function columnIndexFromId(columnId: string): number {
+	const match = /^column_(\d+)$/.exec(columnId);
+	return match ? Number(match[1]) : -1;
+}
+
+function measureCellLength(value: string): number {
+	return value.trim().length;
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, Math.ceil(value)));
+}
+
+function cellValueClassName(value: string, isFirstColumn: boolean): string {
+	const base = "flex min-h-12 items-center whitespace-normal break-words py-2";
+	if (isEmailLike(value)) {
+		return `${base} font-mono text-[12.5px] text-brand-700`;
+	}
+	if (isNumericValue(value)) {
+		return `${base} justify-end font-mono text-[13px] text-neutral-700`;
+	}
+	if (isFirstColumn) {
+		return `${base} font-mono text-[12.5px] text-neutral-400`;
+	}
+	return `${base} font-medium text-neutral-900`;
+}
+
+function isEmailLike(value: string): boolean {
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isNumericValue(value: string): boolean {
+	return value.trim() !== "" && /^-?\d+(?:\.\d+)?$/.test(value.trim());
 }
 
 function CsvEmptyState({ filePath }: { readonly filePath: string }) {
@@ -272,12 +339,11 @@ function decodeFileData(data: unknown): string {
 	return "";
 }
 
-function columnStyle(width: number): CSSProperties {
+function columnStyle(width: number, grow = false): CSSProperties {
 	return {
-		flex: `0 0 ${width}px`,
+		flex: `${grow ? 1 : 0} 0 ${width}px`,
 		width,
 		minWidth: width,
-		maxWidth: width,
 	};
 }
 
