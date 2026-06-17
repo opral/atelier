@@ -33,10 +33,6 @@ export function isMarkdownFilePath(filePath: string): boolean {
 	return extension === "md" || extension === "markdown";
 }
 
-export function isCsvFilePath(filePath: string): boolean {
-	return fileExtensionFromPath(filePath) === "csv";
-}
-
 export function isExternalWriteReviewableFilePath(filePath: string): boolean {
 	const extension = fileExtensionFromPath(filePath);
 	return (

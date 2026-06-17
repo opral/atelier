@@ -72,6 +72,7 @@
 	line-height: 1.7;
 	min-height: 100%;
 	padding: 0 max(2rem, calc((100% - 760px) / 2)) 4rem;
+	caret-color: var(--color-brand-700);
 	cursor: auto;
 	width: 100%;
 }

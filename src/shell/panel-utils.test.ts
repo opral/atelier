@@ -33,13 +33,12 @@ describe("cloneViewInstanceByKey", () => {
 	});
 
 	test("deep clones nested state and launch args", () => {
-		const query = () => null;
 		const panelState: PanelState = {
 			views: [
 				{
 					instance: "files-1",
 					kind: FILES_EXTENSION_KIND,
-					state: { diff: { query, metadata: { nested: true } } },
+					state: { custom: { metadata: { nested: true } } },
 					launchArgs: { initial: { path: "/docs" } },
 				} satisfies ExtensionInstance,
 			],
@@ -52,9 +51,8 @@ describe("cloneViewInstanceByKey", () => {
 		const clonedState = (cloned as ExtensionInstance).state as any;
 		const originalState = panelState.views[0].state as any;
 		expect(clonedState).not.toBe(originalState);
-		expect(clonedState.diff).not.toBe(originalState.diff);
-		expect(clonedState.diff.query).toBe(query);
-		expect(clonedState.diff.metadata).not.toBe(originalState.diff.metadata);
+		expect(clonedState.custom).not.toBe(originalState.custom);
+		expect(clonedState.custom.metadata).not.toBe(originalState.custom.metadata);
 		const clonedLaunchArgs = (cloned as ExtensionInstance).launchArgs as any;
 		const originalLaunchArgs = panelState.views[0].launchArgs as any;
 		expect(clonedLaunchArgs).not.toBe(originalLaunchArgs);

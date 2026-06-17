@@ -2,15 +2,8 @@ import { generateHTML } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
-import { parseMarkdown } from "./markdown-rust";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
-
-export function renderMarkdownEditorHtml(markdown: string): string {
-	const ast = parseMarkdown(markdown) as any;
-	ensureDiffIds(ast);
-	return renderMarkdownAstEditorHtml(ast);
-}
 
 export function renderMarkdownAstEditorHtml(ast: any): string {
 	return generateHTML(astToTiptapDoc(ast) as any, [

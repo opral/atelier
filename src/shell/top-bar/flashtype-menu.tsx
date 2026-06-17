@@ -1,10 +1,4 @@
-import {
-	Circle,
-	CircleOff,
-	FileDown,
-	Hammer,
-	Zap,
-} from "lucide-react";
+import { Circle, CircleOff, FileDown, Hammer, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,

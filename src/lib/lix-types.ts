@@ -5,16 +5,7 @@ import type {
 	OpenLixOptions as SdkOpenLixOptions,
 } from "@lix-js/sdk";
 
-export type {
-	CreateBranchOptions,
-	CreateBranchReceipt,
-	ExecuteResult as LixRuntimeQueryResult,
-	MergeBranchOptions,
-	MergeBranchPreview,
-	MergeBranchReceipt,
-	SwitchBranchOptions,
-	SwitchBranchReceipt,
-} from "@lix-js/sdk";
+export type { ExecuteResult as LixRuntimeQueryResult } from "@lix-js/sdk";
 
 export type LixRow = ExecuteResult["rows"][number];
 

@@ -289,8 +289,7 @@ function BranchSwitcherContent({
 											<span>Rename</span>
 										</DropdownMenuItem>
 										<DropdownMenuItem
-											className="flex items-center gap-2 text-xs"
-											variant="destructive"
+											className="flex items-center gap-2 text-xs text-destructive focus:bg-destructive/10 focus:text-destructive [&_svg]:!text-destructive"
 											onSelect={() => {
 												if (isDeleteDisabled) return;
 												void handleDeleteBranch(branch.id, branch.name);

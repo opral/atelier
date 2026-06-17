@@ -1,32 +1,11 @@
 import { describe, test, expect } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { qb } from "@/lib/lix-kysely";
-import { selectFiles, selectFilesystemEntries } from "@/queries";
+import { selectFilesystemEntries } from "@/queries";
 
 function isUserPath(path: string): boolean {
 	return !path.startsWith("/.lix_system/");
 }
-
-describe("selectFiles", () => {
-	test("returns minimal rows sorted by path", async () => {
-		const lix = await openLix();
-
-		await qb(lix)
-			.insertInto("lix_file")
-			.values([
-				{ id: "f2", path: "/b.md", data: new Uint8Array() },
-				{ id: "f1", path: "/a.md", data: new Uint8Array() },
-			])
-			.execute();
-
-		const rows = await selectFiles(lix).execute();
-		const userRows = rows.filter((row) => isUserPath(row.path));
-
-		expect(userRows.map((r) => r.path)).toEqual(["/a.md", "/b.md"]);
-		expect(userRows[0]).toHaveProperty("id");
-		expect(userRows[0]).toHaveProperty("path");
-	});
-});
 
 describe("selectFilesystemEntries", () => {
 	test("returns directories and files with hierarchy metadata", async () => {

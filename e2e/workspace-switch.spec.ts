@@ -9,10 +9,9 @@ import {
 	registerRendererConsoleLogging,
 } from "./electron-test-utils";
 
-test("switching to an empty workspace closes the previous lix session", async (
-	{ browserName: _browserName },
-	testInfo,
-) => {
+test("switching to an empty workspace closes the previous lix session", async ({
+	browserName: _browserName,
+}, testInfo) => {
 	const firstWorkspaceDir = testInfo.outputPath("first-workspace");
 	const secondWorkspaceDir = testInfo.outputPath("second-workspace");
 

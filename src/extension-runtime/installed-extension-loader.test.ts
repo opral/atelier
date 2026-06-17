@@ -4,7 +4,24 @@ import {
 	loadInstalledExtensionsFromLix,
 	parseManifest,
 } from "./installed-extension-loader";
-import { installExtensionFromFiles } from "./extension-installation";
+
+const textEncoder = new TextEncoder();
+
+async function writeInstalledExtensionFile(
+	lix: Awaited<ReturnType<typeof openLix>>,
+	path: string,
+	data: string,
+): Promise<void> {
+	await lix.execute(
+		"INSERT INTO lix_file_by_branch (path, data, lixcol_branch_id, lixcol_global) VALUES (?, ?, ?, ?)",
+		[
+			`/.lix_system/app_data/flashtype/extensions/table-viewer/${path}`,
+			textEncoder.encode(data),
+			"global",
+			true,
+		],
+	);
+}
 
 describe("parseManifest", () => {
 	test("normalizes file extension handlers from extension manifests", () => {
@@ -24,25 +41,22 @@ describe("parseManifest", () => {
 	test("loads installed extensions from the extension storage root", async () => {
 		const lix = await openLix();
 		try {
-			await installExtensionFromFiles(lix, {
-				extensionId: "table-viewer",
-				files: [
-					{
-						path: "manifest.json",
-						data: JSON.stringify({
-							id: "table-viewer",
-							name: "Table Viewer",
-							description: "Shows tables",
-							entry: "./index.js",
-							fileExtensions: ["csv"],
-						}),
-					},
-					{
-						path: "index.js",
-						data: "export function render({ target }) { target.textContent = 'table'; }",
-					},
-				],
-			});
+			await writeInstalledExtensionFile(
+				lix,
+				"manifest.json",
+				JSON.stringify({
+					id: "table-viewer",
+					name: "Table Viewer",
+					description: "Shows tables",
+					entry: "./index.js",
+					fileExtensions: ["csv"],
+				}),
+			);
+			await writeInstalledExtensionFile(
+				lix,
+				"index.js",
+				"export function render({ target }) { target.textContent = 'table'; }",
+			);
 
 			const render = vi.fn();
 			const importModule = vi.fn(async () => ({ render }));

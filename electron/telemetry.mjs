@@ -75,9 +75,7 @@ async function readEnvVariables() {
 					? env.PUBLIC_POSTHOG_HOST
 					: undefined,
 			APP_VERSION:
-				typeof env.APP_VERSION === "string"
-					? env.APP_VERSION
-					: undefined,
+				typeof env.APP_VERSION === "string" ? env.APP_VERSION : undefined,
 		};
 	} catch {
 		return undefined;

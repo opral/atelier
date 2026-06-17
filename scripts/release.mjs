@@ -1,4 +1,10 @@
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -55,7 +61,9 @@ export function parseChange(root, path) {
 	const text = readText(root, path).trim();
 	const match = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]+)$/);
 	if (!match) {
-		throw new Error(`${path}: expected frontmatter followed by a changelog body`);
+		throw new Error(
+			`${path}: expected frontmatter followed by a changelog body`,
+		);
 	}
 	const metadata = Object.fromEntries(
 		match[1]
@@ -64,8 +72,12 @@ export function parseChange(root, path) {
 			.filter(Boolean)
 			.map((line) => {
 				const separator = line.indexOf(":");
-				if (separator === -1) throw new Error(`${path}: invalid frontmatter line "${line}"`);
-				return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()];
+				if (separator === -1)
+					throw new Error(`${path}: invalid frontmatter line "${line}"`);
+				return [
+					line.slice(0, separator).trim(),
+					line.slice(separator + 1).trim(),
+				];
 			}),
 	);
 	const type = metadata.type;
@@ -144,7 +156,9 @@ function pushBodyParagraph(paragraphs, lines) {
 }
 
 function changelogListItem(change) {
-	const paragraphs = change.summary ? [change.summary, ...(change.details ?? [])] : changeBodyParagraphs(change.body);
+	const paragraphs = change.summary
+		? [change.summary, ...(change.details ?? [])]
+		: changeBodyParagraphs(change.body);
 	const [summary, ...details] = paragraphs;
 	let item = `- ${summary}\n`;
 	for (const detail of details) {
@@ -168,7 +182,9 @@ export function updatePackageVersion(root, version) {
 
 export function updateChangelog(root, version, date, changes) {
 	const path = "CHANGELOG.md";
-	const existing = existsSync(join(root, path)) ? readText(root, path).trimEnd() : "# Changelog\n";
+	const existing = existsSync(join(root, path))
+		? readText(root, path).trimEnd()
+		: "# Changelog\n";
 	const entry = changelogEntry(version, date, changes).trimEnd();
 	const next =
 		existing.trim() === "# Changelog"
@@ -177,7 +193,10 @@ export function updateChangelog(root, version, date, changes) {
 	writeText(root, path, next);
 }
 
-export function prepareRelease(root, { date = new Date().toISOString().slice(0, 10) } = {}) {
+export function prepareRelease(
+	root,
+	{ date = new Date().toISOString().slice(0, 10) } = {},
+) {
 	const changes = loadChanges(root);
 	if (changes.length === 0) {
 		return null;
@@ -201,7 +220,9 @@ export function releaseTagForHead(root) {
 	if (!match) return null;
 	const version = currentVersion(root);
 	if (version !== match[1]) {
-		throw new Error(`Release commit says ${match[1]}, but package.json says ${version}`);
+		throw new Error(
+			`Release commit says ${match[1]}, but package.json says ${version}`,
+		);
 	}
 	return `v${version}`;
 }

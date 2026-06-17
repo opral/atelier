@@ -36,7 +36,11 @@ export async function resolveWorkspace(requestedPath) {
 	return { path: dir, name: path.basename(dir) };
 }
 
-export async function setWorkspaceFromPath(requestedPath, window, options = {}) {
+export async function setWorkspaceFromPath(
+	requestedPath,
+	window,
+	options = {},
+) {
 	return await enqueueWorkspaceChange(async () => {
 		const nextWorkspace = await resolveWorkspace(requestedPath);
 		if (workspace?.path === nextWorkspace.path) {

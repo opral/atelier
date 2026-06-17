@@ -71,9 +71,10 @@ function pluginArchivePath(plugin) {
 }
 
 async function readLixFileBytes(lix, path) {
-	const result = await lix.execute("SELECT data FROM lix_file WHERE path = $1", [
-		path,
-	]);
+	const result = await lix.execute(
+		"SELECT data FROM lix_file WHERE path = $1",
+		[path],
+	);
 	return result.rows[0]?.value("data").asBytes();
 }
 

@@ -48,7 +48,6 @@ import {
 import type {
 	PanelSide,
 	PanelState,
-	DiffExtensionConfig,
 	ExtensionInstance,
 	ExtensionKind,
 	ExtensionLaunchArgs,
@@ -64,18 +63,11 @@ import { loadInstalledExtensionsFromLix } from "../extension-runtime/installed-e
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
-	DIFF_EXTENSION_KIND,
-	diffLabelFromPath,
-	fileExtensionInstance,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
 	activeMarkdownFileIdFromExtensionInstance,
 } from "../extension-runtime/extension-instance-helpers";
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
-import {
-	installExtensionFromFiles as installExtensionFromFilesInLix,
-	uninstallExtension as uninstallExtensionInLix,
-} from "../extension-runtime/extension-installation";
 import {
 	coerceFlashtypeUiState,
 	DEFAULT_FLASHTYPE_UI_STATE,
@@ -184,8 +176,7 @@ const hydratePanel = (
 		// Drop unknown view keys that might linger in persisted UI state.
 		.filter(
 			(view) => options.preserveUnknownKinds || extensionMap.has(view.kind),
-		)
-		.map(upgradeDiffProps);
+		);
 	if (views.length === 0) {
 		return { views, activeInstance: null };
 	}
@@ -200,29 +191,6 @@ const hydratePanel = (
 };
 
 export const hydratePanelForExtensions = hydratePanel;
-
-const upgradeDiffProps = (view: ExtensionInstance): ExtensionInstance => {
-	if (view.kind !== DIFF_EXTENSION_KIND) return view;
-	const state = view.state ?? {};
-	const fileId = state.fileId as string | undefined;
-	if (!fileId) return view;
-	const existing = state.diff as DiffExtensionConfig | undefined;
-	const nextLabel =
-		(state.flashtype?.label as string | undefined) ??
-		diffLabelFromPath(state.filePath as string | undefined) ??
-		"Unnamed diff";
-	if (existing?.query && state.flashtype?.label === nextLabel) {
-		return view;
-	}
-	return {
-		...view,
-		state: {
-			...state,
-			flashtype: { ...(state.flashtype ?? {}), label: nextLabel },
-			...(existing?.query ? { diff: existing } : {}),
-		},
-	};
-};
 
 const DEFAULT_PANEL_FALLBACK_SIZES = {
 	left: 20,
@@ -1381,35 +1349,9 @@ function LayoutShellContent({
 					if (!targetView) {
 						return panel;
 					}
-					let views = panel.views.filter(
+					const views = panel.views.filter(
 						(entry) => entry.instance !== instance,
 					);
-					if (
-						side === "central" &&
-						targetView.kind === DIFF_EXTENSION_KIND &&
-						views.length === 0
-					) {
-						const fileId = targetView.state?.fileId
-							? String(targetView.state.fileId)
-							: null;
-						if (fileId) {
-							const filePath =
-								typeof targetView.state?.filePath === "string"
-									? (targetView.state.filePath as string)
-									: undefined;
-							const fallbackView: ExtensionInstance = {
-								instance: fileExtensionInstance(fileId),
-								kind: FILE_EXTENSION_KIND,
-								isPending: true,
-								state: buildFileExtensionProps({ fileId, filePath }),
-							};
-							views = [fallbackView];
-							return {
-								views,
-								activeInstance: fallbackView.instance,
-							};
-						}
-					}
 					const nextActive =
 						panel.activeInstance === instance
 							? (views[views.length - 1]?.instance ?? null)
@@ -1505,26 +1447,6 @@ function LayoutShellContent({
 		[schedulePanelAnimation],
 	);
 
-	const handleInstallExtensionFromFiles = useCallback(
-		async (args: {
-			readonly extensionId: string;
-			readonly files: ReadonlyArray<{
-				readonly path: string;
-				readonly data: string | Uint8Array;
-			}>;
-		}) => {
-			await installExtensionFromFilesInLix(lix, args);
-		},
-		[lix],
-	);
-
-	const handleUninstallExtension = useCallback(
-		async (extensionId: string) => {
-			await uninstallExtensionInLix(lix, extensionId);
-		},
-		[lix],
-	);
-
 	const sharedViewContext = useMemo(
 		() => ({
 			openExtension: handleOpenView,
@@ -1532,8 +1454,6 @@ function LayoutShellContent({
 			closeExtension: handleCloseView,
 			setTabBadgeCount: () => {},
 			moveExtensionToPanel: handleMoveViewToPanel,
-			installExtensionFromFiles: handleInstallExtensionFromFiles,
-			uninstallExtension: handleUninstallExtension,
 			resizePanel: handleResizePanel,
 			focusPanel: focusPanel,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
@@ -1545,8 +1465,6 @@ function LayoutShellContent({
 			handleOpenFile,
 			handleCloseView,
 			handleMoveViewToPanel,
-			handleInstallExtensionFromFiles,
-			handleUninstallExtension,
 			handleResizePanel,
 			handleAcceptExternalWriteReview,
 			handleRejectExternalWriteReview,

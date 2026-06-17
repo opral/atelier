@@ -1,14 +1,6 @@
 import type { Lix } from "@/lib/lix-types";
 import { qb, sql } from "@/lib/lix-kysely";
 
-// Files
-export function selectFiles(lix: Lix) {
-	return qb(lix)
-		.selectFrom("lix_file")
-		.select(["id", "path"]) // minimal row for explorer
-		.orderBy("path", "asc");
-}
-
 export type FilesystemEntryRow = {
 	id: string;
 	parent_id: string | null;

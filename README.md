@@ -16,13 +16,13 @@ When an agent edits, Flashtype shows the change as an inline diff with word-leve
 
 ## Features
 
-| Feature | Description |
-| --- | --- |
-| Local markdown files | Open `.md` and `.markdown` files from your disk. No imports, sync step, or duplicate document format. |
-| Claude & Codex terminal | Run CLI agents next to the document they are editing, with no copy-paste round trip. |
-| Inline diffs | Review agent edits in the editor and accept or reject changes before they land. |
-| Version history | Every edit becomes a checkpoint you can inspect and restore. |
-| Markdown as source of truth | Keep lossless markdown that works with GitHub, ChatGPT, Discord, docs, and plain text tools. |
+| Feature                     | Description                                                                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local markdown files        | Open `.md` and `.markdown` files from your disk. No imports, sync step, or duplicate document format.                                       |
+| Claude & Codex terminal     | Run CLI agents next to the document they are editing, with no copy-paste round trip.                                                        |
+| Inline diffs                | Review agent edits in the editor and accept or reject changes before they land.                                                             |
+| Version history             | Every edit becomes a checkpoint you can inspect and restore.                                                                                |
+| Markdown as source of truth | Keep lossless markdown that works with GitHub, ChatGPT, Discord, docs, and plain text tools.                                                |
 | Lix-powered version control | Built on the [Lix SDK](https://lix.dev), an embeddable version control system for app-level history, branches, diffs, and change proposals. |
 
 ## Download
@@ -40,15 +40,15 @@ pnpm run dev
 
 Useful commands:
 
-| Command | Description |
-| --- | --- |
-| `pnpm run dev` | Start the Electron app with the Vite renderer. |
-| `pnpm run dev:web` | Start the browser version. |
-| `pnpm run build` | Build the app. |
-| `pnpm test` | Run unit tests. |
-| `pnpm run test:e2e` | Run Playwright end-to-end tests. |
-| `pnpm run typecheck` | Check TypeScript. |
-| `pnpm run lint` | Run oxlint. |
+| Command              | Description                                    |
+| -------------------- | ---------------------------------------------- |
+| `pnpm run dev`       | Start the Electron app with the Vite renderer. |
+| `pnpm run dev:web`   | Start the browser version.                     |
+| `pnpm run build`     | Build the app.                                 |
+| `pnpm test`          | Run unit tests.                                |
+| `pnpm run test:e2e`  | Run Playwright end-to-end tests.               |
+| `pnpm run typecheck` | Check TypeScript.                              |
+| `pnpm run lint`      | Run oxlint.                                    |
 
 The marketing site lives in [`website`](./website).
 
@@ -56,12 +56,12 @@ The marketing site lives in [`website`](./website).
 
 Flashtype is also a real-world showcase for [Lix](https://lix.dev): version control embedded directly into an application instead of bolted on outside it.
 
-| Lix capability | How Flashtype uses it |
-| --- | --- |
-| History | Track every document edit and restore earlier versions. |
-| Branches | Let agents work in isolated branches before changes are accepted. |
-| Diffs | Show granular inline accept/reject UI for markdown changes. |
-| Change proposals | Keep humans in control of what lands. |
+| Lix capability     | How Flashtype uses it                                              |
+| ------------------ | ------------------------------------------------------------------ |
+| History            | Track every document edit and restore earlier versions.            |
+| Branches           | Let agents work in isolated branches before changes are accepted.  |
+| Diffs              | Show granular inline accept/reject UI for markdown changes.        |
+| Change proposals   | Keep humans in control of what lands.                              |
 | Filesystem backend | Persist desktop documents as real files in a Lix-backed workspace. |
 
 ## License

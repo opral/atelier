@@ -72,7 +72,8 @@ export function buildTerminalEnv(
 		...env,
 		PATH: mergePathEntries([
 			...(env.PATH ?? "").split(":"),
-			...(PATH_ENTRIES_BY_PLATFORM[platform] ?? PATH_ENTRIES_BY_PLATFORM.default),
+			...(PATH_ENTRIES_BY_PLATFORM[platform] ??
+				PATH_ENTRIES_BY_PLATFORM.default),
 		]),
 		TERM: "xterm-256color",
 	};

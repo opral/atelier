@@ -1,6 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import type { Lix } from "@/lib/lix-types";
-import type { LixQueryLike } from "@/lib/lix-kysely";
 
 /**
  * Union of registry keys for views available in the layout.
@@ -35,26 +34,6 @@ export type ExtensionState = {
  * const launchArgs: ExtensionLaunchArgs = { initialMessage: "Summarize changes" };
  */
 export type ExtensionLaunchArgs = Record<string, unknown>;
-
-/**
- * Declares how a diff view should source its data.
- *
- * @example
- * const query = (lix: Lix) => selectRenderableDiffs(lix, fileId);
- */
-export type RenderableDiff = {
-	readonly entity_id: string;
-	readonly schema_key: string;
-	readonly status: "added" | "modified" | "removed";
-	readonly before_snapshot_content: Record<string, any> | null;
-	readonly after_snapshot_content: Record<string, any> | null;
-};
-
-export type DiffExtensionConfig = {
-	readonly title?: string;
-	readonly subtitle?: string;
-	readonly query: (lix: Lix) => LixQueryLike<RenderableDiff>;
-};
 
 /**
  * Per-panel instance payload used to track which views are open.
@@ -164,14 +143,6 @@ export interface ExtensionContext {
 		targetPanel: PanelSide,
 		instance?: string,
 	) => void;
-	readonly installExtensionFromFiles?: (args: {
-		readonly extensionId: string;
-		readonly files: ReadonlyArray<{
-			readonly path: string;
-			readonly data: string | Uint8Array;
-		}>;
-	}) => Promise<void>;
-	readonly uninstallExtension?: (extensionId: string) => Promise<void>;
 	readonly resizePanel?: (side: PanelSide, size: number) => void;
 	readonly focusPanel?: (side: PanelSide) => void;
 	readonly isActiveView?: boolean;

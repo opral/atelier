@@ -97,7 +97,9 @@ function buildLongMarkdownRepro(): string {
 	parts.push('export const tail = "survives";');
 	parts.push("```");
 	parts.push("");
-	parts.push("Final paragraph at the very bottom must survive mid-document edits.");
+	parts.push(
+		"Final paragraph at the very bottom must survive mid-document edits.",
+	);
 	return `${parts.join("\n")}\n`;
 }
 

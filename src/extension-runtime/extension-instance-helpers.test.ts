@@ -3,7 +3,7 @@ import type { ExtensionInstance } from "./types";
 import {
 	FILE_EXTENSION_KIND,
 	activeMarkdownFileIdFromExtensionInstance,
-	diffLabelFromPath,
+	fileNameFromPath,
 	fileLabelFromPath,
 } from "./extension-instance-helpers";
 
@@ -47,7 +47,7 @@ describe("activeMarkdownFileIdFromExtensionInstance", () => {
 	});
 
 	test("derives labels from literal path text", () => {
-		expect(diffLabelFromPath("/docs/%61.md")).toBe("%61.md");
+		expect(fileNameFromPath("/docs/%61.md")).toBe("%61.md");
 		expect(fileLabelFromPath("/docs/%61.md")).toBe("%61.md");
 	});
 });

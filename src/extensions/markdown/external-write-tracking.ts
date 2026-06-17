@@ -23,9 +23,3 @@ export function consumeRecentFlashtypeMarkdownWrite(
 ): boolean {
 	return consumeRecentFlashtypeFileWrite(fileId, hash, now);
 }
-
-export {
-	consumeRecentFlashtypeFileWrite,
-	hashFileData,
-	markFlashtypeFileWrite,
-};

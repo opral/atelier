@@ -6,7 +6,9 @@ try {
 	if (manualVersion) {
 		const version = currentVersion(process.cwd());
 		if (version !== manualVersion) {
-			throw new Error(`Requested release version ${manualVersion}, but package.json says ${version}`);
+			throw new Error(
+				`Requested release version ${manualVersion}, but package.json says ${version}`,
+			);
 		}
 		console.log(`v${version}`);
 		process.exit(0);
