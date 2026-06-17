@@ -17,7 +17,10 @@ import {
 	APP_NAME,
 	registerMarkdownDefaultHandler,
 } from "./markdown-default-handler.mjs";
-import { getWorkspacePathArguments } from "./launch-args.mjs";
+import {
+	getWorkspacePathArguments,
+	resolveWorkspacePathArguments,
+} from "./launch-args.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
@@ -49,8 +52,8 @@ if (!hasSingleInstanceLock) {
 }
 
 if (hasSingleInstanceLock) {
-	app.on("second-instance", (_event, argv) => {
-		void openWorkspacePathArguments(argv);
+	app.on("second-instance", (_event, argv, workingDirectory) => {
+		void openWorkspacePathArguments(argv, { workingDirectory });
 	});
 }
 
@@ -67,10 +70,16 @@ function openWorkspacePathWhenReady(workspacePath) {
 	void createMainWindow(workspacePath);
 }
 
-async function openWorkspacePathArguments(argv) {
-	const workspacePaths = getWorkspacePathArguments(argv, {
-		defaultApp: process.defaultApp === true,
-	});
+async function openWorkspacePathArguments(
+	argv,
+	{ workingDirectory = process.cwd() } = {},
+) {
+	const workspacePaths = resolveWorkspacePathArguments(
+		getWorkspacePathArguments(argv, {
+			defaultApp: process.defaultApp === true,
+		}),
+		workingDirectory,
+	);
 	if (workspacePaths.length === 0) {
 		if (!focusMostRecentWorkspaceWindow() && app.isReady()) {
 			await createMainWindow();

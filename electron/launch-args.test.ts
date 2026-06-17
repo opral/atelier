@@ -1,5 +1,9 @@
+import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { getWorkspacePathArguments } from "./launch-args.mjs";
+import {
+	getWorkspacePathArguments,
+	resolveWorkspacePathArguments,
+} from "./launch-args.mjs";
 
 describe("workspace launch arguments", () => {
 	test("extracts packaged app workspace paths", () => {
@@ -25,5 +29,22 @@ describe("workspace launch arguments", () => {
 				{ defaultApp: true },
 			),
 		).toEqual(["/tmp/workspace"]);
+	});
+
+	test("resolves relative workspace paths against the launch working directory", () => {
+		const root = path.parse(process.cwd()).root;
+		const workingDirectory = path.join(root, "tmp", "second-instance-cwd");
+		const absoluteWorkspace = path.join(root, "tmp", "absolute-workspace");
+
+		expect(
+			resolveWorkspacePathArguments(
+				[".", "nested-workspace", absoluteWorkspace],
+				workingDirectory,
+			),
+		).toEqual([
+			workingDirectory,
+			path.join(workingDirectory, "nested-workspace"),
+			absoluteWorkspace,
+		]);
 	});
 });
