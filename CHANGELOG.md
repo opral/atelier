@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0 - 2026-06-17
+
+### Minor
+
+- Added diff review views for external Markdown and CSV file changes.
+
+  FlashType now detects supported files changed outside the app and lets you accept or reject the update from an inline review.
+
+### Patch
+
+- Improved the macOS update flow.
+
+  Checking for updates now opens a focused download progress window, and the header Update button appears only after an update is ready to install.
+
 ## 0.1.1 - 2026-06-15
 
 ### Patch
