@@ -11,9 +11,15 @@ const electronCloseTimeoutMs = 5_000;
 export async function launchDevElectronApp(
 	workspaceDir: string,
 ): Promise<ElectronApplication> {
+	return await launchDevElectronAppWithArgs([workspaceDir]);
+}
+
+export async function launchDevElectronAppWithArgs(
+	workspaceDirs: string[],
+): Promise<ElectronApplication> {
 	return await electron.launch({
 		cwd: repoRoot,
-		args: ["./electron/main.mjs", workspaceDir],
+		args: ["./electron/main.mjs", ...workspaceDirs],
 		env: {
 			...process.env,
 			VITE_DEV_SERVER_URL: rendererUrl,

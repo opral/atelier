@@ -27,6 +27,11 @@ const packagedAppExecutablePath = path.join(
 	"MacOS",
 	"Flashtype",
 );
+const packagedInfoPlistPath = path.join(
+	appBundlePath,
+	"Contents",
+	"Info.plist",
+);
 const unpackedResourcesPath = path.join(
 	appBundlePath,
 	"Contents",
@@ -85,6 +90,19 @@ test("packaged app includes arm64 native modules", async () => {
 			expect(stdout).toContain("arm64");
 		});
 	}
+});
+
+test("packaged app declares folder document support", async () => {
+	await expectFile(packagedInfoPlistPath);
+
+	const { stdout } = await execFileAsync("/usr/libexec/PlistBuddy", [
+		"-c",
+		"Print :CFBundleDocumentTypes",
+		packagedInfoPlistPath,
+	]);
+
+	expect(stdout).toContain("public.folder");
+	expect(stdout).toContain("Markdown Document");
 });
 
 test("packaged app launches, seeds, and opens files without Vite", async ({

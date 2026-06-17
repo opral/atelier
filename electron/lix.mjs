@@ -3,21 +3,16 @@ import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { getWorkspace, getWorkspaceLixDatabasePath } from "./workspace.mjs";
 
-let lixPromise = null;
-let lifecycle = Promise.resolve();
 const LIX_DATABASE_DIR = ".lix";
+const sessions = new Map();
 
-function enqueue(operation) {
-	lifecycle = lifecycle.catch(() => {}).then(operation);
-	return lifecycle;
-}
-
-export async function ensureLixOpen() {
+export async function ensureLixOpen(window) {
+	const session = getOrCreateSession(window);
 	let outPromise;
-	await enqueue(async () => {
-		if (!lixPromise) {
+	await enqueue(session, async () => {
+		if (!session.lixPromise) {
 			const openingPromise = (async () => {
-				const workspace = getWorkspace();
+				const workspace = getWorkspace(window);
 				if (!workspace) {
 					throw new Error(
 						"No workspace is open. Open a folder before using lix.",
@@ -30,14 +25,14 @@ export async function ensureLixOpen() {
 				await ensureDefaultPluginsInstalledOnCurrentBranch(nativeLix);
 				return createDesktopLixHandle(nativeLix, workspace.path);
 			})();
-			lixPromise = openingPromise;
+			session.lixPromise = openingPromise;
 			openingPromise.catch(() => {
-				if (lixPromise === openingPromise) {
-					lixPromise = null;
+				if (session.lixPromise === openingPromise) {
+					session.lixPromise = null;
 				}
 			});
 		}
-		outPromise = lixPromise;
+		outPromise = session.lixPromise;
 	});
 	return await outPromise;
 }
@@ -104,42 +99,58 @@ async function fileBytesEqual(filePath, expected) {
 	}
 }
 
-export async function closeLix(options = {}) {
-	await enqueue(async () => {
-		await closeCurrentLix(options);
+export async function closeLix(window, options = {}) {
+	const session = getSession(window);
+	if (!session) {
+		return;
+	}
+	await enqueue(session, async () => {
+		await closeCurrentLix(session, options);
 	});
 }
 
-export async function resetLixRepository() {
-	await enqueue(async () => {
-		const workspace = getWorkspace();
+export async function resetLixRepository(window) {
+	const session = getOrCreateSession(window);
+	await enqueue(session, async () => {
+		const workspace = getWorkspace(window);
 		if (!workspace) {
 			throw new Error(
 				"No workspace is open. Open a folder before resetting lix.",
 			);
 		}
-		await closeCurrentLix({ ignoreOpenError: true });
+		await closeCurrentLix(session, { ignoreOpenError: true });
 		await removeLixDatabaseFiles(workspace.path);
 	});
 }
 
-export async function exportCurrentLixImage() {
-	await ensureLixOpen();
+export async function exportCurrentLixImage(window) {
+	const session = getOrCreateSession(window);
+	await ensureLixOpen(window);
 
 	let bytes;
-	await enqueue(async () => {
-		await closeCurrentLix();
-		await checkpointWorkspaceLixDatabase();
-		bytes = await readFile(getWorkspaceLixDatabasePath());
+	await enqueue(session, async () => {
+		await closeCurrentLix(session);
+		await checkpointWorkspaceLixDatabase(window);
+		bytes = await readFile(getWorkspaceLixDatabasePath(window));
 	});
 	return bytes;
 }
 
-async function closeCurrentLix(options = {}) {
-	if (!lixPromise) {
+export async function closeAllLixSessions(options = {}) {
+	await Promise.all(
+		[...sessions.values()].map((session) =>
+			enqueue(session, async () => {
+				await closeCurrentLix(session, options);
+			}),
+		),
+	);
+}
+
+async function closeCurrentLix(session, options = {}) {
+	if (!session.lixPromise) {
 		return;
 	}
-	const currentPromise = lixPromise;
+	const currentPromise = session.lixPromise;
 	try {
 		const lix = await currentPromise;
 		await lix.close();
@@ -148,8 +159,8 @@ async function closeCurrentLix(options = {}) {
 			throw error;
 		}
 	} finally {
-		if (lixPromise === currentPromise) {
-			lixPromise = null;
+		if (session.lixPromise === currentPromise) {
+			session.lixPromise = null;
 		}
 	}
 }
@@ -161,14 +172,49 @@ async function removeLixDatabaseFiles(workspacePath) {
 	});
 }
 
-async function checkpointWorkspaceLixDatabase() {
+async function checkpointWorkspaceLixDatabase(window) {
 	const { DatabaseSync } = await import("node:sqlite");
-	const database = new DatabaseSync(getWorkspaceLixDatabasePath());
+	const database = new DatabaseSync(getWorkspaceLixDatabasePath(window));
 	try {
 		database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 	} finally {
 		database.close();
 	}
+}
+
+function enqueue(session, operation) {
+	session.lifecycle = session.lifecycle.catch(() => {}).then(operation);
+	return session.lifecycle;
+}
+
+function getSession(window) {
+	if (!window) {
+		return null;
+	}
+	return sessions.get(window.id) ?? null;
+}
+
+function getOrCreateSession(window) {
+	if (!window || window.isDestroyed()) {
+		throw new Error("A live window is required to open lix.");
+	}
+	const existing = sessions.get(window.id);
+	if (existing) {
+		return existing;
+	}
+	const session = {
+		windowId: window.id,
+		lixPromise: null,
+		lifecycle: Promise.resolve(),
+	};
+	sessions.set(window.id, session);
+	window.once("closed", () => {
+		void enqueue(session, async () => {
+			await closeCurrentLix(session, { ignoreOpenError: true });
+			sessions.delete(session.windowId);
+		});
+	});
+	return session;
 }
 
 function createDesktopLixHandle(nativeLix, workspaceDir) {

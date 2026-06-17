@@ -17,13 +17,16 @@ import {
 	APP_NAME,
 	registerMarkdownDefaultHandler,
 } from "./markdown-default-handler.mjs";
+import { getWorkspacePathArguments } from "./launch-args.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
 const AUTO_UPDATE_CHECK_DELAY_MS = 10_000;
 const DEV_SERVER_URL =
 	process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:4173";
-let mainWindow = null;
+const workspaceWindows = new Set();
+const pendingWorkspaceOpenPaths = [];
+let readyForWorkspaceOpens = false;
 let autoUpdaterInstance = null;
 let autoUpdateListenersRegistered = false;
 let updateCheckInProgress = false;
@@ -40,33 +43,73 @@ app.setAboutPanelOptions({
 	copyright: "Copyright © 2026 Opral US Inc.",
 });
 
-app.on("open-file", (event, filePath) => {
-	event.preventDefault();
-	// Opening a file from Finder adopts its folder as the workspace, but only
-	// before one is open — a window is bound to exactly one workspace.
-	if (!getWorkspace()) {
-		void setWorkspaceFromPath(filePath, mainWindow);
-	}
-});
-
-function getWorkspacePathArgument(argv) {
-	// Playwright/Electron can prepend runtime flags before app arguments.
-	const appArguments = argv.slice(1).filter((argument) => {
-		return argument !== "--" && !argument.startsWith("--");
-	});
-	if (process.defaultApp === true) {
-		appArguments.shift();
-	}
-	return appArguments[0];
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+	app.quit();
 }
 
-function createMainWindow() {
-	if (mainWindow && !mainWindow.isDestroyed()) {
-		mainWindow.focus();
-		return mainWindow;
+if (hasSingleInstanceLock) {
+	app.on("second-instance", (_event, argv) => {
+		void openWorkspacePathArguments(argv);
+	});
+}
+
+app.on("open-file", (event, filePath) => {
+	event.preventDefault();
+	openWorkspacePathWhenReady(filePath);
+});
+
+function openWorkspacePathWhenReady(workspacePath) {
+	if (!readyForWorkspaceOpens) {
+		pendingWorkspaceOpenPaths.push(workspacePath);
+		return;
+	}
+	void createMainWindow(workspacePath);
+}
+
+async function openWorkspacePathArguments(argv) {
+	const workspacePaths = getWorkspacePathArguments(argv, {
+		defaultApp: process.defaultApp === true,
+	});
+	if (workspacePaths.length === 0) {
+		if (!focusMostRecentWorkspaceWindow() && app.isReady()) {
+			await createMainWindow();
+		}
+		return;
 	}
 
-	mainWindow = new BrowserWindow({
+	if (!readyForWorkspaceOpens) {
+		pendingWorkspaceOpenPaths.push(...workspacePaths);
+		return;
+	}
+
+	for (const workspacePath of workspacePaths) {
+		await createMainWindow(workspacePath);
+	}
+}
+
+function focusMostRecentWorkspaceWindow() {
+	const windows = [...workspaceWindows].filter(
+		(window) => !window.isDestroyed(),
+	);
+	const focusedWindow = BrowserWindow.getFocusedWindow();
+	const window =
+		focusedWindow && workspaceWindows.has(focusedWindow)
+			? focusedWindow
+			: windows.at(-1);
+	if (!window) {
+		return false;
+	}
+	if (window.isMinimized()) {
+		window.restore();
+	}
+	window.show();
+	window.focus();
+	return true;
+}
+
+async function createMainWindow(workspacePath) {
+	const window = new BrowserWindow({
 		width: 1400,
 		height: 900,
 		minWidth: 1000,
@@ -86,8 +129,8 @@ function createMainWindow() {
 			sandbox: false,
 		},
 	});
+	workspaceWindows.add(window);
 
-	const window = mainWindow;
 	const showFallback = setTimeout(() => {
 		if (window.isDestroyed() || window.isVisible()) {
 			return;
@@ -95,7 +138,11 @@ function createMainWindow() {
 		window.show();
 	}, 3000);
 
-	applyWorkspaceWindowChrome(window);
+	if (workspacePath !== undefined) {
+		await setWorkspaceFromPath(workspacePath, window);
+	} else {
+		applyWorkspaceWindowChrome(window);
+	}
 
 	window.once("ready-to-show", () => {
 		if (window.isDestroyed()) {
@@ -107,9 +154,8 @@ function createMainWindow() {
 
 	window.on("closed", () => {
 		clearTimeout(showFallback);
-		if (mainWindow === window) {
-			mainWindow = null;
-		}
+		workspaceWindows.delete(window);
+		void closeLixSession(window, { ignoreOpenError: true });
 	});
 
 	window.webContents.on(
@@ -144,36 +190,61 @@ function createMainWindow() {
 	return window;
 }
 
-app.whenReady().then(async () => {
-	registerLixIpc();
-	registerTerminalIpc();
-	registerAppIpc();
-	registerWorkspaceIpc((event) => BrowserWindow.fromWebContents(event.sender), {
-		beforeChange: () => closeLixSession({ ignoreOpenError: true }),
-	});
-	installApplicationMenu();
-	void registerMarkdownDefaultHandler({
-		execFileAsync,
-		executablePath: process.execPath,
-		isPackaged: app.isPackaged,
-		platform: process.platform,
-	}).catch((error) => {
-		console.warn("Failed to register Flashtype as the Markdown editor", error);
-	});
-	void captureAppOpened();
-	const workspaceArgument = getWorkspacePathArgument(process.argv);
-	if (workspaceArgument !== undefined && !getWorkspace()) {
-		await setWorkspaceFromPath(workspaceArgument, null);
-	}
-	createMainWindow();
-	void setupAutoUpdates();
-
-	app.on("activate", () => {
-		if (BrowserWindow.getAllWindows().length === 0) {
-			createMainWindow();
+if (hasSingleInstanceLock) {
+	app.whenReady().then(async () => {
+		registerLixIpc((event) => BrowserWindow.fromWebContents(event.sender));
+		registerTerminalIpc();
+		registerAppIpc();
+		registerWorkspaceIpc(
+			(event) => BrowserWindow.fromWebContents(event.sender),
+			{
+				beforeChange: (_nextWorkspace, window) =>
+					closeLixSession(window, { ignoreOpenError: true }),
+				openInNewWindow: async (requestedPath) => {
+					const window = await createMainWindow(requestedPath);
+					return getWorkspace(window);
+				},
+			},
+		);
+		installApplicationMenu();
+		void registerMarkdownDefaultHandler({
+			execFileAsync,
+			executablePath: process.execPath,
+			isPackaged: app.isPackaged,
+			platform: process.platform,
+		}).catch((error) => {
+			console.warn(
+				"Failed to register Flashtype as the Markdown editor",
+				error,
+			);
+		});
+		void captureAppOpened();
+		const workspacePathsToOpen = [
+			...getWorkspacePathArguments(process.argv, {
+				defaultApp: process.defaultApp === true,
+			}),
+			...pendingWorkspaceOpenPaths,
+		];
+		pendingWorkspaceOpenPaths.length = 0;
+		readyForWorkspaceOpens = true;
+		if (workspacePathsToOpen.length > 0) {
+			for (const workspacePath of workspacePathsToOpen) {
+				await createMainWindow(workspacePath);
+			}
+		} else {
+			await createMainWindow();
 		}
+		void setupAutoUpdates();
+
+		app.on("activate", () => {
+			if (workspaceWindows.size === 0) {
+				void createMainWindow();
+			} else {
+				focusMostRecentWorkspaceWindow();
+			}
+		});
 	});
-});
+}
 
 app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") {
@@ -393,6 +464,10 @@ function showUpdateWindow(initialState) {
 		updateWindowCloseTimer = null;
 	}
 
+	const parentWindow = [...workspaceWindows].find(
+		(window) =>
+			!window.isDestroyed() && window === BrowserWindow.getFocusedWindow(),
+	);
 	updateWindow = new BrowserWindow({
 		width: 560,
 		height: 260,
@@ -409,7 +484,7 @@ function showUpdateWindow(initialState) {
 					trafficLightPosition: { x: 18, y: 18 },
 				}
 			: {}),
-		...(mainWindow && !mainWindow.isDestroyed() ? { parent: mainWindow } : {}),
+		...(parentWindow ? { parent: parentWindow } : {}),
 		webPreferences: {
 			contextIsolation: true,
 			nodeIntegration: false,

@@ -5,17 +5,16 @@ import { readFile, stat } from "node:fs/promises";
 const LIX_DATABASE_FILE = path.join(".lix", "db.sqlite");
 
 /**
- * The workspace is the folder Flashtype operates on. One window has at most
+ * The workspace is the folder Flashtype operates on. Each window has at most
  * one workspace; everything else (lix, terminal cwd, window title) derives
- * from it. `null` means first run: the app renders without a database until
- * the user picks a folder.
+ * from that window's workspace. `null` means first run: the app renders
+ * without a database until the user picks a folder.
  */
-let workspace = null;
 let registered = false;
-let workspaceChangeQueue = Promise.resolve();
+const windowStates = new Map();
 
-export function getWorkspace() {
-	return workspace;
+export function getWorkspace(window) {
+	return getWindowState(window)?.workspace ?? null;
 }
 
 /**
@@ -41,16 +40,17 @@ export async function setWorkspaceFromPath(
 	window,
 	options = {},
 ) {
-	return await enqueueWorkspaceChange(async () => {
+	const state = getOrCreateWindowState(window);
+	return await enqueueWorkspaceChange(state, async () => {
 		const nextWorkspace = await resolveWorkspace(requestedPath);
-		if (workspace?.path === nextWorkspace.path) {
+		if (state.workspace?.path === nextWorkspace.path) {
 			applyWindowChrome(window);
-			return workspace;
+			return state.workspace;
 		}
-		await options.beforeChange?.(nextWorkspace);
-		workspace = nextWorkspace;
+		await options.beforeChange?.(nextWorkspace, window);
+		state.workspace = nextWorkspace;
 		applyWindowChrome(window);
-		return workspace;
+		return state.workspace;
 	});
 }
 
@@ -59,15 +59,7 @@ export async function setWorkspaceFromPath(
  * the user cancels (cancel keeps the current state; it is not an error).
  */
 export async function openWorkspaceDialog(window, options = {}) {
-	const dialogOptions = {
-		title: "Open Folder",
-		buttonLabel: "Open",
-		properties: ["openDirectory", "createDirectory"],
-	};
-	const result =
-		window && !window.isDestroyed()
-			? await dialog.showOpenDialog(window, dialogOptions)
-			: await dialog.showOpenDialog(dialogOptions);
+	const result = await showWorkspaceDialog(window);
 	const dir = result.filePaths[0];
 	if (result.canceled || dir === undefined) {
 		return null;
@@ -75,16 +67,18 @@ export async function openWorkspaceDialog(window, options = {}) {
 	return await setWorkspaceFromPath(dir, window, options);
 }
 
-export async function exportWorkspaceLixFile() {
+export async function exportWorkspaceLixFile(window) {
+	const workspace = getWorkspace(window);
 	if (!workspace) {
 		throw new Error(
 			"No workspace is open. Open a folder before exporting lix.",
 		);
 	}
-	return await readFile(getWorkspaceLixDatabasePath());
+	return await readFile(getWorkspaceLixDatabasePath(window));
 }
 
-export function getWorkspaceLixDatabasePath() {
+export function getWorkspaceLixDatabasePath(window) {
+	const workspace = getWorkspace(window);
 	if (!workspace) {
 		throw new Error(
 			"No workspace is open. Open a folder before exporting lix.",
@@ -98,6 +92,7 @@ export function applyWorkspaceWindowChrome(window) {
 }
 
 function applyWindowChrome(window) {
+	const workspace = getWorkspace(window);
 	if (!workspace || !window || window.isDestroyed()) {
 		return;
 	}
@@ -106,9 +101,20 @@ function applyWindowChrome(window) {
 	window.setRepresentedFilename(workspace.path);
 }
 
-function enqueueWorkspaceChange(operation) {
-	const result = workspaceChangeQueue.catch(() => {}).then(operation);
-	workspaceChangeQueue = result.catch(() => {});
+async function showWorkspaceDialog(window) {
+	const dialogOptions = {
+		title: "Open Folder",
+		buttonLabel: "Open",
+		properties: ["openDirectory", "createDirectory"],
+	};
+	return window && !window.isDestroyed()
+		? await dialog.showOpenDialog(window, dialogOptions)
+		: await dialog.showOpenDialog(dialogOptions);
+}
+
+function enqueueWorkspaceChange(state, operation) {
+	const result = state.workspaceChangeQueue.catch(() => {}).then(operation);
+	state.workspaceChangeQueue = result.catch(() => {});
 	return result;
 }
 
@@ -118,8 +124,8 @@ export function registerWorkspaceIpc(getWindowForEvent, options = {}) {
 	}
 	registered = true;
 
-	ipcMain.handle("workspace:get", () => {
-		return workspace;
+	ipcMain.handle("workspace:get", (event) => {
+		return getWorkspace(getWindowForEvent(event));
 	});
 
 	ipcMain.handle("workspace:open", async (event, payload) => {
@@ -130,4 +136,48 @@ export function registerWorkspaceIpc(getWindowForEvent, options = {}) {
 		}
 		return await openWorkspaceDialog(window, options);
 	});
+
+	ipcMain.handle("workspace:openInNewWindow", async (event, payload) => {
+		if (typeof options.openInNewWindow !== "function") {
+			throw new Error("workspace.openInNewWindow is not available");
+		}
+		const sourceWindow = getWindowForEvent(event);
+		const requestedPath = payload?.path;
+		if (typeof requestedPath === "string" && requestedPath.length > 0) {
+			return await options.openInNewWindow(requestedPath, sourceWindow);
+		}
+
+		const result = await showWorkspaceDialog(sourceWindow);
+		const dir = result.filePaths[0];
+		if (result.canceled || dir === undefined) {
+			return null;
+		}
+		return await options.openInNewWindow(dir, sourceWindow);
+	});
+}
+
+function getWindowState(window) {
+	if (!window || window.isDestroyed()) {
+		return null;
+	}
+	return windowStates.get(window.id) ?? null;
+}
+
+function getOrCreateWindowState(window) {
+	if (!window || window.isDestroyed()) {
+		throw new Error("A live window is required to open a workspace.");
+	}
+	const existing = windowStates.get(window.id);
+	if (existing) {
+		return existing;
+	}
+	const state = {
+		workspace: null,
+		workspaceChangeQueue: Promise.resolve(),
+	};
+	windowStates.set(window.id, state);
+	window.once("closed", () => {
+		windowStates.delete(window.id);
+	});
+	return state;
 }

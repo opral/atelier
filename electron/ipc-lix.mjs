@@ -1,16 +1,19 @@
 import { ipcMain } from "electron";
 import { Value } from "@lix-js/sdk";
 import {
+	closeAllLixSessions,
 	closeLix,
 	ensureLixOpen,
 	exportCurrentLixImage,
 	resetLixRepository,
 } from "./lix.mjs";
+import { createOwnedHandleStore } from "./ipc-owned-handles.mjs";
 
-const observeHandles = new Map();
-const observeTraceMeta = new Map();
-const transactionHandles = new Map();
+const observeHandles = createOwnedHandleStore("observe");
+const observeTraceMeta = createOwnedHandleStore("observe trace");
+const transactionHandles = createOwnedHandleStore("transaction");
 let registered = false;
+let getWindowForEvent = null;
 const LIX_VALUE_ENVELOPE_KEY = "__lixValue";
 const LIX_TRACE_SLOW_MS = Number.parseInt(
 	process.env.FLASHTYPE_TRACE_LIX_SLOW_MS ?? "25",
@@ -18,11 +21,12 @@ const LIX_TRACE_SLOW_MS = Number.parseInt(
 );
 const LIX_TRACE_ENABLED = process.env.FLASHTYPE_TRACE_LIX_IPC === "1";
 
-export function registerLixIpc() {
+export function registerLixIpc(resolveWindowForEvent) {
 	if (registered) {
 		return;
 	}
 	registered = true;
+	getWindowForEvent = resolveWindowForEvent;
 
 	ipcMain.handle("lix:open", async (event) => {
 		await ensureLixOpenForEvent(event);
@@ -104,17 +108,19 @@ export function registerLixIpc() {
 		const lix = await ensureLixOpenForEvent(event);
 		const transaction = await lix.beginTransaction();
 		const transactionId = createId("transaction");
-		transactionHandles.set(transactionId, transaction);
+		transactionHandles.set(
+			transactionId,
+			getOwnerIdForEvent(event),
+			transaction,
+		);
 		return { transactionId };
 	});
 
-	ipcMain.handle("lix:transaction:execute", async (_event, payload) => {
+	ipcMain.handle("lix:transaction:execute", async (event, payload) => {
 		const transaction = transactionHandles.get(
 			String(payload?.transactionId ?? ""),
+			getOwnerIdForEvent(event),
 		);
-		if (!transaction) {
-			throw new Error("transaction handle does not exist or is closed");
-		}
 		const sql = String(payload?.sql ?? "");
 		const params = normalizeParams(payload?.params);
 		const started = performance.now();
@@ -142,23 +148,27 @@ export function registerLixIpc() {
 		}
 	});
 
-	ipcMain.handle("lix:transaction:commit", async (_event, payload) => {
+	ipcMain.handle("lix:transaction:commit", async (event, payload) => {
 		const transactionId = String(payload?.transactionId ?? "");
-		const transaction = transactionHandles.get(transactionId);
+		const transaction = transactionHandles.delete(
+			transactionId,
+			getOwnerIdForEvent(event),
+		);
 		if (!transaction) {
 			throw new Error("transaction handle does not exist or is closed");
 		}
-		transactionHandles.delete(transactionId);
 		await transaction.commit();
 	});
 
-	ipcMain.handle("lix:transaction:rollback", async (_event, payload) => {
+	ipcMain.handle("lix:transaction:rollback", async (event, payload) => {
 		const transactionId = String(payload?.transactionId ?? "");
-		const transaction = transactionHandles.get(transactionId);
+		const transaction = transactionHandles.delete(
+			transactionId,
+			getOwnerIdForEvent(event),
+		);
 		if (!transaction) {
 			throw new Error("transaction handle does not exist or is closed");
 		}
-		transactionHandles.delete(transactionId);
 		await transaction.rollback();
 	});
 
@@ -168,14 +178,15 @@ export function registerLixIpc() {
 		const params = normalizeParams(payload?.params);
 		const observeEvents = lix.observe(sql, params);
 		const observeId = createId("observe");
-		observeHandles.set(observeId, observeEvents);
-		observeTraceMeta.set(observeId, {
+		logTrace("observe:start", {
+			observeId,
 			sqlHash: hashString(sql),
 			sql: summarizeSql(sql),
 			paramShapes: params.map((param) => sqlParamShape(param)),
 		});
-		logTrace("observe:start", {
-			observeId,
+		const ownerId = getOwnerIdForEvent(event);
+		observeHandles.set(observeId, ownerId, observeEvents);
+		observeTraceMeta.set(observeId, ownerId, {
 			sqlHash: hashString(sql),
 			sql: summarizeSql(sql),
 			paramShapes: params.map((param) => sqlParamShape(param)),
@@ -183,9 +194,10 @@ export function registerLixIpc() {
 		return observeId;
 	});
 
-	ipcMain.handle("lix:observe:next", async (_event, payload) => {
+	ipcMain.handle("lix:observe:next", async (event, payload) => {
 		const observeId = String(payload?.observeId ?? "");
-		const observeEvents = observeHandles.get(observeId);
+		const ownerId = getOwnerIdForEvent(event);
+		const observeEvents = observeHandles.getOptional(observeId, ownerId);
 		if (!observeEvents) {
 			return undefined;
 		}
@@ -195,7 +207,7 @@ export function registerLixIpc() {
 			if (!event) {
 				logSlowOperation("observe:next", started, {
 					observeId,
-					...observeTraceMeta.get(observeId),
+					...observeTraceMeta.getOptional(observeId, ownerId),
 					outcome: "none",
 				});
 				return undefined;
@@ -206,7 +218,7 @@ export function registerLixIpc() {
 			);
 			logSlowOperation("observe:next", started, {
 				observeId,
-				...observeTraceMeta.get(observeId),
+				...observeTraceMeta.getOptional(observeId, ownerId),
 				outcome: "event",
 				sequence: event.sequence,
 				mutationSequence: event.mutationSequence,
@@ -221,21 +233,21 @@ export function registerLixIpc() {
 		} catch (error) {
 			logOperationError("observe:next", started, {
 				observeId,
-				...observeTraceMeta.get(observeId),
+				...observeTraceMeta.getOptional(observeId, ownerId),
 				error: formatError(error),
 			});
 			throw error;
 		}
 	});
 
-	ipcMain.handle("lix:observe:close", async (_event, payload) => {
+	ipcMain.handle("lix:observe:close", async (event, payload) => {
 		const observeId = String(payload?.observeId ?? "");
-		const observeEvents = observeHandles.get(observeId);
+		const ownerId = getOwnerIdForEvent(event);
+		const observeEvents = observeHandles.delete(observeId, ownerId);
 		if (!observeEvents) {
 			return;
 		}
-		observeHandles.delete(observeId);
-		observeTraceMeta.delete(observeId);
+		observeTraceMeta.delete(observeId, ownerId);
 		observeEvents.close();
 	});
 
@@ -256,43 +268,65 @@ export function registerLixIpc() {
 		});
 	});
 
-	ipcMain.handle("lix:close", async () => {
-		await closeLixSession();
+	ipcMain.handle("lix:close", async (event) => {
+		await closeLixSession(getWindowForIpcEvent(event));
 	});
 
-	ipcMain.handle("workspace:resetLixRepository", async () => {
-		await closeAllHandles();
-		await resetLixRepository();
+	ipcMain.handle("workspace:resetLixRepository", async (event) => {
+		const window = getWindowForIpcEvent(event);
+		await closeAllHandles(window.id);
+		await resetLixRepository(window);
 	});
 
-	ipcMain.handle("workspace:exportLixFile", async () => {
-		await closeAllHandles();
-		return await exportCurrentLixImage();
+	ipcMain.handle("workspace:exportLixFile", async (event) => {
+		const window = getWindowForIpcEvent(event);
+		await closeAllHandles(window.id);
+		return await exportCurrentLixImage(window);
 	});
 }
 
-async function ensureLixOpenForEvent(_event) {
-	return await ensureLixOpen();
+async function ensureLixOpenForEvent(event) {
+	return await ensureLixOpen(getWindowForIpcEvent(event));
 }
 
 export async function disposeLixIpc() {
-	await closeLixSession();
-}
-
-export async function closeLixSession(options = {}) {
 	await closeAllHandles();
-	await closeLix(options);
+	await closeAllLixSessions({ ignoreOpenError: true });
 }
 
-async function closeAllHandles() {
-	for (const observeEvents of observeHandles.values()) {
+export async function closeLixSession(window, options = {}) {
+	if (!window) {
+		return;
+	}
+	await closeAllHandles(window.id);
+	await closeLix(window, options);
+}
+
+async function closeAllHandles(ownerId) {
+	const observeEntries =
+		ownerId === undefined
+			? observeHandles.values().map((value) => ({ value }))
+			: observeHandles.valuesForOwner(ownerId);
+	for (const { value: observeEvents } of observeEntries) {
 		observeEvents.close();
 	}
-	observeHandles.clear();
-	observeTraceMeta.clear();
+	if (ownerId === undefined) {
+		observeHandles.clear();
+		observeTraceMeta.clear();
+	} else {
+		observeHandles.clearOwner(ownerId);
+		observeTraceMeta.clearOwner(ownerId);
+	}
 
-	const openTransactions = [...transactionHandles.values()];
-	transactionHandles.clear();
+	const openTransactions =
+		ownerId === undefined
+			? transactionHandles.values()
+			: transactionHandles.valuesForOwner(ownerId).map((entry) => entry.value);
+	if (ownerId === undefined) {
+		transactionHandles.clear();
+	} else {
+		transactionHandles.clearOwner(ownerId);
+	}
 	for (const transaction of openTransactions) {
 		try {
 			await transaction.rollback();
@@ -300,6 +334,21 @@ async function closeAllHandles() {
 			// ignore rollback errors while closing handles
 		}
 	}
+}
+
+function getWindowForIpcEvent(event) {
+	if (!getWindowForEvent) {
+		throw new Error("lix IPC is not registered with a window resolver");
+	}
+	const window = getWindowForEvent(event);
+	if (!window || window.isDestroyed()) {
+		throw new Error("No window is available for this lix request.");
+	}
+	return window;
+}
+
+function getOwnerIdForEvent(event) {
+	return getWindowForIpcEvent(event).id;
 }
 
 function createId(prefix) {

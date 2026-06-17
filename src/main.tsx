@@ -83,11 +83,13 @@ export const AppRoot = () => {
 			if (!desktop || openFolderInFlightRef.current) return;
 			openFolderInFlightRef.current = true;
 			try {
-				const opened = await desktop.workspace.open(
-					path ? { path } : undefined,
-				);
+				const openPayload = path ? { path } : undefined;
+				const opened = await (workspace
+					? desktop.workspace.openInNewWindow(openPayload)
+					: desktop.workspace.open(openPayload));
 				// null = picker canceled; keep the current state.
 				if (!opened || opened.path === workspace?.path) return;
+				if (workspace) return;
 				// When switching, close the running lix before the workspace state
 				// flips: close() lags its IPC, so an unawaited close could race the
 				// new open and kill the fresh instance.

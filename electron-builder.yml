@@ -59,6 +59,11 @@ mac:
           - markdown
           - mdown
           - mkd
+      - CFBundleTypeName: Folder
+        CFBundleTypeRole: Viewer
+        LSHandlerRank: Alternate
+        LSItemContentTypes:
+          - public.folder
     UTImportedTypeDeclarations:
       - UTTypeIdentifier: net.daringfireball.markdown
         UTTypeDescription: Markdown Document
