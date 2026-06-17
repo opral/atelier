@@ -450,6 +450,18 @@ describe("lists", () => {
 		expect(canonicalAst(output)).toEqual(canonicalAst(input));
 		// Editor roundtrip of task list is exercised in the example app; core mapping equality is asserted here.
 	});
+
+	test("task list markdown preserves checked markers through editor serialization", () => {
+		const markdown = "- [x] done\n- [ ] todo\n";
+
+		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
+	});
+
+	test("mixed plain and formatted task list markdown preserves markers", () => {
+		const markdown = "- plain bullet\n- [ ] unchecked **bold**\n- [x] checked _italic_\n";
+
+		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
+	});
 });
 
 describe("blocks", () => {

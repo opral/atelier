@@ -76,19 +76,30 @@ export const MarkdownWcShortcuts = Extension.create({
 							for (let d = $from.depth; d > 0; d--) {
 								const n = $from.node(d);
 								if (n?.type?.name === "bulletList") {
-									// Delete the typed trigger right before the cursor
-									const len =
-										match && (match as any)[0] ? (match as any)[0].length : 0;
-									if (len > 0) {
-										commands.command(({ state, tr, dispatch }: any) => {
-											const end = state.selection.from;
-											const start = Math.max(0, end - len);
-											if (dispatch) dispatch(tr.delete(start, end));
-											return true;
+									return commands.command(({ state, tr, dispatch }: any) => {
+										const selectionFrom = state.selection.$from;
+										let listItemDepth = -1;
+										for (let depth = selectionFrom.depth; depth > 0; depth--) {
+											const node = selectionFrom.node(depth);
+											if (node?.type?.name === "listItem") {
+												listItemDepth = depth;
+												break;
+											}
+										}
+										if (listItemDepth < 0) return false;
+										const listItemPos = selectionFrom.before(listItemDepth);
+										const listItem = selectionFrom.node(listItemDepth);
+										if (listItem.firstChild !== selectionFrom.parent) {
+											return false;
+										}
+										tr.delete(range.from, range.to);
+										tr.setNodeMarkup(listItemPos, undefined, {
+											...listItem.attrs,
+											checked,
 										});
-									}
-									commands.updateAttributes("listItem", { checked });
-									return null;
+										if (dispatch) dispatch(tr);
+										return true;
+									});
 								}
 							}
 

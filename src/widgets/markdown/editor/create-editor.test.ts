@@ -2,7 +2,7 @@ import { test, expect } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { createEditor } from "./create-editor";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
-import { parseMarkdown } from "./markdown-rust";
+import { parseMarkdown, serializeAst } from "./markdown-rust";
 import { handlePaste } from "./handle-paste";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
@@ -44,6 +44,80 @@ function paragraphTexts(markdown: string): string[] {
 		.split(/\n{2,}/)
 		.map((paragraph) => paragraph.trim())
 		.filter(Boolean);
+}
+
+function buildLongMarkdownRepro(): string {
+	const parts = [
+		"# Complex roundtrip document",
+		"",
+		"Opening paragraph with **bold**, _italic_, `inline code`, and [a link](https://example.com).",
+		"",
+	];
+	for (let i = 1; i <= 36; i += 1) {
+		parts.push(`## Section ${String(i).padStart(2, "0")}`);
+		parts.push("");
+		parts.push(
+			`Paragraph ${i} alpha. This text should remain after edits, including punctuation: commas, semicolons; and parentheses (like this).`,
+		);
+		parts.push("");
+		if (i % 3 === 0) {
+			parts.push(`- Bullet ${i}.1 remains`);
+			parts.push(`- Bullet ${i}.2 remains`);
+			parts.push("");
+		}
+		if (i % 4 === 0) {
+			parts.push(`- [ ] Todo ${i} remains unchecked`);
+			parts.push(`- [x] Done ${i} remains checked`);
+			parts.push("");
+		}
+		if (i % 5 === 0) {
+			parts.push(`1. Ordered ${i}.1 remains`);
+			parts.push(`2. Ordered ${i}.2 remains`);
+			parts.push("");
+		}
+		if (i % 6 === 0) {
+			parts.push(`> Quote ${i} should remain below edit points.`);
+			parts.push("");
+		}
+		if (i === 18) {
+			parts.push(
+				"TARGET paragraph. Editing inside this line should not delete anything below it.",
+			);
+			parts.push("");
+		}
+	}
+	parts.push("## Tail table");
+	parts.push("");
+	parts.push("| Name | Value |");
+	parts.push("| - | - |");
+	parts.push("| tail-a | survives |");
+	parts.push("| tail-b | survives |");
+	parts.push("");
+	parts.push("```ts");
+	parts.push('export const tail = "survives";');
+	parts.push("```");
+	parts.push("");
+	parts.push("Final paragraph at the very bottom must survive mid-document edits.");
+	return `${parts.join("\n")}\n`;
+}
+
+function positionAfterText(editor: Editor, needle: string): number {
+	let found: number | null = null;
+	editor.state.doc.descendants((node, pos) => {
+		if (found != null) return false;
+		if (!node.isText) return true;
+		const text = node.text ?? "";
+		const index = text.indexOf(needle);
+		if (index >= 0) {
+			found = pos + index + needle.length;
+			return false;
+		}
+		return true;
+	});
+	if (found == null) {
+		throw new Error(`Could not find text in editor: ${needle}`);
+	}
+	return found;
 }
 
 async function createEditorFromFile(args: {
@@ -600,6 +674,47 @@ test("delete removes the middle paragraph from persisted markdown", async () => 
 		(value) => paragraphTexts(value).length === 2,
 	);
 	expect(paragraphTexts(markdown)).toEqual(["Start", "Third"]);
+
+	editor.destroy();
+});
+
+test("editing a long markdown document does not truncate content below the edit point", async () => {
+	const lix = await openLix();
+	const fileId = "long_markdown_mid_edit";
+	const initial = buildLongMarkdownRepro();
+
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/long-markdown-mid-edit.md",
+			data: new TextEncoder().encode(initial),
+		})
+		.execute();
+
+	const editor: Editor = await createEditorFromFile({
+		lix,
+		fileId,
+		persistDebounceMs: 0,
+	});
+
+	editor.commands.setTextSelection(positionAfterText(editor, "TARGET"));
+	editor.commands.insertContent(" EXACT");
+	const expected = serializeAst(parseMarkdown(initial)).replace(
+		"TARGET paragraph.",
+		"TARGET EXACT paragraph.",
+	);
+
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === expected,
+	);
+	expect(markdown).toBe(expected);
+
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	const settledMarkdown = await readMarkdown(lix, fileId);
+	expect(settledMarkdown).toBe(expected);
 
 	editor.destroy();
 });

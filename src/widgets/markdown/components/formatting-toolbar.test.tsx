@@ -2,10 +2,14 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
 import { Editor, type JSONContent } from "@tiptap/core";
-import { MarkdownWc } from "@/widgets/markdown/editor/tiptap-markdown-bridge";
+import {
+	MarkdownWc,
+	astToTiptapDoc,
+} from "@/widgets/markdown/editor/tiptap-markdown-bridge";
 import { FormattingToolbar } from "./formatting-toolbar";
 import { EditorProvider, useEditorCtx } from "../editor/editor-context";
 import { buildMarkdownFromEditor } from "../editor/build-markdown-from-editor";
+import { parseMarkdown } from "../editor/markdown-rust";
 
 type EditorSetup = {
 	editor: Editor;
@@ -52,6 +56,27 @@ function renderToolbar(editor: Editor) {
 	);
 }
 
+function textSelection(editor: Editor, text: string) {
+	let from: number | null = null;
+	let to: number | null = null;
+	editor.state.doc.descendants((node, pos) => {
+		if (from != null) return false;
+		if (!node.isText) return true;
+		const value = node.text ?? "";
+		const index = value.indexOf(text);
+		if (index >= 0) {
+			from = pos + index;
+			to = from + text.length;
+			return false;
+		}
+		return true;
+	});
+	if (from == null || to == null) {
+		throw new Error(`Could not find text selection: ${text}`);
+	}
+	return { from, to };
+}
+
 const paragraphDoc: JSONContent = {
 	type: "doc",
 	content: [
@@ -81,6 +106,10 @@ const bulletListDoc: JSONContent = {
 		},
 	],
 };
+
+const newFileMarkdown =
+	"# Launching\n\n- open source launch (reddit)\n- hello\n\n# Campaigns\n\n- github stars\n";
+const mixedTaskListMarkdown = "- plain bullet\n- [ ] todo\n";
 
 describe("FormattingToolbar", () => {
 	const originalClipboard = navigator.clipboard;
@@ -120,14 +149,16 @@ describe("FormattingToolbar", () => {
 		destroyEditor(setup);
 	});
 
-	test("wraps and unwraps the current block in a bullet list", async () => {
+	test("wraps the current block in a bullet list without unwrapping a collapsed list selection", async () => {
 		const setup = createEditor(paragraphDoc);
 		const utils = renderToolbar(setup.editor);
 
 		const bulletButton = await screen.findByLabelText("Bullet list");
 
 		await act(async () => {
-			setup.editor.commands.selectAll();
+			setup.editor.commands.setTextSelection(
+				textSelection(setup.editor, "Hello world"),
+			);
 			fireEvent.click(bulletButton);
 		});
 
@@ -140,9 +171,52 @@ describe("FormattingToolbar", () => {
 			fireEvent.click(bulletButton);
 		});
 
-		expect(setup.editor.isActive("bulletList")).toBe(false);
+		expect(setup.editor.isActive("bulletList")).toBe(true);
 		doc = setup.editor.getJSON() as any;
+		expect(doc.content?.[0]?.type).toBe("bulletList");
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
+	test("unwraps an explicitly selected bullet-list item", async () => {
+		const setup = createEditor(bulletListDoc);
+		const utils = renderToolbar(setup.editor);
+
+		const bulletButton = await screen.findByLabelText("Bullet list");
+
+		await act(async () => {
+			setup.editor.commands.setTextSelection(textSelection(setup.editor, "First"));
+			fireEvent.click(bulletButton);
+		});
+
+		expect(setup.editor.isActive("bulletList")).toBe(false);
+		const doc = setup.editor.getJSON() as any;
 		expect(doc.content?.[0]?.type).toBe("paragraph");
+		expect(buildMarkdownFromEditor(setup.editor)).toBe("First\n");
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
+	test("keeps the final single-item bullet list serialized after choosing the bullet-list control", async () => {
+		const setup = createEditor(
+			astToTiptapDoc(parseMarkdown(newFileMarkdown)) as JSONContent,
+		);
+		const utils = renderToolbar(setup.editor);
+
+		const bulletButton = await screen.findByLabelText("Bullet list");
+
+		await act(async () => {
+			setup.editor.commands.setTextSelection(setup.editor.state.doc.content.size);
+			fireEvent.click(bulletButton);
+		});
+
+		expect(buildMarkdownFromEditor(setup.editor)).toBe(newFileMarkdown);
 
 		await act(async () => {
 			utils.unmount();
@@ -169,6 +243,8 @@ describe("FormattingToolbar", () => {
 
 		let listItem = (setup.editor.getJSON() as any).content?.[0]?.content?.[0];
 		expect(listItem?.attrs?.checked).toBe(false);
+		expect(bulletButton).toHaveAttribute("aria-pressed", "false");
+		expect(checklistButton).toHaveAttribute("aria-pressed", "true");
 
 		await act(async () => {
 			fireEvent.click(checklistButton);
@@ -176,6 +252,39 @@ describe("FormattingToolbar", () => {
 
 		listItem = (setup.editor.getJSON() as any).content?.[0]?.content?.[0];
 		expect(listItem?.attrs?.checked ?? null).toBeNull();
+		expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+		expect(checklistButton).toHaveAttribute("aria-pressed", "false");
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
+	test("shows plain bullets and checklist items separately in a mixed list", async () => {
+		const setup = createEditor(
+			astToTiptapDoc(parseMarkdown(mixedTaskListMarkdown)) as JSONContent,
+		);
+		const utils = renderToolbar(setup.editor);
+
+		const bulletButton = await screen.findByLabelText("Bullet list");
+		const checklistButton = await screen.findByLabelText("Checklist");
+
+		await act(async () => {
+			setup.editor.commands.setTextSelection(
+				textSelection(setup.editor, "plain bullet"),
+			);
+		});
+
+		expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+		expect(checklistButton).toHaveAttribute("aria-pressed", "false");
+
+		await act(async () => {
+			setup.editor.commands.setTextSelection(textSelection(setup.editor, "todo"));
+		});
+
+		expect(bulletButton).toHaveAttribute("aria-pressed", "false");
+		expect(checklistButton).toHaveAttribute("aria-pressed", "true");
 
 		await act(async () => {
 			utils.unmount();

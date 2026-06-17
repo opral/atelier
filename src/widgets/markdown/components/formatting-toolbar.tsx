@@ -102,14 +102,15 @@ export function FormattingToolbar({ className }: { className?: string }) {
 	useEffect(() => {
 		if (!editor) return;
 		const update = () => {
+			const isTaskList = computeTaskListActive(editor, hasTaskListCommand);
 			setFormatState({
 				block: getActiveBlock(editor),
 				isBold: editor.isActive("bold"),
 				isItalic: editor.isActive("italic"),
 				isCode: editor.isActive("code"),
-				isBulletList: editor.isActive("bulletList"),
+				isBulletList: editor.isActive("bulletList") && !isTaskList,
 				isOrderedList: editor.isActive("orderedList"),
-				isTaskList: computeTaskListActive(editor, hasTaskListCommand),
+				isTaskList,
 			});
 		};
 
@@ -162,6 +163,9 @@ export function FormattingToolbar({ className }: { className?: string }) {
 
 	const handleToggleBulletList = useCallback(() => {
 		if (!editor) return;
+		if (editor.isActive("bulletList") && editor.state.selection.empty) {
+			return;
+		}
 		const chain = editor.chain().focus() as any;
 		let success = editor.isActive("bulletList")
 			? (chain.liftListItem?.("listItem")?.run?.() ?? false)
@@ -177,6 +181,9 @@ export function FormattingToolbar({ className }: { className?: string }) {
 
 	const handleToggleOrderedList = useCallback(() => {
 		if (!editor) return;
+		if (editor.isActive("orderedList") && editor.state.selection.empty) {
+			return;
+		}
 		const chain = editor.chain().focus() as any;
 		let success = editor.isActive("orderedList")
 			? (chain.liftListItem?.("listItem")?.run?.() ?? false)
@@ -472,10 +479,13 @@ function getActiveBlock(editor: Editor): ToolbarBlockType {
 
 function computeTaskListActive(editor: Editor, hasTaskListCommand: boolean) {
 	if (hasTaskListCommand && editor.isActive("taskList")) return true;
+	const itemAttrs = editor.getAttributes("listItem");
+	if (itemAttrs && "checked" in itemAttrs) {
+		return typeof itemAttrs.checked === "boolean";
+	}
 	const listAttrs = editor.getAttributes("bulletList");
 	if (listAttrs?.isTaskList) return true;
-	const itemAttrs = editor.getAttributes("listItem");
-	return typeof itemAttrs?.checked === "boolean";
+	return false;
 }
 
 function toggleTaskListFallback(editor: Editor) {

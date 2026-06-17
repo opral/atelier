@@ -2,11 +2,13 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { Editor } from "@tiptap/core";
 import { MarkdownWc } from "./markdown-wc";
+import { buildMarkdownFromEditor } from "../build-markdown-from-editor";
 
 const __editors: Editor[] = [];
-function createEditor() {
+function createEditor(content?: any) {
 	const ed = new Editor({
 		extensions: MarkdownWc(),
+		content,
 	});
 	__editors.push(ed);
 	return ed;
@@ -72,6 +74,25 @@ function sendKey(editor: Editor, key: string, opts?: { shift?: boolean }) {
 	editor.view.someProp("handleKeyDown", (f: any) => f(editor.view, event));
 }
 
+function setCursorAfterText(editor: Editor, text: string) {
+	let position: number | null = null;
+	editor.state.doc.descendants((node, pos) => {
+		if (position != null) return false;
+		if (!node.isText) return true;
+		const value = node.text ?? "";
+		const index = value.indexOf(text);
+		if (index >= 0) {
+			position = pos + index + text.length;
+			return false;
+		}
+		return true;
+	});
+	if (position == null) {
+		throw new Error(`Could not find text: ${text}`);
+	}
+	editor.commands.setTextSelection(position);
+}
+
 describe("Markdown typing shortcuts (input rules)", () => {
 	test.each([
 		["#", 1],
@@ -128,6 +149,66 @@ describe("Markdown typing shortcuts (input rules)", () => {
 		// Should not retain trigger text
 		const para = li.child(0) as any;
 		expect((para.textContent || "").trim()).toBe("");
+	});
+
+	test.each([
+		["- [] todo", "- [ ] todo\n", false],
+		["- [ ] todo", "- [ ] todo\n", false],
+		["- [x] done", "- [x] done\n", true],
+	])("%s serializes as task-list markdown", (typed, markdown, checked) => {
+		const editor = createEditor();
+		typeText(editor, typed as string);
+		const list = editor.state.doc.child(0) as any;
+		const item = list.child(0) as any;
+
+		expect(list.type.name).toBe("bulletList");
+		expect(item.attrs?.checked).toBe(checked);
+		expect(buildMarkdownFromEditor(editor)).toBe(markdown);
+	});
+
+	test("- [] serializes as a blank unchecked task item", () => {
+		const editor = createEditor();
+		typeText(editor, "- [] ");
+		const list = editor.state.doc.child(0) as any;
+		const item = list.child(0) as any;
+
+		expect(item.attrs?.checked).toBe(false);
+		expect(buildMarkdownFromEditor(editor)).toBe("- [ ] \n");
+	});
+
+	test("[ ] in a continuation paragraph does not convert the whole list item to a task", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "first paragraph" }],
+								},
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "continuation" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+
+		setCursorAfterText(editor, "continuation");
+		typeText(editor, "[ ] ");
+		const item = editor.state.doc.child(0).child(0) as any;
+
+		expect(item.attrs?.checked ?? null).toBeNull();
+		expect(buildMarkdownFromEditor(editor)).toBe(
+			"- first paragraph\n  continuation[ ] \n",
+		);
 	});
 });
 
@@ -191,6 +272,7 @@ describe("Keyboard shortcuts (keymap)", () => {
 		const li2: any = list.child(1);
 		expect(li2.type.name).toBe("listItem");
 		expect(li2.attrs?.checked).toBe(false);
+		expect(buildMarkdownFromEditor(editor)).toBe("- [ ] abc\n- [ ] \n");
 	});
 
 	test("Enter on empty bullet list item exits the list", () => {
