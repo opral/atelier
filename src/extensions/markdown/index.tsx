@@ -2,7 +2,12 @@ import { Suspense, useEffect } from "react";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { ExternalLink, FileText, Github, Loader2 } from "lucide-react";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import {
+	LixProvider,
+	useLix,
+	useQuery,
+	useQueryTakeFirst,
+} from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { EditorProvider } from "@/extensions/markdown/editor/editor-context";
@@ -13,7 +18,7 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { FILE_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
-import type { MarkdownReviewDiff } from "./review-diff";
+import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import {
@@ -37,6 +42,10 @@ type MarkdownViewProps = {
 		readonly fileId: string;
 		readonly reviewId: string;
 	}) => Promise<void>;
+};
+
+type HistoricalMarkdownBlockRow = {
+	readonly snapshot_content: unknown;
 };
 
 /**
@@ -133,14 +142,18 @@ function MarkdownViewContent({
 							focusOnLoad={focusOnLoad}
 						/>
 						{reviewDiff && externalWriteReview ? (
-							<MarkdownReviewOverlay
-								fileId={fileRow.id}
-								reviewDiff={reviewDiff}
-								reviewId={externalWriteReview.reviewId}
-								isActive={isActiveView && isPanelFocused}
-								onAccept={onAcceptReviewDiff}
-								onReject={onRejectReviewDiff}
-							/>
+							<Suspense fallback={<MarkdownReviewOverlayFallback />}>
+								<MarkdownReviewOverlay
+									fileId={fileRow.id}
+									reviewDiff={reviewDiff}
+									reviewId={externalWriteReview.reviewId}
+									beforeCommitId={externalWriteReview.beforeCommitId}
+									afterCommitId={externalWriteReview.afterCommitId}
+									isActive={isActiveView && isPanelFocused}
+									onAccept={onAcceptReviewDiff}
+									onReject={onRejectReviewDiff}
+								/>
+							</Suspense>
 						) : null}
 					</div>
 					{reviewDiff ? null : <SlashCommandMenu />}
@@ -163,6 +176,8 @@ function MarkdownReviewOverlay({
 	fileId,
 	reviewDiff,
 	reviewId,
+	beforeCommitId,
+	afterCommitId,
 	isActive,
 	onAccept,
 	onReject,
@@ -170,6 +185,8 @@ function MarkdownReviewOverlay({
 	readonly fileId: string;
 	readonly reviewDiff: MarkdownReviewDiff;
 	readonly reviewId: string;
+	readonly beforeCommitId?: string;
+	readonly afterCommitId?: string;
 	readonly isActive: boolean;
 	readonly onAccept?: (args: {
 		readonly fileId: string;
@@ -180,9 +197,30 @@ function MarkdownReviewOverlay({
 		readonly reviewId: string;
 	}) => Promise<void>;
 }) {
+	const beforeBlocks = useMarkdownBlocksAtCommit(fileId, beforeCommitId);
+	const afterBlocks = useMarkdownBlocksAtCommit(fileId, afterCommitId);
+	const enrichedReviewDiff = useMemo<MarkdownReviewDiff>(
+		() => {
+			const beforeSnapshotsAvailable =
+				beforeBlocks !== undefined &&
+				(beforeBlocks.length > 0 || reviewDiff.beforeMarkdown.trim().length === 0);
+			const afterSnapshotsAvailable =
+				afterBlocks !== undefined &&
+				(afterBlocks.length > 0 || reviewDiff.afterMarkdown.trim().length === 0);
+			if (!beforeSnapshotsAvailable || !afterSnapshotsAvailable) {
+				return reviewDiff;
+			}
+			return {
+				...reviewDiff,
+				beforeBlocks: beforeBlocks ?? [],
+				afterBlocks: afterBlocks ?? [],
+			};
+		},
+		[afterBlocks, beforeBlocks, reviewDiff],
+	);
 	const diffHtml = useMemo(() => {
-		return renderMarkdownReviewDiffHtml(reviewDiff);
-	}, [reviewDiff]);
+		return renderMarkdownReviewDiffHtml(enrichedReviewDiff);
+	}, [enrichedReviewDiff]);
 	const rejectReview = () => void onReject?.({ fileId, reviewId });
 
 	return (
@@ -202,6 +240,112 @@ function MarkdownReviewOverlay({
 			/>
 		</div>
 	);
+}
+
+function MarkdownReviewOverlayFallback() {
+	return (
+		<div className="markdown-review-overlay">
+			<div className="markdown-review-surface">
+				<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+					<Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+					<span>Loading review…</span>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function useMarkdownBlocksAtCommit(
+	fileId: string,
+	commitId: string | undefined,
+): MarkdownBlockSnapshot[] | undefined {
+	const rows = useQuery<HistoricalMarkdownBlockRow>(
+		(lix) =>
+			commitId
+				? historicalMarkdownBlocksQuery(lix, commitId, fileId)
+				: emptyMarkdownBlocksQuery(),
+		{ subscribe: false },
+	);
+	return useMemo(() => {
+		if (!commitId) return undefined;
+		return rows
+			.map((row) => parseHistoricalMarkdownBlock(row.snapshot_content))
+			.filter((block): block is MarkdownBlockSnapshot => block !== null)
+			.sort(
+				(left, right) =>
+					left.orderKey.localeCompare(right.orderKey) ||
+					left.id.localeCompare(right.id),
+			);
+	}, [commitId, rows]);
+}
+
+function historicalMarkdownBlocksQuery(
+	lix: ReturnType<typeof useLix>,
+	commitId: string,
+	fileId: string,
+) {
+	const sql = `
+		WITH ranked AS (
+			SELECT
+				entity_pk,
+				snapshot_content,
+				depth,
+				ROW_NUMBER() OVER (
+					PARTITION BY entity_pk
+					ORDER BY depth ASC
+				) AS rn
+			FROM lix_state_history
+			WHERE start_commit_id = ?
+				AND file_id = ?
+				AND schema_key = 'markdown_block'
+		)
+		SELECT snapshot_content
+		FROM ranked
+		WHERE rn = 1
+			AND snapshot_content IS NOT NULL
+	`;
+	const parameters = [commitId, fileId] as const;
+	return {
+		compile: () => ({ sql, parameters }),
+		execute: async () => {
+			const result = await lix.execute(sql, parameters);
+			return result.rows.map(
+				(row) => row.toObject() as HistoricalMarkdownBlockRow,
+			);
+		},
+	};
+}
+
+function emptyMarkdownBlocksQuery() {
+	return {
+		compile: () => ({ sql: "SELECT 1 WHERE 0", parameters: [] }),
+		execute: async () => [] as HistoricalMarkdownBlockRow[],
+	};
+}
+
+function parseHistoricalMarkdownBlock(
+	value: unknown,
+): MarkdownBlockSnapshot | null {
+	const snapshot = typeof value === "string" ? safeJsonParse(value) : value;
+	if (!snapshot || typeof snapshot !== "object") return null;
+	const record = snapshot as Record<string, unknown>;
+	const { id, order_key: orderKey, block } = record;
+	if (
+		typeof id !== "string" ||
+		typeof orderKey !== "string" ||
+		typeof block !== "string"
+	) {
+		return null;
+	}
+	return { id, orderKey, block };
+}
+
+function safeJsonParse(value: string): unknown {
+	try {
+		return JSON.parse(value);
+	} catch {
+		return null;
+	}
 }
 
 function UnsupportedFilePlaceholder({

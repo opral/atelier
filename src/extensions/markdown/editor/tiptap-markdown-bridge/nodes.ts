@@ -13,9 +13,14 @@ declare module "@tiptap/core" {
 function diffAttrs(node: any, mode: "words" | "element" = "words"): any {
 	const id = node?.attrs?.data?.id;
 	if (typeof id !== "string" || id.length === 0) return {};
+	const diffMode =
+		node?.attrs?.data?.diffMode === "words" ||
+		node?.attrs?.data?.diffMode === "element"
+			? node.attrs.data.diffMode
+			: mode;
 	return {
 		"data-diff-key": id,
-		"data-diff-mode": mode,
+		"data-diff-mode": diffMode,
 		"data-diff-show-when-removed": "true",
 	};
 }
@@ -119,8 +124,27 @@ export function markdownWcNodes(): Extensions {
 				return { checked: { default: null }, data: { default: null } };
 			},
 			renderHTML({ node }) {
-				// Match serializeToHtml default: plain <li>
-				return ["li", diffAttrs(node, "element"), 0];
+				const isTask =
+					node.attrs.checked === true || node.attrs.checked === false;
+				const attrs = diffAttrs(node, "element");
+				if (!isTask) return ["li", attrs, ["div", 0]];
+				return [
+					"li",
+					{
+						...attrs,
+						"data-task": node.attrs.checked ? "x" : " ",
+					},
+					[
+						"input",
+						{
+							type: "checkbox",
+							checked: node.attrs.checked ? "checked" : undefined,
+							disabled: "true",
+							style: "margin-right: 6px;",
+						},
+					],
+					["div", 0],
+				];
 			},
 			addNodeView() {
 				return ({ node, editor, getPos }) => {

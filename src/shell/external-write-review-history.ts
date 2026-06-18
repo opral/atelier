@@ -7,6 +7,7 @@ import type { ExternalWriteReview } from "@/extension-runtime/external-write-rev
 type FileHistoryRow = {
 	readonly data: unknown;
 	readonly lixcol_depth: number | null;
+	readonly lixcol_observed_commit_id: string | null;
 };
 
 export async function getExternalWriteReview(
@@ -15,22 +16,25 @@ export async function getExternalWriteReview(
 	path: string,
 ): Promise<ExternalWriteReview | null> {
 	const rows = await getHistoryRows(lix, fileId);
-	if (rows.length < 2) return null;
-	const afterData = decodeFileDataToBytes(rows[0]?.data);
-	const beforeData = decodeFileDataToBytes(rows[1]?.data);
+	if (!rows || rows.history.length < 2) return null;
+	const afterData = decodeFileDataToBytes(rows.history[0]?.data);
+	const beforeData = decodeFileDataToBytes(rows.history[1]?.data);
 	return {
 		fileId,
 		path,
 		reviewId: `${fileId}:${hashFileData(beforeData)}:${hashFileData(afterData)}`,
 		afterData,
 		beforeData,
+		afterCommitId:
+			rows.history[0]?.lixcol_observed_commit_id ?? rows.startCommitId,
+		beforeCommitId: rows.history[1]?.lixcol_observed_commit_id ?? undefined,
 		afterDepth:
-			typeof rows[0]?.lixcol_depth === "number"
-				? rows[0].lixcol_depth
+			typeof rows.history[0]?.lixcol_depth === "number"
+				? rows.history[0].lixcol_depth
 				: undefined,
 		beforeDepth:
-			typeof rows[1]?.lixcol_depth === "number"
-				? rows[1].lixcol_depth
+			typeof rows.history[1]?.lixcol_depth === "number"
+				? rows.history[1].lixcol_depth
 				: undefined,
 	};
 }
@@ -38,7 +42,7 @@ export async function getExternalWriteReview(
 async function getHistoryRows(
 	lix: Lix,
 	fileId: string,
-): Promise<FileHistoryRow[]> {
+): Promise<{ startCommitId: string; history: FileHistoryRow[] } | null> {
 	const activeBranchId = await lix.activeBranchId();
 	const branch = await qb(lix)
 		.selectFrom("lix_branch")
@@ -49,15 +53,16 @@ async function getHistoryRows(
 
 	const startCommitId = branch?.commit_id;
 	if (typeof startCommitId !== "string" || startCommitId.length === 0) {
-		return [];
+		return null;
 	}
 
-	return (await qb(lix)
+	const history = (await qb(lix)
 		.selectFrom("lix_file_history")
-		.select(["data", "lixcol_depth"])
+		.select(["data", "lixcol_depth", "lixcol_observed_commit_id"])
 		.where("lixcol_start_commit_id", "=", startCommitId)
 		.where("id", "=", fileId)
 		.orderBy("lixcol_depth", "asc")
 		.limit(2)
 		.execute()) as FileHistoryRow[];
+	return { startCommitId, history };
 }

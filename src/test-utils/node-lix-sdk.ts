@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import type {
+	BundledPluginArchive,
 	ExecuteResult,
 	Lix as SdkLix,
 	OpenLixOptions as SdkOpenLixOptions,
@@ -15,6 +16,7 @@ import type {
 } from "@/lib/lix-types";
 
 export type { Lix, SqlTransaction } from "@/lib/lix-types";
+export type { BundledPluginArchive };
 
 type OpenTestLixOptions = SdkOpenLixOptions & {
 	keyValues?: ReadonlyArray<OpenLixKeyValueEntry>;
@@ -35,6 +37,11 @@ export async function openLix(options: OpenTestLixOptions = {}): Promise<Lix> {
 		await seedKeyValues(lix, keyValues);
 	}
 	return lix;
+}
+
+export async function bundledPluginArchives(): Promise<BundledPluginArchive[]> {
+	const sdk = await loadSdk();
+	return await sdk.bundledPluginArchives();
 }
 
 async function loadSdk(): Promise<SdkModule> {
