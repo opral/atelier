@@ -505,8 +505,8 @@ function showUpdateWindow(initialState) {
 			!window.isDestroyed() && window === BrowserWindow.getFocusedWindow(),
 	);
 	updateWindow = new BrowserWindow({
-		width: 560,
-		height: 260,
+		width: 440,
+		height: 184,
 		resizable: false,
 		minimizable: false,
 		maximizable: false,
@@ -517,7 +517,7 @@ function showUpdateWindow(initialState) {
 		...(process.platform === "darwin"
 			? {
 					titleBarStyle: "hiddenInset",
-					trafficLightPosition: { x: 18, y: 18 },
+					trafficLightPosition: { x: 16, y: 15 },
 				}
 			: {}),
 		...(parentWindow ? { parent: parentWindow } : {}),
@@ -602,33 +602,33 @@ function renderUpdateWindowHtml(initialState) {
 		}
 
 		.titlebar {
-			height: 58px;
+			height: 44px;
 			display: flex;
 			align-items: center;
-			padding-left: 160px;
+			padding-left: 92px;
 			border-bottom: 1px solid rgba(0, 0, 0, 0.32);
-			font-size: 26px;
-			font-weight: 760;
+			font-size: 13px;
+			font-weight: 650;
 			color: rgba(242, 244, 248, 0.72);
 			-webkit-app-region: drag;
 		}
 
 		.content {
 			display: grid;
-			grid-template-columns: 104px 1fr;
-			gap: 28px;
-			padding: 22px 32px 28px 42px;
+			grid-template-columns: 64px 1fr;
+			gap: 18px;
+			padding: 18px 24px 22px 28px;
 			align-items: center;
 		}
 
 		.icon {
-			width: 104px;
-			height: 104px;
-			border-radius: 24px;
+			width: 64px;
+			height: 64px;
+			border-radius: 14px;
 			background: linear-gradient(180deg, #ffffff, #eef1f5);
 			display: grid;
 			place-items: center;
-			box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+			box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
 			overflow: hidden;
 		}
 
@@ -640,7 +640,7 @@ function renderUpdateWindowHtml(initialState) {
 		}
 
 		.fallback-icon {
-			font-size: 48px;
+			font-size: 30px;
 			font-weight: 900;
 			color: #f06f2a;
 		}
@@ -650,10 +650,10 @@ function renderUpdateWindowHtml(initialState) {
 		}
 
 		.heading {
-			margin: 0 0 24px;
-			font-size: 26px;
-			line-height: 1.05;
-			font-weight: 800;
+			margin: 0 0 14px;
+			font-size: 16px;
+			line-height: 1.2;
+			font-weight: 700;
 			letter-spacing: 0;
 			color: #f4f5f7;
 		}
@@ -661,7 +661,7 @@ function renderUpdateWindowHtml(initialState) {
 		.progress {
 			position: relative;
 			width: 100%;
-			height: 16px;
+			height: 8px;
 			border-radius: 999px;
 			background: rgba(255, 255, 255, 0.12);
 			overflow: hidden;
@@ -681,22 +681,22 @@ function renderUpdateWindowHtml(initialState) {
 		}
 
 		.detail {
-			margin-top: 38px;
-			font-size: 25px;
-			line-height: 1.15;
-			font-weight: 700;
+			margin-top: 14px;
+			font-size: 13px;
+			line-height: 1.35;
+			font-weight: 500;
 			color: rgba(242, 244, 248, 0.86);
 		}
 
 		.action {
 			display: none;
-			margin-top: 20px;
+			margin-top: 12px;
 			border: 0;
 			border-radius: 7px;
-			padding: 7px 16px;
+			padding: 6px 12px;
 			background: #1287ff;
 			color: white;
-			font-size: 13px;
+			font-size: 12px;
 			font-weight: 700;
 		}
 
