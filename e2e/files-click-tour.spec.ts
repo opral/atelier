@@ -11,6 +11,8 @@ import {
 } from "./electron-test-utils";
 
 const clickCount = 100;
+const deleteShortcut =
+	process.platform === "darwin" ? "Meta+Backspace" : "Control+Backspace";
 
 test("left files panel survives a seeded random file click tour", async ({
 	browserName: _browserName,
@@ -70,6 +72,44 @@ test("left files panel survives a seeded random file click tour", async ({
 				await page.waitForTimeout(delayMs);
 			});
 		}
+	} finally {
+		await closeElectronApp(electronApp);
+	}
+});
+
+test("deleting the active file closes the central file view", async ({
+	browserName: _browserName,
+}, testInfo) => {
+	const workspaceDir = testInfo.outputPath("workspace-delete-active-file");
+
+	let electronApp: ElectronApplication | undefined;
+	try {
+		await writeStarterFiles(workspaceDir);
+		electronApp = await launchDevElectronApp(workspaceDir);
+
+		const page = await electronApp.firstWindow();
+		registerRendererConsoleLogging(page);
+
+		await expect(page.getByTestId("central-panel-empty-state")).toBeVisible();
+		await expectInstalledPluginArchives(workspaceDir);
+		await ensureFilesViewOpenInLeftPanel(page);
+
+		const file = page.getByTestId("file-tree-item-welcome-md");
+		await expect(file).toBeVisible();
+		await file.click();
+		await expect(file).toHaveAttribute("data-selected", "true");
+		await expect(
+			page.locator('[data-active="true"][data-view-key="flashtype_file"]'),
+		).toBeVisible();
+
+		await file.click();
+		await page.keyboard.press(deleteShortcut);
+
+		await expect(file).toHaveCount(0);
+		await expect(
+			page.locator('[data-active="true"][data-view-key="flashtype_file"]'),
+		).toHaveCount(0);
+		await expect(page.getByTestId("central-panel-empty-state")).toBeVisible();
 	} finally {
 		await closeElectronApp(electronApp);
 	}

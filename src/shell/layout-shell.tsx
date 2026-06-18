@@ -1063,6 +1063,38 @@ function LayoutShellContent({
 		[setPanelState],
 	);
 
+	const handleCloseFileViews = useCallback(
+		({ panel, fileId }: { panel?: PanelSide; fileId: string }) => {
+			const targetPanels: PanelSide[] = panel
+				? [panel]
+				: (["central", "left", "right"] as PanelSide[]);
+			const matchesFileView = (entry: ExtensionInstance) => {
+				if (entry.state?.fileId !== fileId) return false;
+				if (typeof entry.state.filePath !== "string") return false;
+				return (
+					entry.instance === fileExtensionInstanceForKind(entry.kind, fileId)
+				);
+			};
+			for (const side of targetPanels) {
+				setPanelState(side, (current) => {
+					const views = current.views.filter(
+						(entry) => !matchesFileView(entry),
+					);
+					if (views.length === current.views.length) {
+						return current;
+					}
+					const activeInstance = views.some(
+						(entry) => entry.instance === current.activeInstance,
+					)
+						? current.activeInstance
+						: (views[views.length - 1]?.instance ?? null);
+					return { views, activeInstance };
+				});
+			}
+		},
+		[setPanelState],
+	);
+
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
 			// Multi-instance kinds (agent terminals) get a fresh instance per
@@ -1452,6 +1484,7 @@ function LayoutShellContent({
 			openExtension: handleOpenView,
 			openFile: handleOpenFile,
 			closeExtension: handleCloseView,
+			closeFileViews: handleCloseFileViews,
 			setTabBadgeCount: () => {},
 			moveExtensionToPanel: handleMoveViewToPanel,
 			resizePanel: handleResizePanel,
@@ -1464,6 +1497,7 @@ function LayoutShellContent({
 			handleOpenView,
 			handleOpenFile,
 			handleCloseView,
+			handleCloseFileViews,
 			handleMoveViewToPanel,
 			handleResizePanel,
 			handleAcceptExternalWriteReview,

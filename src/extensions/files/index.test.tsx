@@ -109,6 +109,7 @@ describe("FilesView", () => {
 
 	test("Cmd+Backspace deletes the selected file", async () => {
 		const lix = await openLix();
+		const closeFileViews = vi.fn();
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
@@ -123,7 +124,7 @@ describe("FilesView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<FilesView />
+						<FilesView context={createViewContext(lix, { closeFileViews })} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -152,6 +153,61 @@ describe("FilesView", () => {
 		await waitFor(() => {
 			expect(utils!.queryByText("hello.md")).toBeNull();
 		});
+		expect(closeFileViews).toHaveBeenCalledWith({ fileId: "file_1" });
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("Cmd+Backspace closes a newly created selected file view", async () => {
+		const lix = await openLix();
+		const openFile = vi.fn();
+		const closeFileViews = vi.fn();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView
+							context={createViewContext(lix, { closeFileViews, openFile })}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		await act(async () => {
+			fireEvent.keyDown(document, { key: ".", metaKey: true });
+		});
+		const input = (await utils!.findByTestId(
+			"files-view-draft-input",
+		)) as HTMLInputElement;
+		await act(async () => {
+			fireEvent.change(input, { target: { value: "fresh" } });
+		});
+		await act(async () => {
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+
+		await waitFor(() => {
+			expect(openFile).toHaveBeenCalled();
+		});
+		const createdFileId = openFile.mock.calls[0]?.[0]?.fileId;
+		expect(typeof createdFileId).toBe("string");
+
+		await act(async () => {
+			fireEvent.keyDown(document, { key: "Backspace", metaKey: true });
+		});
+
+		await waitFor(async () => {
+			const rows = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["path"])
+				.execute();
+			expect(rows.filter((row) => isUserPath(row.path))).toHaveLength(0);
+		});
+		expect(closeFileViews).toHaveBeenCalledWith({ fileId: createdFileId });
 
 		utils!.unmount();
 		await lix.close();

@@ -8,11 +8,18 @@ export async function upsertMarkdownFile(args: {
 	markdown: string;
 	path?: string;
 	metadata?: any;
+	createIfMissing?: boolean;
 }): Promise<void> {
-	const { lix, fileId, markdown, path, metadata } = args;
+	const {
+		lix,
+		fileId,
+		markdown,
+		path,
+		metadata,
+		createIfMissing = true,
+	} = args;
 	const data = new TextEncoder().encode(markdown);
 	const db = qb(lix);
-	markFlashtypeMarkdownWrite(fileId, markdown);
 
 	const existing = await db
 		.selectFrom("lix_file")
@@ -21,6 +28,7 @@ export async function upsertMarkdownFile(args: {
 		.executeTakeFirst();
 
 	if (existing) {
+		markFlashtypeMarkdownWrite(fileId, markdown);
 		const resolvedPath = path ?? existing.path ?? `/${fileId}.md`;
 		const resolvedMetadata = metadata ?? existing.lixcol_metadata ?? null;
 		await db
@@ -33,6 +41,8 @@ export async function upsertMarkdownFile(args: {
 			.where("id", "=", fileId)
 			.execute();
 	} else {
+		if (!createIfMissing) return;
+		markFlashtypeMarkdownWrite(fileId, markdown);
 		// Insert requires a path; use provided or fallback to /<fileId>.md
 		await db
 			.insertInto("lix_file")

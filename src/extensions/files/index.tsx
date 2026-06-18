@@ -41,6 +41,7 @@ export function FilesView({ context }: FilesViewProps) {
 	);
 	const [draft, setDraft] = useState<DraftState>(null);
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
+	const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 	const [selectedKind, setSelectedKind] = useState<"file" | "directory" | null>(
 		null,
 	);
@@ -74,7 +75,6 @@ export function FilesView({ context }: FilesViewProps) {
 		}
 		return combined;
 	}, [entryDirectorySet, pendingDirectoryPaths]);
-
 	useEffect(() => {
 		if (pendingPaths.length === 0) return;
 		setPendingPaths((prev) => prev.filter((path) => !entryPathSet.has(path)));
@@ -110,6 +110,7 @@ export function FilesView({ context }: FilesViewProps) {
 		setDraft((prev) => {
 			if (prev) return prev;
 			setSelectedPath(null);
+			setSelectedFileId(null);
 			setSelectedKind(null);
 			return {
 				kind: "file",
@@ -153,6 +154,7 @@ export function FilesView({ context }: FilesViewProps) {
 				}
 				setPendingPaths((prev) => [...prev, path]);
 				setSelectedPath(path);
+				setSelectedFileId(id);
 				setSelectedKind("file");
 				context?.openFile?.({
 					panel: "central",
@@ -205,6 +207,7 @@ export function FilesView({ context }: FilesViewProps) {
 	const handleOpenFile = useCallback(
 		async (fileId: string, path: string) => {
 			setSelectedPath(path);
+			setSelectedFileId(fileId);
 			setSelectedKind("file");
 			context?.openFile?.({
 				panel: "central",
@@ -219,6 +222,9 @@ export function FilesView({ context }: FilesViewProps) {
 	const handleSelectItem = useCallback(
 		(path: string, kind: "file" | "directory") => {
 			setSelectedPath(path);
+			if (kind === "directory") {
+				setSelectedFileId(null);
+			}
 			setSelectedKind(kind);
 		},
 		[],
@@ -239,6 +245,9 @@ export function FilesView({ context }: FilesViewProps) {
 				setPendingPaths((prev) =>
 					prev.filter((path) => path !== normalizedPath),
 				);
+				if (selectedFileId) {
+					context?.closeFileViews?.({ fileId: selectedFileId });
+				}
 			} else {
 				await qb(lix)
 					.deleteFrom("lix_directory")
@@ -252,9 +261,10 @@ export function FilesView({ context }: FilesViewProps) {
 			console.error("Failed to delete entry", error);
 		} finally {
 			setSelectedPath(null);
+			setSelectedFileId(null);
 			setSelectedKind(null);
 		}
-	}, [lix, selectedKind, selectedPath]);
+	}, [context, lix, selectedFileId, selectedKind, selectedPath]);
 
 	useEffect(() => {
 		const listener = (event: KeyboardEvent) => {

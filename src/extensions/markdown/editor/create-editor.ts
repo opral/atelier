@@ -84,11 +84,45 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	let persistStateTimer: any = null;
 	let persistRunning = false;
 	let persistQueued = false;
+	let persistPromise: Promise<void> | null = null;
+	let destroyed = false;
+	let editorInstance: Editor | null = null;
 	let currentEditor: Editor | null = null;
 	let lastPersistedMarkdown = normalizePersistedMarkdown(
 		initialMarkdown ?? serializeAst(ast as any),
 	);
 	const persistDebounceMsResolved = persistDebounceMs ?? 0;
+	const persistOnce = async (editor: Editor) => {
+		const markdown = normalizePersistedMarkdown(markdownFromEditorAst(editor));
+		if (markdown === lastPersistedMarkdown) return;
+		await upsertMarkdownFile({
+			lix,
+			fileId: fileId!,
+			markdown,
+			createIfMissing: false,
+		});
+		lastPersistedMarkdown = markdown;
+	};
+	const runPersist = (editor: Editor): Promise<void> => {
+		if (!fileId || !persistState) return Promise.resolve();
+		if (persistRunning) {
+			persistQueued = true;
+			return persistPromise ?? Promise.resolve();
+		}
+		persistRunning = true;
+		persistPromise = (async () => {
+			try {
+				do {
+					persistQueued = false;
+					await persistOnce(editor);
+				} while (persistQueued && !destroyed);
+			} finally {
+				persistRunning = false;
+				persistPromise = null;
+			}
+		})();
+		return persistPromise;
+	};
 
 	const placeholderConfig: any = {
 		placeholder: ({ node }: { node: any }) =>
@@ -105,7 +139,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 
 	const markdownExtensions = MarkdownWc({}) as any[];
 
-	return new Editor({
+	editorInstance = new Editor({
 		extensions: [
 			...markdownExtensions,
 			History.configure({
@@ -128,45 +162,43 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			onCreate?.({ editor });
 		},
 		onUpdate: ({ editor }) => {
+			if (destroyed) return;
 			if (onUpdate?.({ editor }) === false) return;
 			if (!fileId || !persistState) return;
 			const scheduleRun = () => {
+				if (destroyed) return;
 				if (persistDebounceMsResolved <= 0) {
-					void run();
+					void runPersist(editor);
 					return;
 				}
 				if (persistStateTimer) clearTimeout(persistStateTimer);
 				persistStateTimer = setTimeout(() => {
 					persistStateTimer = null;
-					void run();
+					if (destroyed) return;
+					void runPersist(editor);
 				}, persistDebounceMsResolved);
 			};
-			const run = async () => {
+			scheduleRun();
+		},
+		onDestroy: () => {
+			persistQueued = false;
+			if (persistStateTimer) {
+				clearTimeout(persistStateTimer);
+				persistStateTimer = null;
+			}
+			const editorToPersist = currentEditor ?? editorInstance;
+			if (editorToPersist && fileId && persistState) {
 				if (persistRunning) {
 					persistQueued = true;
-					return;
 				}
-				persistRunning = true;
-				try {
-					const markdown = normalizePersistedMarkdown(
-						markdownFromEditorAst(editor),
-					);
-					if (markdown === lastPersistedMarkdown) return;
-					await upsertMarkdownFile({
-						lix,
-						fileId,
-						markdown,
-					});
-					lastPersistedMarkdown = markdown;
-				} finally {
-					persistRunning = false;
-					if (persistQueued) {
-						persistQueued = false;
-						scheduleRun();
-					}
-				}
-			};
-			scheduleRun();
+				void runPersist(editorToPersist).finally(() => {
+					destroyed = true;
+					currentEditor = null;
+				});
+			} else {
+				destroyed = true;
+				currentEditor = null;
+			}
 		},
 		editorProps: {
 			handlePaste: async (_view: any, event: ClipboardEvent) => {
@@ -179,6 +211,8 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			...editorProps,
 		},
 	});
+	currentEditor = editorInstance;
+	return editorInstance;
 }
 
 // React useEditor config builder. TipTapEditor should use this to keep a single source.

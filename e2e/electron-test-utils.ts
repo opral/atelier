@@ -5,7 +5,8 @@ import path from "node:path";
 
 export const repoRoot = path.resolve(import.meta.dirname, "..");
 
-const rendererUrl = "http://127.0.0.1:4173";
+const rendererPort = process.env.FLASHTYPE_E2E_RENDERER_PORT ?? "4173";
+const rendererUrl = `http://127.0.0.1:${rendererPort}`;
 const electronCloseTimeoutMs = 5_000;
 
 export async function launchDevElectronApp(

@@ -137,6 +137,10 @@ export interface ExtensionContext {
 		readonly instance?: string;
 		readonly kind?: ExtensionKind;
 	}) => void;
+	readonly closeFileViews?: (args: {
+		readonly panel?: PanelSide;
+		readonly fileId: string;
+	}) => void;
 	readonly isPanelFocused?: boolean;
 	readonly setTabBadgeCount: (count: number | null | undefined) => void;
 	readonly moveExtensionToPanel?: (

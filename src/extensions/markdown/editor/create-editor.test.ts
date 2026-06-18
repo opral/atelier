@@ -680,6 +680,74 @@ test("delete removes the middle paragraph from persisted markdown", async () => 
 	editor.destroy();
 });
 
+test("destroy flushes pending autosave for an existing file", async () => {
+	const lix = await openLix();
+	const fileId = "destroy_flush_pending_autosave";
+
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/destroy-flush-pending-autosave.md",
+			data: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	const editor: Editor = await createEditorFromFile({
+		lix,
+		fileId,
+		persistDebounceMs: 50,
+	});
+
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	editor.commands.insertContent(" Changed");
+	editor.destroy();
+
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === ensureTrailingNewline("Start Changed"),
+	);
+	expect(markdown).toBe(ensureTrailingNewline("Start Changed"));
+
+	await lix.close();
+});
+
+test("destroy flushes pending autosave without recreating a deleted file", async () => {
+	const lix = await openLix();
+	const fileId = "destroy_cancel_pending_autosave";
+
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/destroy-cancel-pending-autosave.md",
+			data: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	const editor: Editor = await createEditorFromFile({
+		lix,
+		fileId,
+		persistDebounceMs: 50,
+	});
+
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	editor.commands.insertContent(" Changed");
+	await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+	editor.destroy();
+
+	await new Promise((resolve) => setTimeout(resolve, 80));
+	const row = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["id", "path"])
+		.where("id", "=", fileId)
+		.executeTakeFirst();
+	expect(row).toBeUndefined();
+
+	await lix.close();
+});
+
 test("editing a long markdown document does not truncate content below the edit point", async () => {
 	const lix = await openLix();
 	const fileId = "long_markdown_mid_edit";
