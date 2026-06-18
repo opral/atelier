@@ -44,7 +44,7 @@ const iconButtonClass =
 
 /** Pressed state for a formatting toggle. */
 const iconButtonActiveClass =
-	"bg-focus-tint text-neutral-900 shadow-[inset_0_0_0_1px_var(--color-focus-ring)] [&_svg]:text-brand-700";
+	"bg-secondary-tint text-neutral-900 shadow-[inset_0_0_0_1px_var(--color-secondary-ring)] [&_svg]:text-secondary-icon";
 
 const ToolbarSeparator = () => (
 	<Toolbar.Separator className="mx-1.5 h-3.5 w-px bg-island-divider" />
@@ -243,7 +243,7 @@ export function FormattingToolbar({ className }: { className?: string }) {
 						className={clsx(
 							"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-neutral-700 transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-hover-soft hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
 							blockMenuOpen &&
-								"bg-focus-tint text-neutral-900 shadow-[inset_0_0_0_1px_var(--color-focus-ring)]",
+								"bg-secondary-tint text-neutral-900 shadow-[inset_0_0_0_1px_var(--color-secondary-ring)]",
 						)}
 						onMouseDown={suppressMouseDown}
 					>
