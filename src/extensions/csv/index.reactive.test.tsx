@@ -8,6 +8,7 @@ import { CsvView } from "./index";
 
 test("updates when CSV file data changes in Lix", async () => {
 	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
 	try {
 		const fileId = "file_csv_reactive";
 
@@ -20,7 +21,6 @@ test("updates when CSV file data changes in Lix", async () => {
 			})
 			.execute();
 
-		let utils: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
@@ -46,11 +46,12 @@ test("updates when CSV file data changes in Lix", async () => {
 		await waitFor(() => {
 			expect(screen.getByText("person")).toBeInTheDocument();
 		});
-
-		await act(async () => {
-			utils?.unmount();
-		});
 	} finally {
+		if (utils) {
+			await act(async () => {
+				utils.unmount();
+			});
+		}
 		await lix.close();
 	}
 });

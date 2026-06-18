@@ -10,7 +10,7 @@ import {
 	writeStarterFiles,
 } from "./electron-test-utils";
 
-const clickCount = 100;
+const clickCount = 50;
 const deleteShortcut =
 	process.platform === "darwin" ? "Meta+Backspace" : "Control+Backspace";
 

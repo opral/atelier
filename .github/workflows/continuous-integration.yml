@@ -42,9 +42,21 @@ jobs:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
 
-      - name: Install Rust wasm tools
+      - name: Install Rust wasm target
         run: |
           rustup target add wasm32-unknown-unknown
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ github.job }}-${{ matrix.os }}
+          workspaces: |
+            submodule/lix -> ../../target
+            submodule/markdown-wc/js -> target
+          cache-on-failure: true
+
+      - name: Install Rust wasm tools
+        run: |
           cargo install wasm-bindgen-cli --version 0.2.108 --locked
 
       - name: Install dependencies
@@ -85,7 +97,7 @@ jobs:
           node-version: 22
           cache: "pnpm"
 
-      - name: Install Rust wasm tools
+      - name: Install Rust wasm target
         run: |
           if ! command -v rustup >/dev/null 2>&1; then
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
@@ -93,6 +105,18 @@ jobs:
             export PATH="$HOME/.cargo/bin:$PATH"
           fi
           rustup target add wasm32-unknown-unknown
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ github.job }}
+          workspaces: |
+            submodule/lix -> ../../target
+            submodule/markdown-wc/js -> target
+          cache-on-failure: true
+
+      - name: Install Rust wasm tools
+        run: |
           cargo install wasm-bindgen-cli@0.2.108 cargo-bash resvg@0.47.0 --locked
 
       - name: Install dependencies
