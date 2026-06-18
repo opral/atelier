@@ -81,12 +81,14 @@ export async function setWorkspaceFromPath(
 		if (state.workspace?.path === nextWorkspace.path) {
 			state.pendingOpenFilePath = target.pendingOpenFilePath;
 			applyWindowChrome(window);
+			await options.afterChange?.(state.workspace, window);
 			return state.workspace;
 		}
 		await options.beforeChange?.(nextWorkspace, window);
 		state.workspace = nextWorkspace;
 		state.pendingOpenFilePath = target.pendingOpenFilePath;
 		applyWindowChrome(window);
+		await options.afterChange?.(state.workspace, window);
 		return state.workspace;
 	});
 }

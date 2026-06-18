@@ -85,6 +85,177 @@ test("opening a folder from an existing workspace creates a new window", async (
 	}
 });
 
+test("relaunch reopens saved directory and ephemeral file workspaces", async ({
+	browserName: _browserName,
+}, testInfo) => {
+	const userDataDir = testInfo.outputPath("user-data");
+	const workspaceDir = testInfo.outputPath("directory-workspace");
+	const standaloneFileDir = testInfo.outputPath("standalone-files");
+	const standaloneFilePath = path.join(standaloneFileDir, "solo.md");
+
+	let electronApp: ElectronApplication | undefined;
+	try {
+		await writeMarkerFile(workspaceDir, "directory-marker.md");
+		await mkdir(standaloneFileDir, { recursive: true });
+		await writeFile(standaloneFilePath, "# Solo\n");
+
+		electronApp = await launchDevElectronAppWithArgs(
+			[workspaceDir, standaloneFilePath],
+			{ userDataDir },
+		);
+		await pageWithTitle(electronApp, path.basename(workspaceDir));
+		await pageWithTitle(electronApp, "solo.md");
+		await expectWindowCount(electronApp, 2);
+
+		await closeElectronApp(electronApp);
+		electronApp = undefined;
+
+		electronApp = await launchDevElectronAppWithArgs([], { userDataDir });
+		const directoryPage = await pageWithTitle(
+			electronApp,
+			path.basename(workspaceDir),
+		);
+		const filePage = await pageWithTitle(electronApp, "solo.md");
+		registerRendererConsoleLogging(directoryPage);
+		registerRendererConsoleLogging(filePage);
+
+		await expectWindowCount(electronApp, 2);
+		await expect(directoryPage.getByText("directory-marker.md")).toBeVisible();
+		await expect(filePage.getByRole("heading", { name: "Solo" })).toBeVisible();
+	} finally {
+		await closeElectronApp(electronApp);
+	}
+});
+
+test("relaunch restores saved workspaces with explicit paths deduped last", async ({
+	browserName: _browserName,
+}, testInfo) => {
+	const userDataDir = testInfo.outputPath("user-data");
+	const firstWorkspaceDir = testInfo.outputPath("first-workspace");
+	const secondWorkspaceDir = testInfo.outputPath("second-workspace");
+	const standaloneFileDir = testInfo.outputPath("standalone-files");
+	const standaloneFilePath = path.join(standaloneFileDir, "solo.md");
+
+	let electronApp: ElectronApplication | undefined;
+	try {
+		await writeMarkerFile(firstWorkspaceDir, "first-marker.md");
+		await writeMarkerFile(secondWorkspaceDir, "second-marker.md");
+		await mkdir(standaloneFileDir, { recursive: true });
+		await writeFile(standaloneFilePath, "# Solo\n");
+
+		electronApp = await launchDevElectronAppWithArgs(
+			[firstWorkspaceDir, standaloneFilePath],
+			{ userDataDir },
+		);
+		await pageWithTitle(electronApp, path.basename(firstWorkspaceDir));
+		await pageWithTitle(electronApp, "solo.md");
+		await expectWindowCount(electronApp, 2);
+
+		await closeElectronApp(electronApp);
+		electronApp = undefined;
+
+		electronApp = await launchDevElectronAppWithArgs(
+			[firstWorkspaceDir, secondWorkspaceDir],
+			{ userDataDir },
+		);
+		const firstPage = await pageWithTitle(
+			electronApp,
+			path.basename(firstWorkspaceDir),
+		);
+		const secondPage = await pageWithTitle(
+			electronApp,
+			path.basename(secondWorkspaceDir),
+		);
+		const filePage = await pageWithTitle(electronApp, "solo.md");
+		registerRendererConsoleLogging(firstPage);
+		registerRendererConsoleLogging(secondPage);
+		registerRendererConsoleLogging(filePage);
+
+		await expectWindowCount(electronApp, 3);
+		await expectTitleCount(electronApp, path.basename(firstWorkspaceDir), 1);
+		await expectTitleCount(electronApp, path.basename(secondWorkspaceDir), 1);
+		await expectTitleCount(electronApp, "solo.md", 1);
+		await expect(firstPage.getByText("first-marker.md")).toBeVisible();
+		await expect(secondPage.getByText("second-marker.md")).toBeVisible();
+		await expect(filePage.getByRole("heading", { name: "Solo" })).toBeVisible();
+	} finally {
+		await closeElectronApp(electronApp);
+	}
+});
+
+test("closed workspace windows are removed from the relaunch session", async ({
+	browserName: _browserName,
+}, testInfo) => {
+	const userDataDir = testInfo.outputPath("user-data");
+	const firstWorkspaceDir = testInfo.outputPath("first-workspace");
+	const secondWorkspaceDir = testInfo.outputPath("second-workspace");
+
+	let electronApp: ElectronApplication | undefined;
+	try {
+		await writeMarkerFile(firstWorkspaceDir, "first-marker.md");
+		await writeMarkerFile(secondWorkspaceDir, "second-marker.md");
+
+		electronApp = await launchDevElectronAppWithArgs(
+			[firstWorkspaceDir, secondWorkspaceDir],
+			{ userDataDir },
+		);
+		const firstPage = await pageWithTitle(
+			electronApp,
+			path.basename(firstWorkspaceDir),
+		);
+		const secondPage = await pageWithTitle(
+			electronApp,
+			path.basename(secondWorkspaceDir),
+		);
+		registerRendererConsoleLogging(firstPage);
+		registerRendererConsoleLogging(secondPage);
+		await expectWindowCount(electronApp, 2);
+
+		await secondPage.close();
+		await expectWindowCount(electronApp, 1);
+		await expectWorkspaceSessionPaths(userDataDir, [firstWorkspaceDir]);
+
+		await closeElectronApp(electronApp);
+		electronApp = undefined;
+
+		electronApp = await launchDevElectronAppWithArgs([], { userDataDir });
+		const restoredPage = await pageWithTitle(
+			electronApp,
+			path.basename(firstWorkspaceDir),
+		);
+		registerRendererConsoleLogging(restoredPage);
+
+		await expectWindowCount(electronApp, 1);
+		await expectTitleCount(electronApp, path.basename(secondWorkspaceDir), 0);
+		await expect(restoredPage.getByText("first-marker.md")).toBeVisible();
+	} finally {
+		await closeElectronApp(electronApp);
+	}
+});
+
+test("stale saved workspace paths are skipped on relaunch", async ({
+	browserName: _browserName,
+}, testInfo) => {
+	const userDataDir = testInfo.outputPath("user-data");
+	const staleWorkspacePath = testInfo.outputPath("missing-workspace");
+
+	let electronApp: ElectronApplication | undefined;
+	try {
+		await writeWorkspaceSession(userDataDir, [staleWorkspacePath]);
+
+		electronApp = await launchDevElectronAppWithArgs([], { userDataDir });
+		const page = await electronApp.firstWindow();
+		registerRendererConsoleLogging(page);
+
+		await expectWindowCount(electronApp, 1);
+		await expect(page).toHaveTitle("Flashtype");
+		await expect(page.getByText("Open a folder")).toBeVisible();
+		await expectWorkspaceSessionPaths(userDataDir, []);
+	} finally {
+		await closeElectronApp(electronApp);
+	}
+});
+
 test("opening a folder from first run reuses the empty window", async ({
 	browserName: _browserName,
 }, testInfo) => {
@@ -274,6 +445,20 @@ async function expectWindowCount(
 		.toBe(count);
 }
 
+async function expectTitleCount(
+	electronApp: ElectronApplication,
+	title: string,
+	count: number,
+): Promise<void> {
+	await expect
+		.poll(async () => {
+			const pages = await electronApp.windows();
+			const titles = await Promise.all(pages.map((page) => page.title()));
+			return titles.filter((candidate) => candidate === title).length;
+		})
+		.toBe(count);
+}
+
 async function expectPathMissing(filePath: string): Promise<void> {
 	try {
 		await stat(filePath);
@@ -281,4 +466,45 @@ async function expectPathMissing(filePath: string): Promise<void> {
 	} catch (error) {
 		expect(error).toMatchObject({ code: "ENOENT" });
 	}
+}
+
+async function writeWorkspaceSession(
+	userDataDir: string,
+	workspacePaths: string[],
+): Promise<void> {
+	await mkdir(userDataDir, { recursive: true });
+	await writeFile(
+		workspaceSessionPath(userDataDir),
+		`${JSON.stringify(
+			{
+				version: 1,
+				workspacePaths,
+			},
+			null,
+			2,
+		)}\n`,
+		"utf8",
+	);
+}
+
+async function expectWorkspaceSessionPaths(
+	userDataDir: string,
+	workspacePaths: string[],
+): Promise<void> {
+	await expect
+		.poll(async () => {
+			try {
+				const store = JSON.parse(
+					await readFile(workspaceSessionPath(userDataDir), "utf8"),
+				);
+				return store.workspacePaths;
+			} catch {
+				return null;
+			}
+		})
+		.toEqual(workspacePaths);
+}
+
+function workspaceSessionPath(userDataDir: string): string {
+	return path.join(userDataDir, "workspace-session.json");
 }

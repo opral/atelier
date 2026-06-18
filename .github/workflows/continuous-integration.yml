@@ -56,7 +56,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
 
       - name: Run Electron e2e tests
-        run: xvfb-run --auto-servernum pnpm run test:e2e
+        run: xvfb-run --auto-servernum pnpm run test:e2e:headed
 
       - name: Upload Electron e2e diagnostics
         if: failure()

@@ -1,6 +1,8 @@
 import { expect, type Page } from "@playwright/test";
 import { _electron as electron, type ElectronApplication } from "playwright";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 export const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -8,21 +10,36 @@ export const repoRoot = path.resolve(import.meta.dirname, "..");
 const rendererPort = process.env.FLASHTYPE_E2E_RENDERER_PORT ?? "4173";
 const rendererUrl = `http://127.0.0.1:${rendererPort}`;
 const electronCloseTimeoutMs = 5_000;
+export const devElectronHeadless = process.env.FLASHTYPE_HEADLESS ?? "1";
 
 export async function launchDevElectronApp(
 	workspaceDir: string,
+	options: LaunchDevElectronAppOptions = {},
 ): Promise<ElectronApplication> {
-	return await launchDevElectronAppWithArgs([workspaceDir]);
+	return await launchDevElectronAppWithArgs([workspaceDir], options);
 }
+
+type LaunchDevElectronAppOptions = {
+	userDataDir?: string;
+};
 
 export async function launchDevElectronAppWithArgs(
 	workspaceDirs: string[],
+	options: LaunchDevElectronAppOptions = {},
 ): Promise<ElectronApplication> {
+	const userDataDir =
+		options.userDataDir ??
+		path.join(tmpdir(), "flashtype-e2e-user-data", randomUUID());
 	return await electron.launch({
 		cwd: repoRoot,
-		args: ["./electron/main.mjs", ...workspaceDirs],
+		args: [
+			`--user-data-dir=${userDataDir}`,
+			"./electron/main.mjs",
+			...workspaceDirs,
+		],
 		env: {
 			...process.env,
+			FLASHTYPE_HEADLESS: devElectronHeadless,
 			VITE_DEV_SERVER_URL: rendererUrl,
 		},
 	});
@@ -37,6 +54,7 @@ export async function launchPackagedElectronApp({
 }): Promise<ElectronApplication> {
 	const env = { ...process.env };
 	delete env.VITE_DEV_SERVER_URL;
+	delete env.FLASHTYPE_HEADLESS;
 	env.FLASHTYPE_DISABLE_AUTO_UPDATE = "1";
 
 	return await electron.launch({
@@ -103,24 +121,14 @@ export async function expectInstalledPluginArchives(
 	await expect
 		.poll(() =>
 			readBinaryFile(
-				path.join(
-					workspaceDir,
-					".lix",
-					"plugins",
-					"plugin_md_v2.lixplugin",
-				),
+				path.join(workspaceDir, ".lix", "plugins", "plugin_md_v2.lixplugin"),
 			),
 		)
 		.toBeGreaterThan(0);
 	await expect
 		.poll(() =>
 			readBinaryFile(
-				path.join(
-					workspaceDir,
-					".lix",
-					"plugins",
-					"plugin_csv.lixplugin",
-				),
+				path.join(workspaceDir, ".lix", "plugins", "plugin_csv.lixplugin"),
 			),
 		)
 		.toBeGreaterThan(0);

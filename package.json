@@ -32,7 +32,9 @@
 		"pretest": "pnpm run build:markdown-wc",
 		"test": "vitest run",
 		"pretest:e2e": "pnpm run build:markdown-wc && pnpm run rebuild:electron-native",
-		"test:e2e": "playwright test",
+		"test:e2e": "FLASHTYPE_HEADLESS=1 playwright test",
+		"pretest:e2e:headed": "pnpm run pretest:e2e",
+		"test:e2e:headed": "FLASHTYPE_HEADLESS=0 playwright test",
 		"test:e2e:packaged-macos": "playwright test --config playwright.packaged.config.ts",
 		"ci": "pnpm run build && pnpm test"
 	},
