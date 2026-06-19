@@ -129,7 +129,7 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
-	test("Cmd+Backspace deletes the selected file", async () => {
+	test("Cmd+Backspace deletes the selected file from the focused file row", async () => {
 		const lix = await openLix();
 		const closeFileViews = vi.fn();
 		await qb(lix)
@@ -161,7 +161,10 @@ describe("FilesView", () => {
 		});
 
 		await act(async () => {
-			fireEvent.keyDown(document, { key: "Backspace", metaKey: true });
+			fireEvent.keyDown(utils!.getByTestId("file-tree-item-hello-md"), {
+				key: "Backspace",
+				metaKey: true,
+			});
 		});
 
 		await waitFor(async () => {
@@ -181,7 +184,7 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
-	test("Cmd+Backspace closes a newly created selected file view", async () => {
+	test("Cmd+Backspace in an empty editor keeps a newly created selected file and editor event", async () => {
 		const lix = await openLix();
 		const openFile = vi.fn();
 		const closeFileViews = vi.fn();
@@ -215,22 +218,198 @@ describe("FilesView", () => {
 		await waitFor(() => {
 			expect(openFile).toHaveBeenCalled();
 		});
-		const createdFileId = openFile.mock.calls[0]?.[0]?.fileId;
-		expect(typeof createdFileId).toBe("string");
 
+		const emptyEditor = document.createElement("div");
+		emptyEditor.contentEditable = "true";
+		document.body.append(emptyEditor);
+		let emptyEditorEvent: KeyboardEvent;
 		await act(async () => {
-			fireEvent.keyDown(document, { key: "Backspace", metaKey: true });
+			emptyEditorEvent = new KeyboardEvent("keydown", {
+				key: "Backspace",
+				metaKey: true,
+				bubbles: true,
+				cancelable: true,
+			});
+			expect(emptyEditor.dispatchEvent(emptyEditorEvent)).toBe(true);
+		});
+		expect(emptyEditorEvent!.defaultPrevented).toBe(false);
+
+		const rows = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["path"])
+			.execute();
+		expect(rows.some((row) => row.path === "/fresh.md")).toBe(true);
+		expect(closeFileViews).not.toHaveBeenCalled();
+		emptyEditor.remove();
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("Cmd+Backspace in a non-empty editor keeps the selected file and editor event", async () => {
+		const lix = await openLix();
+		const closeFileViews = vi.fn();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_with_text",
+				path: "/keep.md",
+				data: new TextEncoder().encode("Keep me"),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix, { closeFileViews })} />
+					</Suspense>
+				</LixProvider>,
+			);
 		});
 
-		await waitFor(async () => {
-			const rows = await qb(lix)
-				.selectFrom("lix_file")
-				.select(["path"])
-				.execute();
-			expect(rows.filter((row) => isUserPath(row.path))).toHaveLength(0);
+		const file = await utils!.findByText("keep.md");
+		await act(async () => {
+			fireEvent.click(file);
 		});
-		expect(closeFileViews).toHaveBeenCalledWith({ fileId: createdFileId });
 
+		const editor = document.createElement("div");
+		editor.contentEditable = "true";
+		editor.textContent = "Keep me";
+		document.body.append(editor);
+		let editorEvent: KeyboardEvent;
+		await act(async () => {
+			editorEvent = new KeyboardEvent("keydown", {
+				key: "Backspace",
+				metaKey: true,
+				bubbles: true,
+				cancelable: true,
+			});
+			expect(editor.dispatchEvent(editorEvent)).toBe(true);
+		});
+		expect(editorEvent!.defaultPrevented).toBe(false);
+
+		const rows = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["path"])
+			.execute();
+		expect(rows.some((row) => row.path === "/keep.md")).toBe(true);
+		expect(closeFileViews).not.toHaveBeenCalled();
+
+		editor.remove();
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("Cmd+Backspace in a whitespace-only editor keeps the selected file and editor event", async () => {
+		const lix = await openLix();
+		const closeFileViews = vi.fn();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_with_spaces",
+				path: "/spaces.md",
+				data: new TextEncoder().encode("   "),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix, { closeFileViews })} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const file = await utils!.findByText("spaces.md");
+		await act(async () => {
+			fireEvent.click(file);
+		});
+
+		const editor = document.createElement("div");
+		editor.contentEditable = "true";
+		editor.textContent = "   \n";
+		document.body.append(editor);
+		let editorEvent: KeyboardEvent;
+		await act(async () => {
+			editorEvent = new KeyboardEvent("keydown", {
+				key: "Backspace",
+				metaKey: true,
+				bubbles: true,
+				cancelable: true,
+			});
+			expect(editor.dispatchEvent(editorEvent)).toBe(true);
+		});
+		expect(editorEvent!.defaultPrevented).toBe(false);
+
+		const rows = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["path"])
+			.execute();
+		expect(rows.some((row) => row.path === "/spaces.md")).toBe(true);
+		expect(closeFileViews).not.toHaveBeenCalled();
+
+		editor.remove();
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("Cmd+Backspace in an editor with non-text content keeps the selected file and editor event", async () => {
+		const lix = await openLix();
+		const closeFileViews = vi.fn();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_with_rule",
+				path: "/rule.md",
+				data: new TextEncoder().encode("---"),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix, { closeFileViews })} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const file = await utils!.findByText("rule.md");
+		await act(async () => {
+			fireEvent.click(file);
+		});
+
+		const editor = document.createElement("div");
+		editor.contentEditable = "true";
+		editor.innerHTML = "<hr>";
+		document.body.append(editor);
+		let editorEvent: KeyboardEvent;
+		await act(async () => {
+			editorEvent = new KeyboardEvent("keydown", {
+				key: "Backspace",
+				metaKey: true,
+				bubbles: true,
+				cancelable: true,
+			});
+			expect(editor.dispatchEvent(editorEvent)).toBe(true);
+		});
+		expect(editorEvent!.defaultPrevented).toBe(false);
+
+		const rows = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["path"])
+			.execute();
+		expect(rows.some((row) => row.path === "/rule.md")).toBe(true);
+		expect(closeFileViews).not.toHaveBeenCalled();
+
+		editor.remove();
 		utils!.unmount();
 		await lix.close();
 	});

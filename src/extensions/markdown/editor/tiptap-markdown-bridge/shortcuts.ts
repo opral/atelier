@@ -13,6 +13,7 @@ import {
 // - Mod-b / Mod-i / Shift-Mod-s: Toggle bold/italic/strike
 export const MarkdownWcShortcuts = Extension.create({
 	name: "markdownWcShortcuts",
+	priority: 1000,
 
 	addInputRules() {
 		const rules: any[] = [];
@@ -147,12 +148,44 @@ export const MarkdownWcShortcuts = Extension.create({
 	},
 
 	addKeyboardShortcuts() {
+		const deletePreviousWord = () => {
+			const { state, view } = this.editor;
+			const { selection } = state;
+			if (!selection.empty) {
+				return this.editor.chain().focus().deleteSelection().run();
+			}
+
+			const $from: any = selection.$from;
+			const parent: any = $from.parent;
+			if (!parent?.isTextblock || $from.parentOffset === 0) return true;
+
+			const textBefore = parent.textBetween(
+				0,
+				$from.parentOffset,
+				"\uFFFC",
+				"\uFFFC",
+			);
+			const deleteFromOffset = findPreviousWordDeleteOffset(textBefore);
+			if (deleteFromOffset === textBefore.length) return false;
+
+			const deleteSize = textBefore.length - deleteFromOffset;
+			const from = Math.max($from.start(), $from.pos - deleteSize);
+			if (from >= $from.pos) return false;
+
+			view.dispatch(state.tr.delete(from, $from.pos).scrollIntoView());
+			return true;
+		};
+
 		return {
 			// Bold / Italic / Strike
 			"Mod-b": () => this.editor.chain().focus().toggleMark("bold").run(),
 			"Mod-i": () => this.editor.chain().focus().toggleMark("italic").run(),
 			"Shift-Mod-s": () =>
 				this.editor.chain().focus().toggleMark("strike").run(),
+
+			"Mod-Backspace": deletePreviousWord,
+			"Cmd-Backspace": deletePreviousWord,
+			"Ctrl-Backspace": deletePreviousWord,
 
 			Backspace: () => {
 				const { state } = this.editor;
@@ -215,3 +248,38 @@ export const MarkdownWcShortcuts = Extension.create({
 		};
 	},
 });
+
+function findPreviousWordDeleteOffset(text: string): number {
+	let end = text.length;
+	while (end > 0 && isWhitespace(text[end - 1] ?? "")) {
+		end -= 1;
+	}
+	if (end === 0) {
+		return 0;
+	}
+
+	let start = end;
+	if (isWordCharacter(text[start - 1] ?? "")) {
+		while (start > 0 && isWordCharacter(text[start - 1] ?? "")) {
+			start -= 1;
+		}
+		return start;
+	}
+
+	while (
+		start > 0 &&
+		!isWhitespace(text[start - 1] ?? "") &&
+		!isWordCharacter(text[start - 1] ?? "")
+	) {
+		start -= 1;
+	}
+	return start;
+}
+
+function isWhitespace(value: string): boolean {
+	return /\s/.test(value);
+}
+
+function isWordCharacter(value: string): boolean {
+	return /[\p{L}\p{N}_]/u.test(value);
+}

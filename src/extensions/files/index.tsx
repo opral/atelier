@@ -278,6 +278,8 @@ export function FilesView({ context }: FilesViewProps) {
 				event.key === "Delete" ||
 				event.code?.toLowerCase() === "delete";
 			if (isDeleteKey) {
+				const shouldHandleDelete = !isInteractiveTarget(event.target);
+				if (!shouldHandleDelete) return;
 				event.preventDefault();
 				event.stopPropagation();
 				event.stopImmediatePropagation?.();
@@ -286,7 +288,7 @@ export function FilesView({ context }: FilesViewProps) {
 					event.type === "keydown" &&
 					!event.repeat &&
 					!event.shiftKey &&
-					!isInteractiveTarget(event.target)
+					shouldHandleDelete
 				) {
 					void handleDeleteSelection();
 				}

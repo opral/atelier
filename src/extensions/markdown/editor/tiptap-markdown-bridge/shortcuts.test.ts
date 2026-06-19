@@ -60,8 +60,8 @@ function sendModKey(editor: Editor, key: string, opts?: { shift?: boolean }) {
 	};
 	// Try meta-only first (mac style), then ctrl-only (windows/linux)
 	if (tryPress({ metaKey: true, ctrlKey: false, shiftKey: opts?.shift }))
-		return;
-	tryPress({ metaKey: false, ctrlKey: true, shiftKey: opts?.shift });
+		return true;
+	return tryPress({ metaKey: false, ctrlKey: true, shiftKey: opts?.shift });
 }
 
 function sendKey(editor: Editor, key: string, opts?: { shift?: boolean }) {
@@ -235,6 +235,41 @@ describe("Keyboard shortcuts (keymap)", () => {
 		editor.commands.setTextSelection({ from: 1, to: 4 });
 		sendModKey(editor, "s", { shift: true });
 		expect(editor.isActive("strike")).toBe(true);
+	});
+
+	test("Mod-Backspace deletes the previous word instead of the whole line", () => {
+		const editor = createEditor();
+		editor.commands.insertContent("alpha beta gamma");
+		editor.commands.setTextSelection(editor.state.doc.content.size);
+		sendModKey(editor, "Backspace");
+		expect(buildMarkdownFromEditor(editor)).toBe("alpha beta \n");
+	});
+
+	test("Mod-Backspace at the start of a text block does not merge blocks", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{ type: "paragraph", content: [{ type: "text", text: "alpha" }] },
+				{ type: "paragraph", content: [{ type: "text", text: "beta" }] },
+			],
+		});
+		setCursorAfterText(editor, "beta");
+		editor.commands.setTextSelection(
+			editor.state.selection.from - "beta".length,
+		);
+
+		expect(sendModKey(editor, "Backspace")).toBe(true);
+		expect(buildMarkdownFromEditor(editor)).toBe("alpha\n\nbeta\n");
+	});
+
+	test("Mod-Backspace deletes the selection", () => {
+		const editor = createEditor();
+		editor.commands.insertContent("alpha beta gamma");
+		setCursorAfterText(editor, "alpha ");
+		const from = editor.state.selection.from;
+		editor.commands.setTextSelection({ from, to: from + "beta".length });
+		sendModKey(editor, "Backspace");
+		expect(buildMarkdownFromEditor(editor)).toBe("alpha  gamma\n");
 	});
 
 	test("Enter in bullet list creates another bullet item", () => {
