@@ -30,10 +30,11 @@ export async function resolveWorkspaceTarget(requestedPath) {
 		if (stats.isFile()) {
 			const workspaceDir = await findLixWorkspaceRoot(path.dirname(resolved));
 			if (!workspaceDir) {
-				const workspace = createEphemeralFilesWorkspace([resolved]);
+				const workspace = createTransientDirectoryWorkspace([resolved]);
 				return {
 					workspace,
-					pendingOpenFilePaths: workspace.files,
+					pendingOpenFilePaths:
+						pendingOpenFilePathsForTransientDirectoryWorkspace(workspace),
 				};
 			}
 			return {
@@ -63,8 +64,8 @@ export async function resolveWorkspaceTarget(requestedPath) {
 
 export async function resolveWorkspaceTargets(requestedPaths) {
 	const targets = [];
-	const standaloneMarkdownFiles = [];
-	let standaloneMarkdownInsertIndex = null;
+	const standaloneFiles = [];
+	let standaloneFilesInsertIndex = null;
 
 	for (let requestedPath of requestedPaths) {
 		if (
@@ -84,22 +85,23 @@ export async function resolveWorkspaceTargets(requestedPaths) {
 		}
 
 		const resolved = path.resolve(String(requestedPath));
-		const markdownFileTarget = await resolveStandaloneMarkdownFile(resolved);
-		if (markdownFileTarget) {
-			if (standaloneMarkdownInsertIndex === null) {
-				standaloneMarkdownInsertIndex = targets.length;
+		const standaloneFileTarget = await resolveStandaloneFile(resolved);
+		if (standaloneFileTarget) {
+			if (standaloneFilesInsertIndex === null) {
+				standaloneFilesInsertIndex = targets.length;
 			}
-			standaloneMarkdownFiles.push(markdownFileTarget);
+			standaloneFiles.push(standaloneFileTarget);
 			continue;
 		}
 		targets.push(await resolveWorkspaceTarget(resolved));
 	}
 
-	if (standaloneMarkdownFiles.length > 0) {
-		const workspace = createEphemeralFilesWorkspace(standaloneMarkdownFiles);
-		targets.splice(standaloneMarkdownInsertIndex ?? targets.length, 0, {
+	if (standaloneFiles.length > 0) {
+		const workspace = createTransientDirectoryWorkspace(standaloneFiles);
+		targets.splice(standaloneFilesInsertIndex ?? targets.length, 0, {
 			workspace,
-			pendingOpenFilePaths: workspace.files,
+			pendingOpenFilePaths:
+				pendingOpenFilePathsForTransientDirectoryWorkspace(workspace),
 		});
 	}
 
@@ -161,9 +163,9 @@ export async function exportWorkspaceLixFile(window) {
 			"No workspace is open. Open a folder before exporting lix.",
 		);
 	}
-	if (workspace.kind === "ephemeralFiles") {
+	if (workspace.kind === "transientDirectory") {
 		throw new Error(
-			"Cannot export a .lix database from an ephemeral file workspace.",
+			"Cannot export a .lix database from a transient workspace.",
 		);
 	}
 	const databasePath = await findLixDatabasePath(workspace.path);
@@ -180,9 +182,9 @@ export function getWorkspaceLixDatabasePath(window) {
 			"No workspace is open. Open a folder before exporting lix.",
 		);
 	}
-	if (workspace.kind === "ephemeralFiles") {
+	if (workspace.kind === "transientDirectory") {
 		throw new Error(
-			"Ephemeral file workspaces do not have a .lix database on disk.",
+			"Transient workspaces do not have a .lix database on disk.",
 		);
 	}
 	return path.join(workspace.path, LIX_DATABASE_FILE);
@@ -214,7 +216,10 @@ async function resolveWorkspaceSessionEntry(workspaceEntry) {
 	if (workspaceEntry.kind === "directory") {
 		return await resolveWorkspaceTarget(workspaceEntry.path);
 	}
-	if (workspaceEntry.kind === "ephemeralFiles") {
+	if (
+		workspaceEntry.kind === "transientDirectory" ||
+		workspaceEntry.kind === "ephemeralFiles"
+	) {
 		const sourceFilePaths = [];
 		for (const sourceFilePath of workspaceEntry.sourceFilePaths ?? []) {
 			try {
@@ -222,16 +227,17 @@ async function resolveWorkspaceSessionEntry(workspaceEntry) {
 					sourceFilePaths.push(path.resolve(sourceFilePath));
 				}
 			} catch {
-				// Drop missing files from restored ephemeral workspaces.
+				// Drop missing files from restored transient workspaces.
 			}
 		}
 		if (sourceFilePaths.length === 0) {
 			return null;
 		}
-		const workspace = createEphemeralFilesWorkspace(sourceFilePaths);
+		const workspace = createTransientDirectoryWorkspace(sourceFilePaths);
 		return {
 			workspace,
-			pendingOpenFilePaths: workspace.files,
+			pendingOpenFilePaths:
+				pendingOpenFilePathsForTransientDirectoryWorkspace(workspace),
 		};
 	}
 	if (workspaceEntry.kind === "path") {
@@ -240,10 +246,7 @@ async function resolveWorkspaceSessionEntry(workspaceEntry) {
 	return null;
 }
 
-async function resolveStandaloneMarkdownFile(resolvedPath) {
-	if (!isMarkdownFilePath(resolvedPath)) {
-		return null;
-	}
+async function resolveStandaloneFile(resolvedPath) {
 	try {
 		if (!(await stat(resolvedPath)).isFile()) {
 			return null;
@@ -255,35 +258,25 @@ async function resolveStandaloneMarkdownFile(resolvedPath) {
 	return workspaceDir ? null : resolvedPath;
 }
 
-function createEphemeralFilesWorkspace(sourceFilePaths) {
+function createTransientDirectoryWorkspace(sourceFilePaths) {
 	const normalizedSourceFilePaths = normalizeSourceFilePaths(sourceFilePaths);
-	const baseDirectory = deepestCommonParent(
+	const workspacePath = deepestCommonParent(
 		normalizedSourceFilePaths.map((sourceFilePath) =>
 			path.dirname(sourceFilePath),
 		),
 	);
-	const files = normalizedSourceFilePaths.map((sourceFilePath) =>
-		toPortableRelativePath(path.relative(baseDirectory, sourceFilePath)),
-	);
 	return {
-		kind: "ephemeralFiles",
-		path:
-			normalizedSourceFilePaths.length === 1
-				? normalizedSourceFilePaths[0]
-				: baseDirectory,
-		representedPath:
-			normalizedSourceFilePaths.length === 1
-				? normalizedSourceFilePaths[0]
-				: baseDirectory,
-		baseDirectory,
-		sourceFilePath: normalizedSourceFilePaths[0],
+		kind: "transientDirectory",
+		path: workspacePath,
 		sourceFilePaths: normalizedSourceFilePaths,
-		files,
-		name:
-			normalizedSourceFilePaths.length === 1
-				? path.basename(normalizedSourceFilePaths[0])
-				: `${normalizedSourceFilePaths.length} Markdown files`,
+		name: path.basename(workspacePath) || workspacePath,
 	};
+}
+
+function pendingOpenFilePathsForTransientDirectoryWorkspace(workspace) {
+	return (workspace.sourceFilePaths ?? []).map((sourceFilePath) =>
+		toPortableRelativePath(path.relative(workspace.path, sourceFilePath)),
+	);
 }
 
 function normalizeSourceFilePaths(sourceFilePaths) {
@@ -345,15 +338,10 @@ function workspaceKey(workspace) {
 	if (!workspace) {
 		return null;
 	}
-	if (workspace.kind === "ephemeralFiles") {
+	if (workspace.kind === "transientDirectory") {
 		return `${workspace.kind}:${workspace.sourceFilePaths.join("\0")}`;
 	}
 	return `${workspace.kind}:${workspace.path}`;
-}
-
-function isMarkdownFilePath(filePath) {
-	const extension = path.extname(filePath).toLowerCase();
-	return extension === ".md" || extension === ".markdown";
 }
 
 async function showWorkspaceDialog(window) {

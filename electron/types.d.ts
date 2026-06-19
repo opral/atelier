@@ -118,14 +118,10 @@ export type DesktopTerminalApi = {
 };
 
 export type DesktopWorkspace = {
-	kind: "directory" | "ephemeralFiles";
+	kind: "directory" | "transientDirectory";
 	path: string;
 	name: string;
-	representedPath?: string;
-	baseDirectory?: string;
-	sourceFilePath?: string;
 	sourceFilePaths?: string[];
-	files?: string[];
 };
 
 export type DesktopWorkspaceApi = {

@@ -92,7 +92,7 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("resolves files outside a Lix workspace to ephemeral file workspaces", async () => {
+	test("resolves files outside a Lix workspace to transient directory workspaces", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -105,20 +105,16 @@ describe("workspace resolution", () => {
 
 		await expect(resolveWorkspaceTarget(filePath)).resolves.toEqual({
 			workspace: {
-				kind: "ephemeralFiles",
-				path: filePath,
-				representedPath: filePath,
-				baseDirectory: directory,
-				sourceFilePath: filePath,
+				kind: "transientDirectory",
+				path: directory,
 				sourceFilePaths: [filePath],
-				files: ["readme.md"],
-				name: "readme.md",
+				name: "workspace",
 			},
 			pendingOpenFilePaths: ["readme.md"],
 		});
 	});
 
-	test("groups standalone markdown files into one ephemeral workspace target", async () => {
+	test("groups standalone files into one transient directory workspace target", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -136,14 +132,10 @@ describe("workspace resolution", () => {
 		).resolves.toEqual([
 			{
 				workspace: {
-					kind: "ephemeralFiles",
+					kind: "transientDirectory",
 					path: directory,
-					representedPath: directory,
-					baseDirectory: directory,
-					sourceFilePath: firstPath,
 					sourceFilePaths: [firstPath, secondPath],
-					files: ["alpha.md", "nested/beta.markdown"],
-					name: "2 Markdown files",
+					name: "workspace",
 				},
 				pendingOpenFilePaths: ["alpha.md", "nested/beta.markdown"],
 			},
@@ -204,7 +196,7 @@ describe("workspace resolution", () => {
 		]);
 	});
 
-	test("does not group non-markdown standalone files", async () => {
+	test("groups non-markdown standalone files", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -222,29 +214,12 @@ describe("workspace resolution", () => {
 		).resolves.toEqual([
 			{
 				workspace: {
-					kind: "ephemeralFiles",
-					path: firstPath,
-					representedPath: firstPath,
-					baseDirectory: directory,
-					sourceFilePath: firstPath,
-					sourceFilePaths: [firstPath],
-					files: ["alpha.txt"],
-					name: "alpha.txt",
+					kind: "transientDirectory",
+					path: directory,
+					sourceFilePaths: [firstPath, secondPath],
+					name: "workspace",
 				},
-				pendingOpenFilePaths: ["alpha.txt"],
-			},
-			{
-				workspace: {
-					kind: "ephemeralFiles",
-					path: secondPath,
-					representedPath: secondPath,
-					baseDirectory: directory,
-					sourceFilePath: secondPath,
-					sourceFilePaths: [secondPath],
-					files: ["beta.csv"],
-					name: "beta.csv",
-				},
-				pendingOpenFilePaths: ["beta.csv"],
+				pendingOpenFilePaths: ["alpha.txt", "beta.csv"],
 			},
 		]);
 	});

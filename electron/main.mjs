@@ -222,9 +222,12 @@ function mergeRestoredAndExplicitWorkspaceRequests(
 		if (workspaceEntry.kind === "directory" || workspaceEntry.kind === "path") {
 			return !explicitWorkspacePathSet.has(workspaceEntry.path);
 		}
-		return !workspaceEntry.sourceFilePaths.some((sourceFilePath) =>
-			explicitWorkspacePathSet.has(sourceFilePath),
-		);
+		if (workspaceEntry.kind === "transientDirectory") {
+			return !workspaceEntry.sourceFilePaths.some((sourceFilePath) =>
+				explicitWorkspacePathSet.has(sourceFilePath),
+			);
+		}
+		return true;
 	});
 
 	return [...restoredOnlyWorkspaceEntries, ...normalizedExplicitWorkspacePaths];

@@ -1,6 +1,6 @@
 import {
 	FsBackend,
-	FilesBackend,
+	FsEphemeralBackend,
 	bundledPluginArchives,
 	openLix,
 } from "@lix-js/sdk";
@@ -23,20 +23,14 @@ export async function ensureLixOpen(window) {
 						"No workspace is open. Open a folder before using lix.",
 					);
 				}
-				const isEphemeralFiles = workspace.kind === "ephemeralFiles";
+				const isTransientDirectory = workspace.kind === "transientDirectory";
 				const nativeLix = await openLix({
-					backend: isEphemeralFiles
-						? new FilesBackend({
-								root: workspace.baseDirectory,
-								files: workspace.files,
-							})
+					backend: isTransientDirectory
+						? new FsEphemeralBackend({ path: workspace.path })
 						: new FsBackend({ path: workspace.path }),
 				});
 				await ensureDefaultPluginsInstalledOnCurrentBranch(nativeLix);
-				return createDesktopLixHandle(
-					nativeLix,
-					isEphemeralFiles ? workspace.baseDirectory : workspace.path,
-				);
+				return createDesktopLixHandle(nativeLix, workspace.path);
 			})();
 			session.lixPromise = openingPromise;
 			openingPromise.catch(() => {
@@ -105,8 +99,8 @@ export async function resetLixRepository(window) {
 				"No workspace is open. Open a folder before resetting lix.",
 			);
 		}
-		if (workspace.kind === "ephemeralFiles") {
-			throw new Error("Cannot reset an ephemeral file workspace.");
+		if (workspace.kind === "transientDirectory") {
+			throw new Error("Cannot reset a transient workspace.");
 		}
 		await closeCurrentLix(session, { ignoreOpenError: true });
 		await removeLixDatabaseFiles(workspace.path);
@@ -115,9 +109,9 @@ export async function resetLixRepository(window) {
 
 export async function exportCurrentLixImage(window) {
 	const workspace = getWorkspace(window);
-	if (workspace?.kind === "ephemeralFiles") {
+	if (workspace?.kind === "transientDirectory") {
 		throw new Error(
-			"Cannot export a .lix database from an ephemeral file workspace.",
+			"Cannot export a .lix database from a transient workspace.",
 		);
 	}
 	const session = getOrCreateSession(window);

@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const WORKSPACE_SESSION_FILE = "workspace-session.json";
-export const WORKSPACE_SESSION_VERSION = 2;
+export const WORKSPACE_SESSION_VERSION = 3;
 
 export async function readWorkspaceSessionEntries(userDataPath) {
 	try {
@@ -12,7 +12,7 @@ export async function readWorkspaceSessionEntries(userDataPath) {
 		});
 		const store = JSON.parse(rawStore);
 		if (
-			store?.version === WORKSPACE_SESSION_VERSION &&
+			(store?.version === WORKSPACE_SESSION_VERSION || store?.version === 2) &&
 			Array.isArray(store.workspaces)
 		) {
 			return normalizeWorkspaceSessionEntries(store.workspaces);
@@ -71,7 +71,7 @@ export async function filterExistingWorkspaceEntries(workspaceEntries) {
 			continue;
 		}
 
-		if (workspaceEntry.kind === "ephemeralFiles") {
+		if (workspaceEntry.kind === "transientDirectory") {
 			const sourceFilePaths = [];
 			for (const sourceFilePath of workspaceEntry.sourceFilePaths) {
 				try {
@@ -79,12 +79,12 @@ export async function filterExistingWorkspaceEntries(workspaceEntries) {
 						sourceFilePaths.push(sourceFilePath);
 					}
 				} catch {
-					// Drop missing files from a restored ephemeral workspace.
+					// Drop missing files from a restored transient workspace.
 				}
 			}
 			if (sourceFilePaths.length > 0) {
 				existingWorkspaceEntries.push({
-					kind: "ephemeralFiles",
+					kind: "transientDirectory",
 					sourceFilePaths,
 				});
 			}
@@ -115,16 +115,13 @@ export function workspaceToSessionEntry(workspace) {
 			path: path.resolve(workspace.path),
 		};
 	}
-	if (workspace.kind === "ephemeralFiles") {
-		const sourceFilePaths = normalizeWorkspacePaths(
-			workspace.sourceFilePaths ??
-				(workspace.sourceFilePath ? [workspace.sourceFilePath] : []),
-		);
+	if (workspace.kind === "transientDirectory") {
+		const sourceFilePaths = normalizeWorkspacePaths(workspace.sourceFilePaths);
 		if (sourceFilePaths.length === 0) {
 			return null;
 		}
 		return {
-			kind: "ephemeralFiles",
+			kind: "transientDirectory",
 			sourceFilePaths,
 		};
 	}
@@ -193,7 +190,10 @@ function normalizeWorkspaceSessionEntry(workspaceEntry) {
 			path: path.resolve(workspaceEntry.path),
 		};
 	}
-	if (workspaceEntry.kind === "ephemeralFiles") {
+	if (
+		workspaceEntry.kind === "transientDirectory" ||
+		workspaceEntry.kind === "ephemeralFiles"
+	) {
 		const sourceFilePaths = normalizeWorkspacePaths(
 			workspaceEntry.sourceFilePaths,
 		);
@@ -201,7 +201,7 @@ function normalizeWorkspaceSessionEntry(workspaceEntry) {
 			return null;
 		}
 		return {
-			kind: "ephemeralFiles",
+			kind: "transientDirectory",
 			sourceFilePaths,
 		};
 	}
@@ -219,7 +219,7 @@ function normalizeWorkspaceSessionEntry(workspaceEntry) {
 }
 
 function workspaceSessionEntryKey(workspaceEntry) {
-	if (workspaceEntry.kind === "ephemeralFiles") {
+	if (workspaceEntry.kind === "transientDirectory") {
 		return `${workspaceEntry.kind}:${workspaceEntry.sourceFilePaths.join("\0")}`;
 	}
 	return `${workspaceEntry.kind}:${workspaceEntry.path}`;
