@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 - 2026-06-19
+
+### Patch
+
+- FlashType now checks for updates periodically while the app stays open.
+
+  Users who keep FlashType running for long sessions will see the Update button after a new release is downloaded, without needing to restart the app first.
+
 ## 0.3.0 - 2026-06-18
 
 ### Minor
