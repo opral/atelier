@@ -3,7 +3,6 @@ import {
 	BrowserWindow,
 	ipcMain,
 	Menu,
-	nativeImage,
 	shell,
 } from "electron";
 import { execFile } from "node:child_process";
@@ -81,8 +80,6 @@ let registerLixIpc = () => {};
 let disposeTerminalIpc = () => {};
 let registerTerminalIpc = () => {};
 let recentWorkspaceEntries = [];
-let dockMenuAppIcon = null;
-let dockMenuActiveFileIcon = null;
 
 if (isHeadless && process.platform === "darwin") {
 	app.dock.hide();
@@ -273,7 +270,6 @@ async function createMainWindow(workspaceRequest) {
 		autoHideMenuBar: true,
 		...(process.platform === "darwin"
 			? {
-					excludedFromShownWindowsMenu: true,
 					titleBarStyle: "hiddenInset",
 					trafficLightPosition: { x: 16, y: 10 },
 				}
@@ -285,12 +281,6 @@ async function createMainWindow(workspaceRequest) {
 			sandbox: false,
 		},
 	});
-	if (
-		process.platform === "darwin" &&
-		"excludedFromShownWindowsMenu" in window
-	) {
-		window.excludedFromShownWindowsMenu = true;
-	}
 	workspaceWindows.add(window);
 
 	const showFallback = isHeadless
@@ -584,6 +574,7 @@ function registerAppIpc() {
 		} else {
 			activeFilePathsByWindowId.delete(window.id);
 		}
+		applyDockWindowChrome(window);
 		updateDockMenu();
 	});
 }
@@ -1223,27 +1214,7 @@ function updateDockMenu() {
 		return;
 	}
 
-	const activeWindow = getMostRelevantWorkspaceWindow();
-	const activeWorkspace = activeWindow ? getWorkspace(activeWindow) : null;
-	const activeFilePath = activeWindow
-		? activeFilePathsByWindowId.get(activeWindow.id)
-		: null;
-	const activeFileLabel = activeFileDockLabel(activeWorkspace, activeFilePath);
 	const template = [];
-
-	if (activeFileLabel) {
-		template.push({
-			type: "checkbox",
-			checked: true,
-			label: activeFileLabel,
-			icon: getDockMenuActiveFileIcon(),
-			click: () => {
-				activeWindow.show();
-				activeWindow.focus();
-			},
-		});
-		template.push({ type: "separator" });
-	}
 
 	template.push({
 		label: "New Window",
@@ -1253,6 +1224,24 @@ function updateDockMenu() {
 	});
 
 	app.dock.setMenu(Menu.buildFromTemplate(template));
+}
+
+function applyDockWindowChrome(window) {
+	if (!window || window.isDestroyed()) {
+		return;
+	}
+	const workspace = getWorkspace(window);
+	const activeFilePath = activeFilePathsByWindowId.get(window.id);
+	const activeFileLabel = activeFileDockLabel(workspace, activeFilePath);
+	if (activeFileLabel) {
+		window.setTitle(activeFileLabel);
+		window.setRepresentedFilename(activeFilePath);
+		return;
+	}
+	if (workspace) {
+		window.setTitle(workspace.name);
+		window.setRepresentedFilename(workspace.representedPath ?? workspace.path);
+	}
 }
 
 async function syncMacOSDockRecentWorkspaceDocuments() {
@@ -1273,47 +1262,4 @@ async function syncMacOSDockRecentWorkspaceDocuments() {
 	} catch (error) {
 		console.warn("Failed to sync Flashtype macOS Dock recent workspaces", error);
 	}
-}
-
-function getMostRelevantWorkspaceWindow() {
-	const focusedWindow = BrowserWindow.getFocusedWindow();
-	if (focusedWindow && workspaceWindows.has(focusedWindow)) {
-		return focusedWindow;
-	}
-	return (
-		[...workspaceWindows]
-			.filter((window) => !window.isDestroyed() && getWorkspace(window))
-			.at(-1) ?? null
-	);
-}
-
-function getDockMenuActiveFileIcon() {
-	if (dockMenuActiveFileIcon !== null) {
-		return dockMenuActiveFileIcon;
-	}
-	try {
-		dockMenuActiveFileIcon = nativeImage
-			.createFromNamedImage("NSApplicationIcon")
-			.resize({ width: 16, height: 16 });
-		if (dockMenuActiveFileIcon.isEmpty()) {
-			dockMenuActiveFileIcon = getDockMenuAppIcon();
-		}
-	} catch {
-		dockMenuActiveFileIcon = getDockMenuAppIcon();
-	}
-	return dockMenuActiveFileIcon;
-}
-
-function getDockMenuAppIcon() {
-	if (dockMenuAppIcon !== null) {
-		return dockMenuAppIcon;
-	}
-	try {
-		dockMenuAppIcon = nativeImage
-			.createFromPath(path.join(app.getAppPath(), "build/icon.png"))
-			.resize({ width: 16, height: 16 });
-	} catch {
-		dockMenuAppIcon = undefined;
-	}
-	return dockMenuAppIcon;
 }
