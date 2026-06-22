@@ -1,10 +1,4 @@
-import {
-	app,
-	BrowserWindow,
-	ipcMain,
-	Menu,
-	shell,
-} from "electron";
+import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -18,7 +12,12 @@ import {
 	resolveWorkspaceTargets,
 	setWorkspaceFromTarget,
 } from "./workspace.mjs";
-import { captureAppOpened } from "./telemetry.mjs";
+import {
+	captureAppLaunched,
+	captureTelemetryEvent,
+	registerTelemetryIpc,
+	shutdownTelemetry,
+} from "./telemetry.mjs";
 import {
 	APP_NAME,
 	registerMarkdownDefaultHandler,
@@ -51,7 +50,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
 const AUTO_UPDATE_CHECK_DELAY_MS = 10_000;
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
-const TELEMETRY_HEARTBEAT_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const DEV_SERVER_URL =
 	process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:4173";
 const isHeadless = process.env.FLASHTYPE_HEADLESS === "1";
@@ -77,9 +75,9 @@ let updateWindow = null;
 let pendingUpdateWindowState = null;
 let updateWindowCloseTimer = null;
 let updateIconDataUrl = null;
-let telemetryHeartbeatInterval = null;
 let autoUpdatesSetup = false;
 let recoveryUpdateCheckStarted = false;
+let telemetryShutdownComplete = false;
 let closeLixSession = async () => {};
 let disposeLixIpc = async () => {};
 let registerLixIpc = () => {};
@@ -199,6 +197,10 @@ function recordOpenWorkspacePath(window, workspace) {
 	}
 	openWorkspaceEntriesByWindowId.set(window.id, workspaceEntry);
 	recordRecentWorkspace(workspace);
+	void captureTelemetryEvent("workspace opened", {
+		is_ephemeral_workspace: workspace.ephemeral === true,
+		source: "main",
+	});
 	void syncMacOSDockRecentWorkspaceDocuments();
 	persistOpenWorkspacePathsSoon();
 	updateDockMenu();
@@ -376,6 +378,7 @@ if (hasSingleInstanceLock) {
 	app.whenReady().then(async () => {
 		installDevelopmentDockIcon();
 		registerAppIpc();
+		registerTelemetryIpc();
 		installApplicationMenu();
 		app.on("activate", () => {
 			void focusOrCreateWorkspaceWindow();
@@ -431,8 +434,7 @@ async function startWorkspaceLifecycle() {
 	}).catch((error) => {
 		console.warn("Failed to register Flashtype as the Markdown editor", error);
 	});
-	void captureAppOpened();
-	setupTelemetryHeartbeat();
+	void captureAppLaunched();
 	const savedWorkspaceEntries = await readWorkspaceSessionEntries(
 		app.getPath("userData"),
 	);
@@ -505,6 +507,17 @@ app.on("before-quit", () => {
 	disposeTerminalIpc();
 });
 
+app.on("will-quit", (event) => {
+	if (telemetryShutdownComplete) {
+		return;
+	}
+	event.preventDefault();
+	void shutdownTelemetry().finally(() => {
+		telemetryShutdownComplete = true;
+		app.quit();
+	});
+});
+
 async function setupAutoUpdates() {
 	if (!canUseAutoUpdates() || autoUpdatesSetup) {
 		return;
@@ -536,23 +549,6 @@ async function triggerRecoveryUpdateCheck(error) {
 	recoveryUpdateCheckStarted = true;
 	console.warn("Checking for a Flashtype update after app failure", error);
 	return await checkForUpdatesFromMenu({ manual: true });
-}
-
-function setupTelemetryHeartbeat() {
-	if (!app.isPackaged || telemetryHeartbeatInterval !== null) {
-		return;
-	}
-	telemetryHeartbeatInterval = setInterval(() => {
-		if (!hasFocusedWorkspaceWindow()) {
-			return;
-		}
-		void captureAppOpened({ trigger: "heartbeat" });
-	}, TELEMETRY_HEARTBEAT_INTERVAL_MS);
-}
-
-function hasFocusedWorkspaceWindow() {
-	const focusedWindow = BrowserWindow.getFocusedWindow();
-	return Boolean(focusedWindow && workspaceWindows.has(focusedWindow));
 }
 
 function canUseAutoUpdates() {
@@ -1169,7 +1165,6 @@ function getApplicationIconBasePath() {
 	return app.getAppPath();
 }
 
-
 function installApplicationMenu() {
 	const isUpdateBusy = updateCheckInProgress || updateDownloadInProgress;
 	const checkForUpdatesItem = {
@@ -1288,6 +1283,9 @@ async function syncMacOSDockRecentWorkspaceDocuments() {
 			app.addRecentDocument(workspacePath);
 		}
 	} catch (error) {
-		console.warn("Failed to sync Flashtype macOS Dock recent workspaces", error);
+		console.warn(
+			"Failed to sync Flashtype macOS Dock recent workspaces",
+			error,
+		);
 	}
 }

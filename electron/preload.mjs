@@ -13,6 +13,14 @@ const app = {
 	},
 };
 
+const telemetry = {
+	capture: (payload) => ipcRenderer.invoke("telemetry:capture", payload),
+	shouldProfileWorkspace: (payload) =>
+		ipcRenderer.invoke("telemetry:shouldProfileWorkspace", payload),
+	markWorkspaceProfiled: (payload) =>
+		ipcRenderer.invoke("telemetry:markWorkspaceProfiled", payload),
+};
+
 const workspace = {
 	get: () => ipcRenderer.invoke("workspace:get"),
 	consumePendingOpenFiles: () =>
@@ -75,6 +83,7 @@ const terminal = {
 contextBridge.exposeInMainWorld("flashtypeDesktop", {
 	app,
 	platform: process.platform,
+	telemetry,
 	lix,
 	terminal,
 	workspace,

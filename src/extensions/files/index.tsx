@@ -10,6 +10,7 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { qb } from "@/lib/lix-kysely";
 import { FILES_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 import type { FilesystemEntryRow } from "@/queries";
+import { captureTelemetry, fileExtensionProperty } from "@/lib/telemetry";
 
 type FilesViewProps = {
 	readonly context?: ExtensionContext;
@@ -152,6 +153,10 @@ export function FilesView({ context }: FilesViewProps) {
 				if (!id) {
 					throw new Error(`created file id not found for path '${path}'`);
 				}
+				captureTelemetry("file created", {
+					file_extension: fileExtensionProperty(path),
+					source: "renderer",
+				});
 				setPendingPaths((prev) => [...prev, path]);
 				setSelectedPath(path);
 				setSelectedFileId(id);
@@ -426,6 +431,10 @@ export function FilesView({ context }: FilesViewProps) {
 							data: new TextEncoder().encode(content),
 						})
 						.execute();
+					captureTelemetry("file created", {
+						file_extension: fileExtensionProperty(filePath),
+						source: "renderer",
+					});
 
 					// Open the first dropped file
 					if (file === markdownFiles[0]) {
