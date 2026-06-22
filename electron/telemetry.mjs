@@ -147,7 +147,7 @@ let envVariablesPromise;
 let telemetryStorePromise;
 let telemetryStore;
 let posthogClient;
-let posthogClientInitialized = false;
+let posthogClientPromise;
 let identifiedThisSession = false;
 let telemetryIpcRegistered = false;
 let telemetryShutdownStarted = false;
@@ -316,6 +316,21 @@ export function registerTelemetryIpc() {
 		workspaceProfileClaimsByLixId.delete(lixId);
 		return { status: "marked" };
 	});
+
+	ipcMain.handle(
+		"telemetry:releaseWorkspaceProfileClaim",
+		async (_event, payload) => {
+			if (!isTelemetryEnabled()) {
+				return { status: "disabled" };
+			}
+			const lixId = normalizeLixId(payload?.lixId);
+			if (!lixId) {
+				return { status: "ignored" };
+			}
+			workspaceProfileClaimsByLixId.delete(lixId);
+			return { status: "released" };
+		},
+	);
 }
 
 export async function shutdownTelemetry(timeoutMs = SHUTDOWN_TIMEOUT_MS) {
@@ -338,11 +353,16 @@ function isTelemetryEnabled() {
 }
 
 async function getPostHogClient() {
-	if (posthogClientInitialized) {
+	if (posthogClient) {
 		return posthogClient;
 	}
-	posthogClientInitialized = true;
+	posthogClientPromise ??= createPostHogClient().finally(() => {
+		posthogClientPromise = undefined;
+	});
+	return await posthogClientPromise;
+}
 
+async function createPostHogClient() {
 	const env = await readEnvVariables();
 	if (!env?.PUBLIC_POSTHOG_TOKEN) {
 		return undefined;

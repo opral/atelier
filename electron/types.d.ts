@@ -214,6 +214,9 @@ export type DesktopTelemetryApi = {
 	markWorkspaceProfiled(payload: {
 		lixId: string;
 	}): Promise<{ status: "disabled" | "ignored" | "marked" }>;
+	releaseWorkspaceProfileClaim(payload: {
+		lixId: string;
+	}): Promise<{ status: "disabled" | "ignored" | "released" }>;
 };
 
 declare global {

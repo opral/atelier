@@ -373,17 +373,28 @@ function recordOpenWorkspacePath(window, workspace, telemetry = {}) {
 	if (!workspaceEntry) {
 		return;
 	}
+	const previousWorkspaceEntry = openWorkspaceEntriesByWindowId.get(window.id);
+	const workspaceAlreadyOpen = areWorkspaceSessionEntriesEqual(
+		previousWorkspaceEntry,
+		workspaceEntry,
+	);
 	openWorkspaceEntriesByWindowId.set(window.id, workspaceEntry);
 	recordRecentWorkspace(workspace);
-	void captureTelemetryEvent("workspace opened", {
-		is_ephemeral_workspace: workspace.ephemeral === true,
-		open_source: telemetry.openSource ?? "unknown",
-		pending_file_count: telemetry.pendingFileCount ?? 0,
-		source: "main",
-	});
+	if (!workspaceAlreadyOpen) {
+		void captureTelemetryEvent("workspace opened", {
+			is_ephemeral_workspace: workspace.ephemeral === true,
+			open_source: telemetry.openSource ?? "unknown",
+			pending_file_count: telemetry.pendingFileCount ?? 0,
+			source: "main",
+		});
+	}
 	void syncMacOSDockRecentWorkspaceDocuments();
 	persistOpenWorkspacePathsSoon();
 	updateDockMenu();
+}
+
+function areWorkspaceSessionEntriesEqual(left, right) {
+	return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
 function forgetOpenWorkspacePath(window) {

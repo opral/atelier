@@ -140,3 +140,9 @@ export async function markWorkspaceProfiled(lixId: string) {
 		lixId,
 	});
 }
+
+export async function releaseWorkspaceProfileClaim(lixId: string) {
+	return await window.flashtypeDesktop?.telemetry?.releaseWorkspaceProfileClaim({
+		lixId,
+	});
+}
