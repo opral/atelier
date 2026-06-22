@@ -108,6 +108,9 @@ importers:
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.60.0
+      '@posthog/cli':
+        specifier: ^0.7.30
+        version: 0.7.30
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.1.18(vite@7.3.0(@types/node@24.10.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -869,6 +872,11 @@ packages:
   '@playwright/test@1.60.0':
     resolution: {integrity: sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  '@posthog/cli@0.7.30':
+    resolution: {integrity: sha512-Qo665wxrTOUJv7AwHbh1zXdb1UnSX8EaeCRSVBj+VqjR43/461fxoBt30a+dGw5jWqk/5Y0k1FOz0RaV2d6yIg==}
+    engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
   '@posthog/core@1.35.4':
@@ -4483,6 +4491,10 @@ snapshots:
   '@playwright/test@1.60.0':
     dependencies:
       playwright: 1.60.0
+
+  '@posthog/cli@0.7.30':
+    dependencies:
+      detect-libc: 2.1.2
 
   '@posthog/core@1.35.4':
     dependencies:

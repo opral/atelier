@@ -24,7 +24,7 @@ describe("captureTelemetry", () => {
 			},
 		} as unknown as Window["flashtypeDesktop"];
 
-		captureTelemetry("workspace active", { reason: "workspace_ready" });
+		captureTelemetry("file opened", { file_extension: "md" });
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(warn).toHaveBeenCalledWith(

@@ -180,7 +180,6 @@ export type DesktopTelemetryEventName =
 	| "file opened"
 	| "file saved"
 	| "update installed"
-	| "workspace active"
 	| "workspace profiled"
 	| "workspace opened";
 
@@ -189,16 +188,12 @@ export type DesktopTelemetryApi = {
 		event: DesktopTelemetryEventName;
 		properties?: Record<
 			string,
-			| string
-			| number
-			| boolean
-			| Record<string, number>
-			| undefined
+			string | number | boolean | Record<string, number> | undefined
 		>;
 	}): Promise<{
 		status: "disabled" | "error" | "ignored" | "queued" | "throttled";
 	}>;
-	getSessionRecordingConfig(): Promise<
+	getClientConfig(): Promise<
 		| {
 				enabled: false;
 		  }
@@ -207,8 +202,12 @@ export type DesktopTelemetryApi = {
 				token: string;
 				host: string;
 				distinctId: string;
+				sessionRecordingEnabled: boolean;
 		  }
 	>;
+	setSessionContext(payload: {
+		sessionId: string;
+	}): Promise<{ status: "ignored" | "set" }>;
 	shouldProfileWorkspace(payload: {
 		lixId: string;
 	}): Promise<{ status: "disabled" | "due" | "fresh" | "ignored" }>;

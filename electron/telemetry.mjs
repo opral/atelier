@@ -1,5 +1,6 @@
 import { app, ipcMain } from "electron";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PostHog } from "posthog-node";
@@ -8,7 +9,6 @@ const TELEMETRY_STORE_FILE = "telemetry.json";
 const ENV_VARIABLES_FILE = "build/env-variables.mjs";
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const SESSION_REPLAY_SAMPLE_RATE = 0.1;
-const WORKSPACE_ACTIVE_THROTTLE_MS = 30 * 60 * 1000;
 const WORKSPACE_PROFILE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const WORKSPACE_PROFILE_CLAIM_TTL_MS = 5 * 60 * 1000;
 const SHUTDOWN_TIMEOUT_MS = 2_000;
@@ -20,7 +20,6 @@ const RENDERER_EVENT_ALLOWLIST = new Set([
 	"file opened",
 	"file saved",
 	"update installed",
-	"workspace active",
 	"workspace opened",
 	"workspace profiled",
 ]);
@@ -32,6 +31,7 @@ const PROPERTY_ALLOWLIST = new Set([
 	"extension_counts",
 	"extension_kind",
 	"extension_count",
+	"exit_code",
 	"file_extension",
 	"file_count",
 	"is_ephemeral_workspace",
@@ -43,6 +43,7 @@ const PROPERTY_ALLOWLIST = new Set([
 	"outcome",
 	"panel",
 	"pending_file_count",
+	"process_type",
 	"rank",
 	"reason",
 	"review_action",
@@ -150,6 +151,9 @@ let posthogClientInitialized = false;
 let identifiedThisSession = false;
 let telemetryIpcRegistered = false;
 let telemetryShutdownStarted = false;
+let latestRendererPostHogSessionId;
+let cachedDistinctId;
+const rendererPostHogSessionIdsByWebContentsId = new Map();
 const workspaceProfileClaimsByLixId = new Map();
 
 export async function captureAppLaunched({
@@ -160,48 +164,6 @@ export async function captureAppLaunched({
 		trigger,
 		launch_source: launchSource,
 	});
-}
-
-export async function captureWorkspaceActive({
-	reason = "workspace_ready",
-	source = "main",
-	workspaceId,
-} = {}) {
-	if (!isTelemetryEnabled()) {
-		return { status: "disabled" };
-	}
-
-	const store = await getOrCreateTelemetryStore();
-	const normalizedWorkspaceId = normalizeLixId(workspaceId);
-	const now = Date.now();
-	const lastActiveAt = normalizedWorkspaceId
-		? store.workspaceActiveAtByWorkspaceId?.[normalizedWorkspaceId]
-		: store.lastWorkspaceActiveAt;
-	if (!isWorkspaceActiveDue(lastActiveAt, now)) {
-		return { status: "throttled" };
-	}
-
-	const result = await captureTelemetryEvent("workspace active", {
-		reason,
-		source,
-		throttle_minutes: WORKSPACE_ACTIVE_THROTTLE_MS / 60_000,
-		workspace_id: normalizedWorkspaceId,
-	});
-	if (result.status !== "queued") {
-		return result;
-	}
-
-	const capturedAt = new Date(now).toISOString();
-	if (normalizedWorkspaceId) {
-		store.workspaceActiveAtByWorkspaceId = {
-			...(store.workspaceActiveAtByWorkspaceId ?? {}),
-			[normalizedWorkspaceId]: capturedAt,
-		};
-	} else {
-		store.lastWorkspaceActiveAt = capturedAt;
-	}
-	await persistTelemetryStore(store);
-	return result;
 }
 
 export async function captureTelemetryEvent(event, properties = {}) {
@@ -232,6 +194,35 @@ export async function captureTelemetryEvent(event, properties = {}) {
 	}
 }
 
+export async function captureTelemetryException(error, properties = {}) {
+	if (!isTelemetryEnabled()) {
+		return { status: "disabled" };
+	}
+
+	try {
+		const client = await getPostHogClient();
+		if (!client) {
+			return { status: "disabled" };
+		}
+
+		const distinctId = await getDistinctId();
+		await identifyTelemetryUser(client, distinctId);
+		client.captureException(
+			error,
+			distinctId,
+			exceptionEventProperties(properties, {
+				sessionId:
+					normalizePostHogSessionId(properties?.sessionId) ??
+					latestRendererPostHogSessionId,
+			}),
+		);
+		return { status: "queued" };
+	} catch (captureError) {
+		console.warn("PostHog exception capture failed", captureError);
+		return { status: "error" };
+	}
+}
+
 export function registerTelemetryIpc() {
 	if (telemetryIpcRegistered) {
 		return;
@@ -243,20 +234,13 @@ export function registerTelemetryIpc() {
 		if (!eventName) {
 			return { status: "ignored" };
 		}
-		if (eventName === "workspace active") {
-			return await captureWorkspaceActive({
-				reason: normalizeShortString(payload?.properties?.reason),
-				source: "renderer",
-				workspaceId: payload?.properties?.workspace_id,
-			});
-		}
 		return await captureTelemetryEvent(eventName, {
 			...sanitizeProperties(payload?.properties),
 			source: "renderer",
 		});
 	});
 
-	ipcMain.handle("telemetry:getSessionRecordingConfig", async () => {
+	ipcMain.handle("telemetry:getClientConfig", async () => {
 		if (!isTelemetryEnabled()) {
 			return { enabled: false };
 		}
@@ -265,15 +249,23 @@ export function registerTelemetryIpc() {
 			return { enabled: false };
 		}
 		const distinctId = await getDistinctId();
-		if (!isDistinctIdSampled(distinctId, SESSION_REPLAY_SAMPLE_RATE)) {
-			return { enabled: false };
-		}
 		return {
 			enabled: true,
 			token: env.PUBLIC_POSTHOG_TOKEN,
 			host: env.PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST,
 			distinctId,
+			sessionRecordingEnabled: isDistinctIdSampled(
+				distinctId,
+				SESSION_REPLAY_SAMPLE_RATE,
+			),
 		};
+	});
+
+	ipcMain.handle("telemetry:setSessionContext", async (event, payload) => {
+		return setTelemetrySessionContextForWebContents(
+			event.sender,
+			payload?.sessionId,
+		);
 	});
 
 	ipcMain.handle(
@@ -355,11 +347,14 @@ async function getPostHogClient() {
 	if (!env?.PUBLIC_POSTHOG_TOKEN) {
 		return undefined;
 	}
+	cachedDistinctId = await getDistinctId();
 
 	posthogClient = new PostHog(env.PUBLIC_POSTHOG_TOKEN, {
 		host: env.PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST,
 		flushAt: 10,
 		flushInterval: 10_000,
+		enableExceptionAutocapture: true,
+		before_send: (event) => beforeSendTelemetryEvent(event),
 	});
 	return posthogClient;
 }
@@ -545,8 +540,9 @@ function normalizeTelemetryStore(store) {
 function commonEventProperties() {
 	return {
 		app_name: "flashtype",
-		app_version: app.getVersion(),
-		is_packaged: app.isPackaged,
+		app_version:
+			typeof app?.getVersion === "function" ? app.getVersion() : "0.0.0",
+		is_packaged: app?.isPackaged === true,
 		platform: process.platform,
 		platform_arch: process.arch,
 		...systemLocaleProperties(),
@@ -555,11 +551,69 @@ function commonEventProperties() {
 	};
 }
 
+export function getTelemetrySessionIdForWebContents(webContents) {
+	return rendererPostHogSessionIdsByWebContentsId.get(webContents?.id);
+}
+
+export function forgetTelemetrySessionContextForWebContents(webContents) {
+	if (!webContents) {
+		return;
+	}
+	rendererPostHogSessionIdsByWebContentsId.delete(webContents.id);
+}
+
+export function setTelemetrySessionContextForWebContents(
+	webContents,
+	sessionIdValue,
+) {
+	const sessionId = normalizePostHogSessionId(sessionIdValue);
+	if (!sessionId || !webContents) {
+		return { status: "ignored" };
+	}
+	latestRendererPostHogSessionId = sessionId;
+	rendererPostHogSessionIdsByWebContentsId.set(webContents.id, sessionId);
+	return { status: "set" };
+}
+
+function exceptionEventProperties(properties = {}, { sessionId } = {}) {
+	const normalizedSessionId = normalizePostHogSessionId(sessionId);
+	return {
+		...commonEventProperties(),
+		...sanitizeProperties(properties),
+		...(normalizedSessionId ? { $session_id: normalizedSessionId } : {}),
+	};
+}
+
+export function beforeSendTelemetryEvent(event) {
+	if (!event) {
+		return event;
+	}
+
+	if (event.event === "$exception") {
+		if (cachedDistinctId) {
+			event.distinctId = cachedDistinctId;
+		}
+		const existingSessionId = normalizePostHogSessionId(
+			event.properties?.$session_id,
+		);
+		const sessionId = existingSessionId ?? latestRendererPostHogSessionId;
+		event.properties = {
+			...exceptionEventProperties({ source: "electron-main" }, { sessionId }),
+			...(event.properties ?? {}),
+		};
+	}
+
+	if (event.properties) {
+		event.properties = scrubTelemetrySensitiveValues(event.properties);
+	}
+	return event;
+}
+
 function systemLocaleProperties() {
 	const systemLocale =
-		typeof app.getSystemLocale === "function"
+		typeof app?.getSystemLocale === "function"
 			? app.getSystemLocale()
-			: app.getLocale();
+			: app?.getLocale?.();
 	const locale = normalizeLocale(systemLocale);
 	const language = locale?.split(/[-_]/)[0]?.toLowerCase();
 	const properties = {};
@@ -620,6 +674,7 @@ function normalizePropertyValue(key, value) {
 		case "branch_count":
 		case "directory_count":
 		case "extension_count":
+		case "exit_code":
 		case "file_count":
 		case "largest_extension_file_count":
 		case "pending_file_count":
@@ -728,6 +783,18 @@ function normalizeLocale(value) {
 		: undefined;
 }
 
+function normalizePostHogSessionId(value) {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+	const trimmed = value.trim();
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+		trimmed,
+	)
+		? trimmed
+		: undefined;
+}
+
 function isDistinctIdSampled(distinctId, sampleRate) {
 	if (sampleRate <= 0) {
 		return false;
@@ -752,6 +819,96 @@ function normalizeShortString(value) {
 		return undefined;
 	}
 	return trimmed.slice(0, 80);
+}
+
+export function scrubTelemetrySensitiveValues(value, depth = 0) {
+	if (depth > 8) {
+		return undefined;
+	}
+	if (typeof value === "string") {
+		return scrubPrivatePaths(value);
+	}
+	if (Array.isArray(value)) {
+		return value.map((item) => scrubTelemetrySensitiveValues(item, depth + 1));
+	}
+	if (value && typeof value === "object") {
+		const scrubbed = {};
+		for (const [key, nestedValue] of Object.entries(value)) {
+			scrubbed[key] = scrubTelemetrySensitiveValues(nestedValue, depth + 1);
+		}
+		return scrubbed;
+	}
+	return value;
+}
+
+function scrubPrivatePaths(value) {
+	let scrubbed = value;
+	for (const privatePath of getPrivatePathPrefixes()) {
+		scrubbed = scrubPrivatePathPrefix(scrubbed, privatePath);
+		scrubbed = scrubPrivatePathPrefix(
+			scrubbed,
+			`file://${privatePath.replaceAll(path.sep, "/")}`,
+		);
+	}
+	return scrubbed.replaceAll("file://[redacted_path]", "[redacted_path]");
+}
+
+function getPrivatePathPrefixes() {
+	const prefixes = new Set();
+	const homeDir = os.homedir();
+	if (homeDir) {
+		prefixes.add(path.resolve(homeDir));
+	}
+	for (const pathName of ["home", "userData", "temp"]) {
+		try {
+			const prefix = app.getPath(pathName);
+			if (prefix) {
+				prefixes.add(path.resolve(prefix));
+			}
+		} catch {
+			// Some Electron paths are unavailable in unusual runtime phases.
+		}
+	}
+	return [...prefixes];
+}
+
+function scrubPrivatePathPrefix(value, privatePath) {
+	if (!privatePath) {
+		return value;
+	}
+	const normalizedPrivatePath = privatePath.replaceAll("\\", "/");
+	const normalizedValue = value.replaceAll("\\", "/");
+	const startIndex = normalizedValue.indexOf(normalizedPrivatePath);
+	if (startIndex === -1) {
+		return value;
+	}
+
+	let result = "";
+	let cursor = 0;
+	let searchFrom = 0;
+	while (true) {
+		const index = normalizedValue.indexOf(normalizedPrivatePath, searchFrom);
+		if (index === -1) {
+			result += value.slice(cursor);
+			break;
+		}
+		let end = index + normalizedPrivatePath.length;
+		while (
+			end < normalizedValue.length &&
+			!isPathBoundary(normalizedValue[end])
+		) {
+			end += 1;
+		}
+		result += value.slice(cursor, index);
+		result += "[redacted_path]";
+		cursor = end;
+		searchFrom = end;
+	}
+	return result;
+}
+
+function isPathBoundary(character) {
+	return /[\s)"'<>[\]{}]/.test(character);
 }
 
 function normalizeLixId(value) {
@@ -794,14 +951,6 @@ function normalizeWorkspaceActiveAtByWorkspaceId(value) {
 		normalized[workspaceId] = activeAt;
 	}
 	return normalized;
-}
-
-export function isWorkspaceActiveDue(lastActiveAt, now = Date.now()) {
-	const lastActiveTime = Date.parse(lastActiveAt ?? "");
-	return (
-		!Number.isFinite(lastActiveTime) ||
-		now - lastActiveTime >= WORKSPACE_ACTIVE_THROTTLE_MS
-	);
 }
 
 export function isWorkspaceProfileDue(lastProfiledAt, now = Date.now()) {

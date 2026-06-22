@@ -21,11 +21,13 @@ import {
 	captureWorkspaceProfile,
 	readWorkspaceId,
 } from "./lib/workspace-profile-telemetry";
-import { startPostHogSessionRecording } from "./lib/session-recording";
+import { capturePostHogWorkspaceActive } from "./lib/posthog-client";
 
 type Workspace = Awaited<
 	ReturnType<NonNullable<Window["flashtypeDesktop"]>["workspace"]["get"]>
 >;
+
+const WORKSPACE_ACTIVE_SIGNAL_THROTTLE_MS = 30 * 60 * 1000;
 
 /**
  * The workspace gates the app: without a folder, only the first-run screen
@@ -166,22 +168,21 @@ export const AppRoot = () => {
 			const now = Date.now();
 			if (
 				reason !== "workspace_ready" &&
-				now - lastWorkspaceActiveSignalRef.current < 60_000
+				now - lastWorkspaceActiveSignalRef.current <
+					WORKSPACE_ACTIVE_SIGNAL_THROTTLE_MS
 			) {
 				return;
 			}
 			lastWorkspaceActiveSignalRef.current = now;
 			void (async () => {
-				const workspaceId = workspaceIdRef.current ?? (await readWorkspaceId(lix));
+				const workspaceId =
+					workspaceIdRef.current ?? (await readWorkspaceId(lix));
 				workspaceIdRef.current = workspaceId;
-				captureTelemetry("workspace active", {
-					reason,
-					source: "renderer",
-					workspace_id: workspaceId,
-				});
-				void startPostHogSessionRecording().catch((error: unknown) => {
-					console.warn("Failed to start session recording", error);
-				});
+				void capturePostHogWorkspaceActive({ reason, workspaceId }).catch(
+					(error: unknown) => {
+						console.warn("Failed to capture workspace active telemetry", error);
+					},
+				);
 			})().catch((error: unknown) => {
 				console.warn("Failed to capture workspace active telemetry", error);
 			});

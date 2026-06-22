@@ -1,29 +1,14 @@
 import { describe, expect, test } from "vitest";
+import os from "node:os";
 import {
-	isWorkspaceActiveDue,
+	beforeSendTelemetryEvent,
 	isWorkspaceProfileDue,
 	sanitizeProperties,
+	scrubTelemetrySensitiveValues,
+	setTelemetrySessionContextForWebContents,
 } from "./telemetry.mjs";
 
 const NOW = Date.UTC(2026, 5, 22);
-
-describe("isWorkspaceActiveDue", () => {
-	test("is due when no prior active timestamp exists", () => {
-		expect(isWorkspaceActiveDue(undefined, NOW)).toBe(true);
-	});
-
-	test("is fresh inside the active throttle window", () => {
-		expect(
-			isWorkspaceActiveDue(new Date(NOW - 29 * 60 * 1000).toISOString(), NOW),
-		).toBe(false);
-	});
-
-	test("is due once the active throttle window has elapsed", () => {
-		expect(
-			isWorkspaceActiveDue(new Date(NOW - 30 * 60 * 1000).toISOString(), NOW),
-		).toBe(true);
-	});
-});
 
 describe("isWorkspaceProfileDue", () => {
 	test("is due when no prior profile timestamp exists", () => {
@@ -115,5 +100,58 @@ describe("sanitizeProperties", () => {
 			open_source: "file_open_event",
 			pending_file_count: 1,
 		});
+	});
+});
+
+describe("scrubTelemetrySensitiveValues", () => {
+	test("redacts private file paths in nested exception properties", () => {
+		const privateFilePath = `${os.homedir()}/Documents/customer/roadmap.md`;
+		expect(
+			scrubTelemetrySensitiveValues({
+				$exception_list: [
+					{
+						value: `Failed to open ${privateFilePath}`,
+						stacktrace: {
+							frames: [
+								{
+									filename: `file://${privateFilePath}`,
+								},
+							],
+						},
+					},
+				],
+			}),
+		).toEqual({
+			$exception_list: [
+				{
+					value: "Failed to open [redacted_path]",
+					stacktrace: {
+						frames: [
+							{
+								filename: "[redacted_path]",
+							},
+						],
+					},
+				},
+			],
+		});
+	});
+});
+
+describe("beforeSendTelemetryEvent", () => {
+	test("does not overwrite an explicit exception session id with the latest renderer session", () => {
+		const explicitSessionId = "11111111-1111-4111-8111-111111111111";
+		const latestSessionId = "22222222-2222-4222-8222-222222222222";
+		setTelemetrySessionContextForWebContents({ id: 42 }, latestSessionId);
+
+		expect(
+			beforeSendTelemetryEvent({
+				event: "$exception",
+				distinctId: "install-id",
+				properties: {
+					$session_id: explicitSessionId,
+				},
+			})?.properties?.$session_id,
+		).toBe(explicitSessionId);
 	});
 });

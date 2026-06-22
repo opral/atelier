@@ -15,7 +15,10 @@ import {
 } from "./workspace.mjs";
 import {
 	captureAppLaunched,
+	captureTelemetryException,
 	captureTelemetryEvent,
+	forgetTelemetrySessionContextForWebContents,
+	getTelemetrySessionIdForWebContents,
 	registerTelemetryIpc,
 	shutdownTelemetry,
 } from "./telemetry.mjs";
@@ -59,6 +62,13 @@ const isDevRuntime =
 	process.env.VITE_DEV_SERVER_URL !== undefined &&
 	!app.isPackaged;
 const APP_DISPLAY_NAME = isDevRuntime ? `${APP_NAME} (Dev)` : APP_NAME;
+const CRASH_LIKE_PROCESS_GONE_REASONS = new Set([
+	"abnormal-exit",
+	"crashed",
+	"integrity-failure",
+	"launch-failed",
+	"oom",
+]);
 const workspaceWindows = new Set();
 const openWorkspaceEntriesByWindowId = new Map();
 const activeFilePathsByWindowId = new Map();
@@ -110,6 +120,23 @@ if (hasSingleInstanceLock) {
 app.on("open-file", (event, filePath) => {
 	event.preventDefault();
 	openWorkspacePathWhenReady(filePath);
+});
+
+app.on("child-process-gone", (_event, details) => {
+	if (!isCrashLikeProcessGoneReason(details.reason)) {
+		return;
+	}
+	void captureTelemetryException(
+		new Error(
+			`Electron child process exited: ${details.type} ${details.reason} (${details.exitCode ?? "n/a"})`,
+		),
+		{
+			exit_code: details.exitCode,
+			process_type: details.type,
+			reason: details.reason,
+			source: "electron-child-process",
+		},
+	);
 });
 
 function openWorkspacePathWhenReady(workspacePath) {
@@ -176,6 +203,10 @@ async function openWorkspaceRequests(
 
 function createWorkspaceOpenRequest(request, requestedSource) {
 	return { request, requestedSource };
+}
+
+function isCrashLikeProcessGoneReason(reason) {
+	return CRASH_LIKE_PROCESS_GONE_REASONS.has(reason);
 }
 
 function normalizeWorkspaceOpenRequest(
@@ -485,6 +516,7 @@ async function createMainWindow(workspaceRequest) {
 		if (showFallback !== undefined) {
 			clearTimeout(showFallback);
 		}
+		forgetTelemetrySessionContextForWebContents(window.webContents);
 		workspaceWindows.delete(window);
 		forgetOpenWorkspacePath(window);
 		void closeLixSession(window, { ignoreOpenError: true });
@@ -511,6 +543,20 @@ async function createMainWindow(workspaceRequest) {
 		console.error(
 			`Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
 		);
+		if (isCrashLikeProcessGoneReason(details.reason)) {
+			void captureTelemetryException(
+				new Error(
+					`Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
+				),
+				{
+					exit_code: details.exitCode,
+					process_type: "renderer",
+					reason: details.reason,
+					sessionId: getTelemetrySessionIdForWebContents(window.webContents),
+					source: "electron-renderer",
+				},
+			);
+		}
 		void triggerRecoveryUpdateCheck(
 			new Error(
 				`Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
@@ -547,6 +593,10 @@ if (hasSingleInstanceLock) {
 		}
 		void startWorkspaceLifecycle().catch((error) => {
 			console.warn("Failed to start Flashtype workspace UI", error);
+			void captureTelemetryException(error, {
+				reason: "workspace_lifecycle_start_failed",
+				source: "electron-main",
+			});
 			void triggerRecoveryUpdateCheck(error);
 		});
 	});
