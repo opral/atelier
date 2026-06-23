@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 - 2026-06-23
+
+- Exclude FlashType's `.lix` workspace data from the folder size limit.
+
 ## 0.5.0 - 2026-06-23
 
 ### Minor
