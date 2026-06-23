@@ -39,6 +39,12 @@ type CsvViewProps = {
 const COLUMN_MIN_WIDTH = 72;
 const ROW_HEIGHT = 48;
 
+type CsvFileRow = {
+	readonly id: string;
+	readonly path: string;
+	readonly data: Uint8Array;
+};
+
 export function CsvView({
 	fileId,
 	externalWriteReview = null,
@@ -61,28 +67,16 @@ export function CsvView({
 	);
 }
 
-function CsvViewContent({
-	fileId,
-	externalWriteReview = null,
-	isActiveView = true,
-	isPanelFocused = true,
-	onAcceptReview,
-	onRejectReview,
-}: CsvViewProps) {
+function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 	assertFileId(fileId);
 
-	const fileRow = useQueryTakeFirst((lix) =>
+	const fileRow = useQueryTakeFirst<CsvFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "data"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
-
-	const parsed = useMemo<CsvParseResult | null>(() => {
-		if (!fileRow) return null;
-		return parseCsv(decodeFileDataToText(fileRow.data));
-	}, [fileRow]);
 
 	if (!fileRow) {
 		return (
@@ -92,7 +86,24 @@ function CsvViewContent({
 		);
 	}
 
-	if (!parsed || parsed.columns.length === 0) {
+	return <CsvViewLoaded fileRow={fileRow} {...props} />;
+}
+
+function CsvViewLoaded({
+	fileRow,
+	externalWriteReview = null,
+	isActiveView = true,
+	isPanelFocused = true,
+	onAcceptReview,
+	onRejectReview,
+}: Omit<CsvViewProps, "fileId"> & {
+	readonly fileRow: CsvFileRow;
+}) {
+	const parsed = useMemo<CsvParseResult>(() => {
+		return parseCsv(decodeFileDataToText(fileRow.data));
+	}, [fileRow]);
+
+	if (parsed.columns.length === 0) {
 		return <CsvEmptyState filePath={fileRow.path} />;
 	}
 

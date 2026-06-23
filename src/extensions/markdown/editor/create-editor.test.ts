@@ -230,14 +230,12 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 			},
 		},
 	});
-	await new Promise((r) => setTimeout(r, 0));
 
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) => markdown === ensureTrailingNewline("Start\n\nNew"),
+	);
 	expect(mdAfter).toBe(ensureTrailingNewline("Start\n\nNew"));
 	editor.destroy();
 });
@@ -271,14 +269,13 @@ test("replace word selection with paste (TipTap + Lix)", async () => {
 			},
 		},
 	});
-	await new Promise((r) => setTimeout(r, 0));
 
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) =>
+			markdown === ensureTrailingNewline("Replace new content here."),
+	);
 	expect(mdAfter).toBe(ensureTrailingNewline("Replace new content here."));
 	editor.destroy();
 });
@@ -312,14 +309,14 @@ test("replace entire document with paste (TipTap + Lix)", async () => {
 			},
 		},
 	});
-	await new Promise((r) => setTimeout(r, 0));
 
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) =>
+			markdown ===
+			ensureTrailingNewline("# New Document\n\nCompletely new content"),
+	);
 	expect(mdAfter).toBe(
 		ensureTrailingNewline("# New Document\n\nCompletely new content"),
 	);
@@ -355,15 +352,12 @@ test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () 
 		},
 	});
 
-	await new Promise((r) => setTimeout(r, 0));
-
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) =>
+			markdown === ensureTrailingNewline("First line\n\nSecond line"),
+	);
 	expect(mdAfter).toBe(ensureTrailingNewline("First line\n\nSecond line"));
 	editor.destroy();
 });
@@ -486,13 +480,11 @@ test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 			},
 		},
 	});
-	await new Promise((r) => setTimeout(r, 0));
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) => markdown === ensureTrailingNewline("Line one\n\nLine two"),
+	);
 	expect(mdAfter).toBe(ensureTrailingNewline("Line one\n\nLine two"));
 	editor.destroy();
 });
@@ -523,13 +515,16 @@ test("paste complex markdown with lists and code blocks (TipTap + Lix)", async (
 			},
 		},
 	});
-	await new Promise((r) => setTimeout(r, 0));
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) =>
+			markdown.includes("# Title") &&
+			markdown.includes("- Item 1") &&
+			markdown.includes("- Item 2") &&
+			markdown.includes("```javascript") &&
+			markdown.includes("const x = 1;"),
+	);
 	expect(mdAfter).toContain("# Title");
 	expect(mdAfter).toContain("- Item 1");
 	expect(mdAfter).toContain("- Item 2");
@@ -564,13 +559,11 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
 			},
 		},
 	});
-	await new Promise((r) => setTimeout(r, 0));
-	const fileAfter = await qb(lix)
-		.selectFrom("lix_file")
-		.where("id", "=", fileId)
-		.selectAll()
-		.executeTakeFirst();
-	const mdAfter = new TextDecoder().decode(fileAfter?.data ?? new Uint8Array());
+	const mdAfter = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) => markdown === ensureTrailingNewline(input),
+	);
 	expect(mdAfter).toBe(ensureTrailingNewline(input));
 	editor.destroy();
 });

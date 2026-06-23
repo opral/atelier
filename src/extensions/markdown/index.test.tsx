@@ -366,7 +366,7 @@ describe("MarkdownView", () => {
 			);
 		});
 
-		expect(screen.getByText(/file not found/i)).toBeInTheDocument();
+		expect(await screen.findByText(/file not found/i)).toBeInTheDocument();
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
 
 		await act(async () => {

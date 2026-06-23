@@ -32,6 +32,17 @@ function isUserPath(path: string): boolean {
 	return !path.startsWith("/.lix/");
 }
 
+async function waitForFilesViewReady(utils: ReturnType<typeof render>) {
+	for (let i = 0; i < 20; i += 1) {
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		});
+		const button = utils.queryByRole("button", { name: "New file" });
+		if (button) return button;
+	}
+	throw new Error("Files view did not finish loading");
+}
+
 describe("FilesView", () => {
 	beforeAll(() => {
 		setNavigatorPlatform("MacIntel");
@@ -61,7 +72,8 @@ describe("FilesView", () => {
 			);
 		});
 
-		expect(await utils!.findByRole("button", { name: "New file" })).toHaveClass(
+		await waitForFilesViewReady(utils!);
+		expect(utils!.getByRole("button", { name: "New file" })).toHaveClass(
 			"select-none",
 		);
 
@@ -83,6 +95,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		const initialRows = await qb(lix)
 			.selectFrom("lix_file")
@@ -201,6 +214,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
@@ -645,6 +659,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
@@ -693,6 +708,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(document, {
@@ -744,6 +760,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(document, { key: ".", ctrlKey: true });
@@ -776,6 +793,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(document, {
@@ -813,6 +831,7 @@ describe("FilesView", () => {
 				</LixProvider>,
 			);
 		});
+		await waitForFilesViewReady(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
