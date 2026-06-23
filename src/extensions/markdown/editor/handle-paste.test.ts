@@ -99,8 +99,8 @@ describe("handlePaste - cursor position insertion", () => {
 			],
 		});
 
-		// Set cursor between paragraphs
-		editor.commands.setTextSelection(12);
+		// Set cursor at the end of the first paragraph.
+		editor.commands.setTextSelection(11);
 
 		const ok = await handlePaste({
 			editor,
@@ -146,8 +146,8 @@ describe("handlePaste - selection replacement", () => {
 			],
 		});
 
-		// Select "Line two" paragraph
-		editor.commands.setTextSelection({ from: 10, to: 19 });
+		// Select "Line two" paragraph text.
+		editor.commands.setTextSelection({ from: 11, to: 19 });
 
 		const ok = await handlePaste({
 			editor,

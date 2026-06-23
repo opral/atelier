@@ -103,14 +103,13 @@ describe("BranchSwitcher", () => {
 		vi.stubGlobal("prompt", promptSpy);
 
 		await renderWithProviders();
+		const trigger = await screen.findByRole("button", {
+			name: "Select branch",
+		});
 
 		await act(async () => {
-			fireEvent.pointerDown(
-				screen.getByRole("button", { name: "Select branch" }),
-			);
-			fireEvent.pointerUp(
-				screen.getByRole("button", { name: "Select branch" }),
-			);
+			fireEvent.pointerDown(trigger);
+			fireEvent.pointerUp(trigger);
 		});
 
 		const actionsButton = await screen.findByRole("button", {
@@ -145,14 +144,13 @@ describe("BranchSwitcher", () => {
 		vi.stubGlobal("confirm", confirmSpy);
 
 		await renderWithProviders();
+		const trigger = await screen.findByRole("button", {
+			name: "Select branch",
+		});
 
 		await act(async () => {
-			fireEvent.pointerDown(
-				screen.getByRole("button", { name: "Select branch" }),
-			);
-			fireEvent.pointerUp(
-				screen.getByRole("button", { name: "Select branch" }),
-			);
+			fireEvent.pointerDown(trigger);
+			fireEvent.pointerUp(trigger);
 		});
 
 		const actionsButton = await screen.findByRole("button", {
@@ -198,14 +196,13 @@ describe("BranchSwitcher", () => {
 
 	test("delete action is disabled for active branch", async () => {
 		await renderWithProviders();
+		const trigger = await screen.findByRole("button", {
+			name: "Select branch",
+		});
 
 		await act(async () => {
-			fireEvent.pointerDown(
-				screen.getByRole("button", { name: "Select branch" }),
-			);
-			fireEvent.pointerUp(
-				screen.getByRole("button", { name: "Select branch" }),
-			);
+			fireEvent.pointerDown(trigger);
+			fireEvent.pointerUp(trigger);
 		});
 
 		const actionsButton = await screen.findByRole("button", {

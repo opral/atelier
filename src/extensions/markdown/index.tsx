@@ -48,6 +48,11 @@ type HistoricalMarkdownBlockRow = {
 	readonly snapshot_content: unknown;
 };
 
+type MarkdownFileRow = {
+	readonly id: string;
+	readonly path: string;
+};
+
 /**
  * Embeds the shared TipTap editor to render Markdown documents.
  *
@@ -82,19 +87,10 @@ export function MarkdownView({
 	);
 }
 
-function MarkdownViewContent({
-	fileId,
-	isActiveView = true,
-	isPanelFocused = true,
-	focusOnLoad = false,
-	syncActiveFile = true,
-	externalWriteReview = null,
-	onAcceptReviewDiff,
-	onRejectReviewDiff,
-}: MarkdownViewProps) {
+function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 	assertFileId(fileId);
 
-	const fileRow = useQueryTakeFirst(
+	const fileRow = useQueryTakeFirst<MarkdownFileRow>(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
@@ -103,6 +99,22 @@ function MarkdownViewContent({
 				.limit(1),
 		{ subscribe: false },
 	);
+
+	return <MarkdownViewLoaded fileRow={fileRow} {...props} />;
+}
+
+function MarkdownViewLoaded({
+	fileRow,
+	isActiveView = true,
+	isPanelFocused = true,
+	focusOnLoad = false,
+	syncActiveFile = true,
+	externalWriteReview = null,
+	onAcceptReviewDiff,
+	onRejectReviewDiff,
+}: Omit<MarkdownViewProps, "fileId"> & {
+	readonly fileRow: MarkdownFileRow | undefined;
+}) {
 	const reviewDiff = useMemo<MarkdownReviewDiff | null>(() => {
 		if (!externalWriteReview) return null;
 		return {

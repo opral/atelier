@@ -27,6 +27,13 @@ function withKeyDef(
 	} as any;
 }
 
+async function actAndFlush(callback: () => void | Promise<void>) {
+	await act(async () => {
+		await callback();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+}
+
 test("reads a global, untracked key (test fixture)", async () => {
 	const testKey = nextTestKey("flashtype_test_untracked");
 	const defs = withKeyDef(testKey, {
@@ -62,7 +69,9 @@ test("reads a global, untracked key (test fixture)", async () => {
 		hookResult = result as unknown as { current: unknown };
 	});
 
-	await waitFor(() => Array.isArray(hookResult.current as any));
+	await waitFor(() =>
+		expect(Array.isArray(hookResult.current as any)).toBe(true),
+	);
 
 	const [value] = hookResult.current as any;
 	expect(value).toBe("alpha");
@@ -92,9 +101,11 @@ test("writes and reads a global, untracked key (test fixture)", async () => {
 	});
 
 	// Wait for hook to initialize
-	await waitFor(() => Array.isArray(resultRef.current as any));
+	await waitFor(() =>
+		expect(Array.isArray(resultRef.current as any)).toBe(true),
+	);
 
-	await act(async () => {
+	await actAndFlush(async () => {
 		await (resultRef.current as any)?.[1]("beta");
 	});
 
@@ -128,11 +139,13 @@ test("writes and reads a tracked key on active branch", async () => {
 	});
 
 	// Wait for hook to initialize
-	await waitFor(() => Array.isArray(hookResult.current as any));
+	await waitFor(() =>
+		expect(Array.isArray(hookResult.current as any)).toBe(true),
+	);
 
 	await waitFor(() => typeof (hookResult.current as any)[1] === "function");
 
-	await act(async () => {
+	await actAndFlush(async () => {
 		await (hookResult.current as any)[1]("hello");
 	});
 
@@ -171,8 +184,10 @@ test("writes and reads an untracked key on active branch", async () => {
 		hookResult = result as unknown as { current: unknown };
 	});
 
-	await waitFor(() => Array.isArray(hookResult.current as any));
-	await act(async () => {
+	await waitFor(() =>
+		expect(Array.isArray(hookResult.current as any)).toBe(true),
+	);
+	await actAndFlush(async () => {
 		await (hookResult.current as any)[1]("local");
 	});
 	await waitFor(() => expect((hookResult.current as any)[0]).toBe("local"));
@@ -298,11 +313,13 @@ test("re-renders when key value changes externally", async () => {
 		resultRef = result as unknown as { current: unknown };
 	});
 	// wait for initial suspense resolution
-	await waitFor(() => Array.isArray(resultRef.current as any));
+	await waitFor(() =>
+		expect(Array.isArray(resultRef.current as any)).toBe(true),
+	);
 	await waitFor(() => expect((resultRef.current as any)[0]).toBe("initial"));
 
 	// mutate externally (simulate another part of app)
-	await act(async () => {
+	await actAndFlush(async () => {
 		await qb(lix)
 			.updateTable("lix_key_value")
 			.set({ value: "external" })
@@ -428,7 +445,7 @@ test("shares optimistic updates across hook instances", async () => {
 		secondary: "next",
 	});
 
-	await act(async () => {
+	await actAndFlush(async () => {
 		gate.resolve();
 		await pendingWrite;
 	});
@@ -457,16 +474,18 @@ test("returns optimistic value immediately when setter is called", async () => {
 		hookResult = result as unknown as { current: unknown };
 	});
 
-	await waitFor(() => Array.isArray(hookResult.current as any));
+	await waitFor(() =>
+		expect(Array.isArray(hookResult.current as any)).toBe(true),
+	);
 
 	let pending: Promise<unknown> | undefined;
-	await act(async () => {
+	await actAndFlush(async () => {
 		pending = (hookResult.current as any)[1]("value-1");
 	});
 
 	expect((hookResult.current as any)[0]).toBe("value-1");
 
-	await act(async () => {
+	await actAndFlush(async () => {
 		await pending;
 	});
 
