@@ -71,6 +71,7 @@ const CRASH_LIKE_PROCESS_GONE_REASONS = new Set([
 ]);
 const workspaceWindows = new Set();
 const openWorkspaceEntriesByWindowId = new Map();
+const closedWorkspaceEntryWindowIds = new Set();
 const activeFilePathsByWindowId = new Map();
 const pendingWorkspaceOpenRequests = [];
 let readyForWorkspaceOpens = false;
@@ -194,7 +195,8 @@ async function openWorkspaceRequests(
 	}
 
 	for (const [source, requests] of requestsBySource) {
-		const workspaceTargets = await resolveDirectLaunchWorkspaceTargets(requests);
+		const workspaceTargets =
+			await resolveDirectLaunchWorkspaceTargets(requests);
 		for (const workspaceTarget of workspaceTargets) {
 			await createMainWindow(
 				withWorkspaceOpenTelemetry(workspaceTarget, source),
@@ -380,6 +382,7 @@ function recordOpenWorkspacePath(window, workspace, telemetry = {}) {
 		previousWorkspaceEntry,
 		workspaceEntry,
 	);
+	closedWorkspaceEntryWindowIds.delete(window.id);
 	openWorkspaceEntriesByWindowId.set(window.id, workspaceEntry);
 	recordRecentWorkspace(workspace);
 	if (!workspaceAlreadyOpen) {
@@ -403,6 +406,7 @@ function forgetOpenWorkspacePath(window, { persist = true } = {}) {
 	if (!window) {
 		return;
 	}
+	closedWorkspaceEntryWindowIds.delete(window.id);
 	openWorkspaceEntriesByWindowId.delete(window.id);
 	activeFilePathsByWindowId.delete(window.id);
 	if (persist && !isQuitting) {
@@ -411,10 +415,23 @@ function forgetOpenWorkspacePath(window, { persist = true } = {}) {
 	updateDockMenu();
 }
 
-function getOpenWorkspaceEntries() {
-	return normalizeWorkspaceSessionEntries([
-		...openWorkspaceEntriesByWindowId.values(),
-	]);
+function getOpenWorkspaceEntries({ includeClosed = false } = {}) {
+	return normalizeWorkspaceSessionEntries(
+		[...openWorkspaceEntriesByWindowId.entries()]
+			.filter(
+				([windowId]) =>
+					includeClosed || !closedWorkspaceEntryWindowIds.has(windowId),
+			)
+			.map(([, entry]) => entry),
+	);
+}
+
+function pruneClosedWorkspaceEntries() {
+	for (const windowId of closedWorkspaceEntryWindowIds) {
+		openWorkspaceEntriesByWindowId.delete(windowId);
+		activeFilePathsByWindowId.delete(windowId);
+	}
+	closedWorkspaceEntryWindowIds.clear();
 }
 
 function forgetClosedWorkspaceIfOtherWindowsRemain(closedWindow) {
@@ -427,6 +444,9 @@ function forgetClosedWorkspaceIfOtherWindowsRemain(closedWindow) {
 		);
 		if (hasOtherWindow) {
 			forgetOpenWorkspacePath(closedWindow);
+		} else if (openWorkspaceEntriesByWindowId.has(closedWindow.id)) {
+			closedWorkspaceEntryWindowIds.add(closedWindow.id);
+			updateDockMenu();
 		}
 	}, 100);
 }
@@ -440,6 +460,7 @@ function persistOpenWorkspacePathsSoon() {
 			app.getPath("userData"),
 			getOpenWorkspaceEntries(),
 		);
+		pruneClosedWorkspaceEntries();
 	} catch (error) {
 		console.warn("Failed to persist Flashtype workspace session", error);
 	}
@@ -449,7 +470,7 @@ function flushOpenWorkspacePaths() {
 	try {
 		writeWorkspaceSessionEntriesSync(
 			app.getPath("userData"),
-			getOpenWorkspaceEntries(),
+			getOpenWorkspaceEntries({ includeClosed: true }),
 		);
 	} catch (error) {
 		console.warn("Failed to flush Flashtype workspace session", error);
