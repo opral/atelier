@@ -399,13 +399,13 @@ function areWorkspaceSessionEntriesEqual(left, right) {
 	return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
-function forgetOpenWorkspacePath(window) {
+function forgetOpenWorkspacePath(window, { persist = true } = {}) {
 	if (!window) {
 		return;
 	}
 	openWorkspaceEntriesByWindowId.delete(window.id);
 	activeFilePathsByWindowId.delete(window.id);
-	if (!isQuitting) {
+	if (persist && !isQuitting) {
 		persistOpenWorkspacePathsSoon();
 	}
 	updateDockMenu();
@@ -415,6 +415,20 @@ function getOpenWorkspaceEntries() {
 	return normalizeWorkspaceSessionEntries([
 		...openWorkspaceEntriesByWindowId.values(),
 	]);
+}
+
+function forgetClosedWorkspaceIfOtherWindowsRemain(closedWindow) {
+	setTimeout(() => {
+		if (isQuitting) {
+			return;
+		}
+		const hasOtherWindow = BrowserWindow.getAllWindows().some(
+			(window) => window !== closedWindow && !window.isDestroyed(),
+		);
+		if (hasOtherWindow) {
+			forgetOpenWorkspacePath(closedWindow);
+		}
+	}, 100);
 }
 
 function persistOpenWorkspacePathsSoon() {
@@ -525,15 +539,23 @@ async function createMainWindow(workspaceRequest) {
 		window.focus();
 	});
 
-	window.on("closed", () => {
+	let windowCleanupDone = false;
+	const cleanupWorkspaceWindow = () => {
+		if (windowCleanupDone) {
+			return;
+		}
+		windowCleanupDone = true;
 		if (showFallback !== undefined) {
 			clearTimeout(showFallback);
 		}
 		forgetTelemetrySessionContextForWebContents(window.webContents);
 		workspaceWindows.delete(window);
-		forgetOpenWorkspacePath(window);
+		forgetClosedWorkspaceIfOtherWindowsRemain(window);
 		void closeLixSession(window, { ignoreOpenError: true });
-	});
+	};
+
+	window.on("closed", cleanupWorkspaceWindow);
+	window.webContents.once("destroyed", cleanupWorkspaceWindow);
 
 	window.webContents.on(
 		"did-fail-load",
