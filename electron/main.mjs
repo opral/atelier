@@ -182,20 +182,22 @@ async function openWorkspaceRequests(
 	workspaceRequests,
 	{ requestedSource = "direct_launch" } = {},
 ) {
+	const requestsBySource = new Map();
 	for (const workspaceRequest of workspaceRequests) {
 		const taggedRequest = normalizeWorkspaceOpenRequest(
 			workspaceRequest,
 			requestedSource,
 		);
-		const workspaceTargets = await resolveDirectLaunchWorkspaceTargets([
-			taggedRequest.request,
-		]);
+		const requests = requestsBySource.get(taggedRequest.requestedSource) ?? [];
+		requests.push(taggedRequest.request);
+		requestsBySource.set(taggedRequest.requestedSource, requests);
+	}
+
+	for (const [source, requests] of requestsBySource) {
+		const workspaceTargets = await resolveDirectLaunchWorkspaceTargets(requests);
 		for (const workspaceTarget of workspaceTargets) {
 			await createMainWindow(
-				withWorkspaceOpenTelemetry(
-					workspaceTarget,
-					taggedRequest.requestedSource,
-				),
+				withWorkspaceOpenTelemetry(workspaceTarget, source),
 			);
 		}
 	}

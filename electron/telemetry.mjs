@@ -376,6 +376,9 @@ function systemLocaleProperties() {
 }
 
 function normalizeTelemetryString(value) {
+	if (typeof value !== "string") {
+		return undefined;
+	}
 	const trimmed = value.trim();
 	if (!trimmed) {
 		return undefined;
