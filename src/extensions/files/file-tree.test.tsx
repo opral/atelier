@@ -8,26 +8,49 @@ describe("FileTree", () => {
 		render(<FileTree nodes={mockTree} />);
 
 		expect(screen.getByText("docs")).toBeInTheDocument();
-		expect(screen.getByText("guides")).toBeInTheDocument();
-		expect(screen.getByText("writing-style.md")).toBeInTheDocument();
+		expect(screen.queryByText("guides")).toBeNull();
+		expect(screen.queryByText("writing-style.md")).toBeNull();
 	});
 
-	test("collapses and expands directories", () => {
+	test("starts directories collapsed", () => {
+		render(<FileTree nodes={mockTree} />);
+
+		const docsToggle = screen.getByRole("button", { name: /docs/i });
+		expect(docsToggle).toHaveAttribute("aria-expanded", "false");
+		expect(screen.queryByText("README.md")).toBeNull();
+	});
+
+	test("expands and collapses directories", () => {
 		render(<FileTree nodes={mockTree} />);
 
 		const docsToggle = screen.getByRole("button", { name: /docs/i });
 		fireEvent.click(docsToggle);
 
-		expect(screen.queryByText("guides")).toBeNull();
+		expect(screen.getByText("guides")).toBeInTheDocument();
 
 		fireEvent.click(docsToggle);
+		expect(screen.queryByText("guides")).toBeNull();
+	});
+
+	test("preserves opened directories when the tree data refreshes", () => {
+		const { rerender } = render(<FileTree nodes={mockTree} />);
+
+		const docsToggle = screen.getByRole("button", { name: /docs/i });
+		fireEvent.click(docsToggle);
+		const guidesToggle = screen.getByRole("button", { name: /guides/i });
+		fireEvent.click(guidesToggle);
+
+		expect(screen.getByText("writing-style.md")).toBeInTheDocument();
+
+		rerender(<FileTree nodes={mockTreeWithExternalFile} />);
+
 		expect(screen.getByText("guides")).toBeInTheDocument();
+		expect(screen.getByText("external.md")).toBeInTheDocument();
 	});
 
 	test("preserves collapsed directories when the tree data refreshes", () => {
 		const { rerender } = render(<FileTree nodes={mockTree} />);
 
-		fireEvent.click(screen.getByRole("button", { name: /docs/i }));
 		expect(screen.queryByText("guides")).toBeNull();
 
 		rerender(<FileTree nodes={mockTreeWithExternalFile} />);
@@ -60,6 +83,7 @@ describe("FileTree", () => {
 
 	test("keeps focus styling on file tree rows instead of filename labels", () => {
 		render(<FileTree nodes={mockTree} />);
+		fireEvent.click(screen.getByRole("button", { name: /docs/i }));
 
 		const fileRow = screen.getByRole("button", { name: /README.md/i });
 		const fileName = screen.getByText("README.md");
