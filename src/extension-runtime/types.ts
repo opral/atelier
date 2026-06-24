@@ -153,7 +153,15 @@ export interface ExtensionContext {
 	) => void;
 	readonly resizePanel?: (side: PanelSide, size: number) => void;
 	readonly focusPanel?: (side: PanelSide) => void;
+	readonly panelSide?: PanelSide;
+	readonly viewInstance?: string;
 	readonly isActiveView?: boolean;
+	readonly registerNewFileDraftHandler?: (registration: {
+		readonly panelSide: PanelSide;
+		readonly viewInstance: string;
+		readonly isActiveView: boolean;
+		readonly handler: () => void;
+	}) => () => void;
 	readonly lix: Lix;
 }
 

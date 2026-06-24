@@ -117,7 +117,6 @@ function FilesViewContent({
 	}, []);
 
 	const handleNewFile = useCallback(() => {
-		context?.focusPanel?.("left");
 		const baseDirectory = resolveDraftDirectory();
 		const directoryPath = ensureDirectoryPath(baseDirectory);
 		setDraft((prev) => {
@@ -131,17 +130,29 @@ function FilesViewContent({
 				value: "new-file",
 			};
 		});
-	}, [context, resolveDraftDirectory]);
+	}, [resolveDraftDirectory]);
 
 	useEffect(() => {
-		const unsubscribe = window.flashtypeDesktop?.workspace.onNewFile?.(() => {
-			if (context?.isActiveView === false) return;
-			handleNewFile();
+		if (
+			!context?.registerNewFileDraftHandler ||
+			!context.panelSide ||
+			!context.viewInstance
+		) {
+			return;
+		}
+		return context.registerNewFileDraftHandler({
+			panelSide: context.panelSide,
+			viewInstance: context.viewInstance,
+			isActiveView: context.isActiveView === true,
+			handler: handleNewFile,
 		});
-		return () => {
-			unsubscribe?.();
-		};
-	}, [context?.isActiveView, handleNewFile]);
+	}, [
+		context?.isActiveView,
+		context?.panelSide,
+		context?.registerNewFileDraftHandler,
+		context?.viewInstance,
+		handleNewFile,
+	]);
 
 	const handleDraftCommit = useCallback(async () => {
 		if (creatingRef.current) return;

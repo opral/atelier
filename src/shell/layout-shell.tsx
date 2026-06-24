@@ -97,6 +97,13 @@ import {
 } from "./panel-utils";
 import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
 
+type NewFileDraftHandlerRegistration = {
+	readonly panelSide: PanelSide;
+	readonly viewInstance: string;
+	readonly isActiveView: boolean;
+	readonly handler: () => void;
+};
+
 const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
 	const { launchArgs: _omitLaunch, ...rest } = view as any;
 	const state = sanitizeExtensionStateForPersistence(rest.state);
@@ -160,6 +167,34 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 	if (!value || typeof value !== "object") return false;
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
+};
+
+const newFileDraftHandlerKey = (
+	registration: NewFileDraftHandlerRegistration,
+): string => `${registration.panelSide}:${registration.viewInstance}`;
+
+const selectNewFileDraftHandler = (
+	registrations: Iterable<NewFileDraftHandlerRegistration>,
+	focusedPanel: PanelSide,
+): NewFileDraftHandlerRegistration | null => {
+	const panelPreference = [
+		focusedPanel,
+		"left" as const,
+		"central" as const,
+		"right" as const,
+	].filter((side, index, sides) => sides.indexOf(side) === index);
+	const registered = [...registrations].filter(
+		(registration) => registration.isActiveView,
+	);
+	for (const panelSide of panelPreference) {
+		const registration = registered.find(
+			(candidate) => candidate.panelSide === panelSide,
+		);
+		if (registration) {
+			return registration;
+		}
+	}
+	return null;
 };
 
 const collectSessionOpenFilePaths = (
@@ -463,6 +498,9 @@ function LayoutShellContent({
 	);
 	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
 	const animationTimeoutRef = useRef<number | null>(null);
+	const newFileDraftHandlersRef = useRef(
+		new Map<string, NewFileDraftHandlerRegistration>(),
+	);
 	const lastNonZeroSizesRef = useRef({
 		left:
 			initialLayoutSizes.left > MIN_VISIBLE_PANEL_SIZE
@@ -1486,6 +1524,19 @@ function LayoutShellContent({
 		setFocusedPanel((prev) => (prev === side ? prev : side));
 	}, []);
 
+	const registerNewFileDraftHandler = useCallback(
+		(registration: NewFileDraftHandlerRegistration) => {
+			const key = newFileDraftHandlerKey(registration);
+			newFileDraftHandlersRef.current.set(key, registration);
+			return () => {
+				if (newFileDraftHandlersRef.current.get(key) === registration) {
+					newFileDraftHandlersRef.current.delete(key);
+				}
+			};
+		},
+		[],
+	);
+
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const hydratedLeft = leftPanel;
 	const hydratedCentral = centralPanel;
@@ -1664,6 +1715,35 @@ function LayoutShellContent({
 			focus: true,
 		});
 	}, [handleOpenFile, lix]);
+
+	const handleNativeNewFile = useCallback(async () => {
+		const filesViewHandler = selectNewFileDraftHandler(
+			newFileDraftHandlersRef.current.values(),
+			focusedPanel,
+		);
+		if (filesViewHandler) {
+			focusPanel(filesViewHandler.panelSide);
+			filesViewHandler.handler();
+			return;
+		}
+		try {
+			await handleCreateNewFile();
+		} catch (error) {
+			if (onError) {
+				onError(error);
+				return;
+			}
+			console.error("Failed to create new file from native menu", error);
+		}
+	}, [focusPanel, focusedPanel, handleCreateNewFile, onError]);
+
+	useEffect(() => {
+		const unsubscribe =
+			window.flashtypeDesktop?.workspace.onNewFile?.(handleNativeNewFile);
+		return () => {
+			unsubscribe?.();
+		};
+	}, [handleNativeNewFile]);
 
 	const activeCentralFileId =
 		activeMarkdownFileIdFromExtensionInstance(activeCentralEntry);
@@ -1861,6 +1941,7 @@ function LayoutShellContent({
 			moveExtensionToPanel: handleMoveViewToPanel,
 			resizePanel: handleResizePanel,
 			focusPanel: focusPanel,
+			registerNewFileDraftHandler,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
 			rejectExternalWriteReview: handleRejectExternalWriteReview,
 			lix,
@@ -1875,6 +1956,7 @@ function LayoutShellContent({
 			handleAcceptExternalWriteReview,
 			handleRejectExternalWriteReview,
 			focusPanel,
+			registerNewFileDraftHandler,
 			lix,
 		],
 	);
