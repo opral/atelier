@@ -279,9 +279,13 @@ async function profileTransientWorkspaceSourceFiles(profile, workspace) {
 		if (!stats.isFile() || stats.isSymbolicLink()) {
 			continue;
 		}
-		const relativePath = toPortableRelativePath(
-			path.relative(workspace.path, sourceFilePath),
+		const relativePath = workspaceRelativeFilePath(
+			workspace.path,
+			sourceFilePath,
 		);
+		if (!relativePath) {
+			continue;
+		}
 		for (const directory of parentDirectories(relativePath)) {
 			directories.add(directory);
 		}
