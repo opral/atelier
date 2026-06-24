@@ -10,13 +10,11 @@ import {
 	disposeAllWorkspaceWindowStates,
 	disposeWorkspaceWindowState,
 	getWorkspace,
-	isWorkspaceTooLargeError,
 	registerWorkspaceIpc,
 	resolveWorkspaceTargets,
 	setWorkspaceFromTarget,
 	setWorkspaceTrackChanges,
 	showWorkspaceDialog,
-	showWorkspaceTooLargeWarning,
 } from "./workspace.mjs";
 import {
 	captureAppOpened,
@@ -206,16 +204,7 @@ async function openWorkspaceRequests(
 	}
 
 	for (const [source, requests] of requestsBySource) {
-		let workspaceTargets;
-		try {
-			workspaceTargets = await resolveWorkspaceTargets(requests);
-		} catch (error) {
-			if (isWorkspaceTooLargeError(error)) {
-				await showWorkspaceTooLargeWarning(null, error);
-				continue;
-			}
-			throw error;
-		}
+		const workspaceTargets = await resolveWorkspaceTargets(requests);
 		for (const workspaceTarget of workspaceTargets) {
 			await createMainWindow(workspaceTarget);
 			openedWindowCount += 1;
@@ -482,27 +471,10 @@ async function openFolderFromApplicationMenu() {
 	const canReuseSourceWindow =
 		sourceWindow && !sourceWindow.isDestroyed() && !getWorkspace(sourceWindow);
 	if (!canReuseSourceWindow) {
-		try {
-			return await openWorkspacePathInNewWindow(dir, "workspace_picker");
-		} catch (error) {
-			if (isWorkspaceTooLargeError(error)) {
-				await showWorkspaceTooLargeWarning(sourceWindow, error);
-				return null;
-			}
-			throw error;
-		}
+		return await openWorkspacePathInNewWindow(dir, "workspace_picker");
 	}
 
-	let workspaceTarget;
-	try {
-		workspaceTarget = (await resolveWorkspaceTargets([dir]))[0];
-	} catch (error) {
-		if (isWorkspaceTooLargeError(error)) {
-			await showWorkspaceTooLargeWarning(sourceWindow, error);
-			return null;
-		}
-		throw error;
-	}
+	const workspaceTarget = (await resolveWorkspaceTargets([dir]))[0];
 	if (!workspaceTarget) {
 		return null;
 	}
@@ -1737,8 +1709,7 @@ function buildFileMenu() {
 			{ type: "separator" },
 			{
 				label: "New File...",
-				enabled:
-					Boolean(getWorkspaceWindowForFileAction()),
+				enabled: Boolean(getWorkspaceWindowForFileAction()),
 				click: () => {
 					requestNewFileFromApplicationMenu();
 				},
