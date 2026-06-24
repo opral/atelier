@@ -370,6 +370,24 @@ export function V2LayoutShell({
 	);
 }
 
+type LayoutShellContentProps = {
+	readonly workspaceName?: string;
+	readonly onOpenWorkspace?: () => void;
+	readonly pendingOpenFilePaths?: readonly string[];
+	readonly onPendingOpenFileHandled?: (filePath: string) => void;
+	readonly onError?: (error: unknown) => void;
+	readonly isUpdateReady?: boolean;
+	readonly onInstallUpdate?: () => void | Promise<void>;
+};
+
+type LayoutShellLoadedContentProps = LayoutShellContentProps & {
+	readonly lix: ReturnType<typeof useLix>;
+	readonly uiStateKV: FlashtypeUiState | null;
+	readonly setUiStateKV: (newValue: FlashtypeUiState) => Promise<void>;
+	readonly activeFileId: string | null;
+	readonly setActiveFileId: (newValue: string | null) => Promise<void>;
+};
+
 function isExternalWriteReview(value: unknown): value is ExternalWriteReview {
 	if (!value || typeof value !== "object") return false;
 	const review = value as Partial<ExternalWriteReview>;
@@ -442,24 +460,74 @@ function LayoutShellContent({
 	onError,
 	isUpdateReady,
 	onInstallUpdate,
-}: {
-	readonly workspaceName?: string;
-	readonly onOpenWorkspace?: () => void;
-	readonly pendingOpenFilePaths?: readonly string[];
-	readonly onPendingOpenFileHandled?: (filePath: string) => void;
-	readonly onError?: (error: unknown) => void;
-	readonly isUpdateReady?: boolean;
-	readonly onInstallUpdate?: () => void | Promise<void>;
-}) {
+}: LayoutShellContentProps) {
+	const lix = useLix();
+	return (
+		<LayoutShellUiStateLoader
+			workspaceName={workspaceName}
+			onOpenWorkspace={onOpenWorkspace}
+			pendingOpenFilePaths={pendingOpenFilePaths}
+			onPendingOpenFileHandled={onPendingOpenFileHandled}
+			onError={onError}
+			isUpdateReady={isUpdateReady}
+			onInstallUpdate={onInstallUpdate}
+			lix={lix}
+		/>
+	);
+}
+
+function LayoutShellUiStateLoader(
+	props: LayoutShellContentProps & {
+		readonly lix: ReturnType<typeof useLix>;
+	},
+) {
+	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
+	return (
+		<LayoutShellActiveFileLoader
+			{...props}
+			uiStateKV={uiStateKV}
+			setUiStateKV={setUiStateKV}
+		/>
+	);
+}
+
+function LayoutShellActiveFileLoader(
+	props: LayoutShellContentProps & {
+		readonly lix: ReturnType<typeof useLix>;
+		readonly uiStateKV: FlashtypeUiState | null;
+		readonly setUiStateKV: (newValue: FlashtypeUiState) => Promise<void>;
+	},
+) {
+	const [activeFileId, setActiveFileId] = useKeyValue(
+		"flashtype_active_file_id",
+	);
+	return (
+		<LayoutShellLoadedContent
+			{...props}
+			activeFileId={activeFileId}
+			setActiveFileId={setActiveFileId}
+		/>
+	);
+}
+
+function LayoutShellLoadedContent({
+	workspaceName,
+	onOpenWorkspace,
+	pendingOpenFilePaths,
+	onPendingOpenFileHandled,
+	onError,
+	isUpdateReady,
+	onInstallUpdate,
+	lix,
+	uiStateKV,
+	setUiStateKV,
+	activeFileId,
+	setActiveFileId,
+}: LayoutShellLoadedContentProps) {
 	const [hasLoadedInstalledExtensions, setHasLoadedInstalledExtensions] =
 		useState(false);
 	const { extensionMap, replaceInstalledExtensions, clearInstalledExtensions } =
 		useExtensionRegistry();
-	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
-	const [activeFileId, setActiveFileId] = useKeyValue(
-		"flashtype_active_file_id",
-	);
-	const lix = useLix();
 	const uiState = useMemo(
 		() => coerceFlashtypeUiState(uiStateKV ?? DEFAULT_FLASHTYPE_UI_STATE),
 		[uiStateKV],
