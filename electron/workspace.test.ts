@@ -7,7 +7,6 @@ import {
 	MAX_WORKSPACE_SIZE_BYTES,
 	WORKSPACE_TOO_LARGE_ERROR_CODE,
 	profileWorkspaceFilesystem,
-	resolveDirectLaunchWorkspaceTargets,
 	resolveWorkspace,
 	resolveWorkspaceTarget,
 	resolveWorkspaceTargets,
@@ -127,6 +126,29 @@ describe("workspace resolution", () => {
 		});
 	});
 
+	test("resolves a file inside a RocksDB Lix workspace to the workspace root", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const filePath = path.join(directory, "readme.md");
+		await mkdir(path.join(directory, ".lix", ".internal", "rocksdb"), {
+			recursive: true,
+		});
+		await writeFile(filePath, "# Hello\n");
+
+		await expect(resolveWorkspaceTarget(filePath)).resolves.toEqual({
+			workspace: {
+				ephemeral: false,
+				path: directory,
+				name: "workspace",
+			},
+			pendingOpenFilePaths: ["readme.md"],
+		});
+	});
+
 	test("rejects files that resolve to an oversized Lix workspace root", async () => {
 		const directory = path.join(
 			tmpdir(),
@@ -191,7 +213,7 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("can resolve files inside Lix workspaces as transient launch targets", async () => {
+	test("resolves files inside Lix workspaces to the workspace root", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -203,14 +225,11 @@ describe("workspace resolution", () => {
 		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
 		await writeFile(filePath, "# Hello\n");
 
-		await expect(
-			resolveWorkspaceTargets([filePath], { openFilesAsTransient: true }),
-		).resolves.toEqual([
+		await expect(resolveWorkspaceTargets([filePath])).resolves.toEqual([
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: directory,
-					sourceFilePaths: [filePath],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["readme.md"],
@@ -218,7 +237,7 @@ describe("workspace resolution", () => {
 		]);
 	});
 
-	test("resolves direct launch file targets as transient workspaces", async () => {
+	test("resolves file targets in Lix workspaces to persistent workspaces", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -230,14 +249,11 @@ describe("workspace resolution", () => {
 		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
 		await writeFile(filePath, "# Hello\n");
 
-		await expect(
-			resolveDirectLaunchWorkspaceTargets([filePath]),
-		).resolves.toEqual([
+		await expect(resolveWorkspaceTargets([filePath])).resolves.toEqual([
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: directory,
-					sourceFilePaths: [filePath],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["readme.md"],
@@ -245,7 +261,7 @@ describe("workspace resolution", () => {
 		]);
 	});
 
-	test("resolves each file in a direct launch batch independently", async () => {
+	test("resolves each file inside Lix workspaces independently", async () => {
 		const firstDirectory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -278,22 +294,20 @@ describe("workspace resolution", () => {
 		await writeFile(secondPath, "# Second\n");
 
 		await expect(
-			resolveDirectLaunchWorkspaceTargets([firstPath, secondPath]),
+			resolveWorkspaceTargets([firstPath, secondPath]),
 		).resolves.toEqual([
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: firstDirectory,
-					sourceFilePaths: [firstPath],
 					name: "first",
 				},
 				pendingOpenFilePaths: ["readme.md"],
 			},
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: secondDirectory,
-					sourceFilePaths: [secondPath],
 					name: "second",
 				},
 				pendingOpenFilePaths: ["readme.md"],

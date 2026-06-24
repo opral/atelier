@@ -3,6 +3,7 @@ import path from "node:path";
 import { lstat, opendir, readFile, stat } from "node:fs/promises";
 
 const LIX_DATABASE_FILE = path.join(".lix", ".internal", "db.sqlite");
+const LIX_ROCKSDB_DATABASE_DIR = path.join(".lix", ".internal", "rocksdb");
 const LEGACY_LIX_DATABASE_FILE = path.join(".lix", "db.sqlite");
 const LIX_DATABASE_FILES = [LIX_DATABASE_FILE, LEGACY_LIX_DATABASE_FILE];
 export const MAX_WORKSPACE_SIZE_BYTES = 500 * 1024 * 1024;
@@ -36,14 +37,6 @@ export async function resolveWorkspaceTarget(requestedPath, options = {}) {
 		// backend reports unreadable workspace folders.
 	}
 	if (stats?.isFile()) {
-		if (options.openFilesAsTransient === true) {
-			const workspace = createTransientDirectoryWorkspace([resolved]);
-			return {
-				workspace,
-				pendingOpenFilePaths:
-					pendingOpenFilePathsForTransientDirectoryWorkspace(workspace),
-			};
-		}
 		const workspaceDir = await findLixWorkspaceRoot(path.dirname(resolved));
 		if (!workspaceDir) {
 			const workspace = createTransientDirectoryWorkspace([resolved]);
@@ -97,14 +90,8 @@ export async function resolveWorkspaceTargets(requestedPaths, options = {}) {
 		}
 
 		const resolved = path.resolve(String(requestedPath));
-		const standaloneFileTarget = await resolveStandaloneFile(resolved, options);
+		const standaloneFileTarget = await resolveStandaloneFile(resolved);
 		if (standaloneFileTarget) {
-			if (options.openFilesAsTransient === true) {
-				targets.push(
-					await resolveWorkspaceTarget(standaloneFileTarget, options),
-				);
-				continue;
-			}
 			if (standaloneFilesInsertIndex === null) {
 				standaloneFilesInsertIndex = targets.length;
 			}
@@ -124,12 +111,6 @@ export async function resolveWorkspaceTargets(requestedPaths, options = {}) {
 	}
 
 	return targets;
-}
-
-export async function resolveDirectLaunchWorkspaceTargets(requestedPaths) {
-	return await resolveWorkspaceTargets(requestedPaths, {
-		openFilesAsTransient: true,
-	});
 }
 
 export async function resolveWorkspace(requestedPath) {
@@ -544,16 +525,13 @@ function roundKilobytes(bytes) {
 	return Math.round((bytes / 1024) * 100) / 100;
 }
 
-async function resolveStandaloneFile(resolvedPath, options = {}) {
+async function resolveStandaloneFile(resolvedPath) {
 	try {
 		if (!(await stat(resolvedPath)).isFile()) {
 			return null;
 		}
 	} catch {
 		return null;
-	}
-	if (options.openFilesAsTransient === true) {
-		return resolvedPath;
 	}
 	const workspaceDir = await findLixWorkspaceRoot(path.dirname(resolvedPath));
 	return workspaceDir ? null : resolvedPath;
@@ -645,7 +623,7 @@ function workspaceKey(workspace) {
 	return `directory:${workspace.path}`;
 }
 
-async function showWorkspaceDialog(window) {
+export async function showWorkspaceDialog(window) {
 	const dialogOptions = {
 		title: "Open Folder",
 		buttonLabel: "Open",
@@ -659,7 +637,7 @@ async function showWorkspaceDialog(window) {
 async function findLixWorkspaceRoot(startDir) {
 	let current = path.resolve(startDir);
 	while (true) {
-		if ((await findLixDatabasePath(current)) !== null) {
+		if (await hasLixWorkspaceMetadata(current)) {
 			return current;
 		}
 		const parent = path.dirname(current);
@@ -670,6 +648,13 @@ async function findLixWorkspaceRoot(startDir) {
 	}
 }
 
+async function hasLixWorkspaceMetadata(workspaceDir) {
+	if (await isDirectory(path.join(workspaceDir, LIX_ROCKSDB_DATABASE_DIR))) {
+		return true;
+	}
+	return (await findLixDatabasePath(workspaceDir)) !== null;
+}
+
 async function findLixDatabasePath(workspaceDir) {
 	for (const databaseFile of LIX_DATABASE_FILES) {
 		const databasePath = path.join(workspaceDir, databaseFile);
@@ -678,6 +663,14 @@ async function findLixDatabasePath(workspaceDir) {
 		}
 	}
 	return null;
+}
+
+async function isDirectory(filePath) {
+	try {
+		return (await stat(filePath)).isDirectory();
+	} catch {
+		return false;
+	}
 }
 
 async function isFile(filePath) {

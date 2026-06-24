@@ -10,9 +10,9 @@ import {
 	getWorkspace,
 	isWorkspaceTooLargeError,
 	registerWorkspaceIpc,
-	resolveDirectLaunchWorkspaceTargets,
 	resolveWorkspaceTargets,
 	setWorkspaceFromTarget,
+	showWorkspaceDialog,
 	showWorkspaceTooLargeWarning,
 } from "./workspace.mjs";
 import {
@@ -204,7 +204,7 @@ async function openWorkspaceRequests(
 	for (const [source, requests] of requestsBySource) {
 		let workspaceTargets;
 		try {
-			workspaceTargets = await resolveDirectLaunchWorkspaceTargets(requests);
+			workspaceTargets = await resolveWorkspaceTargets(requests);
 		} catch (error) {
 			if (isWorkspaceTooLargeError(error)) {
 				await showWorkspaceTooLargeWarning(null, error);
@@ -353,6 +353,30 @@ async function focusOrCreateWorkspaceWindow() {
 	return true;
 }
 
+function getFocusedWorkspaceWindow() {
+	const focusedWindow = BrowserWindow.getFocusedWindow();
+	if (
+		focusedWindow &&
+		workspaceWindows.has(focusedWindow) &&
+		!focusedWindow.isDestroyed()
+	) {
+		return focusedWindow;
+	}
+	return null;
+}
+
+function getWorkspaceWindowForFileAction() {
+	const focusedWindow = getFocusedWorkspaceWindow();
+	if (focusedWindow && getWorkspace(focusedWindow)) {
+		return focusedWindow;
+	}
+	return (
+		[...workspaceWindows]
+			.reverse()
+			.find((window) => !window.isDestroyed() && getWorkspace(window)) ?? null
+	);
+}
+
 function focusMostRecentWorkspaceWindow() {
 	const windows = [...workspaceWindows].filter(
 		(window) => !window.isDestroyed(),
@@ -376,6 +400,104 @@ function focusMostRecentWorkspaceWindow() {
 	return true;
 }
 
+function createWorkspaceChangeOptions() {
+	return {
+		beforeChange: (_nextWorkspace, window) =>
+			closeLixSession(window, { ignoreOpenError: true }),
+		afterChange: (workspace, window) =>
+			recordOpenWorkspacePath(window, workspace),
+	};
+}
+
+function canOpenWorkspaceWindows() {
+	return (
+		readyForWorkspaceOpens && !initialWorkspaceOpenInProgress && !isQuitting
+	);
+}
+
+async function createNewWindowFromApplicationMenu() {
+	if (!canOpenWorkspaceWindows()) {
+		return null;
+	}
+	return await createMainWindow();
+}
+
+function requestNewFileFromApplicationMenu() {
+	if (!canOpenWorkspaceWindows()) {
+		return;
+	}
+	const window = getWorkspaceWindowForFileAction();
+	if (!window || window.webContents.isDestroyed()) {
+		return;
+	}
+	if (!isHeadless) {
+		if (window.isMinimized()) {
+			window.restore();
+		}
+		window.show();
+		window.focus();
+	}
+	window.webContents.send("workspace:newFile");
+}
+
+async function openWorkspacePathInNewWindow(
+	requestedPath,
+	requestedSource = "open_in_new_window",
+) {
+	const workspaceTarget = (await resolveWorkspaceTargets([requestedPath]))[0];
+	if (!workspaceTarget) {
+		return null;
+	}
+	const window = await createMainWindow(workspaceTarget);
+	return getWorkspace(window);
+}
+
+async function openFolderFromApplicationMenu() {
+	if (!canOpenWorkspaceWindows()) {
+		return null;
+	}
+	const sourceWindow = getFocusedWorkspaceWindow();
+	const result = await showWorkspaceDialog(sourceWindow);
+	const dir = result.filePaths[0];
+	if (result.canceled || dir === undefined) {
+		return null;
+	}
+
+	const canReuseSourceWindow =
+		sourceWindow && !sourceWindow.isDestroyed() && !getWorkspace(sourceWindow);
+	if (!canReuseSourceWindow) {
+		try {
+			return await openWorkspacePathInNewWindow(dir, "workspace_picker");
+		} catch (error) {
+			if (isWorkspaceTooLargeError(error)) {
+				await showWorkspaceTooLargeWarning(sourceWindow, error);
+				return null;
+			}
+			throw error;
+		}
+	}
+
+	let workspaceTarget;
+	try {
+		workspaceTarget = (await resolveWorkspaceTargets([dir]))[0];
+	} catch (error) {
+		if (isWorkspaceTooLargeError(error)) {
+			await showWorkspaceTooLargeWarning(sourceWindow, error);
+			return null;
+		}
+		throw error;
+	}
+	if (!workspaceTarget) {
+		return null;
+	}
+	await setWorkspaceFromTarget(
+		workspaceTarget,
+		sourceWindow,
+		createWorkspaceChangeOptions(),
+	);
+	return getWorkspace(sourceWindow);
+}
+
 function recordOpenWorkspacePath(window, workspace) {
 	if (!window || window.isDestroyed() || !workspace) {
 		return;
@@ -390,6 +512,7 @@ function recordOpenWorkspacePath(window, workspace) {
 	void syncMacOSDockRecentWorkspaceDocuments();
 	persistOpenWorkspacePathsSoon();
 	updateDockMenu();
+	installApplicationMenu();
 }
 
 function forgetOpenWorkspacePath(window, { persist = true } = {}) {
@@ -662,16 +785,12 @@ async function startWorkspaceLifecycle() {
 	registerLixIpc((event) => BrowserWindow.fromWebContents(event.sender));
 	registerTerminalIpc();
 	registerWorkspaceIpc((event) => BrowserWindow.fromWebContents(event.sender), {
-		beforeChange: (_nextWorkspace, window) =>
-			closeLixSession(window, { ignoreOpenError: true }),
-		afterChange: (workspace, window) =>
-			recordOpenWorkspacePath(window, workspace),
+		...createWorkspaceChangeOptions(),
 		openInNewWindow: async (requestedPath) => {
-			const workspaceTarget = (
-				await resolveDirectLaunchWorkspaceTargets([requestedPath])
-			)[0];
-			const window = await createMainWindow(workspaceTarget);
-			return getWorkspace(window);
+			return await openWorkspacePathInNewWindow(
+				requestedPath,
+				"open_in_new_window",
+			);
 		},
 	});
 	void registerMarkdownDefaultHandler({
@@ -785,6 +904,8 @@ async function startWorkspaceLifecycle() {
 		workspaceBootRecoveryInitialWindowsCreated = true;
 	} finally {
 		initialWorkspaceOpenInProgress = false;
+		installApplicationMenu();
+		updateDockMenu();
 	}
 }
 
@@ -1472,6 +1593,7 @@ function getApplicationIconBasePath() {
 
 function installApplicationMenu() {
 	const isUpdateBusy = updateCheckInProgress || updateDownloadInProgress;
+	const fileMenu = buildFileMenu();
 	const checkForUpdatesItem = {
 		label: updateInstallReady
 			? "Restart to Install Update"
@@ -1510,7 +1632,7 @@ function installApplicationMenu() {
 						{ label: `Quit ${APP_DISPLAY_NAME}`, role: "quit" },
 					],
 				},
-				{ role: "fileMenu" },
+				fileMenu,
 				{ role: "editMenu" },
 				{ role: "viewMenu" },
 				{ role: "windowMenu" },
@@ -1521,7 +1643,7 @@ function installApplicationMenu() {
 
 	Menu.setApplicationMenu(
 		Menu.buildFromTemplate([
-			{ role: "fileMenu" },
+			fileMenu,
 			{ role: "editMenu" },
 			{ role: "viewMenu" },
 			{ role: "windowMenu" },
@@ -1533,6 +1655,42 @@ function installApplicationMenu() {
 	);
 }
 
+function buildFileMenu() {
+	const workspaceActionsEnabled = canOpenWorkspaceWindows();
+	return {
+		label: "File",
+		submenu: [
+			{
+				label: "New Window",
+				accelerator: "CmdOrCtrl+N",
+				enabled: workspaceActionsEnabled,
+				click: () => {
+					void createNewWindowFromApplicationMenu();
+				},
+			},
+			{
+				label: "Open Folder...",
+				accelerator: "CmdOrCtrl+O",
+				enabled: workspaceActionsEnabled,
+				click: () => {
+					void openFolderFromApplicationMenu();
+				},
+			},
+			{ type: "separator" },
+			{
+				label: "New File...",
+				enabled:
+					workspaceActionsEnabled && Boolean(getWorkspaceWindowForFileAction()),
+				click: () => {
+					requestNewFileFromApplicationMenu();
+				},
+			},
+			{ type: "separator" },
+			{ role: "close" },
+		],
+	};
+}
+
 function updateDockMenu() {
 	if (process.platform !== "darwin" || isHeadless || !app.dock) {
 		return;
@@ -1542,8 +1700,26 @@ function updateDockMenu() {
 		Menu.buildFromTemplate([
 			{
 				label: "New Window",
+				enabled: canOpenWorkspaceWindows(),
 				click: () => {
-					void createMainWindow();
+					void createNewWindowFromApplicationMenu();
+				},
+			},
+			{
+				label: "Open Folder...",
+				enabled: canOpenWorkspaceWindows(),
+				click: () => {
+					void openFolderFromApplicationMenu();
+				},
+			},
+			{ type: "separator" },
+			{
+				label: "New File...",
+				enabled:
+					canOpenWorkspaceWindows() &&
+					Boolean(getWorkspaceWindowForFileAction()),
+				click: () => {
+					requestNewFileFromApplicationMenu();
 				},
 			},
 		]),

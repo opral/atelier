@@ -145,6 +145,60 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("focuses the inline draft when the native New File menu item is used", async () => {
+		const lix = await openLix();
+		const focusPanel = vi.fn();
+		const originalDesktop = window.flashtypeDesktop;
+		let newFileListener: (() => void) | null = null;
+		window.flashtypeDesktop = {
+			workspace: {
+				onNewFile: vi.fn((listener: () => void) => {
+					newFileListener = listener;
+					return () => {
+						newFileListener = null;
+					};
+				}),
+			},
+		} as unknown as Window["flashtypeDesktop"];
+
+		let utils: ReturnType<typeof render>;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<FilesView
+								context={createViewContext(lix, {
+									focusPanel,
+									isActiveView: true,
+								})}
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await waitForFilesViewReady(utils!);
+
+			await act(async () => {
+				newFileListener?.();
+			});
+
+			const input = (await utils!.findByTestId(
+				"files-view-draft-input",
+			)) as HTMLInputElement;
+			await waitFor(() => {
+				expect(document.activeElement).toBe(input);
+			});
+			expect(input.value).toBe("new-file");
+			expect(focusPanel).toHaveBeenCalledWith("left");
+
+			utils!.unmount();
+		} finally {
+			window.flashtypeDesktop = originalDesktop;
+			await lix.close();
+		}
+	});
+
 	test("Cmd+Backspace deletes the selected file from the focused file row", async () => {
 		const lix = await openLix();
 		const closeFileViews = vi.fn();
