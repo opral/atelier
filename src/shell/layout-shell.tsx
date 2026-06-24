@@ -1787,8 +1787,19 @@ function LayoutShellLoadedContent({
 	}, [handleOpenFile, lix]);
 
 	const handleNativeNewFile = useCallback(async () => {
+		const visibleDraftHandlers = [
+			...newFileDraftHandlersRef.current.values(),
+		].filter((registration) => {
+			if (registration.panelSide === "left") {
+				return !isLeftCollapsed;
+			}
+			if (registration.panelSide === "right") {
+				return !isRightCollapsed;
+			}
+			return true;
+		});
 		const filesViewHandler = selectNewFileDraftHandler(
-			newFileDraftHandlersRef.current.values(),
+			visibleDraftHandlers,
 			focusedPanel,
 		);
 		if (filesViewHandler) {
@@ -1805,7 +1816,14 @@ function LayoutShellLoadedContent({
 			}
 			console.error("Failed to create new file from native menu", error);
 		}
-	}, [focusPanel, focusedPanel, handleCreateNewFile, onError]);
+	}, [
+		focusPanel,
+		focusedPanel,
+		handleCreateNewFile,
+		isLeftCollapsed,
+		isRightCollapsed,
+		onError,
+	]);
 
 	useEffect(() => {
 		const unsubscribe =

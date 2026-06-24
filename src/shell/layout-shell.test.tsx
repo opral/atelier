@@ -90,9 +90,28 @@ describe("V2LayoutShell native New File", () => {
 			await desktop.emitNewFile();
 		});
 
-		await waitFor(async () => {
-			expect(await findFilePath(lix, "/new-file.md")).toBeDefined();
+		await expectNewFileCreatedAndOpened(lix);
+		expect(screen.queryByTestId("files-view-draft-input")).toBeNull();
+
+		utils.unmount();
+		await lix.close();
+	});
+
+	test("falls back to direct file creation when the active FilesView is collapsed", async () => {
+		const desktop = installDesktopMock();
+		const lix = await openLix({
+			keyValues: [uiStateKeyValue(collapsedFilesViewState())],
 		});
+
+		const utils = await renderShell(lix);
+		await screen.findByRole("button", { name: "New file" });
+		await waitFor(() => expect(desktop.onNewFile).toHaveBeenCalled());
+
+		await act(async () => {
+			await desktop.emitNewFile();
+		});
+
+		await expectNewFileCreatedAndOpened(lix);
 		expect(screen.queryByTestId("files-view-draft-input")).toBeNull();
 
 		utils.unmount();
@@ -114,6 +133,16 @@ async function renderShell(lix: Lix) {
 		);
 	});
 	return result!;
+}
+
+async function expectNewFileCreatedAndOpened(lix: Lix) {
+	await waitFor(async () => {
+		expect(await findFilePath(lix, "/new-file.md")).toBeDefined();
+	});
+	await screen.findByTestId("tiptap-editor");
+	await act(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
 }
 
 function installDesktopMock(): DesktopMock {
@@ -181,6 +210,21 @@ function twoFilesViewsState(): FlashtypeUiState {
 			},
 		},
 		layout: { sizes: { left: 20, central: 50, right: 30 } },
+	};
+}
+
+function collapsedFilesViewState(): FlashtypeUiState {
+	return {
+		focusedPanel: "left",
+		panels: {
+			left: {
+				views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
+				activeInstance: "files-left",
+			},
+			central: { views: [], activeInstance: null },
+			right: { views: [], activeInstance: null },
+		},
+		layout: { sizes: { left: 0, central: 70, right: 30 } },
 	};
 }
 
