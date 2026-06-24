@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 - 2026-06-24
+
+- Raise the folder size warning limit to 500 MB.
+- Add a branded loading screen while folders open.
+
 ## 0.5.1 - 2026-06-23
 
 - Exclude FlashType's `.lix` workspace data from the folder size limit.
