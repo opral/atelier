@@ -33,10 +33,7 @@ import {
 	ExternalWriteDetector,
 	type ExternalFileWrite,
 } from "./external-write-detector";
-import {
-	createExternalWriteReviewFromSnapshots,
-	getExternalWriteReview,
-} from "./external-write-review-history";
+import { getExternalWriteReview } from "./external-write-review-history";
 import { markFlashtypeFileWrite } from "@/extension-runtime/external-write-tracking";
 import {
 	EXTERNAL_WRITE_REVIEW_LAUNCH_ARG,
@@ -1258,12 +1255,15 @@ function LayoutShellContent({
 						clearExternalWriteReview({ fileId: write.fileId });
 						continue;
 					}
-					const review =
-						(await getExternalWriteReview(lix, write.fileId, write.path)) ??
-						createExternalWriteReviewFromSnapshots(write);
+					const review = await getExternalWriteReview(
+						lix,
+						write.fileId,
+						write.path,
+					);
 					const existingReview = getOpenExternalWriteReviewForFile(
 						write.fileId,
 					);
+					if (!review) continue;
 					if (existingReview && existingReview.reviewId !== review.reviewId) {
 						resolveDiffReviewTelemetry(existingReview, "abandoned");
 					}

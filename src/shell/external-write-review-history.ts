@@ -19,59 +19,23 @@ export async function getExternalWriteReview(
 	if (!rows || rows.history.length < 2) return null;
 	const afterData = decodeFileDataToBytes(rows.history[0]?.data);
 	const beforeData = decodeFileDataToBytes(rows.history[1]?.data);
-	const afterCommitId =
-		rows.history[0]?.lixcol_observed_commit_id ?? rows.startCommitId;
-	const afterDepth =
-		typeof rows.history[0]?.lixcol_depth === "number"
-			? rows.history[0].lixcol_depth
-			: undefined;
 	return {
 		fileId,
 		path,
-		reviewId: [
-			fileId,
-			hashFileData(beforeData),
-			hashFileData(afterData),
-			afterCommitId,
-			afterDepth ?? "unknown-depth",
-		].join(":"),
+		reviewId: `${fileId}:${hashFileData(beforeData)}:${hashFileData(afterData)}`,
 		afterData,
 		beforeData,
-		afterCommitId,
+		afterCommitId:
+			rows.history[0]?.lixcol_observed_commit_id ?? rows.startCommitId,
 		beforeCommitId: rows.history[1]?.lixcol_observed_commit_id ?? undefined,
-		afterDepth,
+		afterDepth:
+			typeof rows.history[0]?.lixcol_depth === "number"
+				? rows.history[0].lixcol_depth
+				: undefined,
 		beforeDepth:
 			typeof rows.history[1]?.lixcol_depth === "number"
 				? rows.history[1].lixcol_depth
 				: undefined,
-	};
-}
-
-export function createExternalWriteReviewFromSnapshots({
-	fileId,
-	path,
-	beforeData,
-	afterData,
-}: {
-	readonly fileId: string;
-	readonly path: string;
-	readonly beforeData: Uint8Array;
-	readonly afterData: Uint8Array;
-}): ExternalWriteReview {
-	const before = new Uint8Array(beforeData);
-	const after = new Uint8Array(afterData);
-	return {
-		fileId,
-		path,
-		reviewId: [
-			fileId,
-			hashFileData(before),
-			hashFileData(after),
-			Date.now().toString(36),
-			Math.random().toString(36).slice(2),
-		].join(":"),
-		beforeData: before,
-		afterData: after,
 	};
 }
 
