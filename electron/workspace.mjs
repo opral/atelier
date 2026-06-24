@@ -11,6 +11,10 @@ import {
 	rm,
 	stat,
 } from "node:fs/promises";
+import {
+	uniqueWorkspaceRelativeFilePaths,
+	workspaceRelativeFilePath,
+} from "./workspace-paths.mjs";
 
 const LIX_DIRECTORY_NAME = ".lix";
 const LIX_DATABASE_FILE = path.join(".lix", ".internal", "db.sqlite");
@@ -57,8 +61,8 @@ export async function resolveWorkspaceTarget(requestedPath) {
 		return {
 			workspace: createPersistentWorkspace(workspaceDir),
 			pendingOpenFilePaths: [
-				toPortableRelativePath(path.relative(workspaceDir, resolved)),
-			],
+				workspaceRelativeFilePath(workspaceDir, resolved),
+			].filter(Boolean),
 		};
 	}
 	if (stats?.isDirectory()) {
@@ -375,9 +379,11 @@ async function resolveWorkspaceSessionEntry(workspaceEntry) {
 	} catch {
 		return null;
 	}
-	const pendingOpenFilePaths = Array.isArray(workspaceEntry.openFilePaths)
-		? workspaceEntry.openFilePaths
-		: [];
+	const pendingOpenFilePaths = uniqueWorkspaceRelativeFilePaths(
+		Array.isArray(workspaceEntry.openFilePaths)
+			? workspaceEntry.openFilePaths
+			: [],
+	);
 	if (await hasLixWorkspaceMetadata(workspacePath)) {
 		return {
 			workspace: createPersistentWorkspace(workspacePath),
@@ -525,9 +531,10 @@ async function collectWorkspaceIncludePaths(directoryPath) {
 				continue;
 			}
 			if (stats.isFile() && isIncludedWorkspaceFileName(entry.name)) {
-				includePaths.push(
-					toPortableRelativePath(path.relative(directoryPath, entryPath)),
-				);
+				const includePath = workspaceRelativeFilePath(directoryPath, entryPath);
+				if (includePath) {
+					includePaths.push(includePath);
+				}
 			}
 		}
 	}
@@ -569,44 +576,9 @@ function createEphemeralWorkspace(workspacePath, includePaths = []) {
 	return {
 		ephemeral: true,
 		path: resolvedPath,
-		includePaths: normalizeIncludePaths(includePaths),
+		includePaths: uniqueWorkspaceRelativeFilePaths(includePaths),
 		name: path.basename(resolvedPath) || resolvedPath,
 	};
-}
-
-function normalizeIncludePaths(includePaths) {
-	const seen = new Set();
-	const normalizedIncludePaths = [];
-	for (const includePath of includePaths ?? []) {
-		if (typeof includePath !== "string" || includePath.length === 0) {
-			continue;
-		}
-		const segments = includePath
-			.replaceAll("\\", "/")
-			.replace(/^\/+/, "")
-			.split("/")
-			.filter(Boolean);
-		if (
-			segments.length === 0 ||
-			segments[0] === LIX_DIRECTORY_NAME ||
-			segments.some((segment) => segment === "..")
-		) {
-			continue;
-		}
-		const normalizedIncludePath = segments.join("/");
-		if (
-			normalizedIncludePath.length === 0 ||
-			normalizedIncludePath.endsWith("/")
-		) {
-			continue;
-		}
-		if (seen.has(normalizedIncludePath)) {
-			continue;
-		}
-		seen.add(normalizedIncludePath);
-		normalizedIncludePaths.push(normalizedIncludePath);
-	}
-	return normalizedIncludePaths;
 }
 
 function isWorkspaceSessionEntryLike(value) {
@@ -710,9 +682,9 @@ function createTransientDirectoryWorkspace(filePaths) {
 	);
 	return createEphemeralWorkspace(
 		workspacePath,
-		normalizedFilePaths.map((filePath) =>
-			toPortableRelativePath(path.relative(workspacePath, filePath)),
-		),
+		normalizedFilePaths
+			.map((filePath) => workspaceRelativeFilePath(workspacePath, filePath))
+			.filter(Boolean),
 	);
 }
 
@@ -731,10 +703,6 @@ function normalizeFilePaths(filePaths) {
 		normalizedFilePaths.push(normalizedFilePath);
 	}
 	return normalizedFilePaths;
-}
-
-function toPortableRelativePath(relativePath) {
-	return relativePath.split(path.sep).filter(Boolean).join("/");
 }
 
 function deepestCommonParent(directories) {

@@ -7,6 +7,11 @@ import {
 	writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import {
+	uniqueWorkspaceRelativeFilePaths,
+	workspaceLocalFilePath,
+	workspaceRelativeFilePath,
+} from "./workspace-paths.mjs";
 
 export const WORKSPACE_SESSION_FILE = "workspace-session.json";
 export const WORKSPACE_SESSION_RECOVERY_BACKUP_FILE =
@@ -105,10 +110,15 @@ export async function filterExistingWorkspaceEntries(workspaceEntries) {
 
 		const openFilePaths = [];
 		for (const openFilePath of workspaceEntry.openFilePaths) {
+			const localFilePath = workspaceLocalFilePath(
+				workspaceEntry.path,
+				openFilePath,
+			);
+			if (!localFilePath) {
+				continue;
+			}
 			try {
-				if (
-					(await fs.stat(path.join(workspaceEntry.path, openFilePath))).isFile()
-				) {
+				if ((await fs.stat(localFilePath)).isFile()) {
 					openFilePaths.push(openFilePath);
 				}
 			} catch {
@@ -121,12 +131,16 @@ export async function filterExistingWorkspaceEntries(workspaceEntries) {
 }
 
 export function workspaceToSessionEntry(workspace, openFilePaths = []) {
-	if (!workspace || typeof workspace.path !== "string" || workspace.path === "") {
+	if (
+		!workspace ||
+		typeof workspace.path !== "string" ||
+		workspace.path === ""
+	) {
 		return null;
 	}
 	return {
 		path: path.resolve(workspace.path),
-		openFilePaths: normalizeWorkspaceRelativeOpenFilePaths(openFilePaths),
+		openFilePaths: normalizeWorkspaceOpenFilePaths(openFilePaths),
 	};
 }
 
@@ -182,23 +196,12 @@ export function normalizeWorkspacePaths(workspacePaths) {
 	return normalizedWorkspacePaths;
 }
 
-export function normalizeWorkspaceRelativeOpenFilePaths(openFilePaths) {
+export function normalizeWorkspaceOpenFilePaths(openFilePaths) {
 	if (!Array.isArray(openFilePaths)) {
 		return [];
 	}
 
-	const seen = new Set();
-	const normalizedOpenFilePaths = [];
-	for (const openFilePath of openFilePaths) {
-		const normalizedOpenFilePath =
-			normalizeWorkspaceRelativeOpenFilePath(openFilePath);
-		if (!normalizedOpenFilePath || seen.has(normalizedOpenFilePath)) {
-			continue;
-		}
-		seen.add(normalizedOpenFilePath);
-		normalizedOpenFilePaths.push(normalizedOpenFilePath);
-	}
-	return normalizedOpenFilePaths;
+	return uniqueWorkspaceRelativeFilePaths(openFilePaths);
 }
 
 export function mergeRestoredAndExplicitWorkspaceRequests(
@@ -242,7 +245,7 @@ function normalizeWorkspaceSessionEntry(workspaceEntry) {
 	}
 	return {
 		path: path.resolve(workspaceEntry.path),
-		openFilePaths: normalizeWorkspaceRelativeOpenFilePaths(
+		openFilePaths: normalizeWorkspaceOpenFilePaths(
 			workspaceEntry.openFilePaths,
 		),
 	};
@@ -270,29 +273,16 @@ function normalizeLegacyWorkspaceSessionEntry(workspaceEntry) {
 		);
 		return {
 			path: workspacePath,
-			openFilePaths: normalizeWorkspaceRelativeOpenFilePaths(
-				sourceFilePaths.map((sourceFilePath) =>
-					toPortableRelativePath(path.relative(workspacePath, sourceFilePath)),
-				),
+			openFilePaths: normalizeWorkspaceOpenFilePaths(
+				sourceFilePaths
+					.map((sourceFilePath) =>
+						workspaceRelativeFilePath(workspacePath, sourceFilePath),
+					)
+					.filter(Boolean),
 			),
 		};
 	}
 	return null;
-}
-
-function normalizeWorkspaceRelativeOpenFilePath(openFilePath) {
-	if (typeof openFilePath !== "string" || openFilePath.length === 0) {
-		return null;
-	}
-	const portablePath = openFilePath.replaceAll("\\", "/").replace(/^\/+/, "");
-	const segments = portablePath.split("/").filter(Boolean);
-	if (segments.length === 0 || segments.some((segment) => segment === "..")) {
-		return null;
-	}
-	if (segments[0] === ".lix") {
-		return null;
-	}
-	return segments.join("/");
 }
 
 function workspaceSessionEntryKey(workspaceEntry) {
@@ -307,7 +297,7 @@ function mergeWorkspaceSessionEntries(workspaceEntries) {
 			entriesByPath.set(workspaceEntry.path, workspaceEntry);
 			continue;
 		}
-		existing.openFilePaths = normalizeWorkspaceRelativeOpenFilePaths([
+		existing.openFilePaths = normalizeWorkspaceOpenFilePaths([
 			...existing.openFilePaths,
 			...workspaceEntry.openFilePaths,
 		]);
@@ -319,8 +309,8 @@ function deepestCommonParent(directories) {
 	if (directories.length === 0) {
 		return path.resolve(".");
 	}
-	const [firstDirectory, ...remainingDirectories] = directories.map((directory) =>
-		path.resolve(directory),
+	const [firstDirectory, ...remainingDirectories] = directories.map(
+		(directory) => path.resolve(directory),
 	);
 	const root = path.parse(firstDirectory).root;
 	const commonSegments = firstDirectory
@@ -347,10 +337,6 @@ function deepestCommonParent(directories) {
 		commonSegments.length = index;
 	}
 	return path.join(root, ...commonSegments);
-}
-
-function toPortableRelativePath(relativePath) {
-	return relativePath.split(path.sep).filter(Boolean).join("/");
 }
 
 function workspaceEntryOverlapsExplicitPaths(

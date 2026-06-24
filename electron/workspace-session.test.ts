@@ -85,7 +85,7 @@ describe("workspace session store", () => {
 		]);
 	});
 
-	test("write persists normalized workspace entries", async () => {
+	test("write persists relative workspace entries", async () => {
 		const userDataPath = createUserDataPath();
 		const workspacePath = path.join(userDataPath, "workspace");
 		const secondWorkspacePath = path.join(userDataPath, "second");
@@ -94,8 +94,9 @@ describe("workspace session store", () => {
 			{
 				path: workspacePath,
 				openFilePaths: [
-					"/docs/readme.md",
+					"docs/readme.md",
 					"docs\\readme.md",
+					"notes/today.md",
 					"notes/today.md",
 					"../outside.md",
 					".lix/app_data/private.md",
@@ -111,7 +112,11 @@ describe("workspace session store", () => {
 			workspaces: [
 				{
 					path: workspacePath,
-					openFilePaths: ["docs/readme.md", "notes/today.md"],
+					openFilePaths: [
+						"docs/readme.md",
+						"docs\\readme.md",
+						"notes/today.md",
+					],
 				},
 				{ path: secondWorkspacePath, openFilePaths: [] },
 			],

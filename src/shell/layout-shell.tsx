@@ -204,7 +204,7 @@ const collectSessionOpenFilePaths = (
 	const openFilePaths: string[] = [];
 	for (const panel of panels) {
 		for (const view of panel.views) {
-			const filePath = normalizeSessionOpenFilePath(view.state?.filePath);
+			const filePath = sessionOpenFilePath(view.state?.filePath);
 			if (!filePath || seen.has(filePath)) {
 				continue;
 			}
@@ -215,23 +215,25 @@ const collectSessionOpenFilePaths = (
 	return openFilePaths;
 };
 
-const normalizeSessionOpenFilePath = (filePath: unknown): string | null => {
-	if (typeof filePath !== "string" || filePath.length === 0) {
+const sessionOpenFilePath = (filePath: unknown): string | null => {
+	if (typeof filePath !== "string" || !isWorkspaceLixFilePath(filePath)) {
 		return null;
 	}
-	const segments = filePath
-		.replaceAll("\\", "/")
-		.replace(/^\/+/, "")
-		.split("/")
-		.filter(Boolean);
-	if (
-		segments.length === 0 ||
-		segments[0] === ".lix" ||
-		segments.some((segment) => segment === "..")
-	) {
-		return null;
+	return filePath.slice(1);
+};
+
+const isWorkspaceLixFilePath = (filePath: string): boolean => {
+	if (!filePath.startsWith("/") || filePath.endsWith("/")) {
+		return false;
 	}
-	return segments.join("/");
+	const segments = filePath.slice(1).split("/");
+	return (
+		segments.length > 0 &&
+		segments[0] !== ".lix" &&
+		segments.every(
+			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
+		)
+	);
 };
 
 const sanitizePanels = (
