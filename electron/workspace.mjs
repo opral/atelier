@@ -381,7 +381,7 @@ async function resolveWorkspaceSessionEntry(workspaceEntry) {
 	if (await hasLixWorkspaceMetadata(workspacePath)) {
 		return {
 			workspace: createPersistentWorkspace(workspacePath),
-			pendingOpenFilePaths,
+			pendingOpenFilePaths: [],
 		};
 	}
 	return {

@@ -577,7 +577,7 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("restores saved workspace session entries with .lix as tracked", async () => {
+	test("ignores saved open files for tracked workspace session entries", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -601,7 +601,7 @@ describe("workspace resolution", () => {
 					path: directory,
 					name: "workspace",
 				},
-				pendingOpenFilePaths: ["docs/readme.md"],
+				pendingOpenFilePaths: [],
 			},
 		]);
 	});
