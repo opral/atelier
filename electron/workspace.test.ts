@@ -22,7 +22,7 @@ describe("workspace resolution", () => {
 		expect(MAX_WORKSPACE_SIZE_BYTES).toBe(500 * 1024 * 1024);
 	});
 
-	test("uses a directory path as the workspace", async () => {
+	test("opens directory paths as ephemeral workspaces by default", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -32,8 +32,9 @@ describe("workspace resolution", () => {
 		await mkdir(directory, { recursive: true });
 
 		await expect(resolveWorkspace(directory)).resolves.toEqual({
-			ephemeral: false,
+			ephemeral: true,
 			path: directory,
+			includePaths: [],
 			name: "workspace",
 		});
 	});
@@ -70,6 +71,29 @@ describe("workspace resolution", () => {
 		await expect(
 			resolveWorkspaceTarget(directory, { maxWorkspaceSizeBytes: 10 }),
 		).resolves.toEqual({
+			workspace: {
+				ephemeral: true,
+				path: directory,
+				includePaths: [],
+				name: "workspace",
+			},
+			pendingOpenFilePaths: [],
+		});
+	});
+
+	test("resolves directory paths inside Lix workspaces to the workspace root", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const nestedDirectory = path.join(directory, "docs", "guides");
+		await mkdir(path.join(directory, ".lix", ".internal"), { recursive: true });
+		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
+		await mkdir(nestedDirectory, { recursive: true });
+
+		await expect(resolveWorkspaceTarget(nestedDirectory)).resolves.toEqual({
 			workspace: {
 				ephemeral: false,
 				path: directory,

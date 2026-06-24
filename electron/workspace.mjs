@@ -35,8 +35,9 @@ export function getWorkspace(window) {
 }
 
 /**
- * Resolves a requested folder directly, or a requested file to the nearest
- * ancestor Lix workspace and the file path within that workspace.
+ * Resolves requested paths to the nearest ancestor Lix workspace when one
+ * exists; otherwise opens folders ephemerally and files as filtered ephemeral
+ * workspaces.
  */
 export async function resolveWorkspaceTarget(requestedPath, options = {}) {
 	const resolved = path.resolve(requestedPath);
@@ -65,10 +66,18 @@ export async function resolveWorkspaceTarget(requestedPath, options = {}) {
 		};
 	}
 	if (stats?.isDirectory()) {
+		const workspaceDir = await findLixWorkspaceRoot(resolved);
+		if (workspaceDir) {
+			await assertWorkspaceDirectorySizeWithinLimit(workspaceDir, options);
+			return {
+				workspace: createPersistentWorkspace(workspaceDir),
+				pendingOpenFilePaths: [],
+			};
+		}
 		await assertWorkspaceDirectorySizeWithinLimit(resolved, options);
 	}
 	return {
-		workspace: createPersistentWorkspace(resolved),
+		workspace: createEphemeralWorkspace(resolved),
 		pendingOpenFilePaths: [],
 	};
 }
@@ -331,8 +340,7 @@ export async function setWorkspaceTrackChanges(window, trackChanges) {
 }
 
 export async function disposeWorkspaceWindowState(windowOrId) {
-	const windowId =
-		typeof windowOrId === "number" ? windowOrId : windowOrId?.id;
+	const windowId = typeof windowOrId === "number" ? windowOrId : windowOrId?.id;
 	if (typeof windowId !== "number") {
 		return;
 	}
@@ -750,9 +758,7 @@ async function pathExists(filePath) {
 function createTransientDirectoryWorkspace(filePaths) {
 	const normalizedFilePaths = normalizeFilePaths(filePaths);
 	const workspacePath = deepestCommonParent(
-		normalizedFilePaths.map((filePath) =>
-			path.dirname(filePath),
-		),
+		normalizedFilePaths.map((filePath) => path.dirname(filePath)),
 	);
 	return createEphemeralWorkspace(
 		workspacePath,

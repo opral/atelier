@@ -305,19 +305,16 @@ test("Track Changes menu toggles workspace .lix storage", async ({
 		registerRendererConsoleLogging(page);
 
 		await expect(page.getByText("marker.md")).toBeVisible();
-		await expectInstalledPluginArchives(workspaceDir);
-		await expectTrackChangesMenuChecked(electronApp, true);
-
-		await clickTrackChangesMenuItemAndWaitForReload(electronApp, page);
-		await expect(page).toHaveTitle(path.basename(workspaceDir));
-		await expect(page.getByText("marker.md")).toBeVisible();
 		await expectTrackChangesMenuChecked(electronApp, false);
 		await expectPathMissing(path.join(workspaceDir, ".lix"));
 
 		await page.evaluate(async () => {
 			await window.flashtypeDesktop?.lix.execute({
 				sql: "UPDATE lix_file SET data = $1 WHERE path = $2",
-				params: [new TextEncoder().encode("# Updated while off\n"), "/marker.md"],
+				params: [
+					new TextEncoder().encode("# Updated while off\n"),
+					"/marker.md",
+				],
 			});
 		});
 		await expect
@@ -330,6 +327,13 @@ test("Track Changes menu toggles workspace .lix storage", async ({
 		await expect(page.getByText("marker.md")).toBeVisible();
 		await expectTrackChangesMenuChecked(electronApp, true);
 		await expectPathExists(path.join(workspaceDir, ".lix"));
+		await expectInstalledPluginArchives(workspaceDir);
+
+		await clickTrackChangesMenuItemAndWaitForReload(electronApp, page);
+		await expect(page).toHaveTitle(path.basename(workspaceDir));
+		await expect(page.getByText("marker.md")).toBeVisible();
+		await expectTrackChangesMenuChecked(electronApp, false);
+		await expectPathMissing(path.join(workspaceDir, ".lix"));
 	} finally {
 		await closeElectronApp(electronApp);
 	}
@@ -856,8 +860,7 @@ async function expectWorkspaceSessionPaths(
 					await readFile(workspaceSessionPath(userDataDir), "utf8"),
 				);
 				return Array.isArray(store.workspaces)
-					? store.workspaces
-							.map((workspace: any) => workspace.path)
+					? store.workspaces.map((workspace: any) => workspace.path)
 					: null;
 			} catch {
 				return null;
