@@ -25,7 +25,7 @@ describe("workspace session store", () => {
 		);
 	});
 
-	test("corrupt, invalid, or old-version stores return no workspace entries", async () => {
+	test("corrupt, invalid, or unsupported old-version stores return no workspace entries", async () => {
 		const userDataPath = createUserDataPath();
 		await mkdir(userDataPath, { recursive: true });
 
@@ -46,7 +46,7 @@ describe("workspace session store", () => {
 		await writeFile(
 			getWorkspaceSessionPath(userDataPath),
 			JSON.stringify({
-				version: 3,
+				version: 2,
 				workspaces: [{ ephemeral: false, path: "/old" }],
 			}),
 			"utf8",
@@ -54,6 +54,35 @@ describe("workspace session store", () => {
 		await expect(readWorkspaceSessionEntries(userDataPath)).resolves.toEqual(
 			[],
 		);
+	});
+
+	test("migrates version 3 workspace session entries", async () => {
+		const userDataPath = createUserDataPath();
+		const workspacePath = path.join(userDataPath, "workspace");
+		const sourceRoot = path.join(userDataPath, "source-files");
+		const sourceFilePath = path.join(sourceRoot, "draft.md");
+		const nestedSourceFilePath = path.join(sourceRoot, "nested", "note.md");
+		await mkdir(userDataPath, { recursive: true });
+
+		await writeFile(
+			getWorkspaceSessionPath(userDataPath),
+			JSON.stringify({
+				version: 3,
+				workspaces: [
+					{ ephemeral: false, path: workspacePath },
+					{
+						ephemeral: true,
+						sourceFilePaths: [sourceFilePath, nestedSourceFilePath],
+					},
+				],
+			}),
+			"utf8",
+		);
+
+		await expect(readWorkspaceSessionEntries(userDataPath)).resolves.toEqual([
+			{ path: workspacePath, openFiles: [] },
+			{ path: sourceRoot, openFiles: ["draft.md", "nested/note.md"] },
+		]);
 	});
 
 	test("write persists normalized workspace entries", async () => {

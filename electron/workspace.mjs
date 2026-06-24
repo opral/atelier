@@ -69,7 +69,7 @@ export async function resolveWorkspaceTarget(requestedPath) {
 				pendingOpenFilePaths: [],
 			};
 		}
-		const includePaths = await collectMarkdownIncludePaths(resolved);
+		const includePaths = await collectWorkspaceIncludePaths(resolved);
 		return {
 			workspace: createEphemeralWorkspace(resolved, includePaths),
 			pendingOpenFilePaths: [],
@@ -329,7 +329,7 @@ export async function setWorkspaceTrackChanges(window, trackChanges) {
 			await moveWorkspaceLixToExternalStorage(state);
 			state.workspace = createEphemeralWorkspace(
 				workspace.path,
-				await collectMarkdownIncludePaths(workspace.path),
+				await collectWorkspaceIncludePaths(workspace.path),
 			);
 		}
 		state.pendingOpenFilePaths = [];
@@ -493,7 +493,7 @@ function roundKilobytes(bytes) {
 	return Math.round((bytes / 1024) * 100) / 100;
 }
 
-async function collectMarkdownIncludePaths(directoryPath) {
+async function collectWorkspaceIncludePaths(directoryPath) {
 	const includePaths = [];
 	const pendingDirectories = [directoryPath];
 	while (pendingDirectories.length > 0) {
@@ -524,7 +524,7 @@ async function collectMarkdownIncludePaths(directoryPath) {
 				}
 				continue;
 			}
-			if (stats.isFile() && isMarkdownFileName(entry.name)) {
+			if (stats.isFile() && isIncludedWorkspaceFileName(entry.name)) {
 				includePaths.push(
 					toPortableRelativePath(path.relative(directoryPath, entryPath)),
 				);
@@ -535,8 +535,12 @@ async function collectMarkdownIncludePaths(directoryPath) {
 	return includePaths;
 }
 
-function isMarkdownFileName(fileName) {
-	return fileName.endsWith(".md") || fileName.endsWith(".markdown");
+function isIncludedWorkspaceFileName(fileName) {
+	return (
+		fileName.endsWith(".md") ||
+		fileName.endsWith(".markdown") ||
+		fileName.endsWith(".csv")
+	);
 }
 
 async function resolveStandaloneFile(resolvedPath) {

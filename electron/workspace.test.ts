@@ -54,7 +54,7 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("opens non-Lix directories with recursive exact markdown include paths", async () => {
+	test("opens non-Lix directories with recursive exact supported include paths", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -65,7 +65,12 @@ describe("workspace resolution", () => {
 		await mkdir(path.join(directory, ".lix"), { recursive: true });
 		await writeFile(path.join(directory, "z.md"), "# Z\n");
 		await writeFile(path.join(directory, "alpha.markdown"), "# Alpha\n");
+		await writeFile(path.join(directory, "data.csv"), "name,value\nA,1\n");
 		await writeFile(path.join(directory, "docs", "readme.md"), "# Docs\n");
+		await writeFile(
+			path.join(directory, "docs", "table.csv"),
+			"label,total\nDocs,2\n",
+		);
 		await writeFile(
 			path.join(directory, "docs", "nested", "guide.markdown"),
 			"# Guide\n",
@@ -80,8 +85,10 @@ describe("workspace resolution", () => {
 				path: directory,
 				includePaths: [
 					"alpha.markdown",
+					"data.csv",
 					"docs/nested/guide.markdown",
 					"docs/readme.md",
+					"docs/table.csv",
 					"z.md",
 				],
 				name: "workspace",

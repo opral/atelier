@@ -27,6 +27,9 @@ export async function readWorkspaceSessionEntries(userDataPath) {
 		) {
 			return normalizeWorkspaceSessionEntries(store.workspaces);
 		}
+		if (store?.version === 3 && Array.isArray(store.workspaces)) {
+			return normalizeLegacyWorkspaceSessionEntries(store.workspaces);
+		}
 		return [];
 	} catch {
 		return [];
@@ -148,6 +151,14 @@ export function normalizeWorkspaceSessionEntries(workspaceEntries) {
 	return normalizedWorkspaceEntries;
 }
 
+function normalizeLegacyWorkspaceSessionEntries(workspaceEntries) {
+	return mergeWorkspaceSessionEntries(
+		workspaceEntries
+			.map(normalizeLegacyWorkspaceSessionEntry)
+			.filter((workspaceEntry) => workspaceEntry !== null),
+	);
+}
+
 export function normalizeWorkspacePaths(workspacePaths) {
 	if (!Array.isArray(workspacePaths)) {
 		return [];
@@ -232,6 +243,38 @@ function normalizeWorkspaceSessionEntry(workspaceEntry) {
 	};
 }
 
+function normalizeLegacyWorkspaceSessionEntry(workspaceEntry) {
+	if (!workspaceEntry || typeof workspaceEntry !== "object") {
+		return null;
+	}
+	if (workspaceEntry.ephemeral === false) {
+		if (typeof workspaceEntry.path !== "string" || workspaceEntry.path === "") {
+			return null;
+		}
+		return { path: path.resolve(workspaceEntry.path), openFiles: [] };
+	}
+	if (workspaceEntry.ephemeral === true) {
+		const sourceFilePaths = normalizeWorkspacePaths(
+			workspaceEntry.sourceFilePaths,
+		);
+		if (sourceFilePaths.length === 0) {
+			return null;
+		}
+		const workspacePath = deepestCommonParent(
+			sourceFilePaths.map((sourceFilePath) => path.dirname(sourceFilePath)),
+		);
+		return {
+			path: workspacePath,
+			openFiles: normalizeWorkspaceRelativeOpenFiles(
+				sourceFilePaths.map((sourceFilePath) =>
+					toPortableRelativePath(path.relative(workspacePath, sourceFilePath)),
+				),
+			),
+		};
+	}
+	return null;
+}
+
 function normalizeWorkspaceRelativeOpenFile(openFile) {
 	if (typeof openFile !== "string" || openFile.length === 0) {
 		return null;
@@ -249,6 +292,60 @@ function normalizeWorkspaceRelativeOpenFile(openFile) {
 
 function workspaceSessionEntryKey(workspaceEntry) {
 	return workspaceEntry.path;
+}
+
+function mergeWorkspaceSessionEntries(workspaceEntries) {
+	const entriesByPath = new Map();
+	for (const workspaceEntry of workspaceEntries) {
+		const existing = entriesByPath.get(workspaceEntry.path);
+		if (!existing) {
+			entriesByPath.set(workspaceEntry.path, workspaceEntry);
+			continue;
+		}
+		existing.openFiles = normalizeWorkspaceRelativeOpenFiles([
+			...existing.openFiles,
+			...workspaceEntry.openFiles,
+		]);
+	}
+	return [...entriesByPath.values()];
+}
+
+function deepestCommonParent(directories) {
+	if (directories.length === 0) {
+		return path.resolve(".");
+	}
+	const [firstDirectory, ...remainingDirectories] = directories.map((directory) =>
+		path.resolve(directory),
+	);
+	const root = path.parse(firstDirectory).root;
+	const commonSegments = firstDirectory
+		.slice(root.length)
+		.split(path.sep)
+		.filter(Boolean);
+	for (const directory of remainingDirectories) {
+		const directoryRoot = path.parse(directory).root;
+		if (directoryRoot !== root) {
+			return root;
+		}
+		const segments = directory
+			.slice(root.length)
+			.split(path.sep)
+			.filter(Boolean);
+		let index = 0;
+		while (
+			index < commonSegments.length &&
+			index < segments.length &&
+			commonSegments[index] === segments[index]
+		) {
+			index += 1;
+		}
+		commonSegments.length = index;
+	}
+	return path.join(root, ...commonSegments);
+}
+
+function toPortableRelativePath(relativePath) {
+	return relativePath.split(path.sep).filter(Boolean).join("/");
 }
 
 function workspaceEntryOverlapsExplicitPaths(
