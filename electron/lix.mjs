@@ -1,7 +1,11 @@
 import { FsBackend, bundledPluginArchives, openLix } from "@lix-js/sdk";
 import path from "node:path";
 import { readFile, rm } from "node:fs/promises";
-import { getWorkspace, getWorkspaceLixDatabasePath } from "./workspace.mjs";
+import {
+	getWorkspace,
+	getWorkspaceFsBackendOptions,
+	getWorkspaceLixDatabasePath,
+} from "./workspace.mjs";
 
 const LIX_DATABASE_DIR = ".lix";
 const sessions = new Map();
@@ -18,27 +22,18 @@ export async function ensureLixOpen(window) {
 						"No workspace is open. Open a folder before using lix.",
 					);
 				}
-				const isEphemeral = workspace.ephemeral === true;
-				const includePaths = isEphemeral
-					? sourceFilePathsToWorkspaceIncludePaths(workspace)
-					: undefined;
-				if (isEphemeral && includePaths.length === 0) {
-					throw new Error(
-						"Ephemeral workspaces require at least one source file.",
-					);
+				let nativeLix;
+				try {
+					const backendOptions = await getWorkspaceFsBackendOptions(window);
+					nativeLix = await openLix({
+						backend: new FsBackend(backendOptions),
+					});
+					await ensureDefaultPluginsInstalledOnCurrentBranch(nativeLix);
+					return createDesktopLixHandle(nativeLix, workspace.path);
+				} catch (error) {
+					await nativeLix?.close().catch(() => {});
+					throw error;
 				}
-				const nativeLix = await openLix({
-					backend: new FsBackend({
-						path: workspace.path,
-						storage: isEphemeral ? "memory" : "persistent",
-						filter:
-							includePaths && includePaths.length > 0
-								? { includePaths }
-								: undefined,
-					}),
-				});
-				await ensureDefaultPluginsInstalledOnCurrentBranch(nativeLix);
-				return createDesktopLixHandle(nativeLix, workspace.path);
 			})();
 			session.lixPromise = openingPromise;
 			openingPromise.catch(() => {
@@ -50,24 +45,6 @@ export async function ensureLixOpen(window) {
 		outPromise = session.lixPromise;
 	});
 	return await outPromise;
-}
-
-function sourceFilePathsToWorkspaceIncludePaths(workspace) {
-	return (workspace.sourceFilePaths ?? [])
-		.map((sourceFilePath) => {
-			const relativePath = path.relative(workspace.path, sourceFilePath);
-			if (
-				relativePath.startsWith("..") ||
-				path.isAbsolute(relativePath) ||
-				relativePath.length === 0
-			) {
-				throw new Error(
-					`Ephemeral source file must be inside the workspace: ${sourceFilePath}`,
-				);
-			}
-			return relativePath.split(path.sep).filter(Boolean).join("/");
-		})
-		.filter((includePath) => includePath.length > 0);
 }
 
 async function ensureDefaultPluginsInstalledOnCurrentBranch(lix) {

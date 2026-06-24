@@ -97,6 +97,13 @@ import {
 } from "./panel-utils";
 import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
 
+type NewFileDraftHandlerRegistration = {
+	readonly panelSide: PanelSide;
+	readonly viewInstance: string;
+	readonly isActiveView: boolean;
+	readonly handler: () => void;
+};
+
 const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
 	const { launchArgs: _omitLaunch, ...rest } = view as any;
 	const state = sanitizeExtensionStateForPersistence(rest.state);
@@ -160,6 +167,73 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 	if (!value || typeof value !== "object") return false;
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
+};
+
+const newFileDraftHandlerKey = (
+	registration: NewFileDraftHandlerRegistration,
+): string => `${registration.panelSide}:${registration.viewInstance}`;
+
+const selectNewFileDraftHandler = (
+	registrations: Iterable<NewFileDraftHandlerRegistration>,
+	focusedPanel: PanelSide,
+): NewFileDraftHandlerRegistration | null => {
+	const panelPreference = [
+		focusedPanel,
+		"left" as const,
+		"central" as const,
+		"right" as const,
+	].filter((side, index, sides) => sides.indexOf(side) === index);
+	const registered = [...registrations].filter(
+		(registration) => registration.isActiveView,
+	);
+	for (const panelSide of panelPreference) {
+		const registration = registered.find(
+			(candidate) => candidate.panelSide === panelSide,
+		);
+		if (registration) {
+			return registration;
+		}
+	}
+	return null;
+};
+
+const collectSessionOpenFilePaths = (
+	panels: readonly PanelState[],
+): string[] => {
+	const seen = new Set<string>();
+	const openFilePaths: string[] = [];
+	for (const panel of panels) {
+		for (const view of panel.views) {
+			const filePath = sessionOpenFilePath(view.state?.filePath);
+			if (!filePath || seen.has(filePath)) {
+				continue;
+			}
+			seen.add(filePath);
+			openFilePaths.push(filePath);
+		}
+	}
+	return openFilePaths;
+};
+
+const sessionOpenFilePath = (filePath: unknown): string | null => {
+	if (typeof filePath !== "string" || !isWorkspaceLixFilePath(filePath)) {
+		return null;
+	}
+	return filePath.slice(1);
+};
+
+const isWorkspaceLixFilePath = (filePath: string): boolean => {
+	if (!filePath.startsWith("/") || filePath.endsWith("/")) {
+		return false;
+	}
+	const segments = filePath.slice(1).split("/");
+	return (
+		segments.length > 0 &&
+		segments[0] !== ".lix" &&
+		segments.every(
+			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
+		)
+	);
 };
 
 const sanitizePanels = (
@@ -296,6 +370,24 @@ export function V2LayoutShell({
 	);
 }
 
+type LayoutShellContentProps = {
+	readonly workspaceName?: string;
+	readonly onOpenWorkspace?: () => void;
+	readonly pendingOpenFilePaths?: readonly string[];
+	readonly onPendingOpenFileHandled?: (filePath: string) => void;
+	readonly onError?: (error: unknown) => void;
+	readonly isUpdateReady?: boolean;
+	readonly onInstallUpdate?: () => void | Promise<void>;
+};
+
+type LayoutShellLoadedContentProps = LayoutShellContentProps & {
+	readonly lix: ReturnType<typeof useLix>;
+	readonly uiStateKV: FlashtypeUiState | null;
+	readonly setUiStateKV: (newValue: FlashtypeUiState) => Promise<void>;
+	readonly activeFileId: string | null;
+	readonly setActiveFileId: (newValue: string | null) => Promise<void>;
+};
+
 function isExternalWriteReview(value: unknown): value is ExternalWriteReview {
 	if (!value || typeof value !== "object") return false;
 	const review = value as Partial<ExternalWriteReview>;
@@ -368,24 +460,74 @@ function LayoutShellContent({
 	onError,
 	isUpdateReady,
 	onInstallUpdate,
-}: {
-	readonly workspaceName?: string;
-	readonly onOpenWorkspace?: () => void;
-	readonly pendingOpenFilePaths?: readonly string[];
-	readonly onPendingOpenFileHandled?: (filePath: string) => void;
-	readonly onError?: (error: unknown) => void;
-	readonly isUpdateReady?: boolean;
-	readonly onInstallUpdate?: () => void | Promise<void>;
-}) {
+}: LayoutShellContentProps) {
+	const lix = useLix();
+	return (
+		<LayoutShellUiStateLoader
+			workspaceName={workspaceName}
+			onOpenWorkspace={onOpenWorkspace}
+			pendingOpenFilePaths={pendingOpenFilePaths}
+			onPendingOpenFileHandled={onPendingOpenFileHandled}
+			onError={onError}
+			isUpdateReady={isUpdateReady}
+			onInstallUpdate={onInstallUpdate}
+			lix={lix}
+		/>
+	);
+}
+
+function LayoutShellUiStateLoader(
+	props: LayoutShellContentProps & {
+		readonly lix: ReturnType<typeof useLix>;
+	},
+) {
+	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
+	return (
+		<LayoutShellActiveFileLoader
+			{...props}
+			uiStateKV={uiStateKV}
+			setUiStateKV={setUiStateKV}
+		/>
+	);
+}
+
+function LayoutShellActiveFileLoader(
+	props: LayoutShellContentProps & {
+		readonly lix: ReturnType<typeof useLix>;
+		readonly uiStateKV: FlashtypeUiState | null;
+		readonly setUiStateKV: (newValue: FlashtypeUiState) => Promise<void>;
+	},
+) {
+	const [activeFileId, setActiveFileId] = useKeyValue(
+		"flashtype_active_file_id",
+	);
+	return (
+		<LayoutShellLoadedContent
+			{...props}
+			activeFileId={activeFileId}
+			setActiveFileId={setActiveFileId}
+		/>
+	);
+}
+
+function LayoutShellLoadedContent({
+	workspaceName,
+	onOpenWorkspace,
+	pendingOpenFilePaths,
+	onPendingOpenFileHandled,
+	onError,
+	isUpdateReady,
+	onInstallUpdate,
+	lix,
+	uiStateKV,
+	setUiStateKV,
+	activeFileId,
+	setActiveFileId,
+}: LayoutShellLoadedContentProps) {
 	const [hasLoadedInstalledExtensions, setHasLoadedInstalledExtensions] =
 		useState(false);
 	const { extensionMap, replaceInstalledExtensions, clearInstalledExtensions } =
 		useExtensionRegistry();
-	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
-	const [activeFileId, setActiveFileId] = useKeyValue(
-		"flashtype_active_file_id",
-	);
-	const lix = useLix();
 	const uiState = useMemo(
 		() => coerceFlashtypeUiState(uiStateKV ?? DEFAULT_FLASHTYPE_UI_STATE),
 		[uiStateKV],
@@ -426,6 +568,9 @@ function LayoutShellContent({
 	);
 	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
 	const animationTimeoutRef = useRef<number | null>(null);
+	const newFileDraftHandlersRef = useRef(
+		new Map<string, NewFileDraftHandlerRegistration>(),
+	);
 	const lastNonZeroSizesRef = useRef({
 		left:
 			initialLayoutSizes.left > MIN_VISIBLE_PANEL_SIZE
@@ -1449,6 +1594,19 @@ function LayoutShellContent({
 		setFocusedPanel((prev) => (prev === side ? prev : side));
 	}, []);
 
+	const registerNewFileDraftHandler = useCallback(
+		(registration: NewFileDraftHandlerRegistration) => {
+			const key = newFileDraftHandlerKey(registration);
+			newFileDraftHandlersRef.current.set(key, registration);
+			return () => {
+				if (newFileDraftHandlersRef.current.get(key) === registration) {
+					newFileDraftHandlersRef.current.delete(key);
+				}
+			};
+		},
+		[],
+	);
+
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const hydratedLeft = leftPanel;
 	const hydratedCentral = centralPanel;
@@ -1623,9 +1781,39 @@ function LayoutShellContent({
 			fileId: id,
 			filePath: path,
 			documentOrigin: "new",
+			state: { focusOnLoad: true, defaultBlock: "heading1" },
 			focus: true,
 		});
 	}, [handleOpenFile, lix]);
+
+	const handleNativeNewFile = useCallback(async () => {
+		const filesViewHandler = selectNewFileDraftHandler(
+			newFileDraftHandlersRef.current.values(),
+			focusedPanel,
+		);
+		if (filesViewHandler) {
+			focusPanel(filesViewHandler.panelSide);
+			filesViewHandler.handler();
+			return;
+		}
+		try {
+			await handleCreateNewFile();
+		} catch (error) {
+			if (onError) {
+				onError(error);
+				return;
+			}
+			console.error("Failed to create new file from native menu", error);
+		}
+	}, [focusPanel, focusedPanel, handleCreateNewFile, onError]);
+
+	useEffect(() => {
+		const unsubscribe =
+			window.flashtypeDesktop?.workspace.onNewFile?.(handleNativeNewFile);
+		return () => {
+			unsubscribe?.();
+		};
+	}, [handleNativeNewFile]);
 
 	const activeCentralFileId =
 		activeMarkdownFileIdFromExtensionInstance(activeCentralEntry);
@@ -1661,6 +1849,17 @@ function LayoutShellContent({
 			filePath: activeFilePath,
 		});
 	}, [activeFilePath]);
+
+	const sessionOpenFilePaths = useMemo(
+		() => collectSessionOpenFilePaths([leftPanel, centralPanel, rightPanel]),
+		[leftPanel, centralPanel, rightPanel],
+	);
+
+	useEffect(() => {
+		void window.flashtypeDesktop?.workspace.setOpenFilePaths({
+			filePaths: sessionOpenFilePaths,
+		});
+	}, [sessionOpenFilePaths]);
 
 	const isLeftFocused = focusedPanel === "left";
 	const isCentralFocused = focusedPanel === "central";
@@ -1812,6 +2011,7 @@ function LayoutShellContent({
 			moveExtensionToPanel: handleMoveViewToPanel,
 			resizePanel: handleResizePanel,
 			focusPanel: focusPanel,
+			registerNewFileDraftHandler,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
 			rejectExternalWriteReview: handleRejectExternalWriteReview,
 			lix,
@@ -1826,6 +2026,7 @@ function LayoutShellContent({
 			handleAcceptExternalWriteReview,
 			handleRejectExternalWriteReview,
 			focusPanel,
+			registerNewFileDraftHandler,
 			lix,
 		],
 	);

@@ -135,11 +135,76 @@ describe("FilesView", () => {
 				panel: "central",
 				fileId: createdId,
 				filePath: "/notes.md",
-				state: { focusOnLoad: true },
+				state: { focusOnLoad: true, defaultBlock: "heading1" },
 				focus: true,
 				documentOrigin: "new",
 			});
 		});
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("does not subscribe to the native New File menu item directly", async () => {
+		const lix = await openLix();
+		const originalDesktop = window.flashtypeDesktop;
+		const onNewFile = vi.fn();
+		window.flashtypeDesktop = {
+			workspace: {
+				onNewFile,
+			},
+		} as unknown as Window["flashtypeDesktop"];
+
+		let utils: ReturnType<typeof render>;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<FilesView context={createViewContext(lix)} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await waitForFilesViewReady(utils!);
+
+			expect(onNewFile).not.toHaveBeenCalled();
+
+			utils!.unmount();
+		} finally {
+			window.flashtypeDesktop = originalDesktop;
+			await lix.close();
+		}
+	});
+
+	test("focuses the inline draft without forcing the left panel", async () => {
+		const lix = await openLix();
+		const focusPanel = vi.fn();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix, { focusPanel })} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		const newFileButton = await waitForFilesViewReady(utils!);
+
+		await act(async () => {
+			fireEvent.click(newFileButton);
+		});
+
+		const input = (await utils!.findByTestId(
+			"files-view-draft-input",
+		)) as HTMLInputElement;
+		await waitFor(() => {
+			expect(document.activeElement).toBe(input);
+		});
+		expect(input.value).toBe("new-file");
+		expect(focusPanel).not.toHaveBeenCalled();
 
 		utils!.unmount();
 		await lix.close();

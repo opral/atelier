@@ -25,11 +25,20 @@ const workspace = {
 	consumePendingOpenFiles: () =>
 		ipcRenderer.invoke("workspace:consumePendingOpenFiles"),
 	profile: () => ipcRenderer.invoke("workspace:profile"),
+	onNewFile: (listener) => {
+		const wrapped = () => listener();
+		ipcRenderer.on("workspace:newFile", wrapped);
+		return () => {
+			ipcRenderer.off("workspace:newFile", wrapped);
+		};
+	},
 	open: (payload) => ipcRenderer.invoke("workspace:open", payload),
 	openInNewWindow: (payload) =>
 		ipcRenderer.invoke("workspace:openInNewWindow", payload),
 	setActiveFilePath: (payload) =>
 		ipcRenderer.invoke("workspace:setActiveFilePath", payload),
+	setOpenFilePaths: (payload) =>
+		ipcRenderer.invoke("workspace:setOpenFilePaths", payload),
 	exportLixFile: () => ipcRenderer.invoke("workspace:exportLixFile"),
 	resetLixRepository: () => ipcRenderer.invoke("workspace:resetLixRepository"),
 	// Resolves the on-disk path of a File dropped onto the window.

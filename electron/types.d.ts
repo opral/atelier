@@ -122,13 +122,13 @@ export type DesktopWorkspace =
 			ephemeral: false;
 			path: string;
 			name: string;
-			sourceFilePaths?: never;
+			includePaths?: never;
 	  }
 	| {
 			ephemeral: true;
 			path: string;
 			name: string;
-			sourceFilePaths: string[];
+			includePaths: string[];
 	  };
 
 export type DesktopWorkspaceExtensionProfile = {
@@ -152,6 +152,8 @@ export type DesktopWorkspaceApi = {
 	/** Returns workspace-relative file paths queued for editor opening. */
 	consumePendingOpenFiles(): Promise<string[]>;
 	profile(): Promise<DesktopWorkspaceProfile | null>;
+	/** Fired when the native menu asks the workspace UI to start a new file. */
+	onNewFile(listener: () => void): () => void;
 	/**
 	 * Opens a workspace. With a path (e.g. from a dropped folder) it adopts it
 	 * directly; without one it shows the native directory picker. Resolves to
@@ -164,6 +166,7 @@ export type DesktopWorkspaceApi = {
 	 */
 	openInNewWindow(payload?: { path: string }): Promise<DesktopWorkspace | null>;
 	setActiveFilePath(payload: { filePath: string | null }): Promise<void>;
+	setOpenFilePaths(payload: { filePaths: string[] }): Promise<void>;
 	exportLixFile(): Promise<Uint8Array>;
 	resetLixRepository(): Promise<void>;
 	getPathForFile(file: File): string;

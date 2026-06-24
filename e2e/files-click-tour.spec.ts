@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 import type { ElectronApplication } from "playwright";
+import path from "node:path";
 import seedrandom from "seedrandom";
 import {
 	closeElectronApp,
 	ensureFilesViewOpenInLeftPanel,
-	expectInstalledPluginArchives,
+	expectPathMissing,
 	launchDevElectronApp,
 	registerRendererConsoleLogging,
 	writeStarterFiles,
@@ -29,7 +30,7 @@ test("left files panel survives a seeded random file click tour", async ({
 		registerRendererConsoleLogging(page);
 
 		await expect(page.getByTestId("central-panel-empty-state")).toBeVisible();
-		await expectInstalledPluginArchives(workspaceDir);
+		await expectPathMissing(path.join(workspaceDir, ".lix"));
 		await ensureFilesViewOpenInLeftPanel(page);
 
 		const fileItems = page.locator('[data-testid^="file-tree-item-"]');
@@ -91,7 +92,7 @@ test("deleting the active file closes the central file view", async ({
 		registerRendererConsoleLogging(page);
 
 		await expect(page.getByTestId("central-panel-empty-state")).toBeVisible();
-		await expectInstalledPluginArchives(workspaceDir);
+		await expectPathMissing(path.join(workspaceDir, ".lix"));
 		await ensureFilesViewOpenInLeftPanel(page);
 
 		const file = page.getByTestId("file-tree-item-welcome-md");

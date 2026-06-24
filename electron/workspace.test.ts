@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
-	MAX_WORKSPACE_SIZE_BYTES,
-	WORKSPACE_TOO_LARGE_ERROR_CODE,
 	profileWorkspaceFilesystem,
-	resolveDirectLaunchWorkspaceTargets,
 	resolveWorkspace,
 	resolveWorkspaceTarget,
 	resolveWorkspaceTargets,
@@ -19,11 +16,7 @@ vi.mock("electron", () => ({
 }));
 
 describe("workspace resolution", () => {
-	test("defaults to a 500 MB workspace size limit", () => {
-		expect(MAX_WORKSPACE_SIZE_BYTES).toBe(500 * 1024 * 1024);
-	});
-
-	test("uses a directory path as the workspace", async () => {
+	test("opens directory paths as ephemeral workspaces by default", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -33,13 +26,14 @@ describe("workspace resolution", () => {
 		await mkdir(directory, { recursive: true });
 
 		await expect(resolveWorkspace(directory)).resolves.toEqual({
-			ephemeral: false,
+			ephemeral: true,
 			path: directory,
+			includePaths: [],
 			name: "workspace",
 		});
 	});
 
-	test("rejects directory workspaces over the size limit", async () => {
+	test("opens directory workspaces without a size limit", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -49,56 +43,73 @@ describe("workspace resolution", () => {
 		await mkdir(directory, { recursive: true });
 		await writeFile(path.join(directory, "large.md"), Buffer.alloc(11));
 
-		await expect(
-			resolveWorkspaceTarget(directory, { maxWorkspaceSizeBytes: 10 }),
-		).rejects.toMatchObject({
-			code: WORKSPACE_TOO_LARGE_ERROR_CODE,
-			workspacePath: directory,
-			maxSizeBytes: 10,
-		});
-	});
-
-	test("allows directory workspaces at the size limit", async () => {
-		const directory = path.join(
-			tmpdir(),
-			"flashtype-workspace-test",
-			randomUUID(),
-			"workspace",
-		);
-		await mkdir(directory, { recursive: true });
-		await writeFile(path.join(directory, "small.md"), Buffer.alloc(10));
-
-		await expect(
-			resolveWorkspaceTarget(directory, { maxWorkspaceSizeBytes: 10 }),
-		).resolves.toEqual({
+		await expect(resolveWorkspaceTarget(directory)).resolves.toEqual({
 			workspace: {
-				ephemeral: false,
+				ephemeral: true,
 				path: directory,
+				includePaths: ["large.md"],
 				name: "workspace",
 			},
 			pendingOpenFilePaths: [],
 		});
 	});
 
-	test("excludes .lix directories from the workspace size limit", async () => {
+	test("opens non-Lix directories with recursive exact supported include paths", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
 			randomUUID(),
 			"workspace",
 		);
-		await mkdir(path.join(directory, ".lix", ".internal"), {
-			recursive: true,
-		});
-		await writeFile(path.join(directory, "small.md"), Buffer.alloc(10));
+		await mkdir(path.join(directory, "docs", "nested"), { recursive: true });
+		await mkdir(path.join(directory, ".lix"), { recursive: true });
+		await writeFile(path.join(directory, "z.md"), "# Z\n");
+		await writeFile(path.join(directory, "alpha.markdown"), "# Alpha\n");
+		await writeFile(path.join(directory, "data.csv"), "name,value\nA,1\n");
+		await writeFile(path.join(directory, "docs", "readme.md"), "# Docs\n");
 		await writeFile(
-			path.join(directory, ".lix", ".internal", "db.sqlite"),
-			Buffer.alloc(11),
+			path.join(directory, "docs", "table.csv"),
+			"label,total\nDocs,2\n",
 		);
+		await writeFile(
+			path.join(directory, "docs", "nested", "guide.markdown"),
+			"# Guide\n",
+		);
+		await writeFile(path.join(directory, "docs", "upper.MD"), "# Upper\n");
+		await writeFile(path.join(directory, "notes.txt"), "Notes\n");
+		await writeFile(path.join(directory, ".lix", "ignored.md"), "# Ignored\n");
 
-		await expect(
-			resolveWorkspaceTarget(directory, { maxWorkspaceSizeBytes: 10 }),
-		).resolves.toEqual({
+		await expect(resolveWorkspaceTarget(directory)).resolves.toEqual({
+			workspace: {
+				ephemeral: true,
+				path: directory,
+				includePaths: [
+					"alpha.markdown",
+					"data.csv",
+					"docs/nested/guide.markdown",
+					"docs/readme.md",
+					"docs/table.csv",
+					"z.md",
+				],
+				name: "workspace",
+			},
+			pendingOpenFilePaths: [],
+		});
+	});
+
+	test("resolves directory paths inside Lix workspaces to the workspace root", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const nestedDirectory = path.join(directory, "docs", "guides");
+		await mkdir(path.join(directory, ".lix", ".internal"), { recursive: true });
+		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
+		await mkdir(nestedDirectory, { recursive: true });
+
+		await expect(resolveWorkspaceTarget(nestedDirectory)).resolves.toEqual({
 			workspace: {
 				ephemeral: false,
 				path: directory,
@@ -127,7 +138,30 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("rejects files that resolve to an oversized Lix workspace root", async () => {
+	test("resolves a file inside a RocksDB Lix workspace to the workspace root", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const filePath = path.join(directory, "readme.md");
+		await mkdir(path.join(directory, ".lix", ".internal", "rocksdb"), {
+			recursive: true,
+		});
+		await writeFile(filePath, "# Hello\n");
+
+		await expect(resolveWorkspaceTarget(filePath)).resolves.toEqual({
+			workspace: {
+				ephemeral: false,
+				path: directory,
+				name: "workspace",
+			},
+			pendingOpenFilePaths: ["readme.md"],
+		});
+	});
+
+	test("resolves files in Lix workspaces without a size limit", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -140,12 +174,13 @@ describe("workspace resolution", () => {
 		await writeFile(filePath, "# Hello\n");
 		await writeFile(path.join(directory, "large.md"), Buffer.alloc(11));
 
-		await expect(
-			resolveWorkspaceTarget(filePath, { maxWorkspaceSizeBytes: 10 }),
-		).rejects.toMatchObject({
-			code: WORKSPACE_TOO_LARGE_ERROR_CODE,
-			workspacePath: directory,
-			maxSizeBytes: 10,
+		await expect(resolveWorkspaceTarget(filePath)).resolves.toEqual({
+			workspace: {
+				ephemeral: false,
+				path: directory,
+				name: "workspace",
+			},
+			pendingOpenFilePaths: ["readme.md"],
 		});
 	});
 
@@ -191,7 +226,7 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("can resolve files inside Lix workspaces as transient launch targets", async () => {
+	test("resolves files inside Lix workspaces to the workspace root", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -203,14 +238,11 @@ describe("workspace resolution", () => {
 		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
 		await writeFile(filePath, "# Hello\n");
 
-		await expect(
-			resolveWorkspaceTargets([filePath], { openFilesAsTransient: true }),
-		).resolves.toEqual([
+		await expect(resolveWorkspaceTargets([filePath])).resolves.toEqual([
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: directory,
-					sourceFilePaths: [filePath],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["readme.md"],
@@ -218,7 +250,7 @@ describe("workspace resolution", () => {
 		]);
 	});
 
-	test("resolves direct launch file targets as transient workspaces", async () => {
+	test("resolves file targets in Lix workspaces to persistent workspaces", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -230,14 +262,11 @@ describe("workspace resolution", () => {
 		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
 		await writeFile(filePath, "# Hello\n");
 
-		await expect(
-			resolveDirectLaunchWorkspaceTargets([filePath]),
-		).resolves.toEqual([
+		await expect(resolveWorkspaceTargets([filePath])).resolves.toEqual([
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: directory,
-					sourceFilePaths: [filePath],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["readme.md"],
@@ -245,7 +274,7 @@ describe("workspace resolution", () => {
 		]);
 	});
 
-	test("resolves each file in a direct launch batch independently", async () => {
+	test("resolves each file inside Lix workspaces independently", async () => {
 		const firstDirectory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -278,22 +307,20 @@ describe("workspace resolution", () => {
 		await writeFile(secondPath, "# Second\n");
 
 		await expect(
-			resolveDirectLaunchWorkspaceTargets([firstPath, secondPath]),
+			resolveWorkspaceTargets([firstPath, secondPath]),
 		).resolves.toEqual([
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: firstDirectory,
-					sourceFilePaths: [firstPath],
 					name: "first",
 				},
 				pendingOpenFilePaths: ["readme.md"],
 			},
 			{
 				workspace: {
-					ephemeral: true,
+					ephemeral: false,
 					path: secondDirectory,
-					sourceFilePaths: [secondPath],
 					name: "second",
 				},
 				pendingOpenFilePaths: ["readme.md"],
@@ -316,7 +343,7 @@ describe("workspace resolution", () => {
 			workspace: {
 				ephemeral: true,
 				path: directory,
-				sourceFilePaths: [filePath],
+				includePaths: ["readme.md"],
 				name: "workspace",
 			},
 			pendingOpenFilePaths: ["readme.md"],
@@ -343,7 +370,7 @@ describe("workspace resolution", () => {
 				workspace: {
 					ephemeral: true,
 					path: directory,
-					sourceFilePaths: [firstPath, secondPath],
+					includePaths: ["alpha.md", "nested/beta.markdown"],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["alpha.md", "nested/beta.markdown"],
@@ -425,7 +452,7 @@ describe("workspace resolution", () => {
 				workspace: {
 					ephemeral: true,
 					path: directory,
-					sourceFilePaths: [firstPath, secondPath],
+					includePaths: ["alpha.txt", "beta.csv"],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["alpha.txt", "beta.csv"],
@@ -540,7 +567,7 @@ describe("workspace resolution", () => {
 				ephemeral: true,
 				path: directory,
 				name: "workspace",
-				sourceFilePaths: [openedFilePath],
+				includePaths: ["notes/today.md"],
 			}),
 		).resolves.toMatchObject({
 			file_count: 1,
@@ -548,5 +575,94 @@ describe("workspace resolution", () => {
 			extension_counts: { md: 1 },
 			total_size_mb: 0,
 		});
+	});
+
+	test("ignores saved open files for tracked workspace session entries", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const filePath = path.join(directory, "docs", "readme.md");
+		await mkdir(path.join(directory, ".lix", ".internal"), { recursive: true });
+		await mkdir(path.dirname(filePath), { recursive: true });
+		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
+		await writeFile(filePath, "# Hello\n");
+
+		await expect(
+			resolveWorkspaceTargets([
+				{ path: directory, openFilePaths: ["docs/readme.md"] },
+			]),
+		).resolves.toEqual([
+			{
+				workspace: {
+					ephemeral: false,
+					path: directory,
+					name: "workspace",
+				},
+				pendingOpenFilePaths: [],
+			},
+		]);
+	});
+
+	test("restores saved workspace session entries without .lix as ephemeral", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const filePath = path.join(directory, "docs", "readme.md");
+		await mkdir(path.dirname(filePath), { recursive: true });
+		await writeFile(filePath, "# Hello\n");
+		await writeFile(path.join(directory, "overview.md"), "# Overview\n");
+
+		await expect(
+			resolveWorkspaceTargets([
+				{ path: directory, openFilePaths: ["docs/readme.md"] },
+			]),
+		).resolves.toEqual([
+			{
+				workspace: {
+					ephemeral: true,
+					path: directory,
+					includePaths: ["docs/readme.md", "overview.md"],
+					name: "workspace",
+				},
+				pendingOpenFilePaths: ["docs/readme.md"],
+			},
+		]);
+	});
+
+	test("restores saved non-Lix directory session entries with all supported files", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		await mkdir(path.join(directory, "docs"), { recursive: true });
+		await writeFile(path.join(directory, "marker.md"), "# Marker\n");
+		await writeFile(
+			path.join(directory, "docs", "notes.markdown"),
+			"# Notes\n",
+		);
+		await writeFile(path.join(directory, "data.csv"), "name,value\nA,1\n");
+		await writeFile(path.join(directory, "ignored.txt"), "Ignored\n");
+
+		await expect(
+			resolveWorkspaceTargets([{ path: directory, openFilePaths: [] }]),
+		).resolves.toEqual([
+			{
+				workspace: {
+					ephemeral: true,
+					path: directory,
+					includePaths: ["data.csv", "docs/notes.markdown", "marker.md"],
+					name: "workspace",
+				},
+				pendingOpenFilePaths: [],
+			},
+		]);
 	});
 });

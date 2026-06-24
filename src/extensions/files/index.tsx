@@ -132,6 +132,28 @@ function FilesViewContent({
 		});
 	}, [resolveDraftDirectory]);
 
+	useEffect(() => {
+		if (
+			!context?.registerNewFileDraftHandler ||
+			!context.panelSide ||
+			!context.viewInstance
+		) {
+			return;
+		}
+		return context.registerNewFileDraftHandler({
+			panelSide: context.panelSide,
+			viewInstance: context.viewInstance,
+			isActiveView: context.isActiveView === true,
+			handler: handleNewFile,
+		});
+	}, [
+		context?.isActiveView,
+		context?.panelSide,
+		context?.registerNewFileDraftHandler,
+		context?.viewInstance,
+		handleNewFile,
+	]);
+
 	const handleDraftCommit = useCallback(async () => {
 		if (creatingRef.current) return;
 		if (!draft) return;
@@ -172,7 +194,7 @@ function FilesViewContent({
 					panel: "central",
 					fileId: id,
 					filePath: path,
-					state: { focusOnLoad: true },
+					state: { focusOnLoad: true, defaultBlock: "heading1" },
 					focus: true,
 					documentOrigin: "new",
 				});

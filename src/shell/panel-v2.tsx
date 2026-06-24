@@ -109,6 +109,7 @@ export function PanelV2({
 	const activeInstance = activeEntry?.instance ?? null;
 	const { badgeCounts, makeContext } = useExtensionContext({
 		panel,
+		panelSide: side,
 		isFocused,
 		parentContext: viewContext,
 	});
