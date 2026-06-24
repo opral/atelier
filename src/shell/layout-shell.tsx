@@ -1227,7 +1227,6 @@ function LayoutShellContent({
 					.updateTable("lix_file")
 					.set({ data: review.beforeData })
 					.where("id", "=", fileId)
-					.where("data", "=", review.afterData)
 					.executeTakeFirst();
 				if (Number(result.numUpdatedRows) > 0) {
 					resolveDiffReviewTelemetry(review, "rejected");
