@@ -1,6 +1,7 @@
 import { dialog, ipcMain } from "electron";
 import os from "node:os";
 import path from "node:path";
+import { watch } from "node:fs";
 import {
 	cp,
 	lstat,
@@ -21,6 +22,8 @@ const LIX_DATABASE_FILE = path.join(".lix", ".internal", "db.sqlite");
 const LIX_ROCKSDB_DATABASE_DIR = path.join(".lix", ".internal", "rocksdb");
 const LEGACY_LIX_DATABASE_FILE = path.join(".lix", "db.sqlite");
 const LIX_DATABASE_FILES = [LIX_DATABASE_FILE, LEGACY_LIX_DATABASE_FILE];
+const EPHEMERAL_FILE_TREE_CHANGED_CHANNEL =
+	"workspace:ephemeralWatchedFileTreeChanged";
 
 /**
  * The workspace is the folder Flashtype operates on. Each window has at most
@@ -73,9 +76,8 @@ export async function resolveWorkspaceTarget(requestedPath) {
 				pendingOpenFilePaths: [],
 			};
 		}
-		const includePaths = await collectWorkspaceIncludePaths(resolved);
 		return {
-			workspace: createEphemeralWorkspace(resolved, includePaths),
+			workspace: createEphemeralWorkspace(resolved),
 			pendingOpenFilePaths: [],
 		};
 	}
@@ -149,6 +151,7 @@ export async function setWorkspaceFromTarget(target, window, options = {}) {
 			return state.workspace;
 		}
 		await options.beforeChange?.(nextWorkspace, window);
+		disposeEphemeralFileTreeState(state);
 		await disposeExternalLixState(state);
 		state.workspace = nextWorkspace;
 		state.pendingOpenFilePaths = target.pendingOpenFilePaths;
@@ -215,6 +218,47 @@ export function consumePendingOpenFiles(window) {
 	const pendingOpenFilePaths = state.pendingOpenFilePaths;
 	state.pendingOpenFilePaths = [];
 	return pendingOpenFilePaths ?? [];
+}
+
+export async function setEphemeralWatchedDirectories(window, payload) {
+	const state = getOrCreateWindowState(window);
+	const workspace = state.workspace;
+	const ownerId = normalizeEphemeralFileTreeOwnerId(payload?.ownerId);
+	const directoryPaths = normalizeWorkspaceDirectoryPaths(payload?.paths);
+	if (!workspace || workspace.ephemeral !== true) {
+		removeEphemeralFileTreeOwner(state, ownerId);
+		return [];
+	}
+
+	if (directoryPaths.length > 0) {
+		state.ephemeralFileTreeOwners.set(ownerId, directoryPaths);
+	} else {
+		removeEphemeralFileTreeOwner(state, ownerId);
+	}
+	await refreshEphemeralFileTree(window, state, { emit: false });
+	return state.ephemeralWatchedEntries;
+}
+
+export async function readEphemeralWorkspaceFile(window, payload) {
+	const state = getWindowState(window);
+	const workspace = state?.workspace;
+	if (!state || !workspace || workspace.ephemeral !== true) {
+		throw new Error("No transient workspace is open.");
+	}
+	const filePath = normalizeWorkspaceFilePath(payload?.path);
+	const parentDirectory = parentDirectoryPathForFilePath(filePath);
+	const watchedDirectories = effectiveEphemeralWatchedDirectories(state);
+	if (!watchedDirectories.has(parentDirectory)) {
+		throw new Error(
+			`File is not in an opened Files view directory: ${filePath}`,
+		);
+	}
+	const localPath = workspaceLocalPathForFilePath(workspace, filePath);
+	const metadata = await lstat(localPath);
+	if (metadata.isSymbolicLink() || !metadata.isFile()) {
+		throw new Error(`Path is not a regular workspace file: ${filePath}`);
+	}
+	return await readFile(localPath);
 }
 
 export async function profileWorkspaceFilesystem(workspace) {
@@ -331,14 +375,13 @@ export async function setWorkspaceTrackChanges(window, trackChanges) {
 			return workspace;
 		}
 		if (trackChanges) {
+			disposeEphemeralFileTreeState(state);
 			await moveExternalLixBackIntoWorkspace(state);
 			state.workspace = createPersistentWorkspace(workspace.path);
 		} else {
+			disposeEphemeralFileTreeState(state);
 			await moveWorkspaceLixToExternalStorage(state);
-			state.workspace = createEphemeralWorkspace(
-				workspace.path,
-				await collectWorkspaceIncludePaths(workspace.path),
-			);
+			state.workspace = createEphemeralWorkspace(workspace.path);
 		}
 		state.pendingOpenFilePaths = [];
 		applyWindowChrome(window);
@@ -353,6 +396,7 @@ export async function disposeWorkspaceWindowState(windowOrId) {
 	}
 	const state = windowStates.get(windowId);
 	windowStates.delete(windowId);
+	disposeEphemeralFileTreeState(state);
 	await disposeExternalLixState(state);
 }
 
@@ -394,12 +438,8 @@ async function resolveWorkspaceSessionEntry(workspaceEntry) {
 			pendingOpenFilePaths: [],
 		};
 	}
-	const includePaths = uniqueWorkspaceRelativeFilePaths([
-		...pendingOpenFilePaths,
-		...(await collectWorkspaceIncludePaths(workspacePath)),
-	]);
 	return {
-		workspace: createEphemeralWorkspace(workspacePath, includePaths),
+		workspace: createEphemeralWorkspace(workspacePath, pendingOpenFilePaths),
 		pendingOpenFilePaths,
 	};
 }
@@ -487,6 +527,368 @@ function parentDirectories(relativePath) {
 	return directories;
 }
 
+function normalizeEphemeralFileTreeOwnerId(ownerId) {
+	if (typeof ownerId !== "string" || ownerId.length === 0) {
+		throw new Error("workspace ephemeral file tree ownerId is required.");
+	}
+	return ownerId;
+}
+
+function normalizeWorkspaceDirectoryPaths(paths) {
+	if (!Array.isArray(paths)) {
+		throw new Error("workspace watched directory paths must be an array.");
+	}
+	const seen = new Set();
+	const normalizedPaths = [];
+	for (const path of paths) {
+		const normalizedPath = normalizeWorkspaceDirectoryPath(path);
+		if (seen.has(normalizedPath)) {
+			continue;
+		}
+		seen.add(normalizedPath);
+		normalizedPaths.push(normalizedPath);
+	}
+	normalizedPaths.sort((left, right) => left.localeCompare(right));
+	return normalizedPaths;
+}
+
+function normalizeWorkspaceDirectoryPath(directoryPath) {
+	if (directoryPath === "/") {
+		return "/";
+	}
+	if (
+		typeof directoryPath !== "string" ||
+		!directoryPath.startsWith("/") ||
+		!directoryPath.endsWith("/")
+	) {
+		throw new Error(`Invalid workspace directory path: ${directoryPath}`);
+	}
+	const segments = directoryPath.split("/").filter(Boolean);
+	validateVisibleWorkspacePathSegments(segments, directoryPath);
+	return `/${segments.join("/")}/`;
+}
+
+function normalizeWorkspaceFilePath(filePath) {
+	if (
+		typeof filePath !== "string" ||
+		!filePath.startsWith("/") ||
+		filePath.endsWith("/")
+	) {
+		throw new Error(`Invalid workspace file path: ${filePath}`);
+	}
+	const segments = filePath.split("/").filter(Boolean);
+	validateVisibleWorkspacePathSegments(segments, filePath);
+	return `/${segments.join("/")}`;
+}
+
+function validateVisibleWorkspacePathSegments(segments, originalPath) {
+	if (segments.length === 0) {
+		throw new Error(`Invalid workspace path: ${originalPath}`);
+	}
+	for (const segment of segments) {
+		if (
+			segment.length === 0 ||
+			segment === "." ||
+			segment === ".." ||
+			segment.startsWith(".") ||
+			segment.includes("/") ||
+			path.isAbsolute(segment)
+		) {
+			throw new Error(`Invalid workspace path: ${originalPath}`);
+		}
+	}
+	if (segments[0] === LIX_DIRECTORY_NAME) {
+		throw new Error(`Invalid workspace path: ${originalPath}`);
+	}
+}
+
+function workspaceLocalPathForDirectoryPath(workspace, directoryPath) {
+	if (directoryPath === "/") {
+		return workspace.path;
+	}
+	const segments = directoryPath.split("/").filter(Boolean);
+	return path.join(workspace.path, ...segments);
+}
+
+function workspaceLocalPathForFilePath(workspace, filePath) {
+	const segments = filePath.split("/").filter(Boolean);
+	return path.join(workspace.path, ...segments);
+}
+
+function parentDirectoryPathForFilePath(filePath) {
+	const segments = filePath.split("/").filter(Boolean);
+	segments.pop();
+	return segments.length === 0 ? "/" : `/${segments.join("/")}/`;
+}
+
+function parentDirectoryPathForDirectoryPath(directoryPath) {
+	if (directoryPath === "/") {
+		return null;
+	}
+	const segments = directoryPath.split("/").filter(Boolean);
+	segments.pop();
+	return segments.length === 0 ? "/" : `/${segments.join("/")}/`;
+}
+
+function childDirectoryPath(directoryPath, name) {
+	return directoryPath === "/" ? `/${name}/` : `${directoryPath}${name}/`;
+}
+
+function displayNameFromWorkspacePath(workspacePath) {
+	const segments = workspacePath.split("/").filter(Boolean);
+	return segments[segments.length - 1] ?? workspacePath;
+}
+
+function removeEphemeralFileTreeOwner(state, ownerId) {
+	state?.ephemeralFileTreeOwners?.delete(ownerId);
+}
+
+function effectiveEphemeralWatchedDirectories(state) {
+	const paths = new Set();
+	for (const ownerPaths of state.ephemeralFileTreeOwners.values()) {
+		for (const path of ownerPaths) {
+			paths.add(path);
+		}
+	}
+	return paths;
+}
+
+async function refreshEphemeralFileTree(window, state, options = {}) {
+	const workspace = state?.workspace;
+	const watchedDirectories = state
+		? effectiveEphemeralWatchedDirectories(state)
+		: new Set();
+	if (!state || !workspace || workspace.ephemeral !== true) {
+		disposeEphemeralFileTreeState(state);
+		return [];
+	}
+	if (watchedDirectories.size === 0) {
+		closeEphemeralDirectoryWatchers(state, new Set());
+		state.ephemeralWatchedEntries = [];
+		if (options.emit) {
+			emitEphemeralFileTreeChanged(window, state);
+		}
+		return state.ephemeralWatchedEntries;
+	}
+
+	await refreshEphemeralDirectoryWatchers(
+		window,
+		state,
+		workspace,
+		watchedDirectories,
+	);
+	state.ephemeralWatchedEntries = await collectEphemeralWatchedEntries(
+		workspace,
+		watchedDirectories,
+	);
+	if (options.emit) {
+		emitEphemeralFileTreeChanged(window, state);
+	}
+	return state.ephemeralWatchedEntries;
+}
+
+async function refreshEphemeralDirectoryWatchers(
+	window,
+	state,
+	workspace,
+	watchedDirectories,
+) {
+	const watchableDirectories = new Set();
+	for (const directoryPath of watchedDirectories) {
+		const localPath = workspaceLocalPathForDirectoryPath(
+			workspace,
+			directoryPath,
+		);
+		try {
+			const metadata = await lstat(localPath);
+			if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+				continue;
+			}
+			watchableDirectories.add(directoryPath);
+			if (state.ephemeralDirectoryWatchers.has(directoryPath)) {
+				continue;
+			}
+			const watcher = watch(localPath, { persistent: false }, () => {
+				scheduleEphemeralFileTreeRefresh(window, state);
+			});
+			watcher.on("error", () => {
+				state.ephemeralDirectoryWatchers.delete(directoryPath);
+				scheduleEphemeralFileTreeRefresh(window, state);
+			});
+			state.ephemeralDirectoryWatchers.set(directoryPath, watcher);
+		} catch {
+			// Missing or unreadable directories are omitted until a future refresh.
+		}
+	}
+	closeEphemeralDirectoryWatchers(state, watchableDirectories);
+}
+
+function closeEphemeralDirectoryWatchers(state, keepPaths) {
+	for (const [directoryPath, watcher] of state.ephemeralDirectoryWatchers) {
+		if (keepPaths.has(directoryPath)) {
+			continue;
+		}
+		watcher.close();
+		state.ephemeralDirectoryWatchers.delete(directoryPath);
+	}
+}
+
+function scheduleEphemeralFileTreeRefresh(window, state) {
+	if (state.ephemeralWatchRefreshTimer) {
+		clearTimeout(state.ephemeralWatchRefreshTimer);
+	}
+	state.ephemeralWatchRefreshTimer = setTimeout(() => {
+		state.ephemeralWatchRefreshTimer = null;
+		void refreshEphemeralFileTree(window, state, { emit: true }).catch(
+			(error) => {
+				console.warn("Failed to refresh transient workspace file tree", error);
+			},
+		);
+	}, 100);
+}
+
+async function collectEphemeralWatchedEntries(workspace, watchedDirectories) {
+	const entriesByPath = new Map();
+	for (const directoryPath of [...watchedDirectories].sort((left, right) =>
+		left.localeCompare(right),
+	)) {
+		if (directoryPath !== "/") {
+			addWatchedDirectoryEntry(entriesByPath, directoryPath);
+		}
+		for (const entry of await collectEphemeralDirectoryEntries(
+			workspace,
+			directoryPath,
+		)) {
+			entriesByPath.set(entry.path, entry);
+		}
+	}
+	return [...entriesByPath.values()].sort((left, right) =>
+		left.path.localeCompare(right.path),
+	);
+}
+
+function addWatchedDirectoryEntry(entriesByPath, directoryPath) {
+	if (entriesByPath.has(directoryPath)) {
+		return;
+	}
+	const parentPath = parentDirectoryPathForDirectoryPath(directoryPath);
+	entriesByPath.set(directoryPath, {
+		id: `watched:${directoryPath}`,
+		parent_id: parentPath ? `watched:${parentPath}` : null,
+		path: directoryPath,
+		display_name: displayNameFromWorkspacePath(directoryPath),
+		kind: "directory",
+		source: "watched",
+	});
+}
+
+async function collectEphemeralDirectoryEntries(workspace, directoryPath) {
+	const localDirectoryPath = workspaceLocalPathForDirectoryPath(
+		workspace,
+		directoryPath,
+	);
+	let metadata;
+	try {
+		metadata = await lstat(localDirectoryPath);
+	} catch {
+		return [];
+	}
+	if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+		return [];
+	}
+	let directory;
+	try {
+		directory = await opendir(localDirectoryPath);
+	} catch {
+		return [];
+	}
+
+	const entries = [];
+	for await (const entry of directory) {
+		if (entry.name.startsWith(".")) {
+			continue;
+		}
+		const localEntryPath = path.join(localDirectoryPath, entry.name);
+		let entryMetadata;
+		try {
+			entryMetadata = await lstat(localEntryPath);
+		} catch {
+			continue;
+		}
+		if (entryMetadata.isSymbolicLink()) {
+			continue;
+		}
+		if (entryMetadata.isDirectory()) {
+			const entryPath = childDirectoryPath(directoryPath, entry.name);
+			try {
+				normalizeWorkspaceDirectoryPath(entryPath);
+			} catch {
+				continue;
+			}
+			entries.push({
+				id: `watched:${entryPath}`,
+				parent_id: directoryPath === "/" ? null : `watched:${directoryPath}`,
+				path: entryPath,
+				display_name: entry.name,
+				kind: "directory",
+				source: "watched",
+			});
+			continue;
+		}
+		if (!entryMetadata.isFile()) {
+			continue;
+		}
+		const relativePath = workspaceRelativeFilePath(
+			workspace.path,
+			localEntryPath,
+		);
+		if (!relativePath) {
+			continue;
+		}
+		const entryPath = `/${relativePath}`;
+		try {
+			normalizeWorkspaceFilePath(entryPath);
+		} catch {
+			continue;
+		}
+		entries.push({
+			id: `watched:${entryPath}`,
+			parent_id: directoryPath === "/" ? null : `watched:${directoryPath}`,
+			path: entryPath,
+			display_name: entry.name,
+			kind: "file",
+			source: "watched",
+		});
+	}
+	return entries;
+}
+
+function emitEphemeralFileTreeChanged(window, state) {
+	if (!window || window.isDestroyed()) {
+		return;
+	}
+	window.webContents.send(
+		EPHEMERAL_FILE_TREE_CHANGED_CHANNEL,
+		state.ephemeralWatchedEntries,
+	);
+}
+
+function disposeEphemeralFileTreeState(state) {
+	if (!state) {
+		return;
+	}
+	if (state.ephemeralWatchRefreshTimer) {
+		clearTimeout(state.ephemeralWatchRefreshTimer);
+		state.ephemeralWatchRefreshTimer = null;
+	}
+	for (const watcher of state.ephemeralDirectoryWatchers.values()) {
+		watcher.close();
+	}
+	state.ephemeralDirectoryWatchers.clear();
+	state.ephemeralFileTreeOwners.clear();
+	state.ephemeralWatchedEntries = [];
+}
+
 function median(values) {
 	if (values.length === 0) {
 		return 0;
@@ -505,57 +907,6 @@ function roundMegabytes(bytes) {
 
 function roundKilobytes(bytes) {
 	return Math.round((bytes / 1024) * 100) / 100;
-}
-
-async function collectWorkspaceIncludePaths(directoryPath) {
-	const includePaths = [];
-	const pendingDirectories = [directoryPath];
-	while (pendingDirectories.length > 0) {
-		const currentDirectory = pendingDirectories.pop();
-		let directory;
-		try {
-			directory = await opendir(currentDirectory);
-		} catch {
-			continue;
-		}
-		for await (const entry of directory) {
-			if (entry.name === LIX_DIRECTORY_NAME && entry.isDirectory()) {
-				continue;
-			}
-			const entryPath = path.join(currentDirectory, entry.name);
-			let stats;
-			try {
-				stats = await lstat(entryPath);
-			} catch {
-				continue;
-			}
-			if (stats.isSymbolicLink()) {
-				continue;
-			}
-			if (stats.isDirectory()) {
-				if (entry.name !== LIX_DIRECTORY_NAME) {
-					pendingDirectories.push(entryPath);
-				}
-				continue;
-			}
-			if (stats.isFile() && isIncludedWorkspaceFileName(entry.name)) {
-				const includePath = workspaceRelativeFilePath(directoryPath, entryPath);
-				if (includePath) {
-					includePaths.push(includePath);
-				}
-			}
-		}
-	}
-	includePaths.sort();
-	return includePaths;
-}
-
-function isIncludedWorkspaceFileName(fileName) {
-	return (
-		fileName.endsWith(".md") ||
-		fileName.endsWith(".markdown") ||
-		fileName.endsWith(".csv")
-	);
 }
 
 async function resolveStandaloneFile(resolvedPath) {
@@ -835,6 +1186,20 @@ export function registerWorkspaceIpc(getWindowForEvent, options = {}) {
 		return consumePendingOpenFiles(getWindowForEvent(event));
 	});
 
+	ipcMain.handle(
+		"workspace:setEphemeralWatchedDirectories",
+		async (event, payload) => {
+			return await setEphemeralWatchedDirectories(
+				getWindowForEvent(event),
+				payload,
+			);
+		},
+	);
+
+	ipcMain.handle("workspace:readEphemeralFile", async (event, payload) => {
+		return await readEphemeralWorkspaceFile(getWindowForEvent(event), payload);
+	});
+
 	ipcMain.handle("workspace:profile", async (event) => {
 		return await profileWorkspaceFilesystem(
 			getWorkspace(getWindowForEvent(event)),
@@ -889,6 +1254,10 @@ function getOrCreateWindowState(window) {
 		pendingOpenFilePaths: [],
 		externalLixParent: null,
 		externalLixDir: null,
+		ephemeralFileTreeOwners: new Map(),
+		ephemeralDirectoryWatchers: new Map(),
+		ephemeralWatchedEntries: [],
+		ephemeralWatchRefreshTimer: null,
 		workspaceChangeQueue: Promise.resolve(),
 	};
 	windowStates.set(window.id, state);

@@ -27,6 +27,19 @@ export type ExtensionState = {
 	readonly [key: string]: unknown;
 };
 
+export type WorkspaceContext =
+	| {
+			readonly ephemeral: false;
+			readonly path: string;
+			readonly name: string;
+	  }
+	| {
+			readonly ephemeral: true;
+			readonly path: string;
+			readonly name: string;
+			readonly includePaths: readonly string[];
+	  };
+
 /**
  * One-shot launch-time arguments that must not be persisted.
  *
@@ -162,6 +175,7 @@ export interface ExtensionContext {
 		readonly isActiveView: boolean;
 		readonly handler: () => void;
 	}) => () => void;
+	readonly workspace?: WorkspaceContext;
 	readonly lix: Lix;
 }
 

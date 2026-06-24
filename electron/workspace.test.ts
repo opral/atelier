@@ -5,15 +5,29 @@ import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
 	profileWorkspaceFilesystem,
+	disposeWorkspaceWindowState,
+	readEphemeralWorkspaceFile,
 	resolveWorkspace,
 	resolveWorkspaceTarget,
 	resolveWorkspaceTargets,
+	setEphemeralWatchedDirectories,
+	setWorkspaceFromPath,
 } from "./workspace.mjs";
 
 vi.mock("electron", () => ({
 	dialog: { showOpenDialog: vi.fn() },
 	ipcMain: { handle: vi.fn() },
 }));
+
+function createTestWindow() {
+	return {
+		id: Math.floor(Math.random() * Number.MAX_SAFE_INTEGER),
+		isDestroyed: () => false,
+		setTitle: vi.fn(),
+		setRepresentedFilename: vi.fn(),
+		webContents: { send: vi.fn() },
+	};
+}
 
 describe("workspace resolution", () => {
 	test("opens directory paths as ephemeral workspaces by default", async () => {
@@ -33,7 +47,7 @@ describe("workspace resolution", () => {
 		});
 	});
 
-	test("opens directory workspaces without a size limit", async () => {
+	test("opens directory workspaces without recursively seeding include paths", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -47,14 +61,14 @@ describe("workspace resolution", () => {
 			workspace: {
 				ephemeral: true,
 				path: directory,
-				includePaths: ["large.md"],
+				includePaths: [],
 				name: "workspace",
 			},
 			pendingOpenFilePaths: [],
 		});
 	});
 
-	test("opens non-Lix directories with recursive exact supported include paths", async () => {
+	test("opens non-Lix directories without extension-filtered include scans", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -83,14 +97,7 @@ describe("workspace resolution", () => {
 			workspace: {
 				ephemeral: true,
 				path: directory,
-				includePaths: [
-					"alpha.markdown",
-					"data.csv",
-					"docs/nested/guide.markdown",
-					"docs/readme.md",
-					"docs/table.csv",
-					"z.md",
-				],
+				includePaths: [],
 				name: "workspace",
 			},
 			pendingOpenFilePaths: [],
@@ -460,6 +467,96 @@ describe("workspace resolution", () => {
 		]);
 	});
 
+	test("lists transient workspace directories shallowly without extension filtering", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const childDirectory = path.join(directory, "docs");
+		const targetPath = path.join(directory, "notes.txt");
+		const symlinkPath = path.join(directory, "linked.md");
+		await mkdir(childDirectory, { recursive: true });
+		await mkdir(path.join(directory, ".lix"), { recursive: true });
+		await writeFile(path.join(directory, "alpha.md"), "# Alpha\n");
+		await writeFile(path.join(directory, "data.csv"), "name,value\nA,1\n");
+		await writeFile(targetPath, "Notes\n");
+		await writeFile(path.join(childDirectory, "nested.txt"), "Nested\n");
+		await writeFile(path.join(directory, ".hidden.md"), "# Hidden\n");
+		await writeFile(path.join(directory, ".lix", "ignored.md"), "# Ignored\n");
+		await symlink(targetPath, symlinkPath);
+
+		const window = createTestWindow();
+		try {
+			await setWorkspaceFromPath(directory, window);
+			const rootEntries = await setEphemeralWatchedDirectories(window, {
+				ownerId: "files",
+				paths: ["/"],
+			});
+			expect(rootEntries.map((entry) => entry.path).sort()).toEqual([
+				"/alpha.md",
+				"/data.csv",
+				"/docs/",
+				"/notes.txt",
+			]);
+
+			await expect(
+				readEphemeralWorkspaceFile(window, { path: "/docs/nested.txt" }),
+			).rejects.toThrow("opened Files view directory");
+
+			const nestedEntries = await setEphemeralWatchedDirectories(window, {
+				ownerId: "files",
+				paths: ["/", "/docs/"],
+			});
+			expect(nestedEntries.map((entry) => entry.path).sort()).toEqual([
+				"/alpha.md",
+				"/data.csv",
+				"/docs/",
+				"/docs/nested.txt",
+				"/notes.txt",
+			]);
+			await expect(
+				readEphemeralWorkspaceFile(window, { path: "/docs/nested.txt" }),
+			).resolves.toEqual(Buffer.from("Nested\n"));
+		} finally {
+			await disposeWorkspaceWindowState(window);
+		}
+	});
+
+	test("clears transient watched tree owners", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		await mkdir(directory, { recursive: true });
+		await writeFile(path.join(directory, "notes.txt"), "Notes\n");
+
+		const window = createTestWindow();
+		try {
+			await setWorkspaceFromPath(directory, window);
+			await expect(
+				setEphemeralWatchedDirectories(window, {
+					ownerId: "files",
+					paths: ["/"],
+				}),
+			).resolves.toHaveLength(1);
+			await expect(
+				setEphemeralWatchedDirectories(window, {
+					ownerId: "files",
+					paths: [],
+				}),
+			).resolves.toEqual([]);
+			await expect(
+				readEphemeralWorkspaceFile(window, { path: "/notes.txt" }),
+			).rejects.toThrow("opened Files view directory");
+		} finally {
+			await disposeWorkspaceWindowState(window);
+		}
+	});
+
 	test("profiles workspace filesystem sizes by extension without reading Lix blobs", async () => {
 		const directory = path.join(
 			tmpdir(),
@@ -627,7 +724,7 @@ describe("workspace resolution", () => {
 				workspace: {
 					ephemeral: true,
 					path: directory,
-					includePaths: ["docs/readme.md", "overview.md"],
+					includePaths: ["docs/readme.md"],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: ["docs/readme.md"],
@@ -635,7 +732,7 @@ describe("workspace resolution", () => {
 		]);
 	});
 
-	test("restores saved non-Lix directory session entries with all supported files", async () => {
+	test("restores saved non-Lix directory session entries without include scans", async () => {
 		const directory = path.join(
 			tmpdir(),
 			"flashtype-workspace-test",
@@ -658,7 +755,7 @@ describe("workspace resolution", () => {
 				workspace: {
 					ephemeral: true,
 					path: directory,
-					includePaths: ["data.csv", "docs/notes.markdown", "marker.md"],
+					includePaths: [],
 					name: "workspace",
 				},
 				pendingOpenFilePaths: [],

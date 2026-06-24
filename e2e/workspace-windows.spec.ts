@@ -307,6 +307,10 @@ test("Track Changes menu toggles workspace .lix storage", async ({
 		await expect(page.getByText("marker.md")).toBeVisible();
 		await expectTrackChangesMenuChecked(electronApp, false);
 		await expectPathMissing(path.join(workspaceDir, ".lix"));
+		await page.getByTestId("file-tree-item-marker-md").click();
+		await expect(
+			page.getByRole("heading", { name: "marker.md" }),
+		).toBeVisible();
 
 		await page.evaluate(async () => {
 			await window.flashtypeDesktop?.lix.execute({
@@ -324,14 +328,14 @@ test("Track Changes menu toggles workspace .lix storage", async ({
 
 		await clickTrackChangesMenuItemAndWaitForReload(electronApp, page);
 		await expect(page).toHaveTitle(path.basename(workspaceDir));
-		await expect(page.getByText("marker.md")).toBeVisible();
+		await expect(page.getByTestId("file-tree-item-marker-md")).toBeVisible();
 		await expectTrackChangesMenuChecked(electronApp, true);
 		await expectPathExists(path.join(workspaceDir, ".lix"));
 		await expectInstalledPluginArchives(workspaceDir);
 
 		await clickTrackChangesMenuItemAndWaitForReload(electronApp, page);
 		await expect(page).toHaveTitle(path.basename(workspaceDir));
-		await expect(page.getByText("marker.md")).toBeVisible();
+		await expect(page.getByTestId("file-tree-item-marker-md")).toBeVisible();
 		await expectTrackChangesMenuChecked(electronApp, false);
 		await expectPathMissing(path.join(workspaceDir, ".lix"));
 	} finally {
@@ -421,7 +425,7 @@ test("macOS open-file events open standalone files as transient workspaces", asy
 				.first(),
 		).toBeVisible();
 		await expect(filePage.getByRole("heading", { name: "Solo" })).toBeVisible();
-		await expect(filePage.getByText("sibling.md")).toHaveCount(0);
+		await expect(filePage.getByText("sibling.md")).toBeVisible();
 		await expectPathMissing(path.join(directory, ".lix"));
 		await expectPathMissing(path.join(directory, ".lix_system"));
 
@@ -503,7 +507,7 @@ test("launching with multiple standalone markdown files creates one grouped tran
 				"file-tree-item-standalone-markdown-alpha-alpha-md",
 			),
 		).toBeVisible();
-		await expect(groupedPage.getByText("sibling.md")).toHaveCount(0);
+		await expect(groupedPage.getByText("sibling.md")).toBeVisible();
 		await groupedPage
 			.getByTestId("file-tree-directory-standalone-markdown-beta")
 			.click();

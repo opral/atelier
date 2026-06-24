@@ -60,6 +60,7 @@ import type {
 	ExtensionLaunchArgs,
 	ExtensionState,
 	ExtensionDefinition,
+	WorkspaceContext,
 } from "../extension-runtime/types";
 import {
 	createExtensionInstanceId,
@@ -337,6 +338,7 @@ async function resolveNextUntitledMarkdownPath(
 }
 
 export function V2LayoutShell({
+	workspace,
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
@@ -345,6 +347,7 @@ export function V2LayoutShell({
 	isUpdateReady,
 	onInstallUpdate,
 }: {
+	readonly workspace?: WorkspaceContext;
 	readonly workspaceName?: string;
 	readonly onOpenWorkspace?: () => void;
 	readonly pendingOpenFilePaths?: readonly string[];
@@ -357,6 +360,7 @@ export function V2LayoutShell({
 		<ExtensionRegistryProvider>
 			<ExtensionHostRegistryProvider>
 				<LayoutShellContent
+					workspace={workspace}
 					workspaceName={workspaceName}
 					onOpenWorkspace={onOpenWorkspace}
 					pendingOpenFilePaths={pendingOpenFilePaths}
@@ -371,6 +375,7 @@ export function V2LayoutShell({
 }
 
 type LayoutShellContentProps = {
+	readonly workspace?: WorkspaceContext;
 	readonly workspaceName?: string;
 	readonly onOpenWorkspace?: () => void;
 	readonly pendingOpenFilePaths?: readonly string[];
@@ -453,6 +458,7 @@ function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
  * <V2LayoutShell />
  */
 function LayoutShellContent({
+	workspace,
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
@@ -465,6 +471,7 @@ function LayoutShellContent({
 	return (
 		<LayoutShellUiStateLoader
 			workspaceName={workspaceName}
+			workspace={workspace}
 			onOpenWorkspace={onOpenWorkspace}
 			pendingOpenFilePaths={pendingOpenFilePaths}
 			onPendingOpenFileHandled={onPendingOpenFileHandled}
@@ -511,6 +518,7 @@ function LayoutShellActiveFileLoader(
 }
 
 function LayoutShellLoadedContent({
+	workspace,
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
@@ -2032,6 +2040,7 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
 			rejectExternalWriteReview: handleRejectExternalWriteReview,
+			workspace,
 			lix,
 		}),
 		[
@@ -2045,6 +2054,7 @@ function LayoutShellLoadedContent({
 			handleRejectExternalWriteReview,
 			focusPanel,
 			registerNewFileDraftHandler,
+			workspace,
 			lix,
 		],
 	);

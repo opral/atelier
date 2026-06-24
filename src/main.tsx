@@ -232,6 +232,7 @@ export const AppRoot = () => {
 			<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 				<Suspense fallback={<BootPlaceholder />}>
 					<V2LayoutShell
+						workspace={workspace}
 						workspaceName={workspace.name}
 						onOpenWorkspace={handleOpenFolder}
 						pendingOpenFilePaths={pendingOpenFilePaths}

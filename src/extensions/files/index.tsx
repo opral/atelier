@@ -45,7 +45,28 @@ function FilesViewContent({
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
 }) {
-	const nodes = useMemo(() => buildFilesystemTree(entries ?? []), [entries]);
+	const ownerIdRef = useRef(
+		`files-view:${context?.viewInstance ?? Math.random().toString(36).slice(2)}`,
+	);
+	const isEphemeralWorkspace = context?.workspace?.ephemeral === true;
+	const [watchedEntries, setWatchedEntries] = useState<FilesystemEntryRow[]>(
+		[],
+	);
+	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
+		() => new Set<string>(),
+	);
+	const combinedEntries = useMemo(
+		() =>
+			unionFilesystemEntries(
+				entries ?? [],
+				isEphemeralWorkspace ? watchedEntries : [],
+			),
+		[entries, isEphemeralWorkspace, watchedEntries],
+	);
+	const nodes = useMemo(
+		() => buildFilesystemTree(combinedEntries),
+		[combinedEntries],
+	);
 	const creatingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
 	const [pendingDirectoryPaths, setPendingDirectoryPaths] = useState<string[]>(
@@ -61,18 +82,32 @@ function FilesViewContent({
 	const dragCounterRef = useRef(0);
 	const entryPathSet = useMemo(() => {
 		return new Set(
+			(combinedEntries ?? [])
+				.filter((entry) => entry.kind === "file")
+				.map((entry) => entry.path),
+		);
+	}, [combinedEntries]);
+	const entryDirectorySet = useMemo(() => {
+		return new Set(
+			(combinedEntries ?? [])
+				.filter((entry) => entry.kind === "directory")
+				.map((entry) => entry.path),
+		);
+	}, [combinedEntries]);
+	const lixFilePathSet = useMemo(() => {
+		return new Set(
 			(entries ?? [])
 				.filter((entry) => entry.kind === "file")
 				.map((entry) => entry.path),
 		);
 	}, [entries]);
-	const entryDirectorySet = useMemo(() => {
+	const watchedFilePathSet = useMemo(() => {
 		return new Set(
-			(entries ?? [])
-				.filter((entry) => entry.kind === "directory")
+			(watchedEntries ?? [])
+				.filter((entry) => entry.kind === "file")
 				.map((entry) => entry.path),
 		);
-	}, [entries]);
+	}, [watchedEntries]);
 	const existingFilePaths = useMemo(() => {
 		const combined = new Set(entryPathSet);
 		for (const path of pendingPaths) {
@@ -99,6 +134,71 @@ function FilesViewContent({
 	}, [entryDirectorySet, pendingDirectoryPaths.length]);
 	const isMacPlatform = useMemo(() => detectMacPlatform(), []);
 	const isPanelFocused = context?.isPanelFocused ?? false;
+	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
+	const panelSide = context?.panelSide;
+	const viewInstance = context?.viewInstance;
+	const isActiveView = context?.isActiveView === true;
+	const openedEphemeralDirectoryPaths = useMemo(() => {
+		const paths = new Set(openDirectoryPaths);
+		paths.add("/");
+		return [...paths].sort((left, right) => left.localeCompare(right));
+	}, [openDirectoryPaths]);
+
+	useEffect(() => {
+		if (!isEphemeralWorkspace) {
+			setWatchedEntries([]);
+			return;
+		}
+		const workspaceApi = window.flashtypeDesktop?.workspace;
+		if (!workspaceApi?.setEphemeralWatchedDirectories) {
+			return;
+		}
+		const ownerId = ownerIdRef.current;
+		let cancelled = false;
+		void workspaceApi
+			.setEphemeralWatchedDirectories({
+				ownerId,
+				paths: openedEphemeralDirectoryPaths,
+			})
+			.then((entries) => {
+				if (!cancelled) {
+					setWatchedEntries(entries);
+				}
+			})
+			.catch((error: unknown) => {
+				if (!cancelled) {
+					console.warn("Failed to list transient workspace files", error);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [isEphemeralWorkspace, openedEphemeralDirectoryPaths]);
+
+	useEffect(() => {
+		if (!isEphemeralWorkspace) {
+			return;
+		}
+		return window.flashtypeDesktop?.workspace.onEphemeralWatchedFileTreeChanged?.(
+			(entries) => {
+				setWatchedEntries(entries);
+			},
+		);
+	}, [isEphemeralWorkspace]);
+
+	useEffect(() => {
+		if (!isEphemeralWorkspace) {
+			return;
+		}
+		const workspaceApi = window.flashtypeDesktop?.workspace;
+		const ownerId = ownerIdRef.current;
+		return () => {
+			void workspaceApi?.setEphemeralWatchedDirectories?.({
+				ownerId,
+				paths: [],
+			});
+		};
+	}, [isEphemeralWorkspace]);
 
 	const resolveDraftDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
@@ -133,25 +233,21 @@ function FilesViewContent({
 	}, [resolveDraftDirectory]);
 
 	useEffect(() => {
-		if (
-			!context?.registerNewFileDraftHandler ||
-			!context.panelSide ||
-			!context.viewInstance
-		) {
+		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) {
 			return;
 		}
-		return context.registerNewFileDraftHandler({
-			panelSide: context.panelSide,
-			viewInstance: context.viewInstance,
-			isActiveView: context.isActiveView === true,
+		return registerNewFileDraftHandler({
+			panelSide,
+			viewInstance,
+			isActiveView,
 			handler: handleNewFile,
 		});
 	}, [
-		context?.isActiveView,
-		context?.panelSide,
-		context?.registerNewFileDraftHandler,
-		context?.viewInstance,
 		handleNewFile,
+		isActiveView,
+		panelSide,
+		registerNewFileDraftHandler,
+		viewInstance,
 	]);
 
 	const handleDraftCommit = useCallback(async () => {
@@ -241,6 +337,33 @@ function FilesViewContent({
 
 	const handleOpenFile = useCallback(
 		async (fileId: string, path: string) => {
+			if (
+				isEphemeralWorkspace &&
+				watchedFilePathSet.has(path) &&
+				!lixFilePathSet.has(path)
+			) {
+				const data =
+					await window.flashtypeDesktop?.workspace.readEphemeralFile?.({
+						path,
+					});
+				if (!data) {
+					throw new Error(`Unable to read transient workspace file: ${path}`);
+				}
+				await qb(lix)
+					.insertInto("lix_file")
+					.values({
+						path,
+						data,
+					})
+					.onConflict((oc) => oc.column("path").doUpdateSet({ data }))
+					.execute();
+				const importedFile = await qb(lix)
+					.selectFrom("lix_file")
+					.select("id")
+					.where("path", "=", path)
+					.executeTakeFirstOrThrow();
+				fileId = importedFile.id as string;
+			}
 			setSelectedPath(path);
 			setSelectedFileId(fileId);
 			setSelectedKind("file");
@@ -251,7 +374,26 @@ function FilesViewContent({
 				focus: false,
 			});
 		},
-		[context],
+		[context, isEphemeralWorkspace, lix, lixFilePathSet, watchedFilePathSet],
+	);
+
+	const handleOpenDirectoriesChange = useCallback(
+		(next: ReadonlySet<string>) => {
+			setOpenDirectoryPaths((prev) => {
+				const nextPaths = new Set([...next].map(ensureDirectoryPath));
+				const closedPaths = [...prev].filter((path) => !nextPaths.has(path));
+				for (const closedPath of closedPaths) {
+					const closedPrefix = ensureDirectoryPath(closedPath);
+					for (const path of [...nextPaths]) {
+						if (path !== closedPrefix && path.startsWith(closedPrefix)) {
+							nextPaths.delete(path);
+						}
+					}
+				}
+				return nextPaths;
+			});
+		},
+		[],
 	);
 
 	const handleSelectItem = useCallback(
@@ -551,6 +693,8 @@ function FilesViewContent({
 					onSelectItem={handleSelectItem}
 					selectedPath={selectedPath ?? undefined}
 					isPanelFocused={isPanelFocused}
+					openDirectories={openDirectoryPaths}
+					onOpenDirectoriesChange={handleOpenDirectoriesChange}
 					draft={
 						draft
 							? {
@@ -681,4 +825,35 @@ function normalizeNameStem(stem: string): string {
 function ensureDirectoryPath(path: string): string {
 	if (path === "/") return "/";
 	return path.endsWith("/") ? path : `${path}/`;
+}
+
+function unionFilesystemEntries(
+	lixEntries: readonly FilesystemEntryRow[],
+	watchedEntries: readonly FilesystemEntryRow[],
+): FilesystemEntryRow[] {
+	const entriesByPath = new Map<string, FilesystemEntryRow>();
+	for (const entry of watchedEntries) {
+		entriesByPath.set(filesystemEntryPathKey(entry), {
+			...entry,
+			path: filesystemEntryPathKey(entry),
+			source: "watched",
+		});
+	}
+	for (const entry of lixEntries) {
+		entriesByPath.set(filesystemEntryPathKey(entry), {
+			...entry,
+			path: filesystemEntryPathKey(entry),
+			source: "lix",
+		});
+	}
+	return [...entriesByPath.values()].sort((left, right) =>
+		left.path.localeCompare(right.path),
+	);
+}
+
+function filesystemEntryPathKey(entry: FilesystemEntryRow): string {
+	if (entry.kind === "directory") {
+		return ensureDirectoryPath(entry.path);
+	}
+	return entry.path.endsWith("/") ? entry.path.slice(0, -1) : entry.path;
 }
