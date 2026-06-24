@@ -946,7 +946,9 @@ app.on("will-quit", (event) => {
 	event.preventDefault();
 	void shutdownTelemetry().finally(() => {
 		telemetryShutdownComplete = true;
-		app.quit();
+		setImmediate(() => {
+			app.quit();
+		});
 	});
 });
 
