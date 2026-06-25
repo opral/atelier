@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import {
 	applyWorkspaceWindowChrome,
+	disableWorkspaceTrackChanges,
 	disposeAllWorkspaceWindowStates,
 	disposeWorkspaceWindowState,
 	getWorkspace,
@@ -54,6 +55,14 @@ import {
 	recentWorkspaceEntryFromWorkspace,
 	writeRecentWorkspaceEntriesSync,
 } from "./recent-workspaces.mjs";
+import {
+	clearWorkspaceRecoverySync,
+	readWorkspaceRecoveries,
+	readWorkspaceRecovery,
+	recoverPendingWorkspaceLixOpenSync,
+	workspaceRecoveryToSessionEntry,
+	writeWorkspaceRecoverySync,
+} from "./workspace-recovery.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
@@ -203,7 +212,7 @@ async function openWorkspaceRequests(
 		requestsBySource.set(taggedRequest.requestedSource, requests);
 	}
 
-	for (const [source, requests] of requestsBySource) {
+	for (const [_source, requests] of requestsBySource) {
 		const workspaceTargets = await resolveWorkspaceTargets(requests);
 		for (const workspaceTarget of workspaceTargets) {
 			await createMainWindow(workspaceTarget);
@@ -219,6 +228,60 @@ function createWorkspaceOpenRequest(request, requestedSource) {
 
 function isCrashLikeProcessGoneReason(reason) {
 	return CRASH_LIKE_PROCESS_GONE_REASONS.has(reason);
+}
+
+async function reloadPersistentWorkspaceIntoRecovery(window, details) {
+	if (isQuitting || !window || window.isDestroyed()) {
+		return false;
+	}
+	const workspace = getWorkspace(window);
+	if (!workspace || workspace.ephemeral === true) {
+		return false;
+	}
+	writeWorkspaceRecoverySync(
+		app.getPath("userData"),
+		createTrackChangesRecovery(workspace, {
+			reason: "renderer_crash",
+			exitCode: details.exitCode,
+			message: `Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
+		}),
+	);
+	void closeLixSession(window, { ignoreOpenError: true });
+	if (window.isDestroyed() || window.webContents.isDestroyed()) {
+		return true;
+	}
+	void loadWorkspaceWindow(window);
+	return true;
+}
+
+function clearWorkspaceRecoveryForWorkspace(workspace) {
+	if (!workspace) {
+		return;
+	}
+	clearWorkspaceRecoverySync(app.getPath("userData"), workspace.path);
+}
+
+function createTrackChangesRecovery(workspace, options) {
+	const recovery = {
+		kind: "track_changes",
+		workspacePath: workspace.path,
+		workspaceName: workspace.name,
+		reason: options.reason,
+		message: options.message,
+		createdAt: new Date().toISOString(),
+	};
+	if (Number.isFinite(options.exitCode)) {
+		recovery.exitCode = options.exitCode;
+	}
+	return recovery;
+}
+
+async function loadWorkspaceWindow(window) {
+	if (app.isPackaged) {
+		await window.loadFile(path.join(__dirname, "../dist/index.html"));
+		return;
+	}
+	await window.loadURL(DEV_SERVER_URL);
 }
 
 function shouldUseWorkspaceBootRecoveryGuard() {
@@ -434,6 +497,9 @@ async function toggleTrackChangesFromApplicationMenu(trackChanges) {
 	}
 	await closeLixSession(window, { ignoreOpenError: true });
 	const workspace = await setWorkspaceTrackChanges(window, trackChanges);
+	if (!trackChanges) {
+		clearWorkspaceRecoveryForWorkspace(workspace);
+	}
 	recordOpenWorkspacePath(window, workspace);
 	persistOpenWorkspacePathsSoon();
 	applyDockWindowChrome(window);
@@ -447,7 +513,7 @@ async function toggleTrackChangesFromApplicationMenu(trackChanges) {
 
 async function openWorkspacePathInNewWindow(
 	requestedPath,
-	requestedSource = "open_in_new_window",
+	_requestedSource = "open_in_new_window",
 ) {
 	const workspaceTarget = (await resolveWorkspaceTargets([requestedPath]))[0];
 	if (!workspaceTarget) {
@@ -709,7 +775,8 @@ async function createMainWindow(workspaceRequest) {
 		console.error(
 			`Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
 		);
-		if (isCrashLikeProcessGoneReason(details.reason)) {
+		const crashLike = isCrashLikeProcessGoneReason(details.reason);
+		if (crashLike) {
 			void captureTelemetryException(
 				new Error(
 					`Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
@@ -722,6 +789,7 @@ async function createMainWindow(workspaceRequest) {
 					source: "electron-renderer",
 				},
 			);
+			void reloadPersistentWorkspaceIntoRecovery(window, details);
 		}
 		void triggerRecoveryUpdateCheck(
 			new Error(
@@ -735,11 +803,7 @@ async function createMainWindow(workspaceRequest) {
 		return { action: "deny" };
 	});
 
-	if (app.isPackaged) {
-		void window.loadFile(path.join(__dirname, "../dist/index.html"));
-	} else {
-		void window.loadURL(DEV_SERVER_URL);
-	}
+	void loadWorkspaceWindow(window);
 
 	return window;
 }
@@ -786,10 +850,32 @@ async function startWorkspaceLifecycle() {
 	if (isQuitting) {
 		return;
 	}
-	registerLixIpc((event) => BrowserWindow.fromWebContents(event.sender));
+	const userDataPath = app.getPath("userData");
+	recoverPendingWorkspaceLixOpenSync(userDataPath);
+	registerLixIpc((event) => BrowserWindow.fromWebContents(event.sender), {
+		disableTrackChanges: async (window) => {
+			const workspace = await disableWorkspaceTrackChanges(window);
+			clearWorkspaceRecoveryForWorkspace(workspace);
+			recordOpenWorkspacePath(window, workspace);
+			persistOpenWorkspacePathsSoon();
+			applyDockWindowChrome(window);
+			updateDockMenu();
+			installApplicationMenu();
+			return workspace;
+		},
+	});
 	registerTerminalIpc();
 	registerWorkspaceIpc((event) => BrowserWindow.fromWebContents(event.sender), {
 		...createWorkspaceChangeOptions(),
+		getRecovery: async (workspace) => {
+			if (!workspace) {
+				return null;
+			}
+			return await readWorkspaceRecovery(userDataPath, workspace.path);
+		},
+		clearRecovery: async (workspace) => {
+			clearWorkspaceRecoveryForWorkspace(workspace);
+		},
 		openInNewWindow: async (requestedPath) => {
 			return await openWorkspacePathInNewWindow(
 				requestedPath,
@@ -805,21 +891,20 @@ async function startWorkspaceLifecycle() {
 	}).catch((error) => {
 		console.warn("Failed to register Flashtype as the Markdown editor", error);
 	});
-	const savedWorkspaceEntries = await readWorkspaceSessionEntries(
-		app.getPath("userData"),
-	);
-	const restorableSavedWorkspaceEntries = await filterExistingWorkspaceEntries(
-		savedWorkspaceEntries,
-	);
+	const savedWorkspaceEntries = await readWorkspaceSessionEntries(userDataPath);
+	const recoveryWorkspaceEntries = (await readWorkspaceRecoveries(userDataPath))
+		.map(workspaceRecoveryToSessionEntry)
+		.filter(Boolean);
+	const restorableSavedWorkspaceEntries = await filterExistingWorkspaceEntries([
+		...savedWorkspaceEntries,
+		...recoveryWorkspaceEntries,
+	]);
 	recentWorkspaceEntries = await filterExistingRecentWorkspaceEntries(
-		await readRecentWorkspaceEntries(app.getPath("userData")),
+		await readRecentWorkspaceEntries(userDataPath),
 	);
 	void syncMacOSDockRecentWorkspaceDocuments();
 	try {
-		writeRecentWorkspaceEntriesSync(
-			app.getPath("userData"),
-			recentWorkspaceEntries,
-		);
+		writeRecentWorkspaceEntriesSync(userDataPath, recentWorkspaceEntries);
 	} catch (error) {
 		console.warn("Failed to clean Flashtype recent workspaces", error);
 	}
@@ -827,7 +912,7 @@ async function startWorkspaceLifecycle() {
 	if (restorableSavedWorkspaceEntries.length !== savedWorkspaceEntries.length) {
 		try {
 			writeWorkspaceSessionEntriesSync(
-				app.getPath("userData"),
+				userDataPath,
 				restorableSavedWorkspaceEntries,
 			);
 		} catch (error) {

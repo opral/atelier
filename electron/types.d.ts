@@ -131,6 +131,16 @@ export type DesktopWorkspace =
 			includePaths: string[];
 	  };
 
+export type DesktopWorkspaceRecovery = {
+	kind: "track_changes";
+	workspacePath: string;
+	workspaceName: string;
+	reason: string;
+	createdAt: string;
+	exitCode?: number;
+	message?: string;
+};
+
 export type DesktopWorkspaceExtensionProfile = {
 	file_extension: string;
 	file_count: number;
@@ -158,6 +168,8 @@ export type DesktopWatchedFilesystemEntry = {
 
 export type DesktopWorkspaceApi = {
 	get(): Promise<DesktopWorkspace | null>;
+	getRecovery(): Promise<DesktopWorkspaceRecovery | null>;
+	clearRecovery(): Promise<void>;
 	/** Returns workspace-relative file paths queued for editor opening. */
 	consumePendingOpenFiles(): Promise<string[]>;
 	setEphemeralWatchedDirectories(payload: {
@@ -186,6 +198,7 @@ export type DesktopWorkspaceApi = {
 	setOpenFilePaths(payload: { filePaths: string[] }): Promise<void>;
 	exportLixFile(): Promise<Uint8Array>;
 	resetLixRepository(): Promise<void>;
+	disableTrackChanges(): Promise<DesktopWorkspace>;
 	getPathForFile(file: File): string;
 };
 

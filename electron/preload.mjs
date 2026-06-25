@@ -23,6 +23,8 @@ const telemetry = {
 
 const workspace = {
 	get: () => ipcRenderer.invoke("workspace:get"),
+	getRecovery: () => ipcRenderer.invoke("workspace:getRecovery"),
+	clearRecovery: () => ipcRenderer.invoke("workspace:clearRecovery"),
 	consumePendingOpenFiles: () =>
 		ipcRenderer.invoke("workspace:consumePendingOpenFiles"),
 	setEphemeralWatchedDirectories: (payload) =>
@@ -53,6 +55,8 @@ const workspace = {
 		ipcRenderer.invoke("workspace:setOpenFilePaths", payload),
 	exportLixFile: () => ipcRenderer.invoke("workspace:exportLixFile"),
 	resetLixRepository: () => ipcRenderer.invoke("workspace:resetLixRepository"),
+	disableTrackChanges: () =>
+		ipcRenderer.invoke("workspace:disableTrackChanges"),
 	// Resolves the on-disk path of a File dropped onto the window.
 	getPathForFile: (file) => webUtils.getPathForFile(file),
 };

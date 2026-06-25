@@ -1,3 +1,4 @@
+import { app } from "electron";
 import { FsBackend, bundledPluginArchives, openLix } from "@lix-js/sdk";
 import path from "node:path";
 import { readFile, rm } from "node:fs/promises";
@@ -6,6 +7,11 @@ import {
 	getWorkspaceFsBackendOptions,
 	getWorkspaceLixDatabasePath,
 } from "./workspace.mjs";
+import {
+	clearWorkspaceLixOpenPendingSync,
+	markWorkspaceLixOpenPendingSync,
+	writeWorkspaceRecoverySync,
+} from "./workspace-recovery.mjs";
 
 const LIX_DATABASE_DIR = ".lix";
 const sessions = new Map();
@@ -23,15 +29,38 @@ export async function ensureLixOpen(window) {
 					);
 				}
 				let nativeLix;
+				const tracksPersistentWorkspace = workspace.ephemeral !== true;
+				const userDataPath = app.getPath("userData");
 				try {
+					if (tracksPersistentWorkspace) {
+						markWorkspaceLixOpenPendingSync(
+							userDataPath,
+							createTrackChangesRecovery(workspace, {
+								reason: "lix_open_pending",
+							}),
+						);
+					}
 					const backendOptions = await getWorkspaceFsBackendOptions(window);
 					nativeLix = await openLix({
 						backend: new FsBackend(backendOptions),
 					});
 					await ensureDefaultPluginsInstalledOnCurrentBranch(nativeLix);
+					if (tracksPersistentWorkspace) {
+						clearWorkspaceLixOpenPendingSync(userDataPath, workspace.path);
+					}
 					return createDesktopLixHandle(nativeLix, workspace.path);
 				} catch (error) {
 					await nativeLix?.close().catch(() => {});
+					if (tracksPersistentWorkspace) {
+						clearWorkspaceLixOpenPendingSync(userDataPath, workspace.path);
+						writeWorkspaceRecoverySync(
+							userDataPath,
+							createTrackChangesRecovery(workspace, {
+								reason: "lix_open_failed",
+								message: errorMessage(error),
+							}),
+						);
+					}
 					throw error;
 				}
 			})();
@@ -81,6 +110,24 @@ function bytesEqual(actual, expected) {
 		return false;
 	}
 	return Buffer.compare(Buffer.from(actual), Buffer.from(expected)) === 0;
+}
+
+function createTrackChangesRecovery(workspace, options) {
+	return {
+		kind: "track_changes",
+		workspacePath: workspace.path,
+		workspaceName: workspace.name,
+		reason: options.reason,
+		message: options.message,
+		createdAt: new Date().toISOString(),
+	};
+}
+
+function errorMessage(error) {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
 }
 
 export async function closeLix(window, options = {}) {

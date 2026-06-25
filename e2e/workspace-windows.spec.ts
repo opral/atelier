@@ -343,6 +343,73 @@ test("Track Changes menu toggles workspace .lix storage", async ({
 	}
 });
 
+test("Track Changes recovery screen can disable tracking", async ({
+	browserName: _browserName,
+}, testInfo) => {
+	const workspaceDir = testInfo.outputPath("track-changes-recovery-workspace");
+	const userDataDir = testInfo.outputPath("track-changes-recovery-user-data");
+	const filePath = path.join(workspaceDir, "marker.md");
+
+	let electronApp: ElectronApplication | undefined;
+	try {
+		await writeMarkerFile(workspaceDir, "marker.md");
+		await mkdir(path.join(workspaceDir, ".lix", ".internal"), {
+			recursive: true,
+		});
+		await writeFile(
+			path.join(workspaceDir, ".lix", ".internal", "db.sqlite"),
+			"",
+		);
+		await mkdir(userDataDir, { recursive: true });
+		await writeFile(
+			path.join(userDataDir, "workspace-recovery.json"),
+			JSON.stringify({
+				version: 1,
+				recoveries: [
+					{
+						kind: "track_changes",
+						workspacePath: workspaceDir,
+						workspaceName: path.basename(workspaceDir),
+						reason: "renderer_crash",
+						createdAt: "2026-06-25T12:00:00.000Z",
+					},
+				],
+			}),
+			"utf8",
+		);
+
+		electronApp = await launchDevElectronAppWithArgs([workspaceDir], {
+			userDataDir,
+		});
+		const page = await pageWithTitle(electronApp, path.basename(workspaceDir));
+		registerRendererConsoleLogging(page);
+
+		await expectTrackChangesMenuChecked(electronApp, true);
+		await expectPathExists(path.join(workspaceDir, ".lix"));
+
+		await expect(
+			page.getByRole("heading", {
+				name: "Track Changes could not be opened",
+			}),
+		).toBeVisible();
+		await expect(
+			page.getByText("Your project files will not be deleted."),
+		).toBeVisible();
+
+		await Promise.all([
+			page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+			page.getByRole("button", { name: "Disable Track Changes" }).click(),
+		]);
+
+		await expect(page.getByTestId("file-tree-item-marker-md")).toBeVisible();
+		await expectTrackChangesMenuChecked(electronApp, false);
+		await expectPathMissing(path.join(workspaceDir, ".lix"));
+		await expect(readFile(filePath, "utf8")).resolves.toBe("# marker.md\n");
+	} finally {
+		await closeElectronApp(electronApp);
+	}
+});
+
 test("macOS open-file events create workspace windows for folders and files", async ({
 	browserName: _browserName,
 }, testInfo) => {
