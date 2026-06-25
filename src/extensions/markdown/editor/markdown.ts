@@ -1,10 +1,12 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
-import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
-import { gfmFromMarkdown } from "mdast-util-gfm";
-import { mathFromMarkdown } from "mdast-util-math";
+import {
+	frontmatterFromMarkdown,
+	frontmatterToMarkdown,
+} from "mdast-util-frontmatter";
+import { gfmFromMarkdown, gfmToMarkdown } from "mdast-util-gfm";
+import { defaultHandlers, toMarkdown } from "mdast-util-to-markdown";
 import { frontmatter } from "micromark-extension-frontmatter";
 import { gfm } from "micromark-extension-gfm";
-import { math } from "micromark-extension-math";
 
 type AstRoot = {
 	type: "root";
@@ -15,12 +17,8 @@ export function parseMarkdown(markdown: string): AstRoot {
 	return normalizeAst(
 		resolveReferences(
 			fromMarkdown(markdown, {
-				extensions: [gfm(), frontmatter(["yaml"]), math()],
-				mdastExtensions: [
-					gfmFromMarkdown(),
-					frontmatterFromMarkdown(["yaml"]),
-					mathFromMarkdown(),
-				],
+				extensions: [gfm(), frontmatter(["yaml"])],
+				mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
 			}),
 		),
 	);
@@ -85,55 +83,163 @@ function normalizeIdentifier(identifier: string): string {
 }
 
 export function serializeAst(ast: any): string {
-	const children = Array.isArray(ast?.children)
-		? ast.children.map(prepareTaskListMarkers)
-		: [];
-	const renderedBlocks = children
-		.map(renderBlock)
-		.filter((text: string) => text.length > 0);
-	const output = renderedBlocks.join("\n\n");
-	return output.length > 0 ? `${output}\n` : "";
+	return normalizeSerializedMarkdown(
+		toMarkdown(prepareAstForMarkdown(ast), {
+			extensions: [
+				gfmToMarkdown(),
+				taskListItemToMarkdown(),
+				frontmatterToMarkdown(["yaml"]),
+			],
+			bullet: "-",
+			listItemIndent: "one",
+			rule: "-",
+			ruleRepetition: 3,
+			ruleSpaces: false,
+			emphasis: "_",
+			strong: "*",
+			fence: "`",
+			fences: true,
+		}),
+	);
 }
 
-function prepareTaskListMarkers(node: any): any {
-	if (!node || typeof node !== "object") {
-		return node;
-	}
-	if (Array.isArray(node)) {
-		return node.map(prepareTaskListMarkers);
+function taskListItemToMarkdown(): any {
+	return {
+		handlers: {
+			listItem: taskListItemWithEmptyMarker,
+		},
+	};
+}
+
+function taskListItemWithEmptyMarker(
+	node: any,
+	parent: any,
+	state: any,
+	info: any,
+): string {
+	const checkable = typeof node.checked === "boolean";
+	if (!checkable) {
+		return defaultHandlers.listItem(node, parent, state, info);
 	}
 
-	const out: Record<string, any> = { ...node };
-	if (Array.isArray(node.children)) {
-		out.children = node.children.map(prepareTaskListMarkers);
+	const checkbox = `[${node.checked ? "x" : " "}] `;
+	const tracker = state.createTracker(info);
+	tracker.move(checkbox);
+	const value = defaultHandlers.listItem(node, parent, state, {
+		...info,
+		...tracker.current(),
+	});
+	const marked = value.replace(
+		/^((?:[*+-]|\d+\.)(?:[\r\n]| {1,3}))/,
+		`$1${checkbox}`,
+	);
+	return marked === value
+		? value.replace(/^([*+-]|\d+\.)$/, `$1 ${checkbox}`)
+		: marked;
+}
+
+function prepareAstForMarkdown(value: any): any {
+	if (Array.isArray(value)) {
+		return value.map(prepareAstForMarkdown);
+	}
+	if (!value || typeof value !== "object") {
+		return value;
 	}
 
+	const out: Record<string, any> = {};
+	for (const [key, child] of Object.entries(value)) {
+		out[key] = prepareAstForMarkdown(child);
+	}
 	if (
-		node.type !== "listItem" ||
-		!(node.checked === true || node.checked === false)
+		(out.type === "list" || out.type === "listItem") &&
+		typeof out.spread !== "boolean"
 	) {
-		return out;
+		out.spread = false;
 	}
-
-	const marker = node.checked ? "[x] " : "[ ] ";
-	const children = Array.isArray(out.children) ? [...out.children] : [];
-	const first = children[0];
-	if (first?.type === "paragraph") {
-		const paragraphChildren = Array.isArray(first.children)
-			? [...first.children]
-			: [];
-		children[0] = {
-			...first,
-			children: [{ type: "text", value: marker }, ...paragraphChildren],
-		};
-	} else {
-		children.unshift({
-			type: "paragraph",
-			children: [{ type: "text", value: marker }],
-		});
+	if (isInlineContainer(out) && Array.isArray(out.children)) {
+		out.children = trimInlineBoundaryWhitespace(out.children);
 	}
-	out.children = children;
 	return out;
+}
+
+function isInlineContainer(node: Record<string, any>): boolean {
+	return (
+		node.type === "paragraph" ||
+		node.type === "heading" ||
+		node.type === "tableCell"
+	);
+}
+
+function trimInlineBoundaryWhitespace(children: any[]): any[] {
+	const out = [...children];
+	trimInlineStart(out);
+	trimInlineEnd(out);
+	return out.filter((child) => !isEmptyInline(child));
+}
+
+function trimInlineStart(children: any[]): void {
+	for (const child of children) {
+		if (trimInlineNodeStart(child)) return;
+	}
+}
+
+function trimInlineEnd(children: any[]): void {
+	for (let index = children.length - 1; index >= 0; index -= 1) {
+		if (trimInlineNodeEnd(children[index])) return;
+	}
+}
+
+function trimInlineNodeStart(node: any): boolean {
+	if (!node || typeof node !== "object") return true;
+	if (node.type === "text") {
+		node.value =
+			typeof node.value === "string" ? node.value.replace(/^[\t ]+/g, "") : "";
+		return node.value.length > 0;
+	}
+	if (canTrimInlineChildren(node)) {
+		trimInlineStart(node.children);
+		return !isEmptyInline(node);
+	}
+	return true;
+}
+
+function trimInlineNodeEnd(node: any): boolean {
+	if (!node || typeof node !== "object") return true;
+	if (node.type === "text") {
+		node.value =
+			typeof node.value === "string" ? node.value.replace(/[\t ]+$/g, "") : "";
+		return node.value.length > 0;
+	}
+	if (canTrimInlineChildren(node)) {
+		trimInlineEnd(node.children);
+		return !isEmptyInline(node);
+	}
+	return true;
+}
+
+function canTrimInlineChildren(node: any): boolean {
+	return (
+		(node.type === "emphasis" ||
+			node.type === "strong" ||
+			node.type === "delete" ||
+			node.type === "link") &&
+		Array.isArray(node.children)
+	);
+}
+
+function isEmptyInline(node: any): boolean {
+	if (!node || typeof node !== "object") return false;
+	if (node.type === "text") return !node.value;
+	if (canTrimInlineChildren(node)) return node.children.every(isEmptyInline);
+	return false;
+}
+
+function normalizeSerializedMarkdown(markdown: string): string {
+	const normalized = markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+	const withoutTrailingNewlines = normalized.replace(/\n+$/g, "");
+	return withoutTrailingNewlines.length > 0
+		? `${withoutTrailingNewlines}\n`
+		: "";
 }
 
 export function normalizeAst(ast: any): AstRoot {
@@ -181,196 +287,4 @@ function asRoot(ast: any): AstRoot {
 		type: "root",
 		children: Array.isArray(ast?.children) ? ast.children : [],
 	};
-}
-
-function renderBlock(node: any): string {
-	switch (nodeType(node)) {
-		case "paragraph":
-			return renderInlineChildren(node);
-		case "heading": {
-			const depth = clampInteger(node.depth, 1, 6, 1);
-			return `${"#".repeat(depth)} ${renderInlineChildren(node)}`;
-		}
-		case "code": {
-			const value = stringValue(node.value);
-			const lang = stringValue(node.lang);
-			const meta = stringValue(node.meta);
-			const fence = fenceFor(value);
-			if (!lang && !meta) {
-				return `${fence}\n${value}\n${fence}`;
-			}
-			if (!meta) {
-				return `${fence}${lang}\n${value}\n${fence}`;
-			}
-			return `${fence}${lang} ${meta}\n${value}\n${fence}`;
-		}
-		case "blockquote": {
-			const children = arrayValue(node.children, "blockquote.children");
-			return children
-				.map(renderBlock)
-				.map((child) =>
-					child
-						.split("\n")
-						.map((line) => (line.length === 0 ? ">" : `> ${line}`))
-						.join("\n"),
-				)
-				.join("\n>\n");
-		}
-		case "list":
-			return renderList(node);
-		case "thematicBreak":
-			return "---";
-		case "table":
-			return renderTable(node);
-		case "html":
-			return stringValue(node.value);
-		case "yaml":
-			return `---\n${stringValue(node.value).replace(/^\n+|\n+$/g, "")}\n---`;
-		default:
-			throw new Error(`unsupported block node type '${nodeType(node)}'`);
-	}
-}
-
-function renderList(node: any): string {
-	const ordered = node.ordered === true;
-	let number = typeof node.start === "number" ? node.start : 1;
-	const items = arrayValue(node.children, "list.children");
-	const lines: string[] = [];
-
-	for (const item of items) {
-		if (nodeType(item) !== "listItem") {
-			throw new Error("list.children must contain listItem nodes");
-		}
-		const marker = ordered ? `${number++}. ` : "- ";
-		const rendered = renderListItem(item);
-		const [first = "", ...rest] = rendered.split("\n");
-		lines.push(`${marker}${first}`);
-		for (const line of rest) {
-			lines.push(`  ${line}`);
-		}
-	}
-
-	return lines.join("\n");
-}
-
-function renderListItem(node: any): string {
-	const children = arrayValue(node.children, "listItem.children");
-	if (children.length === 0) {
-		return "";
-	}
-	return children
-		.map((child) =>
-			nodeType(child) === "paragraph"
-				? renderInlineChildren(child)
-				: renderBlock(child),
-		)
-		.join("\n");
-}
-
-function renderTable(node: any): string {
-	const rows = arrayValue(node.children, "table.children");
-	if (rows.length === 0) {
-		return "";
-	}
-
-	const headerCells = tableCells(rows[0]);
-	const header = `| ${headerCells.join(" | ")} |`;
-	const separator = `| ${headerCells.map(() => "-").join(" | ")} |`;
-	const body = rows.slice(1).map((row) => `| ${tableCells(row).join(" | ")} |`);
-	return [header, separator, ...body].join("\n");
-}
-
-function tableCells(row: any): string[] {
-	if (nodeType(row) !== "tableRow") {
-		throw new Error("table.children must contain tableRow nodes");
-	}
-	return arrayValue(row.children, "tableRow.children").map((cell) => {
-		if (nodeType(cell) !== "tableCell") {
-			throw new Error("tableRow.children must contain tableCell nodes");
-		}
-		return renderInlineChildren(cell);
-	});
-}
-
-function renderInlineChildren(node: any): string {
-	const children = Array.isArray(node?.children) ? node.children : [];
-	return children.map(renderInline).join("");
-}
-
-function renderInline(node: any): string {
-	switch (nodeType(node)) {
-		case "text":
-			return stringValue(node.value);
-		case "emphasis":
-			return `_${renderInlineChildren(node)}_`;
-		case "strong":
-			return `**${renderInlineChildren(node)}**`;
-		case "delete":
-			return `~~${renderInlineChildren(node)}~~`;
-		case "inlineCode":
-			return renderInlineCode(stringValue(node.value));
-		case "link": {
-			const label = renderInlineChildren(node);
-			const url = stringValue(node.url);
-			const title = stringValue(node.title);
-			return title ? `[${label}](${url} "${title}")` : `[${label}](${url})`;
-		}
-		case "image": {
-			const alt = stringValue(node.alt);
-			const url = stringValue(node.url);
-			const title = stringValue(node.title);
-			return title ? `![${alt}](${url} "${title}")` : `![${alt}](${url})`;
-		}
-		case "break":
-			return "\\\n";
-		case "html":
-			return stringValue(node.value);
-		default:
-			throw new Error(`unsupported inline node type '${nodeType(node)}'`);
-	}
-}
-
-function renderInlineCode(value: string): string {
-	let fenceSize = 1;
-	while (value.includes("`".repeat(fenceSize))) {
-		fenceSize += 1;
-	}
-	const fence = "`".repeat(fenceSize);
-	return `${fence}${value}${fence}`;
-}
-
-function fenceFor(value: string): string {
-	let fenceSize = 3;
-	while (value.includes("`".repeat(fenceSize))) {
-		fenceSize += 1;
-	}
-	return "`".repeat(fenceSize);
-}
-
-function nodeType(node: any): string {
-	if (typeof node?.type !== "string") {
-		throw new Error("AST node is missing string field 'type'");
-	}
-	return node.type;
-}
-
-function stringValue(value: unknown): string {
-	return typeof value === "string" ? value : "";
-}
-
-function arrayValue(value: unknown, name: string): any[] {
-	if (!Array.isArray(value)) {
-		throw new Error(`${name} must be an array`);
-	}
-	return value;
-}
-
-function clampInteger(
-	value: unknown,
-	min: number,
-	max: number,
-	fallback: number,
-): number {
-	const number = typeof value === "number" ? Math.trunc(value) : fallback;
-	return Math.min(max, Math.max(min, number));
 }

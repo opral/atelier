@@ -107,6 +107,17 @@ describe("markdown parser", () => {
 			value: "Café\nnext",
 		});
 	});
+
+	test("keeps dollar-delimited math as text", () => {
+		expect(parseMarkdown("$x$\n").children[0]).toEqual({
+			type: "paragraph",
+			children: [{ type: "text", value: "$x$" }],
+		});
+		expect(parseMarkdown("$$\nx\n$$\n").children[0]).toEqual({
+			type: "paragraph",
+			children: [{ type: "text", value: "$$\nx\n$$" }],
+		});
+	});
 });
 
 describe("markdown serializer", () => {
@@ -146,6 +157,32 @@ describe("markdown serializer", () => {
 		).toBe("- [x] done\n- [ ] todo\n");
 	});
 
+	test("serializes empty task items with markers", () => {
+		expect(
+			serializeAst({
+				type: "root",
+				children: [
+					{
+						type: "list",
+						ordered: false,
+						children: [
+							{
+								type: "listItem",
+								checked: false,
+								children: [{ type: "paragraph", children: [] }],
+							},
+							{
+								type: "listItem",
+								checked: true,
+								children: [{ type: "paragraph", children: [] }],
+							},
+						],
+					},
+				],
+			}),
+		).toBe("- [ ] \n- [x] \n");
+	});
+
 	test("serializes code fence metadata", () => {
 		expect(
 			serializeAst({
@@ -160,6 +197,62 @@ describe("markdown serializer", () => {
 				],
 			}),
 		).toBe("```ts meta\nconst x = 1;\n```\n");
+	});
+
+	test("escapes literal inline markdown syntax", () => {
+		const ast = {
+			type: "root",
+			children: [
+				{
+					type: "paragraph",
+					children: [
+						{ type: "text", value: "literal *stars* and [linkish](url)" },
+					],
+				},
+			],
+		};
+
+		const output = serializeAst(ast);
+
+		expect(output).toBe("literal \\*stars\\* and \\[linkish]\\(url)\n");
+		expect(parseMarkdown(output)).toEqual(ast);
+	});
+
+	test("preserves inline code backticks and spaces", () => {
+		const ast = {
+			type: "root",
+			children: [
+				{
+					type: "paragraph",
+					children: [
+						{ type: "inlineCode", value: "`tick`" },
+						{ type: "text", value: " " },
+						{ type: "inlineCode", value: " spaced " },
+					],
+				},
+			],
+		};
+
+		expect(parseMarkdown(serializeAst(ast))).toEqual(ast);
+	});
+
+	test("preserves table alignment and literal pipes", () => {
+		const ast = parseMarkdown(
+			"| A | B |\n| :- | -: |\n| a \\| b | `c \\| d` |\n",
+		);
+		const output = serializeAst(ast);
+
+		expect(output).toContain("| :");
+		expect(output).toContain(": |");
+		expect(output).toContain("a \\| b");
+		expect(output).toContain("`c \\| d`");
+		expect(parseMarkdown(output)).toEqual(ast);
+	});
+
+	test("preserves multiple blocks inside list items", () => {
+		const ast = parseMarkdown("- first\n\n  second\n");
+
+		expect(parseMarkdown(serializeAst(ast))).toEqual(ast);
 	});
 
 	test("normalizes without mutating the input", () => {
