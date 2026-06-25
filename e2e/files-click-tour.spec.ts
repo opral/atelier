@@ -49,10 +49,6 @@ test("left files panel survives a seeded random file click tour", async ({
 			const delayMs = Math.floor(rng() * 1001);
 			const file = fileItems.nth(fileIndex);
 			const testId = await file.getAttribute("data-testid");
-			const expectedViewKind =
-				testId === "file-tree-item-metrics-csv"
-					? "flashtype_csv"
-					: "flashtype_file";
 
 			await test.step(`click ${index + 1}/${clickCount}: file index ${fileIndex}, delay ${delayMs}ms`, async () => {
 				await file.click();
@@ -60,10 +56,13 @@ test("left files panel survives a seeded random file click tour", async ({
 				await expect(
 					page
 						.locator(
-							`[data-active="true"][data-view-key="${expectedViewKind}"]:visible`,
+							'[data-panel-side="central"][data-active="true"][data-view-key="flashtype_file"]:visible, [data-panel-side="central"][data-active="true"][data-view-key="flashtype_csv"]:visible',
 						)
 						.first(),
 				).toBeVisible();
+				if (testId === "file-tree-item-metrics-csv") {
+					await expectCsvGridCanvasToRender(page);
+				}
 				await page.waitForTimeout(delayMs);
 			});
 		}

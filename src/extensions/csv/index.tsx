@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Table2 } from "lucide-react";
 import {
 	DataEditor,
@@ -211,6 +211,9 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 	const [columnWidthOverrides, setColumnWidthOverrides] = useState<
 		Record<number, number>
 	>({});
+	useEffect(() => {
+		setColumnWidthOverrides({});
+	}, [parsed]);
 	const columns = useMemo<GridColumn[]>(() => {
 		return parsed.columns.map((title, index) => ({
 			id: String(index),
@@ -228,7 +231,7 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 					data: linkUrl,
 					displayData: value,
 					hoverEffect: true,
-					allowOverlay: true,
+					allowOverlay: false,
 					readonly: true,
 					copyData: value,
 					onClickUri: (event) => {
@@ -241,7 +244,7 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 				kind: GridCellKind.Text,
 				data: value,
 				displayData: value,
-				allowOverlay: true,
+				allowOverlay: false,
 				readonly: true,
 				copyData: value,
 			};

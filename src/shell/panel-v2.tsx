@@ -254,6 +254,7 @@ export function PanelV2({
 										view={view}
 										instance={entry}
 										context={context}
+										side={side}
 										isActive={isActive}
 									/>
 								</Activity>
@@ -486,11 +487,13 @@ function ViewRenderer({
 	view,
 	instance,
 	context,
+	side,
 	isActive,
 }: {
 	view: ExtensionDefinition;
 	instance: ExtensionInstance;
 	context: ExtensionContext;
+	side: PanelSide;
 	isActive: boolean;
 }) {
 	const registry = useExtensionHostRegistry();
@@ -506,6 +509,7 @@ function ViewRenderer({
 			host={host}
 			instance={instance.instance}
 			kind={instance.kind}
+			side={side}
 			isActive={isActive}
 		/>
 	);
@@ -515,11 +519,13 @@ function ViewHostMount({
 	host,
 	instance,
 	kind,
+	side,
 	isActive,
 }: {
 	host: ExtensionHostRecord | null;
 	instance: string;
 	kind: ExtensionKind;
+	side: PanelSide;
 	isActive: boolean;
 }) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -541,6 +547,7 @@ function ViewHostMount({
 			ref={containerRef}
 			data-view-instance={instance}
 			data-view-key={kind}
+			data-panel-side={side}
 			data-active={isActive ? "true" : undefined}
 			className="flex min-h-0 flex-1 flex-col overflow-hidden"
 		/>
