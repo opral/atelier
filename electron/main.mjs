@@ -989,6 +989,17 @@ function canUseAutoUpdates() {
 	return app.isPackaged && process.env.FLASHTYPE_DISABLE_AUTO_UPDATE !== "1";
 }
 
+function validateExternalUrl(value) {
+	if (typeof value !== "string") {
+		throw new Error("External URL must be a string");
+	}
+	const url = new URL(value);
+	if (!["http:", "https:", "mailto:"].includes(url.protocol)) {
+		throw new Error(`Unsupported external URL protocol: ${url.protocol}`);
+	}
+	return url.toString();
+}
+
 function registerAppIpc() {
 	ipcMain.handle("app:checkForUpdates", async () => {
 		return await checkForUpdatesFromMenu({ manual: true });
@@ -998,6 +1009,11 @@ function registerAppIpc() {
 	});
 	ipcMain.handle("app:installUpdate", async () => {
 		return installDownloadedUpdate();
+	});
+	ipcMain.handle("app:openExternal", async (_event, payload) => {
+		const url = validateExternalUrl(payload?.url);
+		await shell.openExternal(url);
+		return { status: "opened" };
 	});
 	ipcMain.handle("workspace:setActiveFilePath", (event, payload) => {
 		const window = BrowserWindow.fromWebContents(event.sender);
