@@ -343,6 +343,7 @@ export function V2LayoutShell({
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
+	canPersistOpenFileSession = true,
 	onPendingOpenFileHandled,
 	onError,
 	isUpdateReady,
@@ -352,6 +353,7 @@ export function V2LayoutShell({
 	readonly workspaceName?: string;
 	readonly onOpenWorkspace?: () => void;
 	readonly pendingOpenFilePaths?: readonly string[];
+	readonly canPersistOpenFileSession?: boolean;
 	readonly onPendingOpenFileHandled?: (filePath: string) => void;
 	readonly onError?: (error: unknown) => void;
 	readonly isUpdateReady?: boolean;
@@ -365,6 +367,7 @@ export function V2LayoutShell({
 					workspaceName={workspaceName}
 					onOpenWorkspace={onOpenWorkspace}
 					pendingOpenFilePaths={pendingOpenFilePaths}
+					canPersistOpenFileSession={canPersistOpenFileSession}
 					onPendingOpenFileHandled={onPendingOpenFileHandled}
 					onError={onError}
 					isUpdateReady={isUpdateReady}
@@ -380,6 +383,7 @@ type LayoutShellContentProps = {
 	readonly workspaceName?: string;
 	readonly onOpenWorkspace?: () => void;
 	readonly pendingOpenFilePaths?: readonly string[];
+	readonly canPersistOpenFileSession?: boolean;
 	readonly onPendingOpenFileHandled?: (filePath: string) => void;
 	readonly onError?: (error: unknown) => void;
 	readonly isUpdateReady?: boolean;
@@ -539,6 +543,7 @@ function LayoutShellContent({
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
+	canPersistOpenFileSession,
 	onPendingOpenFileHandled,
 	onError,
 	isUpdateReady,
@@ -551,6 +556,7 @@ function LayoutShellContent({
 			workspace={workspace}
 			onOpenWorkspace={onOpenWorkspace}
 			pendingOpenFilePaths={pendingOpenFilePaths}
+			canPersistOpenFileSession={canPersistOpenFileSession}
 			onPendingOpenFileHandled={onPendingOpenFileHandled}
 			onError={onError}
 			isUpdateReady={isUpdateReady}
@@ -599,6 +605,7 @@ function LayoutShellLoadedContent({
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
+	canPersistOpenFileSession,
 	onPendingOpenFileHandled,
 	onError,
 	isUpdateReady,
@@ -2024,10 +2031,11 @@ function LayoutShellLoadedContent({
 	);
 
 	useEffect(() => {
+		if (!canPersistOpenFileSession) return;
 		void window.flashtypeDesktop?.workspace.setOpenFilePaths({
 			filePaths: sessionOpenFilePaths,
 		});
-	}, [sessionOpenFilePaths]);
+	}, [canPersistOpenFileSession, sessionOpenFilePaths]);
 
 	const isLeftFocused = focusedPanel === "left";
 	const isCentralFocused = focusedPanel === "central";

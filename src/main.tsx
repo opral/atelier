@@ -35,6 +35,8 @@ export const AppRoot = () => {
 	const [pendingOpenFilePaths, setPendingOpenFilePaths] = useState<string[]>(
 		[],
 	);
+	const [pendingOpenFilesConsumed, setPendingOpenFilesConsumed] =
+		useState(false);
 	const [error, setError] = useState<unknown>(null);
 	const [openingWorkspaceName, setOpeningWorkspaceName] = useState<
 		string | null | undefined
@@ -180,6 +182,8 @@ export const AppRoot = () => {
 	}, [lix, workspace]);
 
 	useEffect(() => {
+		setPendingOpenFilesConsumed(false);
+		setPendingOpenFilePaths([]);
 		if (!workspace || !lix) return;
 		let cancelled = false;
 		(async () => {
@@ -187,8 +191,9 @@ export const AppRoot = () => {
 				const filePaths =
 					(await window.flashtypeDesktop?.workspace.consumePendingOpenFiles()) ??
 					[];
-				if (!cancelled && filePaths.length > 0) {
+				if (!cancelled) {
 					setPendingOpenFilePaths(filePaths);
+					setPendingOpenFilesConsumed(true);
 				}
 			} catch (e) {
 				if (!cancelled) setError(e);
@@ -236,6 +241,9 @@ export const AppRoot = () => {
 						workspaceName={workspace.name}
 						onOpenWorkspace={handleOpenFolder}
 						pendingOpenFilePaths={pendingOpenFilePaths}
+						canPersistOpenFileSession={
+							pendingOpenFilesConsumed && pendingOpenFilePaths.length === 0
+						}
 						onPendingOpenFileHandled={handlePendingOpenFileHandled}
 						onError={setError}
 						isUpdateReady={isUpdateReady}
