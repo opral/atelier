@@ -147,10 +147,27 @@ export type DesktopWorkspaceProfile = {
 	extensions: DesktopWorkspaceExtensionProfile[];
 };
 
+export type DesktopWatchedFilesystemEntry = {
+	id: string;
+	parent_id: string | null;
+	path: string;
+	display_name: string;
+	kind: "directory" | "file";
+	source: "watched";
+};
+
 export type DesktopWorkspaceApi = {
 	get(): Promise<DesktopWorkspace | null>;
 	/** Returns workspace-relative file paths queued for editor opening. */
 	consumePendingOpenFiles(): Promise<string[]>;
+	setEphemeralWatchedDirectories(payload: {
+		ownerId: string;
+		paths: string[];
+	}): Promise<DesktopWatchedFilesystemEntry[]>;
+	onEphemeralWatchedFileTreeChanged(
+		listener: (entries: DesktopWatchedFilesystemEntry[]) => void,
+	): () => void;
+	readEphemeralFile(payload: { path: string }): Promise<Uint8Array>;
 	profile(): Promise<DesktopWorkspaceProfile | null>;
 	/** Fired when the native menu asks the workspace UI to start a new file. */
 	onNewFile(listener: () => void): () => void;

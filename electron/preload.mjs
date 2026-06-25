@@ -24,6 +24,17 @@ const workspace = {
 	get: () => ipcRenderer.invoke("workspace:get"),
 	consumePendingOpenFiles: () =>
 		ipcRenderer.invoke("workspace:consumePendingOpenFiles"),
+	setEphemeralWatchedDirectories: (payload) =>
+		ipcRenderer.invoke("workspace:setEphemeralWatchedDirectories", payload),
+	onEphemeralWatchedFileTreeChanged: (listener) => {
+		const wrapped = (_event, payload) => listener(payload);
+		ipcRenderer.on("workspace:ephemeralWatchedFileTreeChanged", wrapped);
+		return () => {
+			ipcRenderer.off("workspace:ephemeralWatchedFileTreeChanged", wrapped);
+		};
+	},
+	readEphemeralFile: (payload) =>
+		ipcRenderer.invoke("workspace:readEphemeralFile", payload),
 	profile: () => ipcRenderer.invoke("workspace:profile"),
 	onNewFile: (listener) => {
 		const wrapped = () => listener();

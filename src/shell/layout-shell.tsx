@@ -22,6 +22,7 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { useLix } from "@/lib/lix-react";
+import type { Lix } from "@/lib/lix-types";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
@@ -60,6 +61,7 @@ import type {
 	ExtensionLaunchArgs,
 	ExtensionState,
 	ExtensionDefinition,
+	WorkspaceContext,
 } from "../extension-runtime/types";
 import {
 	createExtensionInstanceId,
@@ -337,17 +339,21 @@ async function resolveNextUntitledMarkdownPath(
 }
 
 export function V2LayoutShell({
+	workspace,
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
+	canPersistOpenFileSession = true,
 	onPendingOpenFileHandled,
 	onError,
 	isUpdateReady,
 	onInstallUpdate,
 }: {
+	readonly workspace?: WorkspaceContext;
 	readonly workspaceName?: string;
 	readonly onOpenWorkspace?: () => void;
 	readonly pendingOpenFilePaths?: readonly string[];
+	readonly canPersistOpenFileSession?: boolean;
 	readonly onPendingOpenFileHandled?: (filePath: string) => void;
 	readonly onError?: (error: unknown) => void;
 	readonly isUpdateReady?: boolean;
@@ -357,9 +363,11 @@ export function V2LayoutShell({
 		<ExtensionRegistryProvider>
 			<ExtensionHostRegistryProvider>
 				<LayoutShellContent
+					workspace={workspace}
 					workspaceName={workspaceName}
 					onOpenWorkspace={onOpenWorkspace}
 					pendingOpenFilePaths={pendingOpenFilePaths}
+					canPersistOpenFileSession={canPersistOpenFileSession}
 					onPendingOpenFileHandled={onPendingOpenFileHandled}
 					onError={onError}
 					isUpdateReady={isUpdateReady}
@@ -371,9 +379,11 @@ export function V2LayoutShell({
 }
 
 type LayoutShellContentProps = {
+	readonly workspace?: WorkspaceContext;
 	readonly workspaceName?: string;
 	readonly onOpenWorkspace?: () => void;
 	readonly pendingOpenFilePaths?: readonly string[];
+	readonly canPersistOpenFileSession?: boolean;
 	readonly onPendingOpenFileHandled?: (filePath: string) => void;
 	readonly onError?: (error: unknown) => void;
 	readonly isUpdateReady?: boolean;
@@ -406,6 +416,82 @@ function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 		if (left[index] !== right[index]) return false;
 	}
 	return true;
+}
+
+type LixFileForOpen = {
+	readonly id: string;
+	readonly path: string;
+};
+
+type ReadEphemeralFile = (payload: {
+	readonly path: string;
+}) => Promise<Uint8Array | undefined>;
+
+function normalizeLixFileOpenPath(filePath: string): string | null {
+	const rawPath = filePath.replace(/\\/g, "/").trim();
+	if (!rawPath) return null;
+	const rootedPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+	const segments: string[] = [];
+	for (const segment of rootedPath.split("/")) {
+		if (!segment || segment === ".") continue;
+		if (segment === "..") {
+			if (segments.length === 0) return null;
+			segments.pop();
+			continue;
+		}
+		segments.push(segment);
+	}
+	if (segments.length === 0) return null;
+	return `/${segments.join("/")}`;
+}
+
+async function selectLixFileForOpen(
+	lix: Lix,
+	filePath: string,
+): Promise<LixFileForOpen | null> {
+	const row = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["id", "path"])
+		.where("path", "=", filePath)
+		.executeTakeFirst();
+	if (!row) return null;
+	return { id: row.id as string, path: row.path as string };
+}
+
+export async function resolveLixFileForOpen({
+	lix,
+	workspace,
+	filePath,
+	readEphemeralFile,
+}: {
+	readonly lix: Lix;
+	readonly workspace?: WorkspaceContext;
+	readonly filePath: string;
+	readonly readEphemeralFile?: ReadEphemeralFile;
+}): Promise<LixFileForOpen | null> {
+	const normalizedPath = normalizeLixFileOpenPath(filePath);
+	if (!normalizedPath) return null;
+
+	const existingFile = await selectLixFileForOpen(lix, normalizedPath);
+	if (existingFile) return existingFile;
+
+	if (workspace?.ephemeral !== true || !readEphemeralFile) {
+		return null;
+	}
+
+	const data = await readEphemeralFile({ path: normalizedPath });
+	if (!data) return null;
+
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			path: normalizedPath,
+			data,
+		})
+		.onConflict((oc) => oc.column("path").doNothing())
+		.execute();
+
+	return selectLixFileForOpen(lix, normalizedPath);
 }
 
 function documentOpenAttemptTelemetryProperties({
@@ -453,9 +539,11 @@ function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
  * <V2LayoutShell />
  */
 function LayoutShellContent({
+	workspace,
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
+	canPersistOpenFileSession,
 	onPendingOpenFileHandled,
 	onError,
 	isUpdateReady,
@@ -465,8 +553,10 @@ function LayoutShellContent({
 	return (
 		<LayoutShellUiStateLoader
 			workspaceName={workspaceName}
+			workspace={workspace}
 			onOpenWorkspace={onOpenWorkspace}
 			pendingOpenFilePaths={pendingOpenFilePaths}
+			canPersistOpenFileSession={canPersistOpenFileSession}
 			onPendingOpenFileHandled={onPendingOpenFileHandled}
 			onError={onError}
 			isUpdateReady={isUpdateReady}
@@ -511,9 +601,11 @@ function LayoutShellActiveFileLoader(
 }
 
 function LayoutShellLoadedContent({
+	workspace,
 	workspaceName,
 	onOpenWorkspace,
 	pendingOpenFilePaths,
+	canPersistOpenFileSession,
 	onPendingOpenFileHandled,
 	onError,
 	isUpdateReady,
@@ -1111,7 +1203,7 @@ function LayoutShellLoadedContent({
 		[ensurePanelExpanded, setPanelState],
 	);
 
-	const handleOpenFile = useCallback(
+	const openResolvedFileView = useCallback(
 		({
 			panel,
 			fileId,
@@ -1172,6 +1264,69 @@ function LayoutShellLoadedContent({
 		[handleOpenView, extensionMap, captureWorkspaceTelemetry],
 	);
 
+	const handleOpenFile = useCallback(
+		async ({
+			panel,
+			fileId: _requestedFileId,
+			filePath,
+			state,
+			launchArgs,
+			focus,
+			pending,
+			documentOrigin,
+			trackTelemetry,
+			trackDocumentOpenAttempt,
+			trackDocumentViewed,
+		}: {
+			panel: PanelSide;
+			fileId: string;
+			filePath: string;
+			state?: ExtensionState;
+			launchArgs?: ExtensionLaunchArgs;
+			focus?: boolean;
+			pending?: boolean;
+			documentOrigin?: "existing" | "new";
+			trackTelemetry?: boolean;
+			trackDocumentOpenAttempt?: boolean;
+			trackDocumentViewed?: boolean;
+		}) => {
+			let resolvedFile: LixFileForOpen | null = null;
+			try {
+				resolvedFile = await resolveLixFileForOpen({
+					lix,
+					workspace,
+					filePath,
+					readEphemeralFile:
+						window.flashtypeDesktop?.workspace.readEphemeralFile,
+				});
+			} catch (error) {
+				onError?.(error);
+				return;
+			}
+			if (!resolvedFile) {
+				onError?.(
+					new Error(`File not found in the opened workspace: ${filePath}`),
+				);
+				return;
+			}
+
+			openResolvedFileView({
+				panel,
+				fileId: resolvedFile.id,
+				filePath: resolvedFile.path,
+				state,
+				launchArgs,
+				focus,
+				pending,
+				documentOrigin,
+				trackTelemetry,
+				trackDocumentOpenAttempt,
+				trackDocumentViewed,
+			});
+		},
+		[lix, workspace, onError, openResolvedFileView],
+	);
+
 	useEffect(() => {
 		if (!pendingOpenFilePaths || pendingOpenFilePaths.length === 0) return;
 		let cancelled = false;
@@ -1179,19 +1334,20 @@ function LayoutShellLoadedContent({
 			const openedFiles: Array<{ id: string; path: string }> = [];
 			const handledFilePaths: string[] = [];
 			for (const pendingOpenFilePath of pendingOpenFilePaths) {
-				const lixLookupPath = `/${pendingOpenFilePath}`;
-				const file = await qb(lix)
-					.selectFrom("lix_file")
-					.select(["id", "path"])
-					.where("path", "=", lixLookupPath)
-					.executeTakeFirst();
+				const file = await resolveLixFileForOpen({
+					lix,
+					workspace,
+					filePath: `/${pendingOpenFilePath}`,
+					readEphemeralFile:
+						window.flashtypeDesktop?.workspace.readEphemeralFile,
+				});
 				if (cancelled) return;
 				if (!file) {
 					throw new Error(
 						`File not found in the opened workspace: ${pendingOpenFilePath}`,
 					);
 				}
-				handleOpenFile({
+				openResolvedFileView({
 					panel: "central",
 					fileId: file.id as string,
 					filePath: file.path as string,
@@ -1204,7 +1360,7 @@ function LayoutShellLoadedContent({
 			}
 			const firstFile = openedFiles[0];
 			if (!cancelled && firstFile) {
-				handleOpenFile({
+				openResolvedFileView({
 					panel: "central",
 					fileId: firstFile.id,
 					filePath: firstFile.path,
@@ -1227,11 +1383,12 @@ function LayoutShellLoadedContent({
 			cancelled = true;
 		};
 	}, [
-		handleOpenFile,
 		lix,
 		onError,
 		onPendingOpenFileHandled,
+		openResolvedFileView,
 		pendingOpenFilePaths,
+		workspace,
 	]);
 
 	const clearExternalWriteReview = useCallback(
@@ -1421,7 +1578,7 @@ function LayoutShellLoadedContent({
 							source: "renderer",
 						});
 					}
-					handleOpenFile({
+					await handleOpenFile({
 						panel: "central",
 						fileId: write.fileId,
 						filePath: write.path,
@@ -1776,7 +1933,7 @@ function LayoutShellLoadedContent({
 			.where("path", "=", path)
 			.executeTakeFirstOrThrow();
 		const id = createdFile.id;
-		handleOpenFile({
+		await handleOpenFile({
 			panel: "central",
 			fileId: id,
 			filePath: path,
@@ -1787,8 +1944,19 @@ function LayoutShellLoadedContent({
 	}, [handleOpenFile, lix]);
 
 	const handleNativeNewFile = useCallback(async () => {
+		const visibleDraftHandlers = [
+			...newFileDraftHandlersRef.current.values(),
+		].filter((registration) => {
+			if (registration.panelSide === "left") {
+				return !isLeftCollapsed;
+			}
+			if (registration.panelSide === "right") {
+				return !isRightCollapsed;
+			}
+			return true;
+		});
 		const filesViewHandler = selectNewFileDraftHandler(
-			newFileDraftHandlersRef.current.values(),
+			visibleDraftHandlers,
 			focusedPanel,
 		);
 		if (filesViewHandler) {
@@ -1805,7 +1973,14 @@ function LayoutShellLoadedContent({
 			}
 			console.error("Failed to create new file from native menu", error);
 		}
-	}, [focusPanel, focusedPanel, handleCreateNewFile, onError]);
+	}, [
+		focusPanel,
+		focusedPanel,
+		handleCreateNewFile,
+		isLeftCollapsed,
+		isRightCollapsed,
+		onError,
+	]);
 
 	useEffect(() => {
 		const unsubscribe =
@@ -1856,10 +2031,11 @@ function LayoutShellLoadedContent({
 	);
 
 	useEffect(() => {
+		if (!canPersistOpenFileSession) return;
 		void window.flashtypeDesktop?.workspace.setOpenFilePaths({
 			filePaths: sessionOpenFilePaths,
 		});
-	}, [sessionOpenFilePaths]);
+	}, [canPersistOpenFileSession, sessionOpenFilePaths]);
 
 	const isLeftFocused = focusedPanel === "left";
 	const isCentralFocused = focusedPanel === "central";
@@ -2014,6 +2190,7 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
 			rejectExternalWriteReview: handleRejectExternalWriteReview,
+			workspace,
 			lix,
 		}),
 		[
@@ -2027,6 +2204,7 @@ function LayoutShellLoadedContent({
 			handleRejectExternalWriteReview,
 			focusPanel,
 			registerNewFileDraftHandler,
+			workspace,
 			lix,
 		],
 	);
