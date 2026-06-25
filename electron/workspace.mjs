@@ -251,9 +251,7 @@ export async function readEphemeralWorkspaceFile(window, payload) {
 	}
 	const filePath = normalizeWorkspaceFilePath(payload?.path);
 	if (!isEphemeralWatchedFileEntry(state, filePath)) {
-		throw new Error(
-			`File is not in the opened Files view: ${filePath}`,
-		);
+		throw new Error(`File is not in the opened Files view: ${filePath}`);
 	}
 	const { localPath } = await resolveExistingWorkspacePath(
 		workspace,
@@ -385,6 +383,23 @@ export async function setWorkspaceTrackChanges(window, trackChanges) {
 			await moveWorkspaceLixToExternalStorage(state);
 			state.workspace = createEphemeralWorkspace(workspace.path);
 		}
+		state.pendingOpenFilePaths = [];
+		applyWindowChrome(window);
+		return state.workspace;
+	});
+}
+
+export async function disableWorkspaceTrackChanges(window) {
+	const state = getOrCreateWindowState(window);
+	return await enqueueWorkspaceChange(state, async () => {
+		const workspace = state.workspace;
+		if (!workspace) {
+			throw new Error("No workspace is open.");
+		}
+		disposeEphemeralFileTreeState(state);
+		await disposeExternalLixState(state);
+		await removeWorkspaceLixDirectory(workspace.path);
+		state.workspace = createEphemeralWorkspace(workspace.path);
 		state.pendingOpenFilePaths = [];
 		applyWindowChrome(window);
 		return state.workspace;
@@ -1040,6 +1055,13 @@ async function movePath(source, target) {
 	await rm(source, { force: true, recursive: true });
 }
 
+async function removeWorkspaceLixDirectory(workspacePath) {
+	await rm(path.join(workspacePath, LIX_DIRECTORY_NAME), {
+		force: true,
+		recursive: true,
+	});
+}
+
 async function pathExists(filePath) {
 	try {
 		await stat(filePath);
@@ -1195,6 +1217,19 @@ export function registerWorkspaceIpc(getWindowForEvent, options = {}) {
 
 	ipcMain.handle("workspace:get", (event) => {
 		return getWorkspace(getWindowForEvent(event));
+	});
+
+	ipcMain.handle("workspace:getRecovery", async (event) => {
+		const window = getWindowForEvent(event);
+		if (typeof options.getRecovery !== "function") {
+			return null;
+		}
+		return await options.getRecovery(getWorkspace(window), window);
+	});
+
+	ipcMain.handle("workspace:clearRecovery", async (event) => {
+		const window = getWindowForEvent(event);
+		await options.clearRecovery?.(getWorkspace(window), window);
 	});
 
 	ipcMain.handle("workspace:consumePendingOpenFiles", (event) => {

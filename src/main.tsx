@@ -23,6 +23,11 @@ import { activatePostHogRecording } from "./lib/posthog-client";
 type Workspace = Awaited<
 	ReturnType<NonNullable<Window["flashtypeDesktop"]>["workspace"]["get"]>
 >;
+type WorkspaceRecovery = Awaited<
+	ReturnType<
+		NonNullable<Window["flashtypeDesktop"]>["workspace"]["getRecovery"]
+	>
+>;
 
 /**
  * The workspace gates the app: without a folder, only the first-run screen
@@ -31,6 +36,9 @@ type Workspace = Awaited<
 export const AppRoot = () => {
 	// undefined = still asking the main process; null = first run.
 	const [workspace, setWorkspace] = useState<Workspace | undefined>(undefined);
+	const [workspaceRecovery, setWorkspaceRecovery] = useState<
+		WorkspaceRecovery | null | undefined
+	>(undefined);
 	const [lix, setLix] = useState<Lix | null>(null);
 	const [pendingOpenFilePaths, setPendingOpenFilePaths] = useState<string[]>(
 		[],
@@ -53,7 +61,13 @@ export const AppRoot = () => {
 			try {
 				const current =
 					(await window.flashtypeDesktop?.workspace.get()) ?? null;
-				if (!cancelled) setWorkspace(current);
+				const recovery = current
+					? ((await window.flashtypeDesktop?.workspace.getRecovery()) ?? null)
+					: null;
+				if (!cancelled) {
+					setWorkspaceRecovery(recovery);
+					setWorkspace(current);
+				}
 			} catch (e) {
 				if (!cancelled) setError(e);
 			}
@@ -110,6 +124,7 @@ export const AppRoot = () => {
 				if (!opened || opened.path === workspace?.path) return;
 				if (workspace) return;
 				setOpeningWorkspaceName(opened.name);
+				setWorkspaceRecovery((await desktop.workspace.getRecovery?.()) ?? null);
 				keepLoadingScreen = true;
 				// When switching, close the running lix before the workspace state
 				// flips: close() lags its IPC, so an unawaited close could race the
@@ -146,7 +161,9 @@ export const AppRoot = () => {
 	}, [handleOpenFolder]);
 
 	useEffect(() => {
-		if (!workspace) return;
+		if (!workspace || workspaceRecovery === undefined || workspaceRecovery) {
+			return;
+		}
 		let cancelled = false;
 		let current: Lix | undefined;
 		(async () => {
@@ -159,7 +176,15 @@ export const AppRoot = () => {
 				current = instance;
 				setLix(instance);
 			} catch (e) {
-				if (!cancelled) setError(e);
+				const recovery =
+					(await window.flashtypeDesktop?.workspace.getRecovery()) ?? null;
+				if (!cancelled) {
+					if (recovery) {
+						setWorkspaceRecovery(recovery);
+					} else {
+						setError(e);
+					}
+				}
 			}
 		})();
 		return () => {
@@ -169,7 +194,7 @@ export const AppRoot = () => {
 				if (current) await current.close();
 			})();
 		};
-	}, [workspace]);
+	}, [workspace, workspaceRecovery]);
 
 	useEffect(() => {
 		if (!workspace || !lix) return;
@@ -210,8 +235,10 @@ export const AppRoot = () => {
 		);
 	}, []);
 
+	if (workspaceRecovery) return <ErrorFallback recovery={workspaceRecovery} />;
 	if (error) return <ErrorFallback error={error} />;
 	if (workspace === undefined) return <BootPlaceholder />;
+	if (workspaceRecovery === undefined) return <BootPlaceholder />;
 	if (workspace === null) {
 		if (openingWorkspaceName !== undefined) {
 			return <WorkspaceLoadingScreen workspaceName={openingWorkspaceName} />;

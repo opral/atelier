@@ -1,10 +1,18 @@
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	readFile,
+	rm,
+	stat,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
 	profileWorkspaceFilesystem,
+	disableWorkspaceTrackChanges,
 	disposeWorkspaceWindowState,
 	readEphemeralWorkspaceFile,
 	resolveWorkspace,
@@ -772,6 +780,41 @@ describe("workspace resolution", () => {
 				pendingOpenFilePaths: ["docs/readme.md"],
 			},
 		]);
+	});
+
+	test("disables Track Changes by deleting only .lix and reopening transiently", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		const workspaceFile = path.join(directory, "docs", "readme.md");
+		const lixFile = path.join(directory, ".lix", ".internal", "db.sqlite");
+		await mkdir(path.dirname(workspaceFile), { recursive: true });
+		await mkdir(path.dirname(lixFile), { recursive: true });
+		await writeFile(workspaceFile, "# Keep me\n");
+		await writeFile(lixFile, "lix data\n");
+
+		const window = createTestWindow();
+		try {
+			await setWorkspaceFromPath(directory, window);
+
+			await expect(disableWorkspaceTrackChanges(window)).resolves.toEqual({
+				ephemeral: true,
+				path: directory,
+				includePaths: [],
+				name: "workspace",
+			});
+			await expect(readFile(workspaceFile, "utf8")).resolves.toBe(
+				"# Keep me\n",
+			);
+			await expect(stat(path.join(directory, ".lix"))).rejects.toMatchObject({
+				code: "ENOENT",
+			});
+		} finally {
+			await disposeWorkspaceWindowState(window);
+		}
 	});
 
 	test("restores saved non-Lix directory session entries without include scans", async () => {
