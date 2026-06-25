@@ -5,6 +5,7 @@ import {
 	resolveShell,
 	resolveShellArgs,
 } from "./terminal-shell.mjs";
+import { getAgentHookEnvironment } from "./agent-hooks.mjs";
 
 const terminals = new Map();
 const ownerHooks = new Set();
@@ -23,13 +24,17 @@ export function registerTerminalIpc() {
 		const cwd = payload?.cwd;
 		const cols = clampInteger(payload?.cols, 80, 20, 500);
 		const rows = clampInteger(payload?.rows, 24, 5, 200);
+		const env = {
+			...normalizeExtraEnv(payload?.env),
+			...getAgentHookEnvironmentSafely(),
+		};
 
 		const terminal = pty.spawn(shell, shellArgs, {
 			name: "xterm-256color",
 			cwd,
 			cols,
 			rows,
-			env: buildTerminalEnv(),
+			env: buildTerminalEnv(process.env, process.platform, env),
 		});
 
 		const ownerId = event.sender.id;
@@ -134,4 +139,26 @@ function clampInteger(value, fallback, min, max) {
 		return fallback;
 	}
 	return Math.max(min, Math.min(max, Math.floor(numeric)));
+}
+
+function getAgentHookEnvironmentSafely() {
+	try {
+		return getAgentHookEnvironment();
+	} catch (error) {
+		console.warn("[terminal] failed to prepare agent hook environment", error);
+		return {};
+	}
+}
+
+function normalizeExtraEnv(extraEnv) {
+	if (!extraEnv || typeof extraEnv !== "object") {
+		return {};
+	}
+	return Object.fromEntries(
+		Object.entries(extraEnv).filter(([key, value]) => {
+			return (
+				typeof key === "string" && key.length > 0 && typeof value === "string"
+			);
+		}),
+	);
 }

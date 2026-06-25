@@ -107,7 +107,18 @@ const terminal = {
 	},
 };
 
+const agentHooks = {
+	onTurnEvent: (listener) => {
+		const wrapped = (_event, payload) => listener(payload);
+		ipcRenderer.on("agentHooks:turnEvent", wrapped);
+		return () => {
+			ipcRenderer.off("agentHooks:turnEvent", wrapped);
+		};
+	},
+};
+
 contextBridge.exposeInMainWorld("flashtypeDesktop", {
+	agentHooks,
 	app,
 	platform: process.platform,
 	telemetry,

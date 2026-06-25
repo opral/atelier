@@ -90,6 +90,7 @@ export type DesktopTerminalCreatePayload = {
 	shell?: string;
 	cols?: number;
 	rows?: number;
+	env?: Record<string, string>;
 };
 
 export type DesktopTerminalCreateResult = {
@@ -116,6 +117,21 @@ export type DesktopTerminalApi = {
 	kill(payload: { id: string }): Promise<void>;
 	onData(listener: (event: DesktopTerminalDataEvent) => void): () => void;
 	onExit(listener: (event: DesktopTerminalExitEvent) => void): () => void;
+};
+
+export type DesktopAgentTurnEvent = {
+	id: string;
+	agent: "claude" | "codex";
+	phase: "turn-start" | "turn-stop";
+	hookEventName?: string;
+	sessionId?: string;
+	turnId?: string;
+	cwd?: string;
+	createdAt: number;
+};
+
+export type DesktopAgentHooksApi = {
+	onTurnEvent(listener: (event: DesktopAgentTurnEvent) => void): () => void;
 };
 
 export type DesktopWorkspace =
@@ -271,6 +287,7 @@ export type DesktopTelemetryApi = {
 declare global {
 	interface Window {
 		flashtypeDesktop?: {
+			agentHooks: DesktopAgentHooksApi;
 			app: DesktopAppApi;
 			platform: string;
 			telemetry: DesktopTelemetryApi;

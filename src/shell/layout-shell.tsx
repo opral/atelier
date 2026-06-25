@@ -98,6 +98,12 @@ import {
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
 import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
+import {
+	clearAgentTurnCommitRange,
+	deleteAgentTurnCommitRange,
+	writeAgentTurnCommitRange,
+	type AgentTurnCommitRange,
+} from "./agent-turn-review-range";
 
 type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
@@ -105,6 +111,26 @@ type NewFileDraftHandlerRegistration = {
 	readonly isActiveView: boolean;
 	readonly handler: () => void;
 };
+
+type AgentHookTurnEvent = {
+	readonly id: string;
+	readonly agent: "claude" | "codex";
+	readonly phase: "turn-start" | "turn-stop";
+	readonly hookEventName?: string;
+	readonly sessionId?: string;
+	readonly turnId?: string;
+	readonly cwd?: string;
+	readonly createdAt: number;
+};
+
+type ActiveAgentTurn = {
+	readonly key: string;
+	readonly event: AgentHookTurnEvent;
+	readonly beforeCommitIdPromise: Promise<string | null>;
+};
+
+const AGENT_TURN_SYNC_QUIET_MS = 750;
+const AGENT_TURN_SYNC_MAX_MS = 5000;
 
 const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
 	const { launchArgs: _omitLaunch, ...rest } = view as any;
@@ -418,6 +444,100 @@ function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	return true;
 }
 
+async function waitForActiveCommitToSettle(lix: Lix): Promise<string | null> {
+	let latestCommitId = await readActiveBranchCommitId(lix);
+	const events = lix.observe(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	const deadline = Date.now() + AGENT_TURN_SYNC_MAX_MS;
+	try {
+		while (Date.now() < deadline) {
+			const waitMs = Math.min(
+				AGENT_TURN_SYNC_QUIET_MS,
+				Math.max(0, deadline - Date.now()),
+			);
+			if (waitMs <= 0) break;
+			const event = await promiseWithTimeout(events.next(), waitMs);
+			if (event === "timeout" || event === undefined) {
+				break;
+			}
+			latestCommitId =
+				activeCommitIdFromQueryResult(event.result) ?? latestCommitId;
+		}
+	} finally {
+		events.close();
+	}
+	return latestCommitId ?? readActiveBranchCommitId(lix);
+}
+
+async function readActiveBranchCommitId(lix: Lix): Promise<string | null> {
+	const result = await lix.execute(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	return activeCommitIdFromQueryResult(result);
+}
+
+function activeCommitIdFromQueryResult(result: unknown): string | null {
+	const rows =
+		result && typeof result === "object" && Array.isArray((result as any).rows)
+			? ((result as any).rows as unknown[])
+			: [];
+	const value =
+		rows.length > 0 ? readQueryRowValue(rows[0], "commit_id") : null;
+	return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readQueryRowValue(row: unknown, column: string): unknown {
+	if (!row || typeof row !== "object") return undefined;
+	if (typeof (row as { get?: unknown }).get === "function") {
+		return (row as { get(column: string): unknown }).get(column);
+	}
+	if (typeof (row as { toObject?: unknown }).toObject === "function") {
+		return (row as { toObject(): Record<string, unknown> }).toObject()[column];
+	}
+	return (row as Record<string, unknown>)[column];
+}
+
+async function promiseWithTimeout<T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+): Promise<T | "timeout"> {
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<"timeout">((resolve) => {
+				timeoutId = setTimeout(() => resolve("timeout"), timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+		}
+	}
+}
+
+function isAgentHookTurnEvent(value: unknown): value is AgentHookTurnEvent {
+	if (!value || typeof value !== "object") return false;
+	const event = value as Partial<AgentHookTurnEvent>;
+	return (
+		(event.agent === "claude" || event.agent === "codex") &&
+		(event.phase === "turn-start" || event.phase === "turn-stop") &&
+		typeof event.id === "string" &&
+		event.id.length > 0 &&
+		typeof event.createdAt === "number" &&
+		Number.isFinite(event.createdAt)
+	);
+}
+
+function agentTurnKey(event: AgentHookTurnEvent): string {
+	return [
+		event.agent,
+		event.sessionId ?? event.cwd ?? "unknown-session",
+		event.turnId ?? "current-turn",
+	].join(":");
+}
+
 type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
@@ -664,6 +784,8 @@ function LayoutShellLoadedContent({
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
 	);
+	const activeAgentTurnsRef = useRef(new Map<string, ActiveAgentTurn>());
+	const activeAgentTurnWaitersRef = useRef(new Set<() => void>());
 	const workspaceIdRef = useRef<string | undefined>(undefined);
 	const panelStatesRef = useRef({
 		left: leftPanel,
@@ -742,11 +864,129 @@ function LayoutShellLoadedContent({
 			if (openReview?.reviewId === review.reviewId) {
 				openDiffReviewByFileIdRef.current.delete(review.fileId);
 			}
+			if (
+				(outcome === "accepted" || outcome === "rejected") &&
+				review.agentTurnRangeId
+			) {
+				void clearAgentTurnCommitRange(lix, review.agentTurnRangeId).catch(
+					(error: unknown) => {
+						console.warn(
+							"[agent-turn-review] failed to clear commit range",
+							error,
+						);
+					},
+				);
+			}
 			captureDiffResolvedTelemetry(review, outcome);
 			return true;
 		},
-		[claimDiffReviewResolution, captureDiffResolvedTelemetry],
+		[claimDiffReviewResolution, captureDiffResolvedTelemetry, lix],
 	);
+
+	const notifyActiveAgentTurnWaiters = useCallback(() => {
+		const waiters = Array.from(activeAgentTurnWaitersRef.current);
+		activeAgentTurnWaitersRef.current.clear();
+		for (const resolve of waiters) {
+			resolve();
+		}
+	}, []);
+
+	const waitForActiveAgentTurnsToSettle = useCallback(async () => {
+		if (activeAgentTurnsRef.current.size === 0) {
+			return;
+		}
+		let waiter: (() => void) | undefined;
+		await promiseWithTimeout(
+			new Promise<void>((resolve) => {
+				waiter = resolve;
+				activeAgentTurnWaitersRef.current.add(resolve);
+			}),
+			AGENT_TURN_SYNC_MAX_MS,
+		);
+		if (waiter) {
+			activeAgentTurnWaitersRef.current.delete(waiter);
+		}
+	}, []);
+
+	const handleAgentHookTurnEvent = useCallback(
+		(event: AgentHookTurnEvent) => {
+			const key = agentTurnKey(event);
+			if (event.phase === "turn-start") {
+				const beforeCommitIdPromise = waitForActiveCommitToSettle(lix).catch(
+					(error: unknown) => {
+						console.warn(
+							"[agent-turn-review] failed to capture start commit",
+							error,
+						);
+						return null;
+					},
+				);
+				activeAgentTurnsRef.current.set(key, {
+					key,
+					event,
+					beforeCommitIdPromise,
+				});
+				return;
+			}
+
+			void (async () => {
+				const activeTurn = activeAgentTurnsRef.current.get(key);
+				const beforeCommitId = activeTurn
+					? await activeTurn.beforeCommitIdPromise
+					: null;
+				const afterCommitId = await waitForActiveCommitToSettle(lix);
+				activeAgentTurnsRef.current.delete(key);
+
+				if (
+					beforeCommitId &&
+					afterCommitId &&
+					beforeCommitId !== afterCommitId
+				) {
+					const range: AgentTurnCommitRange = {
+						id: [
+							event.agent,
+							event.sessionId ?? "unknown-session",
+							event.turnId ?? String(event.createdAt),
+							beforeCommitId,
+							afterCommitId,
+						].join(":"),
+						agent: event.agent,
+						beforeCommitId,
+						afterCommitId,
+						sessionId: event.sessionId,
+						turnId: event.turnId,
+						startedAt: activeTurn?.event.createdAt ?? event.createdAt,
+						completedAt: Date.now(),
+					};
+					await writeAgentTurnCommitRange(lix, range);
+				} else {
+					await deleteAgentTurnCommitRange(lix);
+				}
+				notifyActiveAgentTurnWaiters();
+			})().catch((error: unknown) => {
+				activeAgentTurnsRef.current.delete(key);
+				notifyActiveAgentTurnWaiters();
+				console.warn(
+					"[agent-turn-review] failed to capture stop commit",
+					error,
+				);
+			});
+		},
+		[lix, notifyActiveAgentTurnWaiters],
+	);
+
+	useEffect(() => {
+		const unsubscribe = window.flashtypeDesktop?.agentHooks?.onTurnEvent(
+			(event: unknown) => {
+				if (isAgentHookTurnEvent(event)) {
+					handleAgentHookTurnEvent(event);
+				}
+			},
+		);
+		return () => {
+			unsubscribe?.();
+		};
+	}, [handleAgentHookTurnEvent]);
 
 	const getOpenExternalWriteReviewForFile = useCallback((fileId: string) => {
 		const activeReview = openDiffReviewByFileIdRef.current.get(fileId);
@@ -1531,6 +1771,7 @@ function LayoutShellLoadedContent({
 	const handleExternalFileWrites = useCallback(
 		(writes: ExternalFileWrite[]) => {
 			void (async () => {
+				await waitForActiveAgentTurnsToSettle();
 				for (const write of writes) {
 					if (ignoredExternalWriteReviewFileIdsRef.current.has(write.fileId)) {
 						clearExternalWriteReview({ fileId: write.fileId });
@@ -1575,6 +1816,7 @@ function LayoutShellLoadedContent({
 			captureWorkspaceTelemetry,
 			getOpenExternalWriteReviewForFile,
 			resolveDiffReviewTelemetry,
+			waitForActiveAgentTurnsToSettle,
 		],
 	);
 

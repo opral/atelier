@@ -64,6 +64,7 @@ import {
 	workspaceRecoveryToSessionEntry,
 	writeWorkspaceRecoverySync,
 } from "./workspace-recovery.mjs";
+import { disposeAgentHookIpc, registerAgentHookIpc } from "./agent-hooks.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
@@ -814,6 +815,7 @@ if (hasSingleInstanceLock) {
 		installDevelopmentDockIcon();
 		registerAppIpc();
 		registerTelemetryIpc();
+		registerAgentHookIpc();
 		installApplicationMenu();
 		app.on("activate", () => {
 			void focusOrCreateWorkspaceWindow();
@@ -1023,6 +1025,7 @@ app.on("before-quit", () => {
 		void disposeAllWorkspaceWindowStates();
 	});
 	disposeTerminalIpc();
+	disposeAgentHookIpc();
 });
 
 app.on("will-quit", (event) => {
