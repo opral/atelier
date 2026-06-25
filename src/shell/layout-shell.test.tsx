@@ -225,10 +225,11 @@ describe("V2LayoutShell native New File", () => {
 		});
 
 		const utils = await renderShell(lix);
-		const newFileButtons = await screen.findAllByRole("button", {
-			name: "New file",
+		await waitFor(() => {
+			expect(screen.getAllByRole("button", { name: "New file" })).toHaveLength(
+				2,
+			);
 		});
-		expect(newFileButtons).toHaveLength(2);
 		await waitFor(() => expect(desktop.onNewFile).toHaveBeenCalled());
 
 		await act(async () => {
