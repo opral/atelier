@@ -190,6 +190,7 @@ export type DesktopAppApi = {
 	checkForUpdates(): Promise<{ status: DesktopUpdateCheckStatus }>;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	installUpdate(): Promise<{ status: DesktopUpdateCheckStatus }>;
+	openExternal(payload: { url: string }): Promise<{ status: "opened" }>;
 	onUpdateState(listener: (state: DesktopUpdateState) => void): () => void;
 };
 

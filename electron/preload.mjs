@@ -4,6 +4,7 @@ const app = {
 	checkForUpdates: () => ipcRenderer.invoke("app:checkForUpdates"),
 	getUpdateState: () => ipcRenderer.invoke("app:getUpdateState"),
 	installUpdate: () => ipcRenderer.invoke("app:installUpdate"),
+	openExternal: (payload) => ipcRenderer.invoke("app:openExternal", payload),
 	onUpdateState: (listener) => {
 		const wrapped = (_event, payload) => listener(payload);
 		ipcRenderer.on("app:updateState", wrapped);
