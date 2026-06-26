@@ -203,7 +203,7 @@ async function openWorkspaceRequests(
 		requestsBySource.set(taggedRequest.requestedSource, requests);
 	}
 
-	for (const [source, requests] of requestsBySource) {
+	for (const [_source, requests] of requestsBySource) {
 		const workspaceTargets = await resolveWorkspaceTargets(requests);
 		for (const workspaceTarget of workspaceTargets) {
 			await createMainWindow(workspaceTarget);
@@ -447,7 +447,7 @@ async function toggleTrackChangesFromApplicationMenu(trackChanges) {
 
 async function openWorkspacePathInNewWindow(
 	requestedPath,
-	requestedSource = "open_in_new_window",
+	_requestedSource = "open_in_new_window",
 ) {
 	const workspaceTarget = (await resolveWorkspaceTargets([requestedPath]))[0];
 	if (!workspaceTarget) {
