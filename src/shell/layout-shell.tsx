@@ -30,16 +30,7 @@ import { TopBar } from "./top-bar";
 import { FlashtypeMenu } from "./top-bar/flashtype-menu";
 import { BranchSwitcher } from "./top-bar/branch-switcher";
 import { StatusBar } from "./status-bar";
-import {
-	ExternalWriteDetector,
-	type ExternalFileWrite,
-} from "./external-write-detector";
-import { getExternalWriteReview } from "./external-write-review-history";
-import { markFlashtypeFileWrite } from "@/extension-runtime/external-write-tracking";
-import {
-	EXTERNAL_WRITE_REVIEW_LAUNCH_ARG,
-	type ExternalWriteReview,
-} from "@/extension-runtime/external-write-review";
+import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -98,12 +89,36 @@ import {
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
 import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
+import {
+	clearAgentTurnCommitRangeFile,
+	appendAgentTurnCommitRange,
+	type AgentTurnCommitRange,
+} from "./agent-turn-review-range";
+import { getFileDataAtCommit } from "./external-write-review-history";
 
 type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
 	readonly viewInstance: string;
 	readonly isActiveView: boolean;
 	readonly handler: () => void;
+};
+
+type AgentHookTurnEvent = {
+	readonly id: string;
+	readonly instanceId?: string;
+	readonly agent: "claude" | "codex";
+	readonly phase: "turn-start" | "turn-stop";
+	readonly hookEventName?: string;
+	readonly sessionId?: string;
+	readonly turnId?: string;
+	readonly cwd?: string;
+	readonly createdAt: number;
+};
+
+type ActiveAgentTurn = {
+	readonly key: string;
+	readonly event: AgentHookTurnEvent;
+	readonly beforeCommitIdPromise: Promise<string | null>;
 };
 
 const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
@@ -398,24 +413,63 @@ type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly setActiveFileId: (newValue: string | null) => Promise<void>;
 };
 
-function isExternalWriteReview(value: unknown): value is ExternalWriteReview {
-	if (!value || typeof value !== "object") return false;
-	const review = value as Partial<ExternalWriteReview>;
-	return (
-		typeof review.fileId === "string" &&
-		typeof review.path === "string" &&
-		typeof review.reviewId === "string" &&
-		review.beforeData instanceof Uint8Array &&
-		review.afterData instanceof Uint8Array
-	);
-}
-
 function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	if (left.byteLength !== right.byteLength) return false;
 	for (let index = 0; index < left.byteLength; index += 1) {
 		if (left[index] !== right[index]) return false;
 	}
 	return true;
+}
+
+async function readSyncedActiveCommitId(lix: Lix): Promise<string | null> {
+	await lix.syncDiskToLix();
+	return readActiveBranchCommitId(lix);
+}
+
+async function readActiveBranchCommitId(lix: Lix): Promise<string | null> {
+	const result = await lix.execute(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	const rows =
+		result && typeof result === "object" && Array.isArray((result as any).rows)
+			? ((result as any).rows as unknown[])
+			: [];
+	const value =
+		rows.length > 0 ? readQueryRowValue(rows[0], "commit_id") : null;
+	return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readQueryRowValue(row: unknown, column: string): unknown {
+	if (!row || typeof row !== "object") return undefined;
+	if (typeof (row as { get?: unknown }).get === "function") {
+		return (row as { get(column: string): unknown }).get(column);
+	}
+	if (typeof (row as { toObject?: unknown }).toObject === "function") {
+		return (row as { toObject(): Record<string, unknown> }).toObject()[column];
+	}
+	return (row as Record<string, unknown>)[column];
+}
+
+function isAgentHookTurnEvent(value: unknown): value is AgentHookTurnEvent {
+	if (!value || typeof value !== "object") return false;
+	const event = value as Partial<AgentHookTurnEvent>;
+	return (
+		(event.agent === "claude" || event.agent === "codex") &&
+		(event.phase === "turn-start" || event.phase === "turn-stop") &&
+		typeof event.id === "string" &&
+		event.id.length > 0 &&
+		typeof event.createdAt === "number" &&
+		Number.isFinite(event.createdAt)
+	);
+}
+
+function agentTurnKey(event: AgentHookTurnEvent): string {
+	return [
+		event.instanceId ?? "unknown-instance",
+		event.agent,
+		event.sessionId ?? event.cwd ?? "unknown-session",
+		event.turnId ?? "current-turn",
+	].join(":");
 }
 
 type LixFileForOpen = {
@@ -658,12 +712,19 @@ function LayoutShellLoadedContent({
 	});
 	const leftPanelRef = useRef<ImperativePanelHandle | null>(null);
 	const rightPanelRef = useRef<ImperativePanelHandle | null>(null);
-	const ignoredExternalWriteReviewFileIdsRef = useRef(new Set<string>());
 	const diffOpenedReviewIdsRef = useRef(new Set<string>());
 	const diffResolvedReviewIdsRef = useRef(new Set<string>());
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
 	);
+	const resolveDiffReviewTelemetryRef = useRef<
+		| ((
+				review: ExternalWriteReview,
+				outcome: "accepted" | "abandoned" | "rejected",
+		  ) => boolean)
+		| null
+	>(null);
+	const activeAgentTurnsRef = useRef(new Map<string, ActiveAgentTurn>());
 	const workspaceIdRef = useRef<string | undefined>(undefined);
 	const panelStatesRef = useRef({
 		left: leftPanel,
@@ -715,6 +776,36 @@ function LayoutShellLoadedContent({
 		[],
 	);
 
+	const registerExternalWriteReview = useCallback(
+		(review: ExternalWriteReview) => {
+			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) {
+				return () => {};
+			}
+			const existingReview = openDiffReviewByFileIdRef.current.get(
+				review.fileId,
+			);
+			if (existingReview && existingReview.reviewId !== review.reviewId) {
+				resolveDiffReviewTelemetryRef.current?.(existingReview, "abandoned");
+			}
+			openDiffReviewByFileIdRef.current.set(review.fileId, review);
+			if (!diffOpenedReviewIdsRef.current.has(review.reviewId)) {
+				diffOpenedReviewIdsRef.current.add(review.reviewId);
+				captureWorkspaceTelemetry("diff_opened", {
+					diff_review_id: review.reviewId,
+					file_extension: fileExtensionProperty(review.path),
+					source: "renderer",
+				});
+			}
+			return () => {
+				const current = openDiffReviewByFileIdRef.current.get(review.fileId);
+				if (current?.reviewId === review.reviewId) {
+					openDiffReviewByFileIdRef.current.delete(review.fileId);
+				}
+			};
+		},
+		[captureWorkspaceTelemetry],
+	);
+
 	const captureDiffResolvedTelemetry = useCallback(
 		(
 			review: ExternalWriteReview,
@@ -747,23 +838,87 @@ function LayoutShellLoadedContent({
 		},
 		[claimDiffReviewResolution, captureDiffResolvedTelemetry],
 	);
+	resolveDiffReviewTelemetryRef.current = resolveDiffReviewTelemetry;
 
-	const getOpenExternalWriteReviewForFile = useCallback((fileId: string) => {
-		const activeReview = openDiffReviewByFileIdRef.current.get(fileId);
-		if (activeReview) {
-			return activeReview;
-		}
-		const panels = panelStatesRef.current;
-		for (const panelState of [panels.central, panels.left, panels.right]) {
-			for (const view of panelState.views) {
-				const review = view.launchArgs?.[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG];
-				if (isExternalWriteReview(review) && review.fileId === fileId) {
-					return review;
-				}
+	const handleAgentHookTurnEvent = useCallback(
+		async (event: AgentHookTurnEvent) => {
+			const key = agentTurnKey(event);
+			if (event.phase === "turn-start") {
+				const beforeCommitIdPromise = readSyncedActiveCommitId(lix).catch(
+					(error: unknown) => {
+						console.warn(
+							"[agent-turn-review] failed to capture start commit",
+							error,
+						);
+						return null;
+					},
+				);
+				activeAgentTurnsRef.current.set(key, {
+					key,
+					event,
+					beforeCommitIdPromise,
+				});
+				await beforeCommitIdPromise;
+				return;
 			}
-		}
-		return null;
-	}, []);
+
+			try {
+				const activeTurn = activeAgentTurnsRef.current.get(key);
+				const beforeCommitId = activeTurn
+					? await activeTurn.beforeCommitIdPromise
+					: null;
+				const afterCommitId = await readSyncedActiveCommitId(lix);
+				activeAgentTurnsRef.current.delete(key);
+
+				if (
+					beforeCommitId &&
+					afterCommitId &&
+					beforeCommitId !== afterCommitId
+				) {
+					const range: AgentTurnCommitRange = {
+						id: [
+							event.instanceId ?? "unknown-instance",
+							event.agent,
+							event.sessionId ?? "unknown-session",
+							event.turnId ?? String(event.createdAt),
+							beforeCommitId,
+							afterCommitId,
+						].join(":"),
+						agent: event.agent,
+						beforeCommitId,
+						afterCommitId,
+						sessionId: event.sessionId,
+						turnId: event.turnId,
+						startedAt: activeTurn?.event.createdAt ?? event.createdAt,
+						completedAt: Date.now(),
+					};
+					await appendAgentTurnCommitRange(lix, range);
+				}
+			} catch (error: unknown) {
+				activeAgentTurnsRef.current.delete(key);
+				console.warn(
+					"[agent-turn-review] failed to capture stop commit",
+					error,
+				);
+				throw error;
+			}
+		},
+		[lix],
+	);
+
+	useEffect(() => {
+		const unsubscribe = window.flashtypeDesktop?.agentHooks?.onTurnEvent(
+			(event: unknown) => {
+				if (isAgentHookTurnEvent(event)) {
+					return handleAgentHookTurnEvent(event);
+				}
+				return undefined;
+			},
+		);
+		return () => {
+			unsubscribe?.();
+		};
+	}, [handleAgentHookTurnEvent]);
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -1370,210 +1525,129 @@ function LayoutShellLoadedContent({
 		workspace,
 	]);
 
-	const clearExternalWriteReview = useCallback(
-		({
-			fileId,
-			reviewId,
-		}: {
-			readonly fileId: string;
-			readonly reviewId?: string;
-		}) => {
-			const clearPanel = (panel: PanelState): PanelState => {
-				let changed = false;
-				const views = panel.views.map((view) => {
-					if (view.state?.fileId !== fileId) return view;
-					if (
-						!view.launchArgs ||
-						!(EXTERNAL_WRITE_REVIEW_LAUNCH_ARG in view.launchArgs)
-					) {
-						return view;
-					}
-					const review = view.launchArgs[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG];
-					if (
-						reviewId &&
-						(!isExternalWriteReview(review) || review.reviewId !== reviewId)
-					) {
-						return view;
-					}
-					const {
-						[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG]: _review,
-						...restLaunchArgs
-					} = view.launchArgs as Record<string, unknown>;
-					changed = true;
-					return {
-						...view,
-						launchArgs:
-							Object.keys(restLaunchArgs).length > 0
-								? restLaunchArgs
-								: undefined,
-					};
-				});
-				return changed ? { ...panel, views } : panel;
-			};
-			setPanelState("left", clearPanel);
-			setPanelState("central", clearPanel);
-			setPanelState("right", clearPanel);
-		},
-		[setPanelState],
-	);
-
 	const getExternalWriteReviewForFile = useCallback(
 		({
 			fileId,
 			reviewId,
+			review,
 		}: {
 			readonly fileId: string;
 			readonly reviewId: string;
+			readonly review?: ExternalWriteReview;
 		}): ExternalWriteReview | null => {
-			const findInPanel = (panel: PanelState): ExternalWriteReview | null => {
-				for (const view of panel.views) {
-					if (view.state?.fileId !== fileId) continue;
-					const review = view.launchArgs?.[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG];
-					if (isExternalWriteReview(review) && review.reviewId === reviewId) {
-						return review;
-					}
-				}
-				return null;
-			};
-			return (
-				findInPanel(leftPanel) ??
-				findInPanel(centralPanel) ??
-				findInPanel(rightPanel)
-			);
+			if (review?.fileId === fileId && review.reviewId === reviewId) {
+				return review;
+			}
+			const openReview = openDiffReviewByFileIdRef.current.get(fileId);
+			return openReview?.reviewId === reviewId ? openReview : null;
 		},
-		[leftPanel, centralPanel, rightPanel],
+		[],
 	);
 
 	const isExternalWriteReviewCurrent = useCallback(
 		async (review: ExternalWriteReview): Promise<boolean> => {
-			const current = await qb(lix)
-				.selectFrom("lix_file")
-				.select(["data"])
-				.where("id", "=", review.fileId)
-				.limit(1)
-				.executeTakeFirst();
+			const [current, afterData] = await Promise.all([
+				qb(lix)
+					.selectFrom("lix_file")
+					.select(["data"])
+					.where("id", "=", review.fileId)
+					.limit(1)
+					.executeTakeFirst(),
+				getFileDataAtCommit(lix, review.fileId, review.afterCommitId),
+			]);
 			return (
 				!!current &&
-				fileBytesEqual(decodeFileDataToBytes(current.data), review.afterData)
+				!!afterData &&
+				fileBytesEqual(decodeFileDataToBytes(current.data), afterData)
 			);
 		},
 		[lix],
 	);
 
 	const handleAcceptExternalWriteReview = useCallback(
-		(args: { readonly fileId: string; readonly reviewId: string }) => {
+		async (args: {
+			readonly fileId: string;
+			readonly reviewId: string;
+			readonly review?: ExternalWriteReview;
+		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) {
-				clearExternalWriteReview(args);
 				return;
 			}
 			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
-			void (async () => {
-				const outcome = (await isExternalWriteReviewCurrent(review))
-					? "accepted"
-					: "abandoned";
-				resolveDiffReviewTelemetry(review, outcome);
-				clearExternalWriteReview(args);
-			})();
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				agentTurnRangeIds: review.agentTurnRangeIds,
+			});
+			const outcome = (await isExternalWriteReviewCurrent(review))
+				? "accepted"
+				: "abandoned";
+			resolveDiffReviewTelemetry(review, outcome);
 		},
 		[
+			lix,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
-			clearExternalWriteReview,
 			resolveDiffReviewTelemetry,
 		],
 	);
 
 	const handleRejectExternalWriteReview = useCallback(
-		async (args: { readonly fileId: string; readonly reviewId: string }) => {
+		async (args: {
+			readonly fileId: string;
+			readonly reviewId: string;
+			readonly review?: ExternalWriteReview;
+		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) {
-				clearExternalWriteReview(args);
 				return;
 			}
 			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
 			if (!(await isExternalWriteReviewCurrent(review))) {
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					agentTurnRangeIds: review.agentTurnRangeIds,
+				});
 				resolveDiffReviewTelemetry(review, "abandoned");
-				clearExternalWriteReview(args);
+				return;
+			}
+			const beforeData = await getFileDataAtCommit(
+				lix,
+				review.fileId,
+				review.beforeCommitId,
+			);
+			if (!beforeData) {
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					agentTurnRangeIds: review.agentTurnRangeIds,
+				});
+				resolveDiffReviewTelemetry(review, "abandoned");
 				return;
 			}
 			const { fileId } = args;
-			ignoredExternalWriteReviewFileIdsRef.current.add(fileId);
-			try {
-				markFlashtypeFileWrite(fileId, review.beforeData);
-				const result = await qb(lix)
-					.updateTable("lix_file")
-					.set({ data: review.beforeData })
-					.where("id", "=", fileId)
-					.executeTakeFirst();
-				if (Number(result.numUpdatedRows) > 0) {
-					resolveDiffReviewTelemetry(review, "rejected");
-				} else {
-					resolveDiffReviewTelemetry(review, "abandoned");
-				}
-				clearExternalWriteReview(args);
-			} finally {
-				window.setTimeout(() => {
-					ignoredExternalWriteReviewFileIdsRef.current.delete(fileId);
-					clearExternalWriteReview(args);
-				}, 1500);
+			const result = await qb(lix)
+				.updateTable("lix_file")
+				.set({ data: beforeData })
+				.where("id", "=", fileId)
+				.executeTakeFirst();
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				agentTurnRangeIds: review.agentTurnRangeIds,
+			});
+			if (Number(result.numUpdatedRows) > 0) {
+				resolveDiffReviewTelemetry(review, "rejected");
+			} else {
+				resolveDiffReviewTelemetry(review, "abandoned");
 			}
 		},
 		[
 			lix,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
-			clearExternalWriteReview,
-			resolveDiffReviewTelemetry,
-		],
-	);
-
-	const handleExternalFileWrites = useCallback(
-		(writes: ExternalFileWrite[]) => {
-			void (async () => {
-				for (const write of writes) {
-					if (ignoredExternalWriteReviewFileIdsRef.current.has(write.fileId)) {
-						clearExternalWriteReview({ fileId: write.fileId });
-						continue;
-					}
-					const review = await getExternalWriteReview(
-						lix,
-						write.fileId,
-						write.path,
-					);
-					const existingReview = getOpenExternalWriteReviewForFile(
-						write.fileId,
-					);
-					if (!review) continue;
-					if (existingReview && existingReview.reviewId !== review.reviewId) {
-						resolveDiffReviewTelemetry(existingReview, "abandoned");
-					}
-					if (!diffOpenedReviewIdsRef.current.has(review.reviewId)) {
-						diffOpenedReviewIdsRef.current.add(review.reviewId);
-						openDiffReviewByFileIdRef.current.set(write.fileId, review);
-						captureWorkspaceTelemetry("diff_opened", {
-							diff_review_id: review.reviewId,
-							file_extension: fileExtensionProperty(write.path),
-							source: "renderer",
-						});
-					}
-					await handleOpenFile({
-						panel: "central",
-						fileId: write.fileId,
-						filePath: write.path,
-						launchArgs: { [EXTERNAL_WRITE_REVIEW_LAUNCH_ARG]: review },
-						focus: true,
-						trackTelemetry: false,
-					});
-				}
-			})();
-		},
-		[
-			lix,
-			handleOpenFile,
-			clearExternalWriteReview,
-			captureWorkspaceTelemetry,
-			getOpenExternalWriteReviewForFile,
 			resolveDiffReviewTelemetry,
 		],
 	);
@@ -1602,8 +1676,13 @@ function LayoutShellLoadedContent({
 			for (const side of targetPanels) {
 				const currentPanel = panelStatesRef.current[side];
 				const removedView = currentPanel.views.find(predicate);
-				const removedReview =
-					removedView?.launchArgs?.[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG];
+				const removedFileId =
+					typeof removedView?.state?.fileId === "string"
+						? removedView.state.fileId
+						: null;
+				const removedReview = removedFileId
+					? openDiffReviewByFileIdRef.current.get(removedFileId)
+					: null;
 				let removed = false;
 				setPanelState(
 					side,
@@ -1624,7 +1703,7 @@ function LayoutShellLoadedContent({
 				if (removed) {
 					const review = removedReview;
 					if (
-						isExternalWriteReview(review) &&
+						review &&
 						!diffResolvedReviewIdsRef.current.has(review.reviewId)
 					) {
 						resolveDiffReviewTelemetry(review, "abandoned");
@@ -1649,7 +1728,8 @@ function LayoutShellLoadedContent({
 				);
 			};
 			for (const side of targetPanels) {
-				const removedReviews = new Map<string, ExternalWriteReview>();
+				const removedReview = openDiffReviewByFileIdRef.current.get(fileId);
+				let removed = false;
 				setPanelState(side, (current) => {
 					const views = current.views.filter(
 						(entry) => !matchesFileView(entry),
@@ -1657,13 +1737,7 @@ function LayoutShellLoadedContent({
 					if (views.length === current.views.length) {
 						return current;
 					}
-					for (const entry of current.views) {
-						if (!matchesFileView(entry)) continue;
-						const review = entry.launchArgs?.[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG];
-						if (isExternalWriteReview(review)) {
-							removedReviews.set(review.reviewId, review);
-						}
-					}
+					removed = true;
 					const activeInstance = views.some(
 						(entry) => entry.instance === current.activeInstance,
 					)
@@ -1671,8 +1745,12 @@ function LayoutShellLoadedContent({
 						: (views[views.length - 1]?.instance ?? null);
 					return { views, activeInstance };
 				});
-				for (const review of removedReviews.values()) {
-					resolveDiffReviewTelemetry(review, "abandoned");
+				if (
+					removed &&
+					removedReview &&
+					!diffResolvedReviewIdsRef.current.has(removedReview.reviewId)
+				) {
+					resolveDiffReviewTelemetry(removedReview, "abandoned");
 				}
 			}
 		},
@@ -2169,6 +2247,7 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
 			rejectExternalWriteReview: handleRejectExternalWriteReview,
+			registerExternalWriteReview,
 			workspace,
 			lix,
 		}),
@@ -2185,6 +2264,7 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			workspace,
 			lix,
+			registerExternalWriteReview,
 		],
 	);
 
@@ -2347,7 +2427,6 @@ function LayoutShellLoadedContent({
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
 		>
-			<ExternalWriteDetector onExternalWrites={handleExternalFileWrites} />
 			<div
 				className="relative flex flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				style={{
