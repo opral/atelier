@@ -254,6 +254,7 @@ export type DesktopTelemetryApi = {
 				token: string;
 				host: string;
 				distinctId: string;
+				environment: "dev" | "production";
 				sessionRecordingEnabled: boolean;
 		  }
 	>;
