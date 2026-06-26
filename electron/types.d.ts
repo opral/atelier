@@ -121,6 +121,7 @@ export type DesktopTerminalApi = {
 
 export type DesktopAgentTurnEvent = {
 	id: string;
+	instanceId?: string;
 	agent: "claude" | "codex";
 	phase: "turn-start" | "turn-stop";
 	hookEventName?: string;
@@ -131,7 +132,9 @@ export type DesktopAgentTurnEvent = {
 };
 
 export type DesktopAgentHooksApi = {
-	onTurnEvent(listener: (event: DesktopAgentTurnEvent) => void): () => void;
+	onTurnEvent(
+		listener: (event: DesktopAgentTurnEvent) => void | Promise<void>,
+	): () => void;
 };
 
 export type DesktopWorkspace =

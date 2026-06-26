@@ -114,6 +114,7 @@ type NewFileDraftHandlerRegistration = {
 
 type AgentHookTurnEvent = {
 	readonly id: string;
+	readonly instanceId?: string;
 	readonly agent: "claude" | "codex";
 	readonly phase: "turn-start" | "turn-stop";
 	readonly hookEventName?: string;
@@ -538,6 +539,7 @@ function isAgentHookTurnEvent(value: unknown): value is AgentHookTurnEvent {
 
 function agentTurnKey(event: AgentHookTurnEvent): string {
 	return [
+		event.instanceId ?? "unknown-instance",
 		event.agent,
 		event.sessionId ?? event.cwd ?? "unknown-session",
 		event.turnId ?? "current-turn",
@@ -912,7 +914,7 @@ function LayoutShellLoadedContent({
 	}, []);
 
 	const handleAgentHookTurnEvent = useCallback(
-		(event: AgentHookTurnEvent) => {
+		async (event: AgentHookTurnEvent) => {
 			const key = agentTurnKey(event);
 			if (event.phase === "turn-start") {
 				const beforeCommitIdPromise = waitForActiveCommitToSettle(lix).catch(
@@ -929,10 +931,11 @@ function LayoutShellLoadedContent({
 					event,
 					beforeCommitIdPromise,
 				});
+				await beforeCommitIdPromise;
 				return;
 			}
 
-			void (async () => {
+			try {
 				const activeTurn = activeAgentTurnsRef.current.get(key);
 				const beforeCommitId = activeTurn
 					? await activeTurn.beforeCommitIdPromise
@@ -947,6 +950,7 @@ function LayoutShellLoadedContent({
 				) {
 					const range: AgentTurnCommitRange = {
 						id: [
+							event.instanceId ?? "unknown-instance",
 							event.agent,
 							event.sessionId ?? "unknown-session",
 							event.turnId ?? String(event.createdAt),
@@ -966,14 +970,15 @@ function LayoutShellLoadedContent({
 					await deleteAgentTurnCommitRange(lix);
 				}
 				notifyActiveAgentTurnWaiters();
-			})().catch((error: unknown) => {
+			} catch (error: unknown) {
 				activeAgentTurnsRef.current.delete(key);
 				notifyActiveAgentTurnWaiters();
 				console.warn(
 					"[agent-turn-review] failed to capture stop commit",
 					error,
 				);
-			});
+				throw error;
+			}
 		},
 		[lix, notifyActiveAgentTurnWaiters],
 	);
@@ -982,8 +987,9 @@ function LayoutShellLoadedContent({
 		const unsubscribe = window.flashtypeDesktop?.agentHooks?.onTurnEvent(
 			(event: unknown) => {
 				if (isAgentHookTurnEvent(event)) {
-					handleAgentHookTurnEvent(event);
+					return handleAgentHookTurnEvent(event);
 				}
+				return undefined;
 			},
 		);
 		return () => {

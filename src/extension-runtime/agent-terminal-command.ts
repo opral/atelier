@@ -3,7 +3,7 @@ import type { ExtensionLaunchArgs, ExtensionState } from "./types";
 export const TERMINAL_INITIAL_COMMAND_LAUNCH_ARG = "initialCommand";
 
 const FLASHTYPE_AGENT_ICONS = new Set(["claude", "codex"]);
-const AGENT_HOOK_TIMEOUT_SECONDS = 5;
+const AGENT_HOOK_TIMEOUT_SECONDS = 10;
 
 export type FlashtypeAgentIcon = "claude" | "codex";
 

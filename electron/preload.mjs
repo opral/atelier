@@ -109,7 +109,26 @@ const terminal = {
 
 const agentHooks = {
 	onTurnEvent: (listener) => {
-		const wrapped = (_event, payload) => listener(payload);
+		const wrapped = (_event, payload) => {
+			if (!payload?.deliveryId) {
+				void Promise.resolve(listener(payload));
+				return;
+			}
+			void Promise.resolve(listener(payload.event))
+				.then(() =>
+					ipcRenderer.invoke("agentHooks:completeTurnEvent", {
+						deliveryId: payload.deliveryId,
+						status: "ok",
+					}),
+				)
+				.catch((error) => {
+					console.warn("[agent-hooks] renderer listener failed", error);
+					return ipcRenderer.invoke("agentHooks:completeTurnEvent", {
+						deliveryId: payload.deliveryId,
+						status: "error",
+					});
+				});
+		};
 		ipcRenderer.on("agentHooks:turnEvent", wrapped);
 		return () => {
 			ipcRenderer.off("agentHooks:turnEvent", wrapped);
