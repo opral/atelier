@@ -1,11 +1,15 @@
 import { dialog, ipcMain } from "electron";
+import os from "node:os";
 import path from "node:path";
 import { watch } from "node:fs";
 import {
+	cp,
 	lstat,
+	mkdtemp,
 	opendir,
 	readFile,
 	realpath,
+	rename,
 	rm,
 	stat,
 } from "node:fs/promises";
@@ -149,6 +153,7 @@ export async function setWorkspaceFromTarget(target, window, options = {}) {
 		}
 		await options.beforeChange?.(nextWorkspace, window);
 		disposeEphemeralFileTreeState(state);
+		await disposeExternalLixState(state);
 		state.workspace = nextWorkspace;
 		state.pendingOpenFilePaths = target.pendingOpenFilePaths;
 		applyWindowChrome(window);
@@ -345,17 +350,15 @@ export async function getWorkspaceFsBackendOptions(window) {
 		throw new Error("No workspace is open. Open a folder before using lix.");
 	}
 	if (workspace.ephemeral === true) {
+		const lixDir = await ensureExternalLixDir(window);
 		const includePaths = Array.isArray(workspace.includePaths)
 			? workspace.includePaths
 			: [];
-		const options = {
+		return {
 			path: workspace.path,
-			storage: "memory",
+			lixDir,
+			filter: { includePaths: [...includePaths] },
 		};
-		if (includePaths.length > 0) {
-			options.filter = { includePaths: [...includePaths] };
-		}
-		return options;
 	}
 	return { path: workspace.path };
 }
@@ -375,11 +378,11 @@ export async function setWorkspaceTrackChanges(window, trackChanges) {
 		}
 		if (trackChanges) {
 			disposeEphemeralFileTreeState(state);
-			await ensureWorkspaceLixPathAvailable(workspace.path);
+			await moveExternalLixBackIntoWorkspace(state);
 			state.workspace = createPersistentWorkspace(workspace.path);
 		} else {
 			disposeEphemeralFileTreeState(state);
-			await removeWorkspaceLixStorage(workspace.path);
+			await moveWorkspaceLixToExternalStorage(state);
 			state.workspace = createEphemeralWorkspace(workspace.path);
 		}
 		state.pendingOpenFilePaths = [];
@@ -396,6 +399,7 @@ export async function disposeWorkspaceWindowState(windowOrId) {
 	const state = windowStates.get(windowId);
 	windowStates.delete(windowId);
 	disposeEphemeralFileTreeState(state);
+	await disposeExternalLixState(state);
 }
 
 export async function disposeAllWorkspaceWindowStates() {
@@ -960,6 +964,82 @@ function isWorkspaceSessionEntryLike(value) {
 	);
 }
 
+async function ensureExternalLixDir(window) {
+	const state = getOrCreateWindowState(window);
+	if (state.externalLixDir) {
+		return state.externalLixDir;
+	}
+	await createExternalLixSlot(state);
+	return state.externalLixDir;
+}
+
+async function createExternalLixSlot(state) {
+	if (state.externalLixParent) {
+		await disposeExternalLixState(state);
+	}
+	const externalLixParent = await mkdtemp(
+		path.join(os.tmpdir(), "flashtype-lix-"),
+	);
+	state.externalLixParent = externalLixParent;
+	state.externalLixDir = path.join(externalLixParent, LIX_DIRECTORY_NAME);
+}
+
+async function moveWorkspaceLixToExternalStorage(state) {
+	const workspace = state.workspace;
+	if (!workspace) {
+		throw new Error("No workspace is open.");
+	}
+	await createExternalLixSlot(state);
+	const workspaceLixDir = path.join(workspace.path, LIX_DIRECTORY_NAME);
+	if (await pathExists(workspaceLixDir)) {
+		await movePath(workspaceLixDir, state.externalLixDir);
+	}
+}
+
+async function moveExternalLixBackIntoWorkspace(state) {
+	const workspace = state.workspace;
+	if (!workspace) {
+		throw new Error("No workspace is open.");
+	}
+	const workspaceLixDir = path.join(workspace.path, LIX_DIRECTORY_NAME);
+	const externalLixDir = state.externalLixDir;
+	if (externalLixDir && (await pathExists(externalLixDir))) {
+		if (await pathExists(workspaceLixDir)) {
+			throw new Error(
+				`Cannot turn Track Changes on because ${workspaceLixDir} already exists.`,
+			);
+		}
+		await movePath(externalLixDir, workspaceLixDir);
+	}
+	await disposeExternalLixState(state);
+}
+
+async function disposeExternalLixState(state) {
+	if (!state?.externalLixParent) {
+		return;
+	}
+	const externalLixParent = state.externalLixParent;
+	state.externalLixParent = null;
+	state.externalLixDir = null;
+	await rm(externalLixParent, { force: true, recursive: true }).catch(() => {});
+}
+
+async function movePath(source, target) {
+	try {
+		await rename(source, target);
+		return;
+	} catch (error) {
+		if (error?.code === "ENOENT") {
+			return;
+		}
+		if (error?.code !== "EXDEV") {
+			throw error;
+		}
+	}
+	await cp(source, target, { recursive: true });
+	await rm(source, { force: true, recursive: true });
+}
+
 async function pathExists(filePath) {
 	try {
 		await stat(filePath);
@@ -967,22 +1047,6 @@ async function pathExists(filePath) {
 	} catch {
 		return false;
 	}
-}
-
-async function ensureWorkspaceLixPathAvailable(workspacePath) {
-	const workspaceLixDir = path.join(workspacePath, LIX_DIRECTORY_NAME);
-	if (await pathExists(workspaceLixDir)) {
-		throw new Error(
-			`Cannot turn Track Changes on because ${workspaceLixDir} already exists.`,
-		);
-	}
-}
-
-async function removeWorkspaceLixStorage(workspacePath) {
-	await rm(path.join(workspacePath, LIX_DIRECTORY_NAME), {
-		force: true,
-		recursive: true,
-	});
 }
 
 function createTransientDirectoryWorkspace(filePaths) {
@@ -1203,6 +1267,8 @@ function getOrCreateWindowState(window) {
 	const state = {
 		workspace: null,
 		pendingOpenFilePaths: [],
+		externalLixParent: null,
+		externalLixDir: null,
 		ephemeralFileTreeOwners: new Map(),
 		ephemeralDirectoryWatchers: new Map(),
 		ephemeralWatchedEntries: [],
