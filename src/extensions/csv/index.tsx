@@ -13,7 +13,10 @@ import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
-import { useExternalWriteReview } from "@/shell/external-write-review-history";
+import {
+	useExternalWriteReview,
+	useExternalWriteReviewData,
+} from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { CSV_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
@@ -197,16 +200,27 @@ function CsvReviewOverlay({
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 }) {
-	const diffHtml = useMemo(() => renderCsvReviewDiffHtml(review), [review]);
+	const reviewData = useExternalWriteReviewData(review);
+	const diffHtml = useMemo(
+		() => (reviewData ? renderCsvReviewDiffHtml(reviewData) : null),
+		[reviewData],
+	);
 	const rejectReview = () =>
 		void onReject?.({ fileId, reviewId: review.reviewId, review });
 
 	return (
 		<div className="csv-review-overlay">
-			<div
-				className="ph-mask csv-review-table"
-				dangerouslySetInnerHTML={{ __html: diffHtml }}
-			/>
+			{diffHtml ? (
+				<div
+					className="ph-mask csv-review-table"
+					dangerouslySetInnerHTML={{ __html: diffHtml }}
+				/>
+			) : (
+				<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+					<Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+					<span>Loading review…</span>
+				</div>
+			)}
 			<ExternalWriteReviewControls
 				isActive={isActive}
 				onAccept={() =>

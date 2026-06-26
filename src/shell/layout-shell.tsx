@@ -91,10 +91,10 @@ import {
 import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
 import {
 	clearAgentTurnCommitRangeFile,
-	deleteAgentTurnCommitRange,
-	writeAgentTurnCommitRange,
+	appendAgentTurnCommitRange,
 	type AgentTurnCommitRange,
 } from "./agent-turn-review-range";
+import { getFileDataAtCommit } from "./external-write-review-history";
 
 type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
@@ -892,9 +892,7 @@ function LayoutShellLoadedContent({
 						startedAt: activeTurn?.event.createdAt ?? event.createdAt,
 						completedAt: Date.now(),
 					};
-					await writeAgentTurnCommitRange(lix, range);
-				} else {
-					await deleteAgentTurnCommitRange(lix);
+					await appendAgentTurnCommitRange(lix, range);
 				}
 			} catch (error: unknown) {
 				activeAgentTurnsRef.current.delete(key);
@@ -1548,15 +1546,19 @@ function LayoutShellLoadedContent({
 
 	const isExternalWriteReviewCurrent = useCallback(
 		async (review: ExternalWriteReview): Promise<boolean> => {
-			const current = await qb(lix)
-				.selectFrom("lix_file")
-				.select(["data"])
-				.where("id", "=", review.fileId)
-				.limit(1)
-				.executeTakeFirst();
+			const [current, afterData] = await Promise.all([
+				qb(lix)
+					.selectFrom("lix_file")
+					.select(["data"])
+					.where("id", "=", review.fileId)
+					.limit(1)
+					.executeTakeFirst(),
+				getFileDataAtCommit(lix, review.fileId, review.afterCommitId),
+			]);
 			return (
 				!!current &&
-				fileBytesEqual(decodeFileDataToBytes(current.data), review.afterData)
+				!!afterData &&
+				fileBytesEqual(decodeFileDataToBytes(current.data), afterData)
 			);
 		},
 		[lix],
@@ -1570,17 +1572,13 @@ function LayoutShellLoadedContent({
 		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) {
-				await clearAgentTurnCommitRangeFile(lix, {
-					fileId: args.fileId,
-					reviewId: args.reviewId,
-				});
 				return;
 			}
 			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
 			await clearAgentTurnCommitRangeFile(lix, {
 				fileId: review.fileId,
 				reviewId: review.reviewId,
-				agentTurnRangeId: review.agentTurnRangeId,
+				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
 			const outcome = (await isExternalWriteReviewCurrent(review))
 				? "accepted"
@@ -1603,10 +1601,6 @@ function LayoutShellLoadedContent({
 		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) {
-				await clearAgentTurnCommitRangeFile(lix, {
-					fileId: args.fileId,
-					reviewId: args.reviewId,
-				});
 				return;
 			}
 			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
@@ -1614,7 +1608,21 @@ function LayoutShellLoadedContent({
 				await clearAgentTurnCommitRangeFile(lix, {
 					fileId: review.fileId,
 					reviewId: review.reviewId,
-					agentTurnRangeId: review.agentTurnRangeId,
+					agentTurnRangeIds: review.agentTurnRangeIds,
+				});
+				resolveDiffReviewTelemetry(review, "abandoned");
+				return;
+			}
+			const beforeData = await getFileDataAtCommit(
+				lix,
+				review.fileId,
+				review.beforeCommitId,
+			);
+			if (!beforeData) {
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					agentTurnRangeIds: review.agentTurnRangeIds,
 				});
 				resolveDiffReviewTelemetry(review, "abandoned");
 				return;
@@ -1622,13 +1630,13 @@ function LayoutShellLoadedContent({
 			const { fileId } = args;
 			const result = await qb(lix)
 				.updateTable("lix_file")
-				.set({ data: review.beforeData })
+				.set({ data: beforeData })
 				.where("id", "=", fileId)
 				.executeTakeFirst();
 			await clearAgentTurnCommitRangeFile(lix, {
 				fileId: review.fileId,
 				reviewId: review.reviewId,
-				agentTurnRangeId: review.agentTurnRangeId,
+				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
 			if (Number(result.numUpdatedRows) > 0) {
 				resolveDiffReviewTelemetry(review, "rejected");

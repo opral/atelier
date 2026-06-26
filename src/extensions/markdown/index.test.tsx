@@ -7,7 +7,7 @@ import { MarkdownView } from "./index";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { qb } from "@/lib/lix-kysely";
-import { writeAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
+import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -394,7 +394,7 @@ describe("MarkdownView", () => {
 		const afterCommitId = await activeCommitId(lix);
 
 		await act(async () => {
-			await writeAgentTurnCommitRange(lix, {
+			await appendAgentTurnCommitRange(lix, {
 				id: "range-review-startup",
 				agent: "codex",
 				beforeCommitId,

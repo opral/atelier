@@ -18,9 +18,20 @@ export type AgentTurnCommitRange = {
 	readonly completedAt: number;
 };
 
-export async function readAgentTurnCommitRange(
+export type AgentTurnCommitRangeStore = {
+	readonly ranges: readonly AgentTurnCommitRange[];
+};
+
+export function agentTurnReviewId(
+	fileId: string,
+	rangeIds: readonly string[],
+): string {
+	return `${fileId}:${rangeIds.join(",")}`;
+}
+
+export async function readAgentTurnCommitRanges(
 	lix: Lix,
-): Promise<AgentTurnCommitRange | null> {
+): Promise<readonly AgentTurnCommitRange[]> {
 	const row = await qb(lix)
 		.selectFrom("lix_key_value_by_branch")
 		.select("value")
@@ -28,14 +39,25 @@ export async function readAgentTurnCommitRange(
 		.where("lixcol_branch_id", "=", GLOBAL_BRANCH_ID)
 		.limit(1)
 		.executeTakeFirst();
-	return isAgentTurnCommitRange(row?.value) ? row.value : null;
+	return isAgentTurnCommitRangeStore(row?.value) ? row.value.ranges : [];
 }
 
-export async function writeAgentTurnCommitRange(
+export async function appendAgentTurnCommitRange(
 	lix: Lix,
 	range: AgentTurnCommitRange,
 ): Promise<void> {
-	const value = serializeAgentTurnCommitRange(range);
+	const ranges = await readAgentTurnCommitRanges(lix);
+	await writeAgentTurnCommitRanges(lix, [
+		...ranges.filter((existing) => existing.id !== range.id),
+		range,
+	]);
+}
+
+async function writeAgentTurnCommitRanges(
+	lix: Lix,
+	ranges: readonly AgentTurnCommitRange[],
+): Promise<void> {
+	const value = serializeAgentTurnCommitRangeStore({ ranges });
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
@@ -51,43 +73,54 @@ export async function writeAgentTurnCommitRange(
 		.execute();
 }
 
-export async function deleteAgentTurnCommitRange(lix: Lix): Promise<void> {
-	await qb(lix)
-		.deleteFrom("lix_key_value_by_branch")
-		.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-		.where("lixcol_branch_id", "=", GLOBAL_BRANCH_ID)
-		.execute();
-}
-
 export async function clearAgentTurnCommitRangeFile(
 	lix: Lix,
 	args: {
 		readonly fileId: string;
 		readonly reviewId?: string;
-		readonly agentTurnRangeId?: string;
+		readonly agentTurnRangeIds?: readonly string[];
 	},
 ): Promise<boolean> {
-	const range = await readAgentTurnCommitRange(lix);
-	if (!range) return false;
-	if (args.agentTurnRangeId && range.id !== args.agentTurnRangeId) {
+	const ranges = await readAgentTurnCommitRanges(lix);
+	const rangeIds = args.agentTurnRangeIds ?? [];
+	if (rangeIds.length === 0) {
 		return false;
 	}
-	if (args.reviewId && args.reviewId !== `${args.fileId}:${range.id}`) {
+	if (
+		args.reviewId &&
+		args.reviewId !== agentTurnReviewId(args.fileId, rangeIds)
+	) {
 		return false;
 	}
-	if (range.clearedFileIds?.includes(args.fileId)) {
-		return false;
-	}
-	await writeAgentTurnCommitRange(lix, {
-		...range,
-		clearedFileIds: [...(range.clearedFileIds ?? []), args.fileId],
+	const rangeIdSet = new Set(rangeIds);
+	let changed = false;
+	const nextRanges = ranges.map((range) => {
+		if (!rangeIdSet.has(range.id)) return range;
+		if (range.clearedFileIds?.includes(args.fileId)) return range;
+		changed = true;
+		return {
+			...range,
+			clearedFileIds: [...(range.clearedFileIds ?? []), args.fileId],
+		};
 	});
+	if (!changed) return false;
+	await writeAgentTurnCommitRanges(lix, nextRanges);
 	return true;
 }
 
-export function isAgentTurnCommitRange(
+export function isAgentTurnCommitRangeStore(
 	value: unknown,
-): value is AgentTurnCommitRange {
+): value is AgentTurnCommitRangeStore {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+	const store = value as Partial<AgentTurnCommitRangeStore>;
+	return (
+		Array.isArray(store.ranges) && store.ranges.every(isAgentTurnCommitRange)
+	);
+}
+
+function isAgentTurnCommitRange(value: unknown): value is AgentTurnCommitRange {
 	if (!value || typeof value !== "object") {
 		return false;
 	}
@@ -113,6 +146,14 @@ export function isAgentTurnCommitRange(
 					(fileId) => typeof fileId === "string" && fileId.length > 0,
 				)))
 	);
+}
+
+function serializeAgentTurnCommitRangeStore(
+	store: AgentTurnCommitRangeStore,
+): AgentTurnCommitRangeStore {
+	return {
+		ranges: store.ranges.map(serializeAgentTurnCommitRange),
+	};
 }
 
 function serializeAgentTurnCommitRange(

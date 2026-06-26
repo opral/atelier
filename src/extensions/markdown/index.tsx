@@ -23,7 +23,10 @@ import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
-import { useExternalWriteReview } from "@/shell/external-write-review-history";
+import {
+	useExternalWriteReview,
+	useExternalWriteReviewData,
+} from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
 
 type MarkdownViewProps = {
@@ -127,17 +130,19 @@ function MarkdownViewLoaded({
 		fileId: fileRow?.id,
 		path: fileRow?.path,
 	});
+	const externalWriteReviewData =
+		useExternalWriteReviewData(externalWriteReview);
 	useEffect(() => {
 		if (!externalWriteReview) return;
 		return registerExternalWriteReview?.(externalWriteReview);
 	}, [externalWriteReview, registerExternalWriteReview]);
 	const reviewDiff = useMemo<MarkdownReviewDiff | null>(() => {
-		if (!externalWriteReview) return null;
+		if (!externalWriteReviewData) return null;
 		return {
-			beforeMarkdown: decodeFileDataToText(externalWriteReview.beforeData),
-			afterMarkdown: decodeFileDataToText(externalWriteReview.afterData),
+			beforeMarkdown: decodeFileDataToText(externalWriteReviewData.beforeData),
+			afterMarkdown: decodeFileDataToText(externalWriteReviewData.afterData),
 		};
-	}, [externalWriteReview]);
+	}, [externalWriteReviewData]);
 
 	let content: ReactNode;
 
@@ -186,6 +191,8 @@ function MarkdownViewLoaded({
 									onReject={onRejectReviewDiff}
 								/>
 							</Suspense>
+						) : externalWriteReview ? (
+							<MarkdownReviewOverlayFallback />
 						) : null}
 					</div>
 					{reviewDiff ? null : <SlashCommandMenu />}

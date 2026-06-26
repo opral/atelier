@@ -7,12 +7,13 @@ import { qb } from "@/lib/lix-kysely";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
 	getExternalWriteReview,
+	getExternalWriteReviewData,
 	useExternalWriteReview,
 } from "./external-write-review-history";
 import {
+	appendAgentTurnCommitRange,
 	clearAgentTurnCommitRangeFile,
-	readAgentTurnCommitRange,
-	writeAgentTurnCommitRange,
+	readAgentTurnCommitRanges,
 	type AgentTurnCommitRange,
 } from "./agent-turn-review-range";
 
@@ -47,7 +48,7 @@ describe("getExternalWriteReview", () => {
 			await writeFile(lix, "agent-file", "/docs/agent.md", "turn after");
 			const afterCommitId = await activeCommitId(lix);
 
-			await writeAgentTurnCommitRange(
+			await appendAgentTurnCommitRange(
 				lix,
 				agentRange({ id: "range-1", beforeCommitId, afterCommitId }),
 			);
@@ -58,11 +59,10 @@ describe("getExternalWriteReview", () => {
 				"/docs/agent.md",
 			);
 
-			expect(review?.agentTurnRangeId).toBe("range-1");
+			expect(review?.agentTurnRangeIds).toEqual(["range-1"]);
 			expect(review?.beforeCommitId).toBe(beforeCommitId);
 			expect(review?.afterCommitId).toBe(afterCommitId);
-			expect(decode(review?.beforeData)).toBe("turn before");
-			expect(decode(review?.afterData)).toBe("turn after");
+			await expectReviewData(lix, review, "turn before", "turn after");
 		} finally {
 			await lix.close();
 		}
@@ -92,7 +92,7 @@ describe("getExternalWriteReview", () => {
 			);
 			const afterCommitId = await activeCommitId(lix);
 
-			await writeAgentTurnCommitRange(
+			await appendAgentTurnCommitRange(
 				lix,
 				agentRange({ id: "range-inherited", beforeCommitId, afterCommitId }),
 			);
@@ -103,9 +103,13 @@ describe("getExternalWriteReview", () => {
 				"/docs/inherited.md",
 			);
 
-			expect(review?.agentTurnRangeId).toBe("range-inherited");
-			expect(decode(review?.beforeData)).toBe("inherited before");
-			expect(decode(review?.afterData)).toBe("inherited after");
+			expect(review?.agentTurnRangeIds).toEqual(["range-inherited"]);
+			await expectReviewData(
+				lix,
+				review,
+				"inherited before",
+				"inherited after",
+			);
 		} finally {
 			await lix.close();
 		}
@@ -118,7 +122,7 @@ describe("getExternalWriteReview", () => {
 			const commitId = await activeCommitId(lix);
 			await writeFile(lix, "noop-file", "/docs/noop.md", "after");
 
-			await writeAgentTurnCommitRange(
+			await appendAgentTurnCommitRange(
 				lix,
 				agentRange({
 					id: "range-noop",
@@ -138,7 +142,7 @@ describe("getExternalWriteReview", () => {
 	test("omits undefined optional ids when persisting agent turn ranges", async () => {
 		const lix = await openLix();
 		try {
-			await writeAgentTurnCommitRange(lix, {
+			await appendAgentTurnCommitRange(lix, {
 				id: "range-without-optional-ids",
 				agent: "codex",
 				beforeCommitId: "commit-before",
@@ -149,7 +153,7 @@ describe("getExternalWriteReview", () => {
 				completedAt: 2,
 			});
 
-			const range = await readAgentTurnCommitRange(lix);
+			const [range] = await readAgentTurnCommitRanges(lix);
 
 			expect(range?.id).toBe("range-without-optional-ids");
 			expect(Object.hasOwn(range ?? {}, "sessionId")).toBe(false);
@@ -162,7 +166,12 @@ describe("getExternalWriteReview", () => {
 	test("persists cleared files in the agent turn range", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(lix, "cleared-file", "/docs/cleared.md", "cleared before");
+			await writeFile(
+				lix,
+				"cleared-file",
+				"/docs/cleared.md",
+				"cleared before",
+			);
 			await writeFile(lix, "open-file", "/docs/open.md", "open before");
 			const beforeCommitId = await activeCommitId(lix);
 			await writeFile(lix, "cleared-file", "/docs/cleared.md", "cleared after");
@@ -174,14 +183,14 @@ describe("getExternalWriteReview", () => {
 				afterCommitId,
 			});
 
-			await writeAgentTurnCommitRange(lix, range);
+			await appendAgentTurnCommitRange(lix, range);
 			await clearAgentTurnCommitRangeFile(lix, {
 				fileId: "cleared-file",
 				reviewId: "cleared-file:range-with-cleared-file",
-				agentTurnRangeId: range.id,
+				agentTurnRangeIds: [range.id],
 			});
 
-			const persistedRange = await readAgentTurnCommitRange(lix);
+			const [persistedRange] = await readAgentTurnCommitRanges(lix);
 			expect(persistedRange?.clearedFileIds).toEqual(["cleared-file"]);
 			await expect(
 				getExternalWriteReview(lix, "cleared-file", "/docs/cleared.md"),
@@ -191,9 +200,118 @@ describe("getExternalWriteReview", () => {
 				"open-file",
 				"/docs/open.md",
 			);
-			expect(openReview?.agentTurnRangeId).toBe("range-with-cleared-file");
-			expect(decode(openReview?.beforeData)).toBe("open before");
-			expect(decode(openReview?.afterData)).toBe("open after");
+			expect(openReview?.agentTurnRangeIds).toEqual([
+				"range-with-cleared-file",
+			]);
+			await expectReviewData(lix, openReview, "open before", "open after");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("combines unresolved ranges for the same file into one review", async () => {
+		const lix = await openLix();
+		try {
+			await writeFile(lix, "multi-file", "/docs/multi.md", "turn 1 before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, "multi-file", "/docs/multi.md", "turn 1 after");
+			const middleCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-multi-1",
+					beforeCommitId,
+					afterCommitId: middleCommitId,
+				}),
+			);
+			await writeFile(lix, "multi-file", "/docs/multi.md", "turn 2 after");
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-multi-2",
+					beforeCommitId: middleCommitId,
+					afterCommitId,
+				}),
+			);
+
+			const review = await getExternalWriteReview(
+				lix,
+				"multi-file",
+				"/docs/multi.md",
+			);
+
+			expect(review?.reviewId).toBe("multi-file:range-multi-1,range-multi-2");
+			expect(review?.agentTurnRangeIds).toEqual([
+				"range-multi-1",
+				"range-multi-2",
+			]);
+			expect(review?.beforeCommitId).toBe(beforeCommitId);
+			expect(review?.afterCommitId).toBe(afterCommitId);
+			await expectReviewData(lix, review, "turn 1 before", "turn 2 after");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("clears a combined file review across all contributing ranges", async () => {
+		const lix = await openLix();
+		try {
+			await writeFile(lix, "multi-clear-file", "/docs/multi-clear.md", "a0");
+			await writeFile(lix, "other-clear-file", "/docs/other-clear.md", "b0");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, "multi-clear-file", "/docs/multi-clear.md", "a1");
+			await writeFile(lix, "other-clear-file", "/docs/other-clear.md", "b1");
+			const middleCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-clear-1",
+					beforeCommitId,
+					afterCommitId: middleCommitId,
+				}),
+			);
+			await writeFile(lix, "multi-clear-file", "/docs/multi-clear.md", "a2");
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-clear-2",
+					beforeCommitId: middleCommitId,
+					afterCommitId,
+				}),
+			);
+			const review = await getExternalWriteReview(
+				lix,
+				"multi-clear-file",
+				"/docs/multi-clear.md",
+			);
+			expect(review?.agentTurnRangeIds).toEqual([
+				"range-clear-1",
+				"range-clear-2",
+			]);
+
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: "multi-clear-file",
+				reviewId: review?.reviewId,
+				agentTurnRangeIds: review?.agentTurnRangeIds,
+			});
+
+			const ranges = await readAgentTurnCommitRanges(lix);
+			expect(ranges.map((range) => range.clearedFileIds)).toEqual([
+				["multi-clear-file"],
+				["multi-clear-file"],
+			]);
+			await expect(
+				getExternalWriteReview(lix, "multi-clear-file", "/docs/multi-clear.md"),
+			).resolves.toBeNull();
+			const otherReview = await getExternalWriteReview(
+				lix,
+				"other-clear-file",
+				"/docs/other-clear.md",
+			);
+			expect(otherReview?.agentTurnRangeIds).toEqual(["range-clear-1"]);
+			await expectReviewData(lix, otherReview, "b0", "b1");
 		} finally {
 			await lix.close();
 		}
@@ -233,7 +351,7 @@ describe("getExternalWriteReview", () => {
 			});
 
 			await act(async () => {
-				await writeAgentTurnCommitRange(
+				await appendAgentTurnCommitRange(
 					lix,
 					agentRange({
 						id: "range-live-hook",
@@ -245,9 +363,9 @@ describe("getExternalWriteReview", () => {
 
 			await waitFor(() => {
 				const review = reviews.at(-1);
-				expect(review?.agentTurnRangeId).toBe("range-live-hook");
-				expect(decode(review?.beforeData)).toBe("live before");
-				expect(decode(review?.afterData)).toBe("live after");
+				expect(review?.agentTurnRangeIds).toEqual(["range-live-hook"]);
+				expect(review?.beforeCommitId).toBe(beforeCommitId);
+				expect(review?.afterCommitId).toBe(afterCommitId);
 			});
 		} finally {
 			await act(async () => {
@@ -277,7 +395,7 @@ describe("getExternalWriteReview", () => {
 			const afterCommitId = await activeCommitId(lix);
 			const reviews: Array<ExternalWriteReview | null> = [];
 
-			await writeAgentTurnCommitRange(
+			await appendAgentTurnCommitRange(
 				lix,
 				agentRange({
 					id: "range-live-clear-hook",
@@ -306,14 +424,14 @@ describe("getExternalWriteReview", () => {
 
 			await waitFor(() => {
 				const review = reviews.at(-1);
-				expect(review?.agentTurnRangeId).toBe("range-live-clear-hook");
+				expect(review?.agentTurnRangeIds).toEqual(["range-live-clear-hook"]);
 			});
 
 			await act(async () => {
 				await clearAgentTurnCommitRangeFile(lix, {
 					fileId: "live-clear-file",
 					reviewId: "live-clear-file:range-live-clear-hook",
-					agentTurnRangeId: "range-live-clear-hook",
+					agentTurnRangeIds: ["range-live-clear-hook"],
 				});
 			});
 
@@ -385,6 +503,22 @@ function agentRange(
 		completedAt: 2,
 		...overrides,
 	};
+}
+
+async function expectReviewData(
+	lix: Lix,
+	review: ExternalWriteReview | null | undefined,
+	beforeText: string,
+	afterText: string,
+): Promise<void> {
+	expect(review).not.toBeNull();
+	expect(review).not.toBeUndefined();
+	const data = await getExternalWriteReviewData(
+		lix,
+		review as ExternalWriteReview,
+	);
+	expect(decode(data?.beforeData)).toBe(beforeText);
+	expect(decode(data?.afterData)).toBe(afterText);
 }
 
 function decode(value: Uint8Array | undefined): string {
