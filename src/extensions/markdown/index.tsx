@@ -22,10 +22,8 @@ import { SlashCommandMenu } from "./components/slash-command-menu";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
-import {
-	EXTERNAL_WRITE_REVIEW_LAUNCH_ARG,
-	type ExternalWriteReview,
-} from "@/extension-runtime/external-write-review";
+import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
+import { useExternalWriteReview } from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
 
 type MarkdownViewProps = {
@@ -36,14 +34,19 @@ type MarkdownViewProps = {
 	readonly focusOnLoad?: boolean;
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly syncActiveFile?: boolean;
-	readonly externalWriteReview?: ExternalWriteReview | null;
+	readonly isExternalWriteReviewResolved?: (reviewId: string) => boolean;
+	readonly registerExternalWriteReview?: (
+		review: ExternalWriteReview,
+	) => () => void;
 	readonly onAcceptReviewDiff?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => void;
 	readonly onRejectReviewDiff?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 };
 
@@ -70,7 +73,8 @@ export function MarkdownView({
 	focusOnLoad = false,
 	defaultBlock,
 	syncActiveFile = true,
-	externalWriteReview = null,
+	isExternalWriteReviewResolved,
+	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 }: MarkdownViewProps) {
@@ -84,7 +88,8 @@ export function MarkdownView({
 				focusOnLoad={focusOnLoad}
 				defaultBlock={defaultBlock}
 				syncActiveFile={syncActiveFile}
-				externalWriteReview={externalWriteReview}
+				isExternalWriteReviewResolved={isExternalWriteReviewResolved}
+				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
 			/>
@@ -115,12 +120,22 @@ function MarkdownViewLoaded({
 	focusOnLoad = false,
 	defaultBlock,
 	syncActiveFile = true,
-	externalWriteReview = null,
+	isExternalWriteReviewResolved,
+	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 }: Omit<MarkdownViewProps, "fileId"> & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
+	const externalWriteReview = useExternalWriteReview({
+		fileId: fileRow?.id,
+		path: fileRow?.path,
+		isReviewResolved: isExternalWriteReviewResolved,
+	});
+	useEffect(() => {
+		if (!externalWriteReview) return;
+		return registerExternalWriteReview?.(externalWriteReview);
+	}, [externalWriteReview, registerExternalWriteReview]);
 	const reviewDiff = useMemo<MarkdownReviewDiff | null>(() => {
 		if (!externalWriteReview) return null;
 		return {
@@ -166,6 +181,7 @@ function MarkdownViewLoaded({
 							<Suspense fallback={<MarkdownReviewOverlayFallback />}>
 								<MarkdownReviewOverlay
 									fileId={fileRow.id}
+									review={externalWriteReview}
 									reviewDiff={reviewDiff}
 									reviewId={externalWriteReview.reviewId}
 									beforeCommitId={externalWriteReview.beforeCommitId}
@@ -245,6 +261,7 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 
 function MarkdownReviewOverlay({
 	fileId,
+	review,
 	reviewDiff,
 	reviewId,
 	beforeCommitId,
@@ -254,6 +271,7 @@ function MarkdownReviewOverlay({
 	onReject,
 }: {
 	readonly fileId: string;
+	readonly review: ExternalWriteReview;
 	readonly reviewDiff: MarkdownReviewDiff;
 	readonly reviewId: string;
 	readonly beforeCommitId: string;
@@ -262,10 +280,12 @@ function MarkdownReviewOverlay({
 	readonly onAccept?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => void;
 	readonly onReject?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 }) {
 	const beforeBlocks = useMarkdownBlocksAtCommit(fileId, beforeCommitId);
@@ -290,7 +310,7 @@ function MarkdownReviewOverlay({
 	const diffHtml = useMemo(() => {
 		return renderMarkdownReviewDiffHtml(enrichedReviewDiff);
 	}, [enrichedReviewDiff]);
-	const rejectReview = () => void onReject?.({ fileId, reviewId });
+	const rejectReview = () => void onReject?.({ fileId, reviewId, review });
 
 	return (
 		<div className="markdown-review-overlay">
@@ -304,7 +324,7 @@ function MarkdownReviewOverlay({
 			</div>
 			<ExternalWriteReviewControls
 				isActive={isActive}
-				onAccept={() => onAccept?.({ fileId, reviewId })}
+				onAccept={() => onAccept?.({ fileId, reviewId, review })}
 				onReject={rejectReview}
 			/>
 		</div>
@@ -553,11 +573,8 @@ export const extension = createReactExtensionDefinition({
 					instance.state?.defaultBlock === "heading1" ? "heading1" : undefined
 				}
 				syncActiveFile={false}
-				externalWriteReview={
-					(instance.launchArgs?.[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG] as
-						| ExternalWriteReview
-						| undefined) ?? null
-				}
+				isExternalWriteReviewResolved={context.isExternalWriteReviewResolved}
+				registerExternalWriteReview={context.registerExternalWriteReview}
 				onAcceptReviewDiff={context.acceptExternalWriteReview}
 				onRejectReviewDiff={context.rejectExternalWriteReview}
 			/>

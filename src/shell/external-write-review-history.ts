@@ -1,9 +1,13 @@
+import { useEffect, useMemo, useState } from "react";
 import type { Lix } from "@/lib/lix-types";
+import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { hashFileData } from "@/extension-runtime/external-write-tracking";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
+	AGENT_TURN_COMMIT_RANGE_KEY,
+	isAgentTurnCommitRange,
 	readAgentTurnCommitRange,
 	type AgentTurnCommitRange,
 } from "./agent-turn-review-range";
@@ -20,6 +24,55 @@ export async function getExternalWriteReview(
 	const range = await readAgentTurnCommitRange(lix);
 	if (!range || range.beforeCommitId === range.afterCommitId) return null;
 	return getAgentTurnExternalWriteReview(lix, fileId, path, range);
+}
+
+export function useExternalWriteReview(args: {
+	readonly fileId?: string | null;
+	readonly path?: string | null;
+	readonly isReviewResolved?: (reviewId: string) => boolean;
+}): ExternalWriteReview | null {
+	const lix = useLix();
+	const rangeRow = useQueryTakeFirst<{ value: unknown }>((lix) =>
+		qb(lix)
+			.selectFrom("lix_key_value_by_branch")
+			.select("value")
+			.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
+			.where("lixcol_branch_id", "=", "global")
+			.limit(1),
+	);
+	const range = useMemo(
+		() => (isAgentTurnCommitRange(rangeRow?.value) ? rangeRow.value : null),
+		[rangeRow?.value],
+	);
+	const [review, setReview] = useState<ExternalWriteReview | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		setReview(null);
+		if (!args.fileId || !args.path || !range) {
+			return;
+		}
+		void getAgentTurnExternalWriteReview(lix, args.fileId, args.path, range)
+			.then((nextReview) => {
+				if (!cancelled) {
+					setReview(nextReview);
+				}
+			})
+			.catch((error: unknown) => {
+				if (!cancelled) {
+					console.warn("[agent-turn-review] failed to load review", error);
+					setReview(null);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [lix, args.fileId, args.path, range]);
+
+	if (!review || args.isReviewResolved?.(review.reviewId)) {
+		return null;
+	}
+	return review;
 }
 
 async function getAgentTurnExternalWriteReview(

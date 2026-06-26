@@ -50,21 +50,6 @@ export async function writeAgentTurnCommitRange(
 		.execute();
 }
 
-export async function clearAgentTurnCommitRange(
-	lix: Lix,
-	rangeId: string,
-): Promise<void> {
-	const current = await readAgentTurnCommitRange(lix);
-	if (current?.id !== rangeId) {
-		return;
-	}
-	await qb(lix)
-		.deleteFrom("lix_key_value_by_branch")
-		.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-		.where("lixcol_branch_id", "=", GLOBAL_BRANCH_ID)
-		.execute();
-}
-
 export async function deleteAgentTurnCommitRange(lix: Lix): Promise<void> {
 	await qb(lix)
 		.deleteFrom("lix_key_value_by_branch")

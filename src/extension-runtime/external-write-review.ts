@@ -8,5 +8,3 @@ export type ExternalWriteReview = {
 	readonly afterCommitId: string;
 	readonly agentTurnRangeId: string;
 };
-
-export const EXTERNAL_WRITE_REVIEW_LAUNCH_ARG = "externalWriteReview";

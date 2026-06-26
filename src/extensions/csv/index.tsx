@@ -12,10 +12,8 @@ import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
-import {
-	EXTERNAL_WRITE_REVIEW_LAUNCH_ARG,
-	type ExternalWriteReview,
-} from "@/extension-runtime/external-write-review";
+import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
+import { useExternalWriteReview } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { CSV_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
@@ -24,16 +22,21 @@ import "./style.css";
 
 type CsvViewProps = {
 	readonly fileId: string;
-	readonly externalWriteReview?: ExternalWriteReview | null;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
+	readonly isExternalWriteReviewResolved?: (reviewId: string) => boolean;
+	readonly registerExternalWriteReview?: (
+		review: ExternalWriteReview,
+	) => () => void;
 	readonly onAcceptReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => void;
 	readonly onRejectReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 };
 
@@ -65,9 +68,10 @@ type CsvFileRow = {
 
 export function CsvView({
 	fileId,
-	externalWriteReview = null,
 	isActiveView = true,
 	isPanelFocused = true,
+	isExternalWriteReviewResolved,
+	registerExternalWriteReview,
 	onAcceptReview,
 	onRejectReview,
 }: CsvViewProps) {
@@ -75,9 +79,10 @@ export function CsvView({
 		<Suspense fallback={<CsvLoadingSpinner />}>
 			<CsvViewContent
 				fileId={fileId}
-				externalWriteReview={externalWriteReview}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
+				isExternalWriteReviewResolved={isExternalWriteReviewResolved}
+				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
 			/>
@@ -95,20 +100,27 @@ function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 			.where("id", "=", fileId)
 			.limit(1),
 	);
-	return (
-		<CsvViewData
-			fileRow={fileRow}
-			{...props}
-		/>
-	);
+	return <CsvViewData fileRow={fileRow} {...props} />;
 }
 
 function CsvViewData({
 	fileRow,
+	isExternalWriteReviewResolved,
+	registerExternalWriteReview,
 	...props
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
+	const externalWriteReview = useExternalWriteReview({
+		fileId: fileRow?.id,
+		path: fileRow?.path,
+		isReviewResolved: isExternalWriteReviewResolved,
+	});
+	useEffect(() => {
+		if (!externalWriteReview) return;
+		return registerExternalWriteReview?.(externalWriteReview);
+	}, [externalWriteReview, registerExternalWriteReview]);
+
 	if (!fileRow) {
 		return (
 			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
@@ -117,18 +129,25 @@ function CsvViewData({
 		);
 	}
 
-	return <CsvViewLoaded fileRow={fileRow} {...props} />;
+	return (
+		<CsvViewLoaded
+			fileRow={fileRow}
+			externalWriteReview={externalWriteReview}
+			{...props}
+		/>
+	);
 }
 
 function CsvViewLoaded({
 	fileRow,
-	externalWriteReview = null,
+	externalWriteReview,
 	isActiveView = true,
 	isPanelFocused = true,
 	onAcceptReview,
 	onRejectReview,
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow: CsvFileRow;
+	readonly externalWriteReview: ExternalWriteReview | null;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
 		return parseCsv(decodeFileDataToText(fileRow.data));
@@ -175,15 +194,17 @@ function CsvReviewOverlay({
 	readonly onAccept?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => void;
 	readonly onReject?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 }) {
 	const diffHtml = useMemo(() => renderCsvReviewDiffHtml(review), [review]);
 	const rejectReview = () =>
-		void onReject?.({ fileId, reviewId: review.reviewId });
+		void onReject?.({ fileId, reviewId: review.reviewId, review });
 
 	return (
 		<div className="csv-review-overlay">
@@ -193,7 +214,9 @@ function CsvReviewOverlay({
 			/>
 			<ExternalWriteReviewControls
 				isActive={isActive}
-				onAccept={() => onAccept?.({ fileId, reviewId: review.reviewId })}
+				onAccept={() =>
+					onAccept?.({ fileId, reviewId: review.reviewId, review })
+				}
 				onReject={rejectReview}
 			/>
 		</div>
@@ -392,13 +415,10 @@ export const extension = createReactExtensionDefinition({
 		<LixProvider lix={context.lix}>
 			<CsvView
 				fileId={instance.state?.fileId as string}
-				externalWriteReview={
-					(instance.launchArgs?.[EXTERNAL_WRITE_REVIEW_LAUNCH_ARG] as
-						| ExternalWriteReview
-						| undefined) ?? null
-				}
 				onAcceptReview={context.acceptExternalWriteReview}
 				onRejectReview={context.rejectExternalWriteReview}
+				isExternalWriteReviewResolved={context.isExternalWriteReviewResolved}
+				registerExternalWriteReview={context.registerExternalWriteReview}
 				isActiveView={context.isActiveView ?? false}
 				isPanelFocused={context.isPanelFocused ?? false}
 			/>

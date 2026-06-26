@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { Lix } from "@/lib/lix-types";
+import type { ExternalWriteReview } from "./external-write-review";
 
 /**
  * Union of registry keys for views available in the layout.
@@ -144,11 +145,17 @@ export interface ExtensionContext {
 	readonly acceptExternalWriteReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => void;
 	readonly rejectExternalWriteReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
+	readonly isExternalWriteReviewResolved?: (reviewId: string) => boolean;
+	readonly registerExternalWriteReview?: (
+		review: ExternalWriteReview,
+	) => () => void;
 	readonly closeExtension?: (args: {
 		readonly panel?: PanelSide;
 		readonly instance?: string;

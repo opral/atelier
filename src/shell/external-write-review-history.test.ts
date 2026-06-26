@@ -3,7 +3,6 @@ import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { qb } from "@/lib/lix-kysely";
 import { getExternalWriteReview } from "./external-write-review-history";
 import {
-	clearAgentTurnCommitRange,
 	readAgentTurnCommitRange,
 	writeAgentTurnCommitRange,
 	type AgentTurnCommitRange,
@@ -80,28 +79,6 @@ describe("getExternalWriteReview", () => {
 			await expect(
 				getExternalWriteReview(lix, "noop-file", "/docs/noop.md"),
 			).resolves.toBeNull();
-		} finally {
-			await lix.close();
-		}
-	});
-
-	test("clears only the matching persisted agent turn range", async () => {
-		const lix = await openLix();
-		try {
-			await writeFile(lix, "clear-file", "/docs/clear.md", "before");
-			const beforeCommitId = await activeCommitId(lix);
-			await writeFile(lix, "clear-file", "/docs/clear.md", "after");
-			const afterCommitId = await activeCommitId(lix);
-			await writeAgentTurnCommitRange(
-				lix,
-				agentRange({ id: "range-to-clear", beforeCommitId, afterCommitId }),
-			);
-
-			await clearAgentTurnCommitRange(lix, "other-range");
-			expect((await readAgentTurnCommitRange(lix))?.id).toBe("range-to-clear");
-
-			await clearAgentTurnCommitRange(lix, "range-to-clear");
-			await expect(readAgentTurnCommitRange(lix)).resolves.toBeNull();
 		} finally {
 			await lix.close();
 		}
