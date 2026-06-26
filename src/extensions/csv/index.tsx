@@ -24,7 +24,6 @@ type CsvViewProps = {
 	readonly fileId: string;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
-	readonly isExternalWriteReviewResolved?: (reviewId: string) => boolean;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -32,7 +31,7 @@ type CsvViewProps = {
 		readonly fileId: string;
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
-	}) => void;
+	}) => Promise<void>;
 	readonly onRejectReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
@@ -70,7 +69,6 @@ export function CsvView({
 	fileId,
 	isActiveView = true,
 	isPanelFocused = true,
-	isExternalWriteReviewResolved,
 	registerExternalWriteReview,
 	onAcceptReview,
 	onRejectReview,
@@ -81,7 +79,6 @@ export function CsvView({
 				fileId={fileId}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
-				isExternalWriteReviewResolved={isExternalWriteReviewResolved}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
@@ -105,7 +102,6 @@ function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 
 function CsvViewData({
 	fileRow,
-	isExternalWriteReviewResolved,
 	registerExternalWriteReview,
 	...props
 }: Omit<CsvViewProps, "fileId"> & {
@@ -114,7 +110,6 @@ function CsvViewData({
 	const externalWriteReview = useExternalWriteReview({
 		fileId: fileRow?.id,
 		path: fileRow?.path,
-		isReviewResolved: isExternalWriteReviewResolved,
 	});
 	useEffect(() => {
 		if (!externalWriteReview) return;
@@ -195,7 +190,7 @@ function CsvReviewOverlay({
 		readonly fileId: string;
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
-	}) => void;
+	}) => Promise<void>;
 	readonly onReject?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
@@ -215,7 +210,7 @@ function CsvReviewOverlay({
 			<ExternalWriteReviewControls
 				isActive={isActive}
 				onAccept={() =>
-					onAccept?.({ fileId, reviewId: review.reviewId, review })
+					void onAccept?.({ fileId, reviewId: review.reviewId, review })
 				}
 				onReject={rejectReview}
 			/>
@@ -417,7 +412,6 @@ export const extension = createReactExtensionDefinition({
 				fileId={instance.state?.fileId as string}
 				onAcceptReview={context.acceptExternalWriteReview}
 				onRejectReview={context.rejectExternalWriteReview}
-				isExternalWriteReviewResolved={context.isExternalWriteReviewResolved}
 				registerExternalWriteReview={context.registerExternalWriteReview}
 				isActiveView={context.isActiveView ?? false}
 				isPanelFocused={context.isPanelFocused ?? false}

@@ -10,6 +10,7 @@ import {
 	useExternalWriteReview,
 } from "./external-write-review-history";
 import {
+	clearAgentTurnCommitRangeFile,
 	readAgentTurnCommitRange,
 	writeAgentTurnCommitRange,
 	type AgentTurnCommitRange,
@@ -158,6 +159,46 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
+	test("persists cleared files in the agent turn range", async () => {
+		const lix = await openLix();
+		try {
+			await writeFile(lix, "cleared-file", "/docs/cleared.md", "cleared before");
+			await writeFile(lix, "open-file", "/docs/open.md", "open before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, "cleared-file", "/docs/cleared.md", "cleared after");
+			await writeFile(lix, "open-file", "/docs/open.md", "open after");
+			const afterCommitId = await activeCommitId(lix);
+			const range = agentRange({
+				id: "range-with-cleared-file",
+				beforeCommitId,
+				afterCommitId,
+			});
+
+			await writeAgentTurnCommitRange(lix, range);
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: "cleared-file",
+				reviewId: "cleared-file:range-with-cleared-file",
+				agentTurnRangeId: range.id,
+			});
+
+			const persistedRange = await readAgentTurnCommitRange(lix);
+			expect(persistedRange?.clearedFileIds).toEqual(["cleared-file"]);
+			await expect(
+				getExternalWriteReview(lix, "cleared-file", "/docs/cleared.md"),
+			).resolves.toBeNull();
+			const openReview = await getExternalWriteReview(
+				lix,
+				"open-file",
+				"/docs/open.md",
+			);
+			expect(openReview?.agentTurnRangeId).toBe("range-with-cleared-file");
+			expect(decode(openReview?.beforeData)).toBe("open before");
+			expect(decode(openReview?.afterData)).toBe("open after");
+		} finally {
+			await lix.close();
+		}
+	});
+
 	test("updates an already mounted review hook when the persisted range appears", async () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
@@ -207,6 +248,77 @@ describe("getExternalWriteReview", () => {
 				expect(review?.agentTurnRangeId).toBe("range-live-hook");
 				expect(decode(review?.beforeData)).toBe("live before");
 				expect(decode(review?.afterData)).toBe("live after");
+			});
+		} finally {
+			await act(async () => {
+				utils?.unmount();
+			});
+			await lix.close();
+		}
+	});
+
+	test("updates an already mounted review hook when the file is cleared", async () => {
+		const lix = await openLix();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await writeFile(
+				lix,
+				"live-clear-file",
+				"/docs/live-clear.md",
+				"clear before",
+			);
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(
+				lix,
+				"live-clear-file",
+				"/docs/live-clear.md",
+				"clear after",
+			);
+			const afterCommitId = await activeCommitId(lix);
+			const reviews: Array<ExternalWriteReview | null> = [];
+
+			await writeAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-live-clear-hook",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			);
+
+			await act(async () => {
+				utils = render(
+					createElement(
+						LixProvider as ComponentType<{ lix: Lix }>,
+						{ lix },
+						createElement(
+							Suspense,
+							{ fallback: null },
+							createElement(ExternalWriteReviewProbe, {
+								fileId: "live-clear-file",
+								path: "/docs/live-clear.md",
+								onReview: (review) => reviews.push(review),
+							}),
+						),
+					),
+				);
+			});
+
+			await waitFor(() => {
+				const review = reviews.at(-1);
+				expect(review?.agentTurnRangeId).toBe("range-live-clear-hook");
+			});
+
+			await act(async () => {
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: "live-clear-file",
+					reviewId: "live-clear-file:range-live-clear-hook",
+					agentTurnRangeId: "range-live-clear-hook",
+				});
+			});
+
+			await waitFor(() => {
+				expect(reviews.at(-1)).toBeNull();
 			});
 		} finally {
 			await act(async () => {

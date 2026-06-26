@@ -34,7 +34,6 @@ type MarkdownViewProps = {
 	readonly focusOnLoad?: boolean;
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly syncActiveFile?: boolean;
-	readonly isExternalWriteReviewResolved?: (reviewId: string) => boolean;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -42,7 +41,7 @@ type MarkdownViewProps = {
 		readonly fileId: string;
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
-	}) => void;
+	}) => Promise<void>;
 	readonly onRejectReviewDiff?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
@@ -73,7 +72,6 @@ export function MarkdownView({
 	focusOnLoad = false,
 	defaultBlock,
 	syncActiveFile = true,
-	isExternalWriteReviewResolved,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -88,7 +86,6 @@ export function MarkdownView({
 				focusOnLoad={focusOnLoad}
 				defaultBlock={defaultBlock}
 				syncActiveFile={syncActiveFile}
-				isExternalWriteReviewResolved={isExternalWriteReviewResolved}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
@@ -120,7 +117,6 @@ function MarkdownViewLoaded({
 	focusOnLoad = false,
 	defaultBlock,
 	syncActiveFile = true,
-	isExternalWriteReviewResolved,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -130,7 +126,6 @@ function MarkdownViewLoaded({
 	const externalWriteReview = useExternalWriteReview({
 		fileId: fileRow?.id,
 		path: fileRow?.path,
-		isReviewResolved: isExternalWriteReviewResolved,
 	});
 	useEffect(() => {
 		if (!externalWriteReview) return;
@@ -281,7 +276,7 @@ function MarkdownReviewOverlay({
 		readonly fileId: string;
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
-	}) => void;
+	}) => Promise<void>;
 	readonly onReject?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
@@ -324,7 +319,7 @@ function MarkdownReviewOverlay({
 			</div>
 			<ExternalWriteReviewControls
 				isActive={isActive}
-				onAccept={() => onAccept?.({ fileId, reviewId, review })}
+				onAccept={() => void onAccept?.({ fileId, reviewId, review })}
 				onReject={rejectReview}
 			/>
 		</div>
@@ -573,7 +568,6 @@ export const extension = createReactExtensionDefinition({
 					instance.state?.defaultBlock === "heading1" ? "heading1" : undefined
 				}
 				syncActiveFile={false}
-				isExternalWriteReviewResolved={context.isExternalWriteReviewResolved}
 				registerExternalWriteReview={context.registerExternalWriteReview}
 				onAcceptReviewDiff={context.acceptExternalWriteReview}
 				onRejectReviewDiff={context.rejectExternalWriteReview}

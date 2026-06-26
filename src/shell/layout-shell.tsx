@@ -90,6 +90,7 @@ import {
 } from "./panel-utils";
 import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
 import {
+	clearAgentTurnCommitRangeFile,
 	deleteAgentTurnCommitRange,
 	writeAgentTurnCommitRange,
 	type AgentTurnCommitRange,
@@ -695,8 +696,6 @@ function LayoutShellLoadedContent({
 		() => initialLayoutSizes.right <= MIN_VISIBLE_PANEL_SIZE,
 	);
 	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
-	const [resolvedExternalWriteReviewIds, setResolvedExternalWriteReviewIds] =
-		useState<ReadonlySet<string>>(() => new Set());
 	const animationTimeoutRef = useRef<number | null>(null);
 	const newFileDraftHandlersRef = useRef(
 		new Map<string, NewFileDraftHandlerRegistration>(),
@@ -766,33 +765,15 @@ function LayoutShellLoadedContent({
 		};
 	}, [leftPanel, centralPanel, rightPanel]);
 
-	const markExternalWriteReviewResolved = useCallback((reviewId: string) => {
-		if (diffResolvedReviewIdsRef.current.has(reviewId)) {
-			return false;
-		}
-		diffResolvedReviewIdsRef.current.add(reviewId);
-		setResolvedExternalWriteReviewIds((current) => {
-			if (current.has(reviewId)) return current;
-			const next = new Set(current);
-			next.add(reviewId);
-			return next;
-		});
-		return true;
-	}, []);
-
 	const claimDiffReviewResolution = useCallback(
 		(review: ExternalWriteReview) => {
-			if (!markExternalWriteReviewResolved(review.reviewId)) {
+			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) {
 				return false;
 			}
+			diffResolvedReviewIdsRef.current.add(review.reviewId);
 			return true;
 		},
-		[markExternalWriteReviewResolved],
-	);
-
-	const isExternalWriteReviewResolved = useCallback(
-		(reviewId: string) => resolvedExternalWriteReviewIds.has(reviewId),
-		[resolvedExternalWriteReviewIds],
+		[],
 	);
 
 	const registerExternalWriteReview = useCallback(
@@ -1582,28 +1563,34 @@ function LayoutShellLoadedContent({
 	);
 
 	const handleAcceptExternalWriteReview = useCallback(
-		(args: {
+		async (args: {
 			readonly fileId: string;
 			readonly reviewId: string;
 			readonly review?: ExternalWriteReview;
 		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) {
-				markExternalWriteReviewResolved(args.reviewId);
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: args.fileId,
+					reviewId: args.reviewId,
+				});
 				return;
 			}
 			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
-			void (async () => {
-				const outcome = (await isExternalWriteReviewCurrent(review))
-					? "accepted"
-					: "abandoned";
-				resolveDiffReviewTelemetry(review, outcome);
-			})();
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				agentTurnRangeId: review.agentTurnRangeId,
+			});
+			const outcome = (await isExternalWriteReviewCurrent(review))
+				? "accepted"
+				: "abandoned";
+			resolveDiffReviewTelemetry(review, outcome);
 		},
 		[
+			lix,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
-			markExternalWriteReviewResolved,
 			resolveDiffReviewTelemetry,
 		],
 	);
@@ -1616,11 +1603,19 @@ function LayoutShellLoadedContent({
 		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) {
-				markExternalWriteReviewResolved(args.reviewId);
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: args.fileId,
+					reviewId: args.reviewId,
+				});
 				return;
 			}
 			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
 			if (!(await isExternalWriteReviewCurrent(review))) {
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					agentTurnRangeId: review.agentTurnRangeId,
+				});
 				resolveDiffReviewTelemetry(review, "abandoned");
 				return;
 			}
@@ -1630,6 +1625,11 @@ function LayoutShellLoadedContent({
 				.set({ data: review.beforeData })
 				.where("id", "=", fileId)
 				.executeTakeFirst();
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				agentTurnRangeId: review.agentTurnRangeId,
+			});
 			if (Number(result.numUpdatedRows) > 0) {
 				resolveDiffReviewTelemetry(review, "rejected");
 			} else {
@@ -1640,7 +1640,6 @@ function LayoutShellLoadedContent({
 			lix,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
-			markExternalWriteReviewResolved,
 			resolveDiffReviewTelemetry,
 		],
 	);
@@ -2240,7 +2239,6 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			acceptExternalWriteReview: handleAcceptExternalWriteReview,
 			rejectExternalWriteReview: handleRejectExternalWriteReview,
-			isExternalWriteReviewResolved,
 			registerExternalWriteReview,
 			workspace,
 			lix,
@@ -2258,7 +2256,6 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			workspace,
 			lix,
-			isExternalWriteReviewResolved,
 			registerExternalWriteReview,
 		],
 	);

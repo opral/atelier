@@ -13,6 +13,7 @@ export type AgentTurnCommitRange = {
 	readonly afterCommitId: string;
 	readonly sessionId?: string;
 	readonly turnId?: string;
+	readonly clearedFileIds?: readonly string[];
 	readonly startedAt: number;
 	readonly completedAt: number;
 };
@@ -58,6 +59,32 @@ export async function deleteAgentTurnCommitRange(lix: Lix): Promise<void> {
 		.execute();
 }
 
+export async function clearAgentTurnCommitRangeFile(
+	lix: Lix,
+	args: {
+		readonly fileId: string;
+		readonly reviewId?: string;
+		readonly agentTurnRangeId?: string;
+	},
+): Promise<boolean> {
+	const range = await readAgentTurnCommitRange(lix);
+	if (!range) return false;
+	if (args.agentTurnRangeId && range.id !== args.agentTurnRangeId) {
+		return false;
+	}
+	if (args.reviewId && args.reviewId !== `${args.fileId}:${range.id}`) {
+		return false;
+	}
+	if (range.clearedFileIds?.includes(args.fileId)) {
+		return false;
+	}
+	await writeAgentTurnCommitRange(lix, {
+		...range,
+		clearedFileIds: [...(range.clearedFileIds ?? []), args.fileId],
+	});
+	return true;
+}
+
 export function isAgentTurnCommitRange(
 	value: unknown,
 ): value is AgentTurnCommitRange {
@@ -65,6 +92,7 @@ export function isAgentTurnCommitRange(
 		return false;
 	}
 	const range = value as Partial<AgentTurnCommitRange>;
+	const clearedFileIds = range.clearedFileIds;
 	return (
 		(range.agent === "claude" || range.agent === "codex") &&
 		typeof range.id === "string" &&
@@ -78,7 +106,12 @@ export function isAgentTurnCommitRange(
 		typeof range.completedAt === "number" &&
 		Number.isFinite(range.completedAt) &&
 		(range.sessionId === undefined || typeof range.sessionId === "string") &&
-		(range.turnId === undefined || typeof range.turnId === "string")
+		(range.turnId === undefined || typeof range.turnId === "string") &&
+		(clearedFileIds === undefined ||
+			(Array.isArray(clearedFileIds) &&
+				clearedFileIds.every(
+					(fileId) => typeof fileId === "string" && fileId.length > 0,
+				)))
 	);
 }
 
@@ -92,6 +125,9 @@ function serializeAgentTurnCommitRange(
 		afterCommitId: range.afterCommitId,
 		...(range.sessionId !== undefined ? { sessionId: range.sessionId } : {}),
 		...(range.turnId !== undefined ? { turnId: range.turnId } : {}),
+		...(range.clearedFileIds?.length
+			? { clearedFileIds: [...new Set(range.clearedFileIds)] }
+			: {}),
 		startedAt: range.startedAt,
 		completedAt: range.completedAt,
 	};

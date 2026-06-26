@@ -28,7 +28,6 @@ export async function getExternalWriteReview(
 export function useExternalWriteReview(args: {
 	readonly fileId?: string | null;
 	readonly path?: string | null;
-	readonly isReviewResolved?: (reviewId: string) => boolean;
 }): ExternalWriteReview | null {
 	const lix = useLix();
 	const rangeRow = useQueryTakeFirst<{ value: unknown }>((lix) =>
@@ -68,7 +67,7 @@ export function useExternalWriteReview(args: {
 		};
 	}, [lix, args.fileId, args.path, range]);
 
-	if (!review || args.isReviewResolved?.(review.reviewId)) {
+	if (!review) {
 		return null;
 	}
 	return review;
@@ -80,6 +79,7 @@ async function getAgentTurnExternalWriteReview(
 	path: string,
 	range: AgentTurnCommitRange,
 ): Promise<ExternalWriteReview | null> {
+	if (range.clearedFileIds?.includes(fileId)) return null;
 	const [before, after] = await Promise.all([
 		getFileHistorySnapshotAtCommit(lix, fileId, range.beforeCommitId),
 		getFileHistorySnapshotAtCommit(lix, fileId, range.afterCommitId),

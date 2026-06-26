@@ -146,13 +146,12 @@ export interface ExtensionContext {
 		readonly fileId: string;
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
-	}) => void;
+	}) => Promise<void>;
 	readonly rejectExternalWriteReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
-	readonly isExternalWriteReviewResolved?: (reviewId: string) => boolean;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
