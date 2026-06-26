@@ -45,6 +45,19 @@ describe("resolveMarkdownImageSrc", () => {
 		).toBe(`${pathToFileURL(expectedPath).href}?raw#preview`);
 	});
 
+	test("resolves leading-slash non-http image paths relative to the workspace root", () => {
+		const workspacePath = path.join("/Users/alec", "project");
+		const expectedPath = path.join(workspacePath, "images", "logo.png");
+
+		expect(
+			resolveMarkdownImageSrc({
+				src: "/assets/../images/logo.png?raw#preview",
+				sourceFilePath: "/docs/guides/readme.md",
+				workspacePath,
+			}),
+		).toBe(`${pathToFileURL(expectedPath).href}?raw#preview`);
+	});
+
 	test("uses a transparent gif when the normalized image path leaves the workspace", () => {
 		expect(
 			resolveMarkdownImageSrc({

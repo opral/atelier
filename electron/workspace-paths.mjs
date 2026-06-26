@@ -89,7 +89,13 @@ export function resolveMarkdownImageSrc(payload) {
 		return TRANSPARENT_GIF_DATA_URL;
 	}
 
-	const imageUrl = parseUrl(src, pathToFileURL(sourceLocalFilePath));
+	const workspaceRootRelative = path.posix.isAbsolute(src);
+	const imageUrl = workspaceRootRelative
+		? parseUrl(
+				path.posix.relative("/", src),
+				workspaceRootFileUrl(workspacePath),
+			)
+		: parseUrl(src, pathToFileURL(sourceLocalFilePath));
 	if (!imageUrl || imageUrl.protocol !== "file:") {
 		return TRANSPARENT_GIF_DATA_URL;
 	}
@@ -150,6 +156,10 @@ function parseUrl(value, base) {
 	} catch {
 		return null;
 	}
+}
+
+function workspaceRootFileUrl(workspacePath) {
+	return pathToFileURL(path.join(path.resolve(workspacePath), path.sep));
 }
 
 function isValidRelativePathSegments(segments) {
