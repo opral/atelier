@@ -1,5 +1,12 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { normalizeAgentHookEvent } from "./agent-hooks.mjs";
+import {
+	agentHookScriptSource,
+	normalizeAgentHookEvent,
+} from "./agent-hooks.mjs";
 
 describe("normalizeAgentHookEvent", () => {
 	test("normalizes valid hook events", () => {
@@ -87,3 +94,84 @@ describe("normalizeAgentHookEvent", () => {
 		expect(normalized?.sessionId).toBeUndefined();
 	});
 });
+
+describe("agentHookScriptSource", () => {
+	test("writes hook events through a temporary file and atomic rename", async () => {
+		const source = agentHookScriptSource();
+		expect(source).toContain("writeFileAtomically(path.join");
+		expect(source).toContain("await rename(tempPath, file);");
+
+		const rootDir = await mkdtemp(path.join(tmpdir(), "flashtype-agent-hook-"));
+		try {
+			const inboxDir = path.join(rootDir, "events");
+			const scriptPath = path.join(rootDir, "hook.mjs");
+			await writeFile(scriptPath, source, { mode: 0o700 });
+
+			await runHookScript({
+				scriptPath,
+				args: ["codex", "turn-stop"],
+				env: {
+					FLASHTYPE_AGENT_HOOK_INBOX: inboxDir,
+					FLASHTYPE_AGENT_HOOK_TOKEN: "secret",
+				},
+				stdin: JSON.stringify({
+					hook_event_name: "Stop",
+					session_id: "session-1",
+					turn_id: "turn-1",
+					cwd: "/workspace",
+				}),
+			});
+
+			const entries = await readdir(inboxDir);
+			const jsonFiles = entries.filter((entry) => entry.endsWith(".json"));
+			expect(jsonFiles).toHaveLength(1);
+			expect(entries.filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
+
+			const raw = JSON.parse(
+				await readFile(path.join(inboxDir, jsonFiles[0]), "utf8"),
+			);
+			expect(normalizeAgentHookEvent(raw, "secret")).toMatchObject({
+				agent: "codex",
+				phase: "turn-stop",
+				hookEventName: "Stop",
+				sessionId: "session-1",
+				turnId: "turn-1",
+				cwd: "/workspace",
+			});
+		} finally {
+			await rm(rootDir, { recursive: true, force: true });
+		}
+	});
+});
+
+function runHookScript({ scriptPath, args, env, stdin }) {
+	return new Promise((resolve, reject) => {
+		const child = spawn(process.execPath, [scriptPath, ...args], {
+			env: { ...process.env, ...env },
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+		let stdout = "";
+		let stderr = "";
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
+		child.stdout.on("data", (chunk) => {
+			stdout += chunk;
+		});
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk;
+		});
+		child.on("error", reject);
+		child.on("close", (code, signal) => {
+			if (code === 0) {
+				resolve();
+				return;
+			}
+			reject(
+				new Error(
+					`hook script exited with code ${String(code)} signal ${String(signal)}\n${stdout}${stderr}`,
+				),
+			);
+		});
+		child.stdin.end(stdin);
+	});
+}

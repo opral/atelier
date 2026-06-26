@@ -176,8 +176,8 @@ function readEnum(value, allowed) {
 	return typeof value === "string" && allowed.includes(value) ? value : null;
 }
 
-function agentHookScriptSource() {
-	return String.raw`import { mkdir, writeFile } from "node:fs/promises";
+export function agentHookScriptSource() {
+	return String.raw`import { mkdir, open, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const [agent, phase] = process.argv.slice(2);
@@ -217,9 +217,41 @@ const payload = {
 await mkdir(inboxDir, { recursive: true });
 const fileName =
 	String(payload.createdAt) + "-" + String(process.pid) + "-" + id + ".json";
-await writeFile(path.join(inboxDir, fileName), JSON.stringify(payload), {
+await writeFileAtomically(path.join(inboxDir, fileName), JSON.stringify(payload), {
 	mode: 0o600,
 });
+
+async function writeFileAtomically(file, data, options = {}) {
+	const mode =
+		options && typeof options === "object" && "mode" in options
+			? options.mode
+			: 0o666;
+	const tempPath =
+		file + "." + String(process.pid) + "." + crypto.randomUUID() + ".tmp";
+	let handle;
+	try {
+		handle = await open(tempPath, "wx", mode);
+		await handle.writeFile(data, writeOptionsFrom(options));
+		await handle.sync();
+		await handle.close();
+		handle = undefined;
+		await rename(tempPath, file);
+	} catch (error) {
+		if (handle) {
+			await handle.close().catch(() => {});
+		}
+		await unlink(tempPath).catch(() => {});
+		throw error;
+	}
+}
+
+function writeOptionsFrom(options) {
+	if (!options || typeof options !== "object") {
+		return options;
+	}
+	const { mode, flag, flush, ...writeOptions } = options;
+	return writeOptions;
+}
 
 function readString(value) {
 	return typeof value === "string" && value.length > 0 ? value : undefined;
