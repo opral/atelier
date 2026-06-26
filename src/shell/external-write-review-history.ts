@@ -3,7 +3,6 @@ import type { Lix } from "@/lib/lix-types";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
-import { hashFileData } from "@/extension-runtime/external-write-tracking";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
 	AGENT_TURN_COMMIT_RANGE_KEY,
@@ -92,7 +91,7 @@ async function getAgentTurnExternalWriteReview(
 	return {
 		fileId,
 		path,
-		reviewId: `${fileId}:${range.id}:${hashFileData(beforeData)}:${hashFileData(afterData)}`,
+		reviewId: `${fileId}:${range.id}`,
 		beforeData,
 		afterData,
 		beforeCommitId: range.beforeCommitId,
