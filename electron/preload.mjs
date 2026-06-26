@@ -37,8 +37,6 @@ const workspace = {
 			ipcRenderer.off("workspace:ephemeralWatchedFileTreeChanged", wrapped);
 		};
 	},
-	readEphemeralFile: (payload) =>
-		ipcRenderer.invoke("workspace:readEphemeralFile", payload),
 	profile: () => ipcRenderer.invoke("workspace:profile"),
 	onNewFile: (listener) => {
 		const wrapped = () => listener();
@@ -83,6 +81,8 @@ const lix = {
 	activeBranchId: () => ipcRenderer.invoke("lix:activeBranchId"),
 	createBranch: (payload) => ipcRenderer.invoke("lix:createBranch", payload),
 	switchBranch: (payload) => ipcRenderer.invoke("lix:switchBranch", payload),
+	importFilesystemPaths: (payload) =>
+		ipcRenderer.invoke("lix:importFilesystemPaths", payload),
 	close: () => ipcRenderer.invoke("lix:close"),
 };
 
