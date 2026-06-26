@@ -1,4 +1,4 @@
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import {
 	resolveWorkspaceTargets,
 	setEphemeralWatchedDirectories,
 	setWorkspaceFromPath,
+	setWorkspaceTrackChanges,
 } from "./workspace.mjs";
 
 vi.mock("electron", () => ({
@@ -150,6 +151,34 @@ describe("workspace resolution", () => {
 				path: directory,
 				storage: "memory",
 				filter: { includePaths: ["marker.md"] },
+			});
+		} finally {
+			await disposeWorkspaceWindowState(window);
+		}
+	});
+
+	test("turning Track Changes off removes workspace Lix storage", async () => {
+		const directory = path.join(
+			tmpdir(),
+			"flashtype-workspace-test",
+			randomUUID(),
+			"workspace",
+		);
+		await mkdir(path.join(directory, ".lix", ".internal"), { recursive: true });
+		await writeFile(path.join(directory, ".lix", ".internal", "db.sqlite"), "");
+		await writeFile(path.join(directory, "marker.md"), "# Marker\n");
+
+		const window = createTestWindow();
+		try {
+			await setWorkspaceFromPath(directory, window);
+			await setWorkspaceTrackChanges(window, false);
+
+			await expect(stat(path.join(directory, ".lix"))).rejects.toMatchObject({
+				code: "ENOENT",
+			});
+			await expect(getWorkspaceFsBackendOptions(window)).resolves.toMatchObject({
+				path: directory,
+				storage: "memory",
 			});
 		} finally {
 			await disposeWorkspaceWindowState(window);
