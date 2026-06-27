@@ -6,6 +6,7 @@ import { createEditor } from "./create-editor";
 import {
 	renderPlainTextFromMarkdown,
 	setEditorSelectionBySimplifiedOffset,
+	simplifiedOffsetPositions,
 	simplifiedSelectionFromEditor,
 	type MarkdownFuzzSnapshot,
 } from "./markdown-editor-fuzz";
@@ -60,9 +61,7 @@ export function MarkdownEditorFuzzHarness() {
 	);
 }
 
-function createMarkdownFuzzApi(
-	editor: Editor,
-): MarkdownEditorFuzzHarnessApi {
+function createMarkdownFuzzApi(editor: Editor): MarkdownEditorFuzzHarnessApi {
 	return {
 		setSelection(anchor: number, head: number) {
 			editor.view.focus();
@@ -70,11 +69,13 @@ function createMarkdownFuzzApi(
 			editor.view.focus();
 		},
 		snapshot() {
+			syncEditorSelectionFromDom(editor);
 			const markdown = buildMarkdownFromEditor(editor);
 			return {
 				markdown,
 				plainText: renderPlainTextFromMarkdown(markdown),
 				editorJson: editor.getJSON(),
+				positionCount: simplifiedOffsetPositions(editor).length,
 				selection: simplifiedSelectionFromEditor(editor),
 			};
 		},
@@ -84,4 +85,8 @@ function createMarkdownFuzzApi(
 			}
 		},
 	};
+}
+
+function syncEditorSelectionFromDom(editor: Editor): void {
+	(editor.view as any).domObserver?.flush?.();
 }

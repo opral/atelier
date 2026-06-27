@@ -10,64 +10,66 @@ import {
 	applyOperationToSimplifiedState,
 	buildOperationFailureMessage,
 	buildPlainTextMismatchMessage,
+	buildSelectionInvariantFailureMessage,
 	createSimplifiedState,
 	expectedPlainText,
 	MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED,
 	MARKDOWN_EDITOR_FUZZ_OPERATION_COUNT,
+	nextSimplifiedArrowSelection,
 	nextOperation,
 	renderPlainTextFromMarkdown,
 	setEditorSelectionBySimplifiedOffset,
+	simplifiedOffsetPositions,
+	simplifiedSelectionFromEditor,
 	validateEditorPositionMap,
+	validateSimplifiedSelectionInvariant,
 	type FuzzOperation,
 	type SimplifiedState,
 } from "./markdown-editor-fuzz";
 
-test(
-	"fuzzes plain-text editor operations through markdown serialization",
-	() => {
-		const seed =
-			process.env.FLASHTYPE_MARKDOWN_FUZZ_SEED ??
-			MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED;
-		const rng = seedrandom(seed);
-		const state = createSimplifiedState();
-		const editor = createEditor({
-			lix: {} as any,
-			initialMarkdown: "",
-			persistState: false,
-		});
-		const rendered = render(<EditorContent editor={editor} />);
+test("fuzzes plain-text editor operations through markdown serialization", () => {
+	const seed =
+		process.env.FLASHTYPE_MARKDOWN_FUZZ_SEED ??
+		MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED;
+	const rng = seedrandom(seed);
+	const state = createSimplifiedState();
+	const editor = createEditor({
+		lix: {} as any,
+		initialMarkdown: "",
+		persistState: false,
+	});
+	const rendered = render(<EditorContent editor={editor} />);
 
-		try {
-			for (
-				let index = 0;
-				index < MARKDOWN_EDITOR_FUZZ_OPERATION_COUNT;
-				index += 1
-			) {
-				const operation = nextOperation(rng, state);
-				try {
-					applyOperationToEditor(editor, state, operation);
-					applyOperationToSimplifiedState(state, operation);
-				} catch (error) {
-					throw new Error(
-						buildOperationFailureMessage({
-							seed,
-							index,
-							operation,
-							state,
-							editorJson: editor.getJSON(),
-							cause: error,
-						}),
-					);
-				}
-				assertMarkdownPlainTextMatches(editor, state, seed, index, operation);
+	try {
+		for (
+			let index = 0;
+			index < MARKDOWN_EDITOR_FUZZ_OPERATION_COUNT;
+			index += 1
+		) {
+			const operation = nextOperation(rng, state);
+			try {
+				applyOperationToEditor(editor, state, operation);
+				applyOperationToSimplifiedState(state, operation);
+			} catch (error) {
+				throw new Error(
+					buildOperationFailureMessage({
+						seed,
+						index,
+						operation,
+						state,
+						editorJson: editor.getJSON(),
+						cause: error,
+					}),
+				);
 			}
-		} finally {
-			rendered.unmount();
-			editor.destroy();
+			assertEditorSelectionMatches(editor, state, seed, index, operation);
+			assertMarkdownPlainTextMatches(editor, state, seed, index, operation);
 		}
-	},
-	120_000,
-);
+	} finally {
+		rendered.unmount();
+		editor.destroy();
+	}
+}, 120_000);
 
 function applyOperationToEditor(
 	editor: Editor,
@@ -97,9 +99,25 @@ function applyOperationToEditor(
 			sendEditorKey(editor, "Enter", { shift: true });
 			return;
 		case "left":
+			if (!trySendEditorKey(editor, "ArrowLeft")) {
+				applyNativeArrowFallbackToEditor(editor, state, "left");
+			}
+			return;
 		case "right":
+			if (!trySendEditorKey(editor, "ArrowRight")) {
+				applyNativeArrowFallbackToEditor(editor, state, "right");
+			}
 			return;
 	}
+}
+
+function applyNativeArrowFallbackToEditor(
+	editor: Editor,
+	state: SimplifiedState,
+	direction: "left" | "right",
+): void {
+	const next = nextSimplifiedArrowSelection(state, direction);
+	setEditorSelectionBySimplifiedOffset(editor, next.anchor, next.head);
 }
 
 function typeEditorText(editor: Editor, value: string): void {
@@ -120,6 +138,15 @@ function sendEditorKey(
 	key: string,
 	options: { shift?: boolean } = {},
 ): void {
+	if (trySendEditorKey(editor, key, options)) return;
+	throw new Error(`Editor did not handle key: ${key}`);
+}
+
+function trySendEditorKey(
+	editor: Editor,
+	key: string,
+	options: { shift?: boolean } = {},
+): boolean {
 	const event = new KeyboardEvent("keydown", {
 		key,
 		shiftKey: options.shift ?? false,
@@ -132,9 +159,38 @@ function sendEditorKey(
 		handled = result || handled;
 		return result;
 	});
-	if (!handled) {
-		throw new Error(`Editor did not handle key: ${key}`);
-	}
+	return handled;
+}
+
+function assertEditorSelectionMatches(
+	editor: Editor,
+	state: SimplifiedState,
+	seed: string,
+	index: number,
+	operation: FuzzOperation,
+): void {
+	const positionCount = simplifiedOffsetPositions(editor).length;
+	const selection = simplifiedSelectionFromEditor(editor);
+	const reason = validateSimplifiedSelectionInvariant({
+		state,
+		positionCount,
+		selection,
+	});
+
+	if (!reason) return;
+
+	throw new Error(
+		buildSelectionInvariantFailureMessage({
+			seed,
+			index,
+			operation,
+			state,
+			reason,
+			positionCount,
+			selection,
+			editorJson: editor.getJSON(),
+		}),
+	);
 }
 
 function assertMarkdownPlainTextMatches(

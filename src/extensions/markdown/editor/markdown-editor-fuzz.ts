@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { parseMarkdown } from "./markdown";
 
 export const MARKDOWN_EDITOR_FUZZ_PARAGRAPH_BREAK = "\x1E";
@@ -25,6 +26,7 @@ export type MarkdownFuzzSnapshot = {
 	markdown: string;
 	plainText: string;
 	editorJson: unknown;
+	positionCount: number;
 	selection: {
 		anchor: number;
 		head: number;
@@ -34,6 +36,7 @@ export type MarkdownFuzzSnapshot = {
 };
 
 type RandomSource = () => number;
+type ArrowDirection = "left" | "right";
 
 export function createSimplifiedState(): SimplifiedState {
 	return { chars: [], anchor: 0, head: 0 };
@@ -78,17 +81,15 @@ export function applyOperationToSimplifiedState(
 			replaceSelection(state, MARKDOWN_EDITOR_FUZZ_HARD_BREAK);
 			return;
 		case "left": {
-			const { from, to } = selectionBounds(state);
-			const next = from === to ? Math.max(0, from - 1) : from;
-			state.anchor = next;
-			state.head = next;
+			const next = nextSimplifiedArrowSelection(state, "left");
+			state.anchor = next.anchor;
+			state.head = next.head;
 			return;
 		}
 		case "right": {
-			const { from, to } = selectionBounds(state);
-			const next = from === to ? Math.min(state.chars.length, to + 1) : to;
-			state.anchor = next;
-			state.head = next;
+			const next = nextSimplifiedArrowSelection(state, "right");
+			state.anchor = next.anchor;
+			state.head = next.head;
 			return;
 		}
 		case "move":
@@ -114,6 +115,23 @@ export function selectionBounds(state: SimplifiedState): {
 		from: Math.min(state.anchor, state.head),
 		to: Math.max(state.anchor, state.head),
 	};
+}
+
+export function nextSimplifiedArrowSelection(
+	state: SimplifiedState,
+	direction: ArrowDirection,
+): { anchor: number; head: number } {
+	const { from, to } = selectionBounds(state);
+	if (from !== to) {
+		const next = direction === "left" ? from : to;
+		return { anchor: next, head: next };
+	}
+
+	const next =
+		direction === "left"
+			? Math.max(0, from - 1)
+			: Math.min(state.chars.length, to + 1);
+	return { anchor: next, head: next };
 }
 
 export function expectedPlainText(state: SimplifiedState): string {
@@ -189,13 +207,11 @@ export function setEditorSelectionBySimplifiedOffset(
 		);
 	}
 
-	const from = Math.min(anchor, head);
-	const to = Math.max(anchor, head);
-	if (from === to) {
-		editor.commands.setTextSelection(from);
-	} else {
-		editor.commands.setTextSelection({ from, to });
-	}
+	editor.view.dispatch(
+		editor.state.tr.setSelection(
+			TextSelection.create(editor.state.doc, anchor, head),
+		),
+	);
 }
 
 export function simplifiedOffsetPositions(editor: Editor): number[] {
@@ -261,6 +277,71 @@ export function validateEditorPositionMap(
 			`doc=${JSON.stringify(editor.getJSON())}`,
 		].join("\n"),
 	);
+}
+
+export function validateSimplifiedSelectionInvariant(args: {
+	state: SimplifiedState;
+	positionCount: number;
+	selection: MarkdownFuzzSnapshot["selection"];
+}): string | null {
+	const expectedPositionCount = args.state.chars.length + 1;
+	if (args.positionCount !== expectedPositionCount) {
+		return [
+			"Editor position map does not match simplified state.",
+			`expectedOffsets=${expectedPositionCount}`,
+			`actualOffsets=${args.positionCount}`,
+		].join("\n");
+	}
+
+	if (!args.selection) {
+		return "Editor selection does not map to a simplified offset.";
+	}
+
+	if (
+		args.selection.anchor !== args.state.anchor ||
+		args.selection.head !== args.state.head
+	) {
+		return [
+			"Editor selection does not match simplified state.",
+			`expectedSelection=${args.state.anchor}:${args.state.head}`,
+			`actualSelection=${args.selection.anchor}:${args.selection.head}`,
+			`rawSelection=${args.selection.rawAnchor}:${args.selection.rawHead}`,
+		].join("\n");
+	}
+
+	return null;
+}
+
+export function buildSelectionInvariantFailureMessage(args: {
+	seed: string;
+	index: number;
+	operation: FuzzOperation;
+	state: SimplifiedState;
+	reason: string;
+	positionCount: number;
+	selection: MarkdownFuzzSnapshot["selection"];
+	editorJson?: unknown;
+}): string {
+	return [
+		"Markdown editor selection fuzz invariant failed.",
+		`seed=${args.seed}`,
+		`operationIndex=${args.index}`,
+		`operation=${JSON.stringify(args.operation)}`,
+		`expectedSelection=${args.state.anchor}:${args.state.head}`,
+		`actualSelection=${
+			args.selection
+				? `${args.selection.anchor}:${args.selection.head}`
+				: "<unmapped>"
+		}`,
+		`positionCount=${args.positionCount}`,
+		`simplified=${JSON.stringify(expectedPlainText(args.state))}`,
+		`reason=${args.reason}`,
+		args.editorJson === undefined
+			? null
+			: `doc=${JSON.stringify(args.editorJson)}`,
+	]
+		.filter((line): line is string => line != null)
+		.join("\n");
 }
 
 export function buildOperationFailureMessage(args: {

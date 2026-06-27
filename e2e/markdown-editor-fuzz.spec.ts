@@ -4,11 +4,13 @@ import {
 	applyOperationToSimplifiedState,
 	buildOperationFailureMessage,
 	buildPlainTextMismatchMessage,
+	buildSelectionInvariantFailureMessage,
 	createSimplifiedState,
 	expectedPlainText,
 	MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED,
 	MARKDOWN_EDITOR_FUZZ_OPERATION_COUNT,
 	nextOperation,
+	validateSimplifiedSelectionInvariant,
 	type FuzzOperation,
 	type MarkdownFuzzSnapshot,
 } from "../src/extensions/markdown/editor/markdown-editor-fuzz";
@@ -42,9 +44,6 @@ test("fuzzes markdown editor plain text in a real browser", async ({
 		try {
 			await applyOperationToPage(page, operation);
 			applyOperationToSimplifiedState(state, operation);
-			if (operation.kind === "left" || operation.kind === "right") {
-				await setPageSelection(page, state.anchor, state.head);
-			}
 		} catch (error) {
 			const snapshot = await safeSnapshot(page);
 			throw new Error(
@@ -60,6 +59,7 @@ test("fuzzes markdown editor plain text in a real browser", async ({
 		}
 
 		const snapshot = await readSnapshot(page);
+		assertSnapshotSelectionMatches(snapshot, state, seed, index, operation);
 		const expected = expectedPlainText(state);
 		if (snapshot.plainText !== expected) {
 			throw new Error(
@@ -77,6 +77,35 @@ test("fuzzes markdown editor plain text in a real browser", async ({
 		}
 	}
 });
+
+function assertSnapshotSelectionMatches(
+	snapshot: MarkdownFuzzSnapshot,
+	state: ReturnType<typeof createSimplifiedState>,
+	seed: string,
+	index: number,
+	operation: FuzzOperation,
+): void {
+	const reason = validateSimplifiedSelectionInvariant({
+		state,
+		positionCount: snapshot.positionCount,
+		selection: snapshot.selection,
+	});
+
+	if (!reason) return;
+
+	throw new Error(
+		buildSelectionInvariantFailureMessage({
+			seed,
+			index,
+			operation,
+			state,
+			reason,
+			positionCount: snapshot.positionCount,
+			selection: snapshot.selection,
+			editorJson: snapshot.editorJson,
+		}),
+	);
+}
 
 async function applyOperationToPage(
 	page: Page,
@@ -125,9 +154,7 @@ async function readSnapshot(page: Page): Promise<MarkdownFuzzSnapshot> {
 	});
 }
 
-async function safeSnapshot(
-	page: Page,
-): Promise<MarkdownFuzzSnapshot | null> {
+async function safeSnapshot(page: Page): Promise<MarkdownFuzzSnapshot | null> {
 	try {
 		return await readSnapshot(page);
 	} catch {
