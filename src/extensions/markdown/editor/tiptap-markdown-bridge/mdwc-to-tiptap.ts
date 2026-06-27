@@ -2,6 +2,8 @@
 
 const SPREAD_META_KEY = "__mdwc_spread";
 export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__flashtype_empty_scaffold";
+export const EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY =
+	"__flashtype_empty_paragraph";
 
 export type PMMark = {
 	type: "bold" | "italic" | "strike" | "code" | "link";
@@ -52,10 +54,21 @@ function astBlockToPM(node: any): PMNode {
 	switch (node.type) {
 		case "paragraph":
 			const paragraphData = buildNodeData((node as any).data);
+			const paragraphChildren = (node as any).children || [];
+			const isEmptyPlaceholder =
+				isEmptyParagraphPlaceholder(paragraphChildren);
 			return {
 				type: "paragraph",
-				attrs: { data: paragraphData },
-				content: flattenInline((node as any).children || [], []),
+				attrs: {
+					data: buildNodeData(paragraphData, {
+						[EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY]: isEmptyPlaceholder
+							? true
+							: undefined,
+					}),
+				},
+				content: isEmptyPlaceholder
+					? []
+					: flattenInline(paragraphChildren, []),
 			};
 		case "heading":
 			const headingData = buildNodeData((node as any).data);
@@ -188,6 +201,16 @@ function astBlockToPM(node: any): PMNode {
 				content: textContent(""),
 			};
 	}
+}
+
+function isEmptyParagraphPlaceholder(children: any[]): boolean {
+	return (
+		children.length === 2 &&
+		children[0]?.type === "html" &&
+		children[0]?.value === "<span>" &&
+		children[1]?.type === "html" &&
+		children[1]?.value === "</span>"
+	);
 }
 
 function buildNodeData(

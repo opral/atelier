@@ -1,5 +1,8 @@
 import { normalizeAst } from "../markdown";
-import { EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY } from "./mdwc-to-tiptap";
+import {
+	EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY,
+	EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY,
+} from "./mdwc-to-tiptap";
 
 const SPREAD_META_KEY = "__mdwc_spread";
 
@@ -21,6 +24,7 @@ function extractNodeData(attrs: PMNode["attrs"]): {
 		delete clone[SPREAD_META_KEY];
 	}
 	delete clone[EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY];
+	delete clone[EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY];
 	return {
 		data: Object.keys(clone).length > 0 ? clone : undefined,
 		spread,
@@ -41,11 +45,17 @@ export type PMNode = {
 
 export function tiptapDocToAst(doc: PMNode): any {
 	const outChildren: any[] = [];
-	for (const n of doc.content || []) {
-		// Drop empty top-level paragraphs used only as editor UI scaffolds.
+	const children = doc.content || [];
+	for (const n of children) {
 		if (n.type === "paragraph") {
 			const inline = pmInlineToMd(n.content || []);
-			if (!inline.length) continue;
+			if (
+				!inline.length &&
+				children.length === 1 &&
+				!isExplicitEmptyParagraph(n)
+			) {
+				continue;
+			}
 		}
 		if (
 			n.type === "heading" &&
@@ -54,19 +64,41 @@ export function tiptapDocToAst(doc: PMNode): any {
 			const inline = pmInlineToMd(n.content || []);
 			if (!inline.length) continue;
 		}
-		outChildren.push(pmBlockToAst(n));
+		const preserveEmptyParagraph =
+			n.type === "paragraph" &&
+			!pmInlineToMd(n.content || []).length &&
+			(children.length > 1 || isExplicitEmptyParagraph(n));
+		outChildren.push(pmBlockToAst(n, { preserveEmptyParagraph }));
 	}
 	return normalizeAst({ type: "root", children: outChildren } as any);
 }
 
-function pmBlockToAst(node: PMNode): any {
+function isExplicitEmptyParagraph(node: PMNode): boolean {
+	return Boolean(node.attrs?.data?.[EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY]);
+}
+
+function emptyParagraphPlaceholderChildren(): any[] {
+	return [
+		{ type: "html", value: "<span>" },
+		{ type: "html", value: "</span>" },
+	];
+}
+
+function pmBlockToAst(
+	node: PMNode,
+	options: { preserveEmptyParagraph?: boolean } = {},
+): any {
 	switch (node.type) {
 		case "paragraph":
 			const paraData = extractNodeData(node.attrs);
+			const inline = pmInlineToMd(node.content || []);
 			return {
 				type: "paragraph",
 				data: paraData.data,
-				children: pmInlineToMd(node.content || []),
+				children:
+					inline.length || !options.preserveEmptyParagraph
+						? inline
+						: emptyParagraphPlaceholderChildren(),
 			};
 		case "heading":
 			const headingData = extractNodeData(node.attrs);
@@ -86,7 +118,7 @@ function pmBlockToAst(node: PMNode): any {
 				type: "list",
 				ordered,
 				data: listData.data,
-				children: (node.content || []).map(pmBlockToAst),
+				children: (node.content || []).map((child) => pmBlockToAst(child)),
 			};
 			if (spread !== undefined) base.spread = spread;
 			if (ordered && node.attrs?.start != null && node.attrs.start !== 1)
@@ -97,7 +129,7 @@ function pmBlockToAst(node: PMNode): any {
 			const listItemData = extractNodeData(node.attrs);
 			const out: any = {
 				type: "listItem",
-				children: (node.content || []).map(pmBlockToAst),
+				children: (node.content || []).map((child) => pmBlockToAst(child)),
 			};
 			if (listItemData.data) out.data = listItemData.data;
 			if (listItemData.spread !== undefined) out.spread = listItemData.spread;
@@ -114,7 +146,7 @@ function pmBlockToAst(node: PMNode): any {
 			return {
 				type: "blockquote",
 				data: blockquoteData.data,
-				children: (node.content || []).map(pmBlockToAst),
+				children: (node.content || []).map((child) => pmBlockToAst(child)),
 			};
 		case "codeBlock": {
 			const text = collectText(node.content || []);
@@ -136,7 +168,7 @@ function pmBlockToAst(node: PMNode): any {
 				type: "table",
 				align,
 				data: tableData.data,
-				children: (node.content || []).map(pmBlockToAst),
+				children: (node.content || []).map((child) => pmBlockToAst(child)),
 			} as any;
 		}
 		case "tableRow": {
@@ -144,7 +176,7 @@ function pmBlockToAst(node: PMNode): any {
 			return {
 				type: "tableRow",
 				data: rowData.data,
-				children: (node.content || []).map(pmBlockToAst),
+				children: (node.content || []).map((child) => pmBlockToAst(child)),
 			};
 		}
 		case "tableCell": {
