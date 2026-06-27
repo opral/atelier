@@ -4,7 +4,11 @@ import {
 	buildAgentLaunchArgsWithActiveFile,
 	buildFlashtypeActiveFilePrompt,
 } from "./agent-launch";
-import { buildTerminalInitialCommand } from "@/extension-runtime/agent-terminal-command";
+import {
+	TERMINAL_PATH_WRAPPER_LAUNCH_ARG,
+	buildTerminalInitialCommand,
+	buildTerminalLaunchConfig,
+} from "@/extension-runtime/agent-terminal-command";
 
 describe("buildFlashtypeActiveFilePrompt", () => {
 	test("uses the Flashtype.com launch-context sentence", () => {
@@ -35,15 +39,23 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 		});
 
 		const command = String(launchArgs?.[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]);
-		expect(command).toContain("claude --dangerously-skip-permissions");
-		expect(command).not.toContain("--setting-sources");
-		expect(command).toContain("--settings");
-		expect(command).toContain("UserPromptSubmit");
-		expect(command).toContain("StopFailure");
-		expect(command).toContain(
+		const pathWrapper = launchArgs?.[TERMINAL_PATH_WRAPPER_LAUNCH_ARG] as {
+			command: string;
+			executableName: string;
+		};
+		expect(command).toBe("claude-flashtype");
+		expect(pathWrapper.executableName).toBe("claude-flashtype");
+		expect(pathWrapper.command).toContain(
+			"claude --dangerously-skip-permissions",
+		);
+		expect(pathWrapper.command).not.toContain("--setting-sources");
+		expect(pathWrapper.command).toContain("--settings");
+		expect(pathWrapper.command).toContain("UserPromptSubmit");
+		expect(pathWrapper.command).toContain("StopFailure");
+		expect(pathWrapper.command).toContain(
 			'ELECTRON_RUN_AS_NODE=1 \\"$FLASHTYPE_AGENT_HOOK_NODE\\" \\"$FLASHTYPE_AGENT_HOOK_SCRIPT\\" claude turn-start',
 		);
-		expect(command).toContain(
+		expect(pathWrapper.command).toContain(
 			"--append-system-prompt 'The user is using Flashtype.com. The active file right now, which may change later, is: ./docs/intro.md'",
 		);
 	});
@@ -58,16 +70,22 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 		});
 
 		const command = String(launchArgs?.[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]);
-		expect(command).toContain(
+		const pathWrapper = launchArgs?.[TERMINAL_PATH_WRAPPER_LAUNCH_ARG] as {
+			command: string;
+			executableName: string;
+		};
+		expect(command).toBe("codex-flashtype");
+		expect(pathWrapper.executableName).toBe("codex-flashtype");
+		expect(pathWrapper.command).toContain(
 			"codex --dangerously-bypass-approvals-and-sandbox",
 		);
-		expect(command).toContain("--dangerously-bypass-hook-trust");
-		expect(command).toContain("hooks.UserPromptSubmit=");
-		expect(command).toContain("hooks.Stop=");
-		expect(command).toContain(
+		expect(pathWrapper.command).toContain("--dangerously-bypass-hook-trust");
+		expect(pathWrapper.command).toContain("hooks.UserPromptSubmit=");
+		expect(pathWrapper.command).toContain("hooks.Stop=");
+		expect(pathWrapper.command).toContain(
 			'ELECTRON_RUN_AS_NODE=1 \\"$FLASHTYPE_AGENT_HOOK_NODE\\" \\"$FLASHTYPE_AGENT_HOOK_SCRIPT\\" codex turn-start',
 		);
-		expect(command).toContain(
+		expect(pathWrapper.command).toContain(
 			"-c 'developer_instructions=\"The user is using Flashtype.com. The active file right now, which may change later, is: ./docs/intro.md\"'",
 		);
 	});
@@ -82,28 +100,47 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 		});
 
 		const command = String(launchArgs?.[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]);
-		expect(command).toContain("hooks.UserPromptSubmit=");
-		expect(command).not.toContain("developer_instructions=");
+		const pathWrapper = launchArgs?.[TERMINAL_PATH_WRAPPER_LAUNCH_ARG] as {
+			command: string;
+		};
+		expect(command).toBe("codex-flashtype");
+		expect(pathWrapper.command).toContain("hooks.UserPromptSubmit=");
+		expect(pathWrapper.command).not.toContain("developer_instructions=");
 	});
 
 	test("injects hooks into restored agent terminal commands", () => {
-		const command = buildTerminalInitialCommand({
+		const launchConfig = buildTerminalLaunchConfig({
 			state: {
 				command: "claude --dangerously-skip-permissions",
 				flashtype: { icon: "claude" },
 			},
 		});
 
-		expect(command).toContain("claude --dangerously-skip-permissions");
-		expect(command).not.toContain("--setting-sources");
-		expect(command).toContain("--settings");
-		expect(command).toContain("UserPromptSubmit");
-		expect(command).toContain("StopFailure");
-		expect(command).not.toContain("--append-system-prompt");
+		expect(launchConfig.initialCommand).toBe("claude-flashtype");
+		expect(
+			buildTerminalInitialCommand({
+				launchArgs: {
+					[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]: launchConfig.initialCommand,
+					[TERMINAL_PATH_WRAPPER_LAUNCH_ARG]: launchConfig.pathWrapper,
+				},
+			}),
+		).toBe("claude-flashtype");
+		expect(launchConfig.pathWrapper?.command).toContain(
+			"claude --dangerously-skip-permissions",
+		);
+		expect(launchConfig.pathWrapper?.command).not.toContain(
+			"--setting-sources",
+		);
+		expect(launchConfig.pathWrapper?.command).toContain("--settings");
+		expect(launchConfig.pathWrapper?.command).toContain("UserPromptSubmit");
+		expect(launchConfig.pathWrapper?.command).toContain("StopFailure");
+		expect(launchConfig.pathWrapper?.command).not.toContain(
+			"--append-system-prompt",
+		);
 	});
 
 	test("keeps Claude setting sources from the configured command", () => {
-		const command = buildTerminalInitialCommand({
+		const launchConfig = buildTerminalLaunchConfig({
 			state: {
 				command:
 					"claude --setting-sources user,project --dangerously-skip-permissions",
@@ -111,9 +148,14 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 			},
 		});
 
-		expect(command).toContain("--setting-sources user,project");
-		expect(command).not.toContain("--setting-sources ''");
-		expect(command).toContain("--settings");
+		expect(launchConfig.initialCommand).toBe("claude-flashtype");
+		expect(launchConfig.pathWrapper?.command).toContain(
+			"--setting-sources user,project",
+		);
+		expect(launchConfig.pathWrapper?.command).not.toContain(
+			"--setting-sources ''",
+		);
+		expect(launchConfig.pathWrapper?.command).toContain("--settings");
 	});
 
 	test("does not alter non-agent terminal launches", () => {

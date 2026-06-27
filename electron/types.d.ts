@@ -92,6 +92,10 @@ export type DesktopTerminalCreatePayload = {
 	cols?: number;
 	rows?: number;
 	env?: Record<string, string>;
+	pathWrapper?: {
+		executableName: "claude-flashtype" | "codex-flashtype";
+		command: string;
+	};
 };
 
 export type DesktopTerminalCreateResult = {

@@ -1,33 +1,55 @@
 import type { ExtensionLaunchArgs, ExtensionState } from "./types";
 
 export const TERMINAL_INITIAL_COMMAND_LAUNCH_ARG = "initialCommand";
+export const TERMINAL_PATH_WRAPPER_LAUNCH_ARG = "pathWrapper";
 
 const FLASHTYPE_AGENT_ICONS = new Set(["claude", "codex"]);
 const AGENT_HOOK_TIMEOUT_SECONDS = 10;
 
 export type FlashtypeAgentIcon = "claude" | "codex";
+export type TerminalPathWrapperConfig = {
+	readonly executableName: `${FlashtypeAgentIcon}-flashtype`;
+	readonly command: string;
+};
+export type TerminalLaunchConfig = {
+	readonly initialCommand?: string;
+	readonly pathWrapper?: TerminalPathWrapperConfig;
+};
 
 export function buildTerminalInitialCommand(args: {
 	readonly state?: ExtensionState;
 	readonly launchArgs?: ExtensionLaunchArgs;
 }): string | undefined {
+	return buildTerminalLaunchConfig(args).initialCommand;
+}
+
+export function buildTerminalLaunchConfig(args: {
+	readonly state?: ExtensionState;
+	readonly launchArgs?: ExtensionLaunchArgs;
+}): TerminalLaunchConfig {
 	const launchCommand =
 		typeof args.launchArgs?.[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG] === "string"
 			? args.launchArgs[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]
 			: undefined;
 	if (launchCommand) {
-		return launchCommand;
+		const pathWrapper = readTerminalPathWrapperConfig(
+			args.launchArgs?.[TERMINAL_PATH_WRAPPER_LAUNCH_ARG],
+		);
+		return {
+			initialCommand: launchCommand,
+			...(pathWrapper ? { pathWrapper } : {}),
+		};
 	}
 	const command =
 		typeof args.state?.command === "string" ? args.state.command : null;
 	if (!command) {
-		return undefined;
+		return {};
 	}
 	const agentIcon = readFlashtypeAgentIcon(args.state?.flashtype?.icon);
 	if (!agentIcon) {
-		return command;
+		return { initialCommand: command };
 	}
-	return buildAgentTerminalInitialCommand({
+	return buildAgentTerminalPathWrapperConfig({
 		command,
 		agentIcon,
 		prompt: null,
@@ -44,13 +66,17 @@ export function buildAgentTerminalLaunchArgs(args: {
 	if (!command || !agentIcon) {
 		return undefined;
 	}
-	return {
-		[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]: buildAgentTerminalInitialCommand({
-			command,
-			agentIcon,
-			prompt: args.prompt ?? null,
-		}),
-	};
+	const launchConfig = buildAgentTerminalPathWrapperConfig({
+		command,
+		agentIcon,
+		prompt: args.prompt ?? null,
+	});
+	return Object.fromEntries(
+		Object.entries({
+			[TERMINAL_INITIAL_COMMAND_LAUNCH_ARG]: launchConfig.initialCommand,
+			[TERMINAL_PATH_WRAPPER_LAUNCH_ARG]: launchConfig.pathWrapper,
+		}).filter(([, value]) => value !== undefined),
+	);
 }
 
 export function buildAgentTerminalInitialCommand(args: {
@@ -97,12 +123,46 @@ export function buildAgentTerminalInitialCommand(args: {
 		.join(" ");
 }
 
+function buildAgentTerminalPathWrapperConfig(args: {
+	readonly command: string;
+	readonly agentIcon: FlashtypeAgentIcon;
+	readonly prompt?: string | null;
+}): TerminalLaunchConfig {
+	const executableName = `${args.agentIcon}-flashtype` as const;
+	return {
+		initialCommand: executableName,
+		pathWrapper: {
+			executableName,
+			command: buildAgentTerminalInitialCommand(args),
+		},
+	};
+}
+
 export function readFlashtypeAgentIcon(
 	value: unknown,
 ): FlashtypeAgentIcon | null {
 	return typeof value === "string" && FLASHTYPE_AGENT_ICONS.has(value)
 		? (value as FlashtypeAgentIcon)
 		: null;
+}
+
+export function readTerminalPathWrapperConfig(
+	value: unknown,
+): TerminalPathWrapperConfig | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+	const executableName = (value as { executableName?: unknown }).executableName;
+	const command = (value as { command?: unknown }).command;
+	if (
+		typeof executableName !== "string" ||
+		!isFlashtypeAgentWrapperName(executableName) ||
+		typeof command !== "string" ||
+		command.trim().length === 0
+	) {
+		return null;
+	}
+	return { executableName, command };
 }
 
 function buildClaudeHookSettings() {
@@ -173,4 +233,10 @@ function shellQuote(value: string): string {
 
 function tomlString(value: string): string {
 	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function isFlashtypeAgentWrapperName(
+	value: string,
+): value is TerminalPathWrapperConfig["executableName"] {
+	return value === "claude-flashtype" || value === "codex-flashtype";
 }
