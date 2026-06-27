@@ -56,7 +56,7 @@ export async function captureTelemetryEvent(
 			distinctId,
 			event,
 			properties: telemetryEventProperties(properties, {
-				sessionId: options.sessionId ?? latestRendererPostHogSessionId,
+				sessionId: telemetrySessionIdFromOptions(options),
 			}),
 			...(groups ? { groups } : {}),
 		});
@@ -83,9 +83,7 @@ export async function captureTelemetryException(error, properties = {}) {
 			error,
 			distinctId,
 			exceptionEventProperties(properties, {
-				sessionId:
-					normalizePostHogSessionId(properties?.sessionId) ??
-					latestRendererPostHogSessionId,
+				sessionId: telemetrySessionIdFromProperties(properties),
 			}),
 		);
 		return { status: "queued" };
@@ -358,6 +356,22 @@ export function telemetryEventGroups(properties = {}) {
 	return workspaceGroupKey
 		? { [WORKSPACE_GROUP_TYPE]: workspaceGroupKey }
 		: undefined;
+}
+
+export function telemetrySessionIdFromOptions(options = {}) {
+	return hasOwnSessionId(options)
+		? options.sessionId
+		: latestRendererPostHogSessionId;
+}
+
+function telemetrySessionIdFromProperties(properties = {}) {
+	return hasOwnSessionId(properties)
+		? properties.sessionId
+		: latestRendererPostHogSessionId;
+}
+
+function hasOwnSessionId(value) {
+	return Object.prototype.hasOwnProperty.call(value, "sessionId");
 }
 
 function workspaceGroupKeyFromProperties(properties = {}) {

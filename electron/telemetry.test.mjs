@@ -8,6 +8,7 @@ import {
 	setTelemetrySessionContextForWebContents,
 	telemetryEventGroups,
 	telemetryEventProperties,
+	telemetrySessionIdFromOptions,
 } from "./telemetry.mjs";
 
 describe("scrubTelemetrySensitiveValues", () => {
@@ -99,6 +100,18 @@ describe("beforeSendTelemetryEvent", () => {
 });
 
 describe("telemetryEventProperties", () => {
+	test("does not borrow another renderer session when caller explicitly has none", () => {
+		const latestSessionId = "99999999-9999-4999-8999-999999999999";
+		setTelemetrySessionContextForWebContents({ id: 303 }, latestSessionId);
+
+		expect(telemetrySessionIdFromOptions({ sessionId: undefined })).toBe(
+			undefined,
+		);
+		expect(telemetrySessionIdFromOptions({})).toBe(latestSessionId);
+
+		forgetTelemetrySessionContextForWebContents({ id: 303 });
+	});
+
 	test("attaches the current renderer session id to product events", () => {
 		const sessionId = "33333333-3333-4333-8333-333333333333";
 
