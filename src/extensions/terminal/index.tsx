@@ -5,7 +5,10 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { TERMINAL_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
-import { buildTerminalInitialCommand } from "../../extension-runtime/agent-terminal-command";
+import {
+	type TerminalLaunchConfig,
+	buildTerminalLaunchConfig,
+} from "../../extension-runtime/agent-terminal-command";
 import { createTerminalOutputNormalizer } from "./ansi-style-normalizer";
 
 function cssColor(name: string, fallback: string): string {
@@ -44,14 +47,14 @@ function buildTerminalTheme() {
 }
 
 function TerminalView({
-	initialCommand,
+	launchConfig,
 }: {
-	/** Typed into the shell once the session starts. */
-	readonly initialCommand?: string;
+	/** One-shot terminal startup command and private PATH wrapper, if needed. */
+	readonly launchConfig: TerminalLaunchConfig;
 }) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const terminalRef = useRef<Terminal | null>(null);
-	const initialCommandRef = useRef(initialCommand);
+	const launchConfigRef = useRef(launchConfig);
 
 	useEffect(() => {
 		const desktop = window.flashtypeDesktop;
@@ -128,6 +131,7 @@ function TerminalView({
 					cwd,
 					cols: terminal.cols,
 					rows: terminal.rows,
+					pathWrapper: launchConfigRef.current.pathWrapper,
 				});
 				if (disposed) {
 					await terminalApi.kill({ id: created.id });
@@ -135,8 +139,8 @@ function TerminalView({
 				}
 				terminalId = created.id;
 				handleResize();
-				const command = initialCommandRef.current;
-				initialCommandRef.current = undefined;
+				const command = launchConfigRef.current.initialCommand;
+				launchConfigRef.current = {};
 				if (command) {
 					await terminalApi.write({ id: created.id, data: `${command}\r` });
 				}
@@ -187,7 +191,7 @@ export const extension = createReactExtensionDefinition({
 	multiInstance: true,
 	component: ({ instance }) => (
 		<TerminalView
-			initialCommand={buildTerminalInitialCommand({
+			launchConfig={buildTerminalLaunchConfig({
 				state: instance.state,
 				launchArgs: instance.launchArgs,
 			})}

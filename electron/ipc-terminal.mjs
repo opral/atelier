@@ -6,6 +6,11 @@ import {
 	resolveShellArgs,
 } from "./terminal-shell.mjs";
 import {
+	createTerminalPathWrapper,
+	disposeTerminalPathWrapper,
+	prependPathEntry,
+} from "./terminal-path-wrapper.mjs";
+import {
 	createAgentHookEnvironment,
 	disposeAgentHookEnvironment,
 } from "./agent-hooks.mjs";
@@ -36,8 +41,18 @@ export function registerTerminalIpc() {
 			...agentHookEnv,
 		};
 
+		let pathWrapper = null;
 		let terminal;
 		try {
+			pathWrapper = await createTerminalPathWrapper(payload?.pathWrapper, {
+				shell,
+			});
+			if (pathWrapper) {
+				env.PATH = prependPathEntry(
+					pathWrapper.directory,
+					env.PATH ?? process.env.PATH,
+				);
+			}
 			terminal = pty.spawn(shell, shellArgs, {
 				name: "xterm-256color",
 				cwd,
@@ -47,6 +62,9 @@ export function registerTerminalIpc() {
 			});
 		} catch (error) {
 			disposeAgentHookEnvironment(id);
+			if (pathWrapper) {
+				await disposeTerminalPathWrapper(pathWrapper);
+			}
 			throw error;
 		}
 
@@ -72,6 +90,7 @@ export function registerTerminalIpc() {
 
 		terminals.set(id, {
 			ownerId,
+			pathWrapper,
 			terminal,
 		});
 
@@ -139,6 +158,9 @@ function closeTerminalHandle(id, options = {}) {
 		}
 	}
 	disposeAgentHookEnvironment(id);
+	void disposeTerminalPathWrapper(handle.pathWrapper).catch((error) => {
+		console.warn("[terminal] failed to clean up PATH wrapper", error);
+	});
 	terminals.delete(id);
 }
 
