@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 - 2026-06-28
+
+- Rebuilt the Files tree with native rename support and pending review markers.
+- Added per-agent-turn reviews for external edits with clearer Keep/Undo actions.
+- Improved Markdown editing with Shift-Enter hard breaks and better roundtripping.
+- Fixed workspace-relative Markdown images in the editor, local dev, and review diffs.
+- Made direct file opens and transient workspaces more reliable by importing files only when opened.
+
 ## 0.6.1 - 2026-06-25
 
 - crash recovery for opening large directories
