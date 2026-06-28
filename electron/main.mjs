@@ -697,6 +697,7 @@ async function createMainWindow(workspaceRequest) {
 			contextIsolation: true,
 			nodeIntegration: false,
 			sandbox: false,
+			webSecurity: !isDevRuntime,
 		},
 	});
 	workspaceWindows.add(window);
