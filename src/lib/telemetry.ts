@@ -32,6 +32,27 @@ export async function captureTelemetryAsync(
 	});
 }
 
+export function captureTelemetryException(
+	error: unknown,
+	properties: TelemetryProperties = {},
+) {
+	void captureTelemetryExceptionAsync(error, properties).catch(
+		(captureError: unknown) => {
+			console.warn("Failed to capture telemetry exception", captureError);
+		},
+	);
+}
+
+export async function captureTelemetryExceptionAsync(
+	error: unknown,
+	properties: TelemetryProperties = {},
+) {
+	return await window.flashtypeDesktop?.telemetry?.captureException({
+		error: serializeError(error),
+		properties,
+	});
+}
+
 export function captureTelemetryThrottled(
 	key: string,
 	event: TelemetryEventName,
@@ -70,4 +91,17 @@ export function workspaceTelemetryProperties(workspaceId: string | undefined) {
 				workspace_id: workspaceId,
 			}
 		: {};
+}
+
+function serializeError(error: unknown) {
+	if (error instanceof Error) {
+		return {
+			message: error.message || "Renderer error",
+			name: error.name,
+			stack: error.stack,
+		};
+	}
+	return {
+		message: typeof error === "string" ? error : "Renderer error",
+	};
 }

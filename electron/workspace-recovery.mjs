@@ -107,6 +107,10 @@ export function clearWorkspaceLixOpenPendingSync(userDataPath, workspacePath) {
 }
 
 export function recoverPendingWorkspaceLixOpenSync(userDataPath) {
+	return recoverPendingWorkspaceLixOpenRecoveriesSync(userDataPath).length;
+}
+
+export function recoverPendingWorkspaceLixOpenRecoveriesSync(userDataPath) {
 	const pendingRecoveries = readPendingLixOpenRecoveriesSync(userDataPath);
 	const recoveriesToWrite = pendingRecoveries
 		.filter((recovery) => isDirectorySync(recovery.workspacePath))
@@ -120,7 +124,7 @@ export function recoverPendingWorkspaceLixOpenSync(userDataPath) {
 		writeWorkspaceRecoverySync(userDataPath, recovery);
 	}
 	writePendingLixOpenRecoveriesSync(userDataPath, []);
-	return recoveriesToWrite.length;
+	return recoveriesToWrite;
 }
 
 export function workspaceRecoveryToSessionEntry(recovery) {

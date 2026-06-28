@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RotateCcw, Bug, AlertTriangle, Trash2 } from "lucide-react";
+import { captureTelemetryException } from "./lib/telemetry";
+import { captureWorkspaceRecoveryLifecycle } from "./lib/workspace-recovery-telemetry";
 
 type WorkspaceRecovery = Awaited<
 	ReturnType<
@@ -75,6 +77,24 @@ export function ErrorFallback(props: {
 	const [actionError, setActionError] = useState<unknown>(null);
 	const busy = busyAction !== null;
 	const recovery = props.recovery ?? null;
+
+	useEffect(() => {
+		if (!recovery) {
+			return;
+		}
+		captureWorkspaceRecoveryLifecycle("shown", recovery, {
+			source: "renderer-error-fallback",
+		});
+	}, [recovery]);
+
+	useEffect(() => {
+		if (!props.error) {
+			return;
+		}
+		captureTelemetryException(props.error, {
+			source: "renderer-error-fallback",
+		});
+	}, [props.error]);
 
 	async function handleDisableTrackChanges() {
 		if (busy) return;

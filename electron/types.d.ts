@@ -261,12 +261,26 @@ export type DesktopTelemetryEventName =
 	| "document_open_attempted"
 	| "document_modified"
 	| "document_viewed"
+	| "workspace_recovery_lifecycle"
 	| "workspace_extension_profiled"
 	| "workspace_profiled";
 
 export type DesktopTelemetryApi = {
 	capture(payload: {
 		event: DesktopTelemetryEventName;
+		properties?: Record<
+			string,
+			string | number | boolean | Record<string, string | number> | undefined
+		>;
+	}): Promise<{
+		status: "disabled" | "error" | "ignored" | "queued" | "throttled";
+	}>;
+	captureException(payload: {
+		error: {
+			message: string;
+			name?: string;
+			stack?: string;
+		};
 		properties?: Record<
 			string,
 			string | number | boolean | Record<string, string | number> | undefined
