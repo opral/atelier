@@ -1,26 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Files, FileUp, FilePlus, Github } from "lucide-react";
-import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
+import {
+	LixProvider,
+	useLix,
+	useQuery,
+	useQueryTakeFirst,
+} from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
-import { buildFilesystemTree } from "@/extensions/files/build-filesystem-tree";
+import {
+	buildFilesystemTree,
+	type FilesystemTreeNode,
+} from "@/extensions/files/build-filesystem-tree";
 import type { ExtensionContext } from "../../extension-runtime/types";
-import { FileTree } from "./file-tree";
+import {
+	FileTree,
+	type FileTreeCreateRequest,
+	type FileTreeRenameRequest,
+} from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { qb } from "@/lib/lix-kysely";
 import { FILES_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 import type { FilesystemEntryRow } from "@/queries";
 import type { Lix } from "@/lib/lix-types";
+import {
+	AGENT_TURN_COMMIT_RANGE_KEY,
+	isAgentTurnCommitRangeStore,
+} from "@/shell/agent-turn-review-range";
+import {
+	getPendingExternalWriteReviewPaths,
+	type ExternalWriteReviewFile,
+} from "@/shell/external-write-review-history";
 
 type FilesViewProps = {
 	readonly context?: ExtensionContext;
 };
-
-type DraftState = {
-	kind: "file" | "directory";
-	directoryPath: string;
-	value: string;
-} | null;
 
 /**
  * Files view - Browse and pin project documents. Owns the Cmd/Ctrl + . shortcut
@@ -52,27 +66,38 @@ function FilesViewContent({
 	const [watchedEntries, setWatchedEntries] = useState<FilesystemEntryRow[]>(
 		[],
 	);
+	const [upgradedWatchedFilePaths, setUpgradedWatchedFilePaths] = useState(
+		() => new Set<string>(),
+	);
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),
 	);
+	const visibleWatchedEntries = useMemo(() => {
+		if (!isEphemeralWorkspace) return [];
+		if (upgradedWatchedFilePaths.size === 0) return watchedEntries;
+		return watchedEntries.filter((entry) => {
+			if (entry.kind !== "file") return true;
+			return !upgradedWatchedFilePaths.has(filesystemEntryPathKey(entry));
+		});
+	}, [isEphemeralWorkspace, upgradedWatchedFilePaths, watchedEntries]);
 	const combinedEntries = useMemo(
-		() =>
-			unionFilesystemEntries(
-				entries ?? [],
-				isEphemeralWorkspace ? watchedEntries : [],
-			),
-		[entries, isEphemeralWorkspace, watchedEntries],
+		() => unionFilesystemEntries(entries ?? [], visibleWatchedEntries),
+		[entries, visibleWatchedEntries],
 	);
 	const nodes = useMemo(
 		() => buildFilesystemTree(combinedEntries),
 		[combinedEntries],
 	);
+	const pendingReviewPaths = usePendingExternalWriteReviewPaths(lix, nodes);
 	const creatingRef = useRef(false);
+	const renamingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
 	const [pendingDirectoryPaths, setPendingDirectoryPaths] = useState<string[]>(
 		[],
 	);
-	const [draft, setDraft] = useState<DraftState>(null);
+	const [createRequest, setCreateRequest] =
+		useState<FileTreeCreateRequest | null>(null);
+	const nextCreateRequestIdRef = useRef(0);
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 	const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 	const [selectedKind, setSelectedKind] = useState<"file" | "directory" | null>(
@@ -133,6 +158,7 @@ function FilesViewContent({
 	useEffect(() => {
 		if (!isEphemeralWorkspace) {
 			setWatchedEntries([]);
+			setUpgradedWatchedFilePaths(new Set());
 			return;
 		}
 		const workspaceApi = window.flashtypeDesktop?.workspace;
@@ -186,7 +212,7 @@ function FilesViewContent({
 		};
 	}, [isEphemeralWorkspace]);
 
-	const resolveDraftDirectory = useCallback(() => {
+	const resolveCreateDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
 		if (selectedPath.endsWith("/")) return selectedPath;
 		const parts = selectedPath.split("/").filter(Boolean);
@@ -194,29 +220,249 @@ function FilesViewContent({
 		return `/${parts.slice(0, -1).join("/")}/`;
 	}, [selectedPath]);
 
-	const handleDraftChange = useCallback((next: string) => {
-		setDraft((prev) => (prev ? { ...prev, value: next } : prev));
-	}, []);
-
-	const handleDraftCancel = useCallback(() => {
-		setDraft(null);
-	}, []);
+	const startCreateRequest = useCallback(
+		(kind: "file" | "directory") => {
+			const baseDirectory = resolveCreateDirectory();
+			const directoryPath = ensureDirectoryPath(baseDirectory);
+			setCreateRequest((prev) => {
+				if (prev) return prev;
+				setSelectedPath(null);
+				setSelectedFileId(null);
+				setSelectedKind(null);
+				if (directoryPath !== "/") {
+					setOpenDirectoryPaths((openPaths) => {
+						const next = new Set(openPaths);
+						next.add(directoryPath);
+						return next;
+					});
+				}
+				nextCreateRequestIdRef.current += 1;
+				return {
+					directoryPath,
+					id: nextCreateRequestIdRef.current,
+					initialValue: kind === "directory" ? "new-directory" : "new-file",
+					kind,
+				};
+			});
+		},
+		[resolveCreateDirectory],
+	);
 
 	const handleNewFile = useCallback(() => {
-		const baseDirectory = resolveDraftDirectory();
-		const directoryPath = ensureDirectoryPath(baseDirectory);
-		setDraft((prev) => {
-			if (prev) return prev;
-			setSelectedPath(null);
-			setSelectedFileId(null);
-			setSelectedKind(null);
-			return {
-				kind: "file",
-				directoryPath,
-				value: "new-file",
+		startCreateRequest("file");
+	}, [startCreateRequest]);
+
+	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
+		setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
+		setSelectedPath(null);
+		setSelectedFileId(null);
+		setSelectedKind(null);
+	}, []);
+
+	const handleCreateCommit = useCallback(
+		async (request: FileTreeCreateRequest, value: string) => {
+			if (creatingRef.current) return;
+			const directoryPath = ensureDirectoryPath(request.directoryPath);
+			const clearRequest = () => {
+				setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 			};
-		});
-	}, [resolveDraftDirectory]);
+			const executeFileCreation = async () => {
+				const path = deriveMarkdownPathFromStem(
+					value,
+					directoryPath,
+					existingFilePaths,
+				);
+				if (!path) {
+					clearRequest();
+					return;
+				}
+				creatingRef.current = true;
+				try {
+					await qb(lix)
+						.insertInto("lix_file")
+						.values({
+							path,
+							data: new TextEncoder().encode(""),
+						})
+						.execute();
+					const id = (
+						await qb(lix)
+							.selectFrom("lix_file")
+							.select("id")
+							.where("path", "=", path)
+							.executeTakeFirst()
+					)?.id;
+					if (!id) {
+						throw new Error(`created file id not found for path '${path}'`);
+					}
+					setPendingPaths((prev) => [...prev, path]);
+					setSelectedPath(path);
+					setSelectedFileId(id);
+					setSelectedKind("file");
+					context?.openFile?.({
+						panel: "central",
+						fileId: id,
+						filePath: path,
+						state: { focusOnLoad: true, defaultBlock: "heading1" },
+						focus: true,
+						documentOrigin: "new",
+					});
+				} catch (error) {
+					console.error("Failed to create file", error);
+				} finally {
+					creatingRef.current = false;
+					clearRequest();
+				}
+			};
+
+			const executeDirectoryCreation = async () => {
+				const path = deriveDirectoryPathFromStem(
+					value,
+					directoryPath,
+					existingDirectoryPaths,
+				);
+				if (!path) {
+					clearRequest();
+					return;
+				}
+				creatingRef.current = true;
+				try {
+					await qb(lix)
+						.insertInto("lix_directory")
+						.values({ path } as any)
+						.execute();
+					setPendingDirectoryPaths((prev) => [...prev, path]);
+					setSelectedPath(path);
+					setSelectedKind("directory");
+				} catch (error) {
+					console.error("Failed to create directory", error);
+				} finally {
+					creatingRef.current = false;
+					clearRequest();
+				}
+			};
+
+			if (request.kind === "directory") {
+				return executeDirectoryCreation();
+			}
+			return executeFileCreation();
+		},
+		[context, existingDirectoryPaths, existingFilePaths, lix],
+	);
+
+	const handleCreateDirectory = useCallback(() => {
+		startCreateRequest("directory");
+	}, [startCreateRequest]);
+
+	const handleRenameCommit = useCallback(
+		async (request: FileTreeRenameRequest) => {
+			if (renamingRef.current) return;
+			const sourcePath =
+				request.kind === "directory"
+					? ensureDirectoryPath(request.sourcePath)
+					: normalizeFilePath(request.sourcePath);
+			const destinationPath =
+				request.kind === "directory"
+					? ensureDirectoryPath(request.destinationPath)
+					: normalizeFilePath(request.destinationPath);
+			if (sourcePath === destinationPath) return;
+
+			const destinationExists =
+				request.kind === "directory"
+					? existingDirectoryPaths.has(destinationPath)
+					: existingFilePaths.has(destinationPath);
+			if (destinationExists) {
+				console.warn(`Cannot rename '${sourcePath}' to '${destinationPath}'`);
+				return;
+			}
+
+			renamingRef.current = true;
+			try {
+				if (request.kind === "directory") {
+					await qb(lix)
+						.updateTable("lix_directory")
+						.set({ path: destinationPath } as any)
+						.where("path", "=", sourcePath)
+						.execute();
+					setOpenDirectoryPaths((prev) =>
+						remapDirectoryPathSet(prev, sourcePath, destinationPath),
+					);
+					setPendingDirectoryPaths((prev) =>
+						remapDirectoryPaths(prev, sourcePath, destinationPath),
+					);
+					setPendingPaths((prev) =>
+						remapFilePathsInDirectory(prev, sourcePath, destinationPath),
+					);
+					setSelectedPath(destinationPath);
+					setSelectedFileId(null);
+					setSelectedKind("directory");
+					return;
+				}
+
+				let resolvedFileId = request.source === "watched" ? null : request.id;
+				if (request.source === "watched") {
+					await lix.importFilesystemPaths([sourcePath]);
+					const importedFile = await qb(lix)
+						.selectFrom("lix_file")
+						.select("id")
+						.where("path", "=", sourcePath)
+						.executeTakeFirst();
+					if (!importedFile?.id) {
+						throw new Error(
+							`imported watched file id not found for path '${sourcePath}'`,
+						);
+					}
+					resolvedFileId = importedFile.id as string;
+				}
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ path: destinationPath } as any)
+					.where("path", "=", sourcePath)
+					.execute();
+				setPendingPaths((prev) =>
+					appendUniquePath(
+						remapFilePaths(prev, sourcePath, destinationPath),
+						destinationPath,
+					),
+				);
+				if (request.source === "watched") {
+					setUpgradedWatchedFilePaths((prev) => {
+						const next = new Set(prev);
+						next.add(sourcePath);
+						return next;
+					});
+				}
+				setSelectedPath(destinationPath);
+				setSelectedFileId(resolvedFileId ?? null);
+				setSelectedKind("file");
+				if (resolvedFileId) {
+					void context?.openFile?.({
+						panel: "central",
+						fileId: resolvedFileId,
+						filePath: destinationPath,
+						focus: false,
+						trackTelemetry: false,
+					});
+				}
+			} catch (error) {
+				console.error("Failed to rename entry", error);
+			} finally {
+				renamingRef.current = false;
+			}
+		},
+		[context, existingDirectoryPaths, existingFilePaths, lix],
+	);
+
+	const handleCreateShortcut = useCallback(
+		(kind: "file" | "directory") => {
+			if (kind === "directory") {
+				handleCreateDirectory();
+				return;
+			}
+			handleNewFile();
+		},
+		[handleCreateDirectory, handleNewFile],
+	);
 
 	useEffect(() => {
 		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) {
@@ -235,91 +481,6 @@ function FilesViewContent({
 		registerNewFileDraftHandler,
 		viewInstance,
 	]);
-
-	const handleDraftCommit = useCallback(async () => {
-		if (creatingRef.current) return;
-		if (!draft) return;
-		const executeFileCreation = async () => {
-			const path = deriveMarkdownPathFromStem(
-				draft.value,
-				draft.directoryPath,
-				existingFilePaths,
-			);
-			if (!path) {
-				setDraft(null);
-				return;
-			}
-			creatingRef.current = true;
-			try {
-				await qb(lix)
-					.insertInto("lix_file")
-					.values({
-						path,
-						data: new TextEncoder().encode(""),
-					})
-					.execute();
-				const id = (
-					await qb(lix)
-						.selectFrom("lix_file")
-						.select("id")
-						.where("path", "=", path)
-						.executeTakeFirst()
-				)?.id;
-				if (!id) {
-					throw new Error(`created file id not found for path '${path}'`);
-				}
-				setPendingPaths((prev) => [...prev, path]);
-				setSelectedPath(path);
-				setSelectedFileId(id);
-				setSelectedKind("file");
-				context?.openFile?.({
-					panel: "central",
-					fileId: id,
-					filePath: path,
-					state: { focusOnLoad: true, defaultBlock: "heading1" },
-					focus: true,
-					documentOrigin: "new",
-				});
-			} catch (error) {
-				console.error("Failed to create file", error);
-			} finally {
-				creatingRef.current = false;
-				setDraft(null);
-			}
-		};
-
-		const executeDirectoryCreation = async () => {
-			const path = deriveDirectoryPathFromStem(
-				draft.value,
-				draft.directoryPath,
-				existingDirectoryPaths,
-			);
-			if (!path) {
-				setDraft(null);
-				return;
-			}
-			creatingRef.current = true;
-			try {
-				await qb(lix)
-					.insertInto("lix_directory")
-					.values({ path } as any)
-					.execute();
-				setPendingDirectoryPaths((prev) => [...prev, path]);
-				setSelectedPath(path);
-				setSelectedKind("directory");
-			} catch (error) {
-				console.error("Failed to create directory", error);
-			} finally {
-				creatingRef.current = false;
-				setDraft(null);
-			}
-		};
-
-		if (draft.kind === "directory") {
-			return executeDirectoryCreation();
-		}
-		return executeFileCreation();
-	}, [context, draft, existingDirectoryPaths, existingFilePaths, lix]);
 
 	const handleOpenFile = useCallback(
 		(fileId: string, path: string) => {
@@ -414,7 +575,7 @@ function FilesViewContent({
 				event.key === "Delete" ||
 				event.code?.toLowerCase() === "delete";
 			if (isDeleteKey) {
-				const shouldHandleDelete = !isInteractiveTarget(event.target);
+				const shouldHandleDelete = !isInteractiveEventTarget(event);
 				if (!shouldHandleDelete) return;
 				event.preventDefault();
 				event.stopPropagation();
@@ -440,21 +601,10 @@ function FilesViewContent({
 			if (
 				event.type === "keydown" &&
 				!event.repeat &&
-				!isInteractiveTarget(event.target)
+				!isInteractiveEventTarget(event)
 			) {
 				const kind = event.shiftKey ? "directory" : "file";
-				const baseDirectory = resolveDraftDirectory();
-				const directoryPath = ensureDirectoryPath(baseDirectory);
-				setDraft((prev) => {
-					if (prev) return prev;
-					setSelectedPath(null);
-					setSelectedKind(null);
-					return {
-						kind,
-						directoryPath,
-						value: kind === "directory" ? "new-directory" : "new-file",
-					};
-				});
+				handleCreateShortcut(kind);
 			}
 		};
 
@@ -480,7 +630,7 @@ function FilesViewContent({
 				}
 			}
 		};
-	}, [handleDeleteSelection, isMacPlatform, resolveDraftDirectory]);
+	}, [handleCreateShortcut, handleDeleteSelection, isMacPlatform]);
 
 	const handleDragEnter = useCallback((e: React.DragEvent) => {
 		e.preventDefault();
@@ -596,8 +746,8 @@ function FilesViewContent({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 		>
-			{/* New file button row - hidden when draft is active */}
-			{!draft && (
+			{/* New file button row - hidden when creation is active */}
+			{!createRequest && (
 				<button
 					type="button"
 					onClick={handleNewFile}
@@ -651,27 +801,103 @@ function FilesViewContent({
 				<FileTree
 					nodes={nodes}
 					openFileView={handleOpenFile}
+					reviewPaths={pendingReviewPaths}
 					onSelectItem={handleSelectItem}
 					selectedPath={selectedPath ?? undefined}
 					isPanelFocused={isPanelFocused}
 					openDirectories={openDirectoryPaths}
 					onOpenDirectoriesChange={handleOpenDirectoriesChange}
-					draft={
-						draft
-							? {
-									kind: draft.kind,
-									directoryPath: draft.directoryPath,
-									value: draft.value,
-									onChange: handleDraftChange,
-									onCommit: handleDraftCommit,
-									onCancel: handleDraftCancel,
-								}
-							: null
-					}
+					createRequest={createRequest}
+					onCreateCancel={handleCreateCancel}
+					onCreateCommit={handleCreateCommit}
+					onRenameCommit={handleRenameCommit}
 				/>
 			</div>
 		</div>
 	);
+}
+
+function usePendingExternalWriteReviewPaths(
+	lix: Lix,
+	nodes: readonly FilesystemTreeNode[],
+): ReadonlySet<string> {
+	const rangeRow = useQueryTakeFirst<{ value: unknown }>((lix) =>
+		qb(lix)
+			.selectFrom("lix_key_value_by_branch")
+			.select("value")
+			.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
+			.where("lixcol_branch_id", "=", "global")
+			.limit(1),
+	);
+	const ranges = useMemo(
+		() =>
+			isAgentTurnCommitRangeStore(rangeRow?.value) ? rangeRow.value.ranges : [],
+		[rangeRow?.value],
+	);
+	const reviewableFiles = useMemo(
+		() => collectReviewableTreeFiles(nodes),
+		[nodes],
+	);
+	const [pendingPaths, setPendingPaths] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (ranges.length === 0 || reviewableFiles.length === 0) {
+			setPendingPaths((prev) => (prev.size === 0 ? prev : new Set()));
+			return;
+		}
+		void getPendingExternalWriteReviewPaths(lix, reviewableFiles, ranges)
+			.then((nextPaths) => {
+				if (cancelled) return;
+				setPendingPaths((prev) =>
+					sameStringSet(prev, nextPaths) ? prev : nextPaths,
+				);
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				console.warn("Failed to resolve pending file reviews", error);
+				setPendingPaths((prev) => (prev.size === 0 ? prev : new Set()));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [lix, ranges, reviewableFiles]);
+
+	return pendingPaths;
+}
+
+function collectReviewableTreeFiles(
+	nodes: readonly FilesystemTreeNode[],
+): ExternalWriteReviewFile[] {
+	const files: ExternalWriteReviewFile[] = [];
+	const visit = (node: FilesystemTreeNode) => {
+		if (node.type === "file") {
+			if (node.source !== "watched") {
+				files.push({ fileId: node.id, path: node.path });
+			}
+			return;
+		}
+		for (const child of node.children) {
+			visit(child);
+		}
+	};
+	for (const node of nodes) {
+		visit(node);
+	}
+	return files;
+}
+
+function sameStringSet(
+	left: ReadonlySet<string>,
+	right: ReadonlySet<string>,
+): boolean {
+	if (left.size !== right.size) return false;
+	for (const value of left) {
+		if (!right.has(value)) return false;
+	}
+	return true;
 }
 
 /**
@@ -702,6 +928,13 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 		return true;
 	}
 	return Boolean(target.closest("input, textarea, [contenteditable]"));
+}
+
+function isInteractiveEventTarget(event: Event): boolean {
+	for (const target of event.composedPath?.() ?? []) {
+		if (isInteractiveTarget(target)) return true;
+	}
+	return isInteractiveTarget(event.target);
 }
 
 function detectMacPlatform(): boolean {
@@ -786,6 +1019,94 @@ function normalizeNameStem(stem: string): string {
 function ensureDirectoryPath(path: string): string {
 	if (path === "/") return "/";
 	return path.endsWith("/") ? path : `${path}/`;
+}
+
+function normalizeFilePath(path: string): string {
+	return path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function remapDirectoryPath(
+	path: string,
+	sourcePath: string,
+	destinationPath: string,
+): string {
+	const source = ensureDirectoryPath(sourcePath);
+	const destination = ensureDirectoryPath(destinationPath);
+	const normalized = ensureDirectoryPath(path);
+	if (normalized === source) return destination;
+	if (normalized.startsWith(source)) {
+		return `${destination}${normalized.slice(source.length)}`;
+	}
+	return normalized;
+}
+
+function remapFilePath(
+	path: string,
+	sourcePath: string,
+	destinationPath: string,
+): string {
+	const source = normalizeFilePath(sourcePath);
+	const destination = normalizeFilePath(destinationPath);
+	const normalized = normalizeFilePath(path);
+	return normalized === source ? destination : normalized;
+}
+
+function remapFilePathInDirectory(
+	path: string,
+	sourcePath: string,
+	destinationPath: string,
+): string {
+	const source = ensureDirectoryPath(sourcePath);
+	const destination = ensureDirectoryPath(destinationPath);
+	const normalized = normalizeFilePath(path);
+	if (normalized.startsWith(source)) {
+		return `${destination}${normalized.slice(source.length)}`;
+	}
+	return normalized;
+}
+
+function remapDirectoryPathSet(
+	paths: ReadonlySet<string>,
+	sourcePath: string,
+	destinationPath: string,
+): Set<string> {
+	return new Set(
+		[...paths].map((path) =>
+			remapDirectoryPath(path, sourcePath, destinationPath),
+		),
+	);
+}
+
+function remapDirectoryPaths(
+	paths: readonly string[],
+	sourcePath: string,
+	destinationPath: string,
+): string[] {
+	return paths.map((path) =>
+		remapDirectoryPath(path, sourcePath, destinationPath),
+	);
+}
+
+function remapFilePaths(
+	paths: readonly string[],
+	sourcePath: string,
+	destinationPath: string,
+): string[] {
+	return paths.map((path) => remapFilePath(path, sourcePath, destinationPath));
+}
+
+function remapFilePathsInDirectory(
+	paths: readonly string[],
+	sourcePath: string,
+	destinationPath: string,
+): string[] {
+	return paths.map((path) =>
+		remapFilePathInDirectory(path, sourcePath, destinationPath),
+	);
+}
+
+function appendUniquePath(paths: readonly string[], path: string): string[] {
+	return paths.includes(path) ? [...paths] : [...paths, path];
 }
 
 function unionFilesystemEntries(

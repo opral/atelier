@@ -6,6 +6,10 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { FilesView } from "./index";
 import type { ExtensionContext } from "../../extension-runtime/types";
 import { qb } from "@/lib/lix-kysely";
+import {
+	appendAgentTurnCommitRange,
+	type AgentTurnCommitRange,
+} from "@/shell/agent-turn-review-range";
 
 const createViewContext = (
 	lix: Awaited<ReturnType<typeof openLix>>,
@@ -41,6 +45,102 @@ async function waitForFilesViewReady(utils: ReturnType<typeof render>) {
 		if (button) return button;
 	}
 	throw new Error("Files view did not finish loading");
+}
+
+function queryFilesTreeHost(
+	utils: ReturnType<typeof render>,
+): HTMLElement | null {
+	const host = utils.container.querySelector("file-tree-container");
+	return host instanceof HTMLElement ? host : null;
+}
+
+function getFilesTreeHost(utils: ReturnType<typeof render>): HTMLElement {
+	const host = queryFilesTreeHost(utils);
+	if (!host) {
+		throw new Error("file tree host not found");
+	}
+	return host;
+}
+
+function queryFilesTreeRoot(
+	utils: ReturnType<typeof render>,
+): ShadowRoot | null {
+	return queryFilesTreeHost(utils)?.shadowRoot ?? null;
+}
+
+function getFilesTreeRoot(utils: ReturnType<typeof render>): ShadowRoot {
+	const root = queryFilesTreeRoot(utils);
+	if (!root) {
+		throw new Error("file tree shadow root not found");
+	}
+	return root;
+}
+
+function queryTreeItemByLabel(
+	utils: ReturnType<typeof render>,
+	label: string,
+): HTMLElement | null {
+	const root = queryFilesTreeRoot(utils);
+	if (!root) return null;
+	for (const item of root.querySelectorAll("[data-type='item']")) {
+		if (
+			item instanceof HTMLElement &&
+			item.getAttribute("aria-label") === label
+		) {
+			return item;
+		}
+	}
+	return null;
+}
+
+async function findTreeItemByLabel(
+	utils: ReturnType<typeof render>,
+	label: string,
+): Promise<HTMLElement> {
+	return waitFor(() => {
+		const item = queryTreeItemByLabel(utils, label);
+		if (!item) {
+			throw new Error(`file tree item not found: ${label}`);
+		}
+		return item;
+	});
+}
+
+function queryTreeRenameInput(
+	utils: ReturnType<typeof render>,
+): HTMLInputElement | null {
+	const input = queryFilesTreeRoot(utils)?.querySelector(
+		"[data-item-rename-input]",
+	);
+	return input instanceof HTMLInputElement ? input : null;
+}
+
+async function findTreeRenameInput(
+	utils: ReturnType<typeof render>,
+): Promise<HTMLInputElement> {
+	return waitFor(() => {
+		const input = queryTreeRenameInput(utils);
+		if (!input) {
+			throw new Error("file tree rename input not found");
+		}
+		return input;
+	});
+}
+
+async function startTreeRenameByLabel(
+	utils: ReturnType<typeof render>,
+	label: string,
+): Promise<HTMLInputElement> {
+	const item = await findTreeItemByLabel(utils, label);
+	await act(async () => {
+		fireEvent.click(item);
+	});
+	await act(async () => {
+		fireEvent.keyDown(getFilesTreeRoot(utils).activeElement ?? item, {
+			key: "F2",
+		});
+	});
+	return findTreeRenameInput(utils);
 }
 
 describe("FilesView", () => {
@@ -117,13 +217,11 @@ describe("FilesView", () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
 		});
 
-		const input = (await utils!.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
+		const input = await findTreeRenameInput(utils!);
 		expect(input.value).toBe("new-file");
 
 		await act(async () => {
-			fireEvent.change(input, { target: { value: "notes" } });
+			fireEvent.input(input, { target: { value: "notes" } });
 		});
 
 		await act(async () => {
@@ -205,14 +303,135 @@ describe("FilesView", () => {
 			fireEvent.click(newFileButton);
 		});
 
-		const input = (await utils!.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
+		const input = await findTreeRenameInput(utils!);
 		await waitFor(() => {
-			expect(document.activeElement).toBe(input);
+			expect(getFilesTreeRoot(utils!).activeElement).toBe(input);
 		});
 		expect(input.value).toBe("new-file");
 		expect(focusPanel).not.toHaveBeenCalled();
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("renames selected files with F2", async () => {
+		const lix = await openLix();
+		const openFile = vi.fn();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_rename",
+				path: "/draft.md",
+				data: new Uint8Array(),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix, { openFile })} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const input = await startTreeRenameByLabel(utils!, "draft.md");
+		expect(input.value).toBe("draft.md");
+		openFile.mockClear();
+
+		await act(async () => {
+			fireEvent.input(input, { target: { value: "renamed.md" } });
+		});
+		await act(async () => {
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+
+		await waitFor(async () => {
+			const rows = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.execute();
+			expect(rows.some((row) => row.path === "/draft.md")).toBe(false);
+			expect(
+				rows.some(
+					(row) => row.id === "file_rename" && row.path === "/renamed.md",
+				),
+			).toBe(true);
+			expect(queryTreeItemByLabel(utils!, "draft.md")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "renamed.md")).toBeInTheDocument();
+		});
+		expect(openFile).toHaveBeenCalledWith({
+			panel: "central",
+			fileId: "file_rename",
+			filePath: "/renamed.md",
+			focus: false,
+			trackTelemetry: false,
+		});
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("renames selected directories with F2", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ path: "/docs/" } as any)
+			.execute();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_nested",
+				path: "/docs/readme.md",
+				data: new Uint8Array(),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix)} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const input = await startTreeRenameByLabel(utils!, "docs");
+		expect(input.value).toBe("docs");
+
+		await act(async () => {
+			fireEvent.input(input, { target: { value: "notes" } });
+		});
+		await act(async () => {
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+
+		await waitFor(async () => {
+			const directoryRows = await qb(lix)
+				.selectFrom("lix_directory")
+				.select(["path"])
+				.execute();
+			const fileRows = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.execute();
+			expect(directoryRows.some((row) => row.path === "/docs/")).toBe(false);
+			expect(directoryRows.some((row) => row.path === "/notes/")).toBe(true);
+			expect(fileRows.some((row) => row.path === "/docs/readme.md")).toBe(
+				false,
+			);
+			expect(
+				fileRows.some(
+					(row) => row.id === "file_nested" && row.path === "/notes/readme.md",
+				),
+			).toBe(true);
+			expect(queryTreeItemByLabel(utils!, "docs")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "notes")).toBeInTheDocument();
+		});
 
 		utils!.unmount();
 		await lix.close();
@@ -241,19 +460,14 @@ describe("FilesView", () => {
 			);
 		});
 
-		await waitFor(() => {
-			expect(utils!.getByText("hello.md")).toBeInTheDocument();
+		await findTreeItemByLabel(utils!, "hello.md");
+
+		await act(async () => {
+			fireEvent.click(await findTreeItemByLabel(utils!, "hello.md"));
 		});
 
 		await act(async () => {
-			fireEvent.click(utils!.getByText("hello.md"));
-		});
-
-		await act(async () => {
-			fireEvent.keyDown(utils!.getByTestId("file-tree-item-hello-md"), {
-				key: "Backspace",
-				metaKey: true,
-			});
+			fireEvent.keyDown(document, { key: "Backspace", metaKey: true });
 		});
 
 		await waitFor(async () => {
@@ -265,7 +479,7 @@ describe("FilesView", () => {
 		});
 
 		await waitFor(() => {
-			expect(utils!.queryByText("hello.md")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "hello.md")).toBeNull();
 		});
 		expect(closeFileViews).toHaveBeenCalledWith({ fileId: "file_1" });
 
@@ -297,11 +511,9 @@ describe("FilesView", () => {
 		await act(async () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
 		});
-		const input = (await utils!.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
+		const input = await findTreeRenameInput(utils!);
 		await act(async () => {
-			fireEvent.change(input, { target: { value: "fresh" } });
+			fireEvent.input(input, { target: { value: "fresh" } });
 		});
 		await act(async () => {
 			fireEvent.keyDown(input, { key: "Enter" });
@@ -361,7 +573,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		const file = await utils!.findByText("keep.md");
+		const file = await findTreeItemByLabel(utils!, "keep.md");
 		await act(async () => {
 			fireEvent.click(file);
 		});
@@ -417,7 +629,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		const file = await utils!.findByText("spaces.md");
+		const file = await findTreeItemByLabel(utils!, "spaces.md");
 		await act(async () => {
 			fireEvent.click(file);
 		});
@@ -473,7 +685,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		const file = await utils!.findByText("rule.md");
+		const file = await findTreeItemByLabel(utils!, "rule.md");
 		await act(async () => {
 			fireEvent.click(file);
 		});
@@ -529,12 +741,10 @@ describe("FilesView", () => {
 			);
 		});
 
-		await waitFor(() => {
-			expect(utils!.getByText("data.csv")).toBeInTheDocument();
-		});
+		await findTreeItemByLabel(utils!, "data.csv");
 
 		await act(async () => {
-			fireEvent.click(utils!.getByText("data.csv"));
+			fireEvent.click(await findTreeItemByLabel(utils!, "data.csv"));
 		});
 
 		expect(openFile).toHaveBeenCalledWith({
@@ -571,12 +781,10 @@ describe("FilesView", () => {
 			);
 		});
 
-		await waitFor(() => {
-			expect(utils!.getByText("notes.txt")).toBeInTheDocument();
-		});
+		await findTreeItemByLabel(utils!, "notes.txt");
 
 		await act(async () => {
-			fireEvent.click(utils!.getByText("notes.txt"));
+			fireEvent.click(await findTreeItemByLabel(utils!, "notes.txt"));
 		});
 
 		expect(openFile).toHaveBeenCalledWith({
@@ -588,6 +796,64 @@ describe("FilesView", () => {
 
 		utils!.unmount();
 		await lix.close();
+	});
+
+	test("marks files with pending external write reviews", async () => {
+		const lix = await openLix();
+		try {
+			await qb(lix)
+				.insertInto("lix_directory")
+				.values({ path: "/docs/" } as any)
+				.execute();
+			await writeReviewFile(lix, "file_review", "/docs/review.md", "before");
+			await writeReviewFile(lix, "file_clean", "/docs/clean.md", "same");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeReviewFile(lix, "file_review", "/docs/review.md", "after");
+			await writeReviewFile(lix, "file_clean", "/docs/clean.md", "same");
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-files-tree-review",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			);
+
+			let utils: ReturnType<typeof render>;
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<FilesView context={createViewContext(lix)} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			await findTreeItemByLabel(utils!, "docs");
+			await act(async () => {
+				fireEvent.click(await findTreeItemByLabel(utils!, "docs"));
+			});
+
+			await waitFor(() => {
+				expect(queryTreeItemByLabel(utils!, "review.md")).toHaveAttribute(
+					"data-item-git-status",
+					"modified",
+				);
+			});
+			expect(queryTreeItemByLabel(utils!, "clean.md")).not.toHaveAttribute(
+				"data-item-git-status",
+			);
+			expect(queryTreeItemByLabel(utils!, "docs")).toHaveAttribute(
+				"data-item-contains-git-change",
+				"true",
+			);
+
+			utils!.unmount();
+		} finally {
+			await lix.close();
+		}
 	});
 
 	test("watches transient directories on demand and delegates watched-only file opens", async () => {
@@ -659,28 +925,26 @@ describe("FilesView", () => {
 				cleanup = () => utils.unmount();
 			});
 
-			await waitFor(() => {
-				expect(utils!.getByText("docs")).toBeInTheDocument();
-				expect(utils!.getByText("notes.txt")).toBeInTheDocument();
-			});
+			await findTreeItemByLabel(utils!, "docs");
+			await findTreeItemByLabel(utils!, "notes.txt");
 			expect(setEphemeralWatchedDirectories).toHaveBeenCalledWith({
 				ownerId: "files-view:files-view-test",
 				paths: ["/"],
 			});
 
 			await act(async () => {
-				fireEvent.click(utils!.getByText("docs"));
+				fireEvent.click(await findTreeItemByLabel(utils!, "docs"));
 			});
 			await waitFor(() => {
 				expect(setEphemeralWatchedDirectories).toHaveBeenCalledWith({
 					ownerId: "files-view:files-view-test",
 					paths: ["/", "/docs/"],
 				});
-				expect(utils!.getByText("nested.txt")).toBeInTheDocument();
+				expect(queryTreeItemByLabel(utils!, "nested.txt")).toBeInTheDocument();
 			});
 
 			await act(async () => {
-				fireEvent.click(utils!.getByText("nested.txt"));
+				fireEvent.click(await findTreeItemByLabel(utils!, "nested.txt"));
 			});
 
 			await waitFor(async () => {
@@ -699,14 +963,14 @@ describe("FilesView", () => {
 			});
 
 			await act(async () => {
-				fireEvent.click(utils!.getByText("docs"));
+				fireEvent.click(await findTreeItemByLabel(utils!, "docs"));
 			});
 			await waitFor(() => {
 				expect(setEphemeralWatchedDirectories).toHaveBeenLastCalledWith({
 					ownerId: "files-view:files-view-test",
 					paths: ["/"],
 				});
-				expect(utils!.queryByText("nested.txt")).toBeNull();
+				expect(queryTreeItemByLabel(utils!, "nested.txt")).toBeNull();
 			});
 		} finally {
 			cleanup?.();
@@ -733,12 +997,10 @@ describe("FilesView", () => {
 			);
 		});
 
-		await waitFor(() => {
-			expect(utils!.getByText("docs")).toBeInTheDocument();
-		});
+		await findTreeItemByLabel(utils!, "docs");
 
 		await act(async () => {
-			fireEvent.click(utils!.getByText("docs"));
+			fireEvent.click(await findTreeItemByLabel(utils!, "docs"));
 		});
 
 		await act(async () => {
@@ -754,7 +1016,7 @@ describe("FilesView", () => {
 		});
 
 		await waitFor(() => {
-			expect(utils!.queryByText("docs")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "docs")).toBeNull();
 		});
 
 		utils!.unmount();
@@ -800,10 +1062,10 @@ describe("FilesView", () => {
 		});
 
 		await waitFor(() => {
-			expect(utils!.getByText("visible.md")).toBeInTheDocument();
-			expect(utils!.queryByText(".hidden.md")).toBeNull();
-			expect(utils!.queryByText(".hidden-folder")).toBeNull();
-			expect(utils!.queryByText("inside.md")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "visible.md")).toBeInTheDocument();
+			expect(queryTreeItemByLabel(utils!, ".hidden.md")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, ".hidden-folder")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "inside.md")).toBeNull();
 		});
 
 		utils!.unmount();
@@ -877,20 +1139,18 @@ describe("FilesView", () => {
 				);
 			});
 
-			await waitFor(() => {
-				expect(utils!.getByText("docs")).toBeInTheDocument();
-				expect(utils!.getByText("loose.txt")).toBeInTheDocument();
-			});
+			await findTreeItemByLabel(utils!, "docs");
+			await findTreeItemByLabel(utils!, "loose.txt");
 			expect(setEphemeralWatchedDirectories).toHaveBeenCalledWith({
 				ownerId: "files-view:files-test",
 				paths: ["/"],
 			});
 
 			await act(async () => {
-				fireEvent.click(utils!.getByText("docs"));
+				fireEvent.click(await findTreeItemByLabel(utils!, "docs"));
 			});
 			await waitFor(() => {
-				expect(utils!.getByText("nested.txt")).toBeInTheDocument();
+				expect(queryTreeItemByLabel(utils!, "nested.txt")).toBeInTheDocument();
 			});
 			expect(setEphemeralWatchedDirectories).toHaveBeenCalledWith({
 				ownerId: "files-view:files-test",
@@ -898,7 +1158,7 @@ describe("FilesView", () => {
 			});
 
 			await act(async () => {
-				fireEvent.click(utils!.getByText("loose.txt"));
+				fireEvent.click(await findTreeItemByLabel(utils!, "loose.txt"));
 			});
 
 			await waitFor(async () => {
@@ -914,6 +1174,106 @@ describe("FilesView", () => {
 					filePath: "/loose.txt",
 					focus: false,
 				});
+			});
+
+			utils!.unmount();
+		} finally {
+			window.flashtypeDesktop = originalDesktop;
+			await lix.close();
+		}
+	});
+
+	test("renames watched-only files by importing them into Lix", async () => {
+		const lix = await openLix();
+		const originalDesktop = window.flashtypeDesktop;
+		const openFile = vi.fn();
+		const importFilesystemPaths = vi
+			.spyOn(lix, "importFilesystemPaths")
+			.mockImplementation(async ([path]) => {
+				if (!path) return;
+				await qb(lix)
+					.insertInto("lix_file")
+					.values({
+						id: "imported_loose",
+						path,
+						data: new TextEncoder().encode("from disk"),
+					})
+					.execute();
+			});
+		const rootEntries = [
+			{
+				id: "watched:/loose.txt",
+				parent_id: null,
+				path: "/loose.txt",
+				display_name: "loose.txt",
+				kind: "file" as const,
+				source: "watched" as const,
+			},
+		];
+		const setEphemeralWatchedDirectories = vi.fn(async () => rootEntries);
+		window.flashtypeDesktop = {
+			workspace: {
+				setEphemeralWatchedDirectories,
+				onEphemeralWatchedFileTreeChanged: vi.fn(() => () => {}),
+			},
+		} as unknown as Window["flashtypeDesktop"];
+
+		let utils: ReturnType<typeof render>;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<FilesView
+								context={createViewContext(lix, {
+									openFile,
+									viewInstance: "files-rename-watched",
+									workspace: {
+										ephemeral: true,
+										path: "/tmp/workspace",
+										name: "workspace",
+										openFilePaths: [],
+									},
+								})}
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			await findTreeItemByLabel(utils!, "loose.txt");
+			const input = await startTreeRenameByLabel(utils!, "loose.txt");
+			expect(input.value).toBe("loose.txt");
+			openFile.mockClear();
+
+			await act(async () => {
+				fireEvent.input(input, { target: { value: "renamed.txt" } });
+			});
+			await act(async () => {
+				fireEvent.keyDown(input, { key: "Enter" });
+			});
+
+			await waitFor(async () => {
+				const rows = await qb(lix)
+					.selectFrom("lix_file")
+					.select(["id", "path", "data"])
+					.execute();
+				expect(rows.some((row) => row.path === "/loose.txt")).toBe(false);
+				expect(
+					rows.some(
+						(row) => row.id === "imported_loose" && row.path === "/renamed.txt",
+					),
+				).toBe(true);
+				expect(queryTreeItemByLabel(utils!, "loose.txt")).toBeNull();
+				expect(queryTreeItemByLabel(utils!, "renamed.txt")).toBeInTheDocument();
+			});
+			expect(importFilesystemPaths).toHaveBeenCalledWith(["/loose.txt"]);
+			expect(openFile).toHaveBeenCalledWith({
+				panel: "central",
+				fileId: "imported_loose",
+				filePath: "/renamed.txt",
+				focus: false,
+				trackTelemetry: false,
 			});
 
 			utils!.unmount();
@@ -947,9 +1307,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		await waitFor(() => {
-			expect(utils!.getByText("file-01.md")).toBeInTheDocument();
-		});
+		await findTreeItemByLabel(utils!, "file-01.md");
 
 		const scrollRegion = utils!.getByTestId("files-view-tree-scroll");
 		expect(scrollRegion).toHaveClass("min-h-0");
@@ -983,11 +1341,9 @@ describe("FilesView", () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
 		});
 
-		const input = (await utils!.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
+		const input = await findTreeRenameInput(utils!);
 		await act(async () => {
-			fireEvent.change(input, { target: { value: "hello nice one" } });
+			fireEvent.input(input, { target: { value: "hello nice one" } });
 		});
 
 		await act(async () => {
@@ -1004,9 +1360,7 @@ describe("FilesView", () => {
 			expect(userRows[0]?.path).toBe("/hello-nice-one.md");
 		});
 
-		await waitFor(() => {
-			expect(utils!.getByText("hello-nice-one.md")).toBeInTheDocument();
-		});
+		await findTreeItemByLabel(utils!, "hello-nice-one.md");
 
 		utils!.unmount();
 		await lix.close();
@@ -1039,13 +1393,11 @@ describe("FilesView", () => {
 			});
 		});
 
-		const input = (await utils!.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
+		const input = await findTreeRenameInput(utils!);
 		expect(input.value).toBe("new-directory");
 
 		await act(async () => {
-			fireEvent.change(input, { target: { value: "docs" } });
+			fireEvent.input(input, { target: { value: "docs" } });
 		});
 
 		await act(async () => {
@@ -1088,7 +1440,7 @@ describe("FilesView", () => {
 			fireEvent.keyDown(document, { key: ".", ctrlKey: true });
 		});
 
-		expect(utils!.queryByTestId("files-view-draft-input")).toBeNull();
+		expect(queryTreeRenameInput(utils!)).toBeNull();
 
 		const rows = await qb(lix)
 			.selectFrom("lix_file")
@@ -1128,7 +1480,7 @@ describe("FilesView", () => {
 			});
 		});
 
-		expect(utils!.queryByTestId("files-view-draft-input")).toBeNull();
+		expect(queryTreeRenameInput(utils!)).toBeNull();
 
 		const rows = await qb(lix)
 			.selectFrom("lix_directory")
@@ -1163,16 +1515,14 @@ describe("FilesView", () => {
 			fireEvent.keyDown(document, { key: ".", metaKey: true });
 		});
 
-		const input = (await utils!.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
+		const input = await findTreeRenameInput(utils!);
 
 		await act(async () => {
 			fireEvent.keyDown(input, { key: "Escape" });
 		});
 
 		await waitFor(() => {
-			expect(utils!.queryByTestId("files-view-draft-input")).toBeNull();
+			expect(queryTreeRenameInput(utils!)).toBeNull();
 		});
 
 		const rows = await qb(lix)
@@ -1186,3 +1536,50 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 });
+
+async function writeReviewFile(
+	lix: Awaited<ReturnType<typeof openLix>>,
+	id: string,
+	path: string,
+	text: string,
+): Promise<void> {
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({ id, path, data: new TextEncoder().encode(text) })
+		.onConflict((oc) =>
+			oc.column("id").doUpdateSet({
+				path,
+				data: new TextEncoder().encode(text),
+			}),
+		)
+		.execute();
+}
+
+async function activeCommitId(
+	lix: Awaited<ReturnType<typeof openLix>>,
+): Promise<string> {
+	const result = await lix.execute(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	const commitId = result.rows[0]?.get("commit_id");
+	if (typeof commitId !== "string") {
+		throw new Error("Missing active commit id");
+	}
+	return commitId;
+}
+
+function agentRange(
+	overrides: Pick<
+		AgentTurnCommitRange,
+		"id" | "beforeCommitId" | "afterCommitId"
+	>,
+): AgentTurnCommitRange {
+	return {
+		agent: "codex",
+		sessionId: "session-1",
+		turnId: "turn-1",
+		startedAt: 1,
+		completedAt: 2,
+		...overrides,
+	};
+}
