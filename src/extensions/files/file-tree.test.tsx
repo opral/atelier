@@ -185,12 +185,13 @@ describe("FileTree", () => {
 				destinationPath: "/notes.md",
 				id: "file-readme",
 				kind: "file",
+				source: "lix",
 				sourcePath: "/README.md",
 			});
 		});
 	});
 
-	test("does not start native renames for watched-only files", async () => {
+	test("commits native renames for watched-only files", async () => {
 		const nodes: FilesystemTreeNode[] = [
 			{
 				type: "file",
@@ -205,7 +206,40 @@ describe("FileTree", () => {
 			<FileTree nodes={nodes} onRenameCommit={handleRenameCommit} />,
 		);
 
-		fireEvent.click(getTreeItem(container, "README.md"));
+		const input = await startTreeRename(container, "README.md");
+		expect(input.value).toBe("README.md");
+
+		fireEvent.input(input, { target: { value: "notes.md" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(() => {
+			expect(handleRenameCommit).toHaveBeenCalledWith({
+				destinationPath: "/notes.md",
+				id: "watched:/README.md",
+				kind: "file",
+				source: "watched",
+				sourcePath: "/README.md",
+			});
+		});
+	});
+
+	test("does not start native renames for watched-only directories", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "directory",
+				id: "watched:/docs/",
+				name: "docs",
+				path: "/docs/",
+				source: "watched",
+				children: [],
+			},
+		];
+		const handleRenameCommit = vi.fn();
+		const { container } = render(
+			<FileTree nodes={nodes} onRenameCommit={handleRenameCommit} />,
+		);
+
+		fireEvent.click(getTreeItem(container, "docs/"));
 		fireEvent.keyDown(
 			getTreeRoot(container).activeElement ?? getTreeHost(container),
 			{

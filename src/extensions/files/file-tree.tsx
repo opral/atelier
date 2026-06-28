@@ -20,6 +20,7 @@ export type FileTreeCreateRequest = {
 export type FileTreeRenameRequest = {
 	readonly id?: string;
 	readonly kind: "file" | "directory";
+	readonly source: "lix" | "watched";
 	readonly sourcePath: string;
 	readonly destinationPath: string;
 };
@@ -215,7 +216,10 @@ export function FileTree({
 			return info.createRequestId === request.id;
 		}
 		if (info.createRequestId != null) return false;
-		return info.source !== "watched";
+		if (info.source === "watched") {
+			return info.kind === "file";
+		}
+		return true;
 	};
 
 	handleRenameRef.current = (event) => {
@@ -233,7 +237,10 @@ export function FileTree({
 			return;
 		}
 		if (request) return;
-		if (sourceInfo.createRequestId != null || sourceInfo.source === "watched") {
+		if (sourceInfo.createRequestId != null) {
+			return;
+		}
+		if (sourceInfo.source === "watched" && sourceInfo.kind !== "file") {
 			return;
 		}
 		void stateRef.current.onRenameCommit?.({
@@ -243,6 +250,7 @@ export function FileTree({
 					: treeFilePathToAppPath(event.destinationPath),
 			id: sourceInfo.id,
 			kind: sourceInfo.kind,
+			source: sourceInfo.source ?? "lix",
 			sourcePath: sourceInfo.appPath,
 		});
 	};

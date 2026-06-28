@@ -50,16 +50,23 @@ function FilesViewContent({
 	const [watchedEntries, setWatchedEntries] = useState<FilesystemEntryRow[]>(
 		[],
 	);
+	const [upgradedWatchedFilePaths, setUpgradedWatchedFilePaths] = useState(
+		() => new Set<string>(),
+	);
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),
 	);
+	const visibleWatchedEntries = useMemo(() => {
+		if (!isEphemeralWorkspace) return [];
+		if (upgradedWatchedFilePaths.size === 0) return watchedEntries;
+		return watchedEntries.filter((entry) => {
+			if (entry.kind !== "file") return true;
+			return !upgradedWatchedFilePaths.has(filesystemEntryPathKey(entry));
+		});
+	}, [isEphemeralWorkspace, upgradedWatchedFilePaths, watchedEntries]);
 	const combinedEntries = useMemo(
-		() =>
-			unionFilesystemEntries(
-				entries ?? [],
-				isEphemeralWorkspace ? watchedEntries : [],
-			),
-		[entries, isEphemeralWorkspace, watchedEntries],
+		() => unionFilesystemEntries(entries ?? [], visibleWatchedEntries),
+		[entries, visibleWatchedEntries],
 	);
 	const nodes = useMemo(
 		() => buildFilesystemTree(combinedEntries),
@@ -134,6 +141,7 @@ function FilesViewContent({
 	useEffect(() => {
 		if (!isEphemeralWorkspace) {
 			setWatchedEntries([]);
+			setUpgradedWatchedFilePaths(new Set());
 			return;
 		}
 		const workspaceApi = window.flashtypeDesktop?.workspace;
@@ -374,21 +382,46 @@ function FilesViewContent({
 					return;
 				}
 
+				let resolvedFileId = request.source === "watched" ? null : request.id;
+				if (request.source === "watched") {
+					await lix.importFilesystemPaths([sourcePath]);
+					const importedFile = await qb(lix)
+						.selectFrom("lix_file")
+						.select("id")
+						.where("path", "=", sourcePath)
+						.executeTakeFirst();
+					if (!importedFile?.id) {
+						throw new Error(
+							`imported watched file id not found for path '${sourcePath}'`,
+						);
+					}
+					resolvedFileId = importedFile.id as string;
+				}
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ path: destinationPath } as any)
 					.where("path", "=", sourcePath)
 					.execute();
 				setPendingPaths((prev) =>
-					remapFilePaths(prev, sourcePath, destinationPath),
+					appendUniquePath(
+						remapFilePaths(prev, sourcePath, destinationPath),
+						destinationPath,
+					),
 				);
+				if (request.source === "watched") {
+					setUpgradedWatchedFilePaths((prev) => {
+						const next = new Set(prev);
+						next.add(sourcePath);
+						return next;
+					});
+				}
 				setSelectedPath(destinationPath);
-				setSelectedFileId(request.id ?? null);
+				setSelectedFileId(resolvedFileId ?? null);
 				setSelectedKind("file");
-				if (request.id) {
+				if (resolvedFileId) {
 					void context?.openFile?.({
 						panel: "central",
-						fileId: request.id,
+						fileId: resolvedFileId,
 						filePath: destinationPath,
 						focus: false,
 						trackTelemetry: false,
@@ -969,6 +1002,10 @@ function remapFilePathsInDirectory(
 	return paths.map((path) =>
 		remapFilePathInDirectory(path, sourcePath, destinationPath),
 	);
+}
+
+function appendUniquePath(paths: readonly string[], path: string): string[] {
+	return paths.includes(path) ? [...paths] : [...paths, path];
 }
 
 function unionFilesystemEntries(

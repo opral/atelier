@@ -1121,6 +1121,106 @@ describe("FilesView", () => {
 		}
 	});
 
+	test("renames watched-only files by importing them into Lix", async () => {
+		const lix = await openLix();
+		const originalDesktop = window.flashtypeDesktop;
+		const openFile = vi.fn();
+		const importFilesystemPaths = vi
+			.spyOn(lix, "importFilesystemPaths")
+			.mockImplementation(async ([path]) => {
+				if (!path) return;
+				await qb(lix)
+					.insertInto("lix_file")
+					.values({
+						id: "imported_loose",
+						path,
+						data: new TextEncoder().encode("from disk"),
+					})
+					.execute();
+			});
+		const rootEntries = [
+			{
+				id: "watched:/loose.txt",
+				parent_id: null,
+				path: "/loose.txt",
+				display_name: "loose.txt",
+				kind: "file" as const,
+				source: "watched" as const,
+			},
+		];
+		const setEphemeralWatchedDirectories = vi.fn(async () => rootEntries);
+		window.flashtypeDesktop = {
+			workspace: {
+				setEphemeralWatchedDirectories,
+				onEphemeralWatchedFileTreeChanged: vi.fn(() => () => {}),
+			},
+		} as unknown as Window["flashtypeDesktop"];
+
+		let utils: ReturnType<typeof render>;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<FilesView
+								context={createViewContext(lix, {
+									openFile,
+									viewInstance: "files-rename-watched",
+									workspace: {
+										ephemeral: true,
+										path: "/tmp/workspace",
+										name: "workspace",
+										openFilePaths: [],
+									},
+								})}
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			await findTreeItemByLabel(utils!, "loose.txt");
+			const input = await startTreeRenameByLabel(utils!, "loose.txt");
+			expect(input.value).toBe("loose.txt");
+			openFile.mockClear();
+
+			await act(async () => {
+				fireEvent.input(input, { target: { value: "renamed.txt" } });
+			});
+			await act(async () => {
+				fireEvent.keyDown(input, { key: "Enter" });
+			});
+
+			await waitFor(async () => {
+				const rows = await qb(lix)
+					.selectFrom("lix_file")
+					.select(["id", "path", "data"])
+					.execute();
+				expect(rows.some((row) => row.path === "/loose.txt")).toBe(false);
+				expect(
+					rows.some(
+						(row) => row.id === "imported_loose" && row.path === "/renamed.txt",
+					),
+				).toBe(true);
+				expect(queryTreeItemByLabel(utils!, "loose.txt")).toBeNull();
+				expect(queryTreeItemByLabel(utils!, "renamed.txt")).toBeInTheDocument();
+			});
+			expect(importFilesystemPaths).toHaveBeenCalledWith(["/loose.txt"]);
+			expect(openFile).toHaveBeenCalledWith({
+				panel: "central",
+				fileId: "imported_loose",
+				filePath: "/renamed.txt",
+				focus: false,
+				trackTelemetry: false,
+			});
+
+			utils!.unmount();
+		} finally {
+			window.flashtypeDesktop = originalDesktop;
+			await lix.close();
+		}
+	});
+
 	test("renders the file tree inside a vertical scroll region", async () => {
 		const lix = await openLix();
 		await qb(lix)
