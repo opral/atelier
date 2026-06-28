@@ -5,7 +5,11 @@ import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
 import { buildFilesystemTree } from "@/extensions/files/build-filesystem-tree";
 import type { ExtensionContext } from "../../extension-runtime/types";
-import { FileTree, type FileTreeCreateRequest } from "./file-tree";
+import {
+	FileTree,
+	type FileTreeCreateRequest,
+	type FileTreeRenameRequest,
+} from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { qb } from "@/lib/lix-kysely";
 import { FILES_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
@@ -62,6 +66,7 @@ function FilesViewContent({
 		[combinedEntries],
 	);
 	const creatingRef = useRef(false);
+	const renamingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
 	const [pendingDirectoryPaths, setPendingDirectoryPaths] = useState<string[]>(
 		[],
@@ -323,6 +328,80 @@ function FilesViewContent({
 	const handleCreateDirectory = useCallback(() => {
 		startCreateRequest("directory");
 	}, [startCreateRequest]);
+
+	const handleRenameCommit = useCallback(
+		async (request: FileTreeRenameRequest) => {
+			if (renamingRef.current) return;
+			const sourcePath =
+				request.kind === "directory"
+					? ensureDirectoryPath(request.sourcePath)
+					: normalizeFilePath(request.sourcePath);
+			const destinationPath =
+				request.kind === "directory"
+					? ensureDirectoryPath(request.destinationPath)
+					: normalizeFilePath(request.destinationPath);
+			if (sourcePath === destinationPath) return;
+
+			const destinationExists =
+				request.kind === "directory"
+					? existingDirectoryPaths.has(destinationPath)
+					: existingFilePaths.has(destinationPath);
+			if (destinationExists) {
+				console.warn(`Cannot rename '${sourcePath}' to '${destinationPath}'`);
+				return;
+			}
+
+			renamingRef.current = true;
+			try {
+				if (request.kind === "directory") {
+					await qb(lix)
+						.updateTable("lix_directory")
+						.set({ path: destinationPath } as any)
+						.where("path", "=", sourcePath)
+						.execute();
+					setOpenDirectoryPaths((prev) =>
+						remapDirectoryPathSet(prev, sourcePath, destinationPath),
+					);
+					setPendingDirectoryPaths((prev) =>
+						remapDirectoryPaths(prev, sourcePath, destinationPath),
+					);
+					setPendingPaths((prev) =>
+						remapFilePathsInDirectory(prev, sourcePath, destinationPath),
+					);
+					setSelectedPath(destinationPath);
+					setSelectedFileId(null);
+					setSelectedKind("directory");
+					return;
+				}
+
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ path: destinationPath } as any)
+					.where("path", "=", sourcePath)
+					.execute();
+				setPendingPaths((prev) =>
+					remapFilePaths(prev, sourcePath, destinationPath),
+				);
+				setSelectedPath(destinationPath);
+				setSelectedFileId(request.id ?? null);
+				setSelectedKind("file");
+				if (request.id) {
+					void context?.openFile?.({
+						panel: "central",
+						fileId: request.id,
+						filePath: destinationPath,
+						focus: false,
+						trackTelemetry: false,
+					});
+				}
+			} catch (error) {
+				console.error("Failed to rename entry", error);
+			} finally {
+				renamingRef.current = false;
+			}
+		},
+		[context, existingDirectoryPaths, existingFilePaths, lix],
+	);
 
 	const handleCreateShortcut = useCallback(
 		(kind: "file" | "directory") => {
@@ -680,6 +759,7 @@ function FilesViewContent({
 					createRequest={createRequest}
 					onCreateCancel={handleCreateCancel}
 					onCreateCommit={handleCreateCommit}
+					onRenameCommit={handleRenameCommit}
 				/>
 			</div>
 		</div>
@@ -805,6 +885,90 @@ function normalizeNameStem(stem: string): string {
 function ensureDirectoryPath(path: string): string {
 	if (path === "/") return "/";
 	return path.endsWith("/") ? path : `${path}/`;
+}
+
+function normalizeFilePath(path: string): string {
+	return path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function remapDirectoryPath(
+	path: string,
+	sourcePath: string,
+	destinationPath: string,
+): string {
+	const source = ensureDirectoryPath(sourcePath);
+	const destination = ensureDirectoryPath(destinationPath);
+	const normalized = ensureDirectoryPath(path);
+	if (normalized === source) return destination;
+	if (normalized.startsWith(source)) {
+		return `${destination}${normalized.slice(source.length)}`;
+	}
+	return normalized;
+}
+
+function remapFilePath(
+	path: string,
+	sourcePath: string,
+	destinationPath: string,
+): string {
+	const source = normalizeFilePath(sourcePath);
+	const destination = normalizeFilePath(destinationPath);
+	const normalized = normalizeFilePath(path);
+	return normalized === source ? destination : normalized;
+}
+
+function remapFilePathInDirectory(
+	path: string,
+	sourcePath: string,
+	destinationPath: string,
+): string {
+	const source = ensureDirectoryPath(sourcePath);
+	const destination = ensureDirectoryPath(destinationPath);
+	const normalized = normalizeFilePath(path);
+	if (normalized.startsWith(source)) {
+		return `${destination}${normalized.slice(source.length)}`;
+	}
+	return normalized;
+}
+
+function remapDirectoryPathSet(
+	paths: ReadonlySet<string>,
+	sourcePath: string,
+	destinationPath: string,
+): Set<string> {
+	return new Set(
+		[...paths].map((path) =>
+			remapDirectoryPath(path, sourcePath, destinationPath),
+		),
+	);
+}
+
+function remapDirectoryPaths(
+	paths: readonly string[],
+	sourcePath: string,
+	destinationPath: string,
+): string[] {
+	return paths.map((path) =>
+		remapDirectoryPath(path, sourcePath, destinationPath),
+	);
+}
+
+function remapFilePaths(
+	paths: readonly string[],
+	sourcePath: string,
+	destinationPath: string,
+): string[] {
+	return paths.map((path) => remapFilePath(path, sourcePath, destinationPath));
+}
+
+function remapFilePathsInDirectory(
+	paths: readonly string[],
+	sourcePath: string,
+	destinationPath: string,
+): string[] {
+	return paths.map((path) =>
+		remapFilePathInDirectory(path, sourcePath, destinationPath),
+	);
 }
 
 function unionFilesystemEntries(

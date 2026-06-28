@@ -17,6 +17,13 @@ export type FileTreeCreateRequest = {
 	readonly initialValue: string;
 };
 
+export type FileTreeRenameRequest = {
+	readonly id?: string;
+	readonly kind: "file" | "directory";
+	readonly sourcePath: string;
+	readonly destinationPath: string;
+};
+
 export type FileTreeProps = {
 	readonly nodes?: FilesystemTreeNode[];
 	readonly openFileView?: (
@@ -34,6 +41,9 @@ export type FileTreeProps = {
 		value: string,
 	) => Promise<void> | void;
 	readonly onCreateCancel?: (request: FileTreeCreateRequest) => void;
+	readonly onRenameCommit?: (
+		request: FileTreeRenameRequest,
+	) => Promise<void> | void;
 };
 
 type TreePathInfo = {
@@ -41,6 +51,7 @@ type TreePathInfo = {
 	readonly kind: "file" | "directory";
 	readonly id?: string;
 	readonly createRequestId?: number;
+	readonly source?: "lix" | "watched";
 };
 
 type TreeInput = {
@@ -90,6 +101,7 @@ export function FileTree({
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
+	onRenameCommit,
 }: FileTreeProps) {
 	const [internalOpenDirectories, setInternalOpenDirectories] = useState(
 		() => new Set<string>(),
@@ -133,6 +145,7 @@ export function FileTree({
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
+		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
 		setInternalOpenDirectories,
@@ -145,6 +158,7 @@ export function FileTree({
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
+		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
 		setInternalOpenDirectories,
@@ -191,26 +205,46 @@ export function FileTree({
 
 	handleCanRenameRef.current = (item) => {
 		const request = stateRef.current.createRequest;
-		if (!request) return false;
 		const info = pathInfoForTreePath(
 			stateRef.current.pathInfoByTreePath,
 			item.path,
 		);
-		return info?.createRequestId === request.id;
+		if (!info) return false;
+		if (item.isFolder !== (info.kind === "directory")) return false;
+		if (request) {
+			return info.createRequestId === request.id;
+		}
+		if (info.createRequestId != null) return false;
+		return info.source !== "watched";
 	};
 
 	handleRenameRef.current = (event) => {
 		const request = stateRef.current.createRequest;
-		if (!request) return;
 		const sourceInfo = pathInfoForTreePath(
 			stateRef.current.pathInfoByTreePath,
 			event.sourcePath,
 		);
-		if (sourceInfo?.createRequestId !== request.id) return;
-		void stateRef.current.onCreateCommit?.(
-			request,
-			leafNameFromTreePath(event.destinationPath),
-		);
+		if (!sourceInfo) return;
+		if (request && sourceInfo.createRequestId === request.id) {
+			void stateRef.current.onCreateCommit?.(
+				request,
+				leafNameFromTreePath(event.destinationPath),
+			);
+			return;
+		}
+		if (request) return;
+		if (sourceInfo.createRequestId != null || sourceInfo.source === "watched") {
+			return;
+		}
+		void stateRef.current.onRenameCommit?.({
+			destinationPath:
+				sourceInfo.kind === "directory"
+					? treeDirectoryPathToAppPath(event.destinationPath)
+					: treeFilePathToAppPath(event.destinationPath),
+			id: sourceInfo.id,
+			kind: sourceInfo.kind,
+			sourcePath: sourceInfo.appPath,
+		});
 	};
 
 	const handleTreeClickCapture = useCallback(() => {
@@ -381,6 +415,7 @@ function buildTreeInput(
 				appPath: node.path,
 				id: node.id,
 				kind: "directory",
+				source: node.source,
 			});
 			for (const child of node.children) {
 				visit(child);
@@ -392,6 +427,7 @@ function buildTreeInput(
 			appPath: node.path,
 			id: node.id,
 			kind: "file",
+			source: node.source,
 		});
 	};
 
@@ -543,6 +579,10 @@ function appDirectoryPathToTreePath(path: string): string {
 function treeDirectoryPathToAppPath(path: string): string {
 	if (!path) return "/";
 	return `/${path.endsWith("/") ? path : `${path}/`}`;
+}
+
+function treeFilePathToAppPath(path: string): string {
+	return path.startsWith("/") ? path : `/${path}`;
 }
 
 function childAppPath(

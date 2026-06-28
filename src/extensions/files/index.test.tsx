@@ -123,6 +123,22 @@ async function findTreeRenameInput(
 	});
 }
 
+async function startTreeRenameByLabel(
+	utils: ReturnType<typeof render>,
+	label: string,
+): Promise<HTMLInputElement> {
+	const item = await findTreeItemByLabel(utils, label);
+	await act(async () => {
+		fireEvent.click(item);
+	});
+	await act(async () => {
+		fireEvent.keyDown(getFilesTreeRoot(utils).activeElement ?? item, {
+			key: "F2",
+		});
+	});
+	return findTreeRenameInput(utils);
+}
+
 describe("FilesView", () => {
 	beforeAll(() => {
 		setNavigatorPlatform("MacIntel");
@@ -289,6 +305,129 @@ describe("FilesView", () => {
 		});
 		expect(input.value).toBe("new-file");
 		expect(focusPanel).not.toHaveBeenCalled();
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("renames selected files with F2", async () => {
+		const lix = await openLix();
+		const openFile = vi.fn();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_rename",
+				path: "/draft.md",
+				data: new Uint8Array(),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix, { openFile })} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const input = await startTreeRenameByLabel(utils!, "draft.md");
+		expect(input.value).toBe("draft.md");
+		openFile.mockClear();
+
+		await act(async () => {
+			fireEvent.input(input, { target: { value: "renamed.md" } });
+		});
+		await act(async () => {
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+
+		await waitFor(async () => {
+			const rows = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.execute();
+			expect(rows.some((row) => row.path === "/draft.md")).toBe(false);
+			expect(
+				rows.some(
+					(row) => row.id === "file_rename" && row.path === "/renamed.md",
+				),
+			).toBe(true);
+			expect(queryTreeItemByLabel(utils!, "draft.md")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "renamed.md")).toBeInTheDocument();
+		});
+		expect(openFile).toHaveBeenCalledWith({
+			panel: "central",
+			fileId: "file_rename",
+			filePath: "/renamed.md",
+			focus: false,
+			trackTelemetry: false,
+		});
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("renames selected directories with F2", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ path: "/docs/" } as any)
+			.execute();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_nested",
+				path: "/docs/readme.md",
+				data: new Uint8Array(),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={createViewContext(lix)} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const input = await startTreeRenameByLabel(utils!, "docs");
+		expect(input.value).toBe("docs");
+
+		await act(async () => {
+			fireEvent.input(input, { target: { value: "notes" } });
+		});
+		await act(async () => {
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+
+		await waitFor(async () => {
+			const directoryRows = await qb(lix)
+				.selectFrom("lix_directory")
+				.select(["path"])
+				.execute();
+			const fileRows = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.execute();
+			expect(directoryRows.some((row) => row.path === "/docs/")).toBe(false);
+			expect(directoryRows.some((row) => row.path === "/notes/")).toBe(true);
+			expect(fileRows.some((row) => row.path === "/docs/readme.md")).toBe(
+				false,
+			);
+			expect(
+				fileRows.some(
+					(row) => row.id === "file_nested" && row.path === "/notes/readme.md",
+				),
+			).toBe(true);
+			expect(queryTreeItemByLabel(utils!, "docs")).toBeNull();
+			expect(queryTreeItemByLabel(utils!, "notes")).toBeInTheDocument();
+		});
 
 		utils!.unmount();
 		await lix.close();

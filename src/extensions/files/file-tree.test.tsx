@@ -159,6 +159,66 @@ describe("FileTree", () => {
 		expect(handleOpen).toHaveBeenCalledWith("file-readme", "/README.md");
 	});
 
+	test("commits native renames for lix-backed files", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+				source: "lix",
+			},
+		];
+		const handleRenameCommit = vi.fn();
+		const { container } = render(
+			<FileTree nodes={nodes} onRenameCommit={handleRenameCommit} />,
+		);
+
+		const input = await startTreeRename(container, "README.md");
+		expect(input.value).toBe("README.md");
+
+		fireEvent.input(input, { target: { value: "notes.md" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(() => {
+			expect(handleRenameCommit).toHaveBeenCalledWith({
+				destinationPath: "/notes.md",
+				id: "file-readme",
+				kind: "file",
+				sourcePath: "/README.md",
+			});
+		});
+	});
+
+	test("does not start native renames for watched-only files", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "watched:/README.md",
+				name: "README.md",
+				path: "/README.md",
+				source: "watched",
+			},
+		];
+		const handleRenameCommit = vi.fn();
+		const { container } = render(
+			<FileTree nodes={nodes} onRenameCommit={handleRenameCommit} />,
+		);
+
+		fireEvent.click(getTreeItem(container, "README.md"));
+		fireEvent.keyDown(
+			getTreeRoot(container).activeElement ?? getTreeHost(container),
+			{
+				key: "F2",
+			},
+		);
+
+		await waitFor(() => {
+			expect(queryTreeRenameInput(container)).toBeNull();
+		});
+		expect(handleRenameCommit).not.toHaveBeenCalled();
+	});
+
 	test("keeps focus state on file tree rows instead of filename labels", async () => {
 		const { container } = render(<FileTree nodes={mockTree} />);
 		fireEvent.click(getTreeItem(container, "docs/"));
@@ -271,6 +331,32 @@ function queryTreeItem(
 	return getTreeRoot(container).querySelector(
 		`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
 	);
+}
+
+function queryTreeRenameInput(container: HTMLElement): HTMLInputElement | null {
+	const input = getTreeRoot(container).querySelector(
+		"[data-item-rename-input]",
+	);
+	return input instanceof HTMLInputElement ? input : null;
+}
+
+async function startTreeRename(
+	container: HTMLElement,
+	path: string,
+): Promise<HTMLInputElement> {
+	const item = getTreeItem(container, path);
+	fireEvent.click(item);
+	await waitFor(() => {
+		expect(getTreeRoot(container).activeElement).toBe(item);
+	});
+	fireEvent.keyDown(item, { key: "F2" });
+	return waitFor(() => {
+		const input = queryTreeRenameInput(container);
+		if (!input) {
+			throw new Error("file tree rename input not found");
+		}
+		return input;
+	});
 }
 
 const mockTree: FilesystemTreeNode[] = [
