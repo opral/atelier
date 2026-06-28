@@ -12,6 +12,8 @@ import {
 	markWorkspaceLixOpenPendingSync,
 	writeWorkspaceRecoverySync,
 } from "./workspace-recovery.mjs";
+import { captureTelemetryException } from "./telemetry.mjs";
+import { captureWorkspaceRecoveryLifecycle } from "./workspace-recovery-telemetry.mjs";
 
 const LIX_DATABASE_DIR = ".lix";
 const sessions = new Map();
@@ -51,15 +53,26 @@ export async function ensureLixOpen(window) {
 					return createDesktopLixHandle(nativeLix, workspace.path);
 				} catch (error) {
 					await nativeLix?.close().catch(() => {});
+					let recovery;
 					if (tracksPersistentWorkspace) {
 						clearWorkspaceLixOpenPendingSync(userDataPath, workspace.path);
-						writeWorkspaceRecoverySync(
+						recovery = writeWorkspaceRecoverySync(
 							userDataPath,
 							createTrackChangesRecovery(workspace, {
 								reason: "lix_open_failed",
 								message: errorMessage(error),
 							}),
 						);
+					}
+					void captureTelemetryException(error, {
+						reason: "lix_open_failed",
+						persistent_workspace: tracksPersistentWorkspace,
+						source: "electron-lix-open",
+					});
+					if (recovery) {
+						void captureWorkspaceRecoveryLifecycle("created", recovery, {
+							source: "electron-lix-open",
+						});
 					}
 					throw error;
 				}

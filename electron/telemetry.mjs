@@ -107,10 +107,21 @@ export function registerTelemetryIpc() {
 		return await captureTelemetryEvent(
 			eventName,
 			{
-				...(payload?.properties ?? {}),
 				source: "renderer",
+				...(payload?.properties ?? {}),
 			},
 			{
+				sessionId: getTelemetrySessionIdForWebContents(_event.sender),
+			},
+		);
+	});
+
+	ipcMain.handle("telemetry:captureException", async (_event, payload) => {
+		return await captureTelemetryException(
+			deserializeRendererError(payload?.error),
+			{
+				source: "renderer",
+				...(payload?.properties ?? {}),
 				sessionId: getTelemetrySessionIdForWebContents(_event.sender),
 			},
 		);
@@ -141,6 +152,24 @@ export function registerTelemetryIpc() {
 			payload?.sessionId,
 		);
 	});
+}
+
+function deserializeRendererError(value) {
+	if (value && typeof value === "object") {
+		const error = new Error(
+			typeof value.message === "string" && value.message.length > 0
+				? value.message
+				: "Renderer error",
+		);
+		if (typeof value.name === "string" && value.name.length > 0) {
+			error.name = value.name;
+		}
+		if (typeof value.stack === "string" && value.stack.length > 0) {
+			error.stack = value.stack;
+		}
+		return error;
+	}
+	return new Error(typeof value === "string" ? value : "Renderer error");
 }
 
 export async function shutdownTelemetry(timeoutMs = SHUTDOWN_TIMEOUT_MS) {

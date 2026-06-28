@@ -17,6 +17,8 @@ const app = {
 
 const telemetry = {
 	capture: (payload) => ipcRenderer.invoke("telemetry:capture", payload),
+	captureException: (payload) =>
+		ipcRenderer.invoke("telemetry:captureException", payload),
 	getClientConfig: () => ipcRenderer.invoke("telemetry:getClientConfig"),
 	setSessionContext: (payload) =>
 		ipcRenderer.invoke("telemetry:setSessionContext", payload),

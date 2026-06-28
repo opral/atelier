@@ -60,10 +60,11 @@ import {
 	clearWorkspaceRecoverySync,
 	readWorkspaceRecoveries,
 	readWorkspaceRecovery,
-	recoverPendingWorkspaceLixOpenSync,
+	recoverPendingWorkspaceLixOpenRecoveriesSync,
 	workspaceRecoveryToSessionEntry,
 	writeWorkspaceRecoverySync,
 } from "./workspace-recovery.mjs";
+import { captureWorkspaceRecoveryLifecycle } from "./workspace-recovery-telemetry.mjs";
 import { disposeAgentHookIpc, registerAgentHookIpc } from "./agent-hooks.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -240,7 +241,7 @@ async function reloadPersistentWorkspaceIntoRecovery(window, details) {
 	if (!workspace || workspace.ephemeral === true) {
 		return false;
 	}
-	writeWorkspaceRecoverySync(
+	const recovery = writeWorkspaceRecoverySync(
 		app.getPath("userData"),
 		createTrackChangesRecovery(workspace, {
 			reason: "renderer_crash",
@@ -248,6 +249,9 @@ async function reloadPersistentWorkspaceIntoRecovery(window, details) {
 			message: `Renderer process exited: ${details.reason} (${details.exitCode ?? "n/a"})`,
 		}),
 	);
+	void captureWorkspaceRecoveryLifecycle("created", recovery, {
+		source: "electron-renderer-recovery",
+	});
 	void closeLixSession(window, { ignoreOpenError: true });
 	if (window.isDestroyed() || window.webContents.isDestroyed()) {
 		return true;
@@ -762,14 +766,18 @@ async function createMainWindow(workspaceRequest) {
 			console.error(
 				`Failed to load ${validatedURL} (${errorCode}): ${errorDescription}`,
 			);
+			const error = new Error(
+				`Failed to load ${validatedURL} (${errorCode}): ${errorDescription}`,
+			);
+			void captureTelemetryException(error, {
+				error_code: errorCode,
+				source: "electron-did-fail-load",
+				validated_url: validatedURL,
+			});
 			if (!isHeadless && !window.isDestroyed() && !window.isVisible()) {
 				window.show();
 			}
-			void triggerRecoveryUpdateCheck(
-				new Error(
-					`Failed to load ${validatedURL} (${errorCode}): ${errorDescription}`,
-				),
-			);
+			void triggerRecoveryUpdateCheck(error);
 		},
 	);
 
@@ -854,7 +862,13 @@ async function startWorkspaceLifecycle() {
 		return;
 	}
 	const userDataPath = app.getPath("userData");
-	recoverPendingWorkspaceLixOpenSync(userDataPath);
+	const recoveredLixOpenRecoveries =
+		recoverPendingWorkspaceLixOpenRecoveriesSync(userDataPath);
+	for (const recovery of recoveredLixOpenRecoveries) {
+		void captureWorkspaceRecoveryLifecycle("created", recovery, {
+			source: "electron-workspace-recovery",
+		});
+	}
 	registerLixIpc((event) => BrowserWindow.fromWebContents(event.sender), {
 		disableTrackChanges: async (window) => {
 			const workspace = await disableWorkspaceTrackChanges(window);
