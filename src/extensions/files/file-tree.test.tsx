@@ -1,40 +1,47 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { FilesystemTreeNode } from "@/extensions/files/build-filesystem-tree";
 import { FileTree } from "./file-tree";
 
 describe("FileTree", () => {
 	test("renders directories and files", () => {
-		render(<FileTree nodes={mockTree} />);
+		const { container } = render(<FileTree nodes={mockTree} />);
 
-		expect(screen.getByText("docs")).toBeInTheDocument();
-		expect(screen.queryByText("guides")).toBeNull();
-		expect(screen.queryByText("writing-style.md")).toBeNull();
+		expect(getTreeItem(container, "docs/")).toHaveTextContent("docs");
+		expect(queryTreeItem(container, "docs/guides/")).toBeNull();
+		expect(queryTreeItem(container, "docs/guides/writing-style.md")).toBeNull();
 	});
 
 	test("starts directories collapsed", () => {
-		render(<FileTree nodes={mockTree} />);
+		const { container } = render(<FileTree nodes={mockTree} />);
 
-		const docsToggle = screen.getByRole("button", { name: /docs/i });
+		const docsToggle = getTreeItem(container, "docs/");
 		expect(docsToggle).toHaveAttribute("aria-expanded", "false");
-		expect(screen.queryByText("README.md")).toBeNull();
+		expect(queryTreeItem(container, "docs/README.md")).toBeNull();
 	});
 
-	test("expands and collapses directories", () => {
-		render(<FileTree nodes={mockTree} />);
+	test("expands and collapses directories", async () => {
+		const { container } = render(<FileTree nodes={mockTree} />);
 
-		const docsToggle = screen.getByRole("button", { name: /docs/i });
+		const docsToggle = getTreeItem(container, "docs/");
 		fireEvent.click(docsToggle);
 
-		expect(screen.getByText("guides")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(getTreeItem(container, "docs/guides/")).toHaveAttribute(
+				"aria-label",
+				"guides",
+			);
+		});
 
 		fireEvent.click(docsToggle);
-		expect(screen.queryByText("guides")).toBeNull();
+		await waitFor(() => {
+			expect(queryTreeItem(container, "docs/guides/")).toBeNull();
+		});
 	});
 
-	test("supports controlled opened directories", () => {
+	test("supports controlled opened directories", async () => {
 		const handleOpenDirectoriesChange = vi.fn();
-		const { rerender } = render(
+		const { container, rerender } = render(
 			<FileTree
 				nodes={mockTree}
 				openDirectories={new Set<string>()}
@@ -42,12 +49,12 @@ describe("FileTree", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: /docs/i }));
+		fireEvent.click(getTreeItem(container, "docs/"));
 
 		expect(handleOpenDirectoriesChange).toHaveBeenCalledWith(
 			new Set(["/docs"]),
 		);
-		expect(screen.queryByText("guides")).toBeNull();
+		expect(queryTreeItem(container, "docs/guides/")).toBeNull();
 
 		rerender(
 			<FileTree
@@ -56,35 +63,49 @@ describe("FileTree", () => {
 				onOpenDirectoriesChange={handleOpenDirectoriesChange}
 			/>,
 		);
-		expect(screen.getByText("guides")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(getTreeItem(container, "docs/guides/")).toHaveAttribute(
+				"aria-label",
+				"guides",
+			);
+		});
 	});
 
-	test("preserves opened directories when the tree data refreshes", () => {
-		const { rerender } = render(<FileTree nodes={mockTree} />);
+	test("preserves opened directories when the tree data refreshes", async () => {
+		const { container, rerender } = render(<FileTree nodes={mockTree} />);
 
-		const docsToggle = screen.getByRole("button", { name: /docs/i });
-		fireEvent.click(docsToggle);
-		const guidesToggle = screen.getByRole("button", { name: /guides/i });
-		fireEvent.click(guidesToggle);
+		fireEvent.click(getTreeItem(container, "docs/"));
+		await waitFor(() => {
+			expect(getTreeItem(container, "docs/guides/")).toBeInTheDocument();
+		});
+		fireEvent.click(getTreeItem(container, "docs/guides/"));
 
-		expect(screen.getByText("writing-style.md")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(
+				getTreeItem(container, "docs/guides/writing-style.md"),
+			).toBeInTheDocument();
+		});
 
 		rerender(<FileTree nodes={mockTreeWithExternalFile} />);
 
-		expect(screen.getByText("guides")).toBeInTheDocument();
-		expect(screen.getByText("external.md")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(getTreeItem(container, "docs/guides/")).toBeInTheDocument();
+			expect(
+				getTreeItem(container, "docs/guides/external.md"),
+			).toBeInTheDocument();
+		});
 	});
 
 	test("preserves collapsed directories when the tree data refreshes", () => {
-		const { rerender } = render(<FileTree nodes={mockTree} />);
+		const { container, rerender } = render(<FileTree nodes={mockTree} />);
 
-		expect(screen.queryByText("guides")).toBeNull();
+		expect(queryTreeItem(container, "docs/guides/")).toBeNull();
 
 		rerender(<FileTree nodes={mockTreeWithExternalFile} />);
 
-		expect(screen.queryByText("guides")).toBeNull();
-		expect(screen.queryByText("external.md")).toBeNull();
-		expect(screen.getByRole("button", { name: /docs/i })).toHaveAttribute(
+		expect(queryTreeItem(container, "docs/guides/")).toBeNull();
+		expect(queryTreeItem(container, "docs/guides/external.md")).toBeNull();
+		expect(getTreeItem(container, "docs/")).toHaveAttribute(
 			"aria-expanded",
 			"false",
 		);
@@ -92,7 +113,7 @@ describe("FileTree", () => {
 
 	test("reports controlled open directory changes", () => {
 		const handleOpenDirectoriesChange = vi.fn();
-		const { rerender } = render(
+		const { container, rerender } = render(
 			<FileTree
 				nodes={mockTree}
 				openDirectories={new Set()}
@@ -100,7 +121,7 @@ describe("FileTree", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: /docs/i }));
+		fireEvent.click(getTreeItem(container, "docs/"));
 		expect([...handleOpenDirectoriesChange.mock.calls.at(-1)![0]]).toEqual([
 			"/docs",
 		]);
@@ -112,7 +133,7 @@ describe("FileTree", () => {
 				onOpenDirectoriesChange={handleOpenDirectoriesChange}
 			/>,
 		);
-		fireEvent.click(screen.getByRole("button", { name: /docs/i }));
+		fireEvent.click(getTreeItem(container, "docs/"));
 		expect([...handleOpenDirectoriesChange.mock.calls.at(-1)![0]]).toEqual([
 			"/docs/guides",
 		]);
@@ -129,31 +150,31 @@ describe("FileTree", () => {
 		];
 
 		const handleOpen = vi.fn();
-		render(<FileTree nodes={nodes} openFileView={handleOpen} />);
+		const { container } = render(
+			<FileTree nodes={nodes} openFileView={handleOpen} />,
+		);
 
-		fireEvent.click(screen.getByRole("button", { name: /README.md/i }));
+		fireEvent.click(getTreeItem(container, "README.md"));
 
 		expect(handleOpen).toHaveBeenCalledWith("file-readme", "/README.md");
 	});
 
-	test("keeps focus styling on file tree rows instead of filename labels", () => {
-		render(<FileTree nodes={mockTree} />);
-		fireEvent.click(screen.getByRole("button", { name: /docs/i }));
+	test("keeps focus state on file tree rows instead of filename labels", async () => {
+		const { container } = render(<FileTree nodes={mockTree} />);
+		fireEvent.click(getTreeItem(container, "docs/"));
 
-		const fileRow = screen.getByRole("button", { name: /README.md/i });
-		const fileName = screen.getByText("README.md");
+		const fileRow = await waitFor(() =>
+			getTreeItem(container, "docs/README.md"),
+		);
+		const fileName = fileRow.querySelector("[data-item-section='content']");
 
-		expect(fileRow).toHaveClass(
-			"focus-visible:ring-[var(--color-ring-focus-visible)]",
-		);
-		expect(fileRow).toHaveClass("select-none");
-		expect(fileName).not.toHaveClass(
-			"focus-visible:ring-[var(--color-ring-focus-visible)]",
-		);
+		expect(fileRow).toHaveAttribute("data-type", "item");
+		expect(fileRow).toHaveAttribute("role", "treeitem");
+		expect(fileName).not.toHaveAttribute("tabindex");
 	});
 
 	test("renders percent text literally instead of URI-decoding filenames", () => {
-		render(
+		const { container } = render(
 			<FileTree
 				nodes={[
 					{
@@ -166,8 +187,11 @@ describe("FileTree", () => {
 			/>,
 		);
 
-		expect(screen.getByText("%61.md")).toBeInTheDocument();
-		expect(screen.queryByText("a.md")).toBeNull();
+		expect(getTreeItem(container, "%61.md")).toHaveAttribute(
+			"aria-label",
+			"%61.md",
+		);
+		expect(getTreeRoot(container)).not.toHaveTextContent("a.md");
 	});
 
 	test("dims the selected file when the files panel is not focused", () => {
@@ -180,17 +204,20 @@ describe("FileTree", () => {
 			},
 		];
 
-		const { rerender } = render(
+		const { container, rerender } = render(
 			<FileTree
 				nodes={nodes}
 				selectedPath="/README.md"
 				isPanelFocused={true}
 			/>,
 		);
-		const selectedFile = screen.getByRole("button", { name: /README.md/i });
-		expect(selectedFile).toHaveClass("bg-[var(--color-bg-selection-current)]");
-		expect(selectedFile).toHaveClass(
-			"ring-[var(--color-border-selection-current)]",
+		const host = getTreeHost(container);
+		expect(getTreeItem(container, "README.md")).toHaveAttribute(
+			"data-item-selected",
+			"true",
+		);
+		expect(host.style.getPropertyValue("--trees-selected-bg-override")).toBe(
+			"var(--color-bg-selection-current)",
 		);
 
 		rerender(
@@ -200,15 +227,51 @@ describe("FileTree", () => {
 				isPanelFocused={false}
 			/>,
 		);
-		expect(selectedFile).toHaveClass("bg-[var(--color-bg-hover)]");
-		expect(selectedFile).not.toHaveClass(
-			"bg-[var(--color-bg-selection-current)]",
-		);
-		expect(selectedFile).not.toHaveClass(
-			"ring-[var(--color-border-selection-current)]",
+		expect(host.style.getPropertyValue("--trees-selected-bg-override")).toBe(
+			"var(--color-bg-hover)",
 		);
 	});
 });
+
+function getTreeHost(container: HTMLElement): HTMLElement {
+	const host = container.querySelector("file-tree-container");
+	if (!(host instanceof HTMLElement)) {
+		throw new Error("file tree host not found");
+	}
+	return host;
+}
+
+function getTreeRoot(container: HTMLElement): ShadowRoot {
+	const root = getTreeHost(container).shadowRoot;
+	if (!root) {
+		throw new Error("file tree shadow root not found");
+	}
+	return root;
+}
+
+function getTreeItem(container: HTMLElement, path: string): HTMLElement {
+	const item = queryTreeItem(container, path);
+	if (!item) {
+		const renderedPaths = [
+			...getTreeRoot(container).querySelectorAll("[data-type='item']"),
+		]
+			.map((element) => element.getAttribute("data-item-path"))
+			.join(", ");
+		throw new Error(
+			`file tree item not found: ${path}; rendered: ${renderedPaths}`,
+		);
+	}
+	return item;
+}
+
+function queryTreeItem(
+	container: HTMLElement,
+	path: string,
+): HTMLElement | null {
+	return getTreeRoot(container).querySelector(
+		`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+	);
+}
 
 const mockTree: FilesystemTreeNode[] = [
 	{

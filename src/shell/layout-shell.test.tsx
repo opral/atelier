@@ -18,6 +18,49 @@ type DesktopMock = {
 
 const originalDesktop = window.flashtypeDesktop;
 
+function queryFileTreeHosts(container: HTMLElement): NodeListOf<HTMLElement> {
+	return container.querySelectorAll<HTMLElement>("file-tree-container");
+}
+
+function queryFilesViewRenameInputs(
+	container: HTMLElement,
+): HTMLInputElement[] {
+	const inputs: HTMLInputElement[] = [];
+	for (const host of queryFileTreeHosts(container)) {
+		const input = host.shadowRoot?.querySelector("[data-item-rename-input]");
+		if (input instanceof HTMLInputElement) inputs.push(input);
+	}
+	return inputs;
+}
+
+function queryFilesViewRenameInput(
+	container: HTMLElement,
+): HTMLInputElement | null {
+	return queryFilesViewRenameInputs(container)[0] ?? null;
+}
+
+async function findFilesViewRenameInput(
+	container: HTMLElement,
+): Promise<HTMLInputElement> {
+	return waitFor(() => {
+		const input = queryFilesViewRenameInput(container);
+		if (!input) {
+			throw new Error("file tree rename input not found");
+		}
+		return input;
+	});
+}
+
+function getFileTreeHostForShadowElement(
+	container: HTMLElement,
+	element: Element,
+): HTMLElement {
+	for (const host of queryFileTreeHosts(container)) {
+		if (host.shadowRoot?.contains(element)) return host;
+	}
+	throw new Error("file tree host for shadow element not found");
+}
+
 afterEach(() => {
 	cleanup();
 	window.flashtypeDesktop = originalDesktop;
@@ -207,10 +250,11 @@ describe("V2LayoutShell native New File", () => {
 			await desktop.emitNewFile();
 		});
 
-		const input = (await screen.findByTestId(
-			"files-view-draft-input",
-		)) as HTMLInputElement;
-		await waitFor(() => expect(document.activeElement).toBe(input));
+		const input = await findFilesViewRenameInput(utils.container);
+		const inputHost = getFileTreeHostForShadowElement(utils.container, input);
+		await waitFor(() =>
+			expect(inputHost.shadowRoot?.activeElement).toBe(input),
+		);
 		expect(input.value).toBe("new-file");
 		await expect(findFilePath(lix, "/new-file.md")).resolves.toBeUndefined();
 
@@ -236,13 +280,14 @@ describe("V2LayoutShell native New File", () => {
 			await desktop.emitNewFile();
 		});
 
-		const input = await screen.findByTestId("files-view-draft-input");
+		const input = await findFilesViewRenameInput(utils.container);
+		const inputHost = getFileTreeHostForShadowElement(utils.container, input);
 		const remainingButton = screen.getByRole("button", { name: "New file" });
 		expect(
-			remainingButton.compareDocumentPosition(input) &
+			remainingButton.compareDocumentPosition(inputHost) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
-		expect(screen.getAllByTestId("files-view-draft-input")).toHaveLength(1);
+		expect(queryFilesViewRenameInputs(utils.container)).toHaveLength(1);
 
 		utils.unmount();
 		await lix.close();
@@ -263,7 +308,7 @@ describe("V2LayoutShell native New File", () => {
 		});
 
 		await expectNewFileCreatedAndOpened(lix);
-		expect(screen.queryByTestId("files-view-draft-input")).toBeNull();
+		expect(queryFilesViewRenameInput(utils.container)).toBeNull();
 
 		utils.unmount();
 		await lix.close();
@@ -284,7 +329,7 @@ describe("V2LayoutShell native New File", () => {
 		});
 
 		await expectNewFileCreatedAndOpened(lix);
-		expect(screen.queryByTestId("files-view-draft-input")).toBeNull();
+		expect(queryFilesViewRenameInput(utils.container)).toBeNull();
 
 		utils.unmount();
 		await lix.close();

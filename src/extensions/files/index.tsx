@@ -5,7 +5,7 @@ import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
 import { buildFilesystemTree } from "@/extensions/files/build-filesystem-tree";
 import type { ExtensionContext } from "../../extension-runtime/types";
-import { FileTree } from "./file-tree";
+import { FileTree, type FileTreeCreateRequest } from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { qb } from "@/lib/lix-kysely";
 import { FILES_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
@@ -15,12 +15,6 @@ import type { Lix } from "@/lib/lix-types";
 type FilesViewProps = {
 	readonly context?: ExtensionContext;
 };
-
-type DraftState = {
-	kind: "file" | "directory";
-	directoryPath: string;
-	value: string;
-} | null;
 
 /**
  * Files view - Browse and pin project documents. Owns the Cmd/Ctrl + . shortcut
@@ -72,7 +66,9 @@ function FilesViewContent({
 	const [pendingDirectoryPaths, setPendingDirectoryPaths] = useState<string[]>(
 		[],
 	);
-	const [draft, setDraft] = useState<DraftState>(null);
+	const [createRequest, setCreateRequest] =
+		useState<FileTreeCreateRequest | null>(null);
+	const nextCreateRequestIdRef = useRef(0);
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 	const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 	const [selectedKind, setSelectedKind] = useState<"file" | "directory" | null>(
@@ -186,7 +182,7 @@ function FilesViewContent({
 		};
 	}, [isEphemeralWorkspace]);
 
-	const resolveDraftDirectory = useCallback(() => {
+	const resolveCreateDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
 		if (selectedPath.endsWith("/")) return selectedPath;
 		const parts = selectedPath.split("/").filter(Boolean);
@@ -194,29 +190,150 @@ function FilesViewContent({
 		return `/${parts.slice(0, -1).join("/")}/`;
 	}, [selectedPath]);
 
-	const handleDraftChange = useCallback((next: string) => {
-		setDraft((prev) => (prev ? { ...prev, value: next } : prev));
-	}, []);
-
-	const handleDraftCancel = useCallback(() => {
-		setDraft(null);
-	}, []);
+	const startCreateRequest = useCallback(
+		(kind: "file" | "directory") => {
+			const baseDirectory = resolveCreateDirectory();
+			const directoryPath = ensureDirectoryPath(baseDirectory);
+			setCreateRequest((prev) => {
+				if (prev) return prev;
+				setSelectedPath(null);
+				setSelectedFileId(null);
+				setSelectedKind(null);
+				if (directoryPath !== "/") {
+					setOpenDirectoryPaths((openPaths) => {
+						const next = new Set(openPaths);
+						next.add(directoryPath);
+						return next;
+					});
+				}
+				nextCreateRequestIdRef.current += 1;
+				return {
+					directoryPath,
+					id: nextCreateRequestIdRef.current,
+					initialValue: kind === "directory" ? "new-directory" : "new-file",
+					kind,
+				};
+			});
+		},
+		[resolveCreateDirectory],
+	);
 
 	const handleNewFile = useCallback(() => {
-		const baseDirectory = resolveDraftDirectory();
-		const directoryPath = ensureDirectoryPath(baseDirectory);
-		setDraft((prev) => {
-			if (prev) return prev;
-			setSelectedPath(null);
-			setSelectedFileId(null);
-			setSelectedKind(null);
-			return {
-				kind: "file",
-				directoryPath,
-				value: "new-file",
+		startCreateRequest("file");
+	}, [startCreateRequest]);
+
+	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
+		setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
+		setSelectedPath(null);
+		setSelectedFileId(null);
+		setSelectedKind(null);
+	}, []);
+
+	const handleCreateCommit = useCallback(
+		async (request: FileTreeCreateRequest, value: string) => {
+			if (creatingRef.current) return;
+			const directoryPath = ensureDirectoryPath(request.directoryPath);
+			const clearRequest = () => {
+				setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 			};
-		});
-	}, [resolveDraftDirectory]);
+			const executeFileCreation = async () => {
+				const path = deriveMarkdownPathFromStem(
+					value,
+					directoryPath,
+					existingFilePaths,
+				);
+				if (!path) {
+					clearRequest();
+					return;
+				}
+				creatingRef.current = true;
+				try {
+					await qb(lix)
+						.insertInto("lix_file")
+						.values({
+							path,
+							data: new TextEncoder().encode(""),
+						})
+						.execute();
+					const id = (
+						await qb(lix)
+							.selectFrom("lix_file")
+							.select("id")
+							.where("path", "=", path)
+							.executeTakeFirst()
+					)?.id;
+					if (!id) {
+						throw new Error(`created file id not found for path '${path}'`);
+					}
+					setPendingPaths((prev) => [...prev, path]);
+					setSelectedPath(path);
+					setSelectedFileId(id);
+					setSelectedKind("file");
+					context?.openFile?.({
+						panel: "central",
+						fileId: id,
+						filePath: path,
+						state: { focusOnLoad: true, defaultBlock: "heading1" },
+						focus: true,
+						documentOrigin: "new",
+					});
+				} catch (error) {
+					console.error("Failed to create file", error);
+				} finally {
+					creatingRef.current = false;
+					clearRequest();
+				}
+			};
+
+			const executeDirectoryCreation = async () => {
+				const path = deriveDirectoryPathFromStem(
+					value,
+					directoryPath,
+					existingDirectoryPaths,
+				);
+				if (!path) {
+					clearRequest();
+					return;
+				}
+				creatingRef.current = true;
+				try {
+					await qb(lix)
+						.insertInto("lix_directory")
+						.values({ path } as any)
+						.execute();
+					setPendingDirectoryPaths((prev) => [...prev, path]);
+					setSelectedPath(path);
+					setSelectedKind("directory");
+				} catch (error) {
+					console.error("Failed to create directory", error);
+				} finally {
+					creatingRef.current = false;
+					clearRequest();
+				}
+			};
+
+			if (request.kind === "directory") {
+				return executeDirectoryCreation();
+			}
+			return executeFileCreation();
+		},
+		[context, existingDirectoryPaths, existingFilePaths, lix],
+	);
+
+	const handleCreateDirectory = useCallback(() => {
+		startCreateRequest("directory");
+	}, [startCreateRequest]);
+
+	const handleCreateShortcut = useCallback(
+		(kind: "file" | "directory") => {
+			if (kind === "directory") {
+				handleCreateDirectory();
+				return;
+			}
+			handleNewFile();
+		},
+		[handleCreateDirectory, handleNewFile],
+	);
 
 	useEffect(() => {
 		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) {
@@ -235,91 +352,6 @@ function FilesViewContent({
 		registerNewFileDraftHandler,
 		viewInstance,
 	]);
-
-	const handleDraftCommit = useCallback(async () => {
-		if (creatingRef.current) return;
-		if (!draft) return;
-		const executeFileCreation = async () => {
-			const path = deriveMarkdownPathFromStem(
-				draft.value,
-				draft.directoryPath,
-				existingFilePaths,
-			);
-			if (!path) {
-				setDraft(null);
-				return;
-			}
-			creatingRef.current = true;
-			try {
-				await qb(lix)
-					.insertInto("lix_file")
-					.values({
-						path,
-						data: new TextEncoder().encode(""),
-					})
-					.execute();
-				const id = (
-					await qb(lix)
-						.selectFrom("lix_file")
-						.select("id")
-						.where("path", "=", path)
-						.executeTakeFirst()
-				)?.id;
-				if (!id) {
-					throw new Error(`created file id not found for path '${path}'`);
-				}
-				setPendingPaths((prev) => [...prev, path]);
-				setSelectedPath(path);
-				setSelectedFileId(id);
-				setSelectedKind("file");
-				context?.openFile?.({
-					panel: "central",
-					fileId: id,
-					filePath: path,
-					state: { focusOnLoad: true, defaultBlock: "heading1" },
-					focus: true,
-					documentOrigin: "new",
-				});
-			} catch (error) {
-				console.error("Failed to create file", error);
-			} finally {
-				creatingRef.current = false;
-				setDraft(null);
-			}
-		};
-
-		const executeDirectoryCreation = async () => {
-			const path = deriveDirectoryPathFromStem(
-				draft.value,
-				draft.directoryPath,
-				existingDirectoryPaths,
-			);
-			if (!path) {
-				setDraft(null);
-				return;
-			}
-			creatingRef.current = true;
-			try {
-				await qb(lix)
-					.insertInto("lix_directory")
-					.values({ path } as any)
-					.execute();
-				setPendingDirectoryPaths((prev) => [...prev, path]);
-				setSelectedPath(path);
-				setSelectedKind("directory");
-			} catch (error) {
-				console.error("Failed to create directory", error);
-			} finally {
-				creatingRef.current = false;
-				setDraft(null);
-			}
-		};
-
-		if (draft.kind === "directory") {
-			return executeDirectoryCreation();
-		}
-		return executeFileCreation();
-	}, [context, draft, existingDirectoryPaths, existingFilePaths, lix]);
 
 	const handleOpenFile = useCallback(
 		(fileId: string, path: string) => {
@@ -414,7 +446,7 @@ function FilesViewContent({
 				event.key === "Delete" ||
 				event.code?.toLowerCase() === "delete";
 			if (isDeleteKey) {
-				const shouldHandleDelete = !isInteractiveTarget(event.target);
+				const shouldHandleDelete = !isInteractiveEventTarget(event);
 				if (!shouldHandleDelete) return;
 				event.preventDefault();
 				event.stopPropagation();
@@ -440,21 +472,10 @@ function FilesViewContent({
 			if (
 				event.type === "keydown" &&
 				!event.repeat &&
-				!isInteractiveTarget(event.target)
+				!isInteractiveEventTarget(event)
 			) {
 				const kind = event.shiftKey ? "directory" : "file";
-				const baseDirectory = resolveDraftDirectory();
-				const directoryPath = ensureDirectoryPath(baseDirectory);
-				setDraft((prev) => {
-					if (prev) return prev;
-					setSelectedPath(null);
-					setSelectedKind(null);
-					return {
-						kind,
-						directoryPath,
-						value: kind === "directory" ? "new-directory" : "new-file",
-					};
-				});
+				handleCreateShortcut(kind);
 			}
 		};
 
@@ -480,7 +501,7 @@ function FilesViewContent({
 				}
 			}
 		};
-	}, [handleDeleteSelection, isMacPlatform, resolveDraftDirectory]);
+	}, [handleCreateShortcut, handleDeleteSelection, isMacPlatform]);
 
 	const handleDragEnter = useCallback((e: React.DragEvent) => {
 		e.preventDefault();
@@ -596,8 +617,8 @@ function FilesViewContent({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 		>
-			{/* New file button row - hidden when draft is active */}
-			{!draft && (
+			{/* New file button row - hidden when creation is active */}
+			{!createRequest && (
 				<button
 					type="button"
 					onClick={handleNewFile}
@@ -656,18 +677,9 @@ function FilesViewContent({
 					isPanelFocused={isPanelFocused}
 					openDirectories={openDirectoryPaths}
 					onOpenDirectoriesChange={handleOpenDirectoriesChange}
-					draft={
-						draft
-							? {
-									kind: draft.kind,
-									directoryPath: draft.directoryPath,
-									value: draft.value,
-									onChange: handleDraftChange,
-									onCommit: handleDraftCommit,
-									onCancel: handleDraftCancel,
-								}
-							: null
-					}
+					createRequest={createRequest}
+					onCreateCancel={handleCreateCancel}
+					onCreateCommit={handleCreateCommit}
 				/>
 			</div>
 		</div>
@@ -702,6 +714,13 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 		return true;
 	}
 	return Boolean(target.closest("input, textarea, [contenteditable]"));
+}
+
+function isInteractiveEventTarget(event: Event): boolean {
+	for (const target of event.composedPath?.() ?? []) {
+		if (isInteractiveTarget(target)) return true;
+	}
+	return isInteractiveTarget(event.target);
 }
 
 function detectMacPlatform(): boolean {
