@@ -39,6 +39,11 @@ export function registerLixIpc(resolveWindowForEvent, options = {}) {
 		return lix.workspaceDir();
 	});
 
+	ipcMain.handle("lix:storageDir", async (event) => {
+		const lix = await ensureLixOpenForEvent(event);
+		return lix.storageDir();
+	});
+
 	ipcMain.handle("lix:execute", async (event, payload) => {
 		const lix = await ensureLixOpenForEvent(event);
 		const sql = String(payload?.sql ?? "");

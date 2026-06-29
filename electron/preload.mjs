@@ -66,6 +66,7 @@ const workspace = {
 const lix = {
 	open: () => ipcRenderer.invoke("lix:open"),
 	workspaceDir: () => ipcRenderer.invoke("lix:workspaceDir"),
+	storageDir: () => ipcRenderer.invoke("lix:storageDir"),
 	execute: (payload) => ipcRenderer.invoke("lix:execute", payload),
 	executeTransaction: (payload) =>
 		ipcRenderer.invoke("lix:executeTransaction", payload),

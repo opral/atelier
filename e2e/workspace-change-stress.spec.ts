@@ -1,8 +1,9 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { ElectronApplication } from "playwright";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import seedrandom from "seedrandom";
 import {
 	closeElectronApp,
@@ -14,17 +15,19 @@ import {
 
 const stressAppPath = "/stress.md";
 const stressFileName = "stress.md";
-const operationCount = 1_000;
+const defaultOperationCount = 1_000;
+const operationCount = readOperationCount();
 const stressSeed = "workspace-change-stress-e2e-v1";
-const initialMarkdown = "seed\n";
+const initialMarkdown = "seed 0000\n";
 const lixTracePrefix = "[lix-ipc-trace]";
+const maxLixDirectoryBytes = 64 * 1024 * 1024;
 
 test.skip(
 	process.platform === "win32",
 	"fake agent shell helper is POSIX-only",
 );
 test.skip(!existsSync("/bin/sh"), "fake agent shell helper requires /bin/sh");
-test.setTimeout(3_600_000);
+test.setTimeout(7_200_000);
 
 test("stress tests workspace changes through manual edits and fake agent turns", async ({
 	browserName: _browserName,
@@ -38,92 +41,177 @@ test("stress tests workspace changes through manual edits and fake agent turns",
 	let expectedMarkdown = initialMarkdown;
 	let electronApp: ElectronApplication | undefined;
 	let traceCapture: LixTraceCapture | undefined;
+	const profile = createStressProfile(operationCount);
 
 	try {
-		await mkdir(workspaceDir, { recursive: true });
-		await mkdir(payloadDir, { recursive: true });
-		await writeFile(stressDiskPath, expectedMarkdown, "utf8");
-		await writeFakeAgentTurnHelper(helperScriptPath);
-
-		electronApp = await launchDevElectronApp(workspaceDir, {
-			env: {
-				FLASHTYPE_TRACE_LIX_IPC: "1",
-				FLASHTYPE_TRACE_LIX_SLOW_MS: "0",
-			},
-			userDataDir,
+		await timeProfile(profile, "setup:files", null, async () => {
+			await mkdir(workspaceDir, { recursive: true });
+			await mkdir(payloadDir, { recursive: true });
+			await writeFile(stressDiskPath, expectedMarkdown, "utf8");
+			await writeFakeAgentTurnHelper(helperScriptPath);
 		});
+
+		electronApp = await timeProfile(
+			profile,
+			"setup:launch",
+			null,
+			async () =>
+				await launchDevElectronApp(workspaceDir, {
+					env: {
+						FLASHTYPE_TRACE_LIX_IPC: "1",
+						FLASHTYPE_TRACE_LIX_SLOW_MS: "0",
+					},
+					userDataDir,
+				}),
+		);
 		traceCapture = startLixTraceCapture(electronApp);
-		const page = await electronApp.firstWindow();
+		const page = await timeProfile(
+			profile,
+			"setup:first-window",
+			null,
+			async () => await electronApp!.firstWindow(),
+		);
 		registerRendererConsoleLogging(page);
 
-		await openStressMarkdown(page);
-		await installStressEditorHelpers(page);
-		await expectMarkdownSettled({
-			diskPath: stressDiskPath,
-			expectedMarkdown,
-			page,
+		await timeProfile(profile, "setup:open-file", null, async () => {
+			await openStressMarkdown(page);
+			await installStressEditorHelpers(page);
+		});
+		await timeProfile(profile, "setup:initial-settle", null, async () => {
+			await expectMarkdownSettled({
+				diskPath: stressDiskPath,
+				expectedMarkdown,
+				page,
+			});
 		});
 
 		for (let index = 0; index < operationCount; index += 1) {
 			const token = nextToken(rng);
 			const kind = rng() < 0.5 ? "manual" : "agent";
-			const line = `${kind} op ${index.toString().padStart(4, "0")} ${token}`;
+			const nextMarkdown = markdownForOperation(kind, index, token);
 
 			if (kind === "manual") {
-				expectedMarkdown = appendParagraph(expectedMarkdown, line);
-				await applyManualEdit(page, line);
-				await expectMarkdownSettled({
-					diskPath: stressDiskPath,
-					expectedMarkdown,
-					page,
+				recordStressOperation(profile, kind);
+				expectedMarkdown = nextMarkdown;
+				await timeProfile(profile, "manual:edit", index, async () => {
+					await applyManualEdit(page, nextMarkdown);
+				});
+				await timeProfile(profile, "manual:settle", index, async () => {
+					await expectMarkdownSettled({
+						diskPath: stressDiskPath,
+						expectedMarkdown,
+						page,
+					});
 				});
 			} else {
 				const beforeAgentMarkdown = expectedMarkdown;
-				const proposedMarkdown = appendParagraph(beforeAgentMarkdown, line);
+				const proposedMarkdown = nextMarkdown;
 				const keep = rng() < 0.5;
+				recordStressOperation(profile, kind, keep);
 				const payloadPath = path.join(
 					payloadDir,
 					`agent-${index.toString().padStart(4, "0")}.md`,
 				);
-				await writeFile(payloadPath, proposedMarkdown, "utf8");
-				await runFakeAgentTurn(page, {
-					helperScriptPath,
-					payloadPath,
-					sessionId: "workspace-change-stress",
-					turnId: `turn-${index.toString().padStart(4, "0")}`,
-					workspaceDir,
+				await timeProfile(profile, "agent:write-payload", index, async () => {
+					await writeFile(payloadPath, proposedMarkdown, "utf8");
 				});
-				await waitForReviewControls(page);
-				await page
-					.getByRole("button", { name: keep ? "Keep" : "Undo" })
-					.click();
-				await expect(
-					page.getByRole("group", { name: "External write review actions" }),
-				).toBeHidden({ timeout: 30_000 });
+				await timeProfile(profile, "agent:terminal-turn", index, async () => {
+					await runFakeAgentTurn(page, {
+						helperScriptPath,
+						payloadPath,
+						sessionId: "workspace-change-stress",
+						turnId: `turn-${index.toString().padStart(4, "0")}`,
+						workspaceDir,
+					});
+				});
+				try {
+					await timeProfile(profile, "agent:wait-review", index, async () => {
+						await waitForReviewControls(page);
+					});
+				} catch (error) {
+					throw new Error(
+						await buildAgentReviewTimeoutMessage({
+							beforeAgentMarkdown,
+							diskPath: stressDiskPath,
+							error,
+							index,
+							page,
+							proposedMarkdown,
+						}),
+					);
+				}
+				await timeProfile(profile, "agent:click-review", index, async () => {
+					await page
+						.getByRole("button", { name: keep ? "Keep" : "Undo" })
+						.click();
+				});
+				await timeProfile(
+					profile,
+					"agent:wait-review-hidden",
+					index,
+					async () => {
+						await expect(
+							page.getByRole("group", {
+								name: "External write review actions",
+							}),
+						).toBeHidden({ timeout: 30_000 });
+					},
+				);
 
 				expectedMarkdown = keep ? proposedMarkdown : beforeAgentMarkdown;
-				await expectMarkdownSettled({
-					diskPath: stressDiskPath,
-					expectedMarkdown,
-					page,
+				await timeProfile(profile, "agent:settle", index, async () => {
+					await expectMarkdownSettled({
+						diskPath: stressDiskPath,
+						expectedMarkdown,
+						page,
+					});
 				});
 			}
 
-			if ((index + 1) % 100 === 0) {
+			if ((index + 1) % progressLogInterval(operationCount) === 0) {
 				console.log(
 					`[workspace-change-stress] completed ${index + 1}/${operationCount}`,
 				);
 			}
 		}
 
-		await expectMarkdownSettled({
-			diskPath: stressDiskPath,
-			expectedMarkdown,
-			page,
-			timeout: 60_000,
+		await timeProfile(profile, "final:settle", null, async () => {
+			await expectMarkdownSettled({
+				diskPath: stressDiskPath,
+				expectedMarkdown,
+				page,
+				timeout: 60_000,
+			});
+		});
+		await timeProfile(profile, "final:lix-size", null, async () => {
+			const lixStorageDir = await readLixStorageDir(page);
+			const lixDirectorySize = await directorySizeBytes(lixStorageDir);
+			profile.lixStorage = {
+				limitBytes: maxLixDirectoryBytes,
+				path: lixStorageDir,
+				sizeBytes: lixDirectorySize,
+			};
+			expect(
+				lixDirectorySize,
+				`Lix storage directory ${lixStorageDir} should stay below ${formatBytes(
+					maxLixDirectoryBytes,
+				)}; actual size was ${formatBytes(lixDirectorySize)}`,
+			).toBeLessThanOrEqual(maxLixDirectoryBytes);
 		});
 	} finally {
-		await closeElectronApp(electronApp);
+		await timeProfile(profile, "teardown:close", null, async () => {
+			await closeElectronApp(electronApp);
+		});
+		const profileSummary = summarizeStressProfile(profile);
+		console.log(formatStressProfileSummary(profileSummary));
+		await testInfo.attach("workspace-change-stress-profile.json", {
+			body: JSON.stringify(
+				{ operations: profile.operations, summary: profileSummary, profile },
+				null,
+				2,
+			),
+			contentType: "application/json",
+		});
 		const traceLines = traceCapture?.stop() ?? [];
 		if (traceLines.length > 0) {
 			await testInfo.attach("lix-ipc-trace.log", {
@@ -137,6 +225,195 @@ test("stress tests workspace changes through manual edits and fake agent turns",
 type LixTraceCapture = {
 	stop: () => string[];
 };
+
+type StressProfilePhase =
+	| "setup:files"
+	| "setup:launch"
+	| "setup:first-window"
+	| "setup:open-file"
+	| "setup:initial-settle"
+	| "manual:edit"
+	| "manual:settle"
+	| "agent:write-payload"
+	| "agent:terminal-turn"
+	| "agent:wait-review"
+	| "agent:click-review"
+	| "agent:wait-review-hidden"
+	| "agent:settle"
+	| "final:settle"
+	| "final:lix-size"
+	| "teardown:close";
+
+type StressProfileEntry = {
+	readonly durationMs: number;
+	readonly operationIndex: number | null;
+	readonly phase: StressProfilePhase;
+};
+
+type StressProfile = {
+	readonly entries: StressProfileEntry[];
+	lixStorage?: {
+		readonly limitBytes: number;
+		readonly path: string;
+		readonly sizeBytes: number;
+	};
+	readonly operationCount: number;
+	readonly operations: {
+		agentKeep: number;
+		agentUndo: number;
+		manual: number;
+	};
+	readonly seed: string;
+	readonly startedAt: string;
+};
+
+type StressProfilePhaseSummary = {
+	readonly avgMs: number;
+	readonly count: number;
+	readonly maxMs: number;
+	readonly p50Ms: number;
+	readonly p95Ms: number;
+	readonly phase: StressProfilePhase;
+	readonly totalMs: number;
+};
+
+type StressProfileSummary = {
+	readonly lixStorage?: StressProfile["lixStorage"];
+	readonly operationCount: number;
+	readonly operations: StressProfile["operations"];
+	readonly phases: StressProfilePhaseSummary[];
+	readonly seed: string;
+	readonly totalProfiledMs: number;
+};
+
+function readOperationCount(): number {
+	const raw = process.env.FLASHTYPE_WORKSPACE_STRESS_OPERATION_COUNT;
+	if (!raw) return defaultOperationCount;
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultOperationCount;
+}
+
+function progressLogInterval(count: number): number {
+	return count <= 200 ? 25 : 100;
+}
+
+function createStressProfile(count: number): StressProfile {
+	return {
+		entries: [],
+		operationCount: count,
+		operations: {
+			agentKeep: 0,
+			agentUndo: 0,
+			manual: 0,
+		},
+		seed: stressSeed,
+		startedAt: new Date().toISOString(),
+	};
+}
+
+function recordStressOperation(
+	profile: StressProfile,
+	kind: "agent" | "manual",
+	keep?: boolean,
+): void {
+	if (kind === "manual") {
+		profile.operations.manual += 1;
+		return;
+	}
+	if (keep) {
+		profile.operations.agentKeep += 1;
+	} else {
+		profile.operations.agentUndo += 1;
+	}
+}
+
+async function timeProfile<T>(
+	profile: StressProfile,
+	phase: StressProfilePhase,
+	operationIndex: number | null,
+	operation: () => Promise<T>,
+): Promise<T> {
+	const startedAt = performance.now();
+	try {
+		return await operation();
+	} finally {
+		profile.entries.push({
+			durationMs: roundMs(performance.now() - startedAt),
+			operationIndex,
+			phase,
+		});
+	}
+}
+
+function summarizeStressProfile(profile: StressProfile): StressProfileSummary {
+	const phases = Array.from(
+		new Set(profile.entries.map((entry) => entry.phase)),
+	).map((phase) => {
+		const durations = profile.entries
+			.filter((entry) => entry.phase === phase)
+			.map((entry) => entry.durationMs)
+			.sort((left, right) => left - right);
+		const totalMs = durations.reduce((sum, value) => sum + value, 0);
+		return {
+			avgMs: roundMs(totalMs / durations.length),
+			count: durations.length,
+			maxMs: durations.at(-1) ?? 0,
+			p50Ms: percentile(durations, 50),
+			p95Ms: percentile(durations, 95),
+			phase,
+			totalMs: roundMs(totalMs),
+		};
+	});
+
+	phases.sort((left, right) => right.totalMs - left.totalMs);
+
+	return {
+		lixStorage: profile.lixStorage,
+		operationCount: profile.operationCount,
+		operations: profile.operations,
+		phases,
+		seed: profile.seed,
+		totalProfiledMs: roundMs(
+			profile.entries.reduce((sum, entry) => sum + entry.durationMs, 0),
+		),
+	};
+}
+
+function formatStressProfileSummary(summary: StressProfileSummary): string {
+	const lines = [
+		`[workspace-change-stress] profile seed=${summary.seed} operations=${summary.operationCount} manual=${summary.operations.manual} agentKeep=${summary.operations.agentKeep} agentUndo=${summary.operations.agentUndo} totalProfiledMs=${summary.totalProfiledMs}`,
+	];
+	if (summary.lixStorage) {
+		lines.push(
+			`[workspace-change-stress] lixStorage path=${summary.lixStorage.path} size=${formatBytes(
+				summary.lixStorage.sizeBytes,
+			)} limit=${formatBytes(summary.lixStorage.limitBytes)}`,
+		);
+	}
+	lines.push("[workspace-change-stress] slowest phases:");
+	for (const phase of summary.phases.slice(0, 10)) {
+		lines.push(
+			`[workspace-change-stress] ${phase.phase} count=${phase.count} total=${phase.totalMs}ms avg=${phase.avgMs}ms p50=${phase.p50Ms}ms p95=${phase.p95Ms}ms max=${phase.maxMs}ms`,
+		);
+	}
+	return lines.join("\n");
+}
+
+function percentile(
+	sortedDurations: readonly number[],
+	percentileValue: number,
+) {
+	if (sortedDurations.length === 0) return 0;
+	const index = Math.min(
+		sortedDurations.length - 1,
+		Math.ceil((percentileValue / 100) * sortedDurations.length) - 1,
+	);
+	return sortedDurations[index] ?? 0;
+}
+
+function roundMs(value: number): number {
+	return Number(value.toFixed(2));
+}
 
 function startLixTraceCapture(
 	electronApp: ElectronApplication,
@@ -197,10 +474,9 @@ async function openStressMarkdown(page: Page): Promise<void> {
 	).toBeVisible();
 }
 
-async function applyManualEdit(page: Page, line: string): Promise<void> {
-	await focusEditorEnd(page);
-	await page.keyboard.press("Enter");
-	await page.keyboard.type(line);
+async function applyManualEdit(page: Page, markdown: string): Promise<void> {
+	await selectEditorContents(page);
+	await page.keyboard.type(markdown.replace(/\n$/, ""));
 }
 
 async function runFakeAgentTurn(
@@ -318,6 +594,29 @@ async function waitForReviewControls(page: Page): Promise<void> {
 	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
 }
 
+async function buildAgentReviewTimeoutMessage(args: {
+	beforeAgentMarkdown: string;
+	diskPath: string;
+	error: unknown;
+	index: number;
+	page: Page;
+	proposedMarkdown: string;
+}): Promise<string> {
+	const state = await readMarkdownState(args.page, args.diskPath).catch(
+		(error: unknown) => ({ stateReadError: String(error) }),
+	);
+	return [
+		"Timed out waiting for fake agent review controls.",
+		`operationIndex=${args.index}`,
+		`beforeAgentMarkdown=${JSON.stringify(args.beforeAgentMarkdown)}`,
+		`proposedMarkdown=${JSON.stringify(args.proposedMarkdown)}`,
+		`state=${JSON.stringify(state)}`,
+		`cause=${
+			args.error instanceof Error ? args.error.message : String(args.error)
+		}`,
+	].join("\n");
+}
+
 async function expectMarkdownSettled(args: {
 	diskPath: string;
 	expectedMarkdown: string;
@@ -325,22 +624,30 @@ async function expectMarkdownSettled(args: {
 	timeout?: number;
 }): Promise<void> {
 	await expect
-		.poll(
-			async () => {
-				const [editorMarkdown, lixMarkdown, diskMarkdown] = await Promise.all([
-					readEditorMarkdown(args.page),
-					readPersistedMarkdown(args.page, stressAppPath),
-					readDiskMarkdown(args.diskPath),
-				]);
-				return { diskMarkdown, editorMarkdown, lixMarkdown };
-			},
-			{ timeout: args.timeout ?? 30_000 },
-		)
+		.poll(async () => await readMarkdownState(args.page, args.diskPath), {
+			timeout: args.timeout ?? 30_000,
+		})
 		.toEqual({
 			diskMarkdown: args.expectedMarkdown,
 			editorMarkdown: args.expectedMarkdown,
 			lixMarkdown: args.expectedMarkdown,
 		});
+}
+
+async function readMarkdownState(
+	page: Page,
+	diskPath: string,
+): Promise<{
+	diskMarkdown: string | null;
+	editorMarkdown: string | null;
+	lixMarkdown: string | null;
+}> {
+	const [diskMarkdown, editorMarkdown, lixMarkdown] = await Promise.all([
+		readDiskMarkdown(diskPath),
+		readEditorMarkdown(page),
+		readPersistedMarkdown(page, stressAppPath),
+	]);
+	return { diskMarkdown, editorMarkdown, lixMarkdown };
 }
 
 async function readDiskMarkdown(filePath: string): Promise<string | null> {
@@ -349,6 +656,43 @@ async function readDiskMarkdown(filePath: string): Promise<string | null> {
 	} catch {
 		return null;
 	}
+}
+
+async function directorySizeBytes(directoryPath: string): Promise<number> {
+	let directoryStat;
+	try {
+		directoryStat = await stat(directoryPath);
+	} catch (error) {
+		if (isNodeErrorCode(error, "ENOENT")) return 0;
+		throw error;
+	}
+	if (!directoryStat.isDirectory()) {
+		throw new Error(`${directoryPath} exists but is not a directory`);
+	}
+
+	let total = 0;
+	const entries = await readdir(directoryPath, { withFileTypes: true });
+	for (const entry of entries) {
+		const entryPath = path.join(directoryPath, entry.name);
+		if (entry.isDirectory()) {
+			total += await directorySizeBytes(entryPath);
+		} else if (entry.isFile()) {
+			total += (await stat(entryPath)).size;
+		}
+	}
+	return total;
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		(error as { code?: unknown }).code === code
+	);
+}
+
+function formatBytes(bytes: number): string {
+	return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
 }
 
 async function readPersistedMarkdown(
@@ -394,17 +738,15 @@ async function readPersistedMarkdown(
 async function installStressEditorHelpers(page: Page): Promise<void> {
 	await page.evaluate(() => {
 		(window as any).__flashtypeWorkspaceStress = {
-			focusEnd() {
+			selectAll() {
 				const editor = requireEditor();
-				const point = endPointFor(editor);
 				editor.focus({ preventScroll: true });
 				const selection = window.getSelection();
 				if (!selection) {
 					throw new Error("Window selection is unavailable.");
 				}
 				const range = document.createRange();
-				range.setStart(point.node, point.offset);
-				range.collapse(true);
+				range.selectNodeContents(editor);
 				selection.removeAllRanges();
 				selection.addRange(range);
 				editor.dispatchEvent(new Event("selectionchange", { bubbles: true }));
@@ -428,32 +770,16 @@ async function installStressEditorHelpers(page: Page): Promise<void> {
 			}
 			return editor;
 		}
-
-		function endPointFor(editor: HTMLElement): { node: Node; offset: number } {
-			const lastBlock = Array.from(editor.children).at(-1);
-			if (!lastBlock) {
-				return { node: editor, offset: 0 };
-			}
-			const walker = document.createTreeWalker(lastBlock, NodeFilter.SHOW_TEXT);
-			let lastText: Node | null = null;
-			while (walker.nextNode()) {
-				lastText = walker.currentNode;
-			}
-			if (lastText) {
-				return { node: lastText, offset: lastText.textContent?.length ?? 0 };
-			}
-			return { node: lastBlock, offset: lastBlock.childNodes.length };
-		}
 	});
 }
 
-async function focusEditorEnd(page: Page): Promise<void> {
+async function selectEditorContents(page: Page): Promise<void> {
 	await page.evaluate(() => {
 		const api = (window as any).__flashtypeWorkspaceStress;
 		if (!api) {
 			throw new Error("Workspace stress editor helpers are not installed.");
 		}
-		api.focusEnd();
+		api.selectAll();
 	});
 }
 
@@ -462,6 +788,16 @@ async function readEditorMarkdown(page: Page): Promise<string | null> {
 		const api = (window as any).__flashtypeWorkspaceStress;
 		if (!api) return null;
 		return api.markdown();
+	});
+}
+
+async function readLixStorageDir(page: Page): Promise<string> {
+	return await page.evaluate(async () => {
+		const storageDir = await window.flashtypeDesktop?.lix.storageDir();
+		if (!storageDir) {
+			throw new Error("Desktop Lix storage directory is unavailable.");
+		}
+		return storageDir;
 	});
 }
 
@@ -526,15 +862,18 @@ async function runHook(hookEventName, phase) {
 	);
 }
 
-function appendParagraph(markdown: string, paragraph: string): string {
-	const body = markdown.endsWith("\n") ? markdown.slice(0, -1) : markdown;
-	return body.length === 0 ? `${paragraph}\n` : `${body}\n\n${paragraph}\n`;
-}
-
 function nextToken(rng: seedrandom.PRNG): string {
 	return Math.floor(rng() * 0x1_0000_0000)
 		.toString(36)
 		.padStart(7, "0");
+}
+
+function markdownForOperation(
+	kind: "agent" | "manual",
+	index: number,
+	token: string,
+): string {
+	return `${kind} op ${index.toString().padStart(4, "0")} ${token}\n`;
 }
 
 function shellQuote(value: string): string {
