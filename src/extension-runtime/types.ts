@@ -164,6 +164,8 @@ export interface ExtensionContext {
 		readonly panel?: PanelSide;
 		readonly fileId: string;
 	}) => void;
+	/** Path for the file currently active in the central editor panel. */
+	readonly activeFilePath?: string | null;
 	readonly isPanelFocused?: boolean;
 	readonly setTabBadgeCount: (count: number | null | undefined) => void;
 	readonly moveExtensionToPanel?: (

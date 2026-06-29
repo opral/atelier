@@ -103,6 +103,8 @@ function FilesViewContent({
 	const [selectedKind, setSelectedKind] = useState<"file" | "directory" | null>(
 		null,
 	);
+	const selectedKindRef = useRef(selectedKind);
+	const syncedActiveFilePathRef = useRef<string | null>(null);
 	const [isDraggingOver, setIsDraggingOver] = useState(false);
 	const dragCounterRef = useRef(0);
 	const entryPathSet = useMemo(() => {
@@ -133,6 +135,7 @@ function FilesViewContent({
 		}
 		return combined;
 	}, [entryDirectorySet, pendingDirectoryPaths]);
+	const activeFilePath = context?.activeFilePath ?? null;
 	useEffect(() => {
 		if (pendingPaths.length === 0) return;
 		setPendingPaths((prev) => prev.filter((path) => !entryPathSet.has(path)));
@@ -143,6 +146,68 @@ function FilesViewContent({
 			prev.filter((path) => !entryDirectorySet.has(path)),
 		);
 	}, [entryDirectorySet, pendingDirectoryPaths.length]);
+	useEffect(() => {
+		selectedKindRef.current = selectedKind;
+	}, [selectedKind]);
+	useEffect(() => {
+		if (createRequest) return;
+		const normalizedActiveFilePath =
+			typeof activeFilePath === "string" && activeFilePath.length > 0
+				? normalizeFilePath(activeFilePath)
+				: null;
+
+		if (!normalizedActiveFilePath) {
+			syncedActiveFilePathRef.current = null;
+			if (selectedKindRef.current === "file") {
+				setSelectedPath(null);
+				setSelectedFileId(null);
+				setSelectedKind(null);
+				selectedKindRef.current = null;
+			}
+			return;
+		}
+
+		if (syncedActiveFilePathRef.current === normalizedActiveFilePath) {
+			return;
+		}
+
+		const activeEntry = combinedEntries.find(
+			(entry) =>
+				entry.kind === "file" &&
+				filesystemEntryPathKey(entry) === normalizedActiveFilePath,
+		);
+
+		if (!activeEntry) {
+			if (selectedKindRef.current === "file") {
+				setSelectedPath(null);
+				setSelectedFileId(null);
+				setSelectedKind(null);
+				selectedKindRef.current = null;
+			}
+			return;
+		}
+
+		syncedActiveFilePathRef.current = normalizedActiveFilePath;
+		selectedKindRef.current = "file";
+		setSelectedPath(normalizedActiveFilePath);
+		setSelectedFileId(activeEntry.id);
+		setSelectedKind("file");
+		setOpenDirectoryPaths((prev) => {
+			const ancestors = ancestorDirectoryPathsForFilePath(
+				normalizedActiveFilePath,
+			);
+			if (ancestors.length === 0) return prev;
+			const next = new Set(prev);
+			let changed = false;
+			for (const ancestor of ancestors) {
+				if (!next.has(ancestor)) {
+					next.add(ancestor);
+					changed = true;
+				}
+			}
+			return changed ? next : prev;
+		});
+	}, [activeFilePath, combinedEntries, createRequest]);
 	const isMacPlatform = useMemo(() => detectMacPlatform(), []);
 	const isPanelFocused = context?.isPanelFocused ?? false;
 	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
@@ -1023,6 +1088,16 @@ function ensureDirectoryPath(path: string): string {
 
 function normalizeFilePath(path: string): string {
 	return path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function ancestorDirectoryPathsForFilePath(path: string): string[] {
+	const segments = normalizeFilePath(path).split("/").filter(Boolean);
+	segments.pop();
+	const ancestors: string[] = [];
+	for (let index = 1; index <= segments.length; index += 1) {
+		ancestors.push(`/${segments.slice(0, index).join("/")}/`);
+	}
+	return ancestors;
 }
 
 function remapDirectoryPath(

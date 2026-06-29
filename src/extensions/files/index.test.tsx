@@ -93,6 +93,31 @@ function queryTreeItemByLabel(
 	return null;
 }
 
+function queryTreeItemByPath(
+	utils: ReturnType<typeof render>,
+	path: string,
+): HTMLElement | null {
+	const root = queryFilesTreeRoot(utils);
+	if (!root) return null;
+	const item = root.querySelector(
+		`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+	);
+	return item instanceof HTMLElement ? item : null;
+}
+
+async function findTreeItemByPath(
+	utils: ReturnType<typeof render>,
+	path: string,
+): Promise<HTMLElement> {
+	return waitFor(() => {
+		const item = queryTreeItemByPath(utils, path);
+		if (!item) {
+			throw new Error(`file tree item not found: ${path}`);
+		}
+		return item;
+	});
+}
+
 async function findTreeItemByLabel(
 	utils: ReturnType<typeof render>,
 	label: string,
@@ -281,6 +306,108 @@ describe("FilesView", () => {
 			window.flashtypeDesktop = originalDesktop;
 			await lix.close();
 		}
+	});
+
+	test("moves the highlighted file when the active file path changes", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: "file_alpha",
+					path: "/alpha.md",
+					data: new Uint8Array(),
+				},
+				{
+					id: "file_beta",
+					path: "/beta.md",
+					data: new Uint8Array(),
+				},
+			])
+			.execute();
+
+		const renderFilesView = (activeFilePath: string | null) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<FilesView
+						context={createViewContext(lix, {
+							activeFilePath,
+						})}
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(renderFilesView("/alpha.md"));
+		});
+
+		await waitFor(() => {
+			expect(queryTreeItemByPath(utils!, "alpha.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+		expect(queryTreeItemByPath(utils!, "beta.md")).not.toHaveAttribute(
+			"data-item-selected",
+			"true",
+		);
+
+		await act(async () => {
+			utils!.rerender(renderFilesView("/beta.md"));
+		});
+
+		await waitFor(() => {
+			expect(queryTreeItemByPath(utils!, "beta.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+			expect(queryTreeItemByPath(utils!, "alpha.md")).not.toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		utils!.unmount();
+		await lix.close();
+	});
+
+	test("opens parent directories for the active file highlight", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ path: "/docs/" } as any)
+			.execute();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_nested_active",
+				path: "/docs/readme.md",
+				data: new Uint8Array(),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render>;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView
+							context={createViewContext(lix, {
+								activeFilePath: "/docs/readme.md",
+							})}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const nestedItem = await findTreeItemByPath(utils!, "docs/readme.md");
+		expect(nestedItem).toHaveAttribute("data-item-selected", "true");
+
+		utils!.unmount();
+		await lix.close();
 	});
 
 	test("focuses the inline draft without forcing the left panel", async () => {
