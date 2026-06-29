@@ -147,9 +147,18 @@ export type DesktopAgentTurnEvent = {
 	createdAt: number;
 };
 
+export type DesktopAgentTurnEventResult =
+	| void
+	| string
+	| {
+			additionalContext?: string | null;
+	  };
+
 export type DesktopAgentHooksApi = {
 	onTurnEvent(
-		listener: (event: DesktopAgentTurnEvent) => void | Promise<void>,
+		listener: (
+			event: DesktopAgentTurnEvent,
+		) => DesktopAgentTurnEventResult | Promise<DesktopAgentTurnEventResult>,
 	): () => void;
 };
 

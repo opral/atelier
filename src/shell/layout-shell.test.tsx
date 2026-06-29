@@ -21,7 +21,7 @@ type DesktopMock = {
 };
 
 type AgentHooksDesktopMock = {
-	readonly emitTurnEvent: (event: AgentHookTurnEventInput) => Promise<void>;
+	readonly emitTurnEvent: (event: AgentHookTurnEventInput) => Promise<unknown>;
 	readonly onTurnEvent: ReturnType<typeof vi.fn>;
 	readonly setActiveFilePath: ReturnType<typeof vi.fn>;
 };
@@ -399,6 +399,32 @@ describe("V2LayoutShell active file sidebar highlight", () => {
 });
 
 describe("V2LayoutShell agent review auto-open", () => {
+	test("returns current active file context from turn-start hooks", async () => {
+		const desktop = installAgentHooksDesktopMock();
+		const lix = await openLix({
+			keyValues: [
+				uiStateKeyValue(openFileState("file_current", "/current.md")),
+			],
+		});
+		vi.spyOn(lix, "syncDiskToLix").mockResolvedValue();
+		await writeReviewFile(lix, "file_current", "/current.md", "# Current");
+
+		const utils = await renderShell(lix);
+		await waitFor(() => expect(desktop.onTurnEvent).toHaveBeenCalled());
+
+		let result: unknown;
+		await act(async () => {
+			result = await desktop.emitTurnEvent(agentTurnEvent("turn-start"));
+		});
+
+		expect(result).toEqual({
+			additionalContext: "The current document is: ./current.md",
+		});
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+
 	test("leaves the current file open when it already has a pending review", async () => {
 		const desktop = installAgentHooksDesktopMock();
 		const lix = await openLix({
@@ -550,9 +576,9 @@ function installDesktopMock(): DesktopMock {
 }
 
 function installAgentHooksDesktopMock(): AgentHooksDesktopMock {
-	let listener: ((event: unknown) => void | Promise<void>) | null = null;
+	let listener: ((event: unknown) => unknown | Promise<unknown>) | null = null;
 	const onTurnEvent = vi.fn(
-		(nextListener: (event: unknown) => void | Promise<void>) => {
+		(nextListener: (event: unknown) => unknown | Promise<unknown>) => {
 			listener = nextListener;
 			return () => {
 				if (listener === nextListener) {
@@ -576,7 +602,7 @@ function installAgentHooksDesktopMock(): AgentHooksDesktopMock {
 			if (!listener) {
 				throw new Error("agent hook listener was not registered");
 			}
-			await listener(event);
+			return await listener(event);
 		},
 		onTurnEvent,
 		setActiveFilePath,

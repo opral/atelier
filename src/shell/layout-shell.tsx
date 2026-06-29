@@ -88,7 +88,10 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
-import { buildAgentLaunchArgsWithActiveFile } from "./agent-launch";
+import {
+	buildAgentLaunchArgsWithActiveFile,
+	buildFlashtypeActiveFilePrompt,
+} from "./agent-launch";
 import {
 	clearAgentTurnCommitRangeFile,
 	appendAgentTurnCommitRange,
@@ -123,6 +126,10 @@ type ActiveAgentTurn = {
 	readonly key: string;
 	readonly event: AgentHookTurnEvent;
 	readonly beforeCommitIdPromise: Promise<string | null>;
+};
+
+type AgentHookTurnEventResult = void | {
+	readonly additionalContext?: string | null;
 };
 
 const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
@@ -188,6 +195,18 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 	if (!value || typeof value !== "object") return false;
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
+};
+
+const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
+	const activeInstance =
+		panel.activeInstance ?? panel.views[0]?.instance ?? null;
+	if (!activeInstance) return null;
+	return panel.views.find((entry) => entry.instance === activeInstance) ?? null;
+};
+
+const activeFilePathFromPanel = (panel: PanelState): string | null => {
+	const rawPath = activeEntryFromPanel(panel)?.state?.filePath;
+	return typeof rawPath === "string" && rawPath.length > 0 ? rawPath : null;
 };
 
 const newFileDraftHandlerKey = (
@@ -848,9 +867,12 @@ function LayoutShellLoadedContent({
 	resolveDiffReviewTelemetryRef.current = resolveDiffReviewTelemetry;
 
 	const handleAgentHookTurnEvent = useCallback(
-		async (event: AgentHookTurnEvent) => {
+		async (event: AgentHookTurnEvent): Promise<AgentHookTurnEventResult> => {
 			const key = agentTurnKey(event);
 			if (event.phase === "turn-start") {
+				const additionalContext = buildFlashtypeActiveFilePrompt(
+					activeFilePathFromPanel(panelStatesRef.current.central),
+				);
 				const beforeCommitIdPromise = readSyncedActiveCommitId(lix).catch(
 					(error: unknown) => {
 						console.warn(
@@ -866,7 +888,7 @@ function LayoutShellLoadedContent({
 					beforeCommitIdPromise,
 				});
 				await beforeCommitIdPromise;
-				return;
+				return additionalContext ? { additionalContext } : undefined;
 			}
 
 			try {
@@ -1835,13 +1857,7 @@ function LayoutShellLoadedContent({
 	);
 
 	const activeCentralEntry = useMemo(() => {
-		const activeInstance =
-			centralPanel.activeInstance ?? centralPanel.views[0]?.instance ?? null;
-		if (!activeInstance) return null;
-		return (
-			centralPanel.views.find((entry) => entry.instance === activeInstance) ??
-			null
-		);
+		return activeEntryFromPanel(centralPanel);
 	}, [centralPanel]);
 
 	const handleAddView = useCallback(
@@ -2148,10 +2164,8 @@ function LayoutShellLoadedContent({
 	}, [activeCentralEntry, extensionMap]);
 
 	const activeFilePath = useMemo(() => {
-		if (!activeCentralEntry) return null;
-		const rawPath = activeCentralEntry.state?.filePath;
-		return typeof rawPath === "string" && rawPath.length > 0 ? rawPath : null;
-	}, [activeCentralEntry]);
+		return activeFilePathFromPanel(centralPanel);
+	}, [centralPanel]);
 
 	useEffect(() => {
 		void window.flashtypeDesktop?.workspace.setActiveFilePath({

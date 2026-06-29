@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+	FLASHTYPE_INITIAL_PROMPT,
 	TERMINAL_INITIAL_COMMAND_LAUNCH_ARG,
 	buildAgentLaunchArgsWithActiveFile,
 	buildFlashtypeActiveFilePrompt,
@@ -11,9 +12,9 @@ import {
 } from "@/extension-runtime/agent-terminal-command";
 
 describe("buildFlashtypeActiveFilePrompt", () => {
-	test("uses the Flashtype.com launch-context sentence", () => {
+	test("uses the active-file context sentence", () => {
 		expect(buildFlashtypeActiveFilePrompt("/docs/intro.md")).toBe(
-			"The user is using Flashtype.com. The active file right now, which may change later, is: ./docs/intro.md",
+			"The current document is: ./docs/intro.md",
 		);
 	});
 
@@ -29,7 +30,7 @@ describe("buildFlashtypeActiveFilePrompt", () => {
 });
 
 describe("buildAgentLaunchArgsWithActiveFile", () => {
-	test("adds a Claude append-system-prompt launch command", () => {
+	test("adds Claude hook launch args with Flashtype system prompt only", () => {
 		const launchArgs = buildAgentLaunchArgsWithActiveFile({
 			state: {
 				command: "claude --dangerously-skip-permissions",
@@ -56,11 +57,12 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 			'ELECTRON_RUN_AS_NODE=1 \\"$FLASHTYPE_AGENT_HOOK_NODE\\" \\"$FLASHTYPE_AGENT_HOOK_SCRIPT\\" claude turn-start',
 		);
 		expect(pathWrapper.command).toContain(
-			"--append-system-prompt 'The user is using Flashtype.com. The active file right now, which may change later, is: ./docs/intro.md'",
+			`--append-system-prompt '${FLASHTYPE_INITIAL_PROMPT}'`,
 		);
+		expect(pathWrapper.command).not.toContain("./docs/intro.md");
 	});
 
-	test("adds a Codex developer-instructions launch command", () => {
+	test("adds Codex hook launch args with Flashtype developer instructions only", () => {
 		const launchArgs = buildAgentLaunchArgsWithActiveFile({
 			state: {
 				command: "codex --dangerously-bypass-approvals-and-sandbox",
@@ -86,8 +88,9 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 			'ELECTRON_RUN_AS_NODE=1 \\"$FLASHTYPE_AGENT_HOOK_NODE\\" \\"$FLASHTYPE_AGENT_HOOK_SCRIPT\\" codex turn-start',
 		);
 		expect(pathWrapper.command).toContain(
-			"-c 'developer_instructions=\"The user is using Flashtype.com. The active file right now, which may change later, is: ./docs/intro.md\"'",
+			`-c 'developer_instructions="${FLASHTYPE_INITIAL_PROMPT}"'`,
 		);
+		expect(pathWrapper.command).not.toContain("./docs/intro.md");
 	});
 
 	test("injects hooks for agent launches without an active file", () => {
@@ -105,7 +108,9 @@ describe("buildAgentLaunchArgsWithActiveFile", () => {
 		};
 		expect(command).toBe("codex-flashtype");
 		expect(pathWrapper.command).toContain("hooks.UserPromptSubmit=");
-		expect(pathWrapper.command).not.toContain("developer_instructions=");
+		expect(pathWrapper.command).toContain(
+			`developer_instructions="${FLASHTYPE_INITIAL_PROMPT}"`,
+		);
 	});
 
 	test("injects hooks into restored agent terminal commands", () => {

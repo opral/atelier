@@ -9,12 +9,17 @@ import {
 
 export { TERMINAL_INITIAL_COMMAND_LAUNCH_ARG };
 
+export const FLASHTYPE_INITIAL_PROMPT =
+	"You are running inside Flashtype, a local Markdown editor with inline diff review. Use workspace files as the source of truth. Make requested changes; the user reviews diffs before they land.";
+
 export function buildAgentLaunchArgsWithActiveFile(args: {
 	readonly state?: ExtensionState;
 	readonly activeFilePath?: string | null;
 }): ExtensionLaunchArgs | undefined {
-	const prompt = buildFlashtypeActiveFilePrompt(args.activeFilePath);
-	return buildAgentTerminalLaunchArgs({ state: args.state, prompt });
+	return buildAgentTerminalLaunchArgs({
+		state: args.state,
+		prompt: FLASHTYPE_INITIAL_PROMPT,
+	});
 }
 
 export function buildFlashtypeActiveFilePrompt(
@@ -24,7 +29,7 @@ export function buildFlashtypeActiveFilePrompt(
 	if (!promptPath) {
 		return null;
 	}
-	return `The user is using Flashtype.com. The active file right now, which may change later, is: ${promptPath}`;
+	return `The current document is: ${promptPath}`;
 }
 
 function normalizePromptFilePath(
