@@ -29,6 +29,10 @@ type BranchRow = {
 	commit_id: string | null;
 };
 
+type BranchSwitcherProps = {
+	readonly disabled?: boolean;
+};
+
 /**
  * Dropdown trigger that lists available branches and switches the active one.
  *
@@ -39,7 +43,11 @@ type BranchRow = {
  * @example
  * <BranchSwitcher />
  */
-export function BranchSwitcher() {
+export function BranchSwitcher({ disabled = false }: BranchSwitcherProps = {}) {
+	if (disabled) {
+		return <DisabledBranchSwitcher />;
+	}
+
 	const lix = useLix();
 	const branches = useQuery<BranchRow>((lix) =>
 		qb(lix)
@@ -53,6 +61,23 @@ export function BranchSwitcher() {
 	);
 
 	return <BranchSwitcherWithActiveBranch lix={lix} branches={branches} />;
+}
+
+function DisabledBranchSwitcher() {
+	return (
+		<Button
+			type="button"
+			variant="ghost"
+			size="sm"
+			className="inline-flex h-5.5 items-center gap-1 rounded-md px-1.5 font-normal text-[var(--color-icon-tertiary)]"
+			aria-label="Select branch"
+			data-attr="branch-switcher-disabled"
+			disabled
+		>
+			<GitBranch className="size-3" />
+			<span className="text-[11.5px]">No branch</span>
+		</Button>
+	);
 }
 
 function BranchSwitcherWithActiveBranch({

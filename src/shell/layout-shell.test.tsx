@@ -11,6 +11,7 @@ import {
 	FILES_EXTENSION_KIND,
 	fileExtensionInstanceForKind,
 } from "@/extension-runtime/extension-instance-helpers";
+import type { WorkspaceContext } from "@/extension-runtime/types";
 import { resolveLixFileForOpen, V2LayoutShell } from "./layout-shell";
 import type { FlashtypeUiState } from "./ui-state";
 import type { Lix } from "@/lib/lix-types";
@@ -271,6 +272,63 @@ describe("resolveLixFileForOpen", () => {
 	});
 });
 
+describe("V2LayoutShell branch status", () => {
+	test("renders enabled branch UI without an explicit workspace context", async () => {
+		const lix = await openLix();
+		const utils = await renderShell(lix);
+
+		const trigger = await screen.findByRole("button", {
+			name: "Select branch",
+		});
+		expect(trigger).toBeEnabled();
+		expect(trigger).toHaveTextContent("main");
+		expect(trigger).not.toHaveAttribute(
+			"data-attr",
+			"branch-switcher-disabled",
+		);
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+
+	test("renders enabled branch UI for persistent workspaces", async () => {
+		const lix = await openLix();
+		const utils = await renderShell(lix, {
+			workspace: persistentWorkspace(),
+		});
+
+		const trigger = await screen.findByRole("button", {
+			name: "Select branch",
+		});
+		expect(trigger).toBeEnabled();
+		expect(trigger).toHaveTextContent("main");
+		expect(trigger).not.toHaveAttribute(
+			"data-attr",
+			"branch-switcher-disabled",
+		);
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+
+	test("renders disabled branch UI for ephemeral workspaces", async () => {
+		const lix = await openLix();
+		const utils = await renderShell(lix, {
+			workspace: ephemeralWorkspace(),
+		});
+
+		const trigger = await screen.findByRole("button", {
+			name: "Select branch",
+		});
+		expect(trigger).toBeDisabled();
+		expect(trigger).toHaveTextContent("No branch");
+		expect(trigger).toHaveAttribute("data-attr", "branch-switcher-disabled");
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+});
+
 describe("V2LayoutShell native New File", () => {
 	test("routes to the active FilesView draft before creating directly", async () => {
 		const desktop = installDesktopMock();
@@ -514,14 +572,20 @@ describe("V2LayoutShell agent review auto-open", () => {
 	});
 });
 
-async function renderShell(lix: Lix) {
+async function renderShell(
+	lix: Lix,
+	options: { readonly workspace?: WorkspaceContext } = {},
+) {
 	let result: ReturnType<typeof render> | undefined;
 	await act(async () => {
 		result = render(
 			<LixProvider lix={lix}>
 				<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 					<Suspense fallback={<div data-testid="loading" />}>
-						<V2LayoutShell workspaceName="Workspace" />
+						<V2LayoutShell
+							workspace={options.workspace}
+							workspaceName="Workspace"
+						/>
 					</Suspense>
 				</KeyValueProvider>
 			</LixProvider>,
@@ -792,5 +856,13 @@ function ephemeralWorkspace() {
 		path: "/workspace",
 		name: "workspace",
 		openFilePaths: [],
+	} as const;
+}
+
+function persistentWorkspace() {
+	return {
+		ephemeral: false,
+		path: "/workspace",
+		name: "workspace",
 	} as const;
 }

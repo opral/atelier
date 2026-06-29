@@ -2616,7 +2616,9 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</PanelGroup>
 				</div>
-				<StatusBar left={<BranchSwitcher />} />
+				<StatusBar
+					left={<BranchSwitcher disabled={workspace?.ephemeral === true} />}
+				/>
 			</div>
 			<DragOverlay>
 				{activeId && activeDragView ? (
