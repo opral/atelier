@@ -48,6 +48,7 @@ export type DesktopObserveEvent = {
 export type DesktopLixApi = {
 	open(): Promise<void>;
 	workspaceDir(): Promise<string>;
+	storageDir(): Promise<string>;
 	execute(payload: {
 		sql: string;
 		params?: ReadonlyArray<unknown>;

@@ -50,7 +50,12 @@ export async function ensureLixOpen(window) {
 					if (tracksPersistentWorkspace) {
 						clearWorkspaceLixOpenPendingSync(userDataPath, workspace.path);
 					}
-					return createDesktopLixHandle(nativeLix, workspace.path);
+					return createDesktopLixHandle(
+						nativeLix,
+						workspace.path,
+						backendOptions.lixDir ??
+							path.join(workspace.path, LIX_DATABASE_DIR),
+					);
 				} catch (error) {
 					await nativeLix?.close().catch(() => {});
 					let recovery;
@@ -270,7 +275,7 @@ function getOrCreateSession(window) {
 	return session;
 }
 
-function createDesktopLixHandle(nativeLix, workspaceDir) {
+function createDesktopLixHandle(nativeLix, workspaceDir, storageDir) {
 	let operationQueue = Promise.resolve();
 
 	async function acquireOperationSlot() {
@@ -306,6 +311,9 @@ function createDesktopLixHandle(nativeLix, workspaceDir) {
 	return {
 		workspaceDir() {
 			return workspaceDir;
+		},
+		storageDir() {
+			return storageDir;
 		},
 		async execute(sql, params = []) {
 			return await runQueued(() => nativeLix.execute(sql, [...params]));
