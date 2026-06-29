@@ -1,10 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
-import {
-	nextMermaidRenderId,
-	renderMermaidDiagram,
-} from "./mermaid-render";
+import { renderMermaidDiagram } from "./mermaid-render";
 
 type DiffAttrs = Record<string, string>;
 
@@ -86,9 +83,26 @@ function createMermaidCodeBlockNodeView(options: {
 	dom.appendChild(pre);
 
 	let lastRenderedSource = "";
-	let renderGeneration = 0;
+	let renderDebounceTimer: number | null = null;
+	let renderInFlight = false;
+	let destroyed = false;
 	let showingSource =
 		editor.isFocused && isNodeSelected(view, getPos, currentNode);
+
+	function getSourceText(): string {
+		return code.textContent || currentNode.textContent;
+	}
+
+	function scheduleRenderPreview(): void {
+		if (showingSource) return;
+		if (renderDebounceTimer !== null) {
+			window.clearTimeout(renderDebounceTimer);
+		}
+		renderDebounceTimer = window.setTimeout(() => {
+			renderDebounceTimer = null;
+			void renderPreview();
+		}, 50);
+	}
 
 	function setViewMode(editing: boolean): void {
 		showingSource = editing;
@@ -97,41 +111,38 @@ function createMermaidCodeBlockNodeView(options: {
 		error.hidden = editing || error.textContent === "";
 		pre.hidden = !editing;
 		if (!editing) {
-			void renderPreview();
+			scheduleRenderPreview();
 		}
 	}
 
 	async function renderPreview(): Promise<void> {
-		const source = currentNode.textContent;
-		if (source === lastRenderedSource && preview.innerHTML.length > 0) {
+		if (destroyed || showingSource || renderInFlight) return;
+
+		const source = getSourceText();
+		if (source === lastRenderedSource && preview.querySelector("svg")) {
 			return;
 		}
-
-		const generation = ++renderGeneration;
-		lastRenderedSource = source;
-
 		if (!source.trim()) {
-			preview.innerHTML = "";
-			error.hidden = true;
-			return;
-		}
-
-		try {
-			const renderId = nextMermaidRenderId(
-				typeof currentNode.attrs?.data?.id === "string"
-					? `mermaid-${currentNode.attrs.data.id}`
-					: "mermaid",
-			);
-			const svg = await renderMermaidDiagram(source, renderId);
-			if (generation !== renderGeneration || showingSource) return;
-			preview.innerHTML = svg;
+			preview.replaceChildren();
 			error.hidden = true;
 			error.textContent = "";
+			return;
+		}
+
+		renderInFlight = true;
+		try {
+			await renderMermaidDiagram(source, preview);
+			if (destroyed || showingSource) return;
+			error.hidden = true;
+			error.textContent = "";
+			lastRenderedSource = source;
 		} catch (cause) {
-			if (generation !== renderGeneration || showingSource) return;
-			preview.innerHTML = "";
+			if (destroyed || showingSource) return;
+			preview.replaceChildren();
 			error.hidden = false;
 			error.textContent = formatMermaidError(cause);
+		} finally {
+			renderInFlight = false;
 		}
 	}
 
@@ -150,6 +161,14 @@ function createMermaidCodeBlockNodeView(options: {
 	return {
 		dom,
 		contentDOM: code,
+		ignoreMutation(mutation) {
+			const target = mutation.target;
+			if (!(target instanceof Node)) {
+				return true;
+			}
+			// ProseMirror should only react to edits inside the source code element.
+			return !code.contains(target);
+		},
 		update(updatedNode) {
 			if (updatedNode.type.name !== "codeBlock") return false;
 			if ((updatedNode.attrs?.language ?? null) !== "mermaid") {
@@ -161,8 +180,11 @@ function createMermaidCodeBlockNodeView(options: {
 				editor.isFocused && isNodeSelected(view, getPos, updatedNode);
 			if (selected !== showingSource) {
 				setViewMode(selected);
-			} else if (!selected) {
-				void renderPreview();
+			} else if (
+				!selected &&
+				updatedNode.textContent !== lastRenderedSource
+			) {
+				scheduleRenderPreview();
 			}
 			return true;
 		},
@@ -173,7 +195,11 @@ function createMermaidCodeBlockNodeView(options: {
 			setViewMode(false);
 		},
 		destroy() {
-			renderGeneration += 1;
+			destroyed = true;
+			if (renderDebounceTimer !== null) {
+				window.clearTimeout(renderDebounceTimer);
+				renderDebounceTimer = null;
+			}
 			editor.off("selectionUpdate", syncViewMode);
 			editor.off("blur", syncViewMode);
 		},

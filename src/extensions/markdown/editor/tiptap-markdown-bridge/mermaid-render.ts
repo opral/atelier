@@ -1,6 +1,5 @@
-type MermaidModule = typeof import("mermaid");
+import mermaid from "mermaid";
 
-let mermaidModulePromise: Promise<MermaidModule["default"]> | null = null;
 let initialized = false;
 let renderCounter = 0;
 
@@ -8,46 +7,35 @@ function isDarkMode(): boolean {
 	return document.documentElement.classList.contains("dark");
 }
 
-async function getMermaid(): Promise<MermaidModule["default"]> {
-	if (!mermaidModulePromise) {
-		mermaidModulePromise = import("mermaid").then((module) => module.default);
-	}
-	return mermaidModulePromise;
-}
-
-async function ensureMermaidInitialized(): Promise<MermaidModule["default"]> {
-	const mermaid = await getMermaid();
-	if (!initialized) {
-		mermaid.initialize({
-			startOnLoad: false,
-			securityLevel: "strict",
-			theme: isDarkMode() ? "dark" : "default",
-		});
-		initialized = true;
-	}
-	return mermaid;
+function ensureMermaidInitialized(): void {
+	if (initialized) return;
+	mermaid.initialize({
+		startOnLoad: false,
+		securityLevel: "strict",
+		theme: isDarkMode() ? "dark" : "default",
+	});
+	initialized = true;
 }
 
 export function resetMermaidForTests(): void {
 	initialized = false;
-	mermaidModulePromise = null;
-}
-
-export function nextMermaidRenderId(prefix = "mermaid"): string {
-	renderCounter += 1;
-	return `${prefix}-${renderCounter}`;
+	renderCounter = 0;
 }
 
 export async function renderMermaidDiagram(
 	source: string,
-	renderId: string,
-): Promise<string> {
+	container: HTMLElement,
+): Promise<void> {
 	const trimmed = source.trim();
+	container.replaceChildren();
 	if (!trimmed) {
-		return "";
+		return;
 	}
 
-	const mermaid = await ensureMermaidInitialized();
+	ensureMermaidInitialized();
+	const renderId = `flashtype-mermaid-${++renderCounter}`;
 	const { svg } = await mermaid.render(renderId, trimmed);
-	return svg;
+	const wrapper = document.createElement("div");
+	wrapper.innerHTML = svg;
+	container.appendChild(wrapper);
 }
