@@ -119,9 +119,10 @@ const agentHooks = {
 				return;
 			}
 			void Promise.resolve(listener(payload.event))
-				.then(() =>
+				.then((result) =>
 					ipcRenderer.invoke("agentHooks:completeTurnEvent", {
 						deliveryId: payload.deliveryId,
+						result: normalizeAgentHookListenerResult(result),
 						status: "ok",
 					}),
 				)
@@ -139,6 +140,20 @@ const agentHooks = {
 		};
 	},
 };
+
+function normalizeAgentHookListenerResult(value) {
+	if (typeof value === "string") {
+		return { additionalContext: value };
+	}
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+	const additionalContext = value.additionalContext;
+	if (typeof additionalContext !== "string") {
+		return undefined;
+	}
+	return { additionalContext };
+}
 
 contextBridge.exposeInMainWorld("flashtypeDesktop", {
 	agentHooks,

@@ -198,6 +198,55 @@ describe("agentHookScriptSource", () => {
 		}
 	});
 
+	test("prints additional context from turn-start acknowledgements", async () => {
+		const rootDir = await mkdtemp(path.join(tmpdir(), "flashtype-agent-hook-"));
+		const socketPath = testSocketPath(rootDir);
+		const received = deferred();
+		const server = net.createServer({ allowHalfOpen: true }, (socket) => {
+			let input = "";
+			socket.setEncoding("utf8");
+			socket.on("data", (chunk) => {
+				input += chunk;
+			});
+			socket.on("end", () => {
+				received.resolve(JSON.parse(input));
+				socket.end(
+					`${JSON.stringify({
+						ok: true,
+						additionalContext: "The active file right now is ./current.md",
+					})}\n`,
+				);
+			});
+		});
+		try {
+			const scriptPath = path.join(rootDir, "hook.mjs");
+			await writeFile(scriptPath, agentHookScriptSource(), { mode: 0o700 });
+			await listen(server, socketPath);
+
+			const result = await runHookScript({
+				scriptPath,
+				args: ["codex", "turn-start"],
+				env: {
+					FLASHTYPE_AGENT_HOOK_SOCKET: socketPath,
+					FLASHTYPE_AGENT_HOOK_TOKEN: "secret",
+					FLASHTYPE_AGENT_HOOK_INSTANCE_ID: "terminal:1",
+				},
+				stdin: JSON.stringify({
+					hook_event_name: "UserPromptSubmit",
+				}),
+			});
+
+			expect(await received.promise).toMatchObject({
+				agent: "codex",
+				phase: "turn-start",
+			});
+			expect(result.stdout).toBe("The active file right now is ./current.md\n");
+		} finally {
+			server.close();
+			await rm(rootDir, { recursive: true, force: true });
+		}
+	});
+
 	test("exits successfully when socket delivery fails", async () => {
 		const rootDir = await mkdtemp(path.join(tmpdir(), "flashtype-agent-hook-"));
 		try {
@@ -280,7 +329,7 @@ function runHookScript({ scriptPath, args, env, stdin }) {
 		child.on("error", reject);
 		child.on("close", (code, signal) => {
 			if (code === 0) {
-				resolve();
+				resolve({ stdout, stderr });
 				return;
 			}
 			reject(

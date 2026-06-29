@@ -30,10 +30,12 @@ export function registerAgentHookIpc() {
 		if (!pending || pending.webContentsId !== event.sender.id) {
 			return { status: "ignored" };
 		}
+		const result = normalizeAgentHookListenerResult(payload?.result);
 		clearTimeout(pending.timeout);
 		pendingDeliveries.delete(deliveryId);
 		pending.resolve({
 			status: payload?.status === "error" ? "error" : "ok",
+			...result,
 		});
 		return { status: "acknowledged" };
 	});
@@ -270,6 +272,9 @@ async function processAgentHookMessage(endpoint, input) {
 	return {
 		ok: delivery.status !== "timeout" && delivery.status !== "disposed",
 		status: delivery.status,
+		...(delivery.additionalContext
+			? { additionalContext: delivery.additionalContext }
+			: {}),
 	};
 }
 
@@ -359,6 +364,27 @@ function parseHookStdin(value) {
 	}
 }
 
+function normalizeAgentHookListenerResult(value) {
+	if (typeof value === "string") {
+		return normalizeAgentHookAdditionalContext(value);
+	}
+	if (!value || typeof value !== "object") {
+		return {};
+	}
+	return normalizeAgentHookAdditionalContext(value.additionalContext);
+}
+
+function normalizeAgentHookAdditionalContext(value) {
+	if (typeof value !== "string") {
+		return {};
+	}
+	const additionalContext = value.trim();
+	if (!additionalContext) {
+		return {};
+	}
+	return { additionalContext };
+}
+
 export function agentHookScriptSource() {
 	return String.raw`import { readFileSync } from "node:fs";
 import { connect } from "node:net";
@@ -383,7 +409,15 @@ const payload = {
 };
 
 try {
-	await sendHookEvent(payload);
+	const response = await sendHookEvent(payload);
+	const additionalContext = readAdditionalContext(response);
+	if (payload.phase === "turn-start" && additionalContext) {
+		process.stdout.write(
+			additionalContext.endsWith("\n")
+				? additionalContext
+				: additionalContext + "\n",
+		);
+	}
 } catch {
 	// Hook delivery must not prevent the agent command from continuing.
 }
@@ -393,7 +427,7 @@ function sendHookEvent(payload) {
 		const socket = connect(socketPath);
 		let response = "";
 		let settled = false;
-		const finish = (error) => {
+		const finish = (error, value) => {
 			if (settled) return;
 			settled = true;
 			socket.destroy();
@@ -401,7 +435,7 @@ function sendHookEvent(payload) {
 				reject(error);
 				return;
 			}
-			resolve();
+			resolve(value);
 		};
 
 		socket.setEncoding("utf8");
@@ -419,19 +453,27 @@ function sendHookEvent(payload) {
 				finish(new Error("Hook acknowledgement was empty"));
 				return;
 			}
+			let parsed;
 			try {
-				JSON.parse(response);
+				parsed = JSON.parse(response);
 			} catch {
 				finish(new Error("Hook acknowledgement was invalid JSON"));
 				return;
 			}
-			finish();
+			finish(null, parsed);
 		});
 		socket.on("error", finish);
 		socket.on("close", () => {
 			finish(new Error("Hook socket closed before acknowledgement"));
 		});
 	});
+}
+
+function readAdditionalContext(response) {
+	const value = response?.additionalContext;
+	return typeof value === "string" && value.trim().length > 0
+		? value.trim()
+		: null;
 }
 
 `;
