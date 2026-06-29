@@ -570,7 +570,6 @@ test("launching with multiple standalone markdown files creates one grouped tran
 		await expect(
 			groupedPage.getByRole("heading", { name: "Alpha" }),
 		).toBeVisible();
-		await fileTreeDirectory(groupedPage, "/standalone-markdown-alpha/").click();
 		await expect(
 			fileTreeFile(groupedPage, "/standalone-markdown-alpha/alpha.md"),
 		).toBeVisible();

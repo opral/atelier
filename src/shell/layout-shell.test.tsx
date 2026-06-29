@@ -60,6 +60,19 @@ function queryFilesViewRenameInput(
 	return queryFilesViewRenameInputs(container)[0] ?? null;
 }
 
+function queryFilesViewTreeItemByPath(
+	container: HTMLElement,
+	path: string,
+): HTMLElement | null {
+	for (const host of queryFileTreeHosts(container)) {
+		const item = host.shadowRoot?.querySelector(
+			`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+		);
+		if (item instanceof HTMLElement) return item;
+	}
+	return null;
+}
+
 async function findFilesViewRenameInput(
 	container: HTMLElement,
 ): Promise<HTMLInputElement> {
@@ -357,6 +370,34 @@ describe("V2LayoutShell native New File", () => {
 	});
 });
 
+describe("V2LayoutShell active file sidebar highlight", () => {
+	test("highlights the active central file in the Files view", async () => {
+		const lix = await openLix({
+			keyValues: [
+				uiStateKeyValue(
+					filesViewWithOpenFileState("file_active", "/docs/readme.md"),
+				),
+			],
+		});
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ path: "/docs/" } as any)
+			.execute();
+		await writeReviewFile(lix, "file_active", "/docs/readme.md", "# Readme");
+
+		const utils = await renderShell(lix);
+
+		await waitFor(() => {
+			expect(
+				queryFilesViewTreeItemByPath(utils.container, "docs/readme.md"),
+			).toHaveAttribute("data-item-selected", "true");
+		});
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+});
+
 describe("V2LayoutShell agent review auto-open", () => {
 	test("leaves the current file open when it already has a pending review", async () => {
 		const desktop = installAgentHooksDesktopMock();
@@ -608,6 +649,23 @@ function collapsedFilesViewState(): FlashtypeUiState {
 			right: { views: [], activeInstance: null },
 		},
 		layout: { sizes: { left: 0, central: 70, right: 30 } },
+	};
+}
+
+function filesViewWithOpenFileState(
+	fileId: string,
+	filePath: string,
+): FlashtypeUiState {
+	const state = openFileState(fileId, filePath);
+	return {
+		...state,
+		panels: {
+			...state.panels,
+			left: {
+				views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
+				activeInstance: "files-left",
+			},
+		},
 	};
 }
 

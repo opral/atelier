@@ -2,6 +2,7 @@ import {
 	createContext,
 	useCallback,
 	useContext,
+	useEffect,
 	useMemo,
 	useRef,
 	type ReactNode,
@@ -100,6 +101,17 @@ export function ExtensionHostRegistryProvider({
 		}),
 		[ensureHost, pruneHosts],
 	);
+
+	useEffect(() => {
+		const hosts = hostsRef.current;
+		return () => {
+			for (const record of hosts.values()) {
+				record.cleanup?.();
+				record.container.remove();
+			}
+			hosts.clear();
+		};
+	}, []);
 
 	return (
 		<ExtensionHostRegistryContext.Provider value={value}>
