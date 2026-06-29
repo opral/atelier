@@ -97,6 +97,36 @@ describe("agent version preflight", () => {
 		}
 	});
 
+	unixTest("ignores shell startup versions outside probe markers", async () => {
+		const rootDir = await mkdtemp(
+			path.join(tmpdir(), "flashtype-agent-version-test-"),
+		);
+		try {
+			const shellPath = path.join(rootDir, "fake-shell");
+			await writeExecutable(
+				shellPath,
+				'printf "%s\\n" "startup tool 99.0.0"\nexec /bin/sh',
+			);
+			await writeExecutable(
+				path.join(rootDir, "codex"),
+				'printf "%s\\n" "codex dev build"',
+			);
+
+			await expect(
+				checkAgentVersionPreflight({
+					...preflightArgs("codex-flashtype", { PATH: rootDir }),
+					shell: shellPath,
+				}),
+			).resolves.toMatchObject({
+				status: "agentVersionError",
+				agent: "codex",
+				reason: "unparseable",
+			});
+		} finally {
+			await rm(rootDir, { recursive: true, force: true });
+		}
+	});
+
 	unixTest(
 		"reports missing, failed, unparseable, and timed-out checks",
 		async () => {

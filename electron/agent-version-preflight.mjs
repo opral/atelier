@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import pty from "node-pty";
 
 const AGENT_REQUIREMENTS = {
@@ -29,7 +30,9 @@ export async function checkAgentVersionPreflight(args) {
 		timeoutMs: args.timeoutMs,
 	});
 	const output = normalizeProbeOutput(probe.output);
-	const detectedVersion = parseFirstSemver(output);
+	const detectedVersion = probe.markerComplete
+		? parseFirstSemver(output)
+		: null;
 
 	if (probe.timedOut) {
 		return agentVersionError({
@@ -46,7 +49,10 @@ export async function checkAgentVersionPreflight(args) {
 			agent,
 			detectedVersion,
 			output,
-			reason: isMissingCommandFailure(probe, output) ? "missing" : "failed",
+			reason:
+				probe.markerComplete && isMissingCommandFailure(probe, output)
+					? "missing"
+					: "failed",
 			requiredVersion: requirement.requiredVersion,
 		});
 	}
@@ -118,6 +124,7 @@ export function compareSemver(left, right) {
 
 export function runAgentVersionProbe(args) {
 	return new Promise((resolve, reject) => {
+		const markers = createProbeMarkers();
 		let terminal;
 		try {
 			terminal = pty.spawn(args.shell, args.shellArgs ?? [], {
@@ -125,7 +132,11 @@ export function runAgentVersionProbe(args) {
 				cwd: args.cwd,
 				cols: 80,
 				rows: 24,
-				env: args.env,
+				env: {
+					...args.env,
+					FLASHTYPE_AGENT_VERSION_PROBE_END: markers.end,
+					FLASHTYPE_AGENT_VERSION_PROBE_START: markers.start,
+				},
 			});
 		} catch (error) {
 			reject(error);
@@ -140,7 +151,13 @@ export function runAgentVersionProbe(args) {
 			}
 			settled = true;
 			clearTimeout(timeout);
-			resolve({ output, ...result });
+			const extracted = extractProbeResult(output, markers);
+			resolve({
+				...result,
+				exitCode: extracted.exitCode ?? result.exitCode,
+				markerComplete: extracted.markerComplete,
+				output: extracted.output,
+			});
 		};
 		const timeout = setTimeout(() => {
 			try {
@@ -161,9 +178,54 @@ export function runAgentVersionProbe(args) {
 				timedOut: false,
 			});
 		});
-		terminal.write(`${args.command}\r`);
+		terminal.write(`${buildProbeCommandLine(args.command)}\r`);
 		terminal.write("exit\r");
 	});
+}
+
+function createProbeMarkers() {
+	const token = randomUUID().replace(/-/gu, "");
+	return {
+		start: `__FLASHTYPE_AGENT_VERSION_PROBE_START_${token}__`,
+		end: `__FLASHTYPE_AGENT_VERSION_PROBE_END_${token}__`,
+	};
+}
+
+function buildProbeCommandLine(command) {
+	const script = [
+		'printf "%s\\n" "$FLASHTYPE_AGENT_VERSION_PROBE_START"',
+		command,
+		"__flashtype_agent_version_status=$?",
+		'printf "%s %s\\n" "$FLASHTYPE_AGENT_VERSION_PROBE_END" "$__flashtype_agent_version_status"',
+		'exit "$__flashtype_agent_version_status"',
+	].join("; ");
+	return `/bin/sh -c ${shellQuote(script)}`;
+}
+
+function extractProbeResult(output, markers) {
+	const normalized = normalizeProbeOutput(output);
+	const pattern = new RegExp(
+		`${escapeRegExp(markers.start)}([\\s\\S]*?)${escapeRegExp(
+			markers.end,
+		)}[^\\S\\n]*(\\d+)`,
+		"gu",
+	);
+	let match = null;
+	for (const candidate of normalized.matchAll(pattern)) {
+		match = candidate;
+	}
+	if (!match) {
+		return {
+			exitCode: null,
+			markerComplete: false,
+			output: normalized,
+		};
+	}
+	return {
+		exitCode: Number(match[2]),
+		markerComplete: true,
+		output: match[1].trim(),
+	};
 }
 
 function agentVersionError(args) {
@@ -259,4 +321,12 @@ function isMissingCommandFailure(probe, output) {
 			output,
 		)
 	);
+}
+
+function shellQuote(value) {
+	return `'${String(value).replace(/'/gu, `'\\''`)}'`;
+}
+
+function escapeRegExp(value) {
+	return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
