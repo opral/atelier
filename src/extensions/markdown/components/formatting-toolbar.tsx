@@ -18,13 +18,11 @@ import {
 	ChevronDown,
 	Code2,
 	Copy,
-	ExternalLink,
 	Italic,
 	Link as LinkIcon,
 	List,
 	ListChecks,
 	ListOrdered,
-	Unlink,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import { useEditorCtx } from "../editor/editor-context";
@@ -210,13 +208,6 @@ export function FormattingToolbar({ className }: { className?: string }) {
 		editor.chain().focus().extendMarkRange("link").unsetMark("link").run();
 		setLinkOpen(false);
 	}, [editor]);
-
-	const handleOpenLink = useCallback(() => {
-		const href = normalizeUrl(linkValue);
-		if (href && typeof window !== "undefined") {
-			window.open(href, "_blank", "noopener,noreferrer");
-		}
-	}, [linkValue]);
 
 	const handleLinkKeyDown = useCallback(
 		(event: KeyboardEvent<HTMLInputElement>) => {
@@ -444,60 +435,36 @@ export function FormattingToolbar({ className }: { className?: string }) {
 						>
 							<Popover.Popup
 								initialFocus={linkInputRef}
-								className="w-80 origin-[var(--transform-origin)] rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-3 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+								className="w-[17rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-2 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
 								data-attr="markdown-link-popover"
 							>
-								<div className="mb-1.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]">
-									Link URL
-								</div>
-								<div className="flex h-8 items-center gap-2 rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel-muted)] pr-1 pl-2.5 transition-[border-color,box-shadow] duration-100 focus-within:border-[var(--color-brand-600)] focus-within:bg-[var(--color-bg-panel)] focus-within:ring-2 focus-within:ring-[var(--color-brand-100)]">
-									<LinkIcon
-										className="size-3.5 shrink-0 stroke-[1.8] text-[var(--color-icon-tertiary)]"
-										aria-hidden
-									/>
-									<input
-										ref={linkInputRef}
-										value={linkValue}
-										onChange={(event) => setLinkValue(event.target.value)}
-										onKeyDown={handleLinkKeyDown}
-										placeholder="Paste or type a URL"
-										className="w-full bg-transparent text-[13px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
-										data-attr="markdown-link-input"
-									/>
-									{linkEditing && (
-										<button
-											type="button"
-											onClick={handleOpenLink}
-											className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-icon-tertiary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
-											aria-label="Open link in new tab"
-										>
-											<ExternalLink
-												className="size-3.25 stroke-[1.8]"
-												aria-hidden
-											/>
-										</button>
-									)}
-								</div>
-								<div className="mt-3 flex items-center gap-2">
+								<input
+									ref={linkInputRef}
+									value={linkValue}
+									onChange={(event) => setLinkValue(event.target.value)}
+									onKeyDown={handleLinkKeyDown}
+									placeholder="Paste a link…"
+									className="h-8 w-full rounded-[7px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel-muted)] px-2.5 text-[12.5px] text-[var(--color-text-primary)] outline-none transition-colors duration-100 placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-text-tertiary)] focus:bg-[var(--color-bg-panel)]"
+									data-attr="markdown-link-input"
+								/>
+								<div className="mt-1.5 flex items-center gap-1">
 									{linkEditing && (
 										<button
 											type="button"
 											onClick={handleRemoveLink}
-											className="inline-flex h-7.5 items-center gap-1.5 rounded-[7px] px-2.5 text-[12.5px] font-medium text-[var(--color-text-status-danger)] transition-colors hover:bg-[var(--color-error-50)]"
+											className="inline-flex h-7 items-center rounded-[7px] px-2 text-[12.5px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-status-danger)]"
 											data-attr="markdown-link-remove"
 										>
-											<Unlink className="size-3.25 stroke-[1.9]" aria-hidden />
 											Remove
 										</button>
 									)}
-									<span className="flex-1" />
-									<Popover.Close className="inline-flex h-7.5 items-center rounded-[7px] px-3 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)]">
+									<Popover.Close className="ml-auto inline-flex h-7 items-center rounded-[7px] px-2.5 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)]">
 										Cancel
 									</Popover.Close>
 									<button
 										type="button"
 										onClick={handleApplyLink}
-										className="inline-flex h-7.5 items-center rounded-[7px] bg-[var(--color-bg-action-primary)] px-3 text-[12.5px] font-semibold text-[var(--color-text-on-action-primary)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)]"
+										className="inline-flex h-7 items-center rounded-[7px] bg-[var(--color-bg-action-primary)] px-3 text-[12.5px] font-semibold text-[var(--color-text-on-action-primary)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
 										data-attr="markdown-link-apply"
 									>
 										{linkEditing ? "Update" : "Add link"}
