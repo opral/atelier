@@ -1,8 +1,4 @@
-import {
-	existsSync,
-	readFileSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -136,7 +132,9 @@ export function releaseTagForHead(root) {
 		cwd: root,
 		encoding: "utf8",
 	}).trim();
-	const match = message.match(/Release v(\d+\.\d+\.\d+)/);
+	const match =
+		message.match(/Release v(\d+\.\d+\.\d+)/) ??
+		releaseCommitMatchForMergedHead(root);
 	if (!match) return null;
 	const version = currentVersion(root);
 	if (version !== match[1]) {
@@ -145,4 +143,25 @@ export function releaseTagForHead(root) {
 		);
 	}
 	return `v${version}`;
+}
+
+function releaseCommitMatchForMergedHead(root) {
+	const parents = execFileSync("git", ["show", "-s", "--pretty=%P", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	})
+		.trim()
+		.split(/\s+/)
+		.filter(Boolean);
+	if (parents.length < 2) return null;
+
+	const introducedMessages = execFileSync(
+		"git",
+		["log", "--format=%B%x00", `${parents[0]}..HEAD`],
+		{
+			cwd: root,
+			encoding: "utf8",
+		},
+	);
+	return introducedMessages.match(/Release v(\d+\.\d+\.\d+)/);
 }
