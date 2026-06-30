@@ -95,7 +95,7 @@ test("ephemeral workspace shows enabled branch UI", async ({
 	}
 });
 
-test("checkpoint row click opens a read-only diff against the previous visible checkpoint", async ({
+test("checkpoint row click marks files without auto-opening a diff", async ({
 	browserName: _browserName,
 }, testInfo) => {
 	const workspaceDir = testInfo.outputPath("checkpoint-diff-workspace");
@@ -127,7 +127,16 @@ test("checkpoint row click opens a read-only diff against the previous visible c
 		await expect
 			.poll(async () => await activeBranchIdFromUi(page))
 			.toBe(setup.activeBranchId);
+		await expect(page.locator(".markdown-review-overlay")).toHaveCount(0);
 
+		await ensureFilesViewOpenInLeftPanel(page);
+		for (const filePath of ["/added.md", "/removed.md", "/shared.md"]) {
+			const file = fileTreeFile(page, filePath);
+			await expect(file).toBeVisible();
+			await expect(file).toHaveAttribute("data-item-git-status", "modified");
+		}
+
+		await fileTreeFile(page, "/added.md").click();
 		await expect(page.locator(".markdown-review-overlay")).toBeVisible();
 		await expect(
 			page.locator(".markdown-review-overlay [data-diff-status]").first(),
@@ -140,13 +149,6 @@ test("checkpoint row click opens a read-only diff against the previous visible c
 			page.getByRole("button", { name: "Undo", exact: true }),
 		).toHaveCount(0);
 
-		await ensureFilesViewOpenInLeftPanel(page);
-		for (const filePath of ["/added.md", "/removed.md", "/shared.md"]) {
-			const file = fileTreeFile(page, filePath);
-			await expect(file).toBeVisible();
-			await expect(file).toHaveAttribute("data-item-git-status", "modified");
-		}
-
 		await fileTreeFile(page, "/shared.md").click();
 		await expect(page.locator(".markdown-review-overlay")).toBeVisible();
 		await expect(
@@ -154,13 +156,6 @@ test("checkpoint row click opens a read-only diff against the previous visible c
 		).toBeVisible();
 		await expect(page.getByText("Previous snapshot")).toBeVisible();
 		await expect(page.getByText("Target snapshot")).toBeVisible();
-
-		await fileTreeFile(page, "/added.md").click();
-		await expect(page.locator(".markdown-review-overlay")).toBeVisible();
-		await expect(
-			page.locator(".markdown-review-overlay [data-diff-status]").first(),
-		).toBeVisible();
-		await expect(page.getByText("Added only in target")).toBeVisible();
 		await expect(
 			page.getByRole("button", { name: "Keep", exact: true }),
 		).toHaveCount(0);

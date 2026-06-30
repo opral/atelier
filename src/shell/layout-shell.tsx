@@ -1508,26 +1508,9 @@ function LayoutShellLoadedContent({
 			setLeftPanel(removeCheckpointDiffViews);
 			setCentralPanel(removeCheckpointDiffViews);
 			setRightPanel(removeCheckpointDiffViews);
-			const firstFile = nextDiff?.files[0];
-			if (firstFile) {
-				openResolvedFileView({
-					panel: "central",
-					fileId: firstFile.fileId,
-					filePath: firstFile.path,
-					instance: checkpointDiffFileInstance(firstFile.reviewId),
-					state: {
-						[CHECKPOINT_DIFF_REVIEW_ID_STATE_KEY]: firstFile.reviewId,
-						[CHECKPOINT_DIFF_BRANCH_ID_STATE_KEY]: nextDiff.branchId,
-					},
-					focus: true,
-					trackTelemetry: false,
-					trackDocumentOpenAttempt: false,
-					trackDocumentViewed: false,
-				});
-			}
 			return nextDiff;
 		},
-		[lix, openResolvedFileView],
+		[lix],
 	);
 
 	const autoOpenFirstAgentReviewFile = useCallback(
