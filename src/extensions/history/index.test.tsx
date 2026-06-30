@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import { Suspense } from "react";
 import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -10,12 +10,12 @@ import {
 } from "@testing-library/react";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
-import { BranchSwitcher } from "./branch-switcher";
+import { HistoryView } from ".";
 
 const originalDesktop = window.flashtypeDesktop;
 const TIMESTAMP_CHECKPOINT_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u;
 
-describe("BranchSwitcher", () => {
+describe("HistoryView", () => {
 	let lix: Lix;
 	let cleanupFns: Array<() => Promise<void>> = [];
 
@@ -24,22 +24,11 @@ describe("BranchSwitcher", () => {
 			render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<BranchSwitcher />
+						<HistoryView />
 					</Suspense>
 				</LixProvider>,
 			);
 		});
-	};
-
-	const openBranchMenu = async () => {
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
-		});
-		await act(async () => {
-			fireEvent.pointerDown(trigger, { button: 0 });
-			fireEvent.pointerUp(trigger, { button: 0 });
-		});
-		return trigger;
 	};
 
 	beforeEach(async () => {
@@ -67,15 +56,10 @@ describe("BranchSwitcher", () => {
 	test("renders main as the current checkpoint", async () => {
 		await renderWithProviders();
 
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
+		const activeCheckpoint = await screen.findByRole("button", {
+			name: "Current Checkpoint",
 		});
-		expect(trigger).toHaveTextContent("Current Checkpoint");
-
-		await openBranchMenu();
-		expect(
-			await screen.findByRole("menuitem", { name: "Current Checkpoint" }),
-		).toBeInTheDocument();
+		expect(activeCheckpoint).toHaveAttribute("aria-current", "true");
 	});
 
 	test("switches to another branch when selected", async () => {
@@ -84,16 +68,7 @@ describe("BranchSwitcher", () => {
 
 		await renderWithProviders();
 
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
-		});
-
-		await act(async () => {
-			fireEvent.pointerDown(trigger, { button: 0 });
-			fireEvent.pointerUp(trigger, { button: 0 });
-		});
-
-		const draftItem = await screen.findByRole("menuitem", { name: draftName });
+		const draftItem = await screen.findByRole("button", { name: draftName });
 		expect(draftItem).toHaveAttribute("data-attr", "branch-switch");
 
 		await act(async () => {
@@ -101,9 +76,7 @@ describe("BranchSwitcher", () => {
 		});
 
 		await waitFor(() => {
-			expect(
-				screen.getByRole("button", { name: "Select branch" }),
-			).toHaveTextContent(draftName);
+			expect(draftItem).toHaveAttribute("aria-current", "true");
 		});
 
 		await waitFor(async () => {
@@ -144,6 +117,11 @@ describe("BranchSwitcher", () => {
 				generateCheckpointName,
 			},
 		} as unknown as Window["flashtypeDesktop"];
+
+		await renderWithProviders();
+		const createButton = await screen.findByRole("button", {
+			name: "Create checkpoint",
+		});
 		const realSetTimeout = globalThis.setTimeout.bind(globalThis);
 		let runScheduledRename: (() => void) | null = null;
 		const setTimeoutSpy = vi
@@ -159,15 +137,8 @@ describe("BranchSwitcher", () => {
 				}
 				return realSetTimeout(handler, timeout, ...args);
 			});
-
-		await renderWithProviders();
-		await openBranchMenu();
-
-		const createItem = await screen.findByRole("menuitem", {
-			name: "Checkpoint",
-		});
 		await act(async () => {
-			fireEvent.click(createItem);
+			fireEvent.click(createButton);
 		});
 
 		let created: { id: string; name: string } | undefined;
@@ -186,14 +157,13 @@ describe("BranchSwitcher", () => {
 		});
 
 		expect(
-			screen.getByRole("button", { name: "Select branch" }),
-		).toHaveTextContent("Current Checkpoint");
+			screen.getByRole("button", { name: "Current Checkpoint" }),
+		).toHaveAttribute("aria-current", "true");
 		expect(syncDiskToLix).toHaveBeenCalledTimes(1);
 		expect(createBranch).toHaveBeenCalledTimes(1);
 		expect(branchCreateCalls).toEqual(["sync", "create"]);
-		await openBranchMenu();
 		expect(
-			await screen.findByRole("menuitem", { name: "Naming checkpoint..." }),
+			await screen.findByRole("button", { name: "Naming checkpoint..." }),
 		).toBeInTheDocument();
 
 		const active = await qb(lix)
@@ -220,13 +190,18 @@ describe("BranchSwitcher", () => {
 			cwd: "/tmp/flashtype-workspace",
 		});
 		expect(
-			await screen.findByRole("menuitem", { name: "Silly Markdown Pancake" }),
+			await screen.findByRole("button", { name: "Silly Markdown Pancake" }),
 		).toBeInTheDocument();
 	});
 
 	test("falls back to a local timestamp checkpoint name without the desktop bridge", async () => {
 		window.flashtypeDesktop = undefined;
 		vi.spyOn(lix, "syncDiskToLix").mockResolvedValue();
+
+		await renderWithProviders();
+		const createButton = await screen.findByRole("button", {
+			name: "Create checkpoint",
+		});
 		const realSetTimeout = globalThis.setTimeout.bind(globalThis);
 		let runScheduledRename: (() => void) | null = null;
 		vi.spyOn(window, "setTimeout").mockImplementation(
@@ -242,13 +217,8 @@ describe("BranchSwitcher", () => {
 				return realSetTimeout(handler, timeout, ...args);
 			},
 		);
-
-		await renderWithProviders();
-		await openBranchMenu();
 		await act(async () => {
-			fireEvent.click(
-				await screen.findByRole("menuitem", { name: "Checkpoint" }),
-			);
+			fireEvent.click(createButton);
 		});
 
 		let created: { id: string; name: string } | undefined;
@@ -262,9 +232,8 @@ describe("BranchSwitcher", () => {
 			);
 			expect(created).toBeDefined();
 		});
-		await openBranchMenu();
 		expect(
-			await screen.findByRole("menuitem", { name: "Naming checkpoint..." }),
+			await screen.findByRole("button", { name: "Naming checkpoint..." }),
 		).toBeInTheDocument();
 
 		await act(async () => {
@@ -289,14 +258,6 @@ describe("BranchSwitcher", () => {
 		vi.stubGlobal("prompt", promptSpy);
 
 		await renderWithProviders();
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
-		});
-
-		await act(async () => {
-			fireEvent.pointerDown(trigger);
-			fireEvent.pointerUp(trigger);
-		});
 
 		const actionsButton = await screen.findByRole("button", {
 			name: `Branch actions for ${baseName}`,
@@ -331,14 +292,6 @@ describe("BranchSwitcher", () => {
 		vi.stubGlobal("confirm", confirmSpy);
 
 		await renderWithProviders();
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
-		});
-
-		await act(async () => {
-			fireEvent.pointerDown(trigger);
-			fireEvent.pointerUp(trigger);
-		});
 
 		const actionsButton = await screen.findByRole("button", {
 			name: `Branch actions for ${tempName}`,
@@ -354,17 +307,9 @@ describe("BranchSwitcher", () => {
 			fireEvent.click(deleteItem);
 		});
 
-		const triggerAfterDelete = await screen.findByRole("button", {
-			name: "Select branch",
-		});
-		await act(async () => {
-			fireEvent.pointerDown(triggerAfterDelete);
-			fireEvent.pointerUp(triggerAfterDelete);
-		});
-
 		await waitFor(() => {
 			expect(
-				screen.queryByRole("menuitem", { name: tempName }),
+				screen.queryByRole("button", { name: tempName }),
 			).not.toBeInTheDocument();
 		});
 
@@ -383,14 +328,6 @@ describe("BranchSwitcher", () => {
 
 	test("delete action is disabled for active branch", async () => {
 		await renderWithProviders();
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
-		});
-
-		await act(async () => {
-			fireEvent.pointerDown(trigger);
-			fireEvent.pointerUp(trigger);
-		});
 
 		const actionsButton = await screen.findByRole("button", {
 			name: "Branch actions for Current Checkpoint",

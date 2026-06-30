@@ -28,8 +28,6 @@ import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { FlashtypeMenu } from "./top-bar/flashtype-menu";
-import { BranchSwitcher } from "./top-bar/branch-switcher";
-import { StatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb } from "@/lib/lix-kysely";
@@ -2651,7 +2649,6 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</PanelGroup>
 				</div>
-				<StatusBar left={<BranchSwitcher />} />
 			</div>
 			<DragOverlay>
 				{activeId && activeDragView ? (

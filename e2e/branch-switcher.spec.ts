@@ -6,6 +6,7 @@ import path from "node:path";
 import {
 	closeElectronApp,
 	ensureFilesViewOpenInLeftPanel,
+	ensureHistoryViewOpenInLeftPanel,
 	expectPathMissing,
 	fileTreeFile,
 	launchDevElectronApp,
@@ -37,20 +38,16 @@ test("persistent workspace branch switching keeps sidebar and disk on the active
 		await ensureFilesViewOpenInLeftPanel(page);
 		await expect(fileTreeFile(page, "/shared.md")).toBeVisible();
 		await expect(fileTreeFile(page, "/main-only.md")).toBeVisible();
-		await expect(
-			page.getByRole("button", { name: "Select branch" }),
-		).toHaveText(/Current Checkpoint/);
+		await ensureHistoryViewOpenInLeftPanel(page);
+		await expectCurrentCheckpointActive(page);
 
 		await createCheckpointFromUi(page);
-		await expect(
-			page.getByRole("button", { name: "Select branch" }),
-		).toHaveText(/Current Checkpoint/);
+		await expectCurrentCheckpointActive(page);
 
 		await switchBranchFromUi(page, "Naming checkpoint...");
-		await expect(
-			page.getByRole("button", { name: "Select branch" }),
-		).not.toHaveText(/Current Checkpoint/);
+		await expectCheckpointActive(page, "Naming checkpoint...");
 
+		await ensureFilesViewOpenInLeftPanel(page);
 		await writeDraftBranchState(page);
 		await expect(fileTreeFile(page, "/draft-only.md")).toBeVisible();
 		await expect(fileTreeFile(page, "/shared.md")).toBeVisible();
@@ -58,9 +55,8 @@ test("persistent workspace branch switching keeps sidebar and disk on the active
 		await expectDiskText(draftOnlyPath, "# Draft only\n");
 
 		await switchBranchFromUi(page, "Current Checkpoint");
-		await expect(
-			page.getByRole("button", { name: "Select branch" }),
-		).toHaveText(/Current Checkpoint/);
+		await expectCurrentCheckpointActive(page);
+		await ensureFilesViewOpenInLeftPanel(page);
 		await expect(fileTreeFile(page, "/shared.md")).toBeVisible();
 		await expect(fileTreeFile(page, "/main-only.md")).toBeVisible();
 		await expect(fileTreeFile(page, "/draft-only.md")).toHaveCount(0);
@@ -89,12 +85,10 @@ test("ephemeral workspace shows enabled branch UI", async ({
 		await expect(fileTreeFile(page, "/note.md")).toBeVisible();
 		await expectPathMissing(path.join(workspaceDir, ".lix"));
 
-		const branchTrigger = page.getByRole("button", { name: "Select branch" });
-		await expect(branchTrigger).toBeEnabled();
-		await expect(branchTrigger).toHaveText(/Current Checkpoint/);
-		await branchTrigger.click();
+		await ensureHistoryViewOpenInLeftPanel(page);
+		await expectCurrentCheckpointActive(page);
 		await expect(
-			page.getByRole("menuitem", { name: "Checkpoint" }),
+			page.getByRole("button", { name: "Create checkpoint" }),
 		).toBeVisible();
 	} finally {
 		await closeElectronApp(electronApp);
@@ -109,33 +103,35 @@ async function initializeLixWorkspace(workspaceDir: string): Promise<void> {
 }
 
 async function createCheckpointFromUi(page: Page): Promise<void> {
-	await openBranchMenu(page);
-	await page.getByRole("menuitem", { name: "Checkpoint" }).click();
-	await openBranchMenu(page);
+	await ensureHistoryViewOpenInLeftPanel(page);
+	await page.getByRole("button", { name: "Create checkpoint" }).click();
 	await expect(
-		page.getByRole("menuitem", { name: "Naming checkpoint..." }),
+		page.getByRole("button", { name: "Naming checkpoint...", exact: true }),
 	).toBeVisible();
-	await page.keyboard.press("Escape");
-	await expect(page.getByRole("menuitem", { name: "Checkpoint" })).toHaveCount(
-		0,
-	);
 }
 
 async function switchBranchFromUi(
 	page: Page,
 	branchName: string,
 ): Promise<void> {
-	await openBranchMenu(page);
-	await page.getByRole("menuitem", { name: branchName }).click();
+	await ensureHistoryViewOpenInLeftPanel(page);
+	await page.getByRole("button", { name: branchName, exact: true }).click();
 }
 
-async function openBranchMenu(page: Page): Promise<void> {
-	const trigger = page.getByRole("button", { name: "Select branch" });
-	await expect(trigger).toBeEnabled();
-	await trigger.click();
-	await expect(
-		page.getByRole("menuitem", { name: "Checkpoint" }),
-	).toBeVisible();
+async function expectCurrentCheckpointActive(page: Page): Promise<void> {
+	await expectCheckpointActive(page, "Current Checkpoint");
+}
+
+async function expectCheckpointActive(
+	page: Page,
+	checkpointName: string,
+): Promise<void> {
+	const checkpoint = page.getByRole("button", {
+		name: checkpointName,
+		exact: true,
+	});
+	await expect(checkpoint).toBeEnabled();
+	await expect(checkpoint).toHaveAttribute("aria-current", "true");
 }
 
 async function writeDraftBranchState(page: Page): Promise<void> {

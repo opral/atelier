@@ -5,7 +5,7 @@ import type { JSX, ReactNode } from "react";
  * document info.
  *
  * @example
- * <StatusBar left={<BranchSwitcher />} right={<span>1,240 words</span>} />
+ * <StatusBar right={<span>1,240 words</span>} />
  */
 export function StatusBar({
 	left,

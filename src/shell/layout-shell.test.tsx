@@ -1,5 +1,12 @@
 import { Suspense, act } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
@@ -281,11 +288,12 @@ describe("V2LayoutShell branch status", () => {
 		const lix = await openLix();
 		const utils = await renderShell(lix);
 
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
+		await openHistoryTab();
+		const currentCheckpoint = await screen.findByRole("button", {
+			name: "Current Checkpoint",
 		});
-		expect(trigger).toBeEnabled();
-		expect(trigger).toHaveTextContent("Current Checkpoint");
+		expect(currentCheckpoint).toBeEnabled();
+		expect(currentCheckpoint).toHaveAttribute("aria-current", "true");
 
 		await unmountShell(utils);
 		await lix.close();
@@ -297,11 +305,12 @@ describe("V2LayoutShell branch status", () => {
 			workspace: persistentWorkspace(),
 		});
 
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
+		await openHistoryTab();
+		const currentCheckpoint = await screen.findByRole("button", {
+			name: "Current Checkpoint",
 		});
-		expect(trigger).toBeEnabled();
-		expect(trigger).toHaveTextContent("Current Checkpoint");
+		expect(currentCheckpoint).toBeEnabled();
+		expect(currentCheckpoint).toHaveAttribute("aria-current", "true");
 
 		await unmountShell(utils);
 		await lix.close();
@@ -313,11 +322,12 @@ describe("V2LayoutShell branch status", () => {
 			workspace: ephemeralWorkspace(),
 		});
 
-		const trigger = await screen.findByRole("button", {
-			name: "Select branch",
+		await openHistoryTab();
+		const currentCheckpoint = await screen.findByRole("button", {
+			name: "Current Checkpoint",
 		});
-		expect(trigger).toBeEnabled();
-		expect(trigger).toHaveTextContent("Current Checkpoint");
+		expect(currentCheckpoint).toBeEnabled();
+		expect(currentCheckpoint).toHaveAttribute("aria-current", "true");
 
 		await unmountShell(utils);
 		await lix.close();
@@ -683,6 +693,49 @@ async function renderShell(
 		);
 	});
 	return result!;
+}
+
+async function openHistoryTab(): Promise<void> {
+	const leftPanel = await waitFor(() => {
+		const panel = document.querySelector("aside");
+		if (!(panel instanceof HTMLElement)) {
+			throw new Error("left panel not found");
+		}
+		return panel;
+	});
+	let historyTab = leftPanel.querySelector<HTMLButtonElement>(
+		'[data-view-key="flashtype_history"]',
+	);
+	if (!historyTab) {
+		const addViewButton = within(leftPanel).getByRole("button", {
+			name: "Add view",
+		});
+		await act(async () => {
+			fireEvent.pointerDown(addViewButton, { button: 0 });
+			fireEvent.pointerUp(addViewButton, { button: 0 });
+		});
+		const historyItem = await screen.findByRole("menuitem", {
+			name: "History",
+		});
+		await act(async () => {
+			fireEvent.click(historyItem);
+		});
+		historyTab = await waitFor(() => {
+			const nextHistoryTab = leftPanel.querySelector<HTMLButtonElement>(
+				'[data-view-key="flashtype_history"]',
+			);
+			if (!nextHistoryTab) {
+				throw new Error("history tab not found");
+			}
+			return nextHistoryTab;
+		});
+	}
+	await act(async () => {
+		fireEvent.click(historyTab);
+	});
+	await waitFor(() => {
+		expect(historyTab).toHaveAttribute("data-focused", "true");
+	});
 }
 
 async function expectNewFileCreatedAndOpened(lix: Lix) {

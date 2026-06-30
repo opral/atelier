@@ -1,26 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { qb, sql } from "@/lib/lix-kysely";
-import { useLix, useQuery, useQueryTakeFirstOrThrow } from "@/lib/lix-react";
-import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import clsx from "clsx";
 import {
 	Check,
-	ChevronDown,
-	Flag,
+	History as HistoryIcon,
 	Loader2,
 	MoreVertical,
 	PenLine,
 	Plus,
 	Trash2,
 } from "lucide-react";
-import clsx from "clsx";
+import {
+	LixProvider,
+	useLix,
+	useQuery,
+	useQueryTakeFirstOrThrow,
+} from "@/lib/lix-react";
+import { qb, sql } from "@/lib/lix-kysely";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
+import { HISTORY_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 
 type BranchRow = {
 	id: string;
@@ -57,16 +61,12 @@ function displayBranchName(branchName: string): string {
 }
 
 /**
- * Dropdown trigger that lists available branches and switches the active one.
- *
- * Branches are queried reactively from the underlying Lix store. Selecting
- * another branch updates the workspace branch via `lix.switchBranch`, which
- * in turn refreshes any subscribers (e.g. editors watching the active branch).
+ * Full-height checkpoint history view for the left pane.
  *
  * @example
- * <BranchSwitcher />
+ * <HistoryView />
  */
-export function BranchSwitcher() {
+export function HistoryView() {
 	const lix = useLix();
 	const branches = useQuery<BranchRow>((lix) =>
 		qb(lix)
@@ -78,25 +78,14 @@ export function BranchSwitcher() {
 			)
 			.orderBy("name", "asc"),
 	);
-
-	return <BranchSwitcherWithActiveBranch lix={lix} branches={branches} />;
-}
-
-function BranchSwitcherWithActiveBranch({
-	lix,
-	branches,
-}: {
-	readonly lix: ReturnType<typeof useLix>;
-	readonly branches: BranchRow[];
-}) {
-	const activeBranch = useQueryTakeFirstOrThrow<{ value: string }>(() =>
+	const activeBranch = useQueryTakeFirstOrThrow<{ value: string }>((lix) =>
 		qb(lix)
 			.selectFrom("lix_key_value")
 			.where("key", "=", "lix_workspace_branch_id")
 			.select(["value"]),
 	);
 	return (
-		<BranchSwitcherContent
+		<HistoryViewContent
 			lix={lix}
 			branches={branches}
 			activeBranchId={activeBranch.value}
@@ -104,7 +93,7 @@ function BranchSwitcherWithActiveBranch({
 	);
 }
 
-function BranchSwitcherContent({
+function HistoryViewContent({
 	lix,
 	branches,
 	activeBranchId,
@@ -123,7 +112,6 @@ function BranchSwitcherContent({
 		} satisfies BranchRow);
 
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
-	const [menuOpen, setMenuOpen] = useState(false);
 	const renameTimerIdsRef = useRef<Set<number>>(new Set());
 
 	useEffect(() => {
@@ -134,10 +122,6 @@ function BranchSwitcherContent({
 			}
 			renameTimerIds.clear();
 		};
-	}, []);
-
-	const handleMenuOpenChange = useCallback((open: boolean) => {
-		setMenuOpen(open);
 	}, []);
 
 	const handleSwitch = useCallback(
@@ -184,7 +168,6 @@ function BranchSwitcherContent({
 					});
 			}, CHECKPOINT_RENAME_DELAY_MS);
 			renameTimerIdsRef.current.add(timerId);
-			setMenuOpen(false);
 		} catch (error) {
 			console.error("Failed to create branch", error);
 		} finally {
@@ -235,7 +218,6 @@ function BranchSwitcherContent({
 				if (currentActiveId) {
 					await lix.switchBranch({ branchId: currentActiveId });
 				}
-				setMenuOpen(false);
 			} catch (error) {
 				console.error("Failed to delete branch", error);
 			} finally {
@@ -245,146 +227,127 @@ function BranchSwitcherContent({
 		[lix, activeBranchRow.id],
 	);
 
-	const buttonLabel = displayBranchName(activeBranchRow.name);
 	const isBusy = pendingAction !== null;
 
 	return (
-		<DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
-			<DropdownMenuTrigger asChild>
+		<div className="flex min-h-0 flex-1 flex-col">
+			<div className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--color-border-panel)] px-3">
+				<div className="flex min-w-0 items-center gap-2">
+					<HistoryIcon className="size-3.75 text-[var(--color-icon-tertiary)]" />
+					<span className="truncate text-xs font-semibold text-[var(--color-text-secondary)]">
+						Checkpoints
+					</span>
+				</div>
 				<Button
 					type="button"
 					variant="ghost"
-					size="sm"
-					className="inline-flex h-5.5 items-center gap-1 rounded-md px-1.5 font-normal text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-secondary)]"
-					aria-label="Select branch"
+					size="icon"
+					className="size-7 rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+					aria-label="Create checkpoint"
+					data-attr="checkpoint-create"
+					disabled={isBusy}
+					onClick={() => {
+						void handleCreateBranch();
+					}}
 				>
-					<Flag className="size-3" />
-					<span className="text-[11.5px]">{buttonLabel}</span>
-					{isBusy ? (
-						<Loader2 className="size-2.5 animate-spin" />
+					{pendingAction === "create" ? (
+						<Loader2 className="size-3.5 animate-spin" />
 					) : (
-						<ChevronDown className="size-2.5" />
+						<Plus className="size-3.5" />
 					)}
 				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent
-				className="min-w-45 text-xs"
-				align="start"
-				sideOffset={6}
-			>
-				<DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-[var(--color-text-tertiary)]">
-					Checkpoints
-				</DropdownMenuLabel>
+			</div>
+			<div className="min-h-0 flex-1 overflow-y-auto p-1.5">
 				{branches.length === 0 ? (
-					<div className="px-3 py-2 text-muted-foreground">
+					<div className="px-2 py-2 text-xs text-[var(--color-text-tertiary)]">
 						No branches available
 					</div>
 				) : (
-					branches.map((branch) => {
-						const isActive = branch.id === activeBranchRow.id;
-						const isDeleteDisabled = isActive;
-						const branchDisplayName = displayBranchName(branch.name);
-						const branchLabelId = `branch-switcher-label-${branch.id}`;
-						return (
-							<DropdownMenuItem
-								key={branch.id}
-								aria-labelledby={branchLabelId}
-								data-attr="branch-switch"
-								onSelect={(event) => {
-									type DropdownSelectEvent = Event & {
-										detail?: { originalEvent?: Event };
-									};
-									const originalTarget = (event as DropdownSelectEvent).detail
-										?.originalEvent?.target as HTMLElement | undefined;
-									if (originalTarget?.closest("[data-branch-actions]")) {
-										event.preventDefault();
-										return;
-									}
-									void handleSwitch(branch.id);
-								}}
-								className={clsx(
-									"group flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs",
-									isActive
-										? "text-[var(--color-text-primary)]"
-										: "text-[var(--color-text-secondary)]",
-								)}
-							>
-								<span className="flex w-3 justify-center" aria-hidden>
-									{isActive ? (
-										<Check className="h-3 w-3 text-[var(--color-icon-brand)]" />
-									) : null}
-								</span>
-								<span id={branchLabelId} className="truncate">
-									{branchDisplayName}
-								</span>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<button
-											type="button"
-											className="ml-auto flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
-											data-branch-actions
-											onClick={(event) => {
-												event.preventDefault();
-												event.stopPropagation();
-											}}
-										>
-											<span className="sr-only">
-												Branch actions for {branchDisplayName}
-											</span>
-											<MoreVertical
-												className="h-3.5 w-3.5 text-[var(--color-icon-tertiary)]"
-												aria-hidden="true"
-											/>
-										</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent
-										align="start"
-										side="right"
-										className="min-w-40 text-xs"
+					<div className="flex flex-col gap-0.5" role="list">
+						{branches.map((branch) => {
+							const isActive = branch.id === activeBranchRow.id;
+							const isDeleteDisabled = isActive;
+							const branchDisplayName = displayBranchName(branch.name);
+							const isPending = pendingAction === branch.id;
+							return (
+								<div
+									key={branch.id}
+									role="listitem"
+									className={clsx(
+										"group flex min-w-0 items-center rounded-[7px] transition-colors",
+										isActive
+											? "bg-[var(--color-bg-selection-current)] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-selection-current)]"
+											: "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+									)}
+								>
+									<button
+										type="button"
+										data-attr="branch-switch"
+										aria-current={isActive ? "true" : undefined}
+										onClick={() => {
+											void handleSwitch(branch.id);
+										}}
+										className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-l-[7px] px-2 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 									>
-										<DropdownMenuItem
-											className="flex items-center gap-2 text-xs"
-											data-attr="branch-rename"
-											onSelect={(event) => {
-												event.preventDefault();
-												void handleRenameBranch(branch.id, branchDisplayName);
-											}}
+										<span className="flex size-3.5 shrink-0 items-center justify-center">
+											{isPending ? (
+												<Loader2 className="size-3 animate-spin text-[var(--color-icon-brand)]" />
+											) : isActive ? (
+												<Check className="size-3 text-[var(--color-icon-brand)]" />
+											) : null}
+										</span>
+										<span className="truncate">{branchDisplayName}</span>
+									</button>
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+												data-branch-actions
+											>
+												<span className="sr-only">
+													Branch actions for {branchDisplayName}
+												</span>
+												<MoreVertical className="size-3.5" aria-hidden="true" />
+											</button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent
+											align="start"
+											side="right"
+											className="min-w-40 text-xs"
 										>
-											<PenLine className="h-3 w-3" />
-											<span>Rename</span>
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											className="flex items-center gap-2 text-xs text-destructive focus:bg-destructive/10 focus:text-destructive [&_svg]:!text-destructive"
-											data-attr="branch-delete"
-											onSelect={() => {
-												if (isDeleteDisabled) return;
-												void handleDeleteBranch(branch.id, branchDisplayName);
-											}}
-											disabled={isDeleteDisabled}
-										>
-											<Trash2 className="h-3 w-3" />
-											<span>Delete</span>
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
-							</DropdownMenuItem>
-						);
-					})
+											<DropdownMenuItem
+												className="flex items-center gap-2 text-xs"
+												data-attr="branch-rename"
+												onSelect={(event) => {
+													event.preventDefault();
+													void handleRenameBranch(branch.id, branchDisplayName);
+												}}
+											>
+												<PenLine className="size-3" />
+												<span>Rename</span>
+											</DropdownMenuItem>
+											<DropdownMenuItem
+												className="flex items-center gap-2 text-xs text-destructive focus:bg-destructive/10 focus:text-destructive [&_svg]:!text-destructive"
+												data-attr="branch-delete"
+												onSelect={() => {
+													if (isDeleteDisabled) return;
+													void handleDeleteBranch(branch.id, branchDisplayName);
+												}}
+												disabled={isDeleteDisabled}
+											>
+												<Trash2 className="size-3" />
+												<span>Delete</span>
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
+								</div>
+							);
+						})}
+					</div>
 				)}
-				<DropdownMenuSeparator />
-				<DropdownMenuItem
-					onSelect={(event) => {
-						event.preventDefault();
-						void handleCreateBranch();
-					}}
-					disabled={isBusy}
-					className="flex items-center gap-2 px-2 py-1.5 text-xs text-[var(--color-text-secondary)]"
-				>
-					<Plus className="h-3 w-3" />
-					<span>Checkpoint</span>
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
+			</div>
+		</div>
 	);
 }
 
@@ -413,3 +376,15 @@ function formatLocalTimestamp(date = new Date()): string {
 		`${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
 	].join(" ");
 }
+
+export const extension = createReactExtensionDefinition({
+	kind: HISTORY_EXTENSION_KIND,
+	label: "History",
+	description: "Review and switch checkpoints.",
+	icon: HistoryIcon,
+	component: ({ context }) => (
+		<LixProvider lix={context.lix}>
+			<HistoryView />
+		</LixProvider>
+	),
+});
