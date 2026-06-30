@@ -19,7 +19,6 @@ import {
 	PenLine,
 	Plus,
 	Trash2,
-	X,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -30,13 +29,31 @@ type BranchRow = {
 	commit_id: string | null;
 };
 
-const CURRENT_CHECKPOINT_BRANCH_NAME = "main";
+const CURRENT_CHECKPOINT_NAME = "main";
 const CURRENT_CHECKPOINT_LABEL = "Current Checkpoint";
+const UNNAMED_CHECKPOINT_LABEL = "Naming checkpoint...";
+const CHECKPOINT_RENAME_DELAY_MS = 5000;
+const BRANCH_TIMESTAMP_NAME_PATTERN =
+	/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?::(.*))?$/u;
+
+type GeneratedCheckpointName = {
+	readonly name: string;
+	readonly source: "codex" | "claude" | "timestamp";
+};
 
 function displayBranchName(branchName: string): string {
-	return branchName === CURRENT_CHECKPOINT_BRANCH_NAME
-		? CURRENT_CHECKPOINT_LABEL
-		: branchName;
+	if (branchName === "") {
+		return UNNAMED_CHECKPOINT_LABEL;
+	}
+	if (branchName === CURRENT_CHECKPOINT_NAME) {
+		return CURRENT_CHECKPOINT_LABEL;
+	}
+	const timestampBranch = BRANCH_TIMESTAMP_NAME_PATTERN.exec(branchName);
+	if (timestampBranch) {
+		const generatedName = timestampBranch[2]?.trim();
+		return generatedName || UNNAMED_CHECKPOINT_LABEL;
+	}
+	return branchName;
 }
 
 /**
@@ -107,25 +124,20 @@ function BranchSwitcherContent({
 
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
 	const [menuOpen, setMenuOpen] = useState(false);
-	const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
-	const [createBranchName, setCreateBranchName] = useState("");
-	const createInputRef = useRef<HTMLInputElement | null>(null);
-	const createSuggestion = `draft-${branches.length + 1}`;
+	const renameTimerIdsRef = useRef<Set<number>>(new Set());
 
 	useEffect(() => {
-		if (!isCreateFormOpen) return;
-		const frame = window.requestAnimationFrame(() => {
-			createInputRef.current?.focus();
-			createInputRef.current?.select();
-		});
-		return () => window.cancelAnimationFrame(frame);
-	}, [isCreateFormOpen]);
+		const renameTimerIds = renameTimerIdsRef.current;
+		return () => {
+			for (const timerId of renameTimerIds) {
+				window.clearTimeout(timerId);
+			}
+			renameTimerIds.clear();
+		};
+	}, []);
 
 	const handleMenuOpenChange = useCallback((open: boolean) => {
 		setMenuOpen(open);
-		if (!open) {
-			setIsCreateFormOpen(false);
-		}
 	}, []);
 
 	const handleSwitch = useCallback(
@@ -143,32 +155,42 @@ function BranchSwitcherContent({
 		[lix, activeBranchRow.id],
 	);
 
-	const handleStartCreateBranch = useCallback(() => {
-		setCreateBranchName(createSuggestion);
-		setIsCreateFormOpen(true);
-	}, [createSuggestion]);
-
 	const handleCreateBranch = useCallback(async () => {
 		if (!lix) return;
-		const trimmed = createBranchName.trim();
 		setPendingAction("create");
 		try {
-			await lix.createBranch({
-				name: trimmed.length > 0 ? trimmed : createSuggestion,
+			const timestamp = formatLocalTimestamp();
+			await lix.syncDiskToLix();
+			const created = await lix.createBranch({
+				name: timestamp,
 			});
-			setIsCreateFormOpen(false);
+			const timerId = window.setTimeout(() => {
+				renameTimerIdsRef.current.delete(timerId);
+				void generateCheckpointName()
+					.then((checkpointName) => {
+						const generatedName = checkpointName.name.trim();
+						if (!generatedName || checkpointName.source === "timestamp") {
+							return;
+						}
+						return qb(lix)
+							.updateTable("lix_branch")
+							.set({ name: `${timestamp}:${generatedName}` })
+							.where("id", "=", created.id)
+							.where("name", "=", timestamp)
+							.execute();
+					})
+					.catch((error) => {
+						console.error("Failed to rename branch", error);
+					});
+			}, CHECKPOINT_RENAME_DELAY_MS);
+			renameTimerIdsRef.current.add(timerId);
 			setMenuOpen(false);
 		} catch (error) {
 			console.error("Failed to create branch", error);
 		} finally {
 			setPendingAction(null);
 		}
-	}, [lix, createBranchName, createSuggestion]);
-
-	const handleCancelCreateBranch = useCallback(() => {
-		setIsCreateFormOpen(false);
-		setCreateBranchName("");
-	}, []);
+	}, [lix]);
 
 	const handleRenameBranch = useCallback(
 		async (branchId: string, currentName: string) => {
@@ -325,7 +347,7 @@ function BranchSwitcherContent({
 											data-attr="branch-rename"
 											onSelect={(event) => {
 												event.preventDefault();
-												void handleRenameBranch(branch.id, branch.name);
+												void handleRenameBranch(branch.id, branchDisplayName);
 											}}
 										>
 											<PenLine className="h-3 w-3" />
@@ -336,7 +358,7 @@ function BranchSwitcherContent({
 											data-attr="branch-delete"
 											onSelect={() => {
 												if (isDeleteDisabled) return;
-												void handleDeleteBranch(branch.id, branch.name);
+												void handleDeleteBranch(branch.id, branchDisplayName);
 											}}
 											disabled={isDeleteDisabled}
 										>
@@ -350,67 +372,44 @@ function BranchSwitcherContent({
 					})
 				)}
 				<DropdownMenuSeparator />
-				{isCreateFormOpen ? (
-					<div
-						className="flex items-center gap-1 px-2 py-1.5"
-						onKeyDown={(event) => {
-							event.stopPropagation();
-						}}
-					>
-						<input
-							ref={createInputRef}
-							aria-label="Branch name"
-							className="h-6 min-w-0 flex-1 rounded border border-[var(--color-border-panel)] bg-transparent px-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-icon-brand)]"
-							value={createBranchName}
-							disabled={isBusy}
-							onChange={(event) => {
-								setCreateBranchName(event.currentTarget.value);
-							}}
-							onKeyDown={(event) => {
-								if (event.key === "Enter") {
-									event.preventDefault();
-									void handleCreateBranch();
-								} else if (event.key === "Escape") {
-									event.preventDefault();
-									handleCancelCreateBranch();
-								}
-							}}
-						/>
-						<button
-							type="button"
-							aria-label="Checkpoint"
-							data-attr="branch-create-submit"
-							className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-							disabled={isBusy}
-							onClick={() => {
-								void handleCreateBranch();
-							}}
-						>
-							<Check className="h-3.5 w-3.5" />
-						</button>
-						<button
-							type="button"
-							aria-label="Cancel branch creation"
-							className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-							disabled={isBusy}
-							onClick={handleCancelCreateBranch}
-						>
-							<X className="h-3.5 w-3.5" />
-						</button>
-					</div>
-				) : (
-					<DropdownMenuItem
-						onSelect={(event) => {
-							event.preventDefault();
-							handleStartCreateBranch();
-						}}
-						className="flex items-center gap-2 px-2 py-1.5 text-xs text-[var(--color-text-secondary)]"
-					>
-						<Plus className="h-3 w-3" />
-						<span>Checkpoint</span>
-					</DropdownMenuItem>
-				)}
+				<DropdownMenuItem
+					onSelect={(event) => {
+						event.preventDefault();
+						void handleCreateBranch();
+					}}
+					disabled={isBusy}
+					className="flex items-center gap-2 px-2 py-1.5 text-xs text-[var(--color-text-secondary)]"
+				>
+					<Plus className="h-3 w-3" />
+					<span>Checkpoint</span>
+				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
+}
+
+async function generateCheckpointName(): Promise<GeneratedCheckpointName> {
+	const desktop = window.flashtypeDesktop;
+	const terminal = desktop?.terminal;
+	if (desktop?.lix && terminal?.generateCheckpointName) {
+		try {
+			const cwd = await desktop.lix.workspaceDir();
+			const result = await terminal.generateCheckpointName({ cwd });
+			const name = result.name.trim();
+			if (name) {
+				return { name, source: result.source };
+			}
+		} catch (error) {
+			console.warn("Failed to generate checkpoint name", error);
+		}
+	}
+	return { name: formatLocalTimestamp(), source: "timestamp" };
+}
+
+function formatLocalTimestamp(date = new Date()): string {
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return [
+		`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+		`${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
+	].join(" ");
 }

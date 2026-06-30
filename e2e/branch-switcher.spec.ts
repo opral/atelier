@@ -41,15 +41,15 @@ test("persistent workspace branch switching keeps sidebar and disk on the active
 			page.getByRole("button", { name: "Select branch" }),
 		).toHaveText(/Current Checkpoint/);
 
-		await createBranchFromUi(page, "draft-ui");
+		await createCheckpointFromUi(page);
 		await expect(
 			page.getByRole("button", { name: "Select branch" }),
 		).toHaveText(/Current Checkpoint/);
 
-		await switchBranchFromUi(page, "draft-ui");
+		await switchBranchFromUi(page, "Naming checkpoint...");
 		await expect(
 			page.getByRole("button", { name: "Select branch" }),
-		).toHaveText(/draft-ui/);
+		).not.toHaveText(/Current Checkpoint/);
 
 		await writeDraftBranchState(page);
 		await expect(fileTreeFile(page, "/draft-only.md")).toBeVisible();
@@ -108,20 +108,13 @@ async function initializeLixWorkspace(workspaceDir: string): Promise<void> {
 	await lix.close();
 }
 
-async function createBranchFromUi(
-	page: Page,
-	branchName: string,
-): Promise<void> {
+async function createCheckpointFromUi(page: Page): Promise<void> {
 	await openBranchMenu(page);
 	await page.getByRole("menuitem", { name: "Checkpoint" }).click();
-	const input = page.getByRole("textbox", { name: "Branch name" });
-	await expect(input).toBeVisible();
-	await expect(input).toHaveValue("draft-2");
-	await input.fill(branchName);
-	await input.press("Enter");
-	await expect(input).toBeHidden();
 	await openBranchMenu(page);
-	await expect(page.getByRole("menuitem", { name: branchName })).toBeVisible();
+	await expect(
+		page.getByRole("menuitem", { name: "Naming checkpoint..." }),
+	).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("menuitem", { name: "Checkpoint" })).toHaveCount(
 		0,

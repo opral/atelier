@@ -99,6 +99,28 @@ export type DesktopTerminalCreatePayload = {
 	};
 };
 
+export type DesktopAgentExecutablePaths = {
+	claude: string | null;
+	codex: string | null;
+};
+
+export type DesktopAgentExecutablePathRefreshPayload = {
+	cwd?: string;
+	shell?: string;
+	env?: Record<string, string>;
+};
+
+export type DesktopGenerateCheckpointNamePayload = {
+	cwd?: string;
+	shell?: string;
+	env?: Record<string, string>;
+};
+
+export type DesktopGenerateCheckpointNameResult = {
+	name: string;
+	source: "codex" | "claude" | "timestamp";
+};
+
 export type DesktopTerminalCreateResult =
 	| {
 			status: "created";
@@ -128,6 +150,12 @@ export type DesktopTerminalApi = {
 	create(
 		payload: DesktopTerminalCreatePayload,
 	): Promise<DesktopTerminalCreateResult>;
+	generateCheckpointName(
+		payload?: DesktopGenerateCheckpointNamePayload,
+	): Promise<DesktopGenerateCheckpointNameResult>;
+	refreshAgentExecutablePaths(
+		payload?: DesktopAgentExecutablePathRefreshPayload,
+	): Promise<DesktopAgentExecutablePaths>;
 	write(payload: { id: string; data: string }): Promise<void>;
 	resize(payload: { id: string; cols: number; rows: number }): Promise<void>;
 	kill(payload: { id: string }): Promise<void>;

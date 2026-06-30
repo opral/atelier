@@ -12,6 +12,9 @@ import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { BranchSwitcher } from "./branch-switcher";
 
+const originalDesktop = window.flashtypeDesktop;
+const TIMESTAMP_CHECKPOINT_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u;
+
 describe("BranchSwitcher", () => {
 	let lix: Lix;
 	let cleanupFns: Array<() => Promise<void>> = [];
@@ -39,11 +42,6 @@ describe("BranchSwitcher", () => {
 		return trigger;
 	};
 
-	const branchCount = async () => {
-		const rows = await qb(lix).selectFrom("lix_branch").select("id").execute();
-		return rows.length;
-	};
-
 	beforeEach(async () => {
 		lix = await openLix({});
 		cleanupFns.push(() => lix.close());
@@ -59,6 +57,7 @@ describe("BranchSwitcher", () => {
 
 	afterEach(async () => {
 		vi.restoreAllMocks();
+		window.flashtypeDesktop = originalDesktop;
 
 		for (const fn of cleanupFns.splice(0)) {
 			await fn();
@@ -117,9 +116,49 @@ describe("BranchSwitcher", () => {
 		});
 	});
 
-	test("creates a branch from the menu without switching to it", async () => {
-		const branchName = `feature-${Math.random().toString(36).slice(2, 7)}`;
+	test("creates a timestamp branch and prefixes generated names after a delay", async () => {
 		const initialActiveBranchId = await lix.activeBranchId();
+		const branchCreateCalls: string[] = [];
+		const originalCreateBranch = lix.createBranch.bind(lix);
+		const syncDiskToLix = vi
+			.spyOn(lix, "syncDiskToLix")
+			.mockImplementation(async () => {
+				branchCreateCalls.push("sync");
+			});
+		const createBranch = vi
+			.spyOn(lix, "createBranch")
+			.mockImplementation(async (options) => {
+				branchCreateCalls.push("create");
+				return await originalCreateBranch(options);
+			});
+		const workspaceDir = vi.fn().mockResolvedValue("/tmp/flashtype-workspace");
+		const generateCheckpointName = vi.fn().mockResolvedValue({
+			name: "Silly Markdown Pancake",
+			source: "codex",
+		});
+		window.flashtypeDesktop = {
+			lix: {
+				workspaceDir,
+			},
+			terminal: {
+				generateCheckpointName,
+			},
+		} as unknown as Window["flashtypeDesktop"];
+		const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+		let runScheduledRename: (() => void) | null = null;
+		const setTimeoutSpy = vi
+			.spyOn(window, "setTimeout")
+			.mockImplementation((handler, timeout, ...args) => {
+				if (timeout === 5000 && typeof handler === "function") {
+					runScheduledRename = () => {
+						handler(...args);
+					};
+					const timerId = realSetTimeout(() => undefined, 0);
+					globalThis.clearTimeout(timerId);
+					return timerId;
+				}
+				return realSetTimeout(handler, timeout, ...args);
+			});
 
 		await renderWithProviders();
 		await openBranchMenu();
@@ -131,28 +170,31 @@ describe("BranchSwitcher", () => {
 			fireEvent.click(createItem);
 		});
 
-		const input = await screen.findByRole("textbox", { name: "Branch name" });
-		expect(input).toHaveValue("draft-2");
-		await act(async () => {
-			fireEvent.input(input, { target: { value: ` ${branchName} ` } });
-			fireEvent.keyDown(input, { key: "Enter" });
+		let created: { id: string; name: string } | undefined;
+		await waitFor(() => {
+			expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5000);
+		});
+		await waitFor(async () => {
+			const branches = await qb(lix)
+				.selectFrom("lix_branch")
+				.select(["id", "name"])
+				.execute();
+			created = branches.find((branch) =>
+				TIMESTAMP_CHECKPOINT_PATTERN.test(branch.name),
+			);
+			expect(created).toBeDefined();
 		});
 
-		await waitFor(() => {
-			expect(
-				screen.queryByRole("textbox", { name: "Branch name" }),
-			).not.toBeInTheDocument();
-		});
 		expect(
 			screen.getByRole("button", { name: "Select branch" }),
 		).toHaveTextContent("Current Checkpoint");
-
-		const created = await qb(lix)
-			.selectFrom("lix_branch")
-			.select(["id", "name"])
-			.where("name", "=", branchName)
-			.executeTakeFirstOrThrow();
-		expect(created.name).toBe(branchName);
+		expect(syncDiskToLix).toHaveBeenCalledTimes(1);
+		expect(createBranch).toHaveBeenCalledTimes(1);
+		expect(branchCreateCalls).toEqual(["sync", "create"]);
+		await openBranchMenu();
+		expect(
+			await screen.findByRole("menuitem", { name: "Naming checkpoint..." }),
+		).toBeInTheDocument();
 
 		const active = await qb(lix)
 			.selectFrom("lix_key_value")
@@ -160,76 +202,83 @@ describe("BranchSwitcher", () => {
 			.select("value")
 			.executeTakeFirstOrThrow();
 		expect(active.value).toBe(initialActiveBranchId);
+
+		await act(async () => {
+			runScheduledRename?.();
+		});
+
+		await waitFor(async () => {
+			const renamed = await qb(lix)
+				.selectFrom("lix_branch")
+				.select("name")
+				.where("id", "=", created?.id ?? "")
+				.executeTakeFirstOrThrow();
+			expect(renamed.name).toBe(`${created?.name}:Silly Markdown Pancake`);
+		});
+		expect(workspaceDir).toHaveBeenCalled();
+		expect(generateCheckpointName).toHaveBeenCalledWith({
+			cwd: "/tmp/flashtype-workspace",
+		});
+		expect(
+			await screen.findByRole("menuitem", { name: "Silly Markdown Pancake" }),
+		).toBeInTheDocument();
 	});
 
-	test("uses the suggested branch name when create prompt is blank", async () => {
-		const initialActiveBranchId = await lix.activeBranchId();
+	test("falls back to a local timestamp checkpoint name without the desktop bridge", async () => {
+		window.flashtypeDesktop = undefined;
+		vi.spyOn(lix, "syncDiskToLix").mockResolvedValue();
+		const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+		let runScheduledRename: (() => void) | null = null;
+		vi.spyOn(window, "setTimeout").mockImplementation(
+			(handler, timeout, ...args) => {
+				if (timeout === 5000 && typeof handler === "function") {
+					runScheduledRename = () => {
+						handler(...args);
+					};
+					const timerId = realSetTimeout(() => undefined, 0);
+					globalThis.clearTimeout(timerId);
+					return timerId;
+				}
+				return realSetTimeout(handler, timeout, ...args);
+			},
+		);
 
 		await renderWithProviders();
 		await openBranchMenu();
-
-		const createItem = await screen.findByRole("menuitem", {
-			name: "Checkpoint",
-		});
 		await act(async () => {
-			fireEvent.click(createItem);
+			fireEvent.click(
+				await screen.findByRole("menuitem", { name: "Checkpoint" }),
+			);
 		});
 
-		const input = await screen.findByRole("textbox", { name: "Branch name" });
-		expect(input).toHaveValue("draft-2");
-		await act(async () => {
-			fireEvent.input(input, { target: { value: "   " } });
-			fireEvent.keyDown(input, { key: "Enter" });
+		let created: { id: string; name: string } | undefined;
+		await waitFor(async () => {
+			const branches = await qb(lix)
+				.selectFrom("lix_branch")
+				.select(["id", "name"])
+				.execute();
+			created = branches.find((branch) =>
+				TIMESTAMP_CHECKPOINT_PATTERN.test(branch.name),
+			);
+			expect(created).toBeDefined();
 		});
-
-		await waitFor(() => {
-			expect(
-				screen.queryByRole("textbox", { name: "Branch name" }),
-			).not.toBeInTheDocument();
-		});
-		expect(
-			screen.getByRole("button", { name: "Select branch" }),
-		).toHaveTextContent("Current Checkpoint");
-
-		const created = await qb(lix)
-			.selectFrom("lix_branch")
-			.select(["id", "name"])
-			.where("name", "=", "draft-2")
-			.executeTakeFirstOrThrow();
-		expect(created.name).toBe("draft-2");
-		const active = await qb(lix)
-			.selectFrom("lix_key_value")
-			.where("key", "=", "lix_workspace_branch_id")
-			.select("value")
-			.executeTakeFirstOrThrow();
-		expect(active.value).toBe(initialActiveBranchId);
-	});
-
-	test("does not create a branch when inline creation is cancelled", async () => {
-		const initialCount = await branchCount();
-
-		await renderWithProviders();
 		await openBranchMenu();
-
-		const createItem = await screen.findByRole("menuitem", {
-			name: "Checkpoint",
-		});
-		await act(async () => {
-			fireEvent.click(createItem);
-		});
-
-		const input = await screen.findByRole("textbox", { name: "Branch name" });
-		await act(async () => {
-			fireEvent.keyDown(input, { key: "Escape" });
-		});
-
-		expect(await branchCount()).toBe(initialCount);
 		expect(
-			screen.queryByRole("textbox", { name: "Branch name" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Select branch" }),
-		).toHaveTextContent("Current Checkpoint");
+			await screen.findByRole("menuitem", { name: "Naming checkpoint..." }),
+		).toBeInTheDocument();
+
+		await act(async () => {
+			runScheduledRename?.();
+		});
+
+		await waitFor(async () => {
+			const renamed = await qb(lix)
+				.selectFrom("lix_branch")
+				.select("name")
+				.where("id", "=", created?.id ?? "")
+				.executeTakeFirstOrThrow();
+			expect(renamed.name).toBe(created?.name);
+		});
 	});
 
 	test("renames a branch via actions menu", async () => {

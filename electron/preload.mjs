@@ -99,6 +99,10 @@ const lix = {
 
 const terminal = {
 	create: (payload) => ipcRenderer.invoke("terminal:create", payload),
+	generateCheckpointName: (payload) =>
+		ipcRenderer.invoke("terminal:generateCheckpointName", payload),
+	refreshAgentExecutablePaths: (payload) =>
+		ipcRenderer.invoke("terminal:refreshAgentExecutablePaths", payload),
 	write: (payload) => ipcRenderer.invoke("terminal:write", payload),
 	resize: (payload) => ipcRenderer.invoke("terminal:resize", payload),
 	kill: (payload) => ipcRenderer.invoke("terminal:kill", payload),
