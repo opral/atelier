@@ -552,7 +552,7 @@ describe("V2LayoutShell central file views", () => {
 });
 
 describe("V2LayoutShell checkpoint editor revisions", () => {
-	test("opens checkpoint diffs in the existing file editor instance", async () => {
+	test("selecting checkpoint diffs updates the existing file editor instance", async () => {
 		const lix = await openLix({
 			keyValues: [
 				uiStateKeyValue(filesViewWithOpenFileState("file_shared", "/shared.md")),
@@ -576,10 +576,18 @@ describe("V2LayoutShell checkpoint editor revisions", () => {
 			expect(checkpoint).toHaveAttribute("data-selected", "true");
 		});
 		await waitFor(async () => {
-			const activeView = activeCentralView(await readPersistedUiState(lix));
-			expect(activeView?.state?.fileId).toBe("file_shared");
-			expect(activeView?.state?.beforeCommitId).toBeUndefined();
-			expect(activeView?.state?.afterCommitId).toBeUndefined();
+			const uiState = await readPersistedUiState(lix);
+			const centralViews = uiState?.panels.central.views ?? [];
+			expect(centralViews).toHaveLength(1);
+			expect(centralViews[0]?.instance).toBe(
+				fileExtensionInstanceForKind(FILE_EXTENSION_KIND, "file_shared"),
+			);
+			expect(centralViews[0]?.state).toMatchObject({
+				fileId: "file_shared",
+				filePath: "/shared.md",
+				beforeCommitId: before.commitId,
+				afterCommitId: after.commitId,
+			});
 		});
 
 		await openFilesTab();

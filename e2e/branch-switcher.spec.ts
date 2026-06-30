@@ -240,7 +240,7 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 
 		await clickCheckpointRow(page, 0);
 		await expectActiveCentralFile(page, "/foo.md");
-		await expectMarkdownDiff(page);
+		await expectEditableMarkdown(page);
 	} finally {
 		await closeElectronApp(electronApp);
 	}
