@@ -987,7 +987,7 @@ describe("FilesView", () => {
 		}
 	});
 
-	test("marks checkpoint diff files and opens virtual paths as checkpoint tabs", async () => {
+	test("marks checkpoint diff files and opens virtual paths as revisioned editors", async () => {
 		const lix = await openLix();
 		const openFile = vi.fn();
 		try {
@@ -1052,8 +1052,8 @@ describe("FilesView", () => {
 				fileId: "file_added",
 				filePath: "/docs/added.md",
 				state: {
-					checkpointDiffReviewId: "checkpoint:added",
-					checkpointDiffBranchId: "checkpoint-after",
+					beforeCommitId: "before-commit",
+					afterCommitId: "after-commit",
 				},
 				focus: false,
 				trackTelemetry: false,

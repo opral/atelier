@@ -154,8 +154,19 @@ test("checkpoint row click marks files without auto-opening a diff", async ({
 		await expect(
 			page.locator(".markdown-review-overlay [data-diff-status]").first(),
 		).toBeVisible();
-		await expect(page.getByText("Previous snapshot")).toBeVisible();
-		await expect(page.getByText("Target snapshot")).toBeVisible();
+		await expect(
+			page
+				.locator(".markdown-review-overlay [data-diff-status='removed']")
+				.filter({ hasText: "Previous" }),
+		).toBeVisible();
+		await expect(
+			page
+				.locator(".markdown-review-overlay [data-diff-status='added']")
+				.filter({ hasText: "Target" }),
+		).toBeVisible();
+		await expect(
+			page.locator(".markdown-review-overlay").getByText("snapshot"),
+		).toBeVisible();
 		await expect(
 			page.getByRole("button", { name: "Keep", exact: true }),
 		).toHaveCount(0);

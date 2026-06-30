@@ -17,6 +17,8 @@ import {
 	useDesktopWorkspaceDir,
 } from "@/extensions/markdown/editor/desktop-workspace";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
+import { renderMarkdownAstEditorHtml } from "@/extensions/markdown/editor/render-markdown-html";
+import { parseMarkdown } from "@/extensions/markdown/editor/markdown";
 import { renderMarkdownReviewDiffHtml } from "./render-review-diff-html";
 import "./style.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -24,7 +26,10 @@ import { FILE_EXTENSION_KIND } from "../../extension-runtime/extension-instance-
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
-import { decodeFileDataToText } from "@/lib/decode-file-data";
+import {
+	decodeFileDataToBytes,
+	decodeFileDataToText,
+} from "@/lib/decode-file-data";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import type {
 	ExternalWriteReview,
@@ -34,6 +39,12 @@ import type {
 	CheckpointDiff,
 	CheckpointDiffFile,
 } from "@/extension-runtime/checkpoint-diff";
+import {
+	editorRevisionMode,
+	editorRevisionReviewId,
+	normalizeEditorRevisionState,
+	type EditorRevisionState,
+} from "@/extension-runtime/editor-revision-state";
 import {
 	useExternalWriteReview,
 	useExternalWriteReviewData,
@@ -49,7 +60,8 @@ type MarkdownViewProps = {
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly syncActiveFile?: boolean;
 	readonly checkpointDiff?: CheckpointDiff | null;
-	readonly checkpointDiffReviewId?: string;
+	readonly beforeCommitId?: string | null;
+	readonly afterCommitId?: string | null;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -73,7 +85,22 @@ type HistoricalMarkdownBlockRow = {
 type MarkdownFileRow = {
 	readonly id: string;
 	readonly path: string;
+	readonly data: unknown;
 };
+
+type HistoricalFileSnapshotRow = {
+	readonly id: string;
+	readonly path: string;
+	readonly data: unknown;
+};
+
+type HistoricalMarkdownFile = {
+	readonly fileRow: MarkdownFileRow;
+	readonly review: ExternalWriteReview | null;
+	readonly reviewData: ExternalWriteReviewData | null;
+};
+
+const EMPTY_FILE_DATA = new Uint8Array();
 
 /**
  * Embeds the shared TipTap editor to render Markdown documents.
@@ -90,7 +117,8 @@ export function MarkdownView({
 	defaultBlock,
 	syncActiveFile = true,
 	checkpointDiff,
-	checkpointDiffReviewId,
+	beforeCommitId,
+	afterCommitId,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -106,7 +134,8 @@ export function MarkdownView({
 				defaultBlock={defaultBlock}
 				syncActiveFile={syncActiveFile}
 				checkpointDiff={checkpointDiff}
-				checkpointDiffReviewId={checkpointDiffReviewId}
+				beforeCommitId={beforeCommitId}
+				afterCommitId={afterCommitId}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
@@ -122,7 +151,7 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
-				.select(["id", "path"])
+				.select(["id", "path", "data"])
 				.where("id", "=", fileId)
 				.limit(1),
 		{ subscribe: false },
@@ -133,6 +162,7 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 
 function MarkdownViewLoaded({
 	fileId,
+	filePath,
 	fileRow,
 	isActiveView = true,
 	isPanelFocused = true,
@@ -140,52 +170,46 @@ function MarkdownViewLoaded({
 	defaultBlock,
 	syncActiveFile = true,
 	checkpointDiff,
-	checkpointDiffReviewId,
+	beforeCommitId,
+	afterCommitId,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
-	const checkpointDiffFile = useMemo(
-		() =>
-			checkpointDiffFileForReviewId(
-				checkpointDiff,
-				checkpointDiffReviewId,
-				fileId,
-			),
-		[checkpointDiff, checkpointDiffReviewId, fileId],
-	);
-	const effectiveFileRow =
-		fileRow ??
-		(checkpointDiffFile
-			? { id: checkpointDiffFile.fileId, path: checkpointDiffFile.path }
-			: undefined);
-	const checkpointReview = useMemo(
-		() =>
-			checkpointDiffFile
-				? checkpointDiffFileToReview(checkpointDiffFile)
-				: null,
-		[checkpointDiffFile],
-	);
-	const externalWriteReview = useExternalWriteReview({
-		fileId: checkpointReview ? null : effectiveFileRow?.id,
-		path: checkpointReview ? null : effectiveFileRow?.path,
+	const editorRevision = normalizeEditorRevisionState({
+		beforeCommitId,
+		afterCommitId,
 	});
-	const externalWriteReviewData = useExternalWriteReviewData(
-		checkpointReview ? null : externalWriteReview,
-	);
+	const revisionMode = editorRevisionMode(editorRevision);
+	if (revisionMode !== "editor") {
+		return (
+			<MarkdownHistoricalViewLoaded
+				fileId={fileId}
+				filePath={filePath}
+				fileRow={fileRow}
+				isActiveView={isActiveView}
+				isPanelFocused={isPanelFocused}
+				syncActiveFile={syncActiveFile}
+				checkpointDiff={checkpointDiff}
+				editorRevision={editorRevision}
+			/>
+		);
+	}
+
+	const effectiveFileRow = fileRow;
+	const externalWriteReview = useExternalWriteReview({
+		fileId: effectiveFileRow?.id,
+		path: effectiveFileRow?.path,
+	});
+	const externalWriteReviewData = useExternalWriteReviewData(externalWriteReview);
 	useEffect(() => {
 		if (!externalWriteReview) return;
 		return registerExternalWriteReview?.(externalWriteReview);
 	}, [externalWriteReview, registerExternalWriteReview]);
-	const review = checkpointReview ?? externalWriteReview;
-	const reviewData: ExternalWriteReviewData | null = checkpointDiffFile
-		? {
-				beforeData: checkpointDiffFile.beforeData,
-				afterData: checkpointDiffFile.afterData,
-			}
-		: externalWriteReviewData;
+	const review = externalWriteReview;
+	const reviewData: ExternalWriteReviewData | null = externalWriteReviewData;
 	const reviewDiff: MarkdownReviewDiff | null = reviewData
 		? {
 				beforeMarkdown: decodeFileDataToText(reviewData.beforeData),
@@ -203,30 +227,6 @@ function MarkdownViewLoaded({
 		);
 	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {
 		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
-	} else if (checkpointDiffFile && !fileRow) {
-		content = (
-			<div className="markdown-view markdown-review flex h-full flex-col bg-background">
-				<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
-					{reviewDiff && review ? (
-						<Suspense fallback={<MarkdownReviewOverlayFallback />}>
-							<MarkdownReviewOverlay
-								fileId={checkpointDiffFile.fileId}
-								sourceFilePath={checkpointDiffFile.path}
-								review={review}
-								reviewDiff={reviewDiff}
-								reviewId={checkpointDiffFile.reviewId}
-								beforeCommitId={checkpointDiffFile.beforeCommitId}
-								afterCommitId={checkpointDiffFile.afterCommitId}
-								isActive={isActiveView && isPanelFocused}
-								controls="none"
-							/>
-						</Suspense>
-					) : (
-						<MarkdownReviewOverlayFallback />
-					)}
-				</div>
-			</div>
-		);
 	} else {
 		content = (
 			<EditorProvider>
@@ -263,7 +263,7 @@ function MarkdownViewLoaded({
 									isActive={isActiveView && isPanelFocused}
 									onAccept={onAcceptReviewDiff}
 									onReject={onRejectReviewDiff}
-									controls={checkpointDiffFile ? "none" : "review"}
+									controls="review"
 								/>
 							</Suspense>
 						) : review ? (
@@ -278,15 +278,125 @@ function MarkdownViewLoaded({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			{syncActiveFile &&
-			fileRow &&
-			!checkpointDiffFile &&
-			isMarkdownFilePath(fileRow.path) ? (
+			{syncActiveFile && fileRow && isMarkdownFilePath(fileRow.path) ? (
 				<ActiveFileSync fileId={fileRow?.id} isActiveView={isActiveView} />
 			) : null}
 			{content}
 		</div>
 	);
+}
+
+function MarkdownHistoricalViewLoaded({
+	fileId,
+	filePath,
+	fileRow,
+	isActiveView,
+	isPanelFocused,
+	checkpointDiff,
+	editorRevision,
+}: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
+	readonly fileRow: MarkdownFileRow | undefined;
+	readonly isActiveView: boolean;
+	readonly isPanelFocused: boolean;
+	readonly syncActiveFile: boolean;
+	readonly checkpointDiff: CheckpointDiff | null | undefined;
+	readonly editorRevision: EditorRevisionState;
+}) {
+	const revisionMode = editorRevisionMode(editorRevision);
+	const checkpointDiffFile = useMemo(
+		() =>
+			checkpointDiffFileForRevision(
+				checkpointDiff,
+				fileId,
+				filePath ?? fileRow?.path,
+				editorRevision,
+			),
+		[checkpointDiff, editorRevision, fileId, filePath, fileRow?.path],
+	);
+	const beforeSnapshot = useHistoricalFileSnapshot(
+		fileId,
+		checkpointDiffFile ? null : editorRevision.beforeCommitId,
+	);
+	const afterSnapshot = useHistoricalFileSnapshot(
+		fileId,
+		checkpointDiffFile ? null : editorRevision.afterCommitId,
+	);
+	const historicalFile = useMemo(
+		() =>
+			buildHistoricalMarkdownFile({
+				fileId,
+				filePath,
+				fileRow,
+				revision: editorRevision,
+				checkpointDiffFile,
+				beforeSnapshot,
+				afterSnapshot,
+			}),
+		[
+			beforeSnapshot,
+			checkpointDiffFile,
+			editorRevision,
+			fileId,
+			filePath,
+			fileRow,
+			afterSnapshot,
+		],
+	);
+	const effectiveFileRow = historicalFile?.fileRow;
+	const review = historicalFile?.review ?? null;
+	const reviewData = historicalFile?.reviewData ?? null;
+	const reviewDiff: MarkdownReviewDiff | null = reviewData
+		? {
+				beforeMarkdown: decodeFileDataToText(reviewData.beforeData),
+				afterMarkdown: decodeFileDataToText(reviewData.afterData),
+			}
+		: null;
+
+	let content: ReactNode;
+	if (!effectiveFileRow) {
+		content = (
+			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+				File not found in the workspace.
+			</div>
+		);
+	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {
+		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
+	} else if (revisionMode === "snapshot") {
+		content = (
+			<MarkdownSnapshotView
+				filePath={effectiveFileRow.path}
+				markdown={decodeFileDataToText(effectiveFileRow.data)}
+			/>
+		);
+	} else {
+		content = (
+			<div className="markdown-view markdown-review flex h-full flex-col bg-background">
+				<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
+					{reviewDiff && review ? (
+						<Suspense fallback={<MarkdownReviewOverlayFallback />}>
+							<MarkdownReviewOverlay
+								fileId={effectiveFileRow.id}
+								sourceFilePath={effectiveFileRow.path}
+								review={review}
+								reviewDiff={reviewDiff}
+								reviewId={review.reviewId}
+								beforeCommitId={review.beforeCommitId}
+								afterCommitId={review.afterCommitId}
+								isActive={isActiveView && isPanelFocused}
+								controls="none"
+							/>
+						</Suspense>
+					) : (
+						<MarkdownReviewOverlayFallback />
+					)}
+				</div>
+			</div>
+		);
+	}
+
+	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
 }
 
 function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
@@ -335,6 +445,53 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 			<span>
 				<strong>Auto-saved.</strong> No Cmd+S needed.
 			</span>
+		</div>
+	);
+}
+
+function MarkdownSnapshotView({
+	filePath,
+	markdown,
+}: {
+	readonly filePath: string;
+	readonly markdown: string;
+}) {
+	const workspaceDirState = useDesktopWorkspaceDir();
+	const html = useMemo(() => {
+		if (!workspaceDirState.loaded) return null;
+		const workspaceApi = desktopWorkspaceApi();
+		const workspacePath = workspaceDirState.workspaceDir;
+		const resolveImageSrc =
+			filePath && workspacePath && workspaceApi?.resolveMarkdownImageSrc
+				? (src: string) =>
+						workspaceApi.resolveMarkdownImageSrc({
+							src,
+							sourceFilePath: filePath,
+							workspacePath,
+						})
+				: undefined;
+		return renderMarkdownAstEditorHtml(parseMarkdown(markdown) as any, {
+			resolveImageSrc,
+		});
+	}, [filePath, markdown, workspaceDirState.loaded, workspaceDirState.workspaceDir]);
+
+	return (
+		<div className="markdown-view flex h-full flex-col bg-background">
+			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
+				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
+					{html ? (
+						<div
+							className="ProseMirror tiptap mx-auto w-full"
+							dangerouslySetInnerHTML={{ __html: html }}
+						/>
+					) : (
+						<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+							<Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+							<span>Loading file…</span>
+						</div>
+					)}
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -579,29 +736,144 @@ function safeJsonParse(value: string): unknown {
 	}
 }
 
-function checkpointDiffFileForReviewId(
-	checkpointDiff: CheckpointDiff | null | undefined,
-	reviewId: string | undefined,
+function useHistoricalFileSnapshot(
 	fileId: string,
+	commitId: string | null,
+): HistoricalFileSnapshotRow | undefined {
+	const lix = useLix();
+	const [snapshot, setSnapshot] = useState<
+		HistoricalFileSnapshotRow | undefined
+	>(undefined);
+	useEffect(() => {
+		if (!commitId) {
+			setSnapshot(undefined);
+			return;
+		}
+		let cancelled = false;
+		setSnapshot(undefined);
+		void qb(lix)
+			.selectFrom("lix_file_history")
+			.select(["id", "path", "data"])
+			.where("id", "=", fileId)
+			.where("lixcol_start_commit_id", "=", commitId)
+			.where("lixcol_depth", "=", 0)
+			.where("data", "is not", null)
+			.limit(1)
+			.executeTakeFirst()
+			.then((row) => {
+				if (!cancelled) {
+					setSnapshot(row as HistoricalFileSnapshotRow | undefined);
+				}
+			})
+			.catch((error: unknown) => {
+				if (!cancelled) {
+					console.warn("Failed to load historical markdown snapshot", error);
+					setSnapshot(undefined);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [commitId, fileId, lix]);
+	return snapshot;
+}
+
+function checkpointDiffFileForRevision(
+	checkpointDiff: CheckpointDiff | null | undefined,
+	fileId: string,
+	filePath: string | undefined,
+	revision: EditorRevisionState,
 ): CheckpointDiffFile | null {
-	if (!checkpointDiff || !reviewId) return null;
+	if (!checkpointDiff || !filePath) return null;
 	return (
 		checkpointDiff.files.find(
-			(file) => file.reviewId === reviewId && file.fileId === fileId,
+			(file) =>
+				file.fileId === fileId &&
+				file.path === filePath &&
+				file.beforeCommitId === revision.beforeCommitId &&
+				file.afterCommitId === revision.afterCommitId,
 		) ?? null
 	);
 }
 
-function checkpointDiffFileToReview(
-	file: CheckpointDiffFile,
-): ExternalWriteReview {
+function buildHistoricalMarkdownFile(args: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
+	readonly fileRow: MarkdownFileRow | undefined;
+	readonly revision: EditorRevisionState;
+	readonly checkpointDiffFile: CheckpointDiffFile | null;
+	readonly beforeSnapshot: HistoricalFileSnapshotRow | undefined;
+	readonly afterSnapshot: HistoricalFileSnapshotRow | undefined;
+}): HistoricalMarkdownFile | null {
+	const mode = editorRevisionMode(args.revision);
+	if (mode === "editor") return null;
+
+	const path =
+		args.checkpointDiffFile?.path ??
+		args.afterSnapshot?.path ??
+		args.beforeSnapshot?.path ??
+		args.fileRow?.path ??
+		args.filePath;
+	if (!path) return null;
+
+	if (mode === "snapshot") {
+		const data = args.checkpointDiffFile
+			? args.checkpointDiffFile.afterData
+			: args.afterSnapshot
+				? decodeFileDataToBytes(args.afterSnapshot.data)
+				: null;
+		if (!data) return null;
+		return {
+			fileRow: {
+				id: args.fileId,
+				path,
+				data,
+			},
+			review: null,
+			reviewData: null,
+		};
+	}
+
+	const beforeData =
+		args.checkpointDiffFile?.beforeData ??
+		(args.beforeSnapshot
+			? decodeFileDataToBytes(args.beforeSnapshot.data)
+			: EMPTY_FILE_DATA);
+	const afterData =
+		args.checkpointDiffFile?.afterData ??
+		(args.revision.afterCommitId
+			? args.afterSnapshot
+				? decodeFileDataToBytes(args.afterSnapshot.data)
+				: EMPTY_FILE_DATA
+			: args.fileRow
+				? decodeFileDataToBytes(args.fileRow.data)
+				: EMPTY_FILE_DATA);
+
 	return {
-		fileId: file.fileId,
-		path: file.path,
-		reviewId: file.reviewId,
-		beforeCommitId: file.beforeCommitId,
-		afterCommitId: file.afterCommitId,
-		agentTurnRangeIds: [],
+		fileRow: {
+			id: args.fileId,
+			path,
+			data: afterData,
+		},
+		review: {
+			fileId: args.fileId,
+			path,
+			reviewId:
+				args.checkpointDiffFile?.reviewId ??
+				editorRevisionReviewId({
+					fileId: args.fileId,
+					path,
+					beforeCommitId: args.revision.beforeCommitId,
+					afterCommitId: args.revision.afterCommitId,
+				}),
+			beforeCommitId: args.revision.beforeCommitId ?? "",
+			afterCommitId: args.revision.afterCommitId ?? "",
+			agentTurnRangeIds: [],
+		},
+		reviewData: {
+			beforeData,
+			afterData,
+		},
 	};
 }
 
@@ -742,10 +1014,15 @@ export const extension = createReactExtensionDefinition({
 				}
 				syncActiveFile={false}
 				checkpointDiff={context.checkpointDiff}
-				checkpointDiffReviewId={
-					typeof instance.state?.checkpointDiffReviewId === "string"
-						? instance.state.checkpointDiffReviewId
-						: undefined
+				beforeCommitId={
+					typeof instance.state?.beforeCommitId === "string"
+						? instance.state.beforeCommitId
+						: null
+				}
+				afterCommitId={
+					typeof instance.state?.afterCommitId === "string"
+						? instance.state.afterCommitId
+						: null
 				}
 				registerExternalWriteReview={context.registerExternalWriteReview}
 				onAcceptReviewDiff={context.acceptExternalWriteReview}

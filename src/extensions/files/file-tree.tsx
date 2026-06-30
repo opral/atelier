@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
+import type { CSSProperties } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type {
 	FileTreeDirectoryHandle,
@@ -373,8 +373,8 @@ export function FileTree({
 		}, 0);
 	}, []);
 
-	const handleTreeClick = useCallback((event: ReactMouseEvent<HTMLElement>) => {
-		const treePath = treePathFromComposedEvent(event.nativeEvent);
+	const openFileFromTreeEvent = useCallback((event: Event) => {
+		const treePath = treePathFromComposedEvent(event);
 		if (!treePath) return;
 		const info = pathInfoForTreePath(
 			stateRef.current.pathInfoByTreePath,
@@ -494,6 +494,33 @@ export function FileTree({
 		});
 	}, [model]);
 
+	useEffect(() => {
+		if (treeInput.paths.length === 0) return;
+		let cancelled = false;
+		let timeoutId: number | null = null;
+		let removeListener: (() => void) | null = null;
+		const attach = () => {
+			if (cancelled || removeListener) return;
+			const shadowRoot = model.getFileTreeContainer()?.shadowRoot;
+			if (!shadowRoot) {
+				timeoutId = window.setTimeout(attach, 0);
+				return;
+			}
+			shadowRoot.addEventListener("click", openFileFromTreeEvent);
+			removeListener = () => {
+				shadowRoot.removeEventListener("click", openFileFromTreeEvent);
+			};
+		};
+		attach();
+		return () => {
+			cancelled = true;
+			if (timeoutId !== null) {
+				window.clearTimeout(timeoutId);
+			}
+			removeListener?.();
+		};
+	}, [model, openFileFromTreeEvent, treeInput.paths.length, treePathsKey]);
+
 	if (treeInput.paths.length === 0) {
 		// The "New file" row above the tree is the affordance; no extra copy.
 		return null;
@@ -503,7 +530,6 @@ export function FileTree({
 		<PierreFileTree
 			aria-label="Files"
 			model={model}
-			onClick={handleTreeClick}
 			onClickCapture={handleTreeClickCapture}
 			style={treeHostStyle(isPanelFocused)}
 		/>

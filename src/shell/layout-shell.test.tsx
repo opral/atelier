@@ -18,7 +18,7 @@ import {
 	FILES_EXTENSION_KIND,
 	fileExtensionInstanceForKind,
 } from "@/extension-runtime/extension-instance-helpers";
-import type { WorkspaceContext } from "@/extension-runtime/types";
+import type { ExtensionInstance, WorkspaceContext } from "@/extension-runtime/types";
 import { resolveLixFileForOpen, V2LayoutShell } from "./layout-shell";
 import type { FlashtypeUiState } from "./ui-state";
 import type { Lix } from "@/lib/lix-types";
@@ -551,6 +551,141 @@ describe("V2LayoutShell central file views", () => {
 	});
 });
 
+describe("V2LayoutShell checkpoint editor revisions", () => {
+	test("opens checkpoint diffs in the existing file editor instance", async () => {
+		const lix = await openLix({
+			keyValues: [
+				uiStateKeyValue(filesViewWithOpenFileState("file_shared", "/shared.md")),
+			],
+		});
+		await writeReviewFile(lix, "file_shared", "/shared.md", "# Before\n");
+		const before = await lix.createBranch({ name: "a-previous" });
+		await writeReviewFile(lix, "file_shared", "/shared.md", "# After\n");
+		const after = await lix.createBranch({ name: "b-target" });
+
+		const utils = await renderShell(lix);
+
+		await openHistoryTab();
+		const checkpoint = await screen.findByRole("button", {
+			name: "b-target",
+		});
+		await act(async () => {
+			fireEvent.click(checkpoint);
+		});
+		await waitFor(() => {
+			expect(checkpoint).toHaveAttribute("data-selected", "true");
+		});
+		await waitFor(async () => {
+			const activeView = activeCentralView(await readPersistedUiState(lix));
+			expect(activeView?.state?.fileId).toBe("file_shared");
+			expect(activeView?.state?.beforeCommitId).toBeUndefined();
+			expect(activeView?.state?.afterCommitId).toBeUndefined();
+		});
+
+		await openFilesTab();
+		const sharedFile = await findFilesViewTreeItemByPath(
+			utils.container,
+			"shared.md",
+		);
+		await waitFor(() => {
+			expect(sharedFile).toHaveAttribute("data-item-git-status", "modified");
+		});
+		await act(async () => {
+			fireEvent.click(sharedFile, { bubbles: true, composed: true });
+		});
+
+		await waitFor(async () => {
+			const uiState = await readPersistedUiState(lix);
+			const centralViews = uiState?.panels.central.views ?? [];
+			expect(centralViews).toHaveLength(1);
+			expect(centralViews[0]?.instance).toBe(
+				fileExtensionInstanceForKind(FILE_EXTENSION_KIND, "file_shared"),
+			);
+			expect(centralViews[0]?.state).toMatchObject({
+				fileId: "file_shared",
+				filePath: "/shared.md",
+				beforeCommitId: before.commitId,
+				afterCommitId: after.commitId,
+			});
+		});
+
+		await openHistoryTab();
+		await act(async () => {
+			fireEvent.click(await screen.findByRole("button", { name: "b-target" }));
+		});
+
+		await waitFor(async () => {
+			const uiState = await readPersistedUiState(lix);
+			const centralViews = uiState?.panels.central.views ?? [];
+			expect(centralViews).toHaveLength(1);
+			expect(centralViews[0]?.state?.fileId).toBe("file_shared");
+			expect(centralViews[0]?.state?.beforeCommitId).toBeUndefined();
+			expect(centralViews[0]?.state?.afterCommitId).toBeUndefined();
+		});
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+
+	test("clearing checkpoint diffs closes historical-only editors", async () => {
+		const lix = await openLix();
+		const before = await lix.createBranch({ name: "a-previous" });
+		await writeReviewFile(lix, "file_added", "/added.md", "# Added\n");
+		const after = await lix.createBranch({ name: "b-target" });
+		await qb(lix)
+			.deleteFrom("lix_file")
+			.where("id", "=", "file_added")
+			.execute();
+
+		const utils = await renderShell(lix);
+
+		await openHistoryTab();
+		const checkpoint = await screen.findByRole("button", {
+			name: "b-target",
+		});
+		await act(async () => {
+			fireEvent.click(checkpoint);
+		});
+		await waitFor(() => {
+			expect(checkpoint).toHaveAttribute("data-selected", "true");
+		});
+
+		await openFilesTab();
+		const addedFile = await findFilesViewTreeItemByPath(
+			utils.container,
+			"added.md",
+		);
+		await waitFor(() => {
+			expect(addedFile).toHaveAttribute("data-item-git-status", "modified");
+		});
+		await act(async () => {
+			fireEvent.click(addedFile, { bubbles: true, composed: true });
+		});
+		await waitFor(async () => {
+			const activeView = activeCentralView(await readPersistedUiState(lix));
+			expect(activeView?.state).toMatchObject({
+				fileId: "file_added",
+				filePath: "/added.md",
+				beforeCommitId: before.commitId,
+				afterCommitId: after.commitId,
+			});
+		});
+
+		await openHistoryTab();
+		await act(async () => {
+			fireEvent.click(await screen.findByRole("button", { name: "b-target" }));
+		});
+		await waitFor(async () => {
+			expect((await readPersistedUiState(lix))?.panels.central.views ?? []).toEqual(
+				[],
+			);
+		});
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+});
+
 describe("V2LayoutShell agent review auto-open", () => {
 	test("returns current active file context from turn-start hooks", async () => {
 		const desktop = installAgentHooksDesktopMock();
@@ -736,6 +871,55 @@ async function openHistoryTab(): Promise<void> {
 	await waitFor(() => {
 		expect(historyTab).toHaveAttribute("data-focused", "true");
 	});
+}
+
+async function openFilesTab(): Promise<void> {
+	const leftPanel = await waitFor(() => {
+		const panel = document.querySelector("aside");
+		if (!(panel instanceof HTMLElement)) {
+			throw new Error("left panel not found");
+		}
+		return panel;
+	});
+	const filesTab = await waitFor(() => {
+		const tab = leftPanel.querySelector<HTMLButtonElement>(
+			'[data-view-key="flashtype_files"]',
+		);
+		if (!tab) {
+			throw new Error("files tab not found");
+		}
+		return tab;
+	});
+	await act(async () => {
+		fireEvent.click(filesTab);
+	});
+	await waitFor(() => {
+		expect(filesTab).toHaveAttribute("data-focused", "true");
+	});
+}
+
+async function findFilesViewTreeItemByPath(
+	container: HTMLElement,
+	path: string,
+): Promise<HTMLElement> {
+	return waitFor(() => {
+		const item = queryFilesViewTreeItemByPath(container, path);
+		if (!item) {
+			throw new Error(`file tree item not found: ${path}`);
+		}
+		return item;
+	});
+}
+
+function activeCentralView(
+	uiState: FlashtypeUiState | undefined,
+): ExtensionInstance | null {
+	const central = uiState?.panels.central;
+	if (!central) return null;
+	const activeInstance =
+		central.activeInstance ?? central.views[0]?.instance ?? null;
+	if (!activeInstance) return null;
+	return central.views.find((view) => view.instance === activeInstance) ?? null;
 }
 
 async function expectNewFileCreatedAndOpened(lix: Lix) {

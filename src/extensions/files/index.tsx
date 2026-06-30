@@ -579,11 +579,14 @@ function FilesViewContent({
 
 	const handleOpenFile = useCallback(
 		(fileId: string, path: string) => {
+			const normalizedPath = normalizeFilePath(path);
 			setSelectedPath(path);
 			setSelectedFileId(fileId);
 			setSelectedKind("file");
 			const checkpointDiffFile = context?.checkpointDiff?.files.find(
-				(file) => file.fileId === fileId && file.path === path,
+				(file) =>
+					normalizeFilePath(file.path) === normalizedPath ||
+					file.fileId === fileId,
 			);
 			setSelectedSource(checkpointDiffFile ? "checkpoint-diff" : "lix");
 			void context?.openFile?.({
@@ -592,8 +595,8 @@ function FilesViewContent({
 				filePath: path,
 				state: checkpointDiffFile
 					? {
-							checkpointDiffReviewId: checkpointDiffFile.reviewId,
-							checkpointDiffBranchId: context.checkpointDiff?.branchId,
+							beforeCommitId: checkpointDiffFile.beforeCommitId,
+							afterCommitId: checkpointDiffFile.afterCommitId,
 						}
 					: undefined,
 				focus: false,

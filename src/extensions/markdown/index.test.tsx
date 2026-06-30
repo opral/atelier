@@ -72,6 +72,116 @@ describe("MarkdownView", () => {
 		});
 	});
 
+	test("renders a read-only historical snapshot from afterCommitId", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_snapshot",
+				path: "/snapshot.md",
+				data: new TextEncoder().encode("# Snapshot version"),
+			})
+			.execute();
+		const snapshotCommitId = await activeCommitId(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ data: new TextEncoder().encode("# Head version") })
+			.where("id", "=", "file_snapshot")
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId="file_snapshot"
+								filePath="/snapshot.md"
+								afterCommitId={snapshotCommitId}
+								isActiveView
+								isPanelFocused
+								syncActiveFile={false}
+							/>
+						</Suspense>
+					</KeyValueProvider>
+				</LixProvider>,
+			);
+		});
+
+		await waitFor(() => {
+			expect(utils!.container).toHaveTextContent("Snapshot version");
+		});
+		expect(utils!.container).not.toHaveTextContent("Head version");
+		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
+		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		await lix.close();
+	});
+
+	test("renders a read-only diff from beforeCommitId to HEAD", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_head_diff",
+				path: "/head-diff.md",
+				data: new TextEncoder().encode("# Before version"),
+			})
+			.execute();
+		const beforeCommitId = await activeCommitId(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ data: new TextEncoder().encode("# Head version") })
+			.where("id", "=", "file_head_diff")
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId="file_head_diff"
+								filePath="/head-diff.md"
+								beforeCommitId={beforeCommitId}
+								isActiveView
+								isPanelFocused
+								syncActiveFile={false}
+							/>
+						</Suspense>
+					</KeyValueProvider>
+				</LixProvider>,
+			);
+		});
+
+		await waitFor(() => {
+			expect(
+				utils!.container.querySelector(".markdown-review-overlay"),
+			).toBeInTheDocument();
+			expect(
+				utils!.container.querySelector("[data-diff-status]"),
+			).toBeInTheDocument();
+		});
+		await waitFor(() => {
+			expect(screen.getByText("Before")).toBeInTheDocument();
+			expect(screen.getByText("Head")).toBeInTheDocument();
+			expect(utils!.container).toHaveTextContent("version");
+		});
+		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
+		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		await lix.close();
+	});
+
 	test("shows an autosave hint when pressing Cmd+S", async () => {
 		const lix = await openLix();
 		await qb(lix)
@@ -456,7 +566,8 @@ describe("MarkdownView", () => {
 								isActiveView
 								isPanelFocused
 								syncActiveFile={false}
-								checkpointDiffReviewId="checkpoint:markdown"
+								beforeCommitId={beforeCommitId}
+								afterCommitId={afterCommitId}
 								checkpointDiff={{
 									branchId: "checkpoint-after",
 									branchName: "After",
