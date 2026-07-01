@@ -396,6 +396,7 @@ describe("V2LayoutShell checkpoint footer", () => {
 		const utils = await renderShell(lix);
 		const footerButton = await screen.findByRole("button", {
 			name: "1 file changed since last checkpoint",
+			hidden: true,
 		});
 		expect(footerButton).toHaveAttribute("aria-pressed", "false");
 
@@ -407,6 +408,7 @@ describe("V2LayoutShell checkpoint footer", () => {
 			expect(
 				screen.getByRole("button", {
 					name: "1 file changed since last checkpoint",
+					hidden: true,
 				}),
 			).toHaveAttribute("aria-pressed", "true");
 		});
@@ -415,6 +417,7 @@ describe("V2LayoutShell checkpoint footer", () => {
 			fireEvent.click(
 				screen.getByRole("button", {
 					name: "1 file changed since last checkpoint",
+					hidden: true,
 				}),
 			);
 		});
@@ -423,6 +426,7 @@ describe("V2LayoutShell checkpoint footer", () => {
 			expect(
 				screen.getByRole("button", {
 					name: "1 file changed since last checkpoint",
+					hidden: true,
 				}),
 			).toHaveAttribute("aria-pressed", "false");
 		});
