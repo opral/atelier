@@ -377,9 +377,11 @@ describe("V2LayoutShell checkpoint footer", () => {
 		const lix = await openLix();
 		const utils = await renderShell(lix);
 
-		expect(
-			await screen.findByText("0 files changed since last checkpoint"),
-		).toBeInTheDocument();
+		await waitFor(() => {
+			expect(
+				screen.getByText("0 files changed since last checkpoint"),
+			).toBeInTheDocument();
+		});
 
 		await unmountShell(utils);
 		await lix.close();

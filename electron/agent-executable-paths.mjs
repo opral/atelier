@@ -17,8 +17,9 @@ export async function refreshAgentExecutablePaths(args) {
 	if (!probe.markerComplete || probe.timedOut) {
 		return getCachedAgentExecutablePaths();
 	}
-	cachedAgentExecutablePaths = probe.paths;
-	return getCachedAgentExecutablePaths();
+	const paths = { ...probe.paths };
+	cachedAgentExecutablePaths = paths;
+	return { ...paths };
 }
 
 export function resetAgentExecutablePathsForTests() {
@@ -75,11 +76,13 @@ export function runAgentExecutablePathProbe(args) {
 			output = appendBoundedOutput(output, data);
 		});
 		terminal.onExit(({ exitCode, signal }) => {
-			finish({
-				exitCode: exitCode ?? null,
-				signal: signal ?? null,
-				timedOut: false,
-			});
+			setTimeout(() => {
+				finish({
+					exitCode: exitCode ?? null,
+					signal: signal ?? null,
+					timedOut: false,
+				});
+			}, 0);
 		});
 		terminal.write(`${buildProbeCommandLine()}\r`);
 		terminal.write("exit\r");
