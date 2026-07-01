@@ -15,6 +15,14 @@ import { HistoryView } from ".";
 const originalDesktop = window.flashtypeDesktop;
 const TIMESTAMP_CHECKPOINT_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u;
 
+function selectedCheckpointButtons(): HTMLButtonElement[] {
+	return [
+		...document.querySelectorAll<HTMLButtonElement>(
+			'[data-attr="branch-diff"][data-selected="true"]',
+		),
+	];
+}
+
 describe("HistoryView", () => {
 	let lix: Lix;
 	let cleanupFns: Array<() => Promise<void>> = [];
@@ -62,9 +70,11 @@ describe("HistoryView", () => {
 			name: "Current Checkpoint",
 		});
 		expect(activeCheckpoint).toHaveAttribute("aria-current", "true");
+		expect(activeCheckpoint).not.toHaveAttribute("data-selected");
+		expect(selectedCheckpointButtons()).toHaveLength(0);
 	});
 
-	test("selects another branch for diff without restoring it", async () => {
+	test("clicking another branch without review mode does not restore it", async () => {
 		const initialActiveBranchId = await lix.activeBranchId();
 		const draftName = `draft-${Math.random().toString(36).slice(2, 7)}`;
 		await lix.createBranch({ name: draftName });
@@ -79,8 +89,9 @@ describe("HistoryView", () => {
 			fireEvent.click(draftItem);
 		});
 
-		expect(draftItem).toHaveAttribute("data-selected", "true");
+		expect(draftItem).not.toHaveAttribute("data-selected");
 		expect(draftItem).not.toHaveAttribute("aria-current");
+		expect(selectedCheckpointButtons()).toHaveLength(0);
 
 		const active = await qb(lix)
 			.selectFrom("lix_key_value")
@@ -120,6 +131,8 @@ describe("HistoryView", () => {
 			"b-checkpoint",
 			"main",
 		]);
+		expect(checkpoint).not.toHaveAttribute("data-selected");
+		expect(selectedCheckpointButtons()).toHaveLength(0);
 	});
 
 	test("clicking the active checkpoint diff again clears it", async () => {
@@ -142,9 +155,15 @@ describe("HistoryView", () => {
 		const checkpoint = await screen.findByRole("button", {
 			name: "selected-checkpoint",
 		});
+		const currentCheckpoint = await screen.findByRole("button", {
+			name: "Current Checkpoint",
+		});
 		await waitFor(() => {
 			expect(checkpoint).toHaveAttribute("data-selected", "true");
 		});
+		expect(checkpoint).not.toHaveAttribute("aria-current");
+		expect(currentCheckpoint).toHaveAttribute("aria-current", "true");
+		expect(currentCheckpoint).not.toHaveAttribute("data-selected");
 
 		await act(async () => {
 			fireEvent.click(checkpoint);

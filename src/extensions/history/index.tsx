@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import {
-	Check,
 	History as HistoryIcon,
 	Loader2,
 	MoreVertical,
@@ -81,6 +80,15 @@ function displayBranchName(branchName: string): string {
  */
 export function HistoryView(props: HistoryViewProps = {}) {
 	const lix = useLix();
+	return <HistoryBranchesLoader lix={lix} {...props} />;
+}
+
+function HistoryBranchesLoader({
+	lix,
+	...props
+}: HistoryViewProps & {
+	readonly lix: ReturnType<typeof useLix>;
+}) {
 	const branches = useQuery<BranchRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_branch")
@@ -91,6 +99,19 @@ export function HistoryView(props: HistoryViewProps = {}) {
 			)
 			.orderBy("name", "asc"),
 	);
+	return <HistoryActiveBranchLoader lix={lix} branches={branches} {...props} />;
+}
+
+function HistoryActiveBranchLoader({
+	lix,
+	branches,
+	checkpointDiff,
+	showCheckpointDiff,
+	clearCheckpointDiff,
+}: HistoryViewProps & {
+	readonly lix: ReturnType<typeof useLix>;
+	readonly branches: BranchRow[];
+}) {
 	const activeBranch = useQueryTakeFirstOrThrow<{ value: string }>((lix) =>
 		qb(lix)
 			.selectFrom("lix_key_value")
@@ -102,9 +123,9 @@ export function HistoryView(props: HistoryViewProps = {}) {
 			lix={lix}
 			branches={branches}
 			activeBranchId={activeBranch.value}
-			checkpointDiff={props.checkpointDiff}
-			showCheckpointDiff={props.showCheckpointDiff}
-			clearCheckpointDiff={props.clearCheckpointDiff}
+			checkpointDiff={checkpointDiff}
+			showCheckpointDiff={showCheckpointDiff}
+			clearCheckpointDiff={clearCheckpointDiff}
 		/>
 	);
 }
@@ -136,7 +157,6 @@ function HistoryViewContent({
 		} satisfies BranchRow);
 
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
-	const [selectedBranchId, setSelectedBranchId] = useState(activeBranchRow.id);
 	const renameTimerIdsRef = useRef<Set<number>>(new Set());
 
 	useEffect(() => {
@@ -149,32 +169,12 @@ function HistoryViewContent({
 		};
 	}, []);
 
-	useEffect(() => {
-		if (
-			checkpointDiff?.branchId &&
-			branches.some((branch) => branch.id === checkpointDiff.branchId)
-		) {
-			setSelectedBranchId(checkpointDiff.branchId);
-			return;
-		}
-		if (branches.some((branch) => branch.id === selectedBranchId)) {
-			return;
-		}
-		setSelectedBranchId(activeBranchRow.id);
-	}, [
-		activeBranchRow.id,
-		branches,
-		checkpointDiff?.branchId,
-		selectedBranchId,
-	]);
-
 	const handleSwitch = useCallback(
 		async (branchId: string) => {
 			if (!lix || branchId === activeBranchRow.id) return;
 			setPendingAction(branchId);
 			try {
 				await lix.switchBranch({ branchId });
-				setSelectedBranchId(branchId);
 				clearCheckpointDiff?.();
 			} catch (error) {
 				console.error("Failed to switch branch", error);
@@ -189,14 +189,15 @@ function HistoryViewContent({
 		async (branchId: string) => {
 			if (checkpointDiff?.branchId === branchId) {
 				clearCheckpointDiff?.();
-				setSelectedBranchId(activeBranchRow.id);
 				return;
 			}
-			setSelectedBranchId(branchId);
 			if (!showCheckpointDiff) return;
 			setPendingAction(branchId);
 			try {
-				await showCheckpointDiff({ branchId, branches });
+				const nextDiff = await showCheckpointDiff({ branchId, branches });
+				if (!nextDiff) {
+					clearCheckpointDiff?.();
+				}
 			} catch (error) {
 				console.error("Failed to resolve checkpoint diff", error);
 				clearCheckpointDiff?.();
@@ -205,7 +206,6 @@ function HistoryViewContent({
 			}
 		},
 		[
-			activeBranchRow.id,
 			branches,
 			checkpointDiff?.branchId,
 			clearCheckpointDiff,
@@ -340,7 +340,7 @@ function HistoryViewContent({
 					<div className="flex flex-col gap-0.5" role="list">
 						{branches.map((branch) => {
 							const isActive = branch.id === activeBranchRow.id;
-							const isSelected = branch.id === selectedBranchId;
+							const isReviewing = checkpointDiff?.branchId === branch.id;
 							const isRestoreDisabled = isActive;
 							const isDeleteDisabled = isActive;
 							const branchDisplayName = displayBranchName(branch.name);
@@ -349,20 +349,18 @@ function HistoryViewContent({
 								<div
 									key={branch.id}
 									role="listitem"
-									data-selected={isSelected ? "true" : undefined}
+									data-selected={isReviewing ? "true" : undefined}
 									className={clsx(
 										"group flex min-w-0 items-center rounded-[7px] transition-colors",
-										isActive
+										isReviewing
 											? "bg-[var(--color-bg-selection-current)] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-selection-current)]"
-											: isSelected
-												? "bg-[var(--color-bg-hover)] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-panel)]"
-												: "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+											: "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
 									)}
 								>
 									<button
 										type="button"
 										data-attr="branch-diff"
-										data-selected={isSelected ? "true" : undefined}
+										data-selected={isReviewing ? "true" : undefined}
 										aria-current={isActive ? "true" : undefined}
 										onClick={() => {
 											void handleSelectBranch(branch.id);
@@ -372,8 +370,8 @@ function HistoryViewContent({
 										<span className="flex size-3.5 shrink-0 items-center justify-center">
 											{isPending ? (
 												<Loader2 className="size-3 animate-spin text-[var(--color-icon-brand)]" />
-											) : isActive ? (
-												<Check className="size-3 text-[var(--color-icon-brand)]" />
+											) : isReviewing ? (
+												<HistoryIcon className="size-3 text-[var(--color-icon-brand)]" />
 											) : null}
 										</span>
 										<span className="truncate">{branchDisplayName}</span>
