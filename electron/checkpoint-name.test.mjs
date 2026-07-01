@@ -101,7 +101,7 @@ describe("checkpoint name generation", () => {
 			]);
 			const prompt = (await readFile(promptPath, "utf8")).trimEnd();
 			expect(prompt).toContain("Name this checkpoint by summarizing the diff");
-			expect(prompt).toContain("3 to 8 words");
+			expect(prompt).toContain("2 to 5 words");
 			expect(prompt).toContain(diffContext);
 		} finally {
 			await rm(rootDir, { recursive: true, force: true });
