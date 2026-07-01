@@ -209,10 +209,20 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 		});
 		await expectEditableMarkdown(page);
 		await expectSingleCentralDocumentSlot(page);
+		const modifiedDocument = await expectActiveCentralDocumentIdentityForPath(
+			page,
+			"/modified.md",
+		);
 
 		await clickCheckpointRow(page, 0);
 		await expectCheckpointRowSelected(page, 0);
 		await expectActiveCentralFile(page, "/modified.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			modifiedDocument,
+			"first checkpoint selection should reuse the active modified.md document view",
+		);
+		await expectActiveBranchId(page, setup.activeBranchId);
 		await expect
 			.poll(async () => await activeEditorRevisionStateFromUi(page), {
 				message:
@@ -242,6 +252,12 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 		await clickCheckpointRow(page, 1);
 		await expectCheckpointRowSelected(page, 1);
 		await expectActiveCentralFile(page, "/modified.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			modifiedDocument,
+			"checkpoint-to-checkpoint selection should reuse the active modified.md document view",
+		);
+		await expectActiveBranchId(page, setup.activeBranchId);
 		await expect
 			.poll(async () => await activeEditorRevisionStateFromUi(page), {
 				message:
@@ -279,6 +295,12 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 		await clickCheckpointRow(page, 2);
 		await expectCheckpointRowSelected(page, 2);
 		await expectActiveCentralFile(page, "/modified.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			modifiedDocument,
+			"current checkpoint selection should reuse the active modified.md document view",
+		);
+		await expectActiveBranchId(page, setup.activeBranchId);
 		await expect
 			.poll(async () => await activeEditorRevisionStateFromUi(page), {
 				message:
@@ -315,6 +337,10 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 
 		await openMarkdownFileFromTree(page, "/added.md");
 		await expectActiveCentralFile(page, "/added.md");
+		const addedDocument = await expectActiveCentralDocumentIdentityForPath(
+			page,
+			"/added.md",
+		);
 		await expect
 			.poll(async () => await activeEditorRevisionStateFromUi(page), {
 				message:
@@ -331,6 +357,12 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 		await clickCheckpointRow(page, 2);
 		await expectCheckpointRowSelected(page, 2);
 		await expectActiveCentralFile(page, "/added.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			addedDocument,
+			"clearing checkpoint-to-HEAD should reuse the active added.md document view",
+		);
+		await expectActiveBranchId(page, setup.activeBranchId);
 		await expectActiveEditorRevisionState(page, {
 			beforeCommitId: null,
 			afterCommitId: null,
@@ -341,6 +373,12 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 		await clickCheckpointRow(page, 2);
 		await expectCheckpointRowSelected(page, 2);
 		await expectActiveCentralFile(page, "/added.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			addedDocument,
+			"reselecting checkpoint-to-HEAD should reuse the active added.md document view",
+		);
+		await expectActiveBranchId(page, setup.activeBranchId);
 		await expect
 			.poll(async () => await activeEditorRevisionStateFromUi(page), {
 				message:
@@ -356,6 +394,11 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 
 		await openMarkdownFileFromTree(page, "/modified.md");
 		await expectActiveCentralFile(page, "/modified.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			modifiedDocument,
+			"reopening modified.md should restore the same central document identity",
+		);
 		await expect
 			.poll(async () => await activeEditorRevisionStateFromUi(page), {
 				message:
@@ -375,6 +418,12 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 		await clickCheckpointRow(page, 2);
 		await expectCheckpointRowSelected(page, 2);
 		await expectActiveCentralFile(page, "/modified.md");
+		await expectActiveCentralDocumentIdentity(
+			page,
+			modifiedDocument,
+			"clearing checkpoint-to-HEAD should reuse the active modified.md document view",
+		);
+		await expectActiveBranchId(page, setup.activeBranchId);
 		await expectActiveEditorRevisionState(page, {
 			beforeCommitId: null,
 			afterCommitId: null,
@@ -791,6 +840,18 @@ async function branchIdsFromUi(page: Page): Promise<string[]> {
 	});
 }
 
+async function expectActiveBranchId(
+	page: Page,
+	expectedBranchId: string,
+): Promise<void> {
+	await expect
+		.poll(async () => await activeBranchIdFromUi(page), {
+			message: "checkpoint diff selection should not restore/switch branches",
+			timeout: 3000,
+		})
+		.toBe(expectedBranchId);
+}
+
 async function newBranchIdFromUi(
 	page: Page,
 	beforeIds: readonly string[],
@@ -896,6 +957,86 @@ async function expectActiveCentralFile(
 	await expect
 		.poll(async () => await activeCentralFilePathFromUi(page))
 		.toBe(appPath);
+}
+
+type ActiveCentralDocumentIdentity = {
+	readonly instance: string;
+	readonly kind: string;
+	readonly fileId: string;
+	readonly filePath: string;
+};
+
+async function expectActiveCentralDocumentIdentityForPath(
+	page: Page,
+	appPath: string,
+): Promise<ActiveCentralDocumentIdentity> {
+	await expect
+		.poll(async () => await activeCentralDocumentIdentityFromUi(page), {
+			message: `expected ${appPath} to be the active central document`,
+			timeout: 3000,
+		})
+		.toMatchObject({ filePath: appPath });
+	const identity = await activeCentralDocumentIdentityFromUi(page);
+	if (!identity || identity.filePath !== appPath) {
+		throw new Error(`Active central document for ${appPath} was not found.`);
+	}
+	return identity;
+}
+
+async function expectActiveCentralDocumentIdentity(
+	page: Page,
+	expected: ActiveCentralDocumentIdentity,
+	message: string,
+): Promise<void> {
+	await expect
+		.poll(async () => await activeCentralDocumentIdentityFromUi(page), {
+			message,
+			timeout: 3000,
+		})
+		.toEqual(expected);
+}
+
+async function activeCentralDocumentIdentityFromUi(
+	page: Page,
+): Promise<ActiveCentralDocumentIdentity | null> {
+	return await page.evaluate(async () => {
+		const result = await window.flashtypeDesktop?.lix.execute({
+			sql: "SELECT value FROM lix_key_value_by_branch WHERE key = $1 AND lixcol_branch_id = $2",
+			params: ["flashtype_ui_state", "global"],
+		});
+		const state = result?.rows?.[0]?.[0] as
+			| {
+					panels?: {
+						central?: {
+							activeInstance?: string | null;
+							views?: Array<{
+								instance?: unknown;
+								kind?: unknown;
+								state?: { fileId?: unknown; filePath?: unknown };
+							}>;
+						};
+					};
+			  }
+			| undefined;
+		const central = state?.panels?.central;
+		const views = central?.views ?? [];
+		const active =
+			views.find((view) => view.instance === central?.activeInstance) ??
+			views[0];
+		const instance = active?.instance;
+		const kind = active?.kind;
+		const fileId = active?.state?.fileId;
+		const filePath = active?.state?.filePath;
+		if (
+			typeof instance !== "string" ||
+			typeof kind !== "string" ||
+			typeof fileId !== "string" ||
+			typeof filePath !== "string"
+		) {
+			return null;
+		}
+		return { instance, kind, fileId, filePath };
+	});
 }
 
 async function expectNoActiveCentralFile(page: Page): Promise<void> {
