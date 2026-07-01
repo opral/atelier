@@ -309,6 +309,61 @@ test("checkpoint diff selection keeps the active editor and toggles revision sta
 			"unchanged checkpoint files should not be marked in checkpoint-to-HEAD diff",
 		);
 
+		await openMarkdownFileFromTree(page, "/added.md");
+		await expectActiveCentralFile(page, "/added.md");
+		await expect
+			.poll(async () => await activeEditorRevisionStateFromUi(page), {
+				message:
+					"unchanged visible file opened during checkpoint-to-HEAD diff should enter review mode",
+				timeout: 3000,
+			})
+			.toEqual({
+				beforeCommitId: setup.secondCommitId,
+				afterCommitId: null,
+			});
+		await expectReadonlyMarkdown(page);
+
+		await clickCheckpointRow(page, 2);
+		await expectCheckpointRowSelected(page, 2);
+		await expectActiveCentralFile(page, "/added.md");
+		await expectActiveEditorRevisionState(page, {
+			beforeCommitId: null,
+			afterCommitId: null,
+		});
+		await expectEditableMarkdown(page);
+
+		await clickCheckpointRow(page, 2);
+		await expectCheckpointRowSelected(page, 2);
+		await expectActiveCentralFile(page, "/added.md");
+		await expect
+			.poll(async () => await activeEditorRevisionStateFromUi(page), {
+				message:
+					"reselecting the checkpoint-to-HEAD diff should restore review mode on the active unchanged file",
+				timeout: 3000,
+			})
+			.toEqual({
+				beforeCommitId: setup.secondCommitId,
+				afterCommitId: null,
+			});
+		await expectReadonlyMarkdown(page);
+
+		await openMarkdownFileFromTree(page, "/modified.md");
+		await expectActiveCentralFile(page, "/modified.md");
+		await expect
+			.poll(async () => await activeEditorRevisionStateFromUi(page), {
+				message:
+					"changed file opened after reselecting the checkpoint-to-HEAD diff should stay in review mode",
+				timeout: 3000,
+			})
+			.toEqual({
+				beforeCommitId: setup.secondCommitId,
+				afterCommitId: null,
+			});
+		await expectMarkdownDiff(page, {
+			added: ["HEAD"],
+			removed: ["second"],
+		});
+
 		await clickCheckpointRow(page, 2);
 		await expectCheckpointRowSelected(page, 2);
 		await expectActiveCentralFile(page, "/modified.md");

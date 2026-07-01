@@ -597,11 +597,6 @@ function FilesViewContent({
 			setSelectedPath(path);
 			setSelectedFileId(fileId);
 			setSelectedKind("file");
-			const checkpointDiffFile = context?.checkpointDiff?.files.find(
-				(file) =>
-					normalizeFilePath(file.path) === normalizedPath ||
-					file.fileId === fileId,
-			);
 			const checkpointVisibleFile = context?.checkpointDiff
 				? (context.checkpointDiff.visibleFiles ?? context.checkpointDiff.files).find(
 						(file) =>

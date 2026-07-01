@@ -31,7 +31,7 @@ import { FlashtypeMenu } from "./top-bar/flashtype-menu";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import type {
 	CheckpointDiff,
-	CheckpointDiffFile,
+	CheckpointDiffVisibleFile,
 	ShowCheckpointDiffArgs,
 } from "@/extension-runtime/checkpoint-diff";
 import {
@@ -388,17 +388,18 @@ function transitionCheckpointEditorRevisionPanel(args: {
 				state: stripEditorRevisionState(nextView.state),
 			};
 		}
-		const nextDiffFile = checkpointDiffFileForView(nextView, args.nextDiff);
-		if (nextDiffFile) {
+		const nextDiff = args.nextDiff;
+		const nextDiffFile = checkpointDiffFileForView(nextView, nextDiff);
+		if (nextDiff && nextDiffFile) {
 			changed = true;
 			nextView = {
 				...nextView,
 				state: {
 					...(stripEditorRevisionState(nextView.state) ?? {}),
-					beforeCommitId: nextDiffFile.beforeCommitId,
-					afterCommitId: args.nextDiff?.afterIsActiveHead
+					beforeCommitId: nextDiff.beforeCommitId,
+					afterCommitId: nextDiff.afterIsActiveHead
 						? null
-						: nextDiffFile.afterCommitId,
+						: nextDiff.afterCommitId,
 				},
 			};
 		}
@@ -416,14 +417,14 @@ function transitionCheckpointEditorRevisionPanel(args: {
 function checkpointDiffFileForView(
 	view: ExtensionInstance,
 	checkpointDiff: CheckpointDiff | null,
-): CheckpointDiffFile | null {
+): CheckpointDiffVisibleFile | null {
 	if (!checkpointDiff) return null;
 	const fileId = typeof view.state?.fileId === "string" ? view.state.fileId : "";
 	const filePath =
 		typeof view.state?.filePath === "string" ? view.state.filePath : "";
 	const normalizedFilePath = normalizeLixFileOpenPath(filePath) ?? filePath;
 	return (
-		checkpointDiff.files.find(
+		checkpointDiffEditorFiles(checkpointDiff).find(
 			(file) =>
 				file.fileId === fileId ||
 				(normalizeLixFileOpenPath(file.path) ?? file.path) ===
@@ -450,13 +451,19 @@ function isCheckpointEditorRevisionView(
 	return (
 		revision.beforeCommitId === checkpointDiff.beforeCommitId &&
 		revision.afterCommitId === afterCommitId &&
-		checkpointDiff.files.some(
+		checkpointDiffEditorFiles(checkpointDiff).some(
 			(file) =>
 				file.fileId === fileId ||
 				(normalizeLixFileOpenPath(file.path) ?? file.path) ===
 					normalizedFilePath,
 		)
 	);
+}
+
+function checkpointDiffEditorFiles(
+	checkpointDiff: CheckpointDiff,
+): readonly CheckpointDiffVisibleFile[] {
+	return checkpointDiff.visibleFiles ?? checkpointDiff.files;
 }
 
 const DEFAULT_PANEL_FALLBACK_SIZES = {
