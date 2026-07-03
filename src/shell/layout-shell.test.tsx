@@ -1137,6 +1137,40 @@ describe("V2LayoutShell agent preference auto-launch", () => {
 		await lix.close();
 	});
 
+	test("auto-opens the agent terminal for a version-blocked auto-launch once", async () => {
+		const desktop = installDesktopMock({
+			agentPreference: agentPreferenceResult({
+				preferredAgent: "codex",
+				autoLaunchAgent: null,
+				versionBlockedAutoLaunchAgent: "codex",
+				reason: "free",
+			}),
+		});
+		const lix = await openLix({
+			keyValues: [uiStateKeyValue(noFilesViewState())],
+		});
+
+		const utils = await renderShell(lix);
+
+		await waitFor(() =>
+			expect(desktop.getPreferredAgent).toHaveBeenCalledTimes(1),
+		);
+		expect(await screen.findByTestId("terminal-view")).toHaveAttribute(
+			"data-agent",
+			"codex",
+		);
+		await waitFor(async () => {
+			const rightViews =
+				(await readPersistedUiState(lix))?.panels.right.views ?? [];
+			expect(rightViews).toHaveLength(1);
+			expect(rightViews[0]?.kind).toBe(TERMINAL_EXTENSION_KIND);
+			expect(rightViews[0]?.state?.flashtype?.icon).toBe("codex");
+		});
+
+		await unmountShell(utils);
+		await lix.close();
+	});
+
 	test.each([
 		{
 			name: "signed-in",
@@ -1690,7 +1724,12 @@ function agentPreferenceResult(
 		DesktopAgentPreferenceResult,
 		"preferredAgent" | "autoLaunchAgent" | "reason"
 	> &
-		Partial<Pick<DesktopAgentPreferenceResult, "agents">>,
+		Partial<
+			Pick<
+				DesktopAgentPreferenceResult,
+				"agents" | "versionBlockedAutoLaunchAgent"
+			>
+		>,
 ): DesktopAgentPreferenceResult {
 	return {
 		...overrides,
@@ -1708,6 +1747,8 @@ function agentPreferenceResult(
 					supportedVersion: false,
 				},
 			} satisfies DesktopAgentPreferenceResult["agents"]),
+		versionBlockedAutoLaunchAgent:
+			overrides.versionBlockedAutoLaunchAgent ?? null,
 	};
 }
 

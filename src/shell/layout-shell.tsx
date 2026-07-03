@@ -2591,7 +2591,8 @@ function LayoutShellLoadedContent({
 			) {
 				setPreferredAgent(preference.preferredAgent);
 			}
-			const autoLaunchAgent = preference.autoLaunchAgent;
+			const autoLaunchAgent =
+				preference.autoLaunchAgent ?? preference.versionBlockedAutoLaunchAgent;
 			if (autoLaunchAgent !== "claude" && autoLaunchAgent !== "codex") {
 				return;
 			}
