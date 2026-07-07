@@ -10,7 +10,7 @@ import { PostHogAnalytics } from "../posthog-analytics";
 import appCss from "../styles.css?url";
 
 const GA_MEASUREMENT_ID = "G-1M7SY9LBT7";
-const siteUrl = "https://flashtype.com/";
+const siteUrl = "https://flashtype.ai/";
 const title = "Flashtype | The markdown editor for Claude & Codex";
 const description =
 	"A WYSIWYG markdown editor with Claude Code and Codex built in. Agents edit, you review diffs. Accept or reject every change. Free and open source.";
@@ -24,8 +24,8 @@ const structuredData = {
 			name: "Flashtype",
 			description,
 			url: siteUrl,
-			image: "https://flashtype.com/og.png",
-			screenshot: "https://flashtype.com/og.png",
+			image: "https://flashtype.ai/og.png",
+			screenshot: "https://flashtype.ai/og.png",
 			applicationCategory: "ProductivityApplication",
 			applicationSubCategory: "Markdown editor",
 			operatingSystem: "macOS",
@@ -114,7 +114,7 @@ export const Route = createRootRoute({
 			{ property: "og:type", content: "website" },
 			{ property: "og:url", content: siteUrl },
 			{ property: "og:site_name", content: "Flashtype" },
-			{ property: "og:image", content: "https://flashtype.com/og.png" },
+			{ property: "og:image", content: "https://flashtype.ai/og.png" },
 			{ property: "og:image:width", content: "1200" },
 			{ property: "og:image:height", content: "630" },
 			{ property: "og:image:type", content: "image/png" },
@@ -122,7 +122,7 @@ export const Route = createRootRoute({
 			{ name: "twitter:card", content: "summary_large_image" },
 			{ name: "twitter:title", content: title },
 			{ name: "twitter:description", content: description },
-			{ name: "twitter:image", content: "https://flashtype.com/og.png" },
+			{ name: "twitter:image", content: "https://flashtype.ai/og.png" },
 			{ name: "twitter:image:alt", content: imageAlt },
 		],
 		links: [

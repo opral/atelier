@@ -4,9 +4,9 @@
 
 Agents edit. You review the diff. Nothing lands without you.
 
-[Download for macOS](https://flashtype.com) - [Website](https://flashtype.com) - [Discord](https://discord.gg/gdMPPWy57R)
+[Download for macOS](https://flashtype.ai) - [Website](https://flashtype.ai) - [Discord](https://discord.gg/gdMPPWy57R)
 
-![Flashtype](https://flashtype.com/og.png)
+![Flashtype](https://flashtype.ai/og.png)
 
 ## Features
 
@@ -32,7 +32,7 @@ Lix is a version control system that can handle any file format, and is designed
 
 ## Download
 
-Download Flashtype for macOS at [flashtype.com](https://flashtype.com).
+Download Flashtype for macOS at [flashtype.ai](https://flashtype.ai).
 
 ## License
 
