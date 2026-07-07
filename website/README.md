@@ -1,6 +1,9 @@
-# Flashtype website
+# Flashtype legacy website
 
-Landing page for [Flashtype](https://flashtype.ai), built with
+This is the legacy Flashtype website package. The live website is now maintained
+in `/Users/samuel/git-repos/site-c05f8933-0e1d-4a08-97be-6a2398f05a2f`.
+
+Legacy landing page for [Flashtype](https://flashtype.ai), built with
 [TanStack Start](https://tanstack.com/start) and Tailwind CSS v4.
 
 This package is intentionally standalone (it has its own
