@@ -1,13 +1,26 @@
 import type {
-	LixExecuteOptions,
-	LixRow,
-	LixRuntimeQueryResult,
-	ObserveEvent,
-	ObserveEvents,
-	SqlTransaction,
-	TransactionStatement,
+	ExecuteOptions,
+	ExecuteResult,
 	Lix,
-} from "@/lib/lix-types";
+	ObserveEvent,
+	SqlParam,
+} from "@lix-js/sdk";
+
+type LixRow = ExecuteResult["rows"][number];
+type LixValue = ReturnType<LixRow["value"]>;
+type PreviewTransaction = {
+	execute(
+		sql: string,
+		params?: SqlParam[],
+		options?: ExecuteOptions,
+	): Promise<ExecuteResult>;
+	commit(): Promise<void>;
+	rollback(): Promise<void>;
+};
+type PreviewObserveEvents = {
+	next(): Promise<ObserveEvent | undefined>;
+	close(): void;
+};
 
 type SerializedResult = {
 	readonly columns: string[];
@@ -21,12 +34,12 @@ const bridge = window.atelierPreview;
 export function createPreviewLix(): Lix {
 	const execute = async (
 		sql: string,
-		params: ReadonlyArray<unknown> = [],
-		options?: LixExecuteOptions,
-	): Promise<LixRuntimeQueryResult> =>
+		params: SqlParam[] = [],
+		options?: ExecuteOptions,
+	): Promise<ExecuteResult> =>
 		toRuntimeResult(await bridge.execute({ sql, params, options }));
 
-	const beginTransaction = async (): Promise<SqlTransaction> => {
+	const beginTransaction = async (): Promise<PreviewTransaction> => {
 		const transactionId = await bridge.transactionBegin();
 		let closed = false;
 		return {
@@ -54,35 +67,10 @@ export function createPreviewLix(): Lix {
 		};
 	};
 
-	const transaction = async <T>(
-		callback: (tx: SqlTransaction) => Promise<T>,
-	): Promise<T> => {
-		const tx = await beginTransaction();
-		try {
-			const result = await callback(tx);
-			await tx.commit();
-			return result;
-		} catch (error) {
-			await tx.rollback();
-			throw error;
-		}
-	};
-
-	const executeTransaction = async (
-		statements: ReadonlyArray<TransactionStatement>,
-	): Promise<LixRuntimeQueryResult> =>
-		transaction(async (tx) => {
-			let result = emptyResult();
-			for (const statement of statements) {
-				result = await tx.execute(statement.sql, statement.params ?? []);
-			}
-			return result;
-		});
-
 	const observe = (
 		sql: string,
-		params: ReadonlyArray<unknown> = [],
-	): ObserveEvents => {
+		params: SqlParam[] = [],
+	): PreviewObserveEvents => {
 		let closed = false;
 		const observeId = bridge.observeStart({ sql, params });
 		return {
@@ -104,23 +92,17 @@ export function createPreviewLix(): Lix {
 	return {
 		execute,
 		beginTransaction,
-		transaction,
-		executeTransaction,
 		observe,
 		activeBranchId: () => bridge.activeBranchId(),
-		createBranch: (options) => bridge.createBranch(options),
-		switchBranch: (options) => bridge.switchBranch(options),
-		mergeBranchPreview: (options) => bridge.mergeBranchPreview(options),
-		mergeBranch: (options) => bridge.mergeBranch(options),
+		createBranch: (options: Parameters<Lix["createBranch"]>[0]) =>
+			bridge.createBranch(options),
+		switchBranch: (options: Parameters<Lix["switchBranch"]>[0]) =>
+			bridge.switchBranch(options),
 		close: async () => {},
-	};
+	} as unknown as Lix;
 }
 
-function emptyResult(): LixRuntimeQueryResult {
-	return { columns: [], rows: [], rowsAffected: 0, notices: [] };
-}
-
-function toRuntimeResult(result: SerializedResult): LixRuntimeQueryResult {
+function toRuntimeResult(result: SerializedResult): ExecuteResult {
 	return {
 		columns: result.columns,
 		rows: result.rows.map((row) => new PreviewRow(result.columns, row)),
@@ -128,8 +110,6 @@ function toRuntimeResult(result: SerializedResult): LixRuntimeQueryResult {
 		notices: result.notices,
 	};
 }
-
-type LixValue = ReturnType<LixRow["value"]>;
 
 class PreviewRow implements LixRow {
 	constructor(

@@ -4,7 +4,7 @@
 
 Atelier is a workspace UI — editor, files, history, and diffs — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
 
-Atelier is to [Flashtype](https://flashtype.ai) what Monaco is to VS Code and Chromium is to Chrome: the engine inside. Flashtype (Electron, macOS) is one host. A browser app pointing at a remote lix is another. Same workspace, any shell.
+Atelier is the workspace engine inside any host. The Electron preview is one host; a browser app pointing at a remote lix is another. Same workspace, any shell.
 
 ## Why "Atelier"?
 
@@ -17,6 +17,7 @@ That's this component's job. Lix holds the workspace — the files, the history,
 ```ts
 import { openLix } from "@lix-js/sdk";
 import { createAtelier } from "@opral/atelier";
+import "@opral/atelier/style.css";
 
 // The host creates and owns the lix.
 const lix = await openLix();

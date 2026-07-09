@@ -31,7 +31,7 @@ import { KeyValueProvider, useKeyValue } from "./use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "./schema";
 
 function Writer() {
-	const [, setValue] = useKeyValue("flashtype_active_file_id");
+	const [, setValue] = useKeyValue("atelier_active_file_id");
 	useEffect(() => {
 		void setValue("file-123" as any);
 	}, [setValue]);
@@ -39,7 +39,7 @@ function Writer() {
 }
 
 function Reader() {
-	useKeyValue("flashtype_active_file_id");
+	useKeyValue("atelier_active_file_id");
 	return null;
 }
 

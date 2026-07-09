@@ -2,8 +2,11 @@ import { describe, expect, test, vi } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
 	loadInstalledExtensionsFromLix,
-	parseManifest,
+	reconcileInstalledExtensionCandidates,
 } from "./installed-extension-loader";
+import { parseExtensionManifest } from "./extension-manifest";
+import { Puzzle } from "lucide-react";
+import type { ExtensionDefinition } from "./types";
 
 const textEncoder = new TextEncoder();
 
@@ -16,7 +19,7 @@ async function writeInstalledExtensionFile(
 		"INSERT INTO lix_file (path, data) VALUES (?, ?) \
 		 ON CONFLICT (path) DO UPDATE SET data = excluded.data",
 		[
-			`/.lix/app_data/flashtype/extensions/table-viewer/${path}`,
+			`/.lix/app_data/atelier/extensions/table-viewer/${path}`,
 			textEncoder.encode(data),
 		],
 	);
@@ -24,17 +27,51 @@ async function writeInstalledExtensionFile(
 
 describe("parseManifest", () => {
 	test("normalizes file extension handlers from extension manifests", () => {
-		const manifest = parseManifest(
-			"/.lix/app_data/flashtype/extensions/table-viewer/manifest.json",
+		const manifest = parseExtensionManifest(
+			"/.lix/app_data/atelier/extensions/table-viewer/manifest.json",
 			JSON.stringify({
+				apiVersion: 1,
 				id: "table-viewer",
 				name: "Table Viewer",
 				entry: "./index.js",
-				fileExtensions: [" .CSV ", ".TSV", ""],
+				fileExtensions: [" .CSV ", ".TSV"],
 			}),
 		);
 
 		expect(manifest.fileExtensions).toEqual(["csv", "tsv"]);
+	});
+
+	test("rejects missing versions, coerced values, and unknown fields", () => {
+		const path = "/.lix/app_data/atelier/extensions/example/manifest.json";
+		expect(() =>
+			parseExtensionManifest(
+				path,
+				JSON.stringify({ id: "example", name: "Example", entry: "index.js" }),
+			),
+		).toThrow("apiVersion 1");
+		expect(() =>
+			parseExtensionManifest(
+				path,
+				JSON.stringify({
+					apiVersion: 1,
+					id: { invalid: true },
+					name: "Example",
+					entry: "index.js",
+				}),
+			),
+		).toThrow('field "id" must be a non-empty string');
+		expect(() =>
+			parseExtensionManifest(
+				path,
+				JSON.stringify({
+					apiVersion: 1,
+					id: "example",
+					name: "Example",
+					entry: "index.js",
+					icon: "puzzle",
+				}),
+			),
+		).toThrow("unknown fields: icon");
 	});
 
 	test("loads installed extensions from the extension storage root", async () => {
@@ -44,9 +81,9 @@ describe("parseManifest", () => {
 				lix,
 				"manifest.json",
 				JSON.stringify({
+					apiVersion: 1,
 					id: "table-viewer",
 					name: "Table Viewer",
-					description: "Shows tables",
 					entry: "./index.js",
 					fileExtensions: ["csv"],
 				}),
@@ -54,31 +91,55 @@ describe("parseManifest", () => {
 			await writeInstalledExtensionFile(
 				lix,
 				"index.js",
-				"export function render({ target }) { target.textContent = 'table'; }",
+				"export default { mount({ element }) { element.textContent = 'table'; } }",
 			);
 
-			const render = vi.fn();
-			const importModule = vi.fn(async () => ({ render }));
-			const definitions = await loadInstalledExtensionsFromLix(lix, {
+			const mount = vi.fn();
+			const importModule = vi.fn(async () => ({ mount }));
+			const candidates = await loadInstalledExtensionsFromLix(lix, {
 				importModule,
 			});
-			const tableViewer = definitions.find(
-				(definition) => definition.kind === "table-viewer",
-			);
+			const tableViewer = candidates[0]?.definition;
 
 			expect(tableViewer).toMatchObject({
 				kind: "table-viewer",
 				label: "Table Viewer",
-				description: "Shows tables",
+				description: "Workspace extension: Table Viewer",
 				fileExtensions: ["csv"],
 			});
-			expect(tableViewer?.render).toEqual(expect.any(Function));
+			expect(tableViewer?.mount).toEqual(expect.any(Function));
 			expect(importModule).toHaveBeenCalledWith(
-				"export function render({ target }) { target.textContent = 'table'; }",
-				"/.lix/app_data/flashtype/extensions/table-viewer/index.js",
+				"export default { mount({ element }) { element.textContent = 'table'; } }",
+				"/.lix/app_data/atelier/extensions/table-viewer/index.js",
 			);
 		} finally {
 			await lix.close();
 		}
+	});
+});
+
+describe("reconcileInstalledExtensionCandidates", () => {
+	const definition: ExtensionDefinition = {
+		kind: "example",
+		label: "Example",
+		description: "Example",
+		icon: Puzzle,
+		mount: () => {},
+	};
+	const manifestPath =
+		"/.lix/app_data/atelier/extensions/example/manifest.json";
+
+	test("keeps the last-known-good definition when a reload fails", () => {
+		const previous = new Map([[manifestPath, definition]]);
+		const next = reconcileInstalledExtensionCandidates(previous, [
+			{ manifestPath, error: new SyntaxError("Unexpected token") },
+		]);
+		expect(next.get(manifestPath)).toBe(definition);
+	});
+
+	test("removes definitions whose manifests were deleted", () => {
+		const previous = new Map([[manifestPath, definition]]);
+		const next = reconcileInstalledExtensionCandidates(previous, []);
+		expect(next.size).toBe(0);
 	});
 });

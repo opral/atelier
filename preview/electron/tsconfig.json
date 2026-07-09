@@ -1,12 +1,9 @@
 {
 	"extends": "../../tsconfig.json",
 	"compilerOptions": {
-		"module": "NodeNext",
-		"moduleResolution": "NodeNext",
-		"noEmit": false,
-		"outDir": "../../.preview/electron",
-		"rootDir": ".",
-		"types": ["node", "electron"]
+		"baseUrl": ".",
+		"paths": {},
+		"types": ["vite/client", "node", "electron"]
 	},
-	"include": ["main.mts", "preload.cts"]
+	"include": ["*.ts", "*.mts", "*.cts"]
 }

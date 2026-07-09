@@ -18,7 +18,8 @@ import { parseMarkdown } from "@/extensions/markdown/editor/markdown";
 import { renderMarkdownReviewDiffHtml } from "./render-review-diff-html";
 import "./style.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
-import { FILE_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
+import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
+import manifestJson from "./manifest.json";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
@@ -663,11 +664,7 @@ function historicalMarkdownBlocksQuery(
 		WHERE rn = 1
 			AND snapshot_content IS NOT NULL
 	`;
-	const parameters = [
-		args.beforeCommitId,
-		args.afterCommitId,
-		args.fileId,
-	] as const;
+	const parameters = [args.beforeCommitId, args.afterCommitId, args.fileId];
 	return {
 		compile: () => ({ sql, parameters }),
 		execute: async () => {
@@ -932,7 +929,7 @@ function ActiveFileSync({
 		qb(lix)
 			.selectFrom("lix_key_value_by_branch")
 			.where("lixcol_branch_id", "=", "global")
-			.where("key", "=", "flashtype_active_file_id")
+			.where("key", "=", "atelier_active_file_id")
 			.select(["value"]),
 	);
 
@@ -965,7 +962,7 @@ function ActiveFileSyncEffect({
 		void qb(lix)
 			.insertInto("lix_key_value_by_branch")
 			.values({
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: fileId,
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -998,37 +995,38 @@ function MarkdownLoadingSpinner(): ReactNode {
  * import { extension as markdownView } from "@/extensions/markdown";
  */
 export const extension = createReactExtensionDefinition({
-	kind: FILE_EXTENSION_KIND,
-	label: "File",
+	manifest: parseExtensionManifest(
+		"bundled:atelier_file/manifest.json",
+		JSON.stringify(manifestJson),
+	),
 	description: "Display file contents.",
 	icon: FileText,
-	fileExtensions: ["md", "markdown"],
-	component: ({ context, instance }) => (
-		<LixProvider lix={context.lix}>
+	component: ({ atelier, view }) => (
+		<LixProvider lix={atelier.lix}>
 			<MarkdownView
-				fileId={instance.state?.fileId as string}
-				filePath={instance.state?.filePath as string | undefined}
-				isActiveView={context.isActiveView ?? false}
-				isPanelFocused={context.isPanelFocused ?? false}
-				focusOnLoad={Boolean(instance.state?.focusOnLoad)}
+				fileId={view.state.fileId as string}
+				filePath={view.state.filePath as string | undefined}
+				isActiveView={view.isActive}
+				isPanelFocused={view.isFocused}
+				focusOnLoad={Boolean(view.state.focusOnLoad)}
 				defaultBlock={
-					instance.state?.defaultBlock === "heading1" ? "heading1" : undefined
+					view.state.defaultBlock === "heading1" ? "heading1" : undefined
 				}
 				syncActiveFile={false}
-				checkpointDiff={context.checkpointDiff}
+				checkpointDiff={atelier.revisions.current}
 				beforeCommitId={
-					typeof instance.state?.beforeCommitId === "string"
-						? instance.state.beforeCommitId
+					typeof view.state.beforeCommitId === "string"
+						? view.state.beforeCommitId
 						: null
 				}
 				afterCommitId={
-					typeof instance.state?.afterCommitId === "string"
-						? instance.state.afterCommitId
+					typeof view.state.afterCommitId === "string"
+						? view.state.afterCommitId
 						: null
 				}
-				registerExternalWriteReview={context.registerExternalWriteReview}
-				onAcceptReviewDiff={context.acceptExternalWriteReview}
-				onRejectReviewDiff={context.rejectExternalWriteReview}
+				registerExternalWriteReview={atelier.reviews.register}
+				onAcceptReviewDiff={atelier.reviews.accept}
+				onRejectReviewDiff={atelier.reviews.reject}
 			/>
 		</LixProvider>
 	),

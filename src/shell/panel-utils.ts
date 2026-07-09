@@ -37,8 +37,8 @@ const deepCloneValue = <T>(input: T): T => {
 };
 
 /**
- * Returns a view instance clone with deep-cloned state and launch args to keep
- * transitions immutable when moving tabs between panels.
+ * Returns a view instance clone with deep-cloned state to keep transitions
+ * immutable when moving tabs between panels.
  *
  * @example
  * const cloned = cloneExtensionInstance(panelState, "files-1");
@@ -52,7 +52,6 @@ export const cloneExtensionInstance = (
 	return {
 		...view,
 		state: view.state ? deepCloneValue(view.state) : undefined,
-		launchArgs: view.launchArgs ? deepCloneValue(view.launchArgs) : undefined,
 	};
 };
 

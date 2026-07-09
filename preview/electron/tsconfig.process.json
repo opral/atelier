@@ -1,0 +1,12 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"noEmit": false,
+		"outDir": "../../.preview/electron",
+		"rootDir": ".",
+		"types": ["node", "electron"]
+	},
+	"include": ["main.mts", "preload.cts"]
+}

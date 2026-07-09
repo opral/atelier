@@ -16,11 +16,9 @@ import { normalizeInstalledExtensionDefinitions } from "./installed-extension-re
 type ExtensionRegistryValue = {
 	readonly visibleExtensions: ExtensionDefinition[];
 	readonly extensionMap: Map<ExtensionKind, ExtensionDefinition>;
-	readonly installedExtensions: ExtensionDefinition[];
 	replaceInstalledExtensions: (
 		definitions: readonly ExtensionDefinition[],
 	) => void;
-	clearInstalledExtensions: () => void;
 };
 
 const buildExtensionRegistry = (
@@ -59,9 +57,7 @@ const NOOP = () => {};
 const ExtensionRegistryContext = createContext<ExtensionRegistryValue>({
 	visibleExtensions: EXTENSION_DEFINITIONS,
 	extensionMap: EXTENSION_MAP,
-	installedExtensions: [],
 	replaceInstalledExtensions: NOOP,
-	clearInstalledExtensions: NOOP,
 });
 
 export function ExtensionRegistryProvider({
@@ -75,31 +71,29 @@ export function ExtensionRegistryProvider({
 
 	const replaceInstalledExtensions = useCallback(
 		(definitions: readonly ExtensionDefinition[]) => {
-			setInstalledExtensions(
-				normalizeInstalledExtensionDefinitions(definitions),
+			const builtinKinds = new Set(
+				BUILTIN_EXTENSION_DEFINITIONS.map((definition) => definition.kind),
 			);
+			const accepted = definitions.filter((definition) => {
+				if (!builtinKinds.has(definition.kind)) return true;
+				console.warn(
+					`[extension-loader] Workspace extension id "${definition.kind}" conflicts with a bundled extension.`,
+				);
+				return false;
+			});
+			setInstalledExtensions(normalizeInstalledExtensionDefinitions(accepted));
 		},
 		[],
 	);
-
-	const clearInstalledExtensions = useCallback(() => {
-		setInstalledExtensions([]);
-	}, []);
 
 	const value = useMemo<ExtensionRegistryValue>(() => {
 		const merged = buildExtensionRegistry(installedExtensions);
 		return {
 			visibleExtensions: merged.visibleExtensions,
 			extensionMap: merged.extensionMap,
-			installedExtensions,
 			replaceInstalledExtensions,
-			clearInstalledExtensions,
 		};
-	}, [
-		installedExtensions,
-		replaceInstalledExtensions,
-		clearInstalledExtensions,
-	]);
+	}, [installedExtensions, replaceInstalledExtensions]);
 
 	return (
 		<ExtensionRegistryContext.Provider value={value}>

@@ -1,14 +1,14 @@
 import { describe, expect, test } from "vitest";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 import {
-	coerceFlashtypeUiState,
-	DEFAULT_FLASHTYPE_UI_STATE,
-	type FlashtypeUiState,
+	coerceAtelierUiState,
+	DEFAULT_ATELIER_UI_STATE,
+	type AtelierUiState,
 } from "./ui-state";
 
-describe("coerceFlashtypeUiState", () => {
+describe("coerceAtelierUiState", () => {
 	test("fresh defaults open Files only", () => {
-		const state = coerceFlashtypeUiState(undefined);
+		const state = coerceAtelierUiState(undefined);
 
 		expect(state.panels.left.views.map((view) => view.kind)).toEqual([
 			FILES_EXTENSION_KIND,
@@ -17,7 +17,7 @@ describe("coerceFlashtypeUiState", () => {
 	});
 
 	test("preserves persisted left panel views without adding History", () => {
-		const persistedState: FlashtypeUiState = {
+		const persistedState: AtelierUiState = {
 			focusedPanel: "left",
 			panels: {
 				left: {
@@ -27,10 +27,10 @@ describe("coerceFlashtypeUiState", () => {
 				central: { views: [], activeInstance: null },
 				right: { views: [], activeInstance: null },
 			},
-			layout: DEFAULT_FLASHTYPE_UI_STATE.layout,
+			layout: DEFAULT_ATELIER_UI_STATE.layout,
 		};
 
-		const coerced = coerceFlashtypeUiState(persistedState);
+		const coerced = coerceAtelierUiState(persistedState);
 
 		expect(coerced.panels.left.views.map((view) => view.kind)).toEqual([
 			FILES_EXTENSION_KIND,

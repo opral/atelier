@@ -5,15 +5,21 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-	base: "./",
 	build: {
 		lib: {
-			entry: path.resolve(__dirname, "src/index.ts"),
+			entry: path.resolve(__dirname, "src/build-entry.ts"),
 			formats: ["es"],
 			fileName: "atelier",
 			cssFileName: "atelier",
 		},
-		sourcemap: true,
+		rollupOptions: {
+			external: (id) =>
+				id === "@lix-js/sdk" ||
+				id === "react" ||
+				id.startsWith("react/") ||
+				id === "react-dom" ||
+				id.startsWith("react-dom/"),
+		},
 	},
 	plugins: [
 		react({
@@ -27,8 +33,5 @@ export default defineConfig({
 		alias: {
 			"@": path.resolve(__dirname, "src"),
 		},
-	},
-	optimizeDeps: {
-		include: ["mermaid"],
 	},
 });

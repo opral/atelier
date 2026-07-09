@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { LixProvider, useQuery } from "./lix-react";
-import type { Lix, ObserveEvent } from "./lix-types";
+import type { Lix, ObserveEvent } from "@lix-js/sdk";
 
 afterEach(() => {
 	vi.restoreAllMocks();

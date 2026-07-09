@@ -135,9 +135,9 @@ describe("Markdown typing shortcuts (input rules)", () => {
 
 	test("[label](url) → link mark with normalized href", () => {
 		const editor = createEditor();
-		typeText(editor, "[Flashtype](flashtype.dev)");
+		typeText(editor, "[Atelier](atelier.dev)");
 		const md = buildMarkdownFromEditor(editor);
-		expect(md).toContain("[Flashtype](https://flashtype.dev)");
+		expect(md).toContain("[Atelier](https://atelier.dev)");
 	});
 
 	test("[label](https://...) → link keeps explicit scheme", () => {

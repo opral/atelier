@@ -11,7 +11,7 @@ const baseExtension = {
 	label: "Extension",
 	description: "Extension",
 	icon: Puzzle,
-	render: () => {},
+	mount: () => {},
 } satisfies Omit<ExtensionDefinition, "kind">;
 
 describe("findFileHandlerExtension", () => {

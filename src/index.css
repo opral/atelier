@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 @import "./shell/theme.css";
 
@@ -8,7 +10,7 @@
 
 /* App-specific globals can go here later. */
 
-@keyframes flashtype-zap-wipe-top {
+@keyframes atelier-zap-wipe-top {
 	0% {
 		transform: scaleY(0);
 	}
@@ -26,7 +28,7 @@
 	}
 }
 
-@keyframes flashtype-zap-wipe-middle {
+@keyframes atelier-zap-wipe-middle {
 	0%,
 	24% {
 		transform: translateX(-62%);
@@ -45,7 +47,7 @@
 	}
 }
 
-@keyframes flashtype-zap-wipe-bottom {
+@keyframes atelier-zap-wipe-bottom {
 	0%,
 	44% {
 		transform: scaleY(0);
@@ -64,7 +66,7 @@
 	}
 }
 
-@keyframes flashtype-zap-fade {
+@keyframes atelier-zap-fade {
 	0%,
 	82% {
 		opacity: 1;
@@ -75,7 +77,7 @@
 	}
 }
 
-@keyframes flashtype-zap-base-fade {
+@keyframes atelier-zap-base-fade {
 	0%,
 	74% {
 		opacity: 0;
@@ -91,7 +93,7 @@
 	}
 }
 
-@keyframes flashtype-zap-outline-draw {
+@keyframes atelier-zap-outline-draw {
 	0% {
 		stroke-dashoffset: 100;
 	}
@@ -103,13 +105,13 @@
 	}
 }
 
-.flashtype-zap-build {
+.atelier-zap-build {
 	position: relative;
-	width: var(--flashtype-zap-width, 72px);
+	width: var(--atelier-zap-width, 72px);
 	aspect-ratio: 3 / 4;
-	color: var(--flashtype-zap-color, currentColor);
-	--flashtype-zap-duration: 1.45s;
-	--flashtype-zap-draw-ease: cubic-bezier(0.45, 0, 0.18, 1);
+	color: var(--atelier-zap-color, currentColor);
+	--atelier-zap-duration: 1.45s;
+	--atelier-zap-draw-ease: cubic-bezier(0.45, 0, 0.18, 1);
 	clip-path: polygon(
 		56.7% 0%,
 		0% 57.5%,
@@ -118,111 +120,109 @@
 		100% 37.5%,
 		53.3% 37.5%
 	);
-	animation: flashtype-zap-fade var(--flashtype-zap-duration) ease-out infinite;
+	animation: atelier-zap-fade var(--atelier-zap-duration) ease-out infinite;
 	will-change: opacity;
 }
 
-.flashtype-zap-build--outline {
+.atelier-zap-build--outline {
 	display: block;
 	overflow: visible;
 	clip-path: none;
 }
 
-.flashtype-zap-build__base,
-.flashtype-zap-build__segment,
-.flashtype-zap-build__wipe {
+.atelier-zap-build__base,
+.atelier-zap-build__segment,
+.atelier-zap-build__wipe {
 	position: absolute;
 }
 
-.flashtype-zap-build__base,
-.flashtype-zap-build__segment {
+.atelier-zap-build__base,
+.atelier-zap-build__segment {
 	inset: 0;
 }
 
-.flashtype-zap-build__base,
-.flashtype-zap-build__wipe {
+.atelier-zap-build__base,
+.atelier-zap-build__wipe {
 	background: currentColor;
 	backface-visibility: hidden;
 }
 
-.flashtype-zap-build__base {
+.atelier-zap-build__base {
 	opacity: 0;
-	animation: flashtype-zap-base-fade var(--flashtype-zap-duration) linear
-		infinite;
+	animation: atelier-zap-base-fade var(--atelier-zap-duration) linear infinite;
 }
 
-.flashtype-zap-build__segment--top {
+.atelier-zap-build__segment--top {
 	clip-path: polygon(56.7% 0%, 0% 57.5%, 43.3% 57.5%, 53.3% 37.5%);
 }
 
-.flashtype-zap-build__segment--middle {
+.atelier-zap-build__segment--middle {
 	clip-path: polygon(43.3% 57.5%, 100% 37.5%, 53.3% 37.5%);
 }
 
-.flashtype-zap-build__segment--bottom {
+.atelier-zap-build__segment--bottom {
 	clip-path: polygon(43.3% 57.5%, 33.3% 100%, 100% 37.5%);
 }
 
-.flashtype-zap-build__wipe--top {
+.atelier-zap-build__wipe--top {
 	top: 0;
 	right: 0;
 	left: 0;
 	height: 57.5%;
 	transform: scaleY(0);
 	transform-origin: 50% 0%;
-	animation: flashtype-zap-wipe-top var(--flashtype-zap-duration)
-		var(--flashtype-zap-draw-ease) infinite;
+	animation: atelier-zap-wipe-top var(--atelier-zap-duration)
+		var(--atelier-zap-draw-ease) infinite;
 	will-change: transform;
 }
 
-.flashtype-zap-build__wipe--middle {
+.atelier-zap-build__wipe--middle {
 	inset: 0;
 	transform: translateX(-62%);
-	animation: flashtype-zap-wipe-middle var(--flashtype-zap-duration)
-		var(--flashtype-zap-draw-ease) infinite;
+	animation: atelier-zap-wipe-middle var(--atelier-zap-duration)
+		var(--atelier-zap-draw-ease) infinite;
 	will-change: transform;
 }
 
-.flashtype-zap-build__wipe--bottom {
+.atelier-zap-build__wipe--bottom {
 	top: 37.5%;
 	right: 0;
 	left: 0;
 	height: 62.5%;
 	transform: scaleY(0);
 	transform-origin: 50% 0%;
-	animation: flashtype-zap-wipe-bottom var(--flashtype-zap-duration)
-		var(--flashtype-zap-draw-ease) infinite;
+	animation: atelier-zap-wipe-bottom var(--atelier-zap-duration)
+		var(--atelier-zap-draw-ease) infinite;
 	will-change: transform;
 }
 
-.flashtype-zap-build__outline-base {
+.atelier-zap-build__outline-base {
 	opacity: 0;
-	animation: flashtype-zap-base-fade var(--flashtype-zap-duration) linear
-		infinite;
+	animation: atelier-zap-base-fade var(--atelier-zap-duration) linear infinite;
 }
 
-.flashtype-zap-build__outline-draw {
+.atelier-zap-build__outline-draw {
 	stroke-dasharray: 100;
 	stroke-dashoffset: 100;
-	animation: flashtype-zap-outline-draw var(--flashtype-zap-duration)
-		var(--flashtype-zap-draw-ease) infinite;
+	animation: atelier-zap-outline-draw var(--atelier-zap-duration)
+		var(--atelier-zap-draw-ease) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.flashtype-zap-build,
-	.flashtype-zap-build__base,
-	.flashtype-zap-build__wipe,
-	.flashtype-zap-build__outline-base,
-	.flashtype-zap-build__outline-draw {
+	.atelier-zap-build,
+	.atelier-zap-build__base,
+	.atelier-zap-build__wipe,
+	.atelier-zap-build__outline-base,
+	.atelier-zap-build__outline-draw {
 		animation: none;
 	}
 
-	.flashtype-zap-build__base,
-	.flashtype-zap-build__outline-base {
+	.atelier-zap-build__base,
+	.atelier-zap-build__outline-base {
 		opacity: 1;
 	}
 
-	.flashtype-zap-build__outline-draw {
+	.atelier-zap-build__outline-draw {
 		stroke-dashoffset: 0;
 	}
 }
@@ -299,7 +299,7 @@
 	--color-sidebar-ring: var(--sidebar-ring);
 }
 
-:root {
+.atelier-root {
 	--radius: 0.625rem;
 
 	--background: var(--color-bg-panel);
@@ -366,57 +366,60 @@
 }
 
 /* Diff rendering helpers */
-.lix-diff-content [data-diff-status="added"] {
+.atelier-root .lix-diff-content [data-diff-status="added"] {
 	color: var(--color-text-diff-added);
 	text-decoration: none;
 	outline: none;
 }
 
-.lix-diff-content [data-diff-status="modified"] {
+.atelier-root .lix-diff-content [data-diff-status="modified"] {
 	color: var(--color-text-diff-modified);
 	text-decoration: none;
 	outline: none;
 }
 
-.lix-diff-content [data-diff-status="removed"] {
+.atelier-root .lix-diff-content [data-diff-status="removed"] {
 	color: var(--color-text-diff-removed);
 	text-decoration: line-through;
 	text-decoration-color: currentColor;
 }
 
-.lix-diff-content input[data-diff-status="added"],
-.lix-diff-content input[data-diff-status="removed"],
-.lix-diff-content input[data-diff-status="modified"] {
+.atelier-root .lix-diff-content input[data-diff-status="added"],
+.atelier-root .lix-diff-content input[data-diff-status="removed"],
+.atelier-root .lix-diff-content input[data-diff-status="modified"] {
 	margin-right: 4px;
 	border-radius: 4px;
 }
 
-.lix-diff-content input[data-diff-status="added"] {
+.atelier-root .lix-diff-content input[data-diff-status="added"] {
 	outline: 2px solid var(--color-border-diff-added);
 	outline-offset: 2px;
 }
 
-.lix-diff-content input[data-diff-status="removed"] {
+.atelier-root .lix-diff-content input[data-diff-status="removed"] {
 	outline: 2px solid var(--color-border-diff-removed);
 	outline-offset: 2px;
 	opacity: 0.6;
 }
 
-.lix-diff-content input[data-diff-status="modified"] {
+.atelier-root .lix-diff-content input[data-diff-status="modified"] {
 	outline: 2px solid var(--color-border-diff-modified);
 	outline-offset: 2px;
 }
 
-.lix-diff-content
+.atelier-root
+	.lix-diff-content
 	input[data-diff-status="removed"]
 	+ input[data-diff-status="added"],
-.lix-diff-content
+.atelier-root
+	.lix-diff-content
 	input[data-diff-status="added"]
 	+ input[data-diff-status="removed"] {
 	margin-left: 6px;
 }
 
-.dark {
+.atelier-root.dark,
+.dark .atelier-root {
 	--background: oklch(0.145 0 0);
 
 	--foreground: oklch(0.985 0 0);
@@ -481,35 +484,68 @@
 }
 
 @layer base {
-	* {
+	.atelier-root,
+	.atelier-root *,
+	.atelier-root *::before,
+	.atelier-root *::after {
 		@apply border-border outline-ring/50;
+		box-sizing: border-box;
+		border: 0 solid;
 	}
-	body {
+	.atelier-root {
 		@apply bg-background text-foreground;
+		height: 100%;
+		min-height: 0;
+		width: 100%;
+		font-family:
+			ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+			"Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+		line-height: 1.5;
+		-webkit-text-size-adjust: 100%;
+		-webkit-tap-highlight-color: transparent;
+	}
+	.atelier-root :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
+		margin: 0;
+	}
+	.atelier-root :where(ol, ul, menu) {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.atelier-root :where(button, input, select, optgroup, textarea) {
+		margin: 0;
+		font: inherit;
+		color: inherit;
+		letter-spacing: inherit;
+		background-color: transparent;
+	}
+	.atelier-root :where(button, [role="button"]) {
+		cursor: pointer;
+	}
+	.atelier-root :where(img, svg, video, canvas, audio, iframe, embed, object) {
+		display: block;
+		vertical-align: middle;
+	}
+	.atelier-root table {
+		border-collapse: collapse;
+		border-color: inherit;
 	}
 }
 
 /* Utility to temporarily hide scrollbars (e.g., during programmatic scroll) */
-.scrollbar-hidden {
+.atelier-root .scrollbar-hidden {
 	scrollbar-width: none; /* Firefox */
 	-ms-overflow-style: none; /* IE/Edge */
 }
-.scrollbar-hidden::-webkit-scrollbar {
+.atelier-root .scrollbar-hidden::-webkit-scrollbar {
 	width: 0;
 	height: 0;
 }
 
-/* Fill available space */
-html,
-body,
-#root {
-	height: 100%;
-	max-height: 100%;
-}
-
 /* TipTap / ProseMirror base styles */
 @layer components {
-	.tiptap-container[data-editor-focused="true"]
+	.atelier-root
+		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror
 		:is(p, h1).is-editor-empty:first-child::before {
 		color: color-mix(in srgb, var(--muted-foreground) 75%, transparent);

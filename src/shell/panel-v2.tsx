@@ -31,18 +31,20 @@ import {
 import type {
 	PanelSide,
 	PanelState,
-	ExtensionContext,
 	ExtensionDefinition,
+	ExtensionHostContext,
 	ExtensionInstance,
 	ExtensionKind,
+	ExtensionRuntime,
 	ExtensionState,
+	ExtensionView,
 } from "../extension-runtime/types";
 import { useExtensionRegistry } from "../extension-runtime/extension-registry";
 import styles from "./panel.module.css";
 
 /** Lucide icons and image-based brand icons both fit this shape. */
 type TabIcon = ComponentType<{ className?: string }>;
-import { useExtensionContext } from "../extension-runtime/extension-context";
+import { useExtensionViewRuntime } from "../extension-runtime/extension-view-runtime";
 import {
 	useExtensionHostRegistry,
 	type ExtensionHostRecord,
@@ -104,61 +106,20 @@ export function PanelV2({
 
 	const hasViews = panel.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
-	const { badgeCounts, makeContext } = useExtensionContext({
+	const { makeRuntime } = useExtensionViewRuntime({
 		panel,
 		panelSide: side,
 		isFocused,
-		parentContext: viewContext,
+		host: viewContext,
 	});
 
 	const viewContexts = useMemo(() => {
-		const map = new Map<string, ReturnType<typeof makeContext>>();
+		const map = new Map<string, ReturnType<typeof makeRuntime>>();
 		for (const entry of panel.views) {
-			map.set(entry.instance, makeContext(entry));
+			map.set(entry.instance, makeRuntime(entry));
 		}
 		return map;
-	}, [panel.views, makeContext]);
-
-	const activationCleanupRef = useRef<Map<string, (() => void) | undefined>>(
-		new Map(),
-	);
-
-	useEffect(() => {
-		const cleanupMap = activationCleanupRef.current;
-		for (const entry of panel.views) {
-			if (cleanupMap.has(entry.instance)) continue;
-			const view = resolveViewDefinition(entry.kind);
-			if (!view?.activate) {
-				cleanupMap.set(entry.instance, undefined);
-				continue;
-			}
-			const contextForView = viewContexts.get(entry.instance);
-			if (!contextForView) {
-				cleanupMap.set(entry.instance, undefined);
-				continue;
-			}
-			const cleanup = view.activate({
-				context: contextForView,
-				instance: entry,
-			});
-			cleanupMap.set(entry.instance, cleanup ?? undefined);
-		}
-
-		for (const [key, cleanup] of Array.from(cleanupMap.entries())) {
-			if (!panel.views.some((entry) => entry.instance === key)) {
-				cleanup?.();
-				cleanupMap.delete(key);
-			}
-		}
-	}, [panel.views, resolveViewDefinition, viewContexts]);
-
-	useEffect(() => {
-		const cleanupMap = activationCleanupRef.current;
-		return () => {
-			cleanupMap.forEach((cleanup) => cleanup?.());
-			cleanupMap.clear();
-		};
-	}, []);
+	}, [panel.views, makeRuntime]);
 
 	const handleInteraction = () => {
 		if (!onActiveViewInteraction || !activeInstance) return;
@@ -212,7 +173,6 @@ export function PanelV2({
 								if (!view) return null;
 								const isActive = activeInstance === entry.instance;
 								const label = resolveLabel(view, entry, tabLabel);
-								const badgeCount = badgeCounts[entry.instance] ?? null;
 								return (
 									<SortableTab
 										key={entry.instance}
@@ -221,7 +181,6 @@ export function PanelV2({
 										kind={entry.kind}
 										icon={view.icon}
 										label={label}
-										badgeCount={badgeCount}
 										isActive={isActive}
 										isFocused={isFocused && isActive}
 										isPending={entry.isPending}
@@ -250,7 +209,8 @@ export function PanelV2({
 									<ViewRenderer
 										view={view}
 										instance={entry}
-										context={context}
+										atelier={context.atelier}
+										extensionView={context.view}
 										side={side}
 										isActive={isActive}
 									/>
@@ -275,7 +235,7 @@ export type PanelV2Props = {
 	readonly onRemoveView: (instance: string) => void;
 	/** Enables the "+" add-view menu in the tab row. */
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
-	readonly viewContext: ExtensionContext;
+	readonly viewContext: ExtensionHostContext;
 	readonly tabLabel?: (
 		view: ExtensionDefinition,
 		instance: ExtensionInstance,
@@ -288,10 +248,7 @@ export type PanelV2Props = {
 	readonly showTabBar?: boolean;
 };
 
-/**
- * The "+" button in every island's tab row: agent sessions first (each click
- * opens a fresh session), then views not already open in this panel.
- */
+/** The "+" button lists views that are not already open in this panel. */
 function AddViewMenu({
 	side,
 	panel,
@@ -307,10 +264,7 @@ function AddViewMenu({
 		[panel.views],
 	);
 	const availableViews = useMemo(
-		() =>
-			visibleExtensions.filter(
-				(view) => view.multiInstance || !openKinds.has(view.kind),
-			),
+		() => visibleExtensions.filter((view) => !openKinds.has(view.kind)),
 		[visibleExtensions, openKinds],
 	);
 	if (availableViews.length === 0) return null;
@@ -354,7 +308,7 @@ const resolveLabel = (
 	if (tabLabel) {
 		return tabLabel(view, instance);
 	}
-	return (instance.state?.flashtype?.label as string | undefined) ?? view.label;
+	return (instance.state?.atelier?.label as string | undefined) ?? view.label;
 };
 
 interface TabBarProps {
@@ -460,13 +414,15 @@ function PanelContent({
 function ViewRenderer({
 	view,
 	instance,
-	context,
+	atelier,
+	extensionView,
 	side,
 	isActive,
 }: {
 	view: ExtensionDefinition;
 	instance: ExtensionInstance;
-	context: ExtensionContext;
+	atelier: ExtensionRuntime;
+	extensionView: ExtensionView;
 	side: PanelSide;
 	isActive: boolean;
 }) {
@@ -474,9 +430,14 @@ function ViewRenderer({
 	const [host, setHost] = useState<ExtensionHostRecord | null>(null);
 
 	useEffect(() => {
-		const record = registry.ensureHost({ view, instance, context });
+		const record = registry.ensureHost({
+			view,
+			instance,
+			atelier,
+			extensionView,
+		});
 		setHost(record);
-	}, [registry, view, instance, context]);
+	}, [registry, view, instance, atelier, extensionView]);
 
 	return (
 		<ViewHostMount
@@ -543,7 +504,6 @@ function SortableTab({
 	kind,
 	icon,
 	label,
-	badgeCount,
 	isActive,
 	isFocused,
 	isPending,
@@ -578,7 +538,6 @@ function SortableTab({
 			ref={setNodeRef}
 			icon={icon}
 			label={label}
-			badgeCount={badgeCount}
 			isActive={isActive}
 			isFocused={isFocused}
 			isPending={isPending}
@@ -625,7 +584,6 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 		{
 			icon: Icon,
 			label,
-			badgeCount,
 			isActive,
 			isFocused,
 			isPending,
@@ -667,18 +625,6 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 					className="relative flex size-3.25 items-center justify-center"
 				>
 					<Icon className="size-3.25" />
-					{badgeCount ? (
-						<span
-							className={clsx(
-								"pointer-events-none absolute -top-1 -left-1 flex h-4 min-w-[16px] -translate-y-1/2 items-center justify-center rounded-full px-[3px] text-[0.65rem] font-semibold leading-none transform",
-								isActive
-									? "bg-[var(--color-bg-action-primary)] text-[var(--color-text-on-action-primary)]"
-									: "bg-[var(--color-bg-notice-neutral)] text-[var(--color-text-notice-neutral)]",
-							)}
-						>
-							{badgeCount > 99 ? "99+" : badgeCount}
-						</span>
-					) : null}
 				</span>
 				<span
 					data-attr="panel-tab-select"
@@ -716,7 +662,6 @@ TabButtonBase.displayName = "PanelTabButton";
 export type PanelTabPreviewProps = {
 	readonly icon: TabIcon;
 	readonly label: string;
-	readonly badgeCount?: number | null;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly isPending?: boolean;

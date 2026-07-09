@@ -24,7 +24,8 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
-import { HISTORY_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
+import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
+import manifestJson from "./manifest.json";
 import type {
 	CheckpointDiff,
 	CheckpointDiffBranchRow,
@@ -637,16 +638,18 @@ function formatLocalTimestamp(date = new Date()): string {
 }
 
 export const extension = createReactExtensionDefinition({
-	kind: HISTORY_EXTENSION_KIND,
-	label: "History",
+	manifest: parseExtensionManifest(
+		"bundled:atelier_history/manifest.json",
+		JSON.stringify(manifestJson),
+	),
 	description: "Review and restore checkpoints.",
 	icon: HistoryIcon,
-	component: ({ context }) => (
-		<LixProvider lix={context.lix}>
+	component: ({ atelier }) => (
+		<LixProvider lix={atelier.lix}>
 			<HistoryView
-				checkpointDiff={context.checkpointDiff}
-				showCheckpointDiff={context.showCheckpointDiff}
-				clearCheckpointDiff={context.clearCheckpointDiff}
+				checkpointDiff={atelier.revisions.current}
+				showCheckpointDiff={atelier.revisions.show}
+				clearCheckpointDiff={atelier.revisions.clear}
 			/>
 		</LixProvider>
 	),

@@ -18,11 +18,5 @@
 		"jsx": "react-jsx",
 		"types": ["vite/client", "node"]
 	},
-	"include": [
-		"src",
-		"setup-tests.ts",
-		"preview/electron/lix-client.ts",
-		"preview/electron/renderer.ts",
-		"preview/electron/renderer-types.d.ts"
-	]
+	"include": ["src", "setup-tests.ts"]
 }

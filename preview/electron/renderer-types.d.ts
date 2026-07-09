@@ -15,8 +15,6 @@ type PreviewLixBridge = {
 	activeBranchId(): Promise<string>;
 	createBranch(options: unknown): Promise<any>;
 	switchBranch(options: unknown): Promise<any>;
-	mergeBranchPreview(options: unknown): Promise<any>;
-	mergeBranch(options: unknown): Promise<any>;
 };
 
 interface Window {

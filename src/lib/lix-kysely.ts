@@ -9,34 +9,12 @@ import {
 	type QueryCompiler,
 	type QueryResult,
 } from "kysely";
-import type { ExecuteResult } from "@lix-js/sdk";
+import type { ExecuteResult, Lix, LixTransaction, SqlParam } from "@lix-js/sdk";
 export { sql } from "kysely";
 
 export type LixDatabaseSchema = Record<string, Record<string, any>>;
 
 type LixQueryResult = ExecuteResult;
-
-type LixExecuteLike = {
-	execute(
-		sql: string,
-		params?: ReadonlyArray<unknown>,
-	): Promise<LixQueryResult>;
-};
-
-type LixTransactionLike = {
-	execute(
-		sql: string,
-		params?: ReadonlyArray<unknown>,
-	): Promise<LixQueryResult>;
-	commit(): Promise<void>;
-	rollback(): Promise<void>;
-};
-
-type LixTransactionalLike = LixExecuteLike & {
-	beginTransaction(): Promise<LixTransactionLike>;
-};
-
-type LixLike = LixTransactionalLike;
 
 class LixConnection implements DatabaseConnection {
 	constructor(
@@ -86,10 +64,10 @@ class LixConnection implements DatabaseConnection {
 class LixDriver implements Driver {
 	private readonly connection: LixConnection;
 	private transactionSlotHeld = false;
-	private transaction: LixTransactionLike | undefined;
+	private transaction: LixTransaction | undefined;
 	private waiters: Array<() => void> = [];
 
-	constructor(private readonly lix: LixTransactionalLike) {
+	constructor(private readonly lix: Lix) {
 		this.connection = new LixConnection((sql, params) =>
 			this.executeSql(sql, params),
 		);
@@ -167,10 +145,11 @@ class LixDriver implements Driver {
 		sql: string,
 		params?: ReadonlyArray<unknown>,
 	): Promise<LixQueryResult> {
+		const sqlParams = [...(params ?? [])] as SqlParam[];
 		if (this.transaction) {
-			return this.transaction.execute(sql, params);
+			return this.transaction.execute(sql, sqlParams);
 		}
-		return this.lix.execute(sql, params);
+		return this.lix.execute(sql, sqlParams);
 	}
 
 	private async acquireTransactionSlot(): Promise<void> {
@@ -198,7 +177,7 @@ class LixQueryCompiler extends SqliteQueryCompiler {
 
 const cache = new WeakMap<object, Map<string, Kysely<LixDatabaseSchema>>>();
 
-export function createLixKysely(lix: LixLike): Kysely<LixDatabaseSchema> {
+export function createLixKysely(lix: Lix): Kysely<LixDatabaseSchema> {
 	const cacheKey = "__default__";
 	const cached = cache.get(lix as object)?.get(cacheKey);
 	if (cached) {
@@ -222,7 +201,7 @@ export function createLixKysely(lix: LixLike): Kysely<LixDatabaseSchema> {
 	return db;
 }
 
-export const qb = (lix: LixLike) => createLixKysely(lix);
+export const qb = (lix: Lix) => createLixKysely(lix);
 
 function decodeRows(
 	rows: ExecuteResult["rows"],

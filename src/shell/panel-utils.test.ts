@@ -32,14 +32,13 @@ describe("cloneViewInstanceByKey", () => {
 		expect(cloned?.state).not.toBe(originalState);
 	});
 
-	test("deep clones nested state and launch args", () => {
+	test("deep clones nested state", () => {
 		const panelState: PanelState = {
 			views: [
 				{
 					instance: "files-1",
 					kind: FILES_EXTENSION_KIND,
 					state: { custom: { metadata: { nested: true } } },
-					launchArgs: { initial: { path: "/docs" } },
 				} satisfies ExtensionInstance,
 			],
 			activeInstance: "files-1",
@@ -53,10 +52,6 @@ describe("cloneViewInstanceByKey", () => {
 		expect(clonedState).not.toBe(originalState);
 		expect(clonedState.custom).not.toBe(originalState.custom);
 		expect(clonedState.custom.metadata).not.toBe(originalState.custom.metadata);
-		const clonedLaunchArgs = (cloned as ExtensionInstance).launchArgs as any;
-		const originalLaunchArgs = panelState.views[0].launchArgs as any;
-		expect(clonedLaunchArgs).not.toBe(originalLaunchArgs);
-		expect(clonedLaunchArgs.initial).not.toBe(originalLaunchArgs.initial);
 	});
 
 	test("returns null when no matching view is found", () => {

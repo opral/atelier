@@ -4,13 +4,10 @@ import { describe, expect, test, vi } from "vitest";
 import type { FilesystemEntryRow } from "@/queries";
 import { SidePanel } from "./side-panel";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
-import type { PanelState, ExtensionContext } from "../extension-runtime/types";
-import {
-	FILES_EXTENSION_KIND,
-	FILE_EXTENSION_KIND,
-	fileExtensionInstance,
-} from "../extension-runtime/extension-instance-helpers";
-import type { Lix } from "@/lib/lix-types";
+import type { PanelState } from "../extension-runtime/types";
+import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
+import type { Lix } from "@lix-js/sdk";
+import { createExtensionHostContext } from "@/test-utils/extension-host-context";
 
 const mockEntries: FilesystemEntryRow[] = [
 	{
@@ -63,36 +60,33 @@ vi.mock("@/lib/lix-react", async () => {
 vi.mock("../extension-runtime/extension-registry", async () => {
 	const definitions = [
 		{
-			kind: "flashtype_files" as const,
+			kind: "atelier_files" as const,
 			label: "Files",
 			description: "Files view",
 			icon: () => <svg></svg>,
-			render: ({
-				context,
-				target,
+			mount: ({
+				atelier,
+				element,
 			}: {
-				context: ExtensionContext;
-				target: HTMLElement;
+				atelier: ReturnType<typeof createExtensionHostContext>["atelier"];
+				element: HTMLElement;
 			}) => {
 				const button = document.createElement("button");
 				button.type = "button";
 				button.textContent = "writing-style.md";
 				button.addEventListener("click", () => {
-					context.openExtension?.({
-						panel: "central",
-						kind: "flashtype_file",
-						instance: "flashtype_file:file-writing",
+					void atelier.files.open({
+						fileId: "file-writing",
+						filePath: "/docs/guides/writing-style.md",
 						state: {
-							fileId: "file-writing",
-							filePath: "/docs/guides/writing-style.md",
-							flashtype: { label: "writing-style.md" },
+							atelier: { label: "writing-style.md" },
 						},
 						focus: false,
 					});
 				});
-				target.replaceChildren(button);
-				return () => {
-					target.replaceChildren();
+				element.replaceChildren(button);
+				return {
+					dispose: () => element.replaceChildren(),
 				};
 			},
 		},
@@ -103,9 +97,7 @@ vi.mock("../extension-runtime/extension-registry", async () => {
 		useExtensionRegistry: () => ({
 			visibleExtensions: definitions,
 			extensionMap: new Map(definitions.map((def) => [def.kind, def])),
-			installedExtensions: [],
 			replaceInstalledExtensions: () => {},
-			clearInstalledExtensions: () => {},
 		}),
 	};
 });
@@ -113,13 +105,10 @@ vi.mock("../extension-runtime/extension-registry", async () => {
 const mockLix = {} as Lix;
 
 const createViewContext = (
-	overrides: Partial<ExtensionContext> = {},
-): ExtensionContext => ({
-	lix: mockLix,
-	isPanelFocused: false,
-	setTabBadgeCount: () => {},
-	...overrides,
-});
+	openFile?: ReturnType<
+		typeof createExtensionHostContext
+	>["atelier"]["files"]["open"],
+) => createExtensionHostContext(mockLix, { openFile });
 
 describe("SidePanel", () => {
 	test("renders the empty state helper when nothing is open", () => {
@@ -156,10 +145,7 @@ describe("SidePanel", () => {
 		const handleAdd = vi.fn();
 		const handleRemove = vi.fn();
 		const handleOpenFile = vi.fn();
-		const viewContext = createViewContext({
-			openExtension: handleOpenFile,
-			isPanelFocused: true,
-		});
+		const viewContext = createViewContext(handleOpenFile);
 
 		render(
 			<ExtensionHostRegistryProvider>
@@ -193,13 +179,10 @@ describe("SidePanel", () => {
 		);
 		fireEvent.click(fileRow);
 		expect(handleOpenFile).toHaveBeenCalledWith({
-			panel: "central",
-			kind: FILE_EXTENSION_KIND,
-			instance: fileExtensionInstance("file-writing"),
+			fileId: "file-writing",
+			filePath: "/docs/guides/writing-style.md",
 			state: {
-				fileId: "file-writing",
-				filePath: "/docs/guides/writing-style.md",
-				flashtype: { label: "writing-style.md" },
+				atelier: { label: "writing-style.md" },
 			},
 			focus: false,
 		});

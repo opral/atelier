@@ -48,7 +48,7 @@ function renderUseKeyValue(
 }
 
 test("reads a global, untracked key (test fixture)", async () => {
-	const testKey = nextTestKey("flashtype_test_untracked");
+	const testKey = nextTestKey("atelier_test_untracked");
 	const defs = withKeyDef(testKey, {
 		defaultBranchId: "global",
 		untracked: true,
@@ -88,7 +88,7 @@ test("reads a global, untracked key (test fixture)", async () => {
 });
 
 test("writes and reads a global, untracked key (test fixture)", async () => {
-	const testKey = nextTestKey("flashtype_test_untracked");
+	const testKey = nextTestKey("atelier_test_untracked");
 	const defs = withKeyDef(testKey, {
 		defaultBranchId: "global",
 		untracked: true,
@@ -130,7 +130,7 @@ test("writes and reads a global, untracked key (test fixture)", async () => {
 });
 
 test("writes and reads a tracked key on active branch", async () => {
-	const TEST_KEY = nextTestKey("flashtype_test_tracked");
+	const TEST_KEY = nextTestKey("atelier_test_tracked");
 	const lix = await openLix({});
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
@@ -171,7 +171,7 @@ test("writes and reads a tracked key on active branch", async () => {
 });
 
 test("writes and reads an untracked key on active branch", async () => {
-	const testKey = nextTestKey("flashtype_test_active_untracked");
+	const testKey = nextTestKey("atelier_test_active_untracked");
 	const defs = withKeyDef(testKey, {
 		defaultBranchId: "active",
 		untracked: true,
@@ -215,7 +215,7 @@ test("writes and reads an untracked key on active branch", async () => {
 });
 
 test("reads explicit global key when active branch has same key", async () => {
-	const testKey = nextTestKey("flashtype_test_global_shadowed");
+	const testKey = nextTestKey("atelier_test_global_shadowed");
 	const defs = withKeyDef(testKey, {
 		defaultBranchId: "global",
 		untracked: true,
@@ -261,7 +261,7 @@ test("reads explicit global key when active branch has same key", async () => {
 });
 
 test("shows Suspense fallback first, then renders value on initial read", async () => {
-	const testKey = nextTestKey("flashtype_test_untracked");
+	const testKey = nextTestKey("atelier_test_untracked");
 	const defs = withKeyDef(testKey, {
 		defaultBranchId: "global",
 		untracked: true,
@@ -301,7 +301,7 @@ test("shows Suspense fallback first, then renders value on initial read", async 
 });
 
 test("re-renders when key value changes externally", async () => {
-	const TEST_KEY = nextTestKey("flashtype_test_tracked_external");
+	const TEST_KEY = nextTestKey("atelier_test_tracked_external");
 	const lix = await openLix({});
 	await qb(lix)
 		.insertInto("lix_key_value")
@@ -349,7 +349,7 @@ function createDeferred<T>() {
 }
 
 test("shares optimistic updates across hook instances", async () => {
-	const SHARED_KEY = nextTestKey("flashtype_test_tracked_shared_optimistic");
+	const SHARED_KEY = nextTestKey("atelier_test_tracked_shared_optimistic");
 	const lix = await openLix({});
 	await qb(lix)
 		.insertInto("lix_key_value")
@@ -462,7 +462,7 @@ test("shares optimistic updates across hook instances", async () => {
 
 test("returns optimistic value immediately when setter is called", async () => {
 	const lix = await openLix({});
-	const TEST_KEY = nextTestKey("flashtype_test_optimistic") as any;
+	const TEST_KEY = nextTestKey("atelier_test_optimistic") as any;
 	await qb(lix)
 		.insertInto("lix_key_value")
 		.values({ key: TEST_KEY, value: "initial" })
@@ -499,7 +499,7 @@ test("returns optimistic value immediately when setter is called", async () => {
 });
 
 test("memoized children should not re-render when parent state changes", async () => {
-	const testKey = nextTestKey("flashtype_test_untracked");
+	const testKey = nextTestKey("atelier_test_untracked");
 	const defs = withKeyDef(testKey, {
 		defaultBranchId: "global",
 		untracked: true,

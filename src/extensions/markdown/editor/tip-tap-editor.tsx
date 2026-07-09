@@ -83,7 +83,7 @@ export function TipTapEditor({
 }
 
 function TipTapEditorWithActiveKey(props: Omit<TipTapEditorProps, "fileId">) {
-	const [activeFileId] = useKeyValue("flashtype_active_file_id");
+	const [activeFileId] = useKeyValue("atelier_active_file_id");
 	return (
 		<TipTapEditorContent
 			{...props}

@@ -1,17 +1,17 @@
 import type { PanelSide, PanelState } from "../extension-runtime/types";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 
-export const FLASHTYPE_UI_STATE_KEY = "flashtype_ui_state" as const;
+export const ATELIER_UI_STATE_KEY = "atelier_ui_state" as const;
 
 /**
- * Serialized layout snapshot persisted in Lix under `flashtype_ui_state`.
+ * Serialized layout snapshot persisted in Lix under `atelier_ui_state`.
  *
  * The structure mirrors the in-memory panel model so we can revive the exact
  * view arrangement (active views, props, focused panel, and optional
  * panel sizes) when the prototype boots.
  *
  * @example
- * const uiState: FlashtypeUiState = {
+ * const uiState: AtelierUiState = {
  *   focusedPanel: "left",
  *   panels: {
  *     left: { views: [...], activeInstance: "files-1" },
@@ -21,7 +21,7 @@ export const FLASHTYPE_UI_STATE_KEY = "flashtype_ui_state" as const;
  *   layout: { sizes: { left: 20, central: 60, right: 20 } },
  * };
  */
-export type FlashtypeUiState = {
+export type AtelierUiState = {
 	readonly focusedPanel: PanelSide;
 	readonly panels: Record<PanelSide, PanelState>;
 	readonly layout?: {
@@ -45,7 +45,7 @@ const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 	right: 30,
 };
 
-export const DEFAULT_FLASHTYPE_UI_STATE: FlashtypeUiState = {
+export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	focusedPanel: "central",
 	panels: {
 		left: {
@@ -92,13 +92,13 @@ function coercePanelState(raw: unknown, fallback: PanelState): PanelState {
 }
 
 /**
- * Coerces persisted key-value payloads into a safe `FlashtypeUiState`.
+ * Coerces persisted key-value payloads into a safe `AtelierUiState`.
  *
  * Falls back to defaults for stale/invalid shapes so app boot does not crash.
  */
-export function coerceFlashtypeUiState(raw: unknown): FlashtypeUiState {
+export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 	if (!raw || typeof raw !== "object") {
-		return DEFAULT_FLASHTYPE_UI_STATE;
+		return DEFAULT_ATELIER_UI_STATE;
 	}
 
 	const candidate = raw as Record<string, unknown>;
@@ -113,22 +113,22 @@ export function coerceFlashtypeUiState(raw: unknown): FlashtypeUiState {
 
 	const focusedPanel = isPanelSide(candidate.focusedPanel)
 		? candidate.focusedPanel
-		: DEFAULT_FLASHTYPE_UI_STATE.focusedPanel;
+		: DEFAULT_ATELIER_UI_STATE.focusedPanel;
 
 	return {
 		focusedPanel,
 		panels: {
 			left: coercePanelState(
 				panelsCandidate.left,
-				DEFAULT_FLASHTYPE_UI_STATE.panels.left,
+				DEFAULT_ATELIER_UI_STATE.panels.left,
 			),
 			central: coercePanelState(
 				panelsCandidate.central,
-				DEFAULT_FLASHTYPE_UI_STATE.panels.central,
+				DEFAULT_ATELIER_UI_STATE.panels.central,
 			),
 			right: coercePanelState(
 				panelsCandidate.right,
-				DEFAULT_FLASHTYPE_UI_STATE.panels.right,
+				DEFAULT_ATELIER_UI_STATE.panels.right,
 			),
 		},
 		layout: {

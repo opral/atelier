@@ -1,11 +1,5 @@
-import type { Lix } from "@/lib/lix-types";
+import type { Lix, SqlParam } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
-import {
-	captureTelemetryThrottled,
-	fileExtensionProperty,
-	workspaceTelemetryProperties,
-} from "@/lib/telemetry";
-import { readWorkspaceId } from "@/lib/workspace-profile-telemetry";
 
 export async function upsertMarkdownFile(args: {
 	lix: Lix;
@@ -58,7 +52,6 @@ export async function upsertMarkdownFile(args: {
 			},
 			originKey,
 		);
-		captureDocumentModifiedTelemetry({ lix, fileId, filePath: resolvedPath });
 	} else {
 		if (!createIfMissing) return;
 		// Insert requires a path; use provided or fallback to /<fileId>.md
@@ -70,17 +63,12 @@ export async function upsertMarkdownFile(args: {
 			},
 			originKey,
 		);
-		captureDocumentModifiedTelemetry({
-			lix,
-			fileId,
-			filePath: path ?? `/${fileId}.md`,
-		});
 	}
 }
 
 async function executeMarkdownFileWrite(
 	lix: Lix,
-	statement: { sql: string; params: ReadonlyArray<unknown> },
+	statement: { sql: string; params: SqlParam[] },
 	originKey: string | undefined,
 ): Promise<void> {
 	if (originKey) {
@@ -88,30 +76,4 @@ async function executeMarkdownFileWrite(
 		return;
 	}
 	await lix.execute(statement.sql, statement.params);
-}
-
-function captureDocumentModifiedTelemetry({
-	lix,
-	fileId,
-	filePath,
-}: {
-	readonly lix: Lix;
-	readonly fileId: string;
-	readonly filePath: string;
-}) {
-	void (async () => {
-		const workspaceId = await readWorkspaceId(lix);
-		captureTelemetryThrottled(
-			`document_modified:${fileId}`,
-			"document_modified",
-			{
-				file_extension: fileExtensionProperty(filePath),
-				modified_by: "user",
-				source: "renderer",
-				...workspaceTelemetryProperties(workspaceId),
-			},
-		);
-	})().catch((error: unknown) => {
-		console.warn("Failed to capture document_modified telemetry", error);
-	});
 }

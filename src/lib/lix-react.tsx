@@ -7,7 +7,7 @@ import {
 	useState,
 } from "react";
 import type { ReactNode } from "react";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix, SqlParam } from "@lix-js/sdk";
 
 export const LixContext = createContext<Lix | null>(null);
 
@@ -82,7 +82,9 @@ export function useQuery<TRow>(
 	useEffect(() => {
 		if (!subscribe) return;
 		let closed = false;
-		const events = lix.observe(observeQuery.sql, observeQuery.params);
+		const events = lix.observe(observeQuery.sql, [
+			...observeQuery.params,
+		] as SqlParam[]);
 
 		void (async () => {
 			try {

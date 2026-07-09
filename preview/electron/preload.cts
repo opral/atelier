@@ -22,8 +22,4 @@ contextBridge.exposeInMainWorld("atelierPreview", {
 		ipcRenderer.invoke("atelier:lix:createBranch", options),
 	switchBranch: (options: unknown) =>
 		ipcRenderer.invoke("atelier:lix:switchBranch", options),
-	mergeBranchPreview: (options: unknown) =>
-		ipcRenderer.invoke("atelier:lix:mergeBranchPreview", options),
-	mergeBranch: (options: unknown) =>
-		ipcRenderer.invoke("atelier:lix:mergeBranch", options),
 });

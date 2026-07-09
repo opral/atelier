@@ -1,0 +1,7 @@
+{
+	"apiVersion": 1,
+	"id": "atelier_file",
+	"name": "File",
+	"entry": "./index.js",
+	"fileExtensions": ["md", "markdown"]
+}

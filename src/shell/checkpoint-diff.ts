@@ -6,7 +6,7 @@ import type {
 	CheckpointDiffVisibleFile,
 } from "@/extension-runtime/checkpoint-diff";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
 
 type FileHistorySnapshot = {

@@ -1,16 +1,6 @@
 import type { PanelState, ExtensionInstance } from "./types";
 
 /**
- * Options for configuring how a pending view is inserted into a panel.
- *
- * @example
- * upsertPendingExtension(panel, view, { activate: false });
- */
-export interface UpsertPendingExtensionOptions {
-	readonly activate?: boolean;
-}
-
-/**
  * Inserts or replaces the single pending slot in a panel.
  *
  * Ensures that only one pending view exists per panel by removing any prior
@@ -19,17 +9,15 @@ export interface UpsertPendingExtensionOptions {
  *
  * @example
  * const next = upsertPendingExtension(panel, {
- *   instance: "flashtype_file-1",
- *   kind: "flashtype_file",
+ *   instance: "atelier_file-1",
+ *   kind: "atelier_file",
  *   isPending: true,
  * });
  */
 export function upsertPendingExtension(
 	panel: PanelState,
 	view: ExtensionInstance,
-	options: UpsertPendingExtensionOptions = {},
 ): PanelState {
-	const activate = options.activate ?? true;
 	const pendingExtension: ExtensionInstance = view.isPending
 		? view
 		: { ...view, isPending: true };
@@ -42,53 +30,31 @@ export function upsertPendingExtension(
 		pendingExtension,
 	];
 
-	const desiredActiveKey = activate
-		? pendingExtension.instance
-		: panel.activeInstance;
-	const fallbackActive = nextViews[nextViews.length - 1]?.instance ?? null;
-	const activeInstance =
-		desiredActiveKey &&
-		nextViews.some((entry) => entry.instance === desiredActiveKey)
-			? desiredActiveKey
-			: fallbackActive;
-
 	return {
 		views: nextViews,
-		activeInstance,
+		activeInstance: pendingExtension.instance,
 	};
 }
 
 /**
- * Options for controlling how a view activation behaves.
- *
- * @example
- * activatePanelExtension(panel, "files-1", { finalizePending: false });
- */
-export interface ActivatePanelExtensionOptions {
-	readonly finalizePending?: boolean;
-}
-
-/**
- * Activates a view inside a panel and optionally finalizes pending status.
+ * Activates a view inside a panel and finalizes its pending status.
  *
  * Use this when a preview tab receives user interaction so that its pending
  * flag clears and the tab becomes permanent.
  *
  * @example
- * const next = activatePanelExtension(panel, "flashtype_file-1");
+ * const next = activatePanelExtension(panel, "atelier_file-1");
  */
 export function activatePanelExtension(
 	panel: PanelState,
 	instance: string,
-	options: ActivatePanelExtensionOptions = {},
 ): PanelState {
-	const finalizePending = options.finalizePending ?? true;
 	let found = false;
 
 	const views = panel.views.map((view) => {
 		if (view.instance !== instance) return view;
 		found = true;
-		if (!finalizePending || !view.isPending) {
+		if (!view.isPending) {
 			return { ...view };
 		}
 		return { ...view, isPending: false };

@@ -8,21 +8,23 @@ import {
 	type FilesystemTreeNode,
 	type FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
-import type { ExtensionContext } from "../../extension-runtime/types";
+import type { ExtensionState, PanelSide } from "../../extension-runtime/types";
 import {
 	FileTree,
 	type FileTreeCreateRequest,
 	type FileTreeRenameRequest,
 } from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
+import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
+import manifestJson from "./manifest.json";
 import { qb } from "@/lib/lix-kysely";
-import { FILES_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
 import type { FilesystemEntryRow } from "@/queries";
 import type {
+	CheckpointDiff,
 	CheckpointDiffFile,
 	CheckpointDiffVisibleFile,
 } from "@/extension-runtime/checkpoint-diff";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import {
 	AGENT_TURN_COMMIT_RANGE_KEY,
 	isAgentTurnCommitRangeStore,
@@ -32,8 +34,33 @@ import {
 	type ExternalWriteReviewFile,
 } from "@/shell/external-write-review-history";
 
+type FilesViewContext = {
+	readonly openFile?: (args: {
+		readonly panel: PanelSide;
+		readonly fileId: string;
+		readonly filePath: string;
+		readonly state?: ExtensionState;
+		readonly focus?: boolean;
+		readonly pending?: boolean;
+	}) => void | Promise<void>;
+	readonly closeFileViews?: (args: { readonly fileId: string }) => void;
+	readonly checkpointDiff?: CheckpointDiff | null;
+	readonly activeFileId?: string | null;
+	readonly activeFilePath?: string | null;
+	readonly isPanelFocused?: boolean;
+	readonly panelSide?: PanelSide;
+	readonly viewInstance?: string;
+	readonly isActiveView?: boolean;
+	readonly registerNewFileDraftHandler?: (registration: {
+		readonly panelSide: PanelSide;
+		readonly viewInstance: string;
+		readonly isActiveView: boolean;
+		readonly handler: () => void;
+	}) => () => void;
+};
+
 type FilesViewProps = {
-	readonly context?: ExtensionContext;
+	readonly context?: FilesViewContext;
 };
 
 /**
@@ -41,7 +68,7 @@ type FilesViewProps = {
  * that opens the inline creation prompt for a new markdown file.
  *
  * @example
- * <FilesView context={{ openExtension: console.log }} />
+ * <FilesView />
  */
 export function FilesView({ context }: FilesViewProps) {
 	const lix = useLix();
@@ -332,7 +359,6 @@ function FilesViewContent({
 						filePath: path,
 						state: { focusOnLoad: true, defaultBlock: "heading1" },
 						focus: true,
-						documentOrigin: "new",
 					});
 				} catch (error) {
 					console.error("Failed to create file", error);
@@ -451,7 +477,6 @@ function FilesViewContent({
 						fileId: resolvedFileId,
 						filePath: destinationPath,
 						focus: false,
-						trackTelemetry: false,
 					});
 				}
 			} catch (error) {
@@ -516,9 +541,6 @@ function FilesViewContent({
 						}
 					: undefined,
 				focus: false,
-				trackTelemetry: checkpointVisibleFile ? false : undefined,
-				trackDocumentOpenAttempt: checkpointVisibleFile ? false : undefined,
-				trackDocumentViewed: checkpointVisibleFile ? false : undefined,
 			});
 		},
 		[context],
@@ -763,7 +785,6 @@ function FilesViewContent({
 								panel: "central",
 								fileId: newFile.id as string,
 								filePath,
-								documentOrigin: "new",
 							});
 						}
 					}
@@ -983,13 +1004,29 @@ function sameStringSet(
  * import { extension as filesView } from "@/extensions/files";
  */
 export const extension = createReactExtensionDefinition({
-	kind: FILES_EXTENSION_KIND,
-	label: "Files",
+	manifest: parseExtensionManifest(
+		"bundled:atelier_files/manifest.json",
+		JSON.stringify(manifestJson),
+	),
 	description: "Browse and pin project documents.",
 	icon: Files,
-	component: ({ context }) => (
-		<LixProvider lix={context.lix}>
-			<FilesView context={context} />
+	component: ({ atelier, view }) => (
+		<LixProvider lix={atelier.lix}>
+			<FilesView
+				context={{
+					openFile: ({ panel: _panel, ...args }) => atelier.files.open(args),
+					closeFileViews: ({ fileId }) => atelier.files.close(fileId),
+					checkpointDiff: atelier.revisions.current,
+					activeFileId: atelier.files.active?.id ?? null,
+					activeFilePath: atelier.files.active?.path ?? null,
+					isPanelFocused: view.isFocused,
+					panelSide: view.panel,
+					viewInstance: view.instanceId,
+					isActiveView: view.isActive,
+					registerNewFileDraftHandler: ({ handler }) =>
+						view.registerNewFileDraftHandler(handler),
+				}}
+			/>
 		</LixProvider>
 	),
 });

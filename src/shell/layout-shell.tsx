@@ -22,12 +22,11 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { useLix } from "@/lib/lix-react";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix, SqlParam } from "@lix-js/sdk";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
-import { FlashtypeMenu } from "./top-bar/flashtype-menu";
 import { StatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import type {
@@ -44,13 +43,6 @@ import {
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb, sql } from "@/lib/lix-kysely";
 import {
-	captureTelemetry,
-	fileExtensionProperty,
-	normalizeTelemetryFileExtension,
-	workspaceTelemetryProperties,
-} from "@/lib/telemetry";
-import { readWorkspaceId } from "@/lib/workspace-profile-telemetry";
-import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
 } from "../extension-runtime/extension-host-registry";
@@ -59,7 +51,6 @@ import type {
 	PanelState,
 	ExtensionInstance,
 	ExtensionKind,
-	ExtensionLaunchArgs,
 	ExtensionState,
 	ExtensionDefinition,
 } from "../extension-runtime/types";
@@ -68,7 +59,10 @@ import {
 	ExtensionRegistryProvider,
 	useExtensionRegistry,
 } from "../extension-runtime/extension-registry";
-import { loadInstalledExtensionsFromLix } from "../extension-runtime/installed-extension-loader";
+import {
+	loadInstalledExtensionsFromLix,
+	reconcileInstalledExtensionCandidates,
+} from "../extension-runtime/installed-extension-loader";
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
@@ -76,17 +70,14 @@ import {
 	FILE_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 } from "../extension-runtime/extension-instance-helpers";
+import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
 import {
-	fileExtensionFromPath,
-	findFileHandlerExtension,
-} from "../extension-runtime/file-handlers";
-import {
-	coerceFlashtypeUiState,
-	DEFAULT_FLASHTYPE_UI_STATE,
-	FLASHTYPE_UI_STATE_KEY,
+	coerceAtelierUiState,
+	DEFAULT_ATELIER_UI_STATE,
+	ATELIER_UI_STATE_KEY,
 	normalizeLayoutSizes,
 	type PanelLayoutSizes,
-	type FlashtypeUiState,
+	type AtelierUiState,
 } from "./ui-state";
 import {
 	activatePanelExtension,
@@ -97,9 +88,7 @@ import {
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
 import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
-import {
-	getFileDataAtCommit,
-} from "./external-write-review-history";
+import { getFileDataAtCommit } from "./external-write-review-history";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
 
 type NewFileDraftHandlerRegistration = {
@@ -109,18 +98,15 @@ type NewFileDraftHandlerRegistration = {
 	readonly handler: () => void;
 };
 
-const LEGACY_CHECKPOINT_DIFF_INSTANCE_PREFIX = "checkpoint-diff:";
-const LEGACY_CHECKPOINT_DIFF_REVIEW_ID_STATE_KEY = "checkpointDiffReviewId";
-const LEGACY_CHECKPOINT_DIFF_BRANCH_ID_STATE_KEY = "checkpointDiffBranchId";
-
-const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
-	const { launchArgs: _omitLaunch, ...rest } = view as any;
-	const state = sanitizeExtensionStateForPersistence(rest.state);
+const sanitizeExtensionInstanceForPersistence = (
+	view: ExtensionInstance,
+): ExtensionInstance => {
+	const state = sanitizeExtensionStateForPersistence(view.state);
 	if (state === undefined) {
-		const { state: _omitState, ...viewWithoutState } = rest;
+		const { state: _omitState, ...viewWithoutState } = view;
 		return viewWithoutState;
 	}
-	return { ...rest, state };
+	return { ...view, state };
 };
 
 const sanitizeExtensionStateForPersistence = (
@@ -188,15 +174,6 @@ const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
 const activeFilePathFromPanel = (panel: PanelState): string | null => {
 	const rawPath = activeEntryFromPanel(panel)?.state?.filePath;
 	return typeof rawPath === "string" && rawPath.length > 0 ? rawPath : null;
-};
-
-const isLegacyCheckpointDiffView = (view: ExtensionInstance): boolean => {
-	return (
-		view.instance.startsWith(LEGACY_CHECKPOINT_DIFF_INSTANCE_PREFIX) ||
-		typeof view.state?.[LEGACY_CHECKPOINT_DIFF_REVIEW_ID_STATE_KEY] ===
-			"string" ||
-		typeof view.state?.[LEGACY_CHECKPOINT_DIFF_BRANCH_ID_STATE_KEY] === "string"
-	);
 };
 
 const isDocumentView = (view: ExtensionInstance): boolean => {
@@ -279,9 +256,7 @@ const sanitizePanels = (
 	panels: Record<PanelSide, PanelState>,
 ): Record<PanelSide, PanelState> => {
 	const sanitizePanel = (panel: PanelState): PanelState => {
-		const views = panel.views
-			.filter((view) => !isLegacyCheckpointDiffView(view))
-			.map(stripLaunchArgs);
+		const views = panel.views.map(sanitizeExtensionInstanceForPersistence);
 		const activeInstance = views.some(
 			(view) => view.instance === panel.activeInstance,
 		)
@@ -298,7 +273,7 @@ const sanitizePanels = (
 	};
 };
 
-const hydratePanel = (
+const reconcilePanelExtensionViews = (
 	panel: PanelState,
 	extensionMap: Map<ExtensionKind, ExtensionDefinition>,
 	options: { preserveUnknownKinds?: boolean } = {},
@@ -306,9 +281,7 @@ const hydratePanel = (
 	const views = panel.views
 		// Drop unknown view keys that might linger in persisted UI state.
 		.filter(
-			(view) =>
-				!isLegacyCheckpointDiffView(view) &&
-				(options.preserveUnknownKinds || extensionMap.has(view.kind)),
+			(view) => options.preserveUnknownKinds || extensionMap.has(view.kind),
 		);
 	if (views.length === 0) {
 		return { views, activeInstance: null };
@@ -323,9 +296,9 @@ const hydratePanel = (
 	};
 };
 
-export const hydratePanelForExtensions = hydratePanel;
+export const reconcilePersistedExtensionViews = reconcilePanelExtensionViews;
 
-const hydratePanelForDocumentSlot = (
+const reconcilePanelExtensionViewsForDocumentSlot = (
 	side: PanelSide,
 	panel: PanelState,
 	extensionMap: Map<ExtensionKind, ExtensionDefinition>,
@@ -333,7 +306,7 @@ const hydratePanelForDocumentSlot = (
 ): PanelState =>
 	normalizePanelForDocumentSlot(
 		side,
-		hydratePanel(panel, extensionMap, options),
+		reconcilePanelExtensionViews(panel, extensionMap, options),
 	);
 
 async function readCurrentLixFileIds(lix: Lix): Promise<ReadonlySet<string>> {
@@ -350,10 +323,6 @@ function transitionCheckpointEditorRevisionPanel(args: {
 	const views: ExtensionInstance[] = [];
 	let changed = false;
 	for (const view of args.panel.views) {
-		if (isLegacyCheckpointDiffView(view)) {
-			changed = true;
-			continue;
-		}
 		let nextView = view;
 		if (isCheckpointEditorRevisionView(nextView, args.previousDiff)) {
 			const fileId =
@@ -445,9 +414,9 @@ const DEFAULT_PANEL_FALLBACK_SIZES = {
 };
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
-const INSTALLED_EXTENSION_PATH_PREFIX = "/.lix/app_data/flashtype/extensions/";
+const INSTALLED_EXTENSION_PATH_PREFIX = "/.lix/app_data/atelier/extensions/";
 const INSTALLED_EXTENSION_PATH_PREFIX_UPPER_BOUND =
-	"/.lix/app_data/flashtype/extensions0";
+	"/.lix/app_data/atelier/extensions0";
 const INSTALLED_EXTENSION_OBSERVE_SQL =
 	"SELECT path, data FROM lix_file WHERE path >= ? AND path < ?";
 const PANEL_TRANSITION_STYLE: CSSProperties = {
@@ -510,8 +479,8 @@ type LayoutShellContentProps = object;
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly lix: ReturnType<typeof useLix>;
-	readonly uiStateKV: FlashtypeUiState | null;
-	readonly setUiStateKV: (newValue: FlashtypeUiState) => Promise<void>;
+	readonly uiStateKV: AtelierUiState | null;
+	readonly setUiStateKV: (newValue: AtelierUiState) => Promise<void>;
 	readonly activeFileId: string | null;
 	readonly setActiveFileId: (newValue: string | null) => Promise<void>;
 };
@@ -624,14 +593,12 @@ function useCurrentCheckpointChangeState(
 
 		const branchesQuery = visibleCheckpointBranchesQuery(lix).compile();
 		const activeBranchQuery = activeCheckpointBranchQuery(lix).compile();
-		const branchEvents = lix.observe(
-			branchesQuery.sql,
-			branchesQuery.parameters,
-		);
-		const activeBranchEvents = lix.observe(
-			activeBranchQuery.sql,
-			activeBranchQuery.parameters,
-		);
+		const branchEvents = lix.observe(branchesQuery.sql, [
+			...branchesQuery.parameters,
+		] as SqlParam[]);
+		const activeBranchEvents = lix.observe(activeBranchQuery.sql, [
+			...activeBranchQuery.parameters,
+		] as SqlParam[]);
 		const observe = async (events: typeof branchEvents) => {
 			try {
 				while (!closed) {
@@ -780,29 +747,6 @@ function CurrentCheckpointFooterReviewButton({
 	);
 }
 
-function documentOpenAttemptTelemetryProperties({
-	filePath,
-	handler,
-}: {
-	readonly filePath: string;
-	readonly handler: ExtensionDefinition | undefined;
-}) {
-	const fileExtension = fileExtensionFromPath(filePath);
-	if (handler) {
-		return {
-			document_open_result: "viewed",
-			file_extension: fileExtensionProperty(filePath),
-		};
-	}
-	return {
-		document_open_result: "unsupported",
-		file_extension: fileExtension
-			? normalizeTelemetryFileExtension(fileExtension)
-			: "(none)",
-		unsupported_reason: fileExtension ? "no_renderer" : "no_extension",
-	};
-}
-
 function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
 	if (!target || !(target instanceof HTMLElement)) {
 		return false;
@@ -834,7 +778,7 @@ function LayoutShellUiStateLoader(
 		readonly lix: ReturnType<typeof useLix>;
 	},
 ) {
-	const [uiStateKV, setUiStateKV] = useKeyValue(FLASHTYPE_UI_STATE_KEY);
+	const [uiStateKV, setUiStateKV] = useKeyValue(ATELIER_UI_STATE_KEY);
 	return (
 		<LayoutShellActiveFileLoader
 			{...props}
@@ -847,13 +791,11 @@ function LayoutShellUiStateLoader(
 function LayoutShellActiveFileLoader(
 	props: LayoutShellContentProps & {
 		readonly lix: ReturnType<typeof useLix>;
-		readonly uiStateKV: FlashtypeUiState | null;
-		readonly setUiStateKV: (newValue: FlashtypeUiState) => Promise<void>;
+		readonly uiStateKV: AtelierUiState | null;
+		readonly setUiStateKV: (newValue: AtelierUiState) => Promise<void>;
 	},
 ) {
-	const [activeFileId, setActiveFileId] = useKeyValue(
-		"flashtype_active_file_id",
-	);
+	const [activeFileId, setActiveFileId] = useKeyValue("atelier_active_file_id");
 	return (
 		<LayoutShellLoadedContent
 			{...props}
@@ -872,10 +814,12 @@ function LayoutShellLoadedContent({
 }: LayoutShellLoadedContentProps) {
 	const [hasLoadedInstalledExtensions, setHasLoadedInstalledExtensions] =
 		useState(false);
-	const { extensionMap, replaceInstalledExtensions, clearInstalledExtensions } =
-		useExtensionRegistry();
+	const installedExtensionsByManifestRef = useRef(
+		new Map<string, ExtensionDefinition>(),
+	);
+	const { extensionMap, replaceInstalledExtensions } = useExtensionRegistry();
 	const uiState = useMemo(
-		() => coerceFlashtypeUiState(uiStateKV ?? DEFAULT_FLASHTYPE_UI_STATE),
+		() => coerceAtelierUiState(uiStateKV ?? DEFAULT_ATELIER_UI_STATE),
 		[uiStateKV],
 	);
 
@@ -885,7 +829,7 @@ function LayoutShellLoadedContent({
 	}, [uiState]);
 
 	const [leftPanel, setLeftPanel] = useState<PanelState>(() =>
-		hydratePanelForDocumentSlot(
+		reconcilePanelExtensionViewsForDocumentSlot(
 			"left",
 			sanitizedPersistedPanels.left,
 			extensionMap,
@@ -895,7 +839,7 @@ function LayoutShellLoadedContent({
 		),
 	);
 	const [centralPanel, setCentralPanel] = useState<PanelState>(() =>
-		hydratePanelForDocumentSlot(
+		reconcilePanelExtensionViewsForDocumentSlot(
 			"central",
 			sanitizedPersistedPanels.central,
 			extensionMap,
@@ -905,7 +849,7 @@ function LayoutShellLoadedContent({
 		),
 	);
 	const [rightPanel, setRightPanel] = useState<PanelState>(() =>
-		hydratePanelForDocumentSlot(
+		reconcilePanelExtensionViewsForDocumentSlot(
 			"right",
 			sanitizedPersistedPanels.right,
 			extensionMap,
@@ -947,49 +891,19 @@ function LayoutShellLoadedContent({
 	});
 	const leftPanelRef = useRef<ImperativePanelHandle | null>(null);
 	const rightPanelRef = useRef<ImperativePanelHandle | null>(null);
-	const diffOpenedReviewIdsRef = useRef(new Set<string>());
-	const diffResolvedReviewIdsRef = useRef(new Set<string>());
+	const resolvedReviewIdsRef = useRef(new Set<string>());
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
 	);
-	const resolveDiffReviewTelemetryRef = useRef<
-		| ((
-				review: ExternalWriteReview,
-				outcome: "accepted" | "abandoned" | "rejected",
-		  ) => boolean)
-		| null
+	const resolveDiffReviewRef = useRef<
+		((review: ExternalWriteReview) => boolean) | null
 	>(null);
-	const workspaceIdRef = useRef<string | undefined>(undefined);
 	const panelStatesRef = useRef({
 		left: leftPanel,
 		central: centralPanel,
 		right: rightPanel,
 	});
 	const viewHostRegistry = useExtensionHostRegistry();
-
-	const captureWorkspaceTelemetry = useCallback(
-		(
-			event: Parameters<typeof captureTelemetry>[0],
-			properties: Parameters<typeof captureTelemetry>[1] = {},
-		) => {
-			void (async () => {
-				const workspaceId =
-					workspaceIdRef.current ?? (await readWorkspaceId(lix));
-				workspaceIdRef.current = workspaceId;
-				captureTelemetry(event, {
-					...properties,
-					...workspaceTelemetryProperties(workspaceId),
-				});
-			})().catch((error: unknown) => {
-				console.warn("Failed to capture workspace telemetry", error);
-			});
-		},
-		[lix],
-	);
-
-	useEffect(() => {
-		workspaceIdRef.current = undefined;
-	}, [lix]);
 
 	useEffect(() => {
 		panelStatesRef.current = {
@@ -1001,10 +915,10 @@ function LayoutShellLoadedContent({
 
 	const claimDiffReviewResolution = useCallback(
 		(review: ExternalWriteReview) => {
-			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) {
+			if (resolvedReviewIdsRef.current.has(review.reviewId)) {
 				return false;
 			}
-			diffResolvedReviewIdsRef.current.add(review.reviewId);
+			resolvedReviewIdsRef.current.add(review.reviewId);
 			return true;
 		},
 		[],
@@ -1012,24 +926,16 @@ function LayoutShellLoadedContent({
 
 	const registerExternalWriteReview = useCallback(
 		(review: ExternalWriteReview) => {
-			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) {
+			if (resolvedReviewIdsRef.current.has(review.reviewId)) {
 				return () => {};
 			}
 			const existingReview = openDiffReviewByFileIdRef.current.get(
 				review.fileId,
 			);
 			if (existingReview && existingReview.reviewId !== review.reviewId) {
-				resolveDiffReviewTelemetryRef.current?.(existingReview, "abandoned");
+				resolveDiffReviewRef.current?.(existingReview);
 			}
 			openDiffReviewByFileIdRef.current.set(review.fileId, review);
-			if (!diffOpenedReviewIdsRef.current.has(review.reviewId)) {
-				diffOpenedReviewIdsRef.current.add(review.reviewId);
-				captureWorkspaceTelemetry("diff_opened", {
-					diff_review_id: review.reviewId,
-					file_extension: fileExtensionProperty(review.path),
-					source: "renderer",
-				});
-			}
 			return () => {
 				const current = openDiffReviewByFileIdRef.current.get(review.fileId);
 				if (current?.reviewId === review.reviewId) {
@@ -1037,29 +943,11 @@ function LayoutShellLoadedContent({
 				}
 			};
 		},
-		[captureWorkspaceTelemetry],
+		[],
 	);
 
-	const captureDiffResolvedTelemetry = useCallback(
-		(
-			review: ExternalWriteReview,
-			outcome: "accepted" | "abandoned" | "rejected",
-		) => {
-			captureWorkspaceTelemetry("diff_resolved", {
-				diff_review_id: review.reviewId,
-				file_extension: fileExtensionProperty(review.path),
-				outcome,
-				source: "renderer",
-			});
-		},
-		[captureWorkspaceTelemetry],
-	);
-
-	const resolveDiffReviewTelemetry = useCallback(
-		(
-			review: ExternalWriteReview,
-			outcome: "accepted" | "abandoned" | "rejected",
-		) => {
+	const resolveDiffReview = useCallback(
+		(review: ExternalWriteReview) => {
 			if (!claimDiffReviewResolution(review)) {
 				return false;
 			}
@@ -1067,12 +955,11 @@ function LayoutShellLoadedContent({
 			if (openReview?.reviewId === review.reviewId) {
 				openDiffReviewByFileIdRef.current.delete(review.fileId);
 			}
-			captureDiffResolvedTelemetry(review, outcome);
 			return true;
 		},
-		[claimDiffReviewResolution, captureDiffResolvedTelemetry],
+		[claimDiffReviewResolution],
 	);
-	resolveDiffReviewTelemetryRef.current = resolveDiffReviewTelemetry;
+	resolveDiffReviewRef.current = resolveDiffReview;
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -1089,35 +976,40 @@ function LayoutShellLoadedContent({
 	useEffect(() => {
 		let cancelled = false;
 		let debounceId: number | null = null;
-		let reloadPromise: Promise<void> | null = null;
+		let reloadRunning = false;
+		let reloadRequested = false;
 
 		const reloadInstalledExtensions = async () => {
-			if (reloadPromise) {
-				await reloadPromise;
-				return;
-			}
-			reloadPromise = (async () => {
-				try {
-					const installed = await loadInstalledExtensionsFromLix(lix);
-					if (!cancelled) {
-						replaceInstalledExtensions(installed);
-						setHasLoadedInstalledExtensions(true);
-					}
-				} catch (error) {
-					console.warn(
-						"[extension-loader] failed to load installed extensions",
-						error,
-					);
-					if (!cancelled) {
-						clearInstalledExtensions();
-						setHasLoadedInstalledExtensions(true);
+			reloadRequested = true;
+			if (reloadRunning) return;
+			reloadRunning = true;
+			try {
+				while (reloadRequested && !cancelled) {
+					reloadRequested = false;
+					const previous = installedExtensionsByManifestRef.current;
+					try {
+						const candidates = await loadInstalledExtensionsFromLix(lix);
+						if (!cancelled) {
+							const next = reconcileInstalledExtensionCandidates(
+								previous,
+								candidates,
+							);
+							installedExtensionsByManifestRef.current = next;
+							replaceInstalledExtensions([...next.values()]);
+							setHasLoadedInstalledExtensions(true);
+						}
+					} catch (error) {
+						console.warn(
+							"[extension-loader] failed to load installed extensions",
+							error,
+						);
+						if (!cancelled) {
+							setHasLoadedInstalledExtensions(true);
+						}
 					}
 				}
-			})();
-			try {
-				await reloadPromise;
 			} finally {
-				reloadPromise = null;
+				reloadRunning = false;
 			}
 		};
 
@@ -1161,10 +1053,10 @@ function LayoutShellLoadedContent({
 			}
 			observeEvents.close();
 		};
-	}, [lix, replaceInstalledExtensions, clearInstalledExtensions]);
+	}, [lix, replaceInstalledExtensions]);
 
 	const lastPersistedRef = useRef<string>(
-		JSON.stringify(uiStateKV ?? DEFAULT_FLASHTYPE_UI_STATE),
+		JSON.stringify(uiStateKV ?? DEFAULT_ATELIER_UI_STATE),
 	);
 	const pendingPersistRef = useRef<string | null>(null);
 	const hydratingRef = useRef(false);
@@ -1184,7 +1076,7 @@ function LayoutShellLoadedContent({
 	);
 
 	useEffect(() => {
-		const hydrateOptions = {
+		const reconciliationOptions = {
 			preserveUnknownKinds: !hasLoadedInstalledExtensions,
 		};
 		if (!uiStateKV) return;
@@ -1204,31 +1096,31 @@ function LayoutShellLoadedContent({
 		setLeftPanel((prev) =>
 			prev === sanitizedPersistedPanels.left
 				? prev
-				: hydratePanelForDocumentSlot(
+				: reconcilePanelExtensionViewsForDocumentSlot(
 						"left",
 						sanitizedPersistedPanels.left,
 						extensionMap,
-						hydrateOptions,
+						reconciliationOptions,
 					),
 		);
 		setCentralPanel((prev) =>
 			prev === sanitizedPersistedPanels.central
 				? prev
-				: hydratePanelForDocumentSlot(
+				: reconcilePanelExtensionViewsForDocumentSlot(
 						"central",
 						sanitizedPersistedPanels.central,
 						extensionMap,
-						hydrateOptions,
+						reconciliationOptions,
 					),
 		);
 		setRightPanel((prev) =>
 			prev === sanitizedPersistedPanels.right
 				? prev
-				: hydratePanelForDocumentSlot(
+				: reconcilePanelExtensionViewsForDocumentSlot(
 						"right",
 						sanitizedPersistedPanels.right,
 						extensionMap,
-						hydrateOptions,
+						reconciliationOptions,
 					),
 		);
 		setFocusedPanel((prev) =>
@@ -1261,38 +1153,38 @@ function LayoutShellLoadedContent({
 	]);
 
 	useEffect(() => {
-		const hydrateOptions = {
+		const reconciliationOptions = {
 			preserveUnknownKinds: !hasLoadedInstalledExtensions,
 		};
 		setLeftPanel((current) =>
-			hydratePanelForDocumentSlot(
+			reconcilePanelExtensionViewsForDocumentSlot(
 				"left",
 				current,
 				extensionMap,
-				hydrateOptions,
+				reconciliationOptions,
 			),
 		);
 		setCentralPanel((current) =>
-			hydratePanelForDocumentSlot(
+			reconcilePanelExtensionViewsForDocumentSlot(
 				"central",
 				current,
 				extensionMap,
-				hydrateOptions,
+				reconciliationOptions,
 			),
 		);
 		setRightPanel((current) =>
-			hydratePanelForDocumentSlot(
+			reconcilePanelExtensionViewsForDocumentSlot(
 				"right",
 				current,
 				extensionMap,
-				hydrateOptions,
+				reconciliationOptions,
 			),
 		);
 	}, [extensionMap, hasLoadedInstalledExtensions]);
 
 	useEffect(() => {
 		if (hydratingRef.current) return;
-		const nextState: FlashtypeUiState = {
+		const nextState: AtelierUiState = {
 			focusedPanel,
 			panels: sanitizePanels({
 				left: leftPanel,
@@ -1334,11 +1226,16 @@ function LayoutShellLoadedContent({
 			options: { focus?: boolean } = {},
 		) => {
 			const applyReducer = (prev: PanelState) => {
-				const next = hydratePanel(
+				const next = reconcilePanelExtensionViews(
 					reducer(
-						hydratePanelForDocumentSlot(side, prev, extensionMap, {
-							preserveUnknownKinds: !hasLoadedInstalledExtensions,
-						}),
+						reconcilePanelExtensionViewsForDocumentSlot(
+							side,
+							prev,
+							extensionMap,
+							{
+								preserveUnknownKinds: !hasLoadedInstalledExtensions,
+							},
+						),
 					),
 					extensionMap,
 					{ preserveUnknownKinds: !hasLoadedInstalledExtensions },
@@ -1468,7 +1365,6 @@ function LayoutShellLoadedContent({
 			panel,
 			kind,
 			state,
-			launchArgs,
 			focus = true,
 			instance,
 			pending = false,
@@ -1476,7 +1372,6 @@ function LayoutShellLoadedContent({
 			panel: PanelSide;
 			kind: ExtensionKind;
 			state?: ExtensionState;
-			launchArgs?: ExtensionLaunchArgs;
 			focus?: boolean;
 			instance?: string;
 			pending?: boolean;
@@ -1486,7 +1381,6 @@ function LayoutShellLoadedContent({
 					instance: instance ?? "",
 					kind,
 					state,
-					launchArgs,
 					isPending: pending || undefined,
 				};
 				if (!isDocumentView(candidate)) return;
@@ -1501,28 +1395,20 @@ function LayoutShellLoadedContent({
 							instance: targetInstance,
 							kind,
 							state,
-							launchArgs,
 							isPending: true,
 						};
-						return upsertPendingExtension(current, nextView, {
-							activate: true,
-						});
+						return upsertPendingExtension(current, nextView);
 					}
 					if (!instance) {
 						const existing = current.views.find((entry) => entry.kind === kind);
 						if (existing) {
-							const views =
-								state || launchArgs
-									? current.views.map((entry) =>
-											entry.instance === existing.instance
-												? {
-														...entry,
-														state: state ?? entry.state,
-														launchArgs: launchArgs ?? entry.launchArgs,
-													}
-												: entry,
-										)
-									: current.views;
+							const views = state
+								? current.views.map((entry) =>
+										entry.instance === existing.instance
+											? { ...entry, state }
+											: entry,
+									)
+								: current.views;
 							return {
 								views,
 								activeInstance: existing.instance,
@@ -1540,7 +1426,6 @@ function LayoutShellLoadedContent({
 										...entry,
 										kind,
 										state: state ?? entry.state,
-										launchArgs: launchArgs ?? entry.launchArgs,
 									}
 								: entry,
 						);
@@ -1553,7 +1438,6 @@ function LayoutShellLoadedContent({
 						instance: targetInstance,
 						kind,
 						state,
-						launchArgs,
 					};
 					return {
 						views: [...current.views, nextView],
@@ -1573,46 +1457,20 @@ function LayoutShellLoadedContent({
 			filePath,
 			instance,
 			state,
-			launchArgs,
 			focus = true,
 			pending = false,
-			documentOrigin = "existing",
-			trackTelemetry = true,
-			trackDocumentOpenAttempt = trackTelemetry,
-			trackDocumentViewed = trackTelemetry,
 		}: {
 			panel: PanelSide;
 			fileId: string;
 			filePath: string;
 			instance?: string;
 			state?: ExtensionState;
-			launchArgs?: ExtensionLaunchArgs;
 			focus?: boolean;
 			pending?: boolean;
-			documentOrigin?: "existing" | "new";
-			trackTelemetry?: boolean;
-			trackDocumentOpenAttempt?: boolean;
-			trackDocumentViewed?: boolean;
 		}) => {
 			const handler =
 				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
-			if (trackDocumentOpenAttempt) {
-				captureWorkspaceTelemetry("document_open_attempted", {
-					...documentOpenAttemptTelemetryProperties({ filePath, handler }),
-					document_origin: documentOrigin,
-					source: "renderer",
-					view_kind: kind,
-				});
-			}
-			if (trackDocumentViewed && handler) {
-				captureWorkspaceTelemetry("document_viewed", {
-					document_origin: documentOrigin,
-					file_extension: fileExtensionProperty(filePath),
-					source: "renderer",
-					view_kind: kind,
-				});
-			}
 			handleOpenView({
 				panel: "central",
 				kind,
@@ -1621,12 +1479,11 @@ function LayoutShellLoadedContent({
 					...buildFileExtensionProps({ fileId, filePath }),
 					...(state ?? {}),
 				},
-				launchArgs,
 				focus,
 				pending,
 			});
 		},
-		[handleOpenView, extensionMap, captureWorkspaceTelemetry],
+		[handleOpenView, extensionMap],
 	);
 
 	const showCheckpointDiff = useCallback(
@@ -1657,25 +1514,15 @@ function LayoutShellLoadedContent({
 			fileId: _requestedFileId,
 			filePath,
 			state,
-			launchArgs,
 			focus,
 			pending,
-			documentOrigin,
-			trackTelemetry,
-			trackDocumentOpenAttempt,
-			trackDocumentViewed,
 		}: {
 			panel: PanelSide;
 			fileId: string;
 			filePath: string;
 			state?: ExtensionState;
-			launchArgs?: ExtensionLaunchArgs;
 			focus?: boolean;
 			pending?: boolean;
-			documentOrigin?: "existing" | "new";
-			trackTelemetry?: boolean;
-			trackDocumentOpenAttempt?: boolean;
-			trackDocumentViewed?: boolean;
 		}) => {
 			if (hasHistoricalEditorRevisionState(state)) {
 				openResolvedFileView({
@@ -1683,13 +1530,8 @@ function LayoutShellLoadedContent({
 					fileId: _requestedFileId,
 					filePath,
 					state,
-					launchArgs,
 					focus,
 					pending,
-					documentOrigin,
-					trackTelemetry,
-					trackDocumentOpenAttempt,
-					trackDocumentViewed,
 				});
 				return;
 			}
@@ -1714,13 +1556,8 @@ function LayoutShellLoadedContent({
 				fileId: resolvedFile.id,
 				filePath: resolvedFile.path,
 				state,
-				launchArgs,
 				focus,
 				pending,
-				documentOrigin,
-				trackTelemetry,
-				trackDocumentOpenAttempt,
-				trackDocumentViewed,
 			});
 		},
 		[lix, openResolvedFileView],
@@ -1775,23 +1612,15 @@ function LayoutShellLoadedContent({
 			if (!review) {
 				return;
 			}
-			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
+			if (resolvedReviewIdsRef.current.has(review.reviewId)) return;
 			await clearAgentTurnCommitRangeFile(lix, {
 				fileId: review.fileId,
 				reviewId: review.reviewId,
 				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
-			const outcome = (await isExternalWriteReviewCurrent(review))
-				? "accepted"
-				: "abandoned";
-			resolveDiffReviewTelemetry(review, outcome);
+			resolveDiffReview(review);
 		},
-		[
-			lix,
-			getExternalWriteReviewForFile,
-			isExternalWriteReviewCurrent,
-			resolveDiffReviewTelemetry,
-		],
+		[lix, getExternalWriteReviewForFile, resolveDiffReview],
 	);
 
 	const handleRejectExternalWriteReview = useCallback(
@@ -1804,14 +1633,14 @@ function LayoutShellLoadedContent({
 			if (!review) {
 				return;
 			}
-			if (diffResolvedReviewIdsRef.current.has(review.reviewId)) return;
+			if (resolvedReviewIdsRef.current.has(review.reviewId)) return;
 			if (!(await isExternalWriteReviewCurrent(review))) {
 				await clearAgentTurnCommitRangeFile(lix, {
 					fileId: review.fileId,
 					reviewId: review.reviewId,
 					agentTurnRangeIds: review.agentTurnRangeIds,
 				});
-				resolveDiffReviewTelemetry(review, "abandoned");
+				resolveDiffReview(review);
 				return;
 			}
 			const beforeData = await getFileDataAtCommit(
@@ -1825,11 +1654,11 @@ function LayoutShellLoadedContent({
 					reviewId: review.reviewId,
 					agentTurnRangeIds: review.agentTurnRangeIds,
 				});
-				resolveDiffReviewTelemetry(review, "abandoned");
+				resolveDiffReview(review);
 				return;
 			}
 			const { fileId } = args;
-			const result = await qb(lix)
+			await qb(lix)
 				.updateTable("lix_file")
 				.set({ data: beforeData })
 				.where("id", "=", fileId)
@@ -1839,17 +1668,13 @@ function LayoutShellLoadedContent({
 				reviewId: review.reviewId,
 				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
-			if (Number(result.numUpdatedRows) > 0) {
-				resolveDiffReviewTelemetry(review, "rejected");
-			} else {
-				resolveDiffReviewTelemetry(review, "abandoned");
-			}
+			resolveDiffReview(review);
 		},
 		[
 			lix,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
-			resolveDiffReviewTelemetry,
+			resolveDiffReview,
 		],
 	);
 
@@ -1903,17 +1728,14 @@ function LayoutShellLoadedContent({
 				);
 				if (removed) {
 					const review = removedReview;
-					if (
-						review &&
-						!diffResolvedReviewIdsRef.current.has(review.reviewId)
-					) {
-						resolveDiffReviewTelemetry(review, "abandoned");
+					if (review && !resolvedReviewIdsRef.current.has(review.reviewId)) {
+						resolveDiffReview(review);
 					}
 					break;
 				}
 			}
 		},
-		[setPanelState, resolveDiffReviewTelemetry],
+		[setPanelState, resolveDiffReview],
 	);
 
 	const handleCloseFileViews = useCallback(
@@ -1948,13 +1770,13 @@ function LayoutShellLoadedContent({
 				if (
 					removed &&
 					removedReview &&
-					!diffResolvedReviewIdsRef.current.has(removedReview.reviewId)
+					!resolvedReviewIdsRef.current.has(removedReview.reviewId)
 				) {
-					resolveDiffReviewTelemetry(removedReview, "abandoned");
+					resolveDiffReview(removedReview);
 				}
 			}
 		},
-		[setPanelState, resolveDiffReviewTelemetry],
+		[setPanelState, resolveDiffReview],
 	);
 
 	const activeCentralEntry = useMemo(() => {
@@ -1963,14 +1785,9 @@ function LayoutShellLoadedContent({
 
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
-			// Multi-instance kinds get a fresh instance per add; single-instance
-			// kinds reuse the existing view.
-			const instance = extensionMap.get(kind)?.multiInstance
-				? createExtensionInstanceId(kind)
-				: undefined;
-			handleOpenView({ panel: side, kind, state, instance });
+			handleOpenView({ panel: side, kind, state });
 		},
-		[handleOpenView, extensionMap],
+		[handleOpenView],
 	);
 
 	const focusPanel = useCallback((side: PanelSide) => {
@@ -2164,7 +1981,6 @@ function LayoutShellLoadedContent({
 			panel: "central",
 			fileId: id,
 			filePath: path,
-			documentOrigin: "new",
 			state: { focusOnLoad: true, defaultBlock: "heading1" },
 			focus: true,
 		});
@@ -2187,7 +2003,7 @@ function LayoutShellLoadedContent({
 			return segments[segments.length - 1] ?? rawPath;
 		}
 		return (
-			(activeCentralEntry.state?.flashtype?.label as string | undefined) ??
+			(activeCentralEntry.state?.atelier?.label as string | undefined) ??
 			extensionMap.get(activeCentralEntry.kind)?.label ??
 			null
 		);
@@ -2196,10 +2012,6 @@ function LayoutShellLoadedContent({
 	const activeFilePath = useMemo(() => {
 		return activeFilePathFromPanel(centralPanel);
 	}, [centralPanel]);
-
-	const isLeftFocused = focusedPanel === "left";
-	const isCentralFocused = focusedPanel === "central";
-	const isRightFocused = focusedPanel === "right";
 
 	const addViewOnLeft = useCallback(
 		(type: ExtensionKind, state?: ExtensionState) =>
@@ -2253,126 +2065,41 @@ function LayoutShellLoadedContent({
 		[handleCloseView],
 	);
 
-	const handleMoveViewToPanel = useCallback(
-		(targetPanel: PanelSide, instance?: string) => {
-			// Find the view in any panel
-			const allViews = [
-				...leftPanel.views.map((v) => ({
-					...v,
-					sourcePanel: "left" as PanelSide,
-				})),
-				...centralPanel.views.map((v) => ({
-					...v,
-					sourcePanel: "central" as PanelSide,
-				})),
-				...rightPanel.views.map((v) => ({
-					...v,
-					sourcePanel: "right" as PanelSide,
-				})),
-			];
-
-			const viewToMove = instance
-				? allViews.find((v) => v.instance === instance)
-				: null;
-
-			if (!viewToMove) return;
-
-			const sourcePanel = viewToMove.sourcePanel;
-			if (sourcePanel === targetPanel) return;
-			if (!canPlaceViewInPanel(viewToMove, targetPanel)) return;
-
-			// Remove from source panel
-			setPanelState(sourcePanel, (panel) => {
-				const views = panel.views.filter(
-					(v) => v.instance !== viewToMove.instance,
-				);
-				const nextActive =
-					panel.activeInstance === viewToMove.instance
-						? (views[views.length - 1]?.instance ?? null)
-						: panel.activeInstance;
-				return { views, activeInstance: nextActive };
-			});
-
-			// Add to target panel
-			setPanelState(
-				targetPanel,
-				(panel) => ({
-					views: [
-						...panel.views,
-						{
-							instance: viewToMove.instance,
-							kind: viewToMove.kind,
-							state: viewToMove.state,
-							launchArgs: viewToMove.launchArgs,
-						},
-					],
-					activeInstance: viewToMove.instance,
-				}),
-				{ focus: true },
-			);
-		},
-		[leftPanel, centralPanel, rightPanel, setPanelState],
-	);
-
-	const handleResizePanel = useCallback(
-		(side: PanelSide, size: number) => {
-			const panel =
-				side === "left" ? leftPanelRef.current : rightPanelRef.current;
-			if (!panel) return;
-
-			const clampedSize = Math.max(10, Math.min(40, size));
-			setPanelSizes((prev) => ({
-				...prev,
-				[side]: clampedSize,
-			}));
-
-			if (side === "left") {
-				setIsLeftCollapsed(clampedSize <= MIN_VISIBLE_PANEL_SIZE);
-			} else {
-				setIsRightCollapsed(clampedSize <= MIN_VISIBLE_PANEL_SIZE);
-			}
-
-			schedulePanelAnimation();
-			panel.resize(clampedSize);
-		},
-		[schedulePanelAnimation],
-	);
-
-	const sharedViewContext = useMemo(
+	const extensionRuntime = useMemo(
 		() => ({
-			openExtension: handleOpenView,
-			openFile: handleOpenFile,
-			closeExtension: handleCloseView,
-			closeFileViews: handleCloseFileViews,
-			checkpointDiff,
-			showCheckpointDiff,
-			clearCheckpointDiff,
-			setTabBadgeCount: () => {},
-			moveExtensionToPanel: handleMoveViewToPanel,
-			resizePanel: handleResizePanel,
-			focusPanel: focusPanel,
-			registerNewFileDraftHandler,
-			acceptExternalWriteReview: handleAcceptExternalWriteReview,
-			rejectExternalWriteReview: handleRejectExternalWriteReview,
-			registerExternalWriteReview,
-			activeFileId: activeCentralFileId,
-			activeFilePath,
 			lix,
+			files: {
+				open: (args: {
+					fileId: string;
+					filePath: string;
+					state?: ExtensionState;
+					focus?: boolean;
+					pending?: boolean;
+				}) => handleOpenFile({ panel: "central", ...args }),
+				close: (fileId: string) => handleCloseFileViews({ fileId }),
+				active: activeCentralFileId
+					? { id: activeCentralFileId, path: activeFilePath }
+					: null,
+			},
+			revisions: {
+				current: checkpointDiff,
+				show: showCheckpointDiff,
+				clear: clearCheckpointDiff,
+			},
+			reviews: {
+				accept: handleAcceptExternalWriteReview,
+				reject: handleRejectExternalWriteReview,
+				register: registerExternalWriteReview,
+			},
 		}),
 		[
-			handleOpenView,
 			handleOpenFile,
-			handleCloseView,
 			handleCloseFileViews,
 			checkpointDiff,
 			showCheckpointDiff,
 			clearCheckpointDiff,
-			handleMoveViewToPanel,
-			handleResizePanel,
 			handleAcceptExternalWriteReview,
 			handleRejectExternalWriteReview,
-			focusPanel,
-			registerNewFileDraftHandler,
 			activeCentralFileId,
 			activeFilePath,
 			lix,
@@ -2380,28 +2107,12 @@ function LayoutShellLoadedContent({
 		],
 	);
 
-	const leftViewContext = useMemo(
+	const extensionHostContext = useMemo(
 		() => ({
-			...sharedViewContext,
-			isPanelFocused: isLeftFocused,
+			atelier: extensionRuntime,
+			registerNewFileDraftHandler,
 		}),
-		[sharedViewContext, isLeftFocused],
-	);
-
-	const centralViewContext = useMemo(
-		() => ({
-			...sharedViewContext,
-			isPanelFocused: isCentralFocused,
-		}),
-		[sharedViewContext, isCentralFocused],
-	);
-
-	const rightViewContext = useMemo(
-		() => ({
-			...sharedViewContext,
-			isPanelFocused: isRightFocused,
-		}),
-		[sharedViewContext, isRightFocused],
+		[extensionRuntime, registerNewFileDraftHandler],
 	);
 
 	useEffect(() => {
@@ -2539,17 +2250,10 @@ function LayoutShellLoadedContent({
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
 		>
-			<div
-				className="relative flex flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
-				style={{
-					// Pin the shell to the available viewport (inspector offset included) to avoid vertical scrolling.
-					height: "calc(100dvh - var(--lix-inspector-offset, 0px))",
-				}}
-			>
+			<div className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]">
 				<TopBar
 					activeFileName={activeFileName}
 					isReviewingCheckpoint={Boolean(checkpointDiff)}
-					menu={<FlashtypeMenu />}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}
@@ -2576,7 +2280,7 @@ function LayoutShellLoadedContent({
 								onSelectView={handleSelectLeftView}
 								onAddView={addViewOnLeft}
 								onRemoveView={(key) => handleRemoveView("left", key)}
-								viewContext={leftViewContext}
+								viewContext={extensionHostContext}
 							/>
 						</Panel>
 						<PanelResizeHandle className="group relative flex w-1.75 items-center justify-center">
@@ -2601,7 +2305,7 @@ function LayoutShellLoadedContent({
 										{ focus: true },
 									)
 								}
-								viewContext={centralViewContext}
+								viewContext={extensionHostContext}
 								onCreateNewFile={handleCreateNewFile}
 							/>
 						</Panel>
@@ -2627,7 +2331,7 @@ function LayoutShellLoadedContent({
 								onSelectView={handleSelectRightView}
 								onAddView={addViewOnRight}
 								onRemoveView={(key) => handleRemoveView("right", key)}
-								viewContext={rightViewContext}
+								viewContext={extensionHostContext}
 							/>
 						</Panel>
 					</PanelGroup>

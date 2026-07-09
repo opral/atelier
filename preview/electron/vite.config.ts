@@ -14,9 +14,6 @@ export default defineConfig({
 		emptyOutDir: true,
 	},
 	plugins: [react(), tailwindcss()],
-	resolve: {
-		alias: { "@": path.resolve(repositoryRoot, "src") },
-	},
 	server: {
 		fs: { allow: [repositoryRoot] },
 	},

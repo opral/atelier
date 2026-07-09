@@ -34,7 +34,8 @@ import {
 	useExternalWriteReviewData,
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
-import { CSV_EXTENSION_KIND } from "../../extension-runtime/extension-instance-helpers";
+import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
+import manifestJson from "./manifest.json";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
 import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
 import "./style.css";
@@ -781,32 +782,33 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 }
 
 export const extension = createReactExtensionDefinition({
-	kind: CSV_EXTENSION_KIND,
-	label: "CSV",
+	manifest: parseExtensionManifest(
+		"bundled:atelier_csv/manifest.json",
+		JSON.stringify(manifestJson),
+	),
 	description: "Display CSV files as a table.",
 	icon: Table2,
-	fileExtensions: ["csv"],
-	component: ({ context, instance }) => (
-		<LixProvider lix={context.lix}>
+	component: ({ atelier, view }) => (
+		<LixProvider lix={atelier.lix}>
 			<CsvView
-				fileId={instance.state?.fileId as string}
-				filePath={instance.state?.filePath as string | undefined}
-				checkpointDiff={context.checkpointDiff}
+				fileId={view.state.fileId as string}
+				filePath={view.state.filePath as string | undefined}
+				checkpointDiff={atelier.revisions.current}
 				beforeCommitId={
-					typeof instance.state?.beforeCommitId === "string"
-						? instance.state.beforeCommitId
+					typeof view.state.beforeCommitId === "string"
+						? view.state.beforeCommitId
 						: null
 				}
 				afterCommitId={
-					typeof instance.state?.afterCommitId === "string"
-						? instance.state.afterCommitId
+					typeof view.state.afterCommitId === "string"
+						? view.state.afterCommitId
 						: null
 				}
-				onAcceptReview={context.acceptExternalWriteReview}
-				onRejectReview={context.rejectExternalWriteReview}
-				registerExternalWriteReview={context.registerExternalWriteReview}
-				isActiveView={context.isActiveView ?? false}
-				isPanelFocused={context.isPanelFocused ?? false}
+				onAcceptReview={atelier.reviews.accept}
+				onRejectReview={atelier.reviews.reject}
+				registerExternalWriteReview={atelier.reviews.register}
+				isActiveView={view.isActive}
+				isPanelFocused={view.isFocused}
 			/>
 		</LixProvider>
 	),

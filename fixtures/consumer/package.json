@@ -1,0 +1,19 @@
+{
+	"name": "@opral/atelier-consumer-fixture",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"build": "tsc -p tsconfig.json --pretty false && vite build"
+	},
+	"dependencies": {
+		"@lix-js/sdk": "workspace:*",
+		"@opral/atelier": "workspace:*",
+		"react": "^19.2.0",
+		"react-dom": "^19.2.0"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.2",
+		"vite": "^7.1.3"
+	}
+}

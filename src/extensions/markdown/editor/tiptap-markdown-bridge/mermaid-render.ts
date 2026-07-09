@@ -80,7 +80,7 @@ export async function renderMermaidDiagram(
 	}
 
 	ensureMermaidInitialized();
-	const renderId = `flashtype-mermaid-${++renderCounter}`;
+	const renderId = `atelier-mermaid-${++renderCounter}`;
 	const { svg } = await mermaid.render(renderId, trimmed);
 	const wrapper = document.createElement("div");
 	wrapper.innerHTML = svg;

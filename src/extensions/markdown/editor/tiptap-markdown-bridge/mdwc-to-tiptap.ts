@@ -1,9 +1,9 @@
 // Avoid tight compile-time coupling to mdast types; operate on structural shape
 
 const SPREAD_META_KEY = "__mdwc_spread";
-export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__flashtype_empty_scaffold";
+export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__atelier_empty_scaffold";
 export const EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY =
-	"__flashtype_empty_paragraph";
+	"__atelier_empty_paragraph";
 
 export type PMMark = {
 	type: "bold" | "italic" | "strike" | "code" | "link";

@@ -2,55 +2,54 @@ import type { ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { LucideIcon } from "lucide-react";
 import type {
-	ExtensionContext,
 	ExtensionDefinition,
-	ExtensionInstance,
-	ExtensionKind,
+	ExtensionRuntime,
+	ExtensionView,
 } from "./types";
 import { normalizeFileExtensions } from "./file-handlers";
+import type { ExtensionManifest } from "./extension-manifest";
 
 type ReactRenderer = (args: {
-	context: ExtensionContext;
-	instance: ExtensionInstance;
+	atelier: ExtensionRuntime;
+	view: ExtensionView;
 }) => ReactNode;
 
-type ReactActivator = (args: {
-	context: ExtensionContext;
-	instance: ExtensionInstance;
-}) => void | (() => void);
-
 export function createReactExtensionDefinition(args: {
-	kind: ExtensionKind;
-	label: string;
+	manifest: ExtensionManifest;
 	description: string;
 	icon: LucideIcon;
-	fileExtensions?: readonly string[];
-	multiInstance?: boolean;
 	component: ReactRenderer;
-	activate?: ReactActivator;
 }): ExtensionDefinition {
-	const ROOT_SLOT = Symbol.for("flashtype.reactRoot");
+	const ROOT_SLOT = Symbol.for("atelier.reactRoot");
 
 	return {
-		kind: args.kind,
-		label: args.label,
+		kind: args.manifest.id,
+		label: args.manifest.name,
 		description: args.description,
 		icon: args.icon,
-		fileExtensions: normalizeFileExtensions(args.fileExtensions),
-		multiInstance: args.multiInstance,
-		activate: args.activate,
-		render: ({ context, instance, target }) => {
-			let root = (target as unknown as Record<symbol, Root | undefined>)[
+		fileExtensions: normalizeFileExtensions(args.manifest.fileExtensions),
+		mount: ({ atelier, view, element }) => {
+			let root = (element as unknown as Record<symbol, Root | undefined>)[
 				ROOT_SLOT
 			];
 			if (!root) {
-				root = createRoot(target);
-				(target as unknown as Record<symbol, Root | undefined>)[ROOT_SLOT] =
+				root = createRoot(element);
+				(element as unknown as Record<symbol, Root | undefined>)[ROOT_SLOT] =
 					root;
 			}
-			root.render(args.component({ context, instance }));
-			return () => {
-				root?.render(null);
+			const render = (next: {
+				atelier: ExtensionRuntime;
+				view: ExtensionView;
+			}) => root?.render(args.component(next));
+			render({ atelier, view });
+			return {
+				update: render,
+				dispose: () => {
+					root?.unmount();
+					delete (element as unknown as Record<symbol, Root | undefined>)[
+						ROOT_SLOT
+					];
+				},
 			};
 		},
 	};

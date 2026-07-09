@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import { useLix } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";

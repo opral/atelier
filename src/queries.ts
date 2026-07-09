@@ -1,4 +1,4 @@
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {

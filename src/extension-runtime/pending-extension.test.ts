@@ -35,21 +35,6 @@ describe("pending view helpers", () => {
 		expect(next.activeInstance).toBe("preview-2");
 	});
 
-	test("upsertPendingExtension can preserve the current active tab", () => {
-		const panel: PanelState = {
-			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
-			activeInstance: "files-1",
-		};
-
-		const next = upsertPendingExtension(
-			panel,
-			{ instance: "preview-1", kind: FILE_EXTENSION_KIND, isPending: true },
-			{ activate: false },
-		);
-
-		expect(next.activeInstance).toBe("files-1");
-	});
-
 	test("activatePanelExtension finalizes pending status and focuses the tab", () => {
 		const panel: PanelState = {
 			views: [
@@ -65,26 +50,6 @@ describe("pending view helpers", () => {
 		expect(next.views[1]).toMatchObject({
 			instance: "preview-1",
 			isPending: false,
-		});
-	});
-
-	test("activatePanelExtension can skip finalizing pending", () => {
-		const panel: PanelState = {
-			views: [
-				{ instance: "files-1", kind: FILES_EXTENSION_KIND },
-				{ instance: "preview-1", kind: FILE_EXTENSION_KIND, isPending: true },
-			],
-			activeInstance: "files-1",
-		};
-
-		const next = activatePanelExtension(panel, "preview-1", {
-			finalizePending: false,
-		});
-
-		expect(next.activeInstance).toBe("preview-1");
-		expect(next.views[1]).toMatchObject({
-			instance: "preview-1",
-			isPending: true,
 		});
 	});
 

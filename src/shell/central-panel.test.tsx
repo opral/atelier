@@ -3,9 +3,10 @@ import { DndContext } from "@dnd-kit/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { CentralPanel } from "./central-panel";
-import type { PanelState, ExtensionContext } from "../extension-runtime/types";
+import type { PanelState } from "../extension-runtime/types";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
+import { createExtensionHostContext } from "@/test-utils/extension-host-context";
 
 const TEST_SEARCH_EXTENSION_KIND = "test_search";
 
@@ -16,27 +17,13 @@ vi.mock("../extension-runtime/extension-registry", () => {
 			label: "Search",
 			description: "Search view",
 			icon: () => <svg></svg>,
-			render: ({
-				context,
-				target,
-			}: {
-				context: ExtensionContext;
-				target: HTMLElement;
-			}) => {
+			mount: ({ element }: { element: HTMLElement }) => {
 				const input = document.createElement("input");
 				input.setAttribute("data-testid", "search-view-input");
 				input.setAttribute("placeholder", "Search project...");
-				input.addEventListener("pointerdown", () => {
-					context.openExtension?.({
-						panel: "central",
-						kind: "test_search",
-						instance: "search-view",
-						focus: false,
-					});
-				});
-				target.replaceChildren(input);
-				return () => {
-					target.replaceChildren();
+				element.replaceChildren(input);
+				return {
+					dispose: () => element.replaceChildren(),
 				};
 			},
 		},
@@ -47,9 +34,7 @@ vi.mock("../extension-runtime/extension-registry", () => {
 		useExtensionRegistry: () => ({
 			visibleExtensions: definitions,
 			extensionMap: new Map(definitions.map((def) => [def.kind, def])),
-			installedExtensions: [],
 			replaceInstalledExtensions: () => {},
-			clearInstalledExtensions: () => {},
 		}),
 	};
 });
@@ -77,18 +62,13 @@ const renderWithProviders = async (ui: ReactNode) => {
 	return result!;
 };
 
-const createViewContext = (
-	overrides: Partial<ExtensionContext> = {},
-): ExtensionContext => ({
-	lix:
+const createViewContext = () =>
+	createExtensionHostContext(
 		lix ??
-		(() => {
-			throw new Error("Lix instance not initialized");
-		})(),
-	isPanelFocused: false,
-	setTabBadgeCount: () => {},
-	...overrides,
-});
+			(() => {
+				throw new Error("Lix instance not initialized");
+			})(),
+	);
 
 describe("CentralPanel", () => {
 	test("renders the document action without desktop agent controls", async () => {
@@ -103,7 +83,7 @@ describe("CentralPanel", () => {
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
-					viewContext={createViewContext({ isPanelFocused: true })}
+					viewContext={createViewContext()}
 					isFocused={true}
 					onFocusPanel={vi.fn()}
 					onCreateNewFile={vi.fn()}
@@ -132,7 +112,7 @@ describe("CentralPanel", () => {
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
-					viewContext={createViewContext({ isPanelFocused: true })}
+					viewContext={createViewContext()}
 					isFocused={true}
 					onFocusPanel={vi.fn()}
 				/>
@@ -162,7 +142,7 @@ describe("CentralPanel", () => {
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
-					viewContext={createViewContext({ isPanelFocused: true })}
+					viewContext={createViewContext()}
 					isFocused={true}
 					onFocusPanel={vi.fn()}
 					onFinalizePendingView={handleFinalize}

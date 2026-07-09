@@ -1,5 +1,4 @@
-import { useMemo, type ReactNode } from "react";
-import { Folder } from "lucide-react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -8,16 +7,10 @@ import {
 } from "@/components/ui/tooltip";
 
 export type TopBarProps = {
-	/** Shown as the macOS-style proxy title in the header center. */
-	readonly workspaceName?: string | null;
-	/** Active document name, shown after the workspace as a breadcrumb. */
+	/** Active document name, shown in the header center. */
 	readonly activeFileName?: string | null;
 	/** Whether the active document is being shown as a checkpoint diff. */
 	readonly isReviewingCheckpoint?: boolean;
-	/** Leading slot, e.g. the Flashtype menu. Must not require lix. */
-	readonly menu?: ReactNode;
-	/** Clicking the proxy title opens the directory picker to switch workspaces. */
-	readonly onWorkspaceTitleClick?: () => void;
 	readonly onToggleLeftSidebar?: () => void;
 	readonly onToggleRightSidebar?: () => void;
 	readonly isLeftSidebarVisible?: boolean;
@@ -25,19 +18,14 @@ export type TopBarProps = {
 };
 
 /**
- * Window header: drag region with the bolt menu, panel toggles, the workspace
- * proxy title, and outbound links. Renders without lix so the first-run
- * screen can share it.
+ * Workspace header with panel toggles and the active file name.
  *
  * @example
- * <TopBar workspaceName="blog" menu={<FlashtypeMenu />} />
+ * <TopBar activeFileName="notes.md" />
  */
 export function TopBar({
-	workspaceName = null,
 	activeFileName = null,
 	isReviewingCheckpoint = false,
-	menu,
-	onWorkspaceTitleClick,
 	onToggleLeftSidebar,
 	onToggleRightSidebar,
 	isLeftSidebarVisible = true,
@@ -59,18 +47,14 @@ export function TopBar({
 	const leftShortcut = isMacPlatform ? `${modifierKey}1` : `${modifierKey}+1`;
 	const rightShortcut = isMacPlatform ? `${modifierKey}2` : `${modifierKey}+2`;
 	return (
-		<header className="relative flex h-9 shrink-0 items-center px-3 text-[var(--color-text-secondary)] [-webkit-app-region:drag]">
-			<div
-				className={`flex min-w-0 flex-1 items-center gap-1 text-sm ${
-					isMacPlatform ? "pl-[68px]" : ""
-				}`}
-			>
+		<header className="relative flex h-9 shrink-0 items-center px-3 text-[var(--color-text-secondary)]">
+			<div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
 				<Tooltip delayDuration={500}>
 					<TooltipTrigger asChild>
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 rounded-[7px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] [-webkit-app-region:no-drag]"
+							className="h-7 w-7 rounded-[7px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -85,43 +69,17 @@ export function TopBar({
 						Toggle left panel ({leftShortcut})
 					</TooltipContent>
 				</Tooltip>
-				{menu}
 			</div>
-			{workspaceName ? (
+			{activeFileName ? (
 				<div className="pointer-events-none absolute inset-x-0 flex min-w-0 items-center justify-center px-[88px]">
-					<div className="pointer-events-auto flex min-w-0 items-center text-[12.5px] [-webkit-app-region:no-drag]">
-						<button
-							type="button"
-							onClick={onWorkspaceTitleClick}
-							disabled={!onWorkspaceTitleClick}
-							title="Switch workspace"
-							data-attr="workspace-switch"
-							className={`flex h-7 min-w-0 items-center gap-1.5 rounded-[7px] px-2 enabled:hover:bg-[var(--color-bg-hover)] ${
-								activeFileName
-									? "font-medium text-[var(--color-text-secondary)]"
-									: "font-semibold text-[var(--color-text-secondary)]"
-							}`}
-						>
-							<Folder
-								className="size-3.25 text-[var(--color-text-secondary)]"
-								strokeWidth={2}
-							/>
-							<span className="ph-mask max-w-60 truncate">{workspaceName}</span>
-						</button>
-						{activeFileName ? (
-							<>
-								<span className="mx-0.5 shrink-0 text-[var(--color-border-panel)]">
-									/
-								</span>
-								<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
-									{activeFileName}
-								</span>
-								{isReviewingCheckpoint ? (
-									<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
-										Reviewing
-									</span>
-								) : null}
-							</>
+					<div className="pointer-events-auto flex min-w-0 items-center text-[12.5px]">
+						<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
+							{activeFileName}
+						</span>
+						{isReviewingCheckpoint ? (
+							<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
+								Reviewing
+							</span>
 						) : null}
 					</div>
 				</div>
@@ -132,7 +90,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] [-webkit-app-region:no-drag]"
+							className="h-7 w-7 rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"

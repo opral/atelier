@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Puzzle } from "lucide-react";
-import { hydratePanelForExtensions } from "./layout-shell";
+import { reconcilePersistedExtensionViews } from "./layout-shell";
 import type {
 	ExtensionDefinition,
 	PanelState,
@@ -11,10 +11,10 @@ const installedExtension = {
 	label: "Notes",
 	description: "Installed notes view",
 	icon: Puzzle,
-	render: () => {},
+	mount: () => {},
 } satisfies ExtensionDefinition;
 
-describe("hydratePanelForExtensions", () => {
+describe("reconcilePersistedExtensionViews", () => {
 	test("preserves unknown persisted views before installed extensions load", () => {
 		const panel: PanelState = {
 			views: [{ instance: "notes-1", kind: installedExtension.kind }],
@@ -22,7 +22,7 @@ describe("hydratePanelForExtensions", () => {
 		};
 
 		expect(
-			hydratePanelForExtensions(panel, new Map(), {
+			reconcilePersistedExtensionViews(panel, new Map(), {
 				preserveUnknownKinds: true,
 			}),
 		).toEqual(panel);
@@ -35,7 +35,7 @@ describe("hydratePanelForExtensions", () => {
 		};
 
 		expect(
-			hydratePanelForExtensions(
+			reconcilePersistedExtensionViews(
 				panel,
 				new Map([[installedExtension.kind, installedExtension]]),
 			),
@@ -48,7 +48,7 @@ describe("hydratePanelForExtensions", () => {
 			activeInstance: "missing-1",
 		};
 
-		expect(hydratePanelForExtensions(panel, new Map())).toEqual({
+		expect(reconcilePersistedExtensionViews(panel, new Map())).toEqual({
 			views: [],
 			activeInstance: null,
 		});

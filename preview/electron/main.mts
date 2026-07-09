@@ -100,12 +100,6 @@ function registerLixIpc() {
 	ipcMain.handle("atelier:lix:switchBranch", (_event, options) =>
 		lix.switchBranch(options),
 	);
-	ipcMain.handle("atelier:lix:mergeBranchPreview", (_event, options) =>
-		lix.mergeBranchPreview(options),
-	);
-	ipcMain.handle("atelier:lix:mergeBranch", (_event, options) =>
-		lix.mergeBranch(options),
-	);
 }
 
 async function seedPreviewWorkspace() {
@@ -130,47 +124,6 @@ async function seedPreviewWorkspace() {
 			[file.id, file.path, new TextEncoder().encode(file.contents)],
 		);
 	}
-
-	const activeFileId = "preview-readme";
-	const activeFileInstance = `flashtype_file:${activeFileId}`;
-	await lix.execute(
-		"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, true, true)",
-		["flashtype_active_file_id", activeFileId],
-	);
-	await lix.execute(
-		"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, true, true)",
-		[
-			"flashtype_ui_state",
-			{
-				focusedPanel: "central",
-				panels: {
-					left: {
-						views: [{ instance: "files-default", kind: "flashtype_files" }],
-						activeInstance: "files-default",
-					},
-					central: {
-						views: [
-							{
-								instance: activeFileInstance,
-								kind: "flashtype_file",
-								state: {
-									fileId: activeFileId,
-									filePath: "/README.md",
-									flashtype: { label: "README.md" },
-								},
-							},
-						],
-						activeInstance: activeFileInstance,
-					},
-					right: {
-						views: [{ instance: "history-default", kind: "flashtype_history" }],
-						activeInstance: "history-default",
-					},
-				},
-				layout: { sizes: { left: 20, central: 50, right: 30 } },
-			},
-		],
-	);
 }
 
 async function createPreviewWindow() {

@@ -30,7 +30,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_key_value_by_branch")
 			.values({
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: "file_1",
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -61,7 +61,7 @@ describe("MarkdownView", () => {
 		await waitFor(async () => {
 			const rows = await qb(lix)
 				.selectFrom("lix_key_value_by_branch")
-				.where("key", "=", "flashtype_active_file_id")
+				.where("key", "=", "atelier_active_file_id")
 				.select(["value"])
 				.execute();
 			expect(rows[0]?.value).toBe("file_1");
@@ -414,7 +414,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_key_value_by_branch")
 			.values({
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: "existing_markdown",
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -450,7 +450,7 @@ describe("MarkdownView", () => {
 		const record = await qb(lix)
 			.selectFrom("lix_key_value_by_branch")
 			.select(["value"])
-			.where("key", "=", "flashtype_active_file_id")
+			.where("key", "=", "atelier_active_file_id")
 			.executeTakeFirst();
 		expect(record?.value).toBe("existing_markdown");
 
@@ -483,7 +483,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_key_value_by_branch")
 			.values({
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: "file_alpha",
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -515,7 +515,7 @@ describe("MarkdownView", () => {
 			const record = await qb(lix)
 				.selectFrom("lix_key_value_by_branch")
 				.select(["value"])
-				.where("key", "=", "flashtype_active_file_id")
+				.where("key", "=", "atelier_active_file_id")
 				.executeTakeFirst();
 			expect(record?.value).toBe("file_beta");
 		});

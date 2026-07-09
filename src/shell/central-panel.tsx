@@ -3,7 +3,7 @@ import { FilePlus } from "lucide-react";
 import type {
 	PanelState,
 	PanelSide,
-	ExtensionContext,
+	ExtensionHostContext,
 	ExtensionDefinition,
 } from "../extension-runtime/types";
 import { PanelV2 } from "./panel-v2";
@@ -12,7 +12,7 @@ type CentralPanelProps = {
 	readonly panel: PanelState;
 	readonly onSelectView: (key: string) => void;
 	readonly onRemoveView: (key: string) => void;
-	readonly viewContext: ExtensionContext;
+	readonly viewContext: ExtensionHostContext;
 	readonly onCreateNewFile?: () => void | Promise<void>;
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
@@ -55,7 +55,7 @@ export function CentralPanel({
 
 	const labelResolver = useCallback(
 		(view: ExtensionDefinition, entry: (typeof panel.views)[number]) =>
-			(entry.state?.flashtype?.label as string | undefined) ?? view.label,
+			(entry.state?.atelier?.label as string | undefined) ?? view.label,
 		[],
 	);
 

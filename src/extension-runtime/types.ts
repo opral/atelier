@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import type { CheckpointDiff, ShowCheckpointDiffArgs } from "./checkpoint-diff";
 import type { ExternalWriteReview } from "./external-write-review";
 
@@ -7,7 +7,7 @@ import type { ExternalWriteReview } from "./external-write-review";
  * Union of registry keys for views available in the layout.
  *
  * @example
- * const activeView: ExtensionKind = "flashtype_files";
+ * const activeView: ExtensionKind = "atelier_files";
  */
 export type ExtensionKind = string;
 
@@ -19,27 +19,19 @@ export type ExtensionKind = string;
  */
 export type ExtensionState = {
 	/**
-	 * Flashtype-managed metadata (reserved namespace).
+	 * Atelier-managed metadata (reserved namespace).
 	 */
-	readonly flashtype?: {
+	readonly atelier?: {
 		readonly label?: string;
 	};
 	readonly [key: string]: unknown;
 };
 
 /**
- * One-shot launch-time arguments that must not be persisted.
- *
- * @example
- * const launchArgs: ExtensionLaunchArgs = { initialMessage: "Summarize changes" };
- */
-export type ExtensionLaunchArgs = Record<string, unknown>;
-
-/**
  * Per-panel instance payload used to track which views are open.
  *
  * @example
- * const instance: ExtensionInstance = { instance: "files-1", kind: "flashtype_files" };
+ * const instance: ExtensionInstance = { instance: "files-1", kind: "atelier_files" };
  */
 export interface ExtensionInstance {
 	readonly instance: string;
@@ -49,10 +41,6 @@ export interface ExtensionInstance {
 	 * Persisted view state (serializable).
 	 */
 	readonly state?: ExtensionState;
-	/**
-	 * Transient launch args (never persisted).
-	 */
-	readonly launchArgs?: ExtensionLaunchArgs;
 }
 
 /**
@@ -73,109 +61,74 @@ export interface ExtensionDefinition {
 	 * fileExtensions: ["md", "markdown"]
 	 */
 	readonly fileExtensions?: readonly string[];
-	/**
-	 * Allows several instances of this extension in one panel. Single-instance
-	 * kinds are hidden from the add-view menu once open.
-	 */
-	readonly multiInstance?: boolean;
-	readonly activate?: (args: {
-		context: ExtensionContext;
-		instance: ExtensionInstance;
-	}) => void | (() => void);
-	readonly render: (args: {
-		context: ExtensionContext;
-		instance: ExtensionInstance;
-		target: HTMLElement;
-	}) => void | (() => void);
+	readonly mount: (args: {
+		atelier: ExtensionRuntime;
+		view: ExtensionView;
+		element: HTMLElement;
+		signal: AbortSignal;
+	}) => void | MountedExtension;
 }
 
-/**
- * Context passed to views for interacting with the layout.
- *
- * The host sets `isActiveView` when the view's tab is visible so consumers can
- * avoid mutating shared state while hidden.
- *
- * @example
- * context.openExtension?.({
- *   panel: "central",
- *   kind: "file-content",
- *   instance: "file-content:file-123",
- *   state: { fileId: "file-123", filePath: "/docs/guide.md" },
- *   pending: true,
- * });
- */
-export interface ExtensionContext {
-	readonly openExtension?: (args: {
-		readonly panel: PanelSide;
-		readonly kind: ExtensionKind;
-		readonly state?: ExtensionState;
-		readonly launchArgs?: ExtensionLaunchArgs;
-		readonly focus?: boolean;
-		readonly instance?: string;
-		readonly pending?: boolean;
-	}) => void;
-	readonly openFile?: (args: {
-		readonly panel: PanelSide;
-		readonly fileId: string;
-		readonly filePath: string;
-		readonly state?: ExtensionState;
-		readonly launchArgs?: ExtensionLaunchArgs;
-		readonly focus?: boolean;
-		readonly pending?: boolean;
-		readonly documentOrigin?: "existing" | "new";
-		readonly trackTelemetry?: boolean;
-		readonly trackDocumentOpenAttempt?: boolean;
-		readonly trackDocumentViewed?: boolean;
-	}) => void | Promise<void>;
-	readonly acceptExternalWriteReview?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly rejectExternalWriteReview?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly registerExternalWriteReview?: (
-		review: ExternalWriteReview,
-	) => () => void;
-	readonly checkpointDiff?: CheckpointDiff | null;
-	readonly showCheckpointDiff?: (
-		args: ShowCheckpointDiffArgs,
-	) => Promise<CheckpointDiff | null>;
-	readonly clearCheckpointDiff?: () => void;
-	readonly closeExtension?: (args: {
-		readonly panel?: PanelSide;
-		readonly instance?: string;
-		readonly kind?: ExtensionKind;
-	}) => void;
-	readonly closeFileViews?: (args: {
-		readonly panel?: PanelSide;
-		readonly fileId: string;
-	}) => void;
-	/** File id for the file currently active in the central editor panel. */
-	readonly activeFileId?: string | null;
-	/** Path for the file currently active in the central editor panel. */
-	readonly activeFilePath?: string | null;
-	readonly isPanelFocused?: boolean;
-	readonly setTabBadgeCount: (count: number | null | undefined) => void;
-	readonly moveExtensionToPanel?: (
-		targetPanel: PanelSide,
-		instance?: string,
-	) => void;
-	readonly resizePanel?: (side: PanelSide, size: number) => void;
-	readonly focusPanel?: (side: PanelSide) => void;
-	readonly panelSide?: PanelSide;
-	readonly viewInstance?: string;
-	readonly isActiveView?: boolean;
-	readonly registerNewFileDraftHandler?: (registration: {
+export interface MountedExtension {
+	update?: (args: { atelier: ExtensionRuntime; view: ExtensionView }) => void;
+	dispose?: () => void;
+}
+
+export interface ExtensionRuntime {
+	readonly lix: Lix;
+	readonly files: {
+		readonly open: (args: {
+			readonly fileId: string;
+			readonly filePath: string;
+			readonly state?: ExtensionState;
+			readonly focus?: boolean;
+			readonly pending?: boolean;
+		}) => void | Promise<void>;
+		readonly close: (fileId: string) => void;
+		readonly active: {
+			readonly id: string;
+			readonly path: string | null;
+		} | null;
+	};
+	readonly revisions: {
+		readonly current: CheckpointDiff | null;
+		readonly show: (
+			args: ShowCheckpointDiffArgs,
+		) => Promise<CheckpointDiff | null>;
+		readonly clear: () => void;
+	};
+	readonly reviews: {
+		readonly accept: (args: {
+			readonly fileId: string;
+			readonly reviewId: string;
+			readonly review?: ExternalWriteReview;
+		}) => Promise<void>;
+		readonly reject: (args: {
+			readonly fileId: string;
+			readonly reviewId: string;
+			readonly review?: ExternalWriteReview;
+		}) => Promise<void>;
+		readonly register: (review: ExternalWriteReview) => () => void;
+	};
+}
+
+export interface ExtensionView {
+	readonly instanceId: string;
+	readonly state: ExtensionState;
+	readonly panel: PanelSide;
+	readonly isActive: boolean;
+	readonly isFocused: boolean;
+	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;
+}
+
+export interface ExtensionHostContext {
+	readonly atelier: ExtensionRuntime;
+	readonly registerNewFileDraftHandler: (registration: {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
 		readonly handler: () => void;
 	}) => () => void;
-	readonly lix: Lix;
 }
 
 /**

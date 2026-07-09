@@ -197,7 +197,7 @@ const FILE_TREE_UNSAFE_CSS = `
 `;
 
 /**
- * Adapter between Flashtype's workspace-path model and @pierre/trees.
+ * Adapter between Atelier's workspace-path model and @pierre/trees.
  *
  * @example
  * <FileTree openFileView={(id) => console.log(id)} />

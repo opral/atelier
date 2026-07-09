@@ -1,7 +1,7 @@
 import { Editor } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
@@ -35,9 +35,9 @@ export const createMarkdownEditorOriginKey = (): string => {
 		typeof crypto !== "undefined" &&
 		typeof crypto.randomUUID === "function"
 	) {
-		return `flashtype.markdown-editor:${crypto.randomUUID()}`;
+		return `atelier.markdown-editor:${crypto.randomUUID()}`;
 	}
-	return `flashtype.markdown-editor:${Date.now().toString(36)}${Math.random()
+	return `atelier.markdown-editor:${Date.now().toString(36)}${Math.random()
 		.toString(36)
 		.slice(2)}`;
 };

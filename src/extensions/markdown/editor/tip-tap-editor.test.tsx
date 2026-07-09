@@ -37,7 +37,7 @@ function Providers({
 async function renderEditorForMarkdownFile({
 	fileId,
 	markdown,
-	originKey = "flashtype.markdown-editor:test-origin",
+	originKey = "atelier.markdown-editor:test-origin",
 }: {
 	fileId: string;
 	markdown: string;
@@ -52,7 +52,7 @@ async function renderEditorForMarkdownFile({
 				lixcol_global: true,
 			},
 			{
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: fileId,
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -151,7 +151,7 @@ test("renders initial document content", async () => {
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
-			key: "flashtype_active_file_id",
+			key: "atelier_active_file_id",
 			value: fileId,
 			lixcol_branch_id: "global",
 			lixcol_global: true,
@@ -186,7 +186,7 @@ test("persists state changes on edit (paragraph append)", async () => {
 				lixcol_global: true,
 			},
 			{
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: fileId,
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -263,7 +263,7 @@ test("renders content under React.StrictMode", async () => {
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
-			key: "flashtype_active_file_id",
+			key: "atelier_active_file_id",
 			value: fileId,
 			lixcol_branch_id: "global",
 			lixcol_global: true,
@@ -298,7 +298,7 @@ test("shows placeholder only while focused on an empty document", async () => {
 				lixcol_global: true,
 			},
 			{
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: fileId,
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -368,7 +368,7 @@ test("uses heading 1 as the requested empty document default", async () => {
 				lixcol_global: true,
 			},
 			{
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: fileId,
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -436,7 +436,7 @@ test("clicking the surface focuses the editor even when content exists", async (
 				lixcol_global: true,
 			},
 			{
-				key: "flashtype_active_file_id",
+				key: "atelier_active_file_id",
 				value: fileId,
 				lixcol_branch_id: "global",
 				lixcol_global: true,
@@ -506,7 +506,7 @@ test("updates editor when switching to a branch with different external state", 
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
-			key: "flashtype_active_file_id",
+			key: "atelier_active_file_id",
 			value: fileId,
 			lixcol_branch_id: "global",
 			lixcol_global: true,
@@ -572,7 +572,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
-			key: "flashtype_active_file_id",
+			key: "atelier_active_file_id",
 			value: fileId,
 			lixcol_branch_id: "global",
 			lixcol_global: true,
@@ -608,7 +608,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 });
 
 test("ignores same-origin stale markdown autosave echoes", async () => {
-	const originKey = "flashtype.markdown-editor:same-origin-stale";
+	const originKey = "atelier.markdown-editor:same-origin-stale";
 	const fileId = "file_same_origin_stale";
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
@@ -631,7 +631,7 @@ test("ignores same-origin stale markdown autosave echoes", async () => {
 });
 
 test("same-origin echo matching current markdown marks editor clean", async () => {
-	const originKey = "flashtype.markdown-editor:same-origin-clean";
+	const originKey = "atelier.markdown-editor:same-origin-clean";
 	const fileId = "file_same_origin_clean";
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
@@ -724,7 +724,7 @@ test("preserves main content when switching to a new branch and back", async () 
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
-			key: "flashtype_active_file_id",
+			key: "atelier_active_file_id",
 			value: fileId,
 			lixcol_branch_id: "global",
 			lixcol_global: true,

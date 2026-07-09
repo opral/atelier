@@ -26,9 +26,9 @@ export function AnimatedZap({
 				? "var(--color-text-tertiary)"
 				: undefined;
 	const style = {
-		"--flashtype-zap-width": typeof size === "number" ? `${size}px` : size,
-		"--flashtype-zap-fill": fill,
-		...(toneColor ? { "--flashtype-zap-color": toneColor } : {}),
+		"--atelier-zap-width": typeof size === "number" ? `${size}px` : size,
+		"--atelier-zap-fill": fill,
+		...(toneColor ? { "--atelier-zap-color": toneColor } : {}),
 	} as CSSProperties;
 	const accessibilityProps = {
 		role: label ? "img" : undefined,
@@ -40,19 +40,19 @@ export function AnimatedZap({
 		return (
 			<svg
 				{...accessibilityProps}
-				className={`flashtype-zap-build flashtype-zap-build--outline ${className}`}
+				className={`atelier-zap-build atelier-zap-build--outline ${className}`}
 				style={style}
 				viewBox="-7 -7 89 114"
 				fill="none"
 				focusable="false"
 			>
 				<path
-					className="flashtype-zap-build__outline-fill"
+					className="atelier-zap-build__outline-fill"
 					d={BOLT_PATH}
-					fill="var(--flashtype-zap-fill, var(--color-bg-app))"
+					fill="var(--atelier-zap-fill, var(--color-bg-app))"
 				/>
 				<path
-					className="flashtype-zap-build__outline-base"
+					className="atelier-zap-build__outline-base"
 					d={BOLT_PATH}
 					pathLength={100}
 					stroke="currentColor"
@@ -62,7 +62,7 @@ export function AnimatedZap({
 					vectorEffect="non-scaling-stroke"
 				/>
 				<path
-					className="flashtype-zap-build__outline-draw"
+					className="atelier-zap-build__outline-draw"
 					d={BOLT_PATH}
 					pathLength={100}
 					stroke="currentColor"
@@ -77,19 +77,19 @@ export function AnimatedZap({
 
 	return (
 		<div
-			className={`flashtype-zap-build ${className}`}
+			className={`atelier-zap-build ${className}`}
 			style={style}
 			{...accessibilityProps}
 		>
-			<div className="flashtype-zap-build__base" />
-			<div className="flashtype-zap-build__segment flashtype-zap-build__segment--top">
-				<div className="flashtype-zap-build__wipe flashtype-zap-build__wipe--top" />
+			<div className="atelier-zap-build__base" />
+			<div className="atelier-zap-build__segment atelier-zap-build__segment--top">
+				<div className="atelier-zap-build__wipe atelier-zap-build__wipe--top" />
 			</div>
-			<div className="flashtype-zap-build__segment flashtype-zap-build__segment--middle">
-				<div className="flashtype-zap-build__wipe flashtype-zap-build__wipe--middle" />
+			<div className="atelier-zap-build__segment atelier-zap-build__segment--middle">
+				<div className="atelier-zap-build__wipe atelier-zap-build__wipe--middle" />
 			</div>
-			<div className="flashtype-zap-build__segment flashtype-zap-build__segment--bottom">
-				<div className="flashtype-zap-build__wipe flashtype-zap-build__wipe--bottom" />
+			<div className="atelier-zap-build__segment atelier-zap-build__segment--bottom">
+				<div className="atelier-zap-build__wipe atelier-zap-build__wipe--bottom" />
 			</div>
 		</div>
 	);

@@ -1,6 +1,6 @@
 import {
-	DEFAULT_FLASHTYPE_UI_STATE,
-	type FlashtypeUiState,
+	DEFAULT_ATELIER_UI_STATE,
+	type AtelierUiState,
 } from "@/shell/ui-state";
 
 export type KeyValueBranchId = "active" | "global" | string;
@@ -11,10 +11,10 @@ export type KeyDef<V> = {
 	defaultValue?: V | null;
 };
 
-// Flashtype keys + per-key defaults
+// Atelier keys + per-key defaults
 export const KEY_VALUE_DEFINITIONS = {
 	// Cross-branch UI state, not change-controlled
-	flashtype_active_file_id: {
+	atelier_active_file_id: {
 		defaultBranchId: "global",
 		untracked: true,
 	} as KeyDef<string | null>,
@@ -22,24 +22,24 @@ export const KEY_VALUE_DEFINITIONS = {
 	/**
 	 * Serialized layout snapshot for the v2 prototype (panels, tabs, focus).
 	 */
-	flashtype_ui_state: {
+	atelier_ui_state: {
 		defaultBranchId: "global",
 		untracked: true,
-		defaultValue: DEFAULT_FLASHTYPE_UI_STATE,
-	} as KeyDef<FlashtypeUiState>,
+		defaultValue: DEFAULT_ATELIER_UI_STATE,
+	} as KeyDef<AtelierUiState>,
 
 	// Test-only keys used in unit tests to exercise tracked behavior
-	flashtype_test_tracked: {
+	atelier_test_tracked: {
 		defaultBranchId: "active",
 		untracked: false,
 	} as KeyDef<string | null>,
 
-	flashtype_test_tracked_external: {
+	atelier_test_tracked_external: {
 		defaultBranchId: "active",
 		untracked: false,
 	} as KeyDef<string | null>,
 
-	flashtype_test_untracked: {
+	atelier_test_untracked: {
 		defaultBranchId: "global",
 		untracked: true,
 		defaultValue: null,

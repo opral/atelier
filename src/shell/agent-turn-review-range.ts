@@ -1,8 +1,8 @@
-import type { Lix } from "@/lib/lix-types";
+import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
 
 export const AGENT_TURN_COMMIT_RANGE_KEY =
-	"flashtype_agent_turn_commit_range" as const;
+	"atelier_agent_turn_commit_range" as const;
 
 const agentTurnCommitRangeMutationQueues = new WeakMap<Lix, Promise<void>>();
 

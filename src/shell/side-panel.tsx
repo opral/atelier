@@ -2,7 +2,7 @@ import type {
 	PanelSide,
 	PanelState,
 	ExtensionKind,
-	ExtensionContext,
+	ExtensionHostContext,
 	ExtensionState,
 } from "../extension-runtime/types";
 import { PanelV2 } from "./panel-v2";
@@ -14,7 +14,7 @@ interface SidePanelProps {
 	readonly onSelectView: (key: string) => void;
 	readonly onAddView: (toolId: ExtensionKind, state?: ExtensionState) => void;
 	readonly onRemoveView: (key: string) => void;
-	readonly viewContext: ExtensionContext;
+	readonly viewContext: ExtensionHostContext;
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
 }

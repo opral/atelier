@@ -31,24 +31,18 @@ vi.mock("@dnd-kit/sortable", async () => {
 	};
 });
 
-import {
-	act,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PanelV2 } from "./panel-v2";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
 import type {
 	PanelState,
-	ExtensionContext,
 	ExtensionDefinition,
 } from "../extension-runtime/types";
-import type { Lix } from "@/lib/lix-types";
-import { Flag, Search } from "lucide-react";
+import type { Lix } from "@lix-js/sdk";
+import { Search } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
+import { createExtensionHostContext } from "@/test-utils/extension-host-context";
 
 const TEST_SEARCH_EXTENSION_KIND = "test_search";
 
@@ -68,27 +62,19 @@ const pendingSearchPanel: PanelState = {
 
 const mockLix = {} as Lix;
 
-const createViewContext = (
-	overrides: Partial<ExtensionContext> = {},
-): ExtensionContext => ({
-	lix: mockLix,
-	isPanelFocused: false,
-	setTabBadgeCount: () => {},
-	...overrides,
-});
+const createViewContext = () => createExtensionHostContext(mockLix);
 
 const searchViewOverride: ExtensionDefinition = {
 	kind: TEST_SEARCH_EXTENSION_KIND,
 	label: "Search",
 	description: "Test search view",
 	icon: Search,
-	activate: () => undefined,
-	render: ({ target }) => {
+	mount: ({ element }) => {
 		const input = document.createElement("input");
 		input.setAttribute("placeholder", "Search project...");
-		target.replaceChildren(input);
-		return () => {
-			target.replaceChildren();
+		element.replaceChildren(input);
+		return {
+			dispose: () => element.replaceChildren(),
 		};
 	},
 };
@@ -321,58 +307,61 @@ describe("PanelV2", () => {
 		});
 	});
 
-	test("renders tab badge counts and updates when the value changes", async () => {
-		let updateBadge: ((value: number | null) => void) | undefined;
-
-		const badgePanel: PanelState = {
-			views: [{ instance: "badge-1", kind: "badge-view" }],
-			activeInstance: "badge-1",
-		};
-
-		const badgeView: ExtensionDefinition = {
-			kind: "badge-view",
-			label: "Badge",
-			description: "Test badge view",
-			icon: Flag,
-			activate: ({ context }) => {
-				updateBadge = (value) => context.setTabBadgeCount?.(value);
-				return () => {
-					context.setTabBadgeCount?.(null);
-					if (updateBadge === context.setTabBadgeCount) {
-						updateBadge = undefined;
-					}
-				};
-			},
-			render: ({ target }) => {
-				target.textContent = "Badge view content";
-				return () => {
-					target.replaceChildren();
-				};
+	test("mounts once, updates snapshots, and disposes with an aborted signal", async () => {
+		const update = vi.fn();
+		const dispose = vi.fn();
+		let signal: AbortSignal | undefined;
+		const lifecycleView: ExtensionDefinition = {
+			kind: "lifecycle",
+			label: "Lifecycle",
+			description: "Lifecycle test",
+			icon: Search,
+			mount: (args) => {
+				signal = args.signal;
+				return { update, dispose };
 			},
 		};
-
-		renderWithinProvider(
+		const panel: PanelState = {
+			views: [{ instance: "lifecycle-1", kind: "lifecycle", state: { n: 1 } }],
+			activeInstance: "lifecycle-1",
+		};
+		const rendered = renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={badgePanel}
-				isFocused={false}
+				panel={panel}
+				isFocused={true}
 				onFocusPanel={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
-				viewOverrides={[badgeView]}
+				viewOverrides={[lifecycleView]}
 			/>,
 		);
 
-		await waitFor(() => {
-			expect(updateBadge).toBeDefined();
-		});
+		await waitFor(() => expect(signal).toBeDefined());
+		rendered.rerender(
+			<ExtensionHostRegistryProvider>
+				<PanelV2
+					side="left"
+					panel={{
+						...panel,
+						views: [
+							{ instance: "lifecycle-1", kind: "lifecycle", state: { n: 2 } },
+						],
+					}}
+					isFocused={true}
+					onFocusPanel={vi.fn()}
+					onSelectView={vi.fn()}
+					onRemoveView={vi.fn()}
+					viewContext={createViewContext()}
+					viewOverrides={[lifecycleView]}
+				/>
+			</ExtensionHostRegistryProvider>,
+		);
 
-		act(() => updateBadge?.(3));
-		expect(await screen.findByText("3")).toBeInTheDocument();
-
-		act(() => updateBadge?.(7));
-		expect(await screen.findByText("7")).toBeInTheDocument();
-		expect(screen.queryByText("3")).not.toBeInTheDocument();
+		await waitFor(() => expect(update).toHaveBeenCalled());
+		rendered.unmount();
+		expect(signal?.aborted).toBe(true);
+		expect(dispose).toHaveBeenCalledTimes(1);
 	});
 });

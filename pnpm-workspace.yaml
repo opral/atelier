@@ -1,13 +1,9 @@
 packages:
   - .
+  - fixtures/consumer
+  - preview/electron
   - submodule/lix/packages/js-sdk
   - "!submodule/lix/packages/**/dist"
-
-allowBuilds:
-  "@parcel/watcher": set this to true or false
-  core-js: set this to true or false
-  electron: set this to true or false
-  esbuild: set this to true or false
 
 onlyBuiltDependencies:
   - electron

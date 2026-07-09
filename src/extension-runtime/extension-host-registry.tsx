@@ -8,9 +8,11 @@ import {
 	type ReactNode,
 } from "react";
 import type {
-	ExtensionContext,
 	ExtensionDefinition,
 	ExtensionInstance,
+	ExtensionRuntime,
+	ExtensionView,
+	MountedExtension,
 } from "./types";
 
 export type ExtensionHostRecord = {
@@ -18,20 +20,59 @@ export type ExtensionHostRecord = {
 	readonly container: HTMLDivElement;
 	view: ExtensionDefinition;
 	instance: ExtensionInstance;
-	cleanup: (() => void) | undefined;
-	lastContext: ExtensionContext;
+	mounted: MountedExtension | undefined;
+	abortController: AbortController;
 };
 
 type EnsureArgs = {
 	instance: ExtensionInstance;
 	view: ExtensionDefinition;
-	context: ExtensionContext;
+	atelier: ExtensionRuntime;
+	extensionView: ExtensionView;
 };
 
 type ExtensionHostRegistry = {
 	ensureHost: (args: EnsureArgs) => ExtensionHostRecord;
 	pruneHosts: (activeInstances: Set<string>) => void;
 };
+
+function mountExtension(args: {
+	view: ExtensionDefinition;
+	atelier: ExtensionRuntime;
+	extensionView: ExtensionView;
+	element: HTMLElement;
+}): {
+	mounted: MountedExtension | undefined;
+	abortController: AbortController;
+} {
+	const abortController = new AbortController();
+	const mounted = args.view.mount({
+		atelier: args.atelier,
+		view: args.extensionView,
+		element: args.element,
+		signal: abortController.signal,
+	});
+	if (mounted !== undefined) {
+		if (!mounted || typeof mounted !== "object") {
+			throw new Error("Extension mount must return an object or undefined.");
+		}
+		if (mounted.update !== undefined && typeof mounted.update !== "function") {
+			throw new Error("Extension update must be a function when provided.");
+		}
+		if (
+			mounted.dispose !== undefined &&
+			typeof mounted.dispose !== "function"
+		) {
+			throw new Error("Extension dispose must be a function when provided.");
+		}
+	}
+	return { mounted: mounted || undefined, abortController };
+}
+
+function disposeExtension(record: ExtensionHostRecord): void {
+	record.abortController.abort();
+	record.mounted?.dispose?.();
+}
 
 const ExtensionHostRegistryContext =
 	createContext<ExtensionHostRegistry | null>(null);
@@ -44,42 +85,49 @@ export function ExtensionHostRegistryProvider({
 	const hostsRef = useRef<Map<string, ExtensionHostRecord>>(new Map());
 
 	const ensureHost = useCallback(
-		({ instance, view, context }: EnsureArgs): ExtensionHostRecord => {
+		({
+			instance,
+			view,
+			atelier,
+			extensionView,
+		}: EnsureArgs): ExtensionHostRecord => {
 			let record = hostsRef.current.get(instance.instance);
 			if (!record) {
 				const container = document.createElement("div");
 				container.className =
 					"flex min-h-0 flex-1 flex-col overflow-hidden w-full h-full";
-				const maybeCleanup = view.render({
-					context,
-					instance,
-					target: container,
+				const lifecycle = mountExtension({
+					view,
+					atelier,
+					extensionView,
+					element: container,
 				});
-				const cleanup =
-					typeof maybeCleanup === "function" ? maybeCleanup : undefined;
 				record = {
 					instanceId: instance.instance,
 					container,
 					view,
 					instance,
-					cleanup,
-					lastContext: context,
+					...lifecycle,
 				};
 				hostsRef.current.set(instance.instance, record);
 				return record;
 			}
 
-			record.cleanup?.();
-			const maybeCleanup = view.render({
-				context,
-				instance,
-				target: record.container,
-			});
-			record.cleanup =
-				typeof maybeCleanup === "function" ? maybeCleanup : undefined;
+			if (record.view !== view) {
+				disposeExtension(record);
+				const lifecycle = mountExtension({
+					view,
+					atelier,
+					extensionView,
+					element: record.container,
+				});
+				record.mounted = lifecycle.mounted;
+				record.abortController = lifecycle.abortController;
+			} else {
+				record.mounted?.update?.({ atelier, view: extensionView });
+			}
 			record.instance = instance;
 			record.view = view;
-			record.lastContext = context;
 			return record;
 		},
 		[],
@@ -88,7 +136,7 @@ export function ExtensionHostRegistryProvider({
 	const pruneHosts = useCallback((activeInstances: Set<string>) => {
 		for (const [key, record] of hostsRef.current) {
 			if (activeInstances.has(key)) continue;
-			record.cleanup?.();
+			disposeExtension(record);
 			record.container.remove();
 			hostsRef.current.delete(key);
 		}
@@ -106,7 +154,7 @@ export function ExtensionHostRegistryProvider({
 		const hosts = hostsRef.current;
 		return () => {
 			for (const record of hosts.values()) {
-				record.cleanup?.();
+				disposeExtension(record);
 				record.container.remove();
 			}
 			hosts.clear();

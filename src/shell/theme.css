@@ -29,7 +29,7 @@
 	--color-neutral-900: rgb(28, 25, 23);
 	--color-neutral-950: rgb(12, 10, 9);
 
-	/* Flashtype semantic aliases. Named by role, prominence, and state. */
+	/* Atelier semantic aliases. Named by role, prominence, and state. */
 	--color-bg-app: rgb(244, 242, 239);
 	--color-bg-panel: var(--color-neutral-0);
 	--color-bg-panel-muted: var(--color-neutral-50);
@@ -134,37 +134,6 @@
 
 	/* Border radiuses */
 	--radius-full: 9999px;
-}
-
-/* Container */
-@utility container {
-	padding-left: 16px;
-	padding-right: 16px;
-
-	@media (width >= theme(--breakpoint-sm)) {
-		padding-left: calc((100vw + 16px - 640px) / 2);
-		padding-right: calc((100vw + 16px - 640px) / 2);
-	}
-
-	@media (width >= theme(--breakpoint-md)) {
-		padding-left: calc((100vw + 16px - 768px) / 2);
-		padding-right: calc((100vw + 16px - 768px) / 2);
-	}
-
-	@media (width >= theme(--breakpoint-lg)) {
-		padding-left: calc((100vw + 16px - 1024px) / 2);
-		padding-right: calc((100vw + 16px - 1024px) / 2);
-	}
-
-	@media (width >= theme(--breakpoint-xl)) {
-		padding-left: calc((100vw + 16px - 1280px) / 2);
-		padding-right: calc((100vw + 16px - 1280px) / 2);
-	}
-
-	@media (width >= theme(--breakpoint-2xl)) {
-		padding-left: calc((100vw + 16px - 1536px) / 2);
-		padding-right: calc((100vw + 16px - 1536px) / 2);
-	}
 }
 
 @custom-variant mobile (@media (max-width: 767px));
