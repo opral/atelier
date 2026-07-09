@@ -80,9 +80,6 @@ function toRuntimeLix(lix: SdkLix): Lix {
 		switchBranch: (options) => lix.switchBranch(options),
 		mergeBranchPreview: (options) => lix.mergeBranchPreview(options),
 		mergeBranch: (options) => lix.mergeBranch(options),
-		// The embedded app has no filesystem backend responsibilities.
-		importFilesystemPaths: async () => {},
-		syncDiskToLix: async () => {},
 		close: () => lix.close(),
 	};
 }

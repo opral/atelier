@@ -392,9 +392,7 @@ describe("MarkdownView", () => {
 		expect(
 			await screen.findByText(/this file type is not supported yet/i),
 		).toBeInTheDocument();
-		expect(
-			screen.getByRole("link", { name: /open an issue/i }),
-		).toHaveAttribute("href", "https://github.com/opral/flashtype/issues");
+		expect(screen.queryByRole("link")).not.toBeInTheDocument();
 		expect(screen.queryByText(/alpha,1/)).not.toBeInTheDocument();
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
 

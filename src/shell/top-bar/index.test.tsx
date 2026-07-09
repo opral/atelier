@@ -10,8 +10,6 @@ describe("TopBar", () => {
 				onWorkspaceTitleClick={vi.fn()}
 				onToggleLeftSidebar={vi.fn()}
 				onToggleRightSidebar={vi.fn()}
-				isUpdateReady={true}
-				onInstallUpdate={vi.fn()}
 			/>,
 		);
 
@@ -23,14 +21,8 @@ describe("TopBar", () => {
 			"data-attr",
 			"workspace-switch",
 		);
-		expect(screen.getByLabelText("Install update")).toHaveAttribute(
-			"data-attr",
-			"update-install",
-		);
-		expect(screen.getByTitle("GitHub")).toHaveAttribute(
-			"data-attr",
-			"github-open",
-		);
+		expect(screen.queryByLabelText("Install update")).not.toBeInTheDocument();
+		expect(screen.queryByTitle("GitHub")).not.toBeInTheDocument();
 		expect(screen.getByLabelText("Toggle right panel")).toHaveAttribute(
 			"data-attr",
 			"topbar-toggle-right-panel",
@@ -51,9 +43,7 @@ describe("TopBar", () => {
 	});
 
 	test("does not show reviewing label without an active file", () => {
-		render(
-			<TopBar workspaceName="Workspace" isReviewingCheckpoint={true} />,
-		);
+		render(<TopBar workspaceName="Workspace" isReviewingCheckpoint={true} />);
 
 		expect(screen.queryByText("Reviewing")).toBeNull();
 	});

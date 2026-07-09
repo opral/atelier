@@ -112,9 +112,6 @@ export function createPreviewLix(): Lix {
 		switchBranch: (options) => bridge.switchBranch(options),
 		mergeBranchPreview: (options) => bridge.mergeBranchPreview(options),
 		mergeBranch: (options) => bridge.mergeBranch(options),
-		// The preview has no filesystem backend.
-		importFilesystemPaths: async () => {},
-		syncDiskToLix: async () => {},
 		close: async () => {},
 	};
 }

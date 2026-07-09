@@ -225,7 +225,6 @@ function HistoryViewContent({
 		setPendingAction("create");
 		try {
 			const timestamp = formatLocalTimestamp();
-			await lix.syncDiskToLix();
 			const created = await lix.createBranch({
 				name: timestamp,
 			});
@@ -452,23 +451,7 @@ function HistoryViewContent({
 async function generateCheckpointName(args: {
 	readonly diffContext?: string;
 }): Promise<GeneratedCheckpointName> {
-	const desktop = window.flashtypeDesktop;
-	const terminal = desktop?.terminal;
-	if (desktop?.lix && terminal?.generateCheckpointName) {
-		try {
-			const cwd = await desktop.lix.workspaceDir();
-			const result = await terminal.generateCheckpointName({
-				cwd,
-				diffContext: args.diffContext,
-			});
-			const name = result.name.trim();
-			if (name) {
-				return { name, source: result.source };
-			}
-		} catch (error) {
-			console.warn("Failed to generate checkpoint name", error);
-		}
-	}
+	void args;
 	return { name: formatLocalTimestamp(), source: "timestamp" };
 }
 
@@ -572,11 +555,7 @@ function summarizeCheckpointDiffFile(file: CheckpointDiffFile): string[] {
 }
 
 function formatCheckpointDiffPath(file: CheckpointDiffFile): string {
-	if (
-		file.beforePath &&
-		file.afterPath &&
-		file.beforePath !== file.afterPath
-	) {
+	if (file.beforePath && file.afterPath && file.beforePath !== file.afterPath) {
 		return `${file.beforePath} -> ${file.afterPath}`;
 	}
 	return file.path;
@@ -636,8 +615,7 @@ function formatCheckpointSnippet(
 	const formatted = [
 		`${label}${lines.length > preview.length ? ` (${preview.length} of ${lines.length} changed lines)` : ""}:`,
 		...preview.map(
-			(line) =>
-				`  ${truncateCheckpointSnippetLine(line) || "<blank line>"}`,
+			(line) => `  ${truncateCheckpointSnippetLine(line) || "<blank line>"}`,
 		),
 	];
 	return formatted;

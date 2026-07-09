@@ -23,24 +23,9 @@ export type ExtensionState = {
 	 */
 	readonly flashtype?: {
 		readonly label?: string;
-		/** Key into the shell's per-instance tab icon set (e.g. "claude"). */
-		readonly icon?: string;
 	};
 	readonly [key: string]: unknown;
 };
-
-export type WorkspaceContext =
-	| {
-			readonly ephemeral: false;
-			readonly path: string;
-			readonly name: string;
-	  }
-	| {
-			readonly ephemeral: true;
-			readonly path: string;
-			readonly name: string;
-			readonly openFilePaths: readonly string[];
-	  };
 
 /**
  * One-shot launch-time arguments that must not be persisted.
@@ -89,9 +74,8 @@ export interface ExtensionDefinition {
 	 */
 	readonly fileExtensions?: readonly string[];
 	/**
-	 * Allows several instances of this extension in one panel (e.g. multiple
-	 * agent terminal sessions). Single-instance kinds are hidden from the
-	 * add-view menu once open.
+	 * Allows several instances of this extension in one panel. Single-instance
+	 * kinds are hidden from the add-view menu once open.
 	 */
 	readonly multiInstance?: boolean;
 	readonly activate?: (args: {
@@ -191,7 +175,6 @@ export interface ExtensionContext {
 		readonly isActiveView: boolean;
 		readonly handler: () => void;
 	}) => () => void;
-	readonly workspace?: WorkspaceContext;
 	readonly lix: Lix;
 }
 

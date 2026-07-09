@@ -175,6 +175,16 @@ function CsvViewData({
 		afterCommitId,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
+	const effectiveFileRow = fileRow;
+	const externalWriteReview = useExternalWriteReview({
+		fileId: effectiveFileRow?.id,
+		path: effectiveFileRow?.path,
+	});
+	useEffect(() => {
+		if (!externalWriteReview) return;
+		return registerExternalWriteReview?.(externalWriteReview);
+	}, [externalWriteReview, registerExternalWriteReview]);
+
 	if (revisionMode !== "editor") {
 		return (
 			<CsvHistoricalViewData
@@ -187,16 +197,6 @@ function CsvViewData({
 			/>
 		);
 	}
-
-	const effectiveFileRow = fileRow;
-	const externalWriteReview = useExternalWriteReview({
-		fileId: effectiveFileRow?.id,
-		path: effectiveFileRow?.path,
-	});
-	useEffect(() => {
-		if (!externalWriteReview) return;
-		return registerExternalWriteReview?.(externalWriteReview);
-	}, [externalWriteReview, registerExternalWriteReview]);
 
 	if (!effectiveFileRow) {
 		return (
@@ -452,7 +452,7 @@ function CsvTable({
 					copyData: value,
 					onClickUri: (event) => {
 						event.preventDefault();
-						void window.flashtypeDesktop?.app.openExternal({ url: linkUrl });
+						window.open(linkUrl, "_blank", "noopener,noreferrer");
 					},
 				};
 			}

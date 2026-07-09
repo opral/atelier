@@ -21,7 +21,6 @@
 	"include": [
 		"src",
 		"setup-tests.ts",
-		"electron/types.d.ts",
 		"preview/electron/lix-client.ts",
 		"preview/electron/renderer.ts",
 		"preview/electron/renderer-types.d.ts"

@@ -1,10 +1,4 @@
-type TelemetryEventName = NonNullable<
-	Window["flashtypeDesktop"]
->["telemetry"] extends { capture(payload: infer Payload): Promise<unknown> }
-	? Payload extends { event: infer EventName }
-		? EventName
-		: never
-	: never;
+type TelemetryEventName = string;
 
 type TelemetryProperties = Record<
 	string,
@@ -23,13 +17,10 @@ export function captureTelemetry(
 }
 
 export async function captureTelemetryAsync(
-	event: TelemetryEventName,
-	properties: TelemetryProperties = {},
+	_event: TelemetryEventName,
+	_properties: TelemetryProperties = {},
 ) {
-	return await window.flashtypeDesktop?.telemetry?.capture({
-		event,
-		properties,
-	});
+	return undefined;
 }
 
 export function captureTelemetryException(
@@ -44,13 +35,10 @@ export function captureTelemetryException(
 }
 
 export async function captureTelemetryExceptionAsync(
-	error: unknown,
-	properties: TelemetryProperties = {},
+	_error: unknown,
+	_properties: TelemetryProperties = {},
 ) {
-	return await window.flashtypeDesktop?.telemetry?.captureException({
-		error: serializeError(error),
-		properties,
-	});
+	return undefined;
 }
 
 export function captureTelemetryThrottled(
@@ -91,17 +79,4 @@ export function workspaceTelemetryProperties(workspaceId: string | undefined) {
 				workspace_id: workspaceId,
 			}
 		: {};
-}
-
-function serializeError(error: unknown) {
-	if (error instanceof Error) {
-		return {
-			message: error.message || "Renderer error",
-			name: error.name,
-			stack: error.stack,
-		};
-	}
-	return {
-		message: typeof error === "string" ? error : "Renderer error",
-	};
 }

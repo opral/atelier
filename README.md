@@ -2,7 +2,7 @@
 
 ### The embeddable lix workspace
 
-Atelier is a workspace UI — editor, files, history, diffs, agents — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
+Atelier is a workspace UI — editor, files, history, and diffs — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
 
 Atelier is to [Flashtype](https://flashtype.ai) what Monaco is to VS Code and Chromium is to Chrome: the engine inside. Flashtype (Electron, macOS) is one host. A browser app pointing at a remote lix is another. Same workspace, any shell.
 
@@ -35,23 +35,16 @@ The target runtime is the browser. Anything that can hand Atelier a DOM element 
 | ------------ | ----------------------------------------------- |
 | Editor       | Markdown-native writing surface.                |
 | Files        | Browse and open the files in the lix workspace. |
-| Agents       | Run Claude & Codex next to the document.        |
 | Inline diffs | Keep or undo edits with word-level context.     |
 | History      | Inspect checkpoints and restore earlier drafts. |
 
 ## Powered by Lix
 
-<p>
-  <a href="https://github.com/opral/lix">
-    <img src="./website/public/lix-logo.svg" alt="Lix" width="64">
-  </a>
-</p>
-
 Atelier's change control is powered by [Lix](https://github.com/opral/lix), a version control system that can handle any file format and is designed for building applications on top of.
 
 ## Status
 
-Atelier is derived from the [Flashtype](https://github.com/opral/flashtype) codebase. The minimal `createAtelier({ element, lix })` entry point and Electron preview are in progress.
+Atelier exposes the minimal `createAtelier({ element, lix })` entry point. The Electron development preview is isolated under `preview/electron/`; the Atelier runtime itself targets the browser.
 
 ## License
 

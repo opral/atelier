@@ -62,7 +62,6 @@ import type {
 	ExtensionLaunchArgs,
 	ExtensionState,
 	ExtensionDefinition,
-	WorkspaceContext,
 } from "../extension-runtime/types";
 import {
 	createExtensionInstanceId,
@@ -75,7 +74,6 @@ import {
 	buildFileExtensionProps,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
-	TERMINAL_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 } from "../extension-runtime/extension-instance-helpers";
 import {
@@ -98,20 +96,9 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
+import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
 import {
-	buildAgentLaunchArgsWithActiveFile,
-	buildFlashtypeActiveFilePrompt,
-} from "./agent-launch";
-import { agentLaunchPresetByKey, type AgentKey } from "./agent-icons";
-import {
-	clearAgentTurnCommitRangeFile,
-	appendAgentTurnCommitRange,
-	type AgentTurnCommitRange,
-} from "./agent-turn-review-range";
-import {
-	getExternalWriteReview,
 	getFileDataAtCommit,
-	getPendingExternalWriteReviewPaths,
 } from "./external-write-review-history";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
 
@@ -122,31 +109,9 @@ type NewFileDraftHandlerRegistration = {
 	readonly handler: () => void;
 };
 
-type AgentHookTurnEvent = {
-	readonly id: string;
-	readonly instanceId?: string;
-	readonly agent: "claude" | "codex";
-	readonly phase: "turn-start" | "turn-stop";
-	readonly hookEventName?: string;
-	readonly sessionId?: string;
-	readonly turnId?: string;
-	readonly cwd?: string;
-	readonly createdAt: number;
-};
-
-type ActiveAgentTurn = {
-	readonly key: string;
-	readonly event: AgentHookTurnEvent;
-	readonly beforeCommitIdPromise: Promise<string | null>;
-};
-
 const LEGACY_CHECKPOINT_DIFF_INSTANCE_PREFIX = "checkpoint-diff:";
 const LEGACY_CHECKPOINT_DIFF_REVIEW_ID_STATE_KEY = "checkpointDiffReviewId";
 const LEGACY_CHECKPOINT_DIFF_BRANCH_ID_STATE_KEY = "checkpointDiffBranchId";
-
-type AgentHookTurnEventResult = void | {
-	readonly additionalContext?: string | null;
-};
 
 const stripLaunchArgs = (view: ExtensionInstance): ExtensionInstance => {
 	const { launchArgs: _omitLaunch, ...rest } = view as any;
@@ -309,69 +274,6 @@ const normalizePanelsForDocumentSlot = (
 const newFileDraftHandlerKey = (
 	registration: NewFileDraftHandlerRegistration,
 ): string => `${registration.panelSide}:${registration.viewInstance}`;
-
-const selectNewFileDraftHandler = (
-	registrations: Iterable<NewFileDraftHandlerRegistration>,
-	focusedPanel: PanelSide,
-): NewFileDraftHandlerRegistration | null => {
-	const panelPreference = [
-		focusedPanel,
-		"left" as const,
-		"central" as const,
-		"right" as const,
-	].filter((side, index, sides) => sides.indexOf(side) === index);
-	const registered = [...registrations].filter(
-		(registration) => registration.isActiveView,
-	);
-	for (const panelSide of panelPreference) {
-		const registration = registered.find(
-			(candidate) => candidate.panelSide === panelSide,
-		);
-		if (registration) {
-			return registration;
-		}
-	}
-	return null;
-};
-
-const collectSessionOpenFilePaths = (
-	panels: readonly PanelState[],
-): string[] => {
-	const seen = new Set<string>();
-	const openFilePaths: string[] = [];
-	for (const panel of panels) {
-		for (const view of panel.views) {
-			const filePath = sessionOpenFilePath(view.state?.filePath);
-			if (!filePath || seen.has(filePath)) {
-				continue;
-			}
-			seen.add(filePath);
-			openFilePaths.push(filePath);
-		}
-	}
-	return openFilePaths;
-};
-
-const sessionOpenFilePath = (filePath: unknown): string | null => {
-	if (typeof filePath !== "string" || !isWorkspaceLixFilePath(filePath)) {
-		return null;
-	}
-	return filePath.slice(1);
-};
-
-const isWorkspaceLixFilePath = (filePath: string): boolean => {
-	if (!filePath.startsWith("/") || filePath.endsWith("/")) {
-		return false;
-	}
-	const segments = filePath.slice(1).split("/");
-	return (
-		segments.length > 0 &&
-		segments[0] !== ".lix" &&
-		segments.every(
-			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
-		)
-	);
-};
 
 const sanitizePanels = (
 	panels: Record<PanelSide, PanelState>,
@@ -594,57 +496,17 @@ async function resolveNextUntitledMarkdownPath(
 	return `/new-file-${Date.now()}.md`;
 }
 
-export function V2LayoutShell({
-	workspace,
-	workspaceName,
-	onOpenWorkspace,
-	pendingOpenFilePaths,
-	canPersistOpenFileSession = true,
-	onPendingOpenFileHandled,
-	onError,
-	isUpdateReady,
-	onInstallUpdate,
-}: {
-	readonly workspace?: WorkspaceContext;
-	readonly workspaceName?: string;
-	readonly onOpenWorkspace?: () => void;
-	readonly pendingOpenFilePaths?: readonly string[];
-	readonly canPersistOpenFileSession?: boolean;
-	readonly onPendingOpenFileHandled?: (filePath: string) => void;
-	readonly onError?: (error: unknown) => void;
-	readonly isUpdateReady?: boolean;
-	readonly onInstallUpdate?: () => void | Promise<void>;
-}) {
+export function V2LayoutShell() {
 	return (
 		<ExtensionRegistryProvider>
 			<ExtensionHostRegistryProvider>
-				<LayoutShellContent
-					workspace={workspace}
-					workspaceName={workspaceName}
-					onOpenWorkspace={onOpenWorkspace}
-					pendingOpenFilePaths={pendingOpenFilePaths}
-					canPersistOpenFileSession={canPersistOpenFileSession}
-					onPendingOpenFileHandled={onPendingOpenFileHandled}
-					onError={onError}
-					isUpdateReady={isUpdateReady}
-					onInstallUpdate={onInstallUpdate}
-				/>
+				<LayoutShellContent />
 			</ExtensionHostRegistryProvider>
 		</ExtensionRegistryProvider>
 	);
 }
 
-type LayoutShellContentProps = {
-	readonly workspace?: WorkspaceContext;
-	readonly workspaceName?: string;
-	readonly onOpenWorkspace?: () => void;
-	readonly pendingOpenFilePaths?: readonly string[];
-	readonly canPersistOpenFileSession?: boolean;
-	readonly onPendingOpenFileHandled?: (filePath: string) => void;
-	readonly onError?: (error: unknown) => void;
-	readonly isUpdateReady?: boolean;
-	readonly onInstallUpdate?: () => void | Promise<void>;
-};
+type LayoutShellContentProps = object;
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly lix: ReturnType<typeof useLix>;
@@ -660,75 +522,6 @@ function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 		if (left[index] !== right[index]) return false;
 	}
 	return true;
-}
-
-async function readSyncedActiveCommitId(lix: Lix): Promise<string | null> {
-	await lix.syncDiskToLix();
-	return readActiveBranchCommitId(lix);
-}
-
-async function readActiveBranchCommitId(lix: Lix): Promise<string | null> {
-	const result = await lix.execute(
-		"SELECT lix_active_branch_commit_id() AS commit_id",
-	);
-	const rows =
-		result && typeof result === "object" && Array.isArray((result as any).rows)
-			? ((result as any).rows as unknown[])
-			: [];
-	const value =
-		rows.length > 0 ? readQueryRowValue(rows[0], "commit_id") : null;
-	return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function readQueryRowValue(row: unknown, column: string): unknown {
-	if (!row || typeof row !== "object") return undefined;
-	if (typeof (row as { get?: unknown }).get === "function") {
-		return (row as { get(column: string): unknown }).get(column);
-	}
-	if (typeof (row as { toObject?: unknown }).toObject === "function") {
-		return (row as { toObject(): Record<string, unknown> }).toObject()[column];
-	}
-	return (row as Record<string, unknown>)[column];
-}
-
-function isAgentHookTurnEvent(value: unknown): value is AgentHookTurnEvent {
-	if (!value || typeof value !== "object") return false;
-	const event = value as Partial<AgentHookTurnEvent>;
-	return (
-		(event.agent === "claude" || event.agent === "codex") &&
-		(event.phase === "turn-start" || event.phase === "turn-stop") &&
-		typeof event.id === "string" &&
-		event.id.length > 0 &&
-		typeof event.createdAt === "number" &&
-		Number.isFinite(event.createdAt)
-	);
-}
-
-function agentTurnKey(event: AgentHookTurnEvent): string {
-	return [
-		event.instanceId ?? "unknown-instance",
-		event.agent,
-		event.sessionId ?? event.cwd ?? "unknown-session",
-		event.turnId ?? "current-turn",
-	].join(":");
-}
-
-function agentPromptAttemptKey(event: AgentHookTurnEvent): string {
-	return [
-		event.instanceId ?? "unknown-instance",
-		event.agent,
-		event.sessionId ?? event.cwd ?? "unknown-session",
-	].join(":");
-}
-
-function incrementAgentPromptAttemptNumber(
-	attempts: Map<string, number>,
-	event: AgentHookTurnEvent,
-): number {
-	const key = agentPromptAttemptKey(event);
-	const nextAttemptNumber = (attempts.get(key) ?? 0) + 1;
-	attempts.set(key, nextAttemptNumber);
-	return nextAttemptNumber;
 }
 
 type LixFileForOpen = {
@@ -768,25 +561,13 @@ async function selectLixFileForOpen(
 
 export async function resolveLixFileForOpen({
 	lix,
-	workspace,
 	filePath,
 }: {
 	readonly lix: Lix;
-	readonly workspace?: WorkspaceContext;
 	readonly filePath: string;
 }): Promise<LixFileForOpen | null> {
 	const normalizedPath = normalizeLixFileOpenPath(filePath);
 	if (!normalizedPath) return null;
-
-	const existingFile = await selectLixFileForOpen(lix, normalizedPath);
-	if (existingFile) return existingFile;
-
-	if (workspace?.ephemeral !== true) {
-		return null;
-	}
-
-	await lix.importFilesystemPaths([normalizedPath]);
-
 	return selectLixFileForOpen(lix, normalizedPath);
 }
 
@@ -1043,32 +824,9 @@ function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
  * @example
  * <V2LayoutShell />
  */
-function LayoutShellContent({
-	workspace,
-	workspaceName,
-	onOpenWorkspace,
-	pendingOpenFilePaths,
-	canPersistOpenFileSession,
-	onPendingOpenFileHandled,
-	onError,
-	isUpdateReady,
-	onInstallUpdate,
-}: LayoutShellContentProps) {
+function LayoutShellContent(_props: LayoutShellContentProps) {
 	const lix = useLix();
-	return (
-		<LayoutShellUiStateLoader
-			workspaceName={workspaceName}
-			workspace={workspace}
-			onOpenWorkspace={onOpenWorkspace}
-			pendingOpenFilePaths={pendingOpenFilePaths}
-			canPersistOpenFileSession={canPersistOpenFileSession}
-			onPendingOpenFileHandled={onPendingOpenFileHandled}
-			onError={onError}
-			isUpdateReady={isUpdateReady}
-			onInstallUpdate={onInstallUpdate}
-			lix={lix}
-		/>
-	);
+	return <LayoutShellUiStateLoader lix={lix} />;
 }
 
 function LayoutShellUiStateLoader(
@@ -1106,15 +864,6 @@ function LayoutShellActiveFileLoader(
 }
 
 function LayoutShellLoadedContent({
-	workspace,
-	workspaceName,
-	onOpenWorkspace,
-	pendingOpenFilePaths,
-	canPersistOpenFileSession,
-	onPendingOpenFileHandled,
-	onError,
-	isUpdateReady,
-	onInstallUpdate,
 	lix,
 	uiStateKV,
 	setUiStateKV,
@@ -1178,7 +927,6 @@ function LayoutShellLoadedContent({
 		() => initialLayoutSizes.right <= MIN_VISIBLE_PANEL_SIZE,
 	);
 	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
-	const [preferredAgent, setPreferredAgent] = useState<AgentKey | null>(null);
 	const [checkpointDiff, setCheckpointDiff] = useState<CheckpointDiff | null>(
 		null,
 	);
@@ -1211,26 +959,13 @@ function LayoutShellLoadedContent({
 		  ) => boolean)
 		| null
 	>(null);
-	const activeAgentTurnsRef = useRef(new Map<string, ActiveAgentTurn>());
-	const agentPromptAttemptNumbersRef = useRef(new Map<string, number>());
-	const autoOpenFirstAgentReviewFileRef = useRef(
-		async (_range: AgentTurnCommitRange) => {},
-	);
-	const agentPreferenceAttemptedRef = useRef(false);
-	const agentPreferenceRunRef = useRef(0);
-	const fileOpenInterruptRevisionRef = useRef(0);
 	const workspaceIdRef = useRef<string | undefined>(undefined);
-	const mostRecentMarkdownFallbackAttemptedRef = useRef(false);
 	const panelStatesRef = useRef({
 		left: leftPanel,
 		central: centralPanel,
 		right: rightPanel,
 	});
 	const viewHostRegistry = useExtensionHostRegistry();
-	const mostRecentMarkdownFallbackWorkspaceKey = useMemo(() => {
-		if (!workspace) return "none";
-		return `${workspace.ephemeral ? "ephemeral" : "persistent"}:${workspace.path}`;
-	}, [workspace]);
 
 	const captureWorkspaceTelemetry = useCallback(
 		(
@@ -1255,16 +990,6 @@ function LayoutShellLoadedContent({
 	useEffect(() => {
 		workspaceIdRef.current = undefined;
 	}, [lix]);
-
-	useEffect(() => {
-		mostRecentMarkdownFallbackAttemptedRef.current = false;
-	}, [lix, mostRecentMarkdownFallbackWorkspaceKey]);
-
-	useEffect(() => {
-		agentPreferenceAttemptedRef.current = false;
-		agentPreferenceRunRef.current += 1;
-		setPreferredAgent(null);
-	}, [lix, mostRecentMarkdownFallbackWorkspaceKey]);
 
 	useEffect(() => {
 		panelStatesRef.current = {
@@ -1348,107 +1073,6 @@ function LayoutShellLoadedContent({
 		[claimDiffReviewResolution, captureDiffResolvedTelemetry],
 	);
 	resolveDiffReviewTelemetryRef.current = resolveDiffReviewTelemetry;
-
-	const handleAgentHookTurnEvent = useCallback(
-		async (event: AgentHookTurnEvent): Promise<AgentHookTurnEventResult> => {
-			const key = agentTurnKey(event);
-			if (event.phase === "turn-start") {
-				const attemptNumber = incrementAgentPromptAttemptNumber(
-					agentPromptAttemptNumbersRef.current,
-					event,
-				);
-				captureWorkspaceTelemetry("prompt_submitted", {
-					agent: event.agent,
-					surface: "terminal",
-					source: "agent_hook",
-					attempt_number: attemptNumber,
-				});
-				const additionalContext = buildFlashtypeActiveFilePrompt(
-					activeFilePathFromPanel(panelStatesRef.current.central),
-				);
-				const beforeCommitIdPromise = readSyncedActiveCommitId(lix).catch(
-					(error: unknown) => {
-						console.warn(
-							"[agent-turn-review] failed to capture start commit",
-							error,
-						);
-						return null;
-					},
-				);
-				activeAgentTurnsRef.current.set(key, {
-					key,
-					event,
-					beforeCommitIdPromise,
-				});
-				await beforeCommitIdPromise;
-				return additionalContext ? { additionalContext } : undefined;
-			}
-
-			try {
-				const activeTurn = activeAgentTurnsRef.current.get(key);
-				const beforeCommitId = activeTurn
-					? await activeTurn.beforeCommitIdPromise
-					: null;
-				const afterCommitId = await readSyncedActiveCommitId(lix);
-				activeAgentTurnsRef.current.delete(key);
-
-				if (
-					beforeCommitId &&
-					afterCommitId &&
-					beforeCommitId !== afterCommitId
-				) {
-					const range: AgentTurnCommitRange = {
-						id: [
-							event.instanceId ?? "unknown-instance",
-							event.agent,
-							event.sessionId ?? "unknown-session",
-							event.turnId ?? String(event.createdAt),
-							beforeCommitId,
-							afterCommitId,
-						].join(":"),
-						agent: event.agent,
-						beforeCommitId,
-						afterCommitId,
-						sessionId: event.sessionId,
-						turnId: event.turnId,
-						startedAt: activeTurn?.event.createdAt ?? event.createdAt,
-						completedAt: Date.now(),
-					};
-					await appendAgentTurnCommitRange(lix, range);
-					try {
-						await autoOpenFirstAgentReviewFileRef.current(range);
-					} catch (error: unknown) {
-						console.warn(
-							"[agent-turn-review] failed to open first edited review file",
-							error,
-						);
-					}
-				}
-			} catch (error: unknown) {
-				activeAgentTurnsRef.current.delete(key);
-				console.warn(
-					"[agent-turn-review] failed to capture stop commit",
-					error,
-				);
-				throw error;
-			}
-		},
-		[lix, captureWorkspaceTelemetry],
-	);
-
-	useEffect(() => {
-		const unsubscribe = window.flashtypeDesktop?.agentHooks?.onTurnEvent(
-			(event: unknown) => {
-				if (isAgentHookTurnEvent(event)) {
-					return handleAgentHookTurnEvent(event);
-				}
-				return undefined;
-			},
-		);
-		return () => {
-			unsubscribe?.();
-		};
-	}, [handleAgentHookTurnEvent]);
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -1771,10 +1395,10 @@ function LayoutShellLoadedContent({
 				setCentralPanel(transitionPanel("central"));
 				setRightPanel(transitionPanel("right"));
 			})().catch((error: unknown) => {
-				onError?.(error);
+				console.error("Failed to update checkpoint revision state", error);
 			});
 		},
-		[lix, onError],
+		[lix],
 	);
 
 	const clearCheckpointDiff = useCallback(() => {
@@ -2027,68 +1651,6 @@ function LayoutShellLoadedContent({
 		[lix, transitionCheckpointEditorRevisions],
 	);
 
-	const autoOpenFirstAgentReviewFile = useCallback(
-		async (range: AgentTurnCommitRange) => {
-			const centralPanelState = panelStatesRef.current.central;
-			const activeInstance =
-				centralPanelState.activeInstance ??
-				centralPanelState.views[0]?.instance ??
-				null;
-			const activeEntry = activeInstance
-				? centralPanelState.views.find(
-						(entry) => entry.instance === activeInstance,
-					)
-				: null;
-			const activeFileId =
-				typeof activeEntry?.state?.fileId === "string"
-					? activeEntry.state.fileId
-					: null;
-			const activeFilePath =
-				typeof activeEntry?.state?.filePath === "string"
-					? activeEntry.state.filePath
-					: null;
-			if (activeFileId && activeFilePath) {
-				const activeReview = await getExternalWriteReview(
-					lix,
-					activeFileId,
-					activeFilePath,
-				);
-				if (activeReview) {
-					return;
-				}
-			}
-
-			const files = await qb(lix)
-				.selectFrom("lix_file")
-				.select(["id", "path"])
-				.orderBy("path", "asc")
-				.execute();
-			const reviewableFiles = files.map((file) => ({
-				fileId: file.id as string,
-				path: file.path as string,
-			}));
-			const pendingPaths = await getPendingExternalWriteReviewPaths(
-				lix,
-				reviewableFiles,
-				[range],
-			);
-			const firstReviewFile = reviewableFiles.find((file) =>
-				pendingPaths.has(file.path),
-			);
-			if (!firstReviewFile) {
-				return;
-			}
-			openResolvedFileView({
-				panel: "central",
-				fileId: firstReviewFile.fileId,
-				filePath: firstReviewFile.path,
-				focus: true,
-			});
-		},
-		[lix, openResolvedFileView],
-	);
-	autoOpenFirstAgentReviewFileRef.current = autoOpenFirstAgentReviewFile;
-
 	const handleOpenFile = useCallback(
 		async ({
 			panel,
@@ -2102,7 +1664,6 @@ function LayoutShellLoadedContent({
 			trackTelemetry,
 			trackDocumentOpenAttempt,
 			trackDocumentViewed,
-			startupFallbackRevision,
 		}: {
 			panel: PanelSide;
 			fileId: string;
@@ -2115,21 +1676,8 @@ function LayoutShellLoadedContent({
 			trackTelemetry?: boolean;
 			trackDocumentOpenAttempt?: boolean;
 			trackDocumentViewed?: boolean;
-			startupFallbackRevision?: number;
 		}) => {
-			const shouldAbortStartupFallback = () =>
-				startupFallbackRevision !== undefined &&
-				(fileOpenInterruptRevisionRef.current !== startupFallbackRevision ||
-					Boolean(activeEntryFromPanel(panelStatesRef.current.central)));
-
-			if (startupFallbackRevision === undefined) {
-				fileOpenInterruptRevisionRef.current += 1;
-			} else if (shouldAbortStartupFallback()) {
-				return;
-			}
-
 			if (hasHistoricalEditorRevisionState(state)) {
-				if (shouldAbortStartupFallback()) return;
 				openResolvedFileView({
 					panel,
 					fileId: _requestedFileId,
@@ -2150,21 +1698,17 @@ function LayoutShellLoadedContent({
 			try {
 				resolvedFile = await resolveLixFileForOpen({
 					lix,
-					workspace,
 					filePath,
 				});
 			} catch (error) {
-				onError?.(error);
+				console.error("Failed to resolve file", error);
 				return;
 			}
 			if (!resolvedFile) {
-				onError?.(
-					new Error(`File not found in the opened workspace: ${filePath}`),
-				);
+				console.error(`File not found in the opened workspace: ${filePath}`);
 				return;
 			}
 
-			if (shouldAbortStartupFallback()) return;
 			openResolvedFileView({
 				panel,
 				fileId: resolvedFile.id,
@@ -2179,70 +1723,8 @@ function LayoutShellLoadedContent({
 				trackDocumentViewed,
 			});
 		},
-		[lix, workspace, onError, openResolvedFileView],
+		[lix, openResolvedFileView],
 	);
-
-	useEffect(() => {
-		if (!pendingOpenFilePaths || pendingOpenFilePaths.length === 0) return;
-		let cancelled = false;
-		(async () => {
-			const openedFiles: Array<{ id: string; path: string }> = [];
-			const handledFilePaths: string[] = [];
-			for (const pendingOpenFilePath of pendingOpenFilePaths) {
-				const file = await resolveLixFileForOpen({
-					lix,
-					workspace,
-					filePath: `/${pendingOpenFilePath}`,
-				});
-				if (cancelled) return;
-				if (!file) {
-					throw new Error(
-						`File not found in the opened workspace: ${pendingOpenFilePath}`,
-					);
-				}
-				openResolvedFileView({
-					panel: "central",
-					fileId: file.id as string,
-					filePath: file.path as string,
-					focus: false,
-					trackDocumentOpenAttempt: true,
-					trackDocumentViewed: false,
-				});
-				openedFiles.push({ id: file.id as string, path: file.path as string });
-				handledFilePaths.push(pendingOpenFilePath);
-			}
-			const firstFile = openedFiles[0];
-			if (!cancelled && firstFile) {
-				openResolvedFileView({
-					panel: "central",
-					fileId: firstFile.id,
-					filePath: firstFile.path,
-					focus: true,
-					trackDocumentOpenAttempt: false,
-					trackDocumentViewed: true,
-				});
-			}
-			if (!cancelled) {
-				for (const handledFilePath of handledFilePaths) {
-					onPendingOpenFileHandled?.(handledFilePath);
-				}
-			}
-		})().catch((error: unknown) => {
-			if (!cancelled) {
-				onError?.(error);
-			}
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		lix,
-		onError,
-		onPendingOpenFileHandled,
-		openResolvedFileView,
-		pendingOpenFilePaths,
-		workspace,
-	]);
 
 	const getExternalWriteReviewForFile = useCallback(
 		({
@@ -2479,145 +1961,17 @@ function LayoutShellLoadedContent({
 		return activeEntryFromPanel(centralPanel);
 	}, [centralPanel]);
 
-	useEffect(() => {
-		if (mostRecentMarkdownFallbackAttemptedRef.current) return;
-		if (canPersistOpenFileSession !== true) return;
-		if ((pendingOpenFilePaths?.length ?? 0) > 0) return;
-		if (activeCentralEntry) {
-			mostRecentMarkdownFallbackAttemptedRef.current = true;
-			return;
-		}
-
-		const workspaceApi = window.flashtypeDesktop?.workspace;
-		if (!workspaceApi?.getMostRecentMarkdownFile) {
-			mostRecentMarkdownFallbackAttemptedRef.current = true;
-			return;
-		}
-
-		mostRecentMarkdownFallbackAttemptedRef.current = true;
-		const fallbackRevision = fileOpenInterruptRevisionRef.current;
-		let cancelled = false;
-		void workspaceApi
-			.getMostRecentMarkdownFile()
-			.then(async (file) => {
-				if (cancelled || !file?.path) return;
-				if (fileOpenInterruptRevisionRef.current !== fallbackRevision) return;
-				if (activeEntryFromPanel(panelStatesRef.current.central)) return;
-				await handleOpenFile({
-					panel: "central",
-					fileId: "",
-					filePath: file.path,
-					focus: true,
-					documentOrigin: "existing",
-					startupFallbackRevision: fallbackRevision,
-				});
-			})
-			.catch((error: unknown) => {
-				if (!cancelled) {
-					onError?.(error);
-				}
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		activeCentralEntry,
-		canPersistOpenFileSession,
-		handleOpenFile,
-		onError,
-		pendingOpenFilePaths,
-	]);
-
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
-			// Multi-instance kinds (agent terminals) get a fresh instance per
-			// add; single-instance kinds reuse the existing view.
+			// Multi-instance kinds get a fresh instance per add; single-instance
+			// kinds reuse the existing view.
 			const instance = extensionMap.get(kind)?.multiInstance
 				? createExtensionInstanceId(kind)
 				: undefined;
-			const launchArgs = buildAgentLaunchArgsWithActiveFile({
-				state,
-				activeFilePath:
-					typeof activeCentralEntry?.state?.filePath === "string"
-						? activeCentralEntry.state.filePath
-						: null,
-			});
-			const agent =
-				kind === TERMINAL_EXTENSION_KIND &&
-				typeof state?.flashtype?.icon === "string"
-					? state.flashtype.icon
-					: undefined;
-			if (agent) {
-				captureWorkspaceTelemetry("agent_opened", {
-					agent,
-					panel: side,
-					source: "renderer",
-					surface: "terminal",
-				});
-			}
-			handleOpenView({ panel: side, kind, state, launchArgs, instance });
+			handleOpenView({ panel: side, kind, state, instance });
 		},
-		[
-			activeCentralEntry,
-			handleOpenView,
-			extensionMap,
-			captureWorkspaceTelemetry,
-		],
+		[handleOpenView, extensionMap],
 	);
-
-	useEffect(() => {
-		if (agentPreferenceAttemptedRef.current) return;
-		if (!extensionMap.has(TERMINAL_EXTENSION_KIND)) return;
-		if (rightPanel.views.length > 0) {
-			agentPreferenceAttemptedRef.current = true;
-			return;
-		}
-
-		const terminalApi = window.flashtypeDesktop?.terminal;
-		if (!terminalApi?.getPreferredAgent) {
-			agentPreferenceAttemptedRef.current = true;
-			return;
-		}
-
-		agentPreferenceAttemptedRef.current = true;
-		const runId = (agentPreferenceRunRef.current += 1);
-		void (async () => {
-			const cwd = await window.flashtypeDesktop?.lix?.workspaceDir?.();
-			const preference = await terminalApi.getPreferredAgent(
-				cwd ? { cwd } : undefined,
-			);
-			if (runId !== agentPreferenceRunRef.current) return;
-			if (
-				preference.preferredAgent === "claude" ||
-				preference.preferredAgent === "codex"
-			) {
-				setPreferredAgent(preference.preferredAgent);
-			}
-			const autoLaunchAgent =
-				preference.autoLaunchAgent ?? preference.versionBlockedAutoLaunchAgent;
-			if (autoLaunchAgent !== "claude" && autoLaunchAgent !== "codex") {
-				return;
-			}
-			if (panelStatesRef.current.right.views.length > 0) {
-				return;
-			}
-			const preset = agentLaunchPresetByKey(autoLaunchAgent);
-			if (!preset) {
-				return;
-			}
-			handleAddView("right", TERMINAL_EXTENSION_KIND, preset.state);
-		})().catch((error: unknown) => {
-			if (runId === agentPreferenceRunRef.current) {
-				onError?.(error);
-			}
-		});
-	}, [
-		extensionMap,
-		handleAddView,
-		mostRecentMarkdownFallbackWorkspaceKey,
-		onError,
-		rightPanel.views.length,
-	]);
 
 	const focusPanel = useCallback((side: PanelSide) => {
 		setFocusedPanel((prev) => (prev === side ? prev : side));
@@ -2816,72 +2170,6 @@ function LayoutShellLoadedContent({
 		});
 	}, [handleOpenFile, lix]);
 
-	const handleNativeNewFile = useCallback(async () => {
-		const visibleDraftHandlers = [
-			...newFileDraftHandlersRef.current.values(),
-		].filter((registration) => {
-			if (registration.panelSide === "left") {
-				return !isLeftCollapsed;
-			}
-			if (registration.panelSide === "right") {
-				return !isRightCollapsed;
-			}
-			return true;
-		});
-		const filesViewHandler = selectNewFileDraftHandler(
-			visibleDraftHandlers,
-			focusedPanel,
-		);
-		if (filesViewHandler) {
-			focusPanel(filesViewHandler.panelSide);
-			filesViewHandler.handler();
-			return;
-		}
-		try {
-			await handleCreateNewFile();
-		} catch (error) {
-			if (onError) {
-				onError(error);
-				return;
-			}
-			console.error("Failed to create new file from native menu", error);
-		}
-	}, [
-		focusPanel,
-		focusedPanel,
-		handleCreateNewFile,
-		isLeftCollapsed,
-		isRightCollapsed,
-		onError,
-	]);
-
-	useEffect(() => {
-		const unsubscribe =
-			window.flashtypeDesktop?.workspace.onNewFile?.(handleNativeNewFile);
-		return () => {
-			unsubscribe?.();
-		};
-	}, [handleNativeNewFile]);
-
-	const handleNativeCloseFile = useCallback(() => {
-		if (!activeCentralEntry?.instance) return;
-		if (typeof activeCentralEntry.state?.filePath !== "string") return;
-		handleCloseView({
-			panel: "central",
-			instance: activeCentralEntry.instance,
-			focus: true,
-		});
-	}, [activeCentralEntry, handleCloseView]);
-
-	useEffect(() => {
-		const unsubscribe = window.flashtypeDesktop?.workspace.onCloseFile?.(
-			handleNativeCloseFile,
-		);
-		return () => {
-			unsubscribe?.();
-		};
-	}, [handleNativeCloseFile]);
-
 	const activeCentralFileId =
 		activeFileIdFromExtensionInstance(activeCentralEntry);
 
@@ -2908,24 +2196,6 @@ function LayoutShellLoadedContent({
 	const activeFilePath = useMemo(() => {
 		return activeFilePathFromPanel(centralPanel);
 	}, [centralPanel]);
-
-	useEffect(() => {
-		void window.flashtypeDesktop?.workspace.setActiveFilePath({
-			filePath: activeFilePath,
-		});
-	}, [activeFilePath]);
-
-	const sessionOpenFilePaths = useMemo(
-		() => collectSessionOpenFilePaths([leftPanel, centralPanel, rightPanel]),
-		[leftPanel, centralPanel, rightPanel],
-	);
-
-	useEffect(() => {
-		if (!canPersistOpenFileSession) return;
-		void window.flashtypeDesktop?.workspace.setOpenFilePaths({
-			filePaths: sessionOpenFilePaths,
-		});
-	}, [canPersistOpenFileSession, sessionOpenFilePaths]);
 
 	const isLeftFocused = focusedPanel === "left";
 	const isCentralFocused = focusedPanel === "central";
@@ -3087,7 +2357,6 @@ function LayoutShellLoadedContent({
 			registerExternalWriteReview,
 			activeFileId: activeCentralFileId,
 			activeFilePath,
-			workspace,
 			lix,
 		}),
 		[
@@ -3106,7 +2375,6 @@ function LayoutShellLoadedContent({
 			registerNewFileDraftHandler,
 			activeCentralFileId,
 			activeFilePath,
-			workspace,
 			lix,
 			registerExternalWriteReview,
 		],
@@ -3279,19 +2547,15 @@ function LayoutShellLoadedContent({
 				}}
 			>
 				<TopBar
-					workspaceName={workspaceName}
 					activeFileName={activeFileName}
 					isReviewingCheckpoint={Boolean(checkpointDiff)}
-					onWorkspaceTitleClick={onOpenWorkspace}
 					menu={<FlashtypeMenu />}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}
 					isRightSidebarVisible={!isRightCollapsed}
-					isUpdateReady={isUpdateReady}
-					onInstallUpdate={onInstallUpdate}
 				/>
-				<div className="flex flex-1 min-h-0 overflow-hidden px-2 pb-2">
+				<div className="flex flex-1 min-h-0 overflow-hidden px-2">
 					<PanelGroup direction="horizontal" onLayout={handleLayoutChange}>
 						<Panel
 							ref={leftPanelRef}

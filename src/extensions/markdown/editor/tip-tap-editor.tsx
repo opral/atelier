@@ -15,10 +15,6 @@ import {
 	buildNormalizedMarkdownFromEditor,
 	normalizePersistedMarkdown,
 } from "./build-markdown-from-editor";
-import {
-	desktopWorkspaceApi,
-	useDesktopWorkspaceDir,
-} from "./desktop-workspace";
 
 type TipTapEditorProps = {
 	fileId?: string | null;
@@ -155,7 +151,6 @@ function TipTapEditorFileContent({
 			activeBranchId={activeBranchId}
 			hasInitialFile={Boolean(initialFile)}
 			initialMarkdown={initialMarkdown}
-			sourceFilePath={props.filePath ?? initialFile?.path ?? null}
 		/>
 	);
 }
@@ -172,39 +167,18 @@ function TipTapEditorLoadedContent({
 	originKey,
 	hasInitialFile,
 	initialMarkdown,
-	sourceFilePath,
 }: TipTapEditorContentProps & {
 	readonly activeBranchId: string;
 	readonly hasInitialFile: boolean;
 	readonly initialMarkdown: string;
-	readonly sourceFilePath?: string | null;
 }) {
 	const lix = useLix();
 	const { setEditor } = useEditorCtx();
-	const workspaceDirState = useDesktopWorkspaceDir();
 	const PERSIST_DEBOUNCE_MS = persistDebounceMs ?? 500;
 	const editorOriginKey = useMemo(
 		() => originKey ?? createMarkdownEditorOriginKey(),
 		[originKey],
 	);
-	const resolveImageSrc = useMemo(() => {
-		const workspaceApi = desktopWorkspaceApi();
-		const workspacePath = workspaceDirState.workspaceDir;
-		if (
-			!sourceFilePath ||
-			!workspacePath ||
-			!workspaceApi?.resolveMarkdownImageSrc
-		) {
-			return undefined;
-		}
-		return (src: string) =>
-			workspaceApi.resolveMarkdownImageSrc({
-				src,
-				sourceFilePath,
-				workspacePath,
-			});
-	}, [sourceFilePath, workspaceDirState.workspaceDir]);
-
 	const [initialAst, setInitialAst] = useState<any | null>(null);
 	const [initialAstLoaded, setInitialAstLoaded] = useState(false);
 	const lastInitialAstRef = useRef<string | null>(null);
@@ -213,12 +187,7 @@ function TipTapEditorLoadedContent({
 	const pendingExternalMarkdownRef = useRef<string | null>(null);
 
 	const editor = useMemo(() => {
-		if (
-			!activeFileId ||
-			!hasInitialFile ||
-			!initialAstLoaded ||
-			!workspaceDirState.loaded
-		) {
+		if (!activeFileId || !hasInitialFile || !initialAstLoaded) {
 			return null;
 		}
 		// Prefer assembled AST from the current file bytes so initialization stays deterministic.
@@ -231,7 +200,6 @@ function TipTapEditorLoadedContent({
 			fileId: activeFileId,
 			defaultBlock,
 			persistDebounceMs: PERSIST_DEBOUNCE_MS,
-			resolveImageSrc,
 			originKey: editorOriginKey,
 		});
 	}, [
@@ -243,9 +211,7 @@ function TipTapEditorLoadedContent({
 		initialAstLoaded,
 		initialMarkdown,
 		defaultBlock,
-		resolveImageSrc,
 		editorOriginKey,
-		workspaceDirState.loaded,
 	]);
 
 	useEffect(() => {

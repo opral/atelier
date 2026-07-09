@@ -1,7 +1,7 @@
 import { Suspense, useEffect } from "react";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, ExternalLink, FileText, Github, Loader2 } from "lucide-react";
+import { Check, FileText, Loader2 } from "lucide-react";
 import {
 	LixProvider,
 	useLix,
@@ -12,10 +12,6 @@ import { qb } from "@/lib/lix-kysely";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { EditorProvider } from "@/extensions/markdown/editor/editor-context";
 import { TipTapEditor } from "@/extensions/markdown/editor/tip-tap-editor";
-import {
-	desktopWorkspaceApi,
-	useDesktopWorkspaceDir,
-} from "@/extensions/markdown/editor/desktop-workspace";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
 import { renderMarkdownAstEditorHtml } from "@/extensions/markdown/editor/render-markdown-html";
 import { parseMarkdown } from "@/extensions/markdown/editor/markdown";
@@ -195,6 +191,18 @@ function MarkdownViewLoaded({
 		afterCommitId,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
+	const effectiveFileRow = fileRow;
+	const externalWriteReview = useExternalWriteReview({
+		fileId: effectiveFileRow?.id,
+		path: effectiveFileRow?.path,
+	});
+	const externalWriteReviewData =
+		useExternalWriteReviewData(externalWriteReview);
+	useEffect(() => {
+		if (!externalWriteReview) return;
+		return registerExternalWriteReview?.(externalWriteReview);
+	}, [externalWriteReview, registerExternalWriteReview]);
+
 	if (revisionMode !== "editor") {
 		return (
 			<MarkdownHistoricalViewLoaded
@@ -209,18 +217,6 @@ function MarkdownViewLoaded({
 			/>
 		);
 	}
-
-	const effectiveFileRow = fileRow;
-	const externalWriteReview = useExternalWriteReview({
-		fileId: effectiveFileRow?.id,
-		path: effectiveFileRow?.path,
-	});
-	const externalWriteReviewData =
-		useExternalWriteReviewData(externalWriteReview);
-	useEffect(() => {
-		if (!externalWriteReview) return;
-		return registerExternalWriteReview?.(externalWriteReview);
-	}, [externalWriteReview, registerExternalWriteReview]);
 	const review = externalWriteReview;
 	const reviewData: ExternalWriteReviewData | null = externalWriteReviewData;
 	const reviewDiff: MarkdownReviewDiff | null = reviewData
@@ -470,51 +466,25 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 }
 
 function MarkdownSnapshotView({
-	filePath,
+	filePath: _filePath,
 	markdown,
 }: {
 	readonly filePath: string;
 	readonly markdown: string;
 }) {
-	const workspaceDirState = useDesktopWorkspaceDir();
-	const html = useMemo(() => {
-		if (!workspaceDirState.loaded) return null;
-		const workspaceApi = desktopWorkspaceApi();
-		const workspacePath = workspaceDirState.workspaceDir;
-		const resolveImageSrc =
-			filePath && workspacePath && workspaceApi?.resolveMarkdownImageSrc
-				? (src: string) =>
-						workspaceApi.resolveMarkdownImageSrc({
-							src,
-							sourceFilePath: filePath,
-							workspacePath,
-						})
-				: undefined;
-		return renderMarkdownAstEditorHtml(parseMarkdown(markdown) as any, {
-			resolveImageSrc,
-		});
-	}, [
-		filePath,
-		markdown,
-		workspaceDirState.loaded,
-		workspaceDirState.workspaceDir,
-	]);
+	const html = useMemo(
+		() => renderMarkdownAstEditorHtml(parseMarkdown(markdown) as any),
+		[markdown],
+	);
 
 	return (
 		<div className="markdown-view flex h-full flex-col bg-background">
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
-					{html ? (
-						<div
-							className="ProseMirror tiptap mx-auto w-full"
-							dangerouslySetInnerHTML={{ __html: html }}
-						/>
-					) : (
-						<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-							<Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-							<span>Loading file…</span>
-						</div>
-					)}
+					<div
+						className="ProseMirror tiptap mx-auto w-full"
+						dangerouslySetInnerHTML={{ __html: html }}
+					/>
 				</div>
 			</div>
 		</div>
@@ -523,7 +493,7 @@ function MarkdownSnapshotView({
 
 function MarkdownReviewOverlay({
 	fileId,
-	sourceFilePath,
+	sourceFilePath: _sourceFilePath,
 	review,
 	reviewDiff,
 	reviewId,
@@ -554,36 +524,18 @@ function MarkdownReviewOverlay({
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 }) {
-	const workspaceDirState = useDesktopWorkspaceDir();
 	const { beforeBlocks, afterBlocks } = useMarkdownBlocksAtCommits(
 		fileId,
 		beforeCommitId,
 		afterCommitId,
 	);
 
-	if (!workspaceDirState.loaded) {
-		return <MarkdownReviewOverlayFallback />;
-	}
-
-	const workspaceApi = desktopWorkspaceApi();
-	const workspacePath = workspaceDirState.workspaceDir;
-	const resolveImageSrc =
-		sourceFilePath && workspacePath && workspaceApi?.resolveMarkdownImageSrc
-			? (src: string) =>
-					workspaceApi.resolveMarkdownImageSrc({
-						src,
-						sourceFilePath,
-						workspacePath,
-					})
-			: undefined;
 	const enrichedReviewDiff = enrichMarkdownReviewDiff(
 		reviewDiff,
 		beforeBlocks,
 		afterBlocks,
 	);
-	const diffHtml = renderMarkdownReviewDiffHtml(enrichedReviewDiff, {
-		resolveImageSrc,
-	});
+	const diffHtml = renderMarkdownReviewDiffHtml(enrichedReviewDiff);
 	const rejectReview = () => void onReject?.({ fileId, reviewId, review });
 
 	return (
@@ -952,24 +904,11 @@ function UnsupportedFilePlaceholder({
 					This file type is not supported yet.
 				</p>
 				<p>
-					Flashtype only opens markdown files in this editor, so{" "}
+					Atelier only opens markdown files in this editor, so{" "}
 					<span className="font-mono text-xs text-[var(--color-text-secondary)]">
 						{filePath}
 					</span>{" "}
 					was left blank to avoid damaging its formatting.
-				</p>
-				<p>
-					<a
-						href="https://github.com/opral/flashtype/issues"
-						target="_blank"
-						rel="noopener noreferrer"
-						className="inline-flex items-center gap-1 font-medium text-[var(--color-icon-brand)] underline underline-offset-2 hover:text-[var(--color-text-link-hover)]"
-					>
-						<Github className="size-3.5" aria-hidden="true" />
-						Open an issue on GitHub
-						<ExternalLink className="size-3" aria-hidden="true" />
-					</a>{" "}
-					for support for more file types.
 				</p>
 			</div>
 		</div>

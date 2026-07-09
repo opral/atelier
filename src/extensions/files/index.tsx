@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Files, FileUp, FilePlus, Github } from "lucide-react";
+import { Files, FileUp, FilePlus } from "lucide-react";
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
@@ -59,27 +59,9 @@ function FilesViewContent({
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
 }) {
-	const ownerIdRef = useRef(
-		`files-view:${context?.viewInstance ?? Math.random().toString(36).slice(2)}`,
-	);
-	const isEphemeralWorkspace = context?.workspace?.ephemeral === true;
-	const [watchedEntries, setWatchedEntries] = useState<FilesystemEntryRow[]>(
-		[],
-	);
-	const [upgradedWatchedFilePaths, setUpgradedWatchedFilePaths] = useState(
-		() => new Set<string>(),
-	);
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),
 	);
-	const visibleWatchedEntries = useMemo(() => {
-		if (!isEphemeralWorkspace) return [];
-		if (upgradedWatchedFilePaths.size === 0) return watchedEntries;
-		return watchedEntries.filter((entry) => {
-			if (entry.kind !== "file") return true;
-			return !upgradedWatchedFilePaths.has(filesystemEntryPathKey(entry));
-		});
-	}, [isEphemeralWorkspace, upgradedWatchedFilePaths, watchedEntries]);
 	const checkpointDiffEntries = useMemo(
 		() =>
 			checkpointDiffFilesystemEntries(
@@ -91,13 +73,8 @@ function FilesViewContent({
 	);
 	const combinedEntries = useMemo(() => {
 		if (context?.checkpointDiff) return checkpointDiffEntries;
-		return unionFilesystemEntries(entries ?? [], visibleWatchedEntries);
-	}, [
-		context?.checkpointDiff,
-		entries,
-		visibleWatchedEntries,
-		checkpointDiffEntries,
-	]);
+		return entries ?? [];
+	}, [context?.checkpointDiff, entries, checkpointDiffEntries]);
 	const nodes = useMemo(
 		() => buildFilesystemTree(combinedEntries),
 		[combinedEntries],
@@ -259,69 +236,6 @@ function FilesViewContent({
 	const panelSide = context?.panelSide;
 	const viewInstance = context?.viewInstance;
 	const isActiveView = context?.isActiveView === true;
-	const openedEphemeralDirectoryPaths = useMemo(() => {
-		const paths = new Set(openDirectoryPaths);
-		paths.add("/");
-		return [...paths].sort((left, right) => left.localeCompare(right));
-	}, [openDirectoryPaths]);
-
-	useEffect(() => {
-		if (!isEphemeralWorkspace) {
-			setWatchedEntries([]);
-			setUpgradedWatchedFilePaths(new Set());
-			return;
-		}
-		const workspaceApi = window.flashtypeDesktop?.workspace;
-		if (!workspaceApi?.setEphemeralWatchedDirectories) {
-			return;
-		}
-		const ownerId = ownerIdRef.current;
-		let cancelled = false;
-		void workspaceApi
-			.setEphemeralWatchedDirectories({
-				ownerId,
-				paths: openedEphemeralDirectoryPaths,
-			})
-			.then((entries) => {
-				if (!cancelled) {
-					setWatchedEntries(entries);
-				}
-			})
-			.catch((error: unknown) => {
-				if (!cancelled) {
-					console.warn("Failed to list transient workspace files", error);
-				}
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [isEphemeralWorkspace, openedEphemeralDirectoryPaths]);
-
-	useEffect(() => {
-		if (!isEphemeralWorkspace) {
-			return;
-		}
-		return window.flashtypeDesktop?.workspace.onEphemeralWatchedFileTreeChanged?.(
-			(entries) => {
-				setWatchedEntries(entries);
-			},
-		);
-	}, [isEphemeralWorkspace]);
-
-	useEffect(() => {
-		if (!isEphemeralWorkspace) {
-			return;
-		}
-		const workspaceApi = window.flashtypeDesktop?.workspace;
-		const ownerId = ownerIdRef.current;
-		return () => {
-			void workspaceApi?.setEphemeralWatchedDirectories?.({
-				ownerId,
-				paths: [],
-			});
-		};
-	}, [isEphemeralWorkspace]);
-
 	const resolveCreateDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
 		if (selectedPath.endsWith("/")) return selectedPath;
@@ -515,21 +429,7 @@ function FilesViewContent({
 					return;
 				}
 
-				let resolvedFileId = request.source === "watched" ? null : request.id;
-				if (request.source === "watched") {
-					await lix.importFilesystemPaths([sourcePath]);
-					const importedFile = await qb(lix)
-						.selectFrom("lix_file")
-						.select("id")
-						.where("path", "=", sourcePath)
-						.executeTakeFirst();
-					if (!importedFile?.id) {
-						throw new Error(
-							`imported watched file id not found for path '${sourcePath}'`,
-						);
-					}
-					resolvedFileId = importedFile.id as string;
-				}
+				const resolvedFileId = request.id;
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ path: destinationPath } as any)
@@ -541,13 +441,6 @@ function FilesViewContent({
 						destinationPath,
 					),
 				);
-				if (request.source === "watched") {
-					setUpgradedWatchedFilePaths((prev) => {
-						const next = new Set(prev);
-						next.add(sourcePath);
-						return next;
-					});
-				}
 				setSelectedPath(destinationPath);
 				setSelectedFileId(resolvedFileId ?? null);
 				setSelectedKind("file");
@@ -821,9 +714,7 @@ function FilesViewContent({
 			);
 
 			if (markdownFiles.length === 0) {
-				alert(
-					"Only markdown files (.md) are supported at the moment.\n\nOpen an issue on GitHub for support for CSV, PDF, etc: https://github.com/opral/flashtype/issues",
-				);
+				alert("Only markdown files (.md) are supported at the moment.");
 				return;
 			}
 
@@ -923,20 +814,6 @@ function FilesViewContent({
 					</p>
 					<p className="mt-1 text-center text-xs text-muted-foreground">
 						Only .md and .markdown files supported
-					</p>
-					<p className="mt-1 text-center text-xs text-muted-foreground">
-						Open{" "}
-						<a
-							href="https://github.com/opral/flashtype/issues"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="inline-flex items-center gap-1 underline hover:text-foreground pointer-events-auto"
-						>
-							<Github className="size-3" aria-hidden="true" />
-							an issue on GitHub
-							<ExternalLink className="size-3" aria-hidden="true" />
-						</a>{" "}
-						for support for CSV, PDF, etc
 					</p>
 				</div>
 			)}
@@ -1316,30 +1193,6 @@ function remapFilePathsInDirectory(
 
 function appendUniquePath(paths: readonly string[], path: string): string[] {
 	return paths.includes(path) ? [...paths] : [...paths, path];
-}
-
-function unionFilesystemEntries(
-	lixEntries: readonly FilesystemEntryRow[],
-	watchedEntries: readonly FilesystemEntryRow[],
-): FilesystemEntryRow[] {
-	const entriesByPath = new Map<string, FilesystemEntryRow>();
-	for (const entry of watchedEntries) {
-		entriesByPath.set(filesystemEntryPathKey(entry), {
-			...entry,
-			path: filesystemEntryPathKey(entry),
-			source: "watched",
-		});
-	}
-	for (const entry of lixEntries) {
-		entriesByPath.set(filesystemEntryPathKey(entry), {
-			...entry,
-			path: filesystemEntryPathKey(entry),
-			source: "lix",
-		});
-	}
-	return [...entriesByPath.values()].sort((left, right) =>
-		left.path.localeCompare(right.path),
-	);
 }
 
 function checkpointDiffFilesystemEntries(

@@ -7,6 +7,12 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
 	base: "./",
 	build: {
+		lib: {
+			entry: path.resolve(__dirname, "src/index.ts"),
+			formats: ["es"],
+			fileName: "atelier",
+			cssFileName: "atelier",
+		},
 		sourcemap: true,
 	},
 	plugins: [

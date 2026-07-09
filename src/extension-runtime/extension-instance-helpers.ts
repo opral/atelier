@@ -5,7 +5,6 @@ export const FILES_EXTENSION_KIND = "flashtype_files" as ExtensionKind;
 export const HISTORY_EXTENSION_KIND = "flashtype_history" as ExtensionKind;
 export const FILE_EXTENSION_KIND = "flashtype_file" as ExtensionKind;
 export const CSV_EXTENSION_KIND = "flashtype_csv" as ExtensionKind;
-export const TERMINAL_EXTENSION_KIND = "flashtype_terminal" as ExtensionKind;
 
 export const fileExtensionInstanceForKind = (
 	kind: ExtensionKind,

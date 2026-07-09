@@ -81,11 +81,6 @@ function externalLinkUrlFromClick(event: MouseEvent): string | null {
 }
 
 function openExternalLink(url: string): void {
-	const openExternal = window.flashtypeDesktop?.app?.openExternal;
-	if (openExternal) {
-		void openExternal({ url });
-		return;
-	}
 	window.open(url, "_blank", "noopener,noreferrer");
 }
 

@@ -162,13 +162,6 @@ function createTestLixAdapter(sdkLix: SdkLix): Lix {
 		async switchBranch(options) {
 			return await sdkLix.switchBranch(options);
 		},
-		async importFilesystemPaths() {
-			// Filesystem import now belongs to FsBackend in the latest SDK. Tests
-			// that exercise the legacy desktop path replace this method with a spy.
-		},
-		async syncDiskToLix() {
-			// The in-memory test backend has no disk to synchronize.
-		},
 		async mergeBranchPreview(options) {
 			return await sdkLix.mergeBranchPreview(options);
 		},

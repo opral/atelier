@@ -426,7 +426,7 @@ export function FileTree({
 		model.resetPaths(treeInput.paths, {
 			initialExpandedPaths: [...openDirectoryTreePaths],
 		});
-	}, [model, treeInput.paths, treePathsKey]);
+	}, [model, openDirectoryTreePaths, treeInput.paths, treePathsKey]);
 
 	useEffect(() => {
 		model.setGitStatus(reviewGitStatusEntries as GitStatusEntry[]);
@@ -477,6 +477,7 @@ export function FileTree({
 			removeIfCanceled: true,
 		});
 	}, [
+		createRequest,
 		createRequest?.id,
 		model,
 		treeInput.createPlaceholderTreePath,

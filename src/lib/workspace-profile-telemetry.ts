@@ -126,28 +126,6 @@ export async function readWorkspaceId(lix: Lix) {
 }
 
 async function readWorkspaceProfile(lix: Lix): Promise<WorkspaceProfile> {
-	const filesystemProfile = await window.flashtypeDesktop?.workspace
-		.profile()
-		.catch((error: unknown) => {
-			console.warn("Failed to profile workspace filesystem", error);
-			return null;
-		});
-	if (filesystemProfile) {
-		return {
-			fileCount: filesystemProfile.file_count,
-			directoryCount: filesystemProfile.directory_count,
-			extensionCount: filesystemProfile.extension_count,
-			extensionCounts: filesystemProfile.extension_counts,
-			totalSizeMb: filesystemProfile.total_size_mb,
-			extensions: filesystemProfile.extensions.map((extension) => ({
-				fileExtension: extension.file_extension,
-				fileCount: extension.file_count,
-				totalSizeMb: extension.total_size_mb,
-				medianFileSizeKb: extension.median_file_size_kb,
-			})),
-		};
-	}
-
 	const filePaths = await readWorkspaceFilePaths(lix);
 	return buildWorkspaceProfile(filePaths);
 }

@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { createEditor } from "./create-editor";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
@@ -148,16 +148,7 @@ async function createEditorFromFile(args: {
 
 test("clicking a rendered markdown link opens it externally", async () => {
 	const lix = await openLix();
-	const originalDesktop = window.flashtypeDesktop;
-	const openedUrls: string[] = [];
-	window.flashtypeDesktop = {
-		app: {
-			openExternal: async ({ url }: { url: string }) => {
-				openedUrls.push(url);
-				return { status: "opened" };
-			},
-		},
-	} as unknown as Window["flashtypeDesktop"];
+	const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
 	const editor = createEditor({
 		lix,
 		initialMarkdown: "Read the [docs](https://example.com/docs).",
@@ -179,30 +170,24 @@ test("clicking a rendered markdown link opens it externally", async () => {
 		link?.dispatchEvent(clickEvent);
 
 		expect(clickEvent.defaultPrevented).toBe(true);
-		expect(openedUrls).toEqual(["https://example.com/docs"]);
+		expect(openWindow).toHaveBeenCalledWith(
+			"https://example.com/docs",
+			"_blank",
+			"noopener,noreferrer",
+		);
 	} finally {
 		editor.destroy();
 		editorDom.remove();
-		window.flashtypeDesktop = originalDesktop;
+		openWindow.mockRestore();
 	}
 });
 
 test("clicking a relative or fragment markdown link does not open externally", async () => {
 	const lix = await openLix();
-	const originalDesktop = window.flashtypeDesktop;
-	const openedUrls: string[] = [];
-	window.flashtypeDesktop = {
-		app: {
-			openExternal: async ({ url }: { url: string }) => {
-				openedUrls.push(url);
-				return { status: "opened" };
-			},
-		},
-	} as unknown as Window["flashtypeDesktop"];
+	const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
 	const editor = createEditor({
 		lix,
-		initialMarkdown:
-			"Read the [guide](./guide.md) or jump to [intro](#intro).",
+		initialMarkdown: "Read the [guide](./guide.md) or jump to [intro](#intro).",
 		persistState: false,
 	});
 	const editorDom = editor.view.dom;
@@ -222,11 +207,11 @@ test("clicking a relative or fragment markdown link does not open externally", a
 			expect(clickEvent.defaultPrevented).toBe(false);
 		}
 
-		expect(openedUrls).toEqual([]);
+		expect(openWindow).not.toHaveBeenCalled();
 	} finally {
 		editor.destroy();
 		editorDom.remove();
-		window.flashtypeDesktop = originalDesktop;
+		openWindow.mockRestore();
 	}
 });
 

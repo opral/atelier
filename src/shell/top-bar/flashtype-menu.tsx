@@ -1,4 +1,4 @@
-import { Circle, CircleOff, FileDown, Hammer, Zap } from "lucide-react";
+import { Circle, CircleOff, Hammer, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -36,31 +36,6 @@ export function FlashtypeMenu() {
 		await setDeterministicMode({ enabled: !deterministicEnabled });
 	}, [deterministicEnabled, setDeterministicMode]);
 
-	const handleExportLix = async () => {
-		const workspace = window.flashtypeDesktop?.workspace;
-		if (!workspace) return;
-		try {
-			const lixFileBytes = await workspace.exportLixFile();
-			const blob = new Blob([new Uint8Array(lixFileBytes)], {
-				type: "application/octet-stream",
-			});
-			const url = URL.createObjectURL(blob);
-			const anchor = document.createElement("a");
-			anchor.href = url;
-			anchor.download = `flashtype-export-${new Date()
-				.toISOString()
-				.slice(0, 10)}.lix`;
-			document.body.appendChild(anchor);
-			anchor.click();
-			window.setTimeout(() => {
-				document.body.removeChild(anchor);
-				URL.revokeObjectURL(url);
-			}, 100);
-		} catch (error) {
-			console.error("Failed to export Lix file", error);
-		}
-	};
-
 	// Inspector is intentionally disabled for now to reduce merge conflicts.
 	// const handleToggleInspector = async () => {
 	// 	try {
@@ -87,15 +62,6 @@ export function FlashtypeMenu() {
 				side="bottom"
 				sideOffset={6}
 			>
-				<DropdownMenuItem
-					className="flex items-center gap-1.5 text-xs"
-					onSelect={() => {
-						void handleExportLix();
-					}}
-				>
-					<FileDown className="h-3.5 w-3.5 shrink-0" />
-					<span>Export lix image</span>
-				</DropdownMenuItem>
 				<DropdownMenuSub>
 					<DropdownMenuSubTrigger className="flex items-center gap-1.5 text-xs">
 						<Hammer className="h-3.5 w-3.5 shrink-0" />

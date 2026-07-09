@@ -22,7 +22,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, X } from "lucide-react";
-import { TAB_INSTANCE_ICONS } from "./agent-icons";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -220,7 +219,7 @@ export function PanelV2({
 										instance={entry.instance}
 										panelSide={side}
 										kind={entry.kind}
-										icon={resolveTabIcon(entry) ?? view.icon}
+										icon={view.icon}
 										label={label}
 										badgeCount={badgeCount}
 										isActive={isActive}
@@ -356,12 +355,6 @@ const resolveLabel = (
 		return tabLabel(view, instance);
 	}
 	return (instance.state?.flashtype?.label as string | undefined) ?? view.label;
-};
-
-/** Per-instance icon override, e.g. the Claude mark on an agent terminal. */
-const resolveTabIcon = (instance: ExtensionInstance): TabIcon | null => {
-	const key = instance.state?.flashtype?.icon as string | undefined;
-	return (key && TAB_INSTANCE_ICONS[key]) || null;
 };
 
 interface TabBarProps {

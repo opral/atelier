@@ -15,7 +15,7 @@
 }
 
 /* Hide the native scrollbar; a lightweight overlay thumb mirrors scroll
-   position so fade behavior is reliable across Electron/Chromium repaints. */
+   position so fade behavior is reliable across Chromium repaints. */
 .markdown-view .tiptap-container {
 	scrollbar-width: none;
 }
