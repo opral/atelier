@@ -91,7 +91,7 @@ const createViewContext = (
 });
 
 describe("CentralPanel", () => {
-	test("renders stable analytics selectors for empty state actions", async () => {
+	test("renders the document action without desktop agent controls", async () => {
 		const panelState: PanelState = {
 			views: [],
 			activeInstance: null,
@@ -115,8 +115,8 @@ describe("CentralPanel", () => {
 			screen.getByRole("button", { name: /new document/i }),
 		).toHaveAttribute("data-attr", "central-empty-new-document");
 		expect(
-			screen.getByRole("button", { name: /ask your agent/i }),
-		).toHaveAttribute("data-attr", "central-empty-ask-agent");
+			screen.queryByRole("button", { name: /ask your agent/i }),
+		).toBeNull();
 	});
 
 	test("renders the active view without a tab strip", async () => {

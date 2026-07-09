@@ -1,22 +1,43 @@
-# Flashtype
+# Atelier
 
-### The markdown editor for Claude & Codex
+### The embeddable lix workspace
 
-Agents edit. You review the diff. Nothing lands without you.
+Atelier is a workspace UI — editor, files, history, diffs, agents — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
 
-[Download for macOS](https://flashtype.ai) - [Website](https://flashtype.ai) - [Discord](https://discord.gg/gdMPPWy57R)
+Atelier is to [Flashtype](https://flashtype.ai) what Monaco is to VS Code and Chromium is to Chrome: the engine inside. Flashtype (Electron, macOS) is one host. A browser app pointing at a remote lix is another. Same workspace, any shell.
 
-![Flashtype](https://flashtype.ai/og.png)
+## Why "Atelier"?
 
-## Features
+**Atelier** (French, _[atəlje]_) is an artist's workshop — the private studio where an artist and their assistants make the work. Not the gallery where it's shown, not the storage where it's kept: the room where the work actually happens.
 
-| Feature                 | Description                                      |
-| ----------------------- | ------------------------------------------------ |
-| Local files             | Edit `.md` and `.markdown` files directly.       |
-| Claude & Codex          | Run agents next to the document.                 |
-| Inline diffs            | Keep or undo edits with word-level context.      |
-| History                 | Inspect checkpoints and restore earlier drafts.  |
-| Markdown-native         | Keep portable markdown as the source of truth.   |
+That's this component's job. Lix holds the workspace — the files, the history, every change. Atelier is the room you step into to work on it.
+
+## Usage
+
+```ts
+import { openLix } from "@lix-js/sdk";
+import { createAtelier } from "@opral/atelier";
+
+// The host creates and owns the lix.
+const lix = await openLix();
+
+createAtelier({
+	element: document.getElementById("mount"),
+	lix,
+});
+```
+
+The target runtime is the browser. Anything that can hand Atelier a DOM element and a lix can host it — an Electron renderer, a web app, a preview deployment.
+
+## What's in the workspace
+
+| Feature      | Description                                     |
+| ------------ | ----------------------------------------------- |
+| Editor       | Markdown-native writing surface.                |
+| Files        | Browse and open the files in the lix workspace. |
+| Agents       | Run Claude & Codex next to the document.        |
+| Inline diffs | Keep or undo edits with word-level context.     |
+| History      | Inspect checkpoints and restore earlier drafts. |
 
 ## Powered by Lix
 
@@ -26,14 +47,12 @@ Agents edit. You review the diff. Nothing lands without you.
   </a>
 </p>
 
-Flashtype's version control features are powered by [Lix](https://github.com/opral/lix).
+Atelier's change control is powered by [Lix](https://github.com/opral/lix), a version control system that can handle any file format and is designed for building applications on top of.
 
-Lix is a version control system that can handle any file format, and is designed for building applications on top of.
+## Status
 
-## Download
-
-Download Flashtype for macOS at [flashtype.ai](https://flashtype.ai).
+Atelier is derived from the [Flashtype](https://github.com/opral/flashtype) codebase. The minimal `createAtelier({ element, lix })` entry point and Electron preview are in progress.
 
 ## License
 
-Flashtype is released under the [MIT License](./LICENSE).
+Atelier is released under the [MIT License](./LICENSE).

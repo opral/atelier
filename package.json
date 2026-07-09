@@ -1,5 +1,5 @@
 {
-	"name": "@opral/flashtype",
+	"name": "@opral/atelier",
 	"private": true,
 	"version": "0.7.3",
 	"type": "module",
@@ -14,7 +14,10 @@
 		}
 	},
 	"scripts": {
-		"dev": "node scripts/dev.mjs",
+		"dev": "pnpm run dev:preview:electron",
+		"dev:legacy": "node scripts/dev.mjs",
+		"dev:preview:electron": "pnpm run build:preview:electron-process && concurrently -k \"pnpm run dev:preview:renderer\" \"wait-on tcp:4174 && ATELIER_PREVIEW_URL=http://127.0.0.1:4174 env -u ELECTRON_RUN_AS_NODE electron --remote-debugging-port=9229 .preview/electron/main.mjs\"",
+		"dev:preview:renderer": "vite --config preview/electron/vite.config.ts --host 127.0.0.1 --port 4174 --strictPort",
 		"dev:renderer": "vite --host 127.0.0.1 --port 4173 --strictPort",
 		"dev:electron": "wait-on tcp:4173 && VITE_DEV_SERVER_URL=http://127.0.0.1:4173 electron ./electron/main.mjs",
 		"build:icons": "cargo flashtype-icons",
@@ -26,7 +29,9 @@
 		"install:mac": "pnpm run package:mac && node scripts/install-mac.mjs",
 		"release:mac": "pnpm run build:icons && pnpm run build && pnpm run build:posthog-sourcemaps && pnpm run build:env-variables && pnpm run rebuild:electron-native && pnpm run fix:lix-native-macos && electron-builder --mac --publish always",
 		"dev:web": "vite",
-		"predev": "pnpm run build:lix && pnpm run rebuild:electron-native",
+		"predev": "pnpm run build:lix",
+		"predev:legacy": "pnpm run build:lix && pnpm run rebuild:electron-native",
+		"build:preview:electron-process": "tsc -p preview/electron/tsconfig.json",
 		"build": "vite build",
 		"prebuild": "pnpm run build:lix",
 		"postinstall": "command -v cargo >/dev/null 2>&1 && cargo fetch --manifest-path submodule/lix/Cargo.toml || true",

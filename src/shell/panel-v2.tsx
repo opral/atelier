@@ -22,13 +22,11 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, X } from "lucide-react";
-import { AGENT_LAUNCH_PRESETS, TAB_INSTANCE_ICONS } from "./agent-icons";
-import { TERMINAL_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
+import { TAB_INSTANCE_ICONS } from "./agent-icons";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type {
@@ -304,7 +302,7 @@ function AddViewMenu({
 	readonly panel: PanelState;
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
 }) {
-	const { visibleExtensions, extensionMap } = useExtensionRegistry();
+	const { visibleExtensions } = useExtensionRegistry();
 	const openKinds = useMemo(
 		() => new Set(panel.views.map((entry) => entry.kind)),
 		[panel.views],
@@ -316,8 +314,7 @@ function AddViewMenu({
 			),
 		[visibleExtensions, openKinds],
 	);
-	const hasTerminal = extensionMap.has(TERMINAL_EXTENSION_KIND);
-	if (availableViews.length === 0 && !hasTerminal) return null;
+	if (availableViews.length === 0) return null;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -335,28 +332,6 @@ function AddViewMenu({
 				align={side === "right" ? "end" : "start"}
 				className="w-44 border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg"
 			>
-				{hasTerminal ? (
-					<>
-						{AGENT_LAUNCH_PRESETS.map((preset) => (
-							<DropdownMenuItem
-								key={preset.key}
-								data-attr={
-									preset.key === "claude"
-										? "panel-add-agent-claude"
-										: "panel-add-agent-codex"
-								}
-								onSelect={() =>
-									onAddView(TERMINAL_EXTENSION_KIND, preset.state)
-								}
-								className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
-							>
-								<preset.icon className="size-4" />
-								<span>{preset.label}</span>
-							</DropdownMenuItem>
-						))}
-						<DropdownMenuSeparator />
-					</>
-				) : null}
 				{availableViews.map((ext) => (
 					<DropdownMenuItem
 						key={ext.kind}

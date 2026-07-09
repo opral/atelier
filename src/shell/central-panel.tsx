@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { ArrowRight, FilePlus } from "lucide-react";
+import { FilePlus } from "lucide-react";
 import type {
 	PanelState,
 	PanelSide,
@@ -51,12 +51,7 @@ export function CentralPanel({
 		[onFinalizePendingView, panel.views],
 	);
 
-	const emptyState = (
-		<EmptyStateContent
-			onCreateNewFile={onCreateNewFile}
-			onAskAgent={() => viewContext.focusPanel?.("right")}
-		/>
-	);
+	const emptyState = <EmptyStateContent onCreateNewFile={onCreateNewFile} />;
 
 	const labelResolver = useCallback(
 		(view: ExtensionDefinition, entry: (typeof panel.views)[number]) =>
@@ -88,10 +83,8 @@ export function CentralPanel({
  */
 function EmptyStateContent({
 	onCreateNewFile,
-	onAskAgent,
 }: {
 	onCreateNewFile?: () => void | Promise<void>;
-	onAskAgent?: () => void;
 }) {
 	return (
 		<div
@@ -120,15 +113,6 @@ function EmptyStateContent({
 					<span className="text-[11.5px] font-semibold opacity-75">⌘.</span>
 				</button>
 			) : null}
-			<button
-				type="button"
-				onClick={onAskAgent}
-				data-attr="central-empty-ask-agent"
-				className="mt-4.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12.5px] text-[var(--color-icon-tertiary)] hover:text-[var(--color-text-secondary)]"
-			>
-				or ask your agent to draft one
-				<ArrowRight className="size-3" strokeWidth={2} />
-			</button>
 		</div>
 	);
 }

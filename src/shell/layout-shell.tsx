@@ -3364,7 +3364,6 @@ function LayoutShellLoadedContent({
 								onAddView={addViewOnRight}
 								onRemoveView={(key) => handleRemoveView("right", key)}
 								viewContext={rightViewContext}
-								preferredAgent={preferredAgent}
 							/>
 						</Panel>
 					</PanelGroup>
