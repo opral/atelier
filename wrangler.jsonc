@@ -1,0 +1,13 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "atelier-preview",
+	"main": "./preview/web/worker.mjs",
+	"compatibility_date": "2026-07-10",
+	"preview_urls": true,
+	"assets": {
+		"directory": "./.preview/web",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/assets/*.wasm"],
+	},
+}
