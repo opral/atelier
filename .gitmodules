@@ -1,4 +1,0 @@
-[submodule "lix"]
-	path = submodule/lix
-	url = https://github.com/opral/lix.git
-	branch = main

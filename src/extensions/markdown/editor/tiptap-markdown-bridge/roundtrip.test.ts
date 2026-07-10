@@ -173,10 +173,7 @@ describe("root & paragraph", () => {
 				content: [
 					{
 						type: "paragraph",
-						content: [
-							{ type: "text", text: "x" },
-							{ type: "hardBreak" },
-						],
+						content: [{ type: "text", text: "x" }, { type: "hardBreak" }],
 					},
 				],
 			}),

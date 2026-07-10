@@ -7,10 +7,10 @@ import {
 	type CSSProperties,
 } from "react";
 import {
+	Group,
 	Panel,
-	PanelGroup,
-	PanelResizeHandle,
-	type ImperativePanelHandle,
+	Separator,
+	type PanelImperativeHandle,
 } from "react-resizable-panels";
 import {
 	DndContext,
@@ -889,8 +889,8 @@ function LayoutShellLoadedContent({
 				? initialLayoutSizes.right
 				: DEFAULT_PANEL_FALLBACK_SIZES.right,
 	});
-	const leftPanelRef = useRef<ImperativePanelHandle | null>(null);
-	const rightPanelRef = useRef<ImperativePanelHandle | null>(null);
+	const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
+	const rightPanelRef = useRef<PanelImperativeHandle | null>(null);
 	const resolvedReviewIdsRef = useRef(new Set<string>());
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
@@ -1349,7 +1349,7 @@ function LayoutShellLoadedContent({
 			} else {
 				setIsRightCollapsed(false);
 			}
-			panelRef.resize(targetSize);
+			panelRef.resize(`${targetSize}%`);
 		},
 		[
 			initialLayoutSizes.left,
@@ -1820,13 +1820,19 @@ function LayoutShellLoadedContent({
 	const sensors = useSensors(pointerSensor);
 
 	const handleLayoutChange = useCallback(
-		(sizes: number[]) => {
-			if (sizes.length !== 3) return;
+		(sizes: Record<string, number>) => {
+			if (
+				typeof sizes.left !== "number" ||
+				typeof sizes.central !== "number" ||
+				typeof sizes.right !== "number"
+			) {
+				return;
+			}
 			setPanelSizes((prev) => {
 				const next = {
-					left: sizes[0],
-					central: sizes[1],
-					right: sizes[2],
+					left: sizes.left,
+					central: sizes.central,
+					right: sizes.right,
 				};
 				if (
 					prev.left === next.left &&
@@ -2137,11 +2143,11 @@ function LayoutShellLoadedContent({
 					: DEFAULT_PANEL_FALLBACK_SIZES.left;
 			setIsLeftCollapsed(false);
 			schedulePanelAnimation();
-			panel.resize(target);
+			panel.resize(`${target}%`);
 		} else {
 			setIsLeftCollapsed(true);
 			schedulePanelAnimation();
-			panel.resize(0);
+			panel.collapse();
 		}
 	}, [isLeftCollapsed, initialLayoutSizes.left, schedulePanelAnimation]);
 
@@ -2160,11 +2166,11 @@ function LayoutShellLoadedContent({
 			target = Math.max(target, MIN_UNCOLLAPSED_RIGHT_SIZE);
 			setIsRightCollapsed(false);
 			schedulePanelAnimation();
-			panel.resize(target);
+			panel.resize(`${target}%`);
 		} else {
 			setIsRightCollapsed(true);
 			schedulePanelAnimation();
-			panel.resize(0);
+			panel.collapse();
 		}
 	}, [isRightCollapsed, initialLayoutSizes.right, schedulePanelAnimation]);
 
@@ -2260,12 +2266,13 @@ function LayoutShellLoadedContent({
 					isRightSidebarVisible={!isRightCollapsed}
 				/>
 				<div className="flex flex-1 min-h-0 overflow-hidden px-2">
-					<PanelGroup direction="horizontal" onLayout={handleLayoutChange}>
+					<Group orientation="horizontal" onLayoutChange={handleLayoutChange}>
 						<Panel
-							ref={leftPanelRef}
-							defaultSize={panelSizes.left}
-							minSize={10}
-							maxSize={40}
+							id="left"
+							panelRef={leftPanelRef}
+							defaultSize={`${panelSizes.left}%`}
+							minSize="10%"
+							maxSize="40%"
 							collapsible
 							collapsedSize={0}
 							className={animatedPanelClass}
@@ -2283,12 +2290,13 @@ function LayoutShellLoadedContent({
 								viewContext={extensionHostContext}
 							/>
 						</Panel>
-						<PanelResizeHandle className="group relative flex w-1.75 items-center justify-center">
+						<Separator className="group relative flex w-1.75 items-center justify-center">
 							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
-						</PanelResizeHandle>
+						</Separator>
 						<Panel
-							defaultSize={panelSizes.central}
-							minSize={30}
+							id="central"
+							defaultSize={`${panelSizes.central}%`}
+							minSize="30%"
 							className={animatedPanelClass}
 							style={animatedPanelStyle}
 						>
@@ -2309,14 +2317,15 @@ function LayoutShellLoadedContent({
 								onCreateNewFile={handleCreateNewFile}
 							/>
 						</Panel>
-						<PanelResizeHandle className="group relative flex w-1.75 items-center justify-center">
+						<Separator className="group relative flex w-1.75 items-center justify-center">
 							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
-						</PanelResizeHandle>
+						</Separator>
 						<Panel
-							ref={rightPanelRef}
-							defaultSize={panelSizes.right}
-							minSize={10}
-							maxSize={40}
+							id="right"
+							panelRef={rightPanelRef}
+							defaultSize={`${panelSizes.right}%`}
+							minSize="10%"
+							maxSize="40%"
 							collapsible
 							collapsedSize={0}
 							className={animatedPanelClass}
@@ -2334,7 +2343,7 @@ function LayoutShellLoadedContent({
 								viewContext={extensionHostContext}
 							/>
 						</Panel>
-					</PanelGroup>
+					</Group>
 				</div>
 				<StatusBar
 					left={

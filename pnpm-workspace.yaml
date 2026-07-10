@@ -1,9 +1,29 @@
 packages:
   - .
   - fixtures/consumer
-  - preview/electron
-  - submodule/lix/packages/js-sdk
-  - "!submodule/lix/packages/**/dist"
+  - preview/web
+
+peerDependencyRules:
+  allowedVersions:
+    "@glideapps/glide-data-grid>react": ^19.0.0
+    "@glideapps/glide-data-grid>react-dom": ^19.0.0
+
+overrides:
+  prosemirror-model: 1.25.10
+  prosemirror-transform: 1.12.0
+  prosemirror-view: 1.42.0
+
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - "@lix-js/sdk-darwin-arm64@0.8.0"
+  - "@lix-js/sdk-linux-arm64@0.8.0"
+  - "@lix-js/sdk-linux-x64@0.8.0"
+  - "@lix-js/sdk-win32-x64@0.8.0"
+  - "@lix-js/sdk@0.8.0"
 
 onlyBuiltDependencies:
-  - electron
+  - "@parcel/watcher"
+  - esbuild

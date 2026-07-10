@@ -4,7 +4,7 @@
 
 Atelier is a workspace UI — editor, files, history, and diffs — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
 
-Atelier is the workspace engine inside any host. The Electron preview is one host; a browser app pointing at a remote lix is another. Same workspace, any shell.
+Atelier is the workspace engine inside any host. The included web preview demonstrates a browser app backed by Lix.
 
 ## Why "Atelier"?
 
@@ -28,7 +28,7 @@ createAtelier({
 });
 ```
 
-The target runtime is the browser. Anything that can hand Atelier a DOM element and a lix can host it — an Electron renderer, a web app, a preview deployment.
+The target runtime is the browser. Anything that can hand Atelier a DOM element and a lix can host it — a web app or a preview deployment.
 
 ## What's in the workspace
 
@@ -45,7 +45,7 @@ Atelier's change control is powered by [Lix](https://github.com/opral/lix), a ve
 
 ## Status
 
-Atelier exposes the minimal `createAtelier({ element, lix })` entry point. The Electron development preview is isolated under `preview/electron/`; the Atelier runtime itself targets the browser.
+Atelier exposes the minimal `createAtelier({ element, lix })` entry point. The development preview lives under `preview/web/`.
 
 ## License
 

@@ -15,6 +15,10 @@ export default defineConfig({
 		rollupOptions: {
 			external: (id) =>
 				id === "@lix-js/sdk" ||
+				id === "@glideapps/glide-data-grid" ||
+				id.startsWith("@glideapps/glide-data-grid/") ||
+				id === "use-sync-external-store" ||
+				id.startsWith("use-sync-external-store/") ||
 				id === "react" ||
 				id.startsWith("react/") ||
 				id === "react-dom" ||

@@ -1,16 +1,11 @@
-import { createRequire } from "node:module";
-import { resolve } from "node:path";
 import type {
 	BundledPluginArchive,
 	Lix,
 	OpenLixOptions as SdkOpenLixOptions,
 	SqlParam,
-} from "../../submodule/lix/packages/js-sdk/dist/index.js";
+} from "@lix-js/sdk";
 
-export type {
-	Lix,
-	LixTransaction as SqlTransaction,
-} from "../../submodule/lix/packages/js-sdk/dist/index.js";
+export type { Lix, LixTransaction as SqlTransaction } from "@lix-js/sdk";
 export type { BundledPluginArchive };
 
 type OpenLixKeyValueEntry = {
@@ -32,11 +27,9 @@ type OpenTestLixOptions = SdkOpenLixOptions & {
 	keyValues?: ReadonlyArray<OpenLixKeyValueEntry>;
 };
 
-type SdkModule =
-	typeof import("../../submodule/lix/packages/js-sdk/dist/index.js");
+type SdkModule = typeof import("@lix-js/sdk");
 
 let sdkModulePromise: Promise<SdkModule> | undefined;
-const require = createRequire(import.meta.url);
 
 export async function openLix(options: OpenTestLixOptions = {}): Promise<Lix> {
 	const { keyValues, ...sdkOptions } = options;
@@ -55,13 +48,7 @@ export async function bundledPluginArchives(): Promise<BundledPluginArchive[]> {
 
 async function loadSdk(): Promise<SdkModule> {
 	if (!sdkModulePromise) {
-		const sdkPath = resolve(
-			process.cwd(),
-			"submodule/lix/packages/js-sdk/dist/index.js",
-		);
-		// Require the built SDK entry so Node, not Vite, owns the native addon's
-		// import.meta.url handling.
-		sdkModulePromise = Promise.resolve(require(sdkPath) as SdkModule);
+		sdkModulePromise = import("@lix-js/sdk");
 	}
 	return await sdkModulePromise;
 }

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320" role="img" aria-labelledby="title description">
+  <title id="title">Atelier seeded image example</title>
+  <desc id="description">A warm gradient card with a lightning bolt and the words Seeded workspace asset.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#171717" />
+      <stop offset="1" stop-color="#3f3f46" />
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fef08a" />
+      <stop offset="1" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="640" height="320" rx="28" fill="url(#background)" />
+  <circle cx="104" cy="112" r="58" fill="#ffffff" fill-opacity="0.08" />
+  <path d="M112 45 61 128h42l-15 69 65-94h-43z" fill="url(#bolt)" />
+  <text x="190" y="126" fill="#fafafa" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="700">Seeded workspace asset</text>
+  <text x="190" y="169" fill="#d4d4d8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="20">preview/web/seed/assets/example.svg</text>
+  <rect x="190" y="207" width="272" height="42" rx="21" fill="#ffffff" fill-opacity="0.1" />
+  <text x="213" y="235" fill="#fef3c7" font-family="ui-monospace, SFMono-Regular, monospace" font-size="17">![image](assets/example.svg)</text>
+</svg>

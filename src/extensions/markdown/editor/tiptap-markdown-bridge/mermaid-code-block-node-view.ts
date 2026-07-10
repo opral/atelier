@@ -229,10 +229,7 @@ function createMermaidCodeBlockNodeView(options: {
 				editor.isFocused && isNodeSelected(view, getPos, updatedNode);
 			if (selected !== showingSource) {
 				setViewMode(selected);
-			} else if (
-				!selected &&
-				!previewIsCurrent(updatedNode.textContent)
-			) {
+			} else if (!selected && !previewIsCurrent(updatedNode.textContent)) {
 				scheduleRenderPreview();
 			}
 			return true;

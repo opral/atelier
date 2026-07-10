@@ -401,44 +401,48 @@ function TipTapEditorLoadedContent({
 		pendingExternalMarkdownRef.current = null;
 
 		void (async () => {
-			while (!closed) {
-				const event = await events.next();
-				if (!event || closed) {
-					continue;
-				}
-				const firstRow = event.result.rows[0];
-				if (!firstRow) {
-					continue;
-				}
-				const nextMarkdown = normalizePersistedMarkdown(
-					decodeMarkdownData(firstRow.get("data")),
-				);
-				const observedOriginKey = firstRow.get("origin_key");
-				const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
-				if (!sawInitialSnapshot) {
-					sawInitialSnapshot = true;
-					if (nextMarkdown === initialObservedMarkdown) {
+			try {
+				while (!closed) {
+					const event = await events.next();
+					if (!event || closed) {
 						continue;
 					}
-				}
-				if (currentMarkdown === nextMarkdown) {
+					const firstRow = event.result.rows[0];
+					if (!firstRow) {
+						continue;
+					}
+					const nextMarkdown = normalizePersistedMarkdown(
+						decodeMarkdownData(firstRow.get("data")),
+					);
+					const observedOriginKey = firstRow.get("origin_key");
+					const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
+					if (!sawInitialSnapshot) {
+						sawInitialSnapshot = true;
+						if (nextMarkdown === initialObservedMarkdown) {
+							continue;
+						}
+					}
+					if (currentMarkdown === nextMarkdown) {
+						lastCleanPersistedMarkdown = nextMarkdown;
+						pendingExternalMarkdownRef.current = null;
+						continue;
+					}
+					if (observedOriginKey === editorOriginKey) {
+						continue;
+					}
+					if (currentMarkdown !== lastCleanPersistedMarkdown) {
+						pendingExternalMarkdownRef.current = nextMarkdown;
+						continue;
+					}
+					const ast = parseMarkdown(nextMarkdown) as any;
+					editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
+						emitUpdate: false,
+					});
 					lastCleanPersistedMarkdown = nextMarkdown;
 					pendingExternalMarkdownRef.current = null;
-					continue;
 				}
-				if (observedOriginKey === editorOriginKey) {
-					continue;
-				}
-				if (currentMarkdown !== lastCleanPersistedMarkdown) {
-					pendingExternalMarkdownRef.current = nextMarkdown;
-					continue;
-				}
-				const ast = parseMarkdown(nextMarkdown) as any;
-				editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
-					emitUpdate: false,
-				});
-				lastCleanPersistedMarkdown = nextMarkdown;
-				pendingExternalMarkdownRef.current = null;
+			} catch (error) {
+				if (!closed) throw error;
 			}
 		})();
 
@@ -525,6 +529,7 @@ function TipTapEditorLoadedContent({
 		<div className={`relative min-h-0 ${className ?? ""}`}>
 			<div
 				ref={scrollContainerRef}
+				role="presentation"
 				className="ph-mask tiptap-container w-full h-full bg-background cursor-text overflow-y-auto"
 				data-editor-focused={isEditorFocused ? "true" : "false"}
 				onMouseDown={handleSurfacePointerDown}

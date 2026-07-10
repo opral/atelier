@@ -1,0 +1,22 @@
+{
+	"name": "@opral/atelier-web-preview",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"predev": "pnpm --dir ../.. build",
+		"dev": "vite --config vite.config.ts --host 127.0.0.1 --port 4175 --strictPort",
+		"prebuild": "pnpm --dir ../.. build",
+		"build": "vite build --config vite.config.ts",
+		"typecheck": "tsc -p tsconfig.json --pretty false"
+	},
+	"dependencies": {
+		"@lix-js/sdk": "^0.8.0",
+		"@opral/atelier": "workspace:*"
+	},
+	"devDependencies": {
+		"@vitejs/plugin-react": "^6.0.3",
+		"typescript": "^7.0.2",
+		"vite": "^8.1.4"
+	}
+}

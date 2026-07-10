@@ -6,7 +6,6 @@
 		"moduleResolution": "Bundler",
 		"moduleDetection": "force",
 		"verbatimModuleSyntax": true,
-		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"]
 		},

@@ -893,15 +893,19 @@ function usePendingExternalWriteReviewPaths(
 		const watchEvents = async (
 			events: ReturnType<Lix["observe"]>,
 		): Promise<void> => {
-			let receivedInitialSnapshot = false;
-			while (!cancelled) {
-				const event = await events.next();
-				if (!event || cancelled) break;
-				if (!receivedInitialSnapshot) {
-					receivedInitialSnapshot = true;
-					continue;
+			try {
+				let receivedInitialSnapshot = false;
+				while (!cancelled) {
+					const event = await events.next();
+					if (!event || cancelled) break;
+					if (!receivedInitialSnapshot) {
+						receivedInitialSnapshot = true;
+						continue;
+					}
+					setReviewRevision((current) => current + 1);
 				}
-				setReviewRevision((current) => current + 1);
+			} catch (error) {
+				if (!cancelled) throw error;
 			}
 		};
 		void watchEvents(activeBranchEvents);

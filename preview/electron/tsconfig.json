@@ -1,9 +1,0 @@
-{
-	"extends": "../../tsconfig.json",
-	"compilerOptions": {
-		"baseUrl": ".",
-		"paths": {},
-		"types": ["vite/client", "node", "electron"]
-	},
-	"include": ["*.ts", "*.mts", "*.cts"]
-}

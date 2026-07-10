@@ -1,12 +1,7 @@
 import React from "react";
 import { test, expect, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
-import {
-	render,
-	screen,
-	waitFor,
-	act,
-} from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { useKeyValue, KeyValueProvider } from "./use-key-value";

@@ -1,6 +1,5 @@
 import { Extension, type CommandProps } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import type { EditorView } from "@tiptap/pm/view";
 
 // Extend Commands interface for slash command extension
 declare module "@tiptap/core" {
@@ -145,7 +144,7 @@ export const SlashCommandsExtension = Extension.create<SlashCommandsOptions>({
 				},
 				view() {
 					return {
-						update(view: EditorView) {
+						update(view) {
 							const state = slashCommandsPluginKey.getState(view.state);
 							if (state) {
 								onStateChange(state);

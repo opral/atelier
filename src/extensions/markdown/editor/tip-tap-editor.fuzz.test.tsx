@@ -29,8 +29,7 @@ import {
 
 test("fuzzes plain-text editor operations through markdown serialization", () => {
 	const seed =
-		process.env.ATELIER_MARKDOWN_FUZZ_SEED ??
-		MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED;
+		process.env.ATELIER_MARKDOWN_FUZZ_SEED ?? MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED;
 	const rng = seedrandom(seed);
 	const state = createSimplifiedState();
 	const editor = createEditor({

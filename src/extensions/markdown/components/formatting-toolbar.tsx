@@ -7,10 +7,10 @@ import {
 	type KeyboardEvent,
 	type MouseEvent,
 } from "react";
-import { Toolbar } from "@base-ui-components/react/toolbar";
-import { Select } from "@base-ui-components/react/select";
-import { Tooltip } from "@base-ui-components/react/tooltip";
-import { Popover } from "@base-ui-components/react/popover";
+import { Toolbar } from "@base-ui/react/toolbar";
+import { Select } from "@base-ui/react/select";
+import { Tooltip } from "@base-ui/react/tooltip";
+import { Popover } from "@base-ui/react/popover";
 import clsx from "clsx";
 import {
 	Bold,
@@ -305,13 +305,14 @@ export function FormattingToolbar({ className }: { className?: string }) {
 			<Toolbar.Group className="flex flex-1 items-center gap-0.5">
 				<Select.Root
 					value={formatState.block}
-					onValueChange={handleBlockChange}
+					onValueChange={(value) => {
+						if (value !== null) handleBlockChange(value);
+					}}
 					open={blockMenuOpen}
 					onOpenChange={setBlockMenuOpen}
 				>
 					<Toolbar.Button
 						render={<Select.Trigger />}
-						nativeButton={false}
 						data-attr="markdown-block-selector"
 						className={clsx(
 							"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
@@ -410,14 +411,9 @@ export function FormattingToolbar({ className }: { className?: string }) {
 					<Code2 className="size-3.5" aria-hidden />
 				</Toolbar.Button>
 
-				<Popover.Root
-					open={linkOpen}
-					onOpenChange={handleLinkOpenChange}
-					openOnHover={false}
-				>
+				<Popover.Root open={linkOpen} onOpenChange={handleLinkOpenChange}>
 					<Toolbar.Button
 						render={<Popover.Trigger />}
-						nativeButton={false}
 						className={clsx(
 							iconButtonClass,
 							(linkOpen || formatState.isLink) && iconButtonActiveClass,

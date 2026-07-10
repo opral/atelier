@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -40,7 +40,20 @@ export function createReactExtensionDefinition(args: {
 			const render = (next: {
 				atelier: ExtensionRuntime;
 				view: ExtensionView;
-			}) => root?.render(args.component(next));
+			}) =>
+				root?.render(
+					<Suspense
+						fallback={
+							<div
+								aria-hidden="true"
+								className="min-h-0 flex-1"
+								data-atelier-extension-suspended=""
+							/>
+						}
+					>
+						{args.component(next)}
+					</Suspense>,
+				);
 			render({ atelier, view });
 			return {
 				update: render,
