@@ -1,12 +1,6 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { FileCode2, RefreshCw } from "lucide-react";
+import { FileCode2 } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
-import { Button } from "@/components/ui/button";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
@@ -89,7 +83,6 @@ export function HtmlPreview({
 		() => buildSandboxedHtmlDocument(source),
 		[source],
 	);
-	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [isLoading, setIsLoading] = useState(true);
 	const fileName = fileNameFromPath(filePath) ?? "HTML artifact";
 
@@ -101,49 +94,18 @@ export function HtmlPreview({
 		return <UnsupportedHtmlState filePath={filePath} />;
 	}
 
-	const refresh = () => {
-		setIsLoading(true);
-		setRefreshVersion((current) => current + 1);
-	};
-
 	return (
 		<div className="atelier-html-view" data-testid="html-viewer">
-			<div className="atelier-html-canvas">
-				<div className="atelier-html-frame-shell">
-					<iframe
-						className="atelier-html-frame"
-						key={refreshVersion}
-						onLoad={() => setIsLoading(false)}
-						referrerPolicy="no-referrer"
-						sandbox="allow-scripts"
-						srcDoc={documentSource}
-						title={`${fileName} HTML preview`}
-					/>
-					{isLoading ? <HtmlLoadingState overlay /> : null}
-				</div>
-			</div>
-
-			<div
-				aria-label="HTML preview controls"
-				className="atelier-html-toolbar"
-				role="toolbar"
-			>
-				<Tooltip delayDuration={500}>
-					<TooltipTrigger asChild>
-						<Button
-							aria-label="Refresh HTML preview"
-							className="h-7 gap-1.5 rounded-[7px] px-2 text-[11.5px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] [&_svg]:size-3.75"
-							onClick={refresh}
-							size="sm"
-							type="button"
-							variant="ghost"
-						>
-							<RefreshCw />
-							<span>Refresh</span>
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent sideOffset={4}>Restart this artifact</TooltipContent>
-				</Tooltip>
+			<div className="atelier-html-frame-shell">
+				<iframe
+					className="atelier-html-frame"
+					onLoad={() => setIsLoading(false)}
+					referrerPolicy="no-referrer"
+					sandbox="allow-scripts"
+					srcDoc={documentSource}
+					title={`${fileName} HTML preview`}
+				/>
+				{isLoading ? <HtmlLoadingState overlay /> : null}
 			</div>
 		</div>
 	);

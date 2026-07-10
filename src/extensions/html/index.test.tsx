@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { findFileHandlerExtension } from "@/extension-runtime/file-handlers";
 import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builtin-extension-registry";
@@ -69,21 +69,6 @@ describe("HtmlPreview", () => {
 		expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
 		expect(frame.getAttribute("srcdoc")).toContain("<h1>Hello</h1>");
 		expect(frame.getAttribute("srcdoc")).toContain(HTML_ARTIFACT_CSP);
-	});
-
-	test("replaces the iframe when the preview is refreshed", () => {
-		render(
-			<HtmlPreview
-				data={new TextEncoder().encode("<button>Count</button>")}
-				filePath="/artifacts/counter.html"
-			/>,
-		);
-
-		const firstFrame = screen.getByTitle("counter.html HTML preview");
-		fireEvent.click(
-			screen.getByRole("button", { name: "Refresh HTML preview" }),
-		);
-		expect(screen.getByTitle("counter.html HTML preview")).not.toBe(firstFrame);
 	});
 
 	test("updates the document when file data changes", () => {

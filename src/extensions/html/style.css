@@ -4,26 +4,15 @@
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		background: var(--color-bg-panel-muted);
-	}
-
-	.atelier-html-canvas {
-		position: absolute;
-		inset: 0;
-		padding: 20px 20px 72px;
+		background: var(--color-bg-panel);
 	}
 
 	.atelier-html-frame-shell {
-		position: relative;
-		height: 100%;
+		position: absolute;
+		inset: 0;
 		min-height: 0;
 		overflow: hidden;
-		border: 1px solid var(--color-border-panel);
-		border-radius: 10px;
 		background: var(--color-bg-panel);
-		box-shadow:
-			0 14px 34px rgba(28, 25, 23, 0.1),
-			0 2px 5px rgba(28, 25, 23, 0.05);
 	}
 
 	.atelier-html-frame {
@@ -40,35 +29,5 @@
 		z-index: 1;
 		background: var(--color-bg-panel);
 		pointer-events: none;
-	}
-
-	.atelier-html-toolbar {
-		position: absolute;
-		bottom: 18px;
-		left: 50%;
-		z-index: 2;
-		display: flex;
-		height: 38px;
-		align-items: center;
-		padding: 4px;
-		transform: translateX(-50%);
-		border: 1px solid
-			color-mix(in srgb, var(--color-neutral-300) 86%, transparent);
-		border-radius: 10px;
-		background: color-mix(in srgb, var(--color-bg-panel) 92%, transparent);
-		box-shadow:
-			0 8px 24px rgba(28, 25, 23, 0.12),
-			0 1px 2px rgba(28, 25, 23, 0.08);
-		backdrop-filter: blur(14px);
-	}
-
-	@media (max-width: 767px) {
-		.atelier-html-canvas {
-			padding: 10px 10px 66px;
-		}
-
-		.atelier-html-toolbar {
-			bottom: 14px;
-		}
 	}
 }
