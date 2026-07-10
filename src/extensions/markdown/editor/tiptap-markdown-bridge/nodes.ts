@@ -6,9 +6,9 @@ import {
 	type LoadedMarkdownAsset,
 } from "../markdown-asset";
 import type {
-	MarkdownPdfPreviewController,
-	MarkdownPdfPreviewRenderer,
-} from "../pdf-preview";
+	PdfPreviewController,
+	PdfPreviewRenderer,
+} from "@/extensions/pdf/pdf-preview";
 
 export type MarkdownImageSrcResolver = (src: string) => string;
 
@@ -41,7 +41,7 @@ export function markdownWcNodes(
 	options: {
 		readonly resolveImageSrc?: MarkdownImageSrcResolver;
 		readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
-		readonly renderPdfPreview?: MarkdownPdfPreviewRenderer;
+		readonly renderPdfPreview?: PdfPreviewRenderer;
 	} = {},
 ): Extensions {
 	const resolveImageSrc = options.resolveImageSrc;
@@ -538,7 +538,7 @@ function createMarkdownAssetNodeView({
 	readonly node: any;
 	readonly resolveImageSrc?: MarkdownImageSrcResolver;
 	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
-	readonly renderPdfPreview?: MarkdownPdfPreviewRenderer;
+	readonly renderPdfPreview?: PdfPreviewRenderer;
 }) {
 	const originalSrc = String(node.attrs?.src ?? "");
 	const rendersPdf = isPdfAssetSrc(originalSrc);
@@ -546,7 +546,7 @@ function createMarkdownAssetNodeView({
 	let disposed = false;
 	let generation = 0;
 	let loadedAsset: LoadedMarkdownAsset | null = null;
-	let pdfPreview: MarkdownPdfPreviewController | null = null;
+	let pdfPreview: PdfPreviewController | null = null;
 	let pdfRenderAbort: AbortController | null = null;
 	let manualPreviewAbort: AbortController | null = null;
 	let visibilityObserver: IntersectionObserver | null = null;

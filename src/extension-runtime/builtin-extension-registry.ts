@@ -5,6 +5,7 @@ import { extension as markdownExtensionDefinition } from "../extensions/markdown
 import { extension as csvExtensionDefinition } from "../extensions/csv";
 import { extension as imageExtensionDefinition } from "../extensions/image";
 import { extension as htmlExtensionDefinition } from "../extensions/html";
+import { extension as pdfExtensionDefinition } from "../extensions/pdf";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	filesExtensionDefinition,
@@ -16,6 +17,7 @@ export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	csvExtensionDefinition,
 	imageExtensionDefinition,
 	htmlExtensionDefinition,
+	pdfExtensionDefinition,
 ];
 
 export const BUILTIN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [

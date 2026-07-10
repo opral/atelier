@@ -5,7 +5,7 @@ import { tiptapDocToAst } from "./tiptap-to-mdwc";
 import { Editor } from "@tiptap/core";
 import { MarkdownWc } from "./markdown-wc";
 import { normalizeAst, parseMarkdown, serializeAst } from "../markdown";
-import type { MarkdownPdfPreviewRenderer } from "../pdf-preview";
+import type { PdfPreviewRenderer } from "@/extensions/pdf/pdf-preview";
 import { renderMarkdownAstEditorHtml } from "../render-markdown-html";
 
 type Ast = any;
@@ -772,7 +772,7 @@ describe("inline", () => {
 		}));
 		const renderPdfPreview = vi.fn(async ({ container }) => {
 			const pageButton = document.createElement("button");
-			pageButton.className = "markdown-pdf-page-button";
+			pageButton.className = "atelier-pdf-page-button";
 			pageButton.textContent = "Next";
 			container.append("Rendered remote PDF", pageButton);
 			return { destroy: vi.fn() };
@@ -864,13 +864,10 @@ describe("inline", () => {
 	test("falls back to Open when a later PDF page fails to render", async () => {
 		let reportRenderError: (() => void) | undefined;
 		const renderPdfPreview = vi.fn(
-			async ({
-				container,
-				onError,
-			}: Parameters<MarkdownPdfPreviewRenderer>[0]) => {
+			async ({ container, onError }: Parameters<PdfPreviewRenderer>[0]) => {
 				reportRenderError = () => onError?.(new Error("Page failed"));
 				const pageButton = document.createElement("button");
-				pageButton.className = "markdown-pdf-page-button";
+				pageButton.className = "atelier-pdf-page-button";
 				container.append(pageButton);
 				return { destroy: vi.fn() };
 			},

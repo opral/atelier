@@ -12,22 +12,22 @@ const MAX_ACCESSIBLE_PAGE_TEXT = 20_000;
 
 let previewId = 0;
 
-export type MarkdownPdfPreviewController = {
+export type PdfPreviewController = {
 	destroy(): void;
 };
 
-export type MarkdownPdfPreviewRenderer = (args: {
+export type PdfPreviewRenderer = (args: {
 	readonly src: string;
 	readonly container: HTMLElement;
 	readonly signal?: AbortSignal;
 	readonly onError?: (error: unknown) => void;
-}) => Promise<MarkdownPdfPreviewController>;
+}) => Promise<PdfPreviewController>;
 
 /**
  * Render a PDF inside Atelier without relying on the browser's built-in PDF
  * viewer. PDF.js is loaded only when a preview is actually requested.
  */
-export const renderMarkdownPdfPreview: MarkdownPdfPreviewRenderer = async ({
+export const renderPdfPreview: PdfPreviewRenderer = async ({
 	src,
 	container,
 	signal,
@@ -56,27 +56,27 @@ export const renderMarkdownPdfPreview: MarkdownPdfPreviewRenderer = async ({
 	let rejectOnAbort: ((reason: unknown) => void) | null = null;
 
 	const viewport = window.document.createElement("span");
-	viewport.className = "markdown-pdf-canvas-scroll";
+	viewport.className = "atelier-pdf-canvas-scroll";
 	const canvas = window.document.createElement("canvas");
-	canvas.className = "markdown-pdf-canvas";
+	canvas.className = "atelier-pdf-canvas";
 	canvas.role = "img";
 	const accessibleText = window.document.createElement("span");
-	accessibleText.className = "markdown-pdf-sr-page-text";
-	accessibleText.id = `markdown-pdf-page-text-${++previewId}`;
+	accessibleText.className = "atelier-pdf-sr-page-text";
+	accessibleText.id = `atelier-pdf-page-text-${++previewId}`;
 	canvas.setAttribute("aria-describedby", accessibleText.id);
 	const controls = window.document.createElement("span");
-	controls.className = "markdown-pdf-page-controls";
+	controls.className = "atelier-pdf-page-controls";
 	const previous = window.document.createElement("button");
 	previous.type = "button";
-	previous.className = "markdown-pdf-page-button";
+	previous.className = "atelier-pdf-page-button";
 	previous.ariaLabel = "Previous PDF page";
 	previous.textContent = "Previous";
 	const pageLabel = window.document.createElement("span");
-	pageLabel.className = "markdown-pdf-page-label";
+	pageLabel.className = "atelier-pdf-page-label";
 	pageLabel.setAttribute("aria-live", "polite");
 	const next = window.document.createElement("button");
 	next.type = "button";
-	next.className = "markdown-pdf-page-button";
+	next.className = "atelier-pdf-page-button";
 	next.ariaLabel = "Next PDF page";
 	next.textContent = "Next";
 	controls.append(previous, pageLabel, next);
@@ -116,7 +116,8 @@ export const renderMarkdownPdfPreview: MarkdownPdfPreviewRenderer = async ({
 		if (destroyed || currentGeneration !== renderGeneration) return;
 
 		const baseViewport = page.getViewport({ scale: 1 });
-		const availableWidth = Math.max(240, container.clientWidth - 32);
+		const availableWidth =
+			container.clientWidth > 0 ? container.clientWidth : 240;
 		const scale = Math.min(
 			2,
 			availableWidth / baseViewport.width,

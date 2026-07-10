@@ -14,7 +14,7 @@ import {
 	normalizePersistedMarkdown,
 } from "./build-markdown-from-editor";
 import { loadMarkdownAsset } from "./markdown-asset";
-import { renderMarkdownPdfPreview } from "./pdf-preview";
+import { renderPdfPreview } from "@/extensions/pdf/pdf-preview";
 
 type CreateEditorArgs = {
 	lix: Lix;
@@ -188,7 +188,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		loadAsset: sourceFilePath
 			? (src) => loadMarkdownAsset({ lix, sourceFilePath, sourceCommitId, src })
 			: undefined,
-		renderPdfPreview: renderMarkdownPdfPreview,
+		renderPdfPreview,
 	}) as any[];
 
 	editorInstance = new Editor({

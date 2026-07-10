@@ -3,13 +3,13 @@ import { markdownWcNodes } from "./nodes";
 import { MarkdownWcShortcuts } from "./shortcuts";
 import { createAssignDataIdExtension } from "./assign-data-id";
 import type { LoadedMarkdownAsset } from "../markdown-asset";
-import type { MarkdownPdfPreviewRenderer } from "../pdf-preview";
+import type { PdfPreviewRenderer } from "@/extensions/pdf/pdf-preview";
 
 export type MarkdownWcOptions = {
 	readonly idProvider?: () => string;
 	readonly resolveImageSrc?: (src: string) => string;
 	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
-	readonly renderPdfPreview?: MarkdownPdfPreviewRenderer;
+	readonly renderPdfPreview?: PdfPreviewRenderer;
 };
 
 // --- TipTap minimal extensions (no HTML parsing, schema only) ---

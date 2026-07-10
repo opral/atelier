@@ -415,11 +415,11 @@
 		);
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-canvas-scroll {
+	.markdown-view .ProseMirror .atelier-pdf-canvas-scroll {
 		display: block;
 		height: 100%;
 		overflow: auto;
-		padding: 1rem 1rem 3.75rem;
+		padding: 0 0 3.75rem;
 	}
 
 	.markdown-view .ProseMirror .markdown-pdf-preview-mount {
@@ -428,7 +428,7 @@
 		height: 100%;
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-canvas {
+	.markdown-view .ProseMirror .atelier-pdf-canvas {
 		display: block;
 		max-width: 100%;
 		height: auto;
@@ -437,7 +437,7 @@
 		box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 28%);
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-sr-page-text {
+	.markdown-view .ProseMirror .atelier-pdf-sr-page-text {
 		position: absolute;
 		width: 1px;
 		height: 1px;
@@ -449,7 +449,7 @@
 		border: 0;
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-page-controls {
+	.markdown-view .ProseMirror .atelier-pdf-page-controls {
 		position: absolute;
 		bottom: 0.875rem;
 		left: 50%;
@@ -465,7 +465,7 @@
 		transform: translateX(-50%);
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-page-button {
+	.markdown-view .ProseMirror .atelier-pdf-page-button {
 		display: inline-flex;
 		height: 1.75rem;
 		align-items: center;
@@ -480,23 +480,23 @@
 		cursor: pointer;
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-page-button:hover:not(:disabled) {
+	.markdown-view .ProseMirror .atelier-pdf-page-button:hover:not(:disabled) {
 		color: var(--color-text-primary);
 		background: var(--color-bg-hover);
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-page-button:disabled {
+	.markdown-view .ProseMirror .atelier-pdf-page-button:disabled {
 		color: var(--color-text-tertiary);
 		cursor: default;
 		opacity: 0.55;
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-page-button:focus-visible {
+	.markdown-view .ProseMirror .atelier-pdf-page-button:focus-visible {
 		outline: 2px solid var(--color-ring-focus-visible);
 		outline-offset: 1px;
 	}
 
-	.markdown-view .ProseMirror .markdown-pdf-page-label {
+	.markdown-view .ProseMirror .atelier-pdf-page-label {
 		min-width: 3.5rem;
 		color: var(--color-text-secondary);
 		font-size: 0.6875rem;
