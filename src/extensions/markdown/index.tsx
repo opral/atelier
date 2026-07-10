@@ -12,9 +12,9 @@ import { qb } from "@/lib/lix-kysely";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { EditorProvider } from "@/extensions/markdown/editor/editor-context";
 import { TipTapEditor } from "@/extensions/markdown/editor/tip-tap-editor";
+import { EditorContent } from "@tiptap/react";
+import { createEditor } from "@/extensions/markdown/editor/create-editor";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
-import { renderMarkdownAstEditorHtml } from "@/extensions/markdown/editor/render-markdown-html";
-import { parseMarkdown } from "@/extensions/markdown/editor/markdown";
 import { renderMarkdownReviewDiffHtml } from "./render-review-diff-html";
 import "./style.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -467,25 +467,31 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 }
 
 function MarkdownSnapshotView({
-	filePath: _filePath,
+	filePath,
 	markdown,
 }: {
 	readonly filePath: string;
 	readonly markdown: string;
 }) {
-	const html = useMemo(
-		() => renderMarkdownAstEditorHtml(parseMarkdown(markdown) as any),
-		[markdown],
+	const lix = useLix();
+	const editor = useMemo(
+		() =>
+			createEditor({
+				lix,
+				initialMarkdown: markdown,
+				sourceFilePath: filePath,
+				editable: false,
+				persistState: false,
+			}),
+		[filePath, lix, markdown],
 	);
+	useEffect(() => () => editor.destroy(), [editor]);
 
 	return (
 		<div className="markdown-view flex h-full flex-col bg-background">
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
-					<div
-						className="ProseMirror tiptap mx-auto w-full"
-						dangerouslySetInnerHTML={{ __html: html }}
-					/>
+					<EditorContent editor={editor} className="tiptap mx-auto w-full" />
 				</div>
 			</div>
 		</div>

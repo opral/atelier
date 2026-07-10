@@ -151,6 +151,7 @@ function TipTapEditorFileContent({
 			activeBranchId={activeBranchId}
 			hasInitialFile={Boolean(initialFile)}
 			initialMarkdown={initialMarkdown}
+			sourceFilePath={props.filePath ?? initialFile?.path ?? null}
 		/>
 	);
 }
@@ -167,10 +168,12 @@ function TipTapEditorLoadedContent({
 	originKey,
 	hasInitialFile,
 	initialMarkdown,
+	sourceFilePath,
 }: TipTapEditorContentProps & {
 	readonly activeBranchId: string;
 	readonly hasInitialFile: boolean;
 	readonly initialMarkdown: string;
+	readonly sourceFilePath?: string | null;
 }) {
 	const lix = useLix();
 	const { setEditor } = useEditorCtx();
@@ -198,6 +201,7 @@ function TipTapEditorLoadedContent({
 			initialMarkdown,
 			contentAst: hasAstSnapshot ? initialAst : undefined,
 			fileId: activeFileId,
+			sourceFilePath: sourceFilePath ?? undefined,
 			defaultBlock,
 			persistDebounceMs: PERSIST_DEBOUNCE_MS,
 			originKey: editorOriginKey,
@@ -210,6 +214,7 @@ function TipTapEditorLoadedContent({
 		initialAst,
 		initialAstLoaded,
 		initialMarkdown,
+		sourceFilePath,
 		defaultBlock,
 		editorOriginKey,
 	]);

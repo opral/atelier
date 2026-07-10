@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { astToTiptapDoc } from "./mdwc-to-tiptap";
 import { tiptapDocToAst } from "./tiptap-to-mdwc";
 import { Editor } from "@tiptap/core";
 import { MarkdownWc } from "./markdown-wc";
 import { normalizeAst, parseMarkdown, serializeAst } from "../markdown";
+import type { MarkdownPdfPreviewRenderer } from "../pdf-preview";
+import { renderMarkdownAstEditorHtml } from "../render-markdown-html";
 
 type Ast = any;
 
@@ -715,6 +717,262 @@ describe("inline", () => {
 		const markdown = serializeAst(tiptapDocToAst(editor.getJSON() as any));
 		expect(markdown).toContain("images/logo.png");
 		expect(markdown).not.toContain("file:///workspace");
+		editor.destroy();
+	});
+
+	test("requires a click before previewing remote PDF targets", () => {
+		const ast = parseMarkdown('![Quarterly brief](docs/brief.pdf "Q2")');
+		const renderedPdfSrc = "https://files.example/docs/brief.pdf";
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				resolveImageSrc: () => renderedPdfSrc,
+			}),
+			content: astToTiptapDoc(ast),
+		});
+
+		const embed = editor.view.dom.querySelector("[data-markdown-pdf]");
+		const preview = embed?.querySelector(".markdown-pdf-preview");
+		const open = embed?.querySelector("a.markdown-pdf-open");
+		expect(embed).toHaveTextContent("Quarterly brief");
+		expect(embed?.getAttribute("data-asset-state")).toBe("open-only");
+		expect(preview).toBeEmptyDOMElement();
+		expect(open?.getAttribute("href")).toBe(renderedPdfSrc);
+
+		const markdown = serializeAst(tiptapDocToAst(editor.getJSON() as any));
+		expect(markdown).toContain('![Quarterly brief](docs/brief.pdf "Q2")');
+		expect(markdown).not.toContain(renderedPdfSrc);
+		editor.destroy();
+	});
+
+	test("preserves a safe relative PDF target in open-only rendering", () => {
+		const ast = parseMarkdown("![Workspace brief](docs/brief.pdf#page=3)");
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(ast),
+		});
+
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-pdf]",
+		);
+		expect(embed?.dataset.assetState).toBe("open-only");
+		expect(
+			embed?.querySelector(".markdown-pdf-open")?.getAttribute("href"),
+		).toBe("docs/brief.pdf#page=3");
+		expect(renderMarkdownAstEditorHtml(ast)).toContain(
+			'href="docs/brief.pdf#page=3"',
+		);
+		editor.destroy();
+	});
+
+	test("previews a remote PDF only after explicit consent", async () => {
+		const loadPreview = vi.fn(async () => ({
+			src: "blob:validated-remote-pdf",
+			preview: "auto" as const,
+			dispose: vi.fn(),
+		}));
+		const renderPdfPreview = vi.fn(async ({ container }) => {
+			const pageButton = document.createElement("button");
+			pageButton.className = "markdown-pdf-page-button";
+			pageButton.textContent = "Next";
+			container.append("Rendered remote PDF", pageButton);
+			return { destroy: vi.fn() };
+		});
+		const remoteSrc = "https://files.example/brief.pdf";
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: remoteSrc,
+					preview: "manual",
+					manualReason: "remote",
+					remoteHost: "files.example",
+					loadPreview,
+				}),
+				renderPdfPreview,
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown("![Remote brief](https://files.example/brief.pdf)"),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-pdf]",
+		);
+		expect(embed?.dataset.assetState).toBe("manual");
+		expect(embed).toHaveTextContent(
+			"Previewing downloads this PDF from files.example.",
+		);
+		expect(loadPreview).not.toHaveBeenCalled();
+		const previewAction = embed?.querySelector<HTMLButtonElement>(
+			".markdown-pdf-preview-action",
+		);
+		const focus = vi.spyOn(HTMLElement.prototype, "focus");
+		previewAction?.focus();
+		focus.mockClear();
+		previewAction?.click();
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		expect(loadPreview).toHaveBeenCalledOnce();
+		expect(renderPdfPreview).toHaveBeenCalledWith(
+			expect.objectContaining({ src: "blob:validated-remote-pdf" }),
+		);
+		expect(embed?.dataset.assetState).toBe("ready");
+		expect(embed).toHaveTextContent("Rendered remote PDF");
+		expect(focus).toHaveBeenCalledOnce();
+		expect(focus.mock.instances[0]).toHaveClass("markdown-pdf-preview");
+		expect(
+			embed?.querySelector(".markdown-pdf-open")?.getAttribute("href"),
+		).toBe(remoteSrc);
+		focus.mockRestore();
+		editor.destroy();
+	});
+
+	test("aborts remote preview loading when the node is destroyed", async () => {
+		let previewSignal: AbortSignal | undefined;
+		const loadPreview = vi.fn(
+			(signal?: AbortSignal) =>
+				new Promise<null>((resolve) => {
+					previewSignal = signal;
+					signal?.addEventListener("abort", () => resolve(null), {
+						once: true,
+					});
+				}),
+		);
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "https://files.example/slow.pdf",
+					preview: "manual",
+					manualReason: "remote",
+					remoteHost: "files.example",
+					loadPreview,
+				}),
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown("![Slow PDF](https://files.example/slow.pdf)"),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		editor.view.dom
+			.querySelector<HTMLButtonElement>(".markdown-pdf-preview-action")
+			?.click();
+
+		editor.destroy();
+		expect(previewSignal?.aborted).toBe(true);
+	});
+
+	test("falls back to Open when a later PDF page fails to render", async () => {
+		let reportRenderError: (() => void) | undefined;
+		const renderPdfPreview = vi.fn(
+			async ({
+				container,
+				onError,
+			}: Parameters<MarkdownPdfPreviewRenderer>[0]) => {
+				reportRenderError = () => onError?.(new Error("Page failed"));
+				const pageButton = document.createElement("button");
+				pageButton.className = "markdown-pdf-page-button";
+				container.append(pageButton);
+				return { destroy: vi.fn() };
+			},
+		);
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:local-pdf",
+					preview: "auto",
+				}),
+				renderPdfPreview,
+			}),
+			content: astToTiptapDoc(parseMarkdown("![Brief](brief.pdf)")),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-pdf]",
+		);
+		expect(embed?.dataset.assetState).toBe("ready");
+
+		reportRenderError?.();
+		expect(embed?.dataset.assetState).toBe("open-only");
+		expect(embed).toHaveTextContent("This page could not be rendered");
+		editor.destroy();
+	});
+
+	test("keeps an ordinary PDF link as a link", () => {
+		const ast = parseMarkdown("[Read the PDF](docs/brief.pdf)");
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(ast),
+		});
+
+		expect(editor.view.dom.querySelector("[data-markdown-pdf]")).toBeNull();
+		expect(editor.view.dom.querySelector("a")?.getAttribute("href")).toBe(
+			"docs/brief.pdf",
+		);
+		editor.destroy();
+	});
+
+	test("auto-previews a validated local PDF and disposes its object URL", async () => {
+		const dispose = vi.fn();
+		const destroyPreview = vi.fn();
+		const renderPdfPreview = vi.fn(async ({ src, container }) => {
+			expect(src).toBe("blob:local-pdf");
+			container.textContent = "Rendered PDF page";
+			return { destroy: destroyPreview };
+		});
+		const ast = parseMarkdown("![Local brief](docs/brief.pdf)");
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:local-pdf",
+					preview: "auto",
+					dispose,
+				}),
+				renderPdfPreview,
+			}),
+			content: astToTiptapDoc(ast),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		const embed = editor.view.dom.querySelector("[data-markdown-pdf]");
+		const preview = embed?.querySelector(".markdown-pdf-preview");
+		expect(embed?.getAttribute("data-asset-state")).toBe("ready");
+		expect(preview).toHaveTextContent("Rendered PDF page");
+		expect(renderPdfPreview).toHaveBeenCalledOnce();
+
+		editor.destroy();
+		expect(destroyPreview).toHaveBeenCalledOnce();
+		expect(dispose).toHaveBeenCalledOnce();
+	});
+
+	test("rejects an unsafe PDF source returned by an async loader", async () => {
+		const ast = parseMarkdown("![Unsafe](docs/brief.pdf)");
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "data:text/html,<script>top.location='https://example.com'</script>",
+					preview: "auto",
+				}),
+			}),
+			content: astToTiptapDoc(ast),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		const embed = editor.view.dom.querySelector("[data-markdown-pdf]");
+		expect(embed?.getAttribute("data-asset-state")).toBe("unavailable");
+		expect(embed?.querySelector(".markdown-pdf-preview")).toBeEmptyDOMElement();
+		editor.destroy();
+	});
+
+	test("does not load unsafe PDF protocols in the preview", () => {
+		const ast = parseMarkdown("![Unsafe](javascript:payload.pdf)");
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(ast),
+		});
+
+		const embed = editor.view.dom.querySelector("[data-markdown-pdf]");
+		expect(embed?.getAttribute("data-asset-state")).toBe("unavailable");
+		expect(embed?.querySelector(".markdown-pdf-preview")).toBeEmptyDOMElement();
 		editor.destroy();
 	});
 

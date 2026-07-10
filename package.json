@@ -65,6 +65,7 @@
 		"micromark-extension-frontmatter": "^2.0.0",
 		"micromark-extension-gfm": "^3.0.0",
 		"papaparse": "^5.5.4",
+		"pdfjs-dist": "5.4.624",
 		"react-resizable-panels": "^4.12.1",
 		"tailwind-merge": "^3.6.0",
 		"use-sync-external-store": "^1.6.0"
