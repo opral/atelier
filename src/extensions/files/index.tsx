@@ -850,7 +850,7 @@ function FilesViewContent({
 					title="New file (⌘.)"
 					data-attr="file-new"
 				>
-					<span className="flex items-center gap-2">
+					<span className="flex items-center gap-[6px]">
 						<FilePlus
 							className="size-3.25 text-[var(--color-icon-tertiary)]"
 							strokeWidth={2}
