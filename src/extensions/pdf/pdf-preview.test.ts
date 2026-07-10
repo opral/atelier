@@ -68,7 +68,7 @@ describe("renderPdfPreview", () => {
 		expect(container).toBeEmptyDOMElement();
 	});
 
-	test("fits dedicated views within both viewport dimensions without upscaling", async () => {
+	test("fits dedicated views within both viewport dimensions and upscales", async () => {
 		const documentProxy = fakePdfDocument(1);
 		pdfMocks.getDocument.mockReturnValue({
 			promise: Promise.resolve(documentProxy),
@@ -77,7 +77,7 @@ describe("renderPdfPreview", () => {
 		const container = document.createElement("div");
 		Object.defineProperties(container, {
 			clientWidth: { value: 1_200 },
-			clientHeight: { value: 900 },
+			clientHeight: { value: 1_400 },
 		});
 
 		const controller = await renderPdfPreview({
@@ -90,8 +90,8 @@ describe("renderPdfPreview", () => {
 			container.querySelector(".atelier-pdf-canvas-scroll"),
 		).toHaveAttribute("data-layout", "fit-page");
 		expect(container.querySelector("canvas")).toHaveStyle({
-			width: "549px",
-			height: "732px",
+			width: "924px",
+			height: "1232px",
 		});
 		controller.destroy();
 	});

@@ -132,7 +132,7 @@ export const renderPdfPreview: PdfPreviewRenderer = async ({
 				FIT_PAGE_VERTICAL_PADDING,
 		);
 		const scale = Math.min(
-			layout === "fit-page" ? 1 : 2,
+			2,
 			availableWidth / baseViewport.width,
 			...(layout === "fit-page" ? [availableHeight / baseViewport.height] : []),
 			MAX_PDF_CSS_DIMENSION / baseViewport.width,
