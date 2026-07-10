@@ -4,7 +4,24 @@ import { describe, expect, test } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { FilesView } from ".";
+import { deriveMarkdownPathFromStem, FilesView } from ".";
+
+describe("deriveMarkdownPathFromStem", () => {
+	test.each([
+		["test.md", "/test.md"],
+		["test.markdown", "/test.md"],
+		["test.MD", "/test.md"],
+		["test.MaRkDoWn", "/test.md"],
+	])("does not duplicate the markdown suffix in %s", (stem, expected) => {
+		expect(deriveMarkdownPathFromStem(stem, "/", new Set())).toBe(expected);
+	});
+
+	test("adds a collision suffix after removing the entered extension", () => {
+		expect(
+			deriveMarkdownPathFromStem("test.markdown", "/", new Set(["/test.md"])),
+		).toBe("/test-2.md");
+	});
+});
 
 describe("FilesView", () => {
 	test("renders the Lix-backed file tree", async () => {

@@ -1065,12 +1065,14 @@ function detectMacPlatform(): boolean {
 	return /mac|iphone|ipad|ipod/.test(combined);
 }
 
-function deriveMarkdownPathFromStem(
+export function deriveMarkdownPathFromStem(
 	stem: string,
 	directory: string,
 	existingPaths: Set<string>,
 ): string | null {
-	const finalStem = normalizeNameStem(stem);
+	const finalStem = normalizeNameStem(
+		(stem ?? "").trim().replace(/\.(?:md|markdown)$/i, ""),
+	);
 	const sanitizedDirectory =
 		directory === "/"
 			? "/"
