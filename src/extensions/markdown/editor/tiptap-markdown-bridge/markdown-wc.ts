@@ -2,10 +2,18 @@ import type { Extensions } from "@tiptap/core";
 import { markdownWcNodes } from "./nodes";
 import { MarkdownWcShortcuts } from "./shortcuts";
 import { createAssignDataIdExtension } from "./assign-data-id";
+import type {
+	LoadedMarkdownAsset,
+	MarkdownWorkspaceFileOpener,
+} from "../markdown-asset";
+import type { PdfPreviewRenderer } from "@/extensions/pdf/pdf-preview";
 
 export type MarkdownWcOptions = {
 	readonly idProvider?: () => string;
 	readonly resolveImageSrc?: (src: string) => string;
+	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly renderPdfPreview?: PdfPreviewRenderer;
 };
 
 // --- TipTap minimal extensions (no HTML parsing, schema only) ---
@@ -47,7 +55,12 @@ export type MarkdownWcOptions = {
  */
 export function MarkdownWc(opts?: MarkdownWcOptions): Extensions {
 	return [
-		...markdownWcNodes({ resolveImageSrc: opts?.resolveImageSrc }),
+		...markdownWcNodes({
+			resolveImageSrc: opts?.resolveImageSrc,
+			loadAsset: opts?.loadAsset,
+			openWorkspaceFile: opts?.openWorkspaceFile,
+			renderPdfPreview: opts?.renderPdfPreview,
+		}),
 		createAssignDataIdExtension(opts),
 		MarkdownWcShortcuts,
 	];

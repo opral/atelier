@@ -1,5 +1,15 @@
 import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
+import {
+	isPdfAssetSrc,
+	markdownAssetLabel,
+	type LoadedMarkdownAsset,
+	type MarkdownWorkspaceFileOpener,
+} from "../markdown-asset";
+import type {
+	PdfPreviewController,
+	PdfPreviewRenderer,
+} from "@/extensions/pdf/pdf-preview";
 
 export type MarkdownImageSrcResolver = (src: string) => string;
 
@@ -29,9 +39,17 @@ function diffAttrs(node: any, mode: "words" | "element" = "words"): any {
 }
 
 export function markdownWcNodes(
-	options: { readonly resolveImageSrc?: MarkdownImageSrcResolver } = {},
+	options: {
+		readonly resolveImageSrc?: MarkdownImageSrcResolver;
+		readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+		readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+		readonly renderPdfPreview?: PdfPreviewRenderer;
+	} = {},
 ): Extensions {
 	const resolveImageSrc = options.resolveImageSrc;
+	const loadAsset = options.loadAsset;
+	const openWorkspaceFile = options.openWorkspaceFile;
+	const renderPdfPreview = options.renderPdfPreview;
 	return [
 		// doc
 		Node.create({ name: "doc", topNode: true, content: "block+" }),
@@ -414,19 +432,668 @@ export function markdownWcNodes(
 				};
 			},
 			renderHTML({ node }) {
-				const attrs: any = {};
 				const src = (node as any).attrs?.src;
-				if (typeof src === "string" && src.length > 0) {
-					attrs.src = resolveRenderedImageSrc(src, resolveImageSrc);
-				}
 				const alt = (node as any).attrs?.alt;
-				if (alt) attrs.alt = alt;
 				const title = (node as any).attrs?.title;
+				const renderedSrc =
+					typeof src === "string" && src.length > 0
+						? resolveRenderedImageSrc(src, resolveImageSrc)
+						: "";
+				if (typeof src === "string" && isPdfAssetSrc(src)) {
+					return pdfRenderSpec({
+						src: safePdfOpenSrc(renderedSrc),
+						label: markdownAssetLabel(src, alt),
+						title,
+						diffAttributes: diffAttrs(node, "element"),
+					});
+				}
+				const attrs: any = {};
+				if (renderedSrc) attrs.src = renderedSrc;
+				if (alt) attrs.alt = alt;
 				if (title) attrs.title = title;
 				return ["img", { ...attrs, ...diffAttrs(node, "element") }];
 			},
+			addNodeView() {
+				return ({ node }) =>
+					createMarkdownAssetNodeView({
+						node,
+						resolveImageSrc,
+						loadAsset,
+						openWorkspaceFile,
+						renderPdfPreview,
+					});
+			},
 		}),
 	];
+}
+
+function pdfRenderSpec({
+	src,
+	label,
+	title,
+	diffAttributes,
+}: {
+	readonly src: string;
+	readonly label: string;
+	readonly title?: string | null;
+	readonly diffAttributes: Record<string, string>;
+}): any {
+	const openLabel = `Open ${label} in a new tab for full document access`;
+	const available = src.length > 0;
+	return [
+		"span",
+		{
+			class: "markdown-pdf-embed",
+			"data-markdown-pdf": "",
+			"data-asset-state": available ? "open-only" : "unavailable",
+			contenteditable: "false",
+			...(title ? { title } : {}),
+			...diffAttributes,
+		},
+		[
+			"span",
+			{ class: "markdown-pdf-toolbar" },
+			["span", { class: "markdown-pdf-icon", "aria-hidden": "true" }],
+			["span", { class: "markdown-pdf-label" }, label],
+			[
+				"a",
+				{
+					class: "markdown-pdf-open",
+					...(available ? { href: src } : {}),
+					target: "_blank",
+					rel: "noopener noreferrer",
+					"aria-label": openLabel,
+				},
+				"Open",
+			],
+		],
+		[
+			"span",
+			{ class: "markdown-pdf-surface" },
+			[
+				"span",
+				{
+					class: "markdown-pdf-preview",
+					role: "region",
+					"aria-label": `PDF preview: ${label}`,
+				},
+			],
+			[
+				"span",
+				{ class: "markdown-pdf-status", role: "status" },
+				[
+					"span",
+					{ class: "markdown-pdf-status-message" },
+					!available
+						? "PDF preview unavailable"
+						: "Open the PDF to view this document.",
+				],
+			],
+		],
+	];
+}
+
+function createMarkdownAssetNodeView({
+	node,
+	resolveImageSrc,
+	loadAsset,
+	openWorkspaceFile,
+	renderPdfPreview,
+}: {
+	readonly node: any;
+	readonly resolveImageSrc?: MarkdownImageSrcResolver;
+	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly renderPdfPreview?: PdfPreviewRenderer;
+}) {
+	const originalSrc = String(node.attrs?.src ?? "");
+	const rendersPdf = isPdfAssetSrc(originalSrc);
+	const dom = rendersPdf ? createPdfEmbedDom(node) : createImageDom(node);
+	let disposed = false;
+	let generation = 0;
+	let loadedAsset: LoadedMarkdownAsset | null = null;
+	let pdfPreview: PdfPreviewController | null = null;
+	let pdfRenderAbort: AbortController | null = null;
+	let manualPreviewAbort: AbortController | null = null;
+	let visibilityObserver: IntersectionObserver | null = null;
+	let pendingManualAsset: LoadedMarkdownAsset | null = null;
+	const previewAction = dom.querySelector<HTMLButtonElement>(
+		".markdown-pdf-preview-action",
+	);
+	const openAction = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	const handleOpenWorkspaceFile = (event: MouseEvent) => {
+		const workspaceFile = loadedAsset?.workspaceFile;
+		if (!workspaceFile || !openWorkspaceFile || event.button !== 0) return;
+		event.preventDefault();
+		event.stopPropagation();
+		event.stopImmediatePropagation();
+		const state = {
+			...(workspaceFile.sourceCommitId
+				? { sourceCommitId: workspaceFile.sourceCommitId }
+				: {}),
+			...(workspaceFile.page ? { page: workspaceFile.page } : {}),
+		};
+		void openWorkspaceFile({
+			fileId: workspaceFile.fileId,
+			filePath: workspaceFile.filePath,
+			...(Object.keys(state).length > 0 ? { state } : {}),
+		});
+	};
+	openAction?.addEventListener("click", handleOpenWorkspaceFile);
+
+	const disposePdfPreview = () => {
+		pdfRenderAbort?.abort();
+		pdfRenderAbort = null;
+		pdfPreview?.destroy();
+		pdfPreview = null;
+	};
+	const disposeLoadedAsset = () => {
+		loadedAsset?.dispose?.();
+		loadedAsset = null;
+	};
+	const showPdfPreview = async ({
+		previewSrc,
+		openSrc,
+		previewGeneration,
+		focusAfterLoad = false,
+	}: {
+		readonly previewSrc: string;
+		readonly openSrc: string;
+		readonly previewGeneration: number;
+		readonly focusAfterLoad?: boolean;
+	}) => {
+		disposePdfPreview();
+		if (!renderPdfPreview) {
+			setPdfDomOpenOnly(
+				dom,
+				openSrc,
+				"PDF preview unavailable here. Use Open to view the document.",
+			);
+			return;
+		}
+		const container = dom.querySelector<HTMLElement>(".markdown-pdf-preview");
+		if (!container) {
+			setPdfDomOpenOnly(dom, openSrc, "PDF preview unavailable.");
+			return;
+		}
+		setAssetDomLoading(dom);
+		setPdfOpenHref(dom, openSrc);
+		const mount = document.createElement("span");
+		mount.className = "markdown-pdf-preview-mount";
+		container.replaceChildren(mount);
+		const renderAbort = new AbortController();
+		pdfRenderAbort = renderAbort;
+		try {
+			const controller = await renderPdfPreview({
+				src: previewSrc,
+				container: mount,
+				signal: renderAbort.signal,
+				onError: () => {
+					if (disposed || generation !== previewGeneration) return;
+					pdfPreview = null;
+					pdfRenderAbort = null;
+					setPdfDomOpenOnly(
+						dom,
+						openSrc,
+						"This page could not be rendered. Use Open to view the document.",
+					);
+					if (focusAfterLoad) focusPdfOpenLink(dom);
+				},
+			});
+			if (disposed || generation !== previewGeneration) {
+				controller.destroy();
+				return;
+			}
+			pdfPreview = controller;
+			setPdfDomReady(dom, openSrc);
+			if (focusAfterLoad) {
+				const preview = dom.querySelector<HTMLElement>(".markdown-pdf-preview");
+				if (preview) {
+					preview.tabIndex = -1;
+					preview.focus();
+				}
+			}
+		} catch {
+			if (!disposed && generation === previewGeneration) {
+				pdfRenderAbort = null;
+				setPdfDomOpenOnly(
+					dom,
+					openSrc,
+					"PDF preview unavailable. Use Open to view the document.",
+				);
+				if (focusAfterLoad) focusPdfOpenLink(dom);
+			}
+		}
+	};
+	const handlePreviewAction = async (event: Event) => {
+		event.preventDefault();
+		const asset = pendingManualAsset;
+		if (!asset) return;
+		const focusAfterLoad = true;
+		const previewGeneration = generation;
+		if (!asset.loadPreview) {
+			pendingManualAsset = null;
+			await showPdfPreview({
+				previewSrc: asset.src,
+				openSrc: asset.src,
+				previewGeneration,
+				focusAfterLoad,
+			});
+			return;
+		}
+		setAssetDomLoading(dom);
+		setPdfOpenHref(dom, asset.src);
+		manualPreviewAbort?.abort();
+		const previewAbort = new AbortController();
+		manualPreviewAbort = previewAbort;
+		let previewAsset: LoadedMarkdownAsset | null = null;
+		try {
+			previewAsset = await asset.loadPreview(previewAbort.signal);
+		} catch {
+			previewAsset = null;
+		}
+		if (manualPreviewAbort === previewAbort) manualPreviewAbort = null;
+		if (disposed || generation !== previewGeneration) {
+			previewAsset?.dispose?.();
+			return;
+		}
+		if (!previewAsset) {
+			pendingManualAsset = asset;
+			setPdfDomManual(
+				dom,
+				asset.src,
+				asset.manualReason ?? "remote",
+				asset.remoteHost,
+			);
+			setPdfStatusMessage(
+				dom,
+				"Preview failed. Try again or use Open to view the PDF.",
+			);
+			if (focusAfterLoad) previewAction?.focus();
+			return;
+		}
+		const safeSrc = safePdfRenderSrc(previewAsset.src);
+		if (!safeSrc || !safeSrc.startsWith("blob:")) {
+			previewAsset.dispose?.();
+			pendingManualAsset = asset;
+			setPdfDomManual(
+				dom,
+				asset.src,
+				asset.manualReason ?? "remote",
+				asset.remoteHost,
+			);
+			setPdfStatusMessage(
+				dom,
+				"Preview failed. Try again or use Open to view the PDF.",
+			);
+			if (focusAfterLoad) previewAction?.focus();
+			return;
+		}
+		pendingManualAsset = null;
+		disposeLoadedAsset();
+		loadedAsset = previewAsset;
+		await showPdfPreview({
+			previewSrc: safeSrc,
+			openSrc: asset.src,
+			previewGeneration,
+			focusAfterLoad,
+		});
+	};
+	previewAction?.addEventListener("click", handlePreviewAction);
+
+	const updateSource = (nextNode: any) => {
+		generation += 1;
+		const loadGeneration = generation;
+		visibilityObserver?.disconnect();
+		visibilityObserver = null;
+		pendingManualAsset = null;
+		manualPreviewAbort?.abort();
+		manualPreviewAbort = null;
+		disposePdfPreview();
+		disposeLoadedAsset();
+		const src = String(nextNode.attrs?.src ?? "");
+		updateAssetDomAttributes(dom, nextNode);
+		if (!loadAsset) {
+			const renderedSrc = resolveRenderedImageSrc(src, resolveImageSrc);
+			const previewSrc = rendersPdf
+				? safePdfRenderSrc(renderedSrc)
+				: renderedSrc;
+			const openSrc = rendersPdf ? safePdfOpenSrc(renderedSrc) : renderedSrc;
+			if (previewSrc && rendersPdf && isRemotePdfSrc(previewSrc)) {
+				setPdfDomOpenOnly(
+					dom,
+					openSrc,
+					"Open the PDF to view this remote document.",
+				);
+			} else if (previewSrc && rendersPdf) {
+				void showPdfPreview({
+					previewSrc,
+					openSrc,
+					previewGeneration: loadGeneration,
+				});
+			} else if (openSrc && rendersPdf) {
+				setPdfDomOpenOnly(dom, openSrc, "Open the PDF to view this document.");
+			} else if (previewSrc) setImageDomSource(dom, previewSrc);
+			else setAssetDomUnavailable(dom);
+			return;
+		}
+		setAssetDomLoading(dom);
+		const performLoad = () => {
+			void loadAsset(src).then(
+				(asset) => {
+					if (disposed || generation !== loadGeneration) {
+						asset?.dispose?.();
+						return;
+					}
+					loadedAsset = asset;
+					if (!asset) {
+						setAssetDomUnavailable(dom);
+						return;
+					}
+					setPdfOpenDestination(
+						dom,
+						asset.workspaceFile && openWorkspaceFile ? "workspace" : "external",
+					);
+					const safeSrc = rendersPdf ? safePdfRenderSrc(asset.src) : asset.src;
+					if (!safeSrc) {
+						disposeLoadedAsset();
+						setAssetDomUnavailable(dom);
+						return;
+					}
+					if (rendersPdf && asset.preview === "manual") {
+						pendingManualAsset = asset;
+						setPdfDomManual(
+							dom,
+							safeSrc,
+							asset.manualReason ?? "remote",
+							asset.remoteHost,
+						);
+						return;
+					}
+					if (rendersPdf) {
+						void showPdfPreview({
+							previewSrc: safeSrc,
+							openSrc: safeSrc,
+							previewGeneration: loadGeneration,
+						});
+					} else {
+						setImageDomSource(dom, safeSrc);
+					}
+				},
+				() => {
+					if (!disposed && generation === loadGeneration) {
+						setAssetDomUnavailable(dom);
+					}
+				},
+			);
+		};
+		if (rendersPdf && typeof IntersectionObserver !== "undefined") {
+			visibilityObserver = new IntersectionObserver((entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return;
+				visibilityObserver?.disconnect();
+				visibilityObserver = null;
+				performLoad();
+			});
+			visibilityObserver.observe(dom);
+		} else {
+			performLoad();
+		}
+	};
+
+	updateSource(node);
+	return {
+		dom,
+		update: (nextNode: any) => {
+			if (nextNode.type.name !== "image") return false;
+			if (isPdfAssetSrc(String(nextNode.attrs?.src ?? "")) !== rendersPdf) {
+				return false;
+			}
+			updateSource(nextNode);
+			return true;
+		},
+		destroy: () => {
+			disposed = true;
+			generation += 1;
+			visibilityObserver?.disconnect();
+			previewAction?.removeEventListener("click", handlePreviewAction);
+			openAction?.removeEventListener("click", handleOpenWorkspaceFile);
+			manualPreviewAbort?.abort();
+			disposePdfPreview();
+			disposeLoadedAsset();
+		},
+	};
+}
+
+function createImageDom(node: any): HTMLImageElement {
+	const image = document.createElement("img");
+	updateAssetDomAttributes(image, node);
+	return image;
+}
+
+function createPdfEmbedDom(node: any): HTMLSpanElement {
+	const wrapper = document.createElement("span");
+	wrapper.className = "markdown-pdf-embed";
+	wrapper.dataset.markdownPdf = "";
+	wrapper.contentEditable = "false";
+
+	const toolbar = document.createElement("span");
+	toolbar.className = "markdown-pdf-toolbar";
+	const icon = document.createElement("span");
+	icon.className = "markdown-pdf-icon";
+	icon.ariaHidden = "true";
+	const label = document.createElement("span");
+	label.className = "markdown-pdf-label";
+	const open = document.createElement("a");
+	open.className = "markdown-pdf-open";
+	open.target = "_blank";
+	open.rel = "noopener noreferrer";
+	open.textContent = "Open";
+	toolbar.append(icon, label, open);
+
+	const surface = document.createElement("span");
+	surface.className = "markdown-pdf-surface";
+	const preview = document.createElement("span");
+	preview.className = "markdown-pdf-preview";
+	preview.role = "region";
+	const status = document.createElement("span");
+	status.className = "markdown-pdf-status";
+	status.role = "status";
+	const statusMessage = document.createElement("span");
+	statusMessage.className = "markdown-pdf-status-message";
+	statusMessage.textContent = "Loading PDF preview…";
+	const previewAction = document.createElement("button");
+	previewAction.type = "button";
+	previewAction.className = "markdown-pdf-preview-action";
+	previewAction.textContent = "Preview PDF";
+	status.append(statusMessage, previewAction);
+	surface.append(preview, status);
+	wrapper.append(toolbar, surface);
+	updateAssetDomAttributes(wrapper, node);
+	return wrapper;
+}
+
+function updateAssetDomAttributes(dom: HTMLElement, node: any): void {
+	const src = String(node.attrs?.src ?? "");
+	const alt = typeof node.attrs?.alt === "string" ? node.attrs.alt : null;
+	const title = typeof node.attrs?.title === "string" ? node.attrs.title : null;
+	for (const attribute of [
+		"data-diff-key",
+		"data-diff-mode",
+		"data-diff-show-when-removed",
+	]) {
+		dom.removeAttribute(attribute);
+	}
+	for (const [key, value] of Object.entries(diffAttrs(node, "element"))) {
+		dom.setAttribute(key, String(value));
+	}
+	if (title) dom.title = title;
+	else dom.removeAttribute("title");
+	if (dom instanceof HTMLImageElement) {
+		if (alt) dom.alt = alt;
+		else dom.removeAttribute("alt");
+		return;
+	}
+	const label = markdownAssetLabel(src, alt);
+	const labelElement = dom.querySelector<HTMLElement>(".markdown-pdf-label");
+	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	const preview = dom.querySelector<HTMLElement>(".markdown-pdf-preview");
+	if (labelElement) labelElement.textContent = label;
+	if (open) {
+		setPdfOpenDestination(dom, "external");
+	}
+	if (preview) preview.ariaLabel = `PDF preview: ${label}`;
+}
+
+function setAssetDomLoading(dom: HTMLElement): void {
+	dom.dataset.assetState = "loading";
+	dom.setAttribute("aria-busy", "true");
+	if (dom instanceof HTMLImageElement) dom.removeAttribute("src");
+	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	const preview = dom.querySelector<HTMLElement>(".markdown-pdf-preview");
+	open?.removeAttribute("href");
+	preview?.replaceChildren();
+	setPdfStatusMessage(dom, "Loading PDF preview…");
+}
+
+function setImageDomSource(dom: HTMLElement, src: string): void {
+	dom.dataset.assetState = "ready";
+	dom.removeAttribute("aria-busy");
+	if (dom instanceof HTMLImageElement) {
+		dom.src = src;
+	}
+}
+
+function setPdfDomReady(dom: HTMLElement, openSrc: string): void {
+	dom.dataset.assetState = "ready";
+	dom.removeAttribute("aria-busy");
+	setPdfOpenHref(dom, openSrc);
+}
+
+function setAssetDomUnavailable(dom: HTMLElement): void {
+	dom.dataset.assetState = "unavailable";
+	dom.removeAttribute("aria-busy");
+	dom
+		.querySelector<HTMLAnchorElement>(".markdown-pdf-open")
+		?.removeAttribute("href");
+	dom.querySelector<HTMLElement>(".markdown-pdf-preview")?.replaceChildren();
+	setPdfStatusMessage(dom, "PDF preview unavailable");
+}
+
+function setPdfDomManual(
+	dom: HTMLElement,
+	src: string,
+	reason: "remote" | "large",
+	remoteHost?: string,
+): void {
+	dom.dataset.assetState = "manual";
+	dom.removeAttribute("aria-busy");
+	setPdfOpenHref(dom, src);
+	dom.querySelector<HTMLElement>(".markdown-pdf-preview")?.replaceChildren();
+	setPdfStatusMessage(
+		dom,
+		reason === "large"
+			? "This PDF is large. Preview it when you're ready."
+			: remoteHost
+				? `Previewing downloads this PDF from ${remoteHost}.`
+				: "Remote PDFs load only after you choose to preview them.",
+	);
+	const action = dom.querySelector<HTMLButtonElement>(
+		".markdown-pdf-preview-action",
+	);
+	if (action) {
+		action.ariaLabel = remoteHost
+			? `Preview PDF from ${remoteHost}`
+			: "Preview PDF";
+	}
+}
+
+function setPdfDomOpenOnly(
+	dom: HTMLElement,
+	src: string,
+	message: string,
+): void {
+	dom.dataset.assetState = "open-only";
+	dom.removeAttribute("aria-busy");
+	setPdfOpenHref(dom, src);
+	dom.querySelector<HTMLElement>(".markdown-pdf-preview")?.replaceChildren();
+	setPdfStatusMessage(dom, message);
+}
+
+function setPdfOpenHref(dom: HTMLElement, src: string): void {
+	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	if (open) open.href = src;
+}
+
+function setPdfOpenDestination(
+	dom: HTMLElement,
+	destination: "workspace" | "external",
+): void {
+	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	if (!open) return;
+	const label =
+		dom.querySelector<HTMLElement>(".markdown-pdf-label")?.textContent ??
+		"PDF document";
+	if (destination === "workspace") {
+		open.removeAttribute("target");
+		open.removeAttribute("rel");
+		open.ariaLabel = `Open ${label} in the center panel`;
+		return;
+	}
+	open.target = "_blank";
+	open.rel = "noopener noreferrer";
+	open.ariaLabel = `Open ${label} in a new tab for full document access`;
+}
+
+function setPdfStatusMessage(dom: HTMLElement, message: string): void {
+	const status = dom.querySelector<HTMLElement>(".markdown-pdf-status-message");
+	if (status) status.textContent = message;
+}
+
+function safePdfRenderSrc(src: string): string {
+	if (!src || src.startsWith("//")) return "";
+	try {
+		const absolute = new URL(src);
+		if (
+			absolute.protocol === "http:" ||
+			absolute.protocol === "https:" ||
+			absolute.protocol === "blob:"
+		) {
+			return src;
+		}
+		return "";
+	} catch {
+		return "";
+	}
+}
+
+function safePdfOpenSrc(src: string): string {
+	if (!src) return "";
+	try {
+		const absolute = new URL(src, "https://atelier.workspace/");
+		if (
+			absolute.protocol !== "http:" &&
+			absolute.protocol !== "https:" &&
+			absolute.protocol !== "blob:"
+		) {
+			return "";
+		}
+		return src.startsWith("//") ? absolute.href : src;
+	} catch {
+		return "";
+	}
+}
+
+function focusPdfOpenLink(dom: HTMLElement): void {
+	dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open[href]")?.focus();
+}
+
+function isRemotePdfSrc(src: string): boolean {
+	try {
+		const url = new URL(src);
+		return url.protocol === "http:" || url.protocol === "https:";
+	} catch {
+		return false;
+	}
 }
 
 function resolveRenderedImageSrc(

@@ -1,0 +1,128 @@
+@scope (.atelier-root) {
+	.atelier-pdf-view {
+		position: relative;
+		height: 100%;
+		min-height: 0;
+		overflow: hidden;
+		background: var(--color-bg-panel-muted);
+	}
+
+	.atelier-pdf-preview {
+		position: relative;
+		width: 100%;
+		height: 100%;
+	}
+
+	.atelier-pdf-document,
+	.atelier-pdf-document .atelier-pdf-canvas-scroll {
+		display: block;
+		width: 100%;
+		height: 100%;
+	}
+
+	.atelier-pdf-document .atelier-pdf-canvas-scroll {
+		overflow: auto;
+	}
+
+	.atelier-pdf-document .atelier-pdf-canvas-scroll[data-layout="fit-page"] {
+		display: grid;
+		place-items: center;
+		padding: 56px 56px 96px;
+	}
+
+	.atelier-pdf-document .atelier-pdf-canvas {
+		display: block;
+		max-width: 100%;
+		height: auto;
+		margin: 0 auto;
+		background: white;
+		box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 28%);
+	}
+
+	@media (max-width: 767px) {
+		.atelier-pdf-document .atelier-pdf-canvas-scroll[data-layout="fit-page"] {
+			padding: 32px 24px 86px;
+		}
+	}
+
+	.atelier-pdf-document .atelier-pdf-page-controls {
+		position: absolute;
+		bottom: 0.875rem;
+		left: 50%;
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem;
+		color: var(--color-text-primary);
+		background: color-mix(in srgb, var(--color-bg-panel) 94%, transparent);
+		border: 1px solid var(--color-border-panel);
+		border-radius: 0.5rem;
+		box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 20%);
+		transform: translateX(-50%);
+	}
+
+	.atelier-pdf-document .atelier-pdf-page-button {
+		display: inline-flex;
+		height: 1.75rem;
+		align-items: center;
+		padding: 0 0.625rem;
+		color: var(--color-text-secondary);
+		font: inherit;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		background: transparent;
+		border: 0;
+		border-radius: 0.25rem;
+		cursor: pointer;
+	}
+
+	.atelier-pdf-document .atelier-pdf-page-button:hover:not(:disabled) {
+		color: var(--color-text-primary);
+		background: var(--color-bg-hover);
+	}
+
+	.atelier-pdf-document .atelier-pdf-page-button:disabled {
+		color: var(--color-text-tertiary);
+		cursor: default;
+		opacity: 0.55;
+	}
+
+	.atelier-pdf-document .atelier-pdf-page-button:focus-visible {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: 1px;
+	}
+
+	.atelier-pdf-document .atelier-pdf-page-label {
+		min-width: 3.5rem;
+		color: var(--color-text-secondary);
+		font-size: 0.6875rem;
+		font-variant-numeric: tabular-nums;
+		font-weight: 600;
+		text-align: center;
+	}
+
+	.atelier-pdf-document .atelier-pdf-sr-page-text {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	.atelier-pdf-state {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		color: var(--color-text-tertiary);
+		text-align: center;
+		background: var(--color-bg-panel-muted);
+	}
+}

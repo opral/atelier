@@ -13,6 +13,11 @@ import {
 	buildNormalizedMarkdownFromEditor,
 	normalizePersistedMarkdown,
 } from "./build-markdown-from-editor";
+import {
+	loadMarkdownAsset,
+	type MarkdownWorkspaceFileOpener,
+} from "./markdown-asset";
+import { renderPdfPreview } from "@/extensions/pdf/pdf-preview";
 
 type CreateEditorArgs = {
 	lix: Lix;
@@ -23,10 +28,13 @@ type CreateEditorArgs = {
 	editorProps?: any;
 	editable?: boolean;
 	fileId?: string;
+	sourceFilePath?: string;
+	sourceCommitId?: string;
 	defaultBlock?: EmptyMarkdownDefaultBlock;
 	persistDebounceMs?: number;
 	persistState?: boolean;
 	resolveImageSrc?: (src: string) => string;
+	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	originKey?: string;
 };
 
@@ -106,10 +114,13 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		editorProps,
 		editable = true,
 		fileId,
+		sourceFilePath,
+		sourceCommitId,
 		defaultBlock,
 		persistDebounceMs,
 		persistState = true,
 		resolveImageSrc,
+		openWorkspaceFile,
 		originKey = createMarkdownEditorOriginKey(),
 	} = args;
 
@@ -177,7 +188,14 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			node.childCount === 0,
 	};
 
-	const markdownExtensions = MarkdownWc({ resolveImageSrc }) as any[];
+	const markdownExtensions = MarkdownWc({
+		resolveImageSrc,
+		loadAsset: sourceFilePath
+			? (src) => loadMarkdownAsset({ lix, sourceFilePath, sourceCommitId, src })
+			: undefined,
+		openWorkspaceFile,
+		renderPdfPreview,
+	}) as any[];
 
 	editorInstance = new Editor({
 		extensions: [

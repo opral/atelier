@@ -12,9 +12,9 @@ import { qb } from "@/lib/lix-kysely";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { EditorProvider } from "@/extensions/markdown/editor/editor-context";
 import { TipTapEditor } from "@/extensions/markdown/editor/tip-tap-editor";
+import { EditorContent } from "@tiptap/react";
+import { createEditor } from "@/extensions/markdown/editor/create-editor";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
-import { renderMarkdownAstEditorHtml } from "@/extensions/markdown/editor/render-markdown-html";
-import { parseMarkdown } from "@/extensions/markdown/editor/markdown";
 import { renderMarkdownReviewDiffHtml } from "./render-review-diff-html";
 import "./style.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -47,6 +47,7 @@ import {
 	useExternalWriteReviewData,
 } from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
+import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/markdown-asset";
 
 type MarkdownViewProps = {
 	readonly fileId: string;
@@ -72,6 +73,7 @@ type MarkdownViewProps = {
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 };
 
 type HistoricalMarkdownBlockRow = {
@@ -131,6 +133,7 @@ export function MarkdownView({
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
+	openWorkspaceFile,
 }: MarkdownViewProps) {
 	return (
 		<Suspense fallback={<MarkdownLoadingSpinner />}>
@@ -148,6 +151,7 @@ export function MarkdownView({
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		</Suspense>
 	);
@@ -184,6 +188,7 @@ function MarkdownViewLoaded({
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
+	openWorkspaceFile,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
@@ -215,6 +220,7 @@ function MarkdownViewLoaded({
 				syncActiveFile={syncActiveFile}
 				checkpointDiff={checkpointDiff}
 				editorRevision={editorRevision}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
 	}
@@ -256,6 +262,7 @@ function MarkdownViewLoaded({
 							isActiveView={isActiveView}
 							focusOnLoad={focusOnLoad}
 							defaultBlock={defaultBlock}
+							openWorkspaceFile={openWorkspaceFile}
 						/>
 						<MarkdownAutosaveHint
 							enabled={isActiveView && isPanelFocused && !reviewDiff}
@@ -304,6 +311,7 @@ function MarkdownHistoricalViewLoaded({
 	isPanelFocused,
 	checkpointDiff,
 	editorRevision,
+	openWorkspaceFile,
 }: {
 	readonly fileId: string;
 	readonly filePath: string | undefined;
@@ -313,6 +321,7 @@ function MarkdownHistoricalViewLoaded({
 	readonly syncActiveFile: boolean;
 	readonly checkpointDiff: CheckpointDiff | null | undefined;
 	readonly editorRevision: EditorRevisionState;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
 	const revisionMode = editorRevisionMode(editorRevision);
 	const checkpointDiffFile = useMemo(
@@ -385,6 +394,12 @@ function MarkdownHistoricalViewLoaded({
 			<MarkdownSnapshotView
 				filePath={effectiveFileRow.path}
 				markdown={decodeFileDataToText(effectiveFileRow.data)}
+				sourceCommitId={
+					checkpointDiffFile?.afterCommitId ??
+					editorRevision.afterCommitId ??
+					undefined
+				}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
 	} else {
@@ -467,25 +482,37 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 }
 
 function MarkdownSnapshotView({
-	filePath: _filePath,
+	filePath,
 	markdown,
+	sourceCommitId,
+	openWorkspaceFile,
 }: {
 	readonly filePath: string;
 	readonly markdown: string;
+	readonly sourceCommitId?: string;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
-	const html = useMemo(
-		() => renderMarkdownAstEditorHtml(parseMarkdown(markdown) as any),
-		[markdown],
+	const lix = useLix();
+	const editor = useMemo(
+		() =>
+			createEditor({
+				lix,
+				initialMarkdown: markdown,
+				sourceFilePath: filePath,
+				sourceCommitId,
+				openWorkspaceFile,
+				editable: false,
+				persistState: false,
+			}),
+		[filePath, lix, markdown, openWorkspaceFile, sourceCommitId],
 	);
+	useEffect(() => () => editor.destroy(), [editor]);
 
 	return (
 		<div className="markdown-view flex h-full flex-col bg-background">
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
-					<div
-						className="ProseMirror tiptap mx-auto w-full"
-						dangerouslySetInnerHTML={{ __html: html }}
-					/>
+					<EditorContent editor={editor} className="tiptap mx-auto w-full" />
 				</div>
 			</div>
 		</div>
@@ -1027,6 +1054,7 @@ export const extension = createReactExtensionDefinition({
 				registerExternalWriteReview={atelier.reviews.register}
 				onAcceptReviewDiff={atelier.reviews.accept}
 				onRejectReviewDiff={atelier.reviews.reject}
+				openWorkspaceFile={atelier.files.open}
 			/>
 		</LixProvider>
 	),

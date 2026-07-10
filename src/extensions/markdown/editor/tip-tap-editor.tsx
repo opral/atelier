@@ -15,6 +15,7 @@ import {
 	buildNormalizedMarkdownFromEditor,
 	normalizePersistedMarkdown,
 } from "./build-markdown-from-editor";
+import type { MarkdownWorkspaceFileOpener } from "./markdown-asset";
 
 type TipTapEditorProps = {
 	fileId?: string | null;
@@ -26,6 +27,7 @@ type TipTapEditorProps = {
 	defaultBlock?: EmptyMarkdownDefaultBlock;
 	isActiveView?: boolean;
 	originKey?: string;
+	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 };
 
 /**
@@ -52,6 +54,7 @@ export function TipTapEditor({
 	defaultBlock,
 	isActiveView = true,
 	originKey,
+	openWorkspaceFile,
 }: TipTapEditorProps) {
 	if (fileId) {
 		return (
@@ -65,6 +68,7 @@ export function TipTapEditor({
 				defaultBlock={defaultBlock}
 				isActiveView={isActiveView}
 				originKey={originKey}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
 	}
@@ -78,6 +82,7 @@ export function TipTapEditor({
 			defaultBlock={defaultBlock}
 			isActiveView={isActiveView}
 			originKey={originKey}
+			openWorkspaceFile={openWorkspaceFile}
 		/>
 	);
 }
@@ -151,6 +156,7 @@ function TipTapEditorFileContent({
 			activeBranchId={activeBranchId}
 			hasInitialFile={Boolean(initialFile)}
 			initialMarkdown={initialMarkdown}
+			sourceFilePath={props.filePath ?? initialFile?.path ?? null}
 		/>
 	);
 }
@@ -165,12 +171,15 @@ function TipTapEditorLoadedContent({
 	defaultBlock,
 	isActiveView = true,
 	originKey,
+	openWorkspaceFile,
 	hasInitialFile,
 	initialMarkdown,
+	sourceFilePath,
 }: TipTapEditorContentProps & {
 	readonly activeBranchId: string;
 	readonly hasInitialFile: boolean;
 	readonly initialMarkdown: string;
+	readonly sourceFilePath?: string | null;
 }) {
 	const lix = useLix();
 	const { setEditor } = useEditorCtx();
@@ -198,9 +207,11 @@ function TipTapEditorLoadedContent({
 			initialMarkdown,
 			contentAst: hasAstSnapshot ? initialAst : undefined,
 			fileId: activeFileId,
+			sourceFilePath: sourceFilePath ?? undefined,
 			defaultBlock,
 			persistDebounceMs: PERSIST_DEBOUNCE_MS,
 			originKey: editorOriginKey,
+			openWorkspaceFile,
 		});
 	}, [
 		lix,
@@ -210,8 +221,10 @@ function TipTapEditorLoadedContent({
 		initialAst,
 		initialAstLoaded,
 		initialMarkdown,
+		sourceFilePath,
 		defaultBlock,
 		editorOriginKey,
+		openWorkspaceFile,
 	]);
 
 	useEffect(() => {

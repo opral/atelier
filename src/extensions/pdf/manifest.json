@@ -1,0 +1,7 @@
+{
+	"apiVersion": 1,
+	"id": "atelier_pdf",
+	"name": "PDF",
+	"entry": "./index.js",
+	"fileExtensions": ["pdf"]
+}

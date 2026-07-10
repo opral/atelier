@@ -76,12 +76,15 @@ export function decodeSeedAssetDataUrl(dataUrl: string): Uint8Array {
 	return new TextEncoder().encode(decodeURIComponent(payload));
 }
 
-function embedSeedAssets(modulePath: string, contents: string): string {
+export function embedSeedAssets(modulePath: string, contents: string): string {
 	if (!modulePath.toLowerCase().endsWith(".md")) return contents;
 
 	let markdown = contents;
 	for (const [assetModulePath, dataUrl] of Object.entries(seedAssetUrls)) {
 		const relativeAssetPath = assetModulePath.slice("./seed/".length);
+		// PDFs must remain workspace-relative so the Markdown asset loader can
+		// validate their bytes and render them through the consent-aware path.
+		if (relativeAssetPath.toLowerCase().endsWith(".pdf")) continue;
 		markdown = markdown.replaceAll(`](${relativeAssetPath}`, `](${dataUrl}`);
 	}
 	return markdown;
