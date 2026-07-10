@@ -13,6 +13,16 @@ import type {
 	FilesystemTreeNode,
 	FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
+import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileGenericIconUrl from "./assets/file-generic.svg";
+import fileHtmlIconUrl from "./assets/file-html.svg";
+import fileJpgIconUrl from "./assets/file-jpg.svg";
+import fileMdIconUrl from "./assets/file-md.svg";
+import filePdfIconUrl from "./assets/file-pdf.svg";
+import filePngIconUrl from "./assets/file-png.svg";
+import fileSvgIconUrl from "./assets/file-svg.svg";
+import folderBlueIconUrl from "./assets/folder-blue.svg";
+import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
 
 export type FileTreeCreateRequest = {
 	readonly id: number;
@@ -87,7 +97,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-type='item'][data-item-type='folder'] > [data-item-section='icon'] {
-		color: var(--color-icon-secondary);
+		color: #60a5fa;
 	}
 
 	[data-type='item'][data-item-type='folder']
@@ -102,19 +112,16 @@ const FILE_TREE_UNSAFE_CSS = `
 		display: block;
 		width: var(--trees-icon-width);
 		height: var(--trees-icon-width);
-		background-color: currentColor;
-		-webkit-mask: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
-		mask: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+		background: url("${folderBlueIconUrl}") center / contain no-repeat;
 	}
 
 	[data-type='item'][data-item-type='folder'][aria-expanded='true']
 		> [data-item-section='icon']::before {
-		-webkit-mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6 14 1.5-2.9A2 2 0 0 1 9.24 9H20a2 2 0 0 1 1.74 3l-3.2 5.9A2 2 0 0 1 16.8 19H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v1' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-		mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6 14 1.5-2.9A2 2 0 0 1 9.24 9H20a2 2 0 0 1 1.74 3l-3.2 5.9A2 2 0 0 1 16.8 19H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v1' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+		background-image: url("${folderBlueOpenIconUrl}");
 	}
 
 	[data-type='item'][data-item-type='file'] > [data-item-section='icon'] {
-		color: var(--color-icon-secondary);
+		color: inherit;
 	}
 
 	[data-type='item'][data-item-type='file']
@@ -129,9 +136,48 @@ const FILE_TREE_UNSAFE_CSS = `
 		display: block;
 		width: var(--trees-icon-width);
 		height: var(--trees-icon-width);
-		background-color: currentColor;
-		-webkit-mask: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
-		mask: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+		background: url("${fileGenericIconUrl}") center / contain no-repeat;
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.md' i]
+		> [data-item-section='icon']::before,
+	[data-type='item'][data-item-type='file'][data-item-path$='.markdown' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${fileMdIconUrl}");
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.csv' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${fileCsvIconUrl}");
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.png' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${filePngIconUrl}");
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.svg' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${fileSvgIconUrl}");
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.jpg' i]
+		> [data-item-section='icon']::before,
+	[data-type='item'][data-item-type='file'][data-item-path$='.jpeg' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${fileJpgIconUrl}");
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.pdf' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${filePdfIconUrl}");
+	}
+
+	[data-type='item'][data-item-type='file'][data-item-path$='.html' i]
+		> [data-item-section='icon']::before,
+	[data-type='item'][data-item-type='file'][data-item-path$='.htm' i]
+		> [data-item-section='icon']::before {
+		background-image: url("${fileHtmlIconUrl}");
 	}
 
 	[data-item-git-status='modified'] > [data-item-section='icon']
@@ -747,7 +793,7 @@ function treeHostStyle(isPanelFocused: boolean) {
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
 		"--trees-item-padding-x-override": "9px",
-		"--trees-level-gap-override": "7px",
+		"--trees-level-gap-override": "1px",
 		"--trees-padding-inline-override": "0px",
 		"--trees-scrollbar-gutter-override": "0px",
 		"--trees-selected-bg-override": isPanelFocused
