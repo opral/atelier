@@ -3,6 +3,7 @@ import { extension as filesExtensionDefinition } from "../extensions/files";
 import { extension as historyExtensionDefinition } from "../extensions/history";
 import { extension as markdownExtensionDefinition } from "../extensions/markdown";
 import { extension as csvExtensionDefinition } from "../extensions/csv";
+import { extension as imageExtensionDefinition } from "../extensions/image";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	filesExtensionDefinition,
@@ -12,6 +13,7 @@ export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	markdownExtensionDefinition,
 	csvExtensionDefinition,
+	imageExtensionDefinition,
 ];
 
 export const BUILTIN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [

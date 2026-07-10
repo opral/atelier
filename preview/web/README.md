@@ -11,9 +11,9 @@ pnpm --dir preview/web dev
 The preview is a regular Vite app. It intentionally has no Electron bridge or
 filesystem backend.
 
-Files under `seed/` are imported as text and inserted into a fresh in-memory
-Lix workspace at startup. `seed/README.md` is opened automatically as the
-visual Markdown fixture.
+Text files under `seed/` and binary files under `seed/assets/` are inserted into
+a fresh in-memory Lix workspace at startup. `seed/README.md` is opened
+automatically as the visual Markdown fixture.
 
 ## Cloudflare preview deployments
 

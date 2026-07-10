@@ -1,0 +1,102 @@
+@scope (.atelier-root) {
+	.atelier-image-view {
+		position: relative;
+		height: 100%;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.atelier-image-viewport {
+		position: absolute;
+		inset: 0;
+		overflow: auto;
+		background-color: var(--color-bg-panel-muted);
+		background-image:
+			linear-gradient(
+				45deg,
+				color-mix(in srgb, var(--color-neutral-500) 4.5%, transparent) 25%,
+				transparent 25%
+			),
+			linear-gradient(
+				-45deg,
+				color-mix(in srgb, var(--color-neutral-500) 4.5%, transparent) 25%,
+				transparent 25%
+			),
+			linear-gradient(
+				45deg,
+				transparent 75%,
+				color-mix(in srgb, var(--color-neutral-500) 4.5%, transparent) 75%
+			),
+			linear-gradient(
+				-45deg,
+				transparent 75%,
+				color-mix(in srgb, var(--color-neutral-500) 4.5%, transparent) 75%
+			);
+		background-position:
+			0 0,
+			0 8px,
+			8px -8px,
+			-8px 0;
+		background-size: 16px 16px;
+	}
+
+	.atelier-image-viewport--opaque {
+		background-image: none;
+	}
+
+	.atelier-image-canvas {
+		display: grid;
+		min-width: 100%;
+		min-height: 100%;
+		place-items: center;
+		padding: 56px 56px 96px;
+	}
+
+	.atelier-image-preview {
+		display: block;
+		max-width: none;
+		max-height: none;
+		object-fit: contain;
+		filter: drop-shadow(0 16px 32px rgba(28, 25, 23, 0.14));
+		user-select: none;
+		-webkit-user-drag: none;
+	}
+
+	.atelier-image-toolbar {
+		position: absolute;
+		bottom: 18px;
+		left: 50%;
+		z-index: 2;
+		display: flex;
+		height: 38px;
+		align-items: center;
+		gap: 2px;
+		padding: 4px;
+		transform: translateX(-50%);
+		border: 1px solid
+			color-mix(in srgb, var(--color-neutral-300) 86%, transparent);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--color-bg-panel) 92%, transparent);
+		box-shadow:
+			0 8px 24px rgba(28, 25, 23, 0.12),
+			0 1px 2px rgba(28, 25, 23, 0.08);
+		backdrop-filter: blur(14px);
+	}
+
+	.atelier-image-toolbar-divider {
+		width: 1px;
+		height: 18px;
+		margin: 0 3px;
+		background: var(--color-border-panel);
+	}
+
+	@media (max-width: 767px) {
+		.atelier-image-canvas {
+			padding: 32px 24px 86px;
+		}
+
+		.atelier-image-toolbar {
+			bottom: 14px;
+		}
+	}
+}
