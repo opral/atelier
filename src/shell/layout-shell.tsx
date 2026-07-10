@@ -21,7 +21,7 @@ import {
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
-import { useLix } from "@/lib/lix-react";
+import { useLix, useQuery } from "@/lib/lix-react";
 import type { Lix, SqlParam } from "@lix-js/sdk";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { SidePanel } from "./side-panel";
@@ -90,6 +90,10 @@ import {
 import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
 import { getFileDataAtCommit } from "./external-write-review-history";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
+import {
+	reconcileCurrentFileViewPanel,
+	reconcileCurrentFileViews,
+} from "./file-view-lifecycle";
 
 type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
@@ -812,6 +816,13 @@ function LayoutShellLoadedContent({
 	activeFileId,
 	setActiveFileId,
 }: LayoutShellLoadedContentProps) {
+	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
+		qb(queryLix).selectFrom("lix_file").select("id"),
+	);
+	const currentFileIds = useMemo(
+		() => new Set(currentFileRows.map((row) => String(row.id))),
+		[currentFileRows],
+	);
 	const [hasLoadedInstalledExtensions, setHasLoadedInstalledExtensions] =
 		useState(false);
 	const installedExtensionsByManifestRef = useRef(
@@ -827,37 +838,60 @@ function LayoutShellLoadedContent({
 	const sanitizedPersistedPanels = useMemo(() => {
 		return sanitizePanels(uiState.panels);
 	}, [uiState]);
+	const reconciledPersistedPanels = useMemo(
+		() =>
+			reconcileCurrentFileViews({
+				panels: sanitizedPersistedPanels,
+				currentFileIds,
+			}),
+		[currentFileIds, sanitizedPersistedPanels],
+	);
 
-	const [leftPanel, setLeftPanel] = useState<PanelState>(() =>
+	const [storedLeftPanel, setLeftPanel] = useState<PanelState>(() =>
 		reconcilePanelExtensionViewsForDocumentSlot(
 			"left",
-			sanitizedPersistedPanels.left,
+			reconciledPersistedPanels.left,
 			extensionMap,
 			{
 				preserveUnknownKinds: true,
 			},
 		),
 	);
-	const [centralPanel, setCentralPanel] = useState<PanelState>(() =>
+	const [storedCentralPanel, setCentralPanel] = useState<PanelState>(() =>
 		reconcilePanelExtensionViewsForDocumentSlot(
 			"central",
-			sanitizedPersistedPanels.central,
+			reconciledPersistedPanels.central,
 			extensionMap,
 			{
 				preserveUnknownKinds: true,
 			},
 		),
 	);
-	const [rightPanel, setRightPanel] = useState<PanelState>(() =>
+	const [storedRightPanel, setRightPanel] = useState<PanelState>(() =>
 		reconcilePanelExtensionViewsForDocumentSlot(
 			"right",
-			sanitizedPersistedPanels.right,
+			reconciledPersistedPanels.right,
 			extensionMap,
 			{
 				preserveUnknownKinds: true,
 			},
 		),
 	);
+	const reconciledPanels = useMemo(
+		() =>
+			reconcileCurrentFileViews({
+				panels: {
+					left: storedLeftPanel,
+					central: storedCentralPanel,
+					right: storedRightPanel,
+				},
+				currentFileIds,
+			}),
+		[currentFileIds, storedCentralPanel, storedLeftPanel, storedRightPanel],
+	);
+	const leftPanel = reconciledPanels.left;
+	const centralPanel = reconciledPanels.central;
+	const rightPanel = reconciledPanels.right;
 	const [focusedPanel, setFocusedPanel] = useState<PanelSide>(
 		() => uiState.focusedPanel,
 	);
@@ -1094,31 +1128,31 @@ function LayoutShellLoadedContent({
 		hydratingRef.current = true;
 		lastPersistedRef.current = serialized;
 		setLeftPanel((prev) =>
-			prev === sanitizedPersistedPanels.left
+			prev === reconciledPersistedPanels.left
 				? prev
 				: reconcilePanelExtensionViewsForDocumentSlot(
 						"left",
-						sanitizedPersistedPanels.left,
+						reconciledPersistedPanels.left,
 						extensionMap,
 						reconciliationOptions,
 					),
 		);
 		setCentralPanel((prev) =>
-			prev === sanitizedPersistedPanels.central
+			prev === reconciledPersistedPanels.central
 				? prev
 				: reconcilePanelExtensionViewsForDocumentSlot(
 						"central",
-						sanitizedPersistedPanels.central,
+						reconciledPersistedPanels.central,
 						extensionMap,
 						reconciliationOptions,
 					),
 		);
 		setRightPanel((prev) =>
-			prev === sanitizedPersistedPanels.right
+			prev === reconciledPersistedPanels.right
 				? prev
 				: reconcilePanelExtensionViewsForDocumentSlot(
 						"right",
-						sanitizedPersistedPanels.right,
+						reconciledPersistedPanels.right,
 						extensionMap,
 						reconciliationOptions,
 					),
@@ -1146,7 +1180,7 @@ function LayoutShellLoadedContent({
 		});
 	}, [
 		uiStateKV,
-		sanitizedPersistedPanels,
+		reconciledPersistedPanels,
 		updateDerivedPanelState,
 		extensionMap,
 		hasLoadedInstalledExtensions,
@@ -1226,11 +1260,15 @@ function LayoutShellLoadedContent({
 			options: { focus?: boolean } = {},
 		) => {
 			const applyReducer = (prev: PanelState) => {
+				const currentPanel = reconcileCurrentFileViewPanel(
+					prev,
+					currentFileIds,
+				);
 				const next = reconcilePanelExtensionViews(
 					reducer(
 						reconcilePanelExtensionViewsForDocumentSlot(
 							side,
-							prev,
+							currentPanel,
 							extensionMap,
 							{
 								preserveUnknownKinds: !hasLoadedInstalledExtensions,
@@ -1259,6 +1297,7 @@ function LayoutShellLoadedContent({
 			setRightPanel,
 			setFocusedPanel,
 			extensionMap,
+			currentFileIds,
 			hasLoadedInstalledExtensions,
 		],
 	);
@@ -1273,7 +1312,7 @@ function LayoutShellLoadedContent({
 			readonly nextDiff: CheckpointDiff | null;
 		}) => {
 			void (async () => {
-				const currentFileIds = args.previousDiff
+				const currentWorkspaceFileIds = args.previousDiff
 					? await readCurrentLixFileIds(lix)
 					: new Set<string>();
 				const transitionPanel =
@@ -1285,7 +1324,7 @@ function LayoutShellLoadedContent({
 								panel,
 								previousDiff: args.previousDiff,
 								nextDiff: args.nextDiff,
-								currentFileIds,
+								currentFileIds: currentWorkspaceFileIds,
 							}),
 						);
 				setLeftPanel(transitionPanel("left"));
@@ -1996,7 +2035,6 @@ function LayoutShellLoadedContent({
 		activeFileIdFromExtensionInstance(activeCentralEntry);
 
 	useEffect(() => {
-		if (!activeCentralFileId) return;
 		if (activeFileId === activeCentralFileId) return;
 		void setActiveFileId(activeCentralFileId);
 	}, [activeCentralFileId, activeFileId, setActiveFileId]);
