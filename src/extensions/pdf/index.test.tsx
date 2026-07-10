@@ -1,7 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { findFileHandlerExtension } from "@/extension-runtime/file-handlers";
 import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builtin-extension-registry";
+import { LixProvider } from "@/lib/lix-react";
+import { qb } from "@/lib/lix-kysely";
+import { openLix } from "@/test-utils/node-lix-sdk";
 
 const pdfRendererMocks = vi.hoisted(() => ({
 	render: vi.fn(),
@@ -11,7 +14,7 @@ vi.mock("./pdf-preview", () => ({
 	renderPdfPreview: pdfRendererMocks.render,
 }));
 
-import { PdfPreview, extension } from "./index";
+import { PdfPreview, PdfView, extension } from "./index";
 
 describe("PDF extension routing", () => {
 	test("handles PDF files case-insensitively", () => {
@@ -68,6 +71,7 @@ describe("PdfPreview", () => {
 		});
 		const renderArgs = pdfRendererMocks.render.mock.calls[0]![0];
 		expect(renderArgs.src).toBe("blob:atelier-pdf");
+		expect(renderArgs.layout).toBe("fit-page");
 		expect(renderArgs.container).toHaveAttribute(
 			"aria-label",
 			"PDF preview: example.pdf",
@@ -88,6 +92,22 @@ describe("PdfPreview", () => {
 		expect(renderArgs.signal.aborted).toBe(true);
 	});
 
+	test("passes the requested workspace page to the renderer", async () => {
+		render(
+			<PdfPreview
+				data={new TextEncoder().encode("%PDF-1.7\nfixture")}
+				filePath="/assets/example.pdf"
+				initialPage={4}
+			/>,
+		);
+
+		await waitFor(() => {
+			expect(pdfRendererMocks.render).toHaveBeenCalledWith(
+				expect.objectContaining({ src: "blob:atelier-pdf#page=4" }),
+			);
+		});
+	});
+
 	test("rejects data without a PDF signature", async () => {
 		render(
 			<PdfPreview
@@ -101,5 +121,46 @@ describe("PdfPreview", () => {
 		).toBeInTheDocument();
 		expect(createObjectURL).not.toHaveBeenCalled();
 		expect(pdfRendererMocks.render).not.toHaveBeenCalled();
+	});
+
+	test("loads direct PDF views from the requested historical commit", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "historical-pdf",
+				path: "/assets/history.pdf",
+				data: new TextEncoder().encode("%PDF-1.7 historical"),
+			})
+			.execute();
+		const result = await lix.execute(
+			"SELECT lix_active_branch_commit_id() AS commit_id",
+		);
+		const sourceCommitId = result.rows[0]?.get("commit_id") as string;
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ data: new TextEncoder().encode("%PDF-1.7 current") })
+			.where("id", "=", "historical-pdf")
+			.execute();
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<PdfView
+						fileId="historical-pdf"
+						filePath="/assets/history.pdf"
+						sourceCommitId={sourceCommitId}
+					/>
+				</LixProvider>,
+			);
+		});
+
+		await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
+		expect(await createObjectURL.mock.calls[0]![0].text()).toBe(
+			"%PDF-1.7 historical",
+		);
+		await act(async () => view?.unmount());
+		await lix.close();
 	});
 });

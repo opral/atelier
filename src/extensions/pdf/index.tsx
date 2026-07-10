@@ -15,6 +15,8 @@ import "./style.css";
 type PdfViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
+	readonly sourceCommitId?: string;
+	readonly initialPage?: number;
 };
 
 type PdfFileRow = {
@@ -26,25 +28,49 @@ type PdfFileRow = {
 type PdfPreviewState = "loading" | "ready" | "error";
 
 /** Read-only renderer for a PDF stored in the Lix workspace. */
-export function PdfView({ fileId, filePath }: PdfViewProps) {
+export function PdfView({
+	fileId,
+	filePath,
+	sourceCommitId,
+	initialPage,
+}: PdfViewProps) {
 	return (
 		<div className="atelier-pdf-view">
 			<Suspense fallback={<PdfLoadingState />}>
-				<PdfViewContent fileId={fileId} filePath={filePath} />
+				<PdfViewContent
+					fileId={fileId}
+					filePath={filePath}
+					sourceCommitId={sourceCommitId}
+					initialPage={initialPage}
+				/>
 			</Suspense>
 		</div>
 	);
 }
 
-function PdfViewContent({ fileId, filePath }: PdfViewProps) {
+function PdfViewContent({
+	fileId,
+	filePath,
+	sourceCommitId,
+	initialPage,
+}: PdfViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<PdfFileRow>((lix) =>
-		qb(lix)
+	const fileRow = useQueryTakeFirst<PdfFileRow>((lix) => {
+		if (sourceCommitId) {
+			return qb(lix)
+				.selectFrom("lix_file_history")
+				.select(["id", "path", "data"])
+				.where("id", "=", fileId)
+				.where("lixcol_start_commit_id", "=", sourceCommitId)
+				.orderBy("lixcol_depth", "asc")
+				.limit(1);
+		}
+		return qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "data"])
 			.where("id", "=", fileId)
-			.limit(1),
-	);
+			.limit(1);
+	});
 
 	if (!fileRow) {
 		return (
@@ -58,6 +84,7 @@ function PdfViewContent({ fileId, filePath }: PdfViewProps) {
 		<PdfPreview
 			data={fileRow.data}
 			filePath={fileRow.path || filePath || "document.pdf"}
+			initialPage={initialPage}
 		/>
 	);
 }
@@ -65,9 +92,11 @@ function PdfViewContent({ fileId, filePath }: PdfViewProps) {
 export function PdfPreview({
 	data,
 	filePath,
+	initialPage,
 }: {
 	readonly data: unknown;
 	readonly filePath: string;
+	readonly initialPage?: number;
 }) {
 	const bytes = useMemo(() => decodeFileDataToBytes(data), [data]);
 	const isPdf = useMemo(() => hasPdfSignature(bytes), [bytes]);
@@ -87,8 +116,9 @@ export function PdfPreview({
 		const abort = new AbortController();
 		setState("loading");
 		void renderPdfPreview({
-			src: objectUrl,
+			src: withInitialPage(objectUrl, initialPage),
 			container,
+			layout: "fit-page",
 			signal: abort.signal,
 			onError: () => {
 				if (active) setState("error");
@@ -111,7 +141,7 @@ export function PdfPreview({
 			abort.abort();
 			preview?.destroy();
 		};
-	}, [isPdf, objectUrl]);
+	}, [initialPage, isPdf, objectUrl]);
 
 	return (
 		<div
@@ -189,6 +219,12 @@ function hasPdfSignature(bytes: Uint8Array): boolean {
 	return false;
 }
 
+function withInitialPage(objectUrl: string, initialPage: number | undefined) {
+	return Number.isSafeInteger(initialPage) && (initialPage ?? 0) > 0
+		? `${objectUrl}#page=${initialPage}`
+		: objectUrl;
+}
+
 function assertFileId(fileId: unknown): asserts fileId is string {
 	if (typeof fileId !== "string" || fileId.length === 0) {
 		throw new Error("PdfView requires a non-empty fileId.");
@@ -207,6 +243,14 @@ export const extension = createReactExtensionDefinition({
 			<PdfView
 				fileId={view.state.fileId as string}
 				filePath={view.state.filePath as string | undefined}
+				sourceCommitId={
+					typeof view.state.sourceCommitId === "string"
+						? view.state.sourceCommitId
+						: undefined
+				}
+				initialPage={
+					typeof view.state.page === "number" ? view.state.page : undefined
+				}
 			/>
 		</LixProvider>
 	),

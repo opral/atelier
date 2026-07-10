@@ -4,6 +4,7 @@ import {
 	isPdfAssetSrc,
 	markdownAssetLabel,
 	type LoadedMarkdownAsset,
+	type MarkdownWorkspaceFileOpener,
 } from "../markdown-asset";
 import type {
 	PdfPreviewController,
@@ -41,11 +42,13 @@ export function markdownWcNodes(
 	options: {
 		readonly resolveImageSrc?: MarkdownImageSrcResolver;
 		readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+		readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 		readonly renderPdfPreview?: PdfPreviewRenderer;
 	} = {},
 ): Extensions {
 	const resolveImageSrc = options.resolveImageSrc;
 	const loadAsset = options.loadAsset;
+	const openWorkspaceFile = options.openWorkspaceFile;
 	const renderPdfPreview = options.renderPdfPreview;
 	return [
 		// doc
@@ -456,6 +459,7 @@ export function markdownWcNodes(
 						node,
 						resolveImageSrc,
 						loadAsset,
+						openWorkspaceFile,
 						renderPdfPreview,
 					});
 			},
@@ -533,11 +537,13 @@ function createMarkdownAssetNodeView({
 	node,
 	resolveImageSrc,
 	loadAsset,
+	openWorkspaceFile,
 	renderPdfPreview,
 }: {
 	readonly node: any;
 	readonly resolveImageSrc?: MarkdownImageSrcResolver;
 	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly renderPdfPreview?: PdfPreviewRenderer;
 }) {
 	const originalSrc = String(node.attrs?.src ?? "");
@@ -554,6 +560,26 @@ function createMarkdownAssetNodeView({
 	const previewAction = dom.querySelector<HTMLButtonElement>(
 		".markdown-pdf-preview-action",
 	);
+	const openAction = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	const handleOpenWorkspaceFile = (event: MouseEvent) => {
+		const workspaceFile = loadedAsset?.workspaceFile;
+		if (!workspaceFile || !openWorkspaceFile || event.button !== 0) return;
+		event.preventDefault();
+		event.stopPropagation();
+		event.stopImmediatePropagation();
+		const state = {
+			...(workspaceFile.sourceCommitId
+				? { sourceCommitId: workspaceFile.sourceCommitId }
+				: {}),
+			...(workspaceFile.page ? { page: workspaceFile.page } : {}),
+		};
+		void openWorkspaceFile({
+			fileId: workspaceFile.fileId,
+			filePath: workspaceFile.filePath,
+			...(Object.keys(state).length > 0 ? { state } : {}),
+		});
+	};
+	openAction?.addEventListener("click", handleOpenWorkspaceFile);
 
 	const disposePdfPreview = () => {
 		pdfRenderAbort?.abort();
@@ -751,6 +777,10 @@ function createMarkdownAssetNodeView({
 						setAssetDomUnavailable(dom);
 						return;
 					}
+					setPdfOpenDestination(
+						dom,
+						asset.workspaceFile && openWorkspaceFile ? "workspace" : "external",
+					);
 					const safeSrc = rendersPdf ? safePdfRenderSrc(asset.src) : asset.src;
 					if (!safeSrc) {
 						setAssetDomUnavailable(dom);
@@ -812,6 +842,7 @@ function createMarkdownAssetNodeView({
 			generation += 1;
 			visibilityObserver?.disconnect();
 			previewAction?.removeEventListener("click", handlePreviewAction);
+			openAction?.removeEventListener("click", handleOpenWorkspaceFile);
 			manualPreviewAbort?.abort();
 			disposePdfPreview();
 			disposeLoadedAsset();
@@ -894,7 +925,7 @@ function updateAssetDomAttributes(dom: HTMLElement, node: any): void {
 	const preview = dom.querySelector<HTMLElement>(".markdown-pdf-preview");
 	if (labelElement) labelElement.textContent = label;
 	if (open) {
-		open.ariaLabel = `Open ${label} in a new tab for full document access`;
+		setPdfOpenDestination(dom, "external");
 	}
 	if (preview) preview.ariaLabel = `PDF preview: ${label}`;
 }
@@ -977,6 +1008,26 @@ function setPdfDomOpenOnly(
 function setPdfOpenHref(dom: HTMLElement, src: string): void {
 	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
 	if (open) open.href = src;
+}
+
+function setPdfOpenDestination(
+	dom: HTMLElement,
+	destination: "workspace" | "external",
+): void {
+	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	if (!open) return;
+	const label =
+		dom.querySelector<HTMLElement>(".markdown-pdf-label")?.textContent ??
+		"PDF document";
+	if (destination === "workspace") {
+		open.removeAttribute("target");
+		open.removeAttribute("rel");
+		open.ariaLabel = `Open ${label} in the center panel`;
+		return;
+	}
+	open.target = "_blank";
+	open.rel = "noopener noreferrer";
+	open.ariaLabel = `Open ${label} in a new tab for full document access`;
 }
 
 function setPdfStatusMessage(dom: HTMLElement, message: string): void {

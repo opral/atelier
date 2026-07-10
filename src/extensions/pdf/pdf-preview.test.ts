@@ -68,6 +68,34 @@ describe("renderPdfPreview", () => {
 		expect(container).toBeEmptyDOMElement();
 	});
 
+	test("fits dedicated views within both viewport dimensions without upscaling", async () => {
+		const documentProxy = fakePdfDocument(1);
+		pdfMocks.getDocument.mockReturnValue({
+			promise: Promise.resolve(documentProxy),
+			destroy: vi.fn(),
+		});
+		const container = document.createElement("div");
+		Object.defineProperties(container, {
+			clientWidth: { value: 1_200 },
+			clientHeight: { value: 900 },
+		});
+
+		const controller = await renderPdfPreview({
+			src: "blob:brief",
+			container,
+			layout: "fit-page",
+		});
+
+		expect(
+			container.querySelector(".atelier-pdf-canvas-scroll"),
+		).toHaveAttribute("data-layout", "fit-page");
+		expect(container.querySelector("canvas")).toHaveStyle({
+			width: "549px",
+			height: "732px",
+		});
+		controller.destroy();
+	});
+
 	test("cancels PDF.js startup when the caller aborts", async () => {
 		const loading = deferred<ReturnType<typeof fakePdfDocument>>();
 		const destroy = vi.fn();

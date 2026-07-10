@@ -1,9 +1,18 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
+import type { ExtensionRuntime } from "@/extension-runtime/types";
+
+export type MarkdownWorkspaceFileOpener = ExtensionRuntime["files"]["open"];
 
 export type LoadedMarkdownAsset = {
 	readonly src: string;
 	readonly preview: "auto" | "manual";
+	readonly workspaceFile?: {
+		readonly fileId: string;
+		readonly filePath: string;
+		readonly sourceCommitId?: string;
+		readonly page?: number;
+	};
 	readonly manualReason?: "remote" | "large";
 	readonly remoteHost?: string;
 	readonly loadPreview?: (
@@ -75,7 +84,7 @@ export async function loadMarkdownAsset({
 	const file = sourceCommitId
 		? await qb(lix)
 				.selectFrom("lix_file_history")
-				.select(["data", "path"])
+				.select(["id", "data", "path"])
 				.where("lixcol_start_commit_id", "=", sourceCommitId)
 				.where("path", "=", workspacePath)
 				.orderBy("lixcol_depth", "asc")
@@ -83,7 +92,7 @@ export async function loadMarkdownAsset({
 				.executeTakeFirst()
 		: await qb(lix)
 				.selectFrom("lix_file")
-				.select(["data", "path"])
+				.select(["id", "data", "path"])
 				.where("path", "=", workspacePath)
 				.limit(1)
 				.executeTakeFirst();
@@ -100,11 +109,18 @@ export async function loadMarkdownAsset({
 		}),
 	);
 	const hash = assetHash(src);
+	const page = pdfPage(src);
 	const requiresManualPreview = isPdf && bytes.byteLength > maxAutoPreviewBytes;
 	return {
 		src: `${objectUrl}${hash}`,
 		preview: requiresManualPreview ? "manual" : "auto",
 		manualReason: requiresManualPreview ? "large" : undefined,
+		workspaceFile: {
+			fileId: file.id,
+			filePath: file.path,
+			...(sourceCommitId ? { sourceCommitId } : {}),
+			...(page ? { page } : {}),
+		},
 		dispose: () => URL.revokeObjectURL(objectUrl),
 	};
 }
@@ -307,6 +323,22 @@ function assetHash(src: string): string {
 		return new URL(src, "https://atelier.workspace/").hash;
 	} catch {
 		return "";
+	}
+}
+
+function pdfPage(src: string): number | undefined {
+	try {
+		const fragment = new URL(src, "https://atelier.workspace/").hash.replace(
+			/^#/,
+			"",
+		);
+		const page = Number.parseInt(
+			new URLSearchParams(fragment).get("page") ?? "",
+			10,
+		);
+		return Number.isSafeInteger(page) && page > 0 ? page : undefined;
+	} catch {
+		return undefined;
 	}
 }
 

@@ -9,6 +9,8 @@ export const MAX_PDF_CANVAS_PIXELS = 16_000_000;
 export const MAX_PDF_CANVAS_BYTES = MAX_PDF_CANVAS_PIXELS * 4;
 const MAX_PDF_CSS_DIMENSION = 8_192;
 const MAX_ACCESSIBLE_PAGE_TEXT = 20_000;
+const FIT_PAGE_HORIZONTAL_PADDING = 112;
+const FIT_PAGE_VERTICAL_PADDING = 168;
 
 let previewId = 0;
 
@@ -19,6 +21,7 @@ export type PdfPreviewController = {
 export type PdfPreviewRenderer = (args: {
 	readonly src: string;
 	readonly container: HTMLElement;
+	readonly layout?: "fit-width" | "fit-page";
 	readonly signal?: AbortSignal;
 	readonly onError?: (error: unknown) => void;
 }) => Promise<PdfPreviewController>;
@@ -30,6 +33,7 @@ export type PdfPreviewRenderer = (args: {
 export const renderPdfPreview: PdfPreviewRenderer = async ({
 	src,
 	container,
+	layout = "fit-width",
 	signal,
 	onError,
 }) => {
@@ -57,6 +61,7 @@ export const renderPdfPreview: PdfPreviewRenderer = async ({
 
 	const viewport = window.document.createElement("span");
 	viewport.className = "atelier-pdf-canvas-scroll";
+	viewport.dataset.layout = layout;
 	const canvas = window.document.createElement("canvas");
 	canvas.className = "atelier-pdf-canvas";
 	canvas.role = "img";
@@ -116,11 +121,20 @@ export const renderPdfPreview: PdfPreviewRenderer = async ({
 		if (destroyed || currentGeneration !== renderGeneration) return;
 
 		const baseViewport = page.getViewport({ scale: 1 });
-		const availableWidth =
-			container.clientWidth > 0 ? container.clientWidth : 240;
+		const availableWidth = Math.max(
+			1,
+			(container.clientWidth > 0 ? container.clientWidth : 240) -
+				(layout === "fit-page" ? FIT_PAGE_HORIZONTAL_PADDING : 0),
+		);
+		const availableHeight = Math.max(
+			1,
+			(container.clientHeight > 0 ? container.clientHeight : 320) -
+				FIT_PAGE_VERTICAL_PADDING,
+		);
 		const scale = Math.min(
-			2,
+			layout === "fit-page" ? 1 : 2,
 			availableWidth / baseViewport.width,
+			...(layout === "fit-page" ? [availableHeight / baseViewport.height] : []),
 			MAX_PDF_CSS_DIMENSION / baseViewport.width,
 			MAX_PDF_CSS_DIMENSION / baseViewport.height,
 		);

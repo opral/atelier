@@ -4,11 +4,7 @@
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		background: color-mix(
-			in srgb,
-			var(--color-text-primary) 72%,
-			var(--color-bg-panel)
-		);
+		background: var(--color-bg-panel-muted);
 	}
 
 	.atelier-pdf-preview {
@@ -26,7 +22,12 @@
 
 	.atelier-pdf-document .atelier-pdf-canvas-scroll {
 		overflow: auto;
-		padding: 0 0 3.75rem;
+	}
+
+	.atelier-pdf-document .atelier-pdf-canvas-scroll[data-layout="fit-page"] {
+		display: grid;
+		place-items: center;
+		padding: 56px 56px 96px;
 	}
 
 	.atelier-pdf-document .atelier-pdf-canvas {
@@ -36,6 +37,12 @@
 		margin: 0 auto;
 		background: white;
 		box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 28%);
+	}
+
+	@media (max-width: 767px) {
+		.atelier-pdf-document .atelier-pdf-canvas-scroll[data-layout="fit-page"] {
+			padding: 32px 24px 86px;
+		}
 	}
 
 	.atelier-pdf-document .atelier-pdf-page-controls {

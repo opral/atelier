@@ -47,6 +47,7 @@ import {
 	useExternalWriteReviewData,
 } from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
+import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/markdown-asset";
 
 type MarkdownViewProps = {
 	readonly fileId: string;
@@ -72,6 +73,7 @@ type MarkdownViewProps = {
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 };
 
 type HistoricalMarkdownBlockRow = {
@@ -131,6 +133,7 @@ export function MarkdownView({
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
+	openWorkspaceFile,
 }: MarkdownViewProps) {
 	return (
 		<Suspense fallback={<MarkdownLoadingSpinner />}>
@@ -148,6 +151,7 @@ export function MarkdownView({
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		</Suspense>
 	);
@@ -184,6 +188,7 @@ function MarkdownViewLoaded({
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
+	openWorkspaceFile,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
@@ -215,6 +220,7 @@ function MarkdownViewLoaded({
 				syncActiveFile={syncActiveFile}
 				checkpointDiff={checkpointDiff}
 				editorRevision={editorRevision}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
 	}
@@ -256,6 +262,7 @@ function MarkdownViewLoaded({
 							isActiveView={isActiveView}
 							focusOnLoad={focusOnLoad}
 							defaultBlock={defaultBlock}
+							openWorkspaceFile={openWorkspaceFile}
 						/>
 						<MarkdownAutosaveHint
 							enabled={isActiveView && isPanelFocused && !reviewDiff}
@@ -304,6 +311,7 @@ function MarkdownHistoricalViewLoaded({
 	isPanelFocused,
 	checkpointDiff,
 	editorRevision,
+	openWorkspaceFile,
 }: {
 	readonly fileId: string;
 	readonly filePath: string | undefined;
@@ -313,6 +321,7 @@ function MarkdownHistoricalViewLoaded({
 	readonly syncActiveFile: boolean;
 	readonly checkpointDiff: CheckpointDiff | null | undefined;
 	readonly editorRevision: EditorRevisionState;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
 	const revisionMode = editorRevisionMode(editorRevision);
 	const checkpointDiffFile = useMemo(
@@ -390,6 +399,7 @@ function MarkdownHistoricalViewLoaded({
 					editorRevision.afterCommitId ??
 					undefined
 				}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
 	} else {
@@ -475,10 +485,12 @@ function MarkdownSnapshotView({
 	filePath,
 	markdown,
 	sourceCommitId,
+	openWorkspaceFile,
 }: {
 	readonly filePath: string;
 	readonly markdown: string;
 	readonly sourceCommitId?: string;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
 	const lix = useLix();
 	const editor = useMemo(
@@ -488,10 +500,11 @@ function MarkdownSnapshotView({
 				initialMarkdown: markdown,
 				sourceFilePath: filePath,
 				sourceCommitId,
+				openWorkspaceFile,
 				editable: false,
 				persistState: false,
 			}),
-		[filePath, lix, markdown, sourceCommitId],
+		[filePath, lix, markdown, openWorkspaceFile, sourceCommitId],
 	);
 	useEffect(() => () => editor.destroy(), [editor]);
 
@@ -1041,6 +1054,7 @@ export const extension = createReactExtensionDefinition({
 				registerExternalWriteReview={atelier.reviews.register}
 				onAcceptReviewDiff={atelier.reviews.accept}
 				onRejectReviewDiff={atelier.reviews.reject}
+				openWorkspaceFile={atelier.files.open}
 			/>
 		</LixProvider>
 	),

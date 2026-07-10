@@ -104,6 +104,11 @@ test("loads a workspace PDF as a disposable object URL", async () => {
 	expect(createdBlob?.type).toBe("application/pdf");
 	expect(asset?.src).toBe("blob:atelier-pdf#page=4");
 	expect(asset?.preview).toBe("auto");
+	expect(asset?.workspaceFile).toEqual({
+		fileId: "pdf-asset",
+		filePath: "/docs/assets/brief.pdf",
+		page: 4,
+	});
 	asset?.dispose?.();
 	expect(revokeObjectURL).toHaveBeenCalledWith("blob:atelier-pdf");
 	await lix.close();
@@ -141,6 +146,11 @@ test("loads workspace assets from the requested historical commit", async () => 
 
 	expect(asset?.src).toBe("blob:historical-pdf");
 	expect(await createdBlob?.text()).toBe("%PDF-1.7 historical bytes");
+	expect(asset?.workspaceFile).toEqual({
+		fileId: "historical-pdf-asset",
+		filePath: "/docs/brief.pdf",
+		sourceCommitId: historicalCommitId,
+	});
 	asset?.dispose?.();
 	await lix.close();
 });

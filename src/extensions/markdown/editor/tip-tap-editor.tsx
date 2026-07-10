@@ -15,6 +15,7 @@ import {
 	buildNormalizedMarkdownFromEditor,
 	normalizePersistedMarkdown,
 } from "./build-markdown-from-editor";
+import type { MarkdownWorkspaceFileOpener } from "./markdown-asset";
 
 type TipTapEditorProps = {
 	fileId?: string | null;
@@ -26,6 +27,7 @@ type TipTapEditorProps = {
 	defaultBlock?: EmptyMarkdownDefaultBlock;
 	isActiveView?: boolean;
 	originKey?: string;
+	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 };
 
 /**
@@ -52,6 +54,7 @@ export function TipTapEditor({
 	defaultBlock,
 	isActiveView = true,
 	originKey,
+	openWorkspaceFile,
 }: TipTapEditorProps) {
 	if (fileId) {
 		return (
@@ -65,6 +68,7 @@ export function TipTapEditor({
 				defaultBlock={defaultBlock}
 				isActiveView={isActiveView}
 				originKey={originKey}
+				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
 	}
@@ -78,6 +82,7 @@ export function TipTapEditor({
 			defaultBlock={defaultBlock}
 			isActiveView={isActiveView}
 			originKey={originKey}
+			openWorkspaceFile={openWorkspaceFile}
 		/>
 	);
 }
@@ -166,6 +171,7 @@ function TipTapEditorLoadedContent({
 	defaultBlock,
 	isActiveView = true,
 	originKey,
+	openWorkspaceFile,
 	hasInitialFile,
 	initialMarkdown,
 	sourceFilePath,
@@ -205,6 +211,7 @@ function TipTapEditorLoadedContent({
 			defaultBlock,
 			persistDebounceMs: PERSIST_DEBOUNCE_MS,
 			originKey: editorOriginKey,
+			openWorkspaceFile,
 		});
 	}, [
 		lix,
@@ -217,6 +224,7 @@ function TipTapEditorLoadedContent({
 		sourceFilePath,
 		defaultBlock,
 		editorOriginKey,
+		openWorkspaceFile,
 	]);
 
 	useEffect(() => {

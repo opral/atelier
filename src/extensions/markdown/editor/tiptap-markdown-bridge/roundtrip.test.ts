@@ -911,6 +911,7 @@ describe("inline", () => {
 	test("auto-previews a validated local PDF and disposes its object URL", async () => {
 		const dispose = vi.fn();
 		const destroyPreview = vi.fn();
+		const openWorkspaceFile = vi.fn();
 		const renderPdfPreview = vi.fn(async ({ src, container }) => {
 			expect(src).toBe("blob:local-pdf");
 			container.textContent = "Rendered PDF page";
@@ -922,8 +923,15 @@ describe("inline", () => {
 				loadAsset: async () => ({
 					src: "blob:local-pdf",
 					preview: "auto",
+					workspaceFile: {
+						fileId: "pdf-file",
+						filePath: "/docs/brief.pdf",
+						sourceCommitId: "commit-1",
+						page: 3,
+					},
 					dispose,
 				}),
+				openWorkspaceFile,
 				renderPdfPreview,
 			}),
 			content: astToTiptapDoc(ast),
@@ -935,6 +943,15 @@ describe("inline", () => {
 		expect(embed?.getAttribute("data-asset-state")).toBe("ready");
 		expect(preview).toHaveTextContent("Rendered PDF page");
 		expect(renderPdfPreview).toHaveBeenCalledOnce();
+		const open = embed?.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+		expect(open).not.toHaveAttribute("target");
+		expect(open).toHaveAccessibleName("Open Local brief in the center panel");
+		open?.click();
+		expect(openWorkspaceFile).toHaveBeenCalledWith({
+			fileId: "pdf-file",
+			filePath: "/docs/brief.pdf",
+			state: { sourceCommitId: "commit-1", page: 3 },
+		});
 
 		editor.destroy();
 		expect(destroyPreview).toHaveBeenCalledOnce();
