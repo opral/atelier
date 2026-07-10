@@ -14,21 +14,38 @@ That's this component's job. Lix holds the workspace — the files, the history,
 
 ## Usage
 
-```ts
+```tsx
 import { openLix } from "@lix-js/sdk";
-import { createAtelier } from "@opral/atelier";
+import { Atelier, createAtelier } from "@opral/atelier";
 import "@opral/atelier/style.css";
 
 // The host creates and owns the lix.
 const lix = await openLix();
 
-createAtelier({
+<Atelier
+	lix={lix}
+	slots={{
+		navbarStart: <a href="/">Host home</a>,
+		navbarEnd: ({ currentFile }) =>
+			currentFile ? <ShareButton file={currentFile} /> : null,
+	}}
+/>;
+```
+
+React hosts can render Atelier directly so host context is available to slotted
+content. Other browser hosts can use the imperative adapter:
+
+```ts
+const atelier = createAtelier({
 	element: document.getElementById("mount"),
 	lix,
 });
+
+atelier.dispose();
 ```
 
-The target runtime is the browser. Anything that can hand Atelier a DOM element and a lix can host it — a web app or a preview deployment.
+The target runtime is the browser. Atelier's fixed slots let a host fill bounded
+navbar regions while Atelier retains ownership of the workspace chrome.
 
 ## What's in the workspace
 
@@ -46,7 +63,7 @@ Atelier's change control is powered by [Lix](https://github.com/opral/lix), a ve
 
 ## Status
 
-Atelier exposes the minimal `createAtelier({ element, lix })` entry point. The development preview lives under `preview/web/`.
+Atelier exposes both a React component and a minimal imperative adapter. The development preview lives under `preview/web/`.
 
 ## License
 

@@ -362,6 +362,6 @@ describe("PanelV2", () => {
 		await waitFor(() => expect(update).toHaveBeenCalled());
 		rendered.unmount();
 		expect(signal?.aborted).toBe(true);
-		expect(dispose).toHaveBeenCalledTimes(1);
+		await waitFor(() => expect(dispose).toHaveBeenCalledTimes(1));
 	});
 });
