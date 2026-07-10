@@ -385,6 +385,11 @@ function MarkdownHistoricalViewLoaded({
 			<MarkdownSnapshotView
 				filePath={effectiveFileRow.path}
 				markdown={decodeFileDataToText(effectiveFileRow.data)}
+				sourceCommitId={
+					checkpointDiffFile?.afterCommitId ??
+					editorRevision.afterCommitId ??
+					undefined
+				}
 			/>
 		);
 	} else {
@@ -469,9 +474,11 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 function MarkdownSnapshotView({
 	filePath,
 	markdown,
+	sourceCommitId,
 }: {
 	readonly filePath: string;
 	readonly markdown: string;
+	readonly sourceCommitId?: string;
 }) {
 	const lix = useLix();
 	const editor = useMemo(
@@ -480,10 +487,11 @@ function MarkdownSnapshotView({
 				lix,
 				initialMarkdown: markdown,
 				sourceFilePath: filePath,
+				sourceCommitId,
 				editable: false,
 				persistState: false,
 			}),
-		[filePath, lix, markdown],
+		[filePath, lix, markdown, sourceCommitId],
 	);
 	useEffect(() => () => editor.destroy(), [editor]);
 

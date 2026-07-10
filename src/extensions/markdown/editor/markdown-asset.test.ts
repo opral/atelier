@@ -109,6 +109,42 @@ test("loads a workspace PDF as a disposable object URL", async () => {
 	await lix.close();
 });
 
+test("loads workspace assets from the requested historical commit", async () => {
+	const lix = await openLix();
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: "historical-pdf-asset",
+			path: "/docs/brief.pdf",
+			data: new TextEncoder().encode("%PDF-1.7 historical bytes"),
+		})
+		.execute();
+	const historicalCommitId = await activeCommitId(lix);
+	await qb(lix)
+		.updateTable("lix_file")
+		.set({ data: new TextEncoder().encode("%PDF-1.7 current bytes") })
+		.where("id", "=", "historical-pdf-asset")
+		.execute();
+
+	let createdBlob: Blob | undefined;
+	vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+		createdBlob = blob as Blob;
+		return "blob:historical-pdf";
+	});
+	vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+	const asset = await loadMarkdownAsset({
+		lix,
+		sourceFilePath: "/docs/readme.md",
+		sourceCommitId: historicalCommitId,
+		src: "brief.pdf",
+	});
+
+	expect(asset?.src).toBe("blob:historical-pdf");
+	expect(await createdBlob?.text()).toBe("%PDF-1.7 historical bytes");
+	asset?.dispose?.();
+	await lix.close();
+});
+
 test("requires a click before previewing remote PDFs", async () => {
 	const lix = await openLix();
 	const asset = await loadMarkdownAsset({
@@ -265,3 +301,12 @@ test("requires a click before previewing an oversized local PDF", async () => {
 	asset?.dispose?.();
 	await lix.close();
 });
+
+async function activeCommitId(
+	lix: Awaited<ReturnType<typeof openLix>>,
+): Promise<string> {
+	const result = await lix.execute(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	return result.rows[0]?.get("commit_id") as string;
+}

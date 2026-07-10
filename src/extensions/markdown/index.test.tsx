@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { MarkdownView } from "./index";
@@ -76,11 +76,20 @@ describe("MarkdownView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
-			.values({
-				id: "file_snapshot",
-				path: "/snapshot.md",
-				data: new TextEncoder().encode("# Snapshot version"),
-			})
+			.values([
+				{
+					id: "file_snapshot",
+					path: "/snapshot.md",
+					data: new TextEncoder().encode(
+						"# Snapshot version\n\n![Historical asset](asset.png)",
+					),
+				},
+				{
+					id: "file_snapshot_asset",
+					path: "/asset.png",
+					data: new TextEncoder().encode("historical asset bytes"),
+				},
+			])
 			.execute();
 		const snapshotCommitId = await activeCommitId(lix);
 		await qb(lix)
@@ -88,6 +97,21 @@ describe("MarkdownView", () => {
 			.set({ data: new TextEncoder().encode("# Head version") })
 			.where("id", "=", "file_snapshot")
 			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ data: new TextEncoder().encode("current asset bytes") })
+			.where("id", "=", "file_snapshot_asset")
+			.execute();
+		let snapshotAssetBlob: Blob | undefined;
+		const createObjectUrl = vi
+			.spyOn(URL, "createObjectURL")
+			.mockImplementation((blob) => {
+				snapshotAssetBlob = blob as Blob;
+				return "blob:historical-snapshot-asset";
+			});
+		const revokeObjectUrl = vi
+			.spyOn(URL, "revokeObjectURL")
+			.mockImplementation(() => {});
 
 		let utils: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -116,10 +140,22 @@ describe("MarkdownView", () => {
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+		await waitFor(() => {
+			expect(screen.getByAltText("Historical asset")).toHaveAttribute(
+				"src",
+				"blob:historical-snapshot-asset",
+			);
+		});
+		expect(await snapshotAssetBlob?.text()).toBe("historical asset bytes");
 
 		await act(async () => {
 			utils?.unmount();
 		});
+		expect(revokeObjectUrl).toHaveBeenCalledWith(
+			"blob:historical-snapshot-asset",
+		);
+		createObjectUrl.mockRestore();
+		revokeObjectUrl.mockRestore();
 		await lix.close();
 	});
 

@@ -15,6 +15,7 @@ export type LoadedMarkdownAsset = {
 type LoadMarkdownAssetArgs = {
 	readonly lix: Lix;
 	readonly sourceFilePath: string;
+	readonly sourceCommitId?: string;
 	readonly src: string;
 	readonly maxAutoPreviewBytes?: number;
 	readonly maxRemotePreviewBytes?: number;
@@ -34,6 +35,7 @@ export const DEFAULT_REMOTE_PREVIEW_TIMEOUT_MS = 30_000;
 export async function loadMarkdownAsset({
 	lix,
 	sourceFilePath,
+	sourceCommitId,
 	src,
 	maxAutoPreviewBytes = DEFAULT_MAX_AUTO_PREVIEW_BYTES,
 	maxRemotePreviewBytes = DEFAULT_MAX_REMOTE_PREVIEW_BYTES,
@@ -70,12 +72,21 @@ export async function loadMarkdownAsset({
 	const workspacePath = resolveMarkdownAssetPath({ src, sourceFilePath });
 	if (!workspacePath) return null;
 
-	const file = await qb(lix)
-		.selectFrom("lix_file")
-		.select(["data", "path"])
-		.where("path", "=", workspacePath)
-		.limit(1)
-		.executeTakeFirst();
+	const file = sourceCommitId
+		? await qb(lix)
+				.selectFrom("lix_file_history")
+				.select(["data", "path"])
+				.where("lixcol_start_commit_id", "=", sourceCommitId)
+				.where("path", "=", workspacePath)
+				.orderBy("lixcol_depth", "asc")
+				.limit(1)
+				.executeTakeFirst()
+		: await qb(lix)
+				.selectFrom("lix_file")
+				.select(["data", "path"])
+				.where("path", "=", workspacePath)
+				.limit(1)
+				.executeTakeFirst();
 	if (!file?.data) return null;
 	const bytes =
 		file.data instanceof Uint8Array

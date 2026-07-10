@@ -26,6 +26,7 @@ type CreateEditorArgs = {
 	editable?: boolean;
 	fileId?: string;
 	sourceFilePath?: string;
+	sourceCommitId?: string;
 	defaultBlock?: EmptyMarkdownDefaultBlock;
 	persistDebounceMs?: number;
 	persistState?: boolean;
@@ -110,6 +111,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		editable = true,
 		fileId,
 		sourceFilePath,
+		sourceCommitId,
 		defaultBlock,
 		persistDebounceMs,
 		persistState = true,
@@ -184,7 +186,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	const markdownExtensions = MarkdownWc({
 		resolveImageSrc,
 		loadAsset: sourceFilePath
-			? (src) => loadMarkdownAsset({ lix, sourceFilePath, src })
+			? (src) => loadMarkdownAsset({ lix, sourceFilePath, sourceCommitId, src })
 			: undefined,
 		renderPdfPreview: renderMarkdownPdfPreview,
 	}) as any[];
