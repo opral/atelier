@@ -1,10 +1,13 @@
 import type { JsonValue, Lix } from "@lix-js/sdk";
 
-const seedModules = import.meta.glob("./seed/**/*", {
-	eager: true,
-	import: "default",
-	query: "?raw",
-}) as Record<string, string>;
+const seedTextModules = import.meta.glob(
+	["./seed/**/*", "!./seed/assets/**/*"],
+	{
+		eager: true,
+		import: "default",
+		query: "?raw",
+	},
+) as Record<string, string>;
 
 const seedAssetUrls = import.meta.glob("./seed/assets/**/*", {
 	eager: true,
@@ -15,16 +18,27 @@ const seedAssetUrls = import.meta.glob("./seed/assets/**/*", {
 type SeededFile = {
 	id: string;
 	path: string;
+	data: Uint8Array;
 };
 
 export async function seedWorkspace(lix: Lix): Promise<void> {
-	const files = Object.entries(seedModules)
-		.map(([modulePath, contents]) => ({
+	const textFiles = Object.entries(seedTextModules).map(
+		([modulePath, contents]) => ({
 			id: `preview-seed:${modulePath.slice("./seed".length)}`,
 			path: modulePath.slice("./seed".length),
-			contents: embedSeedAssets(modulePath, contents),
-		}))
-		.sort((left, right) => left.path.localeCompare(right.path));
+			data: new TextEncoder().encode(embedSeedAssets(modulePath, contents)),
+		}),
+	);
+	const assetFiles = Object.entries(seedAssetUrls).map(
+		([modulePath, dataUrl]) => ({
+			id: `preview-seed:${modulePath.slice("./seed".length)}`,
+			path: modulePath.slice("./seed".length),
+			data: decodeSeedAssetDataUrl(dataUrl),
+		}),
+	);
+	const files = [...textFiles, ...assetFiles].sort((left, right) =>
+		left.path.localeCompare(right.path),
+	);
 
 	await seedDirectories(
 		lix,
@@ -34,7 +48,7 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	for (const file of files) {
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
-			[file.id, file.path, new TextEncoder().encode(file.contents)],
+			[file.id, file.path, file.data],
 		);
 	}
 
@@ -46,6 +60,20 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	if (readme) {
 		await seedOpenFileState(lix, readme);
 	}
+}
+
+export function decodeSeedAssetDataUrl(dataUrl: string): Uint8Array {
+	const separatorIndex = dataUrl.indexOf(",");
+	if (!dataUrl.startsWith("data:") || separatorIndex < 0) {
+		throw new Error("Seed asset must be an inline data URL.");
+	}
+	const metadata = dataUrl.slice(5, separatorIndex);
+	const payload = dataUrl.slice(separatorIndex + 1);
+	if (metadata.split(";").includes("base64")) {
+		const binary = atob(payload);
+		return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+	}
+	return new TextEncoder().encode(decodeURIComponent(payload));
 }
 
 function embedSeedAssets(modulePath: string, contents: string): string {
