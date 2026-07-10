@@ -670,9 +670,9 @@ function createMarkdownAssetNodeView({
 		const asset = pendingManualAsset;
 		if (!asset) return;
 		const focusAfterLoad = true;
-		pendingManualAsset = null;
 		const previewGeneration = generation;
 		if (!asset.loadPreview) {
+			pendingManualAsset = null;
 			await showPdfPreview({
 				previewSrc: asset.src,
 				openSrc: asset.src,
@@ -698,25 +698,38 @@ function createMarkdownAssetNodeView({
 			return;
 		}
 		if (!previewAsset) {
-			setPdfDomOpenOnly(
+			pendingManualAsset = asset;
+			setPdfDomManual(
 				dom,
 				asset.src,
-				"Remote preview unavailable. Use Open to view the PDF.",
+				asset.manualReason ?? "remote",
+				asset.remoteHost,
 			);
-			if (focusAfterLoad) focusPdfOpenLink(dom);
+			setPdfStatusMessage(
+				dom,
+				"Preview failed. Try again or use Open to view the PDF.",
+			);
+			if (focusAfterLoad) previewAction?.focus();
 			return;
 		}
 		const safeSrc = safePdfRenderSrc(previewAsset.src);
 		if (!safeSrc || !safeSrc.startsWith("blob:")) {
 			previewAsset.dispose?.();
-			setPdfDomOpenOnly(
+			pendingManualAsset = asset;
+			setPdfDomManual(
 				dom,
 				asset.src,
-				"Remote preview unavailable. Use Open to view the PDF.",
+				asset.manualReason ?? "remote",
+				asset.remoteHost,
 			);
-			if (focusAfterLoad) focusPdfOpenLink(dom);
+			setPdfStatusMessage(
+				dom,
+				"Preview failed. Try again or use Open to view the PDF.",
+			);
+			if (focusAfterLoad) previewAction?.focus();
 			return;
 		}
+		pendingManualAsset = null;
 		disposeLoadedAsset();
 		loadedAsset = previewAsset;
 		await showPdfPreview({
@@ -783,6 +796,7 @@ function createMarkdownAssetNodeView({
 					);
 					const safeSrc = rendersPdf ? safePdfRenderSrc(asset.src) : asset.src;
 					if (!safeSrc) {
+						disposeLoadedAsset();
 						setAssetDomUnavailable(dom);
 						return;
 					}

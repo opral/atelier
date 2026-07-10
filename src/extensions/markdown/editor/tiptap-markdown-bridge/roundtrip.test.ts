@@ -861,6 +861,63 @@ describe("inline", () => {
 		expect(previewSignal?.aborted).toBe(true);
 	});
 
+	test("allows a failed remote PDF preview to be retried", async () => {
+		const disposePreview = vi.fn();
+		const loadPreview = vi
+			.fn()
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce({
+				src: "blob:retried-remote-pdf",
+				preview: "auto" as const,
+				dispose: disposePreview,
+			});
+		const renderPdfPreview = vi.fn(async ({ container }) => {
+			container.textContent = "Retried PDF";
+			return { destroy: vi.fn() };
+		});
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "https://files.example/retry.pdf",
+					preview: "manual",
+					manualReason: "remote",
+					remoteHost: "files.example",
+					loadPreview,
+				}),
+				renderPdfPreview,
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown("![Retry PDF](https://files.example/retry.pdf)"),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-pdf]",
+		);
+		const previewAction = embed?.querySelector<HTMLButtonElement>(
+			".markdown-pdf-preview-action",
+		);
+
+		previewAction?.click();
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		expect(embed?.dataset.assetState).toBe("manual");
+		expect(embed).toHaveTextContent(
+			"Preview failed. Try again or use Open to view the PDF.",
+		);
+		expect(previewAction).not.toBeNull();
+
+		previewAction?.click();
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		expect(loadPreview).toHaveBeenCalledTimes(2);
+		expect(renderPdfPreview).toHaveBeenCalledWith(
+			expect.objectContaining({ src: "blob:retried-remote-pdf" }),
+		);
+		expect(embed?.dataset.assetState).toBe("ready");
+		expect(embed).toHaveTextContent("Retried PDF");
+		editor.destroy();
+		expect(disposePreview).toHaveBeenCalledOnce();
+	});
+
 	test("falls back to Open when a later PDF page fails to render", async () => {
 		let reportRenderError: (() => void) | undefined;
 		const renderPdfPreview = vi.fn(
@@ -959,12 +1016,14 @@ describe("inline", () => {
 	});
 
 	test("rejects an unsafe PDF source returned by an async loader", async () => {
+		const dispose = vi.fn();
 		const ast = parseMarkdown("![Unsafe](docs/brief.pdf)");
 		const editor = new Editor({
 			extensions: MarkdownWc({
 				loadAsset: async () => ({
 					src: "data:text/html,<script>top.location='https://example.com'</script>",
 					preview: "auto",
+					dispose,
 				}),
 			}),
 			content: astToTiptapDoc(ast),
@@ -974,7 +1033,9 @@ describe("inline", () => {
 		const embed = editor.view.dom.querySelector("[data-markdown-pdf]");
 		expect(embed?.getAttribute("data-asset-state")).toBe("unavailable");
 		expect(embed?.querySelector(".markdown-pdf-preview")).toBeEmptyDOMElement();
+		expect(dispose).toHaveBeenCalledOnce();
 		editor.destroy();
+		expect(dispose).toHaveBeenCalledOnce();
 	});
 
 	test("does not load unsafe PDF protocols in the preview", () => {
