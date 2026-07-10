@@ -22,7 +22,6 @@
 		"dev": "pnpm --dir preview/web dev",
 		"build": "vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs",
 		"build:preview": "pnpm --dir preview/web build && node scripts/compress-preview-wasm.mjs",
-		"deploy": "wrangler deploy",
 		"deploy:preview": "wrangler versions upload",
 		"typecheck": "tsc -p . --pretty false",
 		"format": "oxfmt --write .",
