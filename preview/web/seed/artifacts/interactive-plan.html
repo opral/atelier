@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Interactive launch plan</title>
+		<style>
+			:root {
+				font-family:
+					Inter,
+					ui-sans-serif,
+					system-ui,
+					-apple-system,
+					BlinkMacSystemFont,
+					"Segoe UI",
+					sans-serif;
+				color: #1c1917;
+				background: #fffaf5;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				min-width: 280px;
+				margin: 0;
+				padding: clamp(24px, 6vw, 72px);
+				background:
+					radial-gradient(circle at 85% 8%, #fed7aa 0, transparent 30%), #fffaf5;
+			}
+
+			main {
+				width: min(860px, 100%);
+				margin: 0 auto;
+			}
+
+			.eyebrow {
+				color: #c2410c;
+				font-size: 12px;
+				font-weight: 750;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+			}
+
+			h1 {
+				max-width: 680px;
+				margin: 12px 0 10px;
+				font-size: clamp(34px, 7vw, 64px);
+				line-height: 0.98;
+				letter-spacing: -0.055em;
+			}
+
+			.intro {
+				max-width: 580px;
+				margin: 0;
+				color: #78716c;
+				font-size: 16px;
+				line-height: 1.6;
+			}
+
+			.progress {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				margin: 28px 0;
+				font-size: 13px;
+				font-weight: 700;
+			}
+
+			.track {
+				flex: 1;
+				height: 8px;
+				overflow: hidden;
+				border-radius: 999px;
+				background: #e7e5e4;
+			}
+
+			.fill {
+				height: 100%;
+				border-radius: inherit;
+				background: #ea580c;
+				transition: width 180ms ease;
+			}
+
+			.grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+				gap: 14px;
+			}
+
+			.card {
+				padding: 20px;
+				border: 1px solid #e7e5e4;
+				border-radius: 16px;
+				background: rgba(255, 255, 255, 0.85);
+				box-shadow: 0 8px 24px rgba(28, 25, 23, 0.06);
+			}
+
+			.card span {
+				display: inline-grid;
+				width: 28px;
+				height: 28px;
+				place-items: center;
+				border-radius: 8px;
+				background: #ffedd5;
+				color: #9a3412;
+				font-size: 12px;
+				font-weight: 800;
+			}
+
+			.card h2 {
+				margin: 28px 0 6px;
+				font-size: 18px;
+				letter-spacing: -0.02em;
+			}
+
+			.card p {
+				margin: 0;
+				color: #78716c;
+				font-size: 13px;
+				line-height: 1.5;
+			}
+
+			button {
+				margin-top: 26px;
+				padding: 10px 14px;
+				border: 0;
+				border-radius: 10px;
+				background: #1c1917;
+				color: white;
+				font: inherit;
+				font-size: 13px;
+				font-weight: 700;
+				cursor: pointer;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<div class="eyebrow">Atelier artifact</div>
+			<h1>Launch clarity, one decision at a time.</h1>
+			<p class="intro">
+				A self-contained HTML view can turn an agent's answer into a focused,
+				interactive explanation right inside the workspace.
+			</p>
+			<div class="progress">
+				<div class="track"><div class="fill" id="fill"></div></div>
+				<output id="status">0 of 3 reviewed</output>
+			</div>
+			<section class="grid">
+				<article class="card">
+					<span>01</span>
+					<h2>Frame</h2>
+					<p>Agree on the audience, moment, and one measurable outcome.</p>
+				</article>
+				<article class="card">
+					<span>02</span>
+					<h2>Build</h2>
+					<p>Ship the smallest complete story that demonstrates the value.</p>
+				</article>
+				<article class="card">
+					<span>03</span>
+					<h2>Learn</h2>
+					<p>
+						Capture decisions and evidence while the context is still fresh.
+					</p>
+				</article>
+			</section>
+			<button id="advance" type="button">Review next step</button>
+		</main>
+		<script>
+			let reviewed = 0;
+			const fill = document.querySelector("#fill");
+			const status = document.querySelector("#status");
+			document.querySelector("#advance").addEventListener("click", () => {
+				reviewed = (reviewed + 1) % 4;
+				fill.style.width = `${(reviewed / 3) * 100}%`;
+				status.textContent = `${reviewed} of 3 reviewed`;
+			});
+		</script>
+	</body>
+</html>
