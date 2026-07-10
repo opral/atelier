@@ -1,0 +1,7 @@
+{
+	"apiVersion": 1,
+	"id": "atelier_html",
+	"name": "HTML",
+	"entry": "./index.js",
+	"fileExtensions": ["html", "htm"]
+}

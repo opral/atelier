@@ -36,6 +36,7 @@ The target runtime is the browser. Anything that can hand Atelier a DOM element 
 | ------------ | ----------------------------------------------- |
 | Editor       | Markdown-native writing surface.                |
 | Files        | Browse and open the files in the lix workspace. |
+| HTML         | Run self-contained interactive HTML artifacts.  |
 | Inline diffs | Keep or undo edits with word-level context.     |
 | History      | Inspect checkpoints and restore earlier drafts. |
 
