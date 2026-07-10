@@ -1,5 +1,7 @@
 # GitHub Flavored Markdown visual test
 
+> Cloudflare preview deployment test: this message only appears on the test PR.
+
 This seeded document is a visual fixture for **Atelier's Markdown editor**. It
 covers CommonMark plus the GitHub Flavored Markdown extensions: autolinks,
 strikethrough, tables, and task lists.
