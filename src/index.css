@@ -556,6 +556,9 @@
 /* Pointer resizing should track the cursor directly, without transition lag. */
 .atelier-root
 	.atelier-panel-group:has(> [data-separator="active"])
+	> [data-panel],
+.atelier-root
+	.atelier-panel-group:has(> [data-separator="focus"])
 	> [data-panel] {
 	transition: none;
 }
