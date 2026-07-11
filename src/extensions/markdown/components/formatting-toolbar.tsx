@@ -296,7 +296,7 @@ export function FormattingToolbar({ className }: { className?: string }) {
 	return (
 		<Toolbar.Root
 			className={clsx(
-				"flex h-10 w-full shrink-0 items-center gap-0.5 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-panel)] px-2 text-foreground",
+				"flex h-[var(--atelier-panel-header-height)] w-full shrink-0 items-center gap-0.5 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-panel)] px-2 text-foreground",
 				className,
 			)}
 			aria-label="Formatting toolbar"

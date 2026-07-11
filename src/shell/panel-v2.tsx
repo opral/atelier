@@ -153,7 +153,7 @@ export function PanelV2({
 					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
 				)}
 			>
-				{/* Most islands render the identical 40px tab row; the central
+				{/* Most islands render the shared panel-header-height tab row; the central
 				    editor hides it and switches files from the left file list. */}
 				{showTabBar ? (
 					<TabBar

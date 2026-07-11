@@ -6,6 +6,7 @@ import { extension as csvExtensionDefinition } from "../extensions/csv";
 import { extension as imageExtensionDefinition } from "../extensions/image";
 import { extension as htmlExtensionDefinition } from "../extensions/html";
 import { extension as pdfExtensionDefinition } from "../extensions/pdf";
+import { extension as textExtensionDefinition } from "../extensions/text";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	filesExtensionDefinition,
@@ -18,6 +19,7 @@ export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	imageExtensionDefinition,
 	htmlExtensionDefinition,
 	pdfExtensionDefinition,
+	textExtensionDefinition,
 ];
 
 export const BUILTIN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [

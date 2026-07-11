@@ -1,0 +1,6 @@
+Atelier text extension preview
+
+- Open common source and text formats.
+- Search within the current file.
+- Toggle long-line wrapping.
+- Save edits back to the workspace.

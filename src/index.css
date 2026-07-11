@@ -8,7 +8,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* App-specific globals can go here later. */
+.atelier-root {
+	/* Shared height for panel tabs and view-owned header/tool rows. */
+	--atelier-panel-header-height: 40px;
+}
 
 @keyframes atelier-zap-wipe-top {
 	0% {
