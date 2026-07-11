@@ -79,6 +79,11 @@ export const BlockBoundaryNavigationExtension = Extension.create({
 			) {
 				return false;
 			}
+			if (direction < 0 && selection.node.type.name === "markdownFrontmatter") {
+				// Frontmatter is already the first block. Treat ArrowUp as a no-op
+				// instead of moving the selection down into the document body.
+				return true;
+			}
 
 			const boundary = direction < 0 ? selection.from : selection.to;
 			const adjacent =

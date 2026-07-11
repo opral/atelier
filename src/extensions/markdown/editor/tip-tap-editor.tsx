@@ -23,6 +23,7 @@ import {
 	normalizePersistedMarkdown,
 } from "./build-markdown-from-editor";
 import type { MarkdownWorkspaceFileOpener } from "./markdown-asset";
+import { FrontmatterDisclosure } from "../components/frontmatter-disclosure";
 
 type TipTapEditorProps = {
 	fileId?: string | null;
@@ -542,7 +543,7 @@ function TipTapEditorLoadedContent({
 			<div
 				ref={scrollContainerRef}
 				role="presentation"
-				className="ph-mask tiptap-container w-full h-full bg-background cursor-text overflow-y-auto"
+				className="ph-mask tiptap-container relative w-full h-full bg-background cursor-text overflow-y-auto"
 				data-editor-focused={isEditorFocused ? "true" : "false"}
 				onMouseDown={handleSurfacePointerDown}
 			>
@@ -551,6 +552,10 @@ function TipTapEditorLoadedContent({
 					className="tiptap w-full mx-auto"
 					data-testid="tiptap-editor"
 					key={`${activeBranchId}:${activeFileId ?? "no-file"}`}
+				/>
+				<FrontmatterDisclosure
+					editor={editor}
+					surfaceRef={scrollContainerRef}
 				/>
 			</div>
 			<div

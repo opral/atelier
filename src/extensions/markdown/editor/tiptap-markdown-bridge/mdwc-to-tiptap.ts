@@ -148,11 +148,11 @@ function astBlockToPM(node: any): PMNode {
 		case "yaml": {
 			const n = node as any;
 			return {
-				type: "markdownUnsupported",
+				type: "markdownFrontmatter",
 				attrs: {
-					kind: "yaml",
 					value: n.value ?? "",
 					data: buildNodeData(n.data),
+					autofocus: false,
 				},
 			};
 		}

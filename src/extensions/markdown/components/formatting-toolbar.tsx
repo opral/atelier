@@ -88,6 +88,7 @@ export function FormattingToolbar({ className }: { className?: string }) {
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [linkValue, setLinkValue] = useState("");
 	const [linkEditing, setLinkEditing] = useState(false);
+	const [frontmatterEditing, setFrontmatterEditing] = useState(false);
 	const linkInputRef = useRef<HTMLInputElement>(null);
 	const formattingControlsRef = useRef<HTMLDivElement>(null);
 	const [overflowEdges, setOverflowEdges] = useState({
@@ -128,6 +129,55 @@ export function FormattingToolbar({ className }: { className?: string }) {
 				};
 			},
 		}) ?? initialFormatState;
+	const displayedFormatState = frontmatterEditing
+		? initialFormatState
+		: formatState;
+
+	useEffect(() => {
+		if (!editor) {
+			setFrontmatterEditing(false);
+			return;
+		}
+		const editorDom = editor.view.dom;
+		let frame: number | null = null;
+		const syncFromActiveElement = () => {
+			const active = document.activeElement;
+			setFrontmatterEditing(
+				active instanceof HTMLElement &&
+					editorDom.contains(active) &&
+					Boolean(active.closest("[data-markdown-frontmatter='true']")),
+			);
+		};
+		const handleFocusIn = (event: FocusEvent) => {
+			const target = event.target;
+			setFrontmatterEditing(
+				target instanceof HTMLElement &&
+					Boolean(target.closest("[data-markdown-frontmatter='true']")),
+			);
+		};
+		const handleFocusOut = () => {
+			if (frame !== null) window.cancelAnimationFrame(frame);
+			frame = window.requestAnimationFrame(() => {
+				frame = null;
+				syncFromActiveElement();
+			});
+		};
+
+		syncFromActiveElement();
+		editorDom.addEventListener("focusin", handleFocusIn);
+		editorDom.addEventListener("focusout", handleFocusOut);
+		return () => {
+			editorDom.removeEventListener("focusin", handleFocusIn);
+			editorDom.removeEventListener("focusout", handleFocusOut);
+			if (frame !== null) window.cancelAnimationFrame(frame);
+		};
+	}, [editor]);
+
+	useEffect(() => {
+		if (!frontmatterEditing) return;
+		setBlockMenuOpen(false);
+		setLinkOpen(false);
+	}, [frontmatterEditing]);
 
 	const updateOverflowEdges = useCallback(() => {
 		const controls = formattingControlsRef.current;
@@ -161,10 +211,10 @@ export function FormattingToolbar({ className }: { className?: string }) {
 
 	const activeBlockLabel = useMemo(() => {
 		const active = TOOLBAR_BLOCK_OPTIONS.find(
-			(option) => option.value === formatState.block,
+			(option) => option.value === displayedFormatState.block,
 		);
 		return active?.label ?? "Text";
-	}, [formatState.block]);
+	}, [displayedFormatState.block]);
 
 	const handleBlockChange = useCallback(
 		(value: ToolbarBlockType) => {
@@ -338,251 +388,262 @@ export function FormattingToolbar({ className }: { className?: string }) {
 			data-attr="markdown-format-toolbar"
 		>
 			<div className="relative min-w-0 flex-1 self-stretch">
-				<Toolbar.Group
-					ref={formattingControlsRef}
-					className="markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain"
-					aria-label="Text formatting controls"
-					data-attr="markdown-format-controls"
-					onScroll={updateOverflowEdges}
-				>
-					<Select.Root
-						value={formatState.block}
-						onValueChange={(value) => {
-							if (value !== null) handleBlockChange(value);
-						}}
-						open={blockMenuOpen}
-						onOpenChange={setBlockMenuOpen}
+				<fieldset disabled={frontmatterEditing} className="contents">
+					<Toolbar.Group
+						ref={formattingControlsRef}
+						className={clsx(
+							"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
+							frontmatterEditing && "opacity-40",
+						)}
+						aria-label="Text formatting controls"
+						aria-disabled={frontmatterEditing}
+						data-attr="markdown-format-controls"
+						data-disabled={frontmatterEditing ? "true" : "false"}
+						onScroll={updateOverflowEdges}
 					>
-						<Toolbar.Button
-							render={<Select.Trigger />}
-							data-attr="markdown-block-selector"
-							className={clsx(
-								"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
-								blockMenuOpen &&
-									"bg-[var(--color-bg-control-selected)] text-[var(--color-text-primary)]",
-							)}
-							onMouseDown={suppressMouseDown}
+						<Select.Root
+							value={displayedFormatState.block}
+							onValueChange={(value) => {
+								if (value !== null) handleBlockChange(value);
+							}}
+							open={blockMenuOpen}
+							onOpenChange={setBlockMenuOpen}
 						>
-							<Select.Value className="block w-[4.25rem] truncate">
-								{activeBlockLabel}
-							</Select.Value>
-							<Select.Icon className="text-[var(--color-icon-tertiary)] transition-transform duration-100 data-[popup-open]:rotate-180">
-								<ChevronDown className="size-[13px] stroke-[2]" aria-hidden />
-							</Select.Icon>
-						</Toolbar.Button>
-						<Select.Portal>
-							<Select.Positioner
-								className="z-50 outline-none"
-								side="bottom"
-								align="start"
-								sideOffset={6}
-								alignItemWithTrigger={false}
+							<Toolbar.Button
+								render={<Select.Trigger />}
+								data-attr="markdown-block-selector"
+								className={clsx(
+									"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+									blockMenuOpen &&
+										"bg-[var(--color-bg-control-selected)] text-[var(--color-text-primary)]",
+								)}
+								onMouseDown={suppressMouseDown}
 							>
-								<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
-									<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
-										Turn into
-									</div>
-									{TOOLBAR_BLOCK_OPTIONS.map((option) => (
-										<Select.Item
-											key={option.value}
-											value={option.value}
-											className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-[var(--color-bg-hover)] data-[highlighted]:text-[var(--color-text-primary)]"
-										>
-											<span className="flex size-4.5 items-center justify-center text-[12px] text-[var(--color-icon-tertiary)] group-data-[highlighted]:text-[var(--color-text-secondary)] [&_svg]:stroke-[1.8]">
-												<option.icon className="h-3.5 w-3.5" aria-hidden />
-											</span>
-											<div className="flex flex-1 flex-col">
-												<span className="text-[12.5px] font-semibold leading-4 text-[var(--color-text-primary)]">
-													{option.label}
+								<Select.Value className="block w-[4.25rem] truncate">
+									{activeBlockLabel}
+								</Select.Value>
+								<Select.Icon className="text-[var(--color-icon-tertiary)] transition-transform duration-100 data-[popup-open]:rotate-180">
+									<ChevronDown className="size-[13px] stroke-[2]" aria-hidden />
+								</Select.Icon>
+							</Toolbar.Button>
+							<Select.Portal>
+								<Select.Positioner
+									className="z-50 outline-none"
+									side="bottom"
+									align="start"
+									sideOffset={6}
+									alignItemWithTrigger={false}
+								>
+									<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
+										<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
+											Turn into
+										</div>
+										{TOOLBAR_BLOCK_OPTIONS.map((option) => (
+											<Select.Item
+												key={option.value}
+												value={option.value}
+												className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-[var(--color-bg-hover)] data-[highlighted]:text-[var(--color-text-primary)]"
+											>
+												<span className="flex size-4.5 items-center justify-center text-[12px] text-[var(--color-icon-tertiary)] group-data-[highlighted]:text-[var(--color-text-secondary)] [&_svg]:stroke-[1.8]">
+													<option.icon className="h-3.5 w-3.5" aria-hidden />
 												</span>
-												<span className="text-[11.5px] font-normal leading-4 text-[var(--color-text-tertiary)]">
-													{option.description}
-												</span>
-											</div>
-											<Select.ItemIndicator className="text-[var(--color-text-link-hover)]">
-												<Check className="h-3.5 w-3.5 stroke-[2]" aria-hidden />
-											</Select.ItemIndicator>
-										</Select.Item>
-									))}
-								</Select.Popup>
-							</Select.Positioner>
-						</Select.Portal>
-					</Select.Root>
+												<div className="flex flex-1 flex-col">
+													<span className="text-[12.5px] font-semibold leading-4 text-[var(--color-text-primary)]">
+														{option.label}
+													</span>
+													<span className="text-[11.5px] font-normal leading-4 text-[var(--color-text-tertiary)]">
+														{option.description}
+													</span>
+												</div>
+												<Select.ItemIndicator className="text-[var(--color-text-link-hover)]">
+													<Check
+														className="h-3.5 w-3.5 stroke-[2]"
+														aria-hidden
+													/>
+												</Select.ItemIndicator>
+											</Select.Item>
+										))}
+									</Select.Popup>
+								</Select.Positioner>
+							</Select.Portal>
+						</Select.Root>
 
-					<ToolbarSeparator />
+						<ToolbarSeparator />
 
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isBold && iconButtonActiveClass,
-						)}
-						onClick={handleToggleBold}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isBold}
-						aria-label="Bold"
-						data-attr="markdown-format-bold"
-					>
-						<Bold className="size-3.5" aria-hidden />
-					</Toolbar.Button>
-
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isItalic && iconButtonActiveClass,
-						)}
-						onClick={handleToggleItalic}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isItalic}
-						aria-label="Italic"
-						data-attr="markdown-format-italic"
-					>
-						<Italic className="size-3.5" aria-hidden />
-					</Toolbar.Button>
-
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isStrike && iconButtonActiveClass,
-						)}
-						onClick={handleToggleStrike}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isStrike}
-						aria-label="Strikethrough"
-						data-attr="markdown-format-strike"
-					>
-						<Strikethrough className="size-3.5" aria-hidden />
-					</Toolbar.Button>
-
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isCode && iconButtonActiveClass,
-						)}
-						onClick={handleToggleCode}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isCode}
-						aria-label="Inline code"
-						data-attr="markdown-format-code"
-					>
-						<Code2 className="size-3.5" aria-hidden />
-					</Toolbar.Button>
-
-					<Popover.Root open={linkOpen} onOpenChange={handleLinkOpenChange}>
 						<Toolbar.Button
-							render={<Popover.Trigger />}
 							className={clsx(
 								iconButtonClass,
-								(linkOpen || formatState.isLink) && iconButtonActiveClass,
+								displayedFormatState.isBold && iconButtonActiveClass,
 							)}
+							onClick={handleToggleBold}
 							onMouseDown={suppressMouseDown}
-							aria-label="Link"
-							data-attr="markdown-format-link"
+							aria-pressed={displayedFormatState.isBold}
+							aria-label="Bold"
+							data-attr="markdown-format-bold"
 						>
-							<LinkIcon className="size-3.5" aria-hidden />
+							<Bold className="size-3.5" aria-hidden />
 						</Toolbar.Button>
-						<Popover.Portal>
-							<Popover.Positioner
-								className="z-50 outline-none"
-								side="bottom"
-								align="start"
-								sideOffset={6}
+
+						<Toolbar.Button
+							className={clsx(
+								iconButtonClass,
+								displayedFormatState.isItalic && iconButtonActiveClass,
+							)}
+							onClick={handleToggleItalic}
+							onMouseDown={suppressMouseDown}
+							aria-pressed={displayedFormatState.isItalic}
+							aria-label="Italic"
+							data-attr="markdown-format-italic"
+						>
+							<Italic className="size-3.5" aria-hidden />
+						</Toolbar.Button>
+
+						<Toolbar.Button
+							className={clsx(
+								iconButtonClass,
+								displayedFormatState.isStrike && iconButtonActiveClass,
+							)}
+							onClick={handleToggleStrike}
+							onMouseDown={suppressMouseDown}
+							aria-pressed={displayedFormatState.isStrike}
+							aria-label="Strikethrough"
+							data-attr="markdown-format-strike"
+						>
+							<Strikethrough className="size-3.5" aria-hidden />
+						</Toolbar.Button>
+
+						<Toolbar.Button
+							className={clsx(
+								iconButtonClass,
+								displayedFormatState.isCode && iconButtonActiveClass,
+							)}
+							onClick={handleToggleCode}
+							onMouseDown={suppressMouseDown}
+							aria-pressed={displayedFormatState.isCode}
+							aria-label="Inline code"
+							data-attr="markdown-format-code"
+						>
+							<Code2 className="size-3.5" aria-hidden />
+						</Toolbar.Button>
+
+						<Popover.Root open={linkOpen} onOpenChange={handleLinkOpenChange}>
+							<Toolbar.Button
+								render={<Popover.Trigger />}
+								className={clsx(
+									iconButtonClass,
+									(linkOpen || displayedFormatState.isLink) &&
+										iconButtonActiveClass,
+								)}
+								onMouseDown={suppressMouseDown}
+								aria-label="Link"
+								data-attr="markdown-format-link"
 							>
-								<Popover.Popup
-									initialFocus={linkInputRef}
-									className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
-									data-attr="markdown-link-popover"
+								<LinkIcon className="size-3.5" aria-hidden />
+							</Toolbar.Button>
+							<Popover.Portal>
+								<Popover.Positioner
+									className="z-50 outline-none"
+									side="bottom"
+									align="start"
+									sideOffset={6}
 								>
-									<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-2 text-[var(--color-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-[var(--color-border-brand-soft)] focus-within:bg-[var(--color-bg-panel)] focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--color-bg-brand-soft)]">
-										<LinkIcon
-											className="size-3.5 shrink-0 text-[var(--color-icon-tertiary)]"
-											aria-hidden
-										/>
-										<input
-											ref={linkInputRef}
-											value={linkValue}
-											onChange={(event) => setLinkValue(event.target.value)}
-											onKeyDown={handleLinkKeyDown}
-											aria-label="Link URL"
-											placeholder="Paste a link..."
-											className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-[var(--color-text-primary)] outline-none placeholder:font-normal placeholder:text-[var(--color-text-tertiary)]"
-											data-attr="markdown-link-input"
-										/>
-									</div>
-									<div className="mt-1.5 flex items-center gap-1">
-										{linkEditing && (
+									<Popover.Popup
+										initialFocus={linkInputRef}
+										className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+										data-attr="markdown-link-popover"
+									>
+										<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-2 text-[var(--color-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-[var(--color-border-brand-soft)] focus-within:bg-[var(--color-bg-panel)] focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--color-bg-brand-soft)]">
+											<LinkIcon
+												className="size-3.5 shrink-0 text-[var(--color-icon-tertiary)]"
+												aria-hidden
+											/>
+											<input
+												ref={linkInputRef}
+												value={linkValue}
+												onChange={(event) => setLinkValue(event.target.value)}
+												onKeyDown={handleLinkKeyDown}
+												aria-label="Link URL"
+												placeholder="Paste a link..."
+												className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-[var(--color-text-primary)] outline-none placeholder:font-normal placeholder:text-[var(--color-text-tertiary)]"
+												data-attr="markdown-link-input"
+											/>
+										</div>
+										<div className="mt-1.5 flex items-center gap-1">
+											{linkEditing && (
+												<button
+													type="button"
+													onClick={handleRemoveLink}
+													className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-status-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+													data-attr="markdown-link-remove"
+												>
+													<Unlink className="size-3.5" aria-hidden />
+													Remove
+												</button>
+											)}
+											<Popover.Close className="ml-auto inline-flex h-7 items-center gap-1 rounded-[7px] px-2.5 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]">
+												<X className="size-3.5" aria-hidden />
+												Cancel
+											</Popover.Close>
 											<button
 												type="button"
-												onClick={handleRemoveLink}
-												className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-status-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-												data-attr="markdown-link-remove"
+												onClick={handleApplyLink}
+												className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-[var(--color-bg-action-primary)] px-3 text-[12.5px] font-semibold text-[var(--color-text-on-action-primary)] shadow-[0_1px_2px_rgba(194,65,12,0.18)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+												data-attr="markdown-link-apply"
 											>
-												<Unlink className="size-3.5" aria-hidden />
-												Remove
+												<Check className="size-3.5" aria-hidden />
+												{linkEditing ? "Update" : "Add link"}
 											</button>
-										)}
-										<Popover.Close className="ml-auto inline-flex h-7 items-center gap-1 rounded-[7px] px-2.5 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]">
-											<X className="size-3.5" aria-hidden />
-											Cancel
-										</Popover.Close>
-										<button
-											type="button"
-											onClick={handleApplyLink}
-											className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-[var(--color-bg-action-primary)] px-3 text-[12.5px] font-semibold text-[var(--color-text-on-action-primary)] shadow-[0_1px_2px_rgba(194,65,12,0.18)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
-											data-attr="markdown-link-apply"
-										>
-											<Check className="size-3.5" aria-hidden />
-											{linkEditing ? "Update" : "Add link"}
-										</button>
-									</div>
-								</Popover.Popup>
-							</Popover.Positioner>
-						</Popover.Portal>
-					</Popover.Root>
+										</div>
+									</Popover.Popup>
+								</Popover.Positioner>
+							</Popover.Portal>
+						</Popover.Root>
 
-					<ToolbarSeparator />
+						<ToolbarSeparator />
 
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isOrderedList && iconButtonActiveClass,
-						)}
-						onClick={handleToggleOrderedList}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isOrderedList}
-						aria-label="Numbered list"
-						data-attr="markdown-format-ordered-list"
-					>
-						<ListOrdered className="size-3.5" aria-hidden />
-					</Toolbar.Button>
+						<Toolbar.Button
+							className={clsx(
+								iconButtonClass,
+								displayedFormatState.isOrderedList && iconButtonActiveClass,
+							)}
+							onClick={handleToggleOrderedList}
+							onMouseDown={suppressMouseDown}
+							aria-pressed={displayedFormatState.isOrderedList}
+							aria-label="Numbered list"
+							data-attr="markdown-format-ordered-list"
+						>
+							<ListOrdered className="size-3.5" aria-hidden />
+						</Toolbar.Button>
 
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isBulletList && iconButtonActiveClass,
-						)}
-						onClick={handleToggleBulletList}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isBulletList}
-						aria-label="Bullet list"
-						data-attr="markdown-format-bullet-list"
-					>
-						<List className="size-3.5" aria-hidden />
-					</Toolbar.Button>
+						<Toolbar.Button
+							className={clsx(
+								iconButtonClass,
+								displayedFormatState.isBulletList && iconButtonActiveClass,
+							)}
+							onClick={handleToggleBulletList}
+							onMouseDown={suppressMouseDown}
+							aria-pressed={displayedFormatState.isBulletList}
+							aria-label="Bullet list"
+							data-attr="markdown-format-bullet-list"
+						>
+							<List className="size-3.5" aria-hidden />
+						</Toolbar.Button>
 
-					<Toolbar.Button
-						className={clsx(
-							iconButtonClass,
-							formatState.isTaskList && iconButtonActiveClass,
-						)}
-						onClick={handleToggleTaskList}
-						onMouseDown={suppressMouseDown}
-						aria-pressed={formatState.isTaskList}
-						aria-label="Checklist"
-						data-attr="markdown-format-task-list"
-					>
-						<ListChecks className="size-3.5" aria-hidden />
-					</Toolbar.Button>
-				</Toolbar.Group>
+						<Toolbar.Button
+							className={clsx(
+								iconButtonClass,
+								displayedFormatState.isTaskList && iconButtonActiveClass,
+							)}
+							onClick={handleToggleTaskList}
+							onMouseDown={suppressMouseDown}
+							aria-pressed={displayedFormatState.isTaskList}
+							aria-label="Checklist"
+							data-attr="markdown-format-task-list"
+						>
+							<ListChecks className="size-3.5" aria-hidden />
+						</Toolbar.Button>
+					</Toolbar.Group>
+				</fieldset>
 				<span
 					className="markdown-format-toolbar-overflow-indicator markdown-format-toolbar-overflow-indicator-left"
 					data-visible={overflowEdges.left}

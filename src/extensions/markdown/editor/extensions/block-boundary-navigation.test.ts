@@ -104,6 +104,26 @@ describe("atomic block boundary navigation", () => {
 		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
 	});
 
+	test("ArrowUp from frontmatter keeps frontmatter at the document start", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "markdownFrontmatter",
+					attrs: { value: "title: Demo" },
+				},
+				{ type: "paragraph", content: [{ type: "text", text: "after" }] },
+			],
+		});
+		editor.commands.setNodeSelection(0);
+		const selectionBefore = editor.state.selection;
+
+		expect(sendKey(editor, "ArrowUp")).toBe(true);
+		expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.selection.eq(selectionBefore)).toBe(true);
+	});
+
 	test("ArrowDown after a terminal standalone image creates a paragraph", () => {
 		const editor = createEditor({
 			type: "doc",

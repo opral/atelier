@@ -195,6 +195,14 @@ function pmBlockToAst(
 				children: pmInlineToMd(node.content || []),
 			};
 		}
+		case "markdownFrontmatter": {
+			const frontmatterData = extractNodeData(node.attrs);
+			return {
+				type: "yaml",
+				value: String(node.attrs?.value ?? ""),
+				data: frontmatterData.data,
+			};
+		}
 		case "markdownUnsupported": {
 			const unsupportedData = extractNodeData(node.attrs);
 			const kind = node.attrs?.kind ?? "html";

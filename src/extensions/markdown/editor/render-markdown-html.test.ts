@@ -53,4 +53,30 @@ describe("renderMarkdownAstEditorHtml", () => {
 		).toEqual([false, false, false]);
 		editor.destroy();
 	});
+
+	test("frontmatter command inserts one editable node at the document start", () => {
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: {
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [{ type: "text", text: "Hello" }],
+					},
+				],
+			},
+		});
+
+		expect(editor.commands.setFrontmatter({ title: "Demo" })).toBe(true);
+		expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+		expect(editor.state.doc.firstChild?.attrs.value).toBe("title: Demo");
+		expect(editor.state.doc.child(1).textContent).toBe("Hello");
+
+		const command = BLOCK_COMMANDS.find((item) => item.id === "frontmatter");
+		expect(command?.isAvailable?.(editor)).toBe(false);
+		expect(editor.commands.unsetFrontmatter()).toBe(true);
+		expect(editor.state.doc.firstChild?.type.name).toBe("paragraph");
+		editor.destroy();
+	});
 });

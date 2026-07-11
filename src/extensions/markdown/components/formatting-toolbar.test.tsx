@@ -203,6 +203,43 @@ describe("FormattingToolbar", () => {
 		destroyEditor(setup);
 	});
 
+	test("deactivates formatting controls while frontmatter is being edited", async () => {
+		const setup = createEditor(bulletListDoc);
+		const utils = renderToolbar(setup.editor);
+		const controls = await screen.findByLabelText("Text formatting controls");
+		const bulletButton = screen.getByLabelText("Bullet list");
+		expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+
+		const frontmatter = document.createElement("div");
+		frontmatter.dataset.markdownFrontmatter = "true";
+		const input = document.createElement("input");
+		frontmatter.appendChild(input);
+		setup.editor.view.dom.appendChild(frontmatter);
+
+		await act(async () => {
+			fireEvent.focusIn(input);
+		});
+
+		expect(controls).toHaveAttribute("data-disabled", "true");
+		expect(screen.getByRole("combobox")).toHaveTextContent("Text");
+		expect(bulletButton).toHaveAttribute("aria-pressed", "false");
+		expect(bulletButton).toBeDisabled();
+		expect(screen.getByLabelText("Copy markdown")).toBeEnabled();
+
+		await act(async () => {
+			fireEvent.focusIn(setup.editor.view.dom);
+		});
+
+		expect(controls).toHaveAttribute("data-disabled", "false");
+		expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+		expect(bulletButton).toBeEnabled();
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
 	test("applies bold formatting to the current selection", async () => {
 		const setup = createEditor(paragraphDoc);
 		const utils = renderToolbar(setup.editor);

@@ -1,4 +1,5 @@
 import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core";
+import { ReactNodeViewRenderer } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { codeLanguageLabel } from "./code-language-label";
@@ -13,6 +14,11 @@ import type {
 	PdfPreviewController,
 	PdfPreviewRenderer,
 } from "@/extensions/pdf/pdf-preview";
+import { FrontmatterEditorNodeView } from "../../components/frontmatter-editor";
+import {
+	frontmatterSourceFromInput,
+	type FrontmatterRecord,
+} from "../frontmatter-value";
 
 export type MarkdownImageSrcResolver = (src: string) => string;
 
@@ -101,6 +107,10 @@ declare module "@tiptap/core" {
 	interface Commands<ReturnType> {
 		horizontalRule: {
 			setHorizontalRule: () => ReturnType;
+		};
+		frontmatter: {
+			setFrontmatter: (value?: string | FrontmatterRecord) => ReturnType;
+			unsetFrontmatter: () => ReturnType;
 		};
 	}
 }
@@ -410,6 +420,82 @@ export function markdownWcNodes(
 							return commands.insertContent({ type: nodeName });
 						},
 				};
+			},
+		}),
+		Node.create({
+			name: "markdownFrontmatter",
+			group: "block",
+			atom: true,
+			selectable: true,
+			defining: true,
+			addAttributes() {
+				return {
+					value: { default: "" },
+					data: { default: null },
+					autofocus: { default: false },
+				};
+			},
+			renderHTML({ node }) {
+				return [
+					"div",
+					{
+						"data-markdown-frontmatter": "true",
+						class: "markdown-frontmatter",
+						...diffAttrs(node, "element"),
+					},
+					["pre", ["code", String(node.attrs.value ?? "")]],
+				];
+			},
+			addCommands() {
+				const nodeName = this.name;
+				return {
+					setFrontmatter:
+						(value?: string | FrontmatterRecord) =>
+						({ state, dispatch }: CommandProps) => {
+							const nodeType = state.schema.nodes[nodeName];
+							if (!nodeType) return false;
+							const firstNode = state.doc.firstChild;
+							if (firstNode?.type === nodeType) {
+								if (value === undefined) return true;
+								if (dispatch) {
+									dispatch(
+										state.tr.setNodeMarkup(0, nodeType, {
+											...firstNode.attrs,
+											value: frontmatterSourceFromInput(value),
+										}),
+									);
+								}
+								return true;
+							}
+							if (dispatch) {
+								dispatch(
+									state.tr.insert(
+										0,
+										nodeType.create({
+											value: frontmatterSourceFromInput(value),
+											data: null,
+											autofocus: value === undefined,
+										}),
+									),
+								);
+							}
+							return true;
+						},
+					unsetFrontmatter:
+						() =>
+						({ state, dispatch }: CommandProps) => {
+							const nodeType = state.schema.nodes[nodeName];
+							const firstNode = state.doc.firstChild;
+							if (!nodeType || firstNode?.type !== nodeType) return false;
+							if (dispatch) {
+								dispatch(state.tr.delete(0, firstNode.nodeSize));
+							}
+							return true;
+						},
+				};
+			},
+			addNodeView() {
+				return ReactNodeViewRenderer(FrontmatterEditorNodeView);
 			},
 		}),
 		// Unsupported blocks (html, yaml, etc.)

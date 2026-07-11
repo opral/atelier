@@ -19,6 +19,10 @@ const INACTIVE_SLASH_STATE: SlashCommandState = {
 
 const COMMAND_GROUPS = [
 	{
+		label: "Document",
+		commandIds: ["frontmatter"],
+	},
+	{
 		label: "Basic blocks",
 		commandIds: ["paragraph", "heading1", "heading2", "heading3"],
 	},
@@ -65,8 +69,15 @@ export function SlashCommandMenu() {
 	const menuRef = useRef<HTMLDivElement>(null);
 
 	const filteredCommands = useMemo(
-		() => filterCommands(SLASH_BLOCK_COMMANDS, slashState.query),
-		[slashState.query],
+		() =>
+			filterCommands(
+				SLASH_BLOCK_COMMANDS.filter(
+					(command) =>
+						!command.isAvailable || !editor || command.isAvailable(editor),
+				),
+				slashState.query,
+			),
+		[editor, slashState.query],
 	);
 	const selectedIndex =
 		selection.query === slashState.query

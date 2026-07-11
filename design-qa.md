@@ -1,35 +1,65 @@
-# Design QA — Empty-line command hint
+# Flashtype frontmatter flows 2a, 2b, and 2c — design QA
 
-## Target
+## Comparison target
 
-- Source truth: `/Users/samuel/Library/Application Support/CleanShot/media/media_fTOpgv0MD3/CleanShot 2026-07-11 at 12.23.28@2x.png`
-- Full implementation capture: `artifacts/design-audit/18-empty-line-command-hint.png`
-- Focused comparison capture: `artifacts/design-audit/19-empty-line-command-hint-focus.png`
-- Viewport: 649 × 863, light theme, both side panels open
-- State: a focused, empty paragraph immediately after a blank heading
+- Supplied source: `/Users/samuel/Downloads/Flashtype Frontmatter.dc.html`
+- Local reference: `preview/web/mocks/frontmatter-ux/flashtype-reference.html`
+- Reference captures: `preview/web/mocks/frontmatter-ux/flashtype-reference-flow.png` and `preview/web/mocks/frontmatter-ux/flashtype-reference-full.png`
+- Production implementation: `src/extensions/markdown/components/frontmatter-editor.tsx`, `src/extensions/markdown/editor/frontmatter-value.ts`, `src/extensions/markdown/editor/tiptap-markdown-bridge/nodes.ts`, and `src/extensions/markdown/style.css`
+- Production captures: `preview/web/mocks/frontmatter-ux/production-flow-rest.png`, `preview/web/mocks/frontmatter-ux/production-flow-initial-add.png`, `preview/web/mocks/frontmatter-ux/production-flow-add-property.png`, `preview/web/mocks/frontmatter-ux/production-flow-full.png`, `preview/web/mocks/frontmatter-ux/production-flow-after-removal.png`, and `preview/web/mocks/frontmatter-ux/production-flow-mobile.png`
+- Full-view comparison: `preview/web/mocks/frontmatter-ux/flashtype-production-comparison.png`
+- Focused add-flow comparison: `preview/web/mocks/frontmatter-ux/flashtype-focused-comparison.png`
+- Viewports: 1720 × 1100 source; 1280 × 900 production desktop; 390 × 844 production mobile.
 
-## Comparison
+## States and flows verified
 
-The Notion reference and Atelier implementation were reviewed together in the same visual comparison input. Atelier intentionally adapts the reference copy to its available capability: `Press ‘/’ for commands` rather than advertising an unavailable AI shortcut.
+- **2a / empty document:** no persistent frontmatter chrome is rendered.
+- **2b / discovery:** the first markdown line retains the quiet `Add frontmatter` hover disclosure and the slash command remains available.
+- **2b2 / adding:** invoking frontmatter opens a transient `Property name` row. Enter commits a unique key and moves focus to its value; Escape or an empty blur cancels the flow.
+- **2c / populated:** frontmatter uses a compact two-column property sheet with type icons, low-chrome cell hover states, a quiet YAML action, and a distinct `+ Add property` action.
+- Removing the final property deletes the entire frontmatter node and returns the document to 2b2 discovery. Undo restores the removal.
+- Programmatic removal is available through `unsetFrontmatter()`.
 
-### Findings and fixes
+## Fidelity review
 
-- P1 — The previous placeholder appeared only at the first document node. Fixed by styling every focused empty paragraph emitted by the Tiptap placeholder extension.
-- P1 — The old `Start typing...` copy did not teach the slash menu. Replaced with the direct, capability-accurate command hint.
-- P2 — The old placeholder treatment was italic and visually detached from the editor typography. Fixed with inherited 16px system sans, normal style, 400 weight, and quiet tertiary contrast.
-- P2 — Discoverability needed to disappear the instant input begins. Verified that typing `/` removes the hint and opens the accessible `Slash commands` listbox.
+- **Typography:** quiet metadata typography, compact labels, and the existing Atelier document hierarchy match the supplied direction.
+- **Layout:** no framing card, upper rule, shadow, or permanent selected tab. Keys use a fixed compact track; values remain aligned; nested object rows retain the same visual rhythm.
+- **Color:** neutral editor tokens handle hover, focus, empty values, tags, and actions. Accent color is reserved for real selection/focus behavior.
+- **Icons:** Lucide type icons distinguish text, number, boolean, date, list, person, and object fields without decorative color.
+- **Responsive behavior:** at 390 px, rows stack key above value, remain editable, and avoid horizontal clipping.
+- **Copy:** the interface consistently says `Frontmatter`, `Property name`, `Empty`, `YAML`, and `Add property`.
 
-### Final verification
+## Comparison history
 
-- Copy: `Press ‘/’ for commands`.
-- Typography: 16px font size, 25.6px line height, 400 weight, normal style.
-- Color: tertiary gray (`rgb(120, 113, 108)`) at 0.72 opacity; visually consistent with the reference's low-emphasis helper text.
-- Alignment: the hint begins at the active paragraph caret and shares the editor text column.
-- Scope: the hint appears on a new empty paragraph anywhere in the document, not only in an empty document.
-- Interaction: typing `/` removes the placeholder and opens the slash-command menu with the first option selected.
-- Image quality: no raster or generated assets are involved; text remains native and crisp.
-- Automated verification: 14 targeted editor tests, formatting, linting, TypeScript checks, and the production build passed.
+1. The prior flow created a default `title` field and could leave an empty frontmatter shell visible after every field was removed.
+2. The add flow was changed to a transient property-name row so frontmatter is not committed until the user names a property.
+3. Final-property removal now deletes the node and returns to the first-line hover/slash-command discovery state.
+4. The full state was restyled against the supplied 2c design: type icons, cell-level hover, a hidden-at-rest YAML action, quiet tags, and an unambiguous add action.
+5. Desktop, mobile, empty, adding, populated, and final-removal captures were compared. No P0/P1/P2 mismatch remains.
 
-## Final result
+## Automated validation
 
-passed
+- Full test suite: 62 files passed, 554 tests passed, 1 skipped.
+- Typecheck: passed.
+- Lint: passed with 11 pre-existing warnings and no errors.
+- Preview build: passed with the existing bundle-size warning.
+- Production browser console: no errors in the verified frontmatter flow.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none.
+- P3: the native date input presents its value using the browser locale while YAML serialization remains ISO-formatted.
+
+## First-line disclosure alignment
+
+- Reference: `/Users/samuel/Library/Application Support/CleanShot/media/media_AHTVCO3G8C/CleanShot 2026-07-11 at 16.03.48@2x.png`.
+- The disclosure keeps its padded hover target while shifting that target one padding unit left of the Markdown content edge.
+- Browser measurements at the production desktop viewport: first Markdown block left edge `393px`; frontmatter icon left edge `393px`; disclosure background left edge `385px`.
+- This matches the selected design: the icon and first Markdown line share one vertical guide, while the hover background extends `8px` into the outer gutter.
+- Focused editor tests: 21 passed.
+- P0/P1/P2 alignment mismatches: none.
+- P3: the Vite development session logged React's existing synchronous-unmount warning while hot-reloading and switching fixture files; the CSS-only alignment change does not add or alter component lifecycle behavior.
+
+final result: passed

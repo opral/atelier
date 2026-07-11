@@ -422,6 +422,8 @@ describe("unsupported blocks", () => {
 				},
 			],
 		};
+		const pmDocument = astToTiptapDoc(input);
+		expect(pmDocument.content?.[0]?.type).toBe("markdownFrontmatter");
 		const output = roundtrip(input);
 		expect(canonicalAst(output)).toEqual(canonicalAst(input));
 		const editorOutput = roundtripThroughEditor(input);
