@@ -313,7 +313,7 @@ function HistoryViewContent({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--color-border-panel)] px-3">
+			<div className="flex h-[var(--atelier-panel-header-height)] shrink-0 items-center justify-between border-b border-[var(--color-border-panel)] px-3">
 				<div className="flex min-w-0 items-center gap-2">
 					<HistoryIcon className="size-3.75 text-[var(--color-icon-tertiary)]" />
 					<span className="truncate text-xs font-semibold text-[var(--color-text-secondary)]">

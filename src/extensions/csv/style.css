@@ -33,7 +33,7 @@
 	}
 
 	.csv-review-table th {
-		height: 40px;
+		height: var(--atelier-panel-header-height);
 		border-right: 1px solid var(--color-border-table-grid);
 		border-bottom: 1px solid var(--color-border-subtle);
 		background: var(--background);
