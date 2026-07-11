@@ -310,6 +310,7 @@ export function FileTree({
 
 	const stateRef = useRef({
 		createRequest,
+		openDirectoryTreePaths,
 		openDirectories,
 		openFileView,
 		onCreateCancel,
@@ -320,9 +321,11 @@ export function FileTree({
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
 		setInternalOpenDirectories,
+		treePaths: treeInput.paths,
 	});
 	stateRef.current = {
 		createRequest,
+		openDirectoryTreePaths,
 		openDirectories,
 		openFileView,
 		onCreateCancel,
@@ -333,9 +336,11 @@ export function FileTree({
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
 		setInternalOpenDirectories,
+		treePaths: treeInput.paths,
 	};
 
 	const modelRef = useRef<PierreFileTreeModel | null>(null);
+	const startedCreateRequestIdRef = useRef<number | null>(null);
 	const suppressSelectionOpenRef = useRef(false);
 	const suppressSelectionOpenForClickRef = useRef(false);
 	const handleSelectionChangeRef = useRef(
@@ -469,10 +474,10 @@ export function FileTree({
 	modelRef.current = model;
 
 	useEffect(() => {
-		model.resetPaths(treeInput.paths, {
-			initialExpandedPaths: [...openDirectoryTreePaths],
+		model.resetPaths(stateRef.current.treePaths, {
+			initialExpandedPaths: [...stateRef.current.openDirectoryTreePaths],
 		});
-	}, [model, openDirectoryTreePaths, treeInput.paths, treePathsKey]);
+	}, [model, treePathsKey]);
 
 	useEffect(() => {
 		model.setGitStatus(reviewGitStatusEntries as GitStatusEntry[]);
@@ -515,9 +520,15 @@ export function FileTree({
 	}, [model, selectedTreePath, treePathsKey]);
 
 	useEffect(() => {
-		if (!createRequest || !treeInput.createPlaceholderTreePath) return;
+		if (!createRequest) {
+			startedCreateRequestIdRef.current = null;
+			return;
+		}
+		if (!treeInput.createPlaceholderTreePath) return;
+		if (startedCreateRequestIdRef.current === createRequest.id) return;
 		const item = model.getItem(treeInput.createPlaceholderTreePath);
 		if (!item) return;
+		startedCreateRequestIdRef.current = createRequest.id;
 		model.focusPath(treeInput.createPlaceholderTreePath);
 		model.startRenaming(treeInput.createPlaceholderTreePath, {
 			removeIfCanceled: true,
@@ -560,33 +571,6 @@ export function FileTree({
 		});
 	}, [model]);
 
-	useEffect(() => {
-		if (treeInput.paths.length === 0) return;
-		let cancelled = false;
-		let timeoutId: number | null = null;
-		let removeListener: (() => void) | null = null;
-		const attach = () => {
-			if (cancelled || removeListener) return;
-			const shadowRoot = model.getFileTreeContainer()?.shadowRoot;
-			if (!shadowRoot) {
-				timeoutId = window.setTimeout(attach, 0);
-				return;
-			}
-			shadowRoot.addEventListener("click", openFileFromTreeEvent);
-			removeListener = () => {
-				shadowRoot.removeEventListener("click", openFileFromTreeEvent);
-			};
-		};
-		attach();
-		return () => {
-			cancelled = true;
-			if (timeoutId !== null) {
-				window.clearTimeout(timeoutId);
-			}
-			removeListener?.();
-		};
-	}, [model, openFileFromTreeEvent, treeInput.paths.length, treePathsKey]);
-
 	if (treeInput.paths.length === 0) {
 		// The "New file" row above the tree is the affordance; no extra copy.
 		return null;
@@ -596,6 +580,7 @@ export function FileTree({
 		<PierreFileTree
 			aria-label="Files"
 			model={model}
+			onClick={(event) => openFileFromTreeEvent(event.nativeEvent)}
 			onClickCapture={handleTreeClickCapture}
 			style={treeHostStyle(isPanelFocused)}
 		/>

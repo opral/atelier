@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { FileCode2 } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
@@ -83,16 +83,29 @@ export function HtmlPreview({
 		() => buildSandboxedHtmlDocument(source),
 		[source],
 	);
-	const [isLoading, setIsLoading] = useState(true);
 	const fileName = fileNameFromPath(filePath) ?? "HTML artifact";
-
-	useEffect(() => {
-		setIsLoading(true);
-	}, [documentSource]);
 
 	if (!isHtmlFilePath(filePath)) {
 		return <UnsupportedHtmlState filePath={filePath} />;
 	}
+
+	return (
+		<HtmlPreviewDocument
+			key={documentSource}
+			documentSource={documentSource}
+			fileName={fileName}
+		/>
+	);
+}
+
+function HtmlPreviewDocument({
+	documentSource,
+	fileName,
+}: {
+	readonly documentSource: string;
+	readonly fileName: string;
+}) {
+	const [isLoading, setIsLoading] = useState(true);
 
 	return (
 		<div className="atelier-html-view" data-testid="html-viewer">

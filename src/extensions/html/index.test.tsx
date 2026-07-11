@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { findFileHandlerExtension } from "@/extension-runtime/file-handlers";
 import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builtin-extension-registry";
@@ -87,6 +87,32 @@ describe("HtmlPreview", () => {
 		expect(
 			screen.getByTitle("status.html HTML preview").getAttribute("srcdoc"),
 		).toContain("<p>After</p>");
+	});
+
+	test("shows loading again when the iframe document changes", () => {
+		const { rerender } = render(
+			<HtmlPreview
+				data={new TextEncoder().encode("<p>Before</p>")}
+				filePath="/artifacts/status.html"
+			/>,
+		);
+		const firstFrame = screen.getByTitle("status.html HTML preview");
+		expect(screen.getByText("Loading HTML preview…")).toBeInTheDocument();
+		fireEvent.load(firstFrame);
+		expect(screen.queryByText("Loading HTML preview…")).toBeNull();
+
+		rerender(
+			<HtmlPreview
+				data={new TextEncoder().encode("<p>After</p>")}
+				filePath="/artifacts/status.html"
+			/>,
+		);
+
+		const secondFrame = screen.getByTitle("status.html HTML preview");
+		expect(secondFrame).not.toBe(firstFrame);
+		expect(screen.getByText("Loading HTML preview…")).toBeInTheDocument();
+		fireEvent.load(secondFrame);
+		expect(screen.queryByText("Loading HTML preview…")).toBeNull();
 	});
 
 	test("shows a clear state for unsupported paths", () => {

@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EditorContent } from "@tiptap/react";
+import {
+	Suspense,
+	useCallback,
+	useEffect,
+	useEffectEvent,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { EditorContent, useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
 import { useEditorCtx } from "./editor-context";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { createEditor, createMarkdownEditorOriginKey } from "./create-editor";
-import { assembleMdAst } from "./assemble-md-ast";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
@@ -28,6 +35,13 @@ type TipTapEditorProps = {
 	isActiveView?: boolean;
 	originKey?: string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+};
+
+type MarkdownFileDelivery = {
+	readonly data: unknown;
+	readonly path: string;
+	readonly changeId: string;
+	readonly originKey: unknown;
 };
 
 /**
@@ -122,11 +136,27 @@ function TipTapEditorContent(props: TipTapEditorContentProps) {
 	}
 
 	return (
-		<TipTapEditorFileContent
+		<TipTapEditorFileActivation
+			key={`${activeBranchId}:${props.activeFileId}`}
 			{...props}
 			activeFileId={props.activeFileId}
 			activeBranchId={activeBranchId}
 		/>
+	);
+}
+
+function TipTapEditorFileActivation(
+	props: TipTapEditorContentProps & {
+		readonly activeBranchId: string;
+		readonly activeFileId: string;
+	},
+) {
+	return (
+		<Suspense
+			fallback={<TipTapEditorLoadingState className={props.className} />}
+		>
+			<TipTapEditorFileContent {...props} />
+		</Suspense>
 	);
 }
 
@@ -138,25 +168,51 @@ function TipTapEditorFileContent({
 	readonly activeBranchId: string;
 	readonly activeFileId: string;
 }) {
-	const initialFile = useQueryTakeFirst(
+	const sourceFile = useQueryTakeFirst<MarkdownFileDelivery>(
 		(lix) =>
 			qb(lix)
-				.selectFrom("lix_file")
-				.select(["data", "path"])
+				.selectFrom("lix_file as file")
+				.leftJoin("lix_change as change", "change.id", "file.lixcol_change_id")
+				.select([
+					"file.data as data",
+					"file.path as path",
+					"file.lixcol_change_id as changeId",
+					"change.origin_key as originKey",
+				])
 				.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
-				.where("id", "=", activeFileId),
-		{ subscribe: false },
+				.where("file.id", "=", activeFileId),
+		{ evictOnUnmount: true },
 	);
-	const initialMarkdown = decodeMarkdownData(initialFile?.data);
 
 	return (
-		<TipTapEditorLoadedContent
+		<TipTapEditorSourceBoundary
+			key={`${activeBranchId}:${activeFileId}`}
 			{...props}
 			activeFileId={activeFileId}
 			activeBranchId={activeBranchId}
+			sourceFile={sourceFile}
+		/>
+	);
+}
+
+function TipTapEditorSourceBoundary({
+	sourceFile,
+	...props
+}: TipTapEditorContentProps & {
+	readonly activeBranchId: string;
+	readonly activeFileId: string;
+	readonly sourceFile: MarkdownFileDelivery | undefined;
+}) {
+	// Freeze only the editor's initial content. The subscribed row continues to
+	// deliver external changes without recreating the editor after every save.
+	const [initialFile] = useState(sourceFile);
+	return (
+		<TipTapEditorLoadedContent
+			{...props}
 			hasInitialFile={Boolean(initialFile)}
-			initialMarkdown={initialMarkdown}
+			initialMarkdown={decodeMarkdownData(initialFile?.data)}
 			sourceFilePath={props.filePath ?? initialFile?.path ?? null}
+			sourceFile={sourceFile}
 		/>
 	);
 }
@@ -175,11 +231,13 @@ function TipTapEditorLoadedContent({
 	hasInitialFile,
 	initialMarkdown,
 	sourceFilePath,
+	sourceFile,
 }: TipTapEditorContentProps & {
 	readonly activeBranchId: string;
 	readonly hasInitialFile: boolean;
 	readonly initialMarkdown: string;
 	readonly sourceFilePath?: string | null;
+	readonly sourceFile?: MarkdownFileDelivery | undefined;
 }) {
 	const lix = useLix();
 	const { setEditor } = useEditorCtx();
@@ -188,24 +246,22 @@ function TipTapEditorLoadedContent({
 		() => originKey ?? createMarkdownEditorOriginKey(),
 		[originKey],
 	);
-	const [initialAst, setInitialAst] = useState<any | null>(null);
-	const [initialAstLoaded, setInitialAstLoaded] = useState(false);
-	const lastInitialAstRef = useRef<string | null>(null);
+	const notifyReady = useEffectEvent((readyEditor: Editor) => {
+		onReady?.(readyEditor);
+	});
 	const hasAutoFocusedRef = useRef(false);
-	const mountedEditorRef = useRef<Editor | null>(null);
-	const pendingExternalMarkdownRef = useRef<string | null>(null);
+	const [editor, setEditorInstance] = useState<Editor | null>(null);
 
-	const editor = useMemo(() => {
-		if (!activeFileId || !hasInitialFile || !initialAstLoaded) {
-			return null;
+	// Editor is an imperative resource. Construct and destroy it in the same
+	// lifecycle so speculative renders cannot orphan an instance.
+	useEffect(() => {
+		if (!activeFileId || !hasInitialFile) {
+			setEditorInstance(null);
+			return;
 		}
-		// Prefer assembled AST from the current file bytes so initialization stays deterministic.
-		const hasAstSnapshot =
-			Array.isArray(initialAst?.children) && initialAst.children.length > 0;
-		return createEditor({
+		const nextEditor = createEditor({
 			lix,
 			initialMarkdown,
-			contentAst: hasAstSnapshot ? initialAst : undefined,
 			fileId: activeFileId,
 			sourceFilePath: sourceFilePath ?? undefined,
 			defaultBlock,
@@ -213,13 +269,13 @@ function TipTapEditorLoadedContent({
 			originKey: editorOriginKey,
 			openWorkspaceFile,
 		});
+		setEditorInstance(nextEditor);
+		return () => nextEditor.destroy();
 	}, [
 		lix,
 		activeFileId,
 		PERSIST_DEBOUNCE_MS,
 		hasInitialFile,
-		initialAst,
-		initialAstLoaded,
 		initialMarkdown,
 		sourceFilePath,
 		defaultBlock,
@@ -227,32 +283,11 @@ function TipTapEditorLoadedContent({
 		openWorkspaceFile,
 	]);
 
-	useEffect(() => {
-		mountedEditorRef.current = editor;
-		return () => {
-			const editorToDestroy = editor;
-			mountedEditorRef.current = null;
-			queueMicrotask(() => {
-				if (mountedEditorRef.current !== editorToDestroy) {
-					editorToDestroy?.destroy();
-				}
-			});
-		};
-	}, [editor]);
-
-	const [isEditorFocused, setIsEditorFocused] = useState(false);
-
-	useEffect(() => {
-		if (!editor) return;
-		const syncFocus = () => setIsEditorFocused(editor.isFocused);
-		syncFocus();
-		editor.on("focus", syncFocus);
-		editor.on("blur", syncFocus);
-		return () => {
-			editor.off("focus", syncFocus);
-			editor.off("blur", syncFocus);
-		};
-	}, [editor]);
+	const isEditorFocused =
+		useEditorState<boolean>({
+			editor,
+			selector: () => editor?.isFocused ?? false,
+		}) ?? false;
 
 	const handleSurfacePointerDown = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
@@ -392,91 +427,81 @@ function TipTapEditorLoadedContent({
 		};
 	}, [editor, setScrollbarVisible, syncScrollbarThumb]);
 
-	// Observe markdown file rows and refresh on external changes.
-	useEffect(() => {
-		if (!activeFileId || !editor || !isActiveView) return;
-		const events = lix.observe(
-			`
-					SELECT
-						f.data,
-						f.lixcol_change_id,
-						c.origin_key
-					FROM lix_file AS f
-					LEFT JOIN lix_change AS c ON c.id = f.lixcol_change_id
-					WHERE f.id = ?
-				`,
-			[activeFileId],
-		);
-		let closed = false;
-		let sawInitialSnapshot = false;
-		const initialObservedMarkdown = normalizePersistedMarkdown(initialMarkdown);
-		let lastCleanPersistedMarkdown = buildNormalizedMarkdownFromEditor(editor);
-		pendingExternalMarkdownRef.current = null;
-
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (!event || closed) {
-						continue;
-					}
-					const firstRow = event.result.rows[0];
-					if (!firstRow) {
-						continue;
-					}
-					const nextMarkdown = normalizePersistedMarkdown(
-						decodeMarkdownData(firstRow.get("data")),
-					);
-					const observedOriginKey = firstRow.get("origin_key");
-					const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
-					if (!sawInitialSnapshot) {
-						sawInitialSnapshot = true;
-						if (nextMarkdown === initialObservedMarkdown) {
-							continue;
-						}
-					}
-					if (currentMarkdown === nextMarkdown) {
-						lastCleanPersistedMarkdown = nextMarkdown;
-						pendingExternalMarkdownRef.current = null;
-						continue;
-					}
-					if (observedOriginKey === editorOriginKey) {
-						continue;
-					}
-					if (currentMarkdown !== lastCleanPersistedMarkdown) {
-						pendingExternalMarkdownRef.current = nextMarkdown;
-						continue;
-					}
-					const ast = parseMarkdown(nextMarkdown) as any;
-					editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
-						emitUpdate: false,
-					});
-					lastCleanPersistedMarkdown = nextMarkdown;
-					pendingExternalMarkdownRef.current = null;
-				}
-			} catch (error) {
-				if (!closed) throw error;
-			}
-		})();
-
-		return () => {
-			closed = true;
-			events.close();
+	const externalSyncState = useMemo(() => {
+		if (!editor) return null;
+		return {
+			editor,
+			initialObservedMarkdown: normalizePersistedMarkdown(initialMarkdown),
+			lastCleanPersistedMarkdown: buildNormalizedMarkdownFromEditor(editor),
+			pendingExternalMarkdown: null as string | null,
+			sawInitialSnapshot: false,
 		};
+	}, [editor, initialMarkdown]);
+
+	// The subscribed file query delivers external changes. Keep local dirty edits
+	// authoritative, and use the change origin to ignore stale autosave echoes.
+	useEffect(() => {
+		if (!activeFileId || !editor || !isActiveView || !sourceFile) return;
+		const syncState = externalSyncState;
+		if (!syncState || syncState.editor !== editor) return;
+		const nextMarkdown = normalizePersistedMarkdown(
+			decodeMarkdownData(sourceFile.data),
+		);
+		const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
+		if (!syncState.sawInitialSnapshot) {
+			syncState.sawInitialSnapshot = true;
+			if (nextMarkdown === syncState.initialObservedMarkdown) {
+				return;
+			}
+		}
+		if (currentMarkdown === nextMarkdown) {
+			syncState.lastCleanPersistedMarkdown = nextMarkdown;
+			syncState.pendingExternalMarkdown = null;
+			return;
+		}
+		if (sourceFile.originKey === editorOriginKey) {
+			return;
+		}
+		if (currentMarkdown !== syncState.lastCleanPersistedMarkdown) {
+			syncState.pendingExternalMarkdown = nextMarkdown;
+			return;
+		}
+		setEditorMarkdown(editor, nextMarkdown, defaultBlock);
+		syncState.lastCleanPersistedMarkdown = nextMarkdown;
+		syncState.pendingExternalMarkdown = null;
 	}, [
-		lix,
 		editor,
 		activeFileId,
-		activeBranchId,
 		isActiveView,
 		editorOriginKey,
-		initialMarkdown,
 		defaultBlock,
+		sourceFile,
+		externalSyncState,
 	]);
 
 	useEffect(() => {
-		hasAutoFocusedRef.current = false;
-	}, [activeFileId]);
+		if (!editor || !externalSyncState) return;
+		const applyPendingExternalMarkdown = () => {
+			const pendingMarkdown = externalSyncState.pendingExternalMarkdown;
+			if (pendingMarkdown === null) return;
+			const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
+			if (currentMarkdown === pendingMarkdown) {
+				externalSyncState.lastCleanPersistedMarkdown = pendingMarkdown;
+				externalSyncState.pendingExternalMarkdown = null;
+				return;
+			}
+			if (currentMarkdown !== externalSyncState.lastCleanPersistedMarkdown) {
+				return;
+			}
+			externalSyncState.pendingExternalMarkdown = null;
+			setEditorMarkdown(editor, pendingMarkdown, defaultBlock);
+			externalSyncState.lastCleanPersistedMarkdown = pendingMarkdown;
+		};
+		editor.on("update", applyPendingExternalMarkdown);
+		return () => {
+			editor.off("update", applyPendingExternalMarkdown);
+		};
+	}, [defaultBlock, editor, externalSyncState]);
 
 	useEffect(() => {
 		if (!editor) return;
@@ -488,33 +513,13 @@ function TipTapEditorLoadedContent({
 	}, [editor, focusOnLoad, isActiveView, activeFileId]);
 
 	useEffect(() => {
-		let cancelled = false;
-		if (!activeFileId) {
-			setInitialAst(null);
-			setInitialAstLoaded(true);
-			lastInitialAstRef.current = null;
-			return;
-		}
-		(async () => {
-			const ast = await assembleMdAst({ lix, fileId: activeFileId });
-			if (cancelled) return;
-			const serialized = JSON.stringify(ast);
-			if (serialized === lastInitialAstRef.current && initialAstLoaded) return;
-			lastInitialAstRef.current = serialized;
-			setInitialAstLoaded(false);
-			setInitialAst(ast);
-			setInitialAstLoaded(true);
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [lix, activeFileId, activeBranchId, initialAstLoaded]);
-
-	useEffect(() => {
 		if (!editor) return;
 		setEditor(editor);
-		onReady?.(editor);
-	}, [editor, setEditor, onReady]);
+		notifyReady(editor);
+		return () => {
+			setEditor((current) => (current === editor ? null : current));
+		};
+	}, [editor, setEditor]);
 
 	if (!activeFileId) {
 		return (
@@ -529,13 +534,7 @@ function TipTapEditorLoadedContent({
 	}
 
 	if (!editor) {
-		return (
-			<div className={className ?? undefined}>
-				<div className="w-full bg-background px-3 py-12">
-					<div className="mx-auto h-48 w-full max-w-5xl animate-pulse rounded-md bg-muted" />
-				</div>
-			</div>
-		);
+		return <TipTapEditorLoadingState className={className} />;
 	}
 
 	return (
@@ -561,4 +560,29 @@ function TipTapEditorLoadedContent({
 			/>
 		</div>
 	);
+}
+
+function TipTapEditorLoadingState({
+	className,
+}: {
+	readonly className?: string;
+}) {
+	return (
+		<div className={className ?? undefined}>
+			<div className="w-full bg-background px-3 py-12">
+				<div className="mx-auto h-48 w-full max-w-5xl animate-pulse rounded-md bg-muted" />
+			</div>
+		</div>
+	);
+}
+
+function setEditorMarkdown(
+	editor: Editor,
+	markdown: string,
+	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
+): void {
+	const ast = parseMarkdown(markdown) as any;
+	editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
+		emitUpdate: false,
+	});
 }

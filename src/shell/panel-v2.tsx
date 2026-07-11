@@ -2,7 +2,6 @@ import clsx from "clsx";
 import {
 	forwardRef,
 	useCallback,
-	useEffect,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -369,6 +368,10 @@ function TabBar({ children, extraContent }: TabBarProps) {
 		};
 	}, [updateThumb]);
 
+	useLayoutEffect(() => {
+		updateThumb();
+	}, [children, extraContent, updateThumb]);
+
 	return (
 		<div className={styles.tabBar}>
 			<div className={styles.indicatorTrack}>
@@ -427,61 +430,35 @@ function ViewRenderer({
 	isActive: boolean;
 }) {
 	const registry = useExtensionHostRegistry();
-	const [host, setHost] = useState<ExtensionHostRecord | null>(null);
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const hostRef = useRef<ExtensionHostRecord | null>(null);
 
-	useEffect(() => {
-		const record = registry.ensureHost({
+	useLayoutEffect(() => {
+		hostRef.current = registry.ensureHost({
 			view,
 			instance,
 			atelier,
 			extensionView,
 		});
-		setHost(record);
 	}, [registry, view, instance, atelier, extensionView]);
-
-	return (
-		<ViewHostMount
-			host={host}
-			instance={instance.instance}
-			kind={instance.kind}
-			side={side}
-			isActive={isActive}
-		/>
-	);
-}
-
-function ViewHostMount({
-	host,
-	instance,
-	kind,
-	side,
-	isActive,
-}: {
-	host: ExtensionHostRecord | null;
-	instance: string;
-	kind: ExtensionKind;
-	side: PanelSide;
-	isActive: boolean;
-}) {
-	const containerRef = useRef<HTMLDivElement | null>(null);
 
 	useLayoutEffect(() => {
 		const mountPoint = containerRef.current;
-		if (!mountPoint || !host) return;
-		const node = host.container;
+		const node = hostRef.current?.container;
+		if (!mountPoint || !node) return;
 		mountPoint.appendChild(node);
 		return () => {
 			if (node.parentElement === mountPoint) {
 				mountPoint.removeChild(node);
 			}
 		};
-	}, [host]);
+	}, [registry, instance.instance]);
 
 	return (
 		<div
 			ref={containerRef}
-			data-view-instance={instance}
-			data-view-key={kind}
+			data-view-instance={instance.instance}
+			data-view-key={instance.kind}
 			data-panel-side={side}
 			data-active={isActive ? "true" : undefined}
 			className="flex min-h-0 flex-1 flex-col overflow-hidden"

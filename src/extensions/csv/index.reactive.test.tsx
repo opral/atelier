@@ -116,8 +116,65 @@ test("updates when CSV file data changes in Lix", async () => {
 	}
 });
 
+test("refreshes the grid layout when an existing CSV view becomes active", async () => {
+	const lix = await openLix();
+	const dispatchEvent = vi.spyOn(window, "dispatchEvent");
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		const fileId = "file_csv_activation";
+
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/activation.csv",
+				data: new TextEncoder().encode("name,value\nalpha,1"),
+			})
+			.execute();
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} isActiveView={false} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		expect(await screen.findByText("alpha")).toBeInTheDocument();
+		dispatchEvent.mockClear();
+
+		await act(async () => {
+			utils!.rerender(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} isActiveView />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		await waitFor(() => {
+			expect(
+				dispatchEvent.mock.calls.some(([event]) => event.type === "resize"),
+			).toBe(true);
+		});
+	} finally {
+		dispatchEvent.mockRestore();
+		if (utils) {
+			const rendered = utils;
+			await act(async () => {
+				rendered.unmount();
+			});
+		}
+		await lix.close();
+	}
+});
+
 test("renders a read-only historical CSV snapshot from afterCommitId", async () => {
 	const lix = await openLix();
+	const observe = vi.spyOn(lix, "observe");
 	let utils: ReturnType<typeof render> | undefined;
 	try {
 		await qb(lix)
@@ -155,6 +212,11 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 		expect(screen.queryByText("head")).toBeNull();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+		expect(
+			observe.mock.calls.some(([, params]) =>
+				(params as readonly unknown[]).includes("lix_workspace_branch_id"),
+			),
+		).toBe(false);
 	} finally {
 		if (utils) {
 			await act(async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
-import { useLix } from "@/lib/lix-react";
+import { useLix, useQuery } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import type {
@@ -18,6 +18,18 @@ import {
 type FileHistoryRow = {
 	readonly data: unknown;
 };
+
+type ResolvedExternalWriteReview = {
+	readonly key: string;
+	readonly review: ExternalWriteReview | null;
+};
+
+type ResolvedExternalWriteReviewData = {
+	readonly key: string;
+	readonly data: ExternalWriteReviewData | null;
+};
+
+const EMPTY_AGENT_TURN_RANGES: readonly AgentTurnCommitRange[] = [];
 
 export type ExternalWriteReviewFile = {
 	readonly fileId: string;
@@ -64,140 +76,104 @@ export function useExternalWriteReview(args: {
 	readonly path?: string | null;
 }): ExternalWriteReview | null {
 	const lix = useLix();
-	const [review, setReview] = useState<ExternalWriteReview | null>(null);
-	const [reviewRevision, setReviewRevision] = useState(0);
+	const activeBranchRows = useQuery<{ value: unknown }>((queryLix) =>
+		qb(queryLix)
+			.selectFrom("lix_key_value")
+			.where("key", "=", "lix_workspace_branch_id")
+			.select("value"),
+	);
+	const activeBranchId =
+		typeof activeBranchRows[0]?.value === "string"
+			? activeBranchRows[0].value
+			: "";
+	const rangeRows = useQuery<{
+		value: unknown;
+		lixcol_branch_id: string | null;
+	}>((queryLix) =>
+		qb(queryLix)
+			.selectFrom("lix_key_value_by_branch")
+			.select(["value", "lixcol_branch_id"])
+			.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
+			.where("lixcol_branch_id", "=", activeBranchId),
+	);
+	const activeRangeValue = rangeRows.find(
+		(row) => row.lixcol_branch_id === activeBranchId,
+	)?.value;
+	const ranges = isAgentTurnCommitRangeStore(activeRangeValue)
+		? activeRangeValue.ranges
+		: EMPTY_AGENT_TURN_RANGES;
+	const reviewKey =
+		args.fileId && args.path
+			? JSON.stringify([
+					activeBranchId,
+					args.fileId,
+					args.path,
+					activeRangeValue ?? null,
+				])
+			: null;
+	const [resolvedReview, setResolvedReview] =
+		useState<ResolvedExternalWriteReview | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
-		const activeBranchEvents = lix.observe(
-			`SELECT value
-			 FROM lix_key_value
-			 WHERE key = ?`,
-			["lix_workspace_branch_id"],
-		);
-		const reviewRangeEvents = lix.observe(
-			`SELECT value, lixcol_branch_id
-			 FROM lix_key_value_by_branch
-			 WHERE key = ?`,
-			[AGENT_TURN_COMMIT_RANGE_KEY],
-		);
-		const watchEvents = async (
-			events: ReturnType<Lix["observe"]>,
-		): Promise<void> => {
-			try {
-				let receivedInitialSnapshot = false;
-				while (!cancelled) {
-					const event = await events.next();
-					if (!event || cancelled) break;
-					if (!receivedInitialSnapshot) {
-						receivedInitialSnapshot = true;
-						continue;
-					}
-					setReviewRevision((current) => current + 1);
-				}
-			} catch (error) {
-				if (!cancelled) throw error;
-			}
-		};
-		void watchEvents(activeBranchEvents);
-		void watchEvents(reviewRangeEvents);
-		return () => {
-			cancelled = true;
-			activeBranchEvents.close();
-			reviewRangeEvents.close();
-		};
-	}, [lix]);
-
-	useEffect(() => {
-		let cancelled = false;
-		setReview(null);
-		if (!args.fileId || !args.path) {
-			return;
-		}
-		void (async () => {
-			const ranges = await readActiveBranchReviewRanges(lix);
-			if (ranges.length === 0) return null;
-			return await getAgentTurnExternalWriteReview(
-				lix,
-				args.fileId as string,
-				args.path as string,
-				ranges,
-			);
-		})()
+		if (!reviewKey || !args.fileId || !args.path) return;
+		const loadReview =
+			ranges.length === 0
+				? Promise.resolve(null)
+				: getAgentTurnExternalWriteReview(lix, args.fileId, args.path, ranges);
+		void loadReview
 			.then((nextReview) => {
 				if (!cancelled) {
-					setReview(nextReview);
+					setResolvedReview({ key: reviewKey, review: nextReview });
 				}
 			})
 			.catch((error: unknown) => {
 				if (!cancelled) {
 					console.warn("[agent-turn-review] failed to load review", error);
-					setReview(null);
+					setResolvedReview({ key: reviewKey, review: null });
 				}
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [lix, args.fileId, args.path, reviewRevision]);
+	}, [lix, args.fileId, args.path, ranges, reviewKey]);
 
-	if (!review) {
-		return null;
-	}
-	return review;
-}
-
-async function readActiveBranchReviewRanges(
-	lix: Lix,
-): Promise<readonly AgentTurnCommitRange[]> {
-	const activeBranch = await qb(lix)
-		.selectFrom("lix_key_value")
-		.where("key", "=", "lix_workspace_branch_id")
-		.select(["value"])
-		.executeTakeFirst();
-	const activeBranchId =
-		typeof activeBranch?.value === "string" ? activeBranch.value : "";
-	const rangeRow = await qb(lix)
-		.selectFrom("lix_key_value_by_branch")
-		.select("value")
-		.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-		.where("lixcol_branch_id", "=", activeBranchId)
-		.limit(1)
-		.executeTakeFirst();
-	return isAgentTurnCommitRangeStore(rangeRow?.value)
-		? rangeRow.value.ranges
-		: [];
+	return resolvedReview?.key === reviewKey ? resolvedReview.review : null;
 }
 
 export function useExternalWriteReviewData(
 	review: ExternalWriteReview | null | undefined,
 ): ExternalWriteReviewData | null {
+	const reviewKey = review
+		? JSON.stringify([
+				review.fileId,
+				review.reviewId,
+				review.beforeCommitId,
+				review.afterCommitId,
+			])
+		: null;
 	const lix = useLix();
-	const [data, setData] = useState<ExternalWriteReviewData | null>(null);
+	const [resolvedData, setResolvedData] =
+		useState<ResolvedExternalWriteReviewData | null>(null);
 
 	useEffect(() => {
+		if (!review || !reviewKey) return;
 		let cancelled = false;
-		setData(null);
-		if (!review) {
-			return;
-		}
 		void getExternalWriteReviewData(lix, review)
-			.then((nextData) => {
-				if (!cancelled) {
-					setData(nextData);
-				}
+			.then((data) => {
+				if (!cancelled) setResolvedData({ key: reviewKey, data });
 			})
 			.catch((error: unknown) => {
-				if (!cancelled) {
-					console.warn("[agent-turn-review] failed to load review data", error);
-					setData(null);
-				}
+				if (cancelled) return;
+				console.warn("[agent-turn-review] failed to load review data", error);
+				setResolvedData({ key: reviewKey, data: null });
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [lix, review]);
+	}, [lix, review, reviewKey]);
 
-	return data;
+	return resolvedData?.key === reviewKey ? resolvedData.data : null;
 }
 
 export async function getExternalWriteReviewData(
@@ -270,19 +246,26 @@ async function getRangeFileData(
 	return { beforeData, afterData };
 }
 
-async function getFileHistorySnapshotAtCommit(
-	lix: Lix,
-	fileId: string,
-	commitId: string,
-): Promise<FileHistoryRow | null> {
-	const row = (await qb(lix)
+function fileHistorySnapshotQuery(lix: Lix, fileId: string, commitId: string) {
+	return qb(lix)
 		.selectFrom("lix_file_history")
 		.select("data")
 		.where("lixcol_start_commit_id", "=", commitId)
 		.where("id", "=", fileId)
 		.orderBy("lixcol_depth", "asc")
-		.limit(1)
-		.executeTakeFirst()) as FileHistoryRow | undefined;
+		.limit(1);
+}
+
+async function getFileHistorySnapshotAtCommit(
+	lix: Lix,
+	fileId: string,
+	commitId: string,
+): Promise<FileHistoryRow | null> {
+	const row = (await fileHistorySnapshotQuery(
+		lix,
+		fileId,
+		commitId,
+	).executeTakeFirst()) as FileHistoryRow | undefined;
 	return row ?? null;
 }
 

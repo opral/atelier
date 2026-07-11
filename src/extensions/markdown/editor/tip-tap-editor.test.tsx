@@ -173,6 +173,58 @@ test("renders initial document content", async () => {
 	expect(editor).toHaveTextContent("Hello");
 });
 
+test("reopens a file from fresh data instead of the prior query cache", async () => {
+	const lix = await openLix();
+	const fileId = "file_reopen_fresh";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/reopen.md",
+			data: new TextEncoder().encode("First version"),
+		})
+		.execute();
+
+	const readyMarkdown: string[] = [];
+	const renderCurrent = () =>
+		render(
+			<Suspense>
+				<Providers lix={lix}>
+					<TipTapEditor
+						fileId={fileId}
+						onReady={(editor) => readyMarkdown.push(editor.getText())}
+					/>
+				</Providers>
+			</Suspense>,
+		);
+
+	let firstRender: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		firstRender = renderCurrent();
+	});
+	expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
+		"First version",
+	);
+	await waitFor(() => expect(readyMarkdown).toEqual(["First version"]));
+	await act(async () => firstRender?.unmount());
+
+	await qb(lix)
+		.updateTable("lix_file")
+		.set({ data: new TextEncoder().encode("Second version") })
+		.where("id", "=", fileId)
+		.execute();
+
+	await act(async () => {
+		renderCurrent();
+	});
+	await waitFor(() => {
+		expect(readyMarkdown).toEqual(["First version", "Second version"]);
+	});
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Second version",
+	);
+});
+
 test("persists state changes on edit (paragraph append)", async () => {
 	const fileId = "file_1";
 	const markdown = "# Title\n\nHello";
@@ -696,6 +748,37 @@ test("does not clobber dirty editor content with different-origin markdown updat
 	const editorNode = screen.getByTestId("tiptap-editor");
 	expect(editorNode).toHaveTextContent("Unsaved local edit");
 	expect(editorNode).not.toHaveTextContent("External dirty update");
+});
+
+test("applies a queued external update after undo returns the editor to clean content", async () => {
+	const fileId = "file_external_pending";
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+	});
+
+	await setEditorText(editor, "Unsaved local edit");
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Queued external update\n",
+		"external-origin",
+	);
+	await settleMarkdownObserver();
+
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Unsaved local edit",
+	);
+
+	await act(async () => {
+		editor.commands.undo();
+	});
+
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"Queued external update",
+		);
+	});
 });
 
 test("preserves main content when switching to a new branch and back", async () => {
