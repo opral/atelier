@@ -657,7 +657,7 @@ function FilesViewContent({
 		} catch (error) {
 			console.error("Failed to delete entry", error);
 		} finally {
-			setLocalSelection(null);
+			setSelectionOverride(null);
 		}
 	}, [
 		context,
@@ -666,7 +666,6 @@ function FilesViewContent({
 		selectedKind,
 		selectedPath,
 		selectedSource,
-		setLocalSelection,
 	]);
 
 	useEffect(() => {
