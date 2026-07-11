@@ -1,4 +1,7 @@
 import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { codeLanguageLabel } from "./code-language-label";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
 import {
 	isPdfAssetSrc,
@@ -12,6 +15,86 @@ import type {
 } from "@/extensions/pdf/pdf-preview";
 
 export type MarkdownImageSrcResolver = (src: string) => string;
+
+const syntaxHighlightingPluginKey = new PluginKey(
+	"markdown-code-syntax-highlighting",
+);
+
+type SyntaxToken = {
+	readonly from: number;
+	readonly to: number;
+	readonly kind:
+		| "comment"
+		| "keyword"
+		| "literal"
+		| "number"
+		| "property"
+		| "string"
+		| "type";
+};
+
+const syntaxTokenPattern =
+	/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)(?=\s*:)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d+(?:\.\d+)?\b)|(\b(?:as|async|await|break|case|catch|class|const|continue|default|delete|do|else|export|extends|finally|for|from|function|if|import|in|instanceof|interface|let|new|of|return|satisfies|switch|throw|try|type|typeof|var|while|yield)\b)|(\b(?:false|null|true|undefined)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b[A-Za-z_$][\w$]*)(?=\s*:)/gm;
+
+function syntaxTokensFor(source: string): SyntaxToken[] {
+	const tokens: SyntaxToken[] = [];
+	for (const match of source.matchAll(syntaxTokenPattern)) {
+		const value = match[0];
+		const from = match.index;
+		if (from === undefined || value.length === 0) continue;
+		const kind: SyntaxToken["kind"] = match[1]
+			? "comment"
+			: match[2]
+				? "property"
+				: match[3]
+					? "string"
+					: match[4]
+						? "number"
+						: match[5]
+							? "keyword"
+							: match[6]
+								? "literal"
+								: match[7]
+									? "type"
+									: "property";
+		tokens.push({ from, to: from + value.length, kind });
+	}
+	return tokens;
+}
+
+function codeSyntaxDecorations(doc: any): DecorationSet {
+	const decorations: Decoration[] = [];
+	doc.descendants((node: any, position: number) => {
+		if (node.type.name !== "codeBlock") return;
+		for (const token of syntaxTokensFor(node.textContent)) {
+			decorations.push(
+				Decoration.inline(position + 1 + token.from, position + 1 + token.to, {
+					class: `syntax-token syntax-${token.kind}`,
+				}),
+			);
+		}
+		return false;
+	});
+	return DecorationSet.create(doc, decorations);
+}
+
+function createCodeSyntaxHighlightingPlugin(): Plugin {
+	return new Plugin({
+		key: syntaxHighlightingPluginKey,
+		state: {
+			init: (_config, state) => codeSyntaxDecorations(state.doc),
+			apply: (transaction, previous) =>
+				transaction.docChanged
+					? codeSyntaxDecorations(transaction.doc)
+					: previous.map(transaction.mapping, transaction.doc),
+		},
+		props: {
+			decorations(state) {
+				return syntaxHighlightingPluginKey.getState(state);
+			},
+		},
+	});
+}
 
 // Extend TipTap's command types
 declare module "@tiptap/core" {
@@ -133,10 +216,24 @@ export function markdownWcNodes(
 			name: "tableCell",
 			content: "inline*",
 			addAttributes() {
-				return { data: { default: null } };
+				return {
+					isHeader: { default: false },
+					align: { default: null },
+					data: { default: null },
+				};
 			},
 			renderHTML({ node }) {
-				return ["td", diffAttrs(node), 0];
+				const isHeader = node.attrs?.isHeader === true;
+				const align = node.attrs?.align;
+				return [
+					isHeader ? "th" : "td",
+					{
+						...diffAttrs(node),
+						...(isHeader ? { scope: "col" } : {}),
+						...(align ? { "data-align": align } : {}),
+					},
+					0,
+				];
 			},
 		}),
 		Node.create({
@@ -257,7 +354,28 @@ export function markdownWcNodes(
 				const lang = (node as any).attrs?.language ?? null;
 				const codeAttrs: any = diffAttrs(node);
 				if (lang) codeAttrs.class = `language-${lang}`;
-				return ["pre", ["code", codeAttrs, 0]];
+				const languageLabel = lang ? codeLanguageLabel(lang) : null;
+				return [
+					"pre",
+					lang ? { "data-language": lang } : {},
+					...(languageLabel
+						? [
+								[
+									"span",
+									{
+										class: "markdown-code-language",
+										"aria-label": `Code language: ${languageLabel}`,
+										contenteditable: "false",
+									},
+									languageLabel,
+								],
+							]
+						: []),
+					["code", codeAttrs, 0],
+				];
+			},
+			addProseMirrorPlugins() {
+				return [createCodeSyntaxHighlightingPlugin()];
 			},
 			addNodeView() {
 				return ({ node, editor, getPos }) =>
@@ -275,7 +393,10 @@ export function markdownWcNodes(
 			name: "horizontalRule",
 			group: "block",
 			addAttributes() {
-				return { data: { default: null } };
+				return {
+					autoInput: { default: false },
+					data: { default: null },
+				};
 			},
 			renderHTML({ node }) {
 				return ["hr", diffAttrs(node, "element")];

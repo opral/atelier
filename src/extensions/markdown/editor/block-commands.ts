@@ -170,7 +170,10 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 			for (let r = 0; r < 3; r++) {
 				const cells = [];
 				for (let c = 0; c < 3; c++) {
-					cells.push({ type: "tableCell" });
+					cells.push({
+						type: "tableCell",
+						attrs: { isHeader: r === 0, align: null },
+					});
 				}
 				rows.push({ type: "tableRow", content: cells });
 			}

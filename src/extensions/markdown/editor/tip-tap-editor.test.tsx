@@ -339,7 +339,7 @@ test("renders content under React.StrictMode", async () => {
 	await waitFor(() => expect(editor).toHaveTextContent("Hello Strict"));
 });
 
-test("shows placeholder only while focused on an empty document", async () => {
+test("shows the command hint only while focused on an empty document", async () => {
 	const fileId = "file_placeholder_focus";
 	const lix = await openLix({
 		keyValues: [
@@ -396,7 +396,9 @@ test("shows placeholder only while focused on an empty document", async () => {
 
 	await waitFor(() => {
 		const paragraph = editorNode.querySelector("p");
-		expect(paragraph?.getAttribute("data-placeholder")).toBe("Start typing...");
+		expect(paragraph?.getAttribute("data-placeholder")).toBe(
+			"Press ‘/’ for commands",
+		);
 		expect(container?.getAttribute("data-editor-focused")).toBe("true");
 	});
 
@@ -407,6 +409,68 @@ test("shows placeholder only while focused on an empty document", async () => {
 	await waitFor(() => {
 		expect(container?.getAttribute("data-editor-focused")).toBe("false");
 	});
+});
+
+test("shows the command hint on a focused empty paragraph after Enter", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_placeholder_new_line",
+		markdown: "Existing paragraph",
+	});
+	const editorNode = screen.getByTestId("tiptap-editor");
+
+	await act(async () => {
+		editor.commands.focus("end");
+		editor.commands.splitBlock();
+	});
+
+	await waitFor(() => {
+		const paragraphs = editorNode.querySelectorAll("p");
+		const emptyParagraph = paragraphs[paragraphs.length - 1];
+		expect(emptyParagraph?.textContent).toBe("");
+		expect(emptyParagraph?.classList.contains("is-empty")).toBe(true);
+		expect(emptyParagraph?.getAttribute("data-placeholder")).toBe(
+			"Press ‘/’ for commands",
+		);
+	});
+});
+
+test("keeps the command hint on only the active empty paragraph", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_placeholder_arrow_navigation",
+		markdown: "Existing paragraph",
+	});
+	const editorNode = screen.getByTestId("tiptap-editor");
+
+	await act(async () => {
+		editor.commands.focus("end");
+		editor.commands.splitBlock();
+		editor.commands.splitBlock();
+	});
+
+	const emptyParagraphPositions: number[] = [];
+	editor.state.doc.descendants((node, pos) => {
+		if (node.type.name === "paragraph" && node.content.size === 0) {
+			emptyParagraphPositions.push(pos + 1);
+		}
+	});
+	expect(emptyParagraphPositions).toHaveLength(2);
+
+	for (const position of [
+		emptyParagraphPositions[0],
+		emptyParagraphPositions[1],
+		emptyParagraphPositions[0],
+	]) {
+		await act(async () => {
+			editor.commands.setTextSelection(position);
+		});
+
+		await waitFor(() => {
+			const placeholders = editorNode.querySelectorAll(
+				'p.is-empty[data-placeholder="Press ‘/’ for commands"]',
+			);
+			expect(placeholders).toHaveLength(1);
+		});
+	}
 });
 
 test("uses heading 1 as the requested empty document default", async () => {

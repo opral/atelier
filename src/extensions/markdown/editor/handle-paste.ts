@@ -28,16 +28,22 @@ export async function handlePaste(args: {
 		const inlineTo = !!$to?.parent?.inlineContent;
 
 		if (isRange) {
-			// Replace the selected range. If the range is inline, use inline content when possible.
-			if (inlineFrom && inlineTo) {
+			// A single paragraph can replace an inline selection without changing
+			// the surrounding block. Multi-block Markdown must stay as blocks or
+			// all content after the first paragraph would be discarded.
+			if (inlineFrom && inlineTo && $from.sameParent($to)) {
 				const first = Array.isArray(blockFragment) ? blockFragment[0] : null;
-				const isSimpleParagraph =
-					first && first.type === "paragraph" && Array.isArray(first.content);
-				const inlineContent = isSimpleParagraph ? first.content : blockFragment;
-				editor.commands.insertContentAt({ from, to } as any, inlineContent);
-			} else {
-				editor.commands.insertContentAt({ from, to } as any, blockFragment);
+				const isSingleParagraph =
+					blockFragment.length === 1 &&
+					first &&
+					first.type === "paragraph" &&
+					Array.isArray(first.content);
+				if (isSingleParagraph) {
+					editor.commands.insertContentAt({ from, to } as any, first.content);
+					return true;
+				}
 			}
+			editor.commands.insertContentAt({ from, to } as any, blockFragment);
 			return true;
 		}
 

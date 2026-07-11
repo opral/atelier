@@ -150,6 +150,10 @@ describe("FormattingToolbar", () => {
 			"data-attr",
 			"markdown-format-italic",
 		);
+		expect(screen.getByLabelText("Strikethrough")).toHaveAttribute(
+			"data-attr",
+			"markdown-format-strike",
+		);
 		expect(screen.getByLabelText("Inline code")).toHaveAttribute(
 			"data-attr",
 			"markdown-format-code",
@@ -177,6 +181,28 @@ describe("FormattingToolbar", () => {
 		destroyEditor(setup);
 	});
 
+	test("keeps formatting controls scrollable while copy stays pinned", async () => {
+		const setup = createEditor(paragraphDoc);
+		const utils = renderToolbar(setup.editor);
+		const toolbar = await screen.findByRole("toolbar", {
+			name: "Formatting toolbar",
+		});
+		const controls = toolbar.querySelector(
+			"[data-attr='markdown-format-controls']",
+		);
+
+		expect(controls).toHaveClass("overflow-x-auto");
+		expect(controls).toHaveAttribute("aria-label", "Text formatting controls");
+		expect(controls).not.toContainElement(
+			screen.getByLabelText("Copy markdown"),
+		);
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
 	test("applies bold formatting to the current selection", async () => {
 		const setup = createEditor(paragraphDoc);
 		const utils = renderToolbar(setup.editor);
@@ -189,6 +215,29 @@ describe("FormattingToolbar", () => {
 		});
 
 		expect(setup.editor.isActive("bold")).toBe(true);
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
+	test("applies strikethrough formatting to the current selection", async () => {
+		const setup = createEditor(paragraphDoc);
+		const utils = renderToolbar(setup.editor);
+
+		await screen.findByLabelText("Strikethrough");
+
+		await act(async () => {
+			setup.editor.commands.setTextSelection({ from: 1, to: 6 });
+			fireEvent.click(screen.getByLabelText("Strikethrough"));
+		});
+
+		expect(setup.editor.isActive("strike")).toBe(true);
+		expect(screen.getByLabelText("Strikethrough")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
 
 		await act(async () => {
 			utils.unmount();

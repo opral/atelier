@@ -249,6 +249,22 @@ describe("mermaid code blocks", () => {
 		expect(
 			editor.view.dom.querySelector("pre code.language-js"),
 		).not.toBeNull();
+		expect(editor.view.dom.querySelector("pre")?.dataset.language).toBe("js");
+		expect(
+			editor.view.dom.querySelector(".markdown-code-language")?.textContent,
+		).toBe("JavaScript");
+		expect(
+			editor.view.dom
+				.querySelector(".markdown-code-language")
+				?.getAttribute("aria-label"),
+		).toBe("Code language: JavaScript");
+		expect(
+			editor.view.dom.querySelector(".syntax-token.syntax-keyword")
+				?.textContent,
+		).toBe("const");
+		expect(
+			editor.view.dom.querySelector(".syntax-token.syntax-number")?.textContent,
+		).toBe("1");
 
 		editor.destroy();
 	});

@@ -177,10 +177,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			if (node.type.name === "heading" && node.attrs?.level === 1) {
 				return "Heading 1";
 			}
-			return node.type.name === "paragraph" ? "Start typing..." : "";
+			return node.type.name === "paragraph" ? "Press ‘/’ for commands" : "";
 		},
 		showOnlyWhenEditable: true,
-		includeChildren: true,
+		showOnlyCurrent: true,
+		includeChildren: false,
 		shouldShow: ({ editor, node }: { editor: Editor; node: any }) =>
 			editor.isFocused &&
 			(node.type.name === "paragraph" ||

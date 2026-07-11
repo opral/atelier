@@ -2,6 +2,7 @@ import { test, expect, describe } from "vitest";
 import { handlePaste } from "./handle-paste";
 import { Editor } from "@tiptap/core";
 import { MarkdownWc } from "./tiptap-markdown-bridge";
+import { buildMarkdownFromEditor } from "./build-markdown-from-editor";
 
 function makeClipboardEvent(md: string): any {
 	return {
@@ -180,6 +181,155 @@ describe("handlePaste - selection replacement", () => {
 		expect(editor.getText()).toContain("Completely new");
 		expect(editor.getText()).not.toContain("Old content");
 
+		editor.destroy();
+	});
+
+	test("preserves every paragraph when replacing an inline selection", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Before target after" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection({ from: 8, to: 14 });
+
+		const ok = await handlePaste({
+			editor,
+			event: makeClipboardEvent("First paragraph\n\nSecond paragraph"),
+		});
+
+		expect(ok).toBe(true);
+		expect(editor.state.doc.childCount).toBe(4);
+		expect(
+			Array.from(
+				{ length: editor.state.doc.childCount },
+				(_, index) => editor.state.doc.child(index).textContent,
+			),
+		).toEqual(["Before ", "First paragraph", "Second paragraph", " after"]);
+		editor.destroy();
+	});
+
+	test("preserves a paragraph and list when replacing inline text", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Before target after" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection({ from: 8, to: 14 });
+
+		await handlePaste({
+			editor,
+			event: makeClipboardEvent("Introduction\n\n- one\n- two"),
+		});
+
+		const markdown = buildMarkdownFromEditor(editor);
+		expect(markdown).toContain("Before\n\nIntroduction");
+		expect(markdown).toContain("- one");
+		expect(markdown).toContain("- two");
+		expect(markdown).toContain("after");
+		editor.destroy();
+	});
+
+	test("preserves a paragraph and code block when replacing inline text", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Before target after" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection({ from: 8, to: 14 });
+
+		await handlePaste({
+			editor,
+			event: makeClipboardEvent("Introduction\n\n```ts\nconst value = 1\n```"),
+		});
+
+		const markdown = buildMarkdownFromEditor(editor);
+		expect(markdown).toContain("Before\n\nIntroduction");
+		expect(markdown).toContain("```ts");
+		expect(markdown).toContain("const value = 1");
+		expect(markdown).toContain("after");
+		editor.destroy();
+	});
+
+	test("preserves mixed blocks when replacing a cross-paragraph selection", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Keep before remove one" }],
+				},
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "remove two keep after" }],
+				},
+			],
+		});
+		let from = -1;
+		let to = -1;
+		editor.state.doc.descendants((node, pos) => {
+			if (!node.isText) return true;
+			if (node.text?.includes("remove one")) {
+				from = pos + (node.text?.indexOf("remove one") ?? 0);
+			}
+			if (node.text?.includes("remove two")) {
+				to = pos + (node.text?.indexOf("keep after") ?? 0);
+			}
+			return true;
+		});
+		editor.commands.setTextSelection({ from, to });
+
+		await handlePaste({
+			editor,
+			event: makeClipboardEvent("Inserted\n\n- first\n- second"),
+		});
+
+		const markdown = buildMarkdownFromEditor(editor);
+		expect(markdown).toContain("Keep before");
+		expect(markdown).toContain("Inserted");
+		expect(markdown).toContain("- first");
+		expect(markdown).toContain("- second");
+		expect(markdown).toContain("keep after");
+		expect(markdown).not.toContain("remove one");
+		expect(markdown).not.toContain("remove two");
+		editor.destroy();
+	});
+
+	test("preserves a GFM table when replacing inline text", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Before target after" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection({ from: 8, to: 14 });
+
+		await handlePaste({
+			editor,
+			event: makeClipboardEvent(
+				"| Name | Value |\n| --- | ---: |\n| Alpha | 42 |",
+			),
+		});
+
+		const markdown = buildMarkdownFromEditor(editor);
+		expect(markdown).toContain("| Name");
+		expect(markdown).toContain("| Alpha");
+		expect(markdown).toContain("Before");
+		expect(markdown).toContain("after");
 		editor.destroy();
 	});
 });
