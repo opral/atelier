@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
 	loadInstalledExtensionsFromLix,
+	loadInstalledExtensionsFromRows,
 	reconcileInstalledExtensionCandidates,
 } from "./installed-extension-loader";
 import { parseExtensionManifest } from "./extension-manifest";
@@ -115,6 +116,42 @@ describe("parseManifest", () => {
 		} finally {
 			await lix.close();
 		}
+	});
+
+	test("loads a subscribed file-row snapshot without querying Lix again", async () => {
+		const manifestPath =
+			"/.lix/app_data/atelier/extensions/table-viewer/manifest.json";
+		const entryPath = "/.lix/app_data/atelier/extensions/table-viewer/index.js";
+		const mount = vi.fn();
+		const importModule = vi.fn(async () => ({ mount }));
+
+		const candidates = await loadInstalledExtensionsFromRows(
+			[
+				{
+					path: manifestPath,
+					data: textEncoder.encode(
+						JSON.stringify({
+							apiVersion: 1,
+							id: "table-viewer",
+							name: "Table Viewer",
+							entry: "./index.js",
+						}),
+					),
+				},
+				{
+					path: entryPath,
+					data: textEncoder.encode("export default { mount() {} }"),
+				},
+			],
+			{ importModule },
+		);
+
+		expect(candidates[0]?.definition?.kind).toBe("table-viewer");
+		expect(importModule).toHaveBeenCalledTimes(1);
+		expect(importModule).toHaveBeenCalledWith(
+			"export default { mount() {} }",
+			entryPath,
+		);
 	});
 });
 

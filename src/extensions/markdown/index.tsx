@@ -9,6 +9,10 @@ import {
 	useQueryTakeFirst,
 } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import {
+	type HistoricalFileSnapshot,
+	useFileSnapshotsAtCommits,
+} from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { EditorProvider } from "@/extensions/markdown/editor/editor-context";
 import { TipTapEditor } from "@/extensions/markdown/editor/tip-tap-editor";
@@ -32,6 +36,7 @@ import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
 } from "@/extension-runtime/external-write-review";
+import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
 import type {
 	CheckpointDiff,
 	CheckpointDiffFile,
@@ -85,24 +90,6 @@ type MarkdownFileRow = {
 	readonly id: string;
 	readonly path: string;
 	readonly data: unknown;
-};
-
-type HistoricalFileSnapshotRow = {
-	readonly id: string;
-	readonly path: string;
-	readonly data: unknown;
-};
-
-type RawHistoricalFileSnapshotRow = {
-	readonly id: string;
-	readonly path: string | null;
-	readonly data: unknown | null;
-};
-
-type HistoricalFileSnapshotState = {
-	readonly commitId: string | null;
-	readonly loaded: boolean;
-	readonly snapshot: HistoricalFileSnapshotRow | undefined;
 };
 
 type HistoricalMarkdownFile = {
@@ -173,41 +160,28 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
 }
 
-function MarkdownViewLoaded({
-	fileId,
-	filePath,
-	fileRow,
-	isActiveView = true,
-	isPanelFocused = true,
-	focusOnLoad = false,
-	defaultBlock,
-	syncActiveFile = true,
-	checkpointDiff,
-	beforeCommitId,
-	afterCommitId,
-	registerExternalWriteReview,
-	onAcceptReviewDiff,
-	onRejectReviewDiff,
-	openWorkspaceFile,
-}: MarkdownViewProps & {
-	readonly fileRow: MarkdownFileRow | undefined;
-}) {
+function MarkdownViewLoaded(
+	props: MarkdownViewProps & {
+		readonly fileRow: MarkdownFileRow | undefined;
+	},
+) {
+	const {
+		fileId,
+		filePath,
+		fileRow,
+		isActiveView = true,
+		isPanelFocused = true,
+		syncActiveFile = true,
+		checkpointDiff,
+		beforeCommitId,
+		afterCommitId,
+		openWorkspaceFile,
+	} = props;
 	const editorRevision = normalizeEditorRevisionState({
 		beforeCommitId,
 		afterCommitId,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
-	const effectiveFileRow = fileRow;
-	const externalWriteReview = useExternalWriteReview({
-		fileId: effectiveFileRow?.id,
-		path: effectiveFileRow?.path,
-	});
-	const externalWriteReviewData =
-		useExternalWriteReviewData(externalWriteReview);
-	useEffect(() => {
-		if (!externalWriteReview) return;
-		return registerExternalWriteReview?.(externalWriteReview);
-	}, [externalWriteReview, registerExternalWriteReview]);
 
 	if (revisionMode !== "editor") {
 		return (
@@ -224,6 +198,31 @@ function MarkdownViewLoaded({
 			/>
 		);
 	}
+
+	return <MarkdownLiveViewLoaded {...props} />;
+}
+
+function MarkdownLiveViewLoaded({
+	fileRow,
+	isActiveView = true,
+	isPanelFocused = true,
+	focusOnLoad = false,
+	defaultBlock,
+	syncActiveFile = true,
+	registerExternalWriteReview,
+	onAcceptReviewDiff,
+	onRejectReviewDiff,
+	openWorkspaceFile,
+}: MarkdownViewProps & {
+	readonly fileRow: MarkdownFileRow | undefined;
+}) {
+	const externalWriteReview = useExternalWriteReview({
+		fileId: fileRow?.id,
+		path: fileRow?.path,
+	});
+	const externalWriteReviewData =
+		useExternalWriteReviewData(externalWriteReview);
+	const effectiveFileRow = fileRow;
 	const review = externalWriteReview;
 	const reviewData: ExternalWriteReviewData | null = externalWriteReviewData;
 	const reviewDiff: MarkdownReviewDiff | null = reviewData
@@ -264,9 +263,9 @@ function MarkdownViewLoaded({
 							defaultBlock={defaultBlock}
 							openWorkspaceFile={openWorkspaceFile}
 						/>
-						<MarkdownAutosaveHint
-							enabled={isActiveView && isPanelFocused && !reviewDiff}
-						/>
+						{isActiveView && isPanelFocused && !reviewDiff ? (
+							<MarkdownAutosaveHint />
+						) : null}
 						{reviewDiff && review ? (
 							<Suspense fallback={<MarkdownReviewOverlayFallback />}>
 								<MarkdownReviewOverlay
@@ -295,6 +294,10 @@ function MarkdownViewLoaded({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
+			<ExternalWriteReviewRegistration
+				review={externalWriteReview}
+				register={registerExternalWriteReview}
+			/>
 			{syncActiveFile && fileRow && isMarkdownFilePath(fileRow.path) ? (
 				<ActiveFileSync fileId={fileRow?.id} isActiveView={isActiveView} />
 			) : null}
@@ -328,40 +331,30 @@ function MarkdownHistoricalViewLoaded({
 		() => checkpointDiffFileForRevision(checkpointDiff, fileId, editorRevision),
 		[checkpointDiff, editorRevision, fileId],
 	);
-	const beforeSnapshot = useHistoricalFileSnapshot(
+	const { beforeSnapshot, afterSnapshot } = useFileSnapshotsAtCommits(
 		fileId,
 		checkpointDiffFile ? null : editorRevision.beforeCommitId,
-	);
-	const afterSnapshot = useHistoricalFileSnapshot(
-		fileId,
 		checkpointDiffFile ? null : editorRevision.afterCommitId,
 	);
-	const historicalSnapshotsLoaded =
-		Boolean(checkpointDiffFile) ||
-		((!editorRevision.beforeCommitId || beforeSnapshot.loaded) &&
-			(!editorRevision.afterCommitId || afterSnapshot.loaded));
 	const historicalFile = useMemo(
 		() =>
-			historicalSnapshotsLoaded
-				? buildHistoricalMarkdownFile({
-						fileId,
-						filePath,
-						fileRow,
-						revision: editorRevision,
-						checkpointDiffFile,
-						beforeSnapshot: beforeSnapshot.snapshot,
-						afterSnapshot: afterSnapshot.snapshot,
-					})
-				: null,
+			buildHistoricalMarkdownFile({
+				fileId,
+				filePath,
+				fileRow,
+				revision: editorRevision,
+				checkpointDiffFile,
+				beforeSnapshot,
+				afterSnapshot,
+			}),
 		[
-			beforeSnapshot.snapshot,
+			beforeSnapshot,
 			checkpointDiffFile,
 			editorRevision,
 			fileId,
 			filePath,
 			fileRow,
-			historicalSnapshotsLoaded,
-			afterSnapshot.snapshot,
+			afterSnapshot,
 		],
 	);
 	const effectiveFileRow = historicalFile?.fileRow;
@@ -375,13 +368,7 @@ function MarkdownHistoricalViewLoaded({
 		: null;
 
 	let content: ReactNode;
-	if (!historicalSnapshotsLoaded) {
-		content = (
-			<div className="relative min-h-0 flex-1">
-				<MarkdownReviewOverlayFallback />
-			</div>
-		);
-	} else if (!effectiveFileRow) {
+	if (!effectiveFileRow) {
 		content = (
 			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
 				File not found in the workspace.
@@ -431,16 +418,10 @@ function MarkdownHistoricalViewLoaded({
 	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
 }
 
-function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
+function MarkdownAutosaveHint() {
 	const [hintKey, setHintKey] = useState(0);
 
 	useEffect(() => {
-		if (enabled) return;
-		setHintKey(0);
-	}, [enabled]);
-
-	useEffect(() => {
-		if (!enabled) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			const usesPrimaryModifier = event.metaKey || event.ctrlKey;
 			if (!usesPrimaryModifier || event.altKey || event.shiftKey) return;
@@ -453,7 +434,7 @@ function MarkdownAutosaveHint({ enabled }: { readonly enabled: boolean }) {
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown, { capture: true });
 		};
-	}, [enabled]);
+	}, []);
 
 	useEffect(() => {
 		if (hintKey === 0) return;
@@ -735,86 +716,6 @@ function safeJsonParse(value: string): unknown {
 	}
 }
 
-function useHistoricalFileSnapshot(
-	fileId: string,
-	commitId: string | null,
-): HistoricalFileSnapshotState {
-	const lix = useLix();
-	const [snapshotState, setSnapshotState] =
-		useState<HistoricalFileSnapshotState>({
-			commitId: null,
-			loaded: true,
-			snapshot: undefined,
-		});
-	useEffect(() => {
-		if (!commitId) {
-			setSnapshotState({
-				commitId: null,
-				loaded: true,
-				snapshot: undefined,
-			});
-			return;
-		}
-		let cancelled = false;
-		setSnapshotState({
-			commitId,
-			loaded: false,
-			snapshot: undefined,
-		});
-		void qb(lix)
-			.selectFrom("lix_file_history")
-			.select(["id", "path", "data"])
-			.where("id", "=", fileId)
-			.where("lixcol_start_commit_id", "=", commitId)
-			.orderBy("lixcol_depth", "asc")
-			.limit(1)
-			.executeTakeFirst()
-			.then((row) => {
-				if (!cancelled) {
-					setSnapshotState({
-						commitId,
-						loaded: true,
-						snapshot: visibleHistoricalSnapshot(row),
-					});
-				}
-			})
-			.catch((error: unknown) => {
-				if (!cancelled) {
-					console.warn("Failed to load historical markdown snapshot", error);
-					setSnapshotState({
-						commitId,
-						loaded: true,
-						snapshot: undefined,
-					});
-				}
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [commitId, fileId, lix]);
-	if (snapshotState.commitId !== commitId) {
-		return {
-			commitId,
-			loaded: commitId === null,
-			snapshot: undefined,
-		};
-	}
-	return snapshotState;
-}
-
-function visibleHistoricalSnapshot(
-	row: RawHistoricalFileSnapshotRow | undefined,
-): HistoricalFileSnapshotRow | undefined {
-	if (!row || typeof row.path !== "string" || row.data === null) {
-		return undefined;
-	}
-	return {
-		id: row.id,
-		path: row.path,
-		data: row.data,
-	};
-}
-
 function checkpointDiffFileForRevision(
 	checkpointDiff: CheckpointDiff | null | undefined,
 	fileId: string,
@@ -841,8 +742,8 @@ function buildHistoricalMarkdownFile(args: {
 	readonly fileRow: MarkdownFileRow | undefined;
 	readonly revision: EditorRevisionState;
 	readonly checkpointDiffFile: CheckpointDiffFile | null;
-	readonly beforeSnapshot: HistoricalFileSnapshotRow | undefined;
-	readonly afterSnapshot: HistoricalFileSnapshotRow | undefined;
+	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
 }): HistoricalMarkdownFile | null {
 	const mode = editorRevisionMode(args.revision);
 	if (mode === "editor") return null;

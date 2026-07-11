@@ -121,6 +121,28 @@ export function ImagePreview({
 }) {
 	const mimeType = imageMimeTypeFromPath(filePath);
 	const objectUrl = useImageObjectUrl(data, mimeType);
+	if (!mimeType) {
+		return <ImageErrorState filePath={filePath} />;
+	}
+	return (
+		<ImagePreviewSource
+			key={`${filePath}:${objectUrl ?? "loading"}`}
+			filePath={filePath}
+			mimeType={mimeType}
+			objectUrl={objectUrl}
+		/>
+	);
+}
+
+function ImagePreviewSource({
+	filePath,
+	mimeType,
+	objectUrl,
+}: {
+	readonly filePath: string;
+	readonly mimeType: string;
+	readonly objectUrl: string | null;
+}) {
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const [viewport, setViewport] = useState<ViewportDimensions>({
 		width: 0,
@@ -130,13 +152,6 @@ export function ImagePreview({
 	const [hasError, setHasError] = useState(false);
 	const [zoomMode, setZoomMode] = useState<ZoomMode>("fit");
 	const [customZoom, setCustomZoom] = useState(1);
-
-	useEffect(() => {
-		setHasError(false);
-		setDimensions(null);
-		setZoomMode("fit");
-		setCustomZoom(1);
-	}, [objectUrl]);
 
 	useEffect(() => {
 		const element = viewportRef.current;
@@ -191,10 +206,6 @@ export function ImagePreview({
 		() => setExplicitZoom(1),
 		[setExplicitZoom],
 	);
-
-	if (!mimeType) {
-		return <ImageErrorState filePath={filePath} />;
-	}
 
 	return (
 		<div className="atelier-image-view" data-testid="image-viewer">

@@ -8,8 +8,9 @@ import {
 	parseExtensionManifest,
 } from "./extension-manifest";
 
-const EXTENSION_ROOT = "/.lix/app_data/atelier/extensions/";
-const EXTENSION_ROOT_UPPER_BOUND = "/.lix/app_data/atelier/extensions0";
+export const INSTALLED_EXTENSION_ROOT = "/.lix/app_data/atelier/extensions/";
+export const INSTALLED_EXTENSION_ROOT_UPPER_BOUND =
+	"/.lix/app_data/atelier/extensions0";
 const MANIFEST_SUFFIX = "/manifest.json";
 
 type ExtensionModuleContract = {
@@ -38,16 +39,16 @@ export function reconcileInstalledExtensionCandidates(
 	return next;
 }
 
-type FileRow = {
-	path: string;
-	data: unknown;
+export type InstalledExtensionFileRow = {
+	readonly path: string;
+	readonly data: unknown;
 };
 
 type LoadInstalledExtensionsOptions = {
 	readonly importModule?: typeof importExtensionModule;
 };
 
-function decodeFileData(data: FileRow["data"]): string {
+function decodeFileData(data: InstalledExtensionFileRow["data"]): string {
 	if (data === null || data === undefined) {
 		throw new Error("Expected non-null file data.");
 	}
@@ -102,13 +103,20 @@ export async function loadInstalledExtensionsFromLix(
 	lix: Lix,
 	options: LoadInstalledExtensionsOptions = {},
 ): Promise<InstalledExtensionCandidate[]> {
+	const fileRows = await installedExtensionFilesQuery(lix).execute();
+	return loadInstalledExtensionsFromRows(fileRows, options);
+}
+
+export async function loadInstalledExtensionsFromRows(
+	fileRows: readonly InstalledExtensionFileRow[],
+	options: LoadInstalledExtensionsOptions = {},
+): Promise<InstalledExtensionCandidate[]> {
 	const importModule = options.importModule ?? importExtensionModule;
-	const fileRows = await selectFilesUnderExtensionRoot(lix);
 	const manifestRows = fileRows.filter((row) =>
 		row.path.endsWith(MANIFEST_SUFFIX),
 	);
 
-	const filesByPath = new Map<string, FileRow>();
+	const filesByPath = new Map<string, InstalledExtensionFileRow>();
 	for (const row of fileRows) {
 		filesByPath.set(row.path, row);
 	}
@@ -170,11 +178,10 @@ export async function loadInstalledExtensionsFromLix(
 	});
 }
 
-async function selectFilesUnderExtensionRoot(lix: Lix): Promise<FileRow[]> {
+export function installedExtensionFilesQuery(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_file")
 		.select(["path", "data"])
-		.where("path", ">=", EXTENSION_ROOT)
-		.where("path", "<", EXTENSION_ROOT_UPPER_BOUND)
-		.execute() as Promise<FileRow[]>;
+		.where("path", ">=", INSTALLED_EXTENSION_ROOT)
+		.where("path", "<", INSTALLED_EXTENSION_ROOT_UPPER_BOUND);
 }

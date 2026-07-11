@@ -13,8 +13,8 @@ import {
 	createElement,
 	useCallback,
 	useRef,
-	useState,
 	useEffect,
+	useSyncExternalStore,
 } from "react";
 import type React from "react";
 
@@ -56,14 +56,22 @@ export type UseKeyValueOptions = {
 	untracked?: boolean;
 };
 
+type OptimisticSnapshot<T = unknown> = {
+	readonly hasValue: boolean;
+	readonly value: T | undefined;
+};
+
 type OptimisticSlot = {
-	hasValue: boolean;
-	value: unknown;
+	snapshot: OptimisticSnapshot;
 	listeners: Set<() => void>;
 	notifyScheduled?: boolean;
 };
 
 const OPTIMISTIC_SLOTS = new WeakMap<object, Map<string, OptimisticSlot>>();
+const EMPTY_OPTIMISTIC_SNAPSHOT: OptimisticSnapshot = {
+	hasValue: false,
+	value: undefined,
+};
 
 function notifyOptimisticListeners(slot: OptimisticSlot): void {
 	if (slot.notifyScheduled) {
@@ -92,33 +100,26 @@ function getOptimisticSlot(lix: Lix, key: string): OptimisticSlot {
 	const slots = getOptimisticSlots(lix);
 	let slot = slots.get(key);
 	if (!slot) {
-		slot = { hasValue: false, value: undefined, listeners: new Set() };
+		slot = { snapshot: EMPTY_OPTIMISTIC_SNAPSHOT, listeners: new Set() };
 		slots.set(key, slot);
 	}
 	return slot;
 }
 
-function readOptimisticSnapshot(
-	lix: Lix,
-	key: string,
-): {
-	hasValue: boolean;
-	value: unknown;
-} {
+function readOptimisticSnapshot(lix: Lix, key: string): OptimisticSnapshot {
 	const slot = OPTIMISTIC_SLOTS.get(lix as object)?.get(key);
 	if (!slot) {
-		return { hasValue: false, value: undefined };
+		return EMPTY_OPTIMISTIC_SNAPSHOT;
 	}
-	return { hasValue: slot.hasValue, value: slot.value };
+	return slot.snapshot;
 }
 
 function setOptimisticValue(lix: Lix, key: string, value: unknown): void {
 	const slot = getOptimisticSlot(lix, key);
-	if (slot.hasValue && valuesEqual(slot.value, value)) {
+	if (slot.snapshot.hasValue && valuesEqual(slot.snapshot.value, value)) {
 		return;
 	}
-	slot.hasValue = true;
-	slot.value = value;
+	slot.snapshot = { hasValue: true, value };
 	notifyOptimisticListeners(slot);
 }
 
@@ -126,9 +127,8 @@ function clearOptimisticValue(lix: Lix, key: string): void {
 	const slots = OPTIMISTIC_SLOTS.get(lix as object);
 	const slot = slots?.get(key);
 	if (!slot) return;
-	if (!slot.hasValue) return;
-	slot.hasValue = false;
-	slot.value = undefined;
+	if (!slot.snapshot.hasValue) return;
+	slot.snapshot = EMPTY_OPTIMISTIC_SNAPSHOT;
 	notifyOptimisticListeners(slot);
 	if (slot.listeners.size === 0) {
 		slots?.delete(key);
@@ -144,7 +144,7 @@ function subscribeOptimistic(
 	slot.listeners.add(listener);
 	return () => {
 		slot.listeners.delete(listener);
-		if (!slot.hasValue && slot.listeners.size === 0) {
+		if (!slot.snapshot.hasValue && slot.listeners.size === 0) {
 			OPTIMISTIC_SLOTS.get(lix as object)?.delete(key);
 		}
 	};
@@ -200,45 +200,23 @@ export function useKeyValue<K extends string>(
 	const defaultBranchId = opts?.defaultBranchId ?? d.defaultBranchId;
 	const untracked = opts?.untracked ?? d.untracked;
 
-	const [optimistic, setOptimisticState] = useState<{
-		hasValue: boolean;
-		value: ValueOf<K> | null;
-	}>(() => {
-		const snapshot = readOptimisticSnapshot(lix, key as string);
-		return {
-			hasValue: snapshot.hasValue,
-			value: (snapshot.value ?? null) as ValueOf<K> | null,
-		};
-	});
-
-	useEffect(() => {
-		const snapshot = readOptimisticSnapshot(lix, key as string);
-		const next = {
-			hasValue: snapshot.hasValue,
-			value: (snapshot.value ?? null) as ValueOf<K> | null,
-		};
-		setOptimisticState((prev) =>
-			prev.hasValue === next.hasValue && valuesEqual(prev.value, next.value)
-				? prev
-				: next,
-		);
-	}, [lix, key]);
-
-	useEffect(() => {
-		const handle = () => {
-			const snapshot = readOptimisticSnapshot(lix, key as string);
-			const next = {
-				hasValue: snapshot.hasValue,
-				value: (snapshot.value ?? null) as ValueOf<K> | null,
-			};
-			setOptimisticState((prev) =>
-				prev.hasValue === next.hasValue && valuesEqual(prev.value, next.value)
-					? prev
-					: next,
-			);
-		};
-		return subscribeOptimistic(lix, key as string, handle);
-	}, [lix, key]);
+	const subscribeToOptimisticValue = useCallback(
+		(listener: () => void) => subscribeOptimistic(lix, key as string, listener),
+		[lix, key],
+	);
+	const getOptimisticSnapshot = useCallback(
+		() => readOptimisticSnapshot(lix, key as string),
+		[lix, key],
+	);
+	const optimisticSnapshot = useSyncExternalStore(
+		subscribeToOptimisticValue,
+		getOptimisticSnapshot,
+		getOptimisticSnapshot,
+	);
+	const optimistic = {
+		hasValue: optimisticSnapshot.hasValue,
+		value: (optimisticSnapshot.value ?? null) as ValueOf<K> | null,
+	};
 
 	const latestLixRef = useRef(lix);
 	const latestKeyRef = useRef(key as string);

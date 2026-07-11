@@ -118,6 +118,7 @@ test("updates when CSV file data changes in Lix", async () => {
 
 test("renders a read-only historical CSV snapshot from afterCommitId", async () => {
 	const lix = await openLix();
+	const observe = vi.spyOn(lix, "observe");
 	let utils: ReturnType<typeof render> | undefined;
 	try {
 		await qb(lix)
@@ -155,6 +156,11 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 		expect(screen.queryByText("head")).toBeNull();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+		expect(
+			observe.mock.calls.some(([, params]) =>
+				(params as readonly unknown[]).includes("lix_workspace_branch_id"),
+			),
+		).toBe(false);
 	} finally {
 		if (utils) {
 			await act(async () => {

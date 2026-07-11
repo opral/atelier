@@ -9,6 +9,7 @@ import {
 	getExternalWriteReview,
 	getExternalWriteReviewData,
 	useExternalWriteReview,
+	useExternalWriteReviewData,
 } from "./external-write-review-history";
 import {
 	appendAgentTurnCommitRange,
@@ -508,6 +509,130 @@ describe("getExternalWriteReview", () => {
 			await lix.close();
 		}
 	});
+
+	test("never returns a review calculated for the previous file key", async () => {
+		const lix = await openLix();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await writeFile(lix, "keyed-file", "/docs/keyed.md", "before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, "keyed-file", "/docs/keyed.md", "after");
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-keyed-review",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			);
+			const renders: Array<ExternalWriteReview | null> = [];
+			const renderProbe = (path: string) =>
+				createElement(
+					LixProvider as ComponentType<{ lix: Lix }>,
+					{ lix },
+					createElement(
+						Suspense,
+						{ fallback: null },
+						createElement(ExternalWriteReviewRenderProbe, {
+							fileId: "keyed-file",
+							path,
+							onRender: (review) => renders.push(review),
+						}),
+					),
+				);
+
+			await act(async () => {
+				utils = render(renderProbe("/docs/keyed.md"));
+			});
+			await waitFor(() => {
+				expect(renders.at(-1)?.path).toBe("/docs/keyed.md");
+			});
+
+			const firstRenderForNewKey = renders.length;
+			await act(async () => {
+				utils?.rerender(renderProbe("/docs/renamed-keyed.md"));
+			});
+
+			expect(renders[firstRenderForNewKey]).toBeNull();
+			await waitFor(() => {
+				expect(renders.at(-1)?.path).toBe("/docs/renamed-keyed.md");
+			});
+		} finally {
+			await act(async () => {
+				utils?.unmount();
+			});
+			await lix.close();
+		}
+	});
+
+	test("never returns history bytes for the previous review key", async () => {
+		const lix = await openLix();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await writeFile(lix, "data-a", "/docs/data-a.md", "a before");
+			const aBeforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, "data-a", "/docs/data-a.md", "a after");
+			const aAfterCommitId = await activeCommitId(lix);
+			await writeFile(lix, "data-b", "/docs/data-b.md", "b before");
+			const bBeforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, "data-b", "/docs/data-b.md", "b after");
+			const bAfterCommitId = await activeCommitId(lix);
+			const reviewA: ExternalWriteReview = {
+				fileId: "data-a",
+				path: "/docs/data-a.md",
+				reviewId: "review-data-a",
+				beforeCommitId: aBeforeCommitId,
+				afterCommitId: aAfterCommitId,
+				agentTurnRangeIds: ["range-data-a"],
+			};
+			const reviewB: ExternalWriteReview = {
+				fileId: "data-b",
+				path: "/docs/data-b.md",
+				reviewId: "review-data-b",
+				beforeCommitId: bBeforeCommitId,
+				afterCommitId: bAfterCommitId,
+				agentTurnRangeIds: ["range-data-b"],
+			};
+			const renders: string[] = [];
+			const renderProbe = (review: ExternalWriteReview) =>
+				createElement(
+					LixProvider as ComponentType<{ lix: Lix }>,
+					{ lix },
+					createElement(
+						Suspense,
+						{ fallback: null },
+						createElement(ExternalWriteReviewDataRenderProbe, {
+							review,
+							onRender: (value) => renders.push(value),
+						}),
+					),
+				);
+
+			await act(async () => {
+				utils = render(renderProbe(reviewA));
+			});
+			await waitFor(() => {
+				expect(renders.at(-1)).toBe("a before -> a after");
+			});
+
+			const firstRenderForReviewB = renders.length;
+			await act(async () => {
+				utils?.rerender(renderProbe(reviewB));
+			});
+			await waitFor(() => {
+				expect(renders.at(-1)).toBe("b before -> b after");
+			});
+			expect(renders.slice(firstRenderForReviewB)).not.toContain(
+				"a before -> a after",
+			);
+		} finally {
+			await act(async () => {
+				utils?.unmount();
+			});
+			await lix.close();
+		}
+	});
 });
 
 function ExternalWriteReviewProbe({
@@ -523,6 +648,36 @@ function ExternalWriteReviewProbe({
 	useEffect(() => {
 		onReview(review);
 	}, [onReview, review]);
+	return null;
+}
+
+function ExternalWriteReviewRenderProbe({
+	fileId,
+	path,
+	onRender,
+}: {
+	readonly fileId: string;
+	readonly path: string;
+	readonly onRender: (review: ExternalWriteReview | null) => void;
+}) {
+	const review = useExternalWriteReview({ fileId, path });
+	onRender(review);
+	return null;
+}
+
+function ExternalWriteReviewDataRenderProbe({
+	review,
+	onRender,
+}: {
+	readonly review: ExternalWriteReview;
+	readonly onRender: (value: string) => void;
+}) {
+	const data = useExternalWriteReviewData(review);
+	onRender(
+		data
+			? `${decode(data.beforeData)} -> ${decode(data.afterData)}`
+			: "loading",
+	);
 	return null;
 }
 

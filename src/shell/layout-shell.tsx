@@ -1,6 +1,7 @@
 import {
 	useCallback,
 	useEffect,
+	useEffectEvent,
 	useMemo,
 	useRef,
 	useState,
@@ -22,7 +23,7 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { useLix, useQuery } from "@/lib/lix-react";
-import type { Lix, SqlParam } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
 import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
@@ -60,8 +61,10 @@ import {
 	useExtensionRegistry,
 } from "../extension-runtime/extension-registry";
 import {
-	loadInstalledExtensionsFromLix,
+	installedExtensionFilesQuery,
+	loadInstalledExtensionsFromRows,
 	reconcileInstalledExtensionCandidates,
+	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
 import {
 	ensureWorkspaceLandingView,
@@ -427,11 +430,6 @@ const DEFAULT_PANEL_FALLBACK_SIZES = {
 };
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
-const INSTALLED_EXTENSION_PATH_PREFIX = "/.lix/app_data/atelier/extensions/";
-const INSTALLED_EXTENSION_PATH_PREFIX_UPPER_BOUND =
-	"/.lix/app_data/atelier/extensions0";
-const INSTALLED_EXTENSION_OBSERVE_SQL =
-	"SELECT path, data FROM lix_file WHERE path >= ? AND path < ?";
 const PANEL_TRANSITION_STYLE: CSSProperties = {
 	transitionProperty: "flex-grow, flex-basis",
 	transitionDuration: "200ms",
@@ -567,85 +565,41 @@ type CurrentCheckpointBranchState = {
 	readonly branches: readonly CheckpointDiffBranchRow[];
 };
 
+type ResolvedCheckpointChangeCount = {
+	readonly key: string;
+	readonly count: number;
+};
+
 function useCurrentCheckpointChangeState(
 	lix: Lix,
 ): CurrentCheckpointChangeState {
-	const [branchState, setBranchState] =
-		useState<CurrentCheckpointBranchState | null>(null);
-	const [changedFileCount, setChangedFileCount] = useState<number | null>(null);
-
-	useEffect(() => {
-		let closed = false;
-		let loadRunId = 0;
-		const load = async () => {
-			const runId = loadRunId + 1;
-			loadRunId = runId;
-			try {
-				const [branches, branchId] = await Promise.all([
-					loadVisibleCheckpointBranches(lix),
-					loadActiveCheckpointBranchId(lix),
-				]);
-				if (closed || loadRunId !== runId) return;
-				const nextState =
-					branchId && branches.some((branch) => branch.id === branchId)
-						? {
-								key: checkpointDiffCacheKey(branches, branchId),
-								branchId,
-								branches,
-							}
-						: null;
-				setBranchState((previous) =>
-					previous?.key === nextState?.key ? previous : nextState,
-				);
-			} catch (error: unknown) {
-				if (closed) return;
-				console.warn("Failed to load checkpoint footer state", error);
-				setBranchState(null);
-			}
-		};
-
-		void load();
-
-		const branchesQuery = visibleCheckpointBranchesQuery(lix).compile();
-		const activeBranchQuery = activeCheckpointBranchQuery(lix).compile();
-		const branchEvents = lix.observe(branchesQuery.sql, [
-			...branchesQuery.parameters,
-		] as SqlParam[]);
-		const activeBranchEvents = lix.observe(activeBranchQuery.sql, [
-			...activeBranchQuery.parameters,
-		] as SqlParam[]);
-		const observe = async (events: typeof branchEvents) => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (closed || !event) break;
-					void load();
-				}
-			} catch (error: unknown) {
-				if (!closed) {
-					console.warn("Failed to observe checkpoint footer state", error);
-				}
-			}
-		};
-
-		void observe(branchEvents);
-		void observe(activeBranchEvents);
-
-		return () => {
-			closed = true;
-			branchEvents.close();
-			activeBranchEvents.close();
-		};
-	}, [lix]);
-
-	useEffect(() => {
-		if (!branchState) {
-			setChangedFileCount(0);
-			return;
+	const branches = useQuery<CheckpointDiffBranchRow>(
+		visibleCheckpointBranchesQuery,
+	);
+	const activeBranchRows = useQuery<{ value: unknown }>(
+		activeCheckpointBranchQuery,
+	);
+	const branchId =
+		typeof activeBranchRows[0]?.value === "string"
+			? activeBranchRows[0].value
+			: "";
+	const branchState = useMemo<CurrentCheckpointBranchState | null>(() => {
+		if (!branchId || !branches.some((branch) => branch.id === branchId)) {
+			return null;
 		}
+		return {
+			key: checkpointDiffCacheKey(branches, branchId),
+			branchId,
+			branches,
+		};
+	}, [branches, branchId]);
+	const [resolvedCount, setResolvedCount] =
+		useState<ResolvedCheckpointChangeCount | null>(null);
+
+	useEffect(() => {
+		if (!branchState) return;
 
 		let closed = false;
-		setChangedFileCount(null);
 		void resolveCheckpointDiff({
 			lix,
 			branches: branchState.branches,
@@ -653,12 +607,15 @@ function useCurrentCheckpointChangeState(
 		})
 			.then((diff) => {
 				if (closed) return;
-				setChangedFileCount(diff?.files.length ?? 0);
+				setResolvedCount({
+					key: branchState.key,
+					count: diff?.files.length ?? 0,
+				});
 			})
 			.catch((error: unknown) => {
 				if (closed) return;
 				console.warn("Failed to resolve checkpoint footer count", error);
-				setChangedFileCount(0);
+				setResolvedCount({ key: branchState.key, count: 0 });
 			});
 		return () => {
 			closed = true;
@@ -668,7 +625,10 @@ function useCurrentCheckpointChangeState(
 	return {
 		branchId: branchState?.branchId ?? "",
 		branches: branchState?.branches ?? [],
-		count: branchState ? changedFileCount : null,
+		count:
+			branchState && resolvedCount?.key === branchState.key
+				? resolvedCount.count
+				: null,
 	};
 }
 
@@ -683,26 +643,11 @@ function visibleCheckpointBranchesQuery(lix: Lix) {
 		.orderBy("name", "asc");
 }
 
-async function loadVisibleCheckpointBranches(
-	lix: Lix,
-): Promise<CheckpointDiffBranchRow[]> {
-	return (await visibleCheckpointBranchesQuery(
-		lix,
-	).execute()) as CheckpointDiffBranchRow[];
-}
-
 function activeCheckpointBranchQuery(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_key_value")
 		.where("key", "=", "lix_workspace_branch_id")
 		.select(["value"]);
-}
-
-async function loadActiveCheckpointBranchId(lix: Lix): Promise<string | null> {
-	const row = await activeCheckpointBranchQuery(lix).executeTakeFirst();
-	return typeof row?.value === "string" && row.value.length > 0
-		? row.value
-		: null;
 }
 
 function checkpointDiffCacheKey(
@@ -835,8 +780,19 @@ function LayoutShellLoadedContent({
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
 	);
-	const [hasLoadedInstalledExtensions, setHasLoadedInstalledExtensions] =
-		useState(false);
+	const installedExtensionRows = useQuery<InstalledExtensionFileRow>(
+		installedExtensionFilesQuery,
+	);
+	const [installedExtensionLoad, setInstalledExtensionLoad] = useState<{
+		readonly rows: readonly InstalledExtensionFileRow[];
+		readonly status: "loading" | "ready" | "error";
+	}>(() => ({ rows: installedExtensionRows, status: "loading" }));
+	const installedExtensionLoadStatus =
+		installedExtensionLoad.rows === installedExtensionRows
+			? installedExtensionLoad.status
+			: "loading";
+	const preserveUnknownExtensionKinds =
+		installedExtensionLoadStatus !== "ready";
 	const installedExtensionsByManifestRef = useRef(
 		new Map<string, ExtensionDefinition>(),
 	);
@@ -1049,85 +1005,38 @@ function LayoutShellLoadedContent({
 
 	useEffect(() => {
 		let cancelled = false;
-		let debounceId: number | null = null;
-		let reloadRunning = false;
-		let reloadRequested = false;
-
-		const reloadInstalledExtensions = async () => {
-			reloadRequested = true;
-			if (reloadRunning) return;
-			reloadRunning = true;
-			try {
-				while (reloadRequested && !cancelled) {
-					reloadRequested = false;
-					const previous = installedExtensionsByManifestRef.current;
-					try {
-						const candidates = await loadInstalledExtensionsFromLix(lix);
-						if (!cancelled) {
-							const next = reconcileInstalledExtensionCandidates(
-								previous,
-								candidates,
-							);
-							installedExtensionsByManifestRef.current = next;
-							replaceInstalledExtensions([...next.values()]);
-							setHasLoadedInstalledExtensions(true);
-						}
-					} catch (error) {
-						console.warn(
-							"[extension-loader] failed to load installed extensions",
-							error,
-						);
-						if (!cancelled) {
-							setHasLoadedInstalledExtensions(true);
-						}
-					}
-				}
-			} finally {
-				reloadRunning = false;
-			}
-		};
-
-		const scheduleReload = () => {
-			if (cancelled) return;
-			if (debounceId !== null) {
-				window.clearTimeout(debounceId);
-			}
-			debounceId = window.setTimeout(() => {
-				debounceId = null;
-				void reloadInstalledExtensions();
-			}, 150);
-		};
-
-		void reloadInstalledExtensions();
-
-		const observeEvents = lix.observe(INSTALLED_EXTENSION_OBSERVE_SQL, [
-			INSTALLED_EXTENSION_PATH_PREFIX,
-			INSTALLED_EXTENSION_PATH_PREFIX_UPPER_BOUND,
-		]);
-
-		void (async () => {
-			try {
-				while (!cancelled) {
-					const event = await observeEvents.next();
-					if (cancelled || !event) break;
-					scheduleReload();
-				}
-			} catch (error) {
-				if (!cancelled) {
-					console.warn("[extension-loader] observe failed", error);
-				}
-			}
-		})();
+		void loadInstalledExtensionsFromRows(installedExtensionRows)
+			.then((candidates) => {
+				if (cancelled) return;
+				const next = reconcileInstalledExtensionCandidates(
+					installedExtensionsByManifestRef.current,
+					candidates,
+				);
+				installedExtensionsByManifestRef.current = next;
+				replaceInstalledExtensions([...next.values()]);
+				setInstalledExtensionLoad({
+					rows: installedExtensionRows,
+					// Candidate-level failures retain their last-known-good definition.
+					// Discovery still completed, so unrelated missing kinds can be pruned.
+					status: "ready",
+				});
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				console.warn(
+					"[extension-loader] failed to load installed extensions",
+					error,
+				);
+				setInstalledExtensionLoad({
+					rows: installedExtensionRows,
+					status: "error",
+				});
+			});
 
 		return () => {
 			cancelled = true;
-			if (debounceId !== null) {
-				window.clearTimeout(debounceId);
-				debounceId = null;
-			}
-			observeEvents.close();
 		};
-	}, [lix, replaceInstalledExtensions]);
+	}, [installedExtensionRows, replaceInstalledExtensions]);
 
 	const lastPersistedRef = useRef<string>(
 		JSON.stringify(uiStateKV ?? DEFAULT_ATELIER_UI_STATE),
@@ -1151,7 +1060,7 @@ function LayoutShellLoadedContent({
 
 	useEffect(() => {
 		const reconciliationOptions = {
-			preserveUnknownKinds: !hasLoadedInstalledExtensions,
+			preserveUnknownKinds: preserveUnknownExtensionKinds,
 		};
 		if (!uiStateKV) return;
 		const serialized = JSON.stringify(uiStateKV);
@@ -1213,12 +1122,12 @@ function LayoutShellLoadedContent({
 		reconciledPersistedPanels,
 		updateDerivedPanelState,
 		extensionMap,
-		hasLoadedInstalledExtensions,
+		preserveUnknownExtensionKinds,
 	]);
 
 	useEffect(() => {
 		const reconciliationOptions = {
-			preserveUnknownKinds: !hasLoadedInstalledExtensions,
+			preserveUnknownKinds: preserveUnknownExtensionKinds,
 		};
 		setStoredWorkspace((current) => {
 			const canonical = canonicalizeWorkspace(current).state;
@@ -1246,7 +1155,7 @@ function LayoutShellLoadedContent({
 				focusedPanel: canonical.focusedPanel,
 			};
 		});
-	}, [canonicalizeWorkspace, extensionMap, hasLoadedInstalledExtensions]);
+	}, [canonicalizeWorkspace, extensionMap, preserveUnknownExtensionKinds]);
 
 	useEffect(() => {
 		if (hydratingRef.current) return;
@@ -1268,7 +1177,12 @@ function LayoutShellLoadedContent({
 		}
 		pendingPersistRef.current = serialized;
 		const timeoutId = setTimeout(() => {
-			void setUiStateKV(nextState);
+			void setUiStateKV(nextState).catch((error: unknown) => {
+				if (pendingPersistRef.current === serialized) {
+					pendingPersistRef.current = null;
+				}
+				console.error("Failed to persist Atelier UI state", error);
+			});
 		}, 200);
 		return () => {
 			clearTimeout(timeoutId);
@@ -1298,12 +1212,12 @@ function LayoutShellLoadedContent({
 					side,
 					panels[side],
 					extensionMap,
-					{ preserveUnknownKinds: !hasLoadedInstalledExtensions },
+					{ preserveUnknownKinds: preserveUnknownExtensionKinds },
 				);
 				const nextPanel = normalizePanelForDocumentSlot(
 					side,
 					reconcilePanelExtensionViews(reducer(currentPanel), extensionMap, {
-						preserveUnknownKinds: !hasLoadedInstalledExtensions,
+						preserveUnknownKinds: preserveUnknownExtensionKinds,
 					}),
 				);
 				return {
@@ -1312,12 +1226,8 @@ function LayoutShellLoadedContent({
 				};
 			});
 		},
-		[canonicalizeWorkspace, extensionMap, hasLoadedInstalledExtensions],
+		[canonicalizeWorkspace, extensionMap, preserveUnknownExtensionKinds],
 	);
-
-	useEffect(() => {
-		checkpointDiffRef.current = checkpointDiff;
-	}, [checkpointDiff]);
 
 	const transitionCheckpointEditorRevisions = useCallback(
 		(args: {
@@ -1828,22 +1738,26 @@ function LayoutShellLoadedContent({
 				? [panel]
 				: (["central", "left", "right"] as PanelSide[]);
 			for (const side of targetPanels) {
-				const currentPanel = panelStatesRef.current[side];
+				const currentPanel =
+					side === "left"
+						? leftPanel
+						: side === "central"
+							? centralPanel
+							: rightPanel;
 				const removedView = currentPanel.views.find(predicate);
+				if (!removedView) continue;
 				const removedFileId =
-					typeof removedView?.state?.fileId === "string"
+					typeof removedView.state?.fileId === "string"
 						? removedView.state.fileId
 						: null;
 				const removedReview = removedFileId
 					? openDiffReviewByFileIdRef.current.get(removedFileId)
 					: null;
-				let removed = false;
 				setPanelState(
 					side,
 					(current) => {
 						const index = current.views.findIndex(predicate);
 						if (index === -1) return current;
-						removed = true;
 						const views = current.views.filter((_, idx) => idx !== index);
 						const removedEntry = current.views[index];
 						const activeInstance =
@@ -1854,16 +1768,16 @@ function LayoutShellLoadedContent({
 					},
 					{ focus },
 				);
-				if (removed) {
-					const review = removedReview;
-					if (review && !resolvedReviewIdsRef.current.has(review.reviewId)) {
-						resolveDiffReview(review);
-					}
-					break;
+				if (
+					removedReview &&
+					!resolvedReviewIdsRef.current.has(removedReview.reviewId)
+				) {
+					resolveDiffReview(removedReview);
 				}
+				break;
 			}
 		},
-		[setPanelState, resolveDiffReview],
+		[centralPanel, leftPanel, resolveDiffReview, rightPanel, setPanelState],
 	);
 
 	const handleCloseFileViews = useCallback(
@@ -2133,7 +2047,9 @@ function LayoutShellLoadedContent({
 
 	useEffect(() => {
 		if (activeFileId === activeCentralFileId) return;
-		void setActiveFileId(activeCentralFileId);
+		void setActiveFileId(activeCentralFileId).catch((error: unknown) => {
+			console.error("Failed to persist active file", error);
+		});
 	}, [activeCentralFileId, activeFileId, setActiveFileId]);
 
 	const activeFileName = useMemo(() => {
@@ -2321,62 +2237,35 @@ function LayoutShellLoadedContent({
 		return /mac|iphone|ipad|ipod/.test(combined);
 	}, []);
 
+	const handlePanelShortcut = useEffectEvent((event: KeyboardEvent) => {
+		const usesPrimaryModifier = isMacPlatform
+			? event.metaKey && !event.ctrlKey
+			: event.ctrlKey && !event.metaKey;
+		if (!usesPrimaryModifier || event.altKey || event.shiftKey) return;
+		if (isPanelShortcutBlockedTarget(event.target)) return;
+
+		const toggle =
+			event.key === "1" || event.code === "Digit1"
+				? toggleLeftSidebar
+				: event.key === "2" || event.code === "Digit2"
+					? toggleRightSidebar
+					: null;
+		if (!toggle) return;
+
+		event.preventDefault();
+		event.stopPropagation();
+		event.stopImmediatePropagation?.();
+		event.returnValue = false;
+		if (!event.repeat) toggle();
+	});
+
 	useEffect(() => {
-		const listener = (event: KeyboardEvent) => {
-			const usesPrimaryModifier = isMacPlatform
-				? event.metaKey && !event.ctrlKey
-				: event.ctrlKey && !event.metaKey;
-			if (!usesPrimaryModifier || event.altKey || event.shiftKey) return;
-			if (isPanelShortcutBlockedTarget(event.target)) return;
-
-			// CMD+1 for left panel
-			if (event.key === "1" || event.code === "Digit1") {
-				event.preventDefault();
-				event.stopPropagation();
-				event.stopImmediatePropagation?.();
-				event.returnValue = false;
-				if (event.type === "keydown" && !event.repeat) {
-					toggleLeftSidebar();
-				}
-				return;
-			}
-
-			// CMD+2 for right panel
-			if (event.key === "2" || event.code === "Digit2") {
-				event.preventDefault();
-				event.stopPropagation();
-				event.stopImmediatePropagation?.();
-				event.returnValue = false;
-				if (event.type === "keydown" && !event.repeat) {
-					toggleRightSidebar();
-				}
-				return;
-			}
-		};
-
 		const options: AddEventListenerOptions = { capture: true, passive: false };
-		const eventTypes: Array<"keydown" | "keypress" | "keyup"> = [
-			"keydown",
-			"keypress",
-			"keyup",
-		];
-		const targets: EventTarget[] = [window, document];
-		if (document.body) {
-			targets.push(document.body);
-		}
-		for (const target of targets) {
-			for (const type of eventTypes) {
-				target.addEventListener(type, listener as EventListener, options);
-			}
-		}
+		window.addEventListener("keydown", handlePanelShortcut, options);
 		return () => {
-			for (const target of targets) {
-				for (const type of eventTypes) {
-					target.removeEventListener(type, listener as EventListener, options);
-				}
-			}
+			window.removeEventListener("keydown", handlePanelShortcut, options);
 		};
-	}, [isMacPlatform, toggleLeftSidebar, toggleRightSidebar]);
+	}, []);
 
 	const animatedPanelClass = shouldAnimatePanels
 		? "transition-[flex-basis] duration-200 ease-in-out"

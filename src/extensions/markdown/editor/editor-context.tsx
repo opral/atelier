@@ -1,21 +1,16 @@
 import * as React from "react";
+import type { Editor } from "@tiptap/core";
 
 type EditorContextValue = {
-	editor: any | null;
-	setEditor: (editor: any | null) => void;
+	editor: Editor | null;
+	setEditor: React.Dispatch<React.SetStateAction<Editor | null>>;
 };
 
 const Ctx = React.createContext<EditorContextValue | undefined>(undefined);
 
 export function EditorProvider({ children }: { children: React.ReactNode }) {
-	const [editor, setEditor] = React.useState<any | null>(null);
-	const setEditorStable = React.useCallback((next: any | null) => {
-		setEditor(next);
-	}, []);
-	const value = React.useMemo(
-		() => ({ editor, setEditor: setEditorStable }),
-		[editor, setEditorStable],
-	);
+	const [editor, setEditor] = React.useState<Editor | null>(null);
+	const value = React.useMemo(() => ({ editor, setEditor }), [editor]);
 	return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

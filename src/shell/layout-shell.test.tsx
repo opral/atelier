@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
 	act,
 	fireEvent,
@@ -305,6 +305,129 @@ describe("open file lifecycle", () => {
 			Object.defineProperty(URL, "revokeObjectURL", revokeObjectUrlDescriptor);
 		} else {
 			Reflect.deleteProperty(URL, "revokeObjectURL");
+		}
+	});
+});
+
+describe("installed extension lifecycle", () => {
+	test("does not resurrect a stale tab when its extension is installed later", async () => {
+		const extensionKind = "recovered_extension";
+		const extensionInstance = "recovered-extension-1";
+		const createObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
+			URL,
+			"createObjectURL",
+		);
+		const revokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
+			URL,
+			"revokeObjectURL",
+		);
+		const moduleSource = encodeURIComponent(
+			"export default { mount({ element }) { element.textContent = 'Recovered extension content'; } }",
+		);
+		const createObjectUrl = vi.fn(() => `data:text/javascript,${moduleSource}`);
+		Object.defineProperty(URL, "createObjectURL", {
+			configurable: true,
+			value: createObjectUrl,
+		});
+		Object.defineProperty(URL, "revokeObjectURL", {
+			configurable: true,
+			value: vi.fn(),
+		});
+
+		const lix = await openLix({
+			keyValues: [
+				{
+					key: "atelier_ui_state",
+					value: {
+						...DEFAULT_ATELIER_UI_STATE,
+						panels: {
+							...DEFAULT_ATELIER_UI_STATE.panels,
+							left: {
+								views: [{ instance: extensionInstance, kind: extensionKind }],
+								activeInstance: extensionInstance,
+							},
+						},
+					},
+					lixcol_branch_id: "global",
+					lixcol_global: true,
+					lixcol_untracked: true,
+				},
+			],
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+							<Suspense fallback={null}>
+								<V2LayoutShell />
+							</Suspense>
+						</KeyValueProvider>
+					</LixProvider>,
+				);
+			});
+
+			await waitFor(async () => {
+				const row = await qb(lix)
+					.selectFrom("lix_key_value")
+					.select("value")
+					.where("key", "=", "atelier_ui_state")
+					.executeTakeFirst();
+				const state = row?.value as typeof DEFAULT_ATELIER_UI_STATE | undefined;
+				expect(state?.panels.left.views).toEqual([]);
+			});
+
+			await act(async () => {
+				await qb(lix)
+					.insertInto("lix_file")
+					.values([
+						{
+							path: "/.lix/app_data/atelier/extensions/recovered/manifest.json",
+							data: new TextEncoder().encode(
+								JSON.stringify({
+									apiVersion: 1,
+									id: extensionKind,
+									name: "Recovered Extension",
+									entry: "./index.js",
+								}),
+							),
+						},
+						{
+							path: "/.lix/app_data/atelier/extensions/recovered/index.js",
+							data: new TextEncoder().encode("export default {}"),
+						},
+					])
+					.execute();
+			});
+			await waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+			await act(async () => {
+				await new Promise((resolve) => window.setTimeout(resolve, 50));
+			});
+
+			expect(screen.queryByText("Recovered Extension")).toBeNull();
+			expect(screen.queryByText("Recovered extension content")).toBeNull();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+			if (createObjectUrlDescriptor) {
+				Object.defineProperty(
+					URL,
+					"createObjectURL",
+					createObjectUrlDescriptor,
+				);
+			} else {
+				Reflect.deleteProperty(URL, "createObjectURL");
+			}
+			if (revokeObjectUrlDescriptor) {
+				Object.defineProperty(
+					URL,
+					"revokeObjectURL",
+					revokeObjectUrlDescriptor,
+				);
+			} else {
+				Reflect.deleteProperty(URL, "revokeObjectURL");
+			}
 		}
 	});
 });

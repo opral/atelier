@@ -71,3 +71,202 @@ test("useQuery applies the first observe snapshot over the initial read", async 
 		expect(screen.getByTestId("value")).toHaveTextContent("fresh");
 	});
 });
+
+test("useQuery publishes observed rows to every consumer of the cached query", async () => {
+	let resolveFirstObserve:
+		| ((event: ObserveEvent | undefined) => void)
+		| undefined;
+	const firstClose = vi.fn();
+	const secondClose = vi.fn();
+	const lix = {
+		observe: vi
+			.fn()
+			.mockImplementationOnce(() => ({
+				next: () =>
+					new Promise<ObserveEvent | undefined>((resolve) => {
+						resolveFirstObserve = resolve;
+					}),
+				close: firstClose,
+			}))
+			.mockImplementation(() => ({
+				next: () => new Promise<ObserveEvent | undefined>(() => {}),
+				close: secondClose,
+			})),
+	} as unknown as Lix;
+	const execute = vi.fn(async () => [{ value: "initial" }]);
+
+	function Probe({ id }: { readonly id: string }) {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM shared_observe_cache",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid={id}>{rows[0]?.value}</div>;
+	}
+
+	let view: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		view = render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={<div data-testid="shared-loading" />}>
+					<Probe id="first-value" />
+					<Probe id="second-value" />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+
+	expect(await screen.findByTestId("first-value")).toHaveTextContent("initial");
+	expect(screen.getByTestId("second-value")).toHaveTextContent("initial");
+	expect(execute).toHaveBeenCalledTimes(1);
+
+	resolveFirstObserve?.({
+		sequence: 1,
+		mutationSequence: 1,
+		result: {
+			columns: ["value"],
+			rows: [
+				{
+					toObject: () => ({ value: "shared-fresh" }),
+				},
+			] as unknown as ObserveEvent["result"]["rows"],
+			rowsAffected: 0,
+			notices: [],
+		},
+	});
+
+	await waitFor(() => {
+		expect(screen.getByTestId("first-value")).toHaveTextContent("shared-fresh");
+		expect(screen.getByTestId("second-value")).toHaveTextContent(
+			"shared-fresh",
+		);
+	});
+
+	view?.unmount();
+	expect(firstClose).toHaveBeenCalledTimes(1);
+	expect(secondClose).toHaveBeenCalledTimes(1);
+});
+
+test("useQuery skips disabled queries without suspending or subscribing", () => {
+	const lix = {
+		observe: vi.fn(),
+	} as unknown as Lix;
+	const query = vi.fn(() => ({
+		compile: () => ({ sql: "SELECT disabled", parameters: [] }),
+		execute: vi.fn(async () => [{ value: "unexpected" }]),
+	}));
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(query, { enabled: false });
+		return <div data-testid="disabled-count">{rows.length}</div>;
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Probe />
+		</LixProvider>,
+	);
+
+	expect(screen.getByTestId("disabled-count")).toHaveTextContent("0");
+	expect(query).not.toHaveBeenCalled();
+	expect(lix.observe).not.toHaveBeenCalled();
+});
+
+test("useQuery starts a query when it becomes enabled", async () => {
+	const execute = vi.fn(async () => [{ value: "ready" }]);
+	const close = vi.fn();
+	const lix = {
+		observe: vi.fn(() => ({
+			next: () => new Promise<ObserveEvent | undefined>(() => {}),
+			close,
+		})),
+	} as unknown as Lix;
+
+	function Probe({ enabled }: { readonly enabled: boolean }) {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({ sql: "SELECT enabled_transition", parameters: [] }),
+				execute,
+			}),
+			{ enabled },
+		);
+		return <div data-testid="enabled-value">{rows[0]?.value ?? "off"}</div>;
+	}
+
+	const view = render(
+		<LixProvider lix={lix}>
+			<Suspense fallback={<div data-testid="enabled-loading" />}>
+				<Probe enabled={false} />
+			</Suspense>
+		</LixProvider>,
+	);
+	expect(screen.getByTestId("enabled-value")).toHaveTextContent("off");
+
+	await act(async () => {
+		view.rerender(
+			<LixProvider lix={lix}>
+				<Suspense fallback={<div data-testid="enabled-loading" />}>
+					<Probe enabled />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+
+	await waitFor(() => {
+		expect(screen.getByTestId("enabled-value")).toHaveTextContent("ready");
+	});
+	expect(execute).toHaveBeenCalledTimes(1);
+	expect(lix.observe).toHaveBeenCalledTimes(1);
+
+	view.unmount();
+	expect(close).toHaveBeenCalledTimes(1);
+});
+
+test("useQuery can evict component-scoped results on unmount", async () => {
+	const execute = vi.fn(async () => [
+		{ value: `read-${execute.mock.calls.length}` },
+	]);
+	const lix = {
+		observe: vi.fn(() => ({
+			next: () => new Promise<ObserveEvent | undefined>(() => {}),
+			close: vi.fn(),
+		})),
+	} as unknown as Lix;
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({ sql: "SELECT component_scoped", parameters: [] }),
+				execute,
+			}),
+			{ evictOnUnmount: true },
+		);
+		return <div data-testid="scoped-value">{rows[0]?.value}</div>;
+	}
+
+	const renderProbe = () =>
+		render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe />
+				</Suspense>
+			</LixProvider>,
+		);
+
+	let first: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		first = renderProbe();
+	});
+	expect(await screen.findByTestId("scoped-value")).toHaveTextContent("read-1");
+	await act(async () => first?.unmount());
+
+	let second: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		second = renderProbe();
+	});
+	expect(await screen.findByTestId("scoped-value")).toHaveTextContent("read-2");
+	expect(execute).toHaveBeenCalledTimes(2);
+	await act(async () => second?.unmount());
+});

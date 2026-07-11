@@ -173,6 +173,58 @@ test("renders initial document content", async () => {
 	expect(editor).toHaveTextContent("Hello");
 });
 
+test("reopens a file from fresh data instead of the prior query cache", async () => {
+	const lix = await openLix();
+	const fileId = "file_reopen_fresh";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/reopen.md",
+			data: new TextEncoder().encode("First version"),
+		})
+		.execute();
+
+	const readyMarkdown: string[] = [];
+	const renderCurrent = () =>
+		render(
+			<Suspense>
+				<Providers lix={lix}>
+					<TipTapEditor
+						fileId={fileId}
+						onReady={(editor) => readyMarkdown.push(editor.getText())}
+					/>
+				</Providers>
+			</Suspense>,
+		);
+
+	let firstRender: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		firstRender = renderCurrent();
+	});
+	expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
+		"First version",
+	);
+	await waitFor(() => expect(readyMarkdown).toEqual(["First version"]));
+	await act(async () => firstRender?.unmount());
+
+	await qb(lix)
+		.updateTable("lix_file")
+		.set({ data: new TextEncoder().encode("Second version") })
+		.where("id", "=", fileId)
+		.execute();
+
+	await act(async () => {
+		renderCurrent();
+	});
+	await waitFor(() => {
+		expect(readyMarkdown).toEqual(["First version", "Second version"]);
+	});
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Second version",
+	);
+});
+
 test("persists state changes on edit (paragraph append)", async () => {
 	const fileId = "file_1";
 	const markdown = "# Title\n\nHello";

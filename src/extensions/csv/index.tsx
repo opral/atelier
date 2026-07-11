@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Table2 } from "lucide-react";
 import {
 	DataEditor,
@@ -8,8 +8,12 @@ import {
 	type Item,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import {
+	type HistoricalFileSnapshot,
+	useFileSnapshotsAtCommits,
+} from "@/hooks/use-file-snapshots-at-commits";
 import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
@@ -19,6 +23,7 @@ import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
 } from "@/extension-runtime/external-write-review";
+import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
 import type {
 	CheckpointDiff,
 	CheckpointDiffFile,
@@ -82,29 +87,12 @@ const CSV_GRID_THEME = {
 	resizeIndicatorColor: "rgb(234, 88, 12)",
 	textHeaderSelected: "rgb(124, 45, 18)",
 };
+const EMPTY_COLUMN_WIDTH_OVERRIDES: Record<number, number> = {};
 
 type CsvFileRow = {
 	readonly id: string;
 	readonly path: string;
 	readonly data: Uint8Array;
-};
-
-type HistoricalFileSnapshotRow = {
-	readonly id: string;
-	readonly path: string;
-	readonly data: unknown;
-};
-
-type RawHistoricalFileSnapshotRow = {
-	readonly id: string;
-	readonly path: string | null;
-	readonly data: unknown | null;
-};
-
-type HistoricalFileSnapshotState = {
-	readonly commitId: string | null;
-	readonly loaded: boolean;
-	readonly snapshot: HistoricalFileSnapshotRow | undefined;
 };
 
 type HistoricalCsvFile = {
@@ -176,15 +164,6 @@ function CsvViewData({
 		afterCommitId,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
-	const effectiveFileRow = fileRow;
-	const externalWriteReview = useExternalWriteReview({
-		fileId: effectiveFileRow?.id,
-		path: effectiveFileRow?.path,
-	});
-	useEffect(() => {
-		if (!externalWriteReview) return;
-		return registerExternalWriteReview?.(externalWriteReview);
-	}, [externalWriteReview, registerExternalWriteReview]);
 
 	if (revisionMode !== "editor") {
 		return (
@@ -199,7 +178,28 @@ function CsvViewData({
 		);
 	}
 
-	if (!effectiveFileRow) {
+	return (
+		<CsvLiveViewData
+			fileRow={fileRow}
+			registerExternalWriteReview={registerExternalWriteReview}
+			{...props}
+		/>
+	);
+}
+
+function CsvLiveViewData({
+	fileRow,
+	registerExternalWriteReview,
+	...props
+}: Omit<CsvViewProps, "fileId"> & {
+	readonly fileRow?: CsvFileRow | undefined;
+}) {
+	const externalWriteReview = useExternalWriteReview({
+		fileId: fileRow?.id,
+		path: fileRow?.path,
+	});
+
+	if (!fileRow) {
 		return (
 			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
 				File not found in the workspace.
@@ -208,12 +208,18 @@ function CsvViewData({
 	}
 
 	return (
-		<CsvViewLoaded
-			fileRow={effectiveFileRow}
-			externalWriteReview={externalWriteReview}
-			reviewControls="review"
-			{...props}
-		/>
+		<>
+			<ExternalWriteReviewRegistration
+				review={externalWriteReview}
+				register={registerExternalWriteReview}
+			/>
+			<CsvViewLoaded
+				fileRow={fileRow}
+				externalWriteReview={externalWriteReview}
+				reviewControls="review"
+				{...props}
+			/>
+		</>
 	);
 }
 
@@ -233,46 +239,32 @@ function CsvHistoricalViewData({
 		() => checkpointDiffFileForRevision(checkpointDiff, fileId, editorRevision),
 		[checkpointDiff, editorRevision, fileId],
 	);
-	const beforeSnapshot = useHistoricalFileSnapshot(
+	const { beforeSnapshot, afterSnapshot } = useFileSnapshotsAtCommits(
 		fileId,
 		checkpointDiffFile ? null : editorRevision.beforeCommitId,
-	);
-	const afterSnapshot = useHistoricalFileSnapshot(
-		fileId,
 		checkpointDiffFile ? null : editorRevision.afterCommitId,
 	);
-	const historicalSnapshotsLoaded =
-		Boolean(checkpointDiffFile) ||
-		((!editorRevision.beforeCommitId || beforeSnapshot.loaded) &&
-			(!editorRevision.afterCommitId || afterSnapshot.loaded));
 	const historicalFile = useMemo(
 		() =>
-			historicalSnapshotsLoaded
-				? buildHistoricalCsvFile({
-						fileId,
-						filePath,
-						fileRow,
-						revision: editorRevision,
-						checkpointDiffFile,
-						beforeSnapshot: beforeSnapshot.snapshot,
-						afterSnapshot: afterSnapshot.snapshot,
-					})
-				: null,
+			buildHistoricalCsvFile({
+				fileId,
+				filePath,
+				fileRow,
+				revision: editorRevision,
+				checkpointDiffFile,
+				beforeSnapshot,
+				afterSnapshot,
+			}),
 		[
-			beforeSnapshot.snapshot,
+			beforeSnapshot,
 			checkpointDiffFile,
 			editorRevision,
 			fileId,
 			filePath,
 			fileRow,
-			historicalSnapshotsLoaded,
-			afterSnapshot.snapshot,
+			afterSnapshot,
 		],
 	);
-
-	if (!historicalSnapshotsLoaded) {
-		return <CsvLoadingSpinner />;
-	}
 
 	if (!historicalFile?.fileRow) {
 		return (
@@ -324,7 +316,7 @@ function CsvViewLoaded({
 				{parsed.columns.length === 0 ? (
 					<CsvEmptyState filePath={fileRow.path} />
 				) : (
-					<CsvTable parsed={parsed} isActiveView={isActiveView} />
+					<CsvTable parsed={parsed} />
 				)}
 				{externalWriteReview ? (
 					<CsvReviewOverlay
@@ -404,13 +396,7 @@ function CsvReviewOverlay({
 	);
 }
 
-function CsvTable({
-	parsed,
-	isActiveView,
-}: {
-	readonly parsed: CsvParseResult;
-	readonly isActiveView: boolean;
-}) {
+function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 	const initialColumnWidths = useMemo(
 		() =>
 			parsed.columns.map((header, index) =>
@@ -418,19 +404,14 @@ function CsvTable({
 			),
 		[parsed.columns, parsed.rows],
 	);
-	const [columnWidthOverrides, setColumnWidthOverrides] = useState<
-		Record<number, number>
-	>({});
-	useEffect(() => {
-		setColumnWidthOverrides({});
-	}, [parsed]);
-	useEffect(() => {
-		if (!isActiveView) return;
-		const frame = window.requestAnimationFrame(() => {
-			window.dispatchEvent(new Event("resize"));
-		});
-		return () => window.cancelAnimationFrame(frame);
-	}, [isActiveView]);
+	const [columnWidthState, setColumnWidthState] = useState<{
+		readonly source: CsvParseResult;
+		readonly overrides: Record<number, number>;
+	}>(() => ({ source: parsed, overrides: {} }));
+	const columnWidthOverrides =
+		columnWidthState.source === parsed
+			? columnWidthState.overrides
+			: EMPTY_COLUMN_WIDTH_OVERRIDES;
 	const columns = useMemo<GridColumn[]>(() => {
 		return parsed.columns.map((title, index) => ({
 			id: String(index),
@@ -470,12 +451,15 @@ function CsvTable({
 	);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
-			setColumnWidthOverrides((current) => ({
-				...current,
-				[columnIndex]: clamp(newSize, COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH),
+			setColumnWidthState((current) => ({
+				source: parsed,
+				overrides: {
+					...(current.source === parsed ? current.overrides : {}),
+					[columnIndex]: clamp(newSize, COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH),
+				},
 			}));
 		},
-		[],
+		[parsed],
 	);
 
 	return (
@@ -593,86 +577,6 @@ function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
 }
 
-function useHistoricalFileSnapshot(
-	fileId: string,
-	commitId: string | null,
-): HistoricalFileSnapshotState {
-	const lix = useLix();
-	const [snapshotState, setSnapshotState] =
-		useState<HistoricalFileSnapshotState>({
-			commitId: null,
-			loaded: true,
-			snapshot: undefined,
-		});
-	useEffect(() => {
-		if (!commitId) {
-			setSnapshotState({
-				commitId: null,
-				loaded: true,
-				snapshot: undefined,
-			});
-			return;
-		}
-		let cancelled = false;
-		setSnapshotState({
-			commitId,
-			loaded: false,
-			snapshot: undefined,
-		});
-		void qb(lix)
-			.selectFrom("lix_file_history")
-			.select(["id", "path", "data"])
-			.where("id", "=", fileId)
-			.where("lixcol_start_commit_id", "=", commitId)
-			.orderBy("lixcol_depth", "asc")
-			.limit(1)
-			.executeTakeFirst()
-			.then((row) => {
-				if (!cancelled) {
-					setSnapshotState({
-						commitId,
-						loaded: true,
-						snapshot: visibleHistoricalSnapshot(row),
-					});
-				}
-			})
-			.catch((error: unknown) => {
-				if (!cancelled) {
-					console.warn("Failed to load historical CSV snapshot", error);
-					setSnapshotState({
-						commitId,
-						loaded: true,
-						snapshot: undefined,
-					});
-				}
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [commitId, fileId, lix]);
-	if (snapshotState.commitId !== commitId) {
-		return {
-			commitId,
-			loaded: commitId === null,
-			snapshot: undefined,
-		};
-	}
-	return snapshotState;
-}
-
-function visibleHistoricalSnapshot(
-	row: RawHistoricalFileSnapshotRow | undefined,
-): HistoricalFileSnapshotRow | undefined {
-	if (!row || typeof row.path !== "string" || row.data === null) {
-		return undefined;
-	}
-	return {
-		id: row.id,
-		path: row.path,
-		data: row.data,
-	};
-}
-
 function checkpointDiffFileForRevision(
 	checkpointDiff: CheckpointDiff | null | undefined,
 	fileId: string,
@@ -699,8 +603,8 @@ function buildHistoricalCsvFile(args: {
 	readonly fileRow: CsvFileRow | undefined;
 	readonly revision: EditorRevisionState;
 	readonly checkpointDiffFile: CheckpointDiffFile | null;
-	readonly beforeSnapshot: HistoricalFileSnapshotRow | undefined;
-	readonly afterSnapshot: HistoricalFileSnapshotRow | undefined;
+	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
 }): HistoricalCsvFile | null {
 	const mode = editorRevisionMode(args.revision);
 	if (mode === "editor") return null;

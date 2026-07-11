@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEditorState } from "@tiptap/react";
 import { useEditorCtx } from "../editor/editor-context";
 import {
 	slashCommandsPluginKey,
@@ -9,6 +10,12 @@ import {
 	SLASH_BLOCK_COMMANDS,
 	type BlockCommand,
 } from "../editor/block-commands";
+
+const INACTIVE_SLASH_STATE: SlashCommandState = {
+	active: false,
+	query: "",
+	range: null,
+};
 
 function filterCommands(
 	commands: BlockCommand[],
@@ -25,12 +32,16 @@ function filterCommands(
 
 export function SlashCommandMenu() {
 	const { editor } = useEditorCtx();
-	const [slashState, setSlashState] = useState<SlashCommandState>({
-		active: false,
-		query: "",
-		range: null,
-	});
-	const [selectedIndex, setSelectedIndex] = useState(0);
+	const slashState =
+		useEditorState<SlashCommandState>({
+			editor,
+			selector: () =>
+				editor
+					? (slashCommandsPluginKey.getState(editor.state) ??
+						INACTIVE_SLASH_STATE)
+					: INACTIVE_SLASH_STATE,
+		}) ?? INACTIVE_SLASH_STATE;
+	const [selection, setSelection] = useState({ query: "", index: 0 });
 	const [position, setPosition] = useState<{
 		top: number;
 		left: number;
@@ -42,31 +53,10 @@ export function SlashCommandMenu() {
 		() => filterCommands(SLASH_BLOCK_COMMANDS, slashState.query),
 		[slashState.query],
 	);
-
-	// Reset selection when filtered list changes
-	useEffect(() => {
-		setSelectedIndex(0);
-	}, [filteredCommands.length, slashState.query]);
-
-	// Listen to slash command state changes
-	useEffect(() => {
-		if (!editor) return;
-
-		const updateState = () => {
-			const state = slashCommandsPluginKey.getState(editor.state);
-			if (state) {
-				setSlashState(state);
-			}
-		};
-
-		// Initial state
-		updateState();
-
-		editor.on("transaction", updateState);
-		return () => {
-			editor.off("transaction", updateState);
-		};
-	}, [editor]);
+	const selectedIndex =
+		selection.query === slashState.query
+			? Math.min(selection.index, Math.max(0, filteredCommands.length - 1))
+			: 0;
 
 	// Calculate position when active and update on scroll
 	useEffect(() => {
@@ -153,19 +143,24 @@ export function SlashCommandMenu() {
 		if (!slashState.active || !editor) return;
 
 		const handleKeyDown = (event: KeyboardEvent) => {
+			if (filteredCommands.length === 0) return;
 			if (event.key === "ArrowDown") {
 				event.preventDefault();
-				setSelectedIndex((prev) =>
-					prev < filteredCommands.length - 1 ? prev + 1 : 0,
-				);
+				setSelection({
+					query: slashState.query,
+					index:
+						selectedIndex < filteredCommands.length - 1 ? selectedIndex + 1 : 0,
+				});
 				return;
 			}
 
 			if (event.key === "ArrowUp") {
 				event.preventDefault();
-				setSelectedIndex((prev) =>
-					prev > 0 ? prev - 1 : filteredCommands.length - 1,
-				);
+				setSelection({
+					query: slashState.query,
+					index:
+						selectedIndex > 0 ? selectedIndex - 1 : filteredCommands.length - 1,
+				});
 				return;
 			}
 
@@ -184,10 +179,13 @@ export function SlashCommandMenu() {
 			}
 		};
 
-		window.addEventListener("keydown", handleKeyDown, true);
-		return () => window.removeEventListener("keydown", handleKeyDown, true);
+		const editorElement = editor.view.dom;
+		editorElement.addEventListener("keydown", handleKeyDown, true);
+		return () =>
+			editorElement.removeEventListener("keydown", handleKeyDown, true);
 	}, [
 		slashState.active,
+		slashState.query,
 		editor,
 		filteredCommands,
 		selectedIndex,
@@ -236,29 +234,25 @@ export function SlashCommandMenu() {
 			aria-label="Slash commands"
 		>
 			{filteredCommands.map((command, index) => (
-				<div
+				<button
 					key={command.id}
 					data-index={index}
-					className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] data-[selected=true]:bg-[var(--color-bg-hover)] data-[selected=true]:text-[var(--color-text-primary)]"
+					className="flex w-full cursor-pointer select-none items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-sm hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] data-[selected=true]:bg-[var(--color-bg-hover)] data-[selected=true]:text-[var(--color-text-primary)]"
 					data-selected={index === selectedIndex}
 					role="option"
 					aria-selected={index === selectedIndex}
 					onClick={() => handleItemClick(command)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							handleItemClick(command);
-						}
-					}}
-					onMouseEnter={() => setSelectedIndex(index)}
-					tabIndex={0}
+					onMouseDown={(event) => event.preventDefault()}
+					onMouseEnter={() => setSelection({ query: slashState.query, index })}
+					tabIndex={-1}
+					type="button"
 				>
 					<command.icon
 						className="size-4 shrink-0 text-[var(--color-icon-secondary)]"
 						aria-hidden
 					/>
 					<span>{command.label}</span>
-				</div>
+				</button>
 			))}
 		</div>,
 		document.body,

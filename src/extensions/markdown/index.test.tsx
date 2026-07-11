@@ -74,6 +74,7 @@ describe("MarkdownView", () => {
 
 	test("renders a read-only historical snapshot from afterCommitId", async () => {
 		const lix = await openLix();
+		const observe = vi.spyOn(lix, "observe");
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
@@ -147,6 +148,11 @@ describe("MarkdownView", () => {
 			);
 		});
 		expect(await snapshotAssetBlob?.text()).toBe("historical asset bytes");
+		expect(
+			observe.mock.calls.some(([, params]) =>
+				(params as readonly unknown[]).includes("lix_workspace_branch_id"),
+			),
+		).toBe(false);
 
 		await act(async () => {
 			utils?.unmount();

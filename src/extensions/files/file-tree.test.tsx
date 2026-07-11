@@ -111,6 +111,67 @@ describe("FileTree", () => {
 		);
 	});
 
+	test("does not reset a create draft when directory state changes", async () => {
+		const createRequest = {
+			directoryPath: "/",
+			id: 1,
+			initialValue: "new-file",
+			kind: "file" as const,
+		};
+		const { container, rerender } = render(
+			<FileTree
+				nodes={mockTree}
+				createRequest={createRequest}
+				openDirectories={new Set()}
+			/>,
+		);
+
+		const input = await waitFor(() => {
+			const renameInput = queryTreeRenameInput(container);
+			if (!renameInput) throw new Error("create input not found");
+			return renameInput;
+		});
+		fireEvent.input(input, { target: { value: "work-in-progress" } });
+
+		rerender(
+			<FileTree
+				nodes={mockTree}
+				createRequest={createRequest}
+				openDirectories={new Set(["/docs"])}
+			/>,
+		);
+
+		expect(queryTreeRenameInput(container)).toHaveValue("work-in-progress");
+	});
+
+	test("starts create renaming only once when tree paths refresh", async () => {
+		const createRequest = {
+			directoryPath: "/",
+			id: 1,
+			initialValue: "new-file",
+			kind: "file" as const,
+		};
+		const { container, rerender } = render(
+			<FileTree nodes={mockTree} createRequest={createRequest} />,
+		);
+
+		const input = await waitFor(() => {
+			const renameInput = queryTreeRenameInput(container);
+			if (!renameInput) throw new Error("create input not found");
+			return renameInput;
+		});
+		fireEvent.input(input, { target: { value: "work-in-progress" } });
+
+		rerender(
+			<FileTree
+				nodes={mockTreeWithExternalFile}
+				createRequest={createRequest}
+			/>,
+		);
+
+		expect(queryTreeRenameInput(container)).toHaveValue("work-in-progress");
+	});
+
 	test("reports controlled open directory changes", () => {
 		const handleOpenDirectoriesChange = vi.fn();
 		const { container, rerender } = render(

@@ -27,6 +27,7 @@ import {
 	X,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
+import { useEditorState } from "@tiptap/react";
 import { useEditorCtx } from "../editor/editor-context";
 import { buildMarkdownFromEditor } from "../editor/build-markdown-from-editor";
 import { normalizeUrl } from "../editor/normalize-url";
@@ -77,8 +78,6 @@ const initialFormatState: FormatState = {
  */
 export function FormattingToolbar({ className }: { className?: string }) {
 	const { editor } = useEditorCtx();
-	const [formatState, setFormatState] =
-		useState<FormatState>(initialFormatState);
 	const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">(
 		"idle",
 	);
@@ -100,35 +99,26 @@ export function FormattingToolbar({ className }: { className?: string }) {
 			),
 		[editor],
 	);
-
-	useEffect(() => {
-		if (!editor) return;
-		const update = () => {
-			const isTaskList = computeTaskListActive(editor, hasTaskListCommand);
-			setFormatState({
-				block: getActiveBlock(editor),
-				isBold: editor.isActive("bold"),
-				isItalic: editor.isActive("italic"),
-				isCode: editor.isActive("code"),
-				isLink: editor.isActive("link"),
-				isBulletList: editor.isActive("bulletList") && !isTaskList,
-				isOrderedList: editor.isActive("orderedList"),
-				isTaskList,
-			});
-		};
-
-		update();
-
-		editor.on("selectionUpdate", update);
-		editor.on("transaction", update);
-		editor.on("update", update);
-
-		return () => {
-			editor.off("selectionUpdate", update);
-			editor.off("transaction", update);
-			editor.off("update", update);
-		};
-	}, [editor, hasTaskListCommand]);
+	const formatState =
+		useEditorState<FormatState>({
+			editor,
+			// Read the context value rather than the snapshot editor so a provider
+			// transition from null to an editor has the right initial toolbar state.
+			selector: () => {
+				if (!editor) return initialFormatState;
+				const isTaskList = computeTaskListActive(editor, hasTaskListCommand);
+				return {
+					block: getActiveBlock(editor),
+					isBold: editor.isActive("bold"),
+					isItalic: editor.isActive("italic"),
+					isCode: editor.isActive("code"),
+					isLink: editor.isActive("link"),
+					isBulletList: editor.isActive("bulletList") && !isTaskList,
+					isOrderedList: editor.isActive("orderedList"),
+					isTaskList,
+				};
+			},
+		}) ?? initialFormatState;
 
 	const activeBlockLabel = useMemo(() => {
 		const active = TOOLBAR_BLOCK_OPTIONS.find(
@@ -263,8 +253,9 @@ export function FormattingToolbar({ className }: { className?: string }) {
 
 	const handleToggleTaskList = useCallback(() => {
 		if (!editor) return;
-		if (typeof editor.chain().focus().toggleTaskList === "function") {
-			editor.chain().focus().toggleTaskList().run();
+		const chain = editor.chain().focus() as any;
+		if (typeof chain.toggleTaskList === "function") {
+			chain.toggleTaskList().run();
 			return;
 		}
 		toggleTaskListFallback(editor);

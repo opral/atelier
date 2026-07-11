@@ -1,10 +1,10 @@
 import {
 	createContext,
 	use,
+	useCallback,
 	useContext,
 	useEffect,
-	useRef,
-	useState,
+	useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
 import type { Lix, SqlParam } from "@lix-js/sdk";
@@ -27,10 +27,15 @@ export function useLix() {
 	return lix;
 }
 
+type QueryCacheSnapshot<TRow> =
+	| { readonly status: "pending" }
+	| { readonly status: "success"; readonly rows: TRow[] }
+	| { readonly status: "error"; readonly error: unknown };
+
 type QueryCacheEntry<TRow> = {
 	promise: Promise<TRow[]>;
-	rows?: TRow[];
-	error?: unknown;
+	snapshot: QueryCacheSnapshot<TRow>;
+	listeners: Set<() => void>;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
@@ -38,11 +43,14 @@ const observeQueryCache = new Map<
 	string,
 	{ sql: string; params: ReadonlyArray<unknown> }
 >();
+const evictingQueryUsers = new Map<string, number>();
 const lixInstanceIds = new WeakMap<object, number>();
 let nextLixInstanceId = 1;
 
 interface UseQueryOptions {
 	subscribe?: boolean;
+	enabled?: boolean;
+	evictOnUnmount?: boolean;
 }
 
 interface QueryLike<TRow> {
@@ -55,32 +63,52 @@ interface QueryLike<TRow> {
 
 type QueryFactory<TRow> = (lix: Lix) => QueryLike<TRow>;
 
+const DISABLED_QUERY_ROWS: never[] = [];
+const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
+	promise: Promise.resolve(DISABLED_QUERY_ROWS),
+	snapshot: { status: "success", rows: DISABLED_QUERY_ROWS },
+	listeners: new Set(),
+};
+const DISABLED_OBSERVE_QUERY = { sql: "", params: [] } as const;
+
 export function useQuery<TRow>(
 	query: QueryFactory<TRow>,
 	options: UseQueryOptions = {},
 ): TRow[] {
 	const lix = useLix();
-	const { subscribe = true } = options;
-	const builder = query(lix);
-	const compiled = builder.compile();
+	const { subscribe = true, enabled = true, evictOnUnmount = false } = options;
+	const builder = enabled ? query(lix) : undefined;
+	const compiled = builder?.compile();
 	const cacheKey =
-		`${getLixInstanceId(lix)}:${subscribe ? "sub" : "once"}:` +
-		`${compiled.sql}:${JSON.stringify(compiled.parameters)}`;
-	const observeQuery = getObserveQuery(cacheKey, compiled);
+		enabled && compiled
+			? `${getLixInstanceId(lix)}:${subscribe ? "sub" : "once"}:` +
+				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
+			: "disabled";
+	const observeQuery =
+		enabled && compiled
+			? getObserveQuery(cacheKey, compiled)
+			: DISABLED_OBSERVE_QUERY;
 
-	const entry = getQueryCacheEntry(cacheKey, builder);
-	const cachedRows = entry.rows as TRow[] | undefined;
-	const [, setRows] = useState<TRow[]>(() => cachedRows ?? []);
-	const rowsRef = useRef<TRow[] | undefined>(cachedRows);
+	const entry =
+		enabled && builder
+			? getQueryCacheEntry(cacheKey, builder)
+			: (DISABLED_QUERY_ENTRY as QueryCacheEntry<TRow>);
+	const subscribeToSnapshot = useCallback(
+		(listener: () => void) => {
+			if (!enabled || !subscribe) return () => {};
+			return subscribeToQueryEntry(cacheKey, entry, listener);
+		},
+		[cacheKey, enabled, entry, subscribe],
+	);
+	const getSnapshot = useCallback(() => entry.snapshot, [entry]);
+	const snapshot = useSyncExternalStore(
+		subscribeToSnapshot,
+		getSnapshot,
+		getSnapshot,
+	);
 
 	useEffect(() => {
-		if (cachedRows === undefined) return;
-		rowsRef.current = cachedRows;
-		setRows(cachedRows);
-	}, [cacheKey, cachedRows]);
-
-	useEffect(() => {
-		if (!subscribe) return;
+		if (!enabled || !subscribe) return;
 		let closed = false;
 		const events = lix.observe(observeQuery.sql, [
 			...observeQuery.params,
@@ -92,19 +120,11 @@ export function useQuery<TRow>(
 					const event = await events.next();
 					if (closed || event === undefined) break;
 					const nextRows = queryResultToRows<TRow>(event.result);
-					cacheQueryRows(cacheKey, nextRows);
-					if (rowsEqual(rowsRef.current, nextRows)) {
-						continue;
-					}
-					rowsRef.current = nextRows;
-					setRows(nextRows);
+					setQueryRows(entry, nextRows);
 				}
 			} catch (error) {
 				if (closed) return;
-				queryCache.delete(cacheKey);
-				setRows(() => {
-					throw error instanceof Error ? error : new Error(String(error));
-				});
+				setQueryError(entry, error);
 			}
 		})();
 
@@ -112,18 +132,44 @@ export function useQuery<TRow>(
 			closed = true;
 			events.close();
 		};
-	}, [cacheKey, subscribe, lix, observeQuery]);
+	}, [enabled, entry, subscribe, lix, observeQuery]);
 
-	if (entry.error !== undefined) {
-		throw entry.error instanceof Error
-			? entry.error
-			: new Error(String(entry.error));
+	useEffect(() => {
+		if (!enabled || !evictOnUnmount) return;
+		evictingQueryUsers.set(
+			cacheKey,
+			(evictingQueryUsers.get(cacheKey) ?? 0) + 1,
+		);
+		return () => {
+			const remaining = (evictingQueryUsers.get(cacheKey) ?? 1) - 1;
+			if (remaining > 0) {
+				evictingQueryUsers.set(cacheKey, remaining);
+				return;
+			}
+			evictingQueryUsers.delete(cacheKey);
+			queueMicrotask(() => {
+				// Strict Mode reconnects effects immediately. Only evict when the
+				// component stayed unmounted through that reconnect window.
+				if (evictingQueryUsers.has(cacheKey)) return;
+				if (entry.listeners.size > 0) return;
+				if (queryCache.get(cacheKey) !== entry) return;
+				queryCache.delete(cacheKey);
+				observeQueryCache.delete(cacheKey);
+			});
+		};
+	}, [cacheKey, enabled, entry, evictOnUnmount]);
+
+	if (!enabled) {
+		return DISABLED_QUERY_ROWS;
 	}
-	const initialRows = cachedRows ?? use(entry.promise);
 
-	return subscribe
-		? (cachedRows ?? rowsRef.current ?? initialRows)
-		: initialRows;
+	if (snapshot.status === "error") {
+		throw snapshot.error instanceof Error
+			? snapshot.error
+			: new Error(String(snapshot.error));
+	}
+
+	return snapshot.status === "success" ? snapshot.rows : use(entry.promise);
 }
 
 export const useQueryTakeFirst = <TResult,>(
@@ -170,27 +216,68 @@ function getQueryCacheEntry<TRow>(
 	if (cached) return cached;
 
 	const entry: QueryCacheEntry<TRow> = {
-		promise: builder.execute().then(
-			(rows) => {
-				entry.rows = rows;
-				return rows;
-			},
-			(error: unknown) => {
-				entry.error = error;
-				queryCache.delete(cacheKey);
-				throw error;
-			},
-		),
+		promise: Promise.resolve([]),
+		snapshot: { status: "pending" },
+		listeners: new Set(),
 	};
+	entry.promise = builder.execute().then(
+		(rows) => {
+			setQueryRows(entry, rows);
+			return rows;
+		},
+		(error: unknown) => {
+			setQueryError(entry, error);
+			queryCache.delete(cacheKey);
+			throw error;
+		},
+	);
 	queryCache.set(cacheKey, entry);
 	return entry;
 }
 
-function cacheQueryRows<TRow>(cacheKey: string, rows: TRow[]): void {
-	queryCache.set(cacheKey, {
-		promise: Promise.resolve(rows),
-		rows,
-	});
+function subscribeToQueryEntry<TRow>(
+	cacheKey: string,
+	entry: QueryCacheEntry<TRow>,
+	listener: () => void,
+): () => void {
+	entry.listeners.add(listener);
+	return () => {
+		entry.listeners.delete(listener);
+		if (
+			entry.snapshot.status === "error" &&
+			entry.listeners.size === 0 &&
+			queryCache.get(cacheKey) === entry
+		) {
+			queryCache.delete(cacheKey);
+		}
+	};
+}
+
+function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
+	if (
+		entry.snapshot.status === "success" &&
+		rowsEqual(entry.snapshot.rows, rows)
+	) {
+		return;
+	}
+	setQuerySnapshot(entry, { status: "success", rows });
+}
+
+function setQueryError<TRow>(
+	entry: QueryCacheEntry<TRow>,
+	error: unknown,
+): void {
+	setQuerySnapshot(entry, { status: "error", error });
+}
+
+function setQuerySnapshot<TRow>(
+	entry: QueryCacheEntry<TRow>,
+	snapshot: QueryCacheSnapshot<TRow>,
+): void {
+	entry.snapshot = snapshot;
+	for (const listener of entry.listeners) {
+		listener();
+	}
 }
 
 function getLixInstanceId(lix: Lix): number {

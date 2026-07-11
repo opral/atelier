@@ -10,6 +10,12 @@ import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import type { CheckpointDiff } from "@/extension-runtime/checkpoint-diff";
+import type { Lix } from "@lix-js/sdk";
+import {
+	appendAgentTurnCommitRange,
+	clearAgentTurnCommitRangeFile,
+} from "@/shell/agent-turn-review-range";
 import { deriveMarkdownPathFromStem, FilesView } from ".";
 
 describe("deriveMarkdownPathFromStem", () => {
@@ -212,4 +218,521 @@ describe("FilesView", () => {
 		await act(async () => view?.unmount());
 		await lix.close();
 	});
+
+	test("uses one window keydown listener for standalone shortcuts", async () => {
+		const lix = await openLix();
+		const windowAddEventListener = vi.spyOn(window, "addEventListener");
+		const documentAddEventListener = vi.spyOn(document, "addEventListener");
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		await screen.findByRole("button", { name: "New file" });
+		await waitFor(() => {
+			expect(
+				windowAddEventListener.mock.calls.filter(
+					([type]) => type === "keydown",
+				),
+			).toHaveLength(1);
+		});
+		expect(
+			documentAddEventListener.mock.calls.filter(
+				([type]) => type === "keydown",
+			),
+		).toHaveLength(0);
+		fireEvent.keyDown(window, {
+			code: "Period",
+			key: ".",
+			...primaryModifier(),
+		});
+		await waitFor(() => {
+			expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+		});
+
+		await act(async () => view?.unmount());
+		windowAddEventListener.mockRestore();
+		documentAddEventListener.mockRestore();
+		await lix.close();
+	});
+
+	test("ignores global create shortcuts for inactive or unfocused views", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				isActiveView: false,
+				isPanelFocused: true,
+			});
+		});
+		await screen.findByRole("button", { name: "New file" });
+
+		fireCreateShortcut();
+		expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{ isActiveView: true, isPanelFocused: false }}
+				/>,
+			);
+		});
+		fireCreateShortcut();
+		expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{ isActiveView: true, isPanelFocused: true }}
+				/>,
+			);
+		});
+		fireCreateShortcut();
+		await waitFor(() => {
+			expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("only deletes from the active focused Files view", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "readme",
+				activeFilePath: "/README.md",
+				isActiveView: false,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		fireDeleteShortcut();
+		expect(await selectFileById(lix, "readme")).toBeDefined();
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{
+						activeFileId: "readme",
+						activeFilePath: "/README.md",
+						isActiveView: true,
+						isPanelFocused: true,
+					}}
+				/>,
+			);
+		});
+		fireDeleteShortcut();
+		await waitFor(async () => {
+			expect(await selectFileById(lix, "readme")).toBeUndefined();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("restores the active selection after create is canceled", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "readme",
+				activeFilePath: "/README.md",
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "New file" }));
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.keyDown(input, { key: "Escape" });
+
+		await waitFor(() => {
+			expect(queryFilesTreeRenameInput()).toBeNull();
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("keeps a newly created directory selected while a file is active", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "readme",
+				activeFilePath: "/README.md",
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		fireEvent.keyDown(window, {
+			code: "Period",
+			key: ".",
+			shiftKey: true,
+			...primaryModifier(),
+		});
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "notes" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(() => {
+			expect(getFilesTreeItem("notes/")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+			expect(getFilesTreeItem("README.md")).not.toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("drops a local directory selection when the active file changes", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		await insertFile(lix, "second", "/second.md", "# Second\n");
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ path: "/notes/" } as any)
+			.execute();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "readme",
+				activeFilePath: "/README.md",
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		fireEvent.click(getFilesTreeItem("notes/"));
+		await waitFor(() => {
+			expect(getFilesTreeItem("notes/")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{
+						activeFileId: "second",
+						activeFilePath: "/second.md",
+						isActiveView: true,
+						isPanelFocused: true,
+					}}
+				/>,
+			);
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("second.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+			expect(getFilesTreeItem("notes/")).not.toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("reacts to review range changes without retaining stale badges", async () => {
+		const lix = await openLix();
+		await insertFile(lix, "review-file", "/review.md", "before");
+		const beforeCommitId = await activeCommitId(lix);
+		await insertFile(lix, "review-file", "/review.md", "after");
+		const afterCommitId = await activeCommitId(lix);
+		await appendAgentTurnCommitRange(lix, {
+			id: "files-review-range",
+			agent: "codex",
+			beforeCommitId,
+			afterCommitId,
+			startedAt: 1,
+			completedAt: 2,
+		});
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix);
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("review.md")).toHaveAttribute(
+				"data-item-git-status",
+				"modified",
+			);
+		});
+
+		await act(async () => {
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: "review-file",
+				reviewId: "review-file:files-review-range",
+				agentTurnRangeIds: ["files-review-range"],
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("review.md")).not.toHaveAttribute(
+				"data-item-git-status",
+			);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("resyncs the active selection when its entry reappears", async () => {
+		const lix = await openLix();
+		const visibleFiles = [{ fileId: "readme", path: "/README.md" }];
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "readme",
+				activeFilePath: "/README.md",
+				checkpointDiff: checkpointDiff(visibleFiles),
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{
+						activeFileId: "readme",
+						activeFilePath: "/README.md",
+						checkpointDiff: checkpointDiff([]),
+						isActiveView: true,
+						isPanelFocused: true,
+					}}
+				/>,
+			);
+		});
+		await waitFor(() => {
+			expect(queryFilesTreeItem("README.md")).toBeNull();
+		});
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{
+						activeFileId: "readme",
+						activeFilePath: "/README.md",
+						checkpointDiff: checkpointDiff(visibleFiles),
+						isActiveView: true,
+						isPanelFocused: true,
+					}}
+				/>,
+			);
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
 });
+
+type TestFilesViewContext = NonNullable<
+	Parameters<typeof FilesView>[0]["context"]
+>;
+
+function FilesViewFixture({
+	lix,
+	context,
+}: {
+	readonly lix: Lix;
+	readonly context?: TestFilesViewContext;
+}) {
+	return (
+		<LixProvider lix={lix}>
+			<Suspense fallback={null}>
+				<FilesView context={context} />
+			</Suspense>
+		</LixProvider>
+	);
+}
+
+function renderFilesView(lix: Lix, context?: TestFilesViewContext) {
+	return render(<FilesViewFixture lix={lix} context={context} />);
+}
+
+function primaryModifier(): { ctrlKey: true } | { metaKey: true } {
+	const platform = [
+		(navigator as any).userAgentData?.platform,
+		navigator.platform,
+		navigator.userAgent,
+	]
+		.filter(Boolean)
+		.join(" ")
+		.toLowerCase();
+	return /mac|iphone|ipad|ipod/.test(platform)
+		? { metaKey: true }
+		: { ctrlKey: true };
+}
+
+function fireCreateShortcut() {
+	fireEvent.keyDown(window, {
+		code: "Period",
+		key: ".",
+		...primaryModifier(),
+	});
+}
+
+function fireDeleteShortcut() {
+	fireEvent.keyDown(window, {
+		code: "Backspace",
+		key: "Backspace",
+		...primaryModifier(),
+	});
+}
+
+function getFilesTreeRoot(): ShadowRoot {
+	const host = screen.getByLabelText("Files");
+	if (!host.shadowRoot) throw new Error("file tree shadow root not found");
+	return host.shadowRoot;
+}
+
+function queryFilesTreeItem(path: string): HTMLElement | null {
+	const host = screen.queryByLabelText("Files");
+	if (!host?.shadowRoot) return null;
+	return host.shadowRoot.querySelector(
+		`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+	);
+}
+
+function getFilesTreeItem(path: string): HTMLElement {
+	const item = queryFilesTreeItem(path);
+	if (!item) throw new Error(`file tree item not found: ${path}`);
+	return item;
+}
+
+function queryFilesTreeRenameInput(): HTMLInputElement | null {
+	const input = getFilesTreeRoot().querySelector("[data-item-rename-input]");
+	return input instanceof HTMLInputElement ? input : null;
+}
+
+function getFilesTreeRenameInput(): HTMLInputElement {
+	const input = queryFilesTreeRenameInput();
+	if (!input) throw new Error("file tree rename input not found");
+	return input;
+}
+
+async function insertReadme(lix: Lix): Promise<void> {
+	await insertFile(lix, "readme", "/README.md", "# README\n");
+}
+
+async function insertFile(
+	lix: Lix,
+	id: string,
+	path: string,
+	content: string,
+): Promise<void> {
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id,
+			path,
+			data: new TextEncoder().encode(content),
+		})
+		.onConflict((conflict) =>
+			conflict
+				.column("id")
+				.doUpdateSet({ path, data: new TextEncoder().encode(content) }),
+		)
+		.execute();
+}
+
+async function activeCommitId(lix: Lix): Promise<string> {
+	const result = await lix.execute(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	const commitId = result.rows[0]?.get("commit_id");
+	if (typeof commitId !== "string") {
+		throw new Error("Missing active commit id");
+	}
+	return commitId;
+}
+
+async function selectFileById(lix: Lix, id: string) {
+	return qb(lix)
+		.selectFrom("lix_file")
+		.select("id")
+		.where("id", "=", id)
+		.executeTakeFirst();
+}
+
+function checkpointDiff(
+	visibleFiles: CheckpointDiff["visibleFiles"],
+): CheckpointDiff {
+	return {
+		branchId: "branch-after",
+		branchName: "After",
+		beforeBranchId: "branch-before",
+		beforeBranchName: "Before",
+		beforeCommitId: "commit-before",
+		afterCommitId: "commit-after",
+		visibleFiles,
+		files: [],
+	};
+}

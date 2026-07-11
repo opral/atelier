@@ -364,4 +364,44 @@ describe("PanelV2", () => {
 		expect(signal?.aborted).toBe(true);
 		await waitFor(() => expect(dispose).toHaveBeenCalledTimes(1));
 	});
+
+	test("preserves focused extension DOM while its runtime snapshot updates", async () => {
+		const panel: PanelState = {
+			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
+			activeInstance: "search-1",
+		};
+		const rendered = renderWithinProvider(
+			<PanelV2
+				side="left"
+				panel={panel}
+				isFocused={true}
+				onFocusPanel={vi.fn()}
+				onSelectView={vi.fn()}
+				onRemoveView={vi.fn()}
+				viewContext={createViewContext()}
+				viewOverrides={[searchViewOverride]}
+			/>,
+		);
+		const input = await screen.findByPlaceholderText("Search project...");
+		input.focus();
+		expect(document.activeElement).toBe(input);
+
+		rendered.rerender(
+			<ExtensionHostRegistryProvider>
+				<PanelV2
+					side="left"
+					panel={panel}
+					isFocused={false}
+					onFocusPanel={vi.fn()}
+					onSelectView={vi.fn()}
+					onRemoveView={vi.fn()}
+					viewContext={createViewContext()}
+					viewOverrides={[searchViewOverride]}
+				/>
+			</ExtensionHostRegistryProvider>,
+		);
+
+		expect(await screen.findByPlaceholderText("Search project...")).toBe(input);
+		expect(document.activeElement).toBe(input);
+	});
 });
