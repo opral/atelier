@@ -132,6 +132,11 @@ describe("open file lifecycle", () => {
 			expect(
 				screen.getByRole("button", { name: "Toggle left panel" }),
 			).toHaveAttribute("aria-pressed", "false");
+			expect(
+				document.activeElement ===
+					screen.getByRole("button", { name: "New file" }) ||
+					document.activeElement?.getAttribute("aria-label") === "Files",
+			).toBe(true);
 		});
 		await waitFor(async () => {
 			const row = await qb(lix)
@@ -157,6 +162,15 @@ describe("open file lifecycle", () => {
 				}),
 			]);
 		});
+
+		const leftToggle = screen.getByRole("button", {
+			name: "Toggle left panel",
+		});
+		fireEvent.click(leftToggle);
+		await waitFor(() => {
+			expect(leftToggle).toHaveAttribute("aria-pressed", "true");
+		});
+		fireEvent.click(leftToggle);
 
 		await act(async () => utils?.unmount());
 		await lix.close();
@@ -261,6 +275,22 @@ describe("open file lifecycle", () => {
 				.executeTakeFirst();
 			expect(activeFile?.value ?? null).toBeNull();
 		});
+
+		await act(async () => {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: "next-file",
+					path: "/next.md",
+					data: new TextEncoder().encode("# Next\n"),
+				})
+				.execute();
+		});
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Open /next.md" }),
+		);
+		expect(await screen.findByRole("heading", { name: "Next" })).toBeVisible();
+		expect(screen.getByTestId("files-view-tree-scroll")).toBeInTheDocument();
 
 		await act(async () => {
 			utils?.unmount();
