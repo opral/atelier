@@ -63,6 +63,10 @@ import {
 	loadInstalledExtensionsFromLix,
 	reconcileInstalledExtensionCandidates,
 } from "../extension-runtime/installed-extension-loader";
+import {
+	ensureWorkspaceLandingView,
+	type WorkspacePanelState,
+} from "./workspace-panel-state";
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
@@ -92,10 +96,7 @@ import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
 import { getFileDataAtCommit } from "./external-write-review-history";
 import type { AtelierSlots } from "../create-atelier";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
-import {
-	reconcileCurrentFileViewPanel,
-	reconcileCurrentFileViews,
-} from "./file-view-lifecycle";
+import { reconcileCurrentFileViews } from "./file-view-lifecycle";
 
 type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
@@ -858,53 +859,30 @@ function LayoutShellLoadedContent({
 		[currentFileIds, sanitizedPersistedPanels],
 	);
 
-	const [storedLeftPanel, setLeftPanel] = useState<PanelState>(() =>
-		reconcilePanelExtensionViewsForDocumentSlot(
-			"left",
-			reconciledPersistedPanels.left,
-			extensionMap,
-			{
-				preserveUnknownKinds: true,
+	const [storedWorkspace, setStoredWorkspace] = useState<WorkspacePanelState>(
+		() => ({
+			panels: {
+				left: reconcilePanelExtensionViewsForDocumentSlot(
+					"left",
+					reconciledPersistedPanels.left,
+					extensionMap,
+					{ preserveUnknownKinds: true },
+				),
+				central: reconcilePanelExtensionViewsForDocumentSlot(
+					"central",
+					reconciledPersistedPanels.central,
+					extensionMap,
+					{ preserveUnknownKinds: true },
+				),
+				right: reconcilePanelExtensionViewsForDocumentSlot(
+					"right",
+					reconciledPersistedPanels.right,
+					extensionMap,
+					{ preserveUnknownKinds: true },
+				),
 			},
-		),
-	);
-	const [storedCentralPanel, setCentralPanel] = useState<PanelState>(() =>
-		reconcilePanelExtensionViewsForDocumentSlot(
-			"central",
-			reconciledPersistedPanels.central,
-			extensionMap,
-			{
-				preserveUnknownKinds: true,
-			},
-		),
-	);
-	const [storedRightPanel, setRightPanel] = useState<PanelState>(() =>
-		reconcilePanelExtensionViewsForDocumentSlot(
-			"right",
-			reconciledPersistedPanels.right,
-			extensionMap,
-			{
-				preserveUnknownKinds: true,
-			},
-		),
-	);
-	const reconciledPanels = useMemo(
-		() =>
-			reconcileCurrentFileViews({
-				panels: {
-					left: storedLeftPanel,
-					central: storedCentralPanel,
-					right: storedRightPanel,
-				},
-				currentFileIds,
-			}),
-		[currentFileIds, storedCentralPanel, storedLeftPanel, storedRightPanel],
-	);
-	const leftPanel = reconciledPanels.left;
-	const centralPanel = reconciledPanels.central;
-	const rightPanel = reconciledPanels.right;
-	const [focusedPanel, setFocusedPanel] = useState<PanelSide>(
-		() => uiState.focusedPanel,
+			focusedPanel: uiState.focusedPanel,
+		}),
 	);
 	const [panelSizes, setPanelSizes] = useState<PanelLayoutSizes>(
 		() => initialLayoutSizes,
@@ -915,7 +893,39 @@ function LayoutShellLoadedContent({
 	const [isRightCollapsed, setIsRightCollapsed] = useState(
 		() => initialLayoutSizes.right <= MIN_VISIBLE_PANEL_SIZE,
 	);
+	const canonicalizeWorkspace = useCallback(
+		(workspace: WorkspacePanelState) => {
+			const panels = reconcileCurrentFileViews({
+				panels: workspace.panels,
+				currentFileIds,
+			});
+			const focusedPanel =
+				(workspace.focusedPanel === "left" && isLeftCollapsed) ||
+				(workspace.focusedPanel === "right" && isRightCollapsed)
+					? "central"
+					: workspace.focusedPanel;
+			const reconciledWorkspace =
+				panels === workspace.panels && focusedPanel === workspace.focusedPanel
+					? workspace
+					: { panels, focusedPanel };
+			return ensureWorkspaceLandingView(reconciledWorkspace);
+		},
+		[currentFileIds, isLeftCollapsed, isRightCollapsed],
+	);
+	const effectiveWorkspaceTransition = useMemo(
+		() => canonicalizeWorkspace(storedWorkspace),
+		[canonicalizeWorkspace, storedWorkspace],
+	);
+	const effectiveWorkspace = effectiveWorkspaceTransition.state;
+	const leftPanel = effectiveWorkspace.panels.left;
+	const centralPanel = effectiveWorkspace.panels.central;
+	const rightPanel = effectiveWorkspace.panels.right;
+	const focusedPanel = effectiveWorkspace.focusedPanel;
 	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
+	const [workspaceUiIntent, setWorkspaceUiIntent] = useState<{
+		collapseSide: Exclude<PanelSide, "central"> | null;
+		focusCentral: boolean;
+	} | null>(null);
 	const [checkpointDiff, setCheckpointDiff] = useState<CheckpointDiff | null>(
 		null,
 	);
@@ -957,6 +967,25 @@ function LayoutShellLoadedContent({
 			right: rightPanel,
 		};
 	}, [leftPanel, centralPanel, rightPanel]);
+
+	useEffect(() => {
+		if (effectiveWorkspace === storedWorkspace) return;
+		setStoredWorkspace(effectiveWorkspace);
+		if (effectiveWorkspaceTransition.didRestoreLandingView) {
+			setWorkspaceUiIntent({
+				collapseSide: effectiveWorkspaceTransition.sourceBecameEmpty
+					? effectiveWorkspaceTransition.restoredFilesFrom
+					: null,
+				focusCentral: effectiveWorkspace.focusedPanel === "central",
+			});
+		}
+	}, [
+		effectiveWorkspace,
+		effectiveWorkspaceTransition.didRestoreLandingView,
+		effectiveWorkspaceTransition.restoredFilesFrom,
+		effectiveWorkspaceTransition.sourceBecameEmpty,
+		storedWorkspace,
+	]);
 
 	const claimDiffReviewResolution = useCallback(
 		(review: ExternalWriteReview) => {
@@ -1138,39 +1167,29 @@ function LayoutShellLoadedContent({
 		}
 		hydratingRef.current = true;
 		lastPersistedRef.current = serialized;
-		setLeftPanel((prev) =>
-			prev === reconciledPersistedPanels.left
-				? prev
-				: reconcilePanelExtensionViewsForDocumentSlot(
-						"left",
-						reconciledPersistedPanels.left,
-						extensionMap,
-						reconciliationOptions,
-					),
-		);
-		setCentralPanel((prev) =>
-			prev === reconciledPersistedPanels.central
-				? prev
-				: reconcilePanelExtensionViewsForDocumentSlot(
-						"central",
-						reconciledPersistedPanels.central,
-						extensionMap,
-						reconciliationOptions,
-					),
-		);
-		setRightPanel((prev) =>
-			prev === reconciledPersistedPanels.right
-				? prev
-				: reconcilePanelExtensionViewsForDocumentSlot(
-						"right",
-						reconciledPersistedPanels.right,
-						extensionMap,
-						reconciliationOptions,
-					),
-		);
-		setFocusedPanel((prev) =>
-			prev === uiStateKV.focusedPanel ? prev : uiStateKV.focusedPanel,
-		);
+		setStoredWorkspace({
+			panels: {
+				left: reconcilePanelExtensionViewsForDocumentSlot(
+					"left",
+					reconciledPersistedPanels.left,
+					extensionMap,
+					reconciliationOptions,
+				),
+				central: reconcilePanelExtensionViewsForDocumentSlot(
+					"central",
+					reconciledPersistedPanels.central,
+					extensionMap,
+					reconciliationOptions,
+				),
+				right: reconcilePanelExtensionViewsForDocumentSlot(
+					"right",
+					reconciledPersistedPanels.right,
+					extensionMap,
+					reconciliationOptions,
+				),
+			},
+			focusedPanel: uiStateKV.focusedPanel,
+		});
 		setPanelSizes((prev) => {
 			const next = normalizeLayoutSizes(uiStateKV.layout?.sizes);
 			if (
@@ -1201,31 +1220,33 @@ function LayoutShellLoadedContent({
 		const reconciliationOptions = {
 			preserveUnknownKinds: !hasLoadedInstalledExtensions,
 		};
-		setLeftPanel((current) =>
-			reconcilePanelExtensionViewsForDocumentSlot(
-				"left",
-				current,
-				extensionMap,
-				reconciliationOptions,
-			),
-		);
-		setCentralPanel((current) =>
-			reconcilePanelExtensionViewsForDocumentSlot(
-				"central",
-				current,
-				extensionMap,
-				reconciliationOptions,
-			),
-		);
-		setRightPanel((current) =>
-			reconcilePanelExtensionViewsForDocumentSlot(
-				"right",
-				current,
-				extensionMap,
-				reconciliationOptions,
-			),
-		);
-	}, [extensionMap, hasLoadedInstalledExtensions]);
+		setStoredWorkspace((current) => {
+			const canonical = canonicalizeWorkspace(current).state;
+			return {
+				panels: {
+					left: reconcilePanelExtensionViewsForDocumentSlot(
+						"left",
+						canonical.panels.left,
+						extensionMap,
+						reconciliationOptions,
+					),
+					central: reconcilePanelExtensionViewsForDocumentSlot(
+						"central",
+						canonical.panels.central,
+						extensionMap,
+						reconciliationOptions,
+					),
+					right: reconcilePanelExtensionViewsForDocumentSlot(
+						"right",
+						canonical.panels.right,
+						extensionMap,
+						reconciliationOptions,
+					),
+				},
+				focusedPanel: canonical.focusedPanel,
+			};
+		});
+	}, [canonicalizeWorkspace, extensionMap, hasLoadedInstalledExtensions]);
 
 	useEffect(() => {
 		if (hydratingRef.current) return;
@@ -1270,47 +1291,28 @@ function LayoutShellLoadedContent({
 			reducer: (state: PanelState) => PanelState,
 			options: { focus?: boolean } = {},
 		) => {
-			const applyReducer = (prev: PanelState) => {
-				const currentPanel = reconcileCurrentFileViewPanel(
-					prev,
-					currentFileIds,
-				);
-				const next = reconcilePanelExtensionViews(
-					reducer(
-						reconcilePanelExtensionViewsForDocumentSlot(
-							side,
-							currentPanel,
-							extensionMap,
-							{
-								preserveUnknownKinds: !hasLoadedInstalledExtensions,
-							},
-						),
-					),
+			setStoredWorkspace((previous) => {
+				const canonical = canonicalizeWorkspace(previous).state;
+				const panels = canonical.panels;
+				const currentPanel = reconcilePanelExtensionViewsForDocumentSlot(
+					side,
+					panels[side],
 					extensionMap,
 					{ preserveUnknownKinds: !hasLoadedInstalledExtensions },
 				);
-				return normalizePanelForDocumentSlot(side, next);
-			};
-			if (side === "left") {
-				setLeftPanel(applyReducer);
-			} else if (side === "central") {
-				setCentralPanel(applyReducer);
-			} else {
-				setRightPanel(applyReducer);
-			}
-			if (options.focus) {
-				setFocusedPanel((prev) => (prev === side ? prev : side));
-			}
+				const nextPanel = normalizePanelForDocumentSlot(
+					side,
+					reconcilePanelExtensionViews(reducer(currentPanel), extensionMap, {
+						preserveUnknownKinds: !hasLoadedInstalledExtensions,
+					}),
+				);
+				return {
+					panels: { ...panels, [side]: nextPanel },
+					focusedPanel: options.focus ? side : canonical.focusedPanel,
+				};
+			});
 		},
-		[
-			setLeftPanel,
-			setCentralPanel,
-			setRightPanel,
-			setFocusedPanel,
-			extensionMap,
-			currentFileIds,
-			hasLoadedInstalledExtensions,
-		],
+		[canonicalizeWorkspace, extensionMap, hasLoadedInstalledExtensions],
 	);
 
 	useEffect(() => {
@@ -1338,14 +1340,22 @@ function LayoutShellLoadedContent({
 								currentFileIds: currentWorkspaceFileIds,
 							}),
 						);
-				setLeftPanel(transitionPanel("left"));
-				setCentralPanel(transitionPanel("central"));
-				setRightPanel(transitionPanel("right"));
+				setStoredWorkspace((current) => {
+					const canonical = canonicalizeWorkspace(current).state;
+					return {
+						panels: {
+							left: transitionPanel("left")(canonical.panels.left),
+							central: transitionPanel("central")(canonical.panels.central),
+							right: transitionPanel("right")(canonical.panels.right),
+						},
+						focusedPanel: canonical.focusedPanel,
+					};
+				});
 			})().catch((error: unknown) => {
 				console.error("Failed to update checkpoint revision state", error);
 			});
 		},
-		[lix],
+		[canonicalizeWorkspace, lix],
 	);
 
 	const clearCheckpointDiff = useCallback(() => {
@@ -1411,76 +1421,34 @@ function LayoutShellLoadedContent({
 	);
 
 	useEffect(() => {
-		if (centralPanel.views.length > 0) return;
-
-		const leftFilesView = leftPanel.views.find(
-			(view) => view.kind === FILES_EXTENSION_KIND,
-		);
-		const rightFilesView = rightPanel.views.find(
-			(view) => view.kind === FILES_EXTENSION_KIND,
-		);
-		const filesView =
-			leftFilesView ??
-			rightFilesView ??
-			({
-				instance: "files-default",
-				kind: FILES_EXTENSION_KIND,
-			} satisfies ExtensionInstance);
-
-		if (leftFilesView) {
-			const remainingViews = leftPanel.views.filter(
-				(view) => view.instance !== leftFilesView.instance,
-			);
-			setLeftPanel({
-				views: remainingViews,
-				activeInstance: remainingViews.some(
-					(view) => view.instance === leftPanel.activeInstance,
-				)
-					? leftPanel.activeInstance
-					: (remainingViews[remainingViews.length - 1]?.instance ?? null),
-			});
-			if (remainingViews.length === 0) {
-				setFocusedPanel((current) =>
-					current === "left" ? "central" : current,
-				);
-				if (!isLeftCollapsed) {
-					setIsLeftCollapsed(true);
-					schedulePanelAnimation();
-					leftPanelRef.current?.collapse();
-				}
-			}
-		} else if (rightFilesView) {
-			const remainingViews = rightPanel.views.filter(
-				(view) => view.instance !== rightFilesView.instance,
-			);
-			setRightPanel({
-				views: remainingViews,
-				activeInstance: remainingViews.some(
-					(view) => view.instance === rightPanel.activeInstance,
-				)
-					? rightPanel.activeInstance
-					: (remainingViews[remainingViews.length - 1]?.instance ?? null),
-			});
-			if (remainingViews.length === 0) {
-				setFocusedPanel((current) =>
-					current === "right" ? "central" : current,
-				);
-				if (!isRightCollapsed) {
-					setIsRightCollapsed(true);
-					schedulePanelAnimation();
-					rightPanelRef.current?.collapse();
-				}
-			}
+		if (!workspaceUiIntent) return;
+		if (workspaceUiIntent.collapseSide === "left" && !isLeftCollapsed) {
+			setIsLeftCollapsed(true);
+			schedulePanelAnimation();
+			leftPanelRef.current?.collapse();
+		} else if (
+			workspaceUiIntent.collapseSide === "right" &&
+			!isRightCollapsed
+		) {
+			setIsRightCollapsed(true);
+			schedulePanelAnimation();
+			rightPanelRef.current?.collapse();
 		}
 
-		setCentralPanel({ views: [filesView], activeInstance: filesView.instance });
+		if (
+			workspaceUiIntent.focusCentral &&
+			(!document.activeElement || document.activeElement === document.body)
+		) {
+			document
+				.querySelector<HTMLElement>('[data-attr="file-new-wide"]')
+				?.focus();
+		}
+		setWorkspaceUiIntent(null);
 	}, [
-		centralPanel.views.length,
 		isLeftCollapsed,
 		isRightCollapsed,
-		leftPanel,
-		rightPanel,
 		schedulePanelAnimation,
+		workspaceUiIntent,
 	]);
 
 	const handleOpenView = useCallback(
@@ -1600,57 +1568,50 @@ function LayoutShellLoadedContent({
 				(view) => view.kind === FILES_EXTENSION_KIND,
 			);
 			if (centeredFilesView) {
-				setPanelState(
-					"central",
-					(current) => {
-						const views = current.views.filter(
-							(view) => view.instance !== centeredFilesView.instance,
-						);
-						return {
-							views,
-							activeInstance: views.some(
-								(view) => view.instance === current.activeInstance,
-							)
-								? current.activeInstance
-								: (views[views.length - 1]?.instance ?? null),
-						};
-					},
-					{ focus: false },
-				);
-				setPanelState(
-					"left",
-					(current) => {
-						const existing = current.views.find(
-							(view) => view.kind === FILES_EXTENSION_KIND,
-						);
-						if (existing) {
-							return { ...current, activeInstance: existing.instance };
-						}
-						return {
-							views: [...current.views, centeredFilesView],
-							activeInstance: centeredFilesView.instance,
-						};
-					},
-					{ focus: false },
-				);
 				ensurePanelExpanded("left");
 			}
 			const handler =
 				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
-			handleOpenView({
-				panel: "central",
+			const documentView: ExtensionInstance = {
 				kind,
 				instance: instance ?? fileExtensionInstanceForKind(kind, fileId),
 				state: {
 					...buildFileExtensionProps({ fileId, filePath }),
 					...(state ?? {}),
 				},
-				focus,
-				pending,
+				...(pending ? { isPending: true } : {}),
+			};
+			setStoredWorkspace((previous) => {
+				const canonical = canonicalizeWorkspace(previous).state;
+				const panels = canonical.panels;
+				const centeredFiles = panels.central.views.find(
+					(view) => view.kind === FILES_EXTENSION_KIND,
+				);
+				let left = panels.left;
+				if (
+					centeredFiles &&
+					!left.views.some((view) => view.kind === FILES_EXTENSION_KIND)
+				) {
+					left = {
+						views: [...left.views, centeredFiles],
+						activeInstance: centeredFiles.instance,
+					};
+				}
+				return {
+					panels: {
+						...panels,
+						left,
+						central: {
+							views: [documentView],
+							activeInstance: documentView.instance,
+						},
+					},
+					focusedPanel: focus ? "central" : canonical.focusedPanel,
+				};
 			});
 		},
-		[ensurePanelExpanded, handleOpenView, extensionMap, setPanelState],
+		[canonicalizeWorkspace, ensurePanelExpanded, extensionMap],
 	);
 
 	const showCheckpointDiff = useCallback(
@@ -1957,9 +1918,17 @@ function LayoutShellLoadedContent({
 		[handleOpenView],
 	);
 
-	const focusPanel = useCallback((side: PanelSide) => {
-		setFocusedPanel((prev) => (prev === side ? prev : side));
-	}, []);
+	const focusPanel = useCallback(
+		(side: PanelSide) => {
+			setStoredWorkspace((current) => {
+				const canonical = canonicalizeWorkspace(current).state;
+				return canonical.focusedPanel === side
+					? canonical
+					: { ...canonical, focusedPanel: side };
+			});
+		},
+		[canonicalizeWorkspace],
+	);
 
 	const registerNewFileDraftHandler = useCallback(
 		(registration: NewFileDraftHandlerRegistration) => {
