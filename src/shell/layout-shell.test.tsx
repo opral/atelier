@@ -123,11 +123,46 @@ describe("open file lifecycle", () => {
 			).toBe(false);
 		});
 
+		await act(async () => {
+			await qb(lix).deleteFrom("lix_file").where("id", "=", "two").execute();
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTestId("files-view-wide")).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: "Toggle left panel" }),
+			).toHaveAttribute("aria-pressed", "false");
+		});
+		await waitFor(async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_key_value_by_branch")
+				.select("value")
+				.where("key", "=", "atelier_ui_state")
+				.executeTakeFirst();
+			const value = row?.value as
+				| {
+						panels?: {
+							left?: { views?: Array<{ instance?: string; kind?: string }> };
+							central?: {
+								views?: Array<{ instance?: string; kind?: string }>;
+							};
+						};
+				  }
+				| undefined;
+			expect(value?.panels?.left?.views).toEqual([]);
+			expect(value?.panels?.central?.views).toEqual([
+				expect.objectContaining({
+					instance: "files-default",
+					kind: FILES_EXTENSION_KIND,
+				}),
+			]);
+		});
+
 		await act(async () => utils?.unmount());
 		await lix.close();
 	});
 
-	test("closes an open file view when its backing file is deleted", async () => {
+	test("restores centered Files when the last open file is deleted", async () => {
 		const fileId = "file_generic";
 		const imageKind = "atelier_image";
 		const instance = fileExtensionInstanceForKind(imageKind, fileId);
@@ -214,9 +249,8 @@ describe("open file lifecycle", () => {
 		});
 
 		await waitFor(() => {
-			expect(
-				screen.getByTestId("central-panel-empty-state"),
-			).toBeInTheDocument();
+			expect(screen.getByTestId("files-view-wide")).toBeInTheDocument();
+			expect(screen.queryByTestId("central-panel-empty-state")).toBeNull();
 			expect(screen.queryByRole("img", { name: "photo.jpeg" })).toBeNull();
 		});
 		await waitFor(async () => {

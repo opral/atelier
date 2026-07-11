@@ -1406,6 +1406,79 @@ function LayoutShellLoadedContent({
 		],
 	);
 
+	useEffect(() => {
+		if (centralPanel.views.length > 0) return;
+
+		const leftFilesView = leftPanel.views.find(
+			(view) => view.kind === FILES_EXTENSION_KIND,
+		);
+		const rightFilesView = rightPanel.views.find(
+			(view) => view.kind === FILES_EXTENSION_KIND,
+		);
+		const filesView =
+			leftFilesView ??
+			rightFilesView ??
+			({
+				instance: "files-default",
+				kind: FILES_EXTENSION_KIND,
+			} satisfies ExtensionInstance);
+
+		if (leftFilesView) {
+			const remainingViews = leftPanel.views.filter(
+				(view) => view.instance !== leftFilesView.instance,
+			);
+			setLeftPanel({
+				views: remainingViews,
+				activeInstance: remainingViews.some(
+					(view) => view.instance === leftPanel.activeInstance,
+				)
+					? leftPanel.activeInstance
+					: (remainingViews[remainingViews.length - 1]?.instance ?? null),
+			});
+			if (remainingViews.length === 0) {
+				setFocusedPanel((current) =>
+					current === "left" ? "central" : current,
+				);
+				if (!isLeftCollapsed) {
+					setIsLeftCollapsed(true);
+					schedulePanelAnimation();
+					leftPanelRef.current?.collapse();
+				}
+			}
+		} else if (rightFilesView) {
+			const remainingViews = rightPanel.views.filter(
+				(view) => view.instance !== rightFilesView.instance,
+			);
+			setRightPanel({
+				views: remainingViews,
+				activeInstance: remainingViews.some(
+					(view) => view.instance === rightPanel.activeInstance,
+				)
+					? rightPanel.activeInstance
+					: (remainingViews[remainingViews.length - 1]?.instance ?? null),
+			});
+			if (remainingViews.length === 0) {
+				setFocusedPanel((current) =>
+					current === "right" ? "central" : current,
+				);
+				if (!isRightCollapsed) {
+					setIsRightCollapsed(true);
+					schedulePanelAnimation();
+					rightPanelRef.current?.collapse();
+				}
+			}
+		}
+
+		setCentralPanel({ views: [filesView], activeInstance: filesView.instance });
+	}, [
+		centralPanel.views.length,
+		isLeftCollapsed,
+		isRightCollapsed,
+		leftPanel,
+		rightPanel,
+		schedulePanelAnimation,
+	]);
+
 	const handleOpenView = useCallback(
 		({
 			panel,

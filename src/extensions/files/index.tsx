@@ -942,9 +942,11 @@ function WideFilesView({
 	const files = useMemo(() => flattenFiles(nodes), [nodes]);
 	const [draftName, setDraftName] = useState("");
 	const draftInputRef = useRef<HTMLInputElement | null>(null);
+	const cancelledCreateRequestIdRef = useRef<number | null>(null);
 
 	useEffect(() => {
 		if (!createRequest) return;
+		cancelledCreateRequestIdRef.current = null;
 		setDraftName(createRequest.initialValue);
 		requestAnimationFrame(() => {
 			draftInputRef.current?.focus();
@@ -953,7 +955,12 @@ function WideFilesView({
 	}, [createRequest]);
 
 	const commitDraft = () => {
-		if (!createRequest) return;
+		if (
+			!createRequest ||
+			cancelledCreateRequestIdRef.current === createRequest.id
+		) {
+			return;
+		}
 		void onCreateCommit(createRequest, draftName);
 	};
 
@@ -991,7 +998,10 @@ function WideFilesView({
 							value={draftName}
 							onChange={(event) => setDraftName(event.target.value)}
 							onKeyDown={(event) => {
-								if (event.key === "Escape") onCreateCancel(createRequest);
+								if (event.key !== "Escape") return;
+								event.preventDefault();
+								cancelledCreateRequestIdRef.current = createRequest.id;
+								onCreateCancel(createRequest);
 							}}
 							onBlur={commitDraft}
 							aria-label="File name"

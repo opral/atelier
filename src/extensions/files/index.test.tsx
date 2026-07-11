@@ -160,7 +160,16 @@ describe("FilesView", () => {
 
 		fireEvent.click(await screen.findByRole("button", { name: "New file" }));
 		const input = await screen.findByRole("textbox", { name: "File name" });
-		fireEvent.keyDown(input, { key: "Escape" });
+		act(() => {
+			input.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					key: "Escape",
+					bubbles: true,
+					cancelable: true,
+				}),
+			);
+			input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+		});
 
 		await waitFor(() => {
 			expect(screen.queryByRole("textbox", { name: "File name" })).toBeNull();
