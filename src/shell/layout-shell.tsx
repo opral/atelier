@@ -5,7 +5,6 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	type CSSProperties,
 } from "react";
 import {
 	Group,
@@ -507,12 +506,6 @@ const DEFAULT_PANEL_FALLBACK_SIZES = {
 };
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
-const PANEL_TRANSITION_STYLE: CSSProperties = {
-	transitionProperty: "flex-grow, flex-basis",
-	transitionDuration: "200ms",
-	transitionTimingFunction: "ease-in-out",
-};
-
 function deriveUntitledMarkdownPathForSuffix(suffix: number | null): string {
 	const baseStem = "new-file";
 	if (suffix === null) {
@@ -914,7 +907,6 @@ function LayoutShellLoadedContent({
 	const focusedPanel = effectiveWorkspace.focusedPanel;
 	const isLeftCollapsed = panelSizes.left <= MIN_VISIBLE_PANEL_SIZE;
 	const isRightCollapsed = panelSizes.right <= MIN_VISIBLE_PANEL_SIZE;
-	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
 	const [workspaceUiIntent, setWorkspaceUiIntent] = useState<{
 		collapseSide: Exclude<PanelSide, "central"> | null;
 		focusCentral: boolean;
@@ -923,7 +915,6 @@ function LayoutShellLoadedContent({
 		null,
 	);
 	const checkpointDiffRef = useRef<CheckpointDiff | null>(null);
-	const animationTimeoutRef = useRef<number | null>(null);
 	const newFileDraftHandlersRef = useRef(
 		new Map<string, NewFileDraftHandlerRegistration>(),
 	);
@@ -1235,17 +1226,6 @@ function LayoutShellLoadedContent({
 		});
 	}, [transitionCheckpointEditorRevisions]);
 
-	const schedulePanelAnimation = useCallback(() => {
-		setShouldAnimatePanels(true);
-		if (animationTimeoutRef.current !== null) {
-			window.clearTimeout(animationTimeoutRef.current);
-		}
-		animationTimeoutRef.current = window.setTimeout(() => {
-			setShouldAnimatePanels(false);
-			animationTimeoutRef.current = null;
-		}, 220);
-	}, []);
-
 	const ensurePanelExpanded = useCallback(
 		(side: PanelSide) => {
 			if (side === "central") return;
@@ -1269,7 +1249,6 @@ function LayoutShellLoadedContent({
 			if (side === "right") {
 				targetSize = Math.max(targetSize, MIN_UNCOLLAPSED_RIGHT_SIZE);
 			}
-			schedulePanelAnimation();
 			updateSidePanelSize(side, targetSize);
 			panelRef.resize(`${targetSize}%`);
 		},
@@ -1278,7 +1257,6 @@ function LayoutShellLoadedContent({
 			isRightCollapsed,
 			panelSizes.left,
 			panelSizes.right,
-			schedulePanelAnimation,
 			updateSidePanelSize,
 		],
 	);
@@ -1298,7 +1276,6 @@ function LayoutShellLoadedContent({
 			leftPanel.views.length === 0 &&
 			!isLeftCollapsed
 		) {
-			schedulePanelAnimation();
 			updateSidePanelSize("left", 0);
 			leftPanelRef.current?.collapse();
 		} else if (
@@ -1307,7 +1284,6 @@ function LayoutShellLoadedContent({
 			rightPanel.views.length === 0 &&
 			!isRightCollapsed
 		) {
-			schedulePanelAnimation();
 			updateSidePanelSize("right", 0);
 			rightPanelRef.current?.collapse();
 		}
@@ -1331,7 +1307,6 @@ function LayoutShellLoadedContent({
 		isRightCollapsed,
 		leftPanel.views.length,
 		rightPanel.views.length,
-		schedulePanelAnimation,
 		updateSidePanelSize,
 		workspaceUiIntent,
 	]);
@@ -2148,14 +2123,6 @@ function LayoutShellLoadedContent({
 		[extensionRuntime, registerNewFileDraftHandler],
 	);
 
-	useEffect(() => {
-		return () => {
-			if (animationTimeoutRef.current !== null) {
-				window.clearTimeout(animationTimeoutRef.current);
-			}
-		};
-	}, []);
-
 	const toggleLeftSidebar = useCallback(() => {
 		const panel = leftPanelRef.current;
 		if (!panel) return;
@@ -2168,20 +2135,13 @@ function LayoutShellLoadedContent({
 				desiredSize > MIN_VISIBLE_PANEL_SIZE
 					? desiredSize
 					: DEFAULT_PANEL_FALLBACK_SIZES.left;
-			schedulePanelAnimation();
 			updateSidePanelSize("left", target);
 			panel.resize(`${target}%`);
 		} else {
-			schedulePanelAnimation();
 			updateSidePanelSize("left", 0);
 			panel.collapse();
 		}
-	}, [
-		isLeftCollapsed,
-		panelSizes.left,
-		schedulePanelAnimation,
-		updateSidePanelSize,
-	]);
+	}, [isLeftCollapsed, panelSizes.left, updateSidePanelSize]);
 
 	const toggleRightSidebar = useCallback(() => {
 		const panel = rightPanelRef.current;
@@ -2196,20 +2156,13 @@ function LayoutShellLoadedContent({
 					? desiredSize
 					: DEFAULT_PANEL_FALLBACK_SIZES.right;
 			target = Math.max(target, MIN_UNCOLLAPSED_RIGHT_SIZE);
-			schedulePanelAnimation();
 			updateSidePanelSize("right", target);
 			panel.resize(`${target}%`);
 		} else {
-			schedulePanelAnimation();
 			updateSidePanelSize("right", 0);
 			panel.collapse();
 		}
-	}, [
-		isRightCollapsed,
-		panelSizes.right,
-		schedulePanelAnimation,
-		updateSidePanelSize,
-	]);
+	}, [isRightCollapsed, panelSizes.right, updateSidePanelSize]);
 
 	const isMacPlatform = useMemo(() => {
 		if (typeof navigator === "undefined") return false;
@@ -2253,13 +2206,6 @@ function LayoutShellLoadedContent({
 		};
 	}, []);
 
-	const animatedPanelClass = shouldAnimatePanels
-		? "transition-[flex-basis] duration-200 ease-in-out"
-		: undefined;
-	const animatedPanelStyle = shouldAnimatePanels
-		? PANEL_TRANSITION_STYLE
-		: undefined;
-
 	return (
 		<DndContext
 			sensors={sensors}
@@ -2283,6 +2229,7 @@ function LayoutShellLoadedContent({
 						orientation="horizontal"
 						groupRef={panelGroupRef}
 						onLayoutChanged={handleLayoutChanged}
+						className="atelier-panel-group"
 					>
 						<Panel
 							id="left"
@@ -2292,8 +2239,6 @@ function LayoutShellLoadedContent({
 							maxSize="40%"
 							collapsible
 							collapsedSize={0}
-							className={animatedPanelClass}
-							style={animatedPanelStyle}
 						>
 							<SidePanel
 								side="left"
@@ -2314,8 +2259,6 @@ function LayoutShellLoadedContent({
 							id="central"
 							defaultSize={`${panelSizes.central}%`}
 							minSize="30%"
-							className={animatedPanelClass}
-							style={animatedPanelStyle}
 						>
 							<CentralPanel
 								panel={centralPanel}
@@ -2345,8 +2288,6 @@ function LayoutShellLoadedContent({
 							maxSize="40%"
 							collapsible
 							collapsedSize={0}
-							className={animatedPanelClass}
-							style={animatedPanelStyle}
 						>
 							<SidePanel
 								side="right"

@@ -545,6 +545,24 @@
 	height: 0;
 }
 
+/* react-resizable-panels v4 applies Panel className/style to an inner wrapper.
+ * Animate the outer flex items, where the library updates panel dimensions. */
+.atelier-root .atelier-panel-group > [data-panel] {
+	transition-property: flex-grow, flex-basis;
+	transition-duration: 200ms;
+	transition-timing-function: ease-in-out;
+}
+
+/* Pointer resizing should track the cursor directly, without transition lag. */
+.atelier-root
+	.atelier-panel-group:has(> [data-separator="active"])
+	> [data-panel],
+.atelier-root
+	.atelier-panel-group:has(> [data-separator="focus"])
+	> [data-panel] {
+	transition: none;
+}
+
 /* TipTap / ProseMirror base styles */
 @layer components {
 	.atelier-root

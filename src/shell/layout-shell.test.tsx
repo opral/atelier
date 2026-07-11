@@ -109,9 +109,7 @@ describe("open file lifecycle", () => {
 			"none",
 		);
 
-		fireEvent.click(
-			await screen.findByRole("button", { name: "Open /one.md" }),
-		);
+		fireEvent.click(await findFilesTreeItem("one.md"));
 		expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
 		expect(screen.getByTestId("host-current-file")).toHaveTextContent(
 			"/one.md",
@@ -368,9 +366,7 @@ describe("open file lifecycle", () => {
 				})
 				.execute();
 		});
-		fireEvent.click(
-			await screen.findByRole("button", { name: "Open /next.md" }),
-		);
+		fireEvent.click(await findFilesTreeItem("next.md"));
 		expect(await screen.findByRole("heading", { name: "Next" })).toBeVisible();
 		expect(screen.getByTestId("files-view-tree-scroll")).toBeInTheDocument();
 
@@ -390,6 +386,19 @@ describe("open file lifecycle", () => {
 		}
 	});
 });
+
+async function findFilesTreeItem(path: string): Promise<HTMLElement> {
+	return waitFor(() => {
+		const host = screen.getByLabelText("Files");
+		const item = host.shadowRoot?.querySelector(
+			`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+		);
+		if (!(item instanceof HTMLElement)) {
+			throw new Error(`file tree item not found: ${path}`);
+		}
+		return item;
+	});
+}
 
 describe("installed extension lifecycle", () => {
 	test("does not resurrect a stale tab when its extension is installed later", async () => {
