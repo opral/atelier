@@ -1,20 +1,27 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { AtelierNavbarSlotContext } from "@/create-atelier";
 
 export type TopBarProps = {
 	/** Active document name, shown in the header center. */
 	readonly activeFileName?: string | null;
+	/** Full path of the active file exposed to host-rendered navbar content. */
+	readonly currentFile?: string | null;
 	/** Whether the active document is being shown as a checkpoint diff. */
 	readonly isReviewingCheckpoint?: boolean;
 	readonly onToggleLeftSidebar?: () => void;
 	readonly onToggleRightSidebar?: () => void;
 	readonly isLeftSidebarVisible?: boolean;
 	readonly isRightSidebarVisible?: boolean;
+	readonly navbarStart?: ReactNode;
+	readonly navbarEnd?:
+		| ReactNode
+		| ((context: AtelierNavbarSlotContext) => ReactNode);
 };
 
 /**
@@ -25,11 +32,14 @@ export type TopBarProps = {
  */
 export function TopBar({
 	activeFileName = null,
+	currentFile = null,
 	isReviewingCheckpoint = false,
 	onToggleLeftSidebar,
 	onToggleRightSidebar,
 	isLeftSidebarVisible = true,
 	isRightSidebarVisible = true,
+	navbarStart,
+	navbarEnd,
 }: TopBarProps) {
 	const isMacPlatform = useMemo(() => {
 		if (typeof navigator === "undefined") return false;
@@ -46,15 +56,22 @@ export function TopBar({
 	const modifierKey = isMacPlatform ? "⌘" : "Ctrl";
 	const leftShortcut = isMacPlatform ? `${modifierKey}1` : `${modifierKey}+1`;
 	const rightShortcut = isMacPlatform ? `${modifierKey}2` : `${modifierKey}+2`;
+	const navbarEndContent =
+		typeof navbarEnd === "function" ? navbarEnd({ currentFile }) : navbarEnd;
 	return (
-		<header className="relative flex h-9 shrink-0 items-center px-3 text-[var(--color-text-secondary)]">
+		<header className="relative flex h-9 shrink-0 items-center px-2 text-[var(--color-text-secondary)]">
 			<div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+				{navbarStart !== undefined && navbarStart !== null ? (
+					<div className="flex shrink-0 items-center" data-slot="navbar-start">
+						{navbarStart}
+					</div>
+				) : null}
 				<Tooltip delayDuration={500}>
 					<TooltipTrigger asChild>
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 rounded-[7px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-start rounded-[7px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -85,12 +102,17 @@ export function TopBar({
 				</div>
 			) : null}
 			<div className="flex flex-1 items-center justify-end gap-1.5">
+				{navbarEndContent !== undefined && navbarEndContent !== null ? (
+					<div className="flex shrink-0 items-center" data-slot="navbar-end">
+						{navbarEndContent}
+					</div>
+				) : null}
 				<Tooltip delayDuration={500}>
 					<TooltipTrigger asChild>
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-end rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"

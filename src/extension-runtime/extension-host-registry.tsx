@@ -69,9 +69,19 @@ function mountExtension(args: {
 	return { mounted: mounted || undefined, abortController };
 }
 
-function disposeExtension(record: ExtensionHostRecord): void {
+function disposeExtension(
+	record: ExtensionHostRecord,
+	options: { readonly defer?: boolean } = {},
+): void {
 	record.abortController.abort();
-	record.mounted?.dispose?.();
+	const dispose = record.mounted?.dispose;
+	record.mounted = undefined;
+	if (!dispose) return;
+	if (options.defer) {
+		queueMicrotask(dispose);
+		return;
+	}
+	dispose();
 }
 
 const ExtensionHostRegistryContext =
@@ -154,7 +164,10 @@ export function ExtensionHostRegistryProvider({
 		const hosts = hostsRef.current;
 		return () => {
 			for (const record of hosts.values()) {
-				disposeExtension(record);
+				// These extensions own nested React roots. Defer their unmount until
+				// Atelier's parent-root commit has finished to avoid React's
+				// synchronous nested-root teardown warning.
+				disposeExtension(record, { defer: true });
 				record.container.remove();
 			}
 			hosts.clear();

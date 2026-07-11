@@ -90,6 +90,7 @@ import {
 } from "./panel-utils";
 import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
 import { getFileDataAtCommit } from "./external-write-review-history";
+import type { AtelierSlots } from "../create-atelier";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
 import {
 	reconcileCurrentFileViewPanel,
@@ -476,17 +477,19 @@ async function resolveNextUntitledMarkdownPath(
 	return `/new-file-${Date.now()}.md`;
 }
 
-export function V2LayoutShell() {
+export function V2LayoutShell({ slots }: { readonly slots?: AtelierSlots }) {
 	return (
 		<ExtensionRegistryProvider>
 			<ExtensionHostRegistryProvider>
-				<LayoutShellContent />
+				<LayoutShellContent slots={slots} />
 			</ExtensionHostRegistryProvider>
 		</ExtensionRegistryProvider>
 	);
 }
 
-type LayoutShellContentProps = object;
+type LayoutShellContentProps = {
+	readonly slots?: AtelierSlots;
+};
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly lix: ReturnType<typeof useLix>;
@@ -779,9 +782,9 @@ function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
  * @example
  * <V2LayoutShell />
  */
-function LayoutShellContent(_props: LayoutShellContentProps) {
+function LayoutShellContent(props: LayoutShellContentProps) {
 	const lix = useLix();
-	return <LayoutShellUiStateLoader lix={lix} />;
+	return <LayoutShellUiStateLoader {...props} lix={lix} />;
 }
 
 function LayoutShellUiStateLoader(
@@ -822,6 +825,7 @@ function LayoutShellLoadedContent({
 	setUiStateKV,
 	activeFileId,
 	setActiveFileId,
+	slots,
 }: LayoutShellLoadedContentProps) {
 	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
 		qb(queryLix).selectFrom("lix_file").select("id"),
@@ -2421,11 +2425,14 @@ function LayoutShellLoadedContent({
 			<div className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]">
 				<TopBar
 					activeFileName={activeFileName}
+					currentFile={activeFilePath}
 					isReviewingCheckpoint={Boolean(checkpointDiff)}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}
 					isRightSidebarVisible={!isRightCollapsed}
+					navbarStart={slots?.navbarStart}
+					navbarEnd={slots?.navbarEnd}
 				/>
 				<div className="flex flex-1 min-h-0 overflow-hidden px-2">
 					<Group orientation="horizontal" onLayoutChange={handleLayoutChange}>

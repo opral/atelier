@@ -1,3 +1,9 @@
 import "./index.css";
 
-export { createAtelier } from "./index";
+export { Atelier, createAtelier } from "./index";
+export type {
+	AtelierHandle,
+	AtelierNavbarSlotContext,
+	AtelierProps,
+	AtelierSlots,
+} from "./index";
