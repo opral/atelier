@@ -25,6 +25,7 @@ describe("text editor", () => {
 			filePath: "/main.py",
 			onChange,
 		});
+		expect(parent.querySelector(".cm-lineWrapping")).toBeInTheDocument();
 
 		controller.view.dispatch({
 			changes: {

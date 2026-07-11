@@ -7,7 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Check, Copy, FileCode2, Search, WrapText } from "lucide-react";
+import { Check, Copy, FileCode2, Search } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import {
 	editorRevisionMode,
@@ -24,11 +24,7 @@ import {
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
-import {
-	createTextEditor,
-	type TextCursorPosition,
-	type TextEditorController,
-} from "./editor";
+import { createTextEditor, type TextEditorController } from "./editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
 
@@ -374,14 +370,9 @@ function TextEditorSurface({
 	const editorHostRef = useRef<HTMLDivElement>(null);
 	const controllerRef = useRef<TextEditorController | null>(null);
 	const onChangeRef = useRef(onChange);
-	const [wrapping, setWrapping] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [copyError, setCopyError] = useState(false);
 	const copyTimerRef = useRef<number | null>(null);
-	const [cursor, setCursor] = useState<TextCursorPosition>({
-		line: 1,
-		column: 1,
-	});
 
 	useEffect(() => {
 		onChangeRef.current = onChange;
@@ -403,9 +394,7 @@ function TextEditorSurface({
 			document: text,
 			filePath,
 			readOnly,
-			wrapping,
 			onChange: (nextText) => onChangeRef.current(nextText),
-			onCursorChange: setCursor,
 		});
 		controllerRef.current = controller;
 		return () => {
@@ -429,14 +418,6 @@ function TextEditorSurface({
 			controllerRef.current?.view.focus();
 		}
 	}, [isActive, isPanelFocused, readOnly]);
-
-	const toggleWrapping = () => {
-		setWrapping((current) => {
-			const next = !current;
-			controllerRef.current?.setWrapping(next);
-			return next;
-		});
-	};
 
 	const copyText = async () => {
 		const currentText =
@@ -466,17 +447,6 @@ function TextEditorSurface({
 			>
 				<button
 					type="button"
-					className="atelier-text-toolbar-button atelier-text-wrap-button"
-					aria-pressed={wrapping}
-					onClick={toggleWrapping}
-					title="Toggle line wrapping"
-				>
-					<WrapText aria-hidden="true" size={15} />
-					<span>Wrap</span>
-				</button>
-				<span className="atelier-text-toolbar-divider" aria-hidden="true" />
-				<button
-					type="button"
 					className="atelier-text-toolbar-button"
 					onClick={() => controllerRef.current?.openSearch()}
 					title="Find in file"
@@ -493,11 +463,6 @@ function TextEditorSurface({
 							: copied
 								? "Copied"
 								: null}
-					{isActive ? (
-						<span data-testid="text-cursor-position">
-							Ln {cursor.line}, Col {cursor.column}
-						</span>
-					) : null}
 				</span>
 				<button
 					type="button"

@@ -26,7 +26,7 @@
 		align-items: center;
 		gap: 4px;
 		border-bottom: 1px solid var(--color-border-subtle);
-		padding: 0 14px;
+		padding: 0 10px;
 	}
 
 	.atelier-text-toolbar-button,
@@ -67,22 +67,6 @@
 	.atelier-text-toolbar-icon-button:focus-visible {
 		outline: 2px solid var(--color-ring-focus-visible);
 		outline-offset: 1px;
-	}
-
-	.atelier-text-wrap-button svg {
-		color: var(--color-icon-brand);
-	}
-
-	.atelier-text-wrap-button[aria-pressed="true"] {
-		background: var(--color-bg-brand-soft);
-		color: var(--color-text-primary);
-	}
-
-	.atelier-text-toolbar-divider {
-		height: 20px;
-		width: 1px;
-		margin: 0 4px;
-		background: var(--color-border-panel);
 	}
 
 	.atelier-text-toolbar-spacer {

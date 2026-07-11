@@ -52,7 +52,7 @@ describe("text extension routing", () => {
 });
 
 describe("TextView", () => {
-	test("renders Atelier controls, opens search, and toggles wrapping", async () => {
+	test("renders the minimal toolbar with wrapping enabled", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -86,18 +86,15 @@ describe("TextView", () => {
 		expect(await screen.findByTestId("text-editor-view")).toHaveTextContent(
 			"AgentSession",
 		);
-		const wrap = screen.getByRole("button", { name: "Wrap" });
-		expect(wrap).toHaveAttribute("aria-pressed", "false");
-		fireEvent.click(wrap);
-		expect(wrap).toHaveAttribute("aria-pressed", "true");
+		expect(screen.queryByRole("button", { name: "Wrap" })).toBeNull();
+		expect(
+			utils!.container.querySelector(".cm-lineWrapping"),
+		).toBeInTheDocument();
 
 		fireEvent.click(screen.getByRole("button", { name: "Search" }));
 		await waitFor(() => {
 			expect(utils!.container.querySelector(".cm-search")).toBeInTheDocument();
 		});
-		expect(screen.getByTestId("text-cursor-position")).toHaveTextContent(
-			"Ln 1, Col 1",
-		);
 
 		await act(async () => utils?.unmount());
 		await lix.close();

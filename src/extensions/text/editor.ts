@@ -119,13 +119,13 @@ const atelierEditorTheme = EditorView.theme({
 		lineHeight: "1.72",
 		overflow: "auto",
 		boxSizing: "border-box",
-		paddingTop: "16px",
+		paddingTop: "12px",
 	},
 	".cm-content": {
 		caretColor: "var(--color-text-primary)",
 		padding: "0 0 16px",
 	},
-	".cm-line": { padding: "0 22px 0 12px" },
+	".cm-line": { padding: "0 20px 0 8px" },
 	".cm-cursor, .cm-dropCursor": {
 		borderLeftColor: "var(--color-text-primary)",
 		borderLeftWidth: "1.5px",
@@ -136,23 +136,24 @@ const atelierEditorTheme = EditorView.theme({
 	},
 	".cm-activeLine": {
 		backgroundColor:
-			"color-mix(in srgb, var(--color-brand-50) 62%, transparent)",
+			"color-mix(in srgb, var(--color-brand-50) 28%, transparent)",
 	},
 	".cm-gutters": {
-		minWidth: "58px",
+		minWidth: "38px",
 		backgroundColor: "var(--color-bg-panel)",
-		color: "var(--color-text-tertiary)",
+		color: "color-mix(in srgb, var(--color-text-tertiary) 58%, transparent)",
 		border: "none",
+		fontSize: "12px",
 	},
 	".cm-lineNumbers .cm-gutterElement": {
-		minWidth: "58px",
-		padding: "0 14px 0 10px",
+		minWidth: "38px",
+		padding: "0 8px 0 4px",
 		textAlign: "right",
 	},
 	".cm-activeLineGutter": {
 		backgroundColor:
-			"color-mix(in srgb, var(--color-brand-50) 62%, transparent)",
-		color: "var(--color-text-secondary)",
+			"color-mix(in srgb, var(--color-brand-50) 28%, transparent)",
+		color: "var(--color-text-tertiary)",
 	},
 	".cm-panels": {
 		backgroundColor: "var(--color-bg-panel-muted)",
@@ -235,7 +236,7 @@ export function createTextEditor({
 	document,
 	filePath,
 	readOnly = false,
-	wrapping = false,
+	wrapping = true,
 	onChange,
 	onCursorChange,
 }: CreateTextEditorArgs): TextEditorController {
