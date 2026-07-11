@@ -26,7 +26,7 @@ describe("decodeSeedAssetDataUrl", () => {
 describe("embedSeedAssets", () => {
 	test("keeps PDF embeds workspace-relative while inlining image assets", () => {
 		const markdown = embedSeedAssets(
-			"./seed/PDF-embed.md",
+			"./seed/markdown-extension/PDF-embed.md",
 			[
 				"![PDF](assets/example.pdf#page=1)",
 				"![Image](assets/example.svg)",
