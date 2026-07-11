@@ -6,7 +6,7 @@ const executeMock = vi.fn(async () => undefined);
 
 vi.mock("@/lib/lix-react", () => ({
 	useLix: () => ({}) as any,
-	useQuery: () => [{ value: "file-123" }],
+	useQuery: () => [{ value: "file-initial" }],
 }));
 
 vi.mock("@/lib/lix-kysely", () => ({

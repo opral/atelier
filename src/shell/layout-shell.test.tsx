@@ -10,7 +10,11 @@ import {
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { resolveLixFileForOpen, V2LayoutShell } from "./layout-shell";
+import {
+	resolveLixFileForOpen,
+	syncPanelGroupLayout,
+	V2LayoutShell,
+} from "./layout-shell";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import {
@@ -46,9 +50,33 @@ describe("resolveLixFileForOpen", () => {
 	});
 });
 
+describe("syncPanelGroupLayout", () => {
+	test("applies a remote canonical layout only when it differs", () => {
+		const group = {
+			getLayout: vi.fn(() => ({ left: 20, central: 60, right: 20 })),
+			setLayout: vi.fn((layout: Record<string, number>) => layout),
+		};
+
+		expect(
+			syncPanelGroupLayout(group, { left: 20, central: 60, right: 20 }),
+		).toBe(false);
+		expect(group.setLayout).not.toHaveBeenCalled();
+
+		group.getLayout.mockReturnValue({ left: 0, central: 100, right: 0 });
+		const remoteLayout = { left: 25, central: 50, right: 25 };
+		expect(syncPanelGroupLayout(group, remoteLayout)).toBe(true);
+		expect(group.setLayout).toHaveBeenCalledWith(remoteLayout);
+	});
+});
+
 describe("open file lifecycle", () => {
 	test("moves the centered Files instance left when a document opens", async () => {
 		const lix = await openLix();
+		const renderNavbarEnd = vi.fn(
+			({ currentFile }: { currentFile: string | null }) => (
+				<span data-testid="host-current-file">{currentFile ?? "none"}</span>
+			),
+		);
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
@@ -71,17 +99,23 @@ describe("open file lifecycle", () => {
 				<LixProvider lix={lix}>
 					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 						<Suspense fallback={null}>
-							<V2LayoutShell />
+							<V2LayoutShell slots={{ navbarEnd: renderNavbarEnd }} />
 						</Suspense>
 					</KeyValueProvider>
 				</LixProvider>,
 			);
 		});
+		expect(await screen.findByTestId("host-current-file")).toHaveTextContent(
+			"none",
+		);
 
 		fireEvent.click(
 			await screen.findByRole("button", { name: "Open /one.md" }),
 		);
 		expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
+		expect(screen.getByTestId("host-current-file")).toHaveTextContent(
+			"/one.md",
+		);
 		await waitFor(() => {
 			expect(screen.queryByTestId("files-view-wide")).toBeNull();
 			expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
@@ -97,6 +131,9 @@ describe("open file lifecycle", () => {
 		expect(secondFile).toBeTruthy();
 		fireEvent.click(secondFile!);
 		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+		expect(screen.getByTestId("host-current-file")).toHaveTextContent(
+			"/two.md",
+		);
 		expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
 
 		await waitFor(async () => {
@@ -109,8 +146,14 @@ describe("open file lifecycle", () => {
 				| {
 						panels?: {
 							left?: { views?: Array<{ kind?: string }> };
-							central?: { views?: Array<{ kind?: string }> };
+							central?: {
+								views?: Array<{
+									kind?: string;
+									state?: { fileId?: string };
+								}>;
+							};
 						};
+						layout?: { sizes?: { left?: number } };
 				  }
 				| undefined;
 			expect(value?.panels?.left?.views).toEqual([
@@ -121,6 +164,12 @@ describe("open file lifecycle", () => {
 					(view) => view.kind === FILES_EXTENSION_KIND,
 				),
 			).toBe(false);
+			expect(value?.panels?.central?.views).toEqual([
+				expect.objectContaining({
+					state: expect.objectContaining({ fileId: "two" }),
+				}),
+			]);
+			expect(value?.layout?.sizes?.left).toBeGreaterThan(0);
 		});
 
 		await act(async () => {
@@ -129,6 +178,7 @@ describe("open file lifecycle", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("files-view-wide")).toBeVisible();
+			expect(screen.getByTestId("host-current-file")).toHaveTextContent("none");
 			expect(
 				screen.getByRole("button", { name: "Toggle left panel" }),
 			).toHaveAttribute("aria-pressed", "false");
@@ -152,6 +202,7 @@ describe("open file lifecycle", () => {
 								views?: Array<{ instance?: string; kind?: string }>;
 							};
 						};
+						layout?: { sizes?: { left?: number } };
 				  }
 				| undefined;
 			expect(value?.panels?.left?.views).toEqual([]);
@@ -161,6 +212,7 @@ describe("open file lifecycle", () => {
 					kind: FILES_EXTENSION_KIND,
 				}),
 			]);
+			expect(value?.layout?.sizes?.left).toBe(0);
 		});
 
 		const leftToggle = screen.getByRole("button", {
@@ -202,6 +254,7 @@ describe("open file lifecycle", () => {
 					key: "atelier_ui_state",
 					value: {
 						...DEFAULT_ATELIER_UI_STATE,
+						focusedPanel: "right",
 						panels: {
 							...DEFAULT_ATELIER_UI_STATE.panels,
 							central: {
@@ -218,6 +271,7 @@ describe("open file lifecycle", () => {
 								activeInstance: instance,
 							},
 						},
+						layout: { sizes: { left: 10, central: 55, right: 35 } },
 					},
 					lixcol_branch_id: "global",
 					lixcol_global: true,
@@ -255,7 +309,11 @@ describe("open file lifecycle", () => {
 		});
 
 		expect(
-			await screen.findByRole("img", { name: "photo.jpeg" }),
+			await screen.findByRole(
+				"img",
+				{ name: "photo.jpeg" },
+				{ timeout: 5_000 },
+			),
 		).toBeInTheDocument();
 
 		await act(async () => {
@@ -274,6 +332,30 @@ describe("open file lifecycle", () => {
 				.where("key", "=", "atelier_active_file_id")
 				.executeTakeFirst();
 			expect(activeFile?.value ?? null).toBeNull();
+		});
+		await waitFor(async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_key_value_by_branch")
+				.select("value")
+				.where("key", "=", "atelier_ui_state")
+				.where("lixcol_branch_id", "=", "global")
+				.executeTakeFirst();
+			const state = row?.value as typeof DEFAULT_ATELIER_UI_STATE | undefined;
+			expect(state?.panels.central).toEqual({
+				views: [
+					expect.objectContaining({
+						instance: "files-default",
+						kind: FILES_EXTENSION_KIND,
+					}),
+				],
+				activeInstance: "files-default",
+			});
+			expect(state?.focusedPanel).toBe("central");
+			expect(state?.layout?.sizes).toEqual({
+				left: 10,
+				central: 55,
+				right: 35,
+			});
 		});
 
 		await act(async () => {
@@ -378,6 +460,41 @@ describe("installed extension lifecycle", () => {
 				expect(state?.panels.left.views).toEqual([]);
 			});
 
+			// A stale snapshot can also arrive after extension discovery has settled.
+			// It must be pruned from canonical state, not only hidden while rendering.
+			await act(async () => {
+				await qb(lix)
+					.updateTable("lix_key_value")
+					.set({
+						value: {
+							...DEFAULT_ATELIER_UI_STATE,
+							panels: {
+								...DEFAULT_ATELIER_UI_STATE.panels,
+								left: {
+									views: [
+										{
+											instance: extensionInstance,
+											kind: extensionKind,
+										},
+									],
+									activeInstance: extensionInstance,
+								},
+							},
+						},
+					})
+					.where("key", "=", "atelier_ui_state")
+					.execute();
+			});
+			await waitFor(async () => {
+				const row = await qb(lix)
+					.selectFrom("lix_key_value")
+					.select("value")
+					.where("key", "=", "atelier_ui_state")
+					.executeTakeFirst();
+				const state = row?.value as typeof DEFAULT_ATELIER_UI_STATE | undefined;
+				expect(state?.panels.left.views).toEqual([]);
+			});
+
 			await act(async () => {
 				await qb(lix)
 					.insertInto("lix_file")
@@ -428,6 +545,87 @@ describe("installed extension lifecycle", () => {
 			} else {
 				Reflect.deleteProperty(URL, "revokeObjectURL");
 			}
+		}
+	});
+});
+
+describe("canonical UI state", () => {
+	test("persists panel focus without rebuilding the rest of the snapshot", async () => {
+		const fileId = "focus-file";
+		const documentKind = "atelier_file";
+		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
+		const initialState = {
+			...DEFAULT_ATELIER_UI_STATE,
+			focusedPanel: "central" as const,
+			panels: {
+				left: {
+					views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
+					activeInstance: "files-default",
+				},
+				central: {
+					views: [
+						{
+							instance: documentInstance,
+							kind: documentKind,
+							state: { fileId, filePath: "/focus.md" },
+						},
+					],
+					activeInstance: documentInstance,
+				},
+				right: { views: [], activeInstance: null },
+			},
+			layout: { sizes: { left: 20, central: 80, right: 0 } },
+		};
+		const lix = await openLix({
+			keyValues: [
+				{
+					key: "atelier_ui_state",
+					value: initialState,
+					lixcol_branch_id: "global",
+					lixcol_global: true,
+					lixcol_untracked: true,
+				},
+			],
+		});
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/focus.md",
+				data: new TextEncoder().encode("# Focus\n"),
+			})
+			.execute();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+							<Suspense fallback={null}>
+								<V2LayoutShell />
+							</Suspense>
+						</KeyValueProvider>
+					</LixProvider>,
+				);
+			});
+
+			fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+
+			await waitFor(async () => {
+				const row = await qb(lix)
+					.selectFrom("lix_key_value_by_branch")
+					.select("value")
+					.where("key", "=", "atelier_ui_state")
+					.where("lixcol_branch_id", "=", "global")
+					.executeTakeFirst();
+				const state = row?.value as typeof initialState | undefined;
+				expect(state?.focusedPanel).toBe("left");
+				expect(state?.panels).toEqual(initialState.panels);
+				expect(state?.layout?.sizes).toEqual(initialState.layout.sizes);
+			});
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
 		}
 	});
 });

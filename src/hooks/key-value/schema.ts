@@ -1,4 +1,5 @@
 import {
+	coerceAtelierUiState,
 	DEFAULT_ATELIER_UI_STATE,
 	type AtelierUiState,
 } from "@/shell/ui-state";
@@ -9,6 +10,7 @@ export type KeyDef<V> = {
 	defaultBranchId: KeyValueBranchId;
 	untracked: boolean;
 	defaultValue?: V | null;
+	coerce?: (value: unknown) => V;
 };
 
 // Atelier keys + per-key defaults
@@ -26,6 +28,7 @@ export const KEY_VALUE_DEFINITIONS = {
 		defaultBranchId: "global",
 		untracked: true,
 		defaultValue: DEFAULT_ATELIER_UI_STATE,
+		coerce: coerceAtelierUiState,
 	} as KeyDef<AtelierUiState>,
 
 	// Test-only keys used in unit tests to exercise tracked behavior

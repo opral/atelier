@@ -11,6 +11,7 @@ import {
 	Group,
 	Panel,
 	Separator,
+	type GroupImperativeHandle,
 	type PanelImperativeHandle,
 } from "react-resizable-panels";
 import {
@@ -24,7 +25,10 @@ import {
 } from "@dnd-kit/core";
 import { useLix, useQuery } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
-import { useKeyValue } from "@/hooks/key-value/use-key-value";
+import {
+	useKeyValue,
+	type KeyValueSetter,
+} from "@/hooks/key-value/use-key-value";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
@@ -84,8 +88,8 @@ import {
 	DEFAULT_ATELIER_UI_STATE,
 	ATELIER_UI_STATE_KEY,
 	normalizeLayoutSizes,
-	type PanelLayoutSizes,
 	type AtelierUiState,
+	type PanelLayoutSizes,
 } from "./ui-state";
 import {
 	activatePanelExtension,
@@ -99,7 +103,10 @@ import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
 import { getFileDataAtCommit } from "./external-write-review-history";
 import type { AtelierSlots } from "../create-atelier";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
-import { reconcileCurrentFileViews } from "./file-view-lifecycle";
+import {
+	reconcileCurrentFileViewPanel,
+	reconcileCurrentFileViews,
+} from "./file-view-lifecycle";
 
 type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
@@ -325,6 +332,76 @@ const reconcilePanelExtensionViewsForDocumentSlot = (
 		reconcilePanelExtensionViews(panel, extensionMap, options),
 	);
 
+const reconcilePanelsWithEnvironment = ({
+	panels,
+	currentFileIds,
+	extensionMap,
+	preserveUnknownExtensionKinds,
+}: {
+	readonly panels: Record<PanelSide, PanelState>;
+	readonly currentFileIds: ReadonlySet<string>;
+	readonly extensionMap: Map<ExtensionKind, ExtensionDefinition>;
+	readonly preserveUnknownExtensionKinds: boolean;
+}): Record<PanelSide, PanelState> => {
+	const currentPanels = reconcileCurrentFileViews({
+		panels: sanitizePanels(panels),
+		currentFileIds,
+	});
+	const options = {
+		preserveUnknownKinds: preserveUnknownExtensionKinds,
+	};
+	return {
+		left: reconcilePanelExtensionViewsForDocumentSlot(
+			"left",
+			currentPanels.left,
+			extensionMap,
+			options,
+		),
+		central: reconcilePanelExtensionViewsForDocumentSlot(
+			"central",
+			currentPanels.central,
+			extensionMap,
+			options,
+		),
+		right: reconcilePanelExtensionViewsForDocumentSlot(
+			"right",
+			currentPanels.right,
+			extensionMap,
+			options,
+		),
+	};
+};
+
+const panelsStructurallyEqual = (
+	left: Record<PanelSide, PanelState>,
+	right: Record<PanelSide, PanelState>,
+): boolean => {
+	try {
+		return JSON.stringify(left) === JSON.stringify(right);
+	} catch {
+		return false;
+	}
+};
+
+const panelLayoutsEqual = (
+	current: Readonly<Record<string, number>>,
+	expected: PanelLayoutSizes,
+): boolean =>
+	(["left", "central", "right"] as const).every(
+		(side) =>
+			typeof current[side] === "number" &&
+			Math.abs(current[side] - expected[side]) < 0.01,
+	);
+
+export const syncPanelGroupLayout = (
+	group: Pick<GroupImperativeHandle, "getLayout" | "setLayout">,
+	expected: PanelLayoutSizes,
+): boolean => {
+	if (panelLayoutsEqual(group.getLayout(), expected)) return false;
+	group.setLayout(expected);
+	return true;
+};
+
 async function readCurrentLixFileIds(lix: Lix): Promise<ReadonlySet<string>> {
 	const rows = await qb(lix).selectFrom("lix_file").select(["id"]).execute();
 	return new Set(rows.map((row) => String(row.id)));
@@ -493,9 +570,9 @@ type LayoutShellContentProps = {
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly lix: ReturnType<typeof useLix>;
 	readonly uiStateKV: AtelierUiState | null;
-	readonly setUiStateKV: (newValue: AtelierUiState) => Promise<void>;
+	readonly setUiStateKV: KeyValueSetter<AtelierUiState | null>;
 	readonly activeFileId: string | null;
-	readonly setActiveFileId: (newValue: string | null) => Promise<void>;
+	readonly setActiveFileId: KeyValueSetter<string | null>;
 };
 
 function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
@@ -752,7 +829,7 @@ function LayoutShellActiveFileLoader(
 	props: LayoutShellContentProps & {
 		readonly lix: ReturnType<typeof useLix>;
 		readonly uiStateKV: AtelierUiState | null;
-		readonly setUiStateKV: (newValue: AtelierUiState) => Promise<void>;
+		readonly setUiStateKV: KeyValueSetter<AtelierUiState | null>;
 	},
 ) {
 	const [activeFileId, setActiveFileId] = useKeyValue("atelier_active_file_id");
@@ -801,82 +878,42 @@ function LayoutShellLoadedContent({
 		() => coerceAtelierUiState(uiStateKV ?? DEFAULT_ATELIER_UI_STATE),
 		[uiStateKV],
 	);
-
-	const initialLayoutSizes = normalizeLayoutSizes(uiState.layout?.sizes);
-	const sanitizedPersistedPanels = useMemo(() => {
-		return sanitizePanels(uiState.panels);
-	}, [uiState]);
-	const reconciledPersistedPanels = useMemo(
-		() =>
-			reconcileCurrentFileViews({
-				panels: sanitizedPersistedPanels,
-				currentFileIds,
-			}),
-		[currentFileIds, sanitizedPersistedPanels],
-	);
-
-	const [storedWorkspace, setStoredWorkspace] = useState<WorkspacePanelState>(
-		() => ({
-			panels: {
-				left: reconcilePanelExtensionViewsForDocumentSlot(
-					"left",
-					reconciledPersistedPanels.left,
-					extensionMap,
-					{ preserveUnknownKinds: true },
-				),
-				central: reconcilePanelExtensionViewsForDocumentSlot(
-					"central",
-					reconciledPersistedPanels.central,
-					extensionMap,
-					{ preserveUnknownKinds: true },
-				),
-				right: reconcilePanelExtensionViewsForDocumentSlot(
-					"right",
-					reconciledPersistedPanels.right,
-					extensionMap,
-					{ preserveUnknownKinds: true },
-				),
-			},
-			focusedPanel: uiState.focusedPanel,
-		}),
-	);
-	const [panelSizes, setPanelSizes] = useState<PanelLayoutSizes>(
-		() => initialLayoutSizes,
-	);
-	const [isLeftCollapsed, setIsLeftCollapsed] = useState(
-		() => initialLayoutSizes.left <= MIN_VISIBLE_PANEL_SIZE,
-	);
-	const [isRightCollapsed, setIsRightCollapsed] = useState(
-		() => initialLayoutSizes.right <= MIN_VISIBLE_PANEL_SIZE,
-	);
+	const panelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const canonicalizeWorkspace = useCallback(
-		(workspace: WorkspacePanelState) => {
-			const panels = reconcileCurrentFileViews({
-				panels: workspace.panels,
+		(state: AtelierUiState) => {
+			const panels = reconcilePanelsWithEnvironment({
+				panels: state.panels,
 				currentFileIds,
+				extensionMap,
+				preserveUnknownExtensionKinds,
 			});
+			const sizes = normalizeLayoutSizes(state.layout?.sizes);
 			const focusedPanel =
-				(workspace.focusedPanel === "left" && isLeftCollapsed) ||
-				(workspace.focusedPanel === "right" && isRightCollapsed)
+				(state.focusedPanel === "left" &&
+					sizes.left <= MIN_VISIBLE_PANEL_SIZE) ||
+				(state.focusedPanel === "right" &&
+					sizes.right <= MIN_VISIBLE_PANEL_SIZE)
 					? "central"
-					: workspace.focusedPanel;
-			const reconciledWorkspace =
-				panels === workspace.panels && focusedPanel === workspace.focusedPanel
-					? workspace
-					: { panels, focusedPanel };
+					: state.focusedPanel;
+			const reconciledWorkspace: WorkspacePanelState = {
+				panels,
+				focusedPanel,
+			};
 			return ensureWorkspaceLandingView(reconciledWorkspace);
 		},
-		[currentFileIds, isLeftCollapsed, isRightCollapsed],
+		[currentFileIds, extensionMap, preserveUnknownExtensionKinds],
 	);
 	const effectiveWorkspaceTransition = useMemo(
-		() => canonicalizeWorkspace(storedWorkspace),
-		[canonicalizeWorkspace, storedWorkspace],
+		() => canonicalizeWorkspace(uiState),
+		[canonicalizeWorkspace, uiState],
 	);
 	const effectiveWorkspace = effectiveWorkspaceTransition.state;
 	const leftPanel = effectiveWorkspace.panels.left;
 	const centralPanel = effectiveWorkspace.panels.central;
 	const rightPanel = effectiveWorkspace.panels.right;
 	const focusedPanel = effectiveWorkspace.focusedPanel;
+	const isLeftCollapsed = panelSizes.left <= MIN_VISIBLE_PANEL_SIZE;
+	const isRightCollapsed = panelSizes.right <= MIN_VISIBLE_PANEL_SIZE;
 	const [shouldAnimatePanels, setShouldAnimatePanels] = useState(false);
 	const [workspaceUiIntent, setWorkspaceUiIntent] = useState<{
 		collapseSide: Exclude<PanelSide, "central"> | null;
@@ -892,16 +929,34 @@ function LayoutShellLoadedContent({
 	);
 	const lastNonZeroSizesRef = useRef({
 		left:
-			initialLayoutSizes.left > MIN_VISIBLE_PANEL_SIZE
-				? initialLayoutSizes.left
+			panelSizes.left > MIN_VISIBLE_PANEL_SIZE
+				? panelSizes.left
 				: DEFAULT_PANEL_FALLBACK_SIZES.left,
 		right:
-			initialLayoutSizes.right > MIN_VISIBLE_PANEL_SIZE
-				? initialLayoutSizes.right
+			panelSizes.right > MIN_VISIBLE_PANEL_SIZE
+				? panelSizes.right
 				: DEFAULT_PANEL_FALLBACK_SIZES.right,
 	});
+	useEffect(() => {
+		if (panelSizes.left > MIN_VISIBLE_PANEL_SIZE) {
+			lastNonZeroSizesRef.current.left = panelSizes.left;
+		}
+		if (panelSizes.right > MIN_VISIBLE_PANEL_SIZE) {
+			lastNonZeroSizesRef.current.right = panelSizes.right;
+		}
+	}, [panelSizes.left, panelSizes.right]);
 	const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
 	const rightPanelRef = useRef<PanelImperativeHandle | null>(null);
+	const panelGroupRef = useRef<GroupImperativeHandle | null>(null);
+	useEffect(() => {
+		const group = panelGroupRef.current;
+		if (!group) return;
+		syncPanelGroupLayout(group, {
+			left: panelSizes.left,
+			central: panelSizes.central,
+			right: panelSizes.right,
+		});
+	}, [panelSizes.left, panelSizes.central, panelSizes.right]);
 	const resolvedReviewIdsRef = useRef(new Set<string>());
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
@@ -923,25 +978,6 @@ function LayoutShellLoadedContent({
 			right: rightPanel,
 		};
 	}, [leftPanel, centralPanel, rightPanel]);
-
-	useEffect(() => {
-		if (effectiveWorkspace === storedWorkspace) return;
-		setStoredWorkspace(effectiveWorkspace);
-		if (effectiveWorkspaceTransition.didRestoreLandingView) {
-			setWorkspaceUiIntent({
-				collapseSide: effectiveWorkspaceTransition.sourceBecameEmpty
-					? effectiveWorkspaceTransition.restoredFilesFrom
-					: null,
-				focusCentral: effectiveWorkspace.focusedPanel === "central",
-			});
-		}
-	}, [
-		effectiveWorkspace,
-		effectiveWorkspaceTransition.didRestoreLandingView,
-		effectiveWorkspaceTransition.restoredFilesFrom,
-		effectiveWorkspaceTransition.sourceBecameEmpty,
-		storedWorkspace,
-	]);
 
 	const claimDiffReviewResolution = useCallback(
 		(review: ExternalWriteReview) => {
@@ -1038,166 +1074,80 @@ function LayoutShellLoadedContent({
 		};
 	}, [installedExtensionRows, replaceInstalledExtensions]);
 
-	const lastPersistedRef = useRef<string>(
-		JSON.stringify(uiStateKV ?? DEFAULT_ATELIER_UI_STATE),
-	);
-	const pendingPersistRef = useRef<string | null>(null);
-	const hydratingRef = useRef(false);
-
-	const updateDerivedPanelState = useCallback(
-		(next: PanelLayoutSizes) => {
-			if (next.left > MIN_VISIBLE_PANEL_SIZE) {
-				lastNonZeroSizesRef.current.left = next.left;
-			}
-			if (next.right > MIN_VISIBLE_PANEL_SIZE) {
-				lastNonZeroSizesRef.current.right = next.right;
-			}
-			setIsLeftCollapsed(next.left <= MIN_VISIBLE_PANEL_SIZE);
-			setIsRightCollapsed(next.right <= MIN_VISIBLE_PANEL_SIZE);
-		},
-		[setIsLeftCollapsed, setIsRightCollapsed],
-	);
-
-	useEffect(() => {
-		const reconciliationOptions = {
-			preserveUnknownKinds: preserveUnknownExtensionKinds,
-		};
-		if (!uiStateKV) return;
-		const serialized = JSON.stringify(uiStateKV);
-		if (
-			serialized === lastPersistedRef.current ||
-			serialized === pendingPersistRef.current
-		) {
-			lastPersistedRef.current = serialized;
-			if (pendingPersistRef.current === serialized) {
-				pendingPersistRef.current = null;
-			}
-			return;
-		}
-		hydratingRef.current = true;
-		lastPersistedRef.current = serialized;
-		setStoredWorkspace({
-			panels: {
-				left: reconcilePanelExtensionViewsForDocumentSlot(
-					"left",
-					reconciledPersistedPanels.left,
-					extensionMap,
-					reconciliationOptions,
-				),
-				central: reconcilePanelExtensionViewsForDocumentSlot(
-					"central",
-					reconciledPersistedPanels.central,
-					extensionMap,
-					reconciliationOptions,
-				),
-				right: reconcilePanelExtensionViewsForDocumentSlot(
-					"right",
-					reconciledPersistedPanels.right,
-					extensionMap,
-					reconciliationOptions,
-				),
-			},
-			focusedPanel: uiStateKV.focusedPanel,
-		});
-		setPanelSizes((prev) => {
-			const next = normalizeLayoutSizes(uiStateKV.layout?.sizes);
-			if (
-				prev.left === next.left &&
-				prev.central === next.central &&
-				prev.right === next.right
-			) {
-				return prev;
-			}
-			updateDerivedPanelState(next);
-			return next;
-		});
-		queueMicrotask(() => {
-			hydratingRef.current = false;
-			if (pendingPersistRef.current === serialized) {
-				pendingPersistRef.current = null;
-			}
-		});
-	}, [
-		uiStateKV,
-		reconciledPersistedPanels,
-		updateDerivedPanelState,
-		extensionMap,
-		preserveUnknownExtensionKinds,
-	]);
-
-	useEffect(() => {
-		const reconciliationOptions = {
-			preserveUnknownKinds: preserveUnknownExtensionKinds,
-		};
-		setStoredWorkspace((current) => {
-			const canonical = canonicalizeWorkspace(current).state;
-			return {
-				panels: {
-					left: reconcilePanelExtensionViewsForDocumentSlot(
-						"left",
-						canonical.panels.left,
-						extensionMap,
-						reconciliationOptions,
-					),
-					central: reconcilePanelExtensionViewsForDocumentSlot(
-						"central",
-						canonical.panels.central,
-						extensionMap,
-						reconciliationOptions,
-					),
-					right: reconcilePanelExtensionViewsForDocumentSlot(
-						"right",
-						canonical.panels.right,
-						extensionMap,
-						reconciliationOptions,
-					),
-				},
-				focusedPanel: canonical.focusedPanel,
-			};
-		});
-	}, [canonicalizeWorkspace, extensionMap, preserveUnknownExtensionKinds]);
-
-	useEffect(() => {
-		if (hydratingRef.current) return;
-		const nextState: AtelierUiState = {
-			focusedPanel,
-			panels: sanitizePanels({
-				left: leftPanel,
-				central: centralPanel,
-				right: rightPanel,
-			}),
-			layout: { sizes: panelSizes },
-		};
-		const serialized = JSON.stringify(nextState);
-		if (
-			serialized === lastPersistedRef.current ||
-			serialized === pendingPersistRef.current
-		) {
-			return;
-		}
-		pendingPersistRef.current = serialized;
-		const timeoutId = setTimeout(() => {
-			void setUiStateKV(nextState).catch((error: unknown) => {
-				if (pendingPersistRef.current === serialized) {
-					pendingPersistRef.current = null;
-				}
-				console.error("Failed to persist Atelier UI state", error);
+	const updateUiState = useCallback(
+		(reducer: (current: AtelierUiState) => AtelierUiState) => {
+			setUiStateKV((currentValue) => {
+				const current = coerceAtelierUiState(
+					currentValue ?? DEFAULT_ATELIER_UI_STATE,
+				);
+				const next = reducer(current);
+				return { ...next, panels: sanitizePanels(next.panels) };
 			});
-		}, 200);
-		return () => {
-			clearTimeout(timeoutId);
-			if (pendingPersistRef.current === serialized) {
-				pendingPersistRef.current = null;
-			}
-		};
-	}, [
-		leftPanel,
-		centralPanel,
-		rightPanel,
-		focusedPanel,
-		panelSizes,
-		setUiStateKV,
-	]);
+		},
+		[setUiStateKV],
+	);
+	const updateSidePanelSize = useCallback(
+		(side: Exclude<PanelSide, "central">, size: number) => {
+			updateUiState((current) => {
+				const sizes = normalizeLayoutSizes(current.layout?.sizes);
+				if (sizes[side] === size) return current;
+				const central = Math.max(
+					0,
+					Math.min(100, sizes.central + sizes[side] - size),
+				);
+				return {
+					...current,
+					layout: {
+						...current.layout,
+						sizes: { ...sizes, [side]: size, central },
+					},
+				};
+			});
+		},
+		[updateUiState],
+	);
+	const updateWorkspace = useCallback(
+		(reducer: (current: WorkspacePanelState) => WorkspacePanelState) => {
+			updateUiState((current) => {
+				const canonical = canonicalizeWorkspace(current).state;
+				const next = reducer(canonical);
+				return {
+					...current,
+					panels: next.panels,
+					focusedPanel: next.focusedPanel,
+				};
+			});
+		},
+		[canonicalizeWorkspace, updateUiState],
+	);
+
+	// File and extension discovery happen outside React. Commit their pruning and
+	// the Files landing transition to the canonical snapshot so removed views
+	// cannot reappear and the rendered workspace always matches persistence.
+	useEffect(() => {
+		updateWorkspace((current) => current);
+		if (effectiveWorkspaceTransition.didRestoreLandingView) {
+			setWorkspaceUiIntent({
+				collapseSide: effectiveWorkspaceTransition.sourceBecameEmpty
+					? effectiveWorkspaceTransition.restoredFilesFrom
+					: null,
+				focusCentral: effectiveWorkspace.focusedPanel === "central",
+			});
+		}
+	}, [effectiveWorkspace, effectiveWorkspaceTransition, updateWorkspace]);
+
+	const reconcilePanelForUpdate = useCallback(
+		(side: PanelSide, panel: PanelState): PanelState => {
+			const currentPanel = reconcileCurrentFileViewPanel(panel, currentFileIds);
+			return reconcilePanelExtensionViewsForDocumentSlot(
+				side,
+				currentPanel,
+				extensionMap,
+				{ preserveUnknownKinds: preserveUnknownExtensionKinds },
+			);
+		},
+		[currentFileIds, extensionMap, preserveUnknownExtensionKinds],
+	);
 
 	const setPanelState = useCallback(
 		(
@@ -1205,28 +1155,36 @@ function LayoutShellLoadedContent({
 			reducer: (state: PanelState) => PanelState,
 			options: { focus?: boolean } = {},
 		) => {
-			setStoredWorkspace((previous) => {
-				const canonical = canonicalizeWorkspace(previous).state;
-				const panels = canonical.panels;
-				const currentPanel = reconcilePanelExtensionViewsForDocumentSlot(
+			updateWorkspace((current) => {
+				const currentPanel = reconcilePanelForUpdate(
 					side,
-					panels[side],
+					current.panels[side],
+				);
+				const next = reconcilePanelExtensionViews(
+					reducer(currentPanel),
 					extensionMap,
 					{ preserveUnknownKinds: preserveUnknownExtensionKinds },
 				);
-				const nextPanel = normalizePanelForDocumentSlot(
-					side,
-					reconcilePanelExtensionViews(reducer(currentPanel), extensionMap, {
-						preserveUnknownKinds: preserveUnknownExtensionKinds,
-					}),
-				);
-				return {
-					panels: { ...panels, [side]: nextPanel },
-					focusedPanel: options.focus ? side : canonical.focusedPanel,
+				const panels = {
+					...current.panels,
+					[side]: normalizePanelForDocumentSlot(side, next),
 				};
+				const nextFocusedPanel = options.focus ? side : current.focusedPanel;
+				if (
+					nextFocusedPanel === current.focusedPanel &&
+					panelsStructurallyEqual(current.panels, panels)
+				) {
+					return current;
+				}
+				return { focusedPanel: nextFocusedPanel, panels };
 			});
 		},
-		[canonicalizeWorkspace, extensionMap, preserveUnknownExtensionKinds],
+		[
+			extensionMap,
+			preserveUnknownExtensionKinds,
+			reconcilePanelForUpdate,
+			updateWorkspace,
+		],
 	);
 
 	const transitionCheckpointEditorRevisions = useCallback(
@@ -1250,22 +1208,21 @@ function LayoutShellLoadedContent({
 								currentFileIds: currentWorkspaceFileIds,
 							}),
 						);
-				setStoredWorkspace((current) => {
-					const canonical = canonicalizeWorkspace(current).state;
-					return {
-						panels: {
-							left: transitionPanel("left")(canonical.panels.left),
-							central: transitionPanel("central")(canonical.panels.central),
-							right: transitionPanel("right")(canonical.panels.right),
-						},
-						focusedPanel: canonical.focusedPanel,
+				updateWorkspace((current) => {
+					const panels = {
+						left: transitionPanel("left")(current.panels.left),
+						central: transitionPanel("central")(current.panels.central),
+						right: transitionPanel("right")(current.panels.right),
 					};
+					return panelsStructurallyEqual(current.panels, panels)
+						? current
+						: { ...current, panels };
 				});
 			})().catch((error: unknown) => {
 				console.error("Failed to update checkpoint revision state", error);
 			});
 		},
-		[canonicalizeWorkspace, lix],
+		[lix, updateWorkspace],
 	);
 
 	const clearCheckpointDiff = useCallback(() => {
@@ -1296,8 +1253,7 @@ function LayoutShellLoadedContent({
 				side === "left" ? leftPanelRef.current : rightPanelRef.current;
 			const isCollapsed = side === "left" ? isLeftCollapsed : isRightCollapsed;
 			if (!panelRef || !isCollapsed) return;
-			const initialSize =
-				side === "left" ? initialLayoutSizes.left : initialLayoutSizes.right;
+			const initialSize = side === "left" ? panelSizes.left : panelSizes.right;
 			const lastSize =
 				side === "left"
 					? lastNonZeroSizesRef.current.left
@@ -1314,39 +1270,52 @@ function LayoutShellLoadedContent({
 				targetSize = Math.max(targetSize, MIN_UNCOLLAPSED_RIGHT_SIZE);
 			}
 			schedulePanelAnimation();
-			if (side === "left") {
-				setIsLeftCollapsed(false);
-			} else {
-				setIsRightCollapsed(false);
-			}
+			updateSidePanelSize(side, targetSize);
 			panelRef.resize(`${targetSize}%`);
 		},
 		[
-			initialLayoutSizes.left,
-			initialLayoutSizes.right,
 			isLeftCollapsed,
 			isRightCollapsed,
+			panelSizes.left,
+			panelSizes.right,
 			schedulePanelAnimation,
+			updateSidePanelSize,
 		],
 	);
 
 	useEffect(() => {
 		if (!workspaceUiIntent) return;
-		if (workspaceUiIntent.collapseSide === "left" && !isLeftCollapsed) {
-			setIsLeftCollapsed(true);
+		const landingView = centralPanel.views.find(
+			(view) => view.kind === FILES_EXTENSION_KIND,
+		);
+		const isCurrentLanding =
+			centralPanel.views.length === 1 &&
+			landingView !== undefined &&
+			centralPanel.activeInstance === landingView.instance;
+		if (
+			isCurrentLanding &&
+			workspaceUiIntent.collapseSide === "left" &&
+			leftPanel.views.length === 0 &&
+			!isLeftCollapsed
+		) {
 			schedulePanelAnimation();
+			updateSidePanelSize("left", 0);
 			leftPanelRef.current?.collapse();
 		} else if (
+			isCurrentLanding &&
 			workspaceUiIntent.collapseSide === "right" &&
+			rightPanel.views.length === 0 &&
 			!isRightCollapsed
 		) {
-			setIsRightCollapsed(true);
 			schedulePanelAnimation();
+			updateSidePanelSize("right", 0);
 			rightPanelRef.current?.collapse();
 		}
 
 		if (
+			isCurrentLanding &&
 			workspaceUiIntent.focusCentral &&
+			focusedPanel === "central" &&
 			(!document.activeElement || document.activeElement === document.body)
 		) {
 			document
@@ -1355,9 +1324,15 @@ function LayoutShellLoadedContent({
 		}
 		setWorkspaceUiIntent(null);
 	}, [
+		centralPanel.activeInstance,
+		centralPanel.views,
+		focusedPanel,
 		isLeftCollapsed,
 		isRightCollapsed,
+		leftPanel.views.length,
+		rightPanel.views.length,
 		schedulePanelAnimation,
+		updateSidePanelSize,
 		workspaceUiIntent,
 	]);
 
@@ -1492,9 +1467,8 @@ function LayoutShellLoadedContent({
 				},
 				...(pending ? { isPending: true } : {}),
 			};
-			setStoredWorkspace((previous) => {
-				const canonical = canonicalizeWorkspace(previous).state;
-				const panels = canonical.panels;
+			updateWorkspace((current) => {
+				const panels = current.panels;
 				const centeredFiles = panels.central.views.find(
 					(view) => view.kind === FILES_EXTENSION_KIND,
 				);
@@ -1517,11 +1491,11 @@ function LayoutShellLoadedContent({
 							activeInstance: documentView.instance,
 						},
 					},
-					focusedPanel: focus ? "central" : canonical.focusedPanel,
+					focusedPanel: focus ? "central" : current.focusedPanel,
 				};
 			});
 		},
-		[canonicalizeWorkspace, ensurePanelExpanded, extensionMap],
+		[ensurePanelExpanded, extensionMap, updateWorkspace],
 	);
 
 	const showCheckpointDiff = useCallback(
@@ -1834,14 +1808,13 @@ function LayoutShellLoadedContent({
 
 	const focusPanel = useCallback(
 		(side: PanelSide) => {
-			setStoredWorkspace((current) => {
-				const canonical = canonicalizeWorkspace(current).state;
-				return canonical.focusedPanel === side
-					? canonical
-					: { ...canonical, focusedPanel: side };
-			});
+			updateWorkspace((current) =>
+				current.focusedPanel === side
+					? current
+					: { ...current, focusedPanel: side },
+			);
 		},
-		[canonicalizeWorkspace],
+		[updateWorkspace],
 	);
 
 	const registerNewFileDraftHandler = useCallback(
@@ -1869,7 +1842,7 @@ function LayoutShellLoadedContent({
 	const pointerSensor = useSensor(PointerSensor, pointerSensorOptions);
 	const sensors = useSensors(pointerSensor);
 
-	const handleLayoutChange = useCallback(
+	const handleLayoutChanged = useCallback(
 		(sizes: Record<string, number>) => {
 			if (
 				typeof sizes.left !== "number" ||
@@ -1878,24 +1851,24 @@ function LayoutShellLoadedContent({
 			) {
 				return;
 			}
-			setPanelSizes((prev) => {
-				const next = {
-					left: sizes.left,
-					central: sizes.central,
-					right: sizes.right,
-				};
+			const next = {
+				left: sizes.left,
+				central: sizes.central,
+				right: sizes.right,
+			};
+			updateUiState((current) => {
+				const previous = normalizeLayoutSizes(current.layout?.sizes);
 				if (
-					prev.left === next.left &&
-					prev.central === next.central &&
-					prev.right === next.right
+					previous.left === next.left &&
+					previous.central === next.central &&
+					previous.right === next.right
 				) {
-					return prev;
+					return current;
 				}
-				updateDerivedPanelState(next);
-				return next;
+				return { ...current, layout: { ...current.layout, sizes: next } };
 			});
 		},
-		[updateDerivedPanelState],
+		[updateUiState],
 	);
 
 	const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -1957,53 +1930,58 @@ function LayoutShellLoadedContent({
 				return;
 			}
 
-			const sourcePanel =
-				fromPanel === "left"
-					? leftPanel
-					: fromPanel === "central"
-						? centralPanel
-						: rightPanel;
-			const movedView = cloneExtensionInstance(sourcePanel, instance);
+			updateWorkspace((current) => {
+				const sourcePanel = reconcilePanelForUpdate(
+					fromPanel,
+					current.panels[fromPanel],
+				);
+				const movedView = cloneExtensionInstance(sourcePanel, instance);
+				if (!movedView || !canPlaceViewInPanel(movedView, toPanel)) {
+					return current;
+				}
 
-			if (!movedView) return;
-			if (!canPlaceViewInPanel(movedView, toPanel)) return;
-
-			setPanelState(fromPanel, (panel) => {
-				const remaining = panel.views.filter(
+				const targetPanel = reconcilePanelForUpdate(
+					toPanel,
+					current.panels[toPanel],
+				);
+				const remaining = sourcePanel.views.filter(
 					(entry) => entry.instance !== instance,
 				);
-				const nextActive =
-					panel.activeInstance === instance
-						? (remaining[remaining.length - 1]?.instance ?? null)
-						: panel.activeInstance;
-				return { views: remaining, activeInstance: nextActive };
-			});
+				const nextSource = normalizePanelForDocumentSlot(fromPanel, {
+					views: remaining,
+					activeInstance:
+						sourcePanel.activeInstance === instance
+							? (remaining[remaining.length - 1]?.instance ?? null)
+							: sourcePanel.activeInstance,
+				});
 
-			setPanelState(
-				toPanel,
-				(panel) => {
-					const views = [...panel.views];
-					let insertIndex = views.length;
-					if (overSortable?.index != null) {
-						insertIndex = Math.min(overSortable.index, views.length);
-					} else if (targetInstance) {
-						const targetIndex = views.findIndex(
-							(entry) => entry.instance === targetInstance,
-						);
-						if (targetIndex !== -1) {
-							insertIndex = targetIndex;
-						}
-					}
-					views.splice(insertIndex, 0, movedView);
-					return {
-						views,
-						activeInstance: movedView.instance,
-					};
-				},
-				{ focus: true },
-			);
+				const targetViews = [...targetPanel.views];
+				let insertIndex = targetViews.length;
+				if (overSortable?.index != null) {
+					insertIndex = Math.min(overSortable.index, targetViews.length);
+				} else if (targetInstance) {
+					const targetIndex = targetViews.findIndex(
+						(entry) => entry.instance === targetInstance,
+					);
+					if (targetIndex !== -1) insertIndex = targetIndex;
+				}
+				targetViews.splice(insertIndex, 0, movedView);
+				const nextTarget = normalizePanelForDocumentSlot(toPanel, {
+					views: targetViews,
+					activeInstance: movedView.instance,
+				});
+				const panels = {
+					...current.panels,
+					[fromPanel]: nextSource,
+					[toPanel]: nextTarget,
+				};
+				return {
+					focusedPanel: toPanel,
+					panels,
+				};
+			});
 		},
-		[centralPanel, leftPanel, rightPanel, setPanelState],
+		[reconcilePanelForUpdate, setPanelState, updateWorkspace],
 	);
 
 	const activeDragData = activeId
@@ -2047,9 +2025,7 @@ function LayoutShellLoadedContent({
 
 	useEffect(() => {
 		if (activeFileId === activeCentralFileId) return;
-		void setActiveFileId(activeCentralFileId).catch((error: unknown) => {
-			console.error("Failed to persist active file", error);
-		});
+		setActiveFileId(activeCentralFileId);
 	}, [activeCentralFileId, activeFileId, setActiveFileId]);
 
 	const activeFileName = useMemo(() => {
@@ -2187,20 +2163,25 @@ function LayoutShellLoadedContent({
 			const desiredSize =
 				lastNonZeroSizesRef.current.left > MIN_VISIBLE_PANEL_SIZE
 					? lastNonZeroSizesRef.current.left
-					: initialLayoutSizes.left;
+					: panelSizes.left;
 			const target =
 				desiredSize > MIN_VISIBLE_PANEL_SIZE
 					? desiredSize
 					: DEFAULT_PANEL_FALLBACK_SIZES.left;
-			setIsLeftCollapsed(false);
 			schedulePanelAnimation();
+			updateSidePanelSize("left", target);
 			panel.resize(`${target}%`);
 		} else {
-			setIsLeftCollapsed(true);
 			schedulePanelAnimation();
+			updateSidePanelSize("left", 0);
 			panel.collapse();
 		}
-	}, [isLeftCollapsed, initialLayoutSizes.left, schedulePanelAnimation]);
+	}, [
+		isLeftCollapsed,
+		panelSizes.left,
+		schedulePanelAnimation,
+		updateSidePanelSize,
+	]);
 
 	const toggleRightSidebar = useCallback(() => {
 		const panel = rightPanelRef.current;
@@ -2209,21 +2190,26 @@ function LayoutShellLoadedContent({
 			const desiredSize =
 				lastNonZeroSizesRef.current.right > MIN_VISIBLE_PANEL_SIZE
 					? lastNonZeroSizesRef.current.right
-					: initialLayoutSizes.right;
+					: panelSizes.right;
 			let target =
 				desiredSize > MIN_VISIBLE_PANEL_SIZE
 					? desiredSize
 					: DEFAULT_PANEL_FALLBACK_SIZES.right;
 			target = Math.max(target, MIN_UNCOLLAPSED_RIGHT_SIZE);
-			setIsRightCollapsed(false);
 			schedulePanelAnimation();
+			updateSidePanelSize("right", target);
 			panel.resize(`${target}%`);
 		} else {
-			setIsRightCollapsed(true);
 			schedulePanelAnimation();
+			updateSidePanelSize("right", 0);
 			panel.collapse();
 		}
-	}, [isRightCollapsed, initialLayoutSizes.right, schedulePanelAnimation]);
+	}, [
+		isRightCollapsed,
+		panelSizes.right,
+		schedulePanelAnimation,
+		updateSidePanelSize,
+	]);
 
 	const isMacPlatform = useMemo(() => {
 		if (typeof navigator === "undefined") return false;
@@ -2293,7 +2279,11 @@ function LayoutShellLoadedContent({
 					navbarEnd={slots?.navbarEnd}
 				/>
 				<div className="flex flex-1 min-h-0 overflow-hidden px-2">
-					<Group orientation="horizontal" onLayoutChange={handleLayoutChange}>
+					<Group
+						orientation="horizontal"
+						groupRef={panelGroupRef}
+						onLayoutChanged={handleLayoutChanged}
+					>
 						<Panel
 							id="left"
 							panelRef={leftPanelRef}
