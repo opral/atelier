@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Table2 } from "lucide-react";
 import {
 	DataEditor,
@@ -316,7 +316,7 @@ function CsvViewLoaded({
 				{parsed.columns.length === 0 ? (
 					<CsvEmptyState filePath={fileRow.path} />
 				) : (
-					<CsvTable parsed={parsed} />
+					<CsvTable parsed={parsed} isActiveView={isActiveView} />
 				)}
 				{externalWriteReview ? (
 					<CsvReviewOverlay
@@ -396,7 +396,13 @@ function CsvReviewOverlay({
 	);
 }
 
-function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
+function CsvTable({
+	parsed,
+	isActiveView,
+}: {
+	readonly parsed: CsvParseResult;
+	readonly isActiveView: boolean;
+}) {
 	const initialColumnWidths = useMemo(
 		() =>
 			parsed.columns.map((header, index) =>
@@ -412,6 +418,13 @@ function CsvTable({ parsed }: { readonly parsed: CsvParseResult }) {
 		columnWidthState.source === parsed
 			? columnWidthState.overrides
 			: EMPTY_COLUMN_WIDTH_OVERRIDES;
+	useEffect(() => {
+		if (!isActiveView) return;
+		const frame = window.requestAnimationFrame(() => {
+			window.dispatchEvent(new Event("resize"));
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [isActiveView]);
 	const columns = useMemo<GridColumn[]>(() => {
 		return parsed.columns.map((title, index) => ({
 			id: String(index),
