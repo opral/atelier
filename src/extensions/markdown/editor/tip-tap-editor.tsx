@@ -433,6 +433,7 @@ function TipTapEditorLoadedContent({
 			editor,
 			initialObservedMarkdown: normalizePersistedMarkdown(initialMarkdown),
 			lastCleanPersistedMarkdown: buildNormalizedMarkdownFromEditor(editor),
+			pendingExternalMarkdown: null as string | null,
 			sawInitialSnapshot: false,
 		};
 	}, [editor, initialMarkdown]);
@@ -455,19 +456,19 @@ function TipTapEditorLoadedContent({
 		}
 		if (currentMarkdown === nextMarkdown) {
 			syncState.lastCleanPersistedMarkdown = nextMarkdown;
+			syncState.pendingExternalMarkdown = null;
 			return;
 		}
 		if (sourceFile.originKey === editorOriginKey) {
 			return;
 		}
 		if (currentMarkdown !== syncState.lastCleanPersistedMarkdown) {
+			syncState.pendingExternalMarkdown = nextMarkdown;
 			return;
 		}
-		const ast = parseMarkdown(nextMarkdown) as any;
-		editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
-			emitUpdate: false,
-		});
+		setEditorMarkdown(editor, nextMarkdown, defaultBlock);
 		syncState.lastCleanPersistedMarkdown = nextMarkdown;
+		syncState.pendingExternalMarkdown = null;
 	}, [
 		editor,
 		activeFileId,
@@ -477,6 +478,30 @@ function TipTapEditorLoadedContent({
 		sourceFile,
 		externalSyncState,
 	]);
+
+	useEffect(() => {
+		if (!editor || !externalSyncState) return;
+		const applyPendingExternalMarkdown = () => {
+			const pendingMarkdown = externalSyncState.pendingExternalMarkdown;
+			if (pendingMarkdown === null) return;
+			const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
+			if (currentMarkdown === pendingMarkdown) {
+				externalSyncState.lastCleanPersistedMarkdown = pendingMarkdown;
+				externalSyncState.pendingExternalMarkdown = null;
+				return;
+			}
+			if (currentMarkdown !== externalSyncState.lastCleanPersistedMarkdown) {
+				return;
+			}
+			externalSyncState.pendingExternalMarkdown = null;
+			setEditorMarkdown(editor, pendingMarkdown, defaultBlock);
+			externalSyncState.lastCleanPersistedMarkdown = pendingMarkdown;
+		};
+		editor.on("update", applyPendingExternalMarkdown);
+		return () => {
+			editor.off("update", applyPendingExternalMarkdown);
+		};
+	}, [defaultBlock, editor, externalSyncState]);
 
 	useEffect(() => {
 		if (!editor) return;
@@ -549,4 +574,15 @@ function TipTapEditorLoadingState({
 			</div>
 		</div>
 	);
+}
+
+function setEditorMarkdown(
+	editor: Editor,
+	markdown: string,
+	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
+): void {
+	const ast = parseMarkdown(markdown) as any;
+	editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
+		emitUpdate: false,
+	});
 }

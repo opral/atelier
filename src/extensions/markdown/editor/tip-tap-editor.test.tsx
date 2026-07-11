@@ -750,6 +750,37 @@ test("does not clobber dirty editor content with different-origin markdown updat
 	expect(editorNode).not.toHaveTextContent("External dirty update");
 });
 
+test("applies a queued external update after undo returns the editor to clean content", async () => {
+	const fileId = "file_external_pending";
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+	});
+
+	await setEditorText(editor, "Unsaved local edit");
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Queued external update\n",
+		"external-origin",
+	);
+	await settleMarkdownObserver();
+
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Unsaved local edit",
+	);
+
+	await act(async () => {
+		editor.commands.undo();
+	});
+
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"Queued external update",
+		);
+	});
+});
+
 test("preserves main content when switching to a new branch and back", async () => {
 	const lix = await openLix({
 		keyValues: [
