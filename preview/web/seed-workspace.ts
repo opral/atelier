@@ -15,12 +15,6 @@ const seedAssetUrls = import.meta.glob("./seed/assets/**/*", {
 	query: "?inline",
 }) as Record<string, string>;
 
-type SeededFile = {
-	id: string;
-	path: string;
-	data: Uint8Array;
-};
-
 export async function seedWorkspace(lix: Lix): Promise<void> {
 	const textFiles = Object.entries(seedTextModules).map(
 		([modulePath, contents]) => ({
@@ -56,10 +50,7 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 		await lix.createBranch({ name: "Seed workspace" });
 	}
 
-	const readme = files.find((file) => file.path === "/README.md");
-	if (readme) {
-		await seedOpenFileState(lix, readme);
-	}
+	await seedWorkspaceRootState(lix);
 }
 
 export function decodeSeedAssetDataUrl(dataUrl: string): Uint8Array {
@@ -106,40 +97,22 @@ async function seedDirectories(lix: Lix, filePaths: string[]): Promise<void> {
 	}
 }
 
-async function seedOpenFileState(lix: Lix, file: SeededFile): Promise<void> {
-	const instance = `atelier_file:${file.id}`;
+async function seedWorkspaceRootState(lix: Lix): Promise<void> {
 	const uiState: JsonValue = {
 		focusedPanel: "central",
 		panels: {
-			left: {
+			left: { views: [], activeInstance: null },
+			central: {
 				views: [{ instance: "files-default", kind: "atelier_files" }],
 				activeInstance: "files-default",
 			},
-			central: {
-				views: [
-					{
-						instance,
-						kind: "atelier_file",
-						state: {
-							fileId: file.id,
-							filePath: file.path,
-							atelier: { label: "README.md" },
-						},
-					},
-				],
-				activeInstance: instance,
-			},
 			right: { views: [], activeInstance: null },
 		},
-		layout: { sizes: { left: 20, central: 50, right: 30 } },
+		layout: { sizes: { left: 0, central: 100, right: 0 } },
 	};
 
 	await lix.execute(
 		"INSERT INTO lix_key_value_by_branch (key, value, lixcol_branch_id, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4, $5)",
 		["atelier_ui_state", uiState, "global", true, true],
-	);
-	await lix.execute(
-		"INSERT INTO lix_key_value_by_branch (key, value, lixcol_branch_id, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4, $5)",
-		["atelier_active_file_id", file.id, "global", true, true],
 	);
 }

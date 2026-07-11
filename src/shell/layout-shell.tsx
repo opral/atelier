@@ -68,6 +68,7 @@ import {
 	buildFileExtensionProps,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
+	FILES_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 } from "../extension-runtime/extension-instance-helpers";
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
@@ -191,7 +192,9 @@ const canPlaceViewInPanel = (
 	view: ExtensionInstance,
 	side: PanelSide,
 ): boolean =>
-	side === "central" ? isDocumentView(view) : !isDocumentView(view);
+	side === "central"
+		? isDocumentView(view) || view.kind === FILES_EXTENSION_KIND
+		: !isDocumentView(view);
 
 const activeEntryForDocumentSlot = (
 	panel: PanelState,
@@ -211,7 +214,11 @@ const normalizePanelForDocumentSlot = (
 ): PanelState => {
 	if (side === "central") {
 		const activeEntry = activeEntryForDocumentSlot(panel);
-		if (!activeEntry || !isDocumentView(activeEntry)) {
+		if (
+			!activeEntry ||
+			(!isDocumentView(activeEntry) &&
+				activeEntry.kind !== FILES_EXTENSION_KIND)
+		) {
 			return panel.views.length === 0 && panel.activeInstance === null
 				? panel
 				: { views: [], activeInstance: null };
@@ -1399,6 +1406,79 @@ function LayoutShellLoadedContent({
 		],
 	);
 
+	useEffect(() => {
+		if (centralPanel.views.length > 0) return;
+
+		const leftFilesView = leftPanel.views.find(
+			(view) => view.kind === FILES_EXTENSION_KIND,
+		);
+		const rightFilesView = rightPanel.views.find(
+			(view) => view.kind === FILES_EXTENSION_KIND,
+		);
+		const filesView =
+			leftFilesView ??
+			rightFilesView ??
+			({
+				instance: "files-default",
+				kind: FILES_EXTENSION_KIND,
+			} satisfies ExtensionInstance);
+
+		if (leftFilesView) {
+			const remainingViews = leftPanel.views.filter(
+				(view) => view.instance !== leftFilesView.instance,
+			);
+			setLeftPanel({
+				views: remainingViews,
+				activeInstance: remainingViews.some(
+					(view) => view.instance === leftPanel.activeInstance,
+				)
+					? leftPanel.activeInstance
+					: (remainingViews[remainingViews.length - 1]?.instance ?? null),
+			});
+			if (remainingViews.length === 0) {
+				setFocusedPanel((current) =>
+					current === "left" ? "central" : current,
+				);
+				if (!isLeftCollapsed) {
+					setIsLeftCollapsed(true);
+					schedulePanelAnimation();
+					leftPanelRef.current?.collapse();
+				}
+			}
+		} else if (rightFilesView) {
+			const remainingViews = rightPanel.views.filter(
+				(view) => view.instance !== rightFilesView.instance,
+			);
+			setRightPanel({
+				views: remainingViews,
+				activeInstance: remainingViews.some(
+					(view) => view.instance === rightPanel.activeInstance,
+				)
+					? rightPanel.activeInstance
+					: (remainingViews[remainingViews.length - 1]?.instance ?? null),
+			});
+			if (remainingViews.length === 0) {
+				setFocusedPanel((current) =>
+					current === "right" ? "central" : current,
+				);
+				if (!isRightCollapsed) {
+					setIsRightCollapsed(true);
+					schedulePanelAnimation();
+					rightPanelRef.current?.collapse();
+				}
+			}
+		}
+
+		setCentralPanel({ views: [filesView], activeInstance: filesView.instance });
+	}, [
+		centralPanel.views.length,
+		isLeftCollapsed,
+		isRightCollapsed,
+		leftPanel,
+		rightPanel,
+		schedulePanelAnimation,
+	]);
+
 	const handleOpenView = useCallback(
 		({
 			panel,
@@ -1422,7 +1502,12 @@ function LayoutShellLoadedContent({
 					state,
 					isPending: pending || undefined,
 				};
-				if (!isDocumentView(candidate)) return;
+				if (
+					!isDocumentView(candidate) &&
+					candidate.kind !== FILES_EXTENSION_KIND
+				) {
+					return;
+				}
 			}
 			ensurePanelExpanded(panel);
 			setPanelState(
@@ -1507,6 +1592,45 @@ function LayoutShellLoadedContent({
 			focus?: boolean;
 			pending?: boolean;
 		}) => {
+			const centeredFilesView = panelStatesRef.current.central.views.find(
+				(view) => view.kind === FILES_EXTENSION_KIND,
+			);
+			if (centeredFilesView) {
+				setPanelState(
+					"central",
+					(current) => {
+						const views = current.views.filter(
+							(view) => view.instance !== centeredFilesView.instance,
+						);
+						return {
+							views,
+							activeInstance: views.some(
+								(view) => view.instance === current.activeInstance,
+							)
+								? current.activeInstance
+								: (views[views.length - 1]?.instance ?? null),
+						};
+					},
+					{ focus: false },
+				);
+				setPanelState(
+					"left",
+					(current) => {
+						const existing = current.views.find(
+							(view) => view.kind === FILES_EXTENSION_KIND,
+						);
+						if (existing) {
+							return { ...current, activeInstance: existing.instance };
+						}
+						return {
+							views: [...current.views, centeredFilesView],
+							activeInstance: centeredFilesView.instance,
+						};
+					},
+					{ focus: false },
+				);
+				ensurePanelExpanded("left");
+			}
 			const handler =
 				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
@@ -1522,7 +1646,7 @@ function LayoutShellLoadedContent({
 				pending,
 			});
 		},
-		[handleOpenView, extensionMap],
+		[ensurePanelExpanded, handleOpenView, extensionMap, setPanelState],
 	);
 
 	const showCheckpointDiff = useCallback(
@@ -2320,7 +2444,7 @@ function LayoutShellLoadedContent({
 								side="left"
 								title="Navigator"
 								panel={leftPanel}
-								isFocused={focusedPanel === "left"}
+								isFocused={!isLeftCollapsed && focusedPanel === "left"}
 								onFocusPanel={focusPanel}
 								onSelectView={handleSelectLeftView}
 								onAddView={addViewOnLeft}
@@ -2373,7 +2497,7 @@ function LayoutShellLoadedContent({
 								side="right"
 								title="Secondary"
 								panel={rightPanel}
-								isFocused={focusedPanel === "right"}
+								isFocused={!isRightCollapsed && focusedPanel === "right"}
 								onFocusPanel={focusPanel}
 								onSelectView={handleSelectRightView}
 								onAddView={addViewOnRight}

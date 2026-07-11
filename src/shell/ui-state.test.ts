@@ -7,13 +7,15 @@ import {
 } from "./ui-state";
 
 describe("coerceAtelierUiState", () => {
-	test("fresh defaults open Files only", () => {
+	test("fresh defaults open Files in the centered workspace", () => {
 		const state = coerceAtelierUiState(undefined);
 
-		expect(state.panels.left.views.map((view) => view.kind)).toEqual([
+		expect(state.panels.left.views).toEqual([]);
+		expect(state.panels.central.views.map((view) => view.kind)).toEqual([
 			FILES_EXTENSION_KIND,
 		]);
-		expect(state.panels.left.activeInstance).toBe("files-default");
+		expect(state.panels.central.activeInstance).toBe("files-default");
+		expect(state.layout?.sizes).toEqual({ left: 0, central: 100, right: 0 });
 	});
 
 	test("preserves persisted left panel views without adding History", () => {

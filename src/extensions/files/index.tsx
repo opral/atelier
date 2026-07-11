@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Files, FileUp, FilePlus } from "lucide-react";
+import { FilePlus, Files, FileUp, Plus } from "lucide-react";
+import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileGenericIconUrl from "./assets/file-generic.svg";
+import fileHtmlIconUrl from "./assets/file-html.svg";
+import fileJpgIconUrl from "./assets/file-jpg.svg";
+import fileMdIconUrl from "./assets/file-md.svg";
+import filePdfIconUrl from "./assets/file-pdf.svg";
+import filePngIconUrl from "./assets/file-png.svg";
+import fileSvgIconUrl from "./assets/file-svg.svg";
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
@@ -627,6 +635,12 @@ function FilesViewContent({
 
 	useEffect(() => {
 		const listener = (event: KeyboardEvent) => {
+			if (
+				context?.isActiveView === false ||
+				context?.isPanelFocused === false
+			) {
+				return;
+			}
 			const usesPrimaryModifier = isMacPlatform
 				? event.metaKey && !event.ctrlKey
 				: event.ctrlKey && !event.metaKey;
@@ -692,7 +706,13 @@ function FilesViewContent({
 				}
 			}
 		};
-	}, [handleCreateShortcut, handleDeleteSelection, isMacPlatform]);
+	}, [
+		context?.isActiveView,
+		context?.isPanelFocused,
+		handleCreateShortcut,
+		handleDeleteSelection,
+		isMacPlatform,
+	]);
 
 	const handleDragEnter = useCallback((e: React.DragEvent) => {
 		e.preventDefault();
@@ -799,14 +819,29 @@ function FilesViewContent({
 
 	return (
 		<div
-			className="relative flex min-h-0 flex-1 flex-col p-2"
+			className={
+				context?.panelSide === "central"
+					? "relative flex min-h-0 flex-1 flex-col"
+					: "relative flex min-h-0 flex-1 flex-col p-2"
+			}
 			onDragEnter={handleDragEnter}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 		>
-			{/* New file button row - hidden when creation is active */}
-			{!createRequest && (
+			{context?.panelSide === "central" ? (
+				<WideFilesView
+					nodes={nodes}
+					selectedPath={selectedPath}
+					createRequest={createRequest}
+					onNewFile={handleNewFile}
+					onOpenFile={handleOpenFile}
+					onCreateCommit={handleCreateCommit}
+					onCreateCancel={handleCreateCancel}
+				/>
+			) : null}
+			{/* Compact new-file row for side-panel use. */}
+			{context?.panelSide !== "central" && !createRequest ? (
 				<button
 					type="button"
 					onClick={handleNewFile}
@@ -815,7 +850,7 @@ function FilesViewContent({
 					title="New file (⌘.)"
 					data-attr="file-new"
 				>
-					<span className="flex items-center gap-2">
+					<span className="flex items-center gap-[6px]">
 						<FilePlus
 							className="size-3.25 text-[var(--color-icon-tertiary)]"
 							strokeWidth={2}
@@ -826,7 +861,7 @@ function FilesViewContent({
 						⌘ ·
 					</span>
 				</button>
-			)}
+			) : null}
 			{isDraggingOver && (
 				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">
 					<FileUp className="h-12 w-12 text-foreground" />
@@ -841,7 +876,11 @@ function FilesViewContent({
 			<div
 				data-testid="files-view-tree-scroll"
 				data-attr="file-tree"
-				className="ph-mask min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
+				className={
+					context?.panelSide === "central"
+						? "hidden"
+						: "ph-mask min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
+				}
 			>
 				<FileTree
 					nodes={nodes}
@@ -860,6 +899,180 @@ function FilesViewContent({
 				/>
 			</div>
 		</div>
+	);
+}
+
+type FlatFile = Extract<FilesystemTreeNode, { type: "file" }>;
+
+function flattenFiles(nodes: readonly FilesystemTreeNode[]): FlatFile[] {
+	const files: FlatFile[] = [];
+	const visit = (node: FilesystemTreeNode) => {
+		if (node.type === "file") {
+			files.push(node);
+			return;
+		}
+		for (const child of node.children) visit(child);
+	};
+	for (const node of nodes) visit(node);
+	return files.sort((left, right) =>
+		left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+	);
+}
+
+function WideFilesView({
+	nodes,
+	selectedPath,
+	createRequest,
+	onNewFile,
+	onOpenFile,
+	onCreateCommit,
+	onCreateCancel,
+}: {
+	readonly nodes: readonly FilesystemTreeNode[];
+	readonly selectedPath: string | null;
+	readonly createRequest: FileTreeCreateRequest | null;
+	readonly onNewFile: () => void;
+	readonly onOpenFile: (fileId: string, path: string) => Promise<void> | void;
+	readonly onCreateCommit: (
+		request: FileTreeCreateRequest,
+		value: string,
+	) => Promise<void> | void;
+	readonly onCreateCancel: (request: FileTreeCreateRequest) => void;
+}) {
+	const files = useMemo(() => flattenFiles(nodes), [nodes]);
+	const [draftName, setDraftName] = useState("");
+	const draftInputRef = useRef<HTMLInputElement | null>(null);
+	const cancelledCreateRequestIdRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		if (!createRequest) return;
+		cancelledCreateRequestIdRef.current = null;
+		setDraftName(createRequest.initialValue);
+		requestAnimationFrame(() => {
+			draftInputRef.current?.focus();
+			draftInputRef.current?.select();
+		});
+	}, [createRequest]);
+
+	const commitDraft = () => {
+		if (
+			!createRequest ||
+			cancelledCreateRequestIdRef.current === createRequest.id
+		) {
+			return;
+		}
+		void onCreateCommit(createRequest, draftName);
+	};
+
+	return (
+		<div
+			className="min-h-0 flex-1 overflow-y-auto"
+			data-testid="files-view-wide"
+		>
+			<div className="mx-auto flex w-full max-w-[760px] flex-col px-3.5 pt-13 pb-10">
+				<div className="flex justify-end pb-6">
+					<button
+						type="button"
+						onClick={onNewFile}
+						className="inline-flex items-center gap-2 rounded-[9px] bg-[linear-gradient(180deg,var(--color-brand-500)_0%,var(--color-brand-600)_100%)] px-4 py-2.25 text-[13.5px] font-bold text-white shadow-[0_4px_14px_rgba(232,89,12,0.3),inset_0_1px_0_rgba(255,255,255,0.25)] transition-[filter,transform] hover:brightness-105 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-2"
+						aria-label="New file"
+						data-attr="file-new-wide"
+					>
+						<Plus className="size-3.5" strokeWidth={2.4} />
+						<span>New file</span>
+						<span className="ml-0.5 text-xs font-semibold opacity-65">⌘.</span>
+					</button>
+				</div>
+
+				{createRequest ? (
+					<form
+						className="mb-1 flex min-h-12 items-center gap-3 rounded-[9px] bg-[var(--color-bg-hover)] px-3.5"
+						onSubmit={(event) => {
+							event.preventDefault();
+							commitDraft();
+						}}
+					>
+						<FileTypeIcon path="untitled.md" />
+						<input
+							ref={draftInputRef}
+							value={draftName}
+							onChange={(event) => setDraftName(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key !== "Escape") return;
+								event.preventDefault();
+								cancelledCreateRequestIdRef.current = createRequest.id;
+								onCreateCancel(createRequest);
+							}}
+							onBlur={commitDraft}
+							aria-label="File name"
+							className="min-w-0 flex-1 rounded-md border border-[var(--color-border-selection-current)] bg-[var(--color-bg-panel)] px-2 py-1 text-[15px] text-[var(--color-text-primary)] outline-none ring-2 ring-[var(--color-bg-selection-current)]"
+						/>
+					</form>
+				) : null}
+
+				<ul className="m-0 flex list-none flex-col p-0" aria-label="Files">
+					{files.map((file) => {
+						const isSelected = selectedPath === file.path;
+						return (
+							<li key={file.id}>
+								<button
+									type="button"
+									onClick={() => void onOpenFile(file.id, file.path)}
+									className={`flex min-h-12 w-full items-center gap-3.25 rounded-[9px] px-3.5 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+										isSelected
+											? "bg-[var(--color-bg-selection-current)]"
+											: "hover:bg-[var(--color-bg-hover)]"
+									}`}
+									aria-label={`Open ${file.path}`}
+									aria-current={isSelected ? "page" : undefined}
+								>
+									<FileTypeIcon path={file.path} />
+									<span className="min-w-0 flex-1 truncate text-[15px] font-medium text-[var(--color-neutral-800)]">
+										{file.name}
+									</span>
+									{file.path.split("/").filter(Boolean).length > 1 ? (
+										<span className="max-w-48 truncate text-[13px] text-[var(--color-text-tertiary)]">
+											{file.path.slice(
+												1,
+												Math.max(1, file.path.lastIndexOf("/")),
+											)}
+										</span>
+									) : null}
+								</button>
+							</li>
+						);
+					})}
+				</ul>
+			</div>
+		</div>
+	);
+}
+
+function FileTypeIcon({ path }: { readonly path: string }) {
+	const extension = path.split(".").pop()?.toLowerCase() ?? "";
+	const iconUrl =
+		extension === "md" || extension === "markdown"
+			? fileMdIconUrl
+			: extension === "csv"
+				? fileCsvIconUrl
+				: extension === "png"
+					? filePngIconUrl
+					: extension === "svg"
+						? fileSvgIconUrl
+						: ["jpg", "jpeg"].includes(extension)
+							? fileJpgIconUrl
+							: extension === "pdf"
+								? filePdfIconUrl
+								: ["html", "htm"].includes(extension)
+									? fileHtmlIconUrl
+									: fileGenericIconUrl;
+	return (
+		<img
+			src={iconUrl}
+			alt=""
+			aria-hidden="true"
+			className="size-6.5 shrink-0"
+		/>
 	);
 }
 
