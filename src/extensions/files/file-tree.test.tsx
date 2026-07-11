@@ -20,6 +20,21 @@ describe("FileTree", () => {
 		expect(queryTreeItem(container, "docs/README.md")).toBeNull();
 	});
 
+	test("supports spacious rows and icons", () => {
+		const { container } = render(
+			<FileTree nodes={mockTree} variant="spacious" />,
+		);
+		const host = getTreeHost(container);
+
+		expect(host.style.getPropertyValue("--trees-item-height")).toBe("48px");
+		expect(host.style.getPropertyValue("--trees-icon-width-override")).toBe(
+			"26px",
+		);
+		expect(host.style.getPropertyValue("--trees-font-size-override")).toBe(
+			"15px",
+		);
+	});
+
 	test("expands and collapses directories", async () => {
 		const { container } = render(<FileTree nodes={mockTree} />);
 

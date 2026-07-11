@@ -13,16 +13,9 @@ import type {
 	FilesystemTreeNode,
 	FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
-import fileCsvIconUrl from "./assets/file-csv.svg";
-import fileGenericIconUrl from "./assets/file-generic.svg";
-import fileHtmlIconUrl from "./assets/file-html.svg";
-import fileJpgIconUrl from "./assets/file-jpg.svg";
-import fileMdIconUrl from "./assets/file-md.svg";
-import filePdfIconUrl from "./assets/file-pdf.svg";
-import filePngIconUrl from "./assets/file-png.svg";
-import fileSvgIconUrl from "./assets/file-svg.svg";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
+import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
 
 export type FileTreeCreateRequest = {
 	readonly id: number;
@@ -41,6 +34,7 @@ export type FileTreeRenameRequest = {
 
 export type FileTreeProps = {
 	readonly nodes?: FilesystemTreeNode[];
+	readonly variant?: "compact" | "spacious";
 	readonly openFileView?: (
 		fileId: string,
 		path: string,
@@ -89,6 +83,18 @@ type TreeInput = {
 	readonly realDirectoryTreePaths: string[];
 	readonly createPlaceholderTreePath: string | null;
 };
+
+const FILE_TYPE_ICON_CSS = FILE_ICON_GROUPS.map(
+	({ extensions, iconUrl }) => `
+	${extensions
+		.map(
+			(extension) =>
+				`[data-type='item'][data-item-type='file'][data-item-path$='.${extension}' i] > [data-item-section='icon']::before`,
+		)
+		.join(",\n\t")} {
+		background-image: url("${iconUrl}");
+	}`,
+).join("\n");
 
 const FILE_TREE_UNSAFE_CSS = `
 	[data-item-section='spacing-item'] {
@@ -139,46 +145,7 @@ const FILE_TREE_UNSAFE_CSS = `
 		background: url("${fileGenericIconUrl}") center / contain no-repeat;
 	}
 
-	[data-type='item'][data-item-type='file'][data-item-path$='.md' i]
-		> [data-item-section='icon']::before,
-	[data-type='item'][data-item-type='file'][data-item-path$='.markdown' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${fileMdIconUrl}");
-	}
-
-	[data-type='item'][data-item-type='file'][data-item-path$='.csv' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${fileCsvIconUrl}");
-	}
-
-	[data-type='item'][data-item-type='file'][data-item-path$='.png' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${filePngIconUrl}");
-	}
-
-	[data-type='item'][data-item-type='file'][data-item-path$='.svg' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${fileSvgIconUrl}");
-	}
-
-	[data-type='item'][data-item-type='file'][data-item-path$='.jpg' i]
-		> [data-item-section='icon']::before,
-	[data-type='item'][data-item-type='file'][data-item-path$='.jpeg' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${fileJpgIconUrl}");
-	}
-
-	[data-type='item'][data-item-type='file'][data-item-path$='.pdf' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${filePdfIconUrl}");
-	}
-
-	[data-type='item'][data-item-type='file'][data-item-path$='.html' i]
-		> [data-item-section='icon']::before,
-	[data-type='item'][data-item-type='file'][data-item-path$='.htm' i]
-		> [data-item-section='icon']::before {
-		background-image: url("${fileHtmlIconUrl}");
-	}
+	${FILE_TYPE_ICON_CSS}
 
 	[data-item-git-status='modified'] > [data-item-section='icon']
 		> :where(:not([data-icon-name='file-tree-icon-chevron'])),
@@ -250,6 +217,7 @@ const FILE_TREE_UNSAFE_CSS = `
  */
 export function FileTree({
 	nodes = [],
+	variant = "compact",
 	openFileView,
 	createRequest,
 	selectedPath,
@@ -460,7 +428,7 @@ export function FileTree({
 		icons: { set: "minimal", colored: false },
 		gitStatus: reviewGitStatusEntries as GitStatusEntry[],
 		initialExpansion: "closed",
-		itemHeight: 28,
+		itemHeight: variant === "spacious" ? 48 : 28,
 		onSelectionChange: (paths) => handleSelectionChangeRef.current(paths),
 		paths: [],
 		renaming: {
@@ -582,7 +550,7 @@ export function FileTree({
 			model={model}
 			onClick={(event) => openFileFromTreeEvent(event.nativeEvent)}
 			onClickCapture={handleTreeClickCapture}
-			style={treeHostStyle(isPanelFocused)}
+			style={treeHostStyle(isPanelFocused, variant)}
 		/>
 	);
 }
@@ -762,22 +730,26 @@ function pathInfoForTreePath(
 	return pathInfoByTreePath.get(alternate);
 }
 
-function treeHostStyle(isPanelFocused: boolean) {
+function treeHostStyle(
+	isPanelFocused: boolean,
+	variant: "compact" | "spacious",
+) {
+	const isSpacious = variant === "spacious";
 	return {
 		"--trees-bg-override": "transparent",
 		"--trees-bg-muted-override": "var(--color-bg-hover)",
 		"--trees-border-color-override": "transparent",
-		"--trees-border-radius-override": "7px",
+		"--trees-border-radius-override": isSpacious ? "9px" : "7px",
 		"--trees-fg-muted-override": "var(--color-text-tertiary)",
 		"--trees-fg-override": "var(--color-text-secondary)",
 		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",
 		"--trees-font-family-override": "inherit",
-		"--trees-font-size-override": "12px",
+		"--trees-font-size-override": isSpacious ? "15px" : "12px",
 		"--trees-git-modified-color-override": "var(--color-warning-600)",
-		"--trees-icon-width-override": "13px",
+		"--trees-icon-width-override": isSpacious ? "26px" : "13px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
-		"--trees-item-padding-x-override": "9px",
+		"--trees-item-padding-x-override": isSpacious ? "14px" : "9px",
 		"--trees-level-gap-override": "1px",
 		"--trees-padding-inline-override": "0px",
 		"--trees-scrollbar-gutter-override": "0px",

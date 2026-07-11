@@ -59,11 +59,14 @@ describe("FilesView", () => {
 		});
 
 		expect(await screen.findByLabelText("Files")).toBeVisible();
+		expect(
+			document.querySelector('[data-attr="file-new-icon"]'),
+		).toBeInTheDocument();
 		await act(async () => view?.unmount());
 		await lix.close();
 	});
 
-	test("renders a flat, expanded file list in the central panel", async () => {
+	test("renders the same hierarchical file tree in the central panel", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
@@ -100,10 +103,16 @@ describe("FilesView", () => {
 		expect(screen.queryByRole("heading", { name: "Files" })).toBeNull();
 		expect(screen.queryByText("2 files")).toBeNull();
 		expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
-		expect(
-			screen.getByRole("button", { name: "Open /docs/guide.md" }),
-		).toBeVisible();
-		expect(screen.queryByText("docs", { selector: "button" })).toBeNull();
+		expect(getFilesTreeItem("docs/")).toHaveTextContent("docs");
+		expect(queryFilesTreeItem("docs/guide.md")).toBeNull();
+
+		fireEvent.click(getFilesTreeItem("docs/"));
+		await waitFor(() => {
+			expect(getFilesTreeItem("docs/guide.md")).toHaveAttribute(
+				"aria-label",
+				"guide.md",
+			);
+		});
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -124,9 +133,9 @@ describe("FilesView", () => {
 		});
 
 		fireEvent.click(await screen.findByRole("button", { name: "New file" }));
-		const input = await screen.findByRole("textbox", { name: "File name" });
-		fireEvent.change(input, { target: { value: "launch-plan" } });
-		fireEvent.submit(input.closest("form")!);
+		const input = await waitFor(() => getFilesTreeRenameInput());
+		fireEvent.input(input, { target: { value: "launch-plan" } });
+		fireEvent.keyDown(input, { key: "Enter" });
 
 		await waitFor(async () => {
 			const created = await qb(lix)
@@ -165,7 +174,7 @@ describe("FilesView", () => {
 		});
 
 		fireEvent.click(await screen.findByRole("button", { name: "New file" }));
-		const input = await screen.findByRole("textbox", { name: "File name" });
+		const input = await waitFor(() => getFilesTreeRenameInput());
 		act(() => {
 			input.dispatchEvent(
 				new KeyboardEvent("keydown", {
@@ -178,7 +187,7 @@ describe("FilesView", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.queryByRole("textbox", { name: "File name" })).toBeNull();
+			expect(queryFilesTreeRenameInput()).toBeNull();
 		});
 		expect(await qb(lix).selectFrom("lix_file").select("id").execute()).toEqual(
 			[],
@@ -213,7 +222,7 @@ describe("FilesView", () => {
 			ctrlKey: true,
 			key: ".",
 		});
-		expect(screen.queryByRole("textbox", { name: "File name" })).toBeNull();
+		expect(queryFilesTreeRenameInput()).toBeNull();
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -711,7 +720,8 @@ function getFilesTreeItem(path: string): HTMLElement {
 }
 
 function queryFilesTreeRenameInput(): HTMLInputElement | null {
-	const input = getFilesTreeRoot().querySelector("[data-item-rename-input]");
+	const host = screen.queryByLabelText("Files");
+	const input = host?.shadowRoot?.querySelector("[data-item-rename-input]");
 	return input instanceof HTMLInputElement ? input : null;
 }
 
