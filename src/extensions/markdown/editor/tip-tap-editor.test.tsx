@@ -482,6 +482,49 @@ test("adds frontmatter from the first Markdown block disclosure", async () => {
 	expect(screen.getByPlaceholderText("Empty")).toHaveFocus();
 });
 
+test("preserves newly created frontmatter after it has held a property", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_created_then_emptied",
+		markdown: "Hello",
+	});
+	const firstBlock = screen
+		.getByTestId("tiptap-editor")
+		.querySelector(".ProseMirror > p");
+	await act(async () => {
+		fireEvent.pointerEnter(firstBlock!);
+		fireEvent.click(screen.getByRole("button", { name: "Add frontmatter" }));
+	});
+	const propertyName = await screen.findByRole("textbox", {
+		name: "New frontmatter property name",
+	});
+	await act(async () => {
+		fireEvent.change(propertyName, { target: { value: "title" } });
+		fireEvent.keyDown(propertyName, { key: "Enter" });
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.attrs.value).toBe('title: ""');
+	});
+
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+	});
+	const rawYaml = screen.getByRole("textbox", {
+		name: "Raw YAML frontmatter",
+	});
+	await act(async () => {
+		fireEvent.change(rawYaml, { target: { value: "{}" } });
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.attrs.value).toBe("{}");
+	});
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Fields" }));
+	});
+
+	expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+	expect(screen.getByRole("button", { name: "Add property" })).toBeEnabled();
+});
+
 test("keeps the frontmatter disclosure visible across the area above the first block", async () => {
 	await renderEditorForMarkdownFile({
 		fileId: "file_frontmatter_disclosure_hover_zone",

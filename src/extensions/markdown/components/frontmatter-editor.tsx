@@ -442,6 +442,9 @@ export function FrontmatterEditorNodeView({
 
 	useEffect(() => setRawDraft(source), [source]);
 	useEffect(() => {
+		if (entries.length > 0) createdEmptyRef.current = false;
+	}, [entries.length]);
+	useEffect(() => {
 		if ((!fieldsSupported || parsed.error) && mode !== "yaml") {
 			setMode("yaml");
 			setAddingField(false);
