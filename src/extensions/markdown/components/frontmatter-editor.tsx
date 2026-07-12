@@ -434,9 +434,15 @@ export function FrontmatterEditorNodeView({
 
 	useEffect(() => setRawDraft(source), [source]);
 	useEffect(() => {
+		if ((!fieldsSupported || parsed.error) && mode !== "yaml") {
+			setMode("yaml");
+			setAddingField(false);
+		}
+	}, [fieldsSupported, mode, parsed.error]);
+	useEffect(() => {
 		if (!node.attrs.autofocus) return;
 		const frame = window.requestAnimationFrame(() => {
-			if (parsed.error) {
+			if (parsed.error || !fieldsSupported) {
 				wrapperRef.current
 					?.querySelector<HTMLElement>(".markdown-frontmatter-yaml")
 					?.focus();
@@ -447,7 +453,7 @@ export function FrontmatterEditorNodeView({
 			updateAttributes({ autofocus: false });
 		});
 		return () => window.cancelAnimationFrame(frame);
-	}, [node.attrs.autofocus, parsed.error, updateAttributes]);
+	}, [fieldsSupported, node.attrs.autofocus, parsed.error, updateAttributes]);
 	useEffect(() => {
 		if (!addingField) return;
 		const frame = window.requestAnimationFrame(() =>

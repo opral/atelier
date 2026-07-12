@@ -20,6 +20,29 @@ function isAtomicOnlyTextblock(node: any): boolean {
 	return true;
 }
 
+function topLevelBoundaryAtSelection($from: any, direction: -1 | 1) {
+	if (!$from.parent?.isTextblock) return null;
+	const atTextblockBoundary =
+		direction < 0
+			? $from.parentOffset === 0
+			: $from.parentOffset === $from.parent.content.size;
+	if (!atTextblockBoundary) return null;
+
+	// A nested textblock reaches a document sibling only when it is also the
+	// first/last descendant along every ancestor path (blockquote, list item,
+	// list, and so on). Otherwise the browser's normal caret movement wins.
+	for (let depth = $from.depth - 1; depth >= 1; depth -= 1) {
+		const ancestor = $from.node(depth);
+		if (direction < 0) {
+			if ($from.index(depth) !== 0) return null;
+		} else if ($from.indexAfter(depth) !== ancestor.childCount) {
+			return null;
+		}
+	}
+
+	return direction < 0 ? $from.before(1) : $from.after(1);
+}
+
 /**
  * Makes leaf/atomic Markdown blocks reachable from adjacent text and gives a
  * selected terminal block somewhere safe to exit to.
@@ -34,14 +57,8 @@ export const BlockBoundaryNavigationExtension = Extension.create({
 			if (!selection.empty || selection instanceof NodeSelection) return false;
 
 			const { $from } = selection as any;
-			if ($from.depth !== 1 || !$from.parent?.isTextblock) return false;
-			const atBoundary =
-				direction < 0
-					? $from.parentOffset === 0
-					: $from.parentOffset === $from.parent.content.size;
-			if (!atBoundary) return false;
-
-			const boundary = direction < 0 ? $from.before(1) : $from.after(1);
+			const boundary = topLevelBoundaryAtSelection($from, direction);
+			if (boundary === null) return false;
 			const atomicPos =
 				direction < 0
 					? boundary - (state.doc.resolve(boundary).nodeBefore?.nodeSize ?? 0)
@@ -50,7 +67,11 @@ export const BlockBoundaryNavigationExtension = Extension.create({
 			if (!isAtomicBlock(atomicNode)) {
 				const atDocumentEdge =
 					direction < 0 ? boundary === 0 : boundary === state.doc.content.size;
-				if (!atDocumentEdge || !isAtomicOnlyTextblock($from.parent)) {
+				if (
+					$from.depth !== 1 ||
+					!atDocumentEdge ||
+					!isAtomicOnlyTextblock($from.parent)
+				) {
 					return false;
 				}
 

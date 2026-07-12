@@ -238,6 +238,33 @@ test("keeps complex or source-annotated YAML in raw mode", async () => {
 	expect(screen.getByRole("button", { name: "Fields" })).toBeDisabled();
 });
 
+test("switches an open fields editor to raw mode when YAML becomes non-lossless", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_mode_sync",
+		markdown: "---\ntitle: Demo\n---\n\nHello",
+	});
+	expect(
+		await screen.findByRole("textbox", { name: "title value" }),
+	).toBeEnabled();
+
+	await act(async () => {
+		const frontmatter = editor.state.doc.firstChild;
+		if (!frontmatter) throw new Error("frontmatter node not found");
+		editor.view.dispatch(
+			editor.state.tr.setNodeMarkup(0, undefined, {
+				...frontmatter.attrs,
+				value: "# preserve this\ntitle: Demo",
+			}),
+		);
+	});
+
+	expect(
+		await screen.findByRole("textbox", { name: "Raw YAML frontmatter" }),
+	).toHaveValue("# preserve this\ntitle: Demo");
+	expect(screen.queryByRole("textbox", { name: "title value" })).toBeNull();
+	expect(screen.getByRole("button", { name: "Fields" })).toBeDisabled();
+});
+
 test("keeps unsafe YAML integers in raw mode without rounding them", async () => {
 	await renderEditorForMarkdownFile({
 		fileId: "file_large_integer_frontmatter",

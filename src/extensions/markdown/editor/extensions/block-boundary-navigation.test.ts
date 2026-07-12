@@ -26,6 +26,16 @@ function sendKey(editor: Editor, key: string): boolean {
 	return handled;
 }
 
+function textPosition(editor: Editor, text: string, edge: "start" | "end") {
+	let position: number | null = null;
+	editor.state.doc.descendants((node, pos) => {
+		if (position !== null || !node.isText || node.text !== text) return;
+		position = edge === "start" ? pos : pos + text.length;
+	});
+	if (position === null) throw new Error(`Text not found: ${text}`);
+	return position;
+}
+
 afterEach(() => {
 	for (const editor of editors.splice(0)) editor.destroy();
 });
@@ -71,6 +81,97 @@ describe("atomic block boundary navigation", () => {
 		expect((editor.state.selection as NodeSelection).node.type.name).toBe(
 			"markdownUnsupported",
 		);
+	});
+
+	test("ArrowRight enters an atomic block after a nested blockquote", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "blockquote",
+					content: [
+						{
+							type: "paragraph",
+							content: [{ type: "text", text: "quoted" }],
+						},
+					],
+				},
+				{ type: "horizontalRule" },
+			],
+		});
+		editor.commands.setTextSelection(textPosition(editor, "quoted", "end"));
+
+		expect(sendKey(editor, "ArrowRight")).toBe(true);
+		expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+		expect((editor.state.selection as NodeSelection).node.type.name).toBe(
+			"horizontalRule",
+		);
+	});
+
+	test("ArrowLeft enters an atomic block before a nested list", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{ type: "horizontalRule" },
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "listed" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		editor.commands.setTextSelection(textPosition(editor, "listed", "start"));
+
+		expect(sendKey(editor, "ArrowLeft")).toBe(true);
+		expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+		expect((editor.state.selection as NodeSelection).node.type.name).toBe(
+			"horizontalRule",
+		);
+	});
+
+	test("does not skip remaining nested list content to reach an atomic block", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "first" }],
+								},
+							],
+						},
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "second" }],
+								},
+							],
+						},
+					],
+				},
+				{ type: "horizontalRule" },
+			],
+		});
+		editor.commands.setTextSelection(textPosition(editor, "first", "end"));
+
+		expect(sendKey(editor, "ArrowRight")).toBe(false);
+		expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
 	});
 
 	test("ArrowDown after a terminal divider creates one editable paragraph", () => {
