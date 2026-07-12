@@ -22,6 +22,7 @@ import {
 	FILES_EXTENSION_KIND,
 } from "@/extension-runtime/extension-instance-helpers";
 import { DEFAULT_ATELIER_UI_STATE } from "./ui-state";
+import { createAtelier } from "../atelier-instance";
 
 describe("resolveLixFileForOpen", () => {
 	test("resolves normalized paths from Lix", async () => {
@@ -77,6 +78,7 @@ describe("open file lifecycle", () => {
 				<span data-testid="host-current-file">{currentFile ?? "none"}</span>
 			),
 		);
+		const onEvent = vi.fn();
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
@@ -99,7 +101,10 @@ describe("open file lifecycle", () => {
 				<LixProvider lix={lix}>
 					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 						<Suspense fallback={null}>
-							<V2LayoutShell slots={{ navbarEnd: renderNavbarEnd }} />
+							<V2LayoutShell
+								slots={{ navbarEnd: renderNavbarEnd }}
+								onEvent={onEvent}
+							/>
 						</Suspense>
 					</KeyValueProvider>
 				</LixProvider>,
@@ -111,6 +116,19 @@ describe("open file lifecycle", () => {
 
 		fireEvent.click(await findFilesTreeItem("one.md"));
 		expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
+		expect(onEvent).toHaveBeenCalledWith({
+			type: "document_open_attempted",
+			filePath: "/one.md",
+			documentOrigin: "existing",
+			viewKind: "atelier_file",
+			supported: true,
+		});
+		expect(onEvent).toHaveBeenCalledWith({
+			type: "document_viewed",
+			filePath: "/one.md",
+			documentOrigin: "existing",
+			viewKind: "atelier_file",
+		});
 		expect(screen.getByTestId("host-current-file")).toHaveTextContent(
 			"/one.md",
 		);
@@ -400,6 +418,103 @@ async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 	});
 }
 
+describe("agent turn review reveal", () => {
+	test("opens the first changed file once when a review range appears", async () => {
+		const lix = await openLix();
+		const onEvent = vi.fn();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: "stable-file",
+						path: "/stable.md",
+						data: new TextEncoder().encode("# Stable\n"),
+					},
+					{
+						id: "changed-file",
+						path: "/changed.md",
+						data: new TextEncoder().encode("# Before\n"),
+					},
+				])
+				.execute();
+			const beforeCommitId = await activeCommitId(lix);
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+							<Suspense fallback={null}>
+								<V2LayoutShell onEvent={onEvent} />
+							</Suspense>
+						</KeyValueProvider>
+					</LixProvider>,
+				);
+			});
+			fireEvent.click(await findFilesTreeItem("stable.md"));
+			expect(
+				await screen.findByRole("heading", { name: "Stable" }),
+			).toBeVisible();
+
+			await act(async () => {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ data: new TextEncoder().encode("# After\n") })
+					.where("id", "=", "changed-file")
+					.execute();
+			});
+			const afterCommitId = await activeCommitId(lix);
+
+			await act(async () => {
+				await createAtelier({ lix }).diff.open({
+					before: beforeCommitId,
+					after: afterCommitId,
+					source: { kind: "agent", agent: "claude" },
+				});
+			});
+
+			expect(
+				await screen.findByRole("button", { name: /^Keep/ }),
+			).toBeVisible();
+			expect(
+				onEvent.mock.calls.filter(
+					([event]) =>
+						event.type === "document_viewed" &&
+						event.filePath === "/changed.md",
+				),
+			).toHaveLength(1);
+
+			fireEvent.click(screen.getByRole("button", { name: /^Keep/ }));
+			await waitFor(() => {
+				expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+			});
+
+			const fileTree = document.querySelector<HTMLElement>(
+				'[aria-label="Files"]',
+			);
+			const stableFile = fileTree?.shadowRoot?.querySelector<HTMLElement>(
+				'[data-item-path="stable.md"]',
+			);
+			expect(stableFile).toBeTruthy();
+			fireEvent.click(stableFile!);
+			expect(
+				await screen.findByRole("heading", { name: "Stable" }),
+			).toBeVisible();
+			expect(
+				onEvent.mock.calls.filter(
+					([event]) =>
+						event.type === "document_viewed" &&
+						event.filePath === "/changed.md",
+				),
+			).toHaveLength(1);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+});
+
 describe("installed extension lifecycle", () => {
 	test("does not resurrect a stale tab when its extension is installed later", async () => {
 		const extensionKind = "recovered_extension";
@@ -638,3 +753,16 @@ describe("canonical UI state", () => {
 		}
 	});
 });
+
+async function activeCommitId(
+	lix: Awaited<ReturnType<typeof openLix>>,
+): Promise<string> {
+	const result = await lix.execute(
+		"SELECT lix_active_branch_commit_id() AS commit_id",
+	);
+	const commitId = result.rows[0]?.get("commit_id");
+	if (typeof commitId !== "string") {
+		throw new Error("Missing active commit id");
+	}
+	return commitId;
+}

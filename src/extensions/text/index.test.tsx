@@ -168,6 +168,7 @@ function createRuntime(
 ): ExtensionRuntime {
 	return {
 		lix,
+		events: { emit: vi.fn() },
 		files: {
 			open: vi.fn(),
 			close: vi.fn(),

@@ -2,8 +2,12 @@ import "./index.css";
 
 export { Atelier, createAtelier } from "./index";
 export type {
-	AtelierHandle,
+	AtelierDiffApi,
+	AtelierDiffOpenOptions,
+	AtelierDiffSource,
+	AtelierInstance,
 	AtelierNavbarSlotContext,
+	AtelierOptions,
 	AtelierProps,
 	AtelierSlots,
 } from "./index";

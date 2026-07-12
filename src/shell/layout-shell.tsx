@@ -70,7 +70,8 @@ import {
 	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
 import {
-	ensureWorkspaceLandingView,
+	ensureWorkspaceFilesView,
+	type FilesViewMode,
 	type WorkspacePanelState,
 } from "./workspace-panel-state";
 import { PanelTabPreview } from "./panel-v2";
@@ -84,11 +85,12 @@ import {
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
 import {
 	coerceAtelierUiState,
-	DEFAULT_ATELIER_UI_STATE,
+	createInitialAtelierUiState,
 	ATELIER_UI_STATE_KEY,
 	normalizeLayoutSizes,
 	type AtelierUiState,
 	type PanelLayoutSizes,
+	type DefaultOpenPanel,
 } from "./ui-state";
 import {
 	activatePanelExtension,
@@ -98,9 +100,27 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
-import { clearAgentTurnCommitRangeFile } from "./agent-turn-review-range";
-import { getFileDataAtCommit } from "./external-write-review-history";
-import type { AtelierSlots } from "../create-atelier";
+import {
+	AGENT_TURN_COMMIT_RANGE_KEY,
+	clearAgentTurnCommitRangeFile,
+	isAgentTurnCommitRangeStore,
+	type AgentTurnCommitRange,
+} from "./agent-turn-review-range";
+import {
+	getExternalWriteReview,
+	getFileDataAtCommit,
+	getPendingExternalWriteReviewPaths,
+} from "./external-write-review-history";
+import type {
+	AtelierEmptyPanelSlot,
+	AtelierPanelSide,
+	AtelierSlots,
+} from "../create-atelier";
+import {
+	hostExtensionDefinition,
+	type AtelierExtensionRegistration,
+} from "../extension-runtime/host-extension";
+import type { AtelierEvent } from "../extension-api";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
 import {
 	reconcileCurrentFileViewPanel,
@@ -113,6 +133,8 @@ type NewFileDraftHandlerRegistration = {
 	readonly isActiveView: boolean;
 	readonly handler: () => void;
 };
+
+const EMPTY_AGENT_TURN_RANGES: readonly AgentTurnCommitRange[] = [];
 
 const sanitizeExtensionInstanceForPersistence = (
 	view: ExtensionInstance,
@@ -546,11 +568,55 @@ async function resolveNextUntitledMarkdownPath(
 	return `/new-file-${Date.now()}.md`;
 }
 
-export function V2LayoutShell({ slots }: { readonly slots?: AtelierSlots }) {
+export function V2LayoutShell({
+	slots,
+	extensions = [],
+	filesExtension,
+	filesViewMode = "landing",
+	defaultOpenPanels = [],
+	onEvent,
+}: {
+	readonly slots?: AtelierSlots;
+	readonly extensions?: readonly AtelierExtensionRegistration[];
+	readonly filesExtension?: string;
+	readonly filesViewMode?: FilesViewMode;
+	readonly defaultOpenPanels?: readonly DefaultOpenPanel[];
+	readonly onEvent?: (event: AtelierEvent) => void;
+}) {
+	const hostExtensions = useMemo(
+		() => extensions.map(hostExtensionDefinition),
+		[extensions],
+	);
+	const filesExtensionOverride = useMemo(() => {
+		if (!filesExtension) return undefined;
+		const selected = hostExtensions.find(
+			(extension) => extension.kind === filesExtension,
+		);
+		return selected ? { ...selected, kind: FILES_EXTENSION_KIND } : undefined;
+	}, [filesExtension, hostExtensions]);
+	const visibleHostExtensions = useMemo(
+		() =>
+			filesExtension
+				? hostExtensions.filter(
+						(extension) => extension.kind !== filesExtension,
+					)
+				: hostExtensions,
+		[filesExtension, hostExtensions],
+	);
 	return (
-		<ExtensionRegistryProvider>
+		<ExtensionRegistryProvider
+			hostExtensions={visibleHostExtensions}
+			builtinOverrides={
+				filesExtensionOverride ? [filesExtensionOverride] : undefined
+			}
+		>
 			<ExtensionHostRegistryProvider>
-				<LayoutShellContent slots={slots} />
+				<LayoutShellContent
+					slots={slots}
+					filesViewMode={filesViewMode}
+					defaultOpenPanels={defaultOpenPanels}
+					onEvent={onEvent}
+				/>
 			</ExtensionHostRegistryProvider>
 		</ExtensionRegistryProvider>
 	);
@@ -558,6 +624,9 @@ export function V2LayoutShell({ slots }: { readonly slots?: AtelierSlots }) {
 
 type LayoutShellContentProps = {
 	readonly slots?: AtelierSlots;
+	readonly filesViewMode: FilesViewMode;
+	readonly defaultOpenPanels: readonly DefaultOpenPanel[];
+	readonly onEvent?: (event: AtelierEvent) => void;
 };
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
@@ -842,14 +911,65 @@ function LayoutShellLoadedContent({
 	activeFileId,
 	setActiveFileId,
 	slots,
+	filesViewMode,
+	defaultOpenPanels,
+	onEvent,
 }: LayoutShellLoadedContentProps) {
+	const emitEvent = useCallback(
+		(event: AtelierEvent) => {
+			onEvent?.(event);
+		},
+		[onEvent],
+	);
 	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
 		qb(queryLix).selectFrom("lix_file").select("id"),
+	);
+	const activeReviewBranchRows = useQuery<{ value: unknown }>((queryLix) =>
+		qb(queryLix)
+			.selectFrom("lix_key_value")
+			.where("key", "=", "lix_workspace_branch_id")
+			.select("value"),
+	);
+	const activeReviewBranchId =
+		typeof activeReviewBranchRows[0]?.value === "string"
+			? activeReviewBranchRows[0].value
+			: "";
+	const agentTurnRangeRows = useQuery<{
+		value: unknown;
+		lixcol_branch_id: string | null;
+	}>((queryLix) =>
+		qb(queryLix)
+			.selectFrom("lix_key_value_by_branch")
+			.select(["value", "lixcol_branch_id"])
+			.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
+			.where("lixcol_branch_id", "=", activeReviewBranchId),
+	);
+	const activeAgentTurnRangeValue = agentTurnRangeRows.find(
+		(row) => row.lixcol_branch_id === activeReviewBranchId,
+	)?.value;
+	const agentTurnRanges = useMemo(
+		() =>
+			isAgentTurnCommitRangeStore(activeAgentTurnRangeValue)
+				? activeAgentTurnRangeValue.ranges
+				: EMPTY_AGENT_TURN_RANGES,
+		[activeAgentTurnRangeValue],
 	);
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
 	);
+	const openingFileIdsRef = useRef(new Set<string>());
+	const getCurrentFileIdsForReconciliation = useCallback(
+		() => new Set([...currentFileIds, ...openingFileIdsRef.current]),
+		[currentFileIds],
+	);
+	useEffect(() => {
+		for (const fileId of openingFileIdsRef.current) {
+			if (currentFileIds.has(fileId)) {
+				openingFileIdsRef.current.delete(fileId);
+			}
+		}
+	}, [currentFileIds]);
 	const installedExtensionRows = useQuery<InstalledExtensionFileRow>(
 		installedExtensionFilesQuery,
 	);
@@ -867,16 +987,38 @@ function LayoutShellLoadedContent({
 		new Map<string, ExtensionDefinition>(),
 	);
 	const { extensionMap, replaceInstalledExtensions } = useExtensionRegistry();
-	const uiState = useMemo(
-		() => coerceAtelierUiState(uiStateKV ?? DEFAULT_ATELIER_UI_STATE),
-		[uiStateKV],
+	const defaultLeftPanelOpen = defaultOpenPanels.includes("left");
+	const defaultRightPanelOpen = defaultOpenPanels.includes("right");
+	const initialUiState = useMemo(
+		() =>
+			createInitialAtelierUiState([
+				...(defaultLeftPanelOpen ? (["left"] as const) : []),
+				...(defaultRightPanelOpen ? (["right"] as const) : []),
+			]),
+		[defaultLeftPanelOpen, defaultRightPanelOpen],
 	);
-	const panelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
+	const uiState = useMemo(
+		() => coerceAtelierUiState(uiStateKV ?? initialUiState),
+		[initialUiState, uiStateKV],
+	);
+	const storedPanelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
+	const panelSizes =
+		filesViewMode === "sidebar" &&
+		storedPanelSizes.left <= MIN_VISIBLE_PANEL_SIZE
+			? {
+					...storedPanelSizes,
+					left: DEFAULT_PANEL_FALLBACK_SIZES.left,
+					central: Math.max(
+						30,
+						storedPanelSizes.central - DEFAULT_PANEL_FALLBACK_SIZES.left,
+					),
+				}
+			: storedPanelSizes;
 	const canonicalizeWorkspace = useCallback(
 		(state: AtelierUiState) => {
 			const panels = reconcilePanelsWithEnvironment({
 				panels: state.panels,
-				currentFileIds,
+				currentFileIds: getCurrentFileIdsForReconciliation(),
 				extensionMap,
 				preserveUnknownExtensionKinds,
 			});
@@ -892,9 +1034,14 @@ function LayoutShellLoadedContent({
 				panels,
 				focusedPanel,
 			};
-			return ensureWorkspaceLandingView(reconciledWorkspace);
+			return ensureWorkspaceFilesView(reconciledWorkspace, filesViewMode);
 		},
-		[currentFileIds, extensionMap, preserveUnknownExtensionKinds],
+		[
+			extensionMap,
+			filesViewMode,
+			getCurrentFileIdsForReconciliation,
+			preserveUnknownExtensionKinds,
+		],
 	);
 	const effectiveWorkspaceTransition = useMemo(
 		() => canonicalizeWorkspace(uiState),
@@ -949,6 +1096,10 @@ function LayoutShellLoadedContent({
 		});
 	}, [panelSizes.left, panelSizes.central, panelSizes.right]);
 	const resolvedReviewIdsRef = useRef(new Set<string>());
+	const openedReviewIdsRef = useRef(new Set<string>());
+	const autoRevealedAgentTurnRangeIdsRef = useRef(new Set<string>());
+	const autoRevealAgentTurnQueueRef = useRef(Promise.resolve());
+	const autoRevealAgentTurnMountedRef = useRef(true);
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
 	);
@@ -961,6 +1112,13 @@ function LayoutShellLoadedContent({
 		right: rightPanel,
 	});
 	const viewHostRegistry = useExtensionHostRegistry();
+
+	useEffect(() => {
+		autoRevealAgentTurnMountedRef.current = true;
+		return () => {
+			autoRevealAgentTurnMountedRef.current = false;
+		};
+	}, []);
 
 	useEffect(() => {
 		panelStatesRef.current = {
@@ -993,6 +1151,14 @@ function LayoutShellLoadedContent({
 				resolveDiffReviewRef.current?.(existingReview);
 			}
 			openDiffReviewByFileIdRef.current.set(review.fileId, review);
+			if (!openedReviewIdsRef.current.has(review.reviewId)) {
+				openedReviewIdsRef.current.add(review.reviewId);
+				emitEvent({
+					type: "diff_opened",
+					reviewId: review.reviewId,
+					filePath: review.path,
+				});
+			}
 			return () => {
 				const current = openDiffReviewByFileIdRef.current.get(review.fileId);
 				if (current?.reviewId === review.reviewId) {
@@ -1000,11 +1166,14 @@ function LayoutShellLoadedContent({
 				}
 			};
 		},
-		[],
+		[emitEvent],
 	);
 
 	const resolveDiffReview = useCallback(
-		(review: ExternalWriteReview) => {
+		(
+			review: ExternalWriteReview,
+			outcome: "accepted" | "rejected" | "abandoned" = "abandoned",
+		) => {
 			if (!claimDiffReviewResolution(review)) {
 				return false;
 			}
@@ -1012,9 +1181,15 @@ function LayoutShellLoadedContent({
 			if (openReview?.reviewId === review.reviewId) {
 				openDiffReviewByFileIdRef.current.delete(review.fileId);
 			}
+			emitEvent({
+				type: "diff_resolved",
+				reviewId: review.reviewId,
+				filePath: review.path,
+				outcome,
+			});
 			return true;
 		},
-		[claimDiffReviewResolution],
+		[claimDiffReviewResolution, emitEvent],
 	);
 	resolveDiffReviewRef.current = resolveDiffReview;
 
@@ -1068,14 +1243,12 @@ function LayoutShellLoadedContent({
 	const updateUiState = useCallback(
 		(reducer: (current: AtelierUiState) => AtelierUiState) => {
 			setUiStateKV((currentValue) => {
-				const current = coerceAtelierUiState(
-					currentValue ?? DEFAULT_ATELIER_UI_STATE,
-				);
+				const current = coerceAtelierUiState(currentValue ?? initialUiState);
 				const next = reducer(current);
 				return { ...next, panels: sanitizePanels(next.panels) };
 			});
 		},
-		[setUiStateKV],
+		[initialUiState, setUiStateKV],
 	);
 	const updateSidePanelSize = useCallback(
 		(side: Exclude<PanelSide, "central">, size: number) => {
@@ -1129,7 +1302,10 @@ function LayoutShellLoadedContent({
 
 	const reconcilePanelForUpdate = useCallback(
 		(side: PanelSide, panel: PanelState): PanelState => {
-			const currentPanel = reconcileCurrentFileViewPanel(panel, currentFileIds);
+			const currentPanel = reconcileCurrentFileViewPanel(
+				panel,
+				getCurrentFileIdsForReconciliation(),
+			);
 			return reconcilePanelExtensionViewsForDocumentSlot(
 				side,
 				currentPanel,
@@ -1137,7 +1313,11 @@ function LayoutShellLoadedContent({
 				{ preserveUnknownKinds: preserveUnknownExtensionKinds },
 			);
 		},
-		[currentFileIds, extensionMap, preserveUnknownExtensionKinds],
+		[
+			extensionMap,
+			getCurrentFileIdsForReconciliation,
+			preserveUnknownExtensionKinds,
+		],
 	);
 
 	const setPanelState = useCallback(
@@ -1415,6 +1595,7 @@ function LayoutShellLoadedContent({
 			state,
 			focus = true,
 			pending = false,
+			documentOrigin = "existing",
 		}: {
 			panel: PanelSide;
 			fileId: string;
@@ -1423,6 +1604,7 @@ function LayoutShellLoadedContent({
 			state?: ExtensionState;
 			focus?: boolean;
 			pending?: boolean;
+			documentOrigin?: "existing" | "new";
 		}) => {
 			const centeredFilesView = panelStatesRef.current.central.views.find(
 				(view) => view.kind === FILES_EXTENSION_KIND,
@@ -1433,6 +1615,21 @@ function LayoutShellLoadedContent({
 			const handler =
 				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
+			emitEvent({
+				type: "document_open_attempted",
+				filePath,
+				documentOrigin,
+				viewKind: kind,
+				supported: Boolean(handler),
+			});
+			if (handler) {
+				emitEvent({
+					type: "document_viewed",
+					filePath,
+					documentOrigin,
+					viewKind: kind,
+				});
+			}
 			const documentView: ExtensionInstance = {
 				kind,
 				instance: instance ?? fileExtensionInstanceForKind(kind, fileId),
@@ -1470,8 +1667,82 @@ function LayoutShellLoadedContent({
 				};
 			});
 		},
-		[ensurePanelExpanded, extensionMap, updateWorkspace],
+		[emitEvent, ensurePanelExpanded, extensionMap, updateWorkspace],
 	);
+
+	const autoRevealFirstAgentTurnReview = useCallback(
+		async (range: AgentTurnCommitRange) => {
+			const centralPanelState = panelStatesRef.current.central;
+			const activeEntry = activeEntryFromPanel(centralPanelState);
+			const activeReviewFileId =
+				typeof activeEntry?.state?.fileId === "string"
+					? activeEntry.state.fileId
+					: null;
+			const activeReviewFilePath =
+				typeof activeEntry?.state?.filePath === "string"
+					? activeEntry.state.filePath
+					: null;
+			if (activeReviewFileId && activeReviewFilePath) {
+				const activeReview = await getExternalWriteReview(
+					lix,
+					activeReviewFileId,
+					activeReviewFilePath,
+				);
+				if (activeReview) return;
+			}
+
+			const files = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.orderBy("path", "asc")
+				.execute();
+			const reviewableFiles = files.map((file) => ({
+				fileId: file.id as string,
+				path: file.path as string,
+			}));
+			const pendingPaths = await getPendingExternalWriteReviewPaths(
+				lix,
+				reviewableFiles,
+				[range],
+			);
+			const firstReviewFile = reviewableFiles.find((file) =>
+				pendingPaths.has(file.path),
+			);
+			if (!firstReviewFile || !autoRevealAgentTurnMountedRef.current) return;
+
+			openResolvedFileView({
+				panel: "central",
+				fileId: firstReviewFile.fileId,
+				filePath: firstReviewFile.path,
+				focus: true,
+			});
+		},
+		[lix, openResolvedFileView],
+	);
+
+	useEffect(() => {
+		const unseenRanges = agentTurnRanges.filter(
+			(range) => !autoRevealedAgentTurnRangeIdsRef.current.has(range.id),
+		);
+		if (unseenRanges.length === 0) return;
+		for (const range of unseenRanges) {
+			autoRevealedAgentTurnRangeIdsRef.current.add(range.id);
+		}
+
+		autoRevealAgentTurnQueueRef.current = autoRevealAgentTurnQueueRef.current
+			.then(async () => {
+				for (const range of unseenRanges) {
+					if (!autoRevealAgentTurnMountedRef.current) return;
+					await autoRevealFirstAgentTurnReview(range);
+				}
+			})
+			.catch((error: unknown) => {
+				console.warn(
+					"[agent-turn-review] failed to reveal first changed file",
+					error,
+				);
+			});
+	}, [agentTurnRanges, autoRevealFirstAgentTurnReview]);
 
 	const showCheckpointDiff = useCallback(
 		async ({ branchId, branches }: ShowCheckpointDiffArgs) => {
@@ -1503,6 +1774,7 @@ function LayoutShellLoadedContent({
 			state,
 			focus,
 			pending,
+			documentOrigin,
 		}: {
 			panel: PanelSide;
 			fileId: string;
@@ -1510,6 +1782,7 @@ function LayoutShellLoadedContent({
 			state?: ExtensionState;
 			focus?: boolean;
 			pending?: boolean;
+			documentOrigin?: "existing" | "new";
 		}) => {
 			if (hasHistoricalEditorRevisionState(state)) {
 				openResolvedFileView({
@@ -1519,6 +1792,7 @@ function LayoutShellLoadedContent({
 					state,
 					focus,
 					pending,
+					documentOrigin,
 				});
 				return;
 			}
@@ -1538,6 +1812,9 @@ function LayoutShellLoadedContent({
 				return;
 			}
 
+			if (!currentFileIds.has(resolvedFile.id)) {
+				openingFileIdsRef.current.add(resolvedFile.id);
+			}
 			openResolvedFileView({
 				panel,
 				fileId: resolvedFile.id,
@@ -1545,9 +1822,10 @@ function LayoutShellLoadedContent({
 				state,
 				focus,
 				pending,
+				documentOrigin,
 			});
 		},
-		[lix, openResolvedFileView],
+		[currentFileIds, lix, openResolvedFileView],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
@@ -1605,7 +1883,7 @@ function LayoutShellLoadedContent({
 				reviewId: review.reviewId,
 				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
-			resolveDiffReview(review);
+			resolveDiffReview(review, "accepted");
 		},
 		[lix, getExternalWriteReviewForFile, resolveDiffReview],
 	);
@@ -1627,7 +1905,7 @@ function LayoutShellLoadedContent({
 					reviewId: review.reviewId,
 					agentTurnRangeIds: review.agentTurnRangeIds,
 				});
-				resolveDiffReview(review);
+				resolveDiffReview(review, "rejected");
 				return;
 			}
 			const beforeData = await getFileDataAtCommit(
@@ -1641,7 +1919,7 @@ function LayoutShellLoadedContent({
 					reviewId: review.reviewId,
 					agentTurnRangeIds: review.agentTurnRangeIds,
 				});
-				resolveDiffReview(review);
+				resolveDiffReview(review, "rejected");
 				return;
 			}
 			const { fileId } = args;
@@ -1655,7 +1933,7 @@ function LayoutShellLoadedContent({
 				reviewId: review.reviewId,
 				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
-			resolveDiffReview(review);
+			resolveDiffReview(review, "rejected");
 		},
 		[
 			lix,
@@ -1776,9 +2054,29 @@ function LayoutShellLoadedContent({
 
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
-			handleOpenView({ panel: side, kind, state });
+			emitEvent({ type: "extension_opened", extensionId: kind, panel: side });
+			handleOpenView({
+				panel: side,
+				kind,
+				state,
+				instance: extensionMap.get(kind)?.multiInstance
+					? createExtensionInstanceId(kind)
+					: undefined,
+			});
 		},
-		[handleOpenView],
+		[emitEvent, extensionMap, handleOpenView],
+	);
+
+	const renderEmptyPanelSlot = useCallback(
+		(side: AtelierPanelSide, slot: AtelierEmptyPanelSlot | undefined) => {
+			if (typeof slot !== "function") return slot;
+			return slot({
+				side,
+				openExtension: (extensionId, state) =>
+					handleAddView(side, extensionId, state),
+			});
+		},
+		[handleAddView],
 	);
 
 	const focusPanel = useCallback(
@@ -1992,6 +2290,7 @@ function LayoutShellLoadedContent({
 			filePath: path,
 			state: { focusOnLoad: true, defaultBlock: "heading1" },
 			focus: true,
+			documentOrigin: "new",
 		});
 	}, [handleOpenFile, lix]);
 
@@ -2076,6 +2375,7 @@ function LayoutShellLoadedContent({
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
+			events: { emit: emitEvent },
 			files: {
 				open: (args: {
 					fileId: string;
@@ -2083,6 +2383,7 @@ function LayoutShellLoadedContent({
 					state?: ExtensionState;
 					focus?: boolean;
 					pending?: boolean;
+					documentOrigin?: "existing" | "new";
 				}) => handleOpenFile({ panel: "central", ...args }),
 				close: (fileId: string) => handleCloseFileViews({ fileId }),
 				active: activeCentralFileId
@@ -2101,6 +2402,7 @@ function LayoutShellLoadedContent({
 			},
 		}),
 		[
+			emitEvent,
 			handleOpenFile,
 			handleCloseFileViews,
 			checkpointDiff,
@@ -2250,6 +2552,7 @@ function LayoutShellLoadedContent({
 								onAddView={addViewOnLeft}
 								onRemoveView={(key) => handleRemoveView("left", key)}
 								viewContext={extensionHostContext}
+								emptyState={renderEmptyPanelSlot("left", slots?.leftPanelEmpty)}
 							/>
 						</Panel>
 						<Separator className="group relative flex w-1.75 items-center justify-center">
@@ -2275,6 +2578,10 @@ function LayoutShellLoadedContent({
 								}
 								viewContext={extensionHostContext}
 								onCreateNewFile={handleCreateNewFile}
+								emptyState={renderEmptyPanelSlot(
+									"central",
+									slots?.centralPanelEmpty,
+								)}
 							/>
 						</Panel>
 						<Separator className="group relative flex w-1.75 items-center justify-center">
@@ -2299,6 +2606,10 @@ function LayoutShellLoadedContent({
 								onAddView={addViewOnRight}
 								onRemoveView={(key) => handleRemoveView("right", key)}
 								viewContext={extensionHostContext}
+								emptyState={renderEmptyPanelSlot(
+									"right",
+									slots?.rightPanelEmpty,
+								)}
 							/>
 						</Panel>
 					</Group>

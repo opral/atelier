@@ -17,6 +17,8 @@ export type WorkspaceLandingTransition = {
 	readonly sourceBecameEmpty: boolean;
 };
 
+export type FilesViewMode = "landing" | "sidebar";
+
 const DEFAULT_FILES_VIEW: ExtensionInstance = {
 	instance: "files-default",
 	kind: FILES_EXTENSION_KIND,
@@ -84,3 +86,63 @@ export const ensureWorkspaceLandingView = (
 		sourceBecameEmpty,
 	};
 };
+
+/** Keeps Files in the left sidebar while leaving the document slot empty. */
+export const ensureWorkspaceSidebarFilesView = (
+	state: WorkspacePanelState,
+): WorkspaceLandingTransition => {
+	const leftFiles = state.panels.left.views.find(
+		(view) => view.kind === FILES_EXTENSION_KIND,
+	);
+	const centralFiles = state.panels.central.views.find(
+		(view) => view.kind === FILES_EXTENSION_KIND,
+	);
+	const rightFiles = state.panels.right.views.find(
+		(view) => view.kind === FILES_EXTENSION_KIND,
+	);
+	const filesView =
+		leftFiles ?? centralFiles ?? rightFiles ?? DEFAULT_FILES_VIEW;
+	const withoutFiles = (panel: PanelState): PanelState => {
+		const views = panel.views.filter(
+			(view) => view.kind !== FILES_EXTENSION_KIND,
+		);
+		const activeInstance = views.some(
+			(view) => view.instance === panel.activeInstance,
+		)
+			? panel.activeInstance
+			: (views[views.length - 1]?.instance ?? null);
+		return views.length === panel.views.length &&
+			activeInstance === panel.activeInstance
+			? panel
+			: { views, activeInstance };
+	};
+
+	const leftWithoutFiles = withoutFiles(state.panels.left);
+	const left = leftFiles
+		? state.panels.left
+		: {
+				views: [...leftWithoutFiles.views, filesView],
+				activeInstance: filesView.instance,
+			};
+	const central = withoutFiles(state.panels.central);
+	const right = withoutFiles(state.panels.right);
+	const unchanged =
+		left === state.panels.left &&
+		central === state.panels.central &&
+		right === state.panels.right;
+
+	return {
+		state: unchanged ? state : { ...state, panels: { left, central, right } },
+		didRestoreLandingView: false,
+		restoredFilesFrom: null,
+		sourceBecameEmpty: false,
+	};
+};
+
+export const ensureWorkspaceFilesView = (
+	state: WorkspacePanelState,
+	mode: FilesViewMode,
+): WorkspaceLandingTransition =>
+	mode === "sidebar"
+		? ensureWorkspaceSidebarFilesView(state)
+		: ensureWorkspaceLandingView(state);

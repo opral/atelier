@@ -1,7 +1,8 @@
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import type { Lix } from "@lix-js/sdk";
 import type { CheckpointDiff, ShowCheckpointDiffArgs } from "./checkpoint-diff";
 import type { ExternalWriteReview } from "./external-write-review";
+import type { AtelierEvent } from "../extension-api";
 
 /**
  * Union of registry keys for views available in the layout.
@@ -53,7 +54,7 @@ export interface ExtensionDefinition {
 	readonly kind: ExtensionKind;
 	readonly label: string;
 	readonly description: string;
-	readonly icon: LucideIcon;
+	readonly icon: ComponentType<{ className?: string }>;
 	/**
 	 * Lowercase file extensions this extension can render when a file is opened.
 	 *
@@ -61,6 +62,8 @@ export interface ExtensionDefinition {
 	 * fileExtensions: ["md", "markdown"]
 	 */
 	readonly fileExtensions?: readonly string[];
+	/** Allow more than one view of this extension in the same panel. */
+	readonly multiInstance?: boolean;
 	readonly mount: (args: {
 		atelier: ExtensionRuntime;
 		view: ExtensionView;
@@ -76,6 +79,9 @@ export interface MountedExtension {
 
 export interface ExtensionRuntime {
 	readonly lix: Lix;
+	readonly events: {
+		readonly emit: (event: AtelierEvent) => void;
+	};
 	readonly files: {
 		readonly open: (args: {
 			readonly fileId: string;
@@ -83,6 +89,7 @@ export interface ExtensionRuntime {
 			readonly state?: ExtensionState;
 			readonly focus?: boolean;
 			readonly pending?: boolean;
+			readonly documentOrigin?: "existing" | "new";
 		}) => void | Promise<void>;
 		readonly close: (fileId: string) => void;
 		readonly active: {

@@ -36,6 +36,7 @@ type TipTapEditorProps = {
 	isActiveView?: boolean;
 	originKey?: string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	onPersist?: (args: { fileId: string; filePath?: string }) => void;
 };
 
 type MarkdownFileDelivery = {
@@ -70,6 +71,7 @@ export function TipTapEditor({
 	isActiveView = true,
 	originKey,
 	openWorkspaceFile,
+	onPersist,
 }: TipTapEditorProps) {
 	if (fileId) {
 		return (
@@ -84,6 +86,7 @@ export function TipTapEditor({
 				isActiveView={isActiveView}
 				originKey={originKey}
 				openWorkspaceFile={openWorkspaceFile}
+				onPersist={onPersist}
 			/>
 		);
 	}
@@ -98,6 +101,7 @@ export function TipTapEditor({
 			isActiveView={isActiveView}
 			originKey={originKey}
 			openWorkspaceFile={openWorkspaceFile}
+			onPersist={onPersist}
 		/>
 	);
 }
@@ -229,6 +233,7 @@ function TipTapEditorLoadedContent({
 	isActiveView = true,
 	originKey,
 	openWorkspaceFile,
+	onPersist,
 	hasInitialFile,
 	initialMarkdown,
 	sourceFilePath,
@@ -251,6 +256,8 @@ function TipTapEditorLoadedContent({
 		onReady?.(readyEditor);
 	});
 	const hasAutoFocusedRef = useRef(false);
+	const onPersistRef = useRef(onPersist);
+	onPersistRef.current = onPersist;
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
 
 	// Editor is an imperative resource. Construct and destroy it in the same
@@ -269,6 +276,7 @@ function TipTapEditorLoadedContent({
 			persistDebounceMs: PERSIST_DEBOUNCE_MS,
 			originKey: editorOriginKey,
 			openWorkspaceFile,
+			onPersist: (args) => onPersistRef.current?.(args),
 		});
 		setEditorInstance(nextEditor);
 		return () => nextEditor.destroy();

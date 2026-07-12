@@ -13,6 +13,7 @@ export function createExtensionHostContext(
 	return {
 		atelier: {
 			lix,
+			events: { emit: () => {} },
 			files: {
 				open: options.openFile ?? (async () => {}),
 				close: () => {},

@@ -36,6 +36,7 @@ type CreateEditorArgs = {
 	resolveImageSrc?: (src: string) => string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	originKey?: string;
+	onPersist?: (args: { fileId: string; filePath?: string }) => void;
 };
 
 export const createMarkdownEditorOriginKey = (): string => {
@@ -122,6 +123,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		resolveImageSrc,
 		openWorkspaceFile,
 		originKey = createMarkdownEditorOriginKey(),
+		onPersist,
 	} = args;
 
 	const ast = contentAst ?? (parseMarkdown(initialMarkdown ?? "") as any);
@@ -149,6 +151,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			originKey,
 		});
 		lastPersistedMarkdown = markdown;
+		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
 	};
 	const runPersist = (editor: Editor): Promise<void> => {
 		if (!fileId || !persistState) return Promise.resolve();

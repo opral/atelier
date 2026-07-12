@@ -143,9 +143,11 @@ export async function loadInstalledExtensionsFromRows(
 				definition: {
 					kind: manifest.id,
 					label: manifest.name,
-					description: `Workspace extension: ${manifest.name}`,
+					description:
+						manifest.description ?? `Workspace extension: ${manifest.name}`,
 					icon: Puzzle,
 					fileExtensions: manifest.fileExtensions,
+					multiInstance: manifest.multiInstance,
 					mount: module.mount,
 				},
 			});

@@ -1,5 +1,6 @@
 import { openLix } from "@lix-js/sdk";
-import { createAtelier } from "@opral/atelier";
+import { Atelier, createAtelier } from "@opral/atelier";
+import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
 import { seedWorkspace } from "./seed-workspace";
 import "./style.css";
@@ -11,7 +12,8 @@ const mountElement = element;
 async function start() {
 	const lix = await openLix();
 	await seedWorkspace(lix);
-	createAtelier({ element: mountElement, lix });
+	const atelier = createAtelier({ lix });
+	createRoot(mountElement).render(<Atelier instance={atelier} />);
 }
 
 void start().catch((error: unknown) => {

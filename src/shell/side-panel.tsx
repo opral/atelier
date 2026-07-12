@@ -5,6 +5,7 @@ import type {
 	ExtensionHostContext,
 	ExtensionState,
 } from "../extension-runtime/types";
+import type { ReactNode } from "react";
 import { PanelV2 } from "./panel-v2";
 
 interface SidePanelProps {
@@ -17,6 +18,7 @@ interface SidePanelProps {
 	readonly viewContext: ExtensionHostContext;
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
+	readonly emptyState?: ReactNode;
 }
 
 /**
@@ -35,14 +37,17 @@ export function SidePanel({
 	viewContext,
 	isFocused,
 	onFocusPanel,
+	emptyState: emptyStateOverride,
 }: SidePanelProps) {
-	const emptyState = (
+	const defaultEmptyState = (
 		<div className="flex flex-1 items-center justify-center">
 			<span className="text-[12.5px] text-[var(--color-icon-tertiary)]">
 				No view open
 			</span>
 		</div>
 	);
+	const emptyState =
+		emptyStateOverride === undefined ? defaultEmptyState : emptyStateOverride;
 
 	return (
 		<PanelV2

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 import {
 	coerceAtelierUiState,
+	createInitialAtelierUiState,
 	DEFAULT_ATELIER_UI_STATE,
 	type AtelierUiState,
 } from "./ui-state";
@@ -38,5 +39,22 @@ describe("coerceAtelierUiState", () => {
 			FILES_EXTENSION_KIND,
 		]);
 		expect(coerced.panels.left.activeInstance).toBe("files-left");
+	});
+});
+
+describe("createInitialAtelierUiState", () => {
+	test("opens requested side panels only for the fresh layout", () => {
+		expect(createInitialAtelierUiState(["right"]).layout?.sizes).toEqual({
+			left: 0,
+			central: 80,
+			right: 20,
+		});
+		expect(
+			createInitialAtelierUiState(["left", "right"]).layout?.sizes,
+		).toEqual({
+			left: 20,
+			central: 60,
+			right: 20,
+		});
 	});
 });
