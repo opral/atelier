@@ -145,7 +145,7 @@ describe("getExternalWriteReview", () => {
 		try {
 			await appendAgentTurnCommitRange(lix, {
 				id: "range-without-optional-ids",
-				agent: "codex",
+				sourceId: "codex",
 				beforeCommitId: "commit-before",
 				afterCommitId: "commit-after",
 				sessionId: undefined,
@@ -714,7 +714,7 @@ function agentRange(
 	>,
 ): AgentTurnCommitRange {
 	return {
-		agent: "codex",
+		sourceId: "codex",
 		sessionId: "session-1",
 		turnId: "turn-1",
 		startedAt: 1,

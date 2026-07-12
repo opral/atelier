@@ -23,6 +23,8 @@ export function useFileSnapshotsAtCommits(
 	fileId: string,
 	beforeCommitId: string | null,
 	afterCommitId: string | null,
+	beforeFileId: string | null = null,
+	afterFileId: string | null = null,
 ): {
 	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
 	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
@@ -30,12 +32,15 @@ export function useFileSnapshotsAtCommits(
 	const commitIds = [beforeCommitId, afterCommitId].filter(
 		(commitId): commitId is string => Boolean(commitId),
 	);
+	const fileIds = [beforeFileId ?? fileId, afterFileId ?? fileId].filter(
+		(candidate, index, candidates) => candidates.indexOf(candidate) === index,
+	);
 	const rows = useQuery<HistoricalFileSnapshotRow>(
 		(lix) => {
 			let query = qb(lix)
 				.selectFrom("lix_file_history")
 				.select(["id", "path", "data", "lixcol_start_commit_id as commit_id"])
-				.where("id", "=", fileId);
+				.where("id", "in", fileIds);
 			query = commitIds.length
 				? query.where("lixcol_start_commit_id", "in", commitIds)
 				: query.where("lixcol_start_commit_id", "=", "");
@@ -54,14 +59,21 @@ export function useFileSnapshotsAtCommits(
 		// The first (shallowest) row is the visible state at this commit. Keep an
 		// explicit undefined entry for deletions instead of falling through to an
 		// older, deeper row.
-		if (!snapshots.has(row.commit_id)) {
-			snapshots.set(row.commit_id, visibleSnapshot(row));
+		const key = `${row.commit_id}:${row.id}`;
+		if (!snapshots.has(key)) {
+			snapshots.set(key, visibleSnapshot(row));
 		}
 	}
+	const beforeId = beforeFileId ?? fileId;
+	const afterId = afterFileId ?? fileId;
 
 	return {
-		beforeSnapshot: beforeCommitId ? snapshots.get(beforeCommitId) : undefined,
-		afterSnapshot: afterCommitId ? snapshots.get(afterCommitId) : undefined,
+		beforeSnapshot: beforeCommitId
+			? snapshots.get(`${beforeCommitId}:${beforeId}`)
+			: undefined,
+		afterSnapshot: afterCommitId
+			? snapshots.get(`${afterCommitId}:${afterId}`)
+			: undefined,
 	};
 }
 

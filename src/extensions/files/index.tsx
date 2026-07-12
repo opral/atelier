@@ -34,6 +34,7 @@ import {
 	getPendingExternalWriteReviewPaths,
 	type ExternalWriteReviewFile,
 } from "@/shell/external-write-review-history";
+import { resolveCheckpointDiffForBranch } from "@/shell/checkpoint-diff";
 
 type FilesViewContext = {
 	readonly openFile?: (args: {
@@ -46,6 +47,7 @@ type FilesViewContext = {
 	}) => void | Promise<void>;
 	readonly closeFileViews?: (args: { readonly fileId: string }) => void;
 	readonly checkpointDiff?: CheckpointDiff | null;
+	readonly checkpointBranchId?: string | null;
 	readonly activeFileId?: string | null;
 	readonly activeFilePath?: string | null;
 	readonly isPanelFocused?: boolean;
@@ -94,10 +96,98 @@ const EMPTY_AGENT_TURN_RANGES = [] as const;
  */
 export function FilesView({ context }: FilesViewProps) {
 	const lix = useLix();
-	const entries = useQuery<FilesystemEntryRow>((lix) =>
-		selectFilesystemEntries(lix),
+	const entries = useQuery<FilesystemEntryRow>((queryLix) =>
+		selectFilesystemEntries(queryLix),
 	);
-	return <FilesViewContent context={context} lix={lix} entries={entries} />;
+	return (
+		<FilesActiveFileLoader context={context} lix={lix} entries={entries} />
+	);
+}
+
+function FilesActiveFileLoader({
+	context,
+	lix,
+	entries,
+}: FilesViewProps & {
+	readonly lix: Lix;
+	readonly entries: FilesystemEntryRow[];
+}) {
+	const activeFileRows = useQuery<{ value: unknown }>((queryLix) =>
+		qb(queryLix)
+			.selectFrom("lix_key_value")
+			.select("value")
+			.where("key", "=", "atelier_active_file_id"),
+	);
+	const activeFileId =
+		typeof activeFileRows[0]?.value === "string"
+			? activeFileRows[0].value
+			: null;
+	return (
+		<FilesCheckpointLoader
+			context={context}
+			lix={lix}
+			entries={entries}
+			activeFileId={activeFileId}
+		/>
+	);
+}
+
+function FilesCheckpointLoader({
+	context,
+	lix,
+	entries,
+	activeFileId,
+}: FilesViewProps & {
+	readonly lix: Lix;
+	readonly entries: FilesystemEntryRow[];
+	readonly activeFileId: string | null;
+}) {
+	const resolvedCheckpointDiff = useResolvedCheckpointDiff(
+		lix,
+		context?.checkpointBranchId ?? null,
+	);
+	return (
+		<FilesViewContent
+			context={
+				context
+					? {
+							...context,
+							activeFileId: context.activeFileId ?? activeFileId,
+							checkpointDiff: context.checkpointDiff ?? resolvedCheckpointDiff,
+						}
+					: undefined
+			}
+			lix={lix}
+			entries={entries}
+		/>
+	);
+}
+
+function useResolvedCheckpointDiff(
+	lix: Lix,
+	branchId: string | null,
+): CheckpointDiff | null {
+	const [resolved, setResolved] = useState<{
+		readonly branchId: string;
+		readonly diff: CheckpointDiff | null;
+	} | null>(null);
+	useEffect(() => {
+		if (!branchId) return;
+		let cancelled = false;
+		void resolveCheckpointDiffForBranch({ lix, branchId })
+			.then((diff) => {
+				if (!cancelled) setResolved({ branchId, diff });
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				console.warn("Failed to resolve checkpoint files", error);
+				setResolved({ branchId, diff: null });
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [branchId, lix]);
+	return branchId && resolved?.branchId === branchId ? resolved.diff : null;
 }
 
 function FilesViewContent({
@@ -637,7 +727,9 @@ function FilesViewContent({
 				setPendingPaths((prev) =>
 					prev.filter((path) => path !== normalizedPath),
 				);
-				context?.closeFileViews?.({ fileId: selectedFileId });
+				if (selectedFileId === activeFileId) {
+					context?.closeFileViews?.({ fileId: selectedFileId });
+				}
 			} else {
 				await qb(lix)
 					.deleteFrom("lix_directory")
@@ -653,6 +745,7 @@ function FilesViewContent({
 			setSelectionOverride(null);
 		}
 	}, [
+		activeFileId,
 		context,
 		lix,
 		selectedFileId,
@@ -1056,11 +1149,21 @@ export const extension = createReactExtensionDefinition({
 		<LixProvider lix={atelier.lix}>
 			<FilesView
 				context={{
-					openFile: ({ panel: _panel, ...args }) => atelier.files.open(args),
-					closeFileViews: ({ fileId }) => atelier.files.close(fileId),
-					checkpointDiff: atelier.revisions.current,
-					activeFileId: atelier.files.active?.id ?? null,
-					activeFilePath: atelier.files.active?.path ?? null,
+					openFile: ({
+						panel: _panel,
+						fileId: _fileId,
+						filePath,
+						state,
+						focus,
+					}) =>
+						atelier.documents.open(filePath, {
+							...(state ? { state } : {}),
+							...(focus !== undefined ? { focus } : {}),
+						}),
+					closeFileViews: () => {
+						void atelier.documents.closeActive();
+					},
+					checkpointBranchId: atelier.revisions.current?.branchId ?? null,
 					isPanelFocused: view.isFocused,
 					panelSide: view.panel,
 					viewInstance: view.instanceId,

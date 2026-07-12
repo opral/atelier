@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { Puzzle } from "lucide-react";
-import { reconcilePersistedExtensionViews } from "./layout-shell";
+import {
+	reconcilePersistedExtensionViews,
+	selectNewFileDraftHandler,
+} from "./layout-shell";
 import type {
 	ExtensionDefinition,
 	PanelState,
@@ -52,5 +55,44 @@ describe("reconcilePersistedExtensionViews", () => {
 			views: [],
 			activeInstance: null,
 		});
+	});
+});
+
+describe("selectNewFileDraftHandler", () => {
+	test("prefers the focused panel's active Files view", () => {
+		const left = {
+			panelSide: "left" as const,
+			viewInstance: "files-left",
+			isActiveView: true,
+			handler: () => {},
+		};
+		const right = {
+			panelSide: "right" as const,
+			viewInstance: "files-right",
+			isActiveView: true,
+			handler: () => {},
+		};
+
+		expect(selectNewFileDraftHandler([left, right], "right")).toBe(right);
+	});
+
+	test("ignores inactive views and falls back in panel order", () => {
+		const inactiveCentral = {
+			panelSide: "central" as const,
+			viewInstance: "files-central",
+			isActiveView: false,
+			handler: () => {},
+		};
+		const left = {
+			panelSide: "left" as const,
+			viewInstance: "files-left",
+			isActiveView: true,
+			handler: () => {},
+		};
+
+		expect(selectNewFileDraftHandler([inactiveCentral, left], "central")).toBe(
+			left,
+		);
+		expect(selectNewFileDraftHandler([inactiveCentral], "central")).toBeNull();
 	});
 });

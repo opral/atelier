@@ -1012,7 +1012,6 @@ describe("inline", () => {
 		expect(open).toHaveAccessibleName("Open Local brief in the center panel");
 		open?.click();
 		expect(openWorkspaceFile).toHaveBeenCalledWith({
-			fileId: "pdf-file",
 			filePath: "/docs/brief.pdf",
 			state: { sourceCommitId: "commit-1", page: 3 },
 		});

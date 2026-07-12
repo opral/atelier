@@ -73,11 +73,6 @@ describe("syncPanelGroupLayout", () => {
 describe("open file lifecycle", () => {
 	test("moves the centered Files instance left when a document opens", async () => {
 		const lix = await openLix();
-		const renderNavbarEnd = vi.fn(
-			({ currentFile }: { currentFile: string | null }) => (
-				<span data-testid="host-current-file">{currentFile ?? "none"}</span>
-			),
-		);
 		const onEvent = vi.fn();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -101,19 +96,12 @@ describe("open file lifecycle", () => {
 				<LixProvider lix={lix}>
 					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 						<Suspense fallback={null}>
-							<V2LayoutShell
-								slots={{ navbarEnd: renderNavbarEnd }}
-								onEvent={onEvent}
-							/>
+							<V2LayoutShell onEvent={onEvent} />
 						</Suspense>
 					</KeyValueProvider>
 				</LixProvider>,
 			);
 		});
-		expect(await screen.findByTestId("host-current-file")).toHaveTextContent(
-			"none",
-		);
-
 		fireEvent.click(await findFilesTreeItem("one.md"));
 		expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
 		expect(onEvent).toHaveBeenCalledWith({
@@ -129,9 +117,6 @@ describe("open file lifecycle", () => {
 			documentOrigin: "existing",
 			viewKind: "atelier_file",
 		});
-		expect(screen.getByTestId("host-current-file")).toHaveTextContent(
-			"/one.md",
-		);
 		await waitFor(() => {
 			expect(screen.queryByTestId("files-view-wide")).toBeNull();
 			expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
@@ -147,9 +132,6 @@ describe("open file lifecycle", () => {
 		expect(secondFile).toBeTruthy();
 		fireEvent.click(secondFile!);
 		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
-		expect(screen.getByTestId("host-current-file")).toHaveTextContent(
-			"/two.md",
-		);
 		expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
 
 		await waitFor(async () => {
@@ -194,7 +176,6 @@ describe("open file lifecycle", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("files-view-wide")).toBeVisible();
-			expect(screen.getByTestId("host-current-file")).toHaveTextContent("none");
 			expect(
 				screen.getByRole("button", { name: "Toggle left panel" }),
 			).toHaveAttribute("aria-pressed", "false");
@@ -468,9 +449,9 @@ describe("agent turn review reveal", () => {
 
 			await act(async () => {
 				await createAtelier({ lix }).diff.open({
-					before: beforeCommitId,
-					after: afterCommitId,
-					source: { kind: "agent", agent: "claude" },
+					beforeCommitId,
+					afterCommitId,
+					source: { id: "claude" },
 				});
 			});
 

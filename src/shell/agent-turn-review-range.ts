@@ -8,7 +8,7 @@ const agentTurnCommitRangeMutationQueues = new WeakMap<Lix, Promise<void>>();
 
 export type AgentTurnCommitRange = {
 	readonly id: string;
-	readonly agent: "claude" | "codex";
+	readonly sourceId: string;
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
 	readonly sessionId?: string;
@@ -156,7 +156,8 @@ function isAgentTurnCommitRange(value: unknown): value is AgentTurnCommitRange {
 	const range = value as Partial<AgentTurnCommitRange>;
 	const clearedFileIds = range.clearedFileIds;
 	return (
-		(range.agent === "claude" || range.agent === "codex") &&
+		typeof range.sourceId === "string" &&
+		range.sourceId.length > 0 &&
 		typeof range.id === "string" &&
 		range.id.length > 0 &&
 		typeof range.beforeCommitId === "string" &&
@@ -190,7 +191,7 @@ function serializeAgentTurnCommitRange(
 ): AgentTurnCommitRange {
 	return {
 		id: range.id,
-		agent: range.agent,
+		sourceId: range.sourceId,
 		beforeCommitId: range.beforeCommitId,
 		afterCommitId: range.afterCommitId,
 		...(range.sessionId !== undefined ? { sessionId: range.sessionId } : {}),

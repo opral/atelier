@@ -547,7 +547,7 @@ describe("FilesView", () => {
 		const afterCommitId = await activeCommitId(lix);
 		await appendAgentTurnCommitRange(lix, {
 			id: "files-review-range",
-			agent: "codex",
+			sourceId: "codex",
 			beforeCommitId,
 			afterCommitId,
 			startedAt: 1,

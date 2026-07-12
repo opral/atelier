@@ -7,6 +7,8 @@ export type CheckpointDiffFileStatus =
 export type CheckpointDiffFile = {
 	readonly fileId: string;
 	readonly path: string;
+	readonly beforeFileId?: string | null;
+	readonly afterFileId?: string | null;
 	readonly beforePath: string | null;
 	readonly afterPath: string | null;
 	readonly beforeData: Uint8Array;
@@ -38,9 +40,4 @@ export type CheckpointDiffBranchRow = {
 	readonly id: string;
 	readonly name: string;
 	readonly commit_id: string | null;
-};
-
-export type ShowCheckpointDiffArgs = {
-	readonly branchId: string;
-	readonly branches: readonly CheckpointDiffBranchRow[];
 };

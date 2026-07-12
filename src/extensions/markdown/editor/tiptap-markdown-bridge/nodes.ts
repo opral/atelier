@@ -782,7 +782,6 @@ function createMarkdownAssetNodeView({
 			...(workspaceFile.page ? { page: workspaceFile.page } : {}),
 		};
 		void openWorkspaceFile({
-			fileId: workspaceFile.fileId,
 			filePath: workspaceFile.filePath,
 			...(Object.keys(state).length > 0 ? { state } : {}),
 		});

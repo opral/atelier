@@ -1,8 +1,12 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
-import type { ExtensionRuntime } from "@/extension-runtime/types";
+import type { ExtensionState } from "@/extension-runtime/types";
 
-export type MarkdownWorkspaceFileOpener = ExtensionRuntime["files"]["open"];
+export type MarkdownWorkspaceFileOpener = (args: {
+	readonly filePath: string;
+	readonly state?: ExtensionState;
+	readonly focus?: boolean;
+}) => void | Promise<void>;
 
 export type LoadedMarkdownAsset = {
 	readonly src: string;

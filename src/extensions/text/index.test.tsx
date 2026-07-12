@@ -169,14 +169,14 @@ function createRuntime(
 	return {
 		lix,
 		events: { emit: vi.fn() },
-		files: {
+		documents: {
 			open: vi.fn(),
-			close: vi.fn(),
-			active: null,
+			startNew: vi.fn(),
+			closeActive: vi.fn(),
 		},
 		revisions: {
 			current: null,
-			show: vi.fn(async () => null),
+			show: vi.fn(async () => {}),
 			clear: vi.fn(),
 		},
 		reviews: {

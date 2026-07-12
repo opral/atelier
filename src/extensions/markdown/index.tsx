@@ -65,6 +65,8 @@ type MarkdownViewProps = {
 	readonly checkpointDiff?: CheckpointDiff | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
+	readonly beforeFileId?: string | null;
+	readonly afterFileId?: string | null;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -118,6 +120,8 @@ export function MarkdownView({
 	checkpointDiff,
 	beforeCommitId,
 	afterCommitId,
+	beforeFileId,
+	afterFileId,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -137,6 +141,8 @@ export function MarkdownView({
 				checkpointDiff={checkpointDiff}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
+				beforeFileId={beforeFileId}
+				afterFileId={afterFileId}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
@@ -183,6 +189,8 @@ function MarkdownViewLoaded(
 	const editorRevision = normalizeEditorRevisionState({
 		beforeCommitId,
 		afterCommitId,
+		beforeFileId: props.beforeFileId,
+		afterFileId: props.afterFileId,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
 
@@ -343,6 +351,8 @@ function MarkdownHistoricalViewLoaded({
 		fileId,
 		checkpointDiffFile ? null : editorRevision.beforeCommitId,
 		checkpointDiffFile ? null : editorRevision.afterCommitId,
+		editorRevision.beforeFileId,
+		editorRevision.afterFileId,
 	);
 	const historicalFile = useMemo(
 		() =>
@@ -949,7 +959,6 @@ export const extension = createReactExtensionDefinition({
 					view.state.defaultBlock === "heading1" ? "heading1" : undefined
 				}
 				syncActiveFile={false}
-				checkpointDiff={atelier.revisions.current}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"
 						? view.state.beforeCommitId
@@ -960,10 +969,25 @@ export const extension = createReactExtensionDefinition({
 						? view.state.afterCommitId
 						: null
 				}
+				beforeFileId={
+					typeof view.state.beforeFileId === "string"
+						? view.state.beforeFileId
+						: null
+				}
+				afterFileId={
+					typeof view.state.afterFileId === "string"
+						? view.state.afterFileId
+						: null
+				}
 				registerExternalWriteReview={atelier.reviews.register}
 				onAcceptReviewDiff={atelier.reviews.accept}
 				onRejectReviewDiff={atelier.reviews.reject}
-				openWorkspaceFile={(args) => atelier.files.open(args)}
+				openWorkspaceFile={(args) =>
+					atelier.documents.open(args.filePath, {
+						...(args.state ? { state: args.state } : {}),
+						...(args.focus !== undefined ? { focus: args.focus } : {}),
+					})
+				}
 				onDocumentModified={(filePath) =>
 					atelier.events.emit({
 						type: "document_modified",

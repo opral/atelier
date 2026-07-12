@@ -7,21 +7,21 @@ import type {
 export function createExtensionHostContext(
 	lix: Lix,
 	options: {
-		openFile?: ExtensionRuntime["files"]["open"];
+		openDocument?: ExtensionRuntime["documents"]["open"];
 	} = {},
 ): ExtensionHostContext {
 	return {
 		atelier: {
 			lix,
 			events: { emit: () => {} },
-			files: {
-				open: options.openFile ?? (async () => {}),
-				close: () => {},
-				active: null,
+			documents: {
+				open: options.openDocument ?? (async () => {}),
+				startNew: async () => {},
+				closeActive: async () => {},
 			},
 			revisions: {
 				current: null,
-				show: async () => null,
+				show: async () => {},
 				clear: () => {},
 			},
 			reviews: {

@@ -36,8 +36,8 @@ import type { ExternalWriteReview } from "@/extension-runtime/external-write-rev
 import type {
 	CheckpointDiff,
 	CheckpointDiffBranchRow,
+	CheckpointDiffFile,
 	CheckpointDiffVisibleFile,
-	ShowCheckpointDiffArgs,
 } from "@/extension-runtime/checkpoint-diff";
 import {
 	hasHistoricalEditorRevisionState,
@@ -120,8 +120,22 @@ import {
 	hostExtensionDefinition,
 	type AtelierExtensionRegistration,
 } from "../extension-runtime/host-extension";
-import type { AtelierEvent } from "../extension-api";
-import { resolveCheckpointDiff } from "./checkpoint-diff";
+import type {
+	AtelierDocumentOpenOptions,
+	AtelierEvent,
+} from "../extension-api";
+import {
+	bindAtelierDocumentsRuntime,
+	publishAtelierDocumentsState,
+	createAtelier,
+	type AtelierDocumentsRuntimeBinding,
+	type AtelierDocumentsRuntimeCompletion,
+	type AtelierInstance,
+} from "../atelier-instance";
+import {
+	resolveCheckpointDiff,
+	resolveCheckpointDiffForBranch,
+} from "./checkpoint-diff";
 import {
 	reconcileCurrentFileViewPanel,
 	reconcileCurrentFileViews,
@@ -202,6 +216,14 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 	return prototype === Object.prototype || prototype === null;
 };
 
+function withoutDocumentIdentity(
+	state: ExtensionState | undefined,
+): ExtensionState | undefined {
+	if (!state) return undefined;
+	const { fileId: _fileId, filePath: _filePath, ...rest } = state;
+	return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
 	const activeInstance =
 		panel.activeInstance ?? panel.views[0]?.instance ?? null;
@@ -209,16 +231,30 @@ const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
 	return panel.views.find((entry) => entry.instance === activeInstance) ?? null;
 };
 
-const activeFilePathFromPanel = (panel: PanelState): string | null => {
-	const rawPath = activeEntryFromPanel(panel)?.state?.filePath;
-	return typeof rawPath === "string" && rawPath.length > 0 ? rawPath : null;
-};
-
 const isDocumentView = (view: ExtensionInstance): boolean => {
 	const fileId =
 		typeof view.state?.fileId === "string" ? view.state.fileId : "";
 	if (!fileId) return false;
 	return view.instance === fileExtensionInstanceForKind(view.kind, fileId);
+};
+
+const documentPathFromView = (view: ExtensionInstance): string | null => {
+	if (!isDocumentView(view)) return null;
+	const path = view.state?.filePath;
+	return typeof path === "string" && path.length > 0 ? path : null;
+};
+
+const openDocumentPathsFromPanels = (
+	panels: readonly PanelState[],
+): readonly string[] => {
+	const paths = new Set<string>();
+	for (const panel of panels) {
+		for (const view of panel.views) {
+			const path = documentPathFromView(view);
+			if (path) paths.add(path);
+		}
+	}
+	return [...paths];
 };
 
 const canPlaceViewInPanel = (
@@ -295,6 +331,29 @@ const normalizePanelsForDocumentSlot = (
 const newFileDraftHandlerKey = (
 	registration: NewFileDraftHandlerRegistration,
 ): string => `${registration.panelSide}:${registration.viewInstance}`;
+
+/** @internal */
+export const selectNewFileDraftHandler = (
+	registrations: Iterable<NewFileDraftHandlerRegistration>,
+	focusedPanel: PanelSide,
+): NewFileDraftHandlerRegistration | null => {
+	const panelPreference = [
+		focusedPanel,
+		"left" as const,
+		"central" as const,
+		"right" as const,
+	].filter((side, index, sides) => sides.indexOf(side) === index);
+	const registered = [...registrations].filter(
+		(registration) => registration.isActiveView,
+	);
+	for (const panelSide of panelPreference) {
+		const registration = registered.find(
+			(candidate) => candidate.panelSide === panelSide,
+		);
+		if (registration) return registration;
+	}
+	return null;
+};
 
 const sanitizePanels = (
 	panels: Record<PanelSide, PanelState>,
@@ -461,10 +520,7 @@ function transitionCheckpointEditorRevisionPanel(args: {
 				...nextView,
 				state: {
 					...(stripEditorRevisionState(nextView.state) ?? {}),
-					beforeCommitId: nextDiff.beforeCommitId,
-					afterCommitId: nextDiff.afterIsActiveHead
-						? null
-						: nextDiff.afterCommitId,
+					...checkpointRevisionState(nextDiff, nextDiffFile),
 				},
 			};
 		}
@@ -491,6 +547,40 @@ function checkpointDiffFileForView(
 			(file) => file.fileId === fileId,
 		) ?? null
 	);
+}
+
+function checkpointChangedFileForVisibleFile(
+	checkpointDiff: CheckpointDiff,
+	visibleFile: CheckpointDiffVisibleFile,
+): CheckpointDiffFile | null {
+	return (
+		checkpointDiff.files.find(
+			(file) =>
+				file.fileId === visibleFile.fileId ||
+				file.beforeFileId === visibleFile.fileId ||
+				file.afterFileId === visibleFile.fileId ||
+				file.beforePath === visibleFile.path ||
+				file.afterPath === visibleFile.path,
+		) ?? null
+	);
+}
+
+function checkpointRevisionState(
+	checkpointDiff: CheckpointDiff,
+	visibleFile: CheckpointDiffVisibleFile,
+): ExtensionState {
+	const changedFile = checkpointChangedFileForVisibleFile(
+		checkpointDiff,
+		visibleFile,
+	);
+	return {
+		beforeCommitId: checkpointDiff.beforeCommitId,
+		afterCommitId: checkpointDiff.afterIsActiveHead
+			? null
+			: checkpointDiff.afterCommitId,
+		beforeFileId: changedFile?.beforeFileId ?? visibleFile.fileId,
+		afterFileId: changedFile?.afterFileId ?? visibleFile.fileId,
+	};
 }
 
 function isCheckpointEditorRevisionView(
@@ -569,16 +659,16 @@ async function resolveNextUntitledMarkdownPath(
 }
 
 export function V2LayoutShell({
+	instance: atelierInstance,
 	slots,
 	extensions = [],
-	filesExtension,
 	filesViewMode = "landing",
 	defaultOpenPanels = [],
 	onEvent,
 }: {
+	readonly instance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
-	readonly filesExtension?: string;
 	readonly filesViewMode?: FilesViewMode;
 	readonly defaultOpenPanels?: readonly DefaultOpenPanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
@@ -587,31 +677,11 @@ export function V2LayoutShell({
 		() => extensions.map(hostExtensionDefinition),
 		[extensions],
 	);
-	const filesExtensionOverride = useMemo(() => {
-		if (!filesExtension) return undefined;
-		const selected = hostExtensions.find(
-			(extension) => extension.kind === filesExtension,
-		);
-		return selected ? { ...selected, kind: FILES_EXTENSION_KIND } : undefined;
-	}, [filesExtension, hostExtensions]);
-	const visibleHostExtensions = useMemo(
-		() =>
-			filesExtension
-				? hostExtensions.filter(
-						(extension) => extension.kind !== filesExtension,
-					)
-				: hostExtensions,
-		[filesExtension, hostExtensions],
-	);
 	return (
-		<ExtensionRegistryProvider
-			hostExtensions={visibleHostExtensions}
-			builtinOverrides={
-				filesExtensionOverride ? [filesExtensionOverride] : undefined
-			}
-		>
+		<ExtensionRegistryProvider hostExtensions={hostExtensions}>
 			<ExtensionHostRegistryProvider>
 				<LayoutShellContent
+					atelierInstance={atelierInstance}
 					slots={slots}
 					filesViewMode={filesViewMode}
 					defaultOpenPanels={defaultOpenPanels}
@@ -623,6 +693,7 @@ export function V2LayoutShell({
 }
 
 type LayoutShellContentProps = {
+	readonly atelierInstance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	readonly filesViewMode: FilesViewMode;
 	readonly defaultOpenPanels: readonly DefaultOpenPanel[];
@@ -649,6 +720,23 @@ type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
 };
+
+function activeDocumentCompletion(
+	path: string,
+): AtelierDocumentsRuntimeCompletion {
+	return {
+		isComplete: (state) =>
+			state.activePath === path && state.openPaths.includes(path),
+	};
+}
+
+function closedDocumentCompletion(
+	path: string,
+): AtelierDocumentsRuntimeCompletion {
+	return {
+		isComplete: (state) => state.activePath !== path,
+	};
+}
 
 function normalizeLixFileOpenPath(filePath: string): string | null {
 	if (!filePath) return null;
@@ -678,6 +766,24 @@ async function selectLixFileForOpen(
 		.executeTakeFirst();
 	if (!row) return null;
 	return { id: row.id as string, path: row.path as string };
+}
+
+async function selectHistoricalLixFileForOpen(
+	lix: Lix,
+	filePath: string,
+	commitId: string,
+): Promise<LixFileForOpen | null> {
+	const row = await qb(lix)
+		.selectFrom("lix_file_history")
+		.select(["id", "path"])
+		.where("lixcol_start_commit_id", "=", commitId)
+		.where("path", "=", filePath)
+		.orderBy("lixcol_depth", "asc")
+		.limit(1)
+		.executeTakeFirst();
+	return row && typeof row.path === "string"
+		? { id: row.id as string, path: row.path }
+		: null;
 }
 
 export async function resolveLixFileForOpen({
@@ -813,9 +919,7 @@ function CurrentCheckpointFooterReviewButton({
 }: {
 	readonly lix: Lix;
 	readonly checkpointDiff: CheckpointDiff | null;
-	readonly showCheckpointDiff: (
-		args: ShowCheckpointDiffArgs,
-	) => Promise<CheckpointDiff | null>;
+	readonly showCheckpointDiff: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff: () => void;
 }) {
 	const currentCheckpointChange = useCurrentCheckpointChangeState(lix);
@@ -835,10 +939,7 @@ function CurrentCheckpointFooterReviewButton({
 					clearCheckpointDiff();
 					return;
 				}
-				void showCheckpointDiff({
-					branchId: currentCheckpointChange.branchId,
-					branches: currentCheckpointChange.branches,
-				});
+				void showCheckpointDiff(currentCheckpointChange.branchId);
 			}}
 		>
 			{status}
@@ -905,6 +1006,7 @@ function LayoutShellActiveFileLoader(
 }
 
 function LayoutShellLoadedContent({
+	atelierInstance,
 	lix,
 	uiStateKV,
 	setUiStateKV,
@@ -915,6 +1017,8 @@ function LayoutShellLoadedContent({
 	defaultOpenPanels,
 	onEvent,
 }: LayoutShellLoadedContentProps) {
+	const fallbackAtelierInstance = useMemo(() => createAtelier({ lix }), [lix]);
+	const effectiveAtelierInstance = atelierInstance ?? fallbackAtelierInstance;
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
@@ -1745,31 +1849,22 @@ function LayoutShellLoadedContent({
 	}, [agentTurnRanges, autoRevealFirstAgentTurnReview]);
 
 	const showCheckpointDiff = useCallback(
-		async ({ branchId, branches }: ShowCheckpointDiffArgs) => {
+		async (branchId: string) => {
 			const previousDiff = checkpointDiffRef.current;
-			const [resolvedDiff, activeBranchId] = await Promise.all([
-				resolveCheckpointDiff({ lix, branches, branchId }),
-				lix.activeBranchId().catch(() => null),
-			]);
-			const nextDiff =
-				resolvedDiff && activeBranchId === branchId
-					? { ...resolvedDiff, afterIsActiveHead: true }
-					: resolvedDiff;
+			const nextDiff = await resolveCheckpointDiffForBranch({ lix, branchId });
 			checkpointDiffRef.current = nextDiff;
 			setCheckpointDiff(nextDiff);
 			transitionCheckpointEditorRevisions({
 				previousDiff,
 				nextDiff,
 			});
-			return nextDiff;
 		},
 		[lix, transitionCheckpointEditorRevisions],
 	);
 
-	const handleOpenFile = useCallback(
+	const resolveAndOpenFile = useCallback(
 		async ({
 			panel,
-			fileId: _requestedFileId,
 			filePath,
 			state,
 			focus,
@@ -1777,39 +1872,15 @@ function LayoutShellLoadedContent({
 			documentOrigin,
 		}: {
 			panel: PanelSide;
-			fileId: string;
 			filePath: string;
 			state?: ExtensionState;
 			focus?: boolean;
 			pending?: boolean;
 			documentOrigin?: "existing" | "new";
 		}) => {
-			if (hasHistoricalEditorRevisionState(state)) {
-				openResolvedFileView({
-					panel,
-					fileId: _requestedFileId,
-					filePath,
-					state,
-					focus,
-					pending,
-					documentOrigin,
-				});
-				return;
-			}
-
-			let resolvedFile: LixFileForOpen | null = null;
-			try {
-				resolvedFile = await resolveLixFileForOpen({
-					lix,
-					filePath,
-				});
-			} catch (error) {
-				console.error("Failed to resolve file", error);
-				return;
-			}
+			const resolvedFile = await resolveLixFileForOpen({ lix, filePath });
 			if (!resolvedFile) {
-				console.error(`File not found in the opened workspace: ${filePath}`);
-				return;
+				throw new Error(`File not found in the opened workspace: ${filePath}`);
 			}
 
 			if (!currentFileIds.has(resolvedFile.id)) {
@@ -1824,8 +1895,75 @@ function LayoutShellLoadedContent({
 				pending,
 				documentOrigin,
 			});
+			return resolvedFile.path;
 		},
 		[currentFileIds, lix, openResolvedFileView],
+	);
+
+	const resolveAndOpenDocument = useCallback(
+		async (
+			filePath: string,
+			options: AtelierDocumentOpenOptions = {},
+		): Promise<string> => {
+			const normalizedPath = normalizeLixFileOpenPath(filePath);
+			if (!normalizedPath) {
+				throw new Error(`Invalid workspace file path: ${filePath}`);
+			}
+			const requestedState = withoutDocumentIdentity(options.state);
+			const checkpoint = checkpointDiffRef.current;
+			const checkpointFile = checkpoint
+				? checkpointDiffEditorFiles(checkpoint).find(
+						(file) => file.path === normalizedPath,
+					)
+				: undefined;
+			if (checkpoint && checkpointFile) {
+				openResolvedFileView({
+					panel: "central",
+					fileId: checkpointFile.fileId,
+					filePath: normalizedPath,
+					state: {
+						...(requestedState ?? {}),
+						...checkpointRevisionState(checkpoint, checkpointFile),
+					},
+					focus: options.focus ?? true,
+					documentOrigin: options.documentOrigin ?? "existing",
+				});
+				return normalizedPath;
+			}
+
+			const state = requestedState;
+			const historicalCommitIds = [
+				typeof state?.sourceCommitId === "string" ? state.sourceCommitId : null,
+				typeof state?.afterCommitId === "string" ? state.afterCommitId : null,
+				typeof state?.beforeCommitId === "string" ? state.beforeCommitId : null,
+			].filter((commitId): commitId is string => Boolean(commitId));
+			for (const commitId of historicalCommitIds) {
+				const historicalFile = await selectHistoricalLixFileForOpen(
+					lix,
+					normalizedPath,
+					commitId,
+				);
+				if (!historicalFile) continue;
+				openResolvedFileView({
+					panel: "central",
+					fileId: historicalFile.id,
+					filePath: historicalFile.path,
+					state,
+					focus: options.focus ?? true,
+					documentOrigin: options.documentOrigin ?? "existing",
+				});
+				return historicalFile.path;
+			}
+
+			return resolveAndOpenFile({
+				panel: "central",
+				filePath: normalizedPath,
+				state,
+				focus: options.focus ?? true,
+				documentOrigin: options.documentOrigin ?? "existing",
+			});
+		},
+		[lix, openResolvedFileView, resolveAndOpenFile],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
@@ -2005,47 +2143,6 @@ function LayoutShellLoadedContent({
 			}
 		},
 		[centralPanel, leftPanel, resolveDiffReview, rightPanel, setPanelState],
-	);
-
-	const handleCloseFileViews = useCallback(
-		({ panel, fileId }: { panel?: PanelSide; fileId: string }) => {
-			const targetPanels: PanelSide[] = panel
-				? [panel]
-				: (["central", "left", "right"] as PanelSide[]);
-			const matchesFileView = (entry: ExtensionInstance) => {
-				if (entry.state?.fileId !== fileId) return false;
-				return (
-					entry.instance === fileExtensionInstanceForKind(entry.kind, fileId)
-				);
-			};
-			for (const side of targetPanels) {
-				const removedReview = openDiffReviewByFileIdRef.current.get(fileId);
-				let removed = false;
-				setPanelState(side, (current) => {
-					const views = current.views.filter(
-						(entry) => !matchesFileView(entry),
-					);
-					if (views.length === current.views.length) {
-						return current;
-					}
-					removed = true;
-					const activeInstance = views.some(
-						(entry) => entry.instance === current.activeInstance,
-					)
-						? current.activeInstance
-						: (views[views.length - 1]?.instance ?? null);
-					return { views, activeInstance };
-				});
-				if (
-					removed &&
-					removedReview &&
-					!resolvedReviewIdsRef.current.has(removedReview.reviewId)
-				) {
-					resolveDiffReview(removedReview);
-				}
-			}
-		},
-		[setPanelState, resolveDiffReview],
 	);
 
 	const activeCentralEntry = useMemo(() => {
@@ -2269,7 +2366,7 @@ function LayoutShellLoadedContent({
 		: null;
 
 	const handleCreateNewFile = useCallback(async () => {
-		if (!lix) return;
+		if (!lix) return null;
 		const path = await resolveNextUntitledMarkdownPath(lix);
 		await qb(lix)
 			.insertInto("lix_file")
@@ -2278,21 +2375,40 @@ function LayoutShellLoadedContent({
 				data: new TextEncoder().encode(""),
 			})
 			.execute();
-		const createdFile = await qb(lix)
-			.selectFrom("lix_file")
-			.select("id")
-			.where("path", "=", path)
-			.executeTakeFirstOrThrow();
-		const id = createdFile.id;
-		await handleOpenFile({
+		return resolveAndOpenFile({
 			panel: "central",
-			fileId: id,
 			filePath: path,
 			state: { focusOnLoad: true, defaultBlock: "heading1" },
 			focus: true,
 			documentOrigin: "new",
 		});
-	}, [handleOpenFile, lix]);
+	}, [lix, resolveAndOpenFile]);
+
+	const handleRequestNewFile = useCallback(async () => {
+		const visibleDraftHandlers = [
+			...newFileDraftHandlersRef.current.values(),
+		].filter((registration) => {
+			if (registration.panelSide === "left") return !isLeftCollapsed;
+			if (registration.panelSide === "right") return !isRightCollapsed;
+			return true;
+		});
+		const filesViewHandler = selectNewFileDraftHandler(
+			visibleDraftHandlers,
+			focusedPanel,
+		);
+		if (filesViewHandler) {
+			focusPanel(filesViewHandler.panelSide);
+			filesViewHandler.handler();
+			return null;
+		}
+		return handleCreateNewFile();
+	}, [
+		focusPanel,
+		focusedPanel,
+		handleCreateNewFile,
+		isLeftCollapsed,
+		isRightCollapsed,
+	]);
 
 	const activeCentralFileId =
 		activeFileIdFromExtensionInstance(activeCentralEntry);
@@ -2316,9 +2432,75 @@ function LayoutShellLoadedContent({
 		);
 	}, [activeCentralEntry, extensionMap]);
 
-	const activeFilePath = useMemo(() => {
-		return activeFilePathFromPanel(centralPanel);
-	}, [centralPanel]);
+	const activeDocumentPath = useMemo(
+		() =>
+			activeCentralEntry ? documentPathFromView(activeCentralEntry) : null,
+		[activeCentralEntry],
+	);
+	const openDocumentPaths = useMemo(
+		() => openDocumentPathsFromPanels([leftPanel, centralPanel, rightPanel]),
+		[leftPanel, centralPanel, rightPanel],
+	);
+	const handleCloseActiveDocument = useCallback(() => {
+		if (!activeCentralEntry || !isDocumentView(activeCentralEntry)) return null;
+		const closingPath = documentPathFromView(activeCentralEntry);
+		if (!closingPath) return null;
+		handleCloseView({
+			panel: "central",
+			instance: activeCentralEntry.instance,
+			focus: true,
+		});
+		return closingPath;
+	}, [activeCentralEntry, handleCloseView]);
+	const atelierDocumentsActionsRef =
+		useRef<AtelierDocumentsRuntimeBinding | null>(null);
+	atelierDocumentsActionsRef.current = {
+		open: async (path, options) => {
+			const openedPath = await resolveAndOpenDocument(path, options);
+			return activeDocumentCompletion(openedPath);
+		},
+		startNew: async () => {
+			const createdPath = await handleRequestNewFile();
+			return createdPath ? activeDocumentCompletion(createdPath) : undefined;
+		},
+		closeActive: () => {
+			const closedPath = handleCloseActiveDocument();
+			return closedPath ? closedDocumentCompletion(closedPath) : undefined;
+		},
+	};
+	const atelierDocumentsRuntimeBinding =
+		useMemo<AtelierDocumentsRuntimeBinding>(
+			() => ({
+				open: (path, options) =>
+					atelierDocumentsActionsRef.current?.open(path, options),
+				startNew: () => atelierDocumentsActionsRef.current?.startNew(),
+				closeActive: () => atelierDocumentsActionsRef.current?.closeActive(),
+			}),
+			[],
+		);
+	const atelierDocumentsStateRef = useRef({
+		activePath: activeDocumentPath,
+		openPaths: openDocumentPaths,
+	});
+	atelierDocumentsStateRef.current = {
+		activePath: activeDocumentPath,
+		openPaths: openDocumentPaths,
+	};
+
+	useEffect(() => {
+		return bindAtelierDocumentsRuntime(
+			effectiveAtelierInstance,
+			atelierDocumentsRuntimeBinding,
+			atelierDocumentsStateRef.current,
+		);
+	}, [atelierDocumentsRuntimeBinding, effectiveAtelierInstance]);
+
+	useEffect(() => {
+		publishAtelierDocumentsState(effectiveAtelierInstance, {
+			activePath: activeDocumentPath,
+			openPaths: openDocumentPaths,
+		});
+	}, [activeDocumentPath, effectiveAtelierInstance, openDocumentPaths]);
 
 	const addViewOnLeft = useCallback(
 		(type: ExtensionKind, state?: ExtensionState) =>
@@ -2376,22 +2558,9 @@ function LayoutShellLoadedContent({
 		() => ({
 			lix,
 			events: { emit: emitEvent },
-			files: {
-				open: (args: {
-					fileId: string;
-					filePath: string;
-					state?: ExtensionState;
-					focus?: boolean;
-					pending?: boolean;
-					documentOrigin?: "existing" | "new";
-				}) => handleOpenFile({ panel: "central", ...args }),
-				close: (fileId: string) => handleCloseFileViews({ fileId }),
-				active: activeCentralFileId
-					? { id: activeCentralFileId, path: activeFilePath }
-					: null,
-			},
+			documents: effectiveAtelierInstance.documents,
 			revisions: {
-				current: checkpointDiff,
+				current: checkpointDiff ? { branchId: checkpointDiff.branchId } : null,
 				show: showCheckpointDiff,
 				clear: clearCheckpointDiff,
 			},
@@ -2403,15 +2572,12 @@ function LayoutShellLoadedContent({
 		}),
 		[
 			emitEvent,
-			handleOpenFile,
-			handleCloseFileViews,
 			checkpointDiff,
 			showCheckpointDiff,
 			clearCheckpointDiff,
 			handleAcceptExternalWriteReview,
 			handleRejectExternalWriteReview,
-			activeCentralFileId,
-			activeFilePath,
+			effectiveAtelierInstance.documents,
 			lix,
 			registerExternalWriteReview,
 		],
@@ -2517,7 +2683,6 @@ function LayoutShellLoadedContent({
 			<div className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]">
 				<TopBar
 					activeFileName={activeFileName}
-					currentFile={activeFilePath}
 					isReviewingCheckpoint={Boolean(checkpointDiff)}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
@@ -2577,7 +2742,7 @@ function LayoutShellLoadedContent({
 									)
 								}
 								viewContext={extensionHostContext}
-								onCreateNewFile={handleCreateNewFile}
+								onCreateNewFile={() => void handleCreateNewFile()}
 								emptyState={renderEmptyPanelSlot(
 									"central",
 									slots?.centralPanelEmpty,

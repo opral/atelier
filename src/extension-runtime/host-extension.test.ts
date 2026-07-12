@@ -6,7 +6,7 @@ import {
 } from "./host-extension";
 
 describe("hostExtensionDefinition", () => {
-	test("combines a serializable manifest with its resolved runtime", () => {
+	test("combines a host manifest with its already-loaded entry", () => {
 		const mount = vi.fn();
 		const registration: AtelierExtensionRegistration = {
 			manifest: {
@@ -14,10 +14,9 @@ describe("hostExtensionDefinition", () => {
 				id: "host_terminal",
 				name: "Terminal",
 				description: "Run a terminal.",
-				entry: "./index.js",
 				multiInstance: true,
 			},
-			runtime: { icon: Terminal, mount },
+			entry: { icon: Terminal, mount },
 		};
 
 		expect(hostExtensionDefinition(registration)).toMatchObject({

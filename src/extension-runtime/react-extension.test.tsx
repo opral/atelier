@@ -33,7 +33,6 @@ describe("createReactExtensionDefinition", () => {
 				apiVersion: 1,
 				id: "async-view",
 				name: "Async view",
-				entry: "index.js",
 			},
 			description: "Suspending extension test",
 			icon: Search,

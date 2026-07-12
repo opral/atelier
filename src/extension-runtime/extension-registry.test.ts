@@ -6,6 +6,9 @@ import {
 	normalizeFileExtensions,
 } from "./file-handlers";
 import type { ExtensionDefinition } from "./types";
+import { buildExtensionRegistry } from "./extension-registry";
+import { ATELIER_BUILTIN_EXTENSION_IDS } from "../extension-api";
+import { BUILTIN_EXTENSION_DEFINITIONS } from "./builtin-extension-registry";
 
 const baseExtension = {
 	label: "Extension",
@@ -58,5 +61,48 @@ describe("findFileHandlerExtension", () => {
 		expect(isMarkdownFilePath("/docs/readme.MD")).toBe(true);
 		expect(isMarkdownFilePath("/docs/%6d.md")).toBe(true);
 		expect(isMarkdownFilePath("/docs/readme.md%20")).toBe(false);
+	});
+});
+
+describe("buildExtensionRegistry", () => {
+	test("lets a host registration replace a built-in with the same id", () => {
+		const historyOverride = {
+			...baseExtension,
+			kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
+			label: "Host History",
+		};
+
+		const registry = buildExtensionRegistry([historyOverride], []);
+
+		expect(
+			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.history),
+		).toBe(historyOverride);
+		expect(
+			registry.visibleExtensions.find(
+				(extension) => extension.kind === ATELIER_BUILTIN_EXTENSION_IDS.history,
+			),
+		).toBe(historyOverride);
+	});
+
+	test("exports every bundled extension id for host overrides", () => {
+		expect(new Set(Object.values(ATELIER_BUILTIN_EXTENSION_IDS))).toEqual(
+			new Set(
+				BUILTIN_EXTENSION_DEFINITIONS.map((definition) => definition.kind),
+			),
+		);
+	});
+
+	test("does not let workspace-installed extensions replace built-ins", () => {
+		const installedHistory = {
+			...baseExtension,
+			kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
+			label: "Workspace History",
+		};
+
+		const registry = buildExtensionRegistry([], [installedHistory]);
+
+		expect(
+			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.history),
+		).not.toBe(installedHistory);
 	});
 });

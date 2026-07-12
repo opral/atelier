@@ -5,13 +5,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AtelierNavbarSlotContext } from "@/create-atelier";
 
 export type TopBarProps = {
 	/** Active document name, shown in the header center. */
 	readonly activeFileName?: string | null;
-	/** Full path of the active file exposed to host-rendered navbar content. */
-	readonly currentFile?: string | null;
 	/** Whether the active document is being shown as a checkpoint diff. */
 	readonly isReviewingCheckpoint?: boolean;
 	readonly onToggleLeftSidebar?: () => void;
@@ -19,9 +16,7 @@ export type TopBarProps = {
 	readonly isLeftSidebarVisible?: boolean;
 	readonly isRightSidebarVisible?: boolean;
 	readonly navbarStart?: ReactNode;
-	readonly navbarEnd?:
-		| ReactNode
-		| ((context: AtelierNavbarSlotContext) => ReactNode);
+	readonly navbarEnd?: ReactNode;
 };
 
 /**
@@ -32,7 +27,6 @@ export type TopBarProps = {
  */
 export function TopBar({
 	activeFileName = null,
-	currentFile = null,
 	isReviewingCheckpoint = false,
 	onToggleLeftSidebar,
 	onToggleRightSidebar,
@@ -56,8 +50,6 @@ export function TopBar({
 	const modifierKey = isMacPlatform ? "⌘" : "Ctrl";
 	const leftShortcut = isMacPlatform ? `${modifierKey}1` : `${modifierKey}+1`;
 	const rightShortcut = isMacPlatform ? `${modifierKey}2` : `${modifierKey}+2`;
-	const navbarEndContent =
-		typeof navbarEnd === "function" ? navbarEnd({ currentFile }) : navbarEnd;
 	return (
 		<header className="relative flex h-9 shrink-0 items-center px-2 text-[var(--color-text-secondary)]">
 			<div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
@@ -102,9 +94,9 @@ export function TopBar({
 				</div>
 			) : null}
 			<div className="flex flex-1 items-center justify-end gap-1.5">
-				{navbarEndContent !== undefined && navbarEndContent !== null ? (
+				{navbarEnd !== undefined && navbarEnd !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-end">
-						{navbarEndContent}
+						{navbarEnd}
 					</div>
 				) : null}
 				<Tooltip delayDuration={500}>

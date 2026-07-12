@@ -1,8 +1,12 @@
 import type { Lix } from "@lix-js/sdk";
 import {
 	Atelier,
+	ATELIER_BUILTIN_EXTENSION_IDS,
 	createAtelier,
+	type AtelierExtensionRegistration,
+	type AtelierExtensionRuntime,
 	type AtelierProps,
+	type AtelierRevisionSelection,
 	type AtelierSlots,
 } from "@opral/atelier";
 import "@opral/atelier/style.css";
@@ -14,9 +18,26 @@ export function mountAtelier(lix: Lix): void {
 	if (!element) throw new Error("Atelier fixture mount is missing");
 	const slots = {
 		navbarStart: null,
-		navbarEnd: ({ currentFile }) => currentFile,
+		navbarEnd: null,
 	} satisfies AtelierSlots;
-	const atelier = createAtelier({ lix });
+	const historyOverride = {
+		manifest: {
+			apiVersion: 1,
+			id: ATELIER_BUILTIN_EXTENSION_IDS.history,
+			name: "Host History",
+		},
+		entry: {
+			icon: FixtureExtensionIcon,
+			mount: ({ element: extensionElement }) => {
+				extensionElement.textContent = "Host history";
+			},
+		},
+	} satisfies AtelierExtensionRegistration;
+	const atelier = createAtelier({ lix, extensions: [historyOverride] });
+	const openDocument: (path: string) => Promise<void> = atelier.documents.open;
+	const startNewDocument: () => Promise<void> = atelier.documents.startNew;
+	const closeActiveDocument: () => Promise<void> =
+		atelier.documents.closeActive;
 	createRoot(element).render(
 		createElement(Atelier, { instance: atelier, slots }),
 	);
@@ -24,4 +45,17 @@ export function mountAtelier(lix: Lix): void {
 	const props: AtelierProps = { instance: atelier, slots };
 	void Atelier;
 	void props;
+	void openDocument;
+	void startNewDocument;
+	void closeActiveDocument;
+}
+
+function FixtureExtensionIcon() {
+	return null;
+}
+
+export function currentRevision(
+	runtime: AtelierExtensionRuntime,
+): AtelierRevisionSelection | null {
+	return runtime.revisions.current;
 }
