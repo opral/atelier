@@ -612,7 +612,7 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			await appendAgentTurnCommitRange(lix, {
 				id: "range-review-startup",
-				agent: "codex",
+				sourceId: "codex",
 				beforeCommitId,
 				afterCommitId,
 				startedAt: 1,
@@ -669,28 +669,6 @@ describe("MarkdownView", () => {
 								syncActiveFile={false}
 								beforeCommitId={beforeCommitId}
 								afterCommitId={afterCommitId}
-								checkpointDiff={{
-									branchId: "checkpoint-after",
-									branchName: "After",
-									beforeBranchId: "checkpoint-before",
-									beforeBranchName: "Before",
-									beforeCommitId,
-									afterCommitId,
-									files: [
-										{
-											fileId: "file_checkpoint",
-											path: "/checkpoint.md",
-											beforePath: "/checkpoint.md",
-											afterPath: "/checkpoint.md",
-											beforeData: new TextEncoder().encode("# Before"),
-											afterData: new TextEncoder().encode("# After"),
-											beforeCommitId,
-											afterCommitId,
-											reviewId: "checkpoint:markdown",
-											status: "modified",
-										},
-									],
-								}}
 							/>
 						</Suspense>
 					</KeyValueProvider>

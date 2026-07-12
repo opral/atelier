@@ -1,15 +1,30 @@
 import type { ComponentType } from "react";
 import type { Lix } from "@lix-js/sdk";
 
+/** Metadata for an already-loaded host extension entry. */
 export type ExtensionManifest = {
-	apiVersion: 1;
-	id: string;
-	name: string;
-	description?: string;
-	entry: string;
-	fileExtensions?: string[];
-	multiInstance?: boolean;
+	readonly apiVersion: 1;
+	readonly id: string;
+	readonly name: string;
+	readonly description?: string;
+	readonly fileExtensions?: readonly string[];
+	readonly multiInstance?: boolean;
 };
+
+/** Stable ids for replacing Atelier's bundled extension views. */
+export const ATELIER_BUILTIN_EXTENSION_IDS = {
+	files: "atelier_files",
+	history: "atelier_history",
+	markdown: "atelier_file",
+	csv: "atelier_csv",
+	image: "atelier_image",
+	html: "atelier_html",
+	pdf: "atelier_pdf",
+	text: "atelier_text",
+} as const;
+
+export type AtelierBuiltinExtensionId =
+	(typeof ATELIER_BUILTIN_EXTENSION_IDS)[keyof typeof ATELIER_BUILTIN_EXTENSION_IDS];
 
 export type AtelierExtensionState = {
 	readonly atelier?: { readonly label?: string };
@@ -18,51 +33,23 @@ export type AtelierExtensionState = {
 
 export type AtelierDocumentOrigin = "existing" | "new";
 
-export type CheckpointDiffFileStatus =
-	| "added"
-	| "deleted"
-	| "modified"
-	| "recreated";
-
-export type CheckpointDiffFile = {
-	readonly fileId: string;
-	readonly path: string;
-	readonly beforePath: string | null;
-	readonly afterPath: string | null;
-	readonly beforeData: Uint8Array;
-	readonly afterData: Uint8Array;
-	readonly beforeCommitId: string;
-	readonly afterCommitId: string;
-	readonly reviewId: string;
-	readonly status: CheckpointDiffFileStatus;
+export type AtelierDocumentOpenOptions = {
+	readonly state?: AtelierExtensionState;
+	readonly focus?: boolean;
+	readonly documentOrigin?: AtelierDocumentOrigin;
 };
 
-export type CheckpointDiffVisibleFile = {
-	readonly fileId: string;
-	readonly path: string;
+export type AtelierDocumentsApi = {
+	/** Opens a document by workspace path. */
+	open(path: string, options?: AtelierDocumentOpenOptions): Promise<void>;
+	/** Requests Atelier's contextual new-document UI. */
+	startNew(): Promise<void>;
+	/** Closes the active document. */
+	closeActive(): Promise<void>;
 };
 
-export type CheckpointDiff = {
+export type AtelierRevisionSelection = {
 	readonly branchId: string;
-	readonly branchName: string;
-	readonly beforeBranchId: string;
-	readonly beforeBranchName: string;
-	readonly beforeCommitId: string;
-	readonly afterCommitId: string;
-	readonly afterIsActiveHead?: boolean;
-	readonly visibleFiles?: readonly CheckpointDiffVisibleFile[];
-	readonly files: readonly CheckpointDiffFile[];
-};
-
-export type CheckpointDiffBranchRow = {
-	readonly id: string;
-	readonly name: string;
-	readonly commit_id: string | null;
-};
-
-export type ShowCheckpointDiffArgs = {
-	readonly branchId: string;
-	readonly branches: readonly CheckpointDiffBranchRow[];
 };
 
 /** Product-domain events emitted for hosts that own analytics or auditing. */
@@ -107,26 +94,10 @@ export type AtelierExtensionRuntime = {
 	readonly events: {
 		readonly emit: (event: AtelierEvent) => void;
 	};
-	readonly files: {
-		readonly open: (args: {
-			readonly fileId: string;
-			readonly filePath: string;
-			readonly state?: AtelierExtensionState;
-			readonly focus?: boolean;
-			readonly pending?: boolean;
-			readonly documentOrigin?: AtelierDocumentOrigin;
-		}) => void | Promise<void>;
-		readonly close: (fileId: string) => void;
-		readonly active: {
-			readonly id: string;
-			readonly path: string | null;
-		} | null;
-	};
+	readonly documents: AtelierDocumentsApi;
 	readonly revisions: {
-		readonly current: CheckpointDiff | null;
-		readonly show: (
-			args: ShowCheckpointDiffArgs,
-		) => Promise<CheckpointDiff | null>;
+		readonly current: AtelierRevisionSelection | null;
+		readonly show: (branchId: string) => Promise<void>;
 		readonly clear: () => void;
 	};
 };
@@ -160,5 +131,5 @@ export type ExtensionRuntimeEntry = {
 
 export type AtelierExtensionRegistration = {
 	readonly manifest: ExtensionManifest;
-	readonly runtime: ExtensionRuntimeEntry;
+	readonly entry: ExtensionRuntimeEntry;
 };

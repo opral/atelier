@@ -10,11 +10,11 @@ vi.mock("./shell/agent-turn-review-range", () => ({
 }));
 
 import {
-	bindAtelierFilesRuntime,
+	bindAtelierDocumentsRuntime,
 	createAtelier,
 	getAtelierConfiguration,
-	publishAtelierFilesSnapshot,
-	type AtelierFilesRuntimeBinding,
+	publishAtelierDocumentsState,
+	type AtelierDocumentsRuntimeBinding,
 } from "./atelier-instance";
 
 describe("createAtelier", () => {
@@ -33,18 +33,16 @@ describe("createAtelier", () => {
 		const atelier = createAtelier({
 			lix,
 			extensions,
-			filesExtension: "host_files",
 			filesViewMode: "sidebar",
 			defaultOpenPanels: ["right"],
 		});
 
 		expect(atelier.lix).toBe(lix);
 		expect(atelier.diff.open).toEqual(expect.any(Function));
-		expect(atelier.files.open).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual(["lix", "diff", "files"]);
+		expect(atelier.documents.open).toEqual(expect.any(Function));
+		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents"]);
 		expect(getAtelierConfiguration(atelier)).toEqual({
 			extensions: [],
-			filesExtension: "host_files",
 			filesViewMode: "sidebar",
 			defaultOpenPanels: ["right"],
 		});
@@ -56,11 +54,10 @@ describe("createAtelier", () => {
 		const atelier = createAtelier({ lix });
 
 		await atelier.diff.open({
-			before: "commit-before",
-			after: "commit-after",
+			beforeCommitId: "commit-before",
+			afterCommitId: "commit-after",
 			source: {
-				kind: "agent",
-				agent: "claude",
+				id: "claude",
 				sessionId: "session-1",
 				turnId: "turn-2",
 			},
@@ -69,14 +66,13 @@ describe("createAtelier", () => {
 		expect(mocks.appendAgentTurnCommitRange).toHaveBeenCalledWith(lix, {
 			id: JSON.stringify([
 				"atelier-diff",
-				"agent",
 				"claude",
 				"session-1",
 				"turn-2",
 				"commit-before",
 				"commit-after",
 			]),
-			agent: "claude",
+			sourceId: "claude",
 			beforeCommitId: "commit-before",
 			afterCommitId: "commit-after",
 			sessionId: "session-1",
@@ -90,9 +86,9 @@ describe("createAtelier", () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 
 		await atelier.diff.open({
-			before: "commit-before",
-			after: "commit-after",
-			source: { kind: "agent", agent: "codex" },
+			beforeCommitId: "commit-before",
+			afterCommitId: "commit-after",
+			source: { id: "codex" },
 		});
 
 		const persistedRange = mocks.appendAgentTurnCommitRange.mock.calls[0]?.[1];
@@ -104,147 +100,193 @@ describe("createAtelier", () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 
 		await atelier.diff.open({
-			before: "same-commit",
-			after: "same-commit",
-			source: { kind: "agent", agent: "claude" },
+			beforeCommitId: "same-commit",
+			afterCommitId: "same-commit",
+			source: { id: "claude" },
 		});
 
 		expect(mocks.appendAgentTurnCommitRange).not.toHaveBeenCalled();
 	});
 
-	test("queues file commands until the shell binds and preserves their order", async () => {
+	test("queues document commands until the shell binds and preserves their order", async () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 		const calls: string[] = [];
-		const binding: AtelierFilesRuntimeBinding = {
+		const binding: AtelierDocumentsRuntimeBinding = {
 			open: (path) => {
 				calls.push(`open:${path}`);
 			},
-			create: () => {
-				calls.push("create");
+			startNew: () => {
+				calls.push("start-new");
 			},
 			closeActive: () => {
 				calls.push("close-active");
 			},
 		};
-		const open = atelier.files.open("/queued.md");
-		const create = atelier.files.create();
-		const close = atelier.files.closeActive();
+		const open = atelier.documents.open("/queued.md");
+		const startNew = atelier.documents.startNew();
+		const close = atelier.documents.closeActive();
 
 		expect(calls).toEqual([]);
-		const unbind = bindAtelierFilesRuntime(atelier, binding, {
-			active: null,
-			open: [],
+		const unbind = bindAtelierDocumentsRuntime(atelier, binding, {
+			activePath: null,
+			openPaths: [],
 		});
-		await Promise.all([open, create, close]);
+		await Promise.all([open, startNew, close]);
 
-		expect(calls).toEqual(["open:/queued.md", "create", "close-active"]);
-		expect(atelier.files.getSnapshot()).toEqual({
-			ready: true,
-			active: null,
-			open: [],
-		});
+		expect(calls).toEqual(["open:/queued.md", "start-new", "close-active"]);
 		unbind();
-		expect(atelier.files.getSnapshot().ready).toBe(false);
 	});
 
 	test("serializes mounted commands and continues after a rejected command", async () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 		let releaseOpen: (() => void) | undefined;
-		const binding: AtelierFilesRuntimeBinding = {
+		const binding: AtelierDocumentsRuntimeBinding = {
 			open: vi.fn(
 				() =>
 					new Promise<void>((resolve) => {
 						releaseOpen = resolve;
 					}),
 			),
-			create: vi.fn(async () => {
-				throw new Error("create failed");
+			startNew: vi.fn(async () => {
+				throw new Error("start new failed");
 			}),
 			closeActive: vi.fn(),
 		};
-		bindAtelierFilesRuntime(atelier, binding, { active: null, open: [] });
+		bindAtelierDocumentsRuntime(atelier, binding, {
+			activePath: null,
+			openPaths: [],
+		});
 
-		const open = atelier.files.open("/one.md");
-		const create = atelier.files.create();
-		const close = atelier.files.closeActive();
+		const open = atelier.documents.open("/one.md");
+		const startNew = atelier.documents.startNew();
+		const close = atelier.documents.closeActive();
 		await vi.waitFor(() => expect(binding.open).toHaveBeenCalledOnce());
-		expect(binding.create).not.toHaveBeenCalled();
+		expect(binding.startNew).not.toHaveBeenCalled();
 		releaseOpen?.();
 
 		await open;
-		await expect(create).rejects.toThrow("create failed");
+		await expect(startNew).rejects.toThrow("start new failed");
 		await close;
-		expect(binding.create).toHaveBeenCalledOnce();
+		expect(binding.startNew).toHaveBeenCalledOnce();
 		expect(binding.closeActive).toHaveBeenCalledOnce();
 	});
 
 	test("queues commands again after unmount and drains them on remount", async () => {
 		const atelier = createAtelier({ lix: {} as Lix });
-		const firstBinding: AtelierFilesRuntimeBinding = {
+		const firstBinding: AtelierDocumentsRuntimeBinding = {
 			open: vi.fn(),
-			create: vi.fn(),
+			startNew: vi.fn(),
 			closeActive: vi.fn(),
 		};
-		const unbind = bindAtelierFilesRuntime(atelier, firstBinding, {
-			active: "/last.md",
-			open: ["/last.md"],
+		const unbind = bindAtelierDocumentsRuntime(atelier, firstBinding, {
+			activePath: "/last.md",
+			openPaths: ["/last.md"],
 		});
 		unbind();
 
-		const queued = atelier.files.open("/remounted.md");
+		const queued = atelier.documents.open("/remounted.md");
 		expect(firstBinding.open).not.toHaveBeenCalled();
-		const secondBinding: AtelierFilesRuntimeBinding = {
+		const secondBinding: AtelierDocumentsRuntimeBinding = {
 			open: vi.fn(),
-			create: vi.fn(),
+			startNew: vi.fn(),
 			closeActive: vi.fn(),
 		};
-		bindAtelierFilesRuntime(atelier, secondBinding, {
-			active: "/last.md",
-			open: ["/last.md"],
+		bindAtelierDocumentsRuntime(atelier, secondBinding, {
+			activePath: "/last.md",
+			openPaths: ["/last.md"],
 		});
 		await queued;
 
 		expect(secondBinding.open).toHaveBeenCalledWith("/remounted.md");
 	});
 
-	test("publishes immutable file snapshots through an external-store subscription", () => {
+	test("resolves a document command only after the shell publishes its result", async () => {
 		const atelier = createAtelier({ lix: {} as Lix });
-		const listener = vi.fn();
-		const unsubscribe = atelier.files.subscribe(listener);
-		bindAtelierFilesRuntime(
+		bindAtelierDocumentsRuntime(
 			atelier,
-			{ open: vi.fn(), create: vi.fn(), closeActive: vi.fn() },
-			{ active: null, open: [] },
+			{
+				open: (path) => ({
+					isComplete: (state) =>
+						state.activePath === path && state.openPaths.includes(path),
+				}),
+				startNew: vi.fn(),
+				closeActive: vi.fn(),
+			},
+			{
+				activePath: null,
+				openPaths: [],
+			},
 		);
 
-		publishAtelierFilesSnapshot(atelier, {
-			active: "/active.md",
-			open: ["/active.md", "/other.md", "/active.md"],
+		let resolved = false;
+		const open = atelier.documents.open("/active.md").then(() => {
+			resolved = true;
 		});
-		const snapshot = atelier.files.getSnapshot();
-		expect(snapshot).toEqual({
-			ready: true,
-			active: "/active.md",
-			open: ["/active.md", "/other.md"],
-		});
-		expect(Object.isFrozen(snapshot)).toBe(true);
-		expect(Object.isFrozen(snapshot.open)).toBe(true);
-		expect(listener).toHaveBeenCalledTimes(2);
+		await Promise.resolve();
+		expect(resolved).toBe(false);
 
-		publishAtelierFilesSnapshot(atelier, {
-			active: "/active.md",
-			open: ["/active.md", "/other.md"],
+		publishAtelierDocumentsState(atelier, {
+			activePath: "/active.md",
+			openPaths: ["/active.md"],
 		});
-		expect(listener).toHaveBeenCalledTimes(2);
-		unsubscribe();
-		publishAtelierFilesSnapshot(atelier, { active: null, open: [] });
-		expect(listener).toHaveBeenCalledTimes(2);
+		await open;
+		expect(resolved).toBe(true);
 	});
 
-	test("rejects invalid file paths without queueing them", async () => {
+	test("does not deliver the next command before the first panel transition", async () => {
+		const atelier = createAtelier({ lix: {} as Lix });
+		const closeActive = vi.fn();
+		bindAtelierDocumentsRuntime(
+			atelier,
+			{
+				open: (path) => ({
+					isComplete: (state) => state.activePath === path,
+				}),
+				startNew: vi.fn(),
+				closeActive,
+			},
+			{ activePath: null, openPaths: [] },
+		);
+
+		const open = atelier.documents.open("/first.md");
+		const close = atelier.documents.closeActive();
+		await Promise.resolve();
+		expect(closeActive).not.toHaveBeenCalled();
+
+		publishAtelierDocumentsState(atelier, {
+			activePath: "/first.md",
+			openPaths: ["/first.md"],
+		});
+		await open;
+		await close;
+		expect(closeActive).toHaveBeenCalledOnce();
+	});
+
+	test("rejects an in-flight acknowledgement when its shell unmounts", async () => {
+		const atelier = createAtelier({ lix: {} as Lix });
+		const unbind = bindAtelierDocumentsRuntime(
+			atelier,
+			{
+				open: (path) => ({
+					isComplete: (state) => state.activePath === path,
+				}),
+				startNew: vi.fn(),
+				closeActive: vi.fn(),
+			},
+			{ activePath: null, openPaths: [] },
+		);
+
+		const open = atelier.documents.open("/unmounted.md");
+		await Promise.resolve();
+		unbind();
+
+		await expect(open).rejects.toThrow("shell unmounted");
+	});
+
+	test("rejects invalid document paths without queueing them", async () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 
-		await expect(atelier.files.open("  ")).rejects.toThrow(
+		await expect(atelier.documents.open("  ")).rejects.toThrow(
 			"requires a non-empty path",
 		);
 	});

@@ -7,7 +7,7 @@ import type {
 } from "@/extension-runtime/checkpoint-diff";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import type { Lix } from "@lix-js/sdk";
-import { qb } from "@/lib/lix-kysely";
+import { qb, sql } from "@/lib/lix-kysely";
 
 type FileHistorySnapshot = {
 	readonly id: string;
@@ -23,6 +23,32 @@ type VisibleFileSnapshot = {
 };
 
 const EMPTY_DATA = new Uint8Array();
+
+export async function resolveCheckpointDiffForBranch(args: {
+	readonly lix: Lix;
+	readonly branchId: string;
+}): Promise<CheckpointDiff | null> {
+	const [branches, activeBranchId] = await Promise.all([
+		qb(args.lix)
+			.selectFrom("lix_branch")
+			.select(["id", "name", "commit_id"])
+			.where(
+				() =>
+					sql`COALESCE(CAST(lix_branch.hidden AS TEXT), 'false') NOT IN ('true', '1', 't')`,
+			)
+			.orderBy("name", "asc")
+			.execute() as Promise<CheckpointDiffBranchRow[]>,
+		args.lix.activeBranchId().catch(() => null),
+	]);
+	const diff = await resolveCheckpointDiff({
+		lix: args.lix,
+		branches,
+		branchId: args.branchId,
+	});
+	return diff && activeBranchId === args.branchId
+		? { ...diff, afterIsActiveHead: true }
+		: diff;
+}
 
 export async function resolveCheckpointDiff(args: {
 	readonly lix: Lix;
@@ -228,6 +254,8 @@ function buildDiffFile(args: {
 	return {
 		fileId: args.after.id,
 		path: args.after.path,
+		beforeFileId: args.before.id,
+		afterFileId: args.after.id,
 		beforePath: args.before.path,
 		afterPath: args.after.path,
 		beforeData,
@@ -266,6 +294,8 @@ function buildMissingSideDiffFile(
 	return {
 		fileId,
 		path,
+		beforeFileId: before?.id ?? null,
+		afterFileId: after?.id ?? null,
 		beforePath: before?.path ?? null,
 		afterPath: after?.path ?? null,
 		beforeData: before ? decodeFileDataToBytes(before.data) : EMPTY_DATA,

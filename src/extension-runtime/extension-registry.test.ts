@@ -7,6 +7,8 @@ import {
 } from "./file-handlers";
 import type { ExtensionDefinition } from "./types";
 import { buildExtensionRegistry } from "./extension-registry";
+import { ATELIER_BUILTIN_EXTENSION_IDS } from "../extension-api";
+import { BUILTIN_EXTENSION_DEFINITIONS } from "./builtin-extension-registry";
 
 const baseExtension = {
 	label: "Extension",
@@ -66,54 +68,41 @@ describe("buildExtensionRegistry", () => {
 	test("lets a host registration replace a built-in with the same id", () => {
 		const historyOverride = {
 			...baseExtension,
-			kind: "atelier_history",
+			kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
 			label: "Host History",
 		};
 
 		const registry = buildExtensionRegistry([historyOverride], []);
 
-		expect(registry.extensionMap.get("atelier_history")).toBe(historyOverride);
+		expect(
+			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.history),
+		).toBe(historyOverride);
 		expect(
 			registry.visibleExtensions.find(
-				(extension) => extension.kind === "atelier_history",
+				(extension) => extension.kind === ATELIER_BUILTIN_EXTENSION_IDS.history,
 			),
 		).toBe(historyOverride);
 	});
 
-	test("keeps explicit built-in remaps ahead of exact-id host overrides", () => {
-		const exactFilesOverride = {
-			...baseExtension,
-			kind: "atelier_files",
-			label: "Exact Files",
-		};
-		const remappedFilesOverride = {
-			...baseExtension,
-			kind: "atelier_files",
-			label: "Remapped Files",
-		};
-
-		const registry = buildExtensionRegistry(
-			[exactFilesOverride],
-			[],
-			[remappedFilesOverride],
-		);
-
-		expect(registry.extensionMap.get("atelier_files")).toBe(
-			remappedFilesOverride,
+	test("exports every bundled extension id for host overrides", () => {
+		expect(new Set(Object.values(ATELIER_BUILTIN_EXTENSION_IDS))).toEqual(
+			new Set(
+				BUILTIN_EXTENSION_DEFINITIONS.map((definition) => definition.kind),
+			),
 		);
 	});
 
 	test("does not let workspace-installed extensions replace built-ins", () => {
 		const installedHistory = {
 			...baseExtension,
-			kind: "atelier_history",
+			kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
 			label: "Workspace History",
 		};
 
 		const registry = buildExtensionRegistry([], [installedHistory]);
 
-		expect(registry.extensionMap.get("atelier_history")).not.toBe(
-			installedHistory,
-		);
+		expect(
+			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.history),
+		).not.toBe(installedHistory);
 	});
 });

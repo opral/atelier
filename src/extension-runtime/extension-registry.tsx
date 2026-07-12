@@ -25,19 +25,15 @@ type ExtensionRegistryValue = {
 export const buildExtensionRegistry = (
 	hostDefinitions: readonly ExtensionDefinition[],
 	installedDefinitions: readonly ExtensionDefinition[],
-	builtinOverrides: readonly ExtensionDefinition[] = [],
 ): Pick<ExtensionRegistryValue, "visibleExtensions" | "extensionMap"> => {
 	const bundledKinds = new Set(
 		BUILTIN_EXTENSION_DEFINITIONS.map((definition) => definition.kind),
 	);
-	const overrideMap = new Map([
-		...hostDefinitions
+	const overrideMap = new Map(
+		hostDefinitions
 			.filter((definition) => bundledKinds.has(definition.kind))
 			.map((definition) => [definition.kind, definition] as const),
-		...builtinOverrides.map(
-			(definition) => [definition.kind, definition] as const,
-		),
-	]);
+	);
 	const builtinDefinitions = BUILTIN_EXTENSION_DEFINITIONS.map(
 		(definition) => overrideMap.get(definition.kind) ?? definition,
 	);
@@ -89,11 +85,9 @@ const ExtensionRegistryContext = createContext<ExtensionRegistryValue>({
 export function ExtensionRegistryProvider({
 	children,
 	hostExtensions = [],
-	builtinOverrides = [],
 }: {
 	children: ReactNode;
 	readonly hostExtensions?: readonly ExtensionDefinition[];
-	readonly builtinOverrides?: readonly ExtensionDefinition[];
 }) {
 	const [installedExtensions, setInstalledExtensions] = useState<
 		ExtensionDefinition[]
@@ -117,22 +111,13 @@ export function ExtensionRegistryProvider({
 	);
 
 	const value = useMemo<ExtensionRegistryValue>(() => {
-		const merged = buildExtensionRegistry(
-			hostExtensions,
-			installedExtensions,
-			builtinOverrides,
-		);
+		const merged = buildExtensionRegistry(hostExtensions, installedExtensions);
 		return {
 			visibleExtensions: merged.visibleExtensions,
 			extensionMap: merged.extensionMap,
 			replaceInstalledExtensions,
 		};
-	}, [
-		builtinOverrides,
-		hostExtensions,
-		installedExtensions,
-		replaceInstalledExtensions,
-	]);
+	}, [hostExtensions, installedExtensions, replaceInstalledExtensions]);
 
 	return (
 		<ExtensionRegistryContext.Provider value={value}>

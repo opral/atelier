@@ -1,5 +1,7 @@
 import type { Lix } from "@lix-js/sdk";
 import type {
+	AtelierDocumentOpenOptions,
+	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
 } from "./extension-api";
@@ -9,15 +11,15 @@ export type AtelierPanelSide = "left" | "central" | "right";
 export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
 
 export type AtelierDiffSource = {
-	readonly kind: "agent";
-	readonly agent: "claude" | "codex";
+	/** Host-defined identifier such as "codex" or "claude". */
+	readonly id: string;
 	readonly sessionId?: string;
 	readonly turnId?: string;
 };
 
 export type AtelierDiffOpenOptions = {
-	readonly before: string;
-	readonly after: string;
+	readonly beforeCommitId: string;
+	readonly afterCommitId: string;
 	readonly source: AtelierDiffSource;
 };
 
@@ -26,32 +28,14 @@ export type AtelierDiffApi = {
 	open(options: AtelierDiffOpenOptions): Promise<void>;
 };
 
-export type AtelierFilesSnapshot = {
-	/** Whether the React shell is mounted and can execute file commands. */
-	readonly ready: boolean;
-	/** Full path of the active document, or null when no document is active. */
-	readonly active: string | null;
-	/** Full paths of all documents currently open in Atelier. */
-	readonly open: readonly string[];
-};
-
-export type AtelierFilesApi = {
-	/** Opens and focuses a document already present in the workspace Lix. */
-	open(path: string): Promise<void>;
-	/** Starts Atelier's contextual new Markdown document flow. */
-	create(): Promise<void>;
-	/** Closes the active document. Does nothing when no document is active. */
-	closeActive(): Promise<void>;
-	/** Returns the current immutable document state snapshot. */
-	getSnapshot(): AtelierFilesSnapshot;
-	/** Subscribes to document state changes. */
-	subscribe(listener: () => void): () => void;
-};
+export type {
+	AtelierDocumentOpenOptions,
+	AtelierDocumentsApi,
+} from "./extension-api";
 
 export type AtelierOptions = {
 	readonly lix: Lix;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
-	readonly filesExtension?: string;
 	readonly filesViewMode?: "landing" | "sidebar";
 	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
@@ -61,81 +45,104 @@ export type AtelierInstance = {
 	/** The host-owned Lix backing this Atelier workspace. */
 	readonly lix: Lix;
 	readonly diff: AtelierDiffApi;
-	readonly files: AtelierFilesApi;
+	readonly documents: AtelierDocumentsApi;
 };
 
 type AtelierConfiguration = Omit<AtelierOptions, "lix">;
 
 // Symbol.for keeps an existing instance readable across development module reloads.
 const CONFIGURATION = Symbol.for("@opral/atelier/configuration");
-const FILES_RUNTIME = Symbol.for("@opral/atelier/files-runtime");
+const DOCUMENTS_RUNTIME = Symbol.for("@opral/atelier/documents-runtime");
 
-type AtelierFilesCommand =
-	| { readonly kind: "open"; readonly path: string }
-	| { readonly kind: "create" }
+type AtelierDocumentsCommand =
+	| {
+			readonly kind: "open";
+			readonly path: string;
+			readonly options?: AtelierDocumentOpenOptions;
+	  }
+	| { readonly kind: "start-new" }
 	| { readonly kind: "close-active" };
 
-type QueuedAtelierFilesCommand = {
-	readonly command: AtelierFilesCommand;
+type QueuedAtelierDocumentsCommand = {
+	readonly command: AtelierDocumentsCommand;
 	readonly resolve: () => void;
 	readonly reject: (error: unknown) => void;
 };
 
 /** @internal */
-export type AtelierFilesRuntimeBinding = {
-	readonly open: (path: string) => void | Promise<void>;
-	readonly create: () => void | Promise<void>;
-	readonly closeActive: () => void | Promise<void>;
+export type AtelierDocumentsRuntimeState = {
+	readonly activePath: string | null;
+	readonly openPaths: readonly string[];
 };
 
 /** @internal */
-export type AtelierFilesRuntimeSnapshot = Pick<
-	AtelierFilesSnapshot,
-	"active" | "open"
->;
+export type AtelierDocumentsRuntimeCompletion = {
+	readonly isComplete: (state: AtelierDocumentsRuntimeState) => boolean;
+};
 
-type AtelierFilesRuntime = {
-	binding: AtelierFilesRuntimeBinding | null;
-	readonly queue: QueuedAtelierFilesCommand[];
+type AtelierDocumentsRuntimeCommandResult =
+	AtelierDocumentsRuntimeCompletion | void;
+
+/** @internal */
+export type AtelierDocumentsRuntimeBinding = {
+	readonly open: (
+		path: string,
+		options?: AtelierDocumentOpenOptions,
+	) =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
+	readonly startNew: () =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
+	readonly closeActive: () =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
+};
+
+type AtelierDocumentsRuntime = {
+	binding: AtelierDocumentsRuntimeBinding | null;
+	readonly queue: QueuedAtelierDocumentsCommand[];
 	draining: boolean;
-	snapshot: AtelierFilesSnapshot;
+	state: AtelierDocumentsRuntimeState;
 	readonly listeners: Set<() => void>;
 };
 
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
-	const filesRuntime = createAtelierFilesRuntime();
+	const documentsRuntime = createAtelierDocumentsRuntime();
 	const instance: AtelierInstance = {
 		lix: options.lix,
 		diff: {
 			open: (diffOptions) => openDiff(options.lix, diffOptions),
 		},
-		files: {
-			open: (path) => {
+		documents: {
+			open: (path, openOptions) => {
 				if (typeof path !== "string" || path.trim().length === 0) {
 					return Promise.reject(
-						new TypeError("atelier.files.open() requires a non-empty path."),
+						new TypeError(
+							"atelier.documents.open() requires a non-empty path.",
+						),
 					);
 				}
-				return enqueueAtelierFilesCommand(filesRuntime, { kind: "open", path });
+				return enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "open",
+					path,
+					...(openOptions ? { options: openOptions } : {}),
+				});
 			},
-			create: () =>
-				enqueueAtelierFilesCommand(filesRuntime, { kind: "create" }),
+			startNew: () =>
+				enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "start-new",
+				}),
 			closeActive: () =>
-				enqueueAtelierFilesCommand(filesRuntime, { kind: "close-active" }),
-			getSnapshot: () => filesRuntime.snapshot,
-			subscribe: (listener) => {
-				filesRuntime.listeners.add(listener);
-				return () => filesRuntime.listeners.delete(listener);
-			},
+				enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "close-active",
+				}),
 		},
 	};
 	const configuration: AtelierConfiguration = {
 		...(options.extensions !== undefined
 			? { extensions: [...options.extensions] }
-			: {}),
-		...(options.filesExtension !== undefined
-			? { filesExtension: options.filesExtension }
 			: {}),
 		...(options.filesViewMode !== undefined
 			? { filesViewMode: options.filesViewMode }
@@ -151,50 +158,42 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		value: configuration,
 		writable: false,
 	});
-	Object.defineProperty(instance, FILES_RUNTIME, {
+	Object.defineProperty(instance, DOCUMENTS_RUNTIME, {
 		configurable: false,
 		enumerable: false,
-		value: filesRuntime,
+		value: documentsRuntime,
 		writable: false,
 	});
 	return instance;
 }
 
-/** @internal Binds the programmatic file controller to a mounted shell. */
-export function bindAtelierFilesRuntime(
+/** @internal Binds programmatic document commands to a mounted shell. */
+export function bindAtelierDocumentsRuntime(
 	instance: AtelierInstance,
-	binding: AtelierFilesRuntimeBinding,
-	initialSnapshot: AtelierFilesRuntimeSnapshot,
+	binding: AtelierDocumentsRuntimeBinding,
+	initialState: AtelierDocumentsRuntimeState,
 ): () => void {
-	const runtime = getAtelierFilesRuntime(instance);
+	const runtime = getAtelierDocumentsRuntime(instance);
+	const previousBinding = runtime.binding;
 	runtime.binding = binding;
-	setAtelierFilesSnapshot(runtime, {
-		ready: true,
-		active: initialSnapshot.active,
-		open: initialSnapshot.open,
-	});
-	void drainAtelierFilesCommands(runtime);
+	setAtelierDocumentsState(runtime, initialState);
+	if (previousBinding && previousBinding !== binding) {
+		notifyAtelierDocumentsRuntime(runtime);
+	}
+	void drainAtelierDocumentsCommands(runtime);
 	return () => {
 		if (runtime.binding !== binding) return;
 		runtime.binding = null;
-		setAtelierFilesSnapshot(runtime, {
-			...runtime.snapshot,
-			ready: false,
-		});
+		notifyAtelierDocumentsRuntime(runtime);
 	};
 }
 
-/** @internal Publishes mounted shell document state to the host instance. */
-export function publishAtelierFilesSnapshot(
+/** @internal Publishes mounted shell state for command acknowledgements. */
+export function publishAtelierDocumentsState(
 	instance: AtelierInstance,
-	snapshot: AtelierFilesRuntimeSnapshot,
+	state: AtelierDocumentsRuntimeState,
 ): void {
-	const runtime = getAtelierFilesRuntime(instance);
-	setAtelierFilesSnapshot(runtime, {
-		ready: runtime.binding !== null,
-		active: snapshot.active,
-		open: snapshot.open,
-	});
+	setAtelierDocumentsState(getAtelierDocumentsRuntime(instance), state);
 }
 
 /** @internal Used by the React view to render an Atelier instance. */
@@ -214,33 +213,34 @@ function isAtelierConfiguration(value: unknown): value is AtelierConfiguration {
 	return typeof value === "object" && value !== null;
 }
 
-function createAtelierFilesRuntime(): AtelierFilesRuntime {
+function createAtelierDocumentsRuntime(): AtelierDocumentsRuntime {
 	return {
 		binding: null,
 		queue: [],
 		draining: false,
-		snapshot: freezeAtelierFilesSnapshot({
-			ready: false,
-			active: null,
-			open: [],
+		state: freezeAtelierDocumentsState({
+			activePath: null,
+			openPaths: [],
 		}),
 		listeners: new Set(),
 	};
 }
 
-function getAtelierFilesRuntime(
+function getAtelierDocumentsRuntime(
 	instance: AtelierInstance,
-): AtelierFilesRuntime {
+): AtelierDocumentsRuntime {
 	const runtime = (instance as unknown as Record<symbol, unknown>)[
-		FILES_RUNTIME
+		DOCUMENTS_RUNTIME
 	];
-	if (!isAtelierFilesRuntime(runtime)) {
+	if (!isAtelierDocumentsRuntime(runtime)) {
 		throw new TypeError("Atelier requires an instance from createAtelier().");
 	}
 	return runtime;
 }
 
-function isAtelierFilesRuntime(value: unknown): value is AtelierFilesRuntime {
+function isAtelierDocumentsRuntime(
+	value: unknown,
+): value is AtelierDocumentsRuntime {
 	return (
 		typeof value === "object" &&
 		value !== null &&
@@ -249,27 +249,34 @@ function isAtelierFilesRuntime(value: unknown): value is AtelierFilesRuntime {
 	);
 }
 
-function enqueueAtelierFilesCommand(
-	runtime: AtelierFilesRuntime,
-	command: AtelierFilesCommand,
+function enqueueAtelierDocumentsCommand(
+	runtime: AtelierDocumentsRuntime,
+	command: AtelierDocumentsCommand,
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		runtime.queue.push({ command, resolve, reject });
-		void drainAtelierFilesCommands(runtime);
+		void drainAtelierDocumentsCommands(runtime);
 	});
 }
 
-async function drainAtelierFilesCommands(
-	runtime: AtelierFilesRuntime,
+async function drainAtelierDocumentsCommands(
+	runtime: AtelierDocumentsRuntime,
 ): Promise<void> {
 	if (runtime.draining) return;
 	runtime.draining = true;
 	try {
 		while (runtime.binding && runtime.queue.length > 0) {
+			const binding = runtime.binding;
 			const queued = runtime.queue.shift();
 			if (!queued) continue;
 			try {
-				await runAtelierFilesCommand(runtime.binding, queued.command);
+				const completion = await runAtelierDocumentsCommand(
+					binding,
+					queued.command,
+				);
+				if (completion) {
+					await waitForAtelierDocumentsCompletion(runtime, binding, completion);
+				}
 				queued.resolve();
 			} catch (error) {
 				queued.reject(error);
@@ -278,67 +285,106 @@ async function drainAtelierFilesCommands(
 	} finally {
 		runtime.draining = false;
 		if (runtime.binding && runtime.queue.length > 0) {
-			void drainAtelierFilesCommands(runtime);
+			void drainAtelierDocumentsCommands(runtime);
 		}
 	}
 }
 
-async function runAtelierFilesCommand(
-	binding: AtelierFilesRuntimeBinding,
-	command: AtelierFilesCommand,
-): Promise<void> {
+async function runAtelierDocumentsCommand(
+	binding: AtelierDocumentsRuntimeBinding,
+	command: AtelierDocumentsCommand,
+): Promise<AtelierDocumentsRuntimeCommandResult> {
 	switch (command.kind) {
 		case "open":
-			await binding.open(command.path);
-			return;
-		case "create":
-			await binding.create();
-			return;
+			return command.options
+				? binding.open(command.path, command.options)
+				: binding.open(command.path);
+		case "start-new":
+			return binding.startNew();
 		case "close-active":
-			await binding.closeActive();
+			return binding.closeActive();
 	}
 }
 
-function setAtelierFilesSnapshot(
-	runtime: AtelierFilesRuntime,
-	next: AtelierFilesSnapshot,
-): void {
-	if (atelierFilesSnapshotsEqual(runtime.snapshot, next)) return;
-	runtime.snapshot = freezeAtelierFilesSnapshot(next);
-	for (const listener of [...runtime.listeners]) listener();
-}
+function waitForAtelierDocumentsCompletion(
+	runtime: AtelierDocumentsRuntime,
+	binding: AtelierDocumentsRuntimeBinding,
+	completion: AtelierDocumentsRuntimeCompletion,
+): Promise<void> {
+	const checkCompletion = (): boolean => {
+		if (runtime.binding !== binding) {
+			throw new Error(
+				"Atelier document command could not complete because the shell unmounted.",
+			);
+		}
+		return completion.isComplete(runtime.state);
+	};
 
-function freezeAtelierFilesSnapshot(
-	snapshot: AtelierFilesSnapshot,
-): AtelierFilesSnapshot {
-	return Object.freeze({
-		ready: snapshot.ready,
-		active: snapshot.active,
-		open: Object.freeze([...new Set(snapshot.open)]),
+	try {
+		if (checkCompletion()) return Promise.resolve();
+	} catch (error) {
+		return Promise.reject(error);
+	}
+
+	return new Promise<void>((resolve, reject) => {
+		const listener = () => {
+			try {
+				if (!checkCompletion()) return;
+				runtime.listeners.delete(listener);
+				resolve();
+			} catch (error) {
+				runtime.listeners.delete(listener);
+				reject(error);
+			}
+		};
+		runtime.listeners.add(listener);
+		listener();
 	});
 }
 
-function atelierFilesSnapshotsEqual(
-	left: AtelierFilesSnapshot,
-	right: AtelierFilesSnapshot,
+function setAtelierDocumentsState(
+	runtime: AtelierDocumentsRuntime,
+	next: AtelierDocumentsRuntimeState,
+): void {
+	if (atelierDocumentsStatesEqual(runtime.state, next)) return;
+	runtime.state = freezeAtelierDocumentsState(next);
+	notifyAtelierDocumentsRuntime(runtime);
+}
+
+function notifyAtelierDocumentsRuntime(runtime: AtelierDocumentsRuntime): void {
+	for (const listener of [...runtime.listeners]) listener();
+}
+
+function freezeAtelierDocumentsState(
+	state: AtelierDocumentsRuntimeState,
+): AtelierDocumentsRuntimeState {
+	return Object.freeze({
+		activePath: state.activePath,
+		openPaths: Object.freeze([...new Set(state.openPaths)]),
+	});
+}
+
+function atelierDocumentsStatesEqual(
+	left: AtelierDocumentsRuntimeState,
+	right: AtelierDocumentsRuntimeState,
 ): boolean {
-	if (left.ready !== right.ready || left.active !== right.active) return false;
-	if (left.open.length !== right.open.length) return false;
-	return left.open.every((path, index) => path === right.open[index]);
+	if (left.activePath !== right.activePath) return false;
+	if (left.openPaths.length !== right.openPaths.length) return false;
+	return left.openPaths.every((path, index) => path === right.openPaths[index]);
 }
 
 async function openDiff(
 	lix: Lix,
 	options: AtelierDiffOpenOptions,
 ): Promise<void> {
-	if (options.before === options.after) return;
+	if (options.beforeCommitId === options.afterCommitId) return;
 
 	const openedAt = Date.now();
 	await appendAgentTurnCommitRange(lix, {
 		id: diffId(options),
-		agent: options.source.agent,
-		beforeCommitId: options.before,
-		afterCommitId: options.after,
+		sourceId: options.source.id,
+		beforeCommitId: options.beforeCommitId,
+		afterCommitId: options.afterCommitId,
 		...(options.source.sessionId !== undefined
 			? { sessionId: options.source.sessionId }
 			: {}),
@@ -353,11 +399,10 @@ async function openDiff(
 function diffId(options: AtelierDiffOpenOptions): string {
 	return JSON.stringify([
 		"atelier-diff",
-		options.source.kind,
-		options.source.agent,
+		options.source.id,
 		options.source.sessionId ?? null,
 		options.source.turnId ?? null,
-		options.before,
-		options.after,
+		options.beforeCommitId,
+		options.afterCommitId,
 	]);
 }

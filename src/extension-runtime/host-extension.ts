@@ -15,11 +15,11 @@ export function hostExtensionDefinition(
 		label: registration.manifest.name,
 		description:
 			registration.manifest.description ?? registration.manifest.name,
-		icon: registration.runtime.icon,
+		icon: registration.entry.icon,
 		fileExtensions: normalizeFileExtensions(
 			registration.manifest.fileExtensions,
 		),
 		multiInstance: registration.manifest.multiInstance,
-		mount: registration.runtime.mount as ExtensionDefinition["mount"],
+		mount: registration.entry.mount as ExtensionDefinition["mount"],
 	};
 }

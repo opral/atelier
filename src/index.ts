@@ -1,36 +1,33 @@
 export { Atelier } from "./create-atelier";
 export { createAtelier } from "./atelier-instance";
+export { ATELIER_BUILTIN_EXTENSION_IDS } from "./extension-api";
 export type {
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
 	AtelierDiffSource,
-	AtelierFilesApi,
-	AtelierFilesSnapshot,
 	AtelierInstance,
 	AtelierOptions,
+	AtelierSidePanel,
 } from "./atelier-instance";
 export type {
 	AtelierEmptyPanelSlot,
 	AtelierEmptyPanelSlotContext,
-	AtelierNavbarSlotContext,
 	AtelierPanelSide,
 	AtelierProps,
 	AtelierSlots,
 } from "./create-atelier";
 export type {
+	AtelierBuiltinExtensionId,
+	AtelierDocumentOpenOptions,
 	AtelierDocumentOrigin,
+	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierExtensionView,
 	AtelierMountedExtension,
-	CheckpointDiff,
-	CheckpointDiffBranchRow,
-	CheckpointDiffFile,
-	CheckpointDiffFileStatus,
-	CheckpointDiffVisibleFile,
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
-	ShowCheckpointDiffArgs,
+	AtelierRevisionSelection,
 } from "./extension-api";

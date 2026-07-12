@@ -26,10 +26,7 @@ import {
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
-import type {
-	CheckpointDiff,
-	ShowCheckpointDiffArgs,
-} from "../../extension-runtime/checkpoint-diff";
+import type { AtelierRevisionSelection } from "../../extension-api";
 
 type BranchRow = {
 	id: string;
@@ -39,10 +36,8 @@ type BranchRow = {
 };
 
 type HistoryViewProps = {
-	readonly checkpointDiff?: CheckpointDiff | null;
-	readonly showCheckpointDiff?: (
-		args: ShowCheckpointDiffArgs,
-	) => Promise<CheckpointDiff | null>;
+	readonly currentRevision?: AtelierRevisionSelection | null;
+	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff?: () => void;
 };
 
@@ -100,7 +95,7 @@ function HistoryBranchesLoader({
 function HistoryActiveBranchLoader({
 	lix,
 	branches,
-	checkpointDiff,
+	currentRevision,
 	showCheckpointDiff,
 	clearCheckpointDiff,
 }: HistoryViewProps & {
@@ -118,7 +113,7 @@ function HistoryActiveBranchLoader({
 			lix={lix}
 			branches={branches}
 			activeBranchId={activeBranch.value}
-			checkpointDiff={checkpointDiff}
+			currentRevision={currentRevision}
 			showCheckpointDiff={showCheckpointDiff}
 			clearCheckpointDiff={clearCheckpointDiff}
 		/>
@@ -129,17 +124,15 @@ function HistoryViewContent({
 	lix,
 	branches,
 	activeBranchId,
-	checkpointDiff,
+	currentRevision,
 	showCheckpointDiff,
 	clearCheckpointDiff,
 }: {
 	readonly lix: ReturnType<typeof useLix>;
 	readonly branches: BranchRow[];
 	readonly activeBranchId: string;
-	readonly checkpointDiff?: CheckpointDiff | null;
-	readonly showCheckpointDiff?: (
-		args: ShowCheckpointDiffArgs,
-	) => Promise<CheckpointDiff | null>;
+	readonly currentRevision?: AtelierRevisionSelection | null;
+	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff?: () => void;
 }) {
 	const activeBranchRow =
@@ -171,17 +164,14 @@ function HistoryViewContent({
 
 	const handleSelectBranch = useCallback(
 		async (branchId: string) => {
-			if (checkpointDiff?.branchId === branchId) {
+			if (currentRevision?.branchId === branchId) {
 				clearCheckpointDiff?.();
 				return;
 			}
 			if (!showCheckpointDiff) return;
 			setPendingAction(branchId);
 			try {
-				const nextDiff = await showCheckpointDiff({ branchId, branches });
-				if (!nextDiff) {
-					clearCheckpointDiff?.();
-				}
+				await showCheckpointDiff(branchId);
 			} catch (error) {
 				console.error("Failed to resolve checkpoint diff", error);
 				clearCheckpointDiff?.();
@@ -189,12 +179,7 @@ function HistoryViewContent({
 				setPendingAction(null);
 			}
 		},
-		[
-			branches,
-			checkpointDiff?.branchId,
-			clearCheckpointDiff,
-			showCheckpointDiff,
-		],
+		[currentRevision?.branchId, clearCheckpointDiff, showCheckpointDiff],
 	);
 
 	const handleCreateBranch = useCallback(async () => {
@@ -303,7 +288,7 @@ function HistoryViewContent({
 					<div className="flex flex-col gap-0.5" role="list">
 						{branches.map((branch) => {
 							const isActive = branch.id === activeBranchRow.id;
-							const isReviewing = checkpointDiff?.branchId === branch.id;
+							const isReviewing = currentRevision?.branchId === branch.id;
 							const isRestoreDisabled = isActive;
 							const isDeleteDisabled = isActive;
 							const branchDisplayName = displayBranchName(branch.name);
@@ -422,7 +407,7 @@ export const extension = createReactExtensionDefinition({
 	component: ({ atelier }) => (
 		<LixProvider lix={atelier.lix}>
 			<HistoryView
-				checkpointDiff={atelier.revisions.current}
+				currentRevision={atelier.revisions.current}
 				showCheckpointDiff={atelier.revisions.show}
 				clearCheckpointDiff={atelier.revisions.clear}
 			/>

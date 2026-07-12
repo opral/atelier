@@ -1,8 +1,9 @@
 import type { ComponentType } from "react";
-import type { Lix } from "@lix-js/sdk";
-import type { CheckpointDiff, ShowCheckpointDiffArgs } from "./checkpoint-diff";
 import type { ExternalWriteReview } from "./external-write-review";
-import type { AtelierEvent } from "../extension-api";
+import type {
+	AtelierExtensionRuntime,
+	AtelierExtensionState,
+} from "../extension-api";
 
 /**
  * Union of registry keys for views available in the layout.
@@ -18,15 +19,7 @@ export type ExtensionKind = string;
  * @example
  * const state: ExtensionState = { fileId: "file-123", filePath: "/docs/guide.md" };
  */
-export type ExtensionState = {
-	/**
-	 * Atelier-managed metadata (reserved namespace).
-	 */
-	readonly atelier?: {
-		readonly label?: string;
-	};
-	readonly [key: string]: unknown;
-};
+export type ExtensionState = AtelierExtensionState;
 
 /**
  * Per-panel instance payload used to track which views are open.
@@ -77,33 +70,7 @@ export interface MountedExtension {
 	dispose?: () => void;
 }
 
-export interface ExtensionRuntime {
-	readonly lix: Lix;
-	readonly events: {
-		readonly emit: (event: AtelierEvent) => void;
-	};
-	readonly files: {
-		readonly open: (args: {
-			readonly fileId: string;
-			readonly filePath: string;
-			readonly state?: ExtensionState;
-			readonly focus?: boolean;
-			readonly pending?: boolean;
-			readonly documentOrigin?: "existing" | "new";
-		}) => void | Promise<void>;
-		readonly close: (fileId: string) => void;
-		readonly active: {
-			readonly id: string;
-			readonly path: string | null;
-		} | null;
-	};
-	readonly revisions: {
-		readonly current: CheckpointDiff | null;
-		readonly show: (
-			args: ShowCheckpointDiffArgs,
-		) => Promise<CheckpointDiff | null>;
-		readonly clear: () => void;
-	};
+export type ExtensionRuntime = AtelierExtensionRuntime & {
 	readonly reviews: {
 		readonly accept: (args: {
 			readonly fileId: string;
@@ -117,7 +84,7 @@ export interface ExtensionRuntime {
 		}) => Promise<void>;
 		readonly register: (review: ExternalWriteReview) => () => void;
 	};
-}
+};
 
 export interface ExtensionView {
 	readonly instanceId: string;

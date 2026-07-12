@@ -14,11 +14,6 @@ import { createInitialAtelierUiState } from "./shell/ui-state";
 
 export type { AtelierPanelSide, AtelierSidePanel } from "./atelier-instance";
 
-export type AtelierNavbarSlotContext = {
-	/** Full path of the active file, or null when no file is active. */
-	readonly currentFile: string | null;
-};
-
 export type AtelierEmptyPanelSlotContext = {
 	/** The panel whose empty state is being rendered. */
 	readonly side: AtelierPanelSide;
@@ -37,9 +32,7 @@ export type AtelierSlots = {
 	/** Host-owned content rendered before Atelier's navbar controls. */
 	readonly navbarStart?: ReactNode;
 	/** Host-owned content rendered before Atelier's final navbar control. */
-	readonly navbarEnd?:
-		| ReactNode
-		| ((context: AtelierNavbarSlotContext) => ReactNode);
+	readonly navbarEnd?: ReactNode;
 	/** Host-owned content rendered when the left panel has no open views. */
 	readonly leftPanelEmpty?: AtelierEmptyPanelSlot;
 	/** Host-owned content rendered when the central panel has no open views. */
@@ -75,7 +68,6 @@ export function Atelier({ instance, slots }: AtelierProps) {
 							instance={instance}
 							slots={slots}
 							extensions={configuration.extensions}
-							filesExtension={configuration.filesExtension}
 							filesViewMode={configuration.filesViewMode}
 							defaultOpenPanels={defaultOpenPanels}
 							onEvent={configuration.onEvent}

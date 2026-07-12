@@ -53,6 +53,8 @@ type CsvViewProps = {
 	readonly checkpointDiff?: CheckpointDiff | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
+	readonly beforeFileId?: string | null;
+	readonly afterFileId?: string | null;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -112,6 +114,8 @@ export function CsvView({
 	checkpointDiff,
 	beforeCommitId,
 	afterCommitId,
+	beforeFileId,
+	afterFileId,
 	registerExternalWriteReview,
 	onAcceptReview,
 	onRejectReview,
@@ -126,6 +130,8 @@ export function CsvView({
 				checkpointDiff={checkpointDiff}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
+				beforeFileId={beforeFileId}
+				afterFileId={afterFileId}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
@@ -154,6 +160,8 @@ function CsvViewData({
 	checkpointDiff,
 	beforeCommitId,
 	afterCommitId,
+	beforeFileId,
+	afterFileId,
 	registerExternalWriteReview,
 	...props
 }: CsvViewProps & {
@@ -162,6 +170,8 @@ function CsvViewData({
 	const editorRevision = normalizeEditorRevisionState({
 		beforeCommitId,
 		afterCommitId,
+		beforeFileId,
+		afterFileId,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
 
@@ -243,6 +253,8 @@ function CsvHistoricalViewData({
 		fileId,
 		checkpointDiffFile ? null : editorRevision.beforeCommitId,
 		checkpointDiffFile ? null : editorRevision.afterCommitId,
+		editorRevision.beforeFileId,
+		editorRevision.afterFileId,
 	);
 	const historicalFile = useMemo(
 		() =>
@@ -710,7 +722,6 @@ export const extension = createReactExtensionDefinition({
 			<CsvView
 				fileId={view.state.fileId as string}
 				filePath={view.state.filePath as string | undefined}
-				checkpointDiff={atelier.revisions.current}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"
 						? view.state.beforeCommitId
@@ -719,6 +730,16 @@ export const extension = createReactExtensionDefinition({
 				afterCommitId={
 					typeof view.state.afterCommitId === "string"
 						? view.state.afterCommitId
+						: null
+				}
+				beforeFileId={
+					typeof view.state.beforeFileId === "string"
+						? view.state.beforeFileId
+						: null
+				}
+				afterFileId={
+					typeof view.state.afterFileId === "string"
+						? view.state.afterFileId
 						: null
 				}
 				onAcceptReview={atelier.reviews.accept}

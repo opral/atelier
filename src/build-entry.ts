@@ -1,21 +1,17 @@
 import "./index.css";
 
-export { Atelier, createAtelier } from "./index";
+export { Atelier, ATELIER_BUILTIN_EXTENSION_IDS, createAtelier } from "./index";
 export type {
+	AtelierBuiltinExtensionId,
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
 	AtelierDiffSource,
-	AtelierFilesApi,
-	AtelierFilesSnapshot,
+	AtelierDocumentsApi,
+	AtelierDocumentOpenOptions,
 	AtelierInstance,
-	AtelierNavbarSlotContext,
 	AtelierOptions,
 	AtelierProps,
+	AtelierSidePanel,
 	AtelierSlots,
-	CheckpointDiff,
-	CheckpointDiffBranchRow,
-	CheckpointDiffFile,
-	CheckpointDiffFileStatus,
-	CheckpointDiffVisibleFile,
-	ShowCheckpointDiffArgs,
+	AtelierRevisionSelection,
 } from "./index";

@@ -56,27 +56,6 @@ describe("TopBar", () => {
 		).toBeTruthy();
 	});
 
-	test("passes the active file path to a navbar end render slot", () => {
-		const renderNavbarEnd = vi.fn(
-			({ currentFile }: { currentFile: string | null }) => (
-				<span>{currentFile ?? "No active file"}</span>
-			),
-		);
-
-		const { rerender } = render(
-			<TopBar currentFile="/docs/note.md" navbarEnd={renderNavbarEnd} />,
-		);
-
-		expect(screen.getByText("/docs/note.md")).toBeVisible();
-		expect(renderNavbarEnd).toHaveBeenLastCalledWith({
-			currentFile: "/docs/note.md",
-		});
-
-		rerender(<TopBar currentFile={null} navbarEnd={renderNavbarEnd} />);
-		expect(screen.getByText("No active file")).toBeVisible();
-		expect(renderNavbarEnd).toHaveBeenLastCalledWith({ currentFile: null });
-	});
-
 	test("shows reviewing label after the active file name in checkpoint diff mode", () => {
 		render(<TopBar activeFileName="note.md" isReviewingCheckpoint={true} />);
 

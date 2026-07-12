@@ -14,6 +14,7 @@ import type {
 	AtelierExtensionRegistration,
 	AtelierExtensionRuntime,
 } from "./extension-api";
+import { ATELIER_BUILTIN_EXTENSION_IDS } from "./extension-api";
 import { createAtelier } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
 import {
@@ -38,39 +39,24 @@ describe("Atelier instance file controller", () => {
 			})
 			.execute();
 		const atelier = createAtelier({ lix });
-		const queuedOpen = atelier.files.open("/docs/queued.md");
-		const snapshots: unknown[] = [];
-		const unsubscribe = atelier.files.subscribe(() => {
-			snapshots.push(atelier.files.getSnapshot());
-		});
+		const queuedOpen = atelier.documents.open("/docs/queued.md");
 		let rendered: ReturnType<typeof render> | undefined;
 
 		try {
-			expect(atelier.files.getSnapshot()).toEqual({
-				ready: false,
-				active: null,
-				open: [],
-			});
 			await act(async () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			await waitFor(() => {
-				expect(atelier.files.getSnapshot().ready).toBe(true);
+				expect(
+					rendered?.container.querySelector(".atelier-panel-group"),
+				).toBeTruthy();
 			});
 			await act(async () => queuedOpen);
 
 			expect(
 				await screen.findByRole("heading", { name: "Queued" }),
 			).toBeVisible();
-			await waitFor(() => {
-				expect(atelier.files.getSnapshot()).toEqual({
-					ready: true,
-					active: "/docs/queued.md",
-					open: ["/docs/queued.md"],
-				});
-			});
-
-			await act(async () => atelier.files.create());
+			await act(async () => atelier.documents.startNew());
 			const container = rendered?.container;
 			if (!container) throw new Error("Atelier test container is unavailable");
 			const input = await findFilesViewRenameInput(container);
@@ -89,13 +75,6 @@ describe("Atelier instance file controller", () => {
 					.executeTakeFirst();
 				expect(created).toEqual({ path: "/docs/follow-up.md" });
 			});
-			await waitFor(() => {
-				expect(atelier.files.getSnapshot()).toEqual({
-					ready: true,
-					active: "/docs/follow-up.md",
-					open: ["/docs/follow-up.md"],
-				});
-			});
 			await expect(
 				qb(lix)
 					.selectFrom("lix_file")
@@ -104,19 +83,9 @@ describe("Atelier instance file controller", () => {
 					.executeTakeFirst(),
 			).resolves.toBeUndefined();
 
-			await act(async () => atelier.files.closeActive());
-			await waitFor(() => {
-				expect(atelier.files.getSnapshot()).toEqual({
-					ready: true,
-					active: null,
-					open: [],
-				});
-			});
-			expect(snapshots.length).toBeGreaterThan(2);
+			await act(async () => atelier.documents.closeActive());
 		} finally {
-			unsubscribe();
 			await act(async () => rendered?.unmount());
-			expect(atelier.files.getSnapshot().ready).toBe(false);
 			await lix.close();
 		}
 	});
@@ -167,15 +136,18 @@ describe("Atelier instance file controller", () => {
 			await act(async () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
-			await waitFor(() => expect(atelier.files.getSnapshot().ready).toBe(true));
-			await act(async () => atelier.files.create());
+			expect(
+				await screen.findByRole("heading", { name: "Active" }),
+			).toBeVisible();
+			await act(async () => atelier.documents.startNew());
 
-			await waitFor(() => {
-				expect(atelier.files.getSnapshot()).toEqual({
-					ready: true,
-					active: "/new-file.md",
-					open: ["/new-file.md"],
-				});
+			await waitFor(async () => {
+				const created = await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/new-file.md")
+					.executeTakeFirst();
+				expect(created).toEqual({ path: "/new-file.md" });
 			});
 		} finally {
 			await act(async () => rendered?.unmount());
@@ -197,7 +169,7 @@ describe("host built-in overrides", () => {
 							views: [
 								{
 									instance: historyInstance,
-									kind: "atelier_history",
+									kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
 								},
 							],
 							activeInstance: historyInstance,
@@ -211,11 +183,10 @@ describe("host built-in overrides", () => {
 		const historyOverride: AtelierExtensionRegistration = {
 			manifest: {
 				apiVersion: 1,
-				id: "atelier_history",
+				id: ATELIER_BUILTIN_EXTENSION_IDS.history,
 				name: "FlashType History",
-				entry: "./history.js",
 			},
-			runtime: {
+			entry: {
 				icon: FolderClock,
 				mount: ({ atelier, element }) => {
 					mountedRuntime = atelier;
@@ -236,6 +207,9 @@ describe("host built-in overrides", () => {
 			await waitFor(() => expect(mountedRuntime).not.toBeNull());
 			const revisions = (mountedRuntime as unknown as AtelierExtensionRuntime)
 				.revisions;
+			expect(
+				(mountedRuntime as unknown as AtelierExtensionRuntime).documents,
+			).toBe(atelier.documents);
 			expect(revisions.current).toBeNull();
 			expect(revisions.show).toEqual(expect.any(Function));
 			expect(revisions.clear).toEqual(expect.any(Function));

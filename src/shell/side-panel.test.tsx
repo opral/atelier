@@ -75,9 +75,7 @@ vi.mock("../extension-runtime/extension-registry", async () => {
 				button.type = "button";
 				button.textContent = "writing-style.md";
 				button.addEventListener("click", () => {
-					void atelier.files.open({
-						fileId: "file-writing",
-						filePath: "/docs/guides/writing-style.md",
+					void atelier.documents.open("/docs/guides/writing-style.md", {
 						state: {
 							atelier: { label: "writing-style.md" },
 						},
@@ -105,10 +103,10 @@ vi.mock("../extension-runtime/extension-registry", async () => {
 const mockLix = {} as Lix;
 
 const createViewContext = (
-	openFile?: ReturnType<
+	openDocument?: ReturnType<
 		typeof createExtensionHostContext
-	>["atelier"]["files"]["open"],
-) => createExtensionHostContext(mockLix, { openFile });
+	>["atelier"]["documents"]["open"],
+) => createExtensionHostContext(mockLix, { openDocument });
 
 describe("SidePanel", () => {
 	test("renders the empty state helper when nothing is open", () => {
@@ -206,14 +204,15 @@ describe("SidePanel", () => {
 			{ timeout: 5000 },
 		);
 		fireEvent.click(fileRow);
-		expect(handleOpenFile).toHaveBeenCalledWith({
-			fileId: "file-writing",
-			filePath: "/docs/guides/writing-style.md",
-			state: {
-				atelier: { label: "writing-style.md" },
+		expect(handleOpenFile).toHaveBeenCalledWith(
+			"/docs/guides/writing-style.md",
+			{
+				state: {
+					atelier: { label: "writing-style.md" },
+				},
+				focus: false,
 			},
-			focus: false,
-		});
+		);
 	});
 
 	test("removes focus flag when panel not focused", async () => {

@@ -1,10 +1,15 @@
 import type { ExtensionKind } from "./types";
 import type { ExtensionInstance } from "./types";
+import { ATELIER_BUILTIN_EXTENSION_IDS } from "../extension-api";
 
-export const FILES_EXTENSION_KIND = "atelier_files" as ExtensionKind;
-export const HISTORY_EXTENSION_KIND = "atelier_history" as ExtensionKind;
-export const FILE_EXTENSION_KIND = "atelier_file" as ExtensionKind;
-export const CSV_EXTENSION_KIND = "atelier_csv" as ExtensionKind;
+export const FILES_EXTENSION_KIND =
+	ATELIER_BUILTIN_EXTENSION_IDS.files as ExtensionKind;
+export const HISTORY_EXTENSION_KIND =
+	ATELIER_BUILTIN_EXTENSION_IDS.history as ExtensionKind;
+export const FILE_EXTENSION_KIND =
+	ATELIER_BUILTIN_EXTENSION_IDS.markdown as ExtensionKind;
+export const CSV_EXTENSION_KIND =
+	ATELIER_BUILTIN_EXTENSION_IDS.csv as ExtensionKind;
 
 export const fileExtensionInstanceForKind = (
 	kind: ExtensionKind,

@@ -16,12 +16,28 @@ That's this component's job. Lix holds the workspace — the files, the history,
 
 ```tsx
 import { openLix } from "@lix-js/sdk";
-import { Atelier, createAtelier } from "@opral/atelier";
+import {
+	Atelier,
+	ATELIER_BUILTIN_EXTENSION_IDS,
+	createAtelier,
+} from "@opral/atelier";
 import "@opral/atelier/style.css";
 
 // The host creates and owns the lix.
 const lix = await openLix();
-const atelier = createAtelier({ lix });
+const atelier = createAtelier({
+	lix,
+	extensions: [
+		{
+			manifest: {
+				apiVersion: 1,
+				id: ATELIER_BUILTIN_EXTENSION_IDS.history,
+				name: "Host History",
+			},
+			entry: historyExtensionEntry,
+		},
+	],
+});
 
 <Atelier
 	instance={atelier}
@@ -37,32 +53,28 @@ The instance is the programmatic workspace API and exposes its host-owned Lix:
 
 ```ts
 atelier.lix;
-await atelier.files.open("/notes/idea.md");
-await atelier.files.create();
-await atelier.files.closeActive();
-
-const unsubscribe = atelier.files.subscribe(() => {
-	const { ready, active, open } = atelier.files.getSnapshot();
-	console.log({ ready, active, open });
-});
+await atelier.documents.open("/notes/idea.md");
+await atelier.documents.startNew();
+await atelier.documents.closeActive();
 
 await atelier.diff.open({
-	before: beforeCommitId,
-	after: afterCommitId,
-	source: { kind: "agent", agent: "claude" },
+	beforeCommitId,
+	afterCommitId,
+	source: { id: "claude" },
 });
 ```
 
-File commands issued before `<Atelier>` mounts are queued and executed in
-order once the shell is ready. `getSnapshot()` returns an immutable external
-store snapshot: `active` is the active document path and `open` contains all
-open document paths.
+Document commands issued before `<Atelier>` mounts are queued and executed in
+order once the shell is ready.
 
-Host extensions are passed as manifest/runtime registrations. A host
-registration whose manifest uses a bundled id replaces that bundled view; for
-example, an `atelier_history` registration can provide host-specific history
-UI. Its runtime receives the same revision controls as the bundled History
-view through `atelier.revisions.current`, `.show(...)`, and `.clear()`.
+Host extensions are passed as `{ manifest, entry }` registrations. The host
+manifest describes the view while `entry` supplies its already-loaded icon and
+mount function; module paths belong only to workspace-installed extension
+manifests. A registration using an id from `ATELIER_BUILTIN_EXTENSION_IDS`
+replaces that bundled view. Its runtime receives the same revision controls as
+the bundled History view through `atelier.revisions.current`, `.show(...)`, and
+`.clear()`. `current` contains only the transient reviewed branch id; extensions
+read branch and file history data directly from the host-owned Lix.
 
 The target runtime is the browser. Atelier's fixed slots let a host fill bounded
 navbar regions while Atelier retains ownership of the workspace chrome.

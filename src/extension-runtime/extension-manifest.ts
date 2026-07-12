@@ -3,10 +3,15 @@ import type { ExtensionManifest } from "../extension-api";
 
 export type { ExtensionManifest } from "../extension-api";
 
+export type InstalledExtensionManifest = ExtensionManifest & {
+	/** Module path relative to the installed extension manifest. */
+	readonly entry: string;
+};
+
 export function parseExtensionManifest(
 	manifestPath: string,
 	manifestContent: string,
-): ExtensionManifest {
+): InstalledExtensionManifest {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(manifestContent);
