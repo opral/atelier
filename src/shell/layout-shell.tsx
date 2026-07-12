@@ -121,6 +121,12 @@ import {
 	type AtelierExtensionRegistration,
 } from "../extension-runtime/host-extension";
 import type { AtelierEvent } from "../extension-api";
+import {
+	bindAtelierFilesRuntime,
+	publishAtelierFilesSnapshot,
+	type AtelierFilesRuntimeBinding,
+	type AtelierInstance,
+} from "../atelier-instance";
 import { resolveCheckpointDiff } from "./checkpoint-diff";
 import {
 	reconcileCurrentFileViewPanel,
@@ -221,6 +227,25 @@ const isDocumentView = (view: ExtensionInstance): boolean => {
 	return view.instance === fileExtensionInstanceForKind(view.kind, fileId);
 };
 
+const documentPathFromView = (view: ExtensionInstance): string | null => {
+	if (!isDocumentView(view)) return null;
+	const path = view.state?.filePath;
+	return typeof path === "string" && path.length > 0 ? path : null;
+};
+
+const openDocumentPathsFromPanels = (
+	panels: readonly PanelState[],
+): readonly string[] => {
+	const paths = new Set<string>();
+	for (const panel of panels) {
+		for (const view of panel.views) {
+			const path = documentPathFromView(view);
+			if (path) paths.add(path);
+		}
+	}
+	return [...paths];
+};
+
 const canPlaceViewInPanel = (
 	view: ExtensionInstance,
 	side: PanelSide,
@@ -295,6 +320,29 @@ const normalizePanelsForDocumentSlot = (
 const newFileDraftHandlerKey = (
 	registration: NewFileDraftHandlerRegistration,
 ): string => `${registration.panelSide}:${registration.viewInstance}`;
+
+/** @internal */
+export const selectNewFileDraftHandler = (
+	registrations: Iterable<NewFileDraftHandlerRegistration>,
+	focusedPanel: PanelSide,
+): NewFileDraftHandlerRegistration | null => {
+	const panelPreference = [
+		focusedPanel,
+		"left" as const,
+		"central" as const,
+		"right" as const,
+	].filter((side, index, sides) => sides.indexOf(side) === index);
+	const registered = [...registrations].filter(
+		(registration) => registration.isActiveView,
+	);
+	for (const panelSide of panelPreference) {
+		const registration = registered.find(
+			(candidate) => candidate.panelSide === panelSide,
+		);
+		if (registration) return registration;
+	}
+	return null;
+};
 
 const sanitizePanels = (
 	panels: Record<PanelSide, PanelState>,
@@ -569,6 +617,7 @@ async function resolveNextUntitledMarkdownPath(
 }
 
 export function V2LayoutShell({
+	instance: atelierInstance,
 	slots,
 	extensions = [],
 	filesExtension,
@@ -576,6 +625,7 @@ export function V2LayoutShell({
 	defaultOpenPanels = [],
 	onEvent,
 }: {
+	readonly instance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
 	readonly filesExtension?: string;
@@ -612,6 +662,7 @@ export function V2LayoutShell({
 		>
 			<ExtensionHostRegistryProvider>
 				<LayoutShellContent
+					atelierInstance={atelierInstance}
 					slots={slots}
 					filesViewMode={filesViewMode}
 					defaultOpenPanels={defaultOpenPanels}
@@ -623,6 +674,7 @@ export function V2LayoutShell({
 }
 
 type LayoutShellContentProps = {
+	readonly atelierInstance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	readonly filesViewMode: FilesViewMode;
 	readonly defaultOpenPanels: readonly DefaultOpenPanel[];
@@ -905,6 +957,7 @@ function LayoutShellActiveFileLoader(
 }
 
 function LayoutShellLoadedContent({
+	atelierInstance,
 	lix,
 	uiStateKV,
 	setUiStateKV,
@@ -1766,10 +1819,47 @@ function LayoutShellLoadedContent({
 		[lix, transitionCheckpointEditorRevisions],
 	);
 
+	const resolveAndOpenFile = useCallback(
+		async ({
+			panel,
+			filePath,
+			state,
+			focus,
+			pending,
+			documentOrigin,
+		}: {
+			panel: PanelSide;
+			filePath: string;
+			state?: ExtensionState;
+			focus?: boolean;
+			pending?: boolean;
+			documentOrigin?: "existing" | "new";
+		}) => {
+			const resolvedFile = await resolveLixFileForOpen({ lix, filePath });
+			if (!resolvedFile) {
+				throw new Error(`File not found in the opened workspace: ${filePath}`);
+			}
+
+			if (!currentFileIds.has(resolvedFile.id)) {
+				openingFileIdsRef.current.add(resolvedFile.id);
+			}
+			openResolvedFileView({
+				panel,
+				fileId: resolvedFile.id,
+				filePath: resolvedFile.path,
+				state,
+				focus,
+				pending,
+				documentOrigin,
+			});
+		},
+		[currentFileIds, lix, openResolvedFileView],
+	);
+
 	const handleOpenFile = useCallback(
 		async ({
 			panel,
-			fileId: _requestedFileId,
+			fileId,
 			filePath,
 			state,
 			focus,
@@ -1787,7 +1877,7 @@ function LayoutShellLoadedContent({
 			if (hasHistoricalEditorRevisionState(state)) {
 				openResolvedFileView({
 					panel,
-					fileId: _requestedFileId,
+					fileId,
 					filePath,
 					state,
 					focus,
@@ -1797,35 +1887,20 @@ function LayoutShellLoadedContent({
 				return;
 			}
 
-			let resolvedFile: LixFileForOpen | null = null;
 			try {
-				resolvedFile = await resolveLixFileForOpen({
-					lix,
+				await resolveAndOpenFile({
+					panel,
 					filePath,
+					state,
+					focus,
+					pending,
+					documentOrigin,
 				});
 			} catch (error) {
 				console.error("Failed to resolve file", error);
-				return;
 			}
-			if (!resolvedFile) {
-				console.error(`File not found in the opened workspace: ${filePath}`);
-				return;
-			}
-
-			if (!currentFileIds.has(resolvedFile.id)) {
-				openingFileIdsRef.current.add(resolvedFile.id);
-			}
-			openResolvedFileView({
-				panel,
-				fileId: resolvedFile.id,
-				filePath: resolvedFile.path,
-				state,
-				focus,
-				pending,
-				documentOrigin,
-			});
 		},
-		[currentFileIds, lix, openResolvedFileView],
+		[openResolvedFileView, resolveAndOpenFile],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
@@ -2278,21 +2353,40 @@ function LayoutShellLoadedContent({
 				data: new TextEncoder().encode(""),
 			})
 			.execute();
-		const createdFile = await qb(lix)
-			.selectFrom("lix_file")
-			.select("id")
-			.where("path", "=", path)
-			.executeTakeFirstOrThrow();
-		const id = createdFile.id;
-		await handleOpenFile({
+		await resolveAndOpenFile({
 			panel: "central",
-			fileId: id,
 			filePath: path,
 			state: { focusOnLoad: true, defaultBlock: "heading1" },
 			focus: true,
 			documentOrigin: "new",
 		});
-	}, [handleOpenFile, lix]);
+	}, [lix, resolveAndOpenFile]);
+
+	const handleRequestNewFile = useCallback(async () => {
+		const visibleDraftHandlers = [
+			...newFileDraftHandlersRef.current.values(),
+		].filter((registration) => {
+			if (registration.panelSide === "left") return !isLeftCollapsed;
+			if (registration.panelSide === "right") return !isRightCollapsed;
+			return true;
+		});
+		const filesViewHandler = selectNewFileDraftHandler(
+			visibleDraftHandlers,
+			focusedPanel,
+		);
+		if (filesViewHandler) {
+			focusPanel(filesViewHandler.panelSide);
+			filesViewHandler.handler();
+			return;
+		}
+		await handleCreateNewFile();
+	}, [
+		focusPanel,
+		focusedPanel,
+		handleCreateNewFile,
+		isLeftCollapsed,
+		isRightCollapsed,
+	]);
 
 	const activeCentralFileId =
 		activeFileIdFromExtensionInstance(activeCentralEntry);
@@ -2319,6 +2413,71 @@ function LayoutShellLoadedContent({
 	const activeFilePath = useMemo(() => {
 		return activeFilePathFromPanel(centralPanel);
 	}, [centralPanel]);
+
+	const activeDocumentPath = useMemo(
+		() =>
+			activeCentralEntry ? documentPathFromView(activeCentralEntry) : null,
+		[activeCentralEntry],
+	);
+	const openDocumentPaths = useMemo(
+		() => openDocumentPathsFromPanels([leftPanel, centralPanel, rightPanel]),
+		[leftPanel, centralPanel, rightPanel],
+	);
+	const handleCloseActiveDocument = useCallback(() => {
+		if (!activeCentralEntry || !isDocumentView(activeCentralEntry)) return;
+		handleCloseView({
+			panel: "central",
+			instance: activeCentralEntry.instance,
+			focus: true,
+		});
+	}, [activeCentralEntry, handleCloseView]);
+	const atelierFilesActionsRef = useRef<AtelierFilesRuntimeBinding | null>(
+		null,
+	);
+	atelierFilesActionsRef.current = {
+		open: (path) =>
+			resolveAndOpenFile({
+				panel: "central",
+				filePath: path,
+				focus: true,
+				documentOrigin: "existing",
+			}),
+		create: handleRequestNewFile,
+		closeActive: handleCloseActiveDocument,
+	};
+	const atelierFilesRuntimeBinding = useMemo<AtelierFilesRuntimeBinding>(
+		() => ({
+			open: (path) => atelierFilesActionsRef.current?.open(path),
+			create: () => atelierFilesActionsRef.current?.create(),
+			closeActive: () => atelierFilesActionsRef.current?.closeActive(),
+		}),
+		[],
+	);
+	const atelierFilesSnapshotRef = useRef({
+		active: activeDocumentPath,
+		open: openDocumentPaths,
+	});
+	atelierFilesSnapshotRef.current = {
+		active: activeDocumentPath,
+		open: openDocumentPaths,
+	};
+
+	useEffect(() => {
+		if (!atelierInstance) return;
+		return bindAtelierFilesRuntime(
+			atelierInstance,
+			atelierFilesRuntimeBinding,
+			atelierFilesSnapshotRef.current,
+		);
+	}, [atelierFilesRuntimeBinding, atelierInstance]);
+
+	useEffect(() => {
+		if (!atelierInstance) return;
+		publishAtelierFilesSnapshot(atelierInstance, {
+			active: activeDocumentPath,
+			open: openDocumentPaths,
+		});
+	}, [activeDocumentPath, atelierInstance, openDocumentPaths]);
 
 	const addViewOnLeft = useCallback(
 		(type: ExtensionKind, state?: ExtensionState) =>

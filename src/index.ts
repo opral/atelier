@@ -4,6 +4,8 @@ export type {
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
 	AtelierDiffSource,
+	AtelierFilesApi,
+	AtelierFilesSnapshot,
 	AtelierInstance,
 	AtelierOptions,
 } from "./atelier-instance";
@@ -23,6 +25,12 @@ export type {
 	AtelierExtensionState,
 	AtelierExtensionView,
 	AtelierMountedExtension,
+	CheckpointDiff,
+	CheckpointDiffBranchRow,
+	CheckpointDiffFile,
+	CheckpointDiffFileStatus,
+	CheckpointDiffVisibleFile,
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
+	ShowCheckpointDiffArgs,
 } from "./extension-api";

@@ -37,12 +37,32 @@ The instance is the programmatic workspace API and exposes its host-owned Lix:
 
 ```ts
 atelier.lix;
+await atelier.files.open("/notes/idea.md");
+await atelier.files.create();
+await atelier.files.closeActive();
+
+const unsubscribe = atelier.files.subscribe(() => {
+	const { ready, active, open } = atelier.files.getSnapshot();
+	console.log({ ready, active, open });
+});
+
 await atelier.diff.open({
 	before: beforeCommitId,
 	after: afterCommitId,
 	source: { kind: "agent", agent: "claude" },
 });
 ```
+
+File commands issued before `<Atelier>` mounts are queued and executed in
+order once the shell is ready. `getSnapshot()` returns an immutable external
+store snapshot: `active` is the active document path and `open` contains all
+open document paths.
+
+Host extensions are passed as manifest/runtime registrations. A host
+registration whose manifest uses a bundled id replaces that bundled view; for
+example, an `atelier_history` registration can provide host-specific history
+UI. Its runtime receives the same revision controls as the bundled History
+view through `atelier.revisions.current`, `.show(...)`, and `.clear()`.
 
 The target runtime is the browser. Atelier's fixed slots let a host fill bounded
 navbar regions while Atelier retains ownership of the workspace chrome.

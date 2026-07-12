@@ -72,6 +72,7 @@ export function Atelier({ instance, slots }: AtelierProps) {
 				<KeyValueProvider defs={keyValueDefinitions}>
 					<Suspense fallback={<AtelierLoadingPlaceholder />}>
 						<V2LayoutShell
+							instance={instance}
 							slots={slots}
 							extensions={configuration.extensions}
 							filesExtension={configuration.filesExtension}
