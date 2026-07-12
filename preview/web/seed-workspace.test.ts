@@ -1,5 +1,34 @@
-import { describe, expect, test } from "vitest";
-import { decodeSeedAssetDataUrl, embedSeedAssets } from "./seed-workspace";
+import { describe, expect, test, vi } from "vitest";
+import {
+	decodeSeedAssetDataUrl,
+	embedSeedAssets,
+	seedWorkspace,
+} from "./seed-workspace";
+
+describe("seedWorkspace", () => {
+	test("stores the seeded PDF as its original binary bytes", async () => {
+		const inserts: unknown[][] = [];
+		const lix = {
+			execute: vi.fn(async (sql: string, parameters?: unknown[]) => {
+				if (sql.startsWith("INSERT INTO lix_file ") && parameters) {
+					inserts.push(parameters);
+				}
+			}),
+			createBranch: vi.fn(async () => undefined),
+		};
+
+		await seedWorkspace(lix as never);
+
+		const pdf = inserts.find((parameters) =>
+			String(parameters[1]).endsWith("/assets/example.pdf"),
+		);
+		expect(pdf).toBeDefined();
+		expect(pdf?.[2]).toBeInstanceOf(Uint8Array);
+		const bytes = pdf?.[2] as Uint8Array;
+		expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe("%PDF-1.4");
+		expect(bytes.byteLength).toBeGreaterThan(2_000);
+	});
+});
 
 describe("decodeSeedAssetDataUrl", () => {
 	test("decodes base64 binary assets without converting them to text", () => {
@@ -26,7 +55,7 @@ describe("decodeSeedAssetDataUrl", () => {
 describe("embedSeedAssets", () => {
 	test("keeps PDF embeds workspace-relative while inlining image assets", () => {
 		const markdown = embedSeedAssets(
-			"./seed/PDF-embed.md",
+			"./seed/markdown-extension/PDF-embed.md",
 			[
 				"![PDF](assets/example.pdf#page=1)",
 				"![Image](assets/example.svg)",

@@ -17,6 +17,25 @@ const INACTIVE_SLASH_STATE: SlashCommandState = {
 	range: null,
 };
 
+const COMMAND_GROUPS = [
+	{
+		label: "Document",
+		commandIds: ["frontmatter"],
+	},
+	{
+		label: "Basic blocks",
+		commandIds: ["paragraph", "heading1", "heading2", "heading3"],
+	},
+	{
+		label: "Lists & structure",
+		commandIds: ["bulletList", "orderedList", "taskList", "blockquote"],
+	},
+	{
+		label: "Insert",
+		commandIds: ["codeBlock", "table", "horizontalRule"],
+	},
+] as const;
+
 function filterCommands(
 	commands: BlockCommand[],
 	query: string,
@@ -50,13 +69,30 @@ export function SlashCommandMenu() {
 	const menuRef = useRef<HTMLDivElement>(null);
 
 	const filteredCommands = useMemo(
-		() => filterCommands(SLASH_BLOCK_COMMANDS, slashState.query),
-		[slashState.query],
+		() =>
+			filterCommands(
+				SLASH_BLOCK_COMMANDS.filter(
+					(command) =>
+						!command.isAvailable || !editor || command.isAvailable(editor),
+				),
+				slashState.query,
+			),
+		[editor, slashState.query],
 	);
 	const selectedIndex =
 		selection.query === slashState.query
 			? Math.min(selection.index, Math.max(0, filteredCommands.length - 1))
 			: 0;
+	const groupedCommands = useMemo(
+		() =>
+			COMMAND_GROUPS.map((group) => ({
+				...group,
+				commands: group.commandIds
+					.map((id) => filteredCommands.find((command) => command.id === id))
+					.filter((command): command is BlockCommand => Boolean(command)),
+			})).filter((group) => group.commands.length > 0),
+		[filteredCommands],
+	);
 
 	// Calculate position when active and update on scroll
 	useEffect(() => {
@@ -73,9 +109,10 @@ export function SlashCommandMenu() {
 			const coords = view.coordsAtPos(range.from);
 			const editorRect = view.dom.getBoundingClientRect();
 
-			// Menu dimensions (max-h-80 = 320px)
-			const menuHeight = 320;
-			const menuWidth = 180;
+			// Keep the command palette comfortably readable without overwhelming
+			// the writing surface.
+			const menuHeight = 420;
+			const menuWidth = 304;
 			const gap = 8;
 
 			const viewportHeight = window.innerHeight;
@@ -221,10 +258,17 @@ export function SlashCommandMenu() {
 		return null;
 	}
 
+	const selectedCommand = filteredCommands[selectedIndex];
+	const selectedOptionId = selectedCommand
+		? `markdown-slash-option-${selectedCommand.id}`
+		: undefined;
+	const portalTarget =
+		editor?.view.dom.closest(".atelier-root") ?? document.body;
+
 	return createPortal(
 		<div
 			ref={menuRef}
-			className="z-50 max-h-80 min-w-[180px] overflow-y-auto rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 text-[var(--color-text-primary)] shadow-md"
+			className="markdown-slash-menu"
 			style={{
 				position: "fixed",
 				top: position.top,
@@ -232,29 +276,72 @@ export function SlashCommandMenu() {
 			}}
 			role="listbox"
 			aria-label="Slash commands"
+			aria-activedescendant={selectedOptionId}
+			tabIndex={-1}
 		>
-			{filteredCommands.map((command, index) => (
-				<button
-					key={command.id}
-					data-index={index}
-					className="flex w-full cursor-pointer select-none items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-sm hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] data-[selected=true]:bg-[var(--color-bg-hover)] data-[selected=true]:text-[var(--color-text-primary)]"
-					data-selected={index === selectedIndex}
-					role="option"
-					aria-selected={index === selectedIndex}
-					onClick={() => handleItemClick(command)}
-					onMouseDown={(event) => event.preventDefault()}
-					onMouseEnter={() => setSelection({ query: slashState.query, index })}
-					tabIndex={-1}
-					type="button"
-				>
-					<command.icon
-						className="size-4 shrink-0 text-[var(--color-icon-secondary)]"
-						aria-hidden
-					/>
-					<span>{command.label}</span>
-				</button>
-			))}
+			<div className="markdown-slash-menu-scroll">
+				{groupedCommands.map((group) => (
+					<div className="markdown-slash-group" key={group.label}>
+						<div className="markdown-slash-group-label" aria-hidden="true">
+							{group.label}
+						</div>
+						{group.commands.map((command) => {
+							const index = filteredCommands.indexOf(command);
+							const isSelected = index === selectedIndex;
+							return (
+								<div
+									id={`markdown-slash-option-${command.id}`}
+									key={command.id}
+									data-index={index}
+									className="markdown-slash-option"
+									data-selected={isSelected}
+									role="option"
+									aria-selected={isSelected}
+									aria-label={`${command.label}: ${command.description}`}
+									onClick={() => handleItemClick(command)}
+									onMouseDown={(event) => event.preventDefault()}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault();
+											handleItemClick(command);
+										}
+									}}
+									onMouseEnter={() =>
+										setSelection({ query: slashState.query, index })
+									}
+									tabIndex={-1}
+								>
+									<span
+										className="markdown-slash-option-icon"
+										aria-hidden="true"
+									>
+										<command.icon />
+									</span>
+									<span className="markdown-slash-option-copy">
+										<span className="markdown-slash-option-label">
+											{command.label}
+										</span>
+										<span className="markdown-slash-option-description">
+											{command.description}
+										</span>
+									</span>
+								</div>
+							);
+						})}
+					</div>
+				))}
+			</div>
+			<div className="markdown-slash-menu-footer" aria-hidden="true">
+				<span>↑↓ Navigate</span>
+				<span>↵ Select</span>
+				<span>Esc Close</span>
+			</div>
+			<div className="sr-only" role="status" aria-live="polite">
+				{selectedCommand
+					? `${selectedCommand.label}: ${selectedCommand.description}`
+					: ""}
+			</div>
 		</div>,
-		document.body,
+		portalTarget,
 	);
 }

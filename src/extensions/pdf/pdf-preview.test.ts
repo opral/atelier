@@ -35,14 +35,17 @@ describe("renderPdfPreview", () => {
 		const container = document.createElement("div");
 		Object.defineProperty(container, "clientWidth", { value: 800 });
 		document.body.append(container);
+		const data = new Uint8Array([37, 80, 68, 70]);
 
 		const controller = await renderPdfPreview({
 			src: "blob:brief#page=4",
+			data,
 			container,
 		});
 
 		expect(pdfMocks.getDocument).toHaveBeenCalledWith(
 			expect.objectContaining({
+				data: Uint8Array.from(data),
 				maxImageSize: MAX_PDF_IMAGE_PIXELS,
 				canvasMaxAreaInBytes: MAX_PDF_CANVAS_BYTES,
 				isEvalSupported: false,

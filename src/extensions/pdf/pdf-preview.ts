@@ -20,6 +20,7 @@ export type PdfPreviewController = {
 
 export type PdfPreviewRenderer = (args: {
 	readonly src: string;
+	readonly data?: Uint8Array;
 	readonly container: HTMLElement;
 	readonly layout?: "fit-width" | "fit-page";
 	readonly signal?: AbortSignal;
@@ -32,6 +33,7 @@ export type PdfPreviewRenderer = (args: {
  */
 export const renderPdfPreview: PdfPreviewRenderer = async ({
 	src,
+	data,
 	container,
 	layout = "fit-width",
 	signal,
@@ -45,7 +47,7 @@ export const renderPdfPreview: PdfPreviewRenderer = async ({
 	GlobalWorkerOptions.workerSrc = workerModule.default;
 
 	const loadingTask: PDFDocumentLoadingTask = getDocument({
-		url: src,
+		...(data ? { data: Uint8Array.from(data) } : { url: src }),
 		maxImageSize: MAX_PDF_IMAGE_PIXELS,
 		canvasMaxAreaInBytes: MAX_PDF_CANVAS_BYTES,
 		isEvalSupported: false,

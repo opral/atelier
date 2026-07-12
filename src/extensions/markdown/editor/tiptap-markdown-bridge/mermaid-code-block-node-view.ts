@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
+import { codeLanguageLabel } from "./code-language-label";
 import {
 	getMermaidRenderTheme,
 	onMermaidThemeChange,
@@ -42,6 +43,14 @@ function createPlainCodeBlockNodeView(
 	const language = node.attrs?.language ?? null;
 	if (language) {
 		code.className = `language-${language}`;
+		pre.dataset.language = language;
+		const languageLabel = codeLanguageLabel(language);
+		const label = document.createElement("span");
+		label.className = "markdown-code-language";
+		label.contentEditable = "false";
+		label.textContent = languageLabel;
+		label.setAttribute("aria-label", `Code language: ${languageLabel}`);
+		pre.appendChild(label);
 	}
 	for (const [key, value] of Object.entries(diffAttrs)) {
 		code.setAttribute(key, value);

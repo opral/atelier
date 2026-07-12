@@ -1,7 +1,7 @@
 import type { JsonValue, Lix } from "@lix-js/sdk";
 
 const seedTextModules = import.meta.glob(
-	["./seed/**/*", "!./seed/assets/**/*"],
+	["./seed/**/*", "!./seed/**/assets/**/*"],
 	{
 		eager: true,
 		import: "default",
@@ -9,7 +9,7 @@ const seedTextModules = import.meta.glob(
 	},
 ) as Record<string, string>;
 
-const seedAssetUrls = import.meta.glob("./seed/assets/**/*", {
+const seedAssetUrls = import.meta.glob("./seed/**/assets/**/*", {
 	eager: true,
 	import: "default",
 	query: "?inline",
@@ -70,12 +70,22 @@ export function decodeSeedAssetDataUrl(dataUrl: string): Uint8Array {
 export function embedSeedAssets(modulePath: string, contents: string): string {
 	if (!modulePath.toLowerCase().endsWith(".md")) return contents;
 
+	const markdownWorkspacePath = modulePath.slice("./seed/".length);
+	const markdownDirectory = markdownWorkspacePath
+		.split("/")
+		.slice(0, -1)
+		.join("/");
 	let markdown = contents;
 	for (const [assetModulePath, dataUrl] of Object.entries(seedAssetUrls)) {
-		const relativeAssetPath = assetModulePath.slice("./seed/".length);
+		const assetWorkspacePath = assetModulePath.slice("./seed/".length);
+		const relativeAssetPath =
+			markdownDirectory &&
+			assetWorkspacePath.startsWith(`${markdownDirectory}/`)
+				? assetWorkspacePath.slice(markdownDirectory.length + 1)
+				: assetWorkspacePath;
 		// PDFs must remain workspace-relative so the Markdown asset loader can
 		// validate their bytes and render them through the consent-aware path.
-		if (relativeAssetPath.toLowerCase().endsWith(".pdf")) continue;
+		if (assetWorkspacePath.toLowerCase().endsWith(".pdf")) continue;
 		markdown = markdown.replaceAll(`](${relativeAssetPath}`, `](${dataUrl}`);
 	}
 	return markdown;

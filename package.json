@@ -78,7 +78,8 @@
 		"pdfjs-dist": "5.4.624",
 		"react-resizable-panels": "^4.12.1",
 		"tailwind-merge": "^3.6.0",
-		"use-sync-external-store": "^1.6.0"
+		"use-sync-external-store": "^1.6.0",
+		"yaml": "^2.8.2"
 	},
 	"devDependencies": {
 		"@lix-js/sdk": "^0.8.0",

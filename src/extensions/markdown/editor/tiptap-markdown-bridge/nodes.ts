@@ -1,4 +1,8 @@
 import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { codeLanguageLabel } from "./code-language-label";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
 import {
 	isPdfAssetSrc,
@@ -10,14 +14,103 @@ import type {
 	PdfPreviewController,
 	PdfPreviewRenderer,
 } from "@/extensions/pdf/pdf-preview";
+import { FrontmatterEditorNodeView } from "../../components/frontmatter-editor";
+import {
+	frontmatterSourceFromInput,
+	type FrontmatterRecord,
+} from "../frontmatter-value";
 
 export type MarkdownImageSrcResolver = (src: string) => string;
+
+const syntaxHighlightingPluginKey = new PluginKey(
+	"markdown-code-syntax-highlighting",
+);
+
+type SyntaxToken = {
+	readonly from: number;
+	readonly to: number;
+	readonly kind:
+		| "comment"
+		| "keyword"
+		| "literal"
+		| "number"
+		| "property"
+		| "string"
+		| "type";
+};
+
+const syntaxTokenPattern =
+	/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)(?=\s*:)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d+(?:\.\d+)?\b)|(\b(?:as|async|await|break|case|catch|class|const|continue|default|delete|do|else|export|extends|finally|for|from|function|if|import|in|instanceof|interface|let|new|of|return|satisfies|switch|throw|try|type|typeof|var|while|yield)\b)|(\b(?:false|null|true|undefined)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b[A-Za-z_$][\w$]*)(?=\s*:)/gm;
+
+function syntaxTokensFor(source: string): SyntaxToken[] {
+	const tokens: SyntaxToken[] = [];
+	for (const match of source.matchAll(syntaxTokenPattern)) {
+		const value = match[0];
+		const from = match.index;
+		if (from === undefined || value.length === 0) continue;
+		const kind: SyntaxToken["kind"] = match[1]
+			? "comment"
+			: match[2]
+				? "property"
+				: match[3]
+					? "string"
+					: match[4]
+						? "number"
+						: match[5]
+							? "keyword"
+							: match[6]
+								? "literal"
+								: match[7]
+									? "type"
+									: "property";
+		tokens.push({ from, to: from + value.length, kind });
+	}
+	return tokens;
+}
+
+function codeSyntaxDecorations(doc: any): DecorationSet {
+	const decorations: Decoration[] = [];
+	doc.descendants((node: any, position: number) => {
+		if (node.type.name !== "codeBlock") return;
+		for (const token of syntaxTokensFor(node.textContent)) {
+			decorations.push(
+				Decoration.inline(position + 1 + token.from, position + 1 + token.to, {
+					class: `syntax-token syntax-${token.kind}`,
+				}),
+			);
+		}
+		return false;
+	});
+	return DecorationSet.create(doc, decorations);
+}
+
+function createCodeSyntaxHighlightingPlugin(): Plugin {
+	return new Plugin({
+		key: syntaxHighlightingPluginKey,
+		state: {
+			init: (_config, state) => codeSyntaxDecorations(state.doc),
+			apply: (transaction, previous) =>
+				transaction.docChanged
+					? codeSyntaxDecorations(transaction.doc)
+					: previous.map(transaction.mapping, transaction.doc),
+		},
+		props: {
+			decorations(state) {
+				return syntaxHighlightingPluginKey.getState(state);
+			},
+		},
+	});
+}
 
 // Extend TipTap's command types
 declare module "@tiptap/core" {
 	interface Commands<ReturnType> {
 		horizontalRule: {
 			setHorizontalRule: () => ReturnType;
+		};
+		frontmatter: {
+			setFrontmatter: (value?: string | FrontmatterRecord) => ReturnType;
+			unsetFrontmatter: () => ReturnType;
 		};
 	}
 }
@@ -133,10 +226,24 @@ export function markdownWcNodes(
 			name: "tableCell",
 			content: "inline*",
 			addAttributes() {
-				return { data: { default: null } };
+				return {
+					isHeader: { default: false },
+					align: { default: null },
+					data: { default: null },
+				};
 			},
 			renderHTML({ node }) {
-				return ["td", diffAttrs(node), 0];
+				const isHeader = node.attrs?.isHeader === true;
+				const align = node.attrs?.align;
+				return [
+					isHeader ? "th" : "td",
+					{
+						...diffAttrs(node),
+						...(isHeader ? { scope: "col" } : {}),
+						...(align ? { "data-align": align } : {}),
+					},
+					0,
+				];
 			},
 		}),
 		Node.create({
@@ -257,7 +364,28 @@ export function markdownWcNodes(
 				const lang = (node as any).attrs?.language ?? null;
 				const codeAttrs: any = diffAttrs(node);
 				if (lang) codeAttrs.class = `language-${lang}`;
-				return ["pre", ["code", codeAttrs, 0]];
+				const languageLabel = lang ? codeLanguageLabel(lang) : null;
+				return [
+					"pre",
+					lang ? { "data-language": lang } : {},
+					...(languageLabel
+						? [
+								[
+									"span",
+									{
+										class: "markdown-code-language",
+										"aria-label": `Code language: ${languageLabel}`,
+										contenteditable: "false",
+									},
+									languageLabel,
+								],
+							]
+						: []),
+					["code", codeAttrs, 0],
+				];
+			},
+			addProseMirrorPlugins() {
+				return [createCodeSyntaxHighlightingPlugin()];
 			},
 			addNodeView() {
 				return ({ node, editor, getPos }) =>
@@ -275,7 +403,10 @@ export function markdownWcNodes(
 			name: "horizontalRule",
 			group: "block",
 			addAttributes() {
-				return { data: { default: null } };
+				return {
+					autoInput: { default: false },
+					data: { default: null },
+				};
 			},
 			renderHTML({ node }) {
 				return ["hr", diffAttrs(node, "element")];
@@ -289,6 +420,82 @@ export function markdownWcNodes(
 							return commands.insertContent({ type: nodeName });
 						},
 				};
+			},
+		}),
+		Node.create({
+			name: "markdownFrontmatter",
+			group: "block",
+			atom: true,
+			selectable: true,
+			defining: true,
+			addAttributes() {
+				return {
+					value: { default: "" },
+					data: { default: null },
+					autofocus: { default: false },
+				};
+			},
+			renderHTML({ node }) {
+				return [
+					"div",
+					{
+						"data-markdown-frontmatter": "true",
+						class: "markdown-frontmatter",
+						...diffAttrs(node, "element"),
+					},
+					["pre", ["code", String(node.attrs.value ?? "")]],
+				];
+			},
+			addCommands() {
+				const nodeName = this.name;
+				return {
+					setFrontmatter:
+						(value?: string | FrontmatterRecord) =>
+						({ state, dispatch }: CommandProps) => {
+							const nodeType = state.schema.nodes[nodeName];
+							if (!nodeType) return false;
+							const firstNode = state.doc.firstChild;
+							if (firstNode?.type === nodeType) {
+								if (value === undefined) return true;
+								if (dispatch) {
+									dispatch(
+										state.tr.setNodeMarkup(0, nodeType, {
+											...firstNode.attrs,
+											value: frontmatterSourceFromInput(value),
+										}),
+									);
+								}
+								return true;
+							}
+							if (dispatch) {
+								dispatch(
+									state.tr.insert(
+										0,
+										nodeType.create({
+											value: frontmatterSourceFromInput(value),
+											data: null,
+											autofocus: value === undefined,
+										}),
+									),
+								);
+							}
+							return true;
+						},
+					unsetFrontmatter:
+						() =>
+						({ state, dispatch }: CommandProps) => {
+							const nodeType = state.schema.nodes[nodeName];
+							const firstNode = state.doc.firstChild;
+							if (!nodeType || firstNode?.type !== nodeType) return false;
+							if (dispatch) {
+								dispatch(state.tr.delete(0, firstNode.nodeSize));
+							}
+							return true;
+						},
+				};
+			},
+			addNodeView() {
+				return ReactNodeViewRenderer(FrontmatterEditorNodeView);
 			},
 		}),
 		// Unsupported blocks (html, yaml, etc.)
@@ -557,6 +764,7 @@ function createMarkdownAssetNodeView({
 	let manualPreviewAbort: AbortController | null = null;
 	let visibilityObserver: IntersectionObserver | null = null;
 	let pendingManualAsset: LoadedMarkdownAsset | null = null;
+	let currentSource: string | null = null;
 	const previewAction = dom.querySelector<HTMLButtonElement>(
 		".markdown-pdf-preview-action",
 	);
@@ -593,11 +801,13 @@ function createMarkdownAssetNodeView({
 	};
 	const showPdfPreview = async ({
 		previewSrc,
+		previewData,
 		openSrc,
 		previewGeneration,
 		focusAfterLoad = false,
 	}: {
 		readonly previewSrc: string;
+		readonly previewData?: Uint8Array;
 		readonly openSrc: string;
 		readonly previewGeneration: number;
 		readonly focusAfterLoad?: boolean;
@@ -626,6 +836,7 @@ function createMarkdownAssetNodeView({
 		try {
 			const controller = await renderPdfPreview({
 				src: previewSrc,
+				data: previewData,
 				container: mount,
 				signal: renderAbort.signal,
 				onError: () => {
@@ -675,6 +886,7 @@ function createMarkdownAssetNodeView({
 			pendingManualAsset = null;
 			await showPdfPreview({
 				previewSrc: asset.src,
+				previewData: asset.data,
 				openSrc: asset.src,
 				previewGeneration,
 				focusAfterLoad,
@@ -734,6 +946,7 @@ function createMarkdownAssetNodeView({
 		loadedAsset = previewAsset;
 		await showPdfPreview({
 			previewSrc: safeSrc,
+			previewData: previewAsset.data,
 			openSrc: asset.src,
 			previewGeneration,
 			focusAfterLoad,
@@ -752,6 +965,7 @@ function createMarkdownAssetNodeView({
 		disposePdfPreview();
 		disposeLoadedAsset();
 		const src = String(nextNode.attrs?.src ?? "");
+		currentSource = src;
 		updateAssetDomAttributes(dom, nextNode);
 		if (!loadAsset) {
 			const renderedSrc = resolveRenderedImageSrc(src, resolveImageSrc);
@@ -813,6 +1027,7 @@ function createMarkdownAssetNodeView({
 					if (rendersPdf) {
 						void showPdfPreview({
 							previewSrc: safeSrc,
+							previewData: asset.data,
 							openSrc: safeSrc,
 							previewGeneration: loadGeneration,
 						});
@@ -847,6 +1062,11 @@ function createMarkdownAssetNodeView({
 			if (nextNode.type.name !== "image") return false;
 			if (isPdfAssetSrc(String(nextNode.attrs?.src ?? "")) !== rendersPdf) {
 				return false;
+			}
+			const nextSource = String(nextNode.attrs?.src ?? "");
+			if (nextSource === currentSource) {
+				updateAssetDomAttributes(dom, nextNode);
+				return true;
 			}
 			updateSource(nextNode);
 			return true;

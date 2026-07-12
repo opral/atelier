@@ -7,6 +7,7 @@ import type {
 	MarkdownWorkspaceFileOpener,
 } from "../markdown-asset";
 import type { PdfPreviewRenderer } from "@/extensions/pdf/pdf-preview";
+import { BlockBoundaryNavigationExtension } from "../extensions/block-boundary-navigation";
 
 export type MarkdownWcOptions = {
 	readonly idProvider?: () => string;
@@ -63,5 +64,6 @@ export function MarkdownWc(opts?: MarkdownWcOptions): Extensions {
 		}),
 		createAssignDataIdExtension(opts),
 		MarkdownWcShortcuts,
+		BlockBoundaryNavigationExtension,
 	];
 }

@@ -71,7 +71,12 @@ function sendKey(editor: Editor, key: string, opts?: { shift?: boolean }) {
 		bubbles: true,
 		cancelable: true,
 	});
-	editor.view.someProp("handleKeyDown", (f: any) => f(editor.view, event));
+	let handled = false;
+	editor.view.someProp("handleKeyDown", (f: any) => {
+		handled = f(editor.view, event) || handled;
+		return handled;
+	});
+	return handled;
 }
 
 function setCursorAfterText(editor: Editor, text: string) {
@@ -93,7 +98,38 @@ function setCursorAfterText(editor: Editor, text: string) {
 	editor.commands.setTextSelection(position);
 }
 
+function setCursorBeforeText(editor: Editor, text: string) {
+	let position: number | null = null;
+	editor.state.doc.descendants((node, pos) => {
+		if (position != null) return false;
+		if (!node.isText) return true;
+		const value = node.text ?? "";
+		const index = value.indexOf(text);
+		if (index >= 0) {
+			position = pos + index;
+			return false;
+		}
+		return true;
+	});
+	if (position == null) throw new Error(`Could not find text: ${text}`);
+	editor.commands.setTextSelection(position);
+}
+
 describe("Markdown typing shortcuts (input rules)", () => {
+	test.each([
+		["```ts ", "ts"],
+		["~~~python ", "python"],
+		["``` ", null],
+	])("%s → fenced code block with language %s", (typed, language) => {
+		const editor = createEditor();
+		typeText(editor, typed);
+		const node = editor.state.doc.child(0);
+
+		expect(node.type.name).toBe("codeBlock");
+		expect(node.attrs.language).toBe(language);
+		expect(node.textContent).toBe("");
+	});
+
 	test.each([
 		["#", 1],
 		["##", 2],
@@ -179,6 +215,34 @@ describe("Markdown typing shortcuts (input rules)", () => {
 	});
 
 	test.each([
+		["**bold**", "**bold**\n", "bold"],
+		["*italic*", "_italic_\n", "italic"],
+		["_italic_", "_italic_\n", "italic"],
+		["~~strike~~", "~~strike~~\n", "strike"],
+		["`inline code`", "`inline code`\n", "code"],
+	])("%s → %s mark", (typed, markdown, markName) => {
+		const editor = createEditor();
+		typeText(editor, typed);
+
+		expect(buildMarkdownFromEditor(editor)).toBe(markdown);
+		const textNode = editor.state.doc.child(0).child(0);
+		expect(textNode.marks.some((mark) => mark.type.name === markName)).toBe(
+			true,
+		);
+	});
+
+	test("inline Markdown marks preserve surrounding text and stop at the delimiter", () => {
+		const editor = createEditor();
+		typeText(editor, "Before **bold** after");
+
+		expect(buildMarkdownFromEditor(editor)).toBe("Before **bold** after\n");
+		const paragraph = editor.state.doc.child(0);
+		const trailing = paragraph.child(paragraph.childCount - 1);
+		expect(trailing.text).toContain(" after");
+		expect(trailing.marks).toHaveLength(0);
+	});
+
+	test.each([
 		["[] ", false],
 		["[ ] ", false],
 		["[x] ", true],
@@ -258,6 +322,280 @@ describe("Markdown typing shortcuts (input rules)", () => {
 });
 
 describe("Keyboard shortcuts (keymap)", () => {
+	test("--- immediately creates a divider and following paragraph", () => {
+		const editor = createEditor();
+		typeText(editor, "---");
+
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.doc.child(0).type.name).toBe("horizontalRule");
+		expect(editor.state.doc.child(0).attrs.autoInput).toBe(true);
+		expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+	});
+
+	test("Backspace after a typed divider restores literal ---", () => {
+		const editor = createEditor();
+		typeText(editor, "---");
+		sendKey(editor, "Backspace");
+
+		expect(editor.state.doc.childCount).toBe(1);
+		expect(editor.state.doc.child(0).type.name).toBe("paragraph");
+		expect(editor.state.doc.child(0).textContent).toBe("---");
+		expect(editor.state.selection.from).toBe(4);
+	});
+
+	test.each(["___", "***"])("%s + Enter stays literal", (trigger) => {
+		const editor = createEditor();
+		typeText(editor, trigger);
+		sendKey(editor, "Enter");
+
+		expect(editor.state.doc.child(0).type.name).toBe("paragraph");
+		expect(editor.state.doc.child(0).textContent).toBe(trigger);
+		expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+	});
+
+	test("Backspace after a semantic divider does not restore literal ---", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [{ type: "horizontalRule" }, { type: "paragraph" }],
+		});
+		editor.commands.setTextSelection(2);
+
+		sendKey(editor, "Backspace");
+		expect(editor.state.doc.child(0).type.name).toBe("horizontalRule");
+		expect(editor.state.doc.textContent).not.toContain("---");
+	});
+
+	test("Tab on an empty paragraph is a no-op", () => {
+		const editor = createEditor();
+		const before = editor.state.doc.toJSON();
+		const selectionBefore = editor.state.selection.from;
+
+		const handled = sendKey(editor, "Tab");
+
+		expect(handled).toBe(true);
+		expect(editor.state.doc.toJSON()).toEqual(before);
+		expect(editor.state.selection.from).toBe(selectionBefore);
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+	});
+
+	test("Tab on a non-empty paragraph remains available for focus traversal", () => {
+		const editor = createEditor();
+		typeText(editor, "text");
+
+		expect(sendKey(editor, "Tab")).toBe(false);
+		expect(editor.state.doc.textContent).toBe("text");
+	});
+
+	test("```ts + Enter creates an empty TypeScript code block", () => {
+		const editor = createEditor();
+		typeText(editor, "```ts");
+		sendKey(editor, "Enter");
+		const node = editor.state.doc.child(0);
+
+		expect(node.type.name).toBe("codeBlock");
+		expect(node.attrs.language).toBe("ts");
+		expect(node.textContent).toBe("");
+	});
+
+	test("Enter inserts a newline inside one code block", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "codeBlock",
+					attrs: { language: "ts" },
+					content: [{ type: "text", text: "abcdef" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection(4);
+		sendKey(editor, "Enter");
+
+		expect(editor.state.doc.childCount).toBe(1);
+		expect(editor.state.doc.child(0).type.name).toBe("codeBlock");
+		expect(editor.state.doc.child(0).textContent).toBe("abc\ndef");
+		expect(editor.state.doc.child(0).attrs.language).toBe("ts");
+	});
+
+	test("triple Enter exits a code block without leaving blank lines", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "codeBlock",
+					attrs: { language: "ts" },
+					content: [{ type: "text", text: "alpha" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection(6);
+		sendKey(editor, "Enter");
+		sendKey(editor, "Enter");
+		sendKey(editor, "Enter");
+
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.doc.child(0).type.name).toBe("codeBlock");
+		expect(editor.state.doc.child(0).textContent).toBe("alpha");
+		expect(editor.state.doc.child(0).attrs.language).toBe("ts");
+		expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+	});
+
+	test("ArrowDown at the end of code moves into the following paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "codeBlock",
+					attrs: { language: "ts" },
+					content: [{ type: "text", text: "alpha" }],
+				},
+				{ type: "paragraph", content: [{ type: "text", text: "next" }] },
+			],
+		});
+		editor.commands.setTextSelection(6);
+		sendKey(editor, "ArrowDown");
+
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.textContent).toBe("next");
+	});
+
+	test("ArrowDown at a terminal code block creates a following paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "codeBlock",
+					attrs: { language: "ts" },
+					content: [{ type: "text", text: "alpha" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection(6);
+		sendKey(editor, "ArrowDown");
+
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+	});
+
+	test("ArrowUp at the start of code moves into the preceding paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{ type: "paragraph", content: [{ type: "text", text: "before" }] },
+				{
+					type: "codeBlock",
+					attrs: { language: "ts" },
+					content: [{ type: "text", text: "alpha" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection(9);
+		sendKey(editor, "ArrowUp");
+
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.textContent).toBe("before");
+	});
+
+	test("ArrowRight at the end of code moves into the following paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "codeBlock",
+					attrs: { language: "ts" },
+					content: [{ type: "text", text: "alpha" }],
+				},
+				{ type: "paragraph", content: [{ type: "text", text: "after" }] },
+			],
+		});
+		editor.commands.setTextSelection(6);
+		sendKey(editor, "ArrowRight");
+
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.textContent).toBe("after");
+	});
+
+	test("Backspace in an empty code block returns to a paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [{ type: "codeBlock", attrs: { language: "ts" } }],
+		});
+		editor.commands.setTextSelection(1);
+		sendKey(editor, "Backspace");
+
+		expect(editor.state.doc.child(0).type.name).toBe("paragraph");
+	});
+
+	test("double Enter exits a blockquote into a paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "blockquote",
+					content: [
+						{
+							type: "paragraph",
+							content: [{ type: "text", text: "quoted" }],
+						},
+					],
+				},
+			],
+		});
+		setCursorAfterText(editor, "quoted");
+		sendKey(editor, "Enter");
+		sendKey(editor, "Enter");
+
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.doc.child(0).type.name).toBe("blockquote");
+		expect(editor.state.doc.child(0).textContent).toBe("quoted");
+		expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+	});
+
+	test("Backspace unwraps an empty blockquote", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "blockquote",
+					content: [{ type: "paragraph" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection(2);
+		sendKey(editor, "Backspace");
+
+		expect(editor.state.doc.childCount).toBe(1);
+		expect(editor.state.doc.child(0).type.name).toBe("paragraph");
+	});
+
+	test("ArrowDown leaves the final blockquote paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "blockquote",
+					content: [
+						{
+							type: "paragraph",
+							content: [{ type: "text", text: "quoted" }],
+						},
+					],
+				},
+			],
+		});
+		setCursorAfterText(editor, "quoted");
+		sendKey(editor, "ArrowDown");
+
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+	});
+
 	test("Mod-b toggles bold on selection", () => {
 		const editor = createEditor();
 		editor.commands.insertContent("abc");
@@ -467,6 +805,339 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(buildMarkdownFromEditor(editor)).toBe("- parent\n- child\n");
 		typeText(editor, " updated");
 		expect(buildMarkdownFromEditor(editor)).toBe("- parent\n- child updated\n");
+	});
+
+	test("Shift-Tab outdents a middle ordered child without reordering later siblings", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "parent" }],
+								},
+								{
+									type: "orderedList",
+									attrs: { start: 3 },
+									content: ["before", "current", "after"].map((text) => ({
+										type: "listItem",
+										content: [
+											{
+												type: "paragraph",
+												content: [{ type: "text", text }],
+											},
+										],
+									})),
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+
+		setCursorAfterText(editor, "current");
+		expect(sendKey(editor, "Tab", { shift: true })).toBe(true);
+
+		expect(buildMarkdownFromEditor(editor)).toBe(
+			"- parent\n  3. before\n- current\n  5. after\n",
+		);
+	});
+
+	test("task state survives indent and outdent", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							attrs: { checked: true },
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "done" }],
+								},
+							],
+						},
+						{
+							type: "listItem",
+							attrs: { checked: false },
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "open" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+
+		setCursorAfterText(editor, "open");
+		expect(sendKey(editor, "Tab")).toBe(true);
+		expect(buildMarkdownFromEditor(editor)).toBe("- [x] done\n  - [ ] open\n");
+		expect(sendKey(editor, "Tab", { shift: true })).toBe(true);
+		expect(buildMarkdownFromEditor(editor)).toBe("- [x] done\n- [ ] open\n");
+	});
+
+	test("Shift-Tab lifts a middle top-level ordered item and preserves numbering", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "orderedList",
+					attrs: { start: 4 },
+					content: ["one", "two", "three"].map((text) => ({
+						type: "listItem",
+						content: [
+							{
+								type: "paragraph",
+								content: [{ type: "text", text }],
+							},
+						],
+					})),
+				},
+			],
+		});
+
+		setCursorAfterText(editor, "two");
+		expect(sendKey(editor, "Tab", { shift: true })).toBe(true);
+
+		expect(buildMarkdownFromEditor(editor)).toBe("4. one\n\ntwo\n\n6. three\n");
+		expect(editor.state.selection.$from.parent.textContent).toBe("two");
+	});
+
+	test("Tab on the first list item is consumed without changing the list", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "first" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		const before = editor.state.doc.toJSON();
+		setCursorAfterText(editor, "first");
+
+		expect(sendKey(editor, "Tab")).toBe(true);
+		expect(editor.state.doc.toJSON()).toEqual(before);
+	});
+
+	test("Backspace at the start of a middle item merges it with the previous item", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: ["one", "two"].map((text) => ({
+						type: "listItem",
+						content: [
+							{
+								type: "paragraph",
+								content: [{ type: "text", text }],
+							},
+						],
+					})),
+				},
+			],
+		});
+		setCursorBeforeText(editor, "two");
+
+		expect(sendKey(editor, "Backspace")).toBe(true);
+		expect(editor.state.doc.child(0).childCount).toBe(1);
+		expect(editor.state.doc.textContent).toBe("onetwo");
+	});
+
+	test("Delete at the end of an item merges the following item", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: ["one", "two"].map((text) => ({
+						type: "listItem",
+						content: [
+							{
+								type: "paragraph",
+								content: [{ type: "text", text }],
+							},
+						],
+					})),
+				},
+			],
+		});
+		setCursorAfterText(editor, "one");
+
+		expect(sendKey(editor, "Delete")).toBe(true);
+		expect(editor.state.doc.child(0).childCount).toBe(1);
+		expect(editor.state.doc.textContent).toBe("onetwo");
+	});
+
+	test("Backspace at a continuation paragraph joins it to the first paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "first" }],
+								},
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "continuation" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		setCursorBeforeText(editor, "continuation");
+
+		expect(sendKey(editor, "Backspace")).toBe(true);
+		const item = editor.state.doc.child(0).child(0);
+		expect(item.childCount).toBe(1);
+		expect(item.textContent).toBe("firstcontinuation");
+	});
+
+	test("Delete at the end of a paragraph joins a continuation paragraph", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "first" }],
+								},
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "continuation" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		setCursorAfterText(editor, "first");
+
+		expect(sendKey(editor, "Delete")).toBe(true);
+		const item = editor.state.doc.child(0).child(0);
+		expect(item.childCount).toBe(1);
+		expect(item.textContent).toBe("firstcontinuation");
+	});
+
+	test("Delete at the end of a parent line preserves its child list", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "parent" }],
+								},
+								{
+									type: "bulletList",
+									content: [
+										{
+											type: "listItem",
+											content: [
+												{
+													type: "paragraph",
+													content: [{ type: "text", text: "child" }],
+												},
+											],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		const before = editor.state.doc.toJSON();
+		setCursorAfterText(editor, "parent");
+
+		expect(sendKey(editor, "Delete")).toBe(true);
+		expect(editor.state.doc.toJSON()).toEqual(before);
+		expect(buildMarkdownFromEditor(editor)).toBe("- parent\n  - child\n");
+	});
+
+	test("Enter midway through an item transfers its child list to the new item", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "parenttail" }],
+								},
+								{
+									type: "bulletList",
+									content: [
+										{
+											type: "listItem",
+											content: [
+												{
+													type: "paragraph",
+													content: [{ type: "text", text: "child" }],
+												},
+											],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		setCursorAfterText(editor, "parent");
+
+		expect(sendKey(editor, "Enter")).toBe(true);
+		expect(buildMarkdownFromEditor(editor)).toBe(
+			"- parent\n- tail\n  - child\n",
+		);
 	});
 
 	test("Enter on empty bullet list item exits the list", () => {

@@ -699,12 +699,6 @@ function fireDeleteShortcut() {
 	});
 }
 
-function getFilesTreeRoot(): ShadowRoot {
-	const host = screen.getByLabelText("Files");
-	if (!host.shadowRoot) throw new Error("file tree shadow root not found");
-	return host.shadowRoot;
-}
-
 function queryFilesTreeItem(path: string): HTMLElement | null {
 	const host = screen.queryByLabelText("Files");
 	if (!host?.shadowRoot) return null;

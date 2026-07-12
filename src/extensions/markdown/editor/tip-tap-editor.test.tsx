@@ -1,5 +1,5 @@
 import React, { Suspense, StrictMode } from "react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import {
 	render,
@@ -15,6 +15,8 @@ import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { EditorProvider } from "./editor-context";
 import type { Editor } from "@tiptap/core";
+import { parseFrontmatterSource } from "./frontmatter-value";
+import { FormattingToolbar } from "../components/formatting-toolbar";
 
 function Providers({
 	lix,
@@ -38,10 +40,12 @@ async function renderEditorForMarkdownFile({
 	fileId,
 	markdown,
 	originKey = "atelier.markdown-editor:test-origin",
+	withToolbar = false,
 }: {
 	fileId: string;
 	markdown: string;
 	originKey?: string;
+	withToolbar?: boolean;
 }): Promise<{ lix: Lix; editor: Editor }> {
 	const lix = await openLix({
 		keyValues: [
@@ -74,6 +78,7 @@ async function renderEditorForMarkdownFile({
 		render(
 			<Suspense>
 				<Providers lix={lix}>
+					{withToolbar ? <FormattingToolbar /> : null}
 					<TipTapEditor
 						onReady={(editor) => (editorRef = editor)}
 						originKey={originKey}
@@ -171,6 +176,462 @@ test("renders initial document content", async () => {
 
 	const editor = await screen.findByTestId("tiptap-editor");
 	expect(editor).toHaveTextContent("Hello");
+});
+
+test("renders YAML frontmatter as editable fields", async () => {
+	await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_fields",
+		markdown: "---\ntitle: Demo\npublished: true\n---\n\nHello",
+	});
+
+	expect(await screen.findByText("Frontmatter")).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "YAML" })).toBeEnabled();
+	expect(screen.getByDisplayValue("title")).toBeInTheDocument();
+	expect(screen.getByDisplayValue("Demo")).toBeInTheDocument();
+	expect(
+		screen.getByRole("checkbox", { name: "published value" }),
+	).toBeChecked();
+});
+
+test("preserves existing empty frontmatter until the user removes it", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_empty_frontmatter",
+		markdown: "---\n{}\n---\n\nHello",
+	});
+
+	expect(await screen.findByText("Frontmatter")).toBeInTheDocument();
+	expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Add property" }));
+	});
+	const propertyName = screen.getByRole("textbox", {
+		name: "New frontmatter property name",
+	});
+	await act(async () => {
+		fireEvent.keyDown(propertyName, { key: "Escape" });
+	});
+	expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+	});
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Fields" }));
+	});
+	expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+	expect(screen.getByRole("button", { name: "Add property" })).toBeEnabled();
+});
+
+test("keeps complex or source-annotated YAML in raw mode", async () => {
+	await renderEditorForMarkdownFile({
+		fileId: "file_complex_frontmatter",
+		markdown:
+			"---\n# preserve this context\nmeta:\n  author:\n    name: Atelier\n---\n\nHello",
+	});
+
+	const raw = await screen.findByRole("textbox", {
+		name: "Raw YAML frontmatter",
+	});
+	expect(raw).toHaveValue(
+		"# preserve this context\nmeta:\n  author:\n    name: Atelier",
+	);
+	expect(screen.getByRole("button", { name: "Fields" })).toBeDisabled();
+});
+
+test("switches an open fields editor to raw mode when YAML becomes non-lossless", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_mode_sync",
+		markdown: "---\ntitle: Demo\n---\n\nHello",
+	});
+	expect(
+		await screen.findByRole("textbox", { name: "title value" }),
+	).toBeEnabled();
+
+	await act(async () => {
+		const frontmatter = editor.state.doc.firstChild;
+		if (!frontmatter) throw new Error("frontmatter node not found");
+		editor.view.dispatch(
+			editor.state.tr.setNodeMarkup(0, undefined, {
+				...frontmatter.attrs,
+				value: "# preserve this\ntitle: Demo",
+			}),
+		);
+	});
+
+	expect(
+		await screen.findByRole("textbox", { name: "Raw YAML frontmatter" }),
+	).toHaveValue("# preserve this\ntitle: Demo");
+	expect(screen.queryByRole("textbox", { name: "title value" })).toBeNull();
+	expect(screen.getByRole("button", { name: "Fields" })).toBeDisabled();
+});
+
+test("keeps unsafe YAML integers in raw mode without rounding them", async () => {
+	await renderEditorForMarkdownFile({
+		fileId: "file_large_integer_frontmatter",
+		markdown: "---\nid: 9007199254740993\ntitle: Demo\n---\n\nHello",
+	});
+
+	expect(
+		await screen.findByRole("textbox", { name: "Raw YAML frontmatter" }),
+	).toHaveValue("id: 9007199254740993\ntitle: Demo");
+	expect(screen.getByRole("button", { name: "Fields" })).toBeDisabled();
+});
+
+test.each([
+	["hex", "0x20000000000001"],
+	["exponent", "9.007199254740993e+15"],
+])("keeps unsafe %s YAML numbers in raw mode", async (kind, number) => {
+	await renderEditorForMarkdownFile({
+		fileId: `file_unsafe_${kind}_frontmatter`,
+		markdown: `---\nid: ${number}\ntitle: Demo\n---\n\nHello`,
+	});
+
+	expect(
+		await screen.findByRole("textbox", { name: "Raw YAML frontmatter" }),
+	).toHaveValue(`id: ${number}\ntitle: Demo`);
+	expect(screen.getByRole("button", { name: "Fields" })).toBeDisabled();
+});
+
+test("keeps both values when a frontmatter field is renamed to an existing key", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_duplicate_frontmatter_key",
+		markdown: "---\ntitle: Demo\nslug: demo\n---\n\nHello",
+	});
+
+	const keyInput = await screen.findByDisplayValue("title");
+	keyInput.focus();
+	for (const partial of ["s", "sl", "slu", "slug"]) {
+		await act(async () => {
+			fireEvent.change(keyInput, { target: { value: partial } });
+		});
+		expect(keyInput).toHaveFocus();
+	}
+	await act(async () => {
+		fireEvent.blur(keyInput);
+	});
+
+	const value = parseFrontmatterSource(
+		String(editor.state.doc.firstChild?.attrs.value ?? ""),
+	).value;
+	expect(value).toEqual({ slug2: "Demo", slug: "demo" });
+});
+
+test("allows a renamed key to extend an existing key prefix", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_key_prefix",
+		markdown: "---\ntitle: Demo\nslug: demo\n---\n\nHello",
+	});
+	const keyInput = await screen.findByDisplayValue("title");
+	keyInput.focus();
+	for (const partial of [
+		"s",
+		"sl",
+		"slu",
+		"slug",
+		"slug_",
+		"slug_v",
+		"slug_value",
+	]) {
+		await act(async () => {
+			fireEvent.change(keyInput, { target: { value: partial } });
+		});
+		expect(keyInput).toHaveFocus();
+		expect(keyInput).toHaveValue(partial);
+	}
+	await act(async () => {
+		fireEvent.blur(keyInput);
+	});
+
+	expect(
+		parseFrontmatterSource(
+			String(editor.state.doc.firstChild?.attrs.value ?? ""),
+		).value,
+	).toEqual({ slug_value: "Demo", slug: "demo" });
+});
+
+test("temporarily clearing a numeric field preserves its numeric type", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_numeric_frontmatter",
+		markdown: "---\ncount: 3\n---\n\nHello",
+	});
+	const input = await screen.findByRole("spinbutton", { name: "count value" });
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "" } });
+	});
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+
+	expect(input).toHaveValue(3);
+	expect(
+		parseFrontmatterSource(
+			String(editor.state.doc.firstChild?.attrs.value ?? ""),
+		).value,
+	).toEqual({ count: 3 });
+});
+
+test("numeric fields commit safe values and reject unsafe or invalid drafts", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_numeric_frontmatter_validation",
+		markdown: "---\ncount: 3\n---\n\nHello",
+	});
+	const input = await screen.findByRole("spinbutton", { name: "count value" });
+	const frontmatterValue = () =>
+		parseFrontmatterSource(
+			String(editor.state.doc.firstChild?.attrs.value ?? ""),
+		).value;
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "4.5" } });
+	});
+	expect(frontmatterValue()).toEqual({ count: 3 });
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "9007199254740992" } });
+	});
+	expect(input).toHaveAttribute("aria-invalid", "true");
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+	expect(input).toHaveValue(4.5);
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "1e999" } });
+	});
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+	expect(typeof frontmatterValue()?.count).toBe("number");
+});
+
+test("deactivates and restores the toolbar around real frontmatter focus", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_toolbar_focus",
+		markdown: "---\ntitle: Demo\n---\n\n- after",
+		withToolbar: true,
+	});
+	let listTextPosition = 1;
+	editor.state.doc.descendants((node, pos) => {
+		if (node.isText && node.text === "after") listTextPosition = pos;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(listTextPosition);
+	});
+	const controls = await screen.findByLabelText("Text formatting controls");
+	const bulletButton = screen.getByRole("button", { name: "Bullet list" });
+	expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+
+	await act(async () => {
+		screen.getByRole("textbox", { name: "title value" }).focus();
+	});
+	expect(controls).toHaveAttribute("data-disabled", "true");
+	expect(bulletButton).toHaveAttribute("aria-pressed", "false");
+	expect(bulletButton).toBeDisabled();
+
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Remove title" }));
+	});
+	await waitFor(() => {
+		expect(controls).toHaveAttribute("data-disabled", "false");
+		expect(bulletButton).toBeEnabled();
+	});
+});
+
+test("adds frontmatter from the first Markdown block disclosure", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_disclosure",
+		markdown: "Hello",
+	});
+	const firstBlock = screen
+		.getByTestId("tiptap-editor")
+		.querySelector(".ProseMirror > p");
+	expect(firstBlock).not.toBeNull();
+
+	await act(async () => {
+		fireEvent.pointerEnter(firstBlock!);
+	});
+	const addButton = screen.getByRole("button", { name: "Add frontmatter" });
+	expect(addButton).toHaveAttribute("data-visible", "true");
+	await act(async () => {
+		fireEvent.click(addButton);
+	});
+
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+	});
+	const propertyName = screen.getByRole("textbox", {
+		name: "New frontmatter property name",
+	});
+	expect(propertyName).toHaveFocus();
+	await act(async () => {
+		fireEvent.change(propertyName, { target: { value: "title" } });
+		fireEvent.keyDown(propertyName, { key: "Enter" });
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.attrs.value).toBe('title: ""');
+	});
+	expect(screen.getByPlaceholderText("Empty")).toHaveFocus();
+});
+
+test("preserves newly created frontmatter after it has held a property", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_created_then_emptied",
+		markdown: "Hello",
+	});
+	const firstBlock = screen
+		.getByTestId("tiptap-editor")
+		.querySelector(".ProseMirror > p");
+	await act(async () => {
+		fireEvent.pointerEnter(firstBlock!);
+		fireEvent.click(screen.getByRole("button", { name: "Add frontmatter" }));
+	});
+	const propertyName = await screen.findByRole("textbox", {
+		name: "New frontmatter property name",
+	});
+	await act(async () => {
+		fireEvent.change(propertyName, { target: { value: "title" } });
+		fireEvent.keyDown(propertyName, { key: "Enter" });
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.attrs.value).toBe('title: ""');
+	});
+
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+	});
+	const rawYaml = screen.getByRole("textbox", {
+		name: "Raw YAML frontmatter",
+	});
+	await act(async () => {
+		fireEvent.change(rawYaml, { target: { value: "{}" } });
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.attrs.value).toBe("{}");
+	});
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Fields" }));
+	});
+
+	expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+	expect(screen.getByRole("button", { name: "Add property" })).toBeEnabled();
+});
+
+test("keeps the frontmatter disclosure visible across the area above the first block", async () => {
+	await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_disclosure_hover_zone",
+		markdown: "# Hello",
+	});
+	const editorNode = screen.getByTestId("tiptap-editor");
+	const surface = editorNode.closest(".tiptap-container");
+	const firstBlock = editorNode.querySelector(".ProseMirror > h1");
+	expect(surface).not.toBeNull();
+	expect(firstBlock).not.toBeNull();
+	vi.spyOn(surface!, "getBoundingClientRect").mockReturnValue({
+		bottom: 600,
+		height: 600,
+		left: 0,
+		right: 800,
+		top: 20,
+		width: 800,
+		x: 0,
+		y: 20,
+		toJSON: () => ({}),
+	});
+	vi.spyOn(firstBlock!, "getBoundingClientRect").mockReturnValue({
+		bottom: 180,
+		height: 60,
+		left: 100,
+		right: 700,
+		top: 120,
+		width: 600,
+		x: 100,
+		y: 120,
+		toJSON: () => ({}),
+	});
+
+	await act(async () => {
+		fireEvent.pointerMove(surface!, { clientY: 60 });
+	});
+
+	expect(
+		screen.getByRole("button", { name: "Add frontmatter" }),
+	).toHaveAttribute("data-visible", "true");
+});
+
+test("reveals the frontmatter disclosure when reached by keyboard focus", async () => {
+	await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_disclosure_keyboard",
+		markdown: "Hello",
+	});
+	const button = screen.getByRole("button", { name: "Add frontmatter" });
+	expect(button).toHaveAttribute("data-visible", "false");
+
+	await act(async () => {
+		button.focus();
+	});
+
+	expect(button).toHaveFocus();
+	expect(button).toHaveAttribute("data-visible", "true");
+});
+
+test("removing the final property removes frontmatter and restores its disclosure", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_remove_last",
+		markdown: "---\ntitle: Demo\n---\n\nHello",
+	});
+
+	await act(async () => {
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Remove title" }),
+		);
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.type.name).toBe("paragraph");
+	});
+	expect(screen.queryByText("Frontmatter")).not.toBeInTheDocument();
+
+	const firstBlock = screen
+		.getByTestId("tiptap-editor")
+		.querySelector(".ProseMirror > p");
+	expect(firstBlock).not.toBeNull();
+	await act(async () => {
+		fireEvent.pointerEnter(firstBlock!);
+	});
+	expect(
+		screen.getByRole("button", { name: "Add frontmatter" }),
+	).toHaveAttribute("data-visible", "true");
+});
+
+test("cancelling the first property returns to the no-frontmatter state", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_frontmatter_cancel_first",
+		markdown: "Hello",
+	});
+	const firstBlock = screen
+		.getByTestId("tiptap-editor")
+		.querySelector(".ProseMirror > p");
+	await act(async () => {
+		fireEvent.pointerEnter(firstBlock!);
+		fireEvent.click(screen.getByRole("button", { name: "Add frontmatter" }));
+	});
+	const propertyName = await screen.findByRole("textbox", {
+		name: "New frontmatter property name",
+	});
+	await act(async () => {
+		fireEvent.keyDown(propertyName, { key: "Escape" });
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.type.name).toBe("paragraph");
+	});
 });
 
 test("reopens a file from fresh data instead of the prior query cache", async () => {
@@ -339,7 +800,7 @@ test("renders content under React.StrictMode", async () => {
 	await waitFor(() => expect(editor).toHaveTextContent("Hello Strict"));
 });
 
-test("shows placeholder only while focused on an empty document", async () => {
+test("shows the command hint only while focused on an empty document", async () => {
 	const fileId = "file_placeholder_focus";
 	const lix = await openLix({
 		keyValues: [
@@ -396,7 +857,9 @@ test("shows placeholder only while focused on an empty document", async () => {
 
 	await waitFor(() => {
 		const paragraph = editorNode.querySelector("p");
-		expect(paragraph?.getAttribute("data-placeholder")).toBe("Start typing...");
+		expect(paragraph?.getAttribute("data-placeholder")).toBe(
+			"Press ‘/’ for commands",
+		);
 		expect(container?.getAttribute("data-editor-focused")).toBe("true");
 	});
 
@@ -407,6 +870,68 @@ test("shows placeholder only while focused on an empty document", async () => {
 	await waitFor(() => {
 		expect(container?.getAttribute("data-editor-focused")).toBe("false");
 	});
+});
+
+test("shows the command hint on a focused empty paragraph after Enter", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_placeholder_new_line",
+		markdown: "Existing paragraph",
+	});
+	const editorNode = screen.getByTestId("tiptap-editor");
+
+	await act(async () => {
+		editor.commands.focus("end");
+		editor.commands.splitBlock();
+	});
+
+	await waitFor(() => {
+		const paragraphs = editorNode.querySelectorAll("p");
+		const emptyParagraph = paragraphs[paragraphs.length - 1];
+		expect(emptyParagraph?.textContent).toBe("");
+		expect(emptyParagraph?.classList.contains("is-empty")).toBe(true);
+		expect(emptyParagraph?.getAttribute("data-placeholder")).toBe(
+			"Press ‘/’ for commands",
+		);
+	});
+});
+
+test("keeps the command hint on only the active empty paragraph", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_placeholder_arrow_navigation",
+		markdown: "Existing paragraph",
+	});
+	const editorNode = screen.getByTestId("tiptap-editor");
+
+	await act(async () => {
+		editor.commands.focus("end");
+		editor.commands.splitBlock();
+		editor.commands.splitBlock();
+	});
+
+	const emptyParagraphPositions: number[] = [];
+	editor.state.doc.descendants((node, pos) => {
+		if (node.type.name === "paragraph" && node.content.size === 0) {
+			emptyParagraphPositions.push(pos + 1);
+		}
+	});
+	expect(emptyParagraphPositions).toHaveLength(2);
+
+	for (const position of [
+		emptyParagraphPositions[0],
+		emptyParagraphPositions[1],
+		emptyParagraphPositions[0],
+	]) {
+		await act(async () => {
+			editor.commands.setTextSelection(position);
+		});
+
+		await waitFor(() => {
+			const placeholders = editorNode.querySelectorAll(
+				'p.is-empty[data-placeholder="Press ‘/’ for commands"]',
+			);
+			expect(placeholders).toHaveLength(1);
+		});
+	}
 });
 
 test("uses heading 1 as the requested empty document default", async () => {

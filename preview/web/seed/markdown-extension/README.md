@@ -97,7 +97,7 @@ type WorkspaceFile = {
 };
 
 const readme: WorkspaceFile = {
-	path: "/README.md",
+	path: "/markdown-extension/README.md",
 	contents: new TextEncoder().encode("# Hello, GFM!"),
 };
 ```

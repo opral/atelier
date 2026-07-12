@@ -150,6 +150,10 @@ describe("FormattingToolbar", () => {
 			"data-attr",
 			"markdown-format-italic",
 		);
+		expect(screen.getByLabelText("Strikethrough")).toHaveAttribute(
+			"data-attr",
+			"markdown-format-strike",
+		);
 		expect(screen.getByLabelText("Inline code")).toHaveAttribute(
 			"data-attr",
 			"markdown-format-code",
@@ -177,6 +181,65 @@ describe("FormattingToolbar", () => {
 		destroyEditor(setup);
 	});
 
+	test("keeps formatting controls scrollable while copy stays pinned", async () => {
+		const setup = createEditor(paragraphDoc);
+		const utils = renderToolbar(setup.editor);
+		const toolbar = await screen.findByRole("toolbar", {
+			name: "Formatting toolbar",
+		});
+		const controls = toolbar.querySelector(
+			"[data-attr='markdown-format-controls']",
+		);
+
+		expect(controls).toHaveClass("overflow-x-auto");
+		expect(controls).toHaveAttribute("aria-label", "Text formatting controls");
+		expect(controls).not.toContainElement(
+			screen.getByLabelText("Copy markdown"),
+		);
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
+	test("deactivates formatting controls while frontmatter is being edited", async () => {
+		const setup = createEditor(bulletListDoc);
+		const utils = renderToolbar(setup.editor);
+		const controls = await screen.findByLabelText("Text formatting controls");
+		const bulletButton = screen.getByLabelText("Bullet list");
+		expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+
+		const frontmatter = document.createElement("div");
+		frontmatter.dataset.markdownFrontmatter = "true";
+		const input = document.createElement("input");
+		frontmatter.appendChild(input);
+		setup.editor.view.dom.appendChild(frontmatter);
+
+		await act(async () => {
+			fireEvent.focusIn(input);
+		});
+
+		expect(controls).toHaveAttribute("data-disabled", "true");
+		expect(screen.getByRole("combobox")).toHaveTextContent("Text");
+		expect(bulletButton).toHaveAttribute("aria-pressed", "false");
+		expect(bulletButton).toBeDisabled();
+		expect(screen.getByLabelText("Copy markdown")).toBeEnabled();
+
+		await act(async () => {
+			fireEvent.focusIn(setup.editor.view.dom);
+		});
+
+		expect(controls).toHaveAttribute("data-disabled", "false");
+		expect(bulletButton).toHaveAttribute("aria-pressed", "true");
+		expect(bulletButton).toBeEnabled();
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
 	test("applies bold formatting to the current selection", async () => {
 		const setup = createEditor(paragraphDoc);
 		const utils = renderToolbar(setup.editor);
@@ -189,6 +252,29 @@ describe("FormattingToolbar", () => {
 		});
 
 		expect(setup.editor.isActive("bold")).toBe(true);
+
+		await act(async () => {
+			utils.unmount();
+		});
+		destroyEditor(setup);
+	});
+
+	test("applies strikethrough formatting to the current selection", async () => {
+		const setup = createEditor(paragraphDoc);
+		const utils = renderToolbar(setup.editor);
+
+		await screen.findByLabelText("Strikethrough");
+
+		await act(async () => {
+			setup.editor.commands.setTextSelection({ from: 1, to: 6 });
+			fireEvent.click(screen.getByLabelText("Strikethrough"));
+		});
+
+		expect(setup.editor.isActive("strike")).toBe(true);
+		expect(screen.getByLabelText("Strikethrough")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
 
 		await act(async () => {
 			utils.unmount();

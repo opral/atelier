@@ -148,11 +148,11 @@ function astBlockToPM(node: any): PMNode {
 		case "yaml": {
 			const n = node as any;
 			return {
-				type: "markdownUnsupported",
+				type: "markdownFrontmatter",
 				attrs: {
-					kind: "yaml",
 					value: n.value ?? "",
 					data: buildNodeData(n.data),
+					autofocus: false,
 				},
 			};
 		}
@@ -162,13 +162,28 @@ function astBlockToPM(node: any): PMNode {
 		}
 		case "table": {
 			const n = node as any;
+			const align = Array.isArray(n.align) ? n.align : [];
 			return {
 				type: "table",
 				attrs: {
-					align: Array.isArray(n.align) ? n.align : [],
+					align,
 					data: buildNodeData(n.data),
 				},
-				content: (n.children || []).map(astBlockToPM),
+				content: (n.children || []).map((row: any, rowIndex: number) => ({
+					type: "tableRow",
+					attrs: { data: buildNodeData(row.data) },
+					content: (row.children || []).map(
+						(cell: any, columnIndex: number) => ({
+							type: "tableCell",
+							attrs: {
+								isHeader: rowIndex === 0,
+								align: align[columnIndex] ?? null,
+								data: buildNodeData(cell.data),
+							},
+							content: flattenInline((cell.children || []) as any, []),
+						}),
+					),
+				})),
 			};
 		}
 		case "tableRow": {
@@ -183,7 +198,11 @@ function astBlockToPM(node: any): PMNode {
 			const n = node as any;
 			return {
 				type: "tableCell",
-				attrs: { data: buildNodeData(n.data) },
+				attrs: {
+					isHeader: false,
+					align: null,
+					data: buildNodeData(n.data),
+				},
 				content: flattenInline((n.children || []) as any, []),
 			};
 		}

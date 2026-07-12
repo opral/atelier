@@ -7,6 +7,7 @@ import {
 	List,
 	ListOrdered,
 	Minus,
+	PanelTopDashed,
 	Pilcrow,
 	Table,
 	TextQuote,
@@ -22,11 +23,24 @@ export type BlockCommand = {
 	keywords: string[];
 	/** Insert action - used by slash commands */
 	insert: (editor: Editor) => void;
+	isAvailable?: (editor: Editor) => boolean;
 	/** Toggle action - used by toolbar (converts existing block) */
 	toggle?: (editor: Editor) => void;
 };
 
 export const BLOCK_COMMANDS: BlockCommand[] = [
+	{
+		id: "frontmatter",
+		label: "Frontmatter",
+		description: "Add YAML frontmatter to this document",
+		icon: PanelTopDashed,
+		keywords: ["yaml", "metadata", "fields", "properties"],
+		isAvailable: (editor) =>
+			editor.state.doc.firstChild?.type.name !== "markdownFrontmatter",
+		insert: (editor) => {
+			editor.commands.setFrontmatter();
+		},
+	},
 	{
 		id: "paragraph",
 		label: "Text",
@@ -170,7 +184,10 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 			for (let r = 0; r < 3; r++) {
 				const cells = [];
 				for (let c = 0; c < 3; c++) {
-					cells.push({ type: "tableCell" });
+					cells.push({
+						type: "tableCell",
+						attrs: { isHeader: r === 0, align: null },
+					});
 				}
 				rows.push({ type: "tableRow", content: cells });
 			}
