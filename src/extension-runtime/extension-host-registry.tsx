@@ -146,7 +146,9 @@ export function ExtensionHostRegistryProvider({
 	const pruneHosts = useCallback((activeInstances: Set<string>) => {
 		for (const [key, record] of hostsRef.current) {
 			if (activeInstances.has(key)) continue;
-			disposeExtension(record);
+			// Pruning runs during Atelier's parent render. Nested React roots must
+			// unmount after that commit or React reports a synchronous root race.
+			disposeExtension(record, { defer: true });
 			record.container.remove();
 			hostsRef.current.delete(key);
 		}
