@@ -288,11 +288,13 @@ export function markdownWcNodes(
 						input = document.createElement("input");
 						input.type = "checkbox";
 						input.checked = node.attrs.checked === true;
+						input.disabled = !editor.isEditable;
 						input.addEventListener("mousedown", (e) => {
 							// Prevent focusing the checkbox from moving the caret unexpectedly
 							e.preventDefault();
 						});
 						input.addEventListener("change", () => {
+							if (!editor.isEditable) return;
 							const pos = typeof getPos === "function" ? getPos() : null;
 							if (pos == null) return;
 							const tr = editor.view.state.tr.setNodeMarkup(pos, undefined, {
@@ -321,7 +323,10 @@ export function markdownWcNodes(
 							// If task-state toggled between task/non-task, recreate
 							if (wasTask !== isNowTask) return false;
 							if (isNowTask) {
-								if (input) input.checked = newNode.attrs.checked === true;
+								if (input) {
+									input.checked = newNode.attrs.checked === true;
+									input.disabled = !editor.isEditable;
+								}
 								dom.setAttribute(
 									"data-task",
 									newNode.attrs.checked ? "x" : " ",

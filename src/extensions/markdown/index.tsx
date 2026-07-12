@@ -19,7 +19,7 @@ import { TipTapEditor } from "@/extensions/markdown/editor/tip-tap-editor";
 import { EditorContent } from "@tiptap/react";
 import { createEditor } from "@/extensions/markdown/editor/create-editor";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
-import { renderMarkdownReviewDiffHtml } from "./render-review-diff-html";
+import { MarkdownReviewEditor } from "./review/review-editor";
 import "./style.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
@@ -236,6 +236,7 @@ function MarkdownLiveViewLoaded({
 		useExternalWriteReviewData(externalWriteReview);
 	const effectiveFileRow = fileRow;
 	const review = externalWriteReview;
+	const isReviewing = review !== null;
 	const reviewData: ExternalWriteReviewData | null = externalWriteReviewData;
 	const reviewDiff: MarkdownReviewDiff | null = reviewData
 		? {
@@ -259,10 +260,10 @@ function MarkdownLiveViewLoaded({
 			<EditorProvider>
 				<div
 					className={`markdown-view flex h-full flex-col bg-background ${
-						reviewDiff ? "markdown-review" : ""
+						isReviewing ? "markdown-review" : ""
 					}`}
 				>
-					<div className={reviewDiff ? "pointer-events-none" : undefined}>
+					<div className={isReviewing ? "pointer-events-none" : undefined}>
 						<FormattingToolbar />
 					</div>
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
@@ -273,13 +274,14 @@ function MarkdownLiveViewLoaded({
 							isActiveView={isActiveView}
 							focusOnLoad={focusOnLoad}
 							defaultBlock={defaultBlock}
+							readOnly={isReviewing}
 							openWorkspaceFile={openWorkspaceFile}
 							onPersist={({ filePath: persistedPath }) => {
 								const resolvedPath = persistedPath ?? effectiveFileRow.path;
 								onDocumentModified?.(resolvedPath);
 							}}
 						/>
-						{isActiveView && isPanelFocused && !reviewDiff ? (
+						{isActiveView && isPanelFocused && !isReviewing ? (
 							<MarkdownAutosaveHint />
 						) : null}
 						{reviewDiff && review ? (
@@ -292,6 +294,7 @@ function MarkdownLiveViewLoaded({
 									reviewId={review.reviewId}
 									beforeCommitId={review.beforeCommitId}
 									afterCommitId={review.afterCommitId}
+									openWorkspaceFile={openWorkspaceFile}
 									isActive={isActiveView && isPanelFocused}
 									onAccept={onAcceptReviewDiff}
 									onReject={onRejectReviewDiff}
@@ -302,7 +305,7 @@ function MarkdownLiveViewLoaded({
 							<MarkdownReviewOverlayFallback />
 						) : null}
 					</div>
-					{reviewDiff ? null : <SlashCommandMenu />}
+					{isReviewing ? null : <SlashCommandMenu />}
 				</div>
 			</EditorProvider>
 		);
@@ -421,6 +424,7 @@ function MarkdownHistoricalViewLoaded({
 								reviewId={review.reviewId}
 								beforeCommitId={review.beforeCommitId}
 								afterCommitId={review.afterCommitId}
+								openWorkspaceFile={openWorkspaceFile}
 								isActive={isActiveView && isPanelFocused}
 								controls="none"
 							/>
@@ -520,13 +524,14 @@ function MarkdownSnapshotView({
 
 function MarkdownReviewOverlay({
 	fileId,
-	sourceFilePath: _sourceFilePath,
+	sourceFilePath,
 	review,
 	reviewDiff,
 	reviewId,
 	beforeCommitId,
 	afterCommitId,
 	isActive,
+	openWorkspaceFile,
 	controls = "review",
 	onAccept,
 	onReject,
@@ -539,6 +544,7 @@ function MarkdownReviewOverlay({
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
 	readonly isActive: boolean;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly controls?: "review" | "none";
 	readonly onAccept?: (args: {
 		readonly fileId: string;
@@ -562,16 +568,18 @@ function MarkdownReviewOverlay({
 		beforeBlocks,
 		afterBlocks,
 	);
-	const diffHtml = renderMarkdownReviewDiffHtml(enrichedReviewDiff);
 	const rejectReview = () => void onReject?.({ fileId, reviewId, review });
 
 	return (
 		<div className="markdown-review-overlay">
 			<div className="markdown-review-surface">
 				<div className="ph-mask tiptap-container w-full h-full overflow-y-auto bg-background">
-					<div
-						className="ProseMirror tiptap w-full mx-auto"
-						dangerouslySetInnerHTML={{ __html: diffHtml }}
+					<MarkdownReviewEditor
+						key={`${reviewId}:${beforeCommitId}:${afterCommitId}`}
+						reviewDiff={enrichedReviewDiff}
+						sourceFilePath={sourceFilePath}
+						afterCommitId={afterCommitId}
+						openWorkspaceFile={openWorkspaceFile}
 					/>
 				</div>
 			</div>

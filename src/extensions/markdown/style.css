@@ -1686,7 +1686,7 @@
 		user-select: text;
 	}
 
-	.markdown-review .ProseMirror [data-diff-status="added"] {
+	.markdown-review .ProseMirror [data-review-status="added"] {
 		background-color: var(--color-bg-diff-added);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
@@ -1695,7 +1695,7 @@
 		text-decoration: none;
 	}
 
-	.markdown-review .ProseMirror [data-diff-status="removed"] {
+	.markdown-review .ProseMirror [data-review-status="removed"] {
 		background-color: var(--color-bg-diff-removed);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
@@ -1703,11 +1703,5 @@
 		color: var(--color-text-diff-removed);
 		text-decoration: line-through;
 		text-decoration-color: var(--color-border-diff-removed);
-	}
-
-	.markdown-review .ProseMirror [data-diff-status="modified"] {
-		background-color: var(--color-bg-diff-modified);
-		border-radius: 0.25rem;
-		color: var(--color-text-diff-modified);
 	}
 }

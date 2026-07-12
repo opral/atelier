@@ -1,19 +1,42 @@
-import type { Lix, SqlParam } from "@lix-js/sdk";
+import type { ExecuteResult, Lix, SqlParam } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
 
-export async function upsertMarkdownFile(args: {
+type MarkdownFileWriteArgs = {
 	lix: Lix;
 	fileId: string;
 	markdown: string;
+	expectedMarkdown?: string;
 	path?: string;
 	metadata?: any;
 	createIfMissing?: boolean;
 	originKey?: string;
-}): Promise<void> {
+};
+
+type MarkdownFileCompareAndSwapArgs = MarkdownFileWriteArgs & {
+	expectedMarkdown: string;
+};
+
+type MarkdownFileLegacyUpsertArgs = Omit<
+	MarkdownFileWriteArgs,
+	"expectedMarkdown"
+> & {
+	expectedMarkdown?: undefined;
+};
+
+export function upsertMarkdownFile(
+	args: MarkdownFileCompareAndSwapArgs,
+): Promise<boolean>;
+export function upsertMarkdownFile(
+	args: MarkdownFileLegacyUpsertArgs,
+): Promise<void>;
+export async function upsertMarkdownFile(
+	args: MarkdownFileWriteArgs,
+): Promise<boolean | void> {
 	const {
 		lix,
 		fileId,
 		markdown,
+		expectedMarkdown,
 		path,
 		metadata,
 		createIfMissing = true,
@@ -42,18 +65,29 @@ export async function upsertMarkdownFile(args: {
 		if (metadata !== undefined && metadata !== existing.lixcol_metadata) {
 			updateValues.lixcol_metadata = resolvedMetadata;
 		}
-		await executeMarkdownFileWrite(
+		const expectedData =
+			expectedMarkdown === undefined
+				? undefined
+				: new TextEncoder().encode(expectedMarkdown);
+		const result = await executeMarkdownFileWrite(
 			lix,
 			{
 				sql: `UPDATE lix_file SET ${Object.keys(updateValues)
 					.map((column) => `${column} = ?`)
-					.join(", ")} WHERE id = ?`,
-				params: [...Object.values(updateValues), fileId],
+					.join(", ")} WHERE id = ?${expectedData ? " AND data = ?" : ""}`,
+				params: [
+					...Object.values(updateValues),
+					fileId,
+					...(expectedData ? [expectedData] : []),
+				],
 			},
 			originKey,
 		);
+		return expectedMarkdown === undefined ? undefined : result.rowsAffected > 0;
 	} else {
-		if (!createIfMissing) return;
+		if (!createIfMissing) {
+			return expectedMarkdown === undefined ? undefined : false;
+		}
 		// Insert requires a path; use provided or fallback to /<fileId>.md
 		await executeMarkdownFileWrite(
 			lix,
@@ -63,6 +97,7 @@ export async function upsertMarkdownFile(args: {
 			},
 			originKey,
 		);
+		return expectedMarkdown === undefined ? undefined : true;
 	}
 }
 
@@ -70,10 +105,9 @@ async function executeMarkdownFileWrite(
 	lix: Lix,
 	statement: { sql: string; params: SqlParam[] },
 	originKey: string | undefined,
-): Promise<void> {
+): Promise<ExecuteResult> {
 	if (originKey) {
-		await lix.execute(statement.sql, statement.params, { originKey });
-		return;
+		return await lix.execute(statement.sql, statement.params, { originKey });
 	}
-	await lix.execute(statement.sql, statement.params);
+	return await lix.execute(statement.sql, statement.params);
 }

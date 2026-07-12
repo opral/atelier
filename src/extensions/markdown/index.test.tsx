@@ -207,9 +207,14 @@ describe("MarkdownView", () => {
 				utils!.container.querySelector(".markdown-review-overlay"),
 			).toBeInTheDocument();
 			expect(
-				utils!.container.querySelector("[data-diff-status]"),
+				utils!.container.querySelector("[data-review-status]"),
 			).toBeInTheDocument();
 		});
+		const reviewEditor = screen.getByTestId("markdown-review-editor");
+		expect(reviewEditor.querySelector(".ProseMirror")).toHaveAttribute(
+			"contenteditable",
+			"false",
+		);
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();
@@ -273,10 +278,10 @@ describe("MarkdownView", () => {
 			expect(utils!.container).toHaveTextContent("Stable version");
 		});
 		expect(
-			utils!.container.querySelector("[data-diff-status='added']"),
+			utils!.container.querySelector("[data-review-status='added']"),
 		).toBeNull();
 		expect(
-			utils!.container.querySelector("[data-diff-status='removed']"),
+			utils!.container.querySelector("[data-review-status='removed']"),
 		).toBeNull();
 
 		await act(async () => {
@@ -315,7 +320,11 @@ describe("MarkdownView", () => {
 			);
 		});
 
-		expect(await screen.findByTestId("tiptap-editor")).toBeInTheDocument();
+		const liveEditor = await screen.findByTestId("tiptap-editor");
+		expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
+			"contenteditable",
+			"true",
+		);
 
 		const event = new KeyboardEvent("keydown", {
 			key: "s",
@@ -597,7 +606,11 @@ describe("MarkdownView", () => {
 			);
 		});
 
-		expect(await screen.findByTestId("tiptap-editor")).toBeInTheDocument();
+		const liveEditor = await screen.findByTestId("tiptap-editor");
+		expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
+			"contenteditable",
+			"true",
+		);
 		const beforeCommitId = await activeCommitId(lix);
 
 		await act(async () => {
@@ -627,10 +640,23 @@ describe("MarkdownView", () => {
 			"data-attr",
 			"diff-reject",
 		);
+		await waitFor(() => {
+			expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
+				"contenteditable",
+				"false",
+			);
+			expect(screen.getByTestId("markdown-review-editor")).toBeInTheDocument();
+		});
 
 		await act(async () => {
 			utils?.unmount();
 		});
+		const persisted = await qb(lix)
+			.selectFrom("lix_file")
+			.select("data")
+			.where("id", "=", "file_review_startup")
+			.executeTakeFirstOrThrow();
+		expect(new TextDecoder().decode(persisted.data)).toBe("# After");
 	});
 
 	test("renders checkpoint diffs without review controls for missing active files", async () => {
@@ -681,12 +707,13 @@ describe("MarkdownView", () => {
 				utils!.container.querySelector(".markdown-review-overlay"),
 			).toBeInTheDocument();
 			expect(
-				utils!.container.querySelector("[data-diff-status]"),
+				utils!.container.querySelector("[data-review-status]"),
 			).toBeInTheDocument();
 		});
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		expect(screen.getByTestId("markdown-review-editor")).toBeInTheDocument();
 
 		await act(async () => {
 			utils?.unmount();

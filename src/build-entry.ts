@@ -1,7 +1,16 @@
 import "./index.css";
 
-export { Atelier, ATELIER_BUILTIN_EXTENSION_IDS, createAtelier } from "./index";
+export {
+	Atelier,
+	ATELIER_BUILTIN_EXTENSION_IDS,
+	AtelierDeveloperTools,
+	applyDeveloperWorkflowScenario,
+	createAtelier,
+	recordAgentTurnCommitRange,
+	simulateMarkdownAgentWorkflow,
+} from "./index";
 export type {
+	AgentTurnCommitRange,
 	AtelierBuiltinExtensionId,
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
@@ -11,7 +20,9 @@ export type {
 	AtelierInstance,
 	AtelierOptions,
 	AtelierProps,
+	AtelierRevisionSelection,
 	AtelierSidePanel,
 	AtelierSlots,
-	AtelierRevisionSelection,
+	DeveloperWorkflowScenario,
+	SimulatedAgentWorkflow,
 } from "./index";

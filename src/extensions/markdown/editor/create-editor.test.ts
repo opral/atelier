@@ -477,6 +477,134 @@ test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 	editor.destroy();
 });
 
+test("does not persist editor transactions while persistence is suspended", async () => {
+	const lix = await openLix();
+	const fileId = "suspended_persistence";
+	const initialMarkdown = "Agent result\n";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/suspended-persistence.md",
+			data: new TextEncoder().encode(initialMarkdown),
+		})
+		.execute();
+
+	let suspended = true;
+	const editor = createEditor({
+		lix,
+		fileId,
+		initialMarkdown,
+		persistDebounceMs: 0,
+		shouldPersist: () => !suspended,
+	});
+	editor.commands.insertContentAt(
+		editor.state.doc.content.size,
+		" hidden edit",
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(await readMarkdown(lix, fileId)).toBe(initialMarkdown);
+
+	suspended = false;
+	editor.commands.insertContentAt(
+		editor.state.doc.content.size,
+		" visible edit",
+	);
+	const persisted = await waitForMarkdown(lix, fileId, (markdown) =>
+		markdown.includes("visible edit"),
+	);
+	expect(persisted).toContain("visible edit");
+	editor.destroy();
+});
+
+test("does not flush stale editor content when destroyed while suspended", async () => {
+	const lix = await openLix();
+	const fileId = "suspended_destroy";
+	const externalMarkdown = "# Agent after\n";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/suspended-destroy.md",
+			data: new TextEncoder().encode(externalMarkdown),
+		})
+		.execute();
+
+	const editor = createEditor({
+		lix,
+		fileId,
+		initialMarkdown: "# Stale local before\n",
+		persistDebounceMs: 100,
+		shouldPersist: () => false,
+	});
+	editor.commands.insertContentAt(editor.state.doc.content.size, " local edit");
+	editor.destroy();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(await readMarkdown(lix, fileId)).toBe(externalMarkdown);
+});
+
+test("stale in-flight autosave cannot overwrite a concurrent external write", async () => {
+	const lix = await openLix();
+	const fileId = "autosave_compare_and_swap";
+	const initialMarkdown = "Initial\n";
+	const externalMarkdown = "External wins\n";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/autosave-compare-and-swap.md",
+			data: new TextEncoder().encode(initialMarkdown),
+		})
+		.execute();
+
+	let interleavedExternalWrite = false;
+	const lixWithInterleavedWrite = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute") {
+				return async (...args: Parameters<typeof lix.execute>) => {
+					const [statement] = args;
+					if (
+						!interleavedExternalWrite &&
+						statement.startsWith("UPDATE lix_file SET data = ? WHERE id = ?")
+					) {
+						interleavedExternalWrite = true;
+						await target.execute(
+							"UPDATE lix_file SET data = ? WHERE id = ?",
+							[new TextEncoder().encode(externalMarkdown), fileId],
+							{ originKey: "external-writer" },
+						);
+					}
+					return await target.execute(...args);
+				};
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+
+	const editor = createEditor({
+		lix: lixWithInterleavedWrite,
+		fileId,
+		initialMarkdown,
+		persistDebounceMs: 0,
+	});
+	editor.commands.insertContentAt(editor.state.doc.content.size, " Local edit");
+
+	const persisted = await waitForMarkdown(
+		lix,
+		fileId,
+		(markdown) => markdown === externalMarkdown,
+	);
+	expect(interleavedExternalWrite).toBe(true);
+	expect(persisted).toBe(externalMarkdown);
+
+	editor.destroy();
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	expect(await readMarkdown(lix, fileId)).toBe(externalMarkdown);
+});
+
 test("two Enters create three persisted paragraphs in order", async () => {
 	const lix = await openLix();
 	const fileId = "enter_split_three";
