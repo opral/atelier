@@ -71,6 +71,7 @@ describe("PdfPreview", () => {
 		});
 		const renderArgs = pdfRendererMocks.render.mock.calls[0]![0];
 		expect(renderArgs.src).toBe("blob:atelier-pdf");
+		expect(new TextDecoder().decode(renderArgs.data)).toBe("%PDF-1.7\nfixture");
 		expect(renderArgs.layout).toBe("fit-page");
 		expect(renderArgs.container).toHaveAttribute(
 			"aria-label",
@@ -106,6 +107,34 @@ describe("PdfPreview", () => {
 				expect.objectContaining({ src: "blob:atelier-pdf#page=4" }),
 			);
 		});
+	});
+
+	test("keeps the object URL stable when equivalent file bytes are rerendered", async () => {
+		const firstBytes = new TextEncoder().encode("%PDF-1.7\nfixture");
+		const view = render(
+			<PdfPreview data={firstBytes} filePath="/assets/example.pdf" />,
+		);
+
+		await waitFor(() => expect(pdfRendererMocks.render).toHaveBeenCalledOnce());
+		revokeObjectURL.mockClear();
+		view.rerender(
+			<PdfPreview
+				data={Uint8Array.from(firstBytes)}
+				filePath="/assets/example.pdf"
+			/>,
+		);
+		await waitFor(() => {
+			expect(screen.getByTestId("pdf-viewer")).toHaveAttribute(
+				"data-pdf-state",
+				"ready",
+			);
+		});
+
+		expect(pdfRendererMocks.render).toHaveBeenCalledOnce();
+		expect(createObjectURL).toHaveBeenCalledOnce();
+		expect(revokeObjectURL).not.toHaveBeenCalled();
+		view.unmount();
+		expect(revokeObjectURL).toHaveBeenCalledOnce();
 	});
 
 	test("rejects data without a PDF signature", async () => {

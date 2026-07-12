@@ -6,6 +6,7 @@ export type MarkdownWorkspaceFileOpener = ExtensionRuntime["files"]["open"];
 
 export type LoadedMarkdownAsset = {
 	readonly src: string;
+	readonly data?: Uint8Array;
 	readonly preview: "auto" | "manual";
 	readonly workspaceFile?: {
 		readonly fileId: string;
@@ -113,6 +114,7 @@ export async function loadMarkdownAsset({
 	const requiresManualPreview = isPdf && bytes.byteLength > maxAutoPreviewBytes;
 	return {
 		src: `${objectUrl}${hash}`,
+		data: isPdf ? bytes : undefined,
 		preview: requiresManualPreview ? "manual" : "auto",
 		manualReason: requiresManualPreview ? "large" : undefined,
 		workspaceFile: {
@@ -168,6 +170,7 @@ async function loadRemotePdfPreview({
 		);
 		return {
 			src: `${objectUrl}${assetHash(src)}`,
+			data: bytes,
 			preview: "auto",
 			dispose: () => URL.revokeObjectURL(objectUrl),
 		};

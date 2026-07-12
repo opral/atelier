@@ -764,6 +764,7 @@ function createMarkdownAssetNodeView({
 	let manualPreviewAbort: AbortController | null = null;
 	let visibilityObserver: IntersectionObserver | null = null;
 	let pendingManualAsset: LoadedMarkdownAsset | null = null;
+	let currentSource: string | null = null;
 	const previewAction = dom.querySelector<HTMLButtonElement>(
 		".markdown-pdf-preview-action",
 	);
@@ -800,11 +801,13 @@ function createMarkdownAssetNodeView({
 	};
 	const showPdfPreview = async ({
 		previewSrc,
+		previewData,
 		openSrc,
 		previewGeneration,
 		focusAfterLoad = false,
 	}: {
 		readonly previewSrc: string;
+		readonly previewData?: Uint8Array;
 		readonly openSrc: string;
 		readonly previewGeneration: number;
 		readonly focusAfterLoad?: boolean;
@@ -833,6 +836,7 @@ function createMarkdownAssetNodeView({
 		try {
 			const controller = await renderPdfPreview({
 				src: previewSrc,
+				data: previewData,
 				container: mount,
 				signal: renderAbort.signal,
 				onError: () => {
@@ -882,6 +886,7 @@ function createMarkdownAssetNodeView({
 			pendingManualAsset = null;
 			await showPdfPreview({
 				previewSrc: asset.src,
+				previewData: asset.data,
 				openSrc: asset.src,
 				previewGeneration,
 				focusAfterLoad,
@@ -941,6 +946,7 @@ function createMarkdownAssetNodeView({
 		loadedAsset = previewAsset;
 		await showPdfPreview({
 			previewSrc: safeSrc,
+			previewData: previewAsset.data,
 			openSrc: asset.src,
 			previewGeneration,
 			focusAfterLoad,
@@ -959,6 +965,7 @@ function createMarkdownAssetNodeView({
 		disposePdfPreview();
 		disposeLoadedAsset();
 		const src = String(nextNode.attrs?.src ?? "");
+		currentSource = src;
 		updateAssetDomAttributes(dom, nextNode);
 		if (!loadAsset) {
 			const renderedSrc = resolveRenderedImageSrc(src, resolveImageSrc);
@@ -1020,6 +1027,7 @@ function createMarkdownAssetNodeView({
 					if (rendersPdf) {
 						void showPdfPreview({
 							previewSrc: safeSrc,
+							previewData: asset.data,
 							openSrc: safeSrc,
 							previewGeneration: loadGeneration,
 						});
@@ -1054,6 +1062,11 @@ function createMarkdownAssetNodeView({
 			if (nextNode.type.name !== "image") return false;
 			if (isPdfAssetSrc(String(nextNode.attrs?.src ?? "")) !== rendersPdf) {
 				return false;
+			}
+			const nextSource = String(nextNode.attrs?.src ?? "");
+			if (nextSource === currentSource) {
+				updateAssetDomAttributes(dom, nextNode);
+				return true;
 			}
 			updateSource(nextNode);
 			return true;

@@ -971,6 +971,7 @@ describe("inline", () => {
 		const dispose = vi.fn();
 		const destroyPreview = vi.fn();
 		const openWorkspaceFile = vi.fn();
+		const pdfData = new Uint8Array([37, 80, 68, 70]);
 		const renderPdfPreview = vi.fn(async ({ src, container }) => {
 			expect(src).toBe("blob:local-pdf");
 			container.textContent = "Rendered PDF page";
@@ -981,6 +982,7 @@ describe("inline", () => {
 			extensions: MarkdownWc({
 				loadAsset: async () => ({
 					src: "blob:local-pdf",
+					data: pdfData,
 					preview: "auto",
 					workspaceFile: {
 						fileId: "pdf-file",
@@ -1002,6 +1004,9 @@ describe("inline", () => {
 		expect(embed?.getAttribute("data-asset-state")).toBe("ready");
 		expect(preview).toHaveTextContent("Rendered PDF page");
 		expect(renderPdfPreview).toHaveBeenCalledOnce();
+		expect(renderPdfPreview).toHaveBeenCalledWith(
+			expect.objectContaining({ data: pdfData }),
+		);
 		const open = embed?.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
 		expect(open).not.toHaveAttribute("target");
 		expect(open).toHaveAccessibleName("Open Local brief in the center panel");

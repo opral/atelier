@@ -98,7 +98,8 @@ export function PdfPreview({
 	readonly filePath: string;
 	readonly initialPage?: number;
 }) {
-	const bytes = useMemo(() => decodeFileDataToBytes(data), [data]);
+	const decodedBytes = useMemo(() => decodeFileDataToBytes(data), [data]);
+	const bytes = useStablePdfBytes(decodedBytes);
 	const isPdf = useMemo(() => hasPdfSignature(bytes), [bytes]);
 	const objectUrl = usePdfObjectUrl(bytes);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -117,6 +118,7 @@ export function PdfPreview({
 		setState("loading");
 		void renderPdfPreview({
 			src: withInitialPage(objectUrl, initialPage),
+			data: bytes,
 			container,
 			layout: "fit-page",
 			signal: abort.signal,
@@ -141,7 +143,7 @@ export function PdfPreview({
 			abort.abort();
 			preview?.destroy();
 		};
-	}, [initialPage, isPdf, objectUrl]);
+	}, [bytes, initialPage, isPdf, objectUrl]);
 
 	return (
 		<div
@@ -159,6 +161,21 @@ export function PdfPreview({
 			{state === "error" ? <PdfErrorState filePath={filePath} /> : null}
 		</div>
 	);
+}
+
+function useStablePdfBytes(bytes: Uint8Array): Uint8Array {
+	const stableBytes = useRef(bytes);
+	if (!bytesEqual(stableBytes.current, bytes)) stableBytes.current = bytes;
+	return stableBytes.current;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+	if (left === right) return true;
+	if (left.byteLength !== right.byteLength) return false;
+	for (let index = 0; index < left.byteLength; index += 1) {
+		if (left[index] !== right[index]) return false;
+	}
+	return true;
 }
 
 function PdfLoadingState() {
