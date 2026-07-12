@@ -6,6 +6,8 @@ import {
 	type AtelierSlots,
 } from "@opral/atelier";
 import "@opral/atelier/style.css";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
 
 export function mountAtelier(lix: Lix): void {
 	const element = document.querySelector<HTMLElement>("#atelier");
@@ -14,9 +16,12 @@ export function mountAtelier(lix: Lix): void {
 		navbarStart: null,
 		navbarEnd: ({ currentFile }) => currentFile,
 	} satisfies AtelierSlots;
-	createAtelier({ element, lix, slots });
+	const atelier = createAtelier({ lix });
+	createRoot(element).render(
+		createElement(Atelier, { instance: atelier, slots }),
+	);
 
-	const props: AtelierProps = { lix, slots };
+	const props: AtelierProps = { instance: atelier, slots };
 	void Atelier;
 	void props;
 }

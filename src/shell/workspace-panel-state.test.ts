@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 import type { ExtensionInstance, PanelState } from "../extension-runtime/types";
 import {
+	ensureWorkspaceSidebarFilesView,
 	ensureWorkspaceLandingView,
 	type WorkspacePanelState,
 } from "./workspace-panel-state";
@@ -22,6 +23,35 @@ const workspace = (
 		right: args.right ?? emptyPanel(),
 	},
 	focusedPanel: args.focusedPanel ?? "central",
+});
+
+describe("ensureWorkspaceSidebarFilesView", () => {
+	test("moves the Files landing view left and leaves central empty", () => {
+		const state = workspace({
+			central: { views: [filesView], activeInstance: filesView.instance },
+		});
+
+		const result = ensureWorkspaceSidebarFilesView(state);
+
+		expect(result.state.panels.left).toEqual({
+			views: [filesView],
+			activeInstance: filesView.instance,
+		});
+		expect(result.state.panels.central).toEqual(emptyPanel());
+		expect(result.didRestoreLandingView).toBe(false);
+	});
+
+	test("creates a left Files view when no Files instance exists", () => {
+		const result = ensureWorkspaceSidebarFilesView(workspace());
+
+		expect(result.state.panels.left.views).toEqual([
+			expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
+		]);
+		expect(result.state.panels.central).toEqual(emptyPanel());
+		expect(ensureWorkspaceSidebarFilesView(result.state).state).toBe(
+			result.state,
+		);
+	});
 });
 
 const filesView: ExtensionInstance = {

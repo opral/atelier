@@ -21,9 +21,10 @@ import "@opral/atelier/style.css";
 
 // The host creates and owns the lix.
 const lix = await openLix();
+const atelier = createAtelier({ lix });
 
 <Atelier
-	lix={lix}
+	instance={atelier}
 	slots={{
 		navbarStart: <a href="/">Host home</a>,
 		navbarEnd: ({ currentFile }) =>
@@ -32,16 +33,15 @@ const lix = await openLix();
 />;
 ```
 
-React hosts can render Atelier directly so host context is available to slotted
-content. Other browser hosts can use the imperative adapter:
+The instance is the programmatic workspace API and exposes its host-owned Lix:
 
 ```ts
-const atelier = createAtelier({
-	element: document.getElementById("mount"),
-	lix,
+atelier.lix;
+await atelier.diff.open({
+	before: beforeCommitId,
+	after: afterCommitId,
+	source: { kind: "agent", agent: "claude" },
 });
-
-atelier.dispose();
 ```
 
 The target runtime is the browser. Atelier's fixed slots let a host fill bounded
@@ -63,7 +63,7 @@ Atelier's change control is powered by [Lix](https://github.com/opral/lix), a ve
 
 ## Status
 
-Atelier exposes both a React component and a minimal imperative adapter. The development preview lives under `preview/web/`.
+Atelier exposes one workspace instance and a React view for rendering it. The development preview lives under `preview/web/`.
 
 ## License
 

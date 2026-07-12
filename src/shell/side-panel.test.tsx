@@ -136,6 +136,34 @@ describe("SidePanel", () => {
 		expect(screen.getByLabelText("Add view")).toBeInTheDocument();
 	});
 
+	test("renders a host-provided empty state", () => {
+		const emptyPanel: PanelState = { views: [], activeInstance: null };
+
+		render(
+			<ExtensionHostRegistryProvider>
+				<DndContext>
+					<SidePanel
+						side="right"
+						title="Secondary"
+						panel={emptyPanel}
+						onSelectView={() => {}}
+						onAddView={() => {}}
+						onRemoveView={() => {}}
+						viewContext={createViewContext()}
+						isFocused={false}
+						onFocusPanel={vi.fn()}
+						emptyState={<button type="button">Start agent</button>}
+					/>
+				</DndContext>
+			</ExtensionHostRegistryProvider>,
+		);
+
+		expect(
+			screen.getByRole("button", { name: "Start agent" }),
+		).toBeInTheDocument();
+		expect(screen.queryByText("No view open")).toBeNull();
+	});
+
 	test("renders the active view and forwards interactions", async () => {
 		const panelState: PanelState = {
 			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],

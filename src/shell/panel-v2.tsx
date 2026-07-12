@@ -48,7 +48,6 @@ import {
 	useExtensionHostRegistry,
 	type ExtensionHostRecord,
 } from "../extension-runtime/extension-host-registry";
-import { Activity } from "react";
 
 /**
  * Unified panel host that renders the shared tab strip and body layout for any side.
@@ -201,9 +200,10 @@ export function PanelV2({
 							if (!context) return null;
 							const isActive = activeInstance === entry.instance;
 							return (
-								<Activity
+								<div
 									key={entry.instance}
-									mode={isActive ? "visible" : "hidden"}
+									className={isActive ? "contents" : "hidden"}
+									aria-hidden={isActive ? undefined : true}
 								>
 									<ViewRenderer
 										view={view}
@@ -213,7 +213,7 @@ export function PanelV2({
 										side={side}
 										isActive={isActive}
 									/>
-								</Activity>
+								</div>
 							);
 						})}
 					</PanelContent>
@@ -263,7 +263,10 @@ function AddViewMenu({
 		[panel.views],
 	);
 	const availableViews = useMemo(
-		() => visibleExtensions.filter((view) => !openKinds.has(view.kind)),
+		() =>
+			visibleExtensions.filter(
+				(view) => view.multiInstance || !openKinds.has(view.kind),
+			),
 		[visibleExtensions, openKinds],
 	);
 	if (availableViews.length === 0) return null;

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { FilePlus } from "lucide-react";
 import type {
 	PanelState,
@@ -17,6 +17,7 @@ type CentralPanelProps = {
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
 	readonly onFinalizePendingView?: (key: string) => void;
+	readonly emptyState?: ReactNode;
 };
 
 /**
@@ -39,6 +40,7 @@ export function CentralPanel({
 	onFocusPanel,
 	onFinalizePendingView,
 	onCreateNewFile,
+	emptyState: emptyStateOverride,
 }: CentralPanelProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
@@ -51,7 +53,12 @@ export function CentralPanel({
 		[onFinalizePendingView, panel.views],
 	);
 
-	const emptyState = <EmptyStateContent onCreateNewFile={onCreateNewFile} />;
+	const emptyState =
+		emptyStateOverride === undefined ? (
+			<EmptyStateContent onCreateNewFile={onCreateNewFile} />
+		) : (
+			emptyStateOverride
+		);
 
 	const labelResolver = useCallback(
 		(view: ExtensionDefinition, entry: (typeof panel.views)[number]) =>

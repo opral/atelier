@@ -1,12 +1,7 @@
 import { normalizeFileExtensions } from "./file-handlers";
+import type { ExtensionManifest } from "../extension-api";
 
-export type ExtensionManifest = {
-	apiVersion: 1;
-	id: string;
-	name: string;
-	entry: string;
-	fileExtensions?: string[];
-};
+export type { ExtensionManifest } from "../extension-api";
 
 export function parseExtensionManifest(
 	manifestPath: string,
@@ -32,8 +27,10 @@ export function parseExtensionManifest(
 		"apiVersion",
 		"id",
 		"name",
+		"description",
 		"entry",
 		"fileExtensions",
+		"multiInstance",
 	]);
 	const unknownKeys = Object.keys(manifest).filter(
 		(key) => !allowedKeys.has(key),
@@ -51,6 +48,11 @@ export function parseExtensionManifest(
 		throw new Error(`Manifest at ${manifestPath} has invalid id "${id}".`);
 	}
 	const name = requireNonEmptyString(manifest.name, "name", manifestPath);
+	const description = optionalNonEmptyString(
+		manifest.description,
+		"description",
+		manifestPath,
+	);
 	const entry = requireNonEmptyString(manifest.entry, "entry", manifestPath);
 	let fileExtensions: string[] | undefined;
 	if (manifest.fileExtensions !== undefined) {
@@ -68,7 +70,23 @@ export function parseExtensionManifest(
 		}
 		fileExtensions = normalizeFileExtensions(manifest.fileExtensions);
 	}
-	return { apiVersion: 1, id, name, entry, fileExtensions };
+	if (
+		manifest.multiInstance !== undefined &&
+		typeof manifest.multiInstance !== "boolean"
+	) {
+		throw new Error(
+			`Manifest at ${manifestPath} field "multiInstance" must be a boolean.`,
+		);
+	}
+	return {
+		apiVersion: 1,
+		id,
+		name,
+		...(description ? { description } : {}),
+		entry,
+		fileExtensions,
+		...(manifest.multiInstance === true ? { multiInstance: true } : {}),
+	};
 }
 
 export function normalizeExtensionEntry(entry: string): string {
@@ -101,4 +119,13 @@ function requireNonEmptyString(
 		);
 	}
 	return value.trim();
+}
+
+function optionalNonEmptyString(
+	value: unknown,
+	field: string,
+	manifestPath: string,
+): string | undefined {
+	if (value === undefined) return undefined;
+	return requireNonEmptyString(value, field, manifestPath);
 }

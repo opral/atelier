@@ -79,6 +79,7 @@ type MarkdownViewProps = {
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly onDocumentModified?: (filePath: string) => void;
 };
 
 type HistoricalMarkdownBlockRow = {
@@ -121,6 +122,7 @@ export function MarkdownView({
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 	openWorkspaceFile,
+	onDocumentModified,
 }: MarkdownViewProps) {
 	return (
 		<Suspense fallback={<MarkdownLoadingSpinner />}>
@@ -139,6 +141,7 @@ export function MarkdownView({
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
 				openWorkspaceFile={openWorkspaceFile}
+				onDocumentModified={onDocumentModified}
 			/>
 		</Suspense>
 	);
@@ -213,6 +216,7 @@ function MarkdownLiveViewLoaded({
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 	openWorkspaceFile,
+	onDocumentModified,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
@@ -262,6 +266,10 @@ function MarkdownLiveViewLoaded({
 							focusOnLoad={focusOnLoad}
 							defaultBlock={defaultBlock}
 							openWorkspaceFile={openWorkspaceFile}
+							onPersist={({ filePath: persistedPath }) => {
+								const resolvedPath = persistedPath ?? effectiveFileRow.path;
+								onDocumentModified?.(resolvedPath);
+							}}
 						/>
 						{isActiveView && isPanelFocused && !reviewDiff ? (
 							<MarkdownAutosaveHint />
@@ -955,7 +963,14 @@ export const extension = createReactExtensionDefinition({
 				registerExternalWriteReview={atelier.reviews.register}
 				onAcceptReviewDiff={atelier.reviews.accept}
 				onRejectReviewDiff={atelier.reviews.reject}
-				openWorkspaceFile={atelier.files.open}
+				openWorkspaceFile={(args) => atelier.files.open(args)}
+				onDocumentModified={(filePath) =>
+					atelier.events.emit({
+						type: "document_modified",
+						filePath,
+						modifiedBy: "user",
+					})
+				}
 			/>
 		</LixProvider>
 	),

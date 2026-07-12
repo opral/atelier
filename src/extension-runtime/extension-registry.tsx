@@ -22,21 +22,38 @@ type ExtensionRegistryValue = {
 };
 
 const buildExtensionRegistry = (
+	hostDefinitions: readonly ExtensionDefinition[],
 	installedDefinitions: readonly ExtensionDefinition[],
+	builtinOverrides: readonly ExtensionDefinition[] = [],
 ): Pick<ExtensionRegistryValue, "visibleExtensions" | "extensionMap"> => {
-	const builtinKinds = new Set(
-		BUILTIN_EXTENSION_DEFINITIONS.map((def) => def.kind),
+	const overrideMap = new Map(
+		builtinOverrides.map((definition) => [definition.kind, definition]),
 	);
+	const builtinDefinitions = BUILTIN_EXTENSION_DEFINITIONS.map(
+		(definition) => overrideMap.get(definition.kind) ?? definition,
+	);
+	const builtinVisibleDefinitions = BUILTIN_VISIBLE_EXTENSION_DEFINITIONS.map(
+		(definition) => overrideMap.get(definition.kind) ?? definition,
+	);
+	const builtinKinds = new Set(builtinDefinitions.map((def) => def.kind));
+	const hostVisible = normalizeInstalledExtensionDefinitions(
+		hostDefinitions,
+	).filter((def) => !builtinKinds.has(def.kind));
+	const reservedKinds = new Set([
+		...builtinKinds,
+		...hostVisible.map((definition) => definition.kind),
+	]);
 	const installedVisible = normalizeInstalledExtensionDefinitions(
 		installedDefinitions,
-	).filter((def) => !builtinKinds.has(def.kind));
+	).filter((def) => !reservedKinds.has(def.kind));
 
 	const visibleExtensions = [
-		...BUILTIN_VISIBLE_EXTENSION_DEFINITIONS,
+		...builtinVisibleDefinitions,
+		...hostVisible,
 		...installedVisible,
 	];
 	const extensionMap = new Map<ExtensionKind, ExtensionDefinition>(
-		[...BUILTIN_EXTENSION_DEFINITIONS, ...installedVisible].map((def) => [
+		[...builtinDefinitions, ...hostVisible, ...installedVisible].map((def) => [
 			def.kind,
 			def,
 		]),
@@ -45,7 +62,7 @@ const buildExtensionRegistry = (
 	return { visibleExtensions, extensionMap };
 };
 
-const BASE_REGISTRY = buildExtensionRegistry([]);
+const BASE_REGISTRY = buildExtensionRegistry([], []);
 
 export const EXTENSION_DEFINITIONS: ExtensionDefinition[] =
 	BASE_REGISTRY.visibleExtensions;
@@ -62,8 +79,12 @@ const ExtensionRegistryContext = createContext<ExtensionRegistryValue>({
 
 export function ExtensionRegistryProvider({
 	children,
+	hostExtensions = [],
+	builtinOverrides = [],
 }: {
 	children: ReactNode;
+	readonly hostExtensions?: readonly ExtensionDefinition[];
+	readonly builtinOverrides?: readonly ExtensionDefinition[];
 }) {
 	const [installedExtensions, setInstalledExtensions] = useState<
 		ExtensionDefinition[]
@@ -87,13 +108,22 @@ export function ExtensionRegistryProvider({
 	);
 
 	const value = useMemo<ExtensionRegistryValue>(() => {
-		const merged = buildExtensionRegistry(installedExtensions);
+		const merged = buildExtensionRegistry(
+			hostExtensions,
+			installedExtensions,
+			builtinOverrides,
+		);
 		return {
 			visibleExtensions: merged.visibleExtensions,
 			extensionMap: merged.extensionMap,
 			replaceInstalledExtensions,
 		};
-	}, [installedExtensions, replaceInstalledExtensions]);
+	}, [
+		builtinOverrides,
+		hostExtensions,
+		installedExtensions,
+		replaceInstalledExtensions,
+	]);
 
 	return (
 		<ExtensionRegistryContext.Provider value={value}>

@@ -36,6 +36,7 @@ export type AtelierUiState = {
  * Default UI state used when no persisted snapshot exists in Lix.
  */
 export type PanelLayoutSizes = Record<PanelSide, number>;
+export type DefaultOpenPanel = Exclude<PanelSide, "central">;
 
 // A fresh workspace opens on the centered, full-width Files view. Side panels
 // remain available from the top-bar toggles.
@@ -57,6 +58,23 @@ export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	},
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
 };
+
+/** Creates the fresh-workspace state with requested side panels visible. */
+export function createInitialAtelierUiState(
+	defaultOpenPanels: readonly DefaultOpenPanel[] = [],
+): AtelierUiState {
+	const sizes = { ...DEFAULT_LAYOUT_SIZES };
+	for (const side of defaultOpenPanels) {
+		if (sizes[side] > 0) continue;
+		const sideSize = 20;
+		sizes[side] = sideSize;
+		sizes.central = Math.max(30, sizes.central - sideSize);
+	}
+	return {
+		...DEFAULT_ATELIER_UI_STATE,
+		layout: { sizes },
+	};
+}
 
 function isPanelSide(value: unknown): value is PanelSide {
 	return value === "left" || value === "central" || value === "right";

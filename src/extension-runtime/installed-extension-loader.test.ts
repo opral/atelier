@@ -42,6 +42,25 @@ describe("parseManifest", () => {
 		expect(manifest.fileExtensions).toEqual(["csv", "tsv"]);
 	});
 
+	test("parses host-visible metadata and multi-instance behavior", () => {
+		const manifest = parseExtensionManifest(
+			"/.lix/app_data/atelier/extensions/terminal/manifest.json",
+			JSON.stringify({
+				apiVersion: 1,
+				id: "terminal",
+				name: "Terminal",
+				description: "Run a terminal.",
+				entry: "./index.js",
+				multiInstance: true,
+			}),
+		);
+
+		expect(manifest).toMatchObject({
+			description: "Run a terminal.",
+			multiInstance: true,
+		});
+	});
+
 	test("rejects missing versions, coerced values, and unknown fields", () => {
 		const path = "/.lix/app_data/atelier/extensions/example/manifest.json";
 		expect(() =>
