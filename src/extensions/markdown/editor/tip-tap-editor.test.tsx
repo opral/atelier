@@ -358,6 +358,8 @@ test("temporarily clearing a numeric field preserves its numeric type", async ()
 
 	await act(async () => {
 		fireEvent.change(input, { target: { value: "" } });
+	});
+	await act(async () => {
 		fireEvent.blur(input);
 	});
 
@@ -367,6 +369,48 @@ test("temporarily clearing a numeric field preserves its numeric type", async ()
 			String(editor.state.doc.firstChild?.attrs.value ?? ""),
 		).value,
 	).toEqual({ count: 3 });
+});
+
+test("numeric fields commit safe values and reject unsafe or invalid drafts", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: "file_numeric_frontmatter_validation",
+		markdown: "---\ncount: 3\n---\n\nHello",
+	});
+	const input = await screen.findByRole("spinbutton", { name: "count value" });
+	const frontmatterValue = () =>
+		parseFrontmatterSource(
+			String(editor.state.doc.firstChild?.attrs.value ?? ""),
+		).value;
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "4.5" } });
+	});
+	expect(frontmatterValue()).toEqual({ count: 3 });
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "9007199254740992" } });
+	});
+	expect(input).toHaveAttribute("aria-invalid", "true");
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+	expect(input).toHaveValue(4.5);
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+
+	await act(async () => {
+		fireEvent.change(input, { target: { value: "1e999" } });
+	});
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+	await act(async () => {
+		fireEvent.blur(input);
+	});
+	expect(frontmatterValue()).toEqual({ count: 4.5 });
+	expect(typeof frontmatterValue()?.count).toBe("number");
 });
 
 test("deactivates and restores the toolbar around real frontmatter focus", async () => {

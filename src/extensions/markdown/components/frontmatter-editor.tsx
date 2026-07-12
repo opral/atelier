@@ -176,12 +176,18 @@ function FieldTypeIcon({
 	return <AlignLeft aria-hidden />;
 }
 
-function coerceScalar(previous: unknown, value: string): unknown {
-	if (typeof previous === "number" && value.trim() !== "") {
-		const number = Number(value);
-		if (Number.isFinite(number)) return number;
+function parseEditableNumber(value: string): number | null {
+	const normalized = value.trim();
+	if (!normalized) return null;
+	const number = Number(normalized);
+	if (!Number.isFinite(number)) return null;
+	if (Number.isInteger(number)) {
+		return Number.isSafeInteger(number) ? number : null;
 	}
-	return value;
+	const significantDigits = (normalized.split(/[eE]/, 1)[0] ?? "")
+		.replace(/\D/g, "")
+		.replace(/^0+/, "");
+	return significantDigits.length <= 15 ? number : null;
 }
 
 function NumberField({
@@ -195,6 +201,8 @@ function NumberField({
 }) {
 	const [draft, setDraft] = useState(String(value));
 	useEffect(() => setDraft(String(value)), [value]);
+	const parsedDraft = parseEditableNumber(draft);
+	const invalidDraft = draft.trim() !== "" && parsedDraft === null;
 	return (
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-value"
@@ -202,13 +210,15 @@ function NumberField({
 			value={draft}
 			placeholder="Empty"
 			aria-label={`${label} value`}
-			onChange={(event) => {
-				const next = event.currentTarget.value;
-				setDraft(next);
-				if (next.trim() !== "") onChange(coerceScalar(value, next));
-			}}
-			onBlur={(event) => {
-				if (event.currentTarget.value.trim() === "") setDraft(String(value));
+			aria-invalid={invalidDraft ? "true" : undefined}
+			onChange={(event) => setDraft(event.currentTarget.value)}
+			onBlur={() => {
+				if (parsedDraft === null) {
+					setDraft(String(value));
+					return;
+				}
+				onChange(parsedDraft);
+				setDraft(String(parsedDraft));
 			}}
 		/>
 	);
@@ -248,9 +258,7 @@ function ScalarField({
 			value={text}
 			placeholder="Empty"
 			aria-label={`${label} value`}
-			onChange={(event) =>
-				onChange(coerceScalar(value, event.currentTarget.value))
-			}
+			onChange={(event) => onChange(event.currentTarget.value)}
 		/>
 	);
 }
