@@ -46,21 +46,25 @@ export function FrontmatterDisclosure({
 		const surface = surfaceRef.current;
 		if (!surface) return;
 		let cleanupTarget: (() => void) | null = null;
-		let frame: number | null = null;
-		const bindFirstBlock = () => {
-			cleanupTarget?.();
-			cleanupTarget = null;
-			if (editor.isDestroyed) {
+		let bindFrame: number | null = null;
+		let positionFrame: number | null = null;
+		let observedFirstBlock: HTMLElement | null = null;
+		let resizeObserver: ResizeObserver;
+		const observeFirstBlock = (firstBlock: HTMLElement | null) => {
+			if (observedFirstBlock === firstBlock) return;
+			if (observedFirstBlock) resizeObserver.unobserve(observedFirstBlock);
+			observedFirstBlock = firstBlock;
+			if (firstBlock) resizeObserver.observe(firstBlock);
+		};
+		const updatePosition = () => {
+			if (
+				editor.isDestroyed ||
+				editor.state.doc.firstChild?.type.name === "markdownFrontmatter"
+			) {
 				setPosition(null);
 				setVisible(false);
 				return;
 			}
-			if (editor.state.doc.firstChild?.type.name === "markdownFrontmatter") {
-				setPosition(null);
-				setVisible(false);
-				return;
-			}
-
 			const firstBlock = surface.querySelector(".ProseMirror > :first-child");
 			if (!(firstBlock instanceof HTMLElement)) {
 				setPosition(null);
@@ -72,6 +76,31 @@ export function FrontmatterDisclosure({
 				left: blockRect.left - surfaceRect.left + surface.scrollLeft,
 				top: blockRect.top - surfaceRect.top + surface.scrollTop - 34,
 			});
+		};
+		const bindFirstBlock = () => {
+			cleanupTarget?.();
+			cleanupTarget = null;
+			if (editor.isDestroyed) {
+				observeFirstBlock(null);
+				setPosition(null);
+				setVisible(false);
+				return;
+			}
+			if (editor.state.doc.firstChild?.type.name === "markdownFrontmatter") {
+				observeFirstBlock(null);
+				setPosition(null);
+				setVisible(false);
+				return;
+			}
+
+			const firstBlock = surface.querySelector(".ProseMirror > :first-child");
+			if (!(firstBlock instanceof HTMLElement)) {
+				observeFirstBlock(null);
+				setPosition(null);
+				return;
+			}
+			observeFirstBlock(firstBlock);
+			updatePosition();
 
 			const handleFocusOut = () => {
 				window.requestAnimationFrame(() => {
@@ -112,21 +141,32 @@ export function FrontmatterDisclosure({
 			};
 		};
 		const scheduleBind = () => {
-			if (frame !== null) window.cancelAnimationFrame(frame);
-			frame = window.requestAnimationFrame(() => {
-				frame = null;
+			if (bindFrame !== null) window.cancelAnimationFrame(bindFrame);
+			bindFrame = window.requestAnimationFrame(() => {
+				bindFrame = null;
 				bindFirstBlock();
 			});
 		};
+		const schedulePosition = () => {
+			if (positionFrame !== null) window.cancelAnimationFrame(positionFrame);
+			positionFrame = window.requestAnimationFrame(() => {
+				positionFrame = null;
+				updatePosition();
+			});
+		};
 
+		resizeObserver = new ResizeObserver(schedulePosition);
+		resizeObserver.observe(surface);
 		bindFirstBlock();
 		editor.on("transaction", scheduleBind);
-		window.addEventListener("resize", scheduleBind);
+		window.addEventListener("resize", schedulePosition);
 		return () => {
 			cleanupTarget?.();
+			resizeObserver.disconnect();
 			editor.off("transaction", scheduleBind);
-			window.removeEventListener("resize", scheduleBind);
-			if (frame !== null) window.cancelAnimationFrame(frame);
+			window.removeEventListener("resize", schedulePosition);
+			if (bindFrame !== null) window.cancelAnimationFrame(bindFrame);
+			if (positionFrame !== null) window.cancelAnimationFrame(positionFrame);
 			cancelHide();
 		};
 	}, [cancelHide, editor, hideSoon, show, surfaceRef]);
