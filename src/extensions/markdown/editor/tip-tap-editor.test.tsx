@@ -10,7 +10,10 @@ import {
 } from "@testing-library/react";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
-import { TipTapEditor } from "./tip-tap-editor";
+import {
+	hydrateMarkdownEditorAuthoritativeMarkdown,
+	TipTapEditor,
+} from "./tip-tap-editor";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { EditorProvider } from "./editor-context";
@@ -41,11 +44,13 @@ async function renderEditorForMarkdownFile({
 	markdown,
 	originKey = "atelier.markdown-editor:test-origin",
 	withToolbar = false,
+	persistDebounceMs = 60_000,
 }: {
 	fileId: string;
 	markdown: string;
 	originKey?: string;
 	withToolbar?: boolean;
+	persistDebounceMs?: number;
 }): Promise<{ lix: Lix; editor: Editor }> {
 	const lix = await openLix({
 		keyValues: [
@@ -82,7 +87,7 @@ async function renderEditorForMarkdownFile({
 					<TipTapEditor
 						onReady={(editor) => (editorRef = editor)}
 						originKey={originKey}
-						persistDebounceMs={60_000}
+						persistDebounceMs={persistDebounceMs}
 					/>
 				</Providers>
 			</Suspense>,
@@ -121,6 +126,15 @@ async function writeMarkdownFileWithOrigin(
 		[new TextEncoder().encode(markdown), fileId],
 		originKey ? { originKey } : undefined,
 	);
+}
+
+async function decodeFileMarkdown(lix: Lix, fileId: string): Promise<string> {
+	const row = await qb(lix)
+		.selectFrom("lix_file")
+		.select("data")
+		.where("id", "=", fileId)
+		.executeTakeFirstOrThrow();
+	return new TextDecoder().decode(row.data);
 }
 
 async function settleMarkdownObserver(): Promise<void> {
@@ -1296,6 +1310,261 @@ test("applies different-origin markdown update when editor is clean", async () =
 			"External clean update",
 		);
 	});
+});
+
+test("persists edits on top of an externally hydrated markdown baseline", async () => {
+	const fileId = "file_external_hydration_baseline";
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+		persistDebounceMs: 0,
+	});
+
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"External baseline without trailing newline",
+		"external-origin",
+	);
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"External baseline without trailing newline",
+		);
+	});
+
+	await setEditorText(editor, "Local edit after hydration");
+	await waitFor(async () => {
+		const row = await qb(lix)
+			.selectFrom("lix_file")
+			.select("data")
+			.where("id", "=", fileId)
+			.executeTakeFirstOrThrow();
+		expect(new TextDecoder().decode(row.data)).toBe(
+			"Local edit after hydration\n",
+		);
+	});
+});
+
+test("suspends the same editor instance while read-only and still applies external updates", async () => {
+	const lix = await openLix();
+	const fileId = "file_review_read_only";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/review-read-only.md",
+			data: new TextEncoder().encode("Before review\n"),
+		})
+		.execute();
+
+	let editorRef: Editor | null = null;
+	const renderEditor = (readOnly: boolean) => (
+		<Suspense>
+			<Providers lix={lix}>
+				<TipTapEditor
+					fileId={fileId}
+					readOnly={readOnly}
+					onReady={(editor) => (editorRef = editor)}
+				/>
+			</Providers>
+		</Suspense>
+	);
+	let utils: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		utils = render(renderEditor(false));
+	});
+	const editorElement = await screen.findByTestId("tiptap-editor");
+	await waitFor(() => expect(editorRef).not.toBeNull());
+	const originalEditor = editorRef as Editor | null;
+	if (!originalEditor) throw new Error("Editor did not become ready");
+	expect(editorElement.querySelector(".ProseMirror")).toHaveAttribute(
+		"contenteditable",
+		"true",
+	);
+
+	await act(async () => {
+		utils?.rerender(renderEditor(true));
+	});
+	expect(editorRef).toBe(originalEditor);
+	expect(originalEditor.isEditable).toBe(false);
+	expect(editorElement.querySelector(".ProseMirror")).toHaveAttribute(
+		"contenteditable",
+		"false",
+	);
+
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"External while reviewing\n",
+		"external-origin",
+	);
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"External while reviewing",
+		);
+	});
+
+	utils?.unmount();
+	expect(
+		new TextDecoder().decode(
+			(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("data")
+					.where("id", "=", fileId)
+					.executeTakeFirstOrThrow()
+			).data,
+		),
+	).toBe("External while reviewing\n");
+});
+
+test("keeps a synthetic review document in the live editor through authoritative review hydration", async () => {
+	const lix = await openLix();
+	const fileId = "file_review_synthetic_override";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/review-synthetic-override.md",
+			data: new TextEncoder().encode("Before review\n"),
+		})
+		.execute();
+
+	let editorRef: Editor | null = null;
+	const renderEditor = (reviewMode: boolean) => (
+		<Suspense>
+			<Providers lix={lix}>
+				<TipTapEditor
+					fileId={fileId}
+					readOnly={reviewMode}
+					suspendExternalSync={reviewMode}
+					onReady={(editor) => (editorRef = editor)}
+				/>
+			</Providers>
+		</Suspense>
+	);
+	let utils: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		utils = render(renderEditor(false));
+	});
+	const editorElement = await screen.findByTestId("tiptap-editor");
+	const proseMirror = editorElement.querySelector(".ProseMirror");
+	await waitFor(() => expect(editorRef).not.toBeNull());
+	const originalEditor = editorRef as Editor | null;
+	if (!originalEditor) throw new Error("Editor did not become ready");
+
+	await act(async () => {
+		utils?.rerender(renderEditor(true));
+		originalEditor.commands.setContent(
+			{
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [{ type: "text", text: "Synthetic inline review" }],
+					},
+				],
+			},
+			{ emitUpdate: false },
+		);
+	});
+
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Authoritative resolved result\n",
+		"review-resolver",
+	);
+	await settleMarkdownObserver();
+	expect(editorElement).toHaveTextContent("Synthetic inline review");
+	expect(editorElement.querySelector(".ProseMirror")).toBe(proseMirror);
+	expect(editorRef).toBe(originalEditor);
+
+	await act(async () => {
+		hydrateMarkdownEditorAuthoritativeMarkdown(
+			originalEditor,
+			"Authoritative resolved result\n",
+		);
+		utils?.rerender(renderEditor(false));
+	});
+	await waitFor(() => {
+		expect(editorElement).toHaveTextContent("Authoritative resolved result");
+	});
+	expect(editorElement.querySelector(".ProseMirror")).toBe(proseMirror);
+	expect(editorRef).toBe(originalEditor);
+});
+
+test("read-only inactive editor replaces dirty content with authoritative file updates", async () => {
+	const lix = await openLix();
+	const fileId = "file_review_inactive_authoritative";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/review-inactive-authoritative.md",
+			data: new TextEncoder().encode("Persisted before review\n"),
+		})
+		.execute();
+
+	let editorRef: Editor | null = null;
+	const renderEditor = (readOnly: boolean) => (
+		<Suspense>
+			<Providers lix={lix}>
+				<TipTapEditor
+					fileId={fileId}
+					isActiveView={false}
+					readOnly={readOnly}
+					persistDebounceMs={60_000}
+					onReady={(editor) => (editorRef = editor)}
+				/>
+			</Providers>
+		</Suspense>
+	);
+	let utils: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		utils = render(renderEditor(false));
+	});
+	await screen.findByTestId("tiptap-editor");
+	await waitFor(() => expect(editorRef).not.toBeNull());
+	const originalEditor = editorRef;
+	if (!originalEditor) throw new Error("Editor did not become ready");
+
+	await setEditorText(originalEditor, "Dirty inactive content");
+	await act(async () => {
+		utils?.rerender(renderEditor(true));
+	});
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"Persisted before review",
+		);
+	});
+	expect(editorRef).toBe(originalEditor);
+
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"External while review is inactive\n",
+		"external-origin",
+	);
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"External while review is inactive",
+		);
+	});
+
+	await act(async () => {
+		await writeMarkdownFileWithOrigin(
+			lix,
+			fileId,
+			"Undo result while leaving review\n",
+		);
+		utils?.rerender(renderEditor(false));
+	});
+	utils?.unmount();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(await decodeFileMarkdown(lix, fileId)).toBe(
+		"Undo result while leaving review\n",
+	);
 });
 
 test("does not clobber dirty editor content with different-origin markdown update", async () => {

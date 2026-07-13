@@ -1,5 +1,8 @@
 import type { ComponentType } from "react";
-import type { ExternalWriteReview } from "./external-write-review";
+import type {
+	ExternalWriteReview,
+	ResolveExternalWriteReviewArgs,
+} from "./external-write-review";
 import type {
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
@@ -72,6 +75,7 @@ export interface MountedExtension {
 
 export type ExtensionRuntime = AtelierExtensionRuntime & {
 	readonly reviews: {
+		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
 		readonly accept: (args: {
 			readonly fileId: string;
 			readonly reviewId: string;

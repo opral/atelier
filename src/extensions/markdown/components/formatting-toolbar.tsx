@@ -79,7 +79,13 @@ const initialFormatState: FormatState = {
  * @example
  * <FormattingToolbar className="sticky top-0 z-10" />
  */
-export function FormattingToolbar({ className }: { className?: string }) {
+export function FormattingToolbar({
+	className,
+	disabled = false,
+}: {
+	className?: string;
+	disabled?: boolean;
+}) {
 	const { editor } = useEditorCtx();
 	const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">(
 		"idle",
@@ -132,6 +138,7 @@ export function FormattingToolbar({ className }: { className?: string }) {
 	const displayedFormatState = frontmatterEditing
 		? initialFormatState
 		: formatState;
+	const controlsDisabled = disabled || !editor || frontmatterEditing;
 
 	useEffect(() => {
 		if (!editor) {
@@ -178,6 +185,12 @@ export function FormattingToolbar({ className }: { className?: string }) {
 		setBlockMenuOpen(false);
 		setLinkOpen(false);
 	}, [frontmatterEditing]);
+
+	useEffect(() => {
+		if (!controlsDisabled) return;
+		setBlockMenuOpen(false);
+		setLinkOpen(false);
+	}, [controlsDisabled]);
 
 	const updateOverflowEdges = useCallback(() => {
 		const controls = formattingControlsRef.current;
@@ -376,8 +389,6 @@ export function FormattingToolbar({ className }: { className?: string }) {
 		return () => window.clearTimeout(reset);
 	}, [copyStatus]);
 
-	if (!editor) return null;
-
 	return (
 		<Toolbar.Root
 			className={clsx(
@@ -385,20 +396,22 @@ export function FormattingToolbar({ className }: { className?: string }) {
 				className,
 			)}
 			aria-label="Formatting toolbar"
+			aria-disabled={controlsDisabled}
 			data-attr="markdown-format-toolbar"
+			data-disabled={controlsDisabled ? "true" : "false"}
 		>
 			<div className="relative min-w-0 flex-1 self-stretch">
-				<fieldset disabled={frontmatterEditing} className="contents">
+				<fieldset disabled={controlsDisabled} className="contents">
 					<Toolbar.Group
 						ref={formattingControlsRef}
 						className={clsx(
 							"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
-							frontmatterEditing && "opacity-40",
+							controlsDisabled && "opacity-40",
 						)}
 						aria-label="Text formatting controls"
-						aria-disabled={frontmatterEditing}
+						aria-disabled={controlsDisabled}
 						data-attr="markdown-format-controls"
-						data-disabled={frontmatterEditing ? "true" : "false"}
+						data-disabled={controlsDisabled ? "true" : "false"}
 						onScroll={updateOverflowEdges}
 					>
 						<Select.Root

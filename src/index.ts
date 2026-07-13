@@ -27,7 +27,18 @@ export type {
 	AtelierExtensionState,
 	AtelierExtensionView,
 	AtelierMountedExtension,
+	AtelierRevisionSelection,
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
-	AtelierRevisionSelection,
 } from "./extension-api";
+export { AtelierDeveloperTools } from "./dev-tools/developer-tools-menu";
+export {
+	applyDeveloperWorkflowScenario,
+	simulateMarkdownAgentWorkflow,
+} from "./dev-tools/simulate-agent-workflow";
+export type {
+	DeveloperWorkflowScenario,
+	SimulatedAgentWorkflow,
+} from "./dev-tools/simulate-agent-workflow";
+export { appendAgentTurnCommitRange as recordAgentTurnCommitRange } from "./shell/agent-turn-review-range";
+export type { AgentTurnCommitRange } from "./shell/agent-turn-review-range";

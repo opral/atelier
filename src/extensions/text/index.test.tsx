@@ -180,6 +180,7 @@ function createRuntime(
 			clear: vi.fn(),
 		},
 		reviews: {
+			resolve: vi.fn(async () => {}),
 			accept: vi.fn(async () => {}),
 			reject: vi.fn(async () => {}),
 			register: vi.fn(() => () => {}),

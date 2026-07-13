@@ -25,6 +25,7 @@ export function createExtensionHostContext(
 				clear: () => {},
 			},
 			reviews: {
+				resolve: async () => {},
 				accept: async () => {},
 				reject: async () => {},
 				register: () => () => {},

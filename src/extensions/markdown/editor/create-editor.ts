@@ -1,4 +1,4 @@
-import { Editor } from "@tiptap/core";
+import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Lix } from "@lix-js/sdk";
@@ -23,6 +23,8 @@ type CreateEditorArgs = {
 	lix: Lix;
 	initialMarkdown?: string;
 	contentAst?: any;
+	initialContent?: JSONContent;
+	additionalExtensions?: Extensions;
 	onCreate?: (args: { editor: Editor }) => void;
 	onUpdate?: (args: { editor: Editor }) => void | false;
 	editorProps?: any;
@@ -33,11 +35,33 @@ type CreateEditorArgs = {
 	defaultBlock?: EmptyMarkdownDefaultBlock;
 	persistDebounceMs?: number;
 	persistState?: boolean;
+	shouldPersist?: () => boolean;
 	resolveImageSrc?: (src: string) => string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	originKey?: string;
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
 };
+
+type MarkdownPersistenceBaseline = {
+	lastAcknowledgedMarkdown: string;
+	expectedFileMarkdown: string;
+};
+
+const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
+
+/**
+ * Advances an editor's compare-and-swap baseline after authoritative file data
+ * has been hydrated into that editor without emitting an update transaction.
+ */
+export function acknowledgeMarkdownEditorPersistence(
+	editor: Editor,
+	markdown: string,
+): void {
+	const baseline = persistenceBaselines.get(editor);
+	if (!baseline) return;
+	baseline.lastAcknowledgedMarkdown = normalizePersistedMarkdown(markdown);
+	baseline.expectedFileMarkdown = markdown;
+}
 
 export const createMarkdownEditorOriginKey = (): string => {
 	if (
@@ -110,6 +134,8 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		lix,
 		initialMarkdown,
 		contentAst,
+		initialContent,
+		additionalExtensions = [],
 		onCreate,
 		onUpdate,
 		editorProps,
@@ -120,6 +146,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		defaultBlock,
 		persistDebounceMs,
 		persistState = true,
+		shouldPersist = () => true,
 		resolveImageSrc,
 		openWorkspaceFile,
 		originKey = createMarkdownEditorOriginKey(),
@@ -136,25 +163,35 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	let editorInstance: Editor | null = null;
 	let currentEditor: Editor | null = null;
 	let cleanupExternalLinkClick: (() => void) | null = null;
-	let lastPersistedMarkdown = normalizePersistedMarkdown(
-		initialMarkdown ?? serializeAst(ast as any),
-	);
+	const initialFileMarkdown = initialMarkdown ?? serializeAst(ast as any);
+	const persistenceBaseline: MarkdownPersistenceBaseline = {
+		lastAcknowledgedMarkdown: normalizePersistedMarkdown(initialFileMarkdown),
+		expectedFileMarkdown: initialFileMarkdown,
+	};
 	const persistDebounceMsResolved = persistDebounceMs ?? 0;
 	const persistOnce = async (editor: Editor) => {
+		if (!shouldPersist()) return;
+		// Review projections deliberately contain both sides of a suggestion.
+		// They are presentation state, never valid file content. This guard keeps
+		// an accidental mode transition or destroy flush from serializing them.
+		if (containsMarkdownReviewProjection(editor)) return;
 		const markdown = buildNormalizedMarkdownFromEditor(editor);
-		if (markdown === lastPersistedMarkdown) return;
-		await upsertMarkdownFile({
+		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) return;
+		const didPersist = await upsertMarkdownFile({
 			lix,
 			fileId: fileId!,
 			markdown,
+			expectedMarkdown: persistenceBaseline.expectedFileMarkdown,
 			createIfMissing: false,
 			originKey,
 		});
-		lastPersistedMarkdown = markdown;
+		if (!didPersist) return;
+		persistenceBaseline.lastAcknowledgedMarkdown = markdown;
+		persistenceBaseline.expectedFileMarkdown = markdown;
 		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
 	};
 	const runPersist = (editor: Editor): Promise<void> => {
-		if (!fileId || !persistState) return Promise.resolve();
+		if (!fileId || !persistState || !shouldPersist()) return Promise.resolve();
 		if (persistRunning) {
 			persistQueued = true;
 			return persistPromise ?? Promise.resolve();
@@ -204,6 +241,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	editorInstance = new Editor({
 		extensions: [
 			...markdownExtensions,
+			...additionalExtensions,
 			History.configure({
 				depth: 200,
 				newGroupDelay: 500,
@@ -215,10 +253,13 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			TableNavigationExtension,
 		],
 		editable,
-		content: astToTiptapDoc(ast, { defaultBlock }) as any,
+		content:
+			initialContent ?? (astToTiptapDoc(ast, { defaultBlock }) as JSONContent),
 		onCreate: ({ editor }) => {
 			currentEditor = editor as Editor;
-			lastPersistedMarkdown = buildNormalizedMarkdownFromEditor(editor);
+			persistenceBaseline.lastAcknowledgedMarkdown =
+				buildNormalizedMarkdownFromEditor(editor);
+			persistenceBaselines.set(editor, persistenceBaseline);
 			onCreate?.({ editor });
 		},
 		onUpdate: ({ editor }) => {
@@ -234,7 +275,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				if (persistStateTimer) clearTimeout(persistStateTimer);
 				persistStateTimer = setTimeout(() => {
 					persistStateTimer = null;
-					if (destroyed) return;
+					if (destroyed || !shouldPersist()) return;
 					void runPersist(editor);
 				}, persistDebounceMsResolved);
 			};
@@ -249,7 +290,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				persistStateTimer = null;
 			}
 			const editorToPersist = currentEditor ?? editorInstance;
-			if (editorToPersist && fileId && persistState) {
+			if (editorToPersist && fileId && persistState && shouldPersist()) {
 				if (persistRunning) {
 					persistQueued = true;
 				}
@@ -285,6 +326,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			},
 		},
 	});
+	persistenceBaselines.set(editorInstance, persistenceBaseline);
 	const editorDom = editorInstance.view.dom;
 	editorDom.addEventListener("click", handleExternalLinkClick, {
 		capture: true,
@@ -296,6 +338,28 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	};
 	currentEditor = editorInstance;
 	return editorInstance;
+}
+
+function containsMarkdownReviewProjection(editor: Editor): boolean {
+	let found = false;
+	editor.state.doc.descendants((node) => {
+		if (found) return false;
+		if (node.marks.some((mark) => mark.type.name === "markdownReviewDiff")) {
+			found = true;
+			return false;
+		}
+		const data = node.attrs?.data;
+		if (
+			data &&
+			typeof data === "object" &&
+			"markdownReview" in (data as Record<string, unknown>)
+		) {
+			found = true;
+			return false;
+		}
+		return true;
+	});
+	return found;
 }
 
 // React useEditor config builder. TipTapEditor should use this to keep a single source.

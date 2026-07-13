@@ -7,7 +7,10 @@ import { MarkdownView } from "./index";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { qb } from "@/lib/lix-kysely";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
+import {
+	appendAgentTurnCommitRange,
+	clearAgentTurnCommitRangeFile,
+} from "@/shell/agent-turn-review-range";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -207,9 +210,14 @@ describe("MarkdownView", () => {
 				utils!.container.querySelector(".markdown-review-overlay"),
 			).toBeInTheDocument();
 			expect(
-				utils!.container.querySelector("[data-diff-status]"),
+				utils!.container.querySelector("[data-review-status]"),
 			).toBeInTheDocument();
 		});
+		const reviewEditor = screen.getByTestId("markdown-review-editor");
+		expect(reviewEditor.querySelector(".ProseMirror")).toHaveAttribute(
+			"contenteditable",
+			"false",
+		);
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();
@@ -273,10 +281,10 @@ describe("MarkdownView", () => {
 			expect(utils!.container).toHaveTextContent("Stable version");
 		});
 		expect(
-			utils!.container.querySelector("[data-diff-status='added']"),
+			utils!.container.querySelector("[data-review-status='added']"),
 		).toBeNull();
 		expect(
-			utils!.container.querySelector("[data-diff-status='removed']"),
+			utils!.container.querySelector("[data-review-status='removed']"),
 		).toBeNull();
 
 		await act(async () => {
@@ -315,7 +323,11 @@ describe("MarkdownView", () => {
 			);
 		});
 
-		expect(await screen.findByTestId("tiptap-editor")).toBeInTheDocument();
+		const liveEditor = await screen.findByTestId("tiptap-editor");
+		expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
+			"contenteditable",
+			"true",
+		);
 
 		const event = new KeyboardEvent("keydown", {
 			key: "s",
@@ -590,6 +602,23 @@ describe("MarkdownView", () => {
 								isActiveView
 								isPanelFocused
 								syncActiveFile={false}
+								onResolveReviewDiff={async ({
+									fileId,
+									reviewId,
+									review,
+									data,
+								}) => {
+									await qb(lix)
+										.updateTable("lix_file")
+										.set({ data })
+										.where("id", "=", fileId)
+										.execute();
+									await clearAgentTurnCommitRangeFile(lix, {
+										fileId,
+										reviewId,
+										agentTurnRangeIds: review?.agentTurnRangeIds,
+									});
+								}}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -597,7 +626,29 @@ describe("MarkdownView", () => {
 			);
 		});
 
-		expect(await screen.findByTestId("tiptap-editor")).toBeInTheDocument();
+		const liveEditor = await screen.findByTestId("tiptap-editor");
+		const liveProseMirror = liveEditor.querySelector(".ProseMirror");
+		expect(liveProseMirror).not.toBeNull();
+		const formattingToolbar = screen.getByRole("toolbar", {
+			name: "Formatting toolbar",
+		});
+		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
+			"contenteditable",
+			"true",
+		);
+		const editorSurface = utils!.container.querySelector<HTMLElement>(
+			'[data-attr="markdown-editor"]',
+		)!;
+		const observedEditorCounts = [
+			editorSurface.querySelectorAll(".ProseMirror").length,
+		];
+		const editorObserver = new MutationObserver(() => {
+			observedEditorCounts.push(
+				editorSurface.querySelectorAll(".ProseMirror").length,
+			);
+		});
+		editorObserver.observe(editorSurface, { childList: true, subtree: true });
 		const beforeCommitId = await activeCommitId(lix);
 
 		await act(async () => {
@@ -622,15 +673,54 @@ describe("MarkdownView", () => {
 
 		expect(
 			await screen.findByRole("button", { name: /keep/i }),
-		).toHaveAttribute("data-attr", "diff-accept");
+		).toHaveAttribute("data-attr", "review-change-keep");
 		expect(screen.getByRole("button", { name: /undo/i })).toHaveAttribute(
 			"data-attr",
-			"diff-reject",
+			"review-change-undo",
 		);
+		await waitFor(() => {
+			expect(screen.getByTestId("tiptap-editor")).toBe(liveEditor);
+			expect(liveEditor.querySelector(".ProseMirror")).toBe(liveProseMirror);
+			expect(
+				screen.queryByTestId("markdown-review-editor"),
+			).not.toBeInTheDocument();
+			expect(utils!.container.querySelectorAll(".ProseMirror")).toHaveLength(1);
+			expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+				formattingToolbar,
+			);
+			expect(formattingToolbar).toHaveAttribute("data-disabled", "true");
+		});
+		editorObserver.disconnect();
+		expect(observedEditorCounts.every((count) => count === 1)).toBe(true);
+
+		await act(async () => {
+			screen.getByRole("button", { name: /keep change/i }).click();
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("button", { name: /keep change/i }),
+			).not.toBeInTheDocument();
+		});
+		const restoredEditor = await screen.findByTestId("tiptap-editor");
+		expect(restoredEditor).toBe(liveEditor);
+		expect(restoredEditor.querySelector(".ProseMirror")).toBe(liveProseMirror);
+		expect(liveProseMirror?.isConnected).toBe(true);
+		expect(restoredEditor).toHaveTextContent("After");
+		expect(utils!.container.querySelectorAll(".ProseMirror")).toHaveLength(1);
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			formattingToolbar,
+		);
+		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
 
 		await act(async () => {
 			utils?.unmount();
 		});
+		const persisted = await qb(lix)
+			.selectFrom("lix_file")
+			.select("data")
+			.where("id", "=", "file_review_startup")
+			.executeTakeFirstOrThrow();
+		expect(new TextDecoder().decode(persisted.data)).toBe("# After");
 	});
 
 	test("renders checkpoint diffs without review controls for missing active files", async () => {
@@ -681,12 +771,13 @@ describe("MarkdownView", () => {
 				utils!.container.querySelector(".markdown-review-overlay"),
 			).toBeInTheDocument();
 			expect(
-				utils!.container.querySelector("[data-diff-status]"),
+				utils!.container.querySelector("[data-review-status]"),
 			).toBeInTheDocument();
 		});
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		expect(screen.getByTestId("markdown-review-editor")).toBeInTheDocument();
 
 		await act(async () => {
 			utils?.unmount();

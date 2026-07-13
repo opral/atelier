@@ -14,13 +14,16 @@ type AstRoot = {
 };
 
 export function parseMarkdown(markdown: string): AstRoot {
-	return normalizeAst(
-		resolveReferences(
-			fromMarkdown(markdown, {
-				extensions: [gfm(), frontmatter(["yaml"])],
-				mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
-			}),
-		),
+	return normalizeAst(parseMarkdownSource(markdown));
+}
+
+/** Parses Markdown without discarding source positions used by review plans. */
+export function parseMarkdownSource(markdown: string): AstRoot {
+	return resolveReferences(
+		fromMarkdown(markdown, {
+			extensions: [gfm(), frontmatter(["yaml"])],
+			mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
+		}),
 	);
 }
 
@@ -54,6 +57,7 @@ function resolveReferences(ast: any): any {
 					url: definition.url,
 					title: definition.title ?? null,
 					children: children ?? [],
+					...(node.position ? { position: node.position } : {}),
 				};
 			}
 		}
@@ -65,6 +69,7 @@ function resolveReferences(ast: any): any {
 					url: definition.url,
 					title: definition.title ?? null,
 					alt: node.alt ?? null,
+					...(node.position ? { position: node.position } : {}),
 				};
 			}
 		}
