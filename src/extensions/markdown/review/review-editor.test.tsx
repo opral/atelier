@@ -149,6 +149,63 @@ test("restores an external editor when review projection unmounts", async () => 
 	editor.destroy();
 });
 
+test("applies semantic identity hints that arrive before review starts", async () => {
+	lix = await openLix();
+	let view: ReturnType<typeof render> | undefined;
+	const beforeMarkdown = "Alpha.\n\nBeta.\n";
+	const afterMarkdown = "Beta.\n\nAlpha.\n";
+	const editor = createEditor({
+		lix,
+		initialMarkdown: beforeMarkdown,
+		additionalExtensions: MarkdownReviewExtensions,
+		persistState: false,
+	});
+
+	await act(async () => {
+		view = render(
+			<LixProvider lix={lix!}>
+				<MarkdownReviewEditor
+					externalEditor={editor}
+					reviewDiff={{ beforeMarkdown, afterMarkdown }}
+					sourceFilePath="/review.md"
+					reviewEnabled
+				/>
+			</LixProvider>,
+		);
+	});
+	expect(await screen.findByText("1 of 2")).toBeInTheDocument();
+
+	await act(async () => {
+		view!.rerender(
+			<LixProvider lix={lix!}>
+				<MarkdownReviewEditor
+					externalEditor={editor}
+					reviewDiff={{
+						beforeMarkdown,
+						afterMarkdown,
+						beforeBlocks: [
+							{ id: "alpha", orderKey: "a", block: "Alpha.\n" },
+							{ id: "beta", orderKey: "b", block: "Beta.\n" },
+						],
+						afterBlocks: [
+							{ id: "beta", orderKey: "a", block: "Beta.\n" },
+							{ id: "alpha", orderKey: "b", block: "Alpha.\n" },
+						],
+					}}
+					sourceFilePath="/review.md"
+					reviewEnabled
+				/>
+			</LixProvider>,
+		);
+	});
+
+	await waitFor(() => {
+		expect(screen.getByText("1 of 1")).toBeInTheDocument();
+	});
+	await act(async () => view?.unmount());
+	editor.destroy();
+});
+
 test("clicking any marked fragment selects its whole change group", async () => {
 	lix = await openLix();
 	let view: ReturnType<typeof render> | undefined;

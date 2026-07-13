@@ -58,7 +58,16 @@ export function MarkdownReviewEditor({
 	readonly onCompletionFailure?: () => void;
 }) {
 	const lix = useLix();
-	const [reviewDocument] = useState(() =>
+	const incomingReviewDocument = useMemo(
+		() => buildMarkdownReviewDocument(reviewDiff),
+		[
+			reviewDiff.afterBlocks,
+			reviewDiff.afterMarkdown,
+			reviewDiff.beforeBlocks,
+			reviewDiff.beforeMarkdown,
+		],
+	);
+	const [reviewDocument, setReviewDocument] = useState(() =>
 		buildMarkdownReviewDocument(reviewDiff),
 	);
 	const [decisions, setDecisions] = useState<
@@ -90,6 +99,27 @@ export function MarkdownReviewEditor({
 	const editor = externalEditor ?? ownedEditor;
 	const fileName = workspaceFileName(sourceFilePath);
 	const completionSucceeded = useRef(false);
+
+	useEffect(() => {
+		if (
+			!externalEditor ||
+			busy ||
+			decisions.size > 0 ||
+			reviewDocument.usedSemanticBlockIds ||
+			!incomingReviewDocument.usedSemanticBlockIds
+		) {
+			return;
+		}
+		setReviewDocument(incomingReviewDocument);
+		setActiveChangeId(incomingReviewDocument.changes[0]?.id ?? null);
+		setError(null);
+	}, [
+		busy,
+		decisions.size,
+		externalEditor,
+		incomingReviewDocument,
+		reviewDocument,
+	]);
 
 	useLayoutEffect(() => {
 		if (externalEditor) return;
