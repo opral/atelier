@@ -271,6 +271,7 @@ function MarkdownLiveViewLoaded({
 	const [finishingReview, setFinishingReview] = useState<{
 		readonly fileId: string;
 		readonly reviewId: string;
+		readonly review: ExternalWriteReview;
 	} | null>(null);
 	const reviewLocked =
 		isReviewing || finishingReview?.fileId === effectiveFileRow?.id;
@@ -337,6 +338,7 @@ function MarkdownLiveViewLoaded({
 									setFinishingReview({
 										fileId: effectiveFileRow.id,
 										reviewId: review.reviewId,
+										review,
 									});
 								}}
 								onCompletionSuccess={(markdown) => {
@@ -369,7 +371,7 @@ function MarkdownLiveViewLoaded({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<ExternalWriteReviewRegistration
-				review={externalWriteReview}
+				review={externalWriteReview ?? finishingReview?.review ?? null}
 				register={registerExternalWriteReview}
 			/>
 			{syncActiveFile && fileRow && isMarkdownFilePath(fileRow.path) ? (

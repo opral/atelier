@@ -1134,11 +1134,6 @@ function LayoutShellLoadedContent({
 			if (!claimDiffReviewResolution(review)) {
 				return false;
 			}
-			const openReview = openDiffReviewByFileIdRef.current.get(review.fileId);
-			if (openReview?.reviewId === review.reviewId) {
-				openDiffReviewByFileIdRef.current.delete(review.fileId);
-				setOpenExternalReviewCount(openDiffReviewByFileIdRef.current.size);
-			}
 			emitEvent({
 				type: "diff_resolved",
 				reviewId: review.reviewId,
