@@ -50,13 +50,18 @@ export function FrontmatterDisclosure({
 		const bindFirstBlock = () => {
 			cleanupTarget?.();
 			cleanupTarget = null;
+			if (editor.isDestroyed) {
+				setPosition(null);
+				setVisible(false);
+				return;
+			}
 			if (editor.state.doc.firstChild?.type.name === "markdownFrontmatter") {
 				setPosition(null);
 				setVisible(false);
 				return;
 			}
 
-			const firstBlock = editor.view.dom.firstElementChild;
+			const firstBlock = surface.querySelector(".ProseMirror > :first-child");
 			if (!(firstBlock instanceof HTMLElement)) {
 				setPosition(null);
 				return;
@@ -140,7 +145,9 @@ export function FrontmatterDisclosure({
 			onFocus={show}
 			onBlur={hideSoon}
 			onMouseDown={(event) => event.preventDefault()}
-			onClick={() => editor.commands.setFrontmatter()}
+			onClick={() => {
+				if (!editor.isDestroyed) editor.commands.setFrontmatter();
+			}}
 		>
 			<PanelTopDashed aria-hidden />
 			Add frontmatter

@@ -686,6 +686,50 @@ test("reopens a file from fresh data instead of the prior query cache", async ()
 	);
 });
 
+test("does not recreate the editor when the workspace opener identity changes", async () => {
+	const lix = await openLix();
+	const fileId = "file_stable_workspace_opener";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/stable-workspace-opener.md",
+			data: new TextEncoder().encode("Stable editor"),
+		})
+		.execute();
+
+	const readyEditors: Editor[] = [];
+	const renderEditor = (opener: () => void) => (
+		<Suspense>
+			<Providers lix={lix}>
+				<TipTapEditor
+					fileId={fileId}
+					onReady={(editor) => readyEditors.push(editor)}
+					openWorkspaceFile={opener}
+				/>
+			</Providers>
+		</Suspense>
+	);
+
+	let utils: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		utils = render(renderEditor(() => {}));
+	});
+	await screen.findByTestId("tiptap-editor");
+	await waitFor(() => expect(readyEditors).toHaveLength(1));
+	const originalEditor = readyEditors[0]!;
+
+	await act(async () => {
+		utils?.rerender(renderEditor(() => {}));
+	});
+
+	expect(readyEditors).toEqual([originalEditor]);
+	expect(originalEditor.isDestroyed).toBe(false);
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Stable editor",
+	);
+});
+
 test("persists state changes on edit (paragraph append)", async () => {
 	const fileId = "file_1";
 	const markdown = "# Title\n\nHello";

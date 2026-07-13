@@ -258,6 +258,15 @@ function TipTapEditorLoadedContent({
 	const hasAutoFocusedRef = useRef(false);
 	const onPersistRef = useRef(onPersist);
 	onPersistRef.current = onPersist;
+	const openWorkspaceFileRef = useRef(openWorkspaceFile);
+	openWorkspaceFileRef.current = openWorkspaceFile;
+	const canOpenWorkspaceFile = openWorkspaceFile !== undefined;
+	const stableOpenWorkspaceFile = useMemo<
+		MarkdownWorkspaceFileOpener | undefined
+	>(() => {
+		if (!canOpenWorkspaceFile) return undefined;
+		return (args) => openWorkspaceFileRef.current?.(args);
+	}, [canOpenWorkspaceFile]);
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
 
 	// Editor is an imperative resource. Construct and destroy it in the same
@@ -275,7 +284,7 @@ function TipTapEditorLoadedContent({
 			defaultBlock,
 			persistDebounceMs: PERSIST_DEBOUNCE_MS,
 			originKey: editorOriginKey,
-			openWorkspaceFile,
+			openWorkspaceFile: stableOpenWorkspaceFile,
 			onPersist: (args) => onPersistRef.current?.(args),
 		});
 		setEditorInstance(nextEditor);
@@ -289,7 +298,7 @@ function TipTapEditorLoadedContent({
 		sourceFilePath,
 		defaultBlock,
 		editorOriginKey,
-		openWorkspaceFile,
+		stableOpenWorkspaceFile,
 	]);
 
 	const isEditorFocused =
