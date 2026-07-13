@@ -35,7 +35,6 @@ import { StatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import type {
 	CheckpointDiff,
-	CheckpointDiffBranchRow,
 	CheckpointDiffFile,
 	CheckpointDiffVisibleFile,
 } from "@/extension-runtime/checkpoint-diff";
@@ -45,7 +44,7 @@ import {
 	stripEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
-import { qb, sql } from "@/lib/lix-kysely";
+import { qb } from "@/lib/lix-kysely";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -798,155 +797,6 @@ export async function resolveLixFileForOpen({
 	return selectLixFileForOpen(lix, normalizedPath);
 }
 
-type CurrentCheckpointChangeState = {
-	readonly branchId: string;
-	readonly branches: readonly CheckpointDiffBranchRow[];
-	readonly count: number | null;
-};
-
-type CurrentCheckpointBranchState = {
-	readonly key: string;
-	readonly branchId: string;
-	readonly branches: readonly CheckpointDiffBranchRow[];
-};
-
-type ResolvedCheckpointChangeCount = {
-	readonly key: string;
-	readonly count: number;
-};
-
-function useCurrentCheckpointChangeState(
-	lix: Lix,
-): CurrentCheckpointChangeState {
-	const branches = useQuery<CheckpointDiffBranchRow>(
-		visibleCheckpointBranchesQuery,
-	);
-	const activeBranchRows = useQuery<{ value: unknown }>(
-		activeCheckpointBranchQuery,
-	);
-	const branchId =
-		typeof activeBranchRows[0]?.value === "string"
-			? activeBranchRows[0].value
-			: "";
-	const branchState = useMemo<CurrentCheckpointBranchState | null>(() => {
-		if (!branchId || !branches.some((branch) => branch.id === branchId)) {
-			return null;
-		}
-		return {
-			key: checkpointDiffCacheKey(branches, branchId),
-			branchId,
-			branches,
-		};
-	}, [branches, branchId]);
-	const [resolvedCount, setResolvedCount] =
-		useState<ResolvedCheckpointChangeCount | null>(null);
-
-	useEffect(() => {
-		if (!branchState) return;
-
-		let closed = false;
-		void resolveCheckpointDiff({
-			lix,
-			branches: branchState.branches,
-			branchId: branchState.branchId,
-		})
-			.then((diff) => {
-				if (closed) return;
-				setResolvedCount({
-					key: branchState.key,
-					count: diff?.files.length ?? 0,
-				});
-			})
-			.catch((error: unknown) => {
-				if (closed) return;
-				console.warn("Failed to resolve checkpoint footer count", error);
-				setResolvedCount({ key: branchState.key, count: 0 });
-			});
-		return () => {
-			closed = true;
-		};
-	}, [branchState, lix]);
-
-	return {
-		branchId: branchState?.branchId ?? "",
-		branches: branchState?.branches ?? [],
-		count:
-			branchState && resolvedCount?.key === branchState.key
-				? resolvedCount.count
-				: null,
-	};
-}
-
-function visibleCheckpointBranchesQuery(lix: Lix) {
-	return qb(lix)
-		.selectFrom("lix_branch")
-		.select(["id", "name", "commit_id"])
-		.where(
-			() =>
-				sql`COALESCE(CAST(lix_branch.hidden AS TEXT), 'false') NOT IN ('true', '1', 't')`,
-		)
-		.orderBy("name", "asc");
-}
-
-function activeCheckpointBranchQuery(lix: Lix) {
-	return qb(lix)
-		.selectFrom("lix_key_value")
-		.where("key", "=", "lix_workspace_branch_id")
-		.select(["value"]);
-}
-
-function checkpointDiffCacheKey(
-	branches: readonly CheckpointDiffBranchRow[],
-	branchId: string,
-): string {
-	return [
-		branchId,
-		...branches.map((branch) =>
-			[branch.id, branch.name, branch.commit_id ?? ""].join(":"),
-		),
-	].join("|");
-}
-
-function formatChangedFileCount(count: number): string {
-	return `${count} ${count === 1 ? "file" : "files"} changed since last checkpoint`;
-}
-
-function CurrentCheckpointFooterReviewButton({
-	lix,
-	checkpointDiff,
-	showCheckpointDiff,
-	clearCheckpointDiff,
-}: {
-	readonly lix: Lix;
-	readonly checkpointDiff: CheckpointDiff | null;
-	readonly showCheckpointDiff: (branchId: string) => Promise<void>;
-	readonly clearCheckpointDiff: () => void;
-}) {
-	const currentCheckpointChange = useCurrentCheckpointChangeState(lix);
-	if (currentCheckpointChange.count === null) return null;
-	const status = formatChangedFileCount(currentCheckpointChange.count);
-	const isReviewingCurrentCheckpoint =
-		checkpointDiff?.branchId === currentCheckpointChange.branchId;
-
-	return (
-		<button
-			type="button"
-			className="min-w-0 cursor-pointer truncate rounded-[5px] border-0 bg-transparent px-1 py-0.5 text-left font-[inherit] text-inherit hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-			data-attr="checkpoint-footer-review"
-			aria-pressed={isReviewingCurrentCheckpoint}
-			onClick={() => {
-				if (isReviewingCurrentCheckpoint) {
-					clearCheckpointDiff();
-					return;
-				}
-				void showCheckpointDiff(currentCheckpointChange.branchId);
-			}}
-		>
-			{status}
-		</button>
-	);
-}
-
 function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
 	if (!target || !(target instanceof HTMLElement)) {
 		return false;
@@ -1207,6 +1057,7 @@ function LayoutShellLoadedContent({
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
 	);
+	const [openExternalReviewCount, setOpenExternalReviewCount] = useState(0);
 	const resolveDiffReviewRef = useRef<
 		((review: ExternalWriteReview) => boolean) | null
 	>(null);
@@ -1255,6 +1106,7 @@ function LayoutShellLoadedContent({
 				resolveDiffReviewRef.current?.(existingReview);
 			}
 			openDiffReviewByFileIdRef.current.set(review.fileId, review);
+			setOpenExternalReviewCount(openDiffReviewByFileIdRef.current.size);
 			if (!openedReviewIdsRef.current.has(review.reviewId)) {
 				openedReviewIdsRef.current.add(review.reviewId);
 				emitEvent({
@@ -1267,6 +1119,7 @@ function LayoutShellLoadedContent({
 				const current = openDiffReviewByFileIdRef.current.get(review.fileId);
 				if (current?.reviewId === review.reviewId) {
 					openDiffReviewByFileIdRef.current.delete(review.fileId);
+					setOpenExternalReviewCount(openDiffReviewByFileIdRef.current.size);
 				}
 			};
 		},
@@ -1284,6 +1137,7 @@ function LayoutShellLoadedContent({
 			const openReview = openDiffReviewByFileIdRef.current.get(review.fileId);
 			if (openReview?.reviewId === review.reviewId) {
 				openDiffReviewByFileIdRef.current.delete(review.fileId);
+				setOpenExternalReviewCount(openDiffReviewByFileIdRef.current.size);
 			}
 			emitEvent({
 				type: "diff_resolved",
@@ -1296,6 +1150,7 @@ function LayoutShellLoadedContent({
 		[claimDiffReviewResolution, emitEvent],
 	);
 	resolveDiffReviewRef.current = resolveDiffReview;
+	const isReviewMode = Boolean(checkpointDiff) || openExternalReviewCount > 0;
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -2707,10 +2562,13 @@ function LayoutShellLoadedContent({
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
 		>
-			<div className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]">
+			<div
+				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
+				data-review-mode={isReviewMode ? "true" : undefined}
+			>
 				<TopBar
 					activeFileName={activeFileName}
-					isReviewingCheckpoint={Boolean(checkpointDiff)}
+					isReviewingCheckpoint={isReviewMode}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}
@@ -2806,16 +2664,7 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</Group>
 				</div>
-				<StatusBar
-					left={
-						<CurrentCheckpointFooterReviewButton
-							lix={lix}
-							checkpointDiff={checkpointDiff}
-							showCheckpointDiff={showCheckpointDiff}
-							clearCheckpointDiff={clearCheckpointDiff}
-						/>
-					}
-				/>
+				<StatusBar />
 			</div>
 			<DragOverlay>
 				{activeId && activeDragView ? (
