@@ -3,6 +3,7 @@ import {
 	useEffect,
 	useLayoutEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import type { Editor } from "@tiptap/core";
@@ -88,6 +89,7 @@ export function MarkdownReviewEditor({
 	const [ownedEditor, setOwnedEditor] = useState<Editor | null>(null);
 	const editor = externalEditor ?? ownedEditor;
 	const fileName = workspaceFileName(sourceFilePath);
+	const completionSucceeded = useRef(false);
 
 	useLayoutEffect(() => {
 		if (externalEditor) return;
@@ -111,6 +113,15 @@ export function MarkdownReviewEditor({
 		reviewDocument.doc,
 		sourceFilePath,
 	]);
+
+	useLayoutEffect(() => {
+		if (!externalEditor) return;
+		const authoritativeDocument = externalEditor.getJSON();
+		return () => {
+			if (completionSucceeded.current || externalEditor.isDestroyed) return;
+			setReviewEditorDocument(externalEditor, authoritativeDocument);
+		};
+	}, [externalEditor]);
 
 	useLayoutEffect(() => {
 		if (!editor) return;
@@ -209,8 +220,10 @@ export function MarkdownReviewEditor({
 			onCompletionStart?.(markdown);
 			try {
 				await onComplete?.(markdown);
+				completionSucceeded.current = true;
 				onCompletionSuccess?.(markdown);
 			} catch (cause) {
+				completionSucceeded.current = false;
 				onCompletionFailure?.();
 				setDecisions(decisions);
 				setReviewEditorDocument(

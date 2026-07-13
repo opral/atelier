@@ -9,7 +9,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { createEditor } from "../editor/create-editor";
 import { MarkdownReviewEditor } from "./review-editor";
+import { MarkdownReviewExtensions } from "./review-extension";
 
 let lix: Lix | null = null;
 
@@ -113,6 +115,38 @@ test("keeps the same Tiptap editor mounted after a partial decision", async () =
 	expect(proseMirror?.isConnected).toBe(true);
 
 	await act(async () => view?.unmount());
+});
+
+test("restores an external editor when review projection unmounts", async () => {
+	lix = await openLix();
+	const editor = createEditor({
+		lix,
+		initialMarkdown: "# Authoritative",
+		additionalExtensions: MarkdownReviewExtensions,
+		persistState: false,
+	});
+	let view: ReturnType<typeof render> | undefined;
+
+	await act(async () => {
+		view = render(
+			<LixProvider lix={lix!}>
+				<MarkdownReviewEditor
+					externalEditor={editor}
+					reviewDiff={{
+						beforeMarkdown: "# Authoritative",
+						afterMarkdown: "# Projected",
+					}}
+					sourceFilePath="/review.md"
+					reviewEnabled
+				/>
+			</LixProvider>,
+		);
+	});
+
+	expect(editor.getText()).toContain("Projected");
+	await act(async () => view?.unmount());
+	expect(editor.getText()).toBe("Authoritative");
+	editor.destroy();
 });
 
 test("clicking any marked fragment selects its whole change group", async () => {

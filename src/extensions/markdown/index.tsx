@@ -316,7 +316,7 @@ function MarkdownLiveViewLoaded({
 								onDocumentModified?.(resolvedPath);
 							}}
 						/>
-						{review && reviewDiff && reviewBlocks && liveEditor ? (
+						{review && reviewDiff && liveEditor ? (
 							<MarkdownLiveReviewController
 								fileId={effectiveFileRow.id}
 								sourceFilePath={effectiveFileRow.path}
@@ -326,8 +326,8 @@ function MarkdownLiveViewLoaded({
 								reviewId={review.reviewId}
 								beforeCommitId={review.beforeCommitId}
 								afterCommitId={review.afterCommitId}
-								beforeBlocks={reviewBlocks.beforeBlocks}
-								afterBlocks={reviewBlocks.afterBlocks}
+								beforeBlocks={reviewBlocks?.beforeBlocks}
+								afterBlocks={reviewBlocks?.afterBlocks}
 								openWorkspaceFile={openWorkspaceFile}
 								isActive={isActiveView && isPanelFocused}
 								onAccept={onAcceptReviewDiff}
