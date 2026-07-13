@@ -5,6 +5,8 @@ export type {
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
 	AtelierDiffSource,
+	AtelierFileApi,
+	AtelierFileOpenOptions,
 	AtelierInstance,
 	AtelierOptions,
 	AtelierSidePanel,

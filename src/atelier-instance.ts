@@ -28,6 +28,16 @@ export type AtelierDiffApi = {
 	open(options: AtelierDiffOpenOptions): Promise<void>;
 };
 
+export type AtelierFileOpenOptions = {
+	/** Workspace-relative path of an existing Lix file. */
+	readonly path: string;
+};
+
+export type AtelierFileApi = {
+	/** Opens an existing file in Atelier's central document view. */
+	open(options: AtelierFileOpenOptions): Promise<void>;
+};
+
 export type {
 	AtelierDocumentOpenOptions,
 	AtelierDocumentsApi,
@@ -44,6 +54,7 @@ export type AtelierOptions = {
 export type AtelierInstance = {
 	/** The host-owned Lix backing this Atelier workspace. */
 	readonly lix: Lix;
+	readonly file: AtelierFileApi;
 	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
 };
@@ -110,26 +121,43 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
+	const openDocument = (
+		path: string,
+		openOptions?: AtelierDocumentOpenOptions,
+	): Promise<void> => {
+		if (typeof path !== "string" || path.trim().length === 0) {
+			return Promise.reject(
+				new TypeError("atelier.documents.open() requires a non-empty path."),
+			);
+		}
+		return enqueueAtelierDocumentsCommand(documentsRuntime, {
+			kind: "open",
+			path,
+			...(openOptions ? { options: openOptions } : {}),
+		});
+	};
 	const instance: AtelierInstance = {
 		lix: options.lix,
+		file: {
+			open: (fileOptions) => {
+				if (
+					!fileOptions ||
+					typeof fileOptions !== "object" ||
+					typeof fileOptions.path !== "string" ||
+					fileOptions.path.trim().length === 0
+				) {
+					return Promise.reject(
+						new TypeError("atelier.file.open() requires a non-empty path."),
+					);
+				}
+				return openDocument(fileOptions.path);
+			},
+		},
 		diff: {
 			open: (diffOptions) => openDiff(options.lix, diffOptions),
 		},
 		documents: {
-			open: (path, openOptions) => {
-				if (typeof path !== "string" || path.trim().length === 0) {
-					return Promise.reject(
-						new TypeError(
-							"atelier.documents.open() requires a non-empty path.",
-						),
-					);
-				}
-				return enqueueAtelierDocumentsCommand(documentsRuntime, {
-					kind: "open",
-					path,
-					...(openOptions ? { options: openOptions } : {}),
-				});
-			},
+			open: openDocument,
 			startNew: () =>
 				enqueueAtelierDocumentsCommand(documentsRuntime, {
 					kind: "start-new",

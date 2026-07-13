@@ -15,6 +15,8 @@ export type {
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
 	AtelierDiffSource,
+	AtelierFileApi,
+	AtelierFileOpenOptions,
 	AtelierDocumentsApi,
 	AtelierDocumentOpenOptions,
 	AtelierInstance,

@@ -38,15 +38,41 @@ describe("createAtelier", () => {
 		});
 
 		expect(atelier.lix).toBe(lix);
+		expect(atelier.file.open).toEqual(expect.any(Function));
 		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents"]);
+		expect(Object.keys(atelier)).toEqual(["lix", "file", "diff", "documents"]);
 		expect(getAtelierConfiguration(atelier)).toEqual({
 			extensions: [],
 			filesViewMode: "sidebar",
 			defaultOpenPanels: ["right"],
 		});
 		expect(getAtelierConfiguration(atelier).extensions).not.toBe(extensions);
+	});
+
+	test("opens files through the documents runtime", async () => {
+		const atelier = createAtelier({ lix: {} as Lix });
+		const open = atelier.file.open({ path: "/queued.md" });
+		const binding: AtelierDocumentsRuntimeBinding = {
+			open: vi.fn(),
+			startNew: vi.fn(),
+			closeActive: vi.fn(),
+		};
+		bindAtelierDocumentsRuntime(atelier, binding, {
+			activePath: null,
+			openPaths: [],
+		});
+
+		await open;
+		expect(binding.open).toHaveBeenCalledWith("/queued.md");
+	});
+
+	test("rejects invalid file-open options", async () => {
+		const atelier = createAtelier({ lix: {} as Lix });
+
+		await expect(atelier.file.open({ path: "" })).rejects.toThrow(
+			"atelier.file.open() requires a non-empty path.",
+		);
 	});
 
 	test("opens an agent diff without exposing the internal review range", async () => {

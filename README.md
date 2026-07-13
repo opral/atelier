@@ -53,6 +53,7 @@ The instance is the programmatic workspace API and exposes its host-owned Lix:
 
 ```ts
 atelier.lix;
+await atelier.file.open({ path: "/notes/idea.md" });
 await atelier.documents.open("/notes/idea.md");
 await atelier.documents.startNew();
 await atelier.documents.closeActive();
