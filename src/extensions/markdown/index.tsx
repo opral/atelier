@@ -33,6 +33,10 @@ import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
 import {
+	historicalMarkdownNodeBlocks,
+	type HistoricalMarkdownNodeRow,
+} from "./review/markdown-node-history";
+import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
 } from "@/lib/decode-file-data";
@@ -90,11 +94,6 @@ type MarkdownViewProps = {
 	) => Promise<void>;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly onDocumentModified?: (filePath: string) => void;
-};
-
-type HistoricalMarkdownBlockRow = {
-	readonly start_commit_id: string;
-	readonly snapshot_content: unknown;
 };
 
 type MarkdownFileRow = {
@@ -259,6 +258,8 @@ function MarkdownLiveViewLoaded({
 		effectiveFileRow?.id ?? "",
 		review?.beforeCommitId,
 		review?.afterCommitId,
+		reviewDiff?.beforeMarkdown,
+		reviewDiff?.afterMarkdown,
 	);
 	const [liveEditorState, setLiveEditorState] = useState<{
 		readonly fileId: string;
@@ -758,6 +759,8 @@ function MarkdownReviewOverlayWithBlockHistory(
 		props.fileId,
 		props.beforeCommitId,
 		props.afterCommitId,
+		props.reviewDiff.beforeMarkdown,
+		props.reviewDiff.afterMarkdown,
 	);
 	return (
 		<MarkdownReviewOverlay
@@ -804,11 +807,13 @@ function useMarkdownBlocksAtCommits(
 	fileId: string,
 	beforeCommitId: string | undefined,
 	afterCommitId: string | undefined,
+	beforeMarkdown: string,
+	afterMarkdown: string,
 ): {
 	readonly beforeBlocks: MarkdownBlockSnapshot[] | undefined;
 	readonly afterBlocks: MarkdownBlockSnapshot[] | undefined;
 } {
-	const rows = useQuery<HistoricalMarkdownBlockRow>(
+	const rows = useQuery<HistoricalMarkdownNodeRow>(
 		(lix) =>
 			beforeCommitId && afterCommitId
 				? historicalMarkdownBlocksQuery(lix, {
@@ -823,8 +828,16 @@ function useMarkdownBlocksAtCommits(
 		return { beforeBlocks: undefined, afterBlocks: undefined };
 	}
 	return {
-		beforeBlocks: parseHistoricalMarkdownBlocks(rows, beforeCommitId),
-		afterBlocks: parseHistoricalMarkdownBlocks(rows, afterCommitId),
+		beforeBlocks: historicalMarkdownNodeBlocks(
+			rows,
+			beforeCommitId,
+			beforeMarkdown,
+		),
+		afterBlocks: historicalMarkdownNodeBlocks(
+			rows,
+			afterCommitId,
+			afterMarkdown,
+		),
 	};
 }
 
@@ -842,6 +855,8 @@ function useMarkdownBlocksAtCommitsWithoutSuspense(
 	fileId: string,
 	beforeCommitId: string | undefined,
 	afterCommitId: string | undefined,
+	beforeMarkdown: string | undefined,
+	afterMarkdown: string | undefined,
 ): ResolvedMarkdownBlocks | null {
 	const lix = useLix();
 	const key =
@@ -851,7 +866,14 @@ function useMarkdownBlocksAtCommitsWithoutSuspense(
 	const [resolved, setResolved] = useState<ResolvedMarkdownBlocks | null>(null);
 
 	useEffect(() => {
-		if (!key || !beforeCommitId || !afterCommitId) return;
+		if (
+			!key ||
+			!beforeCommitId ||
+			!afterCommitId ||
+			beforeMarkdown === undefined ||
+			afterMarkdown === undefined
+		)
+			return;
 		let cancelled = false;
 		void historicalMarkdownBlocksQuery(lix, {
 			fileId,
@@ -863,8 +885,16 @@ function useMarkdownBlocksAtCommitsWithoutSuspense(
 				if (cancelled) return;
 				setResolved({
 					key,
-					beforeBlocks: parseHistoricalMarkdownBlocks(rows, beforeCommitId),
-					afterBlocks: parseHistoricalMarkdownBlocks(rows, afterCommitId),
+					beforeBlocks: historicalMarkdownNodeBlocks(
+						rows,
+						beforeCommitId,
+						beforeMarkdown,
+					),
+					afterBlocks: historicalMarkdownNodeBlocks(
+						rows,
+						afterCommitId,
+						afterMarkdown,
+					),
 				});
 			})
 			.catch((error: unknown) => {
@@ -882,25 +912,18 @@ function useMarkdownBlocksAtCommitsWithoutSuspense(
 		return () => {
 			cancelled = true;
 		};
-	}, [afterCommitId, beforeCommitId, fileId, key, lix]);
+	}, [
+		afterCommitId,
+		afterMarkdown,
+		beforeCommitId,
+		beforeMarkdown,
+		fileId,
+		key,
+		lix,
+	]);
 
 	if (!key || resolved?.key !== key) return null;
 	return resolved;
-}
-
-function parseHistoricalMarkdownBlocks(
-	rows: readonly HistoricalMarkdownBlockRow[],
-	commitId: string,
-): MarkdownBlockSnapshot[] {
-	return rows
-		.filter((row) => row.start_commit_id === commitId)
-		.map((row) => parseHistoricalMarkdownBlock(row.snapshot_content))
-		.filter((block): block is MarkdownBlockSnapshot => block !== null)
-		.sort(
-			(left, right) =>
-				left.orderKey.localeCompare(right.orderKey) ||
-				left.id.localeCompare(right.id),
-		);
 }
 
 function historicalMarkdownBlocksQuery(
@@ -925,7 +948,7 @@ function historicalMarkdownBlocksQuery(
 			FROM lix_state_history
 			WHERE start_commit_id IN (?, ?)
 				AND file_id = ?
-				AND schema_key = 'markdown_block'
+				AND schema_key = 'markdown_node'
 		)
 		SELECT start_commit_id, snapshot_content
 		FROM ranked
@@ -938,7 +961,7 @@ function historicalMarkdownBlocksQuery(
 		execute: async () => {
 			const result = await lix.execute(sql, parameters);
 			return result.rows.map(
-				(row) => row.toObject() as HistoricalMarkdownBlockRow,
+				(row) => row.toObject() as HistoricalMarkdownNodeRow,
 			);
 		},
 	};
@@ -947,33 +970,8 @@ function historicalMarkdownBlocksQuery(
 function emptyMarkdownBlocksQuery() {
 	return {
 		compile: () => ({ sql: "SELECT 1 WHERE 0", parameters: [] }),
-		execute: async () => [] as HistoricalMarkdownBlockRow[],
+		execute: async () => [] as HistoricalMarkdownNodeRow[],
 	};
-}
-
-function parseHistoricalMarkdownBlock(
-	value: unknown,
-): MarkdownBlockSnapshot | null {
-	const snapshot = typeof value === "string" ? safeJsonParse(value) : value;
-	if (!snapshot || typeof snapshot !== "object") return null;
-	const record = snapshot as Record<string, unknown>;
-	const { id, order_key: orderKey, block } = record;
-	if (
-		typeof id !== "string" ||
-		typeof orderKey !== "string" ||
-		typeof block !== "string"
-	) {
-		return null;
-	}
-	return { id, orderKey, block };
-}
-
-function safeJsonParse(value: string): unknown {
-	try {
-		return JSON.parse(value);
-	} catch {
-		return null;
-	}
 }
 
 function checkpointDiffFileForRevision(
