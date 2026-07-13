@@ -9,6 +9,11 @@ overrides:
   prosemirror-transform: 1.12.0
   prosemirror-view: 1.42.0
 
+patchedDependencies:
+  '@pierre/trees@1.0.0-beta.5':
+    hash: cd7946a6ce6d2e70e62df31eabbca997f269c304ab193492b210b8c9467b95bc
+    path: patches/@pierre__trees@1.0.0-beta.5.patch
+
 importers:
 
   .:
@@ -63,7 +68,7 @@ importers:
         version: 0.1.0
       '@pierre/trees':
         specifier: 1.0.0-beta.5
-        version: 1.0.0-beta.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.0.0-beta.5(patch_hash=cd7946a6ce6d2e70e62df31eabbca997f269c304ab193492b210b8c9467b95bc)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-dropdown-menu':
         specifier: ^2.1.20
         version: 2.1.20(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -5556,7 +5561,7 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@pierre/trees@1.0.0-beta.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@pierre/trees@1.0.0-beta.5(patch_hash=cd7946a6ce6d2e70e62df31eabbca997f269c304ab193492b210b8c9467b95bc)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@pierre/theming': 0.0.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       preact: 11.0.0-beta.0

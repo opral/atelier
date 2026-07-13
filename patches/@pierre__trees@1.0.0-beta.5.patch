@@ -1,0 +1,9 @@
+diff --git a/dist/components/OverflowText.js b/dist/components/OverflowText.js
+index 5d554e8e5038d021fa5157b0879a0754f6c27339..4e218b6ae28609f34a69bc98b97bc32e050d3f37 100644
+--- a/dist/components/OverflowText.js
++++ b/dist/components/OverflowText.js
+@@ -23,2 +23,2 @@
+-	const extensionIndex = contents.lastIndexOf(".") + 1;
+-	const isTooLong = contents.length - extensionIndex > 10;
++	const extensionIndex = contents.lastIndexOf(".");
++	const isTooLong = contents.length - extensionIndex - 1 > 10;

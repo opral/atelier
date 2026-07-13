@@ -13,6 +13,9 @@ overrides:
   prosemirror-transform: 1.12.0
   prosemirror-view: 1.42.0
 
+patchedDependencies:
+  "@pierre/trees@1.0.0-beta.5": patches/@pierre__trees@1.0.0-beta.5.patch
+
 allowBuilds:
   "@parcel/watcher": true
   esbuild: true

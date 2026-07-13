@@ -12,6 +12,27 @@ describe("FileTree", () => {
 		expect(queryTreeItem(container, "docs/guides/writing-style.md")).toBeNull();
 	});
 
+	test("keeps the extension separator with the visible filename ending", () => {
+		const { container } = render(
+			<FileTree
+				nodes={[
+					{
+						type: "file",
+						id: "file-interactive-plan",
+						name: "interactive-plan.html",
+						path: "/interactive-plan.html",
+					},
+				]}
+			/>,
+		);
+		const item = getTreeItem(container, "interactive-plan.html");
+		const ending = item.querySelector(
+			'[data-truncate-segment-priority="1"] [data-truncate-content="visible"]',
+		);
+
+		expect(ending).toHaveTextContent(".html");
+	});
+
 	test("starts directories collapsed", () => {
 		const { container } = render(<FileTree nodes={mockTree} />);
 
