@@ -73,7 +73,7 @@ export async function simulateMarkdownAgentWorkflow(
 
 	await appendAgentTurnCommitRange(lix, {
 		id: rangeId,
-		agent: "codex",
+		sourceId: "codex",
 		beforeCommitId,
 		afterCommitId,
 		sessionId: "atelier-developer-tools",

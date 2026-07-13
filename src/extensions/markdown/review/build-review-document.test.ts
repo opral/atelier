@@ -6,7 +6,9 @@ import { MarkdownWc, astToTiptapDoc } from "../editor/tiptap-markdown-bridge";
 import type { MarkdownBlockSnapshot } from "../review-diff";
 import {
 	buildMarkdownReviewDocument,
+	materializeMarkdownReviewDecisions,
 	projectMarkdownReviewDocument,
+	resolveMarkdownReviewDocumentChanges,
 } from "./build-review-document";
 import { MarkdownReviewExtensions } from "./review-extension";
 
@@ -36,6 +38,64 @@ test("builds one inline replacement and projects exactly to both snapshots", () 
 	expect(projectMarkdownReviewDocument(review.doc, "after")).toEqual(
 		markdownDoc(after),
 	);
+});
+
+test("materializes mixed decisions from exact raw Markdown chunks", () => {
+	const before = "# Plan\n\nAlpha *old*.\n\nBeta stable.\n";
+	const after =
+		"# Plan\n\nAlpha *new*.\n\nInserted with trailing spaces.  \nA hard break.\n\nBeta stable.\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+
+	expect(review.changes).toHaveLength(2);
+	const replacement = review.changes.find(
+		(change) => change.kind === "replace",
+	);
+	const insertion = review.changes.find((change) => change.kind === "insert");
+	expect(replacement).toBeDefined();
+	expect(insertion).toBeDefined();
+
+	const mixed = materializeMarkdownReviewDecisions(
+		review,
+		new Map([
+			[replacement!.id, "undo"],
+			[insertion!.id, "keep"],
+		]),
+	);
+	expect(mixed).toBe(
+		"# Plan\n\nAlpha *old*.\n\nInserted with trailing spaces.  \nA hard break.\n\nBeta stable.\n",
+	);
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map(review.changes.map((change) => [change.id, "keep"])),
+		),
+	).toBe(after);
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map(review.changes.map((change) => [change.id, "undo"])),
+		),
+	).toBe(before);
+});
+
+test("collapses decided groups and leaves pending groups marked", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "Old first.\n\nOld second.\n",
+		afterMarkdown: "New first.\n\nNew second.\n",
+	});
+	expect(review.changes).toHaveLength(2);
+
+	const resolved = resolveMarkdownReviewDocumentChanges(
+		review.doc,
+		new Map([[review.changes[0]!.id, "undo"]]),
+	);
+	expect(changeIds(resolved)).not.toContain(review.changes[0]!.id);
+	expect(changeIds(resolved)).toContain(review.changes[1]!.id);
+	expect(documentText(resolved)).toContain("Old first.");
+	expect(documentText(resolved)).not.toContain("New first.");
 });
 
 test("treats partial semantic block history as hints and keeps every raw block", () => {
@@ -388,6 +448,23 @@ function reviewStatus(node: any): "added" | "removed" | null {
 
 function textOccurrences(doc: any, text: string): number {
 	return documentText(doc).split(text).length - 1;
+}
+
+function changeIds(doc: any): string[] {
+	const ids = new Set<string>();
+	visit(doc, (node) => {
+		const nodeId = node.attrs?.data?.markdownReview?.changeId;
+		if (typeof nodeId === "string") ids.add(nodeId);
+		for (const mark of node.marks ?? []) {
+			if (
+				mark.type === "markdownReviewDiff" &&
+				typeof mark.attrs?.changeId === "string"
+			) {
+				ids.add(mark.attrs.changeId);
+			}
+		}
+	});
+	return [...ids];
 }
 
 function visit(node: any, callback: (node: any) => void): void {

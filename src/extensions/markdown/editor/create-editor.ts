@@ -171,6 +171,10 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	const persistDebounceMsResolved = persistDebounceMs ?? 0;
 	const persistOnce = async (editor: Editor) => {
 		if (!shouldPersist()) return;
+		// Review projections deliberately contain both sides of a suggestion.
+		// They are presentation state, never valid file content. This guard keeps
+		// an accidental mode transition or destroy flush from serializing them.
+		if (containsMarkdownReviewProjection(editor)) return;
 		const markdown = buildNormalizedMarkdownFromEditor(editor);
 		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) return;
 		const didPersist = await upsertMarkdownFile({
@@ -334,6 +338,28 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	};
 	currentEditor = editorInstance;
 	return editorInstance;
+}
+
+function containsMarkdownReviewProjection(editor: Editor): boolean {
+	let found = false;
+	editor.state.doc.descendants((node) => {
+		if (found) return false;
+		if (node.marks.some((mark) => mark.type.name === "markdownReviewDiff")) {
+			found = true;
+			return false;
+		}
+		const data = node.attrs?.data;
+		if (
+			data &&
+			typeof data === "object" &&
+			"markdownReview" in (data as Record<string, unknown>)
+		) {
+			found = true;
+			return false;
+		}
+		return true;
+	});
+	return found;
 }
 
 // React useEditor config builder. TipTapEditor should use this to keep a single source.

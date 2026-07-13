@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
-import { parseMarkdown } from "../editor/markdown";
+import { parseMarkdown, parseMarkdownSource } from "../editor/markdown";
 import { astToTiptapDoc } from "../editor/tiptap-markdown-bridge";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "../review-diff";
 
@@ -9,6 +9,8 @@ const MAX_ALIGNMENT_CELLS = 250_000;
 const GREEDY_LOOKAHEAD = 128;
 
 type ReviewStatus = "added" | "removed";
+
+export type MarkdownReviewDecision = "keep" | "undo";
 
 export type MarkdownReviewChange = {
 	readonly id: string;
@@ -22,6 +24,15 @@ export type MarkdownReviewDocument = {
 	readonly doc: JSONContent;
 	readonly changes: readonly MarkdownReviewChange[];
 	readonly usedSemanticBlockIds: boolean;
+	readonly beforeMarkdown: string;
+	readonly afterMarkdown: string;
+	readonly rawChunks: readonly MarkdownReviewRawChunk[];
+};
+
+export type MarkdownReviewRawChunk = {
+	readonly changeId?: string;
+	readonly beforeText: string;
+	readonly afterText: string;
 };
 
 type Alignment = {
@@ -49,6 +60,14 @@ export function buildMarkdownReviewDocument(
 	const afterDoc = markdownToDoc(reviewDiff.afterMarkdown);
 	const beforeNodes = beforeDoc.content ?? [];
 	const afterNodes = afterDoc.content ?? [];
+	const beforeSegments = rawNodeSegments(
+		reviewDiff.beforeMarkdown,
+		beforeNodes.length,
+	);
+	const afterSegments = rawNodeSegments(
+		reviewDiff.afterMarkdown,
+		afterNodes.length,
+	);
 	const beforeIds = validatedBlockIds(beforeNodes, reviewDiff.beforeBlocks);
 	const afterIds = validatedBlockIds(afterNodes, reviewDiff.afterBlocks);
 	const useSemanticIds = beforeIds !== null && afterIds !== null;
@@ -63,6 +82,7 @@ export function buildMarkdownReviewDocument(
 		: new Map<number, MoveDescriptor>();
 	const content: JSONContent[] = [];
 	const changes: MarkdownReviewChange[] = [];
+	const rawChunks: MarkdownReviewRawChunk[] = [];
 	const recordedMoveIds = new Set<string>();
 
 	for (
@@ -89,6 +109,14 @@ export function buildMarkdownReviewDocument(
 			if (before)
 				content.push(markWholeNode(before, move.change.id, "removed"));
 			if (after) content.push(markWholeNode(after, move.change.id, "added"));
+			rawChunks.push(
+				rawChunkForAlignment(
+					alignment,
+					beforeSegments,
+					afterSegments,
+					move.change.id,
+				),
+			);
 			continue;
 		}
 
@@ -98,6 +126,9 @@ export function buildMarkdownReviewDocument(
 			exactFingerprint(before) === exactFingerprint(after)
 		) {
 			content.push(cloneContent(after));
+			rawChunks.push(
+				rawChunkForAlignment(alignment, beforeSegments, afterSegments),
+			);
 			continue;
 		}
 
@@ -128,6 +159,9 @@ export function buildMarkdownReviewDocument(
 			before: before ? cloneContent(before) : null,
 			after: after ? cloneContent(after) : null,
 		});
+		rawChunks.push(
+			rawChunkForAlignment(alignment, beforeSegments, afterSegments, changeId),
+		);
 
 		if (before && after) {
 			const merged = mergeChangedNode(before, after, changeId);
@@ -140,11 +174,17 @@ export function buildMarkdownReviewDocument(
 		if (after) content.push(markWholeNode(after, changeId, "added"));
 	}
 
-	return {
+	const reviewDocument: MarkdownReviewDocument = {
 		doc: { type: "doc", content },
 		changes,
 		usedSemanticBlockIds: useSemanticIds,
+		beforeMarkdown: reviewDiff.beforeMarkdown,
+		afterMarkdown: reviewDiff.afterMarkdown,
+		rawChunks: assignRawDependencies(rawChunks),
 	};
+	return rawPlanIsLossless(reviewDocument)
+		? reviewDocument
+		: wholeDocumentReview(reviewDiff, beforeDoc, afterDoc);
 }
 
 /** Projects the synthetic review document back to either original side. */
@@ -155,8 +195,170 @@ export function projectMarkdownReviewDocument(
 	return projectNode(doc, side) ?? { type: "doc", content: [] };
 }
 
+/** Collapses decided groups while leaving pending groups marked for review. */
+export function resolveMarkdownReviewDocumentChanges(
+	doc: JSONContent,
+	decisions: ReadonlyMap<string, MarkdownReviewDecision>,
+): JSONContent {
+	return resolveNodeDecisions(doc, decisions) ?? { type: "doc", content: [] };
+}
+
+/** Materializes an exact raw Markdown result after every group is decided. */
+export function materializeMarkdownReviewDecisions(
+	review: MarkdownReviewDocument,
+	decisions: ReadonlyMap<string, MarkdownReviewDecision>,
+): string {
+	for (const change of review.changes) {
+		if (!decisions.has(change.id)) {
+			throw new Error(`Missing review decision for ${change.id}`);
+		}
+	}
+	return review.rawChunks
+		.map((chunk) => {
+			if (!chunk.changeId) return chunk.afterText;
+			return decisions.get(chunk.changeId) === "undo"
+				? chunk.beforeText
+				: chunk.afterText;
+		})
+		.join("");
+}
+
 function markdownToDoc(markdown: string): JSONContent {
 	return astToTiptapDoc(parseMarkdown(markdown)) as JSONContent;
+}
+
+function rawNodeSegments(
+	markdown: string,
+	expectedNodeCount: number,
+): readonly string[] | null {
+	const source = parseMarkdownSource(markdown);
+	const children = source.children ?? [];
+	if (children.length !== expectedNodeCount) return null;
+	if (children.length === 0) return markdown.length === 0 ? [] : null;
+
+	const starts: number[] = [];
+	for (let index = 0; index < children.length; index += 1) {
+		const offset = children[index]?.position?.start?.offset;
+		if (
+			typeof offset !== "number" ||
+			offset < 0 ||
+			offset > markdown.length ||
+			(index > 0 && offset <= starts[index - 1]!)
+		) {
+			return null;
+		}
+		starts.push(offset);
+	}
+
+	return children.map((_child, index) => {
+		const start = index === 0 ? 0 : starts[index]!;
+		const end = starts[index + 1] ?? markdown.length;
+		return markdown.slice(start, end);
+	});
+}
+
+function rawChunkForAlignment(
+	alignment: Alignment,
+	beforeSegments: readonly string[] | null,
+	afterSegments: readonly string[] | null,
+	changeId?: string,
+): MarkdownReviewRawChunk {
+	return {
+		...(changeId ? { changeId } : {}),
+		beforeText:
+			alignment.beforeIndex === undefined
+				? ""
+				: (beforeSegments?.[alignment.beforeIndex] ?? ""),
+		afterText:
+			alignment.afterIndex === undefined
+				? ""
+				: (afterSegments?.[alignment.afterIndex] ?? ""),
+	};
+}
+
+function rawPlanIsLossless(review: MarkdownReviewDocument): boolean {
+	if (
+		review.rawChunks.map((chunk) => chunk.beforeText).join("") !==
+			review.beforeMarkdown ||
+		review.rawChunks.map((chunk) => chunk.afterText).join("") !==
+			review.afterMarkdown
+	) {
+		return false;
+	}
+	return review.rawChunks.every(
+		(chunk) => chunk.changeId || chunk.beforeText === chunk.afterText,
+	);
+}
+
+function assignRawDependencies(
+	chunks: readonly MarkdownReviewRawChunk[],
+): readonly MarkdownReviewRawChunk[] {
+	return chunks.map((chunk, index) => {
+		if (chunk.changeId || chunk.beforeText === chunk.afterText) return chunk;
+		let owner: string | undefined;
+		for (let previous = index - 1; previous >= 0; previous -= 1) {
+			if (!chunks[previous]?.changeId) continue;
+			owner = chunks[previous]!.changeId;
+			break;
+		}
+		if (!owner) {
+			for (let next = index + 1; next < chunks.length; next += 1) {
+				if (!chunks[next]?.changeId) continue;
+				owner = chunks[next]!.changeId;
+				break;
+			}
+		}
+		return owner ? { ...chunk, changeId: owner } : chunk;
+	});
+}
+
+function wholeDocumentReview(
+	reviewDiff: MarkdownReviewDiff,
+	beforeDoc: JSONContent,
+	afterDoc: JSONContent,
+): MarkdownReviewDocument {
+	const beforeNodes = beforeDoc.content ?? [];
+	const afterNodes = afterDoc.content ?? [];
+	const kind =
+		beforeNodes.length === 0
+			? "insert"
+			: afterNodes.length === 0
+				? "delete"
+				: "replace";
+	const id = reviewChangeId({
+		kind,
+		before: beforeDoc,
+		after: afterDoc,
+		beforeIndex: 0,
+		afterIndex: 0,
+	});
+	return {
+		doc: {
+			type: "doc",
+			content: [
+				...beforeNodes.map((node) => markWholeNode(node, id, "removed")),
+				...afterNodes.map((node) => markWholeNode(node, id, "added")),
+			],
+		},
+		changes: [
+			{
+				id,
+				kind,
+				before: cloneContent(beforeDoc),
+				after: cloneContent(afterDoc),
+			},
+		],
+		usedSemanticBlockIds: false,
+		beforeMarkdown: reviewDiff.beforeMarkdown,
+		afterMarkdown: reviewDiff.afterMarkdown,
+		rawChunks: [
+			{
+				changeId: id,
+				beforeText: reviewDiff.beforeMarkdown,
+				afterText: reviewDiff.afterMarkdown,
+			},
+		],
+	};
 }
 
 function validatedBlockIds(
@@ -725,35 +927,63 @@ function mergeAdjacentText(content: readonly JSONContent[]): JSONContent[] {
 	return merged;
 }
 
+function resolveNodeDecisions(
+	node: JSONContent,
+	decisions: ReadonlyMap<string, MarkdownReviewDecision>,
+): JSONContent | null {
+	const clone = cloneContent(node);
+	const nodeReview = readNodeReview(clone);
+	const nodeDecision = nodeReview
+		? decisions.get(nodeReview.changeId)
+		: undefined;
+	if (
+		nodeReview &&
+		nodeDecision &&
+		shouldDropReviewSide(nodeReview.status, decisionSide(nodeDecision))
+	) {
+		return null;
+	}
+	if (nodeReview && nodeDecision) restoreNodeAttrs(clone, nodeReview);
+
+	const reviewMark = clone.marks?.find(
+		(mark) => mark.type === REVIEW_MARK_NAME,
+	);
+	const markChangeId = reviewMark?.attrs?.changeId;
+	const markStatus = reviewMark?.attrs?.status;
+	const markDecision =
+		typeof markChangeId === "string" ? decisions.get(markChangeId) : undefined;
+	if (
+		markDecision &&
+		(markStatus === "added" || markStatus === "removed") &&
+		shouldDropReviewSide(markStatus, decisionSide(markDecision))
+	) {
+		return null;
+	}
+	if (markDecision) {
+		const marks = clone.marks?.filter((mark) => mark.type !== REVIEW_MARK_NAME);
+		if (marks?.length) clone.marks = marks;
+		else delete clone.marks;
+	}
+
+	if (clone.content) {
+		clone.content = clone.content
+			.map((child) => resolveNodeDecisions(child, decisions))
+			.filter((child): child is JSONContent => child !== null);
+		clone.content = mergeAdjacentText(clone.content);
+	}
+	return clone;
+}
+
 function projectNode(
 	node: JSONContent,
 	side: "before" | "after",
 ): JSONContent | null {
 	const clone = cloneContent(node);
 	const nodeReview = readNodeReview(clone);
-	if (
-		nodeReview &&
-		((side === "before" && nodeReview.status === "added") ||
-			(side === "after" && nodeReview.status === "removed"))
-	) {
+	if (nodeReview && shouldDropReviewSide(nodeReview.status, side)) {
 		return null;
 	}
-	if (nodeReview) {
-		if (nodeReview.hasOriginalAttrs) {
-			if (nodeReview.originalAttrs === undefined) delete clone.attrs;
-			else clone.attrs = cloneValue(nodeReview.originalAttrs);
-		} else {
-			const data = cloneValue(clone.attrs?.data ?? {}) as Record<
-				string,
-				unknown
-			>;
-			delete data[REVIEW_DATA_KEY];
-			clone.attrs = {
-				...(clone.attrs ?? {}),
-				data: Object.keys(data).length > 0 ? data : null,
-			};
-		}
-	}
+	if (nodeReview) restoreNodeAttrs(clone, nodeReview);
 
 	const reviewMark = clone.marks?.find(
 		(mark) => mark.type === REVIEW_MARK_NAME,
@@ -780,7 +1010,39 @@ function projectNode(
 	return clone;
 }
 
+function decisionSide(decision: MarkdownReviewDecision): "before" | "after" {
+	return decision === "undo" ? "before" : "after";
+}
+
+function shouldDropReviewSide(
+	status: ReviewStatus,
+	side: "before" | "after",
+): boolean {
+	return (
+		(side === "before" && status === "added") ||
+		(side === "after" && status === "removed")
+	);
+}
+
+function restoreNodeAttrs(
+	node: JSONContent,
+	review: NonNullable<ReturnType<typeof readNodeReview>>,
+): void {
+	if (review.hasOriginalAttrs) {
+		if (review.originalAttrs === undefined) delete node.attrs;
+		else node.attrs = cloneValue(review.originalAttrs);
+		return;
+	}
+	const data = cloneValue(node.attrs?.data ?? {}) as Record<string, unknown>;
+	delete data[REVIEW_DATA_KEY];
+	node.attrs = {
+		...(node.attrs ?? {}),
+		data: Object.keys(data).length > 0 ? data : null,
+	};
+}
+
 function readNodeReview(node: JSONContent): {
+	readonly changeId: string;
 	readonly status: ReviewStatus;
 	readonly hasOriginalAttrs: boolean;
 	readonly originalAttrs: JSONContent["attrs"] | undefined;
@@ -788,9 +1050,13 @@ function readNodeReview(node: JSONContent): {
 	const value = node.attrs?.data?.[REVIEW_DATA_KEY];
 	if (!value || typeof value !== "object") return null;
 	const record = value as Record<string, unknown>;
+	const changeId = record.changeId;
 	const status = record.status;
-	return status === "added" || status === "removed"
+	return typeof changeId === "string" &&
+		changeId.length > 0 &&
+		(status === "added" || status === "removed")
 		? {
+				changeId,
 				status,
 				hasOriginalAttrs: Object.hasOwn(record, "originalAttrs"),
 				originalAttrs: record.originalAttrs as JSONContent["attrs"] | undefined,

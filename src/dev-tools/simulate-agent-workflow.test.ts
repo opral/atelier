@@ -77,7 +77,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 	expect(result.beforeCommitId).not.toBe(result.afterCommitId);
 	expect(ranges.at(-1)).toMatchObject({
 		id: result.rangeId,
-		agent: "codex",
+		sourceId: "codex",
 		beforeCommitId: result.beforeCommitId,
 		afterCommitId: result.afterCommitId,
 	});

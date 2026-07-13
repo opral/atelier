@@ -2026,6 +2026,44 @@ function LayoutShellLoadedContent({
 		[lix, getExternalWriteReviewForFile, resolveDiffReview],
 	);
 
+	const handleResolveExternalWriteReview = useCallback(
+		async (args: {
+			readonly fileId: string;
+			readonly reviewId: string;
+			readonly review?: ExternalWriteReview;
+			readonly data: Uint8Array;
+		}) => {
+			const review = getExternalWriteReviewForFile(args);
+			if (!review) return;
+			if (resolvedReviewIdsRef.current.has(review.reviewId)) return;
+			const afterData = await getFileDataAtCommit(
+				lix,
+				review.fileId,
+				review.afterCommitId,
+			);
+			if (!afterData) {
+				throw new Error("The reviewed file snapshot is no longer available.");
+			}
+			const result = await lix.execute(
+				"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
+				[args.data, review.fileId, afterData],
+				{ originKey: `atelier.review:${review.reviewId}` },
+			);
+			if (result.rowsAffected !== 1) {
+				throw new Error(
+					"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+				);
+			}
+			await clearAgentTurnCommitRangeFile(lix, {
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				agentTurnRangeIds: review.agentTurnRangeIds,
+			});
+			resolveDiffReview(review, "accepted");
+		},
+		[lix, getExternalWriteReviewForFile, resolveDiffReview],
+	);
+
 	const handleRejectExternalWriteReview = useCallback(
 		async (args: {
 			readonly fileId: string;
@@ -2111,13 +2149,6 @@ function LayoutShellLoadedContent({
 							: rightPanel;
 				const removedView = currentPanel.views.find(predicate);
 				if (!removedView) continue;
-				const removedFileId =
-					typeof removedView.state?.fileId === "string"
-						? removedView.state.fileId
-						: null;
-				const removedReview = removedFileId
-					? openDiffReviewByFileIdRef.current.get(removedFileId)
-					: null;
 				setPanelState(
 					side,
 					(current) => {
@@ -2133,16 +2164,10 @@ function LayoutShellLoadedContent({
 					},
 					{ focus },
 				);
-				if (
-					removedReview &&
-					!resolvedReviewIdsRef.current.has(removedReview.reviewId)
-				) {
-					resolveDiffReview(removedReview);
-				}
 				break;
 			}
 		},
-		[centralPanel, leftPanel, resolveDiffReview, rightPanel, setPanelState],
+		[centralPanel, leftPanel, rightPanel, setPanelState],
 	);
 
 	const activeCentralEntry = useMemo(() => {
@@ -2565,6 +2590,7 @@ function LayoutShellLoadedContent({
 				clear: clearCheckpointDiff,
 			},
 			reviews: {
+				resolve: handleResolveExternalWriteReview,
 				accept: handleAcceptExternalWriteReview,
 				reject: handleRejectExternalWriteReview,
 				register: registerExternalWriteReview,
@@ -2576,6 +2602,7 @@ function LayoutShellLoadedContent({
 			showCheckpointDiff,
 			clearCheckpointDiff,
 			handleAcceptExternalWriteReview,
+			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
 			effectiveAtelierInstance.documents,
 			lix,

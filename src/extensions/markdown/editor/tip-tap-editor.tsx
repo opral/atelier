@@ -8,7 +8,7 @@ import {
 	useState,
 } from "react";
 import { EditorContent, useEditorState } from "@tiptap/react";
-import type { Editor } from "@tiptap/core";
+import type { Editor, Extensions } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
 import { useEditorCtx } from "./editor-context";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
@@ -39,6 +39,8 @@ type TipTapEditorProps = {
 	defaultBlock?: EmptyMarkdownDefaultBlock;
 	isActiveView?: boolean;
 	readOnly?: boolean;
+	suspendExternalSync?: boolean;
+	additionalExtensions?: Extensions;
 	originKey?: string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
@@ -50,6 +52,37 @@ type MarkdownFileDelivery = {
 	readonly changeId: string;
 	readonly originKey: unknown;
 };
+
+type MarkdownExternalSyncState = {
+	readonly editor: Editor;
+	readonly initialObservedMarkdown: string;
+	lastCleanPersistedMarkdown: string;
+	pendingExternalMarkdown: string | null;
+	sawInitialSnapshot: boolean;
+};
+
+const markdownExternalSyncStates = new WeakMap<
+	Editor,
+	MarkdownExternalSyncState
+>();
+
+/**
+ * Hydrates a successful review result into the existing editor and advances
+ * both persistence and external-delivery baselines before editing resumes.
+ */
+export function hydrateMarkdownEditorAuthoritativeMarkdown(
+	editor: Editor,
+	markdown: string,
+	defaultBlock?: EmptyMarkdownDefaultBlock,
+): void {
+	if (editor.isDestroyed) return;
+	setEditorMarkdown(editor, markdown, defaultBlock);
+	const syncState = markdownExternalSyncStates.get(editor);
+	if (!syncState) return;
+	syncState.lastCleanPersistedMarkdown = normalizePersistedMarkdown(markdown);
+	syncState.pendingExternalMarkdown = null;
+	syncState.sawInitialSnapshot = true;
+}
 
 /**
  * Rich text editor for Markdown files backed by the Lix store.
@@ -75,6 +108,8 @@ export function TipTapEditor({
 	defaultBlock,
 	isActiveView = true,
 	readOnly = false,
+	suspendExternalSync = false,
+	additionalExtensions,
 	originKey,
 	openWorkspaceFile,
 	onPersist,
@@ -91,6 +126,8 @@ export function TipTapEditor({
 				defaultBlock={defaultBlock}
 				isActiveView={isActiveView}
 				readOnly={readOnly}
+				suspendExternalSync={suspendExternalSync}
+				additionalExtensions={additionalExtensions}
 				originKey={originKey}
 				openWorkspaceFile={openWorkspaceFile}
 				onPersist={onPersist}
@@ -107,6 +144,8 @@ export function TipTapEditor({
 			defaultBlock={defaultBlock}
 			isActiveView={isActiveView}
 			readOnly={readOnly}
+			suspendExternalSync={suspendExternalSync}
+			additionalExtensions={additionalExtensions}
 			originKey={originKey}
 			openWorkspaceFile={openWorkspaceFile}
 			onPersist={onPersist}
@@ -240,6 +279,8 @@ function TipTapEditorLoadedContent({
 	defaultBlock,
 	isActiveView = true,
 	readOnly = false,
+	suspendExternalSync = false,
+	additionalExtensions,
 	originKey,
 	openWorkspaceFile,
 	onPersist,
@@ -298,6 +339,7 @@ function TipTapEditorLoadedContent({
 			shouldPersist: () => !readOnlyRef.current,
 			originKey: editorOriginKey,
 			openWorkspaceFile: stableOpenWorkspaceFile,
+			additionalExtensions,
 			onPersist: (args) => onPersistRef.current?.(args),
 		});
 		setEditorInstance(nextEditor);
@@ -312,6 +354,7 @@ function TipTapEditorLoadedContent({
 		defaultBlock,
 		editorOriginKey,
 		stableOpenWorkspaceFile,
+		additionalExtensions,
 	]);
 
 	const isEditorFocused =
@@ -466,21 +509,39 @@ function TipTapEditorLoadedContent({
 		};
 	}, [editor, setScrollbarVisible, syncScrollbarThumb]);
 
-	const externalSyncState = useMemo(() => {
+	const externalSyncState = useMemo<MarkdownExternalSyncState | null>(() => {
 		if (!editor) return null;
 		return {
 			editor,
 			initialObservedMarkdown: normalizePersistedMarkdown(initialMarkdown),
 			lastCleanPersistedMarkdown: buildNormalizedMarkdownFromEditor(editor),
-			pendingExternalMarkdown: null as string | null,
+			pendingExternalMarkdown: null,
 			sawInitialSnapshot: false,
 		};
 	}, [editor, initialMarkdown]);
+
+	useEffect(() => {
+		if (!editor || !externalSyncState) return;
+		markdownExternalSyncStates.set(editor, externalSyncState);
+		return () => {
+			if (markdownExternalSyncStates.get(editor) === externalSyncState) {
+				markdownExternalSyncStates.delete(editor);
+			}
+		};
+	}, [editor, externalSyncState]);
+
+	useEffect(() => {
+		if (!suspendExternalSync || !externalSyncState) return;
+		// A queued delivery from edit mode must never be replayed over the
+		// synthetic review document when the review lock is released.
+		externalSyncState.pendingExternalMarkdown = null;
+	}, [externalSyncState, suspendExternalSync]);
 
 	// The subscribed file query delivers external changes. Keep local dirty edits
 	// authoritative while editing. Review mode is read-only, so its file snapshot
 	// is authoritative even when this editor is not the active visible view.
 	useEffect(() => {
+		if (suspendExternalSync) return;
 		if (
 			!activeFileId ||
 			!editor ||
@@ -534,10 +595,11 @@ function TipTapEditorLoadedContent({
 		defaultBlock,
 		sourceFile,
 		externalSyncState,
+		suspendExternalSync,
 	]);
 
 	useEffect(() => {
-		if (!editor || !externalSyncState) return;
+		if (!editor || !externalSyncState || suspendExternalSync) return;
 		const applyPendingExternalMarkdown = () => {
 			const pendingMarkdown = externalSyncState.pendingExternalMarkdown;
 			if (pendingMarkdown === null) return;
@@ -562,7 +624,7 @@ function TipTapEditorLoadedContent({
 		return () => {
 			editor.off("update", applyPendingExternalMarkdown);
 		};
-	}, [defaultBlock, editor, externalSyncState]);
+	}, [defaultBlock, editor, externalSyncState, suspendExternalSync]);
 
 	useEffect(() => {
 		if (!editor) return;

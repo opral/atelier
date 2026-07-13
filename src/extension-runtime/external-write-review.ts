@@ -11,3 +11,10 @@ export type ExternalWriteReviewData = {
 	readonly beforeData: Uint8Array;
 	readonly afterData: Uint8Array;
 };
+
+export type ResolveExternalWriteReviewArgs = {
+	readonly fileId: string;
+	readonly reviewId: string;
+	readonly review?: ExternalWriteReview;
+	readonly data: Uint8Array;
+};

@@ -7,7 +7,10 @@ import { MarkdownView } from "./index";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { qb } from "@/lib/lix-kysely";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
+import {
+	appendAgentTurnCommitRange,
+	clearAgentTurnCommitRangeFile,
+} from "@/shell/agent-turn-review-range";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -599,6 +602,23 @@ describe("MarkdownView", () => {
 								isActiveView
 								isPanelFocused
 								syncActiveFile={false}
+								onResolveReviewDiff={async ({
+									fileId,
+									reviewId,
+									review,
+									data,
+								}) => {
+									await qb(lix)
+										.updateTable("lix_file")
+										.set({ data })
+										.where("id", "=", fileId)
+										.execute();
+									await clearAgentTurnCommitRangeFile(lix, {
+										fileId,
+										reviewId,
+										agentTurnRangeIds: review?.agentTurnRangeIds,
+									});
+								}}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -607,10 +627,28 @@ describe("MarkdownView", () => {
 		});
 
 		const liveEditor = await screen.findByTestId("tiptap-editor");
+		const liveProseMirror = liveEditor.querySelector(".ProseMirror");
+		expect(liveProseMirror).not.toBeNull();
+		const formattingToolbar = screen.getByRole("toolbar", {
+			name: "Formatting toolbar",
+		});
+		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
 		expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
 			"contenteditable",
 			"true",
 		);
+		const editorSurface = utils!.container.querySelector<HTMLElement>(
+			'[data-attr="markdown-editor"]',
+		)!;
+		const observedEditorCounts = [
+			editorSurface.querySelectorAll(".ProseMirror").length,
+		];
+		const editorObserver = new MutationObserver(() => {
+			observedEditorCounts.push(
+				editorSurface.querySelectorAll(".ProseMirror").length,
+			);
+		});
+		editorObserver.observe(editorSurface, { childList: true, subtree: true });
 		const beforeCommitId = await activeCommitId(lix);
 
 		await act(async () => {
@@ -635,18 +673,44 @@ describe("MarkdownView", () => {
 
 		expect(
 			await screen.findByRole("button", { name: /keep/i }),
-		).toHaveAttribute("data-attr", "diff-accept");
+		).toHaveAttribute("data-attr", "review-change-keep");
 		expect(screen.getByRole("button", { name: /undo/i })).toHaveAttribute(
 			"data-attr",
-			"diff-reject",
+			"review-change-undo",
 		);
 		await waitFor(() => {
-			expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
-				"contenteditable",
-				"false",
+			expect(screen.getByTestId("tiptap-editor")).toBe(liveEditor);
+			expect(liveEditor.querySelector(".ProseMirror")).toBe(liveProseMirror);
+			expect(
+				screen.queryByTestId("markdown-review-editor"),
+			).not.toBeInTheDocument();
+			expect(utils!.container.querySelectorAll(".ProseMirror")).toHaveLength(1);
+			expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+				formattingToolbar,
 			);
-			expect(screen.getByTestId("markdown-review-editor")).toBeInTheDocument();
+			expect(formattingToolbar).toHaveAttribute("data-disabled", "true");
 		});
+		editorObserver.disconnect();
+		expect(observedEditorCounts.every((count) => count === 1)).toBe(true);
+
+		await act(async () => {
+			screen.getByRole("button", { name: /keep change/i }).click();
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("button", { name: /keep change/i }),
+			).not.toBeInTheDocument();
+		});
+		const restoredEditor = await screen.findByTestId("tiptap-editor");
+		expect(restoredEditor).toBe(liveEditor);
+		expect(restoredEditor.querySelector(".ProseMirror")).toBe(liveProseMirror);
+		expect(liveProseMirror?.isConnected).toBe(true);
+		expect(restoredEditor).toHaveTextContent("After");
+		expect(utils!.container.querySelectorAll(".ProseMirror")).toHaveLength(1);
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			formattingToolbar,
+		);
+		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
 
 		await act(async () => {
 			utils?.unmount();

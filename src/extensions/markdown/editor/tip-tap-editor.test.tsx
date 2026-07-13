@@ -10,7 +10,10 @@ import {
 } from "@testing-library/react";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
-import { TipTapEditor } from "./tip-tap-editor";
+import {
+	hydrateMarkdownEditorAuthoritativeMarkdown,
+	TipTapEditor,
+} from "./tip-tap-editor";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { EditorProvider } from "./editor-context";
@@ -1413,6 +1416,82 @@ test("suspends the same editor instance while read-only and still applies extern
 			).data,
 		),
 	).toBe("External while reviewing\n");
+});
+
+test("keeps a synthetic review document in the live editor through authoritative review hydration", async () => {
+	const lix = await openLix();
+	const fileId = "file_review_synthetic_override";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/review-synthetic-override.md",
+			data: new TextEncoder().encode("Before review\n"),
+		})
+		.execute();
+
+	let editorRef: Editor | null = null;
+	const renderEditor = (reviewMode: boolean) => (
+		<Suspense>
+			<Providers lix={lix}>
+				<TipTapEditor
+					fileId={fileId}
+					readOnly={reviewMode}
+					suspendExternalSync={reviewMode}
+					onReady={(editor) => (editorRef = editor)}
+				/>
+			</Providers>
+		</Suspense>
+	);
+	let utils: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		utils = render(renderEditor(false));
+	});
+	const editorElement = await screen.findByTestId("tiptap-editor");
+	const proseMirror = editorElement.querySelector(".ProseMirror");
+	await waitFor(() => expect(editorRef).not.toBeNull());
+	const originalEditor = editorRef as Editor | null;
+	if (!originalEditor) throw new Error("Editor did not become ready");
+
+	await act(async () => {
+		utils?.rerender(renderEditor(true));
+		originalEditor.commands.setContent(
+			{
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [{ type: "text", text: "Synthetic inline review" }],
+					},
+				],
+			},
+			{ emitUpdate: false },
+		);
+	});
+
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Authoritative resolved result\n",
+		"review-resolver",
+	);
+	await settleMarkdownObserver();
+	expect(editorElement).toHaveTextContent("Synthetic inline review");
+	expect(editorElement.querySelector(".ProseMirror")).toBe(proseMirror);
+	expect(editorRef).toBe(originalEditor);
+
+	await act(async () => {
+		hydrateMarkdownEditorAuthoritativeMarkdown(
+			originalEditor,
+			"Authoritative resolved result\n",
+		);
+		utils?.rerender(renderEditor(false));
+	});
+	await waitFor(() => {
+		expect(editorElement).toHaveTextContent("Authoritative resolved result");
+	});
+	expect(editorElement.querySelector(".ProseMirror")).toBe(proseMirror);
+	expect(editorRef).toBe(originalEditor);
 });
 
 test("read-only inactive editor replaces dirty content with authoritative file updates", async () => {
