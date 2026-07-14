@@ -6,6 +6,7 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
@@ -1269,8 +1270,28 @@ describe("installed extension lifecycle", () => {
 				await new Promise((resolve) => window.setTimeout(resolve, 50));
 			});
 
-			expect(screen.queryByText("Recovered Extension")).toBeNull();
+			expect(
+				screen.queryByRole("button", { name: "Recovered Extension" }),
+			).toBeNull();
 			expect(screen.queryByText("Recovered extension content")).toBeNull();
+
+			const navigator = screen.getByRole("complementary", {
+				name: "Navigator",
+			});
+			const recoveredView = await within(navigator).findByRole("button", {
+				name: "Open Recovered Extension view",
+			});
+			fireEvent.click(recoveredView);
+
+			expect(
+				await screen.findByText("Recovered extension content"),
+			).toBeInTheDocument();
+			const restoredState = sessionStateStore.getSnapshot();
+			const restoredEntry = restoredState?.panels.left.views.find(
+				(entry) => entry.kind === extensionKind,
+			);
+			expect(restoredEntry?.instance).toBeDefined();
+			expect(restoredEntry?.instance).not.toBe(extensionInstance);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

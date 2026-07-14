@@ -32,8 +32,9 @@ vi.mock("@dnd-kit/sortable", async () => {
 });
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { PanelV2 } from "./panel-v2";
+import { PanelV2, availableExtensionsForPanel } from "./panel-v2";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
+import { ExtensionRegistryProvider } from "../extension-runtime/extension-registry";
 import type {
 	PanelState,
 	ExtensionDefinition,
@@ -79,10 +80,74 @@ const searchViewOverride: ExtensionDefinition = {
 	},
 };
 
+const multiInstanceSearchView: ExtensionDefinition = {
+	...searchViewOverride,
+	multiInstance: true,
+};
+
+function StatefulMultiInstancePanel() {
+	const [panel, setPanel] = React.useState(singleSearchPanel);
+	const nextInstance = React.useRef(2);
+	return (
+		<PanelV2
+			side="left"
+			panel={panel}
+			isFocused={true}
+			onFocusPanel={vi.fn()}
+			onSelectView={(instance) =>
+				setPanel((current) => ({ ...current, activeInstance: instance }))
+			}
+			onRemoveView={vi.fn()}
+			onAddView={(kind) => {
+				const instance = `search-${nextInstance.current}`;
+				nextInstance.current += 1;
+				setPanel((current) => ({
+					views: [...current.views, { instance, kind }],
+					activeInstance: instance,
+				}));
+			}}
+			viewContext={createViewContext()}
+		/>
+	);
+}
+
 const renderWithinProvider = (ui: React.ReactNode) =>
 	render(<ExtensionHostRegistryProvider>{ui}</ExtensionHostRegistryProvider>);
 
 describe("PanelV2", () => {
+	test("keeps singleton and multi-instance availability consistent", () => {
+		expect(
+			availableExtensionsForPanel([searchViewOverride], singleSearchPanel),
+		).toEqual([]);
+		expect(
+			availableExtensionsForPanel([multiInstanceSearchView], singleSearchPanel),
+		).toEqual([multiInstanceSearchView]);
+	});
+
+	test("adds and focuses a new instance of a multi-instance view", async () => {
+		render(
+			<ExtensionRegistryProvider hostExtensions={[multiInstanceSearchView]}>
+				<ExtensionHostRegistryProvider>
+					<StatefulMultiInstancePanel />
+				</ExtensionHostRegistryProvider>
+			</ExtensionRegistryProvider>,
+		);
+
+		const addView = screen.getByRole("button", { name: "Add view" });
+		fireEvent.keyDown(addView, { key: "ArrowDown", code: "ArrowDown" });
+		const searchItem = await screen.findByRole("menuitem", { name: "Search" });
+		searchItem.focus();
+		fireEvent.keyDown(searchItem, { key: "Enter", code: "Enter" });
+
+		await waitFor(() =>
+			expect(screen.getAllByRole("button", { name: "Search" })).toHaveLength(2),
+		);
+		const searchTabs = screen.getAllByRole("button", { name: "Search" });
+		expect(searchTabs[0]).toHaveAttribute("data-view-instance", "search-1");
+		expect(searchTabs[1]).toHaveAttribute("data-view-instance", "search-2");
+		await waitFor(() => expect(searchTabs[1]).toHaveFocus());
+	});
+
 	test("renders content container without padding or margin utilities", () => {
 		renderWithinProvider(
 			<PanelV2
