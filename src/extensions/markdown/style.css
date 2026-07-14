@@ -1664,6 +1664,7 @@
 
 	.markdown-review {
 		position: relative;
+		container-type: inline-size;
 	}
 
 	.markdown-review-overlay {
@@ -1844,6 +1845,12 @@
 		background: rgba(255, 255, 255, 0.14);
 	}
 
+	.markdown-change-review-decisions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
 	.markdown-change-review-button {
 		display: inline-flex;
 		height: 1.875rem;
@@ -1940,5 +1947,42 @@
 	.markdown-change-review-button:focus-visible {
 		outline: 2px solid rgba(255, 255, 255, 0.9);
 		outline-offset: 1px;
+	}
+
+	@container (max-width: 42rem) {
+		.markdown-change-review-actions {
+			height: auto;
+			flex-direction: column;
+			gap: 0.25rem;
+			padding: 0.35rem;
+		}
+
+		.markdown-change-review-nav,
+		.markdown-change-review-decisions {
+			width: 100%;
+			justify-content: center;
+		}
+
+		.markdown-change-review-divider {
+			display: none;
+		}
+	}
+
+	@container (max-width: 28rem) {
+		.markdown-change-review-decisions .markdown-change-review-keycap {
+			display: none;
+		}
+	}
+
+	@container (max-width: 24rem) {
+		.markdown-change-review-file {
+			display: none;
+		}
+	}
+
+	@container (max-width: 20rem) {
+		.markdown-change-review-decisions .markdown-change-review-button > svg {
+			display: none;
+		}
 	}
 }

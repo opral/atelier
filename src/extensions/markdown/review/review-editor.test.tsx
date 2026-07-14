@@ -56,6 +56,9 @@ test("reviews entity groups one at a time and completes with exact mixed Markdow
 	expect(keepAll).toHaveAttribute("aria-keyshortcuts", primaryShortcut());
 	expect(keepAll).toHaveClass("markdown-change-review-button-primary");
 	expect(
+		view!.container.querySelector(".markdown-change-review-decisions"),
+	).not.toBeNull();
+	expect(
 		screen.getByRole("button", { name: "Keep current change" }),
 	).toHaveAttribute("aria-keyshortcuts", individualShortcut());
 	await waitFor(() => {

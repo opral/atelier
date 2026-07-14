@@ -467,46 +467,50 @@ function MarkdownChangeReviewControls({
 					</button>
 				</div>
 				<div className="markdown-change-review-divider" />
-				<button
-					type="button"
-					className="markdown-change-review-button markdown-change-review-button-undo"
-					aria-label="Undo change"
-					data-attr="review-change-undo"
-					disabled={busy}
-					onClick={onUndo}
-				>
-					<RotateCcw aria-hidden />
-					Undo
-					<kbd className="markdown-change-review-keycap">⌫</kbd>
-				</button>
-				<button
-					type="button"
-					className={`markdown-change-review-button markdown-change-review-button-keep${showKeepAll ? "" : " markdown-change-review-button-primary"}`}
-					aria-label={showKeepAll ? "Keep current change" : "Keep change"}
-					aria-keyshortcuts={showKeepAll ? individualShortcut : primaryShortcut}
-					data-attr="review-change-keep"
-					disabled={busy}
-					onClick={onKeep}
-				>
-					<Check aria-hidden />
-					{busy ? "Saving…" : showKeepAll ? "Keep this" : "Keep"}
-					<ReviewShortcutKeycap shift={showKeepAll} />
-				</button>
-				{showKeepAll ? (
+				<div className="markdown-change-review-decisions">
 					<button
 						type="button"
-						className="markdown-change-review-button markdown-change-review-button-keep-all markdown-change-review-button-primary"
-						aria-label={`Keep all ${remainingCount} remaining changes`}
-						aria-keyshortcuts={primaryShortcut}
-						data-attr="review-change-keep-all"
+						className="markdown-change-review-button markdown-change-review-button-undo"
+						aria-label="Undo change"
+						data-attr="review-change-undo"
 						disabled={busy}
-						onClick={onKeepAll}
+						onClick={onUndo}
 					>
-						<CheckCheck aria-hidden />
-						{busy ? "Saving…" : "Keep all"}
-						<ReviewShortcutKeycap />
+						<RotateCcw aria-hidden />
+						Undo
+						<kbd className="markdown-change-review-keycap">⌫</kbd>
 					</button>
-				) : null}
+					<button
+						type="button"
+						className={`markdown-change-review-button markdown-change-review-button-keep${showKeepAll ? "" : " markdown-change-review-button-primary"}`}
+						aria-label={showKeepAll ? "Keep current change" : "Keep change"}
+						aria-keyshortcuts={
+							showKeepAll ? individualShortcut : primaryShortcut
+						}
+						data-attr="review-change-keep"
+						disabled={busy}
+						onClick={onKeep}
+					>
+						<Check aria-hidden />
+						{busy ? "Saving…" : showKeepAll ? "Keep this" : "Keep"}
+						<ReviewShortcutKeycap shift={showKeepAll} />
+					</button>
+					{showKeepAll ? (
+						<button
+							type="button"
+							className="markdown-change-review-button markdown-change-review-button-keep-all markdown-change-review-button-primary"
+							aria-label={`Keep all ${remainingCount} remaining changes`}
+							aria-keyshortcuts={primaryShortcut}
+							data-attr="review-change-keep-all"
+							disabled={busy}
+							onClick={onKeepAll}
+						>
+							<CheckCheck aria-hidden />
+							{busy ? "Saving…" : "Keep all"}
+							<ReviewShortcutKeycap />
+						</button>
+					) : null}
+				</div>
 			</div>
 		</div>
 	);
