@@ -216,6 +216,136 @@ test("clicking a relative or fragment markdown link does not open externally", a
 });
 
 // TipTap + Lix persistence paste tests (no React)
+test("editor paste hook stores a clipboard image and persists its relative reference", async () => {
+	const lix = await openLix();
+	const fileId = "paste_image_asset";
+	const sourceFilePath = "/docs/guide.md";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: sourceFilePath,
+			data: new TextEncoder().encode("Before"),
+		})
+		.execute();
+
+	const statuses: Array<{ state: string }> = [];
+	const editor = createEditor({
+		lix,
+		fileId,
+		sourceFilePath,
+		initialMarkdown: "Before",
+		persistDebounceMs: 0,
+		onImagePasteStatus: (status) => statuses.push(status),
+	});
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	const imageBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
+	const image = new File([imageBytes], "Product screenshot.png", {
+		type: "image/png",
+	});
+	const preventDefault = vi.fn();
+	const event = {
+		preventDefault,
+		clipboardData: {
+			items: [
+				{
+					kind: "file",
+					type: "image/png",
+					getAsFile: () => image,
+				},
+			],
+			getData: () => "ignored text fallback",
+		},
+	} as unknown as ClipboardEvent;
+
+	const handled = editor.view.someProp("handlePaste", (pasteHandler) =>
+		pasteHandler(editor.view, event, undefined as any),
+	);
+	expect(handled).toBe(true);
+	expect(handled).not.toBeInstanceOf(Promise);
+	expect(preventDefault).toHaveBeenCalledOnce();
+
+	const markdown = await waitForMarkdown(lix, fileId, (value) =>
+		value.includes("![Product screenshot](assets/product-screenshot.png)"),
+	);
+	expect(markdown).toContain(
+		"![Product screenshot](assets/product-screenshot.png)",
+	);
+	const storedImage = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["path", "data"])
+		.where("path", "=", "/docs/assets/product-screenshot.png")
+		.executeTakeFirst();
+	expect(storedImage?.path).toBe("/docs/assets/product-screenshot.png");
+	expect(Array.from(storedImage?.data ?? [])).toEqual(Array.from(imageBytes));
+	expect(statuses.map((status) => status.state)).toEqual(["saving", "saved"]);
+
+	editor.destroy();
+	await lix.close();
+});
+
+test("Cmd-Z cancels an image paste that is still being stored", async () => {
+	const lix = await openLix();
+	const editor = createEditor({
+		lix,
+		initialMarkdown: "Keep earlier work",
+		persistState: false,
+	});
+	let resolveStored!: (stored: {
+		workspacePath: string;
+		markdownSrc: string;
+		fileName: string;
+		alt: string;
+		remove: () => Promise<void>;
+	}) => void;
+	const pendingStored = new Promise<Parameters<typeof resolveStored>[0]>(
+		(resolve) => {
+			resolveStored = resolve;
+		},
+	);
+	const remove = vi.fn(async () => {});
+	const statuses: string[] = [];
+
+	handlePaste({
+		editor,
+		event: {
+			preventDefault: vi.fn(),
+			clipboardData: {
+				files: [
+					new File([new Uint8Array([1])], "image.png", {
+						type: "image/png",
+					}),
+				],
+			},
+		},
+		storeImage: () => pendingStored,
+		onImagePasteStatus: (status) => statuses.push(status.state),
+	});
+	const undo = new KeyboardEvent("keydown", {
+		key: "z",
+		metaKey: true,
+		bubbles: true,
+		cancelable: true,
+	});
+	editor.view.dom.dispatchEvent(undo);
+
+	expect(undo.defaultPrevented).toBe(true);
+	expect(statuses).toEqual(["saving", "canceled"]);
+	expect(editor.getText()).toContain("Keep earlier work");
+	resolveStored({
+		workspacePath: "/assets/pasted-image.png",
+		markdownSrc: "assets/pasted-image.png",
+		fileName: "pasted-image.png",
+		alt: "Pasted image",
+		remove,
+	});
+	await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+	expect(editor.getText()).toContain("Keep earlier work");
+
+	editor.destroy();
+	await lix.close();
+});
+
 test("paste at start inserts before existing content (TipTap + Lix)", async () => {
 	const lix = await openLix({
 		keyValues: [

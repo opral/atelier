@@ -28,6 +28,8 @@ import {
 } from "./build-markdown-from-editor";
 import type { MarkdownWorkspaceFileOpener } from "./markdown-asset";
 import { FrontmatterDisclosure } from "../components/frontmatter-disclosure";
+import { AlertTriangle, Check, Loader2, X } from "lucide-react";
+import type { MarkdownImagePasteStatus } from "./handle-paste";
 
 type TipTapEditorProps = {
 	fileId: string;
@@ -275,6 +277,13 @@ function TipTapEditorLoadedContent({
 	}, [canOpenWorkspaceFile]);
 	const readOnlyRef = useRef(readOnly);
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
+	const [imagePasteStatus, setImagePasteStatus] =
+		useState<MarkdownImagePasteStatus | null>(null);
+	const notifyImagePasteStatus = useEffectEvent(
+		(status: MarkdownImagePasteStatus) => {
+			setImagePasteStatus(status);
+		},
+	);
 	useLayoutEffect(() => {
 		onPersistRef.current = onPersist;
 		openWorkspaceFileRef.current = openWorkspaceFile;
@@ -300,6 +309,7 @@ function TipTapEditorLoadedContent({
 			originKey: editorOriginKey,
 			openWorkspaceFile: stableOpenWorkspaceFile,
 			additionalExtensions,
+			onImagePasteStatus: notifyImagePasteStatus,
 			onPersist: (args) => onPersistRef.current?.(args),
 		});
 		setEditorInstance(nextEditor);
@@ -604,6 +614,15 @@ function TipTapEditorLoadedContent({
 		};
 	}, [editor, setEditor]);
 
+	useEffect(() => {
+		if (!imagePasteStatus || imagePasteStatus.state === "saving") return;
+		const timeoutId = window.setTimeout(
+			() => setImagePasteStatus(null),
+			imagePasteStatus.state === "error" ? 6000 : 3000,
+		);
+		return () => window.clearTimeout(timeoutId);
+	}, [imagePasteStatus]);
+
 	if (!activeFileId) {
 		return (
 			<div className={className ?? undefined}>
@@ -645,6 +664,55 @@ function TipTapEditorLoadedContent({
 				className="tiptap-scrollbar-thumb"
 				aria-hidden="true"
 			/>
+			{imagePasteStatus ? (
+				<MarkdownImagePasteHint status={imagePasteStatus} />
+			) : null}
+		</div>
+	);
+}
+
+function MarkdownImagePasteHint({
+	status,
+}: {
+	readonly status: MarkdownImagePasteStatus;
+}) {
+	const isError = status.state === "error";
+	return (
+		<div
+			className="markdown-image-paste-hint"
+			data-state={status.state}
+			role={isError ? "alert" : "status"}
+			aria-live={isError ? "assertive" : "polite"}
+			aria-atomic="true"
+		>
+			<span className="markdown-image-paste-hint-icon" aria-hidden="true">
+				{status.state === "saving" ? (
+					<Loader2 className="animate-spin" />
+				) : status.state === "saved" ? (
+					<Check />
+				) : status.state === "error" ? (
+					<AlertTriangle />
+				) : (
+					<X />
+				)}
+			</span>
+			<span>
+				{status.state === "saving" ? (
+					"Adding image…"
+				) : status.state === "saved" ? (
+					<>
+						<strong>Image added.</strong> Stored as {status.markdownSrc}.
+					</>
+				) : status.state === "error" ? (
+					<>
+						<strong>Couldn’t paste image.</strong> {status.message}
+					</>
+				) : (
+					<>
+						<strong>Image paste canceled.</strong> No file was added.
+					</>
+				)}
+			</span>
 		</div>
 	);
 }

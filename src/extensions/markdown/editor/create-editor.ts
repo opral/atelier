@@ -5,7 +5,11 @@ import type { Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
-import { handlePaste as defaultHandlePaste } from "./handle-paste";
+import {
+	cancelPendingImagePaste,
+	handlePaste as defaultHandlePaste,
+	type MarkdownImagePasteStatus,
+} from "./handle-paste";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
@@ -19,6 +23,7 @@ import {
 	type MarkdownWorkspaceFileOpener,
 } from "./markdown-asset";
 import { renderPdfPreview } from "@/extensions/pdf/pdf-preview";
+import { storePastedMarkdownImage } from "./store-pasted-image";
 
 type CreateEditorArgs = {
 	lix: Lix;
@@ -41,6 +46,7 @@ type CreateEditorArgs = {
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	originKey?: string;
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
+	onImagePasteStatus?: (status: MarkdownImagePasteStatus) => void;
 };
 
 type MarkdownPersistenceBaseline = {
@@ -152,6 +158,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		openWorkspaceFile,
 		originKey = createMarkdownEditorOriginKey(),
 		onPersist,
+		onImagePasteStatus,
 	} = args;
 
 	const ast = contentAst ?? (parseMarkdown(initialMarkdown ?? "") as any);
@@ -308,16 +315,55 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 		},
 		editorProps: {
-			handlePaste: async (_view: any, event: ClipboardEvent) => {
+			handlePaste: (_view: any, event: ClipboardEvent) => {
 				if (!currentEditor) return false;
-				return await defaultHandlePaste({
+				return defaultHandlePaste({
 					editor: currentEditor as any,
 					event,
+					storeImage: sourceFilePath
+						? ({ file, mimeType }) =>
+								storePastedMarkdownImage({
+									lix,
+									sourceFilePath,
+									file,
+									mimeType,
+									originKey,
+								})
+						: undefined,
+					onImagePasteStatus,
 				});
 			},
 			...editorProps,
 			handleDOMEvents: {
 				...(editorProps?.handleDOMEvents ?? {}),
+				keydown: (view: any, event: KeyboardEvent) => {
+					if (
+						currentEditor &&
+						isUndoKeyboardEvent(event) &&
+						cancelPendingImagePaste(currentEditor)
+					) {
+						event.preventDefault();
+						return true;
+					}
+					const handleKeyDown = editorProps?.handleDOMEvents?.keydown;
+					return typeof handleKeyDown === "function"
+						? handleKeyDown(view, event)
+						: false;
+				},
+				beforeinput: (view: any, event: InputEvent) => {
+					if (
+						currentEditor &&
+						event.inputType === "historyUndo" &&
+						cancelPendingImagePaste(currentEditor)
+					) {
+						event.preventDefault();
+						return true;
+					}
+					const handleBeforeInput = editorProps?.handleDOMEvents?.beforeinput;
+					return typeof handleBeforeInput === "function"
+						? handleBeforeInput(view, event)
+						: false;
+				},
 				keyup: (view: any, event: KeyboardEvent) => {
 					if (isSelectionNavigationKey(event)) {
 						flushEditorViewDomObserver(view);
@@ -342,6 +388,15 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	};
 	currentEditor = editorInstance;
 	return editorInstance;
+}
+
+function isUndoKeyboardEvent(event: KeyboardEvent): boolean {
+	return (
+		event.key.toLowerCase() === "z" &&
+		(event.metaKey || event.ctrlKey) &&
+		!event.shiftKey &&
+		!event.altKey
+	);
 }
 
 function containsMarkdownReviewProjection(editor: Editor): boolean {
