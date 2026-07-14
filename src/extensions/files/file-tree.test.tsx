@@ -246,24 +246,31 @@ describe("FileTree", () => {
 		];
 		const handleClearSelection = vi.fn();
 		const { container } = render(
-			<FileTree
-				nodes={nodes}
-				selectedPath="/README.md"
-				onClearSelection={handleClearSelection}
-			/>,
+			<FileTree nodes={nodes} onClearSelection={handleClearSelection} />,
 		);
 
-		expect(getTreeItem(container, "README.md")).toHaveAttribute(
-			"data-item-selected",
-			"true",
-		);
+		const readmeItem = getTreeItem(container, "README.md");
+		fireEvent.click(getTreeItem(container, "README.md"));
+		await waitFor(() => {
+			expect(readmeItem).toHaveAttribute("data-item-selected", "true");
+			expect(getTreeRoot(container).activeElement).toBe(readmeItem);
+		});
+
 		fireEvent.click(getTreeHost(container));
 
 		expect(handleClearSelection).toHaveBeenCalledTimes(1);
 		await waitFor(() => {
-			expect(getTreeItem(container, "README.md")).not.toHaveAttribute(
-				"data-item-selected",
+			expect(readmeItem).not.toHaveAttribute("data-item-selected", "true");
+			expect(getTreeHost(container)).toHaveAttribute(
+				"data-suppress-item-focus-ring",
 				"true",
+			);
+		});
+
+		fireEvent.click(getTreeItem(container, "README.md"));
+		await waitFor(() => {
+			expect(getTreeHost(container)).not.toHaveAttribute(
+				"data-suppress-item-focus-ring",
 			);
 		});
 	});
