@@ -69,6 +69,40 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
+	test("uses empty before data for a file created during an agent turn", async () => {
+		const lix = await openLix();
+		try {
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(
+				lix,
+				"created-file",
+				"/docs/created.md",
+				"created during turn",
+			);
+			const afterCommitId = await activeCommitId(lix);
+
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-created",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			);
+
+			const review = await getExternalWriteReview(
+				lix,
+				"created-file",
+				"/docs/created.md",
+			);
+
+			expect(review?.agentTurnRangeIds).toEqual(["range-created"]);
+			await expectReviewData(lix, review, "", "created during turn");
+		} finally {
+			await lix.close();
+		}
+	});
+
 	test("uses the nearest inherited file history snapshot at the before commit", async () => {
 		const lix = await openLix();
 		try {

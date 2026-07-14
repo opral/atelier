@@ -23,6 +23,7 @@ import {
 } from "@/extension-runtime/extension-instance-helpers";
 import { DEFAULT_ATELIER_UI_STATE } from "./ui-state";
 import { createAtelier } from "../atelier-instance";
+import { readAgentTurnCommitRanges } from "./agent-turn-review-range";
 
 describe("resolveLixFileForOpen", () => {
 	test("resolves normalized paths from Lix", async () => {
@@ -494,6 +495,168 @@ describe("agent turn review reveal", () => {
 			await lix.close();
 		}
 	});
+
+	test("opens a newly added file and removes it when its addition is undone", async () => {
+		const lix = await openLix();
+		const onEvent = vi.fn();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			const beforeCommitId = await activeCommitId(lix);
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+							<Suspense fallback={null}>
+								<V2LayoutShell onEvent={onEvent} />
+							</Suspense>
+						</KeyValueProvider>
+					</LixProvider>,
+				);
+			});
+
+			await act(async () => {
+				await qb(lix)
+					.insertInto("lix_file")
+					.values({
+						id: "agent-created-file",
+						path: "/agent-created.md",
+						data: new TextEncoder().encode("# Created by agent\n"),
+					})
+					.execute();
+			});
+			const afterCommitId = await activeCommitId(lix);
+
+			await act(async () => {
+				await createAtelier({ lix }).diff.open({
+					beforeCommitId,
+					afterCommitId,
+					source: { id: "codex" },
+				});
+			});
+
+			expect(
+				await screen.findByRole("button", { name: /^Undo/ }),
+			).toBeVisible();
+			expect(
+				await screen.findByRole("heading", { name: "Created by agent" }),
+			).toBeVisible();
+			expect(
+				onEvent.mock.calls.filter(
+					([event]) =>
+						event.type === "document_viewed" &&
+						event.filePath === "/agent-created.md",
+				),
+			).toHaveLength(1);
+
+			await act(async () => {
+				fireEvent.click(screen.getByRole("button", { name: /^Undo/ }));
+			});
+			await waitFor(() => {
+				expect(screen.getByText("2 of 2")).toBeVisible();
+			});
+			await act(async () => {
+				fireEvent.click(screen.getByRole("button", { name: /^Undo/ }));
+			});
+			await waitFor(async () => {
+				const file = await qb(lix)
+					.selectFrom("lix_file")
+					.select("id")
+					.where("id", "=", "agent-created-file")
+					.executeTakeFirst();
+				expect(file).toBeUndefined();
+			});
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test.each([
+		{
+			name: "Keep wins if Undo is clicked while resolution is pending",
+			action: "Keep",
+			competingAction: "Undo",
+			shouldExist: true,
+		},
+		{
+			name: "Undo removes the file",
+			action: "Undo",
+			competingAction: undefined,
+			shouldExist: false,
+		},
+	] as const)(
+		"$name when resolving a newly added empty Markdown file",
+		async ({ action, competingAction, shouldExist }) => {
+			const lix = await openLix();
+			let utils: ReturnType<typeof render> | undefined;
+			try {
+				const beforeCommitId = await activeCommitId(lix);
+				await act(async () => {
+					utils = render(
+						<LixProvider lix={lix}>
+							<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+								<Suspense fallback={null}>
+									<V2LayoutShell />
+								</Suspense>
+							</KeyValueProvider>
+						</LixProvider>,
+					);
+				});
+
+				await act(async () => {
+					await qb(lix)
+						.insertInto("lix_file")
+						.values({
+							id: "empty-agent-created-file",
+							path: "/empty-agent-created.md",
+							data: new Uint8Array(),
+						})
+						.execute();
+				});
+				const afterCommitId = await activeCommitId(lix);
+
+				await act(async () => {
+					await createAtelier({ lix }).diff.open({
+						beforeCommitId,
+						afterCommitId,
+						source: { id: "codex" },
+					});
+				});
+
+				const actionButton = await screen.findByRole("button", {
+					name: new RegExp(`^${action}`),
+				});
+				const competingActionButton = competingAction
+					? screen.getByRole("button", {
+							name: new RegExp(`^${competingAction}`),
+						})
+					: null;
+				fireEvent.click(actionButton);
+				if (competingActionButton) fireEvent.click(competingActionButton);
+
+				await waitFor(async () => {
+					const file = await qb(lix)
+						.selectFrom("lix_file")
+						.select("id")
+						.where("id", "=", "empty-agent-created-file")
+						.executeTakeFirst();
+					expect(Boolean(file)).toBe(shouldExist);
+					expect(
+						screen.queryByRole("button", { name: new RegExp(`^${action}`) }),
+					).toBeNull();
+				});
+				await waitFor(async () => {
+					const ranges = await readAgentTurnCommitRanges(lix);
+					expect(ranges[0]?.clearedFileIds).toContain(
+						"empty-agent-created-file",
+					);
+				});
+			} finally {
+				await act(async () => utils?.unmount());
+				await lix.close();
+			}
+		},
+	);
 });
 
 describe("installed extension lifecycle", () => {

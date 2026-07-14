@@ -46,6 +46,7 @@ import type {
 	ResolveExternalWriteReviewArgs,
 } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
+import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import type {
 	CheckpointDiff,
 	CheckpointDiffFile,
@@ -408,6 +409,15 @@ function MarkdownLiveReviewController({
 	readonly onCompletionSuccess: (markdown: string) => void;
 	readonly onCompletionFailure: () => void;
 }) {
+	if (reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown) {
+		return (
+			<ExternalWriteReviewControls
+				isActive={isActive}
+				onAccept={() => void onAccept?.({ fileId, reviewId, review })}
+				onReject={() => void onReject?.({ fileId, reviewId, review })}
+			/>
+		);
+	}
 	const enrichedReviewDiff = enrichMarkdownReviewDiff(
 		reviewDiff,
 		beforeBlocks,
