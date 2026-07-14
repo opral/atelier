@@ -1162,10 +1162,11 @@
 		}
 	}
 
-	/* A standalone Markdown image is a movable block. Clicking may select it for
-	   keyboard actions, but the orange edge is reserved for an active drag. */
+	/* Standalone media is selectable and movable. Selection reuses the embed's
+	   existing edge; hover reveals a compact, undoable delete action. */
 	.markdown-view .ProseMirror [data-markdown-image-block] {
 		display: block;
+		position: relative;
 		cursor: grab;
 		user-select: none;
 		transition:
@@ -1173,9 +1174,39 @@
 			border-color 120ms ease-out;
 	}
 
+	.markdown-view .ProseMirror .markdown-image-embed {
+		width: fit-content;
+		max-width: 100%;
+		margin: 1.35rem auto 1.75rem;
+		line-height: 0;
+	}
+
 	.markdown-view
 		.ProseMirror
-		[data-markdown-image-block]:hover:not(.ProseMirror-selectednode) {
+		.markdown-image-embed
+		> .markdown-image-block-content {
+		display: block;
+		margin: 0;
+		transition:
+			box-shadow 120ms ease-out,
+			border-color 120ms ease-out;
+	}
+
+	.markdown-view
+		.ProseMirror
+		[data-markdown-image-block]:is(img, .markdown-pdf-embed):hover:not(
+			.ProseMirror-selectednode
+		) {
+		box-shadow:
+			0 0 0 2px
+				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
+			0 12px 30px rgba(28, 25, 23, 0.09);
+	}
+
+	.markdown-view
+		.ProseMirror
+		.markdown-image-embed:hover:not(.ProseMirror-selectednode)
+		> .markdown-image-block-content {
 		box-shadow:
 			0 0 0 2px
 				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
@@ -1189,10 +1220,88 @@
 	}
 
 	.markdown-view
+		.ProseMirror
+		[data-markdown-image-block].ProseMirror-selectednode:is(
+			img,
+			.markdown-pdf-embed
+		) {
+		border-color: var(--color-ring-focus-visible);
+	}
+
+	.markdown-view
+		.ProseMirror
+		.markdown-image-embed.ProseMirror-selectednode
+		> .markdown-image-block-content {
+		border-color: var(--color-ring-focus-visible);
+	}
+
+	.markdown-view
 		.ProseMirror[data-markdown-media-dragging]
 		[data-markdown-image-block].ProseMirror-selectednode {
-		border-color: var(--color-ring-focus-visible);
 		cursor: grabbing;
+	}
+
+	.markdown-view .ProseMirror .markdown-asset-delete {
+		display: inline-flex;
+		width: 1.75rem;
+		height: 1.75rem;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		color: var(--color-text-tertiary);
+		cursor: pointer;
+		background: var(--color-bg-panel);
+		border: 1px solid var(--color-border-panel);
+		border-radius: 0.375rem;
+		opacity: 0;
+		pointer-events: none;
+		transform: translateY(-2px);
+		transition:
+			opacity 100ms ease-out,
+			transform 100ms ease-out,
+			color 100ms ease-out,
+			background-color 100ms ease-out;
+	}
+
+	.markdown-view
+		.ProseMirror:not([contenteditable="true"])
+		.markdown-asset-delete {
+		display: none;
+	}
+
+	.markdown-view .ProseMirror .markdown-asset-delete > svg {
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	.markdown-view
+		.ProseMirror
+		[data-markdown-image-block]:hover
+		.markdown-asset-delete,
+	.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
+		opacity: 1;
+		pointer-events: auto;
+		transform: translateY(0);
+	}
+
+	.markdown-view .ProseMirror .markdown-asset-delete:hover {
+		color: var(--color-text-status-danger);
+		background: var(--color-bg-hover);
+	}
+
+	.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: 1px;
+	}
+
+	.markdown-view .ProseMirror .markdown-image-embed > .markdown-asset-delete {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		z-index: 2;
+		box-shadow: 0 1px 2px
+			color-mix(in srgb, var(--color-text-primary) 10%, transparent);
 	}
 
 	.markdown-view

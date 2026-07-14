@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 test.each([
-	["image", "assets/diagram.png", "img.markdown-image-block"],
+	["image", "assets/diagram.png", ".markdown-image-embed"],
 	["PDF embed", "assets/brief.pdf", ".markdown-pdf-embed"],
 ])(
 	"shows a block insertion line at the resolved drop point for a dragged %s",

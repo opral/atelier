@@ -1,4 +1,10 @@
-import { Node, Mark, type Extensions, type CommandProps } from "@tiptap/core";
+import {
+	Node,
+	Mark,
+	type Extensions,
+	type CommandProps,
+	type Editor,
+} from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
@@ -667,13 +673,14 @@ export function markdownWcNodes(
 				return ["img", { ...attrs, ...diffAttrs(node, "element") }];
 			},
 			addNodeView() {
-				return ({ node }) =>
+				return ({ node, editor, getPos }) =>
 					createMarkdownAssetNodeView({
 						node,
 						resolveImageSrc,
 						loadAsset,
 						openWorkspaceFile,
 						renderPdfPreview,
+						deleteNode: () => deleteMarkdownAssetNode(editor, getPos),
 					});
 			},
 		}),
@@ -724,13 +731,14 @@ export function markdownWcNodes(
 				return ["img", { ...attrs, ...diffAttrs(node, "element") }];
 			},
 			addNodeView() {
-				return ({ node }) =>
+				return ({ node, editor, getPos }) =>
 					createMarkdownAssetNodeView({
 						node,
 						resolveImageSrc,
 						loadAsset,
 						openWorkspaceFile,
 						renderPdfPreview,
+						deleteNode: () => deleteMarkdownAssetNode(editor, getPos),
 					});
 			},
 		}),
@@ -809,12 +817,14 @@ function createMarkdownAssetNodeView({
 	loadAsset,
 	openWorkspaceFile,
 	renderPdfPreview,
+	deleteNode,
 }: {
 	readonly node: any;
 	readonly resolveImageSrc?: MarkdownImageSrcResolver;
 	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly renderPdfPreview?: PdfPreviewRenderer;
+	readonly deleteNode?: () => boolean;
 }) {
 	const nodeTypeName = node.type.name;
 	const originalSrc = String(node.attrs?.src ?? "");
@@ -833,6 +843,26 @@ function createMarkdownAssetNodeView({
 		".markdown-pdf-preview-action",
 	);
 	const openAction = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+	const deleteAction =
+		nodeTypeName === "imageBlock"
+			? createAssetDeleteButton(rendersPdf ? "PDF embed" : "image")
+			: null;
+	if (deleteAction) {
+		const toolbar = dom.querySelector<HTMLElement>(".markdown-pdf-toolbar");
+		if (toolbar && openAction) toolbar.insertBefore(deleteAction, openAction);
+		else dom.append(deleteAction);
+	}
+	const handleDeletePointerDown = (event: Event) => {
+		event.preventDefault();
+		event.stopPropagation();
+	};
+	const handleDelete = (event: Event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		deleteNode?.();
+	};
+	deleteAction?.addEventListener("pointerdown", handleDeletePointerDown);
+	deleteAction?.addEventListener("click", handleDelete);
 	const handleOpenWorkspaceFile = (event: MouseEvent) => {
 		const workspaceFile = loadedAsset?.workspaceFile;
 		if (!workspaceFile || !openWorkspaceFile || event.button !== 0) return;
@@ -1140,6 +1170,8 @@ function createMarkdownAssetNodeView({
 			visibilityObserver?.disconnect();
 			previewAction?.removeEventListener("click", handlePreviewAction);
 			openAction?.removeEventListener("click", handleOpenWorkspaceFile);
+			deleteAction?.removeEventListener("pointerdown", handleDeletePointerDown);
+			deleteAction?.removeEventListener("click", handleDelete);
 			manualPreviewAbort?.abort();
 			disposePdfPreview();
 			disposeLoadedAsset();
@@ -1147,15 +1179,23 @@ function createMarkdownAssetNodeView({
 	};
 }
 
-function createImageDom(node: any): HTMLImageElement {
+function createImageDom(node: any): HTMLElement {
 	const image = document.createElement("img");
-	if (node.type.name === "imageBlock") {
-		image.className = "markdown-image-block";
-		image.dataset.markdownImageBlock = "";
-		image.draggable = true;
+	if (node.type.name !== "imageBlock") {
+		updateAssetDomAttributes(image, node);
+		return image;
 	}
-	updateAssetDomAttributes(image, node);
-	return image;
+
+	const wrapper = document.createElement("span");
+	wrapper.className = "markdown-image-embed markdown-image-block";
+	wrapper.dataset.markdownImageBlock = "";
+	wrapper.contentEditable = "false";
+	wrapper.draggable = true;
+	image.className = "markdown-image-block-content";
+	image.draggable = false;
+	wrapper.append(image);
+	updateAssetDomAttributes(wrapper, node);
+	return wrapper;
 }
 
 function createPdfEmbedDom(node: any): HTMLSpanElement {
@@ -1221,9 +1261,10 @@ function updateAssetDomAttributes(dom: HTMLElement, node: any): void {
 	}
 	if (title) dom.title = title;
 	else dom.removeAttribute("title");
-	if (dom instanceof HTMLImageElement) {
-		if (alt) dom.alt = alt;
-		else dom.removeAttribute("alt");
+	const image = markdownImageElement(dom);
+	if (image) {
+		if (alt) image.alt = alt;
+		else image.removeAttribute("alt");
 		return;
 	}
 	const label = markdownAssetLabel(src, alt);
@@ -1240,7 +1281,7 @@ function updateAssetDomAttributes(dom: HTMLElement, node: any): void {
 function setAssetDomLoading(dom: HTMLElement): void {
 	dom.dataset.assetState = "loading";
 	dom.setAttribute("aria-busy", "true");
-	if (dom instanceof HTMLImageElement) dom.removeAttribute("src");
+	markdownImageElement(dom)?.removeAttribute("src");
 	const open = dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
 	const preview = dom.querySelector<HTMLElement>(".markdown-pdf-preview");
 	open?.removeAttribute("href");
@@ -1251,8 +1292,64 @@ function setAssetDomLoading(dom: HTMLElement): void {
 function setImageDomSource(dom: HTMLElement, src: string): void {
 	dom.dataset.assetState = "ready";
 	dom.removeAttribute("aria-busy");
-	if (dom instanceof HTMLImageElement) {
-		dom.src = src;
+	const image = markdownImageElement(dom);
+	if (image) image.src = src;
+}
+
+function markdownImageElement(dom: HTMLElement): HTMLImageElement | null {
+	return dom instanceof HTMLImageElement
+		? dom
+		: dom.querySelector<HTMLImageElement>(".markdown-image-block-content");
+}
+
+function createAssetDeleteButton(
+	label: "image" | "PDF embed",
+): HTMLButtonElement {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "markdown-asset-delete";
+	button.contentEditable = "false";
+	button.ariaLabel = `Delete ${label}`;
+	button.title = `Delete ${label}`;
+
+	const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+	icon.setAttribute("viewBox", "0 0 24 24");
+	icon.setAttribute("fill", "none");
+	icon.setAttribute("stroke", "currentColor");
+	icon.setAttribute("stroke-width", "2");
+	icon.setAttribute("stroke-linecap", "round");
+	icon.setAttribute("stroke-linejoin", "round");
+	icon.setAttribute("aria-hidden", "true");
+	for (const pathData of [
+		"M3 6h18",
+		"M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2",
+		"M19 6l-1 14c-.1 1.1-1 2-2 2H8c-1.1 0-1.9-.9-2-2L5 6",
+		"M10 11v6",
+		"M14 11v6",
+	]) {
+		const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+		path.setAttribute("d", pathData);
+		icon.append(path);
+	}
+	button.append(icon);
+	return button;
+}
+
+function deleteMarkdownAssetNode(
+	editor: Editor,
+	getPos: () => number | undefined,
+): boolean {
+	try {
+		const position = getPos();
+		if (typeof position !== "number") return false;
+		const node = editor.state.doc.nodeAt(position);
+		if (node?.type.name !== "imageBlock") return false;
+		return editor.commands.deleteRange({
+			from: position,
+			to: position + node.nodeSize,
+		});
+	} catch {
+		return false;
 	}
 }
 

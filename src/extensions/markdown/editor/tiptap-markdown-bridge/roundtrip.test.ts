@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import { astToTiptapDoc } from "./mdwc-to-tiptap";
 import { tiptapDocToAst } from "./tiptap-to-mdwc";
 import { Editor } from "@tiptap/core";
+import History from "@tiptap/extension-history";
 import { NodeSelection } from "@tiptap/pm/state";
 import { MarkdownWc } from "./markdown-wc";
 import { normalizeAst, parseMarkdown, serializeAst } from "../markdown";
@@ -765,9 +766,15 @@ describe("inline", () => {
 		editor.commands.setNodeSelection(imagePosition);
 		expect(editor.state.selection).toBeInstanceOf(NodeSelection);
 		expect(editor.view.dom).not.toHaveAttribute("data-markdown-media-dragging");
-		const image = editor.view.dom.querySelector("img.markdown-image-block");
-		expect(image).toHaveAttribute("draggable", "true");
-		expect(image).toHaveClass("ProseMirror-selectednode");
+		const imageEmbed = editor.view.dom.querySelector(".markdown-image-embed");
+		expect(imageEmbed).toHaveAttribute("draggable", "true");
+		expect(imageEmbed).toHaveClass("ProseMirror-selectednode");
+		expect(
+			imageEmbed?.querySelector(".markdown-image-block-content"),
+		).toHaveAttribute("draggable", "false");
+		expect(
+			imageEmbed?.querySelector(".markdown-asset-delete"),
+		).toHaveAccessibleName("Delete image");
 
 		const markdown = serializeAst(tiptapDocToAst(editor.getJSON() as any));
 		expect(markdown).toBe(
@@ -785,7 +792,7 @@ describe("inline", () => {
 				),
 			),
 		});
-		const image = editor.view.dom.querySelector("img.markdown-image-block");
+		const image = editor.view.dom.querySelector(".markdown-image-embed");
 		expect(image).not.toBeNull();
 		const dataTransfer = {
 			files: [] as unknown as FileList,
@@ -813,6 +820,38 @@ describe("inline", () => {
 		).toEqual(["paragraph", "paragraph", "imageBlock"]);
 		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
 			"Before\n\nAfter\n\n![Product diagram](assets/product.png)\n",
+		);
+		editor.destroy();
+	});
+
+	test.each([
+		["image", "assets/product.png", "Delete image"],
+		["PDF embed", "assets/brief.pdf", "Delete PDF embed"],
+	])("deletes a standalone %s from its trash action", (_label, src, name) => {
+		const editor = new Editor({
+			extensions: [...MarkdownWc(), History],
+			content: astToTiptapDoc(
+				parseMarkdown(`Before\n\n![Asset](${src})\n\nAfter`),
+			),
+		});
+		const deleteAction = editor.view.dom.querySelector<HTMLButtonElement>(
+			`.markdown-asset-delete[aria-label="${name}"]`,
+		);
+		expect(deleteAction).not.toBeNull();
+		const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+
+		deleteAction?.dispatchEvent(click);
+
+		expect(click.defaultPrevented).toBe(true);
+		expect(
+			editor.state.doc.content.content.map((node) => node.type.name),
+		).toEqual(["paragraph", "paragraph"]);
+		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
+			"Before\n\nAfter\n",
+		);
+		expect(editor.commands.undo()).toBe(true);
+		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
+			`Before\n\n![Asset](${src})\n\nAfter\n`,
 		);
 		editor.destroy();
 	});
