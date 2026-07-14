@@ -764,6 +764,7 @@ describe("inline", () => {
 		expect(imagePosition).toBeGreaterThanOrEqual(0);
 		editor.commands.setNodeSelection(imagePosition);
 		expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+		expect(editor.view.dom).not.toHaveAttribute("data-markdown-media-dragging");
 		const image = editor.view.dom.querySelector("img.markdown-image-block");
 		expect(image).toHaveAttribute("draggable", "true");
 		expect(image).toHaveClass("ProseMirror-selectednode");
@@ -796,6 +797,7 @@ describe("inline", () => {
 		const dragStart = createDragEvent("dragstart", dataTransfer);
 		image?.dispatchEvent(dragStart);
 		expect((editor.view as any).dragging?.node).toBeInstanceOf(NodeSelection);
+		expect(editor.view.dom).toHaveAttribute("data-markdown-media-dragging");
 
 		vi.spyOn(editor.view, "posAtCoords").mockReturnValue({
 			pos: editor.state.doc.content.size,
@@ -805,6 +807,7 @@ describe("inline", () => {
 		editor.view.dom.dispatchEvent(drop);
 
 		expect(drop.defaultPrevented).toBe(true);
+		expect(editor.view.dom).not.toHaveAttribute("data-markdown-media-dragging");
 		expect(
 			editor.state.doc.content.content.map((node) => node.type.name),
 		).toEqual(["paragraph", "paragraph", "imageBlock"]);

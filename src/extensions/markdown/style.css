@@ -1162,9 +1162,8 @@
 		}
 	}
 
-	/* A standalone Markdown image is a movable block. Its selection state uses
-	   the existing media edge, rather than drawing a second offset frame around
-	   images and embeds that already have their own border. */
+	/* A standalone Markdown image is a movable block. Clicking may select it for
+	   keyboard actions, but the orange edge is reserved for an active drag. */
 	.markdown-view .ProseMirror [data-markdown-image-block] {
 		display: block;
 		cursor: grab;
@@ -1185,6 +1184,12 @@
 
 	.markdown-view
 		.ProseMirror
+		[data-markdown-image-block].ProseMirror-selectednode {
+		outline: none;
+	}
+
+	.markdown-view
+		.ProseMirror[data-markdown-media-dragging]
 		[data-markdown-image-block].ProseMirror-selectednode {
 		border-color: var(--color-ring-focus-visible);
 		cursor: grabbing;

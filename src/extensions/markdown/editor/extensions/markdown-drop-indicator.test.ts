@@ -60,6 +60,7 @@ test.each([
 
 		draggedBlock?.dispatchEvent(createDragEvent("dragstart", dataTransfer()));
 		expect((editor.view as any).dragging?.slice).toBeDefined();
+		expect(editor.view.dom).toHaveAttribute("data-markdown-media-dragging");
 		vi.spyOn(editor.view, "posAtCoords").mockReturnValue({
 			pos: afterImage,
 			inside: -1,
@@ -72,6 +73,8 @@ test.each([
 
 		editor.view.dom.dispatchEvent(createDragEvent("dragleave", dataTransfer()));
 		expect(host.querySelector(".atelier-markdown-drop-indicator")).toBeNull();
+		draggedBlock?.dispatchEvent(createDragEvent("dragend", dataTransfer()));
+		expect(editor.view.dom).not.toHaveAttribute("data-markdown-media-dragging");
 	},
 );
 
@@ -131,7 +134,7 @@ function dataTransfer(): DataTransfer {
 }
 
 function createDragEvent(
-	type: "dragstart" | "dragover" | "dragleave",
+	type: "dragstart" | "dragover" | "dragleave" | "dragend",
 	transfer: DataTransfer,
 ): DragEvent {
 	const event = new Event(type, {
