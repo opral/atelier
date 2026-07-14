@@ -43,7 +43,9 @@ export function historicalMarkdownNodeBlocks(
 	}));
 }
 
-function parseMarkdownNodeSnapshot(value: unknown): MarkdownNodeSnapshot | null {
+function parseMarkdownNodeSnapshot(
+	value: unknown,
+): MarkdownNodeSnapshot | null {
 	const snapshot = typeof value === "string" ? safeJsonParse(value) : value;
 	if (!snapshot || typeof snapshot !== "object") return null;
 	const record = snapshot as Record<string, unknown>;
