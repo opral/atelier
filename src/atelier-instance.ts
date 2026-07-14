@@ -57,6 +57,8 @@ export type AtelierOptions = {
 	readonly branchSession?: AtelierBranchSession;
 	/** Private, account-scoped review acknowledgement state. */
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
+	/** Only expose review ranges tagged with this account or session id. */
+	readonly reviewRangeSessionId?: string;
 };
 
 export type AtelierInstance = {
@@ -157,9 +159,20 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		diff: {
 			open: async (diffOptions) => {
 				if (diffOptions.beforeCommitId === diffOptions.afterCommitId) return;
+				const scopedDiffOptions =
+					options.reviewRangeSessionId !== undefined &&
+					diffOptions.source.sessionId === undefined
+						? {
+								...diffOptions,
+								source: {
+									...diffOptions.source,
+									sessionId: options.reviewRangeSessionId,
+								},
+							}
+						: diffOptions;
 				return openDiff(
 					options.lix,
-					diffOptions,
+					scopedDiffOptions,
 					await resolveBranchSessionId(branchSession),
 				);
 			},
@@ -214,6 +227,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 			? { defaultOpenPanels: [...options.defaultOpenPanels] }
 			: {}),
 		...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
+		...(options.reviewRangeSessionId !== undefined
+			? { reviewRangeSessionId: options.reviewRangeSessionId }
+			: {}),
 	};
 	Object.defineProperty(instance, CONFIGURATION, {
 		configurable: false,

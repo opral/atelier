@@ -115,6 +115,7 @@ function EditableTextView({
 		path: resolvedPath,
 		activeBranchId: atelier.branches.activeId,
 		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
+		reviewRangeSessionId: atelier.reviews.rangeSessionId,
 	});
 	const reviewData = useExternalWriteReviewData(review);
 	const reviewText = reviewData

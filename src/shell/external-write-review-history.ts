@@ -91,33 +91,65 @@ export async function getPendingExternalWriteReviewPaths(
 	return pendingPaths;
 }
 
+export function useAgentTurnCommitRanges(
+	activeBranchId: string,
+	reviewRangeSessionId?: string,
+): {
+	readonly rangeValues: readonly unknown[];
+	readonly ranges: readonly AgentTurnCommitRange[];
+} {
+	const rangeRows = useQuery<{
+		value: unknown;
+		lixcol_branch_id: string | null;
+	}>(
+		(queryLix) =>
+			qb(queryLix)
+				.selectFrom("lix_key_value_by_branch")
+				.select(["value", "lixcol_branch_id"])
+				.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
+				.where("lixcol_branch_id", "=", activeBranchId),
+		{ enabled: activeBranchId.length > 0 },
+	);
+	// Filtering again prevents a cached row for the previous branch from being
+	// interpreted as current while useQuery swaps subscriptions.
+	const storedRangeValues = useMemo(
+		() =>
+			rangeRows
+				.filter((row) => row.lixcol_branch_id === activeBranchId)
+				.map((row) => row.value),
+		[activeBranchId, rangeRows],
+	);
+	const storedRanges = useMemo(
+		() => agentTurnCommitRangesFromValues(storedRangeValues),
+		[storedRangeValues],
+	);
+	const ranges = useMemo(
+		() =>
+			reviewRangeSessionId === undefined
+				? storedRanges
+				: storedRanges.filter(
+						(range) => range.sessionId === reviewRangeSessionId,
+					),
+		[reviewRangeSessionId, storedRanges],
+	);
+	const rangeValues = useMemo<readonly unknown[]>(
+		() => (reviewRangeSessionId === undefined ? storedRangeValues : ranges),
+		[reviewRangeSessionId, storedRangeValues, ranges],
+	);
+	return useMemo(() => ({ rangeValues, ranges }), [rangeValues, ranges]);
+}
+
 export function useExternalWriteReview(args: {
 	readonly fileId?: string | null;
 	readonly path?: string | null;
 	readonly activeBranchId: string;
 	readonly resolvedReviewIds?: readonly string[];
+	readonly reviewRangeSessionId?: string;
 }): ExternalWriteReview | null {
 	const lix = useLix();
-	const rangeRows = useQuery<{
-		value: unknown;
-		lixcol_branch_id: string | null;
-	}>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value_by_branch")
-			.select(["value", "lixcol_branch_id"])
-			.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
-			.where("lixcol_branch_id", "=", args.activeBranchId),
-	);
-	const activeRangeValues = useMemo(
-		() =>
-			rangeRows
-				.filter((row) => row.lixcol_branch_id === args.activeBranchId)
-				.map((row) => row.value),
-		[args.activeBranchId, rangeRows],
-	);
-	const ranges = useMemo(
-		() => agentTurnCommitRangesFromValues(activeRangeValues),
-		[activeRangeValues],
+	const { rangeValues, ranges } = useAgentTurnCommitRanges(
+		args.activeBranchId,
+		args.reviewRangeSessionId,
 	);
 	const resolvedReviewKey = JSON.stringify(
 		[...(args.resolvedReviewIds ?? [])].sort(),
@@ -132,7 +164,7 @@ export function useExternalWriteReview(args: {
 					args.activeBranchId,
 					args.fileId,
 					args.path,
-					activeRangeValues,
+					rangeValues,
 					resolvedReviewKey,
 				])
 			: null;

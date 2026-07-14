@@ -27,12 +27,9 @@ import type {
 } from "@/extension-runtime/checkpoint-diff";
 import type { Lix } from "@lix-js/sdk";
 import {
-	AGENT_TURN_COMMIT_RANGE_KEY,
-	agentTurnCommitRangesFromValues,
-} from "@/shell/agent-turn-review-range";
-import {
 	getPendingExternalWriteReviewPaths,
 	type ExternalWriteReviewFile,
+	useAgentTurnCommitRanges,
 } from "@/shell/external-write-review-history";
 import { resolveCheckpointDiffForBranch } from "@/shell/checkpoint-diff";
 
@@ -52,6 +49,7 @@ type FilesViewContext = {
 	readonly activeFilePath?: string | null;
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
+	readonly reviewRangeSessionId?: string;
 	readonly isPanelFocused?: boolean;
 	readonly panelSide?: PanelSide;
 	readonly viewInstance?: string;
@@ -193,6 +191,7 @@ function FilesViewContent({
 		nodes,
 		context?.activeBranchId ?? "",
 		context?.resolvedReviewIds ?? [],
+		context?.reviewRangeSessionId,
 	);
 	const checkpointReviewStatuses = useMemo(
 		() =>
@@ -1005,35 +1004,15 @@ function usePendingExternalWriteReviewPaths(
 	nodes: readonly FilesystemTreeNode[],
 	activeBranchId: string,
 	resolvedReviewIds: readonly string[],
+	reviewRangeSessionId?: string,
 ): ReadonlySet<string> {
 	const reviewableFiles = useMemo(
 		() => collectReviewableTreeFiles(nodes),
 		[nodes],
 	);
-	const rangeRows = useQuery<{
-		value: unknown;
-		lixcol_branch_id: string | null;
-	}>(
-		(queryLix) =>
-			qb(queryLix)
-				.selectFrom("lix_key_value_by_branch")
-				.select(["value", "lixcol_branch_id"])
-				.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
-				.where("lixcol_branch_id", "=", activeBranchId),
-		{ enabled: activeBranchId.length > 0 },
-	);
-	// Filtering again prevents a cached row for the previous branch from being
-	// interpreted as current while useQuery swaps subscriptions.
-	const activeRangeValues = useMemo(
-		() =>
-			rangeRows
-				.filter((row) => row.lixcol_branch_id === activeBranchId)
-				.map((row) => row.value),
-		[activeBranchId, rangeRows],
-	);
-	const ranges = useMemo(
-		() => agentTurnCommitRangesFromValues(activeRangeValues),
-		[activeRangeValues],
+	const { rangeValues, ranges } = useAgentTurnCommitRanges(
+		activeBranchId,
+		reviewRangeSessionId,
 	);
 	const reviewableFilesKey = useMemo(
 		() =>
@@ -1042,7 +1021,8 @@ function usePendingExternalWriteReviewPaths(
 	);
 	const reviewKey = JSON.stringify([
 		activeBranchId,
-		activeRangeValues,
+		reviewRangeSessionId ?? null,
+		rangeValues,
 		[...resolvedReviewIds].sort(),
 		reviewableFilesKey,
 	]);
@@ -1153,6 +1133,7 @@ export const extension = createReactExtensionDefinition({
 					activeFilePath: atelier.documents.activeFilePath,
 					activeBranchId: atelier.branches.activeId,
 					resolvedReviewIds: atelier.reviews.resolvedReviewIds,
+					reviewRangeSessionId: atelier.reviews.rangeSessionId,
 					isPanelFocused: view.isFocused,
 					panelSide: view.panel,
 					viewInstance: view.instanceId,
