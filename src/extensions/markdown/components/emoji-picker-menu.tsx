@@ -17,6 +17,7 @@ const INACTIVE_EMOJI_STATE: EmojiCommandState = {
 	active: false,
 	query: "",
 	range: null,
+	trigger: null,
 };
 
 function displayEmojiName(name: string): string {

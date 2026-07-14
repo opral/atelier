@@ -56,10 +56,11 @@ function setup() {
 }
 
 describe("EmojiPickerMenu", () => {
-	test("opens on colon, filters, and inserts with Enter", async () => {
+	test("opens explicitly, filters, and inserts with Enter", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent(":rocket");
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("rocket");
 		});
 
 		expect(
@@ -79,7 +80,8 @@ describe("EmojiPickerMenu", () => {
 	test("handles navigation only for key events from its editor", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent(":thumbsup");
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("thumbsup");
 		});
 		await screen.findByRole("listbox", { name: "Emoji picker" });
 
@@ -90,7 +92,7 @@ describe("EmojiPickerMenu", () => {
 		});
 		window.dispatchEvent(globalEnter);
 		expect(globalEnter.defaultPrevented).toBe(false);
-		expect(editor.getText()).toBe(":thumbsup");
+		expect(editor.getText()).toBe("thumbsup");
 
 		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
 		await waitFor(() => expect(editor.getText()).toBe("👍"));
@@ -99,7 +101,7 @@ describe("EmojiPickerMenu", () => {
 	test("wraps keyboard navigation and closes with Escape", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent(":");
+			editor.commands.openEmojiMenu();
 		});
 		const options = await screen.findAllByRole("option");
 		const lastOption = options.at(-1);
@@ -113,7 +115,8 @@ describe("EmojiPickerMenu", () => {
 		await waitFor(() => expect(editor.getText()).toBe(lastEmoji));
 
 		await act(async () => {
-			editor.commands.insertContent(" :");
+			editor.commands.insertContent(" ");
+			editor.commands.openEmojiMenu();
 		});
 		await screen.findByRole("listbox", { name: "Emoji picker" });
 		fireEvent.keyDown(editor.view.dom, { key: "Escape" });
@@ -122,13 +125,14 @@ describe("EmojiPickerMenu", () => {
 				screen.queryByRole("listbox", { name: "Emoji picker" }),
 			).toBeNull();
 		});
-		expect(editor.getText()).toBe(`${lastEmoji} :`);
+		expect(editor.getText()).toBe(`${lastEmoji} `);
 	});
 
 	test("shows an empty result without blocking a normal Enter", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent(":definitely_no_emoji");
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("definitely_no_emoji");
 		});
 
 		expect(
@@ -139,7 +143,7 @@ describe("EmojiPickerMenu", () => {
 		});
 		expect(editor.state.doc.childCount).toBe(2);
 		expect(editor.state.doc.firstChild?.textContent).toBe(
-			":definitely_no_emoji",
+			"definitely_no_emoji",
 		);
 	});
 });

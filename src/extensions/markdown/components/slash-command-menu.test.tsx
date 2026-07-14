@@ -10,7 +10,9 @@ import { afterEach, describe, expect, test } from "vitest";
 import { Editor } from "@tiptap/core";
 import { MarkdownWc } from "../editor/tiptap-markdown-bridge";
 import { SlashCommandsExtension } from "../editor/extensions/slash-commands";
+import { EmojiCommandsExtension } from "../editor/extensions/emoji-commands";
 import { EditorProvider, useEditorCtx } from "../editor/editor-context";
+import { EmojiPickerMenu } from "./emoji-picker-menu";
 import { SlashCommandMenu } from "./slash-command-menu";
 
 const editors: Editor[] = [];
@@ -36,6 +38,7 @@ function setup() {
 		extensions: [
 			...(MarkdownWc() as any[]),
 			SlashCommandsExtension.configure({ onStateChange: () => {} }),
+			EmojiCommandsExtension.configure({ onStateChange: () => {} }),
 		],
 		content: { type: "doc", content: [{ type: "paragraph" }] },
 	});
@@ -50,12 +53,36 @@ function setup() {
 		<EditorProvider>
 			<InjectEditor editor={editor} />
 			<SlashCommandMenu />
+			<EmojiPickerMenu />
 		</EditorProvider>,
 	);
 	return editor;
 }
 
 describe("SlashCommandMenu", () => {
+	test("opens emoji search from the /emoji command", async () => {
+		const editor = setup();
+		await act(async () => {
+			editor.commands.insertContent("/emoji");
+		});
+
+		expect(
+			await screen.findByRole("option", { name: "Emoji: Insert an emoji" }),
+		).toBeInTheDocument();
+		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+
+		expect(
+			await screen.findByRole("listbox", { name: "Emoji picker" }),
+		).toBeInTheDocument();
+		expect(editor.getText()).toBe("");
+
+		await act(async () => {
+			editor.commands.insertContent("rocket");
+		});
+		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+		await waitFor(() => expect(editor.getText()).toBe("🚀"));
+	});
+
 	test("handles navigation only for key events from its editor", async () => {
 		const editor = setup();
 		await act(async () => {

@@ -218,9 +218,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			if (node.type.name === "heading" && node.attrs?.level === 1) {
 				return "Heading 1";
 			}
-			return node.type.name === "paragraph"
-				? "Press ‘/’ for commands · ‘:’ for emoji"
-				: "";
+			return node.type.name === "paragraph" ? "Press ‘/’ for commands" : "";
 		},
 		showOnlyWhenEditable: true,
 		showOnlyCurrent: true,

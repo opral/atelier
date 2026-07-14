@@ -28,18 +28,32 @@ function createTestEditor(): Editor {
 }
 
 describe("EmojiCommandsExtension", () => {
-	test("tracks a boundary-prefixed query and replaces it with an emoji", () => {
+	test("opens explicitly, tracks the query, and replaces it with an emoji", () => {
 		const editor = createTestEditor();
-		editor.commands.insertContent("Update :thumbsup");
+		editor.commands.insertContent("Update ");
+		expect(editor.commands.openEmojiMenu()).toBe(true);
+		editor.commands.insertContent("thumbsup");
 
 		expect(emojiCommandsPluginKey.getState(editor.state)).toMatchObject({
 			active: true,
 			query: "thumbsup",
+			trigger: "slash",
 		});
-
 		expect(editor.commands.insertEmojiFromQuery("👍")).toBe(true);
 		expect(editor.getText()).toBe("Update 👍");
 		expect(emojiCommandsPluginKey.getState(editor.state)?.active).toBe(false);
+	});
+
+	test("typing a colon still opens the emoji picker", () => {
+		const editor = createTestEditor();
+		editor.commands.insertContent(":rocket");
+		expect(emojiCommandsPluginKey.getState(editor.state)).toMatchObject({
+			active: true,
+			query: "rocket",
+			trigger: "colon",
+		});
+		editor.commands.insertEmojiFromQuery("🚀");
+		expect(editor.getText()).toBe("🚀");
 	});
 
 	test.each(["https://example.com", "Time 12:30", "word:test"])(
@@ -51,17 +65,25 @@ describe("EmojiCommandsExtension", () => {
 		},
 	);
 
-	test("stops tracking after whitespace and ignores code blocks", () => {
+	test("closes when the query stops being a single search token", () => {
 		const editor = createTestEditor();
-		editor.commands.insertContent(":rocket ship");
+		editor.commands.openEmojiMenu();
+		editor.commands.insertContent("rocket ship");
 		expect(emojiCommandsPluginKey.getState(editor.state)?.active).toBe(false);
+		expect(editor.getText()).toBe("rocket ship");
+	});
 
+	test("does not open in code blocks or inline code", () => {
+		const editor = createTestEditor();
 		editor.commands.setContent({
 			type: "doc",
-			content: [{ type: "codeBlock", content: [{ type: "text", text: ":" }] }],
+			content: [
+				{ type: "codeBlock", content: [{ type: "text", text: "code" }] },
+			],
 		});
 		editor.commands.focus("end");
-		editor.commands.insertContent("smile");
+		expect(editor.commands.openEmojiMenu()).toBe(false);
+		editor.commands.insertContent(" :rocket");
 		expect(emojiCommandsPluginKey.getState(editor.state)?.active).toBe(false);
 
 		editor.commands.setContent({
@@ -69,12 +91,13 @@ describe("EmojiCommandsExtension", () => {
 			content: [
 				{
 					type: "paragraph",
-					content: [{ type: "text", marks: [{ type: "code" }], text: ":" }],
+					content: [{ type: "text", marks: [{ type: "code" }], text: "code" }],
 				},
 			],
 		});
 		editor.commands.focus("end");
-		editor.commands.insertContent("smile");
+		expect(editor.commands.openEmojiMenu()).toBe(false);
+		editor.commands.insertContent(" :rocket");
 		expect(emojiCommandsPluginKey.getState(editor.state)?.active).toBe(false);
 	});
 });

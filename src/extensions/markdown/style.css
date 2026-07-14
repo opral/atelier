@@ -1662,8 +1662,8 @@
 		line-height: 1;
 	}
 
-	/* Colon-triggered emoji search intentionally reuses the slash palette's
-	   shell and row language so both inline insertion flows feel related. */
+	/* Slash-command emoji search reuses the command palette's shell and row
+	   language so the handoff from /emoji feels like one continuous flow. */
 	.markdown-emoji-menu {
 		max-height: min(22.25rem, calc(100vh - 1.5rem));
 	}
