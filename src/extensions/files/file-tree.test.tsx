@@ -235,6 +235,39 @@ describe("FileTree", () => {
 		expect(handleOpen).toHaveBeenCalledWith("file-readme", "/README.md");
 	});
 
+	test("clears the selection when the tree background is clicked", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+			},
+		];
+		const handleClearSelection = vi.fn();
+		const { container } = render(
+			<FileTree
+				nodes={nodes}
+				selectedPath="/README.md"
+				onClearSelection={handleClearSelection}
+			/>,
+		);
+
+		expect(getTreeItem(container, "README.md")).toHaveAttribute(
+			"data-item-selected",
+			"true",
+		);
+		fireEvent.click(getTreeHost(container));
+
+		expect(handleClearSelection).toHaveBeenCalledTimes(1);
+		await waitFor(() => {
+			expect(getTreeItem(container, "README.md")).not.toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+	});
+
 	test("commits native renames for lix-backed files", async () => {
 		const nodes: FilesystemTreeNode[] = [
 			{

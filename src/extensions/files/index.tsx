@@ -683,6 +683,9 @@ function FilesViewContent({
 		},
 		[combinedEntries, setLocalSelection],
 	);
+	const handleClearSelection = useCallback(() => {
+		setLocalSelection(null);
+	}, [setLocalSelection]);
 
 	const handleDeleteSelection = useCallback(async () => {
 		if (!selectedPath || !selectedKind) return;
@@ -896,6 +899,7 @@ function FilesViewContent({
 			reviewPaths={reviewPaths}
 			reviewStatuses={reviewStatuses}
 			onSelectItem={handleSelectItem}
+			onClearSelection={handleClearSelection}
 			selectedPath={selectedPath ?? undefined}
 			isPanelFocused={isPanelFocused}
 			openDirectories={openDirectoryPaths}

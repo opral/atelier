@@ -47,6 +47,7 @@ export type FileTreeProps = {
 		kind: "file" | "directory",
 		source?: FilesystemTreeSource,
 	) => void;
+	readonly onClearSelection?: () => void;
 	readonly openDirectories?: ReadonlySet<string>;
 	readonly reviewPaths?: ReadonlySet<string>;
 	readonly reviewStatuses?: ReadonlyMap<string, ReviewGitStatus>;
@@ -223,6 +224,7 @@ export function FileTree({
 	selectedPath,
 	isPanelFocused = false,
 	onSelectItem,
+	onClearSelection,
 	openDirectories,
 	reviewPaths,
 	reviewStatuses,
@@ -285,6 +287,7 @@ export function FileTree({
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
+		onClearSelection,
 		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -300,6 +303,7 @@ export function FileTree({
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
+		onClearSelection,
 		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -411,9 +415,16 @@ export function FileTree({
 		}, 0);
 	}, []);
 
-	const openFileFromTreeEvent = useCallback((event: Event) => {
+	const handleTreeClick = useCallback((event: Event) => {
 		const treePath = treePathFromComposedEvent(event);
-		if (!treePath) return;
+		if (!treePath) {
+			for (const modelSelectionPath of modelRef.current?.getSelectedPaths() ??
+				[]) {
+				modelRef.current?.getItem(modelSelectionPath)?.deselect();
+			}
+			stateRef.current.onClearSelection?.();
+			return;
+		}
 		const info = pathInfoForTreePath(
 			stateRef.current.pathInfoByTreePath,
 			treePath,
@@ -548,7 +559,7 @@ export function FileTree({
 		<PierreFileTree
 			aria-label="Files"
 			model={model}
-			onClick={(event) => openFileFromTreeEvent(event.nativeEvent)}
+			onClick={(event) => handleTreeClick(event.nativeEvent)}
 			onClickCapture={handleTreeClickCapture}
 			style={treeHostStyle(isPanelFocused, variant)}
 		/>
