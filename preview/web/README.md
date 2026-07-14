@@ -1,7 +1,7 @@
 # Atelier web preview
 
 This is the browser host for the embedded Atelier app. It uses the Lix SDK's
-in-memory browser backend, which runs the Lix engine and WASM plugins in a
+in-memory browser storage, which runs the Lix engine and WASM plugins in a
 worker.
 
 ```bash
@@ -9,7 +9,7 @@ pnpm --dir preview/web dev
 ```
 
 The preview is a regular Vite app. It intentionally has no Electron bridge or
-filesystem backend.
+filesystem storage.
 
 Files under `seed/` are inserted into a fresh in-memory Lix workspace at
 startup. Markdown fixtures and their local assets live together under
