@@ -11,7 +11,7 @@
 		"typecheck": "tsc -p tsconfig.json --pretty false"
 	},
 	"dependencies": {
-		"@lix-js/sdk": "^0.8.0",
+		"@lix-js/sdk": "^0.8.2",
 		"@opral/atelier": "workspace:*"
 	},
 	"devDependencies": {

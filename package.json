@@ -33,7 +33,7 @@
 		"ci": "pnpm run build && pnpm test && pnpm --dir fixtures/consumer build"
 	},
 	"peerDependencies": {
-		"@lix-js/sdk": "^0.8.0",
+		"@lix-js/sdk": "^0.8.2",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0"
 	},
@@ -82,7 +82,7 @@
 		"yaml": "^2.8.2"
 	},
 	"devDependencies": {
-		"@lix-js/sdk": "^0.8.0",
+		"@lix-js/sdk": "^0.8.2",
 		"@tailwindcss/vite": "^4.3.2",
 		"@testing-library/jest-dom": "^6.6.3",
 		"@testing-library/react": "^16.3.2",
