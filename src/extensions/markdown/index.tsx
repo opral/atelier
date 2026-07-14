@@ -71,7 +71,8 @@ type MarkdownViewProps = {
 	readonly isPanelFocused?: boolean;
 	readonly focusOnLoad?: boolean;
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
-	readonly syncActiveFile?: boolean;
+	readonly activeBranchId?: string;
+	readonly resolvedReviewIds?: readonly string[];
 	readonly checkpointDiff?: CheckpointDiff | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
@@ -124,7 +125,8 @@ export function MarkdownView({
 	isPanelFocused = true,
 	focusOnLoad = false,
 	defaultBlock,
-	syncActiveFile = true,
+	activeBranchId = "main",
+	resolvedReviewIds,
 	checkpointDiff,
 	beforeCommitId,
 	afterCommitId,
@@ -146,7 +148,8 @@ export function MarkdownView({
 				isPanelFocused={isPanelFocused}
 				focusOnLoad={focusOnLoad}
 				defaultBlock={defaultBlock}
-				syncActiveFile={syncActiveFile}
+				activeBranchId={activeBranchId}
+				resolvedReviewIds={resolvedReviewIds}
 				checkpointDiff={checkpointDiff}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
@@ -190,7 +193,6 @@ function MarkdownViewLoaded(
 		fileRow,
 		isActiveView = true,
 		isPanelFocused = true,
-		syncActiveFile = true,
 		checkpointDiff,
 		beforeCommitId,
 		afterCommitId,
@@ -212,7 +214,6 @@ function MarkdownViewLoaded(
 				fileRow={fileRow}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
-				syncActiveFile={syncActiveFile}
 				checkpointDiff={checkpointDiff}
 				editorRevision={editorRevision}
 				openWorkspaceFile={openWorkspaceFile}
@@ -229,7 +230,8 @@ function MarkdownLiveViewLoaded({
 	isPanelFocused = true,
 	focusOnLoad = false,
 	defaultBlock,
-	syncActiveFile = true,
+	activeBranchId = "main",
+	resolvedReviewIds,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -242,6 +244,8 @@ function MarkdownLiveViewLoaded({
 	const externalWriteReview = useExternalWriteReview({
 		fileId: fileRow?.id,
 		path: fileRow?.path,
+		activeBranchId,
+		resolvedReviewIds,
 	});
 	const externalWriteReviewData =
 		useExternalWriteReviewData(externalWriteReview);
@@ -303,6 +307,7 @@ function MarkdownLiveViewLoaded({
 						<TipTapEditor
 							className="h-full"
 							fileId={effectiveFileRow.id}
+							activeBranchId={activeBranchId}
 							filePath={effectiveFileRow.path}
 							isActiveView={isActiveView}
 							focusOnLoad={focusOnLoad}
@@ -376,9 +381,6 @@ function MarkdownLiveViewLoaded({
 				review={externalWriteReview ?? finishingReview?.review ?? null}
 				register={registerExternalWriteReview}
 			/>
-			{syncActiveFile && fileRow && isMarkdownFilePath(fileRow.path) ? (
-				<ActiveFileSync fileId={fileRow?.id} isActiveView={isActiveView} />
-			) : null}
 			{content}
 		</div>
 	);
@@ -466,7 +468,6 @@ function MarkdownHistoricalViewLoaded({
 	readonly fileRow: MarkdownFileRow | undefined;
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
-	readonly syncActiveFile: boolean;
 	readonly checkpointDiff: CheckpointDiff | null | undefined;
 	readonly editorRevision: EditorRevisionState;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
@@ -1116,65 +1117,6 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 	}
 }
 
-function ActiveFileSync({
-	fileId,
-	isActiveView,
-}: {
-	readonly fileId?: string;
-	readonly isActiveView: boolean;
-}) {
-	const activeFile = useQueryTakeFirst<{ value: string }>((lix) =>
-		qb(lix)
-			.selectFrom("lix_key_value_by_branch")
-			.where("lixcol_branch_id", "=", "global")
-			.where("key", "=", "atelier_active_file_id")
-			.select(["value"]),
-	);
-
-	return (
-		<ActiveFileSyncEffect
-			fileId={fileId}
-			isActiveView={isActiveView}
-			activeFileId={
-				typeof activeFile?.value === "string" ? activeFile.value : null
-			}
-		/>
-	);
-}
-
-function ActiveFileSyncEffect({
-	fileId,
-	isActiveView,
-	activeFileId,
-}: {
-	readonly fileId?: string;
-	readonly isActiveView: boolean;
-	readonly activeFileId: string | null;
-}) {
-	const lix = useLix();
-
-	useEffect(() => {
-		if (!fileId) return;
-		if (!isActiveView) return;
-		if (activeFileId === fileId) return;
-		void qb(lix)
-			.insertInto("lix_key_value_by_branch")
-			.values({
-				key: "atelier_active_file_id",
-				value: fileId,
-				lixcol_branch_id: "global",
-				lixcol_global: true,
-				lixcol_untracked: true,
-			})
-			.onConflict((oc) =>
-				oc.columns(["key", "lixcol_branch_id"]).doUpdateSet({ value: fileId }),
-			)
-			.execute();
-	}, [lix, fileId, activeFileId, isActiveView]);
-
-	return null;
-}
-
 function MarkdownLoadingSpinner(): ReactNode {
 	return (
 		<div className="flex h-full items-center justify-center px-3 py-2 text-muted-foreground">
@@ -1210,7 +1152,8 @@ export const extension = createReactExtensionDefinition({
 				defaultBlock={
 					view.state.defaultBlock === "heading1" ? "heading1" : undefined
 				}
-				syncActiveFile={false}
+				activeBranchId={atelier.branches.activeId}
+				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"
 						? view.state.beforeCommitId

@@ -7,9 +7,13 @@ const publicDeclarations = new Set([
 	"atelier-instance.d.ts",
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
+	"state-adapters.d.ts",
 	"dev-tools/developer-tools-menu.d.ts",
 	"dev-tools/simulate-agent-workflow.d.ts",
+	"extension-runtime/external-write-review.d.ts",
+	"extension-runtime/types.d.ts",
 	"shell/agent-turn-review-range.d.ts",
+	"shell/ui-state.d.ts",
 ]);
 
 await pruneDirectory(typesDirectory);

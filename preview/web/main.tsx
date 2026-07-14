@@ -1,7 +1,7 @@
 import { openLix } from "@lix-js/sdk";
 import type { Lix } from "@lix-js/sdk";
 import { Atelier, AtelierDeveloperTools, createAtelier } from "@opral/atelier";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
 import { seedWorkspace } from "./seed-workspace";
@@ -14,63 +14,46 @@ const mountElement = element;
 async function start() {
 	const lix = await openLix();
 	await seedWorkspace(lix);
-	const atelier = createAtelier({ lix });
-	createRoot(mountElement).render(
+	createRoot(mountElement).render(<PreviewApp lix={lix} />);
+}
+
+function PreviewApp({ lix }: { readonly lix: Lix }) {
+	const [currentFile, setCurrentFile] = useState<string | null>(null);
+	const [atelier] = useState(() =>
+		createAtelier({
+			lix,
+			onEvent: (event) => {
+				if (event.type === "document_viewed") {
+					setCurrentFile(event.filePath);
+				} else if (event.type === "document_closed") {
+					setCurrentFile(event.nextFilePath);
+				}
+			},
+		}),
+	);
+	const branchId = useSyncExternalStore(
+		atelier.branches.subscribe,
+		atelier.branches.activeId,
+		atelier.branches.activeId,
+	);
+	return (
 		<Atelier
 			instance={atelier}
 			slots={
 				import.meta.env.DEV
-					? { navbarEnd: <PreviewDeveloperTools lix={lix} /> }
+					? {
+							navbarEnd: (
+								<AtelierDeveloperTools
+									lix={lix}
+									currentFile={currentFile}
+									branchId={branchId}
+								/>
+							),
+						}
 					: undefined
 			}
-		/>,
+		/>
 	);
-}
-
-function PreviewDeveloperTools({ lix }: { readonly lix: Lix }) {
-	const [currentFile, setCurrentFile] = useState<string | null>(null);
-
-	useEffect(() => {
-		let closed = false;
-		const events = lix.observe(
-			"SELECT value FROM lix_key_value_by_branch WHERE key = ? AND lixcol_branch_id = ?",
-			["atelier_active_file_id", "global"],
-		);
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (!event || closed) break;
-					const fileId = event.result.rows[0]?.get("value");
-					if (typeof fileId !== "string") {
-						setCurrentFile(null);
-						continue;
-					}
-					const file = await lix.execute(
-						"SELECT path FROM lix_file WHERE id = ? LIMIT 1",
-						[fileId],
-					);
-					if (!closed) {
-						const path = file.rows[0]?.get("path");
-						setCurrentFile(typeof path === "string" ? path : null);
-					}
-				}
-			} catch (error) {
-				if (!closed) {
-					console.warn(
-						"Unable to resolve the active preview file for developer tools",
-						error,
-					);
-				}
-			}
-		})();
-		return () => {
-			closed = true;
-			events.close();
-		};
-	}, [lix]);
-
-	return <AtelierDeveloperTools lix={lix} currentFile={currentFile} />;
 }
 
 void start().catch((error: unknown) => {

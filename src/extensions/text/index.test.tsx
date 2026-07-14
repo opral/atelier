@@ -173,6 +173,14 @@ function createRuntime(
 			open: vi.fn(),
 			startNew: vi.fn(),
 			closeActive: vi.fn(),
+			closeAll: vi.fn(),
+			activeFileId: null,
+			activeFilePath: null,
+		},
+		branches: {
+			activeId: "main",
+			create: vi.fn(async (name: string) => name),
+			switch: vi.fn(async () => {}),
 		},
 		revisions: {
 			current: null,
@@ -180,6 +188,7 @@ function createRuntime(
 			clear: vi.fn(),
 		},
 		reviews: {
+			resolvedReviewIds: [],
 			resolve: vi.fn(async () => {}),
 			accept: vi.fn(async () => {}),
 			reject: vi.fn(async () => {}),

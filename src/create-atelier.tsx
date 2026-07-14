@@ -1,6 +1,4 @@
-import { Suspense, useMemo, type ReactNode } from "react";
-import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
-import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
+import { Suspense, type ReactNode } from "react";
 import { LixProvider } from "@/lib/lix-react";
 import { V2LayoutShell } from "@/shell/layout-shell";
 import type { AtelierExtensionState } from "./extension-api";
@@ -8,9 +6,7 @@ import {
 	getAtelierConfiguration,
 	type AtelierInstance,
 	type AtelierPanelSide,
-	type AtelierSidePanel,
 } from "./atelier-instance";
-import { createInitialAtelierUiState } from "./shell/ui-state";
 
 export type { AtelierPanelSide, AtelierSidePanel } from "./atelier-instance";
 
@@ -49,47 +45,22 @@ export type AtelierProps = {
 export function Atelier({ instance, slots }: AtelierProps) {
 	const configuration = getAtelierConfiguration(instance);
 	const defaultOpenPanels = configuration.defaultOpenPanels ?? [];
-	const defaultLeftPanelOpen = defaultOpenPanels?.includes("left") ?? false;
-	const defaultRightPanelOpen = defaultOpenPanels?.includes("right") ?? false;
-	const keyValueDefinitions = useMemo(
-		() =>
-			createAtelierKeyValueDefinitions([
-				...(defaultLeftPanelOpen ? (["left"] as const) : []),
-				...(defaultRightPanelOpen ? (["right"] as const) : []),
-			]),
-		[defaultLeftPanelOpen, defaultRightPanelOpen],
-	);
 	return (
 		<div className="atelier-root h-full w-full overflow-hidden">
 			<LixProvider lix={instance.lix}>
-				<KeyValueProvider defs={keyValueDefinitions}>
-					<Suspense fallback={<AtelierLoadingPlaceholder />}>
-						<V2LayoutShell
-							instance={instance}
-							slots={slots}
-							extensions={configuration.extensions}
-							filesViewMode={configuration.filesViewMode}
-							defaultOpenPanels={defaultOpenPanels}
-							onEvent={configuration.onEvent}
-						/>
-					</Suspense>
-				</KeyValueProvider>
+				<Suspense fallback={<AtelierLoadingPlaceholder />}>
+					<V2LayoutShell
+						instance={instance}
+						slots={slots}
+						extensions={configuration.extensions}
+						filesViewMode={configuration.filesViewMode}
+						defaultOpenPanels={defaultOpenPanels}
+						onEvent={configuration.onEvent}
+					/>
+				</Suspense>
 			</LixProvider>
 		</div>
 	);
-}
-
-/** @internal */
-export function createAtelierKeyValueDefinitions(
-	defaultOpenPanels: readonly AtelierSidePanel[] = [],
-) {
-	return {
-		...KEY_VALUE_DEFINITIONS,
-		atelier_ui_state: {
-			...KEY_VALUE_DEFINITIONS.atelier_ui_state,
-			defaultValue: createInitialAtelierUiState(defaultOpenPanels),
-		},
-	};
 }
 
 function AtelierLoadingPlaceholder() {

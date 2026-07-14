@@ -9,12 +9,7 @@ import {
 	RotateCcw,
 	Trash2,
 } from "lucide-react";
-import {
-	LixProvider,
-	useLix,
-	useQuery,
-	useQueryTakeFirstOrThrow,
-} from "@/lib/lix-react";
+import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { qb, sql } from "@/lib/lix-kysely";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +31,9 @@ type BranchRow = {
 };
 
 type HistoryViewProps = {
+	readonly activeBranchId: string;
+	readonly createBranch: (name: string) => Promise<string>;
+	readonly switchBranch: (branchId: string) => Promise<void>;
 	readonly currentRevision?: AtelierRevisionSelection | null;
 	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff?: () => void;
@@ -68,7 +66,7 @@ function displayBranchName(branchName: string): string {
  * @example
  * <HistoryView />
  */
-export function HistoryView(props: HistoryViewProps = {}) {
+export function HistoryView(props: HistoryViewProps) {
 	const lix = useLix();
 	return <HistoryBranchesLoader lix={lix} {...props} />;
 }
@@ -89,41 +87,15 @@ function HistoryBranchesLoader({
 			)
 			.orderBy("name", "asc"),
 	);
-	return <HistoryActiveBranchLoader lix={lix} branches={branches} {...props} />;
-}
-
-function HistoryActiveBranchLoader({
-	lix,
-	branches,
-	currentRevision,
-	showCheckpointDiff,
-	clearCheckpointDiff,
-}: HistoryViewProps & {
-	readonly lix: ReturnType<typeof useLix>;
-	readonly branches: BranchRow[];
-}) {
-	const activeBranch = useQueryTakeFirstOrThrow<{ value: string }>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value")
-			.where("key", "=", "lix_workspace_branch_id")
-			.select(["value"]),
-	);
-	return (
-		<HistoryViewContent
-			lix={lix}
-			branches={branches}
-			activeBranchId={activeBranch.value}
-			currentRevision={currentRevision}
-			showCheckpointDiff={showCheckpointDiff}
-			clearCheckpointDiff={clearCheckpointDiff}
-		/>
-	);
+	return <HistoryViewContent lix={lix} branches={branches} {...props} />;
 }
 
 function HistoryViewContent({
 	lix,
 	branches,
 	activeBranchId,
+	createBranch,
+	switchBranch,
 	currentRevision,
 	showCheckpointDiff,
 	clearCheckpointDiff,
@@ -131,6 +103,8 @@ function HistoryViewContent({
 	readonly lix: ReturnType<typeof useLix>;
 	readonly branches: BranchRow[];
 	readonly activeBranchId: string;
+	readonly createBranch: (name: string) => Promise<string>;
+	readonly switchBranch: (branchId: string) => Promise<void>;
 	readonly currentRevision?: AtelierRevisionSelection | null;
 	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff?: () => void;
@@ -151,7 +125,7 @@ function HistoryViewContent({
 			if (!lix || branchId === activeBranchRow.id) return;
 			setPendingAction(branchId);
 			try {
-				await lix.switchBranch({ branchId });
+				await switchBranch(branchId);
 				clearCheckpointDiff?.();
 			} catch (error) {
 				console.error("Failed to switch branch", error);
@@ -159,7 +133,7 @@ function HistoryViewContent({
 				setPendingAction(null);
 			}
 		},
-		[lix, activeBranchRow.id, clearCheckpointDiff],
+		[activeBranchRow.id, clearCheckpointDiff, lix, switchBranch],
 	);
 
 	const handleSelectBranch = useCallback(
@@ -183,19 +157,15 @@ function HistoryViewContent({
 	);
 
 	const handleCreateBranch = useCallback(async () => {
-		if (!lix) return;
 		setPendingAction("create");
 		try {
-			const timestamp = formatLocalTimestamp();
-			await lix.createBranch({
-				name: timestamp,
-			});
+			await createBranch(formatLocalTimestamp());
 		} catch (error) {
 			console.error("Failed to create branch", error);
 		} finally {
 			setPendingAction(null);
 		}
-	}, [lix]);
+	}, [createBranch]);
 
 	const handleRenameBranch = useCallback(
 		async (branchId: string, currentName: string) => {
@@ -230,16 +200,12 @@ function HistoryViewContent({
 			);
 			if (!confirmed) return;
 			setPendingAction(branchId);
-			const currentActiveId = activeBranchRow.id;
 			try {
 				await qb(lix)
 					.updateTable("lix_branch")
 					.set({ hidden: true })
 					.where("id", "=", branchId)
 					.execute();
-				if (currentActiveId) {
-					await lix.switchBranch({ branchId: currentActiveId });
-				}
 			} catch (error) {
 				console.error("Failed to delete branch", error);
 			} finally {
@@ -407,6 +373,9 @@ export const extension = createReactExtensionDefinition({
 	component: ({ atelier }) => (
 		<LixProvider lix={atelier.lix}>
 			<HistoryView
+				activeBranchId={atelier.branches.activeId}
+				createBranch={atelier.branches.create}
+				switchBranch={atelier.branches.switch}
 				currentRevision={atelier.revisions.current}
 				showCheckpointDiff={atelier.revisions.show}
 				clearCheckpointDiff={atelier.revisions.clear}

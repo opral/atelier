@@ -3,8 +3,8 @@ import { qb } from "@/lib/lix-kysely";
 
 export const AGENT_TURN_COMMIT_RANGE_KEY =
 	"atelier_agent_turn_commit_range" as const;
-
-const agentTurnCommitRangeMutationQueues = new WeakMap<Lix, Promise<void>>();
+export const AGENT_TURN_COMMIT_RANGE_KEY_PREFIX =
+	`${AGENT_TURN_COMMIT_RANGE_KEY}:` as const;
 
 export type AgentTurnCommitRange = {
 	readonly id: string;
@@ -26,115 +26,105 @@ export function agentTurnReviewId(
 	fileId: string,
 	rangeIds: readonly string[],
 ): string {
-	return `${fileId}:${rangeIds.join(",")}`;
+	return JSON.stringify([fileId, rangeIds]);
+}
+
+export function agentTurnReviewRangeIds(
+	reviewId: string,
+	fileId: string,
+): readonly string[] {
+	try {
+		const decoded = JSON.parse(reviewId) as unknown;
+		if (
+			Array.isArray(decoded) &&
+			decoded.length === 2 &&
+			decoded[0] === fileId &&
+			Array.isArray(decoded[1]) &&
+			decoded[1].every(
+				(rangeId) => typeof rangeId === "string" && rangeId.length > 0,
+			)
+		) {
+			return decoded[1];
+		}
+	} catch {
+		// Fall through to the legacy delimiter format.
+	}
+
+	const legacyPrefix = `${fileId}:`;
+	return reviewId.startsWith(legacyPrefix)
+		? reviewId.slice(legacyPrefix.length).split(",").filter(Boolean)
+		: [];
 }
 
 export async function readAgentTurnCommitRanges(
 	lix: Lix,
+	branchId?: string,
 ): Promise<readonly AgentTurnCommitRange[]> {
-	const branchId = await lix.activeBranchId();
-	const row = await qb(lix)
+	const resolvedBranchId = branchId ?? (await lix.activeBranchId());
+	const rows = await qb(lix)
 		.selectFrom("lix_key_value_by_branch")
 		.select("value")
-		.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-		.where("lixcol_branch_id", "=", branchId)
-		.limit(1)
-		.executeTakeFirst();
-	return isAgentTurnCommitRangeStore(row?.value) ? row.value.ranges : [];
+		.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
+		.where("lixcol_branch_id", "=", resolvedBranchId)
+		.execute();
+	return agentTurnCommitRangesFromValues(rows.map((row) => row.value));
 }
 
 export async function appendAgentTurnCommitRange(
 	lix: Lix,
 	range: AgentTurnCommitRange,
+	options?: { readonly branchId?: string },
 ): Promise<void> {
-	await runAgentTurnCommitRangeMutation(lix, async () => {
-		const ranges = await readAgentTurnCommitRanges(lix);
-		await writeAgentTurnCommitRanges(lix, [
-			...ranges.filter((existing) => existing.id !== range.id),
-			range,
-		]);
-	});
-}
-
-async function writeAgentTurnCommitRanges(
-	lix: Lix,
-	ranges: readonly AgentTurnCommitRange[],
-): Promise<void> {
-	const value = serializeAgentTurnCommitRangeStore({ ranges });
-	const branchId = await lix.activeBranchId();
+	const value = serializeNormalizedAgentTurnCommitRange(range);
+	const branchId = options?.branchId ?? (await lix.activeBranchId());
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
-			key: AGENT_TURN_COMMIT_RANGE_KEY,
+			key: agentTurnCommitRangeKey(range.id),
 			value,
 			lixcol_branch_id: branchId,
 			lixcol_global: branchId === "global",
 			lixcol_untracked: true,
 		})
-		.onConflict((oc) =>
-			oc.columns(["key", "lixcol_branch_id"]).doUpdateSet({ value }),
-		)
+		.onConflict((oc) => oc.columns(["key", "lixcol_branch_id"]).doNothing())
 		.execute();
 }
 
-export async function clearAgentTurnCommitRangeFile(
-	lix: Lix,
-	args: {
-		readonly fileId: string;
-		readonly reviewId?: string;
-		readonly agentTurnRangeIds?: readonly string[];
-	},
-): Promise<boolean> {
-	return await runAgentTurnCommitRangeMutation(lix, async () => {
-		const ranges = await readAgentTurnCommitRanges(lix);
-		const rangeIds = args.agentTurnRangeIds ?? [];
-		if (rangeIds.length === 0) {
-			return false;
-		}
-		if (
-			args.reviewId &&
-			args.reviewId !== agentTurnReviewId(args.fileId, rangeIds)
-		) {
-			return false;
-		}
-		const rangeIdSet = new Set(rangeIds);
-		let changed = false;
-		const nextRanges = ranges.map((range) => {
-			if (!rangeIdSet.has(range.id)) return range;
-			if (range.clearedFileIds?.includes(args.fileId)) return range;
-			changed = true;
-			return {
-				...range,
-				clearedFileIds: [...(range.clearedFileIds ?? []), args.fileId],
-			};
-		});
-		if (!changed) return false;
-		await writeAgentTurnCommitRanges(lix, nextRanges);
-		return true;
-	});
+export function agentTurnCommitRangeKey(rangeId: string): string {
+	return `${AGENT_TURN_COMMIT_RANGE_KEY_PREFIX}${encodeURIComponent(rangeId)}`;
 }
 
-async function runAgentTurnCommitRangeMutation<T>(
-	lix: Lix,
-	operation: () => Promise<T>,
-): Promise<T> {
-	const previous =
-		agentTurnCommitRangeMutationQueues.get(lix) ?? Promise.resolve();
-	let releaseCurrent: (() => void) | undefined;
-	const current = new Promise<void>((resolve) => {
-		releaseCurrent = resolve;
-	});
-	const next = previous.catch(() => undefined).then(() => current);
-	agentTurnCommitRangeMutationQueues.set(lix, next);
-	await previous.catch(() => undefined);
-	try {
-		return await operation();
-	} finally {
-		releaseCurrent?.();
-		if (agentTurnCommitRangeMutationQueues.get(lix) === next) {
-			agentTurnCommitRangeMutationQueues.delete(lix);
+export function agentTurnCommitRangesFromValues(
+	values: readonly unknown[],
+): readonly AgentTurnCommitRange[] {
+	const byId = new Map<string, AgentTurnCommitRange>();
+	for (const value of values) {
+		const ranges = isAgentTurnCommitRangeStore(value)
+			? value.ranges
+			: isAgentTurnCommitRange(value)
+				? [serializeNormalizedAgentTurnCommitRange(value)]
+				: [];
+		for (const range of ranges) {
+			const existing = byId.get(range.id);
+			if (!existing) {
+				byId.set(range.id, range);
+				continue;
+			}
+			const clearedFileIds = [
+				...new Set([
+					...(existing.clearedFileIds ?? []),
+					...(range.clearedFileIds ?? []),
+				]),
+			];
+			if (clearedFileIds.length > 0) {
+				byId.set(range.id, { ...existing, clearedFileIds });
+			}
 		}
 	}
+	return [...byId.values()].sort(
+		(left, right) =>
+			left.completedAt - right.completedAt || left.id.localeCompare(right.id),
+	);
 }
 
 export function isAgentTurnCommitRangeStore(
@@ -149,7 +139,9 @@ export function isAgentTurnCommitRangeStore(
 	);
 }
 
-function isAgentTurnCommitRange(value: unknown): value is AgentTurnCommitRange {
+export function isAgentTurnCommitRange(
+	value: unknown,
+): value is AgentTurnCommitRange {
 	if (!value || typeof value !== "object") {
 		return false;
 	}
@@ -178,14 +170,6 @@ function isAgentTurnCommitRange(value: unknown): value is AgentTurnCommitRange {
 	);
 }
 
-function serializeAgentTurnCommitRangeStore(
-	store: AgentTurnCommitRangeStore,
-): AgentTurnCommitRangeStore {
-	return {
-		ranges: store.ranges.map(serializeAgentTurnCommitRange),
-	};
-}
-
 function serializeAgentTurnCommitRange(
 	range: AgentTurnCommitRange,
 ): AgentTurnCommitRange {
@@ -201,5 +185,23 @@ function serializeAgentTurnCommitRange(
 			: {}),
 		startedAt: range.startedAt,
 		completedAt: range.completedAt,
+	};
+}
+
+function serializeNormalizedAgentTurnCommitRange(
+	range: AgentTurnCommitRange,
+): AgentTurnCommitRange {
+	const serialized = serializeAgentTurnCommitRange(range);
+	return {
+		id: serialized.id,
+		sourceId: serialized.sourceId,
+		beforeCommitId: serialized.beforeCommitId,
+		afterCommitId: serialized.afterCommitId,
+		...(serialized.sessionId !== undefined
+			? { sessionId: serialized.sessionId }
+			: {}),
+		...(serialized.turnId !== undefined ? { turnId: serialized.turnId } : {}),
+		startedAt: serialized.startedAt,
+		completedAt: serialized.completedAt,
 	};
 }

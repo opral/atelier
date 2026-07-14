@@ -25,24 +25,27 @@ import {
 export function AtelierDeveloperTools({
 	lix,
 	currentFile,
+	branchId,
 }: {
 	readonly lix: Lix;
 	readonly currentFile: string | null;
+	readonly branchId: string | null;
 }) {
 	const [running, setRunning] = useState<DeveloperWorkflowScenario | null>(
 		null,
 	);
 	const [error, setError] = useState<string | null>(null);
 	const canSimulateMarkdown = Boolean(
-		currentFile?.toLowerCase().endsWith(".md"),
+		branchId && currentFile?.toLowerCase().endsWith(".md"),
 	);
 
 	const run = async (scenario: DeveloperWorkflowScenario) => {
-		if (!currentFile || running) return;
+		if (!branchId || !currentFile || running) return;
 		setRunning(scenario);
 		setError(null);
 		try {
 			await simulateMarkdownAgentWorkflow(lix, {
+				branchId,
 				filePath: currentFile,
 				scenario,
 			});

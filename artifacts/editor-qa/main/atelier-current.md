@@ -79,7 +79,7 @@ The image below is stored alongside this README in the seeded workspace:
 
 | Left aligned |       Center aligned       | Right aligned |
 | :----------- | :------------------------: | ------------: |
-| Plain cell   |        **Bold cell**       |         1,024 |
+| Plain cell   |       **Bold cell**        |         1,024 |
 | `code`       | [Link](https://github.com) |           $42 |
 | ~~Removed~~  |      Emoji :sparkles:      |          100% |
 

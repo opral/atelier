@@ -47,6 +47,8 @@ import "./style.css";
 
 type CsvViewProps = {
 	readonly fileId: string;
+	readonly activeBranchId?: string;
+	readonly resolvedReviewIds?: readonly string[];
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
@@ -108,6 +110,8 @@ const EMPTY_FILE_DATA = new Uint8Array();
 
 export function CsvView({
 	fileId,
+	activeBranchId = "main",
+	resolvedReviewIds,
 	filePath,
 	isActiveView = true,
 	isPanelFocused = true,
@@ -124,6 +128,8 @@ export function CsvView({
 		<Suspense fallback={<CsvLoadingSpinner />}>
 			<CsvViewContent
 				fileId={fileId}
+				activeBranchId={activeBranchId}
+				resolvedReviewIds={resolvedReviewIds}
 				filePath={filePath}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
@@ -200,6 +206,8 @@ function CsvViewData({
 function CsvLiveViewData({
 	fileRow,
 	registerExternalWriteReview,
+	activeBranchId = "main",
+	resolvedReviewIds,
 	...props
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
@@ -207,6 +215,8 @@ function CsvLiveViewData({
 	const externalWriteReview = useExternalWriteReview({
 		fileId: fileRow?.id,
 		path: fileRow?.path,
+		activeBranchId,
+		resolvedReviewIds,
 	});
 
 	if (!fileRow) {
@@ -225,6 +235,8 @@ function CsvLiveViewData({
 			/>
 			<CsvViewLoaded
 				fileRow={fileRow}
+				activeBranchId={activeBranchId}
+				resolvedReviewIds={resolvedReviewIds}
 				externalWriteReview={externalWriteReview}
 				reviewControls="review"
 				{...props}
@@ -721,6 +733,8 @@ export const extension = createReactExtensionDefinition({
 		<LixProvider lix={atelier.lix}>
 			<CsvView
 				fileId={view.state.fileId as string}
+				activeBranchId={atelier.branches.activeId}
+				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
 				filePath={view.state.filePath as string | undefined}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"

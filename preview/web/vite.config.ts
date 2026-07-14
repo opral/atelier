@@ -7,37 +7,34 @@ import { defineConfig } from "vite";
 const previewDir = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(previewDir, "../..");
 
-export default defineConfig(({ command }) => ({
+export default defineConfig({
 	root: previewDir,
 	build: {
 		outDir: path.resolve(repositoryRoot, ".preview/web"),
 		emptyOutDir: true,
 	},
 	plugins: [react(), tailwindcss()],
-	resolve:
-		command === "serve"
-			? {
-					alias: [
-						{
-							find: "@opral/atelier/style.css",
-							replacement: path.resolve(repositoryRoot, "src/index.css"),
-						},
-						{
-							find: "@opral/atelier",
-							replacement: path.resolve(repositoryRoot, "src/index.ts"),
-						},
-						{
-							find: "@",
-							replacement: path.resolve(repositoryRoot, "src"),
-						},
-					],
-				}
-			: undefined,
+	resolve: {
+		alias: [
+			{
+				find: "@opral/atelier/style.css",
+				replacement: path.resolve(repositoryRoot, "src/index.css"),
+			},
+			{
+				find: "@opral/atelier",
+				replacement: path.resolve(repositoryRoot, "src/index.ts"),
+			},
+			{
+				find: "@",
+				replacement: path.resolve(repositoryRoot, "src"),
+			},
+		],
+	},
 	server: {
 		fs: { allow: [repositoryRoot] },
 	},
 	optimizeDeps: {
-		exclude: command === "serve" ? ["@opral/atelier"] : [],
+		exclude: ["@opral/atelier"],
 		include: ["mermaid"],
 	},
-}));
+});

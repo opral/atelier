@@ -1,10 +1,9 @@
 import type { PanelSide, PanelState } from "../extension-runtime/types";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 
-export const ATELIER_UI_STATE_KEY = "atelier_ui_state" as const;
-
 /**
- * Serialized layout snapshot persisted in Lix under `atelier_ui_state`.
+ * Complete in-memory layout snapshot. Hosts split this into per-tab shell
+ * state and private account layout preferences before persisting it.
  *
  * The structure mirrors the in-memory panel model so we can revive the exact
  * view arrangement (active views, props, focused panel, and optional
@@ -32,8 +31,20 @@ export type AtelierUiState = {
 	};
 };
 
+export type AtelierSessionUiState = Pick<
+	AtelierUiState,
+	"focusedPanel" | "panels"
+>;
+
+export type AtelierUserPreferencesV1 = {
+	readonly version: 1;
+	readonly layout: {
+		readonly sizes: PanelLayoutSizes;
+	};
+};
+
 /**
- * Default UI state used when no persisted snapshot exists in Lix.
+ * Default UI state used when no session snapshot exists.
  */
 export type PanelLayoutSizes = Record<PanelSide, number>;
 export type DefaultOpenPanel = Exclude<PanelSide, "central">;
@@ -56,6 +67,11 @@ export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 		},
 		right: { views: [], activeInstance: null },
 	},
+	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
+};
+
+export const DEFAULT_ATELIER_USER_PREFERENCES: AtelierUserPreferencesV1 = {
+	version: 1,
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
 };
 
@@ -110,7 +126,7 @@ function coercePanelState(raw: unknown, fallback: PanelState): PanelState {
 }
 
 /**
- * Coerces persisted key-value payloads into a safe `AtelierUiState`.
+ * Coerces persisted session payloads into a safe `AtelierUiState`.
  *
  * Falls back to defaults for stale/invalid shapes so app boot does not crash.
  */
@@ -154,6 +170,38 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 				(layoutCandidate.sizes as
 					| Partial<Record<PanelSide, number>>
 					| undefined) ?? undefined,
+			),
+		},
+	};
+}
+
+export function coerceAtelierSessionUiState(
+	raw: unknown,
+): AtelierSessionUiState {
+	const coerced = coerceAtelierUiState(raw);
+	return {
+		focusedPanel: coerced.focusedPanel,
+		panels: coerced.panels,
+	};
+}
+
+export function coerceAtelierUserPreferences(
+	raw: unknown,
+): AtelierUserPreferencesV1 {
+	if (!raw || typeof raw !== "object") {
+		return DEFAULT_ATELIER_USER_PREFERENCES;
+	}
+	const candidate = raw as Record<string, unknown>;
+	const layout =
+		candidate.layout && typeof candidate.layout === "object"
+			? (candidate.layout as Record<string, unknown>)
+			: {};
+	return {
+		version: 1,
+		layout: {
+			sizes: normalizeLayoutSizes(
+				(layout.sizes as Partial<Record<PanelSide, number>> | undefined) ??
+					undefined,
 			),
 		},
 	};

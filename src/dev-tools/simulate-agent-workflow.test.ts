@@ -58,6 +58,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 		.execute();
 
 	const result = await simulateMarkdownAgentWorkflow(lix, {
+		branchId: await lix.activeBranchId(),
 		filePath: "/README.md",
 		scenario: "inline-edit",
 	});

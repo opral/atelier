@@ -28,7 +28,7 @@ import type {
 import type { Lix } from "@lix-js/sdk";
 import {
 	AGENT_TURN_COMMIT_RANGE_KEY,
-	isAgentTurnCommitRangeStore,
+	agentTurnCommitRangesFromValues,
 } from "@/shell/agent-turn-review-range";
 import {
 	getPendingExternalWriteReviewPaths,
@@ -50,6 +50,8 @@ type FilesViewContext = {
 	readonly checkpointBranchId?: string | null;
 	readonly activeFileId?: string | null;
 	readonly activeFilePath?: string | null;
+	readonly activeBranchId?: string;
+	readonly resolvedReviewIds?: readonly string[];
 	readonly isPanelFocused?: boolean;
 	readonly panelSide?: PanelSide;
 	readonly viewInstance?: string;
@@ -85,7 +87,6 @@ type ResolvedPendingReviewPaths = {
 };
 
 const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
-const EMPTY_AGENT_TURN_RANGES = [] as const;
 
 /**
  * Files view - Browse and pin project documents. Owns the Cmd/Ctrl + . shortcut
@@ -100,35 +101,7 @@ export function FilesView({ context }: FilesViewProps) {
 		selectFilesystemEntries(queryLix),
 	);
 	return (
-		<FilesActiveFileLoader context={context} lix={lix} entries={entries} />
-	);
-}
-
-function FilesActiveFileLoader({
-	context,
-	lix,
-	entries,
-}: FilesViewProps & {
-	readonly lix: Lix;
-	readonly entries: FilesystemEntryRow[];
-}) {
-	const activeFileRows = useQuery<{ value: unknown }>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value")
-			.select("value")
-			.where("key", "=", "atelier_active_file_id"),
-	);
-	const activeFileId =
-		typeof activeFileRows[0]?.value === "string"
-			? activeFileRows[0].value
-			: null;
-	return (
-		<FilesCheckpointLoader
-			context={context}
-			lix={lix}
-			entries={entries}
-			activeFileId={activeFileId}
-		/>
+		<FilesCheckpointLoader context={context} lix={lix} entries={entries} />
 	);
 }
 
@@ -136,11 +109,9 @@ function FilesCheckpointLoader({
 	context,
 	lix,
 	entries,
-	activeFileId,
 }: FilesViewProps & {
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
-	readonly activeFileId: string | null;
 }) {
 	const resolvedCheckpointDiff = useResolvedCheckpointDiff(
 		lix,
@@ -152,7 +123,6 @@ function FilesCheckpointLoader({
 				context
 					? {
 							...context,
-							activeFileId: context.activeFileId ?? activeFileId,
 							checkpointDiff: context.checkpointDiff ?? resolvedCheckpointDiff,
 						}
 					: undefined
@@ -218,7 +188,12 @@ function FilesViewContent({
 		() => buildFilesystemTree(combinedEntries),
 		[combinedEntries],
 	);
-	const pendingReviewPaths = usePendingExternalWriteReviewPaths(lix, nodes);
+	const pendingReviewPaths = usePendingExternalWriteReviewPaths(
+		lix,
+		nodes,
+		context?.activeBranchId ?? "",
+		context?.resolvedReviewIds ?? [],
+	);
 	const checkpointReviewStatuses = useMemo(
 		() =>
 			new Map(
@@ -1028,21 +1003,13 @@ function FilesViewContent({
 function usePendingExternalWriteReviewPaths(
 	lix: Lix,
 	nodes: readonly FilesystemTreeNode[],
+	activeBranchId: string,
+	resolvedReviewIds: readonly string[],
 ): ReadonlySet<string> {
 	const reviewableFiles = useMemo(
 		() => collectReviewableTreeFiles(nodes),
 		[nodes],
 	);
-	const activeBranchRows = useQuery<{ value: unknown }>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value")
-			.where("key", "=", "lix_workspace_branch_id")
-			.select("value"),
-	);
-	const activeBranchId =
-		typeof activeBranchRows[0]?.value === "string"
-			? activeBranchRows[0].value
-			: "";
 	const rangeRows = useQuery<{
 		value: unknown;
 		lixcol_branch_id: string | null;
@@ -1051,18 +1018,23 @@ function usePendingExternalWriteReviewPaths(
 			qb(queryLix)
 				.selectFrom("lix_key_value_by_branch")
 				.select(["value", "lixcol_branch_id"])
-				.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
+				.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
 				.where("lixcol_branch_id", "=", activeBranchId),
 		{ enabled: activeBranchId.length > 0 },
 	);
 	// Filtering again prevents a cached row for the previous branch from being
 	// interpreted as current while useQuery swaps subscriptions.
-	const activeRangeValue = rangeRows.find(
-		(row) => row.lixcol_branch_id === activeBranchId,
-	)?.value;
-	const ranges = isAgentTurnCommitRangeStore(activeRangeValue)
-		? activeRangeValue.ranges
-		: EMPTY_AGENT_TURN_RANGES;
+	const activeRangeValues = useMemo(
+		() =>
+			rangeRows
+				.filter((row) => row.lixcol_branch_id === activeBranchId)
+				.map((row) => row.value),
+		[activeBranchId, rangeRows],
+	);
+	const ranges = useMemo(
+		() => agentTurnCommitRangesFromValues(activeRangeValues),
+		[activeRangeValues],
+	);
 	const reviewableFilesKey = useMemo(
 		() =>
 			JSON.stringify(reviewableFiles.map(({ fileId, path }) => [fileId, path])),
@@ -1070,7 +1042,8 @@ function usePendingExternalWriteReviewPaths(
 	);
 	const reviewKey = JSON.stringify([
 		activeBranchId,
-		activeRangeValue ?? null,
+		activeRangeValues,
+		[...resolvedReviewIds].sort(),
 		reviewableFilesKey,
 	]);
 	const shouldResolve = reviewableFiles.length > 0 && ranges.length > 0;
@@ -1081,7 +1054,12 @@ function usePendingExternalWriteReviewPaths(
 	useEffect(() => {
 		if (!shouldResolve) return;
 		let cancelled = false;
-		void getPendingExternalWriteReviewPaths(lix, reviewableFiles, ranges)
+		void getPendingExternalWriteReviewPaths(
+			lix,
+			reviewableFiles,
+			ranges,
+			new Set(resolvedReviewIds),
+		)
 			.then((paths) => {
 				if (!cancelled) setResolved({ key: reviewKey, paths });
 			})
@@ -1093,7 +1071,14 @@ function usePendingExternalWriteReviewPaths(
 		return () => {
 			cancelled = true;
 		};
-	}, [lix, ranges, reviewableFiles, reviewKey, shouldResolve]);
+	}, [
+		lix,
+		ranges,
+		resolvedReviewIds,
+		reviewableFiles,
+		reviewKey,
+		shouldResolve,
+	]);
 
 	if (!shouldResolve || resolved?.key !== reviewKey) {
 		return EMPTY_REVIEW_PATHS;
@@ -1164,6 +1149,10 @@ export const extension = createReactExtensionDefinition({
 						void atelier.documents.closeActive();
 					},
 					checkpointBranchId: atelier.revisions.current?.branchId ?? null,
+					activeFileId: atelier.documents.activeFileId,
+					activeFilePath: atelier.documents.activeFilePath,
+					activeBranchId: atelier.branches.activeId,
+					resolvedReviewIds: atelier.reviews.resolvedReviewIds,
 					isPanelFocused: view.isFocused,
 					panelSide: view.panel,
 					viewInstance: view.instanceId,

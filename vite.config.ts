@@ -7,9 +7,12 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
 	build: {
 		lib: {
-			entry: path.resolve(__dirname, "src/build-entry.ts"),
+			entry: {
+				atelier: path.resolve(__dirname, "src/build-entry.ts"),
+				"state-adapters": path.resolve(__dirname, "src/state-adapters.ts"),
+			},
 			formats: ["es"],
-			fileName: "atelier",
+			fileName: (_format, entryName) => `${entryName}.js`,
 			cssFileName: "atelier",
 		},
 		rollupOptions: {

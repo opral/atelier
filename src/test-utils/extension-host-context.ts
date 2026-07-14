@@ -18,6 +18,14 @@ export function createExtensionHostContext(
 				open: options.openDocument ?? (async () => {}),
 				startNew: async () => {},
 				closeActive: async () => {},
+				closeAll: async () => {},
+				activeFileId: null,
+				activeFilePath: null,
+			},
+			branches: {
+				activeId: "main",
+				create: async (name) => name,
+				switch: async () => {},
 			},
 			revisions: {
 				current: null,
@@ -25,6 +33,7 @@ export function createExtensionHostContext(
 				clear: () => {},
 			},
 			reviews: {
+				resolvedReviewIds: [],
 				resolve: async () => {},
 				accept: async () => {},
 				reject: async () => {},

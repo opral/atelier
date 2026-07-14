@@ -12,7 +12,6 @@ import type { Editor, Extensions } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
 import { useEditorCtx } from "./editor-context";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
-import { useKeyValue } from "@/hooks/key-value/use-key-value";
 import {
 	acknowledgeMarkdownEditorPersistence,
 	createEditor,
@@ -30,7 +29,8 @@ import type { MarkdownWorkspaceFileOpener } from "./markdown-asset";
 import { FrontmatterDisclosure } from "../components/frontmatter-disclosure";
 
 type TipTapEditorProps = {
-	fileId?: string | null;
+	fileId: string;
+	activeBranchId?: string;
 	filePath?: string | null;
 	className?: string;
 	onReady?: (editor: Editor) => void;
@@ -100,6 +100,7 @@ export function hydrateMarkdownEditorAuthoritativeMarkdown(
  */
 export function TipTapEditor({
 	fileId,
+	activeBranchId = "main",
 	filePath,
 	className,
 	onReady,
@@ -114,29 +115,11 @@ export function TipTapEditor({
 	openWorkspaceFile,
 	onPersist,
 }: TipTapEditorProps) {
-	if (fileId) {
-		return (
-			<TipTapEditorContent
-				activeFileId={fileId}
-				filePath={filePath}
-				className={className}
-				onReady={onReady}
-				persistDebounceMs={persistDebounceMs}
-				focusOnLoad={focusOnLoad}
-				defaultBlock={defaultBlock}
-				isActiveView={isActiveView}
-				readOnly={readOnly}
-				suspendExternalSync={suspendExternalSync}
-				additionalExtensions={additionalExtensions}
-				originKey={originKey}
-				openWorkspaceFile={openWorkspaceFile}
-				onPersist={onPersist}
-			/>
-		);
-	}
-
 	return (
-		<TipTapEditorWithActiveKey
+		<TipTapEditorContent
+			activeFileId={fileId}
+			activeBranchId={activeBranchId}
+			filePath={filePath}
 			className={className}
 			onReady={onReady}
 			persistDebounceMs={persistDebounceMs}
@@ -153,46 +136,20 @@ export function TipTapEditor({
 	);
 }
 
-function TipTapEditorWithActiveKey(props: Omit<TipTapEditorProps, "fileId">) {
-	const [activeFileId] = useKeyValue("atelier_active_file_id");
-	return (
-		<TipTapEditorContent
-			{...props}
-			activeFileId={typeof activeFileId === "string" ? activeFileId : null}
-		/>
-	);
-}
-
-type TipTapEditorContentProps = Omit<TipTapEditorProps, "fileId"> & {
-	readonly activeFileId?: string | null;
+type TipTapEditorContentProps = Omit<
+	TipTapEditorProps,
+	"fileId" | "activeBranchId"
+> & {
+	readonly activeFileId: string;
+	readonly activeBranchId: string;
 };
 
 function TipTapEditorContent(props: TipTapEditorContentProps) {
-	const activeBranch = useQueryTakeFirst<{ value: string }>((lix) =>
-		qb(lix)
-			.selectFrom("lix_key_value")
-			.where("key", "=", "lix_workspace_branch_id")
-			.select(["value"]),
-	);
-	const activeBranchId = String(activeBranch?.value ?? "");
-
-	if (!props.activeFileId) {
-		return (
-			<TipTapEditorLoadedContent
-				{...props}
-				activeBranchId={activeBranchId}
-				hasInitialFile={false}
-				initialMarkdown=""
-			/>
-		);
-	}
-
 	return (
 		<TipTapEditorFileActivation
-			key={`${activeBranchId}:${props.activeFileId}`}
+			key={`${props.activeBranchId}:${props.activeFileId}`}
 			{...props}
 			activeFileId={props.activeFileId}
-			activeBranchId={activeBranchId}
 		/>
 	);
 }
