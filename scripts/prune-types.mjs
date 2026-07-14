@@ -7,12 +7,29 @@ const publicDeclarations = new Set([
 	"atelier-instance.d.ts",
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
+	"dev-tools/developer-tools-menu.d.ts",
+	"dev-tools/simulate-agent-workflow.d.ts",
+	"shell/agent-turn-review-range.d.ts",
 ]);
 
-for (const entry of await readdir(typesDirectory, { withFileTypes: true })) {
-	if (entry.isFile() && publicDeclarations.has(entry.name)) continue;
-	await rm(path.join(typesDirectory, entry.name), {
-		recursive: true,
-		force: true,
-	});
+await pruneDirectory(typesDirectory);
+
+async function pruneDirectory(directory, relativeDirectory = "") {
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		const relativePath = path.posix.join(relativeDirectory, entry.name);
+		const absolutePath = path.join(directory, entry.name);
+
+		if (entry.isFile() && publicDeclarations.has(relativePath)) continue;
+		if (
+			entry.isDirectory() &&
+			[...publicDeclarations].some((declaration) =>
+				declaration.startsWith(`${relativePath}/`),
+			)
+		) {
+			await pruneDirectory(absolutePath, relativePath);
+			continue;
+		}
+
+		await rm(absolutePath, { recursive: true, force: true });
+	}
 }
