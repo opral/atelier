@@ -141,8 +141,8 @@ importers:
         version: 2.8.2
     devDependencies:
       '@lix-js/sdk':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.8.2
+        version: 0.8.2
       '@tailwindcss/vite':
         specifier: ^4.3.2
         version: 4.3.2(vite@8.1.4(@types/node@24.10.15)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -213,8 +213,8 @@ importers:
   fixtures/consumer:
     dependencies:
       '@lix-js/sdk':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.8.2
+        version: 0.8.2
       '@opral/atelier':
         specifier: workspace:*
         version: link:../..
@@ -235,8 +235,8 @@ importers:
   preview/web:
     dependencies:
       '@lix-js/sdk':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.8.2
+        version: 0.8.2
       '@opral/atelier':
         specifier: workspace:*
         version: link:../..
@@ -1211,28 +1211,28 @@ packages:
   '@lix-js/html-diff@0.1.0':
     resolution: {integrity: sha512-4dr7+xo8UEncWGjne9PoL6KqFGcOHZXyeBTTghTW196kK5xidQ8h4hufjHXYxv6x5VAFzXcBCuFnW1GgPS5kqw==}
 
-  '@lix-js/sdk-darwin-arm64@0.8.0':
-    resolution: {integrity: sha512-lAFM6B4Ywi5B/CfmlNRAjfrd2YgChM/qKiMdIZUECNLeExmNDA5xht8aejprLkoHmFBdQ9iTpUWiYaaEzqojpQ==}
+  '@lix-js/sdk-darwin-arm64@0.8.2':
+    resolution: {integrity: sha512-biWtEtZT3vwXgMn/NV0gZie4cBK5ksygCQjGgIjoE0Mc2ONmmrfMoeIEjV6kTlzQo20UuAcMTD+L/ORRuUa+vA==}
     cpu: [arm64]
     os: [darwin]
 
-  '@lix-js/sdk-linux-arm64@0.8.0':
-    resolution: {integrity: sha512-oBoURu6ps+nlPubQIFh9EkyVyzaoxVB7xMdZH17tk06oWURtCWjqhMR4H3PJWQ1Sngb+/wlV8bmDWaiS5KUhiA==}
+  '@lix-js/sdk-linux-arm64@0.8.2':
+    resolution: {integrity: sha512-0atYrjXhgX/Vm8PMaLgmuz/JbBJadqrCL752s8eR0fSLrSLHhNngvG+Hfdxqt4W9yu0y52Oyiwi/PcgFUWzcqQ==}
     cpu: [arm64]
     os: [linux]
 
-  '@lix-js/sdk-linux-x64@0.8.0':
-    resolution: {integrity: sha512-IedJVFwZqcxzOjSQCBdksLA9/hrPSLGRxT0ugPjbcAQHdUl7aamngOuTMUEgJTvE/gzGGvpNDbmABlhprfsU7g==}
+  '@lix-js/sdk-linux-x64@0.8.2':
+    resolution: {integrity: sha512-oUhbN1Sm/HFPGq4vRAXnpbwZO9RAltU3WUkW2QZQ52CUugihL68S6ku+XY2QY9mjx6cigzP+mW+H0oy8i0sMPg==}
     cpu: [x64]
     os: [linux]
 
-  '@lix-js/sdk-win32-x64@0.8.0':
-    resolution: {integrity: sha512-LUrgWRzgcpHf/3bY3WT1xa4rGKEAOZpL3VXrNmdak902FmA6OhCyIlVgZohZYved9Vpdb5r5wnIf8AObT0LU6g==}
+  '@lix-js/sdk-win32-x64@0.8.2':
+    resolution: {integrity: sha512-QHJh6aQE4FqZixzOlLbXSoe8oYOg4sRHJJTrD9gWajWlyZYZE0Bs38b7GS/EwNjhz5OQzQoiHsXp7P6ViRDcMQ==}
     cpu: [x64]
     os: [win32]
 
-  '@lix-js/sdk@0.8.0':
-    resolution: {integrity: sha512-cw5CVBJXhr/JTmLZGeLlLdiYMyGhoT82zlvzX4PsRclSDtas+Wvz9g8He9Wm0wJE9oFMiGTjWsnFlTkkrdTLMA==}
+  '@lix-js/sdk@0.8.2':
+    resolution: {integrity: sha512-R4ESto7SejuNIttxrxuSxSslJkPg8TXHbwZ6FI6z3Y8/gXUOBYdd9QpDDVbw8IifJpXgfZJITUTgwmmrxi5UZg==}
 
   '@marijn/find-cluster-break@1.0.3':
     resolution: {integrity: sha512-FY+MKLBoTsLNJF/eLWaOsXGdz6uh3Iu1axjPf6TUq92IYumcTcXWHoS747JARLkcdlJ/Waiaxc5wQfFO8jC6NA==}
@@ -5223,28 +5223,28 @@ snapshots:
       diff: 8.0.4
       parse5: 7.3.0
 
-  '@lix-js/sdk-darwin-arm64@0.8.0':
+  '@lix-js/sdk-darwin-arm64@0.8.2':
     optional: true
 
-  '@lix-js/sdk-linux-arm64@0.8.0':
+  '@lix-js/sdk-linux-arm64@0.8.2':
     optional: true
 
-  '@lix-js/sdk-linux-x64@0.8.0':
+  '@lix-js/sdk-linux-x64@0.8.2':
     optional: true
 
-  '@lix-js/sdk-win32-x64@0.8.0':
+  '@lix-js/sdk-win32-x64@0.8.2':
     optional: true
 
-  '@lix-js/sdk@0.8.0':
+  '@lix-js/sdk@0.8.2':
     dependencies:
       '@bytecodealliance/jco-transpile': 0.4.2
       '@bytecodealliance/preview2-shim': 0.19.0
       fflate: 0.8.3
     optionalDependencies:
-      '@lix-js/sdk-darwin-arm64': 0.8.0
-      '@lix-js/sdk-linux-arm64': 0.8.0
-      '@lix-js/sdk-linux-x64': 0.8.0
-      '@lix-js/sdk-win32-x64': 0.8.0
+      '@lix-js/sdk-darwin-arm64': 0.8.2
+      '@lix-js/sdk-linux-arm64': 0.8.2
+      '@lix-js/sdk-linux-x64': 0.8.2
+      '@lix-js/sdk-win32-x64': 0.8.2
 
   '@marijn/find-cluster-break@1.0.3': {}
 

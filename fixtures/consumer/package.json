@@ -7,7 +7,7 @@
 		"build": "tsc -p tsconfig.json --pretty false && vite build"
 	},
 	"dependencies": {
-		"@lix-js/sdk": "^0.8.0",
+		"@lix-js/sdk": "^0.8.2",
 		"@opral/atelier": "workspace:*",
 		"react": "^19.2.7",
 		"react-dom": "^19.2.7"
