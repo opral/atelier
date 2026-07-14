@@ -43,6 +43,7 @@ export type AtelierReviewStatusStore = {
 export type AtelierBranchSession = {
 	getSnapshot(): string | null;
 	subscribe(listener: () => void): () => void;
+	createBranch(name: string): Promise<string>;
 	switchBranch(branchId: string): Promise<void>;
 };
 
@@ -97,6 +98,7 @@ export function createLixBranchSession(
 	initialBranchId: string | null = null,
 ): AtelierBranchSession {
 	let branchId = initialBranchId;
+	let branchChangeVersion = 0;
 	const listeners = new Set<() => void>();
 	const publish = (nextBranchId: string) => {
 		if (branchId === nextBranchId) return;
@@ -107,9 +109,14 @@ export function createLixBranchSession(
 	if (!branchId) {
 		const activeBranchId = (lix as Partial<Lix>).activeBranchId;
 		if (typeof activeBranchId === "function") {
+			const initialVersion = branchChangeVersion;
 			void activeBranchId
 				.call(lix)
-				.then(publish)
+				.then((resolvedBranchId) => {
+					if (branchChangeVersion === initialVersion) {
+						publish(resolvedBranchId);
+					}
+				})
 				.catch((error: unknown) => {
 					console.error("Failed to resolve the active Atelier branch", error);
 				});
@@ -122,8 +129,15 @@ export function createLixBranchSession(
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
+		createBranch: async (name) => {
+			const branch = await lix.createBranch({ name });
+			branchChangeVersion += 1;
+			publish(branch.id);
+			return branch.id;
+		},
 		switchBranch: async (nextBranchId) => {
 			const receipt = await lix.switchBranch({ branchId: nextBranchId });
+			branchChangeVersion += 1;
 			publish(receipt.branchId);
 		},
 	};

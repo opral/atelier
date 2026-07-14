@@ -26,7 +26,34 @@ export function agentTurnReviewId(
 	fileId: string,
 	rangeIds: readonly string[],
 ): string {
-	return `${fileId}:${rangeIds.join(",")}`;
+	return JSON.stringify([fileId, rangeIds]);
+}
+
+export function agentTurnReviewRangeIds(
+	reviewId: string,
+	fileId: string,
+): readonly string[] {
+	try {
+		const decoded = JSON.parse(reviewId) as unknown;
+		if (
+			Array.isArray(decoded) &&
+			decoded.length === 2 &&
+			decoded[0] === fileId &&
+			Array.isArray(decoded[1]) &&
+			decoded[1].every(
+				(rangeId) => typeof rangeId === "string" && rangeId.length > 0,
+			)
+		) {
+			return decoded[1];
+		}
+	} catch {
+		// Fall through to the legacy delimiter format.
+	}
+
+	const legacyPrefix = `${fileId}:`;
+	return reviewId.startsWith(legacyPrefix)
+		? reviewId.slice(legacyPrefix.length).split(",").filter(Boolean)
+		: [];
 }
 
 export async function readAgentTurnCommitRanges(
@@ -61,57 +88,6 @@ export async function appendAgentTurnCommitRange(
 		})
 		.onConflict((oc) => oc.columns(["key", "lixcol_branch_id"]).doNothing())
 		.execute();
-}
-
-export async function clearAgentTurnCommitRangeFile(
-	lix: Lix,
-	args: {
-		readonly fileId: string;
-		readonly reviewId?: string;
-		readonly agentTurnRangeIds?: readonly string[];
-	},
-): Promise<boolean> {
-	// Compatibility only: historical aggregates encoded acknowledgement as a
-	// shared clearedFileIds array. New normalized events are immutable and are
-	// resolved through AtelierReviewStatusStore instead.
-	const branchId = await lix.activeBranchId();
-	const legacy = await qb(lix)
-		.selectFrom("lix_key_value_by_branch")
-		.select("value")
-		.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-		.where("lixcol_branch_id", "=", branchId)
-		.limit(1)
-		.executeTakeFirst();
-	if (!isAgentTurnCommitRangeStore(legacy?.value)) return false;
-	const ranges = legacy.value.ranges;
-	const rangeIds = args.agentTurnRangeIds ?? [];
-	if (rangeIds.length === 0) return false;
-	if (
-		args.reviewId &&
-		args.reviewId !== agentTurnReviewId(args.fileId, rangeIds)
-	) {
-		return false;
-	}
-	const rangeIdSet = new Set(rangeIds);
-	let changed = false;
-	const nextRanges = ranges.map((range) => {
-		if (!rangeIdSet.has(range.id)) return range;
-		if (range.clearedFileIds?.includes(args.fileId)) return range;
-		changed = true;
-		return {
-			...range,
-			clearedFileIds: [...(range.clearedFileIds ?? []), args.fileId],
-		};
-	});
-	if (!changed) return false;
-	const value = serializeAgentTurnCommitRangeStore({ ranges: nextRanges });
-	await qb(lix)
-		.updateTable("lix_key_value_by_branch")
-		.set({ value })
-		.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-		.where("lixcol_branch_id", "=", branchId)
-		.execute();
-	return true;
 }
 
 export function agentTurnCommitRangeKey(rangeId: string): string {
@@ -192,14 +168,6 @@ export function isAgentTurnCommitRange(
 					(fileId) => typeof fileId === "string" && fileId.length > 0,
 				)))
 	);
-}
-
-function serializeAgentTurnCommitRangeStore(
-	store: AgentTurnCommitRangeStore,
-): AgentTurnCommitRangeStore {
-	return {
-		ranges: store.ranges.map(serializeAgentTurnCommitRange),
-	};
 }
 
 function serializeAgentTurnCommitRange(

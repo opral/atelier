@@ -16,6 +16,7 @@ describe("HistoryView", () => {
 					<Suspense fallback={null}>
 						<HistoryView
 							activeBranchId={activeBranchId}
+							createBranch={async (name) => name}
 							switchBranch={async () => {}}
 						/>
 					</Suspense>

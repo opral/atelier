@@ -4,8 +4,6 @@ import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { MarkdownView } from "./index";
-import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
-import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { qb } from "@/lib/lix-kysely";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 
@@ -42,11 +40,9 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView fileId="file_1" filePath="/docs/readme.md" />
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView fileId="file_1" filePath="/docs/readme.md" />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -118,17 +114,15 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_snapshot"
-								filePath="/snapshot.md"
-								afterCommitId={snapshotCommitId}
-								isActiveView
-								isPanelFocused
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_snapshot"
+							filePath="/snapshot.md"
+							afterCommitId={snapshotCommitId}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -185,17 +179,15 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_head_diff"
-								filePath="/head-diff.md"
-								beforeCommitId={beforeCommitId}
-								isActiveView
-								isPanelFocused
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_head_diff"
+							filePath="/head-diff.md"
+							beforeCommitId={beforeCommitId}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -256,17 +248,15 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_unchanged_head_diff"
-								filePath="/unchanged-head-diff.md"
-								beforeCommitId={beforeCommitId}
-								isActiveView
-								isPanelFocused
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_unchanged_head_diff"
+							filePath="/unchanged-head-diff.md"
+							beforeCommitId={beforeCommitId}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -302,16 +292,14 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_autosave_hint"
-								filePath="/docs/autosave.md"
-								isActiveView
-								isPanelFocused
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_autosave_hint"
+							filePath="/docs/autosave.md"
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -357,14 +345,12 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_markdown"
-								filePath="/docs/guide.markdown"
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_markdown"
+							filePath="/docs/guide.markdown"
+						/>
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -391,14 +377,9 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_uppercase"
-								filePath="/docs/README.MD"
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView fileId="file_uppercase" filePath="/docs/README.MD" />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -425,11 +406,9 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView fileId="file_csv" filePath="/data.csv" />
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView fileId="file_csv" filePath="/data.csv" />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -471,15 +450,9 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_csv"
-								filePath="/data.csv"
-								isActiveView
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView fileId="file_csv" filePath="/data.csv" isActiveView />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -540,15 +513,9 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_beta"
-								filePath="/beta.md"
-								isActiveView
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView fileId="file_beta" filePath="/beta.md" isActiveView />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -587,26 +554,24 @@ describe("MarkdownView", () => {
 			resolvedReviewIds: readonly string[] = [],
 		) => (
 			<LixProvider lix={lix}>
-				<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-					<Suspense fallback={null}>
-						<MarkdownView
-							fileId="file_review_startup"
-							filePath="/review-startup.md"
-							activeBranchId={activeBranchId}
-							resolvedReviewIds={resolvedReviewIds}
-							isActiveView
-							isPanelFocused
-							onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
-								await qb(lix)
-									.updateTable("lix_file")
-									.set({ data })
-									.where("id", "=", fileId)
-									.execute();
-								utils?.rerender(renderReviewMarkdown([reviewId]));
-							}}
-						/>
-					</Suspense>
-				</KeyValueProvider>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId="file_review_startup"
+						filePath="/review-startup.md"
+						activeBranchId={activeBranchId}
+						resolvedReviewIds={resolvedReviewIds}
+						isActiveView
+						isPanelFocused
+						onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
+							await qb(lix)
+								.updateTable("lix_file")
+								.set({ data })
+								.where("id", "=", fileId)
+								.execute();
+							utils?.rerender(renderReviewMarkdown([reviewId]));
+						}}
+					/>
+				</Suspense>
 			</LixProvider>
 		);
 		await act(async () => {
@@ -736,18 +701,16 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_checkpoint"
-								filePath="/checkpoint.md"
-								isActiveView
-								isPanelFocused
-								beforeCommitId={beforeCommitId}
-								afterCommitId={afterCommitId}
-							/>
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_checkpoint"
+							filePath="/checkpoint.md"
+							isActiveView
+							isPanelFocused
+							beforeCommitId={beforeCommitId}
+							afterCommitId={afterCommitId}
+						/>
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -778,11 +741,9 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView fileId="missing_file" />
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<MarkdownView fileId="missing_file" />
+					</Suspense>
 				</LixProvider>,
 			);
 		});

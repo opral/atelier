@@ -14,27 +14,15 @@ import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
 	TipTapEditor,
 } from "./tip-tap-editor";
-import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
-import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { EditorProvider } from "./editor-context";
 import type { Editor } from "@tiptap/core";
 import { parseFrontmatterSource } from "./frontmatter-value";
 import { FormattingToolbar } from "../components/formatting-toolbar";
 
-function Providers({
-	lix,
-	defs,
-	children,
-}: {
-	lix: Lix;
-	defs?: any;
-	children: React.ReactNode;
-}) {
+function Providers({ lix, children }: { lix: Lix; children: React.ReactNode }) {
 	return (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs ?? KEY_VALUE_DEFINITIONS}>
-				<EditorProvider>{children}</EditorProvider>
-			</KeyValueProvider>
+			<EditorProvider>{children}</EditorProvider>
 		</LixProvider>
 	);
 }

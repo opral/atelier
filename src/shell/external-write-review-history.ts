@@ -11,6 +11,7 @@ import {
 	AGENT_TURN_COMMIT_RANGE_KEY,
 	agentTurnCommitRangesFromValues,
 	agentTurnReviewId,
+	agentTurnReviewRangeIds,
 	readAgentTurnCommitRanges,
 	type AgentTurnCommitRange,
 } from "./agent-turn-review-range";
@@ -255,8 +256,12 @@ async function getAgentTurnExternalWriteReview(
 		relevantRanges.push(range);
 	}
 	if (relevantRanges.length === 0) return null;
-	const firstRange = relevantRanges[0];
-	const lastRange = relevantRanges[relevantRanges.length - 1];
+	const orderedRanges = await orderAgentTurnRangesByCommitAncestry(
+		lix,
+		relevantRanges,
+	);
+	const firstRange = orderedRanges[0];
+	const lastRange = orderedRanges[orderedRanges.length - 1];
 	if (!firstRange || !lastRange) return null;
 	const data = await getRangeFileData(lix, fileId, {
 		beforeCommitId: firstRange.beforeCommitId,
@@ -278,7 +283,7 @@ async function getAgentTurnExternalWriteReview(
 	) {
 		return null;
 	}
-	const rangeIds = relevantRanges.map((range) => range.id);
+	const rangeIds = orderedRanges.map((range) => range.id);
 	return {
 		fileId,
 		path,
@@ -294,14 +299,50 @@ function resolvedAgentTurnRangeIds(
 	resolvedReviewIds: ReadonlySet<string>,
 ): Set<string> {
 	const resolvedRangeIds = new Set<string>();
-	const prefix = `${fileId}:`;
 	for (const reviewId of resolvedReviewIds) {
-		if (!reviewId.startsWith(prefix)) continue;
-		for (const rangeId of reviewId.slice(prefix.length).split(",")) {
-			if (rangeId) resolvedRangeIds.add(rangeId);
+		for (const rangeId of agentTurnReviewRangeIds(reviewId, fileId)) {
+			resolvedRangeIds.add(rangeId);
 		}
 	}
 	return resolvedRangeIds;
+}
+
+async function orderAgentTurnRangesByCommitAncestry(
+	lix: Lix,
+	ranges: readonly AgentTurnCommitRange[],
+): Promise<AgentTurnCommitRange[]> {
+	if (ranges.length < 2) return [...ranges];
+	const result = await lix.execute(
+		`
+			SELECT observed_commit_id AS commit_id, MAX(depth) AS depth
+			FROM lix_state_history
+			WHERE start_commit_id = lix_active_branch_commit_id()
+				AND schema_key = 'lix_commit'
+			GROUP BY observed_commit_id
+		`,
+	);
+	const depthByCommit = new Map<string, number>();
+	for (const row of result.rows) {
+		const commitId = row.get("commit_id");
+		const depth = row.get("depth");
+		if (typeof commitId === "string" && typeof depth === "number") {
+			depthByCommit.set(commitId, depth);
+		}
+	}
+	return [...ranges].sort((left, right) => {
+		const afterDepthDifference =
+			(depthByCommit.get(right.afterCommitId) ?? 0) -
+			(depthByCommit.get(left.afterCommitId) ?? 0);
+		if (afterDepthDifference !== 0) return afterDepthDifference;
+		const beforeDepthDifference =
+			(depthByCommit.get(right.beforeCommitId) ?? 0) -
+			(depthByCommit.get(left.beforeCommitId) ?? 0);
+		return (
+			beforeDepthDifference ||
+			left.completedAt - right.completedAt ||
+			left.id.localeCompare(right.id)
+		);
+	});
 }
 
 async function getRangeFileData(

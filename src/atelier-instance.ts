@@ -67,6 +67,7 @@ export type AtelierInstance = {
 	readonly branches: {
 		readonly activeId: () => string | null;
 		readonly subscribe: (listener: () => void) => () => void;
+		readonly create: (name: string) => Promise<string>;
 		readonly switch: (branchId: string) => Promise<void>;
 	};
 };
@@ -146,8 +147,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		options.branchSession ?? createLixBranchSession(options.lix);
 	const sessionStateStore =
 		options.sessionStateStore ?? createMemorySessionStateStore();
-	const preferencesStore =
-		options.preferencesStore ?? createMemoryPreferencesStore();
+	const preferencesStore = queuePreferenceSaves(
+		options.preferencesStore ?? createMemoryPreferencesStore(),
+	);
 	const reviewStatusStore =
 		options.reviewStatusStore ?? createMemoryReviewStatusStore();
 	const instance: AtelierInstance = {
@@ -191,9 +193,10 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 				}),
 		},
 		branches: {
-			activeId: branchSession.getSnapshot,
-			subscribe: branchSession.subscribe,
-			switch: branchSession.switchBranch,
+			activeId: () => branchSession.getSnapshot(),
+			subscribe: (listener) => branchSession.subscribe(listener),
+			create: (name) => branchSession.createBranch(name),
+			switch: (branchId) => branchSession.switchBranch(branchId),
 		},
 	};
 	const configuration: AtelierConfiguration = {
@@ -225,6 +228,22 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		writable: false,
 	});
 	return instance;
+}
+
+function queuePreferenceSaves(
+	store: AtelierPreferencesStore,
+): AtelierPreferencesStore {
+	let pendingSave = Promise.resolve();
+	return {
+		load: () => store.load(),
+		save: (value) => {
+			const save = pendingSave
+				.catch(() => undefined)
+				.then(() => store.save(value));
+			pendingSave = save;
+			return save;
+		},
+	};
 }
 
 /** @internal Binds programmatic document commands to a mounted shell. */

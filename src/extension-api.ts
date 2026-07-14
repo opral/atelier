@@ -107,6 +107,7 @@ export type AtelierExtensionRuntime = {
 	};
 	readonly branches: {
 		readonly activeId: string;
+		readonly create: (name: string) => Promise<string>;
 		readonly switch: (branchId: string) => Promise<void>;
 	};
 	readonly revisions: {

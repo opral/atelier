@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
+import type { AtelierPreferencesStore } from "./state-adapters";
 
 const mocks = vi.hoisted(() => ({
 	appendAgentTurnCommitRange: vi.fn(),
@@ -20,6 +21,7 @@ import {
 const branchSession = {
 	getSnapshot: () => "main",
 	subscribe: () => () => undefined,
+	createBranch: async (name: string) => name,
 	switchBranch: async () => undefined,
 };
 
@@ -47,6 +49,7 @@ describe("createAtelier", () => {
 		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
 		expect(atelier.branches.activeId).toEqual(expect.any(Function));
+		expect(atelier.branches.create).toEqual(expect.any(Function));
 		expect(atelier.branches.switch).toEqual(expect.any(Function));
 		expect(Object.keys(atelier)).toEqual([
 			"lix",
@@ -66,6 +69,66 @@ describe("createAtelier", () => {
 			}),
 		);
 		expect(getAtelierConfiguration(atelier).extensions).not.toBe(extensions);
+	});
+
+	test("keeps class-based branch adapter methods bound", async () => {
+		class BranchSession {
+			current = "main";
+			getSnapshot() {
+				return this.current;
+			}
+			subscribe() {
+				return () => undefined;
+			}
+			async createBranch(name: string) {
+				this.current = name;
+				return name;
+			}
+			async switchBranch(branchId: string) {
+				this.current = branchId;
+			}
+		}
+		const adapter = new BranchSession();
+		const atelier = createAtelier({ lix: {} as Lix, branchSession: adapter });
+
+		expect(atelier.branches.activeId()).toBe("main");
+		await expect(atelier.branches.create("draft")).resolves.toBe("draft");
+		await atelier.branches.switch("review");
+		expect(atelier.branches.activeId()).toBe("review");
+	});
+
+	test("serializes preference saves at the Atelier boundary", async () => {
+		let releaseFirstSave: () => void = () => undefined;
+		const firstSaveBlocked = new Promise<void>((resolve) => {
+			releaseFirstSave = resolve;
+		});
+		const savedWidths: number[] = [];
+		const preferencesStore: AtelierPreferencesStore = {
+			load: async () => null,
+			save: async (value) => {
+				savedWidths.push(value.layout.sizes.left);
+				if (savedWidths.length === 1) await firstSaveBlocked;
+			},
+		};
+		const atelier = createAtelier({
+			lix: {} as Lix,
+			branchSession,
+			preferencesStore,
+		});
+		const store = getAtelierConfiguration(atelier).preferencesStore;
+		const preference = (left: number) =>
+			({
+				version: 1,
+				layout: { sizes: { left, central: 50, right: 25 } },
+			}) as const;
+
+		const first = store.save(preference(25));
+		const second = store.save(preference(30));
+		await vi.waitFor(() => expect(savedWidths).toEqual([25]));
+		releaseFirstSave();
+		await Promise.all([first, second]);
+
+		expect(savedWidths).toEqual([25, 30]);
 	});
 
 	test("opens an agent diff without exposing the internal review range", async () => {

@@ -15,8 +15,6 @@ import {
 	syncPanelGroupLayout,
 	V2LayoutShell,
 } from "./layout-shell";
-import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
-import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import {
 	fileExtensionInstanceForKind,
 	FILES_EXTENSION_KIND,
@@ -108,11 +106,9 @@ describe("open file lifecycle", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} onEvent={onEvent} />
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<V2LayoutShell instance={atelier} onEvent={onEvent} />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -270,11 +266,9 @@ describe("open file lifecycle", () => {
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} />
-						</Suspense>
-					</KeyValueProvider>
+					<Suspense fallback={null}>
+						<V2LayoutShell instance={atelier} />
+					</Suspense>
 				</LixProvider>,
 			);
 		});
@@ -387,11 +381,9 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
-						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-							<Suspense fallback={null}>
-								<V2LayoutShell instance={atelier} onEvent={onEvent} />
-							</Suspense>
-						</KeyValueProvider>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} onEvent={onEvent} />
+						</Suspense>
 					</LixProvider>,
 				);
 			});
@@ -472,11 +464,9 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
-						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-							<Suspense fallback={null}>
-								<V2LayoutShell instance={atelier} onEvent={onEvent} />
-							</Suspense>
-						</KeyValueProvider>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} onEvent={onEvent} />
+						</Suspense>
 					</LixProvider>,
 				);
 			});
@@ -572,11 +562,9 @@ describe("agent turn review navigation", () => {
 				await act(async () => {
 					utils = render(
 						<LixProvider lix={lix}>
-							<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-								<Suspense fallback={null}>
-									<V2LayoutShell instance={atelier} />
-								</Suspense>
-							</KeyValueProvider>
+							<Suspense fallback={null}>
+								<V2LayoutShell instance={atelier} />
+							</Suspense>
 						</LixProvider>,
 					);
 				});
@@ -684,11 +672,9 @@ describe("installed extension lifecycle", () => {
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
-						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-							<Suspense fallback={null}>
-								<V2LayoutShell instance={atelier} />
-							</Suspense>
-						</KeyValueProvider>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
 					</LixProvider>,
 				);
 			});
@@ -811,11 +797,9 @@ describe("canonical UI state", () => {
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
-						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-							<Suspense fallback={null}>
-								<V2LayoutShell instance={atelier} />
-							</Suspense>
-						</KeyValueProvider>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
 					</LixProvider>,
 				);
 			});

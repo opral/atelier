@@ -32,6 +32,7 @@ type BranchRow = {
 
 type HistoryViewProps = {
 	readonly activeBranchId: string;
+	readonly createBranch: (name: string) => Promise<string>;
 	readonly switchBranch: (branchId: string) => Promise<void>;
 	readonly currentRevision?: AtelierRevisionSelection | null;
 	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
@@ -93,6 +94,7 @@ function HistoryViewContent({
 	lix,
 	branches,
 	activeBranchId,
+	createBranch,
 	switchBranch,
 	currentRevision,
 	showCheckpointDiff,
@@ -101,6 +103,7 @@ function HistoryViewContent({
 	readonly lix: ReturnType<typeof useLix>;
 	readonly branches: BranchRow[];
 	readonly activeBranchId: string;
+	readonly createBranch: (name: string) => Promise<string>;
 	readonly switchBranch: (branchId: string) => Promise<void>;
 	readonly currentRevision?: AtelierRevisionSelection | null;
 	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
@@ -154,20 +157,15 @@ function HistoryViewContent({
 	);
 
 	const handleCreateBranch = useCallback(async () => {
-		if (!lix) return;
 		setPendingAction("create");
 		try {
-			const timestamp = formatLocalTimestamp();
-			const branch = await lix.createBranch({
-				name: timestamp,
-			});
-			await switchBranch(branch.id);
+			await createBranch(formatLocalTimestamp());
 		} catch (error) {
 			console.error("Failed to create branch", error);
 		} finally {
 			setPendingAction(null);
 		}
-	}, [lix, switchBranch]);
+	}, [createBranch]);
 
 	const handleRenameBranch = useCallback(
 		async (branchId: string, currentName: string) => {
@@ -376,6 +374,7 @@ export const extension = createReactExtensionDefinition({
 		<LixProvider lix={atelier.lix}>
 			<HistoryView
 				activeBranchId={atelier.branches.activeId}
+				createBranch={atelier.branches.create}
 				switchBranch={atelier.branches.switch}
 				currentRevision={atelier.revisions.current}
 				showCheckpointDiff={atelier.revisions.show}

@@ -824,8 +824,10 @@ function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
  */
 function LayoutShellContent(props: LayoutShellContentProps) {
 	const lix = useLix();
-	const fallbackAtelierInstance = useMemo(() => createAtelier({ lix }), [lix]);
-	const atelierInstance = props.atelierInstance ?? fallbackAtelierInstance;
+	const atelierInstance = useMemo(
+		() => props.atelierInstance ?? createAtelier({ lix }),
+		[lix, props.atelierInstance],
+	);
 	return (
 		<LayoutShellStateLoader
 			{...props}
@@ -842,16 +844,10 @@ function LayoutShellStateLoader(
 	},
 ) {
 	const configuration = getAtelierConfiguration(props.atelierInstance);
-	const sessionSnapshot = useSyncExternalStore(
-		configuration.sessionStateStore.subscribe,
-		configuration.sessionStateStore.getSnapshot,
-		configuration.sessionStateStore.getSnapshot,
+	const sessionSnapshot = useAtelierStoreSnapshot(
+		configuration.sessionStateStore,
 	);
-	const activeBranchId = useSyncExternalStore(
-		configuration.branchSession.subscribe,
-		configuration.branchSession.getSnapshot,
-		configuration.branchSession.getSnapshot,
-	);
+	const activeBranchId = useAtelierStoreSnapshot(configuration.branchSession);
 	const initialUiState = useMemo(
 		() => createInitialAtelierUiState(props.defaultOpenPanels),
 		[props.defaultOpenPanels],
@@ -975,6 +971,18 @@ function LayoutShellStateLoader(
 			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
 		/>
 	);
+}
+
+function useAtelierStoreSnapshot<T>(store: {
+	getSnapshot(): T;
+	subscribe(listener: () => void): () => void;
+}): T {
+	const subscribe = useCallback(
+		(listener: () => void) => store.subscribe(listener),
+		[store],
+	);
+	const getSnapshot = useCallback(() => store.getSnapshot(), [store]);
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 function AtelierShellLoadingPlaceholder() {
@@ -2593,6 +2601,7 @@ function LayoutShellLoadedContent({
 			},
 			branches: {
 				activeId: activeBranchId,
+				create: effectiveAtelierInstance.branches.create,
 				switch: effectiveAtelierInstance.branches.switch,
 			},
 			revisions: {
@@ -2621,6 +2630,7 @@ function LayoutShellLoadedContent({
 			activeCentralFileId,
 			activeDocumentPath,
 			effectiveAtelierInstance.branches.switch,
+			effectiveAtelierInstance.branches.create,
 			lix,
 			privateResolvedReviewIds,
 			registerExternalWriteReview,
