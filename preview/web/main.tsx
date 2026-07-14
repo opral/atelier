@@ -39,19 +39,15 @@ function PreviewApp({ lix }: { readonly lix: Lix }) {
 	return (
 		<Atelier
 			instance={atelier}
-			slots={
-				import.meta.env.DEV
-					? {
-							navbarEnd: (
-								<AtelierDeveloperTools
-									lix={lix}
-									currentFile={currentFile}
-									branchId={branchId}
-								/>
-							),
-						}
-					: undefined
-			}
+			slots={{
+				navbarEnd: (
+					<AtelierDeveloperTools
+						lix={lix}
+						currentFile={currentFile}
+						branchId={branchId}
+					/>
+				),
+			}}
 		/>
 	);
 }
