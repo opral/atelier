@@ -1190,6 +1190,7 @@ function LayoutShellLoadedContent({
 	const storedPanelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const panelSizes =
 		filesViewMode === "sidebar" &&
+		defaultLeftPanelOpen &&
 		storedPanelSizes.left <= MIN_VISIBLE_PANEL_SIZE
 			? {
 					...storedPanelSizes,

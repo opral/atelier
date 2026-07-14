@@ -27,6 +27,50 @@ import {
 } from "./state-adapters";
 
 describe("Atelier instance file controller", () => {
+	test("keeps sidebar-mode panels collapsed when the host does not open them by default", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "focused-file",
+				path: "/focused.md",
+				data: new TextEncoder().encode("# Focused\n"),
+			})
+			.execute();
+		const atelier = createAtelier({
+			lix,
+			filesViewMode: "sidebar",
+			defaultOpenPanels: [],
+		});
+		const queuedOpen = atelier.documents.open("/focused.md");
+		let rendered: ReturnType<typeof render> | undefined;
+
+		try {
+			await act(async () => {
+				rendered = render(<Atelier instance={atelier} />);
+			});
+			await waitFor(() => {
+				expect(
+					rendered?.container.querySelector(".atelier-panel-group"),
+				).toBeTruthy();
+			});
+			await act(async () => queuedOpen);
+
+			expect(
+				await screen.findByRole("heading", { name: "Focused" }),
+			).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: "Toggle left panel" }),
+			).toHaveAttribute("aria-pressed", "false");
+			expect(
+				screen.getByRole("button", { name: "Toggle right panel" }),
+			).toHaveAttribute("aria-pressed", "false");
+		} finally {
+			await act(async () => rendered?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("drains pre-mount commands and starts a folder-relative Files draft", async () => {
 		const lix = await openLix();
 		await qb(lix)
