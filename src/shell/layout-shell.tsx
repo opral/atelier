@@ -3,10 +3,12 @@ import {
 	useCallback,
 	useEffect,
 	useEffectEvent,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
 	useSyncExternalStore,
+	type RefObject,
 } from "react";
 import {
 	Group,
@@ -610,6 +612,8 @@ const DEFAULT_PANEL_FALLBACK_SIZES = {
 	central: 60,
 	right: 20,
 };
+const EMPTY_ATELIER_EXTENSIONS: readonly AtelierExtensionRegistration[] = [];
+const EMPTY_DEFAULT_OPEN_PANELS: readonly DefaultOpenPanel[] = [];
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
 function deriveUntitledMarkdownPathForSuffix(suffix: number | null): string {
@@ -655,9 +659,9 @@ async function resolveNextUntitledMarkdownPath(
 export function V2LayoutShell({
 	instance: atelierInstance,
 	slots,
-	extensions = [],
+	extensions = EMPTY_ATELIER_EXTENSIONS,
 	filesViewMode = "landing",
-	defaultOpenPanels = [],
+	defaultOpenPanels = EMPTY_DEFAULT_OPEN_PANELS,
 	onEvent,
 }: {
 	readonly instance?: AtelierInstance;
@@ -701,7 +705,7 @@ type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly setUiStateKV: AtelierUiStateSetter;
 	readonly activeBranchId: string;
 	readonly resolvedReviewIds: readonly string[];
-	readonly autoRevealedAgentTurnRangeKeys: Set<string>;
+	readonly autoRevealedAgentTurnRangeKeysRef: RefObject<Set<string>>;
 };
 
 type AtelierUiStateSetter = (
@@ -932,7 +936,9 @@ function LayoutShellStateLoader(
 		[initialUiState, preferences.layout, sessionSnapshot],
 	);
 	const uiStateRef = useRef(uiStateKV);
-	uiStateRef.current = uiStateKV;
+	useLayoutEffect(() => {
+		uiStateRef.current = uiStateKV;
+	}, [uiStateKV]);
 	const setUiStateKV = useCallback<AtelierUiStateSetter>(
 		(update) => {
 			const current = uiStateRef.current;
@@ -976,7 +982,7 @@ function LayoutShellStateLoader(
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
 			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
-			autoRevealedAgentTurnRangeKeys={autoRevealedAgentTurnRangeKeysRef.current}
+			autoRevealedAgentTurnRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
 		/>
 	);
 }
@@ -1004,7 +1010,7 @@ function AgentTurnReviewAutoReveal({
 	activeFilePath,
 	resolvedReviewIds,
 	reviewRangeSessionId,
-	autoRevealedRangeKeys,
+	autoRevealedRangeKeysRef,
 	openFile,
 }: {
 	readonly lix: ReturnType<typeof useLix>;
@@ -1013,7 +1019,7 @@ function AgentTurnReviewAutoReveal({
 	readonly activeFilePath: string | null;
 	readonly resolvedReviewIds: readonly string[];
 	readonly reviewRangeSessionId?: string;
-	readonly autoRevealedRangeKeys: Set<string>;
+	readonly autoRevealedRangeKeysRef: RefObject<Set<string>>;
 	readonly openFile: (file: { fileId: string; filePath: string }) => void;
 }) {
 	const { ranges } = useAgentTurnCommitRanges(
@@ -1022,6 +1028,7 @@ function AgentTurnReviewAutoReveal({
 	);
 
 	useEffect(() => {
+		const autoRevealedRangeKeys = autoRevealedRangeKeysRef.current;
 		const unseenRanges = ranges
 			.map((range) => ({
 				range,
@@ -1097,7 +1104,7 @@ function AgentTurnReviewAutoReveal({
 		activeBranchId,
 		activeFileId,
 		activeFilePath,
-		autoRevealedRangeKeys,
+		autoRevealedRangeKeysRef,
 		lix,
 		openFile,
 		ranges,
@@ -1114,7 +1121,7 @@ function LayoutShellLoadedContent({
 	setUiStateKV,
 	activeBranchId,
 	resolvedReviewIds,
-	autoRevealedAgentTurnRangeKeys,
+	autoRevealedAgentTurnRangeKeysRef,
 	slots,
 	filesViewMode,
 	defaultOpenPanels,
@@ -1344,7 +1351,7 @@ function LayoutShellLoadedContent({
 	const registerExternalWriteReview = useCallback(
 		(review: ExternalWriteReview) => {
 			for (const rangeId of review.agentTurnRangeIds) {
-				autoRevealedAgentTurnRangeKeys.add(
+				autoRevealedAgentTurnRangeKeysRef.current.add(
 					JSON.stringify([activeBranchId, rangeId]),
 				);
 			}
@@ -1375,7 +1382,7 @@ function LayoutShellLoadedContent({
 				}
 			};
 		},
-		[activeBranchId, autoRevealedAgentTurnRangeKeys, emitEvent],
+		[activeBranchId, autoRevealedAgentTurnRangeKeysRef, emitEvent],
 	);
 
 	const emitDiffReviewResolution = useCallback(
@@ -2888,7 +2895,7 @@ function LayoutShellLoadedContent({
 						activeFilePath={activeDocumentPath}
 						resolvedReviewIds={privateResolvedReviewIds}
 						reviewRangeSessionId={reviewRangeSessionId}
-						autoRevealedRangeKeys={autoRevealedAgentTurnRangeKeys}
+						autoRevealedRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
 						openFile={openAutoRevealedFile}
 					/>
 				</Suspense>

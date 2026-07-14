@@ -3,6 +3,7 @@ import {
 	useCallback,
 	useEffect,
 	useEffectEvent,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -264,9 +265,7 @@ function TipTapEditorLoadedContent({
 	});
 	const hasAutoFocusedRef = useRef(false);
 	const onPersistRef = useRef(onPersist);
-	onPersistRef.current = onPersist;
 	const openWorkspaceFileRef = useRef(openWorkspaceFile);
-	openWorkspaceFileRef.current = openWorkspaceFile;
 	const canOpenWorkspaceFile = openWorkspaceFile !== undefined;
 	const stableOpenWorkspaceFile = useMemo<
 		MarkdownWorkspaceFileOpener | undefined
@@ -275,8 +274,12 @@ function TipTapEditorLoadedContent({
 		return (args) => openWorkspaceFileRef.current?.(args);
 	}, [canOpenWorkspaceFile]);
 	const readOnlyRef = useRef(readOnly);
-	readOnlyRef.current = readOnly;
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
+	useLayoutEffect(() => {
+		onPersistRef.current = onPersist;
+		openWorkspaceFileRef.current = openWorkspaceFile;
+		readOnlyRef.current = readOnly;
+	}, [onPersist, openWorkspaceFile, readOnly]);
 
 	// Editor is an imperative resource. Construct and destroy it in the same
 	// lifecycle so speculative renders cannot orphan an instance.

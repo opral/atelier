@@ -82,4 +82,18 @@ describe("renderCsvReviewDiffHtml", () => {
 		const afterRowZeroMatches = html.match(/data-diff-key="after_row_0"/g);
 		expect(afterRowZeroMatches).toHaveLength(1);
 	});
+
+	test("escapes executable markup from CSV cells and headers", () => {
+		const html = renderCsvReviewDiffHtml(
+			review(
+				'name,<img src=x onerror="alert(1)">\n"alpha"" onmouseover=""alert(1)",<script>alert(1)</script>',
+				'name,<img src=x onerror="alert(2)">\n"alpha"" onmouseover=""alert(1)",<script>alert(2)</script>',
+			),
+		);
+
+		expect(html).not.toMatch(/<(?:img|script)\b/i);
+		expect(html).not.toMatch(/<[^>]+\son[a-z]+\s*=/i);
+		expect(html).toContain("&lt;img");
+		expect(html).toContain("&lt;script&gt;");
+	});
 });
