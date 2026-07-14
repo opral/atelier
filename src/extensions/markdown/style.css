@@ -1898,17 +1898,17 @@
 		color: rgb(255, 201, 198);
 	}
 
-	.markdown-change-review-button-keep-all {
+	.markdown-change-review-button-keep {
 		background: rgba(255, 255, 255, 0.08);
 		color: rgba(255, 255, 255, 0.9);
 	}
 
-	.markdown-change-review-button-keep-all:hover:not(:disabled) {
+	.markdown-change-review-button-keep:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.14);
 		color: white;
 	}
 
-	.markdown-change-review-button-keep {
+	.markdown-change-review-button-primary {
 		padding-right: 0.55rem;
 		padding-left: 0.7rem;
 		background: var(--color-bg-action-primary);
@@ -1918,21 +1918,22 @@
 		color: var(--color-text-on-action-primary);
 	}
 
-	.markdown-change-review-keycap-keep {
+	.markdown-change-review-button-primary .markdown-change-review-keycap {
 		min-width: 1.9rem;
 		gap: 0.14rem;
 		background: rgba(255, 255, 255, 0.2);
 		color: rgba(255, 255, 255, 0.92);
 	}
 
-	.markdown-change-review-keycap-keep svg {
+	.markdown-change-review-keycap svg {
 		width: 0.62rem;
 		height: 0.62rem;
 		stroke-width: 2.2;
 	}
 
-	.markdown-change-review-button-keep:hover:not(:disabled) {
+	.markdown-change-review-button-primary:hover:not(:disabled) {
 		background: var(--color-bg-action-primary-hover);
+		color: var(--color-text-on-action-primary);
 	}
 
 	.markdown-change-review-icon-button:focus-visible,
