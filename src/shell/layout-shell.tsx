@@ -110,6 +110,7 @@ import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
 	AtelierSlots,
+	AtelierTopBarProps,
 } from "../create-atelier";
 import {
 	hostExtensionDefinition,
@@ -659,6 +660,7 @@ async function resolveNextUntitledMarkdownPath(
 export function V2LayoutShell({
 	instance: atelierInstance,
 	slots,
+	topBarProps,
 	extensions = EMPTY_ATELIER_EXTENSIONS,
 	filesViewMode = "landing",
 	defaultOpenPanels = EMPTY_DEFAULT_OPEN_PANELS,
@@ -666,6 +668,7 @@ export function V2LayoutShell({
 }: {
 	readonly instance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
+	readonly topBarProps?: AtelierTopBarProps;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
 	readonly filesViewMode?: FilesViewMode;
 	readonly defaultOpenPanels?: readonly DefaultOpenPanel[];
@@ -681,6 +684,7 @@ export function V2LayoutShell({
 				<LayoutShellContent
 					atelierInstance={atelierInstance}
 					slots={slots}
+					topBarProps={topBarProps}
 					filesViewMode={filesViewMode}
 					defaultOpenPanels={defaultOpenPanels}
 					onEvent={onEvent}
@@ -693,6 +697,7 @@ export function V2LayoutShell({
 type LayoutShellContentProps = {
 	readonly atelierInstance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
+	readonly topBarProps?: AtelierTopBarProps;
 	readonly filesViewMode: FilesViewMode;
 	readonly defaultOpenPanels: readonly DefaultOpenPanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
@@ -1123,6 +1128,7 @@ function LayoutShellLoadedContent({
 	resolvedReviewIds,
 	autoRevealedAgentTurnRangeKeysRef,
 	slots,
+	topBarProps,
 	filesViewMode,
 	defaultOpenPanels,
 	onEvent,
@@ -2909,8 +2915,9 @@ function LayoutShellLoadedContent({
 					isRightSidebarVisible={!isRightCollapsed}
 					navbarStart={slots?.navbarStart}
 					navbarEnd={slots?.navbarEnd}
+					rootProps={topBarProps}
 				/>
-				<div className="flex flex-1 min-h-0 overflow-hidden px-2">
+				<main className="flex flex-1 min-h-0 overflow-hidden px-2">
 					<Group
 						orientation="horizontal"
 						groupRef={panelGroupRef}
@@ -2997,7 +3004,7 @@ function LayoutShellLoadedContent({
 							/>
 						</Panel>
 					</Group>
-				</div>
+				</main>
 				<StatusBar />
 			</div>
 			<DragOverlay>
