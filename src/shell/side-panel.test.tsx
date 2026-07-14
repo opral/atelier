@@ -149,7 +149,7 @@ function StatefulSidePanel() {
 }
 
 describe("SidePanel", () => {
-	test("renders the empty state helper when nothing is open", () => {
+	test("renders the empty state CTA and opens its view picker", async () => {
 		const emptyPanel: PanelState = { views: [], activeInstance: null };
 		const handleAdd = vi.fn();
 
@@ -171,25 +171,27 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		expect(screen.getByText("Open a view")).toBeInTheDocument();
 		expect(
-			screen.getByText("Choose what you want to see in this panel."),
+			screen.getByRole("heading", { name: "This is a panel." }),
 		).toBeInTheDocument();
+		expect(screen.getByText("It can open views.")).toBeInTheDocument();
 		expect(
 			screen.getByRole("complementary", { name: "Navigator" }),
 		).toBeInTheDocument();
-		const filesChip = screen.getByRole("button", {
-			name: "Open Files view",
-		});
-		expect(filesChip).toHaveAttribute(
-			"title",
-			"Browse and pin project documents.",
-		);
+		const openView = screen.getByRole("button", { name: "Open a view" });
+		expect(openView).toHaveAttribute("data-attr", "panel-empty-open-view");
 		expect(
-			screen.getByRole("button", { name: "Open History view" }),
-		).toHaveAttribute("title", "Review and restore checkpoints.");
-		fireEvent.click(filesChip);
+			screen.queryByRole("button", { name: "Open Files view" }),
+		).toBeNull();
+		fireEvent.pointerDown(openView, { button: 0 });
+
+		const filesItem = await screen.findByRole("menuitem", { name: "Files" });
+		expect(
+			screen.getByRole("menuitem", { name: "History" }),
+		).toBeInTheDocument();
+		fireEvent.click(filesItem);
 		expect(handleAdd).toHaveBeenCalledWith(FILES_EXTENSION_KIND);
+		await waitFor(() => expect(openView).toHaveFocus());
 		expect(screen.getByLabelText("Add view")).toBeInTheDocument();
 		expect(screen.queryByText("No view open")).toBeNull();
 	});
@@ -203,11 +205,12 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		const filesChip = screen.getByRole("button", {
-			name: "Open Files view",
-		});
-		filesChip.focus();
-		fireEvent.click(filesChip);
+		const openView = screen.getByRole("button", { name: "Open a view" });
+		openView.focus();
+		fireEvent.keyDown(openView, { key: "ArrowDown", code: "ArrowDown" });
+		const filesItem = await screen.findByRole("menuitem", { name: "Files" });
+		await waitFor(() => expect(filesItem).toHaveFocus());
+		fireEvent.keyDown(filesItem, { key: "Enter", code: "Enter" });
 
 		const filesTab = await screen.findByRole("button", { name: "Files" });
 		await waitFor(() => expect(filesTab).toHaveFocus());
@@ -218,9 +221,7 @@ describe("SidePanel", () => {
 		fireEvent.click(closeControl as SVGElement);
 
 		await waitFor(() =>
-			expect(
-				screen.getByRole("button", { name: "Open Files view" }),
-			).toHaveFocus(),
+			expect(screen.getByRole("button", { name: "Open a view" })).toHaveFocus(),
 		);
 	});
 
@@ -270,10 +271,8 @@ describe("SidePanel", () => {
 		expect(
 			screen.getByRole("button", { name: "Start agent" }),
 		).toBeInTheDocument();
-		expect(screen.queryByText("Open a view")).toBeNull();
-		expect(
-			screen.queryByRole("button", { name: "Open Files view" }),
-		).toBeNull();
+		expect(screen.queryByText("This is a panel.")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Open a view" })).toBeNull();
 	});
 
 	test("preserves an intentional blank empty-state override", () => {
@@ -296,10 +295,8 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		expect(screen.queryByText("Open a view")).toBeNull();
-		expect(
-			screen.queryByRole("button", { name: "Open Files view" }),
-		).toBeNull();
+		expect(screen.queryByText("This is a panel.")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Open a view" })).toBeNull();
 		expect(
 			screen.getByRole("button", { name: "Add view" }),
 		).toBeInTheDocument();

@@ -1278,10 +1278,17 @@ describe("installed extension lifecycle", () => {
 			const navigator = screen.getByRole("complementary", {
 				name: "Navigator",
 			});
-			const recoveredView = await within(navigator).findByRole("button", {
-				name: "Open Recovered Extension view",
-			});
-			fireEvent.click(recoveredView);
+			fireEvent.pointerDown(
+				await within(navigator).findByRole("button", {
+					name: "Open a view",
+				}),
+				{ button: 0 },
+			);
+			fireEvent.click(
+				await screen.findByRole("menuitem", {
+					name: "Recovered Extension",
+				}),
+			);
 
 			expect(
 				await screen.findByText("Recovered extension content"),

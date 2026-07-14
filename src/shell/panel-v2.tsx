@@ -28,6 +28,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import panelEmptyStatePreview from "../assets/panel-empty-state-preview.png";
 import type {
 	PanelSide,
 	PanelState,
@@ -159,12 +160,6 @@ export function PanelV2({
 			}
 		},
 		[onAddView, panel.activeInstance, panel.views],
-	);
-	const handleAddView = useCallback(
-		(kind: ExtensionKind, state?: ExtensionState) => {
-			requestAddView(kind, state, false);
-		},
-		[requestAddView],
 	);
 	const handleMenuAddView = useCallback(
 		(kind: ExtensionKind, state?: ExtensionState) => {
@@ -312,7 +307,8 @@ export function PanelV2({
 			<DefaultPanelEmptyState
 				side={side}
 				availableViews={availableViews}
-				onAddView={handleAddView}
+				onAddView={handleMenuAddView}
+				onSelectedViewSettled={focusPendingAddedTab}
 			/>
 		) : (
 			emptyStatePlaceholder
@@ -439,14 +435,17 @@ function AddViewMenu({
 	availableViews,
 	onAddView,
 	onSelectedViewSettled,
+	variant = "tab-bar",
 }: {
 	readonly side: PanelSide;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly onSelectedViewSettled: () => boolean;
+	readonly variant?: "tab-bar" | "empty-state";
 }) {
 	const selectedViewRef = useRef(false);
 	const triggerRef = useRef<HTMLButtonElement>(null);
+	const isEmptyStateTrigger = variant === "empty-state";
 	if (availableViews.length === 0) return null;
 	return (
 		<DropdownMenu>
@@ -454,12 +453,23 @@ function AddViewMenu({
 				<button
 					ref={triggerRef}
 					type="button"
-					title="Add view"
-					aria-label="Add view"
-					data-attr="panel-add-view"
-					className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+					title={isEmptyStateTrigger ? undefined : "Add view"}
+					aria-label={isEmptyStateTrigger ? "Open a view" : "Add view"}
+					data-attr={
+						isEmptyStateTrigger ? "panel-empty-open-view" : "panel-add-view"
+					}
+					className={clsx(
+						isEmptyStateTrigger
+							? "inline-flex h-10 w-full items-center justify-center gap-2 rounded-[9px] bg-[var(--color-bg-action-primary)] px-4 text-sm font-bold text-[var(--color-text-on-action-primary)] shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-panel)]"
+							: "flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]",
+					)}
 				>
-					<Plus className="size-3.25" strokeWidth={2} />
+					<Plus
+						aria-hidden="true"
+						className={isEmptyStateTrigger ? "size-4" : "size-3.25"}
+						strokeWidth={isEmptyStateTrigger ? 2.25 : 2}
+					/>
+					{isEmptyStateTrigger ? <span>Open a view</span> : null}
 				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
@@ -507,63 +517,57 @@ function DefaultPanelEmptyState({
 	side,
 	availableViews,
 	onAddView,
+	onSelectedViewSettled,
 }: {
 	readonly side: PanelSide;
 	readonly availableViews: readonly ExtensionDefinition[];
-	readonly onAddView: (kind: ExtensionKind) => void;
+	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
+	readonly onSelectedViewSettled: () => boolean;
 }) {
 	const headingId = useId();
 	const hasAvailableViews = availableViews.length > 0;
 
 	return (
-		<div className="min-h-0 flex-1 overflow-y-auto">
-			<div className="flex min-h-full items-center justify-center px-4 py-10">
+		<div className="@container min-h-0 flex-1 overflow-y-auto">
+			<div className="flex min-h-full items-center justify-center px-5 py-10 @max-[300px]:px-4 @max-[300px]:py-7">
 				<section
 					aria-labelledby={headingId}
 					data-attr="panel-empty-state"
 					data-panel-side={side}
-					className="flex w-full max-w-64 flex-col items-center text-center"
+					className="flex w-full max-w-64 flex-col items-center pb-10 text-center @max-[300px]:max-w-56 @max-[300px]:pb-4"
 				>
+					<img
+						src={panelEmptyStatePreview}
+						alt=""
+						aria-hidden="true"
+						className="w-44 max-w-full object-contain @max-[300px]:w-36"
+					/>
 					<h2
 						id={headingId}
-						className="text-[13px] font-semibold text-[var(--color-text-primary)]"
+						className="mt-6 text-xl font-bold tracking-[-0.025em] text-[var(--color-text-primary)] @max-[300px]:mt-5 @max-[300px]:text-lg"
 					>
-						{hasAvailableViews ? "Open a view" : "No views available"}
+						{hasAvailableViews ? "This is a panel." : "No views available"}
 					</h2>
-					<p className="mt-1 max-w-52 text-[12.5px] leading-5 text-[var(--color-text-tertiary)] text-pretty">
+					<p className="mt-2 text-sm leading-5 text-[var(--color-text-tertiary)]">
 						{hasAvailableViews
-							? "Choose what you want to see in this panel."
+							? "It can open views."
 							: "Available views will appear here."}
 					</p>
 					{hasAvailableViews ? (
-						<ul className="mt-4 flex max-w-full flex-wrap justify-center gap-2">
-							{availableViews.map((extension) => {
-								const Icon = extension.icon;
-								return (
-									<li key={extension.kind} className="max-w-full">
-										<button
-											type="button"
-											onClick={() => onAddView(extension.kind)}
-											aria-label={`Open ${extension.label} view`}
-											title={extension.description}
-											data-attr="panel-empty-open-view"
-											data-view-key={extension.kind}
-											className="group inline-flex min-h-8 max-w-full items-center gap-2 rounded-[7px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel-muted)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-brand-soft)] hover:bg-[var(--color-bg-brand-soft)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-panel)]"
-										>
-											<span
-												aria-hidden="true"
-												className="flex size-3.5 flex-none items-center justify-center text-[var(--color-icon-tertiary)] transition-colors group-hover:text-[var(--color-icon-selection-current)]"
-											>
-												<Icon className="size-3.5" />
-											</span>
-											<span className="min-w-0 truncate">
-												{extension.label}
-											</span>
-										</button>
-									</li>
-								);
-							})}
-						</ul>
+						<>
+							<div className="mt-7 w-full max-w-52 @max-[300px]:mt-6">
+								<AddViewMenu
+									side={side}
+									availableViews={availableViews}
+									onAddView={onAddView}
+									onSelectedViewSettled={onSelectedViewSettled}
+									variant="empty-state"
+								/>
+							</div>
+							<p className="mt-4 max-w-56 text-[12.5px] leading-[18px] text-[var(--color-text-tertiary)] text-pretty">
+								Choose Files, History, or another workspace view.
+							</p>
+						</>
 					) : null}
 				</section>
 			</div>
