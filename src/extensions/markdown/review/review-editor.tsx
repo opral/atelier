@@ -58,14 +58,17 @@ export function MarkdownReviewEditor({
 	readonly onCompletionFailure?: () => void;
 }) {
 	const lix = useLix();
+	const { beforeMarkdown, afterMarkdown, beforeBlocks, afterBlocks } =
+		reviewDiff;
 	const incomingReviewDocument = useMemo(
-		() => buildMarkdownReviewDocument(reviewDiff),
-		[
-			reviewDiff.afterBlocks,
-			reviewDiff.afterMarkdown,
-			reviewDiff.beforeBlocks,
-			reviewDiff.beforeMarkdown,
-		],
+		() =>
+			buildMarkdownReviewDocument({
+				beforeMarkdown,
+				afterMarkdown,
+				beforeBlocks,
+				afterBlocks,
+			}),
+		[afterBlocks, afterMarkdown, beforeBlocks, beforeMarkdown],
 	);
 	const [reviewDocument, setReviewDocument] = useState(() =>
 		buildMarkdownReviewDocument(reviewDiff),
@@ -249,17 +252,22 @@ export function MarkdownReviewEditor({
 			);
 			onCompletionStart?.(markdown);
 			try {
-				await onComplete?.(markdown);
+				// The resolver can remove the reviewed file and unmount this editor.
+				// Mark completion before awaiting it so unmount cleanup does not restore
+				// the synthetic review document into a disappearing live editor.
 				completionSucceeded.current = true;
+				await onComplete?.(markdown);
 				onCompletionSuccess?.(markdown);
 			} catch (cause) {
 				completionSucceeded.current = false;
 				onCompletionFailure?.();
 				setDecisions(decisions);
-				setReviewEditorDocument(
-					editor,
-					resolveMarkdownReviewDocumentChanges(reviewDocument.doc, decisions),
-				);
+				if (!editor.isDestroyed) {
+					setReviewEditorDocument(
+						editor,
+						resolveMarkdownReviewDocumentChanges(reviewDocument.doc, decisions),
+					);
+				}
 				setError(
 					cause instanceof Error
 						? cause.message

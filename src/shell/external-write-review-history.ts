@@ -29,7 +29,12 @@ type ResolvedExternalWriteReviewData = {
 	readonly data: ExternalWriteReviewData | null;
 };
 
+type AgentTurnFileData = ExternalWriteReviewData & {
+	readonly beforeExists: boolean;
+};
+
 const EMPTY_AGENT_TURN_RANGES: readonly AgentTurnCommitRange[] = [];
+const EMPTY_FILE_DATA = new Uint8Array();
 
 export type ExternalWriteReviewFile = {
 	readonly fileId: string;
@@ -180,12 +185,13 @@ export async function getExternalWriteReviewData(
 	lix: Lix,
 	review: ExternalWriteReview,
 ): Promise<ExternalWriteReviewData | null> {
-	const [beforeData, afterData] = await Promise.all([
-		getFileDataAtCommit(lix, review.fileId, review.beforeCommitId),
-		getFileDataAtCommit(lix, review.fileId, review.afterCommitId),
-	]);
-	if (!beforeData || !afterData) return null;
-	return { beforeData, afterData };
+	const data = await getRangeFileData(lix, review.fileId, {
+		beforeCommitId: review.beforeCommitId,
+		afterCommitId: review.afterCommitId,
+	});
+	return data
+		? { beforeData: data.beforeData, afterData: data.afterData }
+		: null;
 }
 
 export async function getFileDataAtCommit(
@@ -209,19 +215,23 @@ async function getAgentTurnExternalWriteReview(
 		if (range.clearedFileIds?.includes(fileId)) continue;
 		const data = await getRangeFileData(lix, fileId, range);
 		if (!data) continue;
-		if (fileBytesEqual(data.beforeData, data.afterData)) continue;
+		if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
+			continue;
+		}
 		relevantRanges.push(range);
 	}
 	if (relevantRanges.length === 0) return null;
 	const firstRange = relevantRanges[0];
 	const lastRange = relevantRanges[relevantRanges.length - 1];
 	if (!firstRange || !lastRange) return null;
-	const [beforeData, afterData] = await Promise.all([
-		getFileDataAtCommit(lix, fileId, firstRange.beforeCommitId),
-		getFileDataAtCommit(lix, fileId, lastRange.afterCommitId),
-	]);
-	if (!beforeData || !afterData) return null;
-	if (fileBytesEqual(beforeData, afterData)) return null;
+	const data = await getRangeFileData(lix, fileId, {
+		beforeCommitId: firstRange.beforeCommitId,
+		afterCommitId: lastRange.afterCommitId,
+	});
+	if (!data) return null;
+	if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
+		return null;
+	}
 	const rangeIds = relevantRanges.map((range) => range.id);
 	return {
 		fileId,
@@ -236,14 +246,18 @@ async function getAgentTurnExternalWriteReview(
 async function getRangeFileData(
 	lix: Lix,
 	fileId: string,
-	range: AgentTurnCommitRange,
-): Promise<ExternalWriteReviewData | null> {
+	range: Pick<AgentTurnCommitRange, "beforeCommitId" | "afterCommitId">,
+): Promise<AgentTurnFileData | null> {
 	const [beforeData, afterData] = await Promise.all([
 		getFileDataAtCommit(lix, fileId, range.beforeCommitId),
 		getFileDataAtCommit(lix, fileId, range.afterCommitId),
 	]);
-	if (!beforeData || !afterData) return null;
-	return { beforeData, afterData };
+	if (!afterData) return null;
+	return {
+		beforeData: beforeData ?? EMPTY_FILE_DATA,
+		afterData,
+		beforeExists: beforeData !== null,
+	};
 }
 
 function fileHistorySnapshotQuery(lix: Lix, fileId: string, commitId: string) {

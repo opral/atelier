@@ -131,10 +131,7 @@ import {
 	type AtelierDocumentsRuntimeCompletion,
 	type AtelierInstance,
 } from "../atelier-instance";
-import {
-	resolveCheckpointDiff,
-	resolveCheckpointDiffForBranch,
-} from "./checkpoint-diff";
+import { resolveCheckpointDiffForBranch } from "./checkpoint-diff";
 import {
 	reconcileCurrentFileViewPanel,
 	reconcileCurrentFileViews,
@@ -1093,6 +1090,12 @@ function LayoutShellLoadedContent({
 		},
 		[],
 	);
+	const releaseDiffReviewResolution = useCallback(
+		(review: ExternalWriteReview) => {
+			resolvedReviewIdsRef.current.delete(review.reviewId);
+		},
+		[],
+	);
 
 	const registerExternalWriteReview = useCallback(
 		(review: ExternalWriteReview) => {
@@ -1126,23 +1129,52 @@ function LayoutShellLoadedContent({
 		[emitEvent],
 	);
 
-	const resolveDiffReview = useCallback(
+	const emitDiffReviewResolution = useCallback(
 		(
 			review: ExternalWriteReview,
 			outcome: "accepted" | "rejected" | "abandoned" = "abandoned",
 		) => {
-			if (!claimDiffReviewResolution(review)) {
-				return false;
-			}
 			emitEvent({
 				type: "diff_resolved",
 				reviewId: review.reviewId,
 				filePath: review.path,
 				outcome,
 			});
+		},
+		[emitEvent],
+	);
+	const resolveDiffReview = useCallback(
+		(
+			review: ExternalWriteReview,
+			outcome: "accepted" | "rejected" | "abandoned" = "abandoned",
+		) => {
+			if (!claimDiffReviewResolution(review)) return false;
+			emitDiffReviewResolution(review, outcome);
 			return true;
 		},
-		[claimDiffReviewResolution, emitEvent],
+		[claimDiffReviewResolution, emitDiffReviewResolution],
+	);
+	const runDiffReviewResolution = useCallback(
+		async (
+			review: ExternalWriteReview,
+			outcome: "accepted" | "rejected",
+			action: () => Promise<void>,
+		) => {
+			if (!claimDiffReviewResolution(review)) return false;
+			try {
+				await action();
+				emitDiffReviewResolution(review, outcome);
+				return true;
+			} catch (cause) {
+				releaseDiffReviewResolution(review);
+				throw cause;
+			}
+		},
+		[
+			claimDiffReviewResolution,
+			emitDiffReviewResolution,
+			releaseDiffReviewResolution,
+		],
 	);
 	resolveDiffReviewRef.current = resolveDiffReview;
 	const isReviewMode = Boolean(checkpointDiff) || openExternalReviewCount > 0;
@@ -1855,6 +1887,22 @@ function LayoutShellLoadedContent({
 		[lix],
 	);
 
+	const deleteAddedExternalWriteReviewFile = useCallback(
+		async (review: ExternalWriteReview, afterData: Uint8Array) => {
+			const result = await lix.execute(
+				"DELETE FROM lix_file WHERE id = $1 AND data = $2",
+				[review.fileId, afterData],
+				{ originKey: `atelier.review:${review.reviewId}` },
+			);
+			if (result.rowsAffected !== 1) {
+				throw new Error(
+					"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+				);
+			}
+		},
+		[lix],
+	);
+
 	const handleAcceptExternalWriteReview = useCallback(
 		async (args: {
 			readonly fileId: string;
@@ -1865,15 +1913,15 @@ function LayoutShellLoadedContent({
 			if (!review) {
 				return;
 			}
-			if (resolvedReviewIdsRef.current.has(review.reviewId)) return;
-			await clearAgentTurnCommitRangeFile(lix, {
-				fileId: review.fileId,
-				reviewId: review.reviewId,
-				agentTurnRangeIds: review.agentTurnRangeIds,
+			await runDiffReviewResolution(review, "accepted", async () => {
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					agentTurnRangeIds: review.agentTurnRangeIds,
+				});
 			});
-			resolveDiffReview(review, "accepted");
 		},
-		[lix, getExternalWriteReviewForFile, resolveDiffReview],
+		[lix, getExternalWriteReviewForFile, runDiffReviewResolution],
 	);
 
 	const handleResolveExternalWriteReview = useCallback(
@@ -1885,33 +1933,41 @@ function LayoutShellLoadedContent({
 		}) => {
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) return;
-			if (resolvedReviewIdsRef.current.has(review.reviewId)) return;
-			const afterData = await getFileDataAtCommit(
-				lix,
-				review.fileId,
-				review.afterCommitId,
-			);
-			if (!afterData) {
-				throw new Error("The reviewed file snapshot is no longer available.");
-			}
-			const result = await lix.execute(
-				"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
-				[args.data, review.fileId, afterData],
-				{ originKey: `atelier.review:${review.reviewId}` },
-			);
-			if (result.rowsAffected !== 1) {
-				throw new Error(
-					"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
-				);
-			}
-			await clearAgentTurnCommitRangeFile(lix, {
-				fileId: review.fileId,
-				reviewId: review.reviewId,
-				agentTurnRangeIds: review.agentTurnRangeIds,
+			await runDiffReviewResolution(review, "accepted", async () => {
+				const [beforeData, afterData] = await Promise.all([
+					getFileDataAtCommit(lix, review.fileId, review.beforeCommitId),
+					getFileDataAtCommit(lix, review.fileId, review.afterCommitId),
+				]);
+				if (!afterData) {
+					throw new Error("The reviewed file snapshot is no longer available.");
+				}
+				if (beforeData === null && args.data.byteLength === 0) {
+					await deleteAddedExternalWriteReviewFile(review, afterData);
+				} else {
+					const result = await lix.execute(
+						"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
+						[args.data, review.fileId, afterData],
+						{ originKey: `atelier.review:${review.reviewId}` },
+					);
+					if (result.rowsAffected !== 1) {
+						throw new Error(
+							"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+						);
+					}
+				}
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					agentTurnRangeIds: review.agentTurnRangeIds,
+				});
 			});
-			resolveDiffReview(review, "accepted");
 		},
-		[lix, getExternalWriteReviewForFile, resolveDiffReview],
+		[
+			lix,
+			deleteAddedExternalWriteReviewFile,
+			getExternalWriteReviewForFile,
+			runDiffReviewResolution,
+		],
 	);
 
 	const handleRejectExternalWriteReview = useCallback(
@@ -1924,48 +1980,55 @@ function LayoutShellLoadedContent({
 			if (!review) {
 				return;
 			}
-			if (resolvedReviewIdsRef.current.has(review.reviewId)) return;
-			if (!(await isExternalWriteReviewCurrent(review))) {
+			await runDiffReviewResolution(review, "rejected", async () => {
+				if (!(await isExternalWriteReviewCurrent(review))) {
+					await clearAgentTurnCommitRangeFile(lix, {
+						fileId: review.fileId,
+						reviewId: review.reviewId,
+						agentTurnRangeIds: review.agentTurnRangeIds,
+					});
+					return;
+				}
+				const beforeData = await getFileDataAtCommit(
+					lix,
+					review.fileId,
+					review.beforeCommitId,
+				);
+				if (!beforeData) {
+					const afterData = await getFileDataAtCommit(
+						lix,
+						review.fileId,
+						review.afterCommitId,
+					);
+					if (afterData) {
+						await deleteAddedExternalWriteReviewFile(review, afterData);
+					}
+					await clearAgentTurnCommitRangeFile(lix, {
+						fileId: review.fileId,
+						reviewId: review.reviewId,
+						agentTurnRangeIds: review.agentTurnRangeIds,
+					});
+					return;
+				}
+				const { fileId } = args;
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ data: beforeData })
+					.where("id", "=", fileId)
+					.executeTakeFirst();
 				await clearAgentTurnCommitRangeFile(lix, {
 					fileId: review.fileId,
 					reviewId: review.reviewId,
 					agentTurnRangeIds: review.agentTurnRangeIds,
 				});
-				resolveDiffReview(review, "rejected");
-				return;
-			}
-			const beforeData = await getFileDataAtCommit(
-				lix,
-				review.fileId,
-				review.beforeCommitId,
-			);
-			if (!beforeData) {
-				await clearAgentTurnCommitRangeFile(lix, {
-					fileId: review.fileId,
-					reviewId: review.reviewId,
-					agentTurnRangeIds: review.agentTurnRangeIds,
-				});
-				resolveDiffReview(review, "rejected");
-				return;
-			}
-			const { fileId } = args;
-			await qb(lix)
-				.updateTable("lix_file")
-				.set({ data: beforeData })
-				.where("id", "=", fileId)
-				.executeTakeFirst();
-			await clearAgentTurnCommitRangeFile(lix, {
-				fileId: review.fileId,
-				reviewId: review.reviewId,
-				agentTurnRangeIds: review.agentTurnRangeIds,
 			});
-			resolveDiffReview(review, "rejected");
 		},
 		[
 			lix,
+			deleteAddedExternalWriteReviewFile,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
-			resolveDiffReview,
+			runDiffReviewResolution,
 		],
 	);
 
