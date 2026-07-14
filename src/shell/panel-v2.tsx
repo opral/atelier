@@ -28,6 +28,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AtelierActionButton } from "@/components/ui/atelier-action-button";
 import panelEmptyStatePreview from "../assets/panel-empty-state-preview.png";
 import type {
 	PanelSide,
@@ -450,27 +451,30 @@ function AddViewMenu({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<button
-					ref={triggerRef}
-					type="button"
-					title={isEmptyStateTrigger ? undefined : "Add view"}
-					aria-label={isEmptyStateTrigger ? "Open a view" : "Add view"}
-					data-attr={
-						isEmptyStateTrigger ? "panel-empty-open-view" : "panel-add-view"
-					}
-					className={clsx(
-						isEmptyStateTrigger
-							? "inline-flex h-10 w-full items-center justify-center gap-2 rounded-[9px] bg-[var(--color-bg-action-primary)] px-4 text-sm font-bold text-[var(--color-text-on-action-primary)] shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-panel)]"
-							: "flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]",
-					)}
-				>
-					<Plus
-						aria-hidden="true"
-						className={isEmptyStateTrigger ? "size-4" : "size-3.25"}
-						strokeWidth={isEmptyStateTrigger ? 2.25 : 2}
-					/>
-					{isEmptyStateTrigger ? <span>Open a view</span> : null}
-				</button>
+				{isEmptyStateTrigger ? (
+					<AtelierActionButton
+						ref={triggerRef}
+						aria-label="Open a view"
+						data-attr="panel-empty-open-view"
+						variant="secondary"
+						fullWidth
+						className="focus-visible:ring-offset-[var(--color-bg-panel)]"
+					>
+						<Plus aria-hidden="true" className="size-4" strokeWidth={2.25} />
+						<span>Open a view</span>
+					</AtelierActionButton>
+				) : (
+					<button
+						ref={triggerRef}
+						type="button"
+						title="Add view"
+						aria-label="Add view"
+						data-attr="panel-add-view"
+						className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+					>
+						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
+					</button>
+				)}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align={side === "right" ? "end" : "start"}
@@ -540,7 +544,7 @@ function DefaultPanelEmptyState({
 						src={panelEmptyStatePreview}
 						alt=""
 						aria-hidden="true"
-						className="w-44 max-w-full object-contain @max-[300px]:w-36"
+						className="w-40 max-w-full object-contain @max-[300px]:w-32"
 					/>
 					<h2
 						id={headingId}

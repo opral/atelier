@@ -180,6 +180,8 @@ describe("SidePanel", () => {
 		).toBeInTheDocument();
 		const openView = screen.getByRole("button", { name: "Open a view" });
 		expect(openView).toHaveAttribute("data-attr", "panel-empty-open-view");
+		expect(openView).toHaveAttribute("data-ui", "atelier-action-button");
+		expect(openView).toHaveAttribute("data-variant", "secondary");
 		expect(
 			screen.queryByRole("button", { name: "Open Files view" }),
 		).toBeNull();
