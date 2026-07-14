@@ -1162,19 +1162,21 @@
 		}
 	}
 
-	/* A standalone Markdown image is a movable block. The selection ring makes
-	   the click → drag interaction obvious instead of relying on an invisible
-	   ProseMirror node selection. */
+	/* A standalone Markdown image is a movable block. Its selection state uses
+	   the existing media edge, rather than drawing a second offset frame around
+	   images and embeds that already have their own border. */
 	.markdown-view .ProseMirror [data-markdown-image-block] {
 		display: block;
 		cursor: grab;
 		user-select: none;
 		transition:
 			box-shadow 120ms ease-out,
-			outline-color 120ms ease-out;
+			border-color 120ms ease-out;
 	}
 
-	.markdown-view .ProseMirror [data-markdown-image-block]:hover {
+	.markdown-view
+		.ProseMirror
+		[data-markdown-image-block]:hover:not(.ProseMirror-selectednode) {
 		box-shadow:
 			0 0 0 2px
 				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
@@ -1184,8 +1186,7 @@
 	.markdown-view
 		.ProseMirror
 		[data-markdown-image-block].ProseMirror-selectednode {
-		outline: 2px solid var(--color-ring-focus-visible);
-		outline-offset: 3px;
+		border-color: var(--color-ring-focus-visible);
 		cursor: grabbing;
 	}
 
