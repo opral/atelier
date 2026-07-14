@@ -1141,6 +1141,27 @@
 		border-radius: 0.375rem;
 	}
 
+	/* A dragged block gets a landing rail instead of relying on source selection
+	   alone. ProseMirror positions this at the resolved drop point, so it
+	   previews exactly where an image, PDF, or later embed will land. */
+	.markdown-view .atelier-markdown-drop-indicator {
+		border-radius: 999px;
+		background: var(--color-brand-500);
+		box-shadow: 0 0 0 1px var(--color-bg-panel);
+		animation: markdown-drop-indicator-in 100ms ease-out;
+	}
+
+	@keyframes markdown-drop-indicator-in {
+		from {
+			opacity: 0;
+			transform: scaleX(0.94);
+		}
+		to {
+			opacity: 1;
+			transform: scaleX(1);
+		}
+	}
+
 	/* A standalone Markdown image is a movable block. The selection ring makes
 	   the click → drag interaction obvious instead of relying on an invisible
 	   ProseMirror node selection. */
