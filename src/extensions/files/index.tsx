@@ -938,9 +938,7 @@ function FilesViewContent({
 							>
 								<Plus className="size-3.5" strokeWidth={2.4} />
 								<span>New file</span>
-								<span className="ml-0.5 text-xs font-semibold opacity-65">
-									⌘.
-								</span>
+								<span className="ml-0.5 text-xs font-semibold">⌘.</span>
 							</AtelierActionButton>
 						</div>
 						<div

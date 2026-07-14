@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense, type ComponentPropsWithRef, type ReactNode } from "react";
 import { LixProvider } from "@/lib/lix-react";
 import { V2LayoutShell } from "@/shell/layout-shell";
 import type { AtelierExtensionState } from "./extension-api";
@@ -9,6 +9,13 @@ import {
 } from "./atelier-instance";
 
 export type { AtelierPanelSide, AtelierSidePanel } from "./atelier-instance";
+
+export type AtelierTopBarProps = Omit<
+	ComponentPropsWithRef<"header">,
+	"children" | "dangerouslySetInnerHTML" | "role"
+> & {
+	readonly [attribute: `data-${string}`]: string | number | boolean | undefined;
+};
 
 export type AtelierEmptyPanelSlotContext = {
 	/** The panel whose empty state is being rendered. */
@@ -40,9 +47,11 @@ export type AtelierSlots = {
 export type AtelierProps = {
 	readonly instance: AtelierInstance;
 	readonly slots?: AtelierSlots;
+	/** Props forwarded to Atelier's semantic top-bar header. */
+	readonly topBarProps?: AtelierTopBarProps;
 };
 
-export function Atelier({ instance, slots }: AtelierProps) {
+export function Atelier({ instance, slots, topBarProps }: AtelierProps) {
 	const configuration = getAtelierConfiguration(instance);
 	const defaultOpenPanels = configuration.defaultOpenPanels ?? [];
 	return (
@@ -52,6 +61,7 @@ export function Atelier({ instance, slots }: AtelierProps) {
 					<V2LayoutShell
 						instance={instance}
 						slots={slots}
+						topBarProps={topBarProps}
 						extensions={configuration.extensions}
 						filesViewMode={configuration.filesViewMode}
 						defaultOpenPanels={defaultOpenPanels}

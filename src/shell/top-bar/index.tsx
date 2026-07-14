@@ -1,5 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { AtelierTopBarProps } from "@/create-atelier";
 import {
 	Tooltip,
 	TooltipContent,
@@ -17,6 +19,8 @@ export type TopBarProps = {
 	readonly isRightSidebarVisible?: boolean;
 	readonly navbarStart?: ReactNode;
 	readonly navbarEnd?: ReactNode;
+	/** Host props forwarded to the semantic top-bar header. */
+	readonly rootProps?: AtelierTopBarProps;
 };
 
 /**
@@ -34,6 +38,7 @@ export function TopBar({
 	isRightSidebarVisible = true,
 	navbarStart,
 	navbarEnd,
+	rootProps,
 }: TopBarProps) {
 	const isMacPlatform = useMemo(() => {
 		if (typeof navigator === "undefined") return false;
@@ -51,7 +56,14 @@ export function TopBar({
 	const leftShortcut = isMacPlatform ? `${modifierKey}1` : `${modifierKey}+1`;
 	const rightShortcut = isMacPlatform ? `${modifierKey}2` : `${modifierKey}+2`;
 	return (
-		<header className="relative flex h-9 shrink-0 items-center px-2 text-[var(--color-text-secondary)]">
+		<header
+			{...rootProps}
+			className={cn(
+				"relative flex h-9 shrink-0 items-center px-2 text-[var(--color-text-secondary)]",
+				rootProps?.className,
+			)}
+			data-atelier-part="top-bar"
+		>
 			<div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
 				{navbarStart !== undefined && navbarStart !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-start">

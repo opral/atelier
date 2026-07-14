@@ -35,6 +35,7 @@ export type {
 	AtelierPanelSide,
 	AtelierProps,
 	AtelierSlots,
+	AtelierTopBarProps,
 } from "./create-atelier";
 export type {
 	AtelierBuiltinExtensionId,
