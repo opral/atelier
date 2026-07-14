@@ -37,6 +37,11 @@ type PendingImagePaste = {
 	readonly notify?: (status: MarkdownImagePasteStatus) => void;
 };
 
+type TransferredImage = {
+	readonly file: File;
+	readonly mimeType: string;
+};
+
 const imagePasteQueues = new WeakMap<object, Promise<void>>();
 const pendingImagePastes = new WeakMap<object, PendingImagePaste[]>();
 const IMAGE_PASTE_TRANSACTION_META = "atelier.markdown-image-paste";
@@ -76,93 +81,12 @@ export function handlePaste(args: {
 	const clipboardImage = firstClipboardImage(event);
 	if (clipboardImage) {
 		event.preventDefault?.();
-		if (!storeImage) {
-			notifyImagePasteStatus(onImagePasteStatus, {
-				state: "error",
-				message: "This document cannot store workspace assets.",
-			});
-			return true;
-		}
-
-		// Capture this paste's location before it joins the per-editor queue. A
-		// later paste may wait on an earlier image write while the user keeps
-		// moving and editing elsewhere.
-		const pasteTargetTracker = trackPasteTarget(editor);
-		const pendingImagePaste = registerPendingImagePaste(editor, {
-			canceled: false,
-			tracker: pasteTargetTracker,
-			notify: onImagePasteStatus,
+		return queueMarkdownImage({
+			editor,
+			image: clipboardImage,
+			storeImage,
+			onImagePasteStatus,
 		});
-		enqueueImagePaste(editor, async () => {
-			let storedImage: StoredPastedMarkdownImage | null = null;
-			try {
-				// A queued paste can outlive its editor when the user navigates or a
-				// review locks the document. Do not create a write that would only be
-				// cleaned up immediately afterward.
-				if (
-					pendingImagePaste.canceled ||
-					editor?.isDestroyed === true ||
-					editor?.isEditable === false
-				) {
-					return;
-				}
-				notifyImagePasteStatus(onImagePasteStatus, { state: "saving" });
-				storedImage = await storeImage(clipboardImage);
-				if (pendingImagePaste.canceled) {
-					await storedImage.remove();
-					storedImage = null;
-					return;
-				}
-				if (editor?.isDestroyed === true || editor?.isEditable === false) {
-					throw new Error("The editor is no longer editable.");
-				}
-				const pasteTarget = pasteTargetTracker.current();
-				pasteTargetTracker.stop();
-				const inserted = insertPastedBlocks(
-					editor,
-					[
-						{
-							type: "imageBlock",
-							attrs: {
-								src: storedImage.markdownSrc,
-								alt: storedImage.alt,
-								title: null,
-								data: null,
-								imageData: null,
-							},
-						},
-					],
-					pasteTarget,
-					{ preserveLiveSelection: true },
-				);
-				if (!inserted) {
-					throw new Error("The image reference could not be inserted.");
-				}
-				notifyImagePasteStatus(onImagePasteStatus, {
-					state: "saved",
-					markdownSrc: storedImage.markdownSrc,
-					workspacePath: storedImage.workspacePath,
-				});
-			} catch (error) {
-				if (storedImage) {
-					try {
-						await storedImage.remove();
-					} catch {
-						// The reference was never inserted, so cleanup is best-effort.
-					}
-				}
-				if (!pendingImagePaste.canceled) {
-					notifyImagePasteStatus(onImagePasteStatus, {
-						state: "error",
-						message: imagePasteErrorMessage(error),
-					});
-				}
-			} finally {
-				pasteTargetTracker.stop();
-				finishPendingImagePaste(editor, pendingImagePaste);
-			}
-		});
-		return true;
 	}
 
 	const text = event?.clipboardData?.getData?.("text/plain") ?? "";
@@ -172,6 +96,163 @@ export function handlePaste(args: {
 	const ast = parseMarkdown(text);
 	const tiptapDoc = astToTiptapDoc(ast) as any;
 	return insertPastedBlocks(editor, tiptapDoc?.content ?? []);
+}
+
+/**
+ * Claims external file drops before the browser can navigate to a local file.
+ * The eventual insertion stays anchored to the coordinate where the user
+ * released the file, even while the image write is still in flight.
+ */
+export function handleImageDrop(args: {
+	editor: any;
+	view: any;
+	event: DragEvent | any;
+	storeImage?: StorePastedImage;
+	onImagePasteStatus?: (status: MarkdownImagePasteStatus) => void;
+}): boolean {
+	const { editor, view, event, storeImage, onImagePasteStatus } = args;
+	if (view?.dragging || !hasExternalFiles(event)) return false;
+
+	// File drops otherwise navigate Chrome to the dropped file. Claim the
+	// browser event synchronously, before the asynchronous workspace write.
+	event.preventDefault?.();
+	if (editor?.isDestroyed === true) return true;
+	if (editor?.isEditable === false) {
+		notifyImagePasteStatus(onImagePasteStatus, {
+			state: "error",
+			message: "This document is read-only.",
+		});
+		return true;
+	}
+
+	const droppedImage = firstImageFromDataTransfer(event?.dataTransfer);
+	if (!droppedImage) {
+		notifyImagePasteStatus(onImagePasteStatus, {
+			state: "error",
+			message: "Drop a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
+		});
+		return true;
+	}
+	const dropTarget = captureDropTarget(editor, view, event);
+	if (!dropTarget) {
+		// Never turn an unresolved release point into an unrelated insertion at
+		// the live caret. The event remains claimed, so Chrome still cannot open
+		// the dropped local file in a new tab.
+		notifyImagePasteStatus(onImagePasteStatus, {
+			state: "error",
+			message: "Drop the image over the document.",
+		});
+		return true;
+	}
+
+	return queueMarkdownImage({
+		editor,
+		image: droppedImage,
+		storeImage,
+		onImagePasteStatus,
+		initialTarget: dropTarget,
+	});
+}
+
+function queueMarkdownImage({
+	editor,
+	image,
+	storeImage,
+	onImagePasteStatus,
+	initialTarget,
+}: {
+	readonly editor: any;
+	readonly image: TransferredImage;
+	readonly storeImage?: StorePastedImage;
+	readonly onImagePasteStatus?: (status: MarkdownImagePasteStatus) => void;
+	readonly initialTarget?: PasteTarget | null;
+}): boolean {
+	if (!storeImage) {
+		notifyImagePasteStatus(onImagePasteStatus, {
+			state: "error",
+			message: "This document cannot store workspace assets.",
+		});
+		return true;
+	}
+
+	// Capture the input location before it joins the per-editor queue. A later
+	// image may wait on an earlier write while the user keeps editing elsewhere.
+	const pasteTargetTracker = trackPasteTarget(editor, initialTarget);
+	const pendingImagePaste = registerPendingImagePaste(editor, {
+		canceled: false,
+		tracker: pasteTargetTracker,
+		notify: onImagePasteStatus,
+	});
+	enqueueImagePaste(editor, async () => {
+		let storedImage: StoredPastedMarkdownImage | null = null;
+		try {
+			// A queued image can outlive its editor when the user navigates or a
+			// review locks the document. Do not create a write that would only be
+			// cleaned up immediately afterward.
+			if (
+				pendingImagePaste.canceled ||
+				editor?.isDestroyed === true ||
+				editor?.isEditable === false
+			) {
+				return;
+			}
+			notifyImagePasteStatus(onImagePasteStatus, { state: "saving" });
+			storedImage = await storeImage(image);
+			if (pendingImagePaste.canceled) {
+				await storedImage.remove();
+				storedImage = null;
+				return;
+			}
+			if (editor?.isDestroyed === true || editor?.isEditable === false) {
+				throw new Error("The editor is no longer editable.");
+			}
+			const pasteTarget = pasteTargetTracker.current();
+			pasteTargetTracker.stop();
+			const inserted = insertPastedBlocks(
+				editor,
+				[
+					{
+						type: "imageBlock",
+						attrs: {
+							src: storedImage.markdownSrc,
+							alt: storedImage.alt,
+							title: null,
+							data: null,
+							imageData: null,
+						},
+					},
+				],
+				pasteTarget,
+				{ preserveLiveSelection: true },
+			);
+			if (!inserted) {
+				throw new Error("The image reference could not be inserted.");
+			}
+			notifyImagePasteStatus(onImagePasteStatus, {
+				state: "saved",
+				markdownSrc: storedImage.markdownSrc,
+				workspacePath: storedImage.workspacePath,
+			});
+		} catch (error) {
+			if (storedImage) {
+				try {
+					await storedImage.remove();
+				} catch {
+					// The reference was never inserted, so cleanup is best-effort.
+				}
+			}
+			if (!pendingImagePaste.canceled) {
+				notifyImagePasteStatus(onImagePasteStatus, {
+					state: "error",
+					message: imagePasteErrorMessage(error),
+				});
+			}
+		} finally {
+			pasteTargetTracker.stop();
+			finishPendingImagePaste(editor, pendingImagePaste);
+		}
+	});
+	return true;
 }
 
 function insertPastedBlocks(
@@ -265,6 +346,19 @@ function capturePasteTarget(editor: any): PasteTarget | null {
 	return resolvePasteTarget(editor, selection.from, selection.to);
 }
 
+function captureDropTarget(
+	editor: any,
+	view: any,
+	event: DragEvent | any,
+): PasteTarget | null {
+	const position = view?.posAtCoords?.({
+		left: event?.clientX,
+		top: event?.clientY,
+	})?.pos;
+	if (!Number.isInteger(position)) return null;
+	return resolvePasteTarget(editor, position, position);
+}
+
 function resolvePasteTarget(
 	editor: any,
 	from: number,
@@ -272,19 +366,26 @@ function resolvePasteTarget(
 ): PasteTarget | null {
 	const doc = editor?.state?.doc;
 	if (!doc?.resolve) return null;
-	const $from = doc.resolve(from);
-	const $to = doc.resolve(to);
-	return {
-		from,
-		to,
-		inlineFrom: Boolean($from?.parent?.inlineContent),
-		inlineTo: Boolean($to?.parent?.inlineContent),
-		sameParent: Boolean($from?.sameParent?.($to)),
-	};
+	try {
+		const $from = doc.resolve(from);
+		const $to = doc.resolve(to);
+		return {
+			from,
+			to,
+			inlineFrom: Boolean($from?.parent?.inlineContent),
+			inlineTo: Boolean($to?.parent?.inlineContent),
+			sameParent: Boolean($from?.sameParent?.($to)),
+		};
+	} catch {
+		return null;
+	}
 }
 
-function trackPasteTarget(editor: any): PasteTargetTracker {
-	let target = capturePasteTarget(editor);
+function trackPasteTarget(
+	editor: any,
+	initialTarget?: PasteTarget | null,
+): PasteTargetTracker {
+	let target = initialTarget ?? capturePasteTarget(editor);
 	let stopped = false;
 	const handleTransaction = ({ transaction }: { transaction?: any }) => {
 		if (!target || !transaction?.mapping) return;
@@ -358,19 +459,46 @@ function mapCollapsedTargetAfterImage(mapping: any, position: number): number {
 
 function firstClipboardImage(
 	event: ClipboardEvent | any,
-): { file: File; mimeType: string } | null {
-	const clipboardData = event?.clipboardData;
-	for (const item of arrayFromList<any>(clipboardData?.items)) {
-		const mimeType = String(item?.type ?? "").toLowerCase();
-		if (item?.kind !== "file" || !mimeType.startsWith("image/")) continue;
-		const file = item.getAsFile?.();
-		if (file) return { file, mimeType: mimeType || file.type };
+): TransferredImage | null {
+	return firstImageFromDataTransfer(event?.clipboardData);
+}
+
+function firstImageFromDataTransfer(
+	dataTransfer: DataTransfer | any,
+): TransferredImage | null {
+	for (const item of arrayFromList<any>(dataTransfer?.items)) {
+		if (item?.kind !== "file") continue;
+		const image = imageFromFile(item.getAsFile?.(), item.type);
+		if (image) return image;
 	}
-	for (const file of arrayFromList<File>(clipboardData?.files)) {
-		const mimeType = String(file?.type ?? "").toLowerCase();
-		if (mimeType.startsWith("image/")) return { file, mimeType };
+	for (const file of arrayFromList<File>(dataTransfer?.files)) {
+		const image = imageFromFile(file);
+		if (image) return image;
 	}
 	return null;
+}
+
+function imageFromFile(
+	file: File | null | undefined,
+	suggestedMimeType?: unknown,
+): TransferredImage | null {
+	if (!file) return null;
+	const mimeType = String(suggestedMimeType || file.type || "").toLowerCase();
+	if (!mimeType.startsWith("image/")) return null;
+	return { file, mimeType };
+}
+
+function hasExternalFiles(event: DragEvent | any): boolean {
+	const dataTransfer = event?.dataTransfer;
+	return (
+		arrayFromList<any>(dataTransfer?.items).some(
+			(item) => item?.kind === "file",
+		) ||
+		arrayFromList<File>(dataTransfer?.files).length > 0 ||
+		arrayFromList<any>(dataTransfer?.types).some(
+			(type) => String(type).toLowerCase() === "files",
+		)
+	);
 }
 
 function arrayFromList<T>(

@@ -1,6 +1,7 @@
 import { test, expect, describe, vi } from "vitest";
 import {
 	cancelPendingImagePaste,
+	handleImageDrop,
 	handlePaste,
 	type MarkdownImagePasteStatus,
 } from "./handle-paste";
@@ -44,6 +45,34 @@ function makeImageClipboardEvent({
 	};
 }
 
+function makeImageDropEvent({
+	file = new File([new Uint8Array([1, 2, 3])], "dropped-image.png", {
+		type: "image/png",
+	}),
+	itemType = file.type,
+}: {
+	file?: File;
+	itemType?: string;
+} = {}) {
+	const preventDefault = vi.fn();
+	return {
+		preventDefault,
+		clientX: 240,
+		clientY: 180,
+		dataTransfer: {
+			items: [
+				{
+					kind: "file",
+					type: itemType,
+					getAsFile: () => file,
+				},
+			],
+			files: [file],
+			types: ["Files"],
+		},
+	};
+}
+
 function storedImage({
 	markdownSrc = "assets/pasted-image.png",
 	workspacePath = "/assets/pasted-image.png",
@@ -80,6 +109,10 @@ function textRange(editor: Editor, text: string): { from: number; to: number } {
 	});
 	if (from < 0) throw new Error(`Could not find text: ${text}`);
 	return { from, to: from + text.length };
+}
+
+function positionAfterText(editor: Editor, text: string): number {
+	return textRange(editor, text).to;
 }
 
 describe("handlePaste - cursor position insertion", () => {
@@ -1019,5 +1052,155 @@ describe("handlePaste - clipboard images", () => {
 
 		await vi.waitFor(() => expect(firstImage.remove).toHaveBeenCalledOnce());
 		expect(secondStore).not.toHaveBeenCalled();
+	});
+});
+
+describe("handleImageDrop", () => {
+	test("claims an external image and inserts it at its drop coordinate", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Before" }],
+				},
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "After" }],
+				},
+			],
+		});
+		editor.commands.setTextSelection(positionAfterText(editor, "After"));
+		const event = makeImageDropEvent({ itemType: "" });
+		const stored = storedImage({
+			markdownSrc: "assets/dropped-image.png",
+			workspacePath: "/assets/dropped-image.png",
+			alt: "Dropped image",
+		});
+		const storeImage = vi.fn(async () => stored);
+		const view = {
+			posAtCoords: vi.fn(() => ({
+				pos: positionAfterText(editor, "Before"),
+				inside: -1,
+			})),
+		};
+
+		const handled = handleImageDrop({
+			editor,
+			view,
+			event,
+			storeImage,
+		});
+
+		expect(handled).toBe(true);
+		expect(handled).not.toBeInstanceOf(Promise);
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		await vi.waitFor(() => expect(storeImage).toHaveBeenCalledOnce());
+		await vi.waitFor(() =>
+			expect(buildMarkdownFromEditor(editor)).toMatch(
+				/Before\n\n!\[Dropped image\]\(assets\/dropped-image\.png\)\n\nAfter/,
+			),
+		);
+		expect(storeImage).toHaveBeenCalledWith({
+			file: event.dataTransfer.files[0],
+			mimeType: "image/png",
+		});
+
+		editor.destroy();
+	});
+
+	test("claims unsupported external files instead of allowing browser navigation", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Unchanged" }],
+				},
+			],
+		});
+		const event = makeImageDropEvent({
+			file: new File([new Uint8Array([1])], "notes.pdf", {
+				type: "application/pdf",
+			}),
+		});
+		const storeImage = vi.fn(async () => storedImage());
+		const statuses: MarkdownImagePasteStatus[] = [];
+
+		const handled = handleImageDrop({
+			editor,
+			view: { posAtCoords: vi.fn() },
+			event,
+			storeImage,
+			onImagePasteStatus: (status) => statuses.push(status),
+		});
+
+		expect(handled).toBe(true);
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		expect(storeImage).not.toHaveBeenCalled();
+		expect(statuses).toEqual([
+			{
+				state: "error",
+				message: "Drop a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
+			},
+		]);
+		expect(buildMarkdownFromEditor(editor)).toBe("Unchanged\n");
+
+		editor.destroy();
+	});
+
+	test("does not fall back to the live caret when the drop coordinate is unavailable", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Unchanged" }],
+				},
+			],
+		});
+		const event = makeImageDropEvent();
+		const storeImage = vi.fn(async () => storedImage());
+		const statuses: MarkdownImagePasteStatus[] = [];
+
+		const handled = handleImageDrop({
+			editor,
+			view: { posAtCoords: vi.fn(() => null) },
+			event,
+			storeImage,
+			onImagePasteStatus: (status) => statuses.push(status),
+		});
+
+		expect(handled).toBe(true);
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		expect(storeImage).not.toHaveBeenCalled();
+		expect(statuses).toEqual([
+			{
+				state: "error",
+				message: "Drop the image over the document.",
+			},
+		]);
+		expect(buildMarkdownFromEditor(editor)).toBe("Unchanged\n");
+
+		editor.destroy();
+	});
+
+	test("leaves in-editor block moves to ProseMirror", () => {
+		const editor = createEditor();
+		const event = makeImageDropEvent();
+		const storeImage = vi.fn(async () => storedImage());
+
+		expect(
+			handleImageDrop({
+				editor,
+				view: { dragging: {} },
+				event,
+				storeImage,
+			}),
+		).toBe(false);
+		expect(event.preventDefault).not.toHaveBeenCalled();
+		expect(storeImage).not.toHaveBeenCalled();
+
+		editor.destroy();
 	});
 });

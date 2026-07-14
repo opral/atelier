@@ -706,11 +706,11 @@ function MarkdownImagePasteHint({
 					</>
 				) : status.state === "error" ? (
 					<>
-						<strong>Couldn’t paste image.</strong> {status.message}
+						<strong>Couldn’t add image.</strong> {status.message}
 					</>
 				) : (
 					<>
-						<strong>Image paste canceled.</strong> No file was added.
+						<strong>Image add canceled.</strong> No file was added.
 					</>
 				)}
 			</span>

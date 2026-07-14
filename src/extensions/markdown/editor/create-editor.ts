@@ -7,8 +7,10 @@ import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import {
 	cancelPendingImagePaste,
+	handleImageDrop as defaultHandleImageDrop,
 	handlePaste as defaultHandlePaste,
 	type MarkdownImagePasteStatus,
+	type StorePastedImage,
 } from "./handle-paste";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { EmojiCommandsExtension } from "./extensions/emoji-commands";
@@ -245,6 +247,16 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		openWorkspaceFile,
 		renderPdfPreview,
 	}) as any[];
+	const storeWorkspaceImage: StorePastedImage | undefined = sourceFilePath
+		? ({ file, mimeType }) =>
+				storePastedMarkdownImage({
+					lix,
+					sourceFilePath,
+					file,
+					mimeType,
+					originKey,
+				})
+		: undefined;
 
 	editorInstance = new Editor({
 		extensions: [
@@ -320,16 +332,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				return defaultHandlePaste({
 					editor: currentEditor as any,
 					event,
-					storeImage: sourceFilePath
-						? ({ file, mimeType }) =>
-								storePastedMarkdownImage({
-									lix,
-									sourceFilePath,
-									file,
-									mimeType,
-									originKey,
-								})
-						: undefined,
+					storeImage: storeWorkspaceImage,
 					onImagePasteStatus,
 				});
 			},
@@ -372,6 +375,23 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					return typeof handleKeyUp === "function"
 						? handleKeyUp(view, event)
 						: false;
+				},
+				drop: (view: any, event: DragEvent) => {
+					// ProseMirror's text/HTML drop parser deliberately leaves an empty
+					// external file slice unclaimed. Handle files at the DOM boundary so
+					// Chrome cannot navigate away to the dropped file URL.
+					const handleDrop = editorProps?.handleDOMEvents?.drop;
+					const consumerHandled =
+						typeof handleDrop === "function" ? handleDrop(view, event) : false;
+					if (consumerHandled || event.defaultPrevented) return true;
+					if (!currentEditor) return false;
+					return defaultHandleImageDrop({
+						editor: currentEditor as any,
+						view,
+						event,
+						storeImage: storeWorkspaceImage,
+						onImagePasteStatus,
+					});
 				},
 			},
 		},

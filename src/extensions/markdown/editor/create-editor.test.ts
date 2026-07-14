@@ -122,6 +122,32 @@ function positionAfterText(editor: Editor, needle: string): number {
 	return found;
 }
 
+function createExternalImageDropEvent(file: File): DragEvent {
+	const event = new Event("drop", {
+		bubbles: true,
+		cancelable: true,
+	}) as DragEvent;
+	Object.defineProperties(event, {
+		clientX: { value: 280 },
+		clientY: { value: 220 },
+		dataTransfer: {
+			value: {
+				items: [
+					{
+						kind: "file",
+						type: file.type,
+						getAsFile: () => file,
+					},
+				],
+				files: [file] as unknown as FileList,
+				types: ["Files"],
+				getData: () => "",
+			},
+		},
+	});
+	return event;
+}
+
 async function createEditorFromFile(args: {
 	lix: Awaited<ReturnType<typeof openLix>>;
 	fileId: string;
@@ -215,7 +241,7 @@ test("clicking a relative or fragment markdown link does not open externally", a
 	}
 });
 
-// TipTap + Lix persistence paste tests (no React)
+// TipTap + Lix persistence image-input tests (no React)
 test("editor paste hook stores a clipboard image and persists its relative reference", async () => {
 	const lix = await openLix();
 	const fileId = "paste_image_asset";
@@ -277,6 +303,65 @@ test("editor paste hook stores a clipboard image and persists its relative refer
 		.where("path", "=", "/assets/product-screenshot.png")
 		.executeTakeFirst();
 	expect(storedImage?.path).toBe("/assets/product-screenshot.png");
+	expect(Array.from(storedImage?.data ?? [])).toEqual(Array.from(imageBytes));
+	expect(statuses.map((status) => status.state)).toEqual(["saving", "saved"]);
+
+	editor.destroy();
+	await lix.close();
+});
+
+test("dropping an external image prevents navigation and persists it at the drop position", async () => {
+	const lix = await openLix();
+	const fileId = "drop_image_asset";
+	const sourceFilePath = "/docs/guides/guide.md";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: sourceFilePath,
+			data: new TextEncoder().encode("Before\n\nAfter"),
+		})
+		.execute();
+
+	const statuses: Array<{ state: string }> = [];
+	const editor = createEditor({
+		lix,
+		fileId,
+		sourceFilePath,
+		initialMarkdown: "Before\n\nAfter",
+		persistDebounceMs: 0,
+		onImagePasteStatus: (status) => statuses.push(status),
+	});
+	editor.commands.setTextSelection(positionAfterText(editor, "After"));
+	vi.spyOn(editor.view, "posAtCoords").mockReturnValue({
+		pos: positionAfterText(editor, "Before"),
+		inside: -1,
+	});
+	const imageBytes = new Uint8Array([137, 80, 78, 71, 4, 5, 6]);
+	const image = new File([imageBytes], "Dropped image.png", {
+		type: "image/png",
+	});
+	const drop = createExternalImageDropEvent(image);
+
+	editor.view.dom.dispatchEvent(drop);
+
+	expect(drop.defaultPrevented).toBe(true);
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) =>
+			value ===
+			"Before\n\n![Dropped image](../../assets/dropped-image.png)\n\nAfter\n",
+	);
+	expect(markdown).toBe(
+		"Before\n\n![Dropped image](../../assets/dropped-image.png)\n\nAfter\n",
+	);
+	const storedImage = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["path", "data"])
+		.where("path", "=", "/assets/dropped-image.png")
+		.executeTakeFirst();
+	expect(storedImage?.path).toBe("/assets/dropped-image.png");
 	expect(Array.from(storedImage?.data ?? [])).toEqual(Array.from(imageBytes));
 	expect(statuses.map((status) => status.state)).toEqual(["saving", "saved"]);
 

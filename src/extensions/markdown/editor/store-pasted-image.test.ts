@@ -428,7 +428,7 @@ describe("storePastedMarkdownImage", () => {
 					sourceFilePath: "/README.md",
 					file: new File([], "empty.png", { type: "image/png" }),
 				}),
-			).rejects.toThrow("The clipboard image was empty.");
+			).rejects.toThrow("The image was empty.");
 			expect(await assetFilePaths(lix)).toEqual([]);
 		} finally {
 			await lix.close();

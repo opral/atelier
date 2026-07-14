@@ -53,13 +53,13 @@ export async function storePastedMarkdownImage({
 	const extension = pastedImageExtension(mimeType);
 	if (!extension) {
 		throw new PastedMarkdownImageError(
-			"Paste a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
+			"Use a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
 		);
 	}
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	if (bytes.byteLength === 0) {
-		throw new PastedMarkdownImageError("The clipboard image was empty.");
+		throw new PastedMarkdownImageError("The image was empty.");
 	}
 	await assertAssetsDirectoryAvailable(lix, ROOT_ASSETS_FILE_PATH);
 
