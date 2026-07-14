@@ -354,6 +354,40 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("deselects the active file when the tree background is clicked", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "readme",
+				activeFilePath: "/README.md",
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+
+		fireEvent.click(screen.getByLabelText("Files"));
+
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).not.toHaveAttribute(
+				"data-item-selected",
+				"true",
+			);
+		});
+		fireDeleteShortcut();
+		expect(await selectFileById(lix, "readme")).toBeDefined();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("restores the active selection after deleting a local selection", async () => {
 		const lix = await openLix();
 		await insertReadme(lix);

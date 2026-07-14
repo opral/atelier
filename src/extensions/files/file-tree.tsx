@@ -47,6 +47,7 @@ export type FileTreeProps = {
 		kind: "file" | "directory",
 		source?: FilesystemTreeSource,
 	) => void;
+	readonly onClearSelection?: () => void;
 	readonly openDirectories?: ReadonlySet<string>;
 	readonly reviewPaths?: ReadonlySet<string>;
 	readonly reviewStatuses?: ReadonlyMap<string, ReviewGitStatus>;
@@ -190,6 +191,11 @@ const FILE_TREE_UNSAFE_CSS = `
 		color: var(--color-icon-selection-current);
 	}
 
+	:host([data-suppress-item-focus-ring='true'])
+		[data-type='item'][data-item-focused='true']::before {
+		outline-color: transparent;
+	}
+
 	[data-item-rename-input] {
 		height: calc(var(--trees-row-height) - 6px);
 		border: 1px solid var(--color-border-selection-current);
@@ -223,6 +229,7 @@ export function FileTree({
 	selectedPath,
 	isPanelFocused = false,
 	onSelectItem,
+	onClearSelection,
 	openDirectories,
 	reviewPaths,
 	reviewStatuses,
@@ -234,6 +241,7 @@ export function FileTree({
 	const [internalOpenDirectories, setInternalOpenDirectories] = useState(
 		() => new Set<string>(),
 	);
+	const [suppressItemFocusRing, setSuppressItemFocusRing] = useState(false);
 	const resolvedOpenDirectories = openDirectories ?? internalOpenDirectories;
 	const treeInput = useMemo(
 		() => buildTreeInput(nodes, createRequest),
@@ -285,6 +293,7 @@ export function FileTree({
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
+		onClearSelection,
 		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -300,6 +309,7 @@ export function FileTree({
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
+		onClearSelection,
 		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -322,6 +332,7 @@ export function FileTree({
 	handleSelectionChangeRef.current = (selectedTreePaths) => {
 		const latestTreePath = selectedTreePaths.at(-1);
 		if (!latestTreePath) return;
+		setSuppressItemFocusRing(false);
 		const model = modelRef.current;
 		if (model) {
 			for (const treePath of selectedTreePaths) {
@@ -411,9 +422,17 @@ export function FileTree({
 		}, 0);
 	}, []);
 
-	const openFileFromTreeEvent = useCallback((event: Event) => {
+	const handleTreeClick = useCallback((event: Event) => {
 		const treePath = treePathFromComposedEvent(event);
-		if (!treePath) return;
+		if (!treePath) {
+			setSuppressItemFocusRing(true);
+			for (const modelSelectionPath of modelRef.current?.getSelectedPaths() ??
+				[]) {
+				modelRef.current?.getItem(modelSelectionPath)?.deselect();
+			}
+			stateRef.current.onClearSelection?.();
+			return;
+		}
 		const info = pathInfoForTreePath(
 			stateRef.current.pathInfoByTreePath,
 			treePath,
@@ -469,6 +488,12 @@ export function FileTree({
 		treeInput.directoryTreePaths,
 		treePathsKey,
 	]);
+
+	useEffect(() => {
+		if (selectedTreePath) {
+			setSuppressItemFocusRing(false);
+		}
+	}, [selectedTreePath]);
 
 	useEffect(() => {
 		for (const treePath of model.getSelectedPaths()) {
@@ -547,9 +572,11 @@ export function FileTree({
 	return (
 		<PierreFileTree
 			aria-label="Files"
+			data-suppress-item-focus-ring={suppressItemFocusRing ? "true" : undefined}
 			model={model}
-			onClick={(event) => openFileFromTreeEvent(event.nativeEvent)}
+			onClick={(event) => handleTreeClick(event.nativeEvent)}
 			onClickCapture={handleTreeClickCapture}
+			onKeyDownCapture={() => setSuppressItemFocusRing(false)}
 			style={treeHostStyle(isPanelFocused, variant)}
 		/>
 	);
