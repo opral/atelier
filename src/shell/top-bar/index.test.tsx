@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { createRef } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { TopBar } from ".";
 
@@ -31,6 +32,32 @@ describe("TopBar", () => {
 			"data-attr",
 			"topbar-toggle-right-panel",
 		);
+	});
+
+	test("forwards host props to a stable semantic header", () => {
+		const ref = createRef<HTMLElement>();
+		const onPointerDown = vi.fn();
+		const { container } = render(
+			<TopBar
+				rootProps={{
+					"aria-label": "Workspace controls",
+					"data-app-titlebar": true,
+					className: "bg-red-500",
+					onPointerDown,
+					ref,
+				}}
+			/>,
+		);
+
+		const header = container.querySelector("header");
+		expect(header).toHaveAttribute("data-atelier-part", "top-bar");
+		expect(header).toHaveAttribute("data-app-titlebar", "true");
+		expect(header).toHaveAttribute("aria-label", "Workspace controls");
+		expect(header).toHaveClass("bg-red-500", "px-2");
+		expect(ref.current).toBe(header);
+		if (!header) throw new Error("Top bar header is unavailable");
+		fireEvent.pointerDown(header);
+		expect(onPointerDown).toHaveBeenCalledOnce();
 	});
 
 	test("renders host navbar content around Atelier's panel controls", () => {
