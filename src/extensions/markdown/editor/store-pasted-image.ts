@@ -1,5 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
-import { resolveMarkdownAssetPath } from "./markdown-asset";
+import { relativeMarkdownAssetSrc } from "./markdown-asset";
 
 const IMAGE_EXTENSION_BY_MIME_TYPE = new Map<string, string>([
 	["image/png", "png"],
@@ -20,6 +20,7 @@ const GENERIC_IMAGE_STEMS = new Set([
 
 const MAX_FILENAME_STEM_LENGTH = 80;
 const MAX_FILENAME_ATTEMPTS = 1_000;
+const ROOT_ASSETS_FILE_PATH = "/assets";
 
 export type StoredPastedMarkdownImage = {
 	readonly workspacePath: string;
@@ -60,16 +61,7 @@ export async function storePastedMarkdownImage({
 	if (bytes.byteLength === 0) {
 		throw new PastedMarkdownImageError("The clipboard image was empty.");
 	}
-	const assetsDirectoryFilePath = resolveMarkdownAssetPath({
-		sourceFilePath,
-		src: "assets",
-	});
-	if (!assetsDirectoryFilePath) {
-		throw new PastedMarkdownImageError(
-			"This document does not have a valid workspace path.",
-		);
-	}
-	await assertAssetsDirectoryAvailable(lix, assetsDirectoryFilePath);
+	await assertAssetsDirectoryAvailable(lix, ROOT_ASSETS_FILE_PATH);
 
 	const suggestedStem = pastedImageStem(file.name);
 	const alt = pastedImageAlt(file.name, suggestedStem);
@@ -77,12 +69,12 @@ export async function storePastedMarkdownImage({
 		const suffix = attempt === 1 ? "" : `-${attempt}`;
 		const fileName = `${suggestedStem}${suffix}.${extension}`;
 		const fileId = pastedImageFileId();
-		const markdownSrc = `assets/${fileName}`;
-		const workspacePath = resolveMarkdownAssetPath({
+		const workspacePath = `${ROOT_ASSETS_FILE_PATH}/${fileName}`;
+		const markdownSrc = relativeMarkdownAssetSrc({
 			sourceFilePath,
-			src: markdownSrc,
+			workspacePath,
 		});
-		if (!workspacePath) {
+		if (!markdownSrc) {
 			throw new PastedMarkdownImageError(
 				"This document does not have a valid workspace path.",
 			);
@@ -119,7 +111,7 @@ export async function storePastedMarkdownImage({
 				// If a file appeared at the would-be assets directory after the
 				// preflight, no leaf filename can succeed. Surface the real conflict
 				// instead of burning through every suffix.
-				await assertAssetsDirectoryAvailable(lix, assetsDirectoryFilePath);
+				await assertAssetsDirectoryAvailable(lix, ROOT_ASSETS_FILE_PATH);
 			}
 			// A directory can occupy a candidate file path. Lix reports that
 			// namespace collision as a unique error even with ON CONFLICT, so try

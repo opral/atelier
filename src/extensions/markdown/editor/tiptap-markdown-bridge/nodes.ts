@@ -635,6 +635,7 @@ export function markdownWcNodes(
 			group: "inline",
 			inline: true,
 			atom: true,
+			selectable: true,
 			addAttributes() {
 				return {
 					src: { default: null },
@@ -660,6 +661,63 @@ export function markdownWcNodes(
 					});
 				}
 				const attrs: any = {};
+				if (renderedSrc) attrs.src = renderedSrc;
+				if (alt) attrs.alt = alt;
+				if (title) attrs.title = title;
+				return ["img", { ...attrs, ...diffAttrs(node, "element") }];
+			},
+			addNodeView() {
+				return ({ node }) =>
+					createMarkdownAssetNodeView({
+						node,
+						resolveImageSrc,
+						loadAsset,
+						openWorkspaceFile,
+						renderPdfPreview,
+					});
+			},
+		}),
+		// A Markdown paragraph containing only an image is a true movable block.
+		// Keep `image` above for images embedded in prose, where dragging an atom
+		// would split text and leave an empty paragraph behind.
+		Node.create({
+			name: "imageBlock",
+			group: "block",
+			atom: true,
+			selectable: true,
+			draggable: true,
+			addAttributes() {
+				return {
+					src: { default: null },
+					alt: { default: null },
+					title: { default: null },
+					// `data` belongs to the containing Markdown paragraph so the
+					// editor can assign a stable block id. `imageData` preserves
+					// metadata attached to the Markdown image itself.
+					data: { default: null },
+					imageData: { default: null },
+				};
+			},
+			renderHTML({ node }) {
+				const src = (node as any).attrs?.src;
+				const alt = (node as any).attrs?.alt;
+				const title = (node as any).attrs?.title;
+				const renderedSrc =
+					typeof src === "string" && src.length > 0
+						? resolveRenderedImageSrc(src, resolveImageSrc)
+						: "";
+				if (typeof src === "string" && isPdfAssetSrc(src)) {
+					return pdfRenderSpec({
+						src: safePdfOpenSrc(renderedSrc),
+						label: markdownAssetLabel(src, alt),
+						title,
+						diffAttributes: diffAttrs(node, "element"),
+					});
+				}
+				const attrs: any = {
+					class: "markdown-image-block",
+					"data-markdown-image-block": "",
+				};
 				if (renderedSrc) attrs.src = renderedSrc;
 				if (alt) attrs.alt = alt;
 				if (title) attrs.title = title;
@@ -758,6 +816,7 @@ function createMarkdownAssetNodeView({
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly renderPdfPreview?: PdfPreviewRenderer;
 }) {
+	const nodeTypeName = node.type.name;
 	const originalSrc = String(node.attrs?.src ?? "");
 	const rendersPdf = isPdfAssetSrc(originalSrc);
 	const dom = rendersPdf ? createPdfEmbedDom(node) : createImageDom(node);
@@ -1063,7 +1122,7 @@ function createMarkdownAssetNodeView({
 	return {
 		dom,
 		update: (nextNode: any) => {
-			if (nextNode.type.name !== "image") return false;
+			if (nextNode.type.name !== nodeTypeName) return false;
 			if (isPdfAssetSrc(String(nextNode.attrs?.src ?? "")) !== rendersPdf) {
 				return false;
 			}
@@ -1090,6 +1149,11 @@ function createMarkdownAssetNodeView({
 
 function createImageDom(node: any): HTMLImageElement {
 	const image = document.createElement("img");
+	if (node.type.name === "imageBlock") {
+		image.className = "markdown-image-block";
+		image.dataset.markdownImageBlock = "";
+		image.draggable = true;
+	}
 	updateAssetDomAttributes(image, node);
 	return image;
 }
@@ -1099,6 +1163,11 @@ function createPdfEmbedDom(node: any): HTMLSpanElement {
 	wrapper.className = "markdown-pdf-embed";
 	wrapper.dataset.markdownPdf = "";
 	wrapper.contentEditable = "false";
+	if (node.type.name === "imageBlock") {
+		wrapper.classList.add("markdown-image-block");
+		wrapper.dataset.markdownImageBlock = "";
+		wrapper.draggable = true;
+	}
 
 	const toolbar = document.createElement("span");
 	toolbar.className = "markdown-pdf-toolbar";

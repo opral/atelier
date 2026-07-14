@@ -122,19 +122,14 @@ export function handlePaste(args: {
 					editor,
 					[
 						{
-							type: "paragraph",
-							attrs: { data: null },
-							content: [
-								{
-									type: "image",
-									attrs: {
-										src: storedImage.markdownSrc,
-										alt: storedImage.alt,
-										title: null,
-										data: null,
-									},
-								},
-							],
+							type: "imageBlock",
+							attrs: {
+								src: storedImage.markdownSrc,
+								alt: storedImage.alt,
+								title: null,
+								data: null,
+								imageData: null,
+							},
 						},
 					],
 					pasteTarget,

@@ -1141,6 +1141,39 @@
 		border-radius: 0.375rem;
 	}
 
+	/* A standalone Markdown image is a movable block. The selection ring makes
+	   the click → drag interaction obvious instead of relying on an invisible
+	   ProseMirror node selection. */
+	.markdown-view .ProseMirror [data-markdown-image-block] {
+		display: block;
+		cursor: grab;
+		user-select: none;
+		transition:
+			box-shadow 120ms ease-out,
+			outline-color 120ms ease-out;
+	}
+
+	.markdown-view .ProseMirror [data-markdown-image-block]:hover {
+		box-shadow:
+			0 0 0 2px
+				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
+			0 12px 30px rgba(28, 25, 23, 0.09);
+	}
+
+	.markdown-view
+		.ProseMirror
+		[data-markdown-image-block].ProseMirror-selectednode {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: 3px;
+		cursor: grabbing;
+	}
+
+	.markdown-view
+		.ProseMirror
+		[data-markdown-image-block][data-asset-state="loading"] {
+		cursor: progress;
+	}
+
 	.markdown-view .ProseMirror .markdown-pdf-embed {
 		display: flex;
 		width: 100%;

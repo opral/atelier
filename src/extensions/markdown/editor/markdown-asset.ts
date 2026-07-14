@@ -250,20 +250,58 @@ export function resolveMarkdownAssetPath({
 			: sourceSegments.slice(0, -1);
 		const rawAssetPath = src.split(/[?#]/, 1)[0] ?? "";
 		for (const rawSegment of rawAssetPath.split("/")) {
-			const segment = decodeURIComponent(rawSegment);
+			const segment = markdownPathSegment(rawSegment);
+			if (segment === null) return null;
 			if (!segment || segment === ".") continue;
 			if (segment === "..") {
 				if (assetSegments.length === 0) return null;
 				assetSegments.pop();
 				continue;
 			}
-			if (segment.includes("/") || segment.includes("\\")) return null;
 			assetSegments.push(segment);
 		}
 		return assetSegments.length > 0 ? `/${assetSegments.join("/")}` : null;
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Build a portable Markdown source from one workspace file to another.
+ *
+ * Both inputs are canonical, root-based workspace paths. The returned source
+ * uses the shortest relative traversal and percent-encodes path segments so it
+ * can be persisted safely inside a Markdown link destination.
+ */
+export function relativeMarkdownAssetSrc({
+	sourceFilePath,
+	workspacePath,
+}: {
+	readonly sourceFilePath: string;
+	readonly workspacePath: string;
+}): string | null {
+	if (!sourceFilePath.startsWith("/") || !workspacePath.startsWith("/")) {
+		return null;
+	}
+	const sourceSegments = workspacePathSegments(sourceFilePath);
+	const targetSegments = workspacePathSegments(workspacePath);
+	if (!sourceSegments?.length || !targetSegments?.length) return null;
+
+	const sourceDirectory = sourceSegments.slice(0, -1);
+	let sharedSegments = 0;
+	while (
+		sharedSegments < sourceDirectory.length &&
+		sharedSegments < targetSegments.length &&
+		sourceDirectory[sharedSegments] === targetSegments[sharedSegments]
+	) {
+		sharedSegments += 1;
+	}
+	const relativeSegments = [
+		...Array<string>(sourceDirectory.length - sharedSegments).fill(".."),
+		...targetSegments.slice(sharedSegments),
+	];
+	if (relativeSegments.length === 0) return null;
+	return relativeSegments.map(encodeMarkdownPathSegment).join("/");
 }
 
 export function isPdfAssetSrc(src: string): boolean {
@@ -310,19 +348,39 @@ function parseExternalAssetUrl(value: string): URL | null {
 }
 
 function workspacePathSegments(path: string): string[] | null {
-	const segments: string[] = [];
-	for (const rawSegment of path.split("/")) {
-		const segment = decodeURIComponent(rawSegment);
-		if (!segment || segment === ".") continue;
-		if (segment === "..") {
-			if (segments.length === 0) return null;
-			segments.pop();
-			continue;
-		}
-		if (segment.includes("/") || segment.includes("\\")) return null;
-		segments.push(segment);
+	if (!path.startsWith("/") || path === "/" || path.endsWith("/")) {
+		return null;
+	}
+	const segments = path.slice(1).split("/");
+	if (
+		segments.some(
+			(segment) =>
+				!segment ||
+				segment === "." ||
+				segment === ".." ||
+				segment.includes("\\"),
+		)
+	) {
+		return null;
 	}
 	return segments;
+}
+
+function markdownPathSegment(rawSegment: string): string | null {
+	try {
+		const segment = decodeURIComponent(rawSegment);
+		return segment.includes("/") || segment.includes("\\") ? null : segment;
+	} catch {
+		return null;
+	}
+}
+
+function encodeMarkdownPathSegment(segment: string): string {
+	if (segment === "..") return segment;
+	return encodeURIComponent(segment).replace(
+		/[!'()*]/g,
+		(character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+	);
 }
 
 function assetHash(src: string): string {

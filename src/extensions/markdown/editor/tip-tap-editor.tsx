@@ -701,7 +701,8 @@ function MarkdownImagePasteHint({
 					"Adding image…"
 				) : status.state === "saved" ? (
 					<>
-						<strong>Image added.</strong> Stored as {status.markdownSrc}.
+						<strong>Image added.</strong> Saved to{" "}
+						{workspacePathLabel(status.workspacePath)}.
 					</>
 				) : status.state === "error" ? (
 					<>
@@ -715,6 +716,10 @@ function MarkdownImagePasteHint({
 			</span>
 		</div>
 	);
+}
+
+function workspacePathLabel(workspacePath: string): string {
+	return workspacePath.replace(/^\/+/, "") || "assets";
 }
 
 function TipTapEditorLoadingState({

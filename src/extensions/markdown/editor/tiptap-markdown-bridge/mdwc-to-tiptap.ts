@@ -49,11 +49,30 @@ function emptyDefaultBlockToPM(
 	return { type: "paragraph", attrs: { data: {} } };
 }
 
-function astBlockToPM(node: any): PMNode {
+function astBlockToPM(
+	node: any,
+	options: { readonly standaloneImageAsBlock?: boolean } = {},
+): PMNode {
 	switch (node.type) {
-		case "paragraph":
+		case "paragraph": {
 			const paragraphData = buildNodeData((node as any).data);
 			const paragraphChildren = (node as any).children || [];
+			const standaloneImage = standaloneMarkdownImage(paragraphChildren);
+			if (standaloneImage && options.standaloneImageAsBlock !== false) {
+				return {
+					type: "imageBlock",
+					attrs: {
+						src: standaloneImage.url || null,
+						title: standaloneImage.title ?? null,
+						alt: standaloneImage.alt ?? null,
+						// Block identity belongs to the Markdown paragraph. Keep image
+						// metadata separate so assigning a stable editor id never mutates
+						// the Markdown image node itself.
+						data: paragraphData,
+						imageData: standaloneImage.data ?? null,
+					},
+				};
+			}
 			const isEmptyPlaceholder = isEmptyParagraphPlaceholder(paragraphChildren);
 			const inlineChildren = isHardBreakOnlyParagraphPlaceholder(
 				paragraphChildren,
@@ -71,6 +90,7 @@ function astBlockToPM(node: any): PMNode {
 				},
 				content: isEmptyPlaceholder ? [] : flattenInline(inlineChildren, []),
 			};
+		}
 		case "heading":
 			const headingData = buildNodeData((node as any).data);
 			return {
@@ -115,7 +135,14 @@ function astBlockToPM(node: any): PMNode {
 			return {
 				type: "listItem",
 				attrs,
-				content: (n.children || []).map(astBlockToPM),
+				// ProseMirror list items require a paragraph first. Keep a lone
+				// image inline there, while later standalone-image paragraphs can
+				// still be movable blocks.
+				content: (n.children || []).map((child: any, index: number) =>
+					astBlockToPM(child, {
+						standaloneImageAsBlock: index > 0,
+					}),
+				),
 			};
 		}
 		case "blockquote": {
@@ -221,6 +248,12 @@ function astBlockToPM(node: any): PMNode {
 				content: textContent(""),
 			};
 	}
+}
+
+function standaloneMarkdownImage(children: any[]): any | null {
+	return children.length === 1 && children[0]?.type === "image"
+		? children[0]
+		: null;
 }
 
 function isEmptyParagraphPlaceholder(children: any[]): boolean {

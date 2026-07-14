@@ -215,7 +215,7 @@ test("shows accessible feedback after pasting an image into the editor", async (
 	expect(event.preventDefault).toHaveBeenCalledOnce();
 	await waitFor(() =>
 		expect(screen.getByRole("status")).toHaveTextContent(
-			"Image added. Stored as assets/pasted-image.png.",
+			"Image added. Saved to assets/pasted-image.png.",
 		),
 	);
 	await waitFor(async () => {

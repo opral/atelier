@@ -266,17 +266,17 @@ test("editor paste hook stores a clipboard image and persists its relative refer
 	expect(preventDefault).toHaveBeenCalledOnce();
 
 	const markdown = await waitForMarkdown(lix, fileId, (value) =>
-		value.includes("![Product screenshot](assets/product-screenshot.png)"),
+		value.includes("![Product screenshot](../assets/product-screenshot.png)"),
 	);
 	expect(markdown).toContain(
-		"![Product screenshot](assets/product-screenshot.png)",
+		"![Product screenshot](../assets/product-screenshot.png)",
 	);
 	const storedImage = await qb(lix)
 		.selectFrom("lix_file")
 		.select(["path", "data"])
-		.where("path", "=", "/docs/assets/product-screenshot.png")
+		.where("path", "=", "/assets/product-screenshot.png")
 		.executeTakeFirst();
-	expect(storedImage?.path).toBe("/docs/assets/product-screenshot.png");
+	expect(storedImage?.path).toBe("/assets/product-screenshot.png");
 	expect(Array.from(storedImage?.data ?? [])).toEqual(Array.from(imageBytes));
 	expect(statuses.map((status) => status.state)).toEqual(["saving", "saved"]);
 

@@ -545,8 +545,8 @@ describe("handlePaste - clipboard images", () => {
 		});
 		editor.commands.setTextSelection({ from: 8, to: 14 });
 		const image = storedImage({
-			markdownSrc: "assets/diagram.png",
-			workspacePath: "/docs/assets/diagram.png",
+			markdownSrc: "../assets/diagram.png",
+			workspacePath: "/assets/diagram.png",
 			alt: "Diagram",
 		});
 		const statuses: MarkdownImagePasteStatus[] = [];
@@ -563,14 +563,66 @@ describe("handlePaste - clipboard images", () => {
 		await vi.waitFor(() =>
 			expect(statuses.at(-1)).toEqual({
 				state: "saved",
-				markdownSrc: "assets/diagram.png",
-				workspacePath: "/docs/assets/diagram.png",
+				markdownSrc: "../assets/diagram.png",
+				workspacePath: "/assets/diagram.png",
 			}),
 		);
-		expect(buildMarkdownFromEditor(editor)).toContain(
-			"Before ![Diagram](assets/diagram.png) after",
+		expect(buildMarkdownFromEditor(editor)).toMatch(
+			/Before\n\n!\[Diagram\]\(\.\.\/assets\/diagram\.png\)\n\nafter/,
 		);
 		expect(buildMarkdownFromEditor(editor)).not.toContain("target");
+
+		editor.destroy();
+	});
+
+	test("keeps a pasted image schema-valid inside a list item", async () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "Before target after" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		editor.commands.setTextSelection(textRange(editor, "target"));
+
+		expect(
+			handlePaste({
+				editor,
+				event: makeImageClipboardEvent(),
+				storeImage: async () =>
+					storedImage({
+						markdownSrc: "assets/diagram.png",
+						alt: "Diagram",
+					}),
+			}),
+		).toBe(true);
+
+		await vi.waitFor(() => {
+			let hasImageBlock = false;
+			editor.state.doc.descendants((node) => {
+				if (node.type.name === "imageBlock") hasImageBlock = true;
+			});
+			expect(hasImageBlock).toBe(true);
+		});
+		expect(() => editor.state.doc.check()).not.toThrow();
+		const listItem = editor.state.doc.child(0)?.child(0);
+		expect(listItem?.content.content.map((node) => node.type.name)).toEqual([
+			"paragraph",
+			"imageBlock",
+			"paragraph",
+		]);
 
 		editor.destroy();
 	});
@@ -779,8 +831,8 @@ describe("handlePaste - clipboard images", () => {
 		resolveStored(storedImage());
 
 		await vi.waitFor(() =>
-			expect(buildMarkdownFromEditor(editor)).toContain(
-				"Before ![Pasted image](assets/pasted-image.png) after",
+			expect(buildMarkdownFromEditor(editor)).toMatch(
+				/Before\n\n!\[Pasted image\]\(assets\/pasted-image\.png\)\n\nafter/,
 			),
 		);
 		expect(buildMarkdownFromEditor(editor)).toContain(
@@ -916,8 +968,12 @@ describe("handlePaste - clipboard images", () => {
 		await vi.waitFor(() => expect(secondStore).toHaveBeenCalledOnce());
 		await vi.waitFor(() => {
 			const markdown = buildMarkdownFromEditor(editor);
-			expect(markdown).toContain("Before ![First](assets/first.png) after");
-			expect(markdown).toContain("Before ![Second](assets/second.png) after");
+			expect(markdown).toMatch(
+				/Before\n\n!\[First\]\(assets\/first\.png\)\n\nafter/,
+			);
+			expect(markdown).toMatch(
+				/Before\n\n!\[Second\]\(assets\/second\.png\)\n\nafter/,
+			);
 			expect(markdown).toContain("Elsewhere typed elsewhere");
 			expect(markdown).not.toContain("alpha");
 			expect(markdown).not.toContain("beta");

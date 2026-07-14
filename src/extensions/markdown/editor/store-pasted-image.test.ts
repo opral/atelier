@@ -48,7 +48,7 @@ describe("pasted image metadata", () => {
 });
 
 describe("storePastedMarkdownImage", () => {
-	test("stores exact bytes beside a nested document and creates its assets directory", async () => {
+	test("stores exact bytes in root assets and links from a nested document", async () => {
 		const lix = await openLix();
 		try {
 			await seedMarkdownFile(lix, "/docs/readme.md");
@@ -62,8 +62,8 @@ describe("storePastedMarkdownImage", () => {
 			});
 
 			expect(stored).toMatchObject({
-				workspacePath: "/docs/assets/resume-screenshot-final.png",
-				markdownSrc: "assets/resume-screenshot-final.png",
+				workspacePath: "/assets/resume-screenshot-final.png",
+				markdownSrc: "../assets/resume-screenshot-final.png",
 				fileName: "resume-screenshot-final.png",
 				alt: "Résumé Screenshot (Final)",
 			});
@@ -73,7 +73,29 @@ describe("storePastedMarkdownImage", () => {
 				.where("path", "=", stored.workspacePath)
 				.executeTakeFirstOrThrow();
 			expect(decodeFileDataToBytes(asset.data)).toEqual(expectedBytes);
-			await expectDirectory(lix, "/docs/assets/");
+			await expectDirectory(lix, "/assets/");
+			await expectNoDirectory(lix, "/docs/assets/");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("links deeply nested documents back to root assets", async () => {
+		const lix = await openLix();
+		try {
+			await seedMarkdownFile(lix, "/docs/guides/setup/readme.md");
+			const stored = await storePastedMarkdownImage({
+				lix,
+				sourceFilePath: "/docs/guides/setup/readme.md",
+				file: new File([new Uint8Array([1])], "diagram.png", {
+					type: "image/png",
+				}),
+			});
+
+			expect(stored.workspacePath).toBe("/assets/diagram.png");
+			expect(stored.markdownSrc).toBe("../../../assets/diagram.png");
+			await expectDirectory(lix, "/assets/");
+			await expectNoDirectory(lix, "/docs/guides/setup/assets/");
 		} finally {
 			await lix.close();
 		}
@@ -110,7 +132,7 @@ describe("storePastedMarkdownImage", () => {
 			const originalBytes = new Uint8Array([9, 8, 7]);
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/docs/assets/diagram.png", data: originalBytes })
+				.values({ path: "/assets/diagram.png", data: originalBytes })
 				.execute();
 
 			const pastedBytes = new Uint8Array([1, 3, 5, 7]);
@@ -120,20 +142,17 @@ describe("storePastedMarkdownImage", () => {
 				file: new File([pastedBytes], "diagram.png", { type: "image/png" }),
 			});
 
-			expect(stored.workspacePath).toBe("/docs/assets/diagram-2.png");
-			expect(stored.markdownSrc).toBe("assets/diagram-2.png");
+			expect(stored.workspacePath).toBe("/assets/diagram-2.png");
+			expect(stored.markdownSrc).toBe("../assets/diagram-2.png");
 			const assets = await qb(lix)
 				.selectFrom("lix_file")
 				.select(["path", "data"])
-				.where("path", "in", [
-					"/docs/assets/diagram.png",
-					"/docs/assets/diagram-2.png",
-				])
+				.where("path", "in", ["/assets/diagram.png", "/assets/diagram-2.png"])
 				.orderBy("path")
 				.execute();
 			expect(assets.map((asset) => asset.path)).toEqual([
-				"/docs/assets/diagram-2.png",
-				"/docs/assets/diagram.png",
+				"/assets/diagram-2.png",
+				"/assets/diagram.png",
 			]);
 			expect(decodeFileDataToBytes(assets[0]?.data)).toEqual(pastedBytes);
 			expect(decodeFileDataToBytes(assets[1]?.data)).toEqual(originalBytes);
@@ -149,7 +168,7 @@ describe("storePastedMarkdownImage", () => {
 			await qb(lix)
 				.insertInto("lix_file")
 				.values({
-					path: "/docs/assets/Diagram.png",
+					path: "/assets/Diagram.png",
 					data: new Uint8Array([9]),
 				})
 				.execute();
@@ -162,7 +181,8 @@ describe("storePastedMarkdownImage", () => {
 				}),
 			});
 
-			expect(stored.workspacePath).toBe("/docs/assets/diagram-2.png");
+			expect(stored.workspacePath).toBe("/assets/diagram-2.png");
+			expect(stored.markdownSrc).toBe("../assets/diagram-2.png");
 		} finally {
 			await lix.close();
 		}
@@ -174,7 +194,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/docs/assets", data: new Uint8Array([9]) })
+				.values({ path: "/assets", data: new Uint8Array([9]) })
 				.execute();
 
 			await expect(
@@ -200,7 +220,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/docs/Assets", data: new Uint8Array([9]) })
+				.values({ path: "/Assets", data: new Uint8Array([9]) })
 				.execute();
 
 			await expect(
@@ -226,7 +246,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_directory")
-				.values({ path: "/docs/Assets/" })
+				.values({ path: "/Assets/" })
 				.execute();
 
 			await expect(
@@ -252,7 +272,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_directory")
-				.values({ path: "/docs/assets/" })
+				.values({ path: "/assets/" })
 				.execute();
 
 			const stored = await storePastedMarkdownImage({
@@ -263,7 +283,72 @@ describe("storePastedMarkdownImage", () => {
 				}),
 			});
 
-			expect(stored.workspacePath).toBe("/docs/assets/diagram.png");
+			expect(stored.workspacePath).toBe("/assets/diagram.png");
+			expect(stored.markdownSrc).toBe("../assets/diagram.png");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("does not treat a document-local assets folder as the paste destination", async () => {
+		const lix = await openLix();
+		try {
+			await seedMarkdownFile(lix, "/docs/readme.md");
+			const localBytes = new Uint8Array([9, 8, 7]);
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({ path: "/docs/assets/diagram.png", data: localBytes })
+				.execute();
+
+			const stored = await storePastedMarkdownImage({
+				lix,
+				sourceFilePath: "/docs/readme.md",
+				file: new File([new Uint8Array([1])], "diagram.png", {
+					type: "image/png",
+				}),
+			});
+
+			expect(stored.workspacePath).toBe("/assets/diagram.png");
+			expect(stored.markdownSrc).toBe("../assets/diagram.png");
+			const localAsset = await qb(lix)
+				.selectFrom("lix_file")
+				.select("data")
+				.where("path", "=", "/docs/assets/diagram.png")
+				.executeTakeFirstOrThrow();
+			expect(decodeFileDataToBytes(localAsset.data)).toEqual(localBytes);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("shares root collision suffixes across document directories", async () => {
+		const lix = await openLix();
+		try {
+			await seedMarkdownFile(lix, "/one/readme.md");
+			await seedMarkdownFile(lix, "/two/guides/readme.md");
+			const first = await storePastedMarkdownImage({
+				lix,
+				sourceFilePath: "/one/readme.md",
+				file: new File([new Uint8Array([1])], "diagram.png", {
+					type: "image/png",
+				}),
+			});
+			const second = await storePastedMarkdownImage({
+				lix,
+				sourceFilePath: "/two/guides/readme.md",
+				file: new File([new Uint8Array([2])], "diagram.png", {
+					type: "image/png",
+				}),
+			});
+
+			expect(first).toMatchObject({
+				workspacePath: "/assets/diagram.png",
+				markdownSrc: "../assets/diagram.png",
+			});
+			expect(second).toMatchObject({
+				workspacePath: "/assets/diagram-2.png",
+				markdownSrc: "../../assets/diagram-2.png",
+			});
 		} finally {
 			await lix.close();
 		}
@@ -349,6 +434,24 @@ describe("storePastedMarkdownImage", () => {
 			await lix.close();
 		}
 	});
+
+	test("rejects an invalid document path without leaving a root asset", async () => {
+		const lix = await openLix();
+		try {
+			await expect(
+				storePastedMarkdownImage({
+					lix,
+					sourceFilePath: "docs/readme.md",
+					file: new File([new Uint8Array([1])], "diagram.png", {
+						type: "image/png",
+					}),
+				}),
+			).rejects.toThrow("This document does not have a valid workspace path.");
+			expect(await assetFilePaths(lix)).toEqual([]);
+		} finally {
+			await lix.close();
+		}
+	});
 });
 
 async function seedMarkdownFile(
@@ -373,13 +476,25 @@ async function expectDirectory(
 	expect(directories).toEqual([{ path }]);
 }
 
+async function expectNoDirectory(
+	lix: Awaited<ReturnType<typeof openLix>>,
+	path: string,
+): Promise<void> {
+	const directories = await qb(lix)
+		.selectFrom("lix_directory")
+		.select("path")
+		.where("path", "=", path)
+		.execute();
+	expect(directories).toEqual([]);
+}
+
 async function assetFilePaths(
 	lix: Awaited<ReturnType<typeof openLix>>,
 ): Promise<string[]> {
 	const rows = await qb(lix)
 		.selectFrom("lix_file")
 		.select("path")
-		.where("path", "like", "%/assets/%")
+		.where("path", "like", "/assets/%")
 		.orderBy("path")
 		.execute();
 	return rows.map((row) => row.path);
