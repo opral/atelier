@@ -604,6 +604,14 @@ describe("lists", () => {
 		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
 	});
 
+	test("empty task item stays a task after reopening the editor", () => {
+		const markdown = "- [ ] \n";
+		const reopened = roundtripThroughEditor(parseMarkdown(markdown));
+
+		expect(reopened.children?.[0]?.children?.[0]?.checked).toBe(false);
+		expect(serializeAst(reopened)).toBe(markdown);
+	});
+
 	test("mixed plain and formatted task list markdown preserves markers", () => {
 		const markdown =
 			"- plain bullet\n- [ ] unchecked **bold**\n- [x] checked _italic_\n";
