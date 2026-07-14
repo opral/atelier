@@ -10,6 +10,7 @@ import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
 import {
 	Check,
+	CheckCheck,
 	ChevronLeft,
 	ChevronRight,
 	CornerDownLeft,
@@ -214,10 +215,15 @@ export function MarkdownReviewEditor({
 	);
 
 	const decide = useCallback(
-		async (decision: MarkdownReviewDecision) => {
+		async (decision: MarkdownReviewDecision, allPendingChanges = false) => {
 			if (!activeChange || busy || !editor) return;
 			const nextDecisions = new Map(decisions);
-			nextDecisions.set(activeChange.id, decision);
+			const changesToDecide = allPendingChanges
+				? pendingChanges
+				: [activeChange];
+			for (const change of changesToDecide) {
+				nextDecisions.set(change.id, decision);
+			}
 			const remaining = reviewDocument.changes.filter(
 				(change) => !nextDecisions.has(change.id),
 			);
@@ -286,6 +292,7 @@ export function MarkdownReviewEditor({
 			onCompletionFailure,
 			onCompletionStart,
 			onCompletionSuccess,
+			pendingChanges,
 			reviewDocument,
 		],
 	);
@@ -349,7 +356,9 @@ export function MarkdownReviewEditor({
 					onPrevious={() => navigate(-1)}
 					onNext={() => navigate(1)}
 					onUndo={() => void decide("undo")}
+					onKeepAll={() => void decide("keep", true)}
 					onKeep={() => void decide("keep")}
+					showKeepAll={pendingChanges.length > 1}
 				/>
 			) : null}
 		</>
@@ -382,7 +391,9 @@ function MarkdownChangeReviewControls({
 	onPrevious,
 	onNext,
 	onUndo,
+	onKeepAll,
 	onKeep,
+	showKeepAll,
 }: {
 	readonly fileName: string;
 	readonly activeOrdinal: number;
@@ -393,7 +404,9 @@ function MarkdownChangeReviewControls({
 	readonly onPrevious: () => void;
 	readonly onNext: () => void;
 	readonly onUndo: () => void;
+	readonly onKeepAll: () => void;
 	readonly onKeep: () => void;
+	readonly showKeepAll: boolean;
 }) {
 	return (
 		<div className="markdown-change-review-wrap">
@@ -447,6 +460,19 @@ function MarkdownChangeReviewControls({
 					Undo
 					<kbd className="markdown-change-review-keycap">⌫</kbd>
 				</button>
+				{showKeepAll ? (
+					<button
+						type="button"
+						className="markdown-change-review-button markdown-change-review-button-keep-all"
+						aria-label="Keep all remaining changes"
+						data-attr="review-change-keep-all"
+						disabled={busy}
+						onClick={onKeepAll}
+					>
+						<CheckCheck aria-hidden />
+						Keep all
+					</button>
+				) : null}
 				<button
 					type="button"
 					className="markdown-change-review-button markdown-change-review-button-keep"

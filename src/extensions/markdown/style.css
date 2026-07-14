@@ -1898,6 +1898,16 @@
 		color: rgb(255, 201, 198);
 	}
 
+	.markdown-change-review-button-keep-all {
+		background: rgba(255, 255, 255, 0.08);
+		color: rgba(255, 255, 255, 0.9);
+	}
+
+	.markdown-change-review-button-keep-all:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.14);
+		color: white;
+	}
+
 	.markdown-change-review-button-keep {
 		padding-right: 0.55rem;
 		padding-left: 0.7rem;

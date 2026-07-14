@@ -117,6 +117,49 @@ test("keeps the same Tiptap editor mounted after a partial decision", async () =
 	await act(async () => view?.unmount());
 });
 
+test("keeps all unresolved changes without overriding earlier decisions", async () => {
+	lix = await openLix();
+	const onComplete = vi.fn(async () => {});
+	let view: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		view = render(
+			<LixProvider lix={lix!}>
+				<MarkdownReviewEditor
+					reviewDiff={{
+						beforeMarkdown: "First old.\n\nSecond old.\n\nThird old.\n",
+						afterMarkdown: "First new.\n\nSecond new.\n\nThird new.\n",
+					}}
+					sourceFilePath="/review.md"
+					reviewEnabled
+					onComplete={onComplete}
+				/>
+			</LixProvider>,
+		);
+	});
+
+	await screen.findByText("1 of 3");
+	expect(
+		screen.getByRole("button", { name: "Keep all remaining changes" }),
+	).toHaveAttribute("data-attr", "review-change-keep-all");
+
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Undo change" }));
+	});
+	expect(await screen.findByText("2 of 3")).toBeInTheDocument();
+
+	await act(async () => {
+		fireEvent.click(
+			screen.getByRole("button", { name: "Keep all remaining changes" }),
+		);
+	});
+	await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+	expect(onComplete).toHaveBeenCalledWith(
+		"First old.\n\nSecond new.\n\nThird new.\n",
+	);
+
+	await act(async () => view?.unmount());
+});
+
 test("restores an external editor when review projection unmounts", async () => {
 	lix = await openLix();
 	const editor = createEditor({
