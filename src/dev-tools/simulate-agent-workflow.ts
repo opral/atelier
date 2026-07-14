@@ -28,6 +28,7 @@ export async function simulateMarkdownAgentWorkflow(
 	args: {
 		readonly filePath: string;
 		readonly scenario: DeveloperWorkflowScenario;
+		readonly branchId: string;
 	},
 ): Promise<SimulatedAgentWorkflow> {
 	if (!args.filePath.toLowerCase().endsWith(".md")) {
@@ -71,16 +72,20 @@ export async function simulateMarkdownAgentWorkflow(
 		throw new Error("The simulated agent write did not create a new commit.");
 	}
 
-	await appendAgentTurnCommitRange(lix, {
-		id: rangeId,
-		sourceId: "codex",
-		beforeCommitId,
-		afterCommitId,
-		sessionId: "atelier-developer-tools",
-		turnId: rangeId,
-		startedAt,
-		completedAt: Date.now(),
-	});
+	await appendAgentTurnCommitRange(
+		lix,
+		{
+			id: rangeId,
+			sourceId: "codex",
+			beforeCommitId,
+			afterCommitId,
+			sessionId: "atelier-developer-tools",
+			turnId: rangeId,
+			startedAt,
+			completedAt: Date.now(),
+		},
+		{ branchId: args.branchId },
+	);
 	return {
 		fileId: file.id,
 		filePath: file.path,

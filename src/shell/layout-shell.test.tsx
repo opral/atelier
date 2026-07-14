@@ -24,6 +24,11 @@ import {
 import { DEFAULT_ATELIER_UI_STATE } from "./ui-state";
 import { createAtelier } from "../atelier-instance";
 import { readAgentTurnCommitRanges } from "./agent-turn-review-range";
+import {
+	createMemoryPreferencesStore,
+	createMemoryReviewStatusStore,
+	createMemorySessionStateStore,
+} from "../state-adapters";
 
 describe("resolveLixFileForOpen", () => {
 	test("resolves normalized paths from Lix", async () => {
@@ -75,6 +80,14 @@ describe("open file lifecycle", () => {
 	test("moves the centered Files instance left when a document opens", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
+		const sessionStateStore = createMemorySessionStateStore();
+		const preferencesStore = createMemoryPreferencesStore();
+		const atelier = createAtelier({
+			lix,
+			onEvent,
+			sessionStateStore,
+			preferencesStore,
+		});
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
@@ -97,7 +110,7 @@ describe("open file lifecycle", () => {
 				<LixProvider lix={lix}>
 					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 						<Suspense fallback={null}>
-							<V2LayoutShell onEvent={onEvent} />
+							<V2LayoutShell instance={atelier} onEvent={onEvent} />
 						</Suspense>
 					</KeyValueProvider>
 				</LixProvider>,
@@ -136,25 +149,7 @@ describe("open file lifecycle", () => {
 		expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
 
 		await waitFor(async () => {
-			const row = await qb(lix)
-				.selectFrom("lix_key_value_by_branch")
-				.select("value")
-				.where("key", "=", "atelier_ui_state")
-				.executeTakeFirst();
-			const value = row?.value as
-				| {
-						panels?: {
-							left?: { views?: Array<{ kind?: string }> };
-							central?: {
-								views?: Array<{
-									kind?: string;
-									state?: { fileId?: string };
-								}>;
-							};
-						};
-						layout?: { sizes?: { left?: number } };
-				  }
-				| undefined;
+			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.left?.views).toEqual([
 				expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
 			]);
@@ -168,7 +163,9 @@ describe("open file lifecycle", () => {
 					state: expect.objectContaining({ fileId: "two" }),
 				}),
 			]);
-			expect(value?.layout?.sizes?.left).toBeGreaterThan(0);
+			expect(
+				(await preferencesStore.load())?.layout.sizes.left,
+			).toBeGreaterThan(0);
 		});
 
 		await act(async () => {
@@ -187,22 +184,7 @@ describe("open file lifecycle", () => {
 			).toBe(true);
 		});
 		await waitFor(async () => {
-			const row = await qb(lix)
-				.selectFrom("lix_key_value_by_branch")
-				.select("value")
-				.where("key", "=", "atelier_ui_state")
-				.executeTakeFirst();
-			const value = row?.value as
-				| {
-						panels?: {
-							left?: { views?: Array<{ instance?: string; kind?: string }> };
-							central?: {
-								views?: Array<{ instance?: string; kind?: string }>;
-							};
-						};
-						layout?: { sizes?: { left?: number } };
-				  }
-				| undefined;
+			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.left?.views).toEqual([]);
 			expect(value?.panels?.central?.views).toEqual([
 				expect.objectContaining({
@@ -210,7 +192,7 @@ describe("open file lifecycle", () => {
 					kind: FILES_EXTENSION_KIND,
 				}),
 			]);
-			expect(value?.layout?.sizes?.left).toBe(0);
+			expect((await preferencesStore.load())?.layout.sizes.left).toBe(0);
 		});
 
 		const leftToggle = screen.getByRole("button", {
@@ -246,43 +228,34 @@ describe("open file lifecycle", () => {
 			configurable: true,
 			value: () => {},
 		});
-		const lix = await openLix({
-			keyValues: [
-				{
-					key: "atelier_ui_state",
-					value: {
-						...DEFAULT_ATELIER_UI_STATE,
-						focusedPanel: "right",
-						panels: {
-							...DEFAULT_ATELIER_UI_STATE.panels,
-							central: {
-								views: [
-									{
-										instance,
-										kind: imageKind,
-										state: {
-											fileId,
-											filePath: "/photo.jpeg",
-										},
-									},
-								],
-								activeInstance: instance,
-							},
+		const initialState = {
+			...DEFAULT_ATELIER_UI_STATE,
+			focusedPanel: "right" as const,
+			panels: {
+				...DEFAULT_ATELIER_UI_STATE.panels,
+				central: {
+					views: [
+						{
+							instance,
+							kind: imageKind,
+							state: { fileId, filePath: "/photo.jpeg" },
 						},
-						layout: { sizes: { left: 10, central: 55, right: 35 } },
-					},
-					lixcol_branch_id: "global",
-					lixcol_global: true,
-					lixcol_untracked: true,
+					],
+					activeInstance: instance,
 				},
-				{
-					key: "atelier_active_file_id",
-					value: fileId,
-					lixcol_branch_id: "global",
-					lixcol_global: true,
-					lixcol_untracked: true,
-				},
-			],
+			},
+			layout: { sizes: { left: 10, central: 55, right: 35 } },
+		};
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore(initialState);
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: initialState.layout,
+		});
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			preferencesStore,
 		});
 		await qb(lix)
 			.insertInto("lix_file")
@@ -299,7 +272,7 @@ describe("open file lifecycle", () => {
 				<LixProvider lix={lix}>
 					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 						<Suspense fallback={null}>
-							<V2LayoutShell />
+							<V2LayoutShell instance={atelier} />
 						</Suspense>
 					</KeyValueProvider>
 				</LixProvider>,
@@ -324,21 +297,7 @@ describe("open file lifecycle", () => {
 			expect(screen.queryByRole("img", { name: "photo.jpeg" })).toBeNull();
 		});
 		await waitFor(async () => {
-			const activeFile = await qb(lix)
-				.selectFrom("lix_key_value_by_branch")
-				.select("value")
-				.where("key", "=", "atelier_active_file_id")
-				.executeTakeFirst();
-			expect(activeFile?.value ?? null).toBeNull();
-		});
-		await waitFor(async () => {
-			const row = await qb(lix)
-				.selectFrom("lix_key_value_by_branch")
-				.select("value")
-				.where("key", "=", "atelier_ui_state")
-				.where("lixcol_branch_id", "=", "global")
-				.executeTakeFirst();
-			const state = row?.value as typeof DEFAULT_ATELIER_UI_STATE | undefined;
+			const state = sessionStateStore.getSnapshot();
 			expect(state?.panels.central).toEqual({
 				views: [
 					expect.objectContaining({
@@ -349,7 +308,7 @@ describe("open file lifecycle", () => {
 				activeInstance: "files-default",
 			});
 			expect(state?.focusedPanel).toBe("central");
-			expect(state?.layout?.sizes).toEqual({
+			expect((await preferencesStore.load())?.layout.sizes).toEqual({
 				left: 10,
 				central: 55,
 				right: 35,
@@ -400,10 +359,12 @@ async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 	});
 }
 
-describe("agent turn review reveal", () => {
-	test("opens the first changed file once when a review range appears", async () => {
+describe("agent turn review navigation", () => {
+	test("never changes the active document when a shared review appears", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
+		const reviewStatusStore = createMemoryReviewStatusStore();
+		const atelier = createAtelier({ lix, onEvent, reviewStatusStore });
 		let utils: ReturnType<typeof render> | undefined;
 		try {
 			await qb(lix)
@@ -428,7 +389,7 @@ describe("agent turn review reveal", () => {
 					<LixProvider lix={lix}>
 						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 							<Suspense fallback={null}>
-								<V2LayoutShell onEvent={onEvent} />
+								<V2LayoutShell instance={atelier} onEvent={onEvent} />
 							</Suspense>
 						</KeyValueProvider>
 					</LixProvider>,
@@ -449,40 +410,38 @@ describe("agent turn review reveal", () => {
 			const afterCommitId = await activeCommitId(lix);
 
 			await act(async () => {
-				await createAtelier({ lix }).diff.open({
+				await atelier.diff.open({
 					beforeCommitId,
 					afterCommitId,
 					source: { id: "claude" },
 				});
 			});
 
-			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
-			).toBeVisible();
+			expect(screen.getByRole("heading", { name: "Stable" })).toBeVisible();
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
 			expect(
 				onEvent.mock.calls.filter(
 					([event]) =>
 						event.type === "document_viewed" &&
 						event.filePath === "/changed.md",
 				),
-			).toHaveLength(1);
-
-			fireEvent.click(screen.getByRole("button", { name: /^Keep/ }));
-			await waitFor(() => {
-				expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
-			});
+			).toHaveLength(0);
 
 			const fileTree = document.querySelector<HTMLElement>(
 				'[aria-label="Files"]',
 			);
-			const stableFile = fileTree?.shadowRoot?.querySelector<HTMLElement>(
-				'[data-item-path="stable.md"]',
+			const changedFile = fileTree?.shadowRoot?.querySelector<HTMLElement>(
+				'[data-item-path="changed.md"]',
 			);
-			expect(stableFile).toBeTruthy();
-			fireEvent.click(stableFile!);
+			expect(changedFile).toBeTruthy();
+			fireEvent.click(changedFile!);
 			expect(
-				await screen.findByRole("heading", { name: "Stable" }),
+				await screen.findByRole("button", { name: /^Keep/ }),
 			).toBeVisible();
+			fireEvent.click(screen.getByRole("button", { name: /^Keep/ }));
+			await waitFor(() => {
+				expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+			});
 			expect(
 				onEvent.mock.calls.filter(
 					([event]) =>
@@ -490,15 +449,23 @@ describe("agent turn review reveal", () => {
 						event.filePath === "/changed.md",
 				),
 			).toHaveLength(1);
+			const [range] = await readAgentTurnCommitRanges(lix);
+			const branchId = atelier.branches.activeId();
+			expect(branchId).not.toBeNull();
+			expect(
+				await reviewStatusStore.loadResolvedReviewIds(branchId!),
+			).toHaveLength(1);
+			expect(range?.clearedFileIds).toBeUndefined();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
 		}
 	});
 
-	test("opens a newly added file and removes it when its addition is undone", async () => {
+	test("reviews a newly added file only after the user opens it", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
+		const atelier = createAtelier({ lix, onEvent });
 		let utils: ReturnType<typeof render> | undefined;
 		try {
 			const beforeCommitId = await activeCommitId(lix);
@@ -507,7 +474,7 @@ describe("agent turn review reveal", () => {
 					<LixProvider lix={lix}>
 						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 							<Suspense fallback={null}>
-								<V2LayoutShell onEvent={onEvent} />
+								<V2LayoutShell instance={atelier} onEvent={onEvent} />
 							</Suspense>
 						</KeyValueProvider>
 					</LixProvider>,
@@ -527,13 +494,22 @@ describe("agent turn review reveal", () => {
 			const afterCommitId = await activeCommitId(lix);
 
 			await act(async () => {
-				await createAtelier({ lix }).diff.open({
+				await atelier.diff.open({
 					beforeCommitId,
 					afterCommitId,
 					source: { id: "codex" },
 				});
 			});
 
+			expect(screen.queryByRole("button", { name: /^Undo/ })).toBeNull();
+			expect(
+				onEvent.mock.calls.filter(
+					([event]) =>
+						event.type === "document_viewed" &&
+						event.filePath === "/agent-created.md",
+				),
+			).toHaveLength(0);
+			fireEvent.click(await findFilesTreeItem("agent-created.md"));
 			expect(
 				await screen.findByRole("button", { name: /^Undo/ }),
 			).toBeVisible();
@@ -588,6 +564,8 @@ describe("agent turn review reveal", () => {
 		"$name when resolving a newly added empty Markdown file",
 		async ({ action, competingAction, shouldExist }) => {
 			const lix = await openLix();
+			const reviewStatusStore = createMemoryReviewStatusStore();
+			const atelier = createAtelier({ lix, reviewStatusStore });
 			let utils: ReturnType<typeof render> | undefined;
 			try {
 				const beforeCommitId = await activeCommitId(lix);
@@ -596,7 +574,7 @@ describe("agent turn review reveal", () => {
 						<LixProvider lix={lix}>
 							<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 								<Suspense fallback={null}>
-									<V2LayoutShell />
+									<V2LayoutShell instance={atelier} />
 								</Suspense>
 							</KeyValueProvider>
 						</LixProvider>,
@@ -616,13 +594,14 @@ describe("agent turn review reveal", () => {
 				const afterCommitId = await activeCommitId(lix);
 
 				await act(async () => {
-					await createAtelier({ lix }).diff.open({
+					await atelier.diff.open({
 						beforeCommitId,
 						afterCommitId,
 						source: { id: "codex" },
 					});
 				});
 
+				fireEvent.click(await findFilesTreeItem("empty-agent-created.md"));
 				const actionButton = await screen.findByRole("button", {
 					name: new RegExp(`^${action}`),
 				});
@@ -646,10 +625,13 @@ describe("agent turn review reveal", () => {
 					).toBeNull();
 				});
 				await waitFor(async () => {
-					const ranges = await readAgentTurnCommitRanges(lix);
-					expect(ranges[0]?.clearedFileIds).toContain(
-						"empty-agent-created-file",
-					);
+					const [range] = await readAgentTurnCommitRanges(lix);
+					const branchId = atelier.branches.activeId();
+					expect(branchId).not.toBeNull();
+					expect(
+						await reviewStatusStore.loadResolvedReviewIds(branchId!),
+					).toHaveLength(1);
+					expect(range?.clearedFileIds).toBeUndefined();
 				});
 			} finally {
 				await act(async () => utils?.unmount());
@@ -684,26 +666,19 @@ describe("installed extension lifecycle", () => {
 			value: vi.fn(),
 		});
 
-		const lix = await openLix({
-			keyValues: [
-				{
-					key: "atelier_ui_state",
-					value: {
-						...DEFAULT_ATELIER_UI_STATE,
-						panels: {
-							...DEFAULT_ATELIER_UI_STATE.panels,
-							left: {
-								views: [{ instance: extensionInstance, kind: extensionKind }],
-								activeInstance: extensionInstance,
-							},
-						},
-					},
-					lixcol_branch_id: "global",
-					lixcol_global: true,
-					lixcol_untracked: true,
+		const staleSessionState = {
+			...DEFAULT_ATELIER_UI_STATE,
+			panels: {
+				...DEFAULT_ATELIER_UI_STATE.panels,
+				left: {
+					views: [{ instance: extensionInstance, kind: extensionKind }],
+					activeInstance: extensionInstance,
 				},
-			],
-		});
+			},
+		};
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore(staleSessionState);
+		const atelier = createAtelier({ lix, sessionStateStore });
 		let utils: ReturnType<typeof render> | undefined;
 		try {
 			await act(async () => {
@@ -711,55 +686,23 @@ describe("installed extension lifecycle", () => {
 					<LixProvider lix={lix}>
 						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 							<Suspense fallback={null}>
-								<V2LayoutShell />
+								<V2LayoutShell instance={atelier} />
 							</Suspense>
 						</KeyValueProvider>
 					</LixProvider>,
 				);
 			});
 
-			await waitFor(async () => {
-				const row = await qb(lix)
-					.selectFrom("lix_key_value")
-					.select("value")
-					.where("key", "=", "atelier_ui_state")
-					.executeTakeFirst();
-				const state = row?.value as typeof DEFAULT_ATELIER_UI_STATE | undefined;
+			await waitFor(() => {
+				const state = sessionStateStore.getSnapshot();
 				expect(state?.panels.left.views).toEqual([]);
 			});
 
 			// A stale snapshot can also arrive after extension discovery has settled.
 			// It must be pruned from canonical state, not only hidden while rendering.
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_key_value")
-					.set({
-						value: {
-							...DEFAULT_ATELIER_UI_STATE,
-							panels: {
-								...DEFAULT_ATELIER_UI_STATE.panels,
-								left: {
-									views: [
-										{
-											instance: extensionInstance,
-											kind: extensionKind,
-										},
-									],
-									activeInstance: extensionInstance,
-								},
-							},
-						},
-					})
-					.where("key", "=", "atelier_ui_state")
-					.execute();
-			});
-			await waitFor(async () => {
-				const row = await qb(lix)
-					.selectFrom("lix_key_value")
-					.select("value")
-					.where("key", "=", "atelier_ui_state")
-					.executeTakeFirst();
-				const state = row?.value as typeof DEFAULT_ATELIER_UI_STATE | undefined;
+			act(() => sessionStateStore.setSnapshot(staleSessionState));
+			await waitFor(() => {
+				const state = sessionStateStore.getSnapshot();
 				expect(state?.panels.left.views).toEqual([]);
 			});
 
@@ -844,16 +787,16 @@ describe("canonical UI state", () => {
 			},
 			layout: { sizes: { left: 20, central: 80, right: 0 } },
 		};
-		const lix = await openLix({
-			keyValues: [
-				{
-					key: "atelier_ui_state",
-					value: initialState,
-					lixcol_branch_id: "global",
-					lixcol_global: true,
-					lixcol_untracked: true,
-				},
-			],
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore(initialState);
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: initialState.layout,
+		});
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			preferencesStore,
 		});
 		await qb(lix)
 			.insertInto("lix_file")
@@ -870,7 +813,7 @@ describe("canonical UI state", () => {
 					<LixProvider lix={lix}>
 						<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
 							<Suspense fallback={null}>
-								<V2LayoutShell />
+								<V2LayoutShell instance={atelier} />
 							</Suspense>
 						</KeyValueProvider>
 					</LixProvider>,
@@ -880,16 +823,12 @@ describe("canonical UI state", () => {
 			fireEvent.click(await screen.findByRole("button", { name: "Files" }));
 
 			await waitFor(async () => {
-				const row = await qb(lix)
-					.selectFrom("lix_key_value_by_branch")
-					.select("value")
-					.where("key", "=", "atelier_ui_state")
-					.where("lixcol_branch_id", "=", "global")
-					.executeTakeFirst();
-				const state = row?.value as typeof initialState | undefined;
+				const state = sessionStateStore.getSnapshot();
 				expect(state?.focusedPanel).toBe("left");
 				expect(state?.panels).toEqual(initialState.panels);
-				expect(state?.layout?.sizes).toEqual(initialState.layout.sizes);
+				expect((await preferencesStore.load())?.layout.sizes).toEqual(
+					initialState.layout.sizes,
+				);
 			});
 		} finally {
 			await act(async () => utils?.unmount());

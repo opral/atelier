@@ -6,6 +6,7 @@ import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { useKeyValue, KeyValueProvider } from "./use-key-value";
 import { KEY_VALUE_DEFINITIONS, type KeyDef } from "./schema";
+import { createLixBranchSession } from "@/state-adapters";
 
 function nextTestKey(base: string): string {
 	return `${base}_${Math.random().toString(36).slice(2, 10)}`;
@@ -45,9 +46,10 @@ test("reads a global, untracked key (test fixture)", async () => {
 		untracked: true,
 	});
 	const lix = await openLix({});
+	const branchSession = createLixBranchSession(lix, await lix.activeBranchId());
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -127,9 +129,10 @@ test("writes and reads a tracked key on active branch", async () => {
 		untracked: false,
 	});
 	const lix = await openLix({});
+	const branchSession = createLixBranchSession(lix, await lix.activeBranchId());
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -173,9 +176,10 @@ test("writes and reads an untracked key on active branch", async () => {
 	});
 	const lix = await openLix({});
 	const activeBranchId = await lix.activeBranchId();
+	const branchSession = createLixBranchSession(lix, activeBranchId);
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -302,13 +306,14 @@ test("re-renders when key value changes externally", async () => {
 		untracked: false,
 	});
 	const lix = await openLix({});
+	const branchSession = createLixBranchSession(lix, await lix.activeBranchId());
 	await qb(lix)
 		.insertInto("lix_key_value")
 		.values({ key: TEST_KEY, value: "initial" })
 		.execute();
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -354,6 +359,7 @@ test("reveals a newer external value after a local write commits", async () => {
 		untracked: true,
 	});
 	const lix = await openLix({});
+	const branchSession = createLixBranchSession(lix, await lix.activeBranchId());
 	await qb(lix)
 		.insertInto("lix_key_value_by_branch")
 		.values({
@@ -365,7 +371,7 @@ test("reveals a newer external value after a local write commits", async () => {
 		.execute();
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -525,6 +531,7 @@ test("shares optimistic updates across hook instances", async () => {
 		untracked: false,
 	});
 	const lix = await openLix({});
+	const branchSession = createLixBranchSession(lix, await lix.activeBranchId());
 	await qb(lix)
 		.insertInto("lix_key_value")
 		.values({ key: SHARED_KEY, value: "initial" })
@@ -532,7 +539,7 @@ test("shares optimistic updates across hook instances", async () => {
 
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -630,13 +637,14 @@ test("returns optimistic value immediately when setter is called", async () => {
 		defaultBranchId: "active",
 		untracked: false,
 	});
+	const branchSession = createLixBranchSession(lix, await lix.activeBranchId());
 	await qb(lix)
 		.insertInto("lix_key_value")
 		.values({ key: TEST_KEY, value: "initial" })
 		.execute();
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -1009,6 +1017,7 @@ test("keeps pending optimistic state isolated to its concrete active branch", as
 	});
 	const lix = await openLix({});
 	const mainBranchId = await lix.activeBranchId();
+	const branchSession = createLixBranchSession(lix, mainBranchId);
 	const draftBranch = await lix.createBranch({ name: "Draft" });
 	for (const [branchId, value] of [
 		[mainBranchId, "main"],
@@ -1027,7 +1036,7 @@ test("keeps pending optimistic state isolated to its concrete active branch", as
 	}
 	const wrapper = ({ children }: { children: React.ReactNode }) => (
 		<LixProvider lix={lix}>
-			<KeyValueProvider defs={defs}>
+			<KeyValueProvider defs={defs} branchSession={branchSession}>
 				<React.Suspense fallback={null}>{children}</React.Suspense>
 			</KeyValueProvider>
 		</LixProvider>
@@ -1067,7 +1076,7 @@ test("keeps pending optimistic state isolated to its concrete active branch", as
 	await waitFor(() => expect(blocked).toBe(true));
 
 	await actAndFlush(async () => {
-		await lix.switchBranch({ branchId: draftBranch.id });
+		await branchSession.switchBranch(draftBranch.id);
 	});
 	expect(await lix.activeBranchId()).toBe(draftBranch.id);
 	// Kysely uses one connection for this Lix. The draft read queues behind the

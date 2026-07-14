@@ -1,5 +1,13 @@
 export { Atelier } from "./create-atelier";
 export { createAtelier } from "./atelier-instance";
+export {
+	coerceAtelierSessionUiState,
+	coerceAtelierUserPreferences,
+	createLixBranchSession,
+	createMemoryPreferencesStore,
+	createMemoryReviewStatusStore,
+	createMemorySessionStateStore,
+} from "./state-adapters";
 export { ATELIER_BUILTIN_EXTENSION_IDS } from "./extension-api";
 export type {
 	AtelierDiffApi,
@@ -9,6 +17,18 @@ export type {
 	AtelierOptions,
 	AtelierSidePanel,
 } from "./atelier-instance";
+export type {
+	AtelierBranchSession,
+	AtelierPreferencesStore,
+	AtelierReviewOutcome,
+	AtelierReviewResolution,
+	AtelierReviewStatusStore,
+	AtelierSessionStateStore,
+} from "./state-adapters";
+export type {
+	AtelierSessionUiState,
+	AtelierUserPreferencesV1,
+} from "./shell/ui-state";
 export type {
 	AtelierEmptyPanelSlot,
 	AtelierEmptyPanelSlotContext,

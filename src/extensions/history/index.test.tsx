@@ -8,12 +8,16 @@ import { HistoryView } from ".";
 describe("HistoryView", () => {
 	test("renders the active Lix branch as the current checkpoint", async () => {
 		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<HistoryView />
+						<HistoryView
+							activeBranchId={activeBranchId}
+							switchBranch={async () => {}}
+						/>
 					</Suspense>
 				</LixProvider>,
 			);

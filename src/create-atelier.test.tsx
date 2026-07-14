@@ -5,7 +5,6 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import type { SqlParam } from "@lix-js/sdk";
 import { FolderClock } from "lucide-react";
 import { describe, expect, test } from "vitest";
 import { qb } from "@/lib/lix-kysely";
@@ -22,6 +21,10 @@ import {
 	FILES_EXTENSION_KIND,
 } from "./extension-runtime/extension-instance-helpers";
 import { DEFAULT_ATELIER_UI_STATE } from "./shell/ui-state";
+import {
+	createMemoryPreferencesStore,
+	createMemorySessionStateStore,
+} from "./state-adapters";
 
 describe("Atelier instance file controller", () => {
 	test("drains pre-mount commands and starts a folder-relative Files draft", async () => {
@@ -95,31 +98,30 @@ describe("Atelier instance file controller", () => {
 		const filePath = "/active.md";
 		const documentKind = "atelier_file";
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
-		const lix = await openLix({
-			keyValues: [
-				atelierUiStateKeyValue({
-					...DEFAULT_ATELIER_UI_STATE,
-					focusedPanel: "central",
-					panels: {
-						left: {
-							views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
-							activeInstance: "files-left",
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore({
+			focusedPanel: "central",
+			panels: {
+				left: {
+					views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
+					activeInstance: "files-left",
+				},
+				central: {
+					views: [
+						{
+							instance: documentInstance,
+							kind: documentKind,
+							state: { fileId, filePath },
 						},
-						central: {
-							views: [
-								{
-									instance: documentInstance,
-									kind: documentKind,
-									state: { fileId, filePath },
-								},
-							],
-							activeInstance: documentInstance,
-						},
-						right: { views: [], activeInstance: null },
-					},
-					layout: { sizes: { left: 0, central: 100, right: 0 } },
-				}),
-			],
+					],
+					activeInstance: documentInstance,
+				},
+				right: { views: [], activeInstance: null },
+			},
+		});
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: { sizes: { left: 0, central: 100, right: 0 } },
 		});
 		await qb(lix)
 			.insertInto("lix_file")
@@ -129,7 +131,11 @@ describe("Atelier instance file controller", () => {
 				data: new TextEncoder().encode("# Active\n"),
 			})
 			.execute();
-		const atelier = createAtelier({ lix });
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			preferencesStore,
+		});
 		let rendered: ReturnType<typeof render> | undefined;
 
 		try {
@@ -154,30 +160,77 @@ describe("Atelier instance file controller", () => {
 			await lix.close();
 		}
 	});
+
+	test("closes every central document when the workspace root takes control", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: "root-first",
+					path: "/first.md",
+					data: new TextEncoder().encode("# First\n"),
+				},
+				{
+					id: "root-second",
+					path: "/second.md",
+					data: new TextEncoder().encode("# Second\n"),
+				},
+			])
+			.execute();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let rendered: ReturnType<typeof render> | undefined;
+
+		try {
+			await act(async () => {
+				rendered = render(<Atelier instance={atelier} />);
+			});
+			await waitFor(() => {
+				expect(
+					rendered?.container.querySelector(".atelier-panel-group"),
+				).toBeTruthy();
+			});
+			await act(async () => atelier.documents.open("/first.md"));
+			await act(async () => atelier.documents.open("/second.md"));
+			await act(async () => atelier.documents.closeAll());
+
+			await waitFor(() => {
+				const centralViews =
+					sessionStateStore.getSnapshot()?.panels.central.views ?? [];
+				expect(
+					centralViews.filter((view) => typeof view.state?.fileId === "string"),
+				).toEqual([]);
+			});
+		} finally {
+			await act(async () => rendered?.unmount());
+			await lix.close();
+		}
+	});
 });
 
 describe("host built-in overrides", () => {
 	test("mounts an exact-id History override with public revision controls", async () => {
 		const historyInstance = "host-history";
-		const lix = await openLix({
-			keyValues: [
-				atelierUiStateKeyValue({
-					...DEFAULT_ATELIER_UI_STATE,
-					panels: {
-						...DEFAULT_ATELIER_UI_STATE.panels,
-						left: {
-							views: [
-								{
-									instance: historyInstance,
-									kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
-								},
-							],
-							activeInstance: historyInstance,
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore({
+			focusedPanel: DEFAULT_ATELIER_UI_STATE.focusedPanel,
+			panels: {
+				...DEFAULT_ATELIER_UI_STATE.panels,
+				left: {
+					views: [
+						{
+							instance: historyInstance,
+							kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
 						},
-					},
-					layout: { sizes: { left: 20, central: 80, right: 0 } },
-				}),
-			],
+					],
+					activeInstance: historyInstance,
+				},
+			},
+		});
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: { sizes: { left: 20, central: 80, right: 0 } },
 		});
 		let mountedRuntime: AtelierExtensionRuntime | null = null;
 		const historyOverride: AtelierExtensionRegistration = {
@@ -197,6 +250,8 @@ describe("host built-in overrides", () => {
 		const atelier = createAtelier({
 			lix,
 			extensions: [historyOverride],
+			sessionStateStore,
+			preferencesStore,
 		});
 		let rendered: ReturnType<typeof render> | undefined;
 
@@ -209,7 +264,7 @@ describe("host built-in overrides", () => {
 				.revisions;
 			expect(
 				(mountedRuntime as unknown as AtelierExtensionRuntime).documents,
-			).toBe(atelier.documents);
+			).toMatchObject(atelier.documents);
 			expect(revisions.current).toBeNull();
 			expect(revisions.show).toEqual(expect.any(Function));
 			expect(revisions.clear).toEqual(expect.any(Function));
@@ -219,16 +274,6 @@ describe("host built-in overrides", () => {
 		}
 	});
 });
-
-function atelierUiStateKeyValue(value: unknown) {
-	return {
-		key: "atelier_ui_state",
-		value: value as SqlParam,
-		lixcol_branch_id: "global",
-		lixcol_global: true,
-		lixcol_untracked: true,
-	};
-}
 
 async function findFilesViewRenameInput(
 	container: HTMLElement,

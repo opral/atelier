@@ -1,9 +1,3 @@
-import {
-	coerceAtelierUiState,
-	DEFAULT_ATELIER_UI_STATE,
-	type AtelierUiState,
-} from "@/shell/ui-state";
-
 export type KeyValueBranchId = "active" | "global" | string;
 
 export type KeyDef<V> = {
@@ -13,24 +7,9 @@ export type KeyDef<V> = {
 	coerce?: (value: unknown) => V;
 };
 
-// Atelier keys + per-key defaults
+// Generic/test definitions. Personal Atelier state is deliberately not stored
+// in Lix because a Lix workspace is shared by every collaborator.
 export const KEY_VALUE_DEFINITIONS = {
-	// Cross-branch UI state, not change-controlled
-	atelier_active_file_id: {
-		defaultBranchId: "global",
-		untracked: true,
-	} as KeyDef<string | null>,
-
-	/**
-	 * Serialized layout snapshot for the v2 prototype (panels, tabs, focus).
-	 */
-	atelier_ui_state: {
-		defaultBranchId: "global",
-		untracked: true,
-		defaultValue: DEFAULT_ATELIER_UI_STATE,
-		coerce: coerceAtelierUiState,
-	} as KeyDef<AtelierUiState>,
-
 	// Test-only keys used in unit tests to exercise tracked behavior
 	atelier_test_tracked: {
 		defaultBranchId: "active",

@@ -12,10 +12,7 @@ import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import type { CheckpointDiff } from "@/extension-runtime/checkpoint-diff";
 import type { Lix } from "@lix-js/sdk";
-import {
-	appendAgentTurnCommitRange,
-	clearAgentTurnCommitRangeFile,
-} from "@/shell/agent-turn-review-range";
+import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import { deriveMarkdownPathFromStem, FilesView } from ".";
 
 describe("deriveMarkdownPathFromStem", () => {
@@ -541,6 +538,7 @@ describe("FilesView", () => {
 
 	test("reacts to review range changes without retaining stale badges", async () => {
 		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
 		await insertFile(lix, "review-file", "/review.md", "before");
 		const beforeCommitId = await activeCommitId(lix);
 		await insertFile(lix, "review-file", "/review.md", "after");
@@ -555,7 +553,7 @@ describe("FilesView", () => {
 		});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
-			view = renderFilesView(lix);
+			view = renderFilesView(lix, { activeBranchId });
 		});
 		await waitFor(() => {
 			expect(getFilesTreeItem("review.md")).toHaveAttribute(
@@ -565,11 +563,15 @@ describe("FilesView", () => {
 		});
 
 		await act(async () => {
-			await clearAgentTurnCommitRangeFile(lix, {
-				fileId: "review-file",
-				reviewId: "review-file:files-review-range",
-				agentTurnRangeIds: ["files-review-range"],
-			});
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{
+						activeBranchId,
+						resolvedReviewIds: ["review-file:files-review-range"],
+					}}
+				/>,
+			);
 		});
 		await waitFor(() => {
 			expect(getFilesTreeItem("review.md")).not.toHaveAttribute(

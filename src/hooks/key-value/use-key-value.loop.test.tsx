@@ -30,8 +30,14 @@ vi.mock("@/lib/lix-kysely", () => ({
 import { KeyValueProvider, useKeyValue } from "./use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "./schema";
 
+const branchSession = {
+	getSnapshot: () => "main",
+	subscribe: () => () => undefined,
+	switchBranch: async () => undefined,
+};
+
 function Writer() {
-	const [, setValue] = useKeyValue("atelier_active_file_id");
+	const [, setValue] = useKeyValue("atelier_test_tracked_external");
 	useEffect(() => {
 		void setValue("file-123" as any);
 	}, [setValue]);
@@ -39,7 +45,7 @@ function Writer() {
 }
 
 function Reader() {
-	useKeyValue("atelier_active_file_id");
+	useKeyValue("atelier_test_tracked_external");
 	return null;
 }
 
@@ -54,7 +60,10 @@ test("does not hit maximum update depth when optimistic value clears across many
 
 	render(
 		<StrictMode>
-			<KeyValueProvider defs={KEY_VALUE_DEFINITIONS as any}>
+			<KeyValueProvider
+				defs={KEY_VALUE_DEFINITIONS as any}
+				branchSession={branchSession}
+			>
 				<Writer />
 				{Array.from({ length: 40 }, (_, i) => (
 					<Reader key={`reader-${i}`} />

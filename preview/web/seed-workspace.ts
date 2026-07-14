@@ -1,4 +1,4 @@
-import type { JsonValue, Lix } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
 
 const seedTextModules = import.meta.glob(
 	["./seed/**/*", "!./seed/**/assets/**/*"],
@@ -49,8 +49,6 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	if (files.length > 0) {
 		await lix.createBranch({ name: "Seed workspace" });
 	}
-
-	await seedWorkspaceRootState(lix);
 }
 
 export function decodeSeedAssetDataUrl(dataUrl: string): Uint8Array {
@@ -105,24 +103,4 @@ async function seedDirectories(lix: Lix, filePaths: string[]): Promise<void> {
 			directory,
 		]);
 	}
-}
-
-async function seedWorkspaceRootState(lix: Lix): Promise<void> {
-	const uiState: JsonValue = {
-		focusedPanel: "central",
-		panels: {
-			left: { views: [], activeInstance: null },
-			central: {
-				views: [{ instance: "files-default", kind: "atelier_files" }],
-				activeInstance: "files-default",
-			},
-			right: { views: [], activeInstance: null },
-		},
-		layout: { sizes: { left: 0, central: 100, right: 0 } },
-	};
-
-	await lix.execute(
-		"INSERT INTO lix_key_value_by_branch (key, value, lixcol_branch_id, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4, $5)",
-		["atelier_ui_state", uiState, "global", true, true],
-	);
 }

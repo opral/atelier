@@ -1,4 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
+import type { AtelierBranchSession } from "@/state-adapters";
 import { useLix, useQuery } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -19,7 +20,17 @@ import {
 import type React from "react";
 
 type KVDefs = Record<string, KeyDef<any>>;
-const KVDefsContext = createContext<KVDefs | null>(null);
+type KeyValueContextValue = {
+	readonly defs: KVDefs;
+	readonly branchSession: AtelierBranchSession | null;
+};
+const KeyValueContext = createContext<KeyValueContextValue | null>(null);
+const NO_BRANCH_SUBSCRIBE = () => () => undefined;
+const NO_BRANCH_SNAPSHOT = () => null;
+const BRANCH_READY_PROMISES = new WeakMap<
+	AtelierBranchSession,
+	Promise<void>
+>();
 
 /**
  * Provides key-value definitions to `useKeyValue` within a React subtree.
@@ -29,13 +40,18 @@ const KVDefsContext = createContext<KVDefs | null>(null);
  */
 export function KeyValueProvider({
 	defs,
+	branchSession = null,
 	children,
 }: {
 	defs: KVDefs;
+	branchSession?: AtelierBranchSession | null;
 	children: React.ReactNode;
 }) {
-	// oxlint-disable-next-line no-children-prop
-	return createElement(KVDefsContext.Provider, { value: defs, children });
+	return createElement(
+		KeyValueContext.Provider,
+		{ value: { defs, branchSession } },
+		children,
+	);
 }
 
 export type KeyValueUpdater<T> = T | ((current: T) => T);
@@ -314,28 +330,29 @@ export function useKeyValue<K extends string>(
 	key: K,
 ): readonly [ValueOf<K> | null, KeyValueSetter<ValueOf<K> | null>] {
 	const lix = useLix();
-	const providedDefs =
-		useContext(KVDefsContext) ?? (KEY_VALUE_DEFINITIONS as KVDefs);
+	const context = useContext(KeyValueContext);
+	const providedDefs = context?.defs ?? (KEY_VALUE_DEFINITIONS as KVDefs);
 	const definition = getDefinition(key as string, providedDefs);
 	const configuredBranchId = String(definition.defaultBranchId);
 
 	// `active` must resolve to the concrete observable branch ID. Otherwise an
 	// optimistic value queued on branch A could leak into branch B after a switch.
-	const activeBranchRows = useQuery<{ value: unknown }>(
-		(database) =>
-			qb(database)
-				.selectFrom("lix_key_value")
-				.where("key", "=", "lix_workspace_branch_id")
-				.select(["value"]),
-		{
-			enabled: configuredBranchId === "active",
-			evictOnUnmount: true,
-		},
+	const branchSession = context?.branchSession ?? null;
+	const activeBranchId = useSyncExternalStore(
+		branchSession?.subscribe ?? NO_BRANCH_SUBSCRIBE,
+		branchSession?.getSnapshot ?? NO_BRANCH_SNAPSHOT,
+		branchSession?.getSnapshot ?? NO_BRANCH_SNAPSHOT,
 	);
+	if (configuredBranchId === "active" && !branchSession) {
+		throw new Error(
+			'KeyValueProvider requires an AtelierBranchSession for keys on the "active" branch.',
+		);
+	}
+	if (configuredBranchId === "active" && !activeBranchId) {
+		throw branchReadyPromise(branchSession!);
+	}
 	const resolvedBranchId =
-		configuredBranchId === "active"
-			? readActiveBranchId(activeBranchRows)
-			: configuredBranchId;
+		configuredBranchId === "active" ? activeBranchId! : configuredBranchId;
 	const slot = getKeyValueSlot(lix, resolvedBranchId, key as string);
 
 	const subscribe = useCallback(
@@ -404,12 +421,19 @@ export function useKeyValue<K extends string>(
 	return resultRef.current;
 }
 
-function readActiveBranchId(rows: ReadonlyArray<{ value: unknown }>): string {
-	const value = rows[0]?.value;
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error("Lix did not expose an active workspace branch ID.");
-	}
-	return value;
+function branchReadyPromise(session: AtelierBranchSession): Promise<void> {
+	let promise = BRANCH_READY_PROMISES.get(session);
+	if (promise) return promise;
+	promise = new Promise((resolve) => {
+		const unsubscribe = session.subscribe(() => {
+			if (!session.getSnapshot()) return;
+			unsubscribe();
+			BRANCH_READY_PROMISES.delete(session);
+			resolve();
+		});
+	});
+	BRANCH_READY_PROMISES.set(session, promise);
+	return promise;
 }
 
 function selectValue(lix: Lix, key: string, branchId: string) {

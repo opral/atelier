@@ -85,6 +85,7 @@ async function renderEditorForMarkdownFile({
 				<Providers lix={lix}>
 					{withToolbar ? <FormattingToolbar /> : null}
 					<TipTapEditor
+						fileId={fileId}
 						onReady={(editor) => (editorRef = editor)}
 						originKey={originKey}
 						persistDebounceMs={persistDebounceMs}
@@ -182,7 +183,7 @@ test("renders initial document content", async () => {
 		render(
 			<Suspense>
 				<Providers lix={lix}>
-					<TipTapEditor />
+					<TipTapEditor fileId={fileId} />
 				</Providers>
 			</Suspense>,
 		);
@@ -782,6 +783,7 @@ test("persists state changes on edit (paragraph append)", async () => {
 			<Suspense>
 				<Providers lix={lix}>
 					<TipTapEditor
+						fileId={fileId}
 						onReady={(editor) => (editorRef = editor)}
 						persistDebounceMs={0}
 					/>
@@ -847,7 +849,7 @@ test("renders content under React.StrictMode", async () => {
 			<StrictMode>
 				<Suspense>
 					<Providers lix={lix}>
-						<TipTapEditor />
+						<TipTapEditor fileId={fileId} />
 					</Providers>
 				</Suspense>
 			</StrictMode>,
@@ -893,7 +895,10 @@ test("shows the command hint only while focused on an empty document", async () 
 		render(
 			<Suspense>
 				<Providers lix={lix}>
-					<TipTapEditor onReady={(editor) => (editorRef = editor)} />
+					<TipTapEditor
+						fileId={fileId}
+						onReady={(editor) => (editorRef = editor)}
+					/>
 				</Providers>
 			</Suspense>,
 		);
@@ -1028,6 +1033,7 @@ test("uses heading 1 as the requested empty document default", async () => {
 			<Suspense>
 				<Providers lix={lix}>
 					<TipTapEditor
+						fileId={fileId}
 						defaultBlock="heading1"
 						focusOnLoad
 						onReady={(editor) => (editorRef = editor)}
@@ -1093,7 +1099,7 @@ test("clicking the surface focuses the editor even when content exists", async (
 		render(
 			<Suspense>
 				<Providers lix={lix}>
-					<TipTapEditor />
+					<TipTapEditor fileId={fileId} />
 				</Providers>
 			</Suspense>,
 		);
@@ -1163,7 +1169,7 @@ test("updates editor when switching to a branch with different external state", 
 		render(
 			<Suspense>
 				<Providers lix={lix}>
-					<TipTapEditor />
+					<TipTapEditor fileId={fileId} />
 				</Providers>
 			</Suspense>,
 		);
@@ -1219,7 +1225,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 		render(
 			<Suspense>
 				<Providers lix={lix}>
-					<TipTapEditor />
+					<TipTapEditor fileId={fileId} />
 				</Providers>
 			</Suspense>,
 		);
@@ -1661,7 +1667,7 @@ test("preserves main content when switching to a new branch and back", async () 
 		render(
 			<Suspense>
 				<Providers lix={lix}>
-					<TipTapEditor />
+					<TipTapEditor fileId={fileId} />
 				</Providers>
 			</Suspense>,
 		);

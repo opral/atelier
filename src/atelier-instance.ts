@@ -6,6 +6,16 @@ import type {
 	AtelierExtensionRegistration,
 } from "./extension-api";
 import { appendAgentTurnCommitRange } from "./shell/agent-turn-review-range";
+import {
+	createLixBranchSession,
+	createMemoryPreferencesStore,
+	createMemoryReviewStatusStore,
+	createMemorySessionStateStore,
+	type AtelierBranchSession,
+	type AtelierPreferencesStore,
+	type AtelierReviewStatusStore,
+	type AtelierSessionStateStore,
+} from "./state-adapters";
 
 export type AtelierPanelSide = "left" | "central" | "right";
 export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
@@ -39,6 +49,14 @@ export type AtelierOptions = {
 	readonly filesViewMode?: "landing" | "sidebar";
 	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
+	/** Per-tab shell state. Hosts should normally back this with sessionStorage. */
+	readonly sessionStateStore?: AtelierSessionStateStore;
+	/** Private, account-scoped layout preferences. */
+	readonly preferencesStore?: AtelierPreferencesStore;
+	/** The active branch for this browsing context. */
+	readonly branchSession?: AtelierBranchSession;
+	/** Private, account-scoped review acknowledgement state. */
+	readonly reviewStatusStore?: AtelierReviewStatusStore;
 };
 
 export type AtelierInstance = {
@@ -46,9 +64,19 @@ export type AtelierInstance = {
 	readonly lix: Lix;
 	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
+	readonly branches: {
+		readonly activeId: () => string | null;
+		readonly subscribe: (listener: () => void) => () => void;
+		readonly switch: (branchId: string) => Promise<void>;
+	};
 };
 
-type AtelierConfiguration = Omit<AtelierOptions, "lix">;
+export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
+	readonly sessionStateStore: AtelierSessionStateStore;
+	readonly preferencesStore: AtelierPreferencesStore;
+	readonly branchSession: AtelierBranchSession;
+	readonly reviewStatusStore: AtelierReviewStatusStore;
+};
 
 // Symbol.for keeps an existing instance readable across development module reloads.
 const CONFIGURATION = Symbol.for("@opral/atelier/configuration");
@@ -61,7 +89,8 @@ type AtelierDocumentsCommand =
 			readonly options?: AtelierDocumentOpenOptions;
 	  }
 	| { readonly kind: "start-new" }
-	| { readonly kind: "close-active" };
+	| { readonly kind: "close-active" }
+	| { readonly kind: "close-all" };
 
 type QueuedAtelierDocumentsCommand = {
 	readonly command: AtelierDocumentsCommand;
@@ -97,6 +126,9 @@ export type AtelierDocumentsRuntimeBinding = {
 	readonly closeActive: () =>
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
+	readonly closeAll: () =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
 };
 
 type AtelierDocumentsRuntime = {
@@ -110,10 +142,25 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
+	const branchSession =
+		options.branchSession ?? createLixBranchSession(options.lix);
+	const sessionStateStore =
+		options.sessionStateStore ?? createMemorySessionStateStore();
+	const preferencesStore =
+		options.preferencesStore ?? createMemoryPreferencesStore();
+	const reviewStatusStore =
+		options.reviewStatusStore ?? createMemoryReviewStatusStore();
 	const instance: AtelierInstance = {
 		lix: options.lix,
 		diff: {
-			open: (diffOptions) => openDiff(options.lix, diffOptions),
+			open: async (diffOptions) => {
+				if (diffOptions.beforeCommitId === diffOptions.afterCommitId) return;
+				return openDiff(
+					options.lix,
+					diffOptions,
+					await resolveBranchSessionId(branchSession),
+				);
+			},
 		},
 		documents: {
 			open: (path, openOptions) => {
@@ -138,9 +185,22 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 				enqueueAtelierDocumentsCommand(documentsRuntime, {
 					kind: "close-active",
 				}),
+			closeAll: () =>
+				enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "close-all",
+				}),
+		},
+		branches: {
+			activeId: branchSession.getSnapshot,
+			subscribe: branchSession.subscribe,
+			switch: branchSession.switchBranch,
 		},
 	};
 	const configuration: AtelierConfiguration = {
+		sessionStateStore,
+		preferencesStore,
+		branchSession,
+		reviewStatusStore,
 		...(options.extensions !== undefined
 			? { extensions: [...options.extensions] }
 			: {}),
@@ -303,6 +363,8 @@ async function runAtelierDocumentsCommand(
 			return binding.startNew();
 		case "close-active":
 			return binding.closeActive();
+		case "close-all":
+			return binding.closeAll();
 	}
 }
 
@@ -376,23 +438,43 @@ function atelierDocumentsStatesEqual(
 async function openDiff(
 	lix: Lix,
 	options: AtelierDiffOpenOptions,
+	branchId: string,
 ): Promise<void> {
 	if (options.beforeCommitId === options.afterCommitId) return;
 
 	const openedAt = Date.now();
-	await appendAgentTurnCommitRange(lix, {
-		id: diffId(options),
-		sourceId: options.source.id,
-		beforeCommitId: options.beforeCommitId,
-		afterCommitId: options.afterCommitId,
-		...(options.source.sessionId !== undefined
-			? { sessionId: options.source.sessionId }
-			: {}),
-		...(options.source.turnId !== undefined
-			? { turnId: options.source.turnId }
-			: {}),
-		startedAt: openedAt,
-		completedAt: openedAt,
+	await appendAgentTurnCommitRange(
+		lix,
+		{
+			id: diffId(options),
+			sourceId: options.source.id,
+			beforeCommitId: options.beforeCommitId,
+			afterCommitId: options.afterCommitId,
+			...(options.source.sessionId !== undefined
+				? { sessionId: options.source.sessionId }
+				: {}),
+			...(options.source.turnId !== undefined
+				? { turnId: options.source.turnId }
+				: {}),
+			startedAt: openedAt,
+			completedAt: openedAt,
+		},
+		{ branchId },
+	);
+}
+
+function resolveBranchSessionId(
+	branchSession: AtelierBranchSession,
+): Promise<string> {
+	const current = branchSession.getSnapshot();
+	if (current) return Promise.resolve(current);
+	return new Promise((resolve) => {
+		const unsubscribe = branchSession.subscribe(() => {
+			const branchId = branchSession.getSnapshot();
+			if (!branchId) return;
+			unsubscribe();
+			resolve(branchId);
+		});
 	});
 }
 

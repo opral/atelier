@@ -1,7 +1,11 @@
 {
 	"extends": "../../tsconfig.json",
 	"compilerOptions": {
-		"paths": {},
+		"paths": {
+			"@opral/atelier": ["../../src/index.ts"],
+			"@opral/atelier/style.css": ["../../src/index.css"],
+			"@/*": ["../../src/*"]
+		},
 		"types": ["vite/client"]
 	},
 	"include": ["*.tsx", "*.ts"]

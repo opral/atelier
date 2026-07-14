@@ -46,6 +46,8 @@ export type AtelierDocumentsApi = {
 	startNew(): Promise<void>;
 	/** Closes the active document. */
 	closeActive(): Promise<void>;
+	/** Closes every document in the central panel. */
+	closeAll(): Promise<void>;
 };
 
 export type AtelierRevisionSelection = {
@@ -66,6 +68,11 @@ export type AtelierEvent =
 			filePath: string;
 			documentOrigin: AtelierDocumentOrigin;
 			viewKind: string;
+	  }
+	| {
+			type: "document_closed";
+			filePath: string;
+			nextFilePath: string | null;
 	  }
 	| {
 			type: "document_modified";
@@ -94,7 +101,14 @@ export type AtelierExtensionRuntime = {
 	readonly events: {
 		readonly emit: (event: AtelierEvent) => void;
 	};
-	readonly documents: AtelierDocumentsApi;
+	readonly documents: AtelierDocumentsApi & {
+		readonly activeFileId: string | null;
+		readonly activeFilePath: string | null;
+	};
+	readonly branches: {
+		readonly activeId: string;
+		readonly switch: (branchId: string) => Promise<void>;
+	};
 	readonly revisions: {
 		readonly current: AtelierRevisionSelection | null;
 		readonly show: (branchId: string) => Promise<void>;

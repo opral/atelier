@@ -17,6 +17,12 @@ import {
 	type AtelierDocumentsRuntimeBinding,
 } from "./atelier-instance";
 
+const branchSession = {
+	getSnapshot: () => "main",
+	subscribe: () => () => undefined,
+	switchBranch: async () => undefined,
+};
+
 describe("createAtelier", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -40,18 +46,31 @@ describe("createAtelier", () => {
 		expect(atelier.lix).toBe(lix);
 		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents"]);
-		expect(getAtelierConfiguration(atelier)).toEqual({
-			extensions: [],
-			filesViewMode: "sidebar",
-			defaultOpenPanels: ["right"],
-		});
+		expect(atelier.branches.activeId).toEqual(expect.any(Function));
+		expect(atelier.branches.switch).toEqual(expect.any(Function));
+		expect(Object.keys(atelier)).toEqual([
+			"lix",
+			"diff",
+			"documents",
+			"branches",
+		]);
+		expect(getAtelierConfiguration(atelier)).toEqual(
+			expect.objectContaining({
+				extensions: [],
+				filesViewMode: "sidebar",
+				defaultOpenPanels: ["right"],
+				sessionStateStore: expect.any(Object),
+				preferencesStore: expect.any(Object),
+				branchSession: expect.any(Object),
+				reviewStatusStore: expect.any(Object),
+			}),
+		);
 		expect(getAtelierConfiguration(atelier).extensions).not.toBe(extensions);
 	});
 
 	test("opens an agent diff without exposing the internal review range", async () => {
 		const lix = {} as Lix;
-		const atelier = createAtelier({ lix });
+		const atelier = createAtelier({ lix, branchSession });
 
 		await atelier.diff.open({
 			beforeCommitId: "commit-before",
@@ -63,27 +82,34 @@ describe("createAtelier", () => {
 			},
 		});
 
-		expect(mocks.appendAgentTurnCommitRange).toHaveBeenCalledWith(lix, {
-			id: JSON.stringify([
-				"atelier-diff",
-				"claude",
-				"session-1",
-				"turn-2",
-				"commit-before",
-				"commit-after",
-			]),
-			sourceId: "claude",
-			beforeCommitId: "commit-before",
-			afterCommitId: "commit-after",
-			sessionId: "session-1",
-			turnId: "turn-2",
-			startedAt: 1_234,
-			completedAt: 1_234,
-		});
+		expect(mocks.appendAgentTurnCommitRange).toHaveBeenCalledWith(
+			lix,
+			{
+				id: JSON.stringify([
+					"atelier-diff",
+					"claude",
+					"session-1",
+					"turn-2",
+					"commit-before",
+					"commit-after",
+				]),
+				sourceId: "claude",
+				beforeCommitId: "commit-before",
+				afterCommitId: "commit-after",
+				sessionId: "session-1",
+				turnId: "turn-2",
+				startedAt: 1_234,
+				completedAt: 1_234,
+			},
+			{ branchId: "main" },
+		);
 	});
 
 	test("omits unavailable source metadata", async () => {
-		const atelier = createAtelier({ lix: {} as Lix });
+		const atelier = createAtelier({
+			lix: {} as Lix,
+			branchSession,
+		});
 
 		await atelier.diff.open({
 			beforeCommitId: "commit-before",
@@ -121,19 +147,28 @@ describe("createAtelier", () => {
 			closeActive: () => {
 				calls.push("close-active");
 			},
+			closeAll: () => {
+				calls.push("close-all");
+			},
 		};
 		const open = atelier.documents.open("/queued.md");
 		const startNew = atelier.documents.startNew();
 		const close = atelier.documents.closeActive();
+		const closeAll = atelier.documents.closeAll();
 
 		expect(calls).toEqual([]);
 		const unbind = bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
 			openPaths: [],
 		});
-		await Promise.all([open, startNew, close]);
+		await Promise.all([open, startNew, close, closeAll]);
 
-		expect(calls).toEqual(["open:/queued.md", "start-new", "close-active"]);
+		expect(calls).toEqual([
+			"open:/queued.md",
+			"start-new",
+			"close-active",
+			"close-all",
+		]);
 		unbind();
 	});
 
@@ -151,6 +186,7 @@ describe("createAtelier", () => {
 				throw new Error("start new failed");
 			}),
 			closeActive: vi.fn(),
+			closeAll: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
@@ -177,6 +213,7 @@ describe("createAtelier", () => {
 			open: vi.fn(),
 			startNew: vi.fn(),
 			closeActive: vi.fn(),
+			closeAll: vi.fn(),
 		};
 		const unbind = bindAtelierDocumentsRuntime(atelier, firstBinding, {
 			activePath: "/last.md",
@@ -190,6 +227,7 @@ describe("createAtelier", () => {
 			open: vi.fn(),
 			startNew: vi.fn(),
 			closeActive: vi.fn(),
+			closeAll: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, secondBinding, {
 			activePath: "/last.md",
@@ -211,6 +249,7 @@ describe("createAtelier", () => {
 				}),
 				startNew: vi.fn(),
 				closeActive: vi.fn(),
+				closeAll: vi.fn(),
 			},
 			{
 				activePath: null,
@@ -244,6 +283,7 @@ describe("createAtelier", () => {
 				}),
 				startNew: vi.fn(),
 				closeActive,
+				closeAll: vi.fn(),
 			},
 			{ activePath: null, openPaths: [] },
 		);
@@ -272,6 +312,7 @@ describe("createAtelier", () => {
 				}),
 				startNew: vi.fn(),
 				closeActive: vi.fn(),
+				closeAll: vi.fn(),
 			},
 			{ activePath: null, openPaths: [] },
 		);

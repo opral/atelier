@@ -110,7 +110,12 @@ function EditableTextView({
 		() => decodeFileDataToText(fileRow.data),
 		[fileRow.data],
 	);
-	const review = useExternalWriteReview({ fileId, path: resolvedPath });
+	const review = useExternalWriteReview({
+		fileId,
+		path: resolvedPath,
+		activeBranchId: atelier.branches.activeId,
+		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
+	});
 	const reviewData = useExternalWriteReviewData(review);
 	const reviewText = reviewData
 		? decodeFileDataToText(reviewData.afterData)

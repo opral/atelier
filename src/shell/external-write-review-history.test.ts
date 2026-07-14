@@ -13,6 +13,7 @@ import {
 } from "./external-write-review-history";
 import {
 	appendAgentTurnCommitRange,
+	agentTurnCommitRangesFromValues,
 	clearAgentTurnCommitRangeFile,
 	readAgentTurnCommitRanges,
 	type AgentTurnCommitRange,
@@ -198,7 +199,7 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
-	test("serializes concurrent agent turn range appends", async () => {
+	test("persists concurrent agent ranges independently without lost updates", async () => {
 		const lix = await openLix();
 		try {
 			const ranges = Array.from({ length: 8 }, (_, index) =>
@@ -221,6 +222,35 @@ describe("getExternalWriteReview", () => {
 		} finally {
 			await lix.close();
 		}
+	});
+
+	test("preserves historical global clears when a normalized row has the same id", () => {
+		const normalized = agentRange({
+			id: "range-duplicate",
+			beforeCommitId: "before-duplicate",
+			afterCommitId: "after-duplicate",
+		});
+		const legacy = {
+			ranges: [{ ...normalized, clearedFileIds: ["historically-closed"] }],
+		};
+
+		expect(
+			agentTurnCommitRangesFromValues([normalized, legacy])[0]?.clearedFileIds,
+		).toEqual(["historically-closed"]);
+	});
+
+	test("ignores shared clears attached to normalized range events", () => {
+		const normalized = agentRange({
+			id: "range-normalized-clear",
+			beforeCommitId: "before-normalized-clear",
+			afterCommitId: "after-normalized-clear",
+		});
+
+		expect(
+			agentTurnCommitRangesFromValues([
+				{ ...normalized, clearedFileIds: ["must-stay-private"] },
+			])[0]?.clearedFileIds,
+		).toBeUndefined();
 	});
 
 	test("stores agent turn ranges on the active branch", async () => {
@@ -261,7 +291,7 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
-	test("persists cleared files in the agent turn range", async () => {
+	test("keeps normalized agent ranges immutable", async () => {
 		const lix = await openLix();
 		try {
 			await writeFile(
@@ -282,17 +312,19 @@ describe("getExternalWriteReview", () => {
 			});
 
 			await appendAgentTurnCommitRange(lix, range);
-			await clearAgentTurnCommitRangeFile(lix, {
-				fileId: "cleared-file",
-				reviewId: "cleared-file:range-with-cleared-file",
-				agentTurnRangeIds: [range.id],
-			});
+			expect(
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: "cleared-file",
+					reviewId: "cleared-file:range-with-cleared-file",
+					agentTurnRangeIds: [range.id],
+				}),
+			).toBe(false);
 
 			const [persistedRange] = await readAgentTurnCommitRanges(lix);
-			expect(persistedRange?.clearedFileIds).toEqual(["cleared-file"]);
-			await expect(
-				getExternalWriteReview(lix, "cleared-file", "/docs/cleared.md"),
-			).resolves.toBeNull();
+			expect(persistedRange?.clearedFileIds).toBeUndefined();
+			expect(
+				await getExternalWriteReview(lix, "cleared-file", "/docs/cleared.md"),
+			).not.toBeNull();
 			const openReview = await getExternalWriteReview(
 				lix,
 				"open-file",
@@ -352,7 +384,7 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
-	test("clears a combined file review across all contributing ranges", async () => {
+	test("does not mutate normalized ranges when legacy clear is requested", async () => {
 		const lix = await openLix();
 		try {
 			await writeFile(lix, "multi-clear-file", "/docs/multi-clear.md", "a0");
@@ -389,20 +421,26 @@ describe("getExternalWriteReview", () => {
 				"range-clear-2",
 			]);
 
-			await clearAgentTurnCommitRangeFile(lix, {
-				fileId: "multi-clear-file",
-				reviewId: review?.reviewId,
-				agentTurnRangeIds: review?.agentTurnRangeIds,
-			});
+			expect(
+				await clearAgentTurnCommitRangeFile(lix, {
+					fileId: "multi-clear-file",
+					reviewId: review?.reviewId,
+					agentTurnRangeIds: review?.agentTurnRangeIds,
+				}),
+			).toBe(false);
 
 			const ranges = await readAgentTurnCommitRanges(lix);
 			expect(ranges.map((range) => range.clearedFileIds)).toEqual([
-				["multi-clear-file"],
-				["multi-clear-file"],
+				undefined,
+				undefined,
 			]);
-			await expect(
-				getExternalWriteReview(lix, "multi-clear-file", "/docs/multi-clear.md"),
-			).resolves.toBeNull();
+			expect(
+				await getExternalWriteReview(
+					lix,
+					"multi-clear-file",
+					"/docs/multi-clear.md",
+				),
+			).not.toBeNull();
 			const otherReview = await getExternalWriteReview(
 				lix,
 				"other-clear-file",
@@ -423,6 +461,7 @@ describe("getExternalWriteReview", () => {
 			const beforeCommitId = await activeCommitId(lix);
 			await writeFile(lix, "live-file", "/docs/live.md", "live after");
 			const afterCommitId = await activeCommitId(lix);
+			const activeBranchId = await lix.activeBranchId();
 			const reviews: Array<ExternalWriteReview | null> = [];
 
 			await act(async () => {
@@ -436,6 +475,7 @@ describe("getExternalWriteReview", () => {
 							createElement(ExternalWriteReviewProbe, {
 								fileId: "live-file",
 								path: "/docs/live.md",
+								activeBranchId,
 								onReview: (review) => reviews.push(review),
 							}),
 						),
@@ -473,7 +513,7 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
-	test("updates an already mounted review hook when the file is cleared", async () => {
+	test("does not hide a mounted review through the legacy shared clear path", async () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
 		try {
@@ -491,6 +531,7 @@ describe("getExternalWriteReview", () => {
 				"clear after",
 			);
 			const afterCommitId = await activeCommitId(lix);
+			const activeBranchId = await lix.activeBranchId();
 			const reviews: Array<ExternalWriteReview | null> = [];
 
 			await appendAgentTurnCommitRange(
@@ -513,6 +554,7 @@ describe("getExternalWriteReview", () => {
 							createElement(ExternalWriteReviewProbe, {
 								fileId: "live-clear-file",
 								path: "/docs/live-clear.md",
+								activeBranchId,
 								onReview: (review) => reviews.push(review),
 							}),
 						),
@@ -534,7 +576,9 @@ describe("getExternalWriteReview", () => {
 			});
 
 			await waitFor(() => {
-				expect(reviews.at(-1)).toBeNull();
+				expect(reviews.at(-1)?.reviewId).toBe(
+					"live-clear-file:range-live-clear-hook",
+				);
 			});
 		} finally {
 			await act(async () => {
@@ -552,6 +596,7 @@ describe("getExternalWriteReview", () => {
 			const beforeCommitId = await activeCommitId(lix);
 			await writeFile(lix, "keyed-file", "/docs/keyed.md", "after");
 			const afterCommitId = await activeCommitId(lix);
+			const activeBranchId = await lix.activeBranchId();
 			await appendAgentTurnCommitRange(
 				lix,
 				agentRange({
@@ -571,6 +616,7 @@ describe("getExternalWriteReview", () => {
 						createElement(ExternalWriteReviewRenderProbe, {
 							fileId: "keyed-file",
 							path,
+							activeBranchId,
 							onRender: (review) => renders.push(review),
 						}),
 					),
@@ -672,13 +718,19 @@ describe("getExternalWriteReview", () => {
 function ExternalWriteReviewProbe({
 	fileId,
 	path,
+	activeBranchId,
 	onReview,
 }: {
 	readonly fileId: string;
 	readonly path: string;
+	readonly activeBranchId: string;
 	readonly onReview: (review: ExternalWriteReview | null) => void;
 }) {
-	const review = useExternalWriteReview({ fileId, path });
+	const review = useExternalWriteReview({
+		fileId,
+		path,
+		activeBranchId,
+	});
 	useEffect(() => {
 		onReview(review);
 	}, [onReview, review]);
@@ -688,13 +740,19 @@ function ExternalWriteReviewProbe({
 function ExternalWriteReviewRenderProbe({
 	fileId,
 	path,
+	activeBranchId,
 	onRender,
 }: {
 	readonly fileId: string;
 	readonly path: string;
+	readonly activeBranchId: string;
 	readonly onRender: (review: ExternalWriteReview | null) => void;
 }) {
-	const review = useExternalWriteReview({ fileId, path });
+	const review = useExternalWriteReview({
+		fileId,
+		path,
+		activeBranchId,
+	});
 	onRender(review);
 	return null;
 }

@@ -7,10 +7,7 @@ import { MarkdownView } from "./index";
 import { KeyValueProvider } from "@/hooks/key-value/use-key-value";
 import { KEY_VALUE_DEFINITIONS } from "@/hooks/key-value/schema";
 import { qb } from "@/lib/lix-kysely";
-import {
-	appendAgentTurnCommitRange,
-	clearAgentTurnCommitRangeFile,
-} from "@/shell/agent-turn-review-range";
+import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -129,7 +126,6 @@ describe("MarkdownView", () => {
 								afterCommitId={snapshotCommitId}
 								isActiveView
 								isPanelFocused
-								syncActiveFile={false}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -197,7 +193,6 @@ describe("MarkdownView", () => {
 								beforeCommitId={beforeCommitId}
 								isActiveView
 								isPanelFocused
-								syncActiveFile={false}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -269,7 +264,6 @@ describe("MarkdownView", () => {
 								beforeCommitId={beforeCommitId}
 								isActiveView
 								isPanelFocused
-								syncActiveFile={false}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -315,7 +309,6 @@ describe("MarkdownView", () => {
 								filePath="/docs/autosave.md"
 								isActiveView
 								isPanelFocused
-								syncActiveFile={false}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -369,7 +362,6 @@ describe("MarkdownView", () => {
 							<MarkdownView
 								fileId="file_markdown"
 								filePath="/docs/guide.markdown"
-								syncActiveFile={false}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -404,7 +396,6 @@ describe("MarkdownView", () => {
 							<MarkdownView
 								fileId="file_uppercase"
 								filePath="/docs/README.MD"
-								syncActiveFile={false}
 							/>
 						</Suspense>
 					</KeyValueProvider>
@@ -571,7 +562,7 @@ describe("MarkdownView", () => {
 				.select(["value"])
 				.where("key", "=", "atelier_active_file_id")
 				.executeTakeFirst();
-			expect(record?.value).toBe("file_beta");
+			expect(record?.value).toBe("file_alpha");
 		});
 
 		await act(async () => {
@@ -581,6 +572,7 @@ describe("MarkdownView", () => {
 
 	test("shows review controls for a file already mounted before the range is persisted", async () => {
 		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
@@ -591,39 +583,34 @@ describe("MarkdownView", () => {
 			.execute();
 
 		let utils: ReturnType<typeof render> | undefined;
+		const renderReviewMarkdown = (
+			resolvedReviewIds: readonly string[] = [],
+		) => (
+			<LixProvider lix={lix}>
+				<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_review_startup"
+							filePath="/review-startup.md"
+							activeBranchId={activeBranchId}
+							resolvedReviewIds={resolvedReviewIds}
+							isActiveView
+							isPanelFocused
+							onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
+								await qb(lix)
+									.updateTable("lix_file")
+									.set({ data })
+									.where("id", "=", fileId)
+									.execute();
+								utils?.rerender(renderReviewMarkdown([reviewId]));
+							}}
+						/>
+					</Suspense>
+				</KeyValueProvider>
+			</LixProvider>
+		);
 		await act(async () => {
-			utils = render(
-				<LixProvider lix={lix}>
-					<KeyValueProvider defs={KEY_VALUE_DEFINITIONS}>
-						<Suspense fallback={null}>
-							<MarkdownView
-								fileId="file_review_startup"
-								filePath="/review-startup.md"
-								isActiveView
-								isPanelFocused
-								syncActiveFile={false}
-								onResolveReviewDiff={async ({
-									fileId,
-									reviewId,
-									review,
-									data,
-								}) => {
-									await qb(lix)
-										.updateTable("lix_file")
-										.set({ data })
-										.where("id", "=", fileId)
-										.execute();
-									await clearAgentTurnCommitRangeFile(lix, {
-										fileId,
-										reviewId,
-										agentTurnRangeIds: review?.agentTurnRangeIds,
-									});
-								}}
-							/>
-						</Suspense>
-					</KeyValueProvider>
-				</LixProvider>,
-			);
+			utils = render(renderReviewMarkdown());
 		});
 
 		const liveEditor = await screen.findByTestId("tiptap-editor");
@@ -756,7 +743,6 @@ describe("MarkdownView", () => {
 								filePath="/checkpoint.md"
 								isActiveView
 								isPanelFocused
-								syncActiveFile={false}
 								beforeCommitId={beforeCommitId}
 								afterCommitId={afterCommitId}
 							/>

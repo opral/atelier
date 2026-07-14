@@ -5,6 +5,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import {
 	Group,
@@ -24,10 +25,6 @@ import {
 } from "@dnd-kit/core";
 import { useLix, useQuery } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
-import {
-	useKeyValue,
-	type KeyValueSetter,
-} from "@/hooks/key-value/use-key-value";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
@@ -84,10 +81,12 @@ import {
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
 import {
 	coerceAtelierUiState,
+	coerceAtelierSessionUiState,
+	coerceAtelierUserPreferences,
 	createInitialAtelierUiState,
-	ATELIER_UI_STATE_KEY,
 	normalizeLayoutSizes,
 	type AtelierUiState,
+	type AtelierUserPreferencesV1,
 	type PanelLayoutSizes,
 	type DefaultOpenPanel,
 } from "./ui-state";
@@ -99,17 +98,7 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
-import {
-	AGENT_TURN_COMMIT_RANGE_KEY,
-	clearAgentTurnCommitRangeFile,
-	isAgentTurnCommitRangeStore,
-	type AgentTurnCommitRange,
-} from "./agent-turn-review-range";
-import {
-	getExternalWriteReview,
-	getFileDataAtCommit,
-	getPendingExternalWriteReviewPaths,
-} from "./external-write-review-history";
+import { getFileDataAtCommit } from "./external-write-review-history";
 import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
@@ -127,6 +116,7 @@ import {
 	bindAtelierDocumentsRuntime,
 	publishAtelierDocumentsState,
 	createAtelier,
+	getAtelierConfiguration,
 	type AtelierDocumentsRuntimeBinding,
 	type AtelierDocumentsRuntimeCompletion,
 	type AtelierInstance,
@@ -143,8 +133,6 @@ type NewFileDraftHandlerRegistration = {
 	readonly isActiveView: boolean;
 	readonly handler: () => void;
 };
-
-const EMPTY_AGENT_TURN_RANGES: readonly AgentTurnCommitRange[] = [];
 
 const sanitizeExtensionInstanceForPersistence = (
 	view: ExtensionInstance,
@@ -227,15 +215,20 @@ const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
 	return panel.views.find((entry) => entry.instance === activeInstance) ?? null;
 };
 
-const isDocumentView = (view: ExtensionInstance): boolean => {
+const isDocumentView = (
+	view: ExtensionInstance | null | undefined,
+): boolean => {
+	if (!view) return false;
 	const fileId =
 		typeof view.state?.fileId === "string" ? view.state.fileId : "";
 	if (!fileId) return false;
 	return view.instance === fileExtensionInstanceForKind(view.kind, fileId);
 };
 
-const documentPathFromView = (view: ExtensionInstance): string | null => {
-	if (!isDocumentView(view)) return null;
+const documentPathFromView = (
+	view: ExtensionInstance | null | undefined,
+): string | null => {
+	if (!view || !isDocumentView(view)) return null;
 	const path = view.state?.filePath;
 	return typeof path === "string" && path.length > 0 ? path : null;
 };
@@ -698,11 +691,16 @@ type LayoutShellContentProps = {
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly lix: ReturnType<typeof useLix>;
-	readonly uiStateKV: AtelierUiState | null;
-	readonly setUiStateKV: KeyValueSetter<AtelierUiState | null>;
-	readonly activeFileId: string | null;
-	readonly setActiveFileId: KeyValueSetter<string | null>;
+	readonly atelierInstance: AtelierInstance;
+	readonly uiStateKV: AtelierUiState;
+	readonly setUiStateKV: AtelierUiStateSetter;
+	readonly activeBranchId: string;
+	readonly resolvedReviewIds: readonly string[];
 };
+
+type AtelierUiStateSetter = (
+	update: AtelierUiState | ((current: AtelierUiState) => AtelierUiState),
+) => void;
 
 function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	if (left.byteLength !== right.byteLength) return false;
@@ -731,6 +729,15 @@ function closedDocumentCompletion(
 ): AtelierDocumentsRuntimeCompletion {
 	return {
 		isComplete: (state) => state.activePath !== path,
+	};
+}
+
+function closedDocumentsCompletion(
+	paths: readonly string[],
+): AtelierDocumentsRuntimeCompletion {
+	return {
+		isComplete: (state) =>
+			paths.every((path) => !state.openPaths.includes(path)),
 	};
 }
 
@@ -817,39 +824,161 @@ function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
  */
 function LayoutShellContent(props: LayoutShellContentProps) {
 	const lix = useLix();
-	return <LayoutShellUiStateLoader {...props} lix={lix} />;
-}
-
-function LayoutShellUiStateLoader(
-	props: LayoutShellContentProps & {
-		readonly lix: ReturnType<typeof useLix>;
-	},
-) {
-	const [uiStateKV, setUiStateKV] = useKeyValue(ATELIER_UI_STATE_KEY);
+	const fallbackAtelierInstance = useMemo(() => createAtelier({ lix }), [lix]);
+	const atelierInstance = props.atelierInstance ?? fallbackAtelierInstance;
 	return (
-		<LayoutShellActiveFileLoader
+		<LayoutShellStateLoader
 			{...props}
-			uiStateKV={uiStateKV}
-			setUiStateKV={setUiStateKV}
+			atelierInstance={atelierInstance}
+			lix={lix}
 		/>
 	);
 }
 
-function LayoutShellActiveFileLoader(
+function LayoutShellStateLoader(
 	props: LayoutShellContentProps & {
 		readonly lix: ReturnType<typeof useLix>;
-		readonly uiStateKV: AtelierUiState | null;
-		readonly setUiStateKV: KeyValueSetter<AtelierUiState | null>;
+		readonly atelierInstance: AtelierInstance;
 	},
 ) {
-	const [activeFileId, setActiveFileId] = useKeyValue("atelier_active_file_id");
+	const configuration = getAtelierConfiguration(props.atelierInstance);
+	const sessionSnapshot = useSyncExternalStore(
+		configuration.sessionStateStore.subscribe,
+		configuration.sessionStateStore.getSnapshot,
+		configuration.sessionStateStore.getSnapshot,
+	);
+	const activeBranchId = useSyncExternalStore(
+		configuration.branchSession.subscribe,
+		configuration.branchSession.getSnapshot,
+		configuration.branchSession.getSnapshot,
+	);
+	const initialUiState = useMemo(
+		() => createInitialAtelierUiState(props.defaultOpenPanels),
+		[props.defaultOpenPanels],
+	);
+	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
+		coerceAtelierUserPreferences(initialUiState),
+	);
+	const [preferencesReady, setPreferencesReady] = useState(false);
+	const [reviewStatusLoad, setReviewStatusLoad] = useState<{
+		readonly branchId: string | null;
+		readonly resolvedReviewIds: readonly string[];
+	}>({ branchId: null, resolvedReviewIds: [] });
+
+	useEffect(() => {
+		let cancelled = false;
+		setPreferencesReady(false);
+		void configuration.preferencesStore
+			.load()
+			.then((loaded) => {
+				if (!cancelled && loaded) {
+					setPreferences(coerceAtelierUserPreferences(loaded));
+				}
+			})
+			.catch((error: unknown) => {
+				console.error("Failed to load private Atelier preferences", error);
+			})
+			.finally(() => {
+				if (!cancelled) setPreferencesReady(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [configuration.preferencesStore]);
+
+	useEffect(() => {
+		if (sessionSnapshot) return;
+		configuration.sessionStateStore.setSnapshot(
+			coerceAtelierSessionUiState(initialUiState),
+		);
+	}, [configuration.sessionStateStore, initialUiState, sessionSnapshot]);
+
+	useEffect(() => {
+		if (!activeBranchId) return;
+		let cancelled = false;
+		setReviewStatusLoad({ branchId: null, resolvedReviewIds: [] });
+		void configuration.reviewStatusStore
+			.loadResolvedReviewIds(activeBranchId)
+			.then((reviewIds) => {
+				if (!cancelled) {
+					setReviewStatusLoad({
+						branchId: activeBranchId,
+						resolvedReviewIds: [...reviewIds],
+					});
+				}
+			})
+			.catch((error: unknown) => {
+				console.error("Failed to load private Atelier review status", error);
+				if (!cancelled) {
+					setReviewStatusLoad({
+						branchId: activeBranchId,
+						resolvedReviewIds: [],
+					});
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [activeBranchId, configuration.reviewStatusStore]);
+
+	const uiStateKV = useMemo<AtelierUiState>(
+		() => ({
+			...(sessionSnapshot ?? coerceAtelierSessionUiState(initialUiState)),
+			layout: preferences.layout,
+		}),
+		[initialUiState, preferences.layout, sessionSnapshot],
+	);
+	const uiStateRef = useRef(uiStateKV);
+	uiStateRef.current = uiStateKV;
+	const setUiStateKV = useCallback<AtelierUiStateSetter>(
+		(update) => {
+			const current = uiStateRef.current;
+			const next = coerceAtelierUiState(
+				typeof update === "function" ? update(current) : update,
+			);
+			configuration.sessionStateStore.setSnapshot(
+				coerceAtelierSessionUiState(next),
+			);
+			const nextPreferences = coerceAtelierUserPreferences(next);
+			if (
+				JSON.stringify(nextPreferences.layout) !==
+				JSON.stringify(preferences.layout)
+			) {
+				setPreferences(nextPreferences);
+				void configuration.preferencesStore
+					.save(nextPreferences)
+					.catch((error: unknown) => {
+						console.error("Failed to save private Atelier preferences", error);
+					});
+			}
+		},
+		[
+			configuration.preferencesStore,
+			configuration.sessionStateStore,
+			preferences.layout,
+		],
+	);
+
+	if (
+		!activeBranchId ||
+		!preferencesReady ||
+		reviewStatusLoad.branchId !== activeBranchId
+	) {
+		return <AtelierShellLoadingPlaceholder />;
+	}
 	return (
 		<LayoutShellLoadedContent
 			{...props}
-			activeFileId={activeFileId}
-			setActiveFileId={setActiveFileId}
+			uiStateKV={uiStateKV}
+			setUiStateKV={setUiStateKV}
+			activeBranchId={activeBranchId}
+			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
 		/>
 	);
+}
+
+function AtelierShellLoadingPlaceholder() {
+	return <div className="h-full w-full bg-[var(--color-bg-app)]" />;
 }
 
 function LayoutShellLoadedContent({
@@ -857,15 +986,14 @@ function LayoutShellLoadedContent({
 	lix,
 	uiStateKV,
 	setUiStateKV,
-	activeFileId,
-	setActiveFileId,
+	activeBranchId,
+	resolvedReviewIds,
 	slots,
 	filesViewMode,
 	defaultOpenPanels,
 	onEvent,
 }: LayoutShellLoadedContentProps) {
-	const fallbackAtelierInstance = useMemo(() => createAtelier({ lix }), [lix]);
-	const effectiveAtelierInstance = atelierInstance ?? fallbackAtelierInstance;
+	const effectiveAtelierInstance = atelierInstance;
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
@@ -874,36 +1002,6 @@ function LayoutShellLoadedContent({
 	);
 	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
 		qb(queryLix).selectFrom("lix_file").select("id"),
-	);
-	const activeReviewBranchRows = useQuery<{ value: unknown }>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value")
-			.where("key", "=", "lix_workspace_branch_id")
-			.select("value"),
-	);
-	const activeReviewBranchId =
-		typeof activeReviewBranchRows[0]?.value === "string"
-			? activeReviewBranchRows[0].value
-			: "";
-	const agentTurnRangeRows = useQuery<{
-		value: unknown;
-		lixcol_branch_id: string | null;
-	}>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value_by_branch")
-			.select(["value", "lixcol_branch_id"])
-			.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-			.where("lixcol_branch_id", "=", activeReviewBranchId),
-	);
-	const activeAgentTurnRangeValue = agentTurnRangeRows.find(
-		(row) => row.lixcol_branch_id === activeReviewBranchId,
-	)?.value;
-	const agentTurnRanges = useMemo(
-		() =>
-			isAgentTurnCommitRangeStore(activeAgentTurnRangeValue)
-				? activeAgentTurnRangeValue.ranges
-				: EMPTY_AGENT_TURN_RANGES,
-		[activeAgentTurnRangeValue],
 	);
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
@@ -1046,11 +1144,10 @@ function LayoutShellLoadedContent({
 			right: panelSizes.right,
 		});
 	}, [panelSizes.left, panelSizes.central, panelSizes.right]);
-	const resolvedReviewIdsRef = useRef(new Set<string>());
+	const [privateResolvedReviewIds, setPrivateResolvedReviewIds] =
+		useState<readonly string[]>(resolvedReviewIds);
+	const resolvedReviewIdsRef = useRef(new Set<string>(resolvedReviewIds));
 	const openedReviewIdsRef = useRef(new Set<string>());
-	const autoRevealedAgentTurnRangeIdsRef = useRef(new Set<string>());
-	const autoRevealAgentTurnQueueRef = useRef(Promise.resolve());
-	const autoRevealAgentTurnMountedRef = useRef(true);
 	const openDiffReviewByFileIdRef = useRef(
 		new Map<string, ExternalWriteReview>(),
 	);
@@ -1064,13 +1161,14 @@ function LayoutShellLoadedContent({
 		right: rightPanel,
 	});
 	const viewHostRegistry = useExtensionHostRegistry();
+	const reviewStatusStore = getAtelierConfiguration(
+		effectiveAtelierInstance,
+	).reviewStatusStore;
 
 	useEffect(() => {
-		autoRevealAgentTurnMountedRef.current = true;
-		return () => {
-			autoRevealAgentTurnMountedRef.current = false;
-		};
-	}, []);
+		setPrivateResolvedReviewIds(resolvedReviewIds);
+		resolvedReviewIdsRef.current = new Set(resolvedReviewIds);
+	}, [resolvedReviewIds]);
 
 	useEffect(() => {
 		panelStatesRef.current = {
@@ -1095,6 +1193,22 @@ function LayoutShellLoadedContent({
 			resolvedReviewIdsRef.current.delete(review.reviewId);
 		},
 		[],
+	);
+	const persistReviewResolution = useCallback(
+		async (
+			review: ExternalWriteReview,
+			outcome: "accepted" | "rejected" | "resolved",
+		) => {
+			await reviewStatusStore.resolve({
+				branchId: activeBranchId,
+				reviewId: review.reviewId,
+				fileId: review.fileId,
+				outcome,
+			});
+			resolvedReviewIdsRef.current.add(review.reviewId);
+			setPrivateResolvedReviewIds([...resolvedReviewIdsRef.current]);
+		},
+		[activeBranchId, reviewStatusStore],
 	);
 
 	const registerExternalWriteReview = useCallback(
@@ -1656,80 +1770,6 @@ function LayoutShellLoadedContent({
 		[emitEvent, ensurePanelExpanded, extensionMap, updateWorkspace],
 	);
 
-	const autoRevealFirstAgentTurnReview = useCallback(
-		async (range: AgentTurnCommitRange) => {
-			const centralPanelState = panelStatesRef.current.central;
-			const activeEntry = activeEntryFromPanel(centralPanelState);
-			const activeReviewFileId =
-				typeof activeEntry?.state?.fileId === "string"
-					? activeEntry.state.fileId
-					: null;
-			const activeReviewFilePath =
-				typeof activeEntry?.state?.filePath === "string"
-					? activeEntry.state.filePath
-					: null;
-			if (activeReviewFileId && activeReviewFilePath) {
-				const activeReview = await getExternalWriteReview(
-					lix,
-					activeReviewFileId,
-					activeReviewFilePath,
-				);
-				if (activeReview) return;
-			}
-
-			const files = await qb(lix)
-				.selectFrom("lix_file")
-				.select(["id", "path"])
-				.orderBy("path", "asc")
-				.execute();
-			const reviewableFiles = files.map((file) => ({
-				fileId: file.id as string,
-				path: file.path as string,
-			}));
-			const pendingPaths = await getPendingExternalWriteReviewPaths(
-				lix,
-				reviewableFiles,
-				[range],
-			);
-			const firstReviewFile = reviewableFiles.find((file) =>
-				pendingPaths.has(file.path),
-			);
-			if (!firstReviewFile || !autoRevealAgentTurnMountedRef.current) return;
-
-			openResolvedFileView({
-				panel: "central",
-				fileId: firstReviewFile.fileId,
-				filePath: firstReviewFile.path,
-				focus: true,
-			});
-		},
-		[lix, openResolvedFileView],
-	);
-
-	useEffect(() => {
-		const unseenRanges = agentTurnRanges.filter(
-			(range) => !autoRevealedAgentTurnRangeIdsRef.current.has(range.id),
-		);
-		if (unseenRanges.length === 0) return;
-		for (const range of unseenRanges) {
-			autoRevealedAgentTurnRangeIdsRef.current.add(range.id);
-		}
-
-		autoRevealAgentTurnQueueRef.current = autoRevealAgentTurnQueueRef.current
-			.then(async () => {
-				for (const range of unseenRanges) {
-					if (!autoRevealAgentTurnMountedRef.current) return;
-					await autoRevealFirstAgentTurnReview(range);
-				}
-			})
-			.catch((error: unknown) => {
-				console.warn(
-					"[agent-turn-review] failed to reveal first changed file",
-					error,
-				);
-			});
-	}, [agentTurnRanges, autoRevealFirstAgentTurnReview]);
-
 	const showCheckpointDiff = useCallback(
 		async (branchId: string) => {
 			const previousDiff = checkpointDiffRef.current;
@@ -1914,14 +1954,14 @@ function LayoutShellLoadedContent({
 				return;
 			}
 			await runDiffReviewResolution(review, "accepted", async () => {
-				await clearAgentTurnCommitRangeFile(lix, {
-					fileId: review.fileId,
-					reviewId: review.reviewId,
-					agentTurnRangeIds: review.agentTurnRangeIds,
-				});
+				await persistReviewResolution(review, "accepted");
 			});
 		},
-		[lix, getExternalWriteReviewForFile, runDiffReviewResolution],
+		[
+			getExternalWriteReviewForFile,
+			persistReviewResolution,
+			runDiffReviewResolution,
+		],
 	);
 
 	const handleResolveExternalWriteReview = useCallback(
@@ -1955,17 +1995,14 @@ function LayoutShellLoadedContent({
 						);
 					}
 				}
-				await clearAgentTurnCommitRangeFile(lix, {
-					fileId: review.fileId,
-					reviewId: review.reviewId,
-					agentTurnRangeIds: review.agentTurnRangeIds,
-				});
+				await persistReviewResolution(review, "resolved");
 			});
 		},
 		[
 			lix,
 			deleteAddedExternalWriteReviewFile,
 			getExternalWriteReviewForFile,
+			persistReviewResolution,
 			runDiffReviewResolution,
 		],
 	);
@@ -1982,12 +2019,9 @@ function LayoutShellLoadedContent({
 			}
 			await runDiffReviewResolution(review, "rejected", async () => {
 				if (!(await isExternalWriteReviewCurrent(review))) {
-					await clearAgentTurnCommitRangeFile(lix, {
-						fileId: review.fileId,
-						reviewId: review.reviewId,
-						agentTurnRangeIds: review.agentTurnRangeIds,
-					});
-					return;
+					throw new Error(
+						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+					);
 				}
 				const beforeData = await getFileDataAtCommit(
 					lix,
@@ -2000,27 +2034,34 @@ function LayoutShellLoadedContent({
 						review.fileId,
 						review.afterCommitId,
 					);
-					if (afterData) {
-						await deleteAddedExternalWriteReviewFile(review, afterData);
+					if (!afterData) {
+						throw new Error(
+							"The reviewed file snapshot is no longer available.",
+						);
 					}
-					await clearAgentTurnCommitRangeFile(lix, {
-						fileId: review.fileId,
-						reviewId: review.reviewId,
-						agentTurnRangeIds: review.agentTurnRangeIds,
-					});
+					await deleteAddedExternalWriteReviewFile(review, afterData);
+					await persistReviewResolution(review, "rejected");
 					return;
 				}
-				const { fileId } = args;
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ data: beforeData })
-					.where("id", "=", fileId)
-					.executeTakeFirst();
-				await clearAgentTurnCommitRangeFile(lix, {
-					fileId: review.fileId,
-					reviewId: review.reviewId,
-					agentTurnRangeIds: review.agentTurnRangeIds,
-				});
+				const afterData = await getFileDataAtCommit(
+					lix,
+					review.fileId,
+					review.afterCommitId,
+				);
+				if (!afterData) {
+					throw new Error("The reviewed file snapshot is no longer available.");
+				}
+				const result = await lix.execute(
+					"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
+					[beforeData, review.fileId, afterData],
+					{ originKey: `atelier.review:${review.reviewId}` },
+				);
+				if (result.rowsAffected !== 1) {
+					throw new Error(
+						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+					);
+				}
+				await persistReviewResolution(review, "rejected");
 			});
 		},
 		[
@@ -2028,6 +2069,7 @@ function LayoutShellLoadedContent({
 			deleteAddedExternalWriteReviewFile,
 			getExternalWriteReviewForFile,
 			isExternalWriteReviewCurrent,
+			persistReviewResolution,
 			runDiffReviewResolution,
 		],
 	);
@@ -2062,6 +2104,16 @@ function LayoutShellLoadedContent({
 							: rightPanel;
 				const removedView = currentPanel.views.find(predicate);
 				if (!removedView) continue;
+				const wasActiveCentralDocument =
+					side === "central" &&
+					currentPanel.activeInstance === removedView.instance &&
+					documentPathFromView(removedView) !== null;
+				const remainingViews = currentPanel.views.filter(
+					(entry) => entry.instance !== removedView.instance,
+				);
+				const nextCentralDocument = wasActiveCentralDocument
+					? documentPathFromView(remainingViews[remainingViews.length - 1])
+					: null;
 				setPanelState(
 					side,
 					(current) => {
@@ -2077,10 +2129,17 @@ function LayoutShellLoadedContent({
 					},
 					{ focus },
 				);
+				if (wasActiveCentralDocument) {
+					emitEvent({
+						type: "document_closed",
+						filePath: documentPathFromView(removedView) ?? "",
+						nextFilePath: nextCentralDocument,
+					});
+				}
 				break;
 			}
 		},
-		[centralPanel, leftPanel, rightPanel, setPanelState],
+		[centralPanel, emitEvent, leftPanel, rightPanel, setPanelState],
 	);
 
 	const activeCentralEntry = useMemo(() => {
@@ -2351,11 +2410,6 @@ function LayoutShellLoadedContent({
 	const activeCentralFileId =
 		activeFileIdFromExtensionInstance(activeCentralEntry);
 
-	useEffect(() => {
-		if (activeFileId === activeCentralFileId) return;
-		setActiveFileId(activeCentralFileId);
-	}, [activeCentralFileId, activeFileId, setActiveFileId]);
-
 	const activeFileName = useMemo(() => {
 		if (!activeCentralEntry) return null;
 		const rawPath = activeCentralEntry.state?.filePath as string | undefined;
@@ -2390,6 +2444,35 @@ function LayoutShellLoadedContent({
 		});
 		return closingPath;
 	}, [activeCentralEntry, handleCloseView]);
+	const handleCloseAllDocuments = useCallback(() => {
+		const documentViews = centralPanel.views.filter(isDocumentView);
+		if (documentViews.length === 0) return [];
+		const closedPaths = documentViews
+			.map(documentPathFromView)
+			.filter((path): path is string => path !== null);
+		const activePath = documentPathFromView(activeCentralEntry);
+		setPanelState(
+			"central",
+			(current) => {
+				const views = current.views.filter((view) => !isDocumentView(view));
+				const activeInstance = views.some(
+					(view) => view.instance === current.activeInstance,
+				)
+					? current.activeInstance
+					: (views[views.length - 1]?.instance ?? null);
+				return { views, activeInstance };
+			},
+			{ focus: true },
+		);
+		if (activePath) {
+			emitEvent({
+				type: "document_closed",
+				filePath: activePath,
+				nextFilePath: null,
+			});
+		}
+		return closedPaths;
+	}, [activeCentralEntry, centralPanel.views, emitEvent, setPanelState]);
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);
 	atelierDocumentsActionsRef.current = {
@@ -2405,6 +2488,12 @@ function LayoutShellLoadedContent({
 			const closedPath = handleCloseActiveDocument();
 			return closedPath ? closedDocumentCompletion(closedPath) : undefined;
 		},
+		closeAll: () => {
+			const closedPaths = handleCloseAllDocuments();
+			return closedPaths.length > 0
+				? closedDocumentsCompletion(closedPaths)
+				: undefined;
+		},
 	};
 	const atelierDocumentsRuntimeBinding =
 		useMemo<AtelierDocumentsRuntimeBinding>(
@@ -2413,6 +2502,7 @@ function LayoutShellLoadedContent({
 					atelierDocumentsActionsRef.current?.open(path, options),
 				startNew: () => atelierDocumentsActionsRef.current?.startNew(),
 				closeActive: () => atelierDocumentsActionsRef.current?.closeActive(),
+				closeAll: () => atelierDocumentsActionsRef.current?.closeAll(),
 			}),
 			[],
 		);
@@ -2496,13 +2586,22 @@ function LayoutShellLoadedContent({
 		() => ({
 			lix,
 			events: { emit: emitEvent },
-			documents: effectiveAtelierInstance.documents,
+			documents: {
+				...effectiveAtelierInstance.documents,
+				activeFileId: activeCentralFileId,
+				activeFilePath: activeDocumentPath,
+			},
+			branches: {
+				activeId: activeBranchId,
+				switch: effectiveAtelierInstance.branches.switch,
+			},
 			revisions: {
 				current: checkpointDiff ? { branchId: checkpointDiff.branchId } : null,
 				show: showCheckpointDiff,
 				clear: clearCheckpointDiff,
 			},
 			reviews: {
+				resolvedReviewIds: privateResolvedReviewIds,
 				resolve: handleResolveExternalWriteReview,
 				accept: handleAcceptExternalWriteReview,
 				reject: handleRejectExternalWriteReview,
@@ -2511,6 +2610,7 @@ function LayoutShellLoadedContent({
 		}),
 		[
 			emitEvent,
+			activeBranchId,
 			checkpointDiff,
 			showCheckpointDiff,
 			clearCheckpointDiff,
@@ -2518,7 +2618,11 @@ function LayoutShellLoadedContent({
 			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
 			effectiveAtelierInstance.documents,
+			activeCentralFileId,
+			activeDocumentPath,
+			effectiveAtelierInstance.branches.switch,
 			lix,
+			privateResolvedReviewIds,
 			registerExternalWriteReview,
 		],
 	);

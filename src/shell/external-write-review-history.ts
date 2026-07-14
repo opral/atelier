@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
 import { useLix, useQuery } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
@@ -9,8 +9,8 @@ import type {
 } from "@/extension-runtime/external-write-review";
 import {
 	AGENT_TURN_COMMIT_RANGE_KEY,
+	agentTurnCommitRangesFromValues,
 	agentTurnReviewId,
-	isAgentTurnCommitRangeStore,
 	readAgentTurnCommitRanges,
 	type AgentTurnCommitRange,
 } from "./agent-turn-review-range";
@@ -33,7 +33,6 @@ type AgentTurnFileData = ExternalWriteReviewData & {
 	readonly beforeExists: boolean;
 };
 
-const EMPTY_AGENT_TURN_RANGES: readonly AgentTurnCommitRange[] = [];
 const EMPTY_FILE_DATA = new Uint8Array();
 
 export type ExternalWriteReviewFile = {
@@ -45,15 +44,28 @@ export async function getExternalWriteReview(
 	lix: Lix,
 	fileId: string,
 	path: string,
+	options?: {
+		readonly branchId?: string;
+		readonly resolvedReviewIds?: ReadonlySet<string>;
+	},
 ): Promise<ExternalWriteReview | null> {
-	const ranges = await readAgentTurnCommitRanges(lix);
-	return getAgentTurnExternalWriteReview(lix, fileId, path, ranges);
+	const ranges = await readAgentTurnCommitRanges(lix, options?.branchId);
+	const review = await getAgentTurnExternalWriteReview(
+		lix,
+		fileId,
+		path,
+		ranges,
+	);
+	return review && !options?.resolvedReviewIds?.has(review.reviewId)
+		? review
+		: null;
 }
 
 export async function getPendingExternalWriteReviewPaths(
 	lix: Lix,
 	files: readonly ExternalWriteReviewFile[],
 	ranges?: readonly AgentTurnCommitRange[],
+	resolvedReviewIds: ReadonlySet<string> = new Set(),
 ): Promise<Set<string>> {
 	const pendingPaths = new Set<string>();
 	const resolvedRanges = ranges ?? (await readAgentTurnCommitRanges(lix));
@@ -68,7 +80,7 @@ export async function getPendingExternalWriteReviewPaths(
 				file.path,
 				resolvedRanges,
 			);
-			if (review) {
+			if (review && !resolvedReviewIds.has(review.reviewId)) {
 				pendingPaths.add(file.path);
 			}
 		}),
@@ -79,18 +91,10 @@ export async function getPendingExternalWriteReviewPaths(
 export function useExternalWriteReview(args: {
 	readonly fileId?: string | null;
 	readonly path?: string | null;
+	readonly activeBranchId: string;
+	readonly resolvedReviewIds?: readonly string[];
 }): ExternalWriteReview | null {
 	const lix = useLix();
-	const activeBranchRows = useQuery<{ value: unknown }>((queryLix) =>
-		qb(queryLix)
-			.selectFrom("lix_key_value")
-			.where("key", "=", "lix_workspace_branch_id")
-			.select("value"),
-	);
-	const activeBranchId =
-		typeof activeBranchRows[0]?.value === "string"
-			? activeBranchRows[0].value
-			: "";
 	const rangeRows = useQuery<{
 		value: unknown;
 		lixcol_branch_id: string | null;
@@ -98,22 +102,35 @@ export function useExternalWriteReview(args: {
 		qb(queryLix)
 			.selectFrom("lix_key_value_by_branch")
 			.select(["value", "lixcol_branch_id"])
-			.where("key", "=", AGENT_TURN_COMMIT_RANGE_KEY)
-			.where("lixcol_branch_id", "=", activeBranchId),
+			.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
+			.where("lixcol_branch_id", "=", args.activeBranchId),
 	);
-	const activeRangeValue = rangeRows.find(
-		(row) => row.lixcol_branch_id === activeBranchId,
-	)?.value;
-	const ranges = isAgentTurnCommitRangeStore(activeRangeValue)
-		? activeRangeValue.ranges
-		: EMPTY_AGENT_TURN_RANGES;
+	const activeRangeValues = useMemo(
+		() =>
+			rangeRows
+				.filter((row) => row.lixcol_branch_id === args.activeBranchId)
+				.map((row) => row.value),
+		[args.activeBranchId, rangeRows],
+	);
+	const ranges = useMemo(
+		() => agentTurnCommitRangesFromValues(activeRangeValues),
+		[activeRangeValues],
+	);
+	const resolvedReviewKey = JSON.stringify(
+		[...(args.resolvedReviewIds ?? [])].sort(),
+	);
+	const resolvedReviewIdSet = useMemo(
+		() => new Set<string>(JSON.parse(resolvedReviewKey)),
+		[resolvedReviewKey],
+	);
 	const reviewKey =
 		args.fileId && args.path
 			? JSON.stringify([
-					activeBranchId,
+					args.activeBranchId,
 					args.fileId,
 					args.path,
-					activeRangeValue ?? null,
+					activeRangeValues,
+					resolvedReviewKey,
 				])
 			: null;
 	const [resolvedReview, setResolvedReview] =
@@ -129,7 +146,13 @@ export function useExternalWriteReview(args: {
 		void loadReview
 			.then((nextReview) => {
 				if (!cancelled) {
-					setResolvedReview({ key: reviewKey, review: nextReview });
+					setResolvedReview({
+						key: reviewKey,
+						review:
+							nextReview && !resolvedReviewIdSet.has(nextReview.reviewId)
+								? nextReview
+								: null,
+					});
 				}
 			})
 			.catch((error: unknown) => {
@@ -141,7 +164,7 @@ export function useExternalWriteReview(args: {
 		return () => {
 			cancelled = true;
 		};
-	}, [lix, args.fileId, args.path, ranges, reviewKey]);
+	}, [lix, args.fileId, args.path, ranges, resolvedReviewIdSet, reviewKey]);
 
 	return resolvedReview?.key === reviewKey ? resolvedReview.review : null;
 }
@@ -230,6 +253,18 @@ async function getAgentTurnExternalWriteReview(
 	});
 	if (!data) return null;
 	if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
+		return null;
+	}
+	const current = await qb(lix)
+		.selectFrom("lix_file")
+		.select("data")
+		.where("id", "=", fileId)
+		.limit(1)
+		.executeTakeFirst();
+	if (
+		!current ||
+		!fileBytesEqual(decodeFileDataToBytes(current.data), data.afterData)
+	) {
 		return null;
 	}
 	const rangeIds = relevantRanges.map((range) => range.id);
