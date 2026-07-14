@@ -9,6 +9,7 @@ import {
 	Minus,
 	PanelTopDashed,
 	Pilcrow,
+	Smile,
 	Table,
 	TextQuote,
 } from "lucide-react";
@@ -131,6 +132,16 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 					],
 				})
 				.run();
+		},
+	},
+	{
+		id: "emoji",
+		label: "Emoji",
+		description: "Insert an emoji",
+		icon: Smile,
+		keywords: ["emoji", "smiley", "reaction", "icon"],
+		insert: (editor) => {
+			editor.commands.openEmojiMenu();
 		},
 	},
 	{

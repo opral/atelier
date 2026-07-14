@@ -31,6 +31,7 @@ import { parseExtensionManifest } from "../../extension-runtime/extension-manife
 import manifestJson from "./manifest.json";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
+import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
 import {
 	historicalMarkdownNodeBlocks,
@@ -374,7 +375,12 @@ function MarkdownLiveViewLoaded({
 							<MarkdownAutosaveHint />
 						) : null}
 					</div>
-					{reviewLocked ? null : <SlashCommandMenu />}
+					{reviewLocked ? null : (
+						<>
+							<SlashCommandMenu />
+							<EmojiPickerMenu />
+						</>
+					)}
 				</div>
 			</EditorProvider>
 		);

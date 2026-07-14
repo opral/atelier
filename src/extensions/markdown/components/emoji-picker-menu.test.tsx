@@ -9,11 +9,9 @@ import {
 import { afterEach, describe, expect, test } from "vitest";
 import { Editor } from "@tiptap/core";
 import { MarkdownWc } from "../editor/tiptap-markdown-bridge";
-import { SlashCommandsExtension } from "../editor/extensions/slash-commands";
 import { EmojiCommandsExtension } from "../editor/extensions/emoji-commands";
 import { EditorProvider, useEditorCtx } from "../editor/editor-context";
 import { EmojiPickerMenu } from "./emoji-picker-menu";
-import { SlashCommandMenu } from "./slash-command-menu";
 
 const editors: Editor[] = [];
 
@@ -37,12 +35,11 @@ function setup() {
 		element,
 		extensions: [
 			...(MarkdownWc() as any[]),
-			SlashCommandsExtension.configure({ onStateChange: () => {} }),
 			EmojiCommandsExtension.configure({ onStateChange: () => {} }),
 		],
 		content: { type: "doc", content: [{ type: "paragraph" }] },
 	});
-	(editors as Editor[]).push(editor);
+	editors.push(editor);
 	(editor.view as any).coordsAtPos = () => ({
 		top: 20,
 		bottom: 40,
@@ -52,45 +49,41 @@ function setup() {
 	render(
 		<EditorProvider>
 			<InjectEditor editor={editor} />
-			<SlashCommandMenu />
 			<EmojiPickerMenu />
 		</EditorProvider>,
 	);
 	return editor;
 }
 
-describe("SlashCommandMenu", () => {
-	test("opens emoji search from the /emoji command", async () => {
+describe("EmojiPickerMenu", () => {
+	test("opens explicitly, filters, and inserts with Enter", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent("/emoji");
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("rocket");
 		});
-
-		expect(
-			await screen.findByRole("option", { name: "Emoji: Insert an emoji" }),
-		).toBeInTheDocument();
-		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
 
 		expect(
 			await screen.findByRole("listbox", { name: "Emoji picker" }),
 		).toBeInTheDocument();
-		expect(editor.getText()).toBe("");
+		expect(screen.getByRole("option", { name: /rocket/i })).toBeInTheDocument();
 
-		await act(async () => {
-			editor.commands.insertContent("rocket");
-		});
 		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
-		await waitFor(() => expect(editor.getText()).toBe("🚀"));
+		await waitFor(() => {
+			expect(editor.getText()).toBe("🚀");
+			expect(
+				screen.queryByRole("listbox", { name: "Emoji picker" }),
+			).toBeNull();
+		});
 	});
 
 	test("handles navigation only for key events from its editor", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent("/head");
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("thumbsup");
 		});
-		expect(
-			await screen.findByRole("listbox", { name: "Slash commands" }),
-		).toBeInTheDocument();
+		await screen.findByRole("listbox", { name: "Emoji picker" });
 
 		const globalEnter = new KeyboardEvent("keydown", {
 			key: "Enter",
@@ -99,30 +92,58 @@ describe("SlashCommandMenu", () => {
 		});
 		window.dispatchEvent(globalEnter);
 		expect(globalEnter.defaultPrevented).toBe(false);
-		expect(editor.getText()).toBe("/head");
+		expect(editor.getText()).toBe("thumbsup");
 
 		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
-		await waitFor(() => {
-			expect(editor.getText()).toBe("");
-			expect(editor.isActive("heading", { level: 1 })).toBe(true);
-		});
+		await waitFor(() => expect(editor.getText()).toBe("👍"));
 	});
 
-	test("does not block Enter when the query has no results", async () => {
+	test("wraps keyboard navigation and closes with Escape", async () => {
 		const editor = setup();
 		await act(async () => {
-			editor.commands.insertContent("/definitely-no-command");
+			editor.commands.openEmojiMenu();
 		});
+		const options = await screen.findAllByRole("option");
+		const lastOption = options.at(-1);
+		const lastEmoji = lastOption?.querySelector(
+			".markdown-emoji-option-glyph",
+		)?.textContent;
+
+		fireEvent.keyDown(editor.view.dom, { key: "ArrowUp" });
+		expect(lastOption).toHaveAttribute("aria-selected", "true");
+		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+		await waitFor(() => expect(editor.getText()).toBe(lastEmoji));
+
+		await act(async () => {
+			editor.commands.insertContent(" ");
+			editor.commands.openEmojiMenu();
+		});
+		await screen.findByRole("listbox", { name: "Emoji picker" });
+		fireEvent.keyDown(editor.view.dom, { key: "Escape" });
 		await waitFor(() => {
-			expect(screen.queryByRole("listbox")).toBeNull();
+			expect(
+				screen.queryByRole("listbox", { name: "Emoji picker" }),
+			).toBeNull();
+		});
+		expect(editor.getText()).toBe(`${lastEmoji} `);
+	});
+
+	test("shows an empty result without blocking a normal Enter", async () => {
+		const editor = setup();
+		await act(async () => {
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("definitely_no_emoji");
 		});
 
+		expect(
+			await screen.findByRole("listbox", { name: "Emoji picker" }),
+		).toHaveTextContent("No emoji found");
 		await act(async () => {
 			fireEvent.keyDown(editor.view.dom, { key: "Enter" });
 		});
 		expect(editor.state.doc.childCount).toBe(2);
 		expect(editor.state.doc.firstChild?.textContent).toBe(
-			"/definitely-no-command",
+			"definitely_no_emoji",
 		);
 	});
 });

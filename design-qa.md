@@ -1,65 +1,72 @@
-# Flashtype frontmatter flows 2a, 2b, and 2c — design QA
+# Emoji picker entry points — design QA
 
 ## Comparison target
 
-- Supplied source: `/Users/samuel/Downloads/Flashtype Frontmatter.dc.html`
-- Local reference: `preview/web/mocks/frontmatter-ux/flashtype-reference.html`
-- Reference captures: `preview/web/mocks/frontmatter-ux/flashtype-reference-flow.png` and `preview/web/mocks/frontmatter-ux/flashtype-reference-full.png`
-- Production implementation: `src/extensions/markdown/components/frontmatter-editor.tsx`, `src/extensions/markdown/editor/frontmatter-value.ts`, `src/extensions/markdown/editor/tiptap-markdown-bridge/nodes.ts`, and `src/extensions/markdown/style.css`
-- Production captures: `preview/web/mocks/frontmatter-ux/production-flow-rest.png`, `preview/web/mocks/frontmatter-ux/production-flow-initial-add.png`, `preview/web/mocks/frontmatter-ux/production-flow-add-property.png`, `preview/web/mocks/frontmatter-ux/production-flow-full.png`, `preview/web/mocks/frontmatter-ux/production-flow-after-removal.png`, and `preview/web/mocks/frontmatter-ux/production-flow-mobile.png`
-- Full-view comparison: `preview/web/mocks/frontmatter-ux/flashtype-production-comparison.png`
-- Focused add-flow comparison: `preview/web/mocks/frontmatter-ux/flashtype-focused-comparison.png`
-- Viewports: 1720 × 1100 source; 1280 × 900 production desktop; 390 × 844 production mobile.
+- User feedback capture: `/Users/samuel/Library/Application Support/CleanShot/media/media_jd91sCxjYo/CleanShot 2026-07-14 at 12.00.47@2x.png`.
+- Correct original command-hint reference: `artifacts/design-audit/19-empty-line-command-hint-focus.png`.
+- Existing slash-menu visual system: `src/extensions/markdown/components/slash-command-menu.tsx` and the `.markdown-slash-*` rules in `src/extensions/markdown/style.css`.
+- Implementation: `src/extensions/markdown/editor/block-commands.ts`, `src/extensions/markdown/components/slash-command-menu.tsx`, `src/extensions/markdown/components/emoji-picker-menu.tsx`, and `src/extensions/markdown/editor/extensions/emoji-commands.ts`.
+- Intended states: focused empty paragraph; `/emoji` filtered in the slash menu; emoji picker immediately after selecting `/emoji`; `:rocket` emoji search.
+- Implementation screenshot: unavailable; the Codex in-app Browser runtime failed during connection with `Cannot redefine property: process` before a tab could be opened.
 
-## States and flows verified
+## Full-view comparison evidence
 
-- **2a / empty document:** no persistent frontmatter chrome is rendered.
-- **2b / discovery:** the first markdown line retains the quiet `Add frontmatter` hover disclosure and the slash command remains available.
-- **2b2 / adding:** invoking frontmatter opens a transient `Property name` row. Enter commits a unique key and moves focus to its value; Escape or an empty blur cancels the flow.
-- **2c / populated:** frontmatter uses a compact two-column property sheet with type icons, low-chrome cell hover states, a quiet YAML action, and a distinct `+ Add property` action.
-- Removing the final property deletes the entire frontmatter node and returns the document to 2b2 discovery. Undo restores the removal.
-- Programmatic removal is available through `unsetFrontmatter()`.
+- The feedback screenshot and correct original command-hint capture were opened and inspected.
+- The placeholder is restored exactly to `Press ‘/’ for commands`; it no longer advertises the `:` shortcut.
+- A browser-rendered implementation capture could not be produced, so no same-viewport side-by-side visual comparison is available.
 
-## Fidelity review
+## Focused region comparison evidence
 
-- **Typography:** quiet metadata typography, compact labels, and the existing Atelier document hierarchy match the supplied direction.
-- **Layout:** no framing card, upper rule, shadow, or permanent selected tab. Keys use a fixed compact track; values remain aligned; nested object rows retain the same visual rhythm.
-- **Color:** neutral editor tokens handle hover, focus, empty values, tags, and actions. Accent color is reserved for real selection/focus behavior.
-- **Icons:** Lucide type icons distinguish text, number, boolean, date, list, person, and object fields without decorative color.
-- **Responsive behavior:** at 390 px, rows stack key above value, remain editable, and avoid horizontal clipping.
-- **Copy:** the interface consistently says `Frontmatter`, `Property name`, `Empty`, `YAML`, and `Add property`.
+- Command hint: the production copy now exactly matches the original reference, with no typography or layout changes.
+- Slash menu: `Emoji` appears in the existing Insert group with a Lucide Smile icon, the same option-row structure, and the description `Insert an emoji`.
+- Picker handoff: selecting `/emoji` deletes the slash query, keeps the caret in place, and opens the same emoji palette. Typing filters directly in the document and selection replaces that query.
+- Colon shortcut: `:` remains available silently and uses the same picker, preserving the original requested behavior without adding placeholder noise.
+- Focused browser comparison is blocked because the implementation screenshot is unavailable.
 
-## Comparison history
+## Required fidelity surfaces
 
-1. The prior flow created a default `title` field and could leave an empty frontmatter shell visible after every field was removed.
-2. The add flow was changed to a transient property-name row so frontmatter is not committed until the user names a property.
-3. Final-property removal now deletes the node and returns to the first-line hover/slash-command discovery state.
-4. The full state was restyled against the supplied 2c design: type icons, cell-level hover, a hidden-at-rest YAML action, quiet tags, and an unambiguous add action.
-5. Desktop, mobile, empty, adding, populated, and final-removal captures were compared. No P0/P1/P2 mismatch remains.
+- Fonts and typography: the placeholder reuses the unchanged editor placeholder styling; the new slash item inherits slash-menu typography.
+- Spacing and layout rhythm: no placeholder dimensions changed; the new command uses the existing slash option and Insert group layout.
+- Colors and visual tokens: no new colors were introduced; the command and picker inherit existing Atelier tokens.
+- Image quality and asset fidelity: the slash item uses the repository's existing Lucide icon system, and the picker renders native Unicode emoji as selectable content.
+- Copy and content: the hint is exactly `Press ‘/’ for commands`; slash copy is `Emoji` and `Insert an emoji`; picker labels remain Unicode names and shortcodes.
+
+## Interaction evidence
+
+- `/emoji` filters to the Emoji command, Enter opens the picker, typing `rocket` filters it, and Enter inserts 🚀.
+- `:` still opens emoji search at a valid text boundary.
+- Prose, times, URLs, code blocks, and inline code do not create false-positive colon triggers.
+- Arrow navigation wraps, Enter and click insert, Escape and outside click close, focus returns to the editor, and no-result Enter remains available to the editor.
+- Accessibility semantics include named slash and emoji listboxes, options, active descendants, selected states, and a polite live region.
 
 ## Automated validation
 
-- Full test suite: 62 files passed, 554 tests passed, 1 skipped.
 - Typecheck: passed.
-- Lint: passed with 11 pre-existing warnings and no errors.
-- Preview build: passed with the existing bundle-size warning.
-- Production browser console: no errors in the verified frontmatter flow.
+- Production build: passed; the Unicode catalog remains a lazy 30.60 kB gzip chunk.
+- Full test suite: 72 files passed; 683 tests passed and 1 skipped.
+- Consumer fixture build: passed.
+- Format check: passed.
+- Lint: passed with 10 pre-existing warnings and no errors.
 
 ## Findings
 
-- P0: none.
-- P1: none.
-- P2: none.
-- P3: the native date input presents its value using the browser locale while YAML serialization remains ISO-formatted.
+- P0: none found in automated interaction coverage.
+- P1: visual verification is blocked because the implementation could not be rendered in the required in-app Browser.
+- P2: none found in code-level comparison.
+- P3: skin-tone variants are not expanded as separate results in this first version.
 
-## First-line disclosure alignment
+## Comparison history
 
-- Reference: `/Users/samuel/Library/Application Support/CleanShot/media/media_AHTVCO3G8C/CleanShot 2026-07-11 at 16.03.48@2x.png`.
-- The disclosure keeps its padded hover target while shifting that target one padding unit left of the Markdown content edge.
-- Browser measurements at the production desktop viewport: first Markdown block left edge `393px`; frontmatter icon left edge `393px`; disclosure background left edge `385px`.
-- This matches the selected design: the icon and first Markdown line share one vertical guide, while the hover background extends `8px` into the outer gutter.
-- Focused editor tests: 21 passed.
-- P0/P1/P2 alignment mismatches: none.
-- P3: the Vite development session logged React's existing synchronous-unmount warning while hot-reloading and switching fixture files; the CSS-only alignment change does not add or alter component lifecycle behavior.
+1. The initial implementation added `: for emoji` to the empty-line hint.
+2. User feedback established that the original hint should remain visually unchanged.
+3. The hint was restored exactly, while the existing `:` shortcut was kept silent.
+4. Emoji was added to the slash menu's Insert group, with an explicit picker-open state so `/emoji` and `:` converge on the same component.
+5. Automated interaction, type, lint, format, production build, and consumer build checks passed.
+6. Browser capture was retried, but the in-app Browser connection failed before an implementation screenshot could be created.
 
-final result: passed
+## Implementation checklist
+
+- No code fixes remain from automated review.
+- Human visual review should confirm the original placeholder copy, the Emoji row in the Insert group, picker anchoring after `/emoji`, emoji baseline alignment, and light/dark appearance.
+
+final result: blocked
