@@ -18,10 +18,9 @@ directory in the seeded workspace.
 
 ## Developer workflows
 
-Local preview builds show a hammer menu in the navbar. Open a Markdown file and
-choose a workflow to run a real Lix file write plus completed agent-turn range;
-the normal Keep/Undo review flow should appear. The menu is only available while
-running the Vite development server and is omitted from production previews.
+Preview builds show a hammer menu in the navbar, including deployed preview
+versions. Open a Markdown file and choose a workflow to run a real Lix file write
+plus completed agent-turn range; the normal Keep/Undo review flow should appear.
 
 Agent hosts trigger the same flow by reading the active commit before a turn,
 performing the file writes, reading the active commit afterward, and calling

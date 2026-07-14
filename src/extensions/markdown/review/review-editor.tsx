@@ -10,6 +10,7 @@ import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
 import {
 	Check,
+	CheckCheck,
 	ChevronLeft,
 	ChevronRight,
 	CornerDownLeft,
@@ -214,10 +215,15 @@ export function MarkdownReviewEditor({
 	);
 
 	const decide = useCallback(
-		async (decision: MarkdownReviewDecision) => {
+		async (decision: MarkdownReviewDecision, allPendingChanges = false) => {
 			if (!activeChange || busy || !editor) return;
 			const nextDecisions = new Map(decisions);
-			nextDecisions.set(activeChange.id, decision);
+			const changesToDecide = allPendingChanges
+				? pendingChanges
+				: [activeChange];
+			for (const change of changesToDecide) {
+				nextDecisions.set(change.id, decision);
+			}
 			const remaining = reviewDocument.changes.filter(
 				(change) => !nextDecisions.has(change.id),
 			);
@@ -286,6 +292,7 @@ export function MarkdownReviewEditor({
 			onCompletionFailure,
 			onCompletionStart,
 			onCompletionSuccess,
+			pendingChanges,
 			reviewDocument,
 		],
 	);
@@ -293,17 +300,28 @@ export function MarkdownReviewEditor({
 	useEffect(() => {
 		if (!reviewEnabled || !isActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.altKey || event.shiftKey) return;
-			const usesPrimaryModifier =
-				event.metaKey || (event.ctrlKey && !event.metaKey);
+			if (
+				event.altKey ||
+				event.isComposing ||
+				event.repeat ||
+				isReviewShortcutBlockedTarget(event.target)
+			) {
+				return;
+			}
+			const usesPrimaryModifier = isMacPlatform()
+				? event.metaKey && !event.ctrlKey
+				: event.ctrlKey && !event.metaKey;
+			const hasCommandModifier = event.metaKey || event.ctrlKey;
 			if (usesPrimaryModifier && event.key === "Enter") {
 				event.preventDefault();
 				event.stopPropagation();
-				void decide("keep");
+				event.stopImmediatePropagation();
+				void decide("keep", !event.shiftKey && pendingChanges.length > 1);
 				return;
 			}
+			if (event.shiftKey) return;
 			if (
-				!usesPrimaryModifier &&
+				!hasCommandModifier &&
 				(event.key === "Backspace" || event.key === "Delete")
 			) {
 				event.preventDefault();
@@ -311,7 +329,7 @@ export function MarkdownReviewEditor({
 				void decide("undo");
 				return;
 			}
-			if (usesPrimaryModifier) return;
+			if (hasCommandModifier) return;
 			if (event.key === "ArrowLeft") {
 				event.preventDefault();
 				navigate(-1);
@@ -323,7 +341,7 @@ export function MarkdownReviewEditor({
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () =>
 			window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [decide, isActive, navigate, reviewEnabled]);
+	}, [decide, isActive, navigate, pendingChanges.length, reviewEnabled]);
 
 	return (
 		<>
@@ -343,13 +361,16 @@ export function MarkdownReviewEditor({
 					fileName={fileName}
 					activeOrdinal={activeOrdinal}
 					total={reviewDocument.changes.length}
+					remainingCount={pendingChanges.length}
 					canNavigate={pendingChanges.length > 1}
 					busy={busy}
 					error={error}
 					onPrevious={() => navigate(-1)}
 					onNext={() => navigate(1)}
 					onUndo={() => void decide("undo")}
+					onKeepAll={() => void decide("keep", true)}
 					onKeep={() => void decide("keep")}
+					showKeepAll={pendingChanges.length > 1}
 				/>
 			) : null}
 		</>
@@ -376,25 +397,36 @@ function MarkdownChangeReviewControls({
 	fileName,
 	activeOrdinal,
 	total,
+	remainingCount,
 	canNavigate,
 	busy,
 	error,
 	onPrevious,
 	onNext,
 	onUndo,
+	onKeepAll,
 	onKeep,
+	showKeepAll,
 }: {
 	readonly fileName: string;
 	readonly activeOrdinal: number;
 	readonly total: number;
+	readonly remainingCount: number;
 	readonly canNavigate: boolean;
 	readonly busy: boolean;
 	readonly error: string | null;
 	readonly onPrevious: () => void;
 	readonly onNext: () => void;
 	readonly onUndo: () => void;
+	readonly onKeepAll: () => void;
 	readonly onKeep: () => void;
+	readonly showKeepAll: boolean;
 }) {
+	const primaryShortcut = isMacPlatform() ? "Meta+Enter" : "Control+Enter";
+	const individualShortcut = isMacPlatform()
+		? "Meta+Shift+Enter"
+		: "Control+Shift+Enter";
+
 	return (
 		<div className="markdown-change-review-wrap">
 			{error ? (
@@ -405,7 +437,7 @@ function MarkdownChangeReviewControls({
 			<div
 				className="markdown-change-review-actions"
 				role="group"
-				aria-label={`Review change ${activeOrdinal} of ${total}`}
+				aria-label={`Review change ${activeOrdinal} of ${total}, ${remainingCount} remaining`}
 			>
 				<div className="markdown-change-review-nav">
 					<button
@@ -435,35 +467,72 @@ function MarkdownChangeReviewControls({
 					</button>
 				</div>
 				<div className="markdown-change-review-divider" />
-				<button
-					type="button"
-					className="markdown-change-review-button markdown-change-review-button-undo"
-					aria-label="Undo change"
-					data-attr="review-change-undo"
-					disabled={busy}
-					onClick={onUndo}
-				>
-					<RotateCcw aria-hidden />
-					Undo
-					<kbd className="markdown-change-review-keycap">⌫</kbd>
-				</button>
-				<button
-					type="button"
-					className="markdown-change-review-button markdown-change-review-button-keep"
-					aria-label="Keep change"
-					data-attr="review-change-keep"
-					disabled={busy}
-					onClick={onKeep}
-				>
-					<Check aria-hidden />
-					{busy ? "Saving…" : "Keep"}
-					<kbd className="markdown-change-review-keycap markdown-change-review-keycap-keep">
-						<span>{isMacPlatform() ? "⌘" : "Ctrl"}</span>
-						<CornerDownLeft aria-hidden />
-					</kbd>
-				</button>
+				<div className="markdown-change-review-decisions">
+					<button
+						type="button"
+						className="markdown-change-review-button markdown-change-review-button-undo"
+						aria-label="Undo change"
+						data-attr="review-change-undo"
+						disabled={busy}
+						onClick={onUndo}
+					>
+						<RotateCcw aria-hidden />
+						Undo
+						<kbd className="markdown-change-review-keycap">⌫</kbd>
+					</button>
+					<button
+						type="button"
+						className={`markdown-change-review-button markdown-change-review-button-keep${showKeepAll ? "" : " markdown-change-review-button-primary"}`}
+						aria-label={showKeepAll ? "Keep current change" : "Keep change"}
+						aria-keyshortcuts={
+							showKeepAll ? individualShortcut : primaryShortcut
+						}
+						data-attr="review-change-keep"
+						disabled={busy}
+						onClick={onKeep}
+					>
+						<Check aria-hidden />
+						{busy ? "Saving…" : showKeepAll ? "Keep this" : "Keep"}
+						<ReviewShortcutKeycap shift={showKeepAll} />
+					</button>
+					{showKeepAll ? (
+						<button
+							type="button"
+							className="markdown-change-review-button markdown-change-review-button-keep-all markdown-change-review-button-primary"
+							aria-label={`Keep all ${remainingCount} remaining changes`}
+							aria-keyshortcuts={primaryShortcut}
+							data-attr="review-change-keep-all"
+							disabled={busy}
+							onClick={onKeepAll}
+						>
+							<CheckCheck aria-hidden />
+							{busy ? "Saving…" : "Keep all"}
+							<ReviewShortcutKeycap />
+						</button>
+					) : null}
+				</div>
 			</div>
 		</div>
+	);
+}
+
+function ReviewShortcutKeycap({ shift = false }: { readonly shift?: boolean }) {
+	const isMac = isMacPlatform();
+	return (
+		<kbd className="markdown-change-review-keycap">
+			{shift ? <span>{isMac ? "⇧" : "Shift"}</span> : null}
+			<span>{isMac ? "⌘" : "Ctrl"}</span>
+			<CornerDownLeft aria-hidden />
+		</kbd>
+	);
+}
+
+function isReviewShortcutBlockedTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof Element)) return false;
+	return Boolean(
+		target.closest(
+			'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [role="listbox"]',
+		),
 	);
 }
 
