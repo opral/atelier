@@ -29,7 +29,7 @@ interface SidePanelProps {
  */
 export function SidePanel({
 	side,
-	title: _unusedTitle,
+	title,
 	panel,
 	onSelectView,
 	onAddView,
@@ -39,19 +39,10 @@ export function SidePanel({
 	onFocusPanel,
 	emptyState: emptyStateOverride,
 }: SidePanelProps) {
-	const defaultEmptyState = (
-		<div className="flex flex-1 items-center justify-center">
-			<span className="text-[12.5px] text-[var(--color-icon-tertiary)]">
-				No view open
-			</span>
-		</div>
-	);
-	const emptyState =
-		emptyStateOverride === undefined ? defaultEmptyState : emptyStateOverride;
-
 	return (
 		<PanelV2
 			side={side}
+			ariaLabel={title}
 			panel={panel}
 			isFocused={isFocused}
 			onFocusPanel={onFocusPanel}
@@ -59,7 +50,7 @@ export function SidePanel({
 			onRemoveView={onRemoveView}
 			onAddView={onAddView}
 			viewContext={viewContext}
-			emptyStatePlaceholder={emptyState}
+			emptyStatePlaceholder={emptyStateOverride}
 		/>
 	);
 }

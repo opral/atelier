@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
+import { AtelierActionButton } from "@/components/ui/atelier-action-button";
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
@@ -930,17 +931,15 @@ function FilesViewContent({
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						<div className="flex shrink-0 justify-end pb-6">
-							<button
-								type="button"
+							<AtelierActionButton
 								onClick={handleNewFile}
-								className="inline-flex items-center gap-2 rounded-[9px] bg-[linear-gradient(180deg,var(--color-brand-500)_0%,var(--color-brand-600)_100%)] px-4 py-2.25 text-[13.5px] font-bold text-white shadow-[0_4px_14px_rgba(232,89,12,0.3),inset_0_1px_0_rgba(255,255,255,0.25)] transition-[filter,transform] hover:brightness-105 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-2"
 								aria-label="New file"
 								data-attr="file-new-wide"
 							>
 								<Plus className="size-3.5" strokeWidth={2.4} />
 								<span>New file</span>
 								<span className="ml-0.5 text-xs font-semibold">⌘.</span>
-							</button>
+							</AtelierActionButton>
 						</div>
 						<div
 							data-testid="files-view-tree-scroll"

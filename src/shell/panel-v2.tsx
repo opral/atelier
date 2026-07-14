@@ -2,6 +2,7 @@ import clsx from "clsx";
 import {
 	forwardRef,
 	useCallback,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -27,6 +28,8 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AtelierActionButton } from "@/components/ui/atelier-action-button";
+import panelEmptyStatePreview from "../assets/panel-empty-state-preview.png";
 import type {
 	PanelSide,
 	PanelState,
@@ -67,6 +70,7 @@ import {
  */
 export function PanelV2({
 	side,
+	ariaLabel,
 	panel,
 	isFocused,
 	onFocusPanel,
@@ -81,7 +85,7 @@ export function PanelV2({
 	viewOverrides,
 	showTabBar = true,
 }: PanelV2Props) {
-	const { extensionMap } = useExtensionRegistry();
+	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
 		id: dropId ?? `${side}-panel`,
 		data: { panel: side },
@@ -104,6 +108,108 @@ export function PanelV2({
 
 	const hasViews = panel.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
+	const availableViews = useMemo(
+		() => availableExtensionsForPanel(visibleExtensions, panel),
+		[panel, visibleExtensions],
+	);
+	const panelElementRef = useRef<HTMLElement | null>(null);
+	const pendingAddedViewRef = useRef<{
+		readonly kind: ExtensionKind;
+		readonly focusAfterMenuClose: boolean;
+		readonly previousInstances: ReadonlySet<string>;
+		readonly previousViews: PanelState["views"];
+		readonly previousActiveInstance: string | null;
+	} | null>(null);
+	const pendingRemovalFocusRef = useRef<{
+		readonly instance: string;
+		readonly previousViews: PanelState["views"];
+		readonly previousActiveInstance: string | null;
+	} | null>(null);
+	const setPanelElementRef = useCallback(
+		(node: HTMLElement | null) => {
+			panelElementRef.current = node;
+			setNodeRef(node);
+		},
+		[setNodeRef],
+	);
+	const requestAddView = useCallback(
+		(
+			kind: ExtensionKind,
+			state: ExtensionState | undefined,
+			focusAfterMenuClose: boolean,
+		) => {
+			if (!onAddView) return;
+			const pendingAddedView = {
+				kind,
+				focusAfterMenuClose,
+				previousInstances: new Set(panel.views.map((entry) => entry.instance)),
+				previousViews: panel.views,
+				previousActiveInstance: panel.activeInstance,
+			};
+			pendingAddedViewRef.current = pendingAddedView;
+			if (state === undefined) {
+				onAddView(kind);
+			} else {
+				onAddView(kind, state);
+			}
+			if (!focusAfterMenuClose) {
+				window.setTimeout(() => {
+					if (pendingAddedViewRef.current === pendingAddedView) {
+						pendingAddedViewRef.current = null;
+					}
+				}, 0);
+			}
+		},
+		[onAddView, panel.activeInstance, panel.views],
+	);
+	const handleMenuAddView = useCallback(
+		(kind: ExtensionKind, state?: ExtensionState) => {
+			requestAddView(kind, state, true);
+		},
+		[requestAddView],
+	);
+	const findPendingAddedTab = useCallback(() => {
+		const panelElement = panelElementRef.current;
+		const pendingAddedView = pendingAddedViewRef.current;
+		if (!panelElement || !pendingAddedView) return null;
+		return (
+			Array.from(
+				panelElement.querySelectorAll<HTMLButtonElement>(
+					"button[data-view-instance][data-view-key]",
+				),
+			).find(
+				(button) =>
+					button.dataset.viewKey === pendingAddedView.kind &&
+					!pendingAddedView.previousInstances.has(
+						button.dataset.viewInstance ?? "",
+					),
+			) ?? null
+		);
+	}, []);
+	const focusPendingAddedTab = useCallback(() => {
+		const nextTab = findPendingAddedTab();
+		pendingAddedViewRef.current = null;
+		if (!nextTab) return false;
+		nextTab.focus({ preventScroll: true });
+		return true;
+	}, [findPendingAddedTab]);
+	const handleRemoveView = useCallback(
+		(instance: string) => {
+			const pendingRemovalFocus = {
+				instance,
+				previousViews: panel.views,
+				previousActiveInstance: panel.activeInstance,
+			};
+			pendingRemovalFocusRef.current = pendingRemovalFocus;
+			onRemoveView(instance);
+			window.setTimeout(() => {
+				if (pendingRemovalFocusRef.current === pendingRemovalFocus) {
+					pendingRemovalFocusRef.current = null;
+				}
+			}, 0);
+		},
+		[onRemoveView, panel.activeInstance, panel.views],
+	);
 	const { makeRuntime } = useExtensionViewRuntime({
 		panel,
 		panelSide: side,
@@ -139,9 +245,80 @@ export function PanelV2({
 				}
 			: undefined;
 
+	useLayoutEffect(() => {
+		const panelElement = panelElementRef.current;
+		if (!panelElement) return;
+		const findTab = (instance: string) =>
+			Array.from(
+				panelElement.querySelectorAll<HTMLButtonElement>(
+					"button[data-view-instance]",
+				),
+			).find((button) => button.dataset.viewInstance === instance) ?? null;
+
+		const pendingAddedView = pendingAddedViewRef.current;
+		if (pendingAddedView) {
+			const addedEntry = panel.views.find(
+				(entry) =>
+					entry.kind === pendingAddedView.kind &&
+					!pendingAddedView.previousInstances.has(entry.instance),
+			);
+			if (addedEntry && activeInstance === addedEntry.instance) {
+				if (pendingAddedView.focusAfterMenuClose) return;
+				pendingAddedViewRef.current = null;
+				findTab(addedEntry.instance)?.focus({ preventScroll: true });
+				return;
+			}
+			if (
+				panel.views !== pendingAddedView.previousViews ||
+				panel.activeInstance !== pendingAddedView.previousActiveInstance
+			) {
+				pendingAddedViewRef.current = null;
+			}
+		}
+
+		const pendingRemovalFocus = pendingRemovalFocusRef.current;
+		if (!pendingRemovalFocus) return;
+		if (
+			panel.views.some(
+				(entry) => entry.instance === pendingRemovalFocus.instance,
+			)
+		) {
+			if (
+				panel.views !== pendingRemovalFocus.previousViews ||
+				panel.activeInstance !== pendingRemovalFocus.previousActiveInstance
+			) {
+				pendingRemovalFocusRef.current = null;
+			}
+			return;
+		}
+		pendingRemovalFocusRef.current = null;
+		const nextTarget = activeInstance
+			? findTab(activeInstance)
+			: (panelElement.querySelector<HTMLButtonElement>(
+					'[data-attr="panel-empty-open-view"]',
+				) ??
+				panelElement.querySelector<HTMLButtonElement>(
+					'[data-attr="panel-add-view"]',
+				));
+		nextTarget?.focus({ preventScroll: true });
+	}, [activeInstance, panel.activeInstance, panel.views]);
+
+	const resolvedEmptyState =
+		emptyStatePlaceholder === undefined && onAddView ? (
+			<DefaultPanelEmptyState
+				side={side}
+				availableViews={availableViews}
+				onAddView={handleMenuAddView}
+				onSelectedViewSettled={focusPendingAddedTab}
+			/>
+		) : (
+			emptyStatePlaceholder
+		);
+
 	return (
 		<ContainerElement
-			ref={setNodeRef}
+			ref={setPanelElementRef}
+			aria-label={ariaLabel}
 			onClickCapture={() => onFocusPanel(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
@@ -157,7 +334,12 @@ export function PanelV2({
 					<TabBar
 						extraContent={
 							onAddView ? (
-								<AddViewMenu side={side} panel={panel} onAddView={onAddView} />
+								<AddViewMenu
+									side={side}
+									availableViews={availableViews}
+									onAddView={handleMenuAddView}
+									onSelectedViewSettled={focusPendingAddedTab}
+								/>
 							) : null
 						}
 					>
@@ -183,7 +365,7 @@ export function PanelV2({
 										isFocused={isFocused && isActive}
 										isPending={entry.isPending}
 										onClick={() => onSelectView(entry.instance)}
-										onClose={() => onRemoveView(entry.instance)}
+										onClose={() => handleRemoveView(entry.instance)}
 									/>
 								);
 							})}
@@ -218,7 +400,7 @@ export function PanelV2({
 						})}
 					</PanelContent>
 				) : (
-					<PanelContent>{emptyStatePlaceholder}</PanelContent>
+					<PanelContent>{resolvedEmptyState}</PanelContent>
 				)}
 			</div>
 		</ContainerElement>
@@ -227,6 +409,7 @@ export function PanelV2({
 
 export type PanelV2Props = {
 	readonly side: PanelSide;
+	readonly ariaLabel?: string;
 	readonly panel: PanelState;
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
@@ -250,47 +433,69 @@ export type PanelV2Props = {
 /** The "+" button lists views that are not already open in this panel. */
 function AddViewMenu({
 	side,
-	panel,
+	availableViews,
 	onAddView,
+	onSelectedViewSettled,
+	variant = "tab-bar",
 }: {
 	readonly side: PanelSide;
-	readonly panel: PanelState;
+	readonly availableViews: readonly ExtensionDefinition[];
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
+	readonly onSelectedViewSettled: () => boolean;
+	readonly variant?: "tab-bar" | "empty-state";
 }) {
-	const { visibleExtensions } = useExtensionRegistry();
-	const openKinds = useMemo(
-		() => new Set(panel.views.map((entry) => entry.kind)),
-		[panel.views],
-	);
-	const availableViews = useMemo(
-		() =>
-			visibleExtensions.filter(
-				(view) => view.multiInstance || !openKinds.has(view.kind),
-			),
-		[visibleExtensions, openKinds],
-	);
+	const selectedViewRef = useRef(false);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const isEmptyStateTrigger = variant === "empty-state";
 	if (availableViews.length === 0) return null;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<button
-					type="button"
-					title="Add view"
-					aria-label="Add view"
-					data-attr="panel-add-view"
-					className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
-				>
-					<Plus className="size-3.25" strokeWidth={2} />
-				</button>
+				{isEmptyStateTrigger ? (
+					<AtelierActionButton
+						ref={triggerRef}
+						aria-label="Open a view"
+						data-attr="panel-empty-open-view"
+						variant="secondary"
+						fullWidth
+						className="focus-visible:ring-offset-[var(--color-bg-panel)]"
+					>
+						<Plus aria-hidden="true" className="size-4" strokeWidth={2.25} />
+						<span>Open a view</span>
+					</AtelierActionButton>
+				) : (
+					<button
+						ref={triggerRef}
+						type="button"
+						title="Add view"
+						aria-label="Add view"
+						data-attr="panel-add-view"
+						className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+					>
+						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
+					</button>
+				)}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align={side === "right" ? "end" : "start"}
+				onCloseAutoFocus={(event) => {
+					if (!selectedViewRef.current) return;
+					selectedViewRef.current = false;
+					event.preventDefault();
+					window.setTimeout(() => {
+						if (onSelectedViewSettled()) return;
+						triggerRef.current?.focus({ preventScroll: true });
+					}, 0);
+				}}
 				className="w-44 border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg"
 			>
 				{availableViews.map((ext) => (
 					<DropdownMenuItem
 						key={ext.kind}
-						onSelect={() => onAddView(ext.kind)}
+						onSelect={() => {
+							selectedViewRef.current = true;
+							onAddView(ext.kind);
+						}}
 						className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
 					>
 						<ext.icon className="h-4 w-4" />
@@ -299,6 +504,78 @@ function AddViewMenu({
 				))}
 			</DropdownMenuContent>
 		</DropdownMenu>
+	);
+}
+
+export function availableExtensionsForPanel(
+	visibleExtensions: readonly ExtensionDefinition[],
+	panel: PanelState,
+): ExtensionDefinition[] {
+	const openKinds = new Set(panel.views.map((entry) => entry.kind));
+	return visibleExtensions.filter(
+		(view) => view.multiInstance || !openKinds.has(view.kind),
+	);
+}
+
+function DefaultPanelEmptyState({
+	side,
+	availableViews,
+	onAddView,
+	onSelectedViewSettled,
+}: {
+	readonly side: PanelSide;
+	readonly availableViews: readonly ExtensionDefinition[];
+	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
+	readonly onSelectedViewSettled: () => boolean;
+}) {
+	const headingId = useId();
+	const hasAvailableViews = availableViews.length > 0;
+
+	return (
+		<div className="@container min-h-0 flex-1 overflow-y-auto">
+			<div className="flex min-h-full items-center justify-center px-5 py-10 @max-[300px]:px-4 @max-[300px]:py-7">
+				<section
+					aria-labelledby={headingId}
+					data-attr="panel-empty-state"
+					data-panel-side={side}
+					className="flex w-full max-w-64 flex-col items-center pb-10 text-center @max-[300px]:max-w-56 @max-[300px]:pb-4"
+				>
+					<img
+						src={panelEmptyStatePreview}
+						alt=""
+						aria-hidden="true"
+						className="w-40 max-w-full object-contain @max-[300px]:w-32"
+					/>
+					<h2
+						id={headingId}
+						className="mt-6 text-xl font-bold tracking-[-0.025em] text-[var(--color-text-primary)] @max-[300px]:mt-5 @max-[300px]:text-lg"
+					>
+						{hasAvailableViews ? "This is a panel." : "No views available"}
+					</h2>
+					<p className="mt-2 text-sm leading-5 text-[var(--color-text-tertiary)]">
+						{hasAvailableViews
+							? "It can open views."
+							: "Available views will appear here."}
+					</p>
+					{hasAvailableViews ? (
+						<>
+							<div className="mt-7 w-full max-w-52 @max-[300px]:mt-6">
+								<AddViewMenu
+									side={side}
+									availableViews={availableViews}
+									onAddView={onAddView}
+									onSelectedViewSettled={onSelectedViewSettled}
+									variant="empty-state"
+								/>
+							</div>
+							<p className="mt-4 max-w-56 text-[12.5px] leading-[18px] text-[var(--color-text-tertiary)] text-pretty">
+								Choose Files, History, or another workspace view.
+							</p>
+						</>
+					) : null}
+				</section>
+			</div>
+		</div>
 	);
 }
 

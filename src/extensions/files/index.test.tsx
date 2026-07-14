@@ -99,7 +99,11 @@ describe("FilesView", () => {
 		expect(await screen.findByTestId("files-view-wide")).toBeVisible();
 		expect(screen.queryByRole("heading", { name: "Files" })).toBeNull();
 		expect(screen.queryByText("2 files")).toBeNull();
-		expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+		const newFile = screen.getByRole("button", { name: "New file" });
+		expect(newFile).toBeVisible();
+		expect(newFile).toHaveAttribute("data-attr", "file-new-wide");
+		expect(newFile).toHaveAttribute("data-ui", "atelier-action-button");
+		expect(newFile).toHaveAttribute("data-variant", "primary");
 		expect(getFilesTreeItem("docs/")).toHaveTextContent("docs");
 		expect(queryFilesTreeItem("docs/guide.md")).toBeNull();
 
