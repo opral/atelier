@@ -6,9 +6,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type {
+	ContextMenuItem as FileTreeContextMenuItem,
+	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
 	FileTreeDirectoryHandle,
 	FileTree as PierreFileTreeModel,
 	FileTreeItemHandle,
@@ -24,11 +26,14 @@ import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
 import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
 
+export type FileTreeFileType = "generic" | "markdown" | "csv";
+
 export type FileTreeCreateRequest = {
 	readonly id: number;
 	readonly kind: "file" | "directory";
 	readonly directoryPath: string;
 	readonly initialValue: string;
+	readonly fileType?: FileTreeFileType;
 };
 
 export type FileTreeRenameRequest = {
@@ -64,6 +69,10 @@ export type FileTreeProps = {
 		value: string,
 	) => Promise<void> | void;
 	readonly onCreateCancel?: (request: FileTreeCreateRequest) => void;
+	readonly onCreateAtDirectory?: (
+		directoryPath: string,
+		kind: "file" | "directory",
+	) => void;
 	readonly onRenameCommit?: (
 		request: FileTreeRenameRequest,
 	) => Promise<void> | void;
@@ -245,6 +254,7 @@ export function FileTree({
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
+	onCreateAtDirectory,
 	onRenameCommit,
 }: FileTreeProps) {
 	const [internalOpenDirectories, setInternalOpenDirectories] = useState(
@@ -298,6 +308,7 @@ export function FileTree({
 		openDirectoryTreePaths,
 		openDirectories,
 		openFileView,
+		onCreateAtDirectory,
 		onCreateCancel,
 		onCreateCommit,
 		onOpenDirectoriesChange,
@@ -348,6 +359,21 @@ export function FileTree({
 	}, []);
 
 	const { model } = useFileTree({
+		composition: {
+			contextMenu: {
+				buttonVisibility: "when-needed",
+				enabled: true,
+				triggerMode: "both",
+				onOpen: (item) => {
+					const info = pathInfoForTreePath(
+						stateRef.current.pathInfoByTreePath,
+						item.path,
+					);
+					if (!info || info.createRequestId != null) return;
+					stateRef.current.onSelectItem?.(info.appPath, info.kind, info.source);
+				},
+			},
+		},
 		dragAndDrop: false,
 		flattenEmptyDirectories: false,
 		icons: { set: "minimal", colored: false },
@@ -364,6 +390,62 @@ export function FileTree({
 		stickyFolders: false,
 		unsafeCSS: FILE_TREE_UNSAFE_CSS,
 	});
+	const renderContextMenu = useCallback(
+		(
+			item: FileTreeContextMenuItem,
+			context: FileTreeContextMenuOpenContext,
+		) => {
+			const info = pathInfoForTreePath(
+				stateRef.current.pathInfoByTreePath,
+				item.path,
+			);
+			if (!info || info.createRequestId != null) return null;
+			const canRename = canRenameTreeItem(info);
+			const canCreateInDirectory =
+				info.kind === "directory" &&
+				info.source !== "checkpoint-diff" &&
+				info.source !== "watched" &&
+				stateRef.current.createRequest == null;
+			const canOpen = info.source === "checkpoint-diff";
+			if (!canRename && !canCreateInDirectory && !canOpen) return null;
+			return (
+				<TreeItemContextMenu
+					item={item}
+					context={context}
+					canCreateInDirectory={canCreateInDirectory}
+					canOpen={canOpen}
+					canRename={canRename}
+					onCreate={(kind) => {
+						if (info.kind !== "directory") return;
+						context.close({ restoreFocus: false });
+						stateRef.current.onCreateAtDirectory?.(
+							ensureDirectoryPath(info.appPath),
+							kind,
+						);
+					}}
+					onOpen={() => {
+						context.close();
+						stateRef.current.onSelectItem?.(
+							info.appPath,
+							info.kind,
+							info.source,
+						);
+						if (info.kind === "file" && info.id) {
+							void stateRef.current.openFileView?.(info.id, info.appPath);
+						}
+					}}
+					onRename={() => {
+						context.close({ restoreFocus: false });
+						window.setTimeout(() => {
+							model.focusPath(item.path);
+							model.startRenaming(item.path);
+						}, 0);
+					}}
+				/>
+			);
+		},
+		[model],
+	);
 
 	useLayoutEffect(() => {
 		stateRef.current = {
@@ -371,6 +453,7 @@ export function FileTree({
 			openDirectoryTreePaths,
 			openDirectories,
 			openFileView,
+			onCreateAtDirectory,
 			onCreateCancel,
 			onCreateCommit,
 			onOpenDirectoriesChange,
@@ -456,6 +539,7 @@ export function FileTree({
 	}, [
 		createRequest,
 		model,
+		onCreateAtDirectory,
 		onCreateCancel,
 		onCreateCommit,
 		onClearSelection,
@@ -576,7 +660,7 @@ export function FileTree({
 	}, [model]);
 
 	if (treeInput.paths.length === 0) {
-		// The "New file" row above the tree is the affordance; no extra copy.
+		// The tree-row "New" control above the tree is the affordance; no extra copy.
 		return null;
 	}
 
@@ -588,9 +672,127 @@ export function FileTree({
 			onClick={(event) => handleTreeClick(event.nativeEvent)}
 			onClickCapture={handleTreeClickCapture}
 			onKeyDownCapture={() => setSuppressItemFocusRing(false)}
+			renderContextMenu={renderContextMenu}
 			style={treeHostStyle(isPanelFocused, variant)}
 		/>
 	);
+}
+
+function TreeItemContextMenu({
+	item,
+	context,
+	canCreateInDirectory,
+	canOpen,
+	canRename,
+	onCreate,
+	onOpen,
+	onRename,
+}: {
+	readonly item: FileTreeContextMenuItem;
+	readonly context: FileTreeContextMenuOpenContext;
+	readonly canCreateInDirectory: boolean;
+	readonly canOpen: boolean;
+	readonly canRename: boolean;
+	readonly onCreate: (kind: "file" | "directory") => void;
+	readonly onOpen: () => void;
+	readonly onRename: () => void;
+}) {
+	const style = treeContextMenuStyle(context.anchorRect);
+	return (
+		<div
+			aria-label={`Actions for ${item.name}`}
+			className="z-50 min-w-44 rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 font-sans text-xs text-[var(--color-text-primary)] shadow-md"
+			data-file-tree-context-menu-root="true"
+			role="menu"
+			style={style}
+			tabIndex={-1}
+			onClick={(event) => event.stopPropagation()}
+			onKeyDown={(event) => event.stopPropagation()}
+			onPointerDown={(event) => event.stopPropagation()}
+		>
+			{canOpen ? (
+				<TreeItemContextMenuButton onClick={onOpen}>
+					Open
+				</TreeItemContextMenuButton>
+			) : null}
+			{canCreateInDirectory ? (
+				<>
+					<TreeItemContextMenuButton onClick={() => onCreate("file")}>
+						New file
+					</TreeItemContextMenuButton>
+					<TreeItemContextMenuButton onClick={() => onCreate("directory")}>
+						New folder
+					</TreeItemContextMenuButton>
+					<div
+						aria-hidden="true"
+						className="my-1 h-px bg-[var(--color-border-panel)]"
+					/>
+				</>
+			) : null}
+			{canRename ? (
+				<TreeItemContextMenuButton onClick={onRename}>
+					Rename
+				</TreeItemContextMenuButton>
+			) : null}
+		</div>
+	);
+}
+
+function TreeItemContextMenuButton({
+	children,
+	onClick,
+}: {
+	readonly children: ReactNode;
+	readonly onClick: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			role="menuitem"
+			className="flex w-full items-center rounded-sm px-2 py-1.5 text-left outline-none hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			onClick={onClick}
+		>
+			{children}
+		</button>
+	);
+}
+
+function treeContextMenuStyle(
+	anchorRect: FileTreeContextMenuOpenContext["anchorRect"],
+): CSSProperties {
+	const edge = 8;
+	const menuHeight = 132;
+	const menuWidth = 176;
+	const viewportWidth =
+		typeof window === "undefined" ? 1024 : window.innerWidth;
+	const viewportHeight =
+		typeof window === "undefined" ? 768 : window.innerHeight;
+	const top = Math.max(
+		edge,
+		Math.min(anchorRect.bottom + 4, viewportHeight - menuHeight - edge),
+	);
+	if (anchorRect.width === 0 && anchorRect.height === 0) {
+		return {
+			left: Math.max(
+				edge,
+				Math.min(anchorRect.left, viewportWidth - menuWidth - edge),
+			),
+			position: "fixed",
+			top,
+		};
+	}
+	return {
+		position: "fixed",
+		right: Math.max(edge, viewportWidth - anchorRect.right),
+		top,
+	};
+}
+
+function canRenameTreeItem(info: TreePathInfo): boolean {
+	if (info.createRequestId != null || info.source === "checkpoint-diff") {
+		return false;
+	}
+	return info.source !== "watched" || info.kind === "file";
 }
 
 function buildTreeInput(

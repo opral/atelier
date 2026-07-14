@@ -70,3 +70,66 @@
 - Human visual review should confirm the original placeholder copy, the Emoji row in the Insert group, picker anchoring after `/emoji`, emoji baseline alignment, and light/dark appearance.
 
 final result: blocked
+
+---
+
+# Files tree unified New menu — design QA
+
+## Comparison target
+
+- Approved design mock: `.codex/audits/file-tree/mocks/07-new-as-tree-row-review-mode.png`.
+- Primary reference state: a compact, borderless `New` row in the file tree;
+  its open menu has a selected destination, generic file/folder actions with
+  shortcuts, and Markdown/CSV quick starts. A review-status dot is left of the
+  row ellipsis.
+- Implementation: `src/extensions/files/index.tsx` and
+  `src/extensions/files/file-tree.tsx`.
+
+## Implemented fidelity surfaces
+
+- The compact trigger is a normal tree row (`New`, orange file-plus icon,
+  discreet chevron), rather than a bordered button or toolbar.
+- The flat menu names the creation destination and keeps the happy path in one
+  scan: `New file` (`⌘ .`), `New folder` (`⇧⌘ .`), then Markdown and CSV
+  variants. Existing asset icons preserve the repository's folder, Markdown,
+  and CSV colors.
+- Creation resolves to the selected folder, the selected file's parent, or
+  root; generic names keep their supplied extension, while Markdown and CSV
+  variants append their extension only once.
+- Per-row actions use the native tree right-click and hover/focus ellipsis
+  affordance. Folder menus offer New file, New folder, and Rename; file menus
+  offer Rename. Checkpoint-diff rows stay read-only with Open only.
+- The upstream tree composition keeps the review-decoration lane before the
+  action lane, so an amber review dot appears before the ellipsis without
+  permanent action chrome.
+
+## Interaction and automated evidence
+
+- Targeted Files tests: 47 passed. Coverage includes central New menu labels
+  and shortcuts, selected-folder creation, generic-extension collision
+  handling, CSV initialization, right-click, ellipsis, rename, checkpoint
+  read-only behavior, watched-directory restrictions, and review-dot/action
+  ordering.
+- Typecheck: passed.
+- Production build: passed.
+- Lint: passed with 10 pre-existing warnings and no errors.
+- Scoped formatting and `git diff --check`: passed.
+
+## Visual verification limitation
+
+- The approved source mock was opened and inspected in this task.
+- A same-viewport implementation screenshot could not be captured: the Codex
+  in-app Browser runtime fails before opening a tab with
+  `Cannot redefine property: process`. No alternate browser was used because
+  no browser was selected for this task.
+- This is an environment/tooling limitation, not a claimed visual pass. Review
+  the open New-menu and row-ellipsis states in the PR preview before merge.
+
+## Findings
+
+- P0: none in automated interaction, type, lint, or production-build checks.
+- P1: manual visual comparison remains required because the in-app Browser
+  runtime could not initialize.
+- P2: none.
+
+final result: blocked — browser runtime unavailable for required screenshot comparison

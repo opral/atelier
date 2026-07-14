@@ -180,7 +180,7 @@ describe("open file lifecycle", () => {
 			).toHaveAttribute("aria-pressed", "false");
 			expect(
 				document.activeElement ===
-					screen.getByRole("button", { name: "New file" }) ||
+					screen.getByRole("button", { name: "New" }) ||
 					document.activeElement?.getAttribute("aria-label") === "Files",
 			).toBe(true);
 		});

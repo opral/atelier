@@ -1,7 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Files, FileUp, Plus } from "lucide-react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
+import { ChevronDown, Files, FileUp } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
-import { AtelierActionButton } from "@/components/ui/atelier-action-button";
+import folderBlueIconUrl from "./assets/folder-blue.svg";
+import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileMdIconUrl from "./assets/file-md.svg";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
@@ -14,6 +31,7 @@ import type { ExtensionState, PanelSide } from "../../extension-runtime/types";
 import {
 	FileTree,
 	type FileTreeCreateRequest,
+	type FileTreeFileType,
 	type FileTreeRenameRequest,
 } from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -343,16 +361,26 @@ function FilesViewContent({
 	);
 	const resolveCreateDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
-		if (selectedPath.endsWith("/")) return selectedPath;
+		if (selectedKind === "directory") {
+			return ensureDirectoryPath(selectedPath);
+		}
 		const parts = selectedPath.split("/").filter(Boolean);
 		if (parts.length <= 1) return "/";
 		return `/${parts.slice(0, -1).join("/")}/`;
-	}, [selectedPath]);
+	}, [selectedKind, selectedPath]);
+	const createDestinationLabel = useMemo(
+		() => formatCreateDestination(resolveCreateDirectory()),
+		[resolveCreateDirectory],
+	);
 
 	const startCreateRequest = useCallback(
-		(kind: "file" | "directory") => {
+		(
+			kind: "file" | "directory",
+			fileType: FileTreeFileType = "generic",
+			directoryOverride?: string,
+		) => {
 			if (createRequest) return;
-			const baseDirectory = resolveCreateDirectory();
+			const baseDirectory = directoryOverride ?? resolveCreateDirectory();
 			const directoryPath = ensureDirectoryPath(baseDirectory);
 			setLocalSelection(null);
 			if (directoryPath !== "/") {
@@ -365,8 +393,9 @@ function FilesViewContent({
 			nextCreateRequestIdRef.current += 1;
 			setCreateRequest({
 				directoryPath,
+				fileType: kind === "file" ? fileType : undefined,
 				id: nextCreateRequestIdRef.current,
-				initialValue: kind === "directory" ? "new-directory" : "new-file",
+				initialValue: initialValueForCreateRequest(kind),
 				kind,
 			});
 		},
@@ -374,7 +403,15 @@ function FilesViewContent({
 	);
 
 	const handleNewFile = useCallback(() => {
-		startCreateRequest("file");
+		startCreateRequest("file", "generic");
+	}, [startCreateRequest]);
+
+	const handleNewMarkdown = useCallback(() => {
+		startCreateRequest("file", "markdown");
+	}, [startCreateRequest]);
+
+	const handleNewCsv = useCallback(() => {
+		startCreateRequest("file", "csv");
 	}, [startCreateRequest]);
 
 	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
@@ -390,11 +427,17 @@ function FilesViewContent({
 				setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 			};
 			const executeFileCreation = async () => {
-				const path = deriveMarkdownPathFromStem(
-					value,
-					directoryPath,
-					existingFilePaths,
-				);
+				const fileType = request.fileType ?? "generic";
+				const path =
+					fileType === "markdown"
+						? deriveMarkdownPathFromStem(
+								value,
+								directoryPath,
+								existingFilePaths,
+							)
+						: fileType === "csv"
+							? deriveCsvPathFromStem(value, directoryPath, existingFilePaths)
+							: deriveGenericFilePath(value, directoryPath, existingFilePaths);
 				if (!path) {
 					setSelectionOverride(null);
 					clearRequest();
@@ -406,7 +449,9 @@ function FilesViewContent({
 						.insertInto("lix_file")
 						.values({
 							path,
-							data: new TextEncoder().encode(""),
+							data: new TextEncoder().encode(
+								fileType === "csv" ? "Column 1\n" : "",
+							),
 						})
 						.execute();
 					const id = (
@@ -492,6 +537,13 @@ function FilesViewContent({
 	const handleCreateDirectory = useCallback(() => {
 		startCreateRequest("directory");
 	}, [startCreateRequest]);
+
+	const handleCreateAtDirectory = useCallback(
+		(directoryPath: string, kind: "file" | "directory") => {
+			startCreateRequest(kind, "generic", directoryPath);
+		},
+		[startCreateRequest],
+	);
 
 	const handleRenameCommit = useCallback(
 		async (request: FileTreeRenameRequest) => {
@@ -602,10 +654,12 @@ function FilesViewContent({
 			panelSide,
 			viewInstance,
 			isActiveView,
-			handler: handleNewFile,
+			// The host-level document command keeps its established Markdown
+			// behavior. The visible New-file action remains extension-agnostic.
+			handler: handleNewMarkdown,
 		});
 	}, [
-		handleNewFile,
+		handleNewMarkdown,
 		isActiveView,
 		panelSide,
 		registerNewFileDraftHandler,
@@ -908,6 +962,7 @@ function FilesViewContent({
 			createRequest={createRequest}
 			onCreateCancel={handleCreateCancel}
 			onCreateCommit={handleCreateCommit}
+			onCreateAtDirectory={handleCreateAtDirectory}
 			onRenameCommit={handleRenameCommit}
 		/>
 	);
@@ -931,15 +986,34 @@ function FilesViewContent({
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						<div className="flex shrink-0 justify-end pb-6">
-							<AtelierActionButton
-								onClick={handleNewFile}
-								aria-label="New file"
-								data-attr="file-new-wide"
-							>
-								<Plus className="size-3.5" strokeWidth={2.4} />
-								<span>New file</span>
-								<span className="ml-0.5 text-xs font-semibold">⌘.</span>
-							</AtelierActionButton>
+							{!createRequest ? (
+								<UnifiedNewMenu
+									destinationLabel={createDestinationLabel}
+									onNewCsv={handleNewCsv}
+									onNewFile={handleNewFile}
+									onNewFolder={handleCreateDirectory}
+									onNewMarkdown={handleNewMarkdown}
+								>
+									<button
+										type="button"
+										className="flex h-8 select-none items-center gap-1.5 rounded-[7px] px-2.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+										data-attr="file-new-wide"
+										title="Create a new file or folder"
+									>
+										<img
+											src={fileNewIconUrl}
+											alt=""
+											aria-hidden="true"
+											className="size-3.5 shrink-0"
+										/>
+										<span>New</span>
+										<ChevronDown
+											aria-hidden="true"
+											className="size-3 text-[var(--color-icon-tertiary)]"
+										/>
+									</button>
+								</UnifiedNewMenu>
+							) : null}
 						</div>
 						<div
 							data-testid="files-view-tree-scroll"
@@ -951,30 +1025,37 @@ function FilesViewContent({
 					</div>
 				</div>
 			) : null}
-			{/* Compact new-file row for side-panel use. */}
+			{/* Compact New row for side-panel use. */}
 			{context?.panelSide !== "central" && !createRequest ? (
-				<button
-					type="button"
-					onClick={handleNewFile}
-					className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-					aria-label="New file"
-					title="New file (⌘.)"
-					data-attr="file-new"
+				<UnifiedNewMenu
+					destinationLabel={createDestinationLabel}
+					onNewCsv={handleNewCsv}
+					onNewFile={handleNewFile}
+					onNewFolder={handleCreateDirectory}
+					onNewMarkdown={handleNewMarkdown}
 				>
-					<span className="flex items-center gap-[6px]">
-						<img
-							src={fileNewIconUrl}
-							alt=""
+					<button
+						type="button"
+						className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+						data-attr="file-new"
+						title="Create a new file or folder"
+					>
+						<span className="flex items-center gap-[6px]">
+							<img
+								src={fileNewIconUrl}
+								alt=""
+								aria-hidden="true"
+								className="size-3.25 shrink-0"
+								data-attr="file-new-icon"
+							/>
+							<span>New</span>
+						</span>
+						<ChevronDown
 							aria-hidden="true"
-							className="size-3.25 shrink-0"
-							data-attr="file-new-icon"
+							className="size-3 text-[var(--color-icon-tertiary)]"
 						/>
-						<span>New file</span>
-					</span>
-					<span className="text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
-						⌘ ·
-					</span>
-				</button>
+					</button>
+				</UnifiedNewMenu>
 			) : null}
 			{isDraggingOver && (
 				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">
@@ -997,6 +1078,100 @@ function FilesViewContent({
 				</div>
 			) : null}
 		</div>
+	);
+}
+
+function UnifiedNewMenu({
+	children,
+	destinationLabel,
+	onNewCsv,
+	onNewFile,
+	onNewFolder,
+	onNewMarkdown,
+}: {
+	readonly children: ReactNode;
+	readonly destinationLabel: string;
+	readonly onNewCsv: () => void;
+	readonly onNewFile: () => void;
+	readonly onNewFolder: () => void;
+	readonly onNewMarkdown: () => void;
+}) {
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+			<DropdownMenuContent
+				align="start"
+				aria-label="Create"
+				className="w-56 p-1.5 text-xs"
+				sideOffset={3}
+			>
+				<DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
+					Create in: {destinationLabel}
+				</DropdownMenuLabel>
+				<NewMenuItem
+					dataAttr="file-new-file"
+					iconUrl={fileNewIconUrl}
+					label="New file"
+					shortcut="⌘ ."
+					onSelect={onNewFile}
+				/>
+				<NewMenuItem
+					dataAttr="file-new-folder"
+					iconUrl={folderBlueIconUrl}
+					label="New folder"
+					shortcut="⇧⌘ ."
+					onSelect={onNewFolder}
+				/>
+				<DropdownMenuSeparator className="my-1.5" />
+				<NewMenuItem
+					dataAttr="file-new-markdown"
+					iconUrl={fileMdIconUrl}
+					label="New Markdown (.md)"
+					onSelect={onNewMarkdown}
+				/>
+				<NewMenuItem
+					dataAttr="file-new-csv"
+					iconUrl={fileCsvIconUrl}
+					label="New CSV (.csv)"
+					onSelect={onNewCsv}
+				/>
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
+
+function NewMenuItem({
+	dataAttr,
+	iconUrl,
+	label,
+	shortcut,
+	onSelect,
+}: {
+	readonly dataAttr: string;
+	readonly iconUrl: string;
+	readonly label: string;
+	readonly shortcut?: string;
+	readonly onSelect: () => void;
+}) {
+	return (
+		<DropdownMenuItem
+			className="gap-2 py-1.75 text-xs"
+			data-attr={dataAttr}
+			onSelect={onSelect}
+		>
+			<img
+				src={iconUrl}
+				alt=""
+				aria-hidden="true"
+				className="size-3.5 shrink-0"
+			/>
+			<span className="min-w-0 flex-1 truncate">{label}</span>
+			{shortcut ? (
+				<kbd className="ml-3 text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
+					{shortcut}
+				</kbd>
+			) : null}
+		</DropdownMenuItem>
 	);
 }
 
@@ -1182,28 +1357,95 @@ export function deriveMarkdownPathFromStem(
 	directory: string,
 	existingPaths: Set<string>,
 ): string | null {
-	const finalStem = normalizeNameStem(
-		(stem ?? "").trim().replace(/\.(?:md|markdown)$/i, ""),
+	return deriveTypedFilePathFromStem(
+		stem,
+		directory,
+		existingPaths,
+		"md",
+		/\.(?:md|markdown)$/i,
 	);
+}
+
+export function deriveCsvPathFromStem(
+	stem: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	return deriveTypedFilePathFromStem(
+		stem,
+		directory,
+		existingPaths,
+		"csv",
+		/\.csv$/i,
+	);
+}
+
+export function deriveGenericFilePath(
+	name: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	return deriveFilePathFromName(
+		normalizeNameStem(name),
+		directory,
+		existingPaths,
+	);
+}
+
+function deriveTypedFilePathFromStem(
+	stem: string,
+	directory: string,
+	existingPaths: Set<string>,
+	fileExtension: string,
+	suffixPattern: RegExp,
+): string | null {
+	const finalStem = normalizeNameStem(
+		(stem ?? "").trim().replace(suffixPattern, ""),
+	);
+	return deriveFilePathFromName(
+		`${finalStem}.${fileExtension}`,
+		directory,
+		existingPaths,
+	);
+}
+
+function deriveFilePathFromName(
+	name: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	const finalName = normalizeNameStem(name);
 	const sanitizedDirectory =
 		directory === "/"
 			? "/"
 			: directory.endsWith("/")
 				? directory
 				: `${directory}/`;
-	const primary = `${sanitizedDirectory}${finalStem}.md`;
+	const primary = `${sanitizedDirectory}${finalName}`;
 	if (!existingPaths.has(primary)) {
 		return primary;
 	}
+	const { baseName, extension: filenameSuffix } = splitFilename(finalName);
 	let suffix = 2;
 	while (suffix < 1000) {
-		const candidate = `${sanitizedDirectory}${finalStem}-${suffix}.md`;
+		const candidate = `${sanitizedDirectory}${baseName}-${suffix}${filenameSuffix}`;
 		if (!existingPaths.has(candidate)) {
 			return candidate;
 		}
 		suffix += 1;
 	}
 	return null;
+}
+
+function splitFilename(name: string): { baseName: string; extension: string } {
+	const dotIndex = name.lastIndexOf(".");
+	if (dotIndex <= 0 || dotIndex === name.length - 1) {
+		return { baseName: name, extension: "" };
+	}
+	return {
+		baseName: name.slice(0, dotIndex),
+		extension: name.slice(dotIndex),
+	};
 }
 
 function deriveDirectoryPathFromStem(
@@ -1245,6 +1487,16 @@ function normalizeNameStem(stem: string): string {
 		return "untitled";
 	}
 	return collapsedWhitespace;
+}
+
+function initialValueForCreateRequest(kind: "file" | "directory"): string {
+	if (kind === "directory") return "new-folder";
+	return "new-file";
+}
+
+function formatCreateDestination(directoryPath: string): string {
+	if (directoryPath === "/") return "Workspace";
+	return directoryPath.replace(/^\/+|\/+$/g, "") || "Workspace";
 }
 
 function ensureDirectoryPath(path: string): string {

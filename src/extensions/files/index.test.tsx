@@ -13,7 +13,12 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import type { CheckpointDiff } from "@/extension-runtime/checkpoint-diff";
 import type { Lix } from "@lix-js/sdk";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
-import { deriveMarkdownPathFromStem, FilesView } from ".";
+import {
+	deriveCsvPathFromStem,
+	deriveGenericFilePath,
+	deriveMarkdownPathFromStem,
+	FilesView,
+} from ".";
 
 describe("deriveMarkdownPathFromStem", () => {
 	test.each([
@@ -29,6 +34,21 @@ describe("deriveMarkdownPathFromStem", () => {
 		expect(
 			deriveMarkdownPathFromStem("test.markdown", "/", new Set(["/test.md"])),
 		).toBe("/test-2.md");
+	});
+});
+
+describe("file creation path helpers", () => {
+	test("keeps an entered generic extension and suffixes collisions before it", () => {
+		expect(deriveGenericFilePath("notes.csv", "/", new Set())).toBe(
+			"/notes.csv",
+		);
+		expect(
+			deriveGenericFilePath("notes.csv", "/", new Set(["/notes.csv"])),
+		).toBe("/notes-2.csv");
+	});
+
+	test("does not duplicate the CSV suffix", () => {
+		expect(deriveCsvPathFromStem("data.csv", "/", new Set())).toBe("/data.csv");
 	});
 });
 
@@ -99,11 +119,9 @@ describe("FilesView", () => {
 		expect(await screen.findByTestId("files-view-wide")).toBeVisible();
 		expect(screen.queryByRole("heading", { name: "Files" })).toBeNull();
 		expect(screen.queryByText("2 files")).toBeNull();
-		const newFile = screen.getByRole("button", { name: "New file" });
-		expect(newFile).toBeVisible();
-		expect(newFile).toHaveAttribute("data-attr", "file-new-wide");
-		expect(newFile).toHaveAttribute("data-ui", "atelier-action-button");
-		expect(newFile).toHaveAttribute("data-variant", "primary");
+		const newButton = screen.getByRole("button", { name: "New" });
+		expect(newButton).toBeVisible();
+		expect(newButton).toHaveAttribute("data-attr", "file-new-wide");
 		expect(getFilesTreeItem("docs/")).toHaveTextContent("docs");
 		expect(queryFilesTreeItem("docs/guide.md")).toBeNull();
 
@@ -133,7 +151,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		fireEvent.click(await screen.findByRole("button", { name: "New file" }));
+		await chooseNewMenuItem("New Markdown (.md)");
 		const input = await waitFor(() => getFilesTreeRenameInput());
 		fireEvent.input(input, { target: { value: "launch-plan" } });
 		fireEvent.keyDown(input, { key: "Enter" });
@@ -160,6 +178,95 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("offers the unified New menu with destination and creation shortcuts", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		openNewMenu(await screen.findByRole("button", { name: "New" }));
+		expect(await screen.findByText("Create in: Workspace")).toBeVisible();
+		expect(screen.getByRole("menuitem", { name: /New file/ })).toBeVisible();
+		expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeVisible();
+		expect(
+			screen.getByRole("menuitem", { name: /New Markdown \(.md\)/ }),
+		).toBeVisible();
+		expect(
+			screen.getByRole("menuitem", { name: /New CSV \(.csv\)/ }),
+		).toBeVisible();
+		expect(screen.getByText("⌘ .")).toBeVisible();
+		expect(screen.getByText("⇧⌘ .")).toBeVisible();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("creates generic files, folders, and CSV files from New", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		await chooseNewMenuItem("New file");
+		const genericInput = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(genericInput, { target: { value: "notes.csv" } });
+		fireEvent.keyDown(genericInput, { key: "Enter" });
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/notes.csv")
+					.execute(),
+			).toHaveLength(1);
+		});
+
+		await chooseNewMenuItem("New folder");
+		const folderInput = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(folderInput, { target: { value: "planning" } });
+		fireEvent.keyDown(folderInput, { key: "Enter" });
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/planning/")
+					.execute(),
+			).toHaveLength(1);
+		});
+
+		await chooseNewMenuItem("New CSV (.csv)");
+		const csvInput = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(csvInput, { target: { value: "budget" } });
+		fireEvent.keyDown(csvInput, { key: "Enter" });
+		await waitFor(async () => {
+			const created = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["data", "path"])
+				.where("path", "=", "/planning/budget.csv")
+				.executeTakeFirst();
+			expect(created?.path).toBe("/planning/budget.csv");
+			expect(new TextDecoder().decode(created?.data)).toBe("Column 1\n");
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("cancels the expanded new-file form with Escape", async () => {
 		const lix = await openLix();
 		const openFile = vi.fn();
@@ -174,7 +281,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		fireEvent.click(await screen.findByRole("button", { name: "New file" }));
+		await chooseNewMenuItem("New Markdown (.md)");
 		const input = await waitFor(() => getFilesTreeRenameInput());
 		act(() => {
 			input.dispatchEvent(
@@ -232,7 +339,6 @@ describe("FilesView", () => {
 	test("uses one window keydown listener for standalone shortcuts", async () => {
 		const lix = await openLix();
 		const windowAddEventListener = vi.spyOn(window, "addEventListener");
-		const documentAddEventListener = vi.spyOn(document, "addEventListener");
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -244,7 +350,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		await screen.findByRole("button", { name: "New file" });
+		await screen.findByRole("button", { name: "New" });
 		await waitFor(() => {
 			expect(
 				windowAddEventListener.mock.calls.filter(
@@ -252,23 +358,17 @@ describe("FilesView", () => {
 				),
 			).toHaveLength(1);
 		});
-		expect(
-			documentAddEventListener.mock.calls.filter(
-				([type]) => type === "keydown",
-			),
-		).toHaveLength(0);
 		fireEvent.keyDown(window, {
 			code: "Period",
 			key: ".",
 			...primaryModifier(),
 		});
 		await waitFor(() => {
-			expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+			expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 		});
 
 		await act(async () => view?.unmount());
 		windowAddEventListener.mockRestore();
-		documentAddEventListener.mockRestore();
 		await lix.close();
 	});
 
@@ -281,10 +381,10 @@ describe("FilesView", () => {
 				isPanelFocused: true,
 			});
 		});
-		await screen.findByRole("button", { name: "New file" });
+		await screen.findByRole("button", { name: "New" });
 
 		fireCreateShortcut();
-		expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "New" })).toBeVisible();
 
 		await act(async () => {
 			view?.rerender(
@@ -295,7 +395,7 @@ describe("FilesView", () => {
 			);
 		});
 		fireCreateShortcut();
-		expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "New" })).toBeVisible();
 
 		await act(async () => {
 			view?.rerender(
@@ -307,7 +407,7 @@ describe("FilesView", () => {
 		});
 		fireCreateShortcut();
 		await waitFor(() => {
-			expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+			expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 		});
 
 		await act(async () => view?.unmount());
@@ -454,7 +554,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		fireEvent.click(screen.getByRole("button", { name: "New file" }));
+		await chooseNewMenuItem("New file");
 		const input = await waitFor(getFilesTreeRenameInput);
 		fireEvent.keyDown(input, { key: "Escape" });
 
@@ -729,6 +829,30 @@ function fireCreateShortcut() {
 		key: ".",
 		...primaryModifier(),
 	});
+}
+
+async function chooseNewMenuItem(name: string) {
+	openNewMenu(await screen.findByRole("button", { name: "New" }));
+	const dataAttrByName: Record<string, string> = {
+		"New file": "file-new-file",
+		"New folder": "file-new-folder",
+		"New Markdown (.md)": "file-new-markdown",
+		"New CSV (.csv)": "file-new-csv",
+	};
+	const dataAttr = dataAttrByName[name];
+	if (!dataAttr) throw new Error(`Unknown New menu item '${name}'`);
+	const menuItem = await waitFor(() => {
+		const item = document.querySelector(`[data-attr='${dataAttr}']`);
+		if (!(item instanceof HTMLElement)) {
+			throw new Error(`New menu item '${name}' was not rendered`);
+		}
+		return item;
+	});
+	fireEvent.click(menuItem);
+}
+
+function openNewMenu(button: HTMLElement) {
+	fireEvent.pointerDown(button, { button: 0, ctrlKey: false });
 }
 
 function fireDeleteShortcut() {

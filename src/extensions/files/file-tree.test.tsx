@@ -339,6 +339,96 @@ describe("FileTree", () => {
 		});
 	});
 
+	test("opens the folder action menu from right click and creates at that folder", async () => {
+		const handleCreateAtDirectory = vi.fn();
+		const { container } = render(
+			<FileTree
+				nodes={mockTree}
+				onCreateAtDirectory={handleCreateAtDirectory}
+			/>,
+		);
+
+		openTreeContextMenu(container, "docs/");
+		const menu = await getTreeContextMenu(container);
+		expect(menu).toHaveTextContent("New file");
+		expect(menu).toHaveTextContent("New folder");
+		expect(menu).toHaveTextContent("Rename");
+
+		fireEvent.click(getTreeContextMenuButton(menu, "New file"));
+		expect(handleCreateAtDirectory).toHaveBeenCalledWith("/docs/", "file");
+	});
+
+	test("opens the same menu from the row ellipsis trigger", async () => {
+		const { container } = render(<FileTree nodes={mockTree} />);
+		const docsRow = getTreeItem(container, "docs/");
+		fireEvent.pointerOver(docsRow);
+		const overflowTrigger = await waitFor(() => {
+			const trigger = getTreeRoot(container).querySelector(
+				"[data-type='context-menu-trigger'][data-visible='true']",
+			);
+			if (!(trigger instanceof HTMLElement)) {
+				throw new Error("row ellipsis trigger not visible");
+			}
+			return trigger;
+		});
+
+		fireEvent.click(overflowTrigger);
+		const menu = await getTreeContextMenu(container);
+		expect(menu).toHaveTextContent("New file");
+	});
+
+	test("uses the same context menu to rename a file", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+				source: "lix",
+			},
+		];
+		const { container } = render(<FileTree nodes={nodes} />);
+
+		openTreeContextMenu(container, "README.md");
+		const menu = await getTreeContextMenu(container);
+		fireEvent.click(getTreeContextMenuButton(menu, "Rename"));
+
+		const input = await waitFor(() => {
+			const nextInput = queryTreeRenameInput(container);
+			if (!nextInput) throw new Error("rename input not rendered");
+			return nextInput;
+		});
+		expect(input).toHaveValue("README.md");
+	});
+
+	test("keeps checkpoint-diff file menus read-only", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "historical-file",
+				name: "historical.md",
+				path: "/historical.md",
+				source: "checkpoint-diff",
+			},
+		];
+		const handleOpen = vi.fn();
+		const { container } = render(
+			<FileTree nodes={nodes} openFileView={handleOpen} />,
+		);
+
+		openTreeContextMenu(container, "historical.md");
+		const menu = await getTreeContextMenu(container);
+		expect(menu).toHaveTextContent("Open");
+		expect(menu).not.toHaveTextContent("Rename");
+		expect(menu).not.toHaveTextContent("New file");
+
+		fireEvent.click(getTreeContextMenuButton(menu, "Open"));
+		expect(handleOpen).toHaveBeenCalledWith(
+			"historical-file",
+			"/historical.md",
+		);
+	});
+
 	test("does not start native renames for watched-only directories", async () => {
 		const nodes: FilesystemTreeNode[] = [
 			{
@@ -367,6 +457,13 @@ describe("FileTree", () => {
 			expect(queryTreeRenameInput(container)).toBeNull();
 		});
 		expect(handleRenameCommit).not.toHaveBeenCalled();
+
+		fireEvent.contextMenu(getTreeItem(container, "docs/"));
+		await waitFor(() => {
+			expect(
+				container.querySelector("[data-file-tree-context-menu-root]"),
+			).toBeNull();
+		});
 	});
 
 	test("keeps focus state on file tree rows instead of filename labels", async () => {
@@ -509,6 +606,16 @@ describe("FileTree", () => {
 				"--trees-git-modified-color-override",
 			),
 		).toBe("var(--color-warning-600)");
+		const reviewRow = getTreeItem(container, "docs/review.md");
+		const reviewDot = reviewRow.querySelector("[data-item-section='git']");
+		const actionLane = reviewRow.querySelector("[data-item-section='action']");
+		if (!reviewDot || !actionLane) {
+			throw new Error("review dot or action lane not rendered");
+		}
+		expect(
+			reviewDot.compareDocumentPosition(actionLane) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 	});
 });
 
@@ -557,6 +664,39 @@ function queryTreeRenameInput(container: HTMLElement): HTMLInputElement | null {
 		"[data-item-rename-input]",
 	);
 	return input instanceof HTMLInputElement ? input : null;
+}
+
+function openTreeContextMenu(container: HTMLElement, path: string) {
+	fireEvent.contextMenu(getTreeItem(container, path), {
+		button: 2,
+		clientX: 24,
+		clientY: 24,
+	});
+}
+
+function getTreeContextMenu(container: HTMLElement): Promise<HTMLElement> {
+	return waitFor(() => {
+		const menu = container.querySelector(
+			"[data-file-tree-context-menu-root='true']",
+		);
+		if (!(menu instanceof HTMLElement)) {
+			throw new Error("file tree context menu not found");
+		}
+		return menu;
+	});
+}
+
+function getTreeContextMenuButton(
+	menu: HTMLElement,
+	name: string,
+): HTMLElement {
+	const button = [...menu.querySelectorAll("button")].find(
+		(element) => element.textContent?.trim() === name,
+	);
+	if (!(button instanceof HTMLElement)) {
+		throw new Error(`context menu action '${name}' not found`);
+	}
+	return button;
 }
 
 async function startTreeRename(
