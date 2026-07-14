@@ -14,6 +14,7 @@ import {
 import {
 	appendAgentTurnCommitRange,
 	agentTurnCommitRangesFromValues,
+	agentTurnReviewId,
 	clearAgentTurnCommitRangeFile,
 	readAgentTurnCommitRanges,
 	type AgentTurnCommitRange,
@@ -379,6 +380,52 @@ describe("getExternalWriteReview", () => {
 			expect(review?.beforeCommitId).toBe(beforeCommitId);
 			expect(review?.afterCommitId).toBe(afterCommitId);
 			await expectReviewData(lix, review, "turn 1 before", "turn 2 after");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("excludes resolved ranges before combining a later review", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = "resolved-then-later-file";
+			const path = "/docs/resolved-then-later.md";
+			await writeFile(lix, fileId, path, "before range A");
+			const beforeRangeA = await activeCommitId(lix);
+			await writeFile(lix, fileId, path, "after range A");
+			const afterRangeA = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-resolved-a",
+					beforeCommitId: beforeRangeA,
+					afterCommitId: afterRangeA,
+				}),
+			);
+			await writeFile(lix, fileId, path, "after range B");
+			const afterRangeB = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-pending-b",
+					beforeCommitId: afterRangeA,
+					afterCommitId: afterRangeB,
+				}),
+			);
+
+			const review = await getExternalWriteReview(lix, fileId, path, {
+				resolvedReviewIds: new Set([
+					agentTurnReviewId(fileId, ["range-resolved-a"]),
+				]),
+			});
+
+			expect(review?.reviewId).toBe(
+				agentTurnReviewId(fileId, ["range-pending-b"]),
+			);
+			expect(review?.agentTurnRangeIds).toEqual(["range-pending-b"]);
+			expect(review?.beforeCommitId).toBe(afterRangeA);
+			expect(review?.afterCommitId).toBe(afterRangeB);
+			await expectReviewData(lix, review, "after range A", "after range B");
 		} finally {
 			await lix.close();
 		}

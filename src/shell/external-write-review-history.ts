@@ -55,6 +55,7 @@ export async function getExternalWriteReview(
 		fileId,
 		path,
 		ranges,
+		options?.resolvedReviewIds,
 	);
 	return review && !options?.resolvedReviewIds?.has(review.reviewId)
 		? review
@@ -79,6 +80,7 @@ export async function getPendingExternalWriteReviewPaths(
 				file.fileId,
 				file.path,
 				resolvedRanges,
+				resolvedReviewIds,
 			);
 			if (review && !resolvedReviewIds.has(review.reviewId)) {
 				pendingPaths.add(file.path);
@@ -142,7 +144,13 @@ export function useExternalWriteReview(args: {
 		const loadReview =
 			ranges.length === 0
 				? Promise.resolve(null)
-				: getAgentTurnExternalWriteReview(lix, args.fileId, args.path, ranges);
+				: getAgentTurnExternalWriteReview(
+						lix,
+						args.fileId,
+						args.path,
+						ranges,
+						resolvedReviewIdSet,
+					);
 		void loadReview
 			.then((nextReview) => {
 				if (!cancelled) {
@@ -231,9 +239,12 @@ async function getAgentTurnExternalWriteReview(
 	fileId: string,
 	path: string,
 	ranges: readonly AgentTurnCommitRange[],
+	resolvedReviewIds: ReadonlySet<string> = new Set(),
 ): Promise<ExternalWriteReview | null> {
 	const relevantRanges: AgentTurnCommitRange[] = [];
+	const resolvedRangeIds = resolvedAgentTurnRangeIds(fileId, resolvedReviewIds);
 	for (const range of ranges) {
+		if (resolvedRangeIds.has(range.id)) continue;
 		if (range.beforeCommitId === range.afterCommitId) continue;
 		if (range.clearedFileIds?.includes(fileId)) continue;
 		const data = await getRangeFileData(lix, fileId, range);
@@ -276,6 +287,21 @@ async function getAgentTurnExternalWriteReview(
 		afterCommitId: lastRange.afterCommitId,
 		agentTurnRangeIds: rangeIds,
 	};
+}
+
+function resolvedAgentTurnRangeIds(
+	fileId: string,
+	resolvedReviewIds: ReadonlySet<string>,
+): Set<string> {
+	const resolvedRangeIds = new Set<string>();
+	const prefix = `${fileId}:`;
+	for (const reviewId of resolvedReviewIds) {
+		if (!reviewId.startsWith(prefix)) continue;
+		for (const rangeId of reviewId.slice(prefix.length).split(",")) {
+			if (rangeId) resolvedRangeIds.add(rangeId);
+		}
+	}
+	return resolvedRangeIds;
 }
 
 async function getRangeFileData(
