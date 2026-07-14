@@ -7,6 +7,7 @@ import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import { handlePaste as defaultHandlePaste } from "./handle-paste";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
+import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
@@ -217,7 +218,9 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			if (node.type.name === "heading" && node.attrs?.level === 1) {
 				return "Heading 1";
 			}
-			return node.type.name === "paragraph" ? "Press ‘/’ for commands" : "";
+			return node.type.name === "paragraph"
+				? "Press ‘/’ for commands · ‘:’ for emoji"
+				: "";
 		},
 		showOnlyWhenEditable: true,
 		showOnlyCurrent: true,
@@ -248,6 +251,9 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}),
 			Placeholder.configure(placeholderConfig),
 			SlashCommandsExtension.configure({
+				onStateChange: () => {},
+			}),
+			EmojiCommandsExtension.configure({
 				onStateChange: () => {},
 			}),
 			TableNavigationExtension,

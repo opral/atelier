@@ -909,7 +909,7 @@ test("shows the command hint only while focused on an empty document", async () 
 	await waitFor(() => {
 		const paragraph = editorNode.querySelector("p");
 		expect(paragraph?.getAttribute("data-placeholder")).toBe(
-			"Press ‘/’ for commands",
+			"Press ‘/’ for commands · ‘:’ for emoji",
 		);
 		expect(container?.getAttribute("data-editor-focused")).toBe("true");
 	});
@@ -941,7 +941,7 @@ test("shows the command hint on a focused empty paragraph after Enter", async ()
 		expect(emptyParagraph?.textContent).toBe("");
 		expect(emptyParagraph?.classList.contains("is-empty")).toBe(true);
 		expect(emptyParagraph?.getAttribute("data-placeholder")).toBe(
-			"Press ‘/’ for commands",
+			"Press ‘/’ for commands · ‘:’ for emoji",
 		);
 	});
 });
@@ -978,7 +978,7 @@ test("keeps the command hint on only the active empty paragraph", async () => {
 
 		await waitFor(() => {
 			const placeholders = editorNode.querySelectorAll(
-				'p.is-empty[data-placeholder="Press ‘/’ for commands"]',
+				'p.is-empty[data-placeholder="Press ‘/’ for commands · ‘:’ for emoji"]',
 			);
 			expect(placeholders).toHaveLength(1);
 		});

@@ -83,6 +83,7 @@
 		"pdfjs-dist": "5.4.624",
 		"react-resizable-panels": "^4.12.1",
 		"tailwind-merge": "^3.6.0",
+		"unicode-emoji-json": "0.9.0",
 		"use-sync-external-store": "^1.6.0",
 		"yaml": "^2.8.2"
 	},
