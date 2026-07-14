@@ -76,6 +76,7 @@ export interface MountedExtension {
 export type ExtensionRuntime = AtelierExtensionRuntime & {
 	readonly reviews: {
 		readonly resolvedReviewIds: readonly string[];
+		readonly rangeSessionId?: string;
 		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
 		readonly accept: (args: {
 			readonly fileId: string;

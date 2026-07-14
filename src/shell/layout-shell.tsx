@@ -1,4 +1,5 @@
 import {
+	Suspense,
 	useCallback,
 	useEffect,
 	useEffectEvent,
@@ -98,7 +99,11 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
-import { getFileDataAtCommit } from "./external-write-review-history";
+import {
+	getFileDataAtCommit,
+	getPendingExternalWriteReviewPaths,
+	useAgentTurnCommitRanges,
+} from "./external-write-review-history";
 import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
@@ -696,6 +701,7 @@ type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly setUiStateKV: AtelierUiStateSetter;
 	readonly activeBranchId: string;
 	readonly resolvedReviewIds: readonly string[];
+	readonly autoRevealedAgentTurnRangeKeys: Set<string>;
 };
 
 type AtelierUiStateSetter = (
@@ -860,6 +866,7 @@ function LayoutShellStateLoader(
 		readonly branchId: string | null;
 		readonly resolvedReviewIds: readonly string[];
 	}>({ branchId: null, resolvedReviewIds: [] });
+	const autoRevealedAgentTurnRangeKeysRef = useRef(new Set<string>());
 
 	useEffect(() => {
 		let cancelled = false;
@@ -969,6 +976,7 @@ function LayoutShellStateLoader(
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
 			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
+			autoRevealedAgentTurnRangeKeys={autoRevealedAgentTurnRangeKeysRef.current}
 		/>
 	);
 }
@@ -989,6 +997,116 @@ function AtelierShellLoadingPlaceholder() {
 	return <div className="h-full w-full bg-[var(--color-bg-app)]" />;
 }
 
+function AgentTurnReviewAutoReveal({
+	lix,
+	activeBranchId,
+	activeFileId,
+	activeFilePath,
+	resolvedReviewIds,
+	reviewRangeSessionId,
+	autoRevealedRangeKeys,
+	openFile,
+}: {
+	readonly lix: ReturnType<typeof useLix>;
+	readonly activeBranchId: string;
+	readonly activeFileId: string | null;
+	readonly activeFilePath: string | null;
+	readonly resolvedReviewIds: readonly string[];
+	readonly reviewRangeSessionId?: string;
+	readonly autoRevealedRangeKeys: Set<string>;
+	readonly openFile: (file: { fileId: string; filePath: string }) => void;
+}) {
+	const { ranges } = useAgentTurnCommitRanges(
+		activeBranchId,
+		reviewRangeSessionId,
+	);
+
+	useEffect(() => {
+		const unseenRanges = ranges
+			.map((range) => ({
+				range,
+				key: JSON.stringify([activeBranchId, range.id]),
+			}))
+			.filter(({ key }) => !autoRevealedRangeKeys.has(key));
+		if (unseenRanges.length === 0) return;
+
+		let cancelled = false;
+		void (async () => {
+			const isCapturedBranchActive = async () => {
+				if (cancelled) return false;
+				const currentBranchId = await lix.activeBranchId();
+				return !cancelled && currentBranchId === activeBranchId;
+			};
+			const resolvedReviewIdSet = new Set(resolvedReviewIds);
+			if (activeFileId && activeFilePath) {
+				const activePendingPaths = await getPendingExternalWriteReviewPaths(
+					lix,
+					[{ fileId: activeFileId, path: activeFilePath }],
+					ranges,
+					resolvedReviewIdSet,
+				);
+				if (!(await isCapturedBranchActive())) return;
+				if (activePendingPaths.has(activeFilePath)) return;
+			}
+
+			// Read the files after observing the range. This avoids treating a newly
+			// created file as a no-op while the independent file query catches up.
+			if (!(await isCapturedBranchActive())) return;
+			const files = await qb(lix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.orderBy("path", "asc")
+				.execute();
+			if (!(await isCapturedBranchActive())) return;
+			const reviewableFiles = files.map((file) => ({
+				fileId: String(file.id),
+				path: String(file.path),
+			}));
+
+			for (const { range, key } of unseenRanges) {
+				const pendingPaths = await getPendingExternalWriteReviewPaths(
+					lix,
+					reviewableFiles,
+					[range],
+					resolvedReviewIdSet,
+				);
+				if (!(await isCapturedBranchActive())) return;
+				autoRevealedRangeKeys.add(key);
+				const firstReviewFile = reviewableFiles.find((file) =>
+					pendingPaths.has(file.path),
+				);
+				if (!firstReviewFile) continue;
+
+				openFile({
+					fileId: firstReviewFile.fileId,
+					filePath: firstReviewFile.path,
+				});
+				return;
+			}
+		})().catch((error: unknown) => {
+			if (cancelled) return;
+			console.warn(
+				"[agent-turn-review] failed to reveal first changed file",
+				error,
+			);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		activeBranchId,
+		activeFileId,
+		activeFilePath,
+		autoRevealedRangeKeys,
+		lix,
+		openFile,
+		ranges,
+		resolvedReviewIds,
+	]);
+
+	return null;
+}
+
 function LayoutShellLoadedContent({
 	atelierInstance,
 	lix,
@@ -996,6 +1114,7 @@ function LayoutShellLoadedContent({
 	setUiStateKV,
 	activeBranchId,
 	resolvedReviewIds,
+	autoRevealedAgentTurnRangeKeys,
 	slots,
 	filesViewMode,
 	defaultOpenPanels,
@@ -1011,6 +1130,9 @@ function LayoutShellLoadedContent({
 	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
 		qb(queryLix).selectFrom("lix_file").select("id"),
 	);
+	const reviewRangeSessionId = getAtelierConfiguration(
+		effectiveAtelierInstance,
+	).reviewRangeSessionId;
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
@@ -1221,6 +1343,11 @@ function LayoutShellLoadedContent({
 
 	const registerExternalWriteReview = useCallback(
 		(review: ExternalWriteReview) => {
+			for (const rangeId of review.agentTurnRangeIds) {
+				autoRevealedAgentTurnRangeKeys.add(
+					JSON.stringify([activeBranchId, rangeId]),
+				);
+			}
 			if (resolvedReviewIdsRef.current.has(review.reviewId)) {
 				return () => {};
 			}
@@ -1248,7 +1375,7 @@ function LayoutShellLoadedContent({
 				}
 			};
 		},
-		[emitEvent],
+		[activeBranchId, autoRevealedAgentTurnRangeKeys, emitEvent],
 	);
 
 	const emitDiffReviewResolution = useCallback(
@@ -1776,6 +1903,17 @@ function LayoutShellLoadedContent({
 			});
 		},
 		[emitEvent, ensurePanelExpanded, extensionMap, updateWorkspace],
+	);
+	const openAutoRevealedFile = useCallback(
+		(file: { fileId: string; filePath: string }) => {
+			openResolvedFileView({
+				panel: "central",
+				fileId: file.fileId,
+				filePath: file.filePath,
+				focus: true,
+			});
+		},
+		[openResolvedFileView],
 	);
 
 	const showCheckpointDiff = useCallback(
@@ -2611,6 +2749,9 @@ function LayoutShellLoadedContent({
 			},
 			reviews: {
 				resolvedReviewIds: privateResolvedReviewIds,
+				...(reviewRangeSessionId !== undefined
+					? { rangeSessionId: reviewRangeSessionId }
+					: {}),
 				resolve: handleResolveExternalWriteReview,
 				accept: handleAcceptExternalWriteReview,
 				reject: handleRejectExternalWriteReview,
@@ -2633,6 +2774,7 @@ function LayoutShellLoadedContent({
 			effectiveAtelierInstance.branches.create,
 			lix,
 			privateResolvedReviewIds,
+			reviewRangeSessionId,
 			registerExternalWriteReview,
 		],
 	);
@@ -2738,6 +2880,18 @@ function LayoutShellLoadedContent({
 				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
+				<Suspense fallback={null}>
+					<AgentTurnReviewAutoReveal
+						lix={lix}
+						activeBranchId={activeBranchId}
+						activeFileId={activeCentralFileId}
+						activeFilePath={activeDocumentPath}
+						resolvedReviewIds={privateResolvedReviewIds}
+						reviewRangeSessionId={reviewRangeSessionId}
+						autoRevealedRangeKeys={autoRevealedAgentTurnRangeKeys}
+						openFile={openAutoRevealedFile}
+					/>
+				</Suspense>
 				<TopBar
 					activeFileName={activeFileName}
 					isReviewingCheckpoint={isReviewMode}

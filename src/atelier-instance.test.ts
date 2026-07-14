@@ -185,6 +185,52 @@ describe("createAtelier", () => {
 		expect(persistedRange).not.toHaveProperty("turnId");
 	});
 
+	test("defaults diff ranges to the configured review session", async () => {
+		const atelier = createAtelier({
+			lix: {} as Lix,
+			branchSession,
+			reviewRangeSessionId: "account-1",
+		});
+
+		await atelier.diff.open({
+			beforeCommitId: "commit-before",
+			afterCommitId: "commit-after",
+			source: { id: "codex" },
+		});
+
+		expect(mocks.appendAgentTurnCommitRange.mock.calls[0]?.[1]).toEqual(
+			expect.objectContaining({
+				sessionId: "account-1",
+				id: JSON.stringify([
+					"atelier-diff",
+					"codex",
+					"account-1",
+					null,
+					"commit-before",
+					"commit-after",
+				]),
+			}),
+		);
+	});
+
+	test("keeps an explicit diff session over the configured default", async () => {
+		const atelier = createAtelier({
+			lix: {} as Lix,
+			branchSession,
+			reviewRangeSessionId: "account-1",
+		});
+
+		await atelier.diff.open({
+			beforeCommitId: "commit-before",
+			afterCommitId: "commit-after",
+			source: { id: "codex", sessionId: "explicit-session" },
+		});
+
+		expect(mocks.appendAgentTurnCommitRange.mock.calls[0]?.[1]?.sessionId).toBe(
+			"explicit-session",
+		);
+	});
+
 	test("does not open an empty commit range", async () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 

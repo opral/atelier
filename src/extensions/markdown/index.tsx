@@ -73,6 +73,7 @@ type MarkdownViewProps = {
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
+	readonly reviewRangeSessionId?: string;
 	readonly checkpointDiff?: CheckpointDiff | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
@@ -127,6 +128,7 @@ export function MarkdownView({
 	defaultBlock,
 	activeBranchId = "main",
 	resolvedReviewIds,
+	reviewRangeSessionId,
 	checkpointDiff,
 	beforeCommitId,
 	afterCommitId,
@@ -150,6 +152,7 @@ export function MarkdownView({
 				defaultBlock={defaultBlock}
 				activeBranchId={activeBranchId}
 				resolvedReviewIds={resolvedReviewIds}
+				reviewRangeSessionId={reviewRangeSessionId}
 				checkpointDiff={checkpointDiff}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
@@ -232,6 +235,7 @@ function MarkdownLiveViewLoaded({
 	defaultBlock,
 	activeBranchId = "main",
 	resolvedReviewIds,
+	reviewRangeSessionId,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -246,6 +250,7 @@ function MarkdownLiveViewLoaded({
 		path: fileRow?.path,
 		activeBranchId,
 		resolvedReviewIds,
+		reviewRangeSessionId,
 	});
 	const externalWriteReviewData =
 		useExternalWriteReviewData(externalWriteReview);
@@ -1154,6 +1159,7 @@ export const extension = createReactExtensionDefinition({
 				}
 				activeBranchId={atelier.branches.activeId}
 				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
+				reviewRangeSessionId={atelier.reviews.rangeSessionId}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"
 						? view.state.beforeCommitId

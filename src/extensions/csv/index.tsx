@@ -49,6 +49,7 @@ type CsvViewProps = {
 	readonly fileId: string;
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
+	readonly reviewRangeSessionId?: string;
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
@@ -112,6 +113,7 @@ export function CsvView({
 	fileId,
 	activeBranchId = "main",
 	resolvedReviewIds,
+	reviewRangeSessionId,
 	filePath,
 	isActiveView = true,
 	isPanelFocused = true,
@@ -130,6 +132,7 @@ export function CsvView({
 				fileId={fileId}
 				activeBranchId={activeBranchId}
 				resolvedReviewIds={resolvedReviewIds}
+				reviewRangeSessionId={reviewRangeSessionId}
 				filePath={filePath}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
@@ -208,6 +211,7 @@ function CsvLiveViewData({
 	registerExternalWriteReview,
 	activeBranchId = "main",
 	resolvedReviewIds,
+	reviewRangeSessionId,
 	...props
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
@@ -217,6 +221,7 @@ function CsvLiveViewData({
 		path: fileRow?.path,
 		activeBranchId,
 		resolvedReviewIds,
+		reviewRangeSessionId,
 	});
 
 	if (!fileRow) {
@@ -237,6 +242,7 @@ function CsvLiveViewData({
 				fileRow={fileRow}
 				activeBranchId={activeBranchId}
 				resolvedReviewIds={resolvedReviewIds}
+				reviewRangeSessionId={reviewRangeSessionId}
 				externalWriteReview={externalWriteReview}
 				reviewControls="review"
 				{...props}
@@ -735,6 +741,7 @@ export const extension = createReactExtensionDefinition({
 				fileId={view.state.fileId as string}
 				activeBranchId={atelier.branches.activeId}
 				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
+				reviewRangeSessionId={atelier.reviews.rangeSessionId}
 				filePath={view.state.filePath as string | undefined}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"
