@@ -108,6 +108,21 @@ function pmBlockToAst(
 						? inline
 						: emptyParagraphPlaceholderChildren(),
 			};
+		case "imageBlock": {
+			const blockData = extractNodeData(node.attrs);
+			const image: any = {
+				type: "image",
+				url: node.attrs?.src ?? null,
+				title: node.attrs?.title ?? null,
+				alt: node.attrs?.alt ?? null,
+			};
+			if (node.attrs?.imageData != null) image.data = node.attrs.imageData;
+			return {
+				type: "paragraph",
+				data: blockData.data,
+				children: [image],
+			};
+		}
 		case "heading":
 			const headingData = extractNodeData(node.attrs);
 			return {

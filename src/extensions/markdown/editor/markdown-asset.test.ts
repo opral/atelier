@@ -5,6 +5,7 @@ import {
 	isPdfAssetSrc,
 	loadMarkdownAsset,
 	markdownAssetLabel,
+	relativeMarkdownAssetSrc,
 	resolveMarkdownAssetPath,
 } from "./markdown-asset";
 
@@ -54,6 +55,58 @@ describe("resolveMarkdownAssetPath", () => {
 			}),
 		).toBeNull();
 	});
+
+	test("preserves literal percent signs in workspace file paths", () => {
+		const sourceFilePath = "/docs/100%/guide.md";
+		const workspacePath = "/assets/diagram 100%.png";
+		const src = relativeMarkdownAssetSrc({ sourceFilePath, workspacePath });
+
+		expect(src).toBe("../../assets/diagram%20100%25.png");
+		expect(resolveMarkdownAssetPath({ sourceFilePath, src: src ?? "" })).toBe(
+			workspacePath,
+		);
+	});
+});
+
+describe("relativeMarkdownAssetSrc", () => {
+	test.each([
+		["/README.md", "/assets/diagram.png", "assets/diagram.png"],
+		["/docs/readme.md", "/assets/diagram.png", "../assets/diagram.png"],
+		[
+			"/docs/guides/readme.md",
+			"/assets/diagram.png",
+			"../../assets/diagram.png",
+		],
+		["/assets/readme.md", "/assets/diagram.png", "diagram.png"],
+		[
+			"/docs/readme.md",
+			"/assets/Product brief (final).png",
+			"../assets/Product%20brief%20%28final%29.png",
+		],
+	])(
+		"builds a portable source from %s to %s",
+		(sourceFilePath, workspacePath, expectedSrc) => {
+			const src = relativeMarkdownAssetSrc({ sourceFilePath, workspacePath });
+			expect(src).toBe(expectedSrc);
+			expect(resolveMarkdownAssetPath({ sourceFilePath, src: src ?? "" })).toBe(
+				workspacePath,
+			);
+		},
+	);
+
+	test.each([
+		["docs/readme.md", "/assets/diagram.png"],
+		["/docs/readme.md", "assets/diagram.png"],
+		["/../readme.md", "/assets/diagram.png"],
+		["/docs//private/readme.md", "/assets/diagram.png"],
+	])(
+		"rejects invalid workspace paths %s -> %s",
+		(sourceFilePath, workspacePath) => {
+			expect(
+				relativeMarkdownAssetSrc({ sourceFilePath, workspacePath }),
+			).toBeNull();
+		},
+	);
 });
 
 describe("PDF asset metadata", () => {

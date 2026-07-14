@@ -181,6 +181,54 @@ test("renders initial document content", async () => {
 	expect(editor).toHaveTextContent("Hello");
 });
 
+test("shows accessible feedback after pasting an image into the editor", async () => {
+	const fileId = "file_image_paste_feedback";
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Before",
+	});
+	const imageBytes = new Uint8Array([137, 80, 78, 71, 9, 8, 7]);
+	const file = new File([imageBytes], "image.png", { type: "image/png" });
+	const event = {
+		preventDefault: vi.fn(),
+		clipboardData: {
+			items: [
+				{
+					kind: "file",
+					type: "image/png",
+					getAsFile: () => file,
+				},
+			],
+			getData: () => "",
+		},
+	} as unknown as ClipboardEvent;
+
+	let handled: void | boolean | undefined;
+	await act(async () => {
+		handled = editor.view.someProp("handlePaste", (pasteHandler) =>
+			pasteHandler(editor.view, event, undefined as any),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+
+	expect(handled).toBe(true);
+	expect(event.preventDefault).toHaveBeenCalledOnce();
+	await waitFor(() =>
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Image added. Saved to assets/pasted-image.png.",
+		),
+	);
+	await waitFor(async () => {
+		const asset = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["path", "data"])
+			.where("path", "=", "/assets/pasted-image.png")
+			.executeTakeFirst();
+		expect(asset?.path).toBe("/assets/pasted-image.png");
+		expect(Array.from(asset?.data ?? [])).toEqual(Array.from(imageBytes));
+	});
+});
+
 test("renders YAML frontmatter as editable fields", async () => {
 	await renderEditorForMarkdownFile({
 		fileId: "file_frontmatter_fields",

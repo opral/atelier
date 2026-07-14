@@ -3,6 +3,8 @@ import { describe, expect, test, vi } from "vitest";
 import { astToTiptapDoc } from "./mdwc-to-tiptap";
 import { tiptapDocToAst } from "./tiptap-to-mdwc";
 import { Editor } from "@tiptap/core";
+import History from "@tiptap/extension-history";
+import { NodeSelection } from "@tiptap/pm/state";
 import { MarkdownWc } from "./markdown-wc";
 import { normalizeAst, parseMarkdown, serializeAst } from "../markdown";
 import type { PdfPreviewRenderer } from "@/extensions/pdf/pdf-preview";
@@ -32,6 +34,22 @@ function roundtripMarkdownThroughEditor(markdown: string): string {
 	const ast = parseMarkdown(markdown);
 	const editorAst = roundtripThroughEditor(ast);
 	return serializeAst(editorAst);
+}
+
+function createDragEvent(
+	type: "dragstart" | "drop",
+	dataTransfer: DataTransfer,
+): DragEvent {
+	const event = new Event(type, {
+		bubbles: true,
+		cancelable: true,
+	}) as DragEvent;
+	Object.defineProperties(event, {
+		dataTransfer: { value: dataTransfer },
+		clientX: { value: 0 },
+		clientY: { value: 0 },
+	});
+	return event;
 }
 
 function stripNullData(value: any): any {
@@ -452,6 +470,17 @@ describe("inline HTML", () => {
 });
 
 describe("lists", () => {
+	test("keeps a list item's first standalone image in its required paragraph", () => {
+		const markdown = "- ![Product diagram](assets/product.png)\n";
+		const pmDoc = astToTiptapDoc(parseMarkdown(markdown));
+		const listItem = pmDoc.content?.[0]?.content?.[0];
+
+		expect(listItem?.type).toBe("listItem");
+		expect(listItem?.content?.[0]?.type).toBe("paragraph");
+		expect(listItem?.content?.[0]?.content?.[0]?.type).toBe("image");
+		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
+	});
+
 	test("unordered", () => {
 		const input: Ast = {
 			type: "root",
@@ -710,6 +739,135 @@ describe("blocks", () => {
 });
 
 describe("inline", () => {
+	test("models a standalone Markdown image as a selectable, draggable block", () => {
+		const ast = parseMarkdown(
+			'Before\n\n![Product diagram](assets/product.png "Architecture")\n\nAfter',
+		);
+		const pmDoc = astToTiptapDoc(ast);
+		expect(pmDoc.content?.map((node) => node.type)).toEqual([
+			"paragraph",
+			"imageBlock",
+			"paragraph",
+		]);
+		expect(pmDoc.content?.[1]?.attrs).toMatchObject({
+			src: "assets/product.png",
+			alt: "Product diagram",
+			title: "Architecture",
+		});
+
+		const editor = new Editor({ extensions: MarkdownWc(), content: pmDoc });
+		expect(editor.schema.nodes.imageBlock.spec.selectable).toBe(true);
+		expect(editor.schema.nodes.imageBlock.spec.draggable).toBe(true);
+		let imagePosition = -1;
+		editor.state.doc.descendants((node, position) => {
+			if (node.type.name === "imageBlock") imagePosition = position;
+		});
+		expect(imagePosition).toBeGreaterThanOrEqual(0);
+		editor.commands.setNodeSelection(imagePosition);
+		expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+		expect(editor.view.dom).not.toHaveAttribute("data-markdown-media-dragging");
+		const imageEmbed = editor.view.dom.querySelector(".markdown-image-embed");
+		expect(imageEmbed).toHaveAttribute("draggable", "true");
+		expect(imageEmbed).toHaveClass("ProseMirror-selectednode");
+		expect(
+			imageEmbed?.querySelector(".markdown-image-block-content"),
+		).toHaveAttribute("draggable", "false");
+		expect(
+			imageEmbed?.querySelector(".markdown-asset-delete"),
+		).toHaveAccessibleName("Delete image");
+
+		const markdown = serializeAst(tiptapDocToAst(editor.getJSON() as any));
+		expect(markdown).toBe(
+			'Before\n\n![Product diagram](assets/product.png "Architecture")\n\nAfter\n',
+		);
+		editor.destroy();
+	});
+
+	test("moves a dragged standalone image without leaving an empty paragraph", () => {
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(
+				parseMarkdown(
+					"Before\n\n![Product diagram](assets/product.png)\n\nAfter",
+				),
+			),
+		});
+		const image = editor.view.dom.querySelector(".markdown-image-embed");
+		expect(image).not.toBeNull();
+		const dataTransfer = {
+			files: [] as unknown as FileList,
+			clearData: vi.fn(),
+			setData: vi.fn(),
+			getData: vi.fn(() => ""),
+			effectAllowed: "",
+		} as unknown as DataTransfer;
+		const dragStart = createDragEvent("dragstart", dataTransfer);
+		image?.dispatchEvent(dragStart);
+		expect((editor.view as any).dragging?.node).toBeInstanceOf(NodeSelection);
+		expect(editor.view.dom).toHaveAttribute("data-markdown-media-dragging");
+
+		vi.spyOn(editor.view, "posAtCoords").mockReturnValue({
+			pos: editor.state.doc.content.size,
+			inside: -1,
+		});
+		const drop = createDragEvent("drop", dataTransfer);
+		editor.view.dom.dispatchEvent(drop);
+
+		expect(drop.defaultPrevented).toBe(true);
+		expect(editor.view.dom).not.toHaveAttribute("data-markdown-media-dragging");
+		expect(
+			editor.state.doc.content.content.map((node) => node.type.name),
+		).toEqual(["paragraph", "paragraph", "imageBlock"]);
+		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
+			"Before\n\nAfter\n\n![Product diagram](assets/product.png)\n",
+		);
+		editor.destroy();
+	});
+
+	test.each([
+		["image", "assets/product.png", "Delete image"],
+		["PDF embed", "assets/brief.pdf", "Delete PDF embed"],
+	])("deletes a standalone %s from its trash action", (_label, src, name) => {
+		const editor = new Editor({
+			extensions: [...MarkdownWc(), History],
+			content: astToTiptapDoc(
+				parseMarkdown(`Before\n\n![Asset](${src})\n\nAfter`),
+			),
+		});
+		const deleteAction = editor.view.dom.querySelector<HTMLButtonElement>(
+			`.markdown-asset-delete[aria-label="${name}"]`,
+		);
+		expect(deleteAction).not.toBeNull();
+		const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+
+		deleteAction?.dispatchEvent(click);
+
+		expect(click.defaultPrevented).toBe(true);
+		expect(
+			editor.state.doc.content.content.map((node) => node.type.name),
+		).toEqual(["paragraph", "paragraph"]);
+		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
+			"Before\n\nAfter\n",
+		);
+		expect(editor.commands.undo()).toBe(true);
+		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
+			`Before\n\n![Asset](${src})\n\nAfter\n`,
+		);
+		editor.destroy();
+	});
+
+	test("keeps images embedded in prose as inline nodes", () => {
+		const pmDoc = astToTiptapDoc(
+			parseMarkdown("Read ![Logo](assets/logo.png) in this sentence."),
+		);
+		expect(pmDoc.content?.[0]?.type).toBe("paragraph");
+		expect(pmDoc.content?.[0]?.content?.map((node) => node.type)).toEqual([
+			"text",
+			"image",
+			"text",
+		]);
+	});
+
 	test("resolved image render src does not change serialized markdown src", () => {
 		const ast = parseMarkdown('![Alt](images/logo.png "Logo")');
 		const editor = new Editor({
