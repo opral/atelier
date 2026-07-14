@@ -1,18 +1,12 @@
-import { useMemo, type ComponentPropsWithRef, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { AtelierTopBarProps } from "@/create-atelier";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-export type AtelierTopBarProps = Omit<
-	ComponentPropsWithRef<"header">,
-	"children" | "dangerouslySetInnerHTML" | "role"
-> & {
-	readonly [attribute: `data-${string}`]: string | number | boolean | undefined;
-};
 
 export type TopBarProps = {
 	/** Active document name, shown in the header center. */

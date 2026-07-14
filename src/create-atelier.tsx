@@ -1,7 +1,6 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense, type ComponentPropsWithRef, type ReactNode } from "react";
 import { LixProvider } from "@/lib/lix-react";
 import { V2LayoutShell } from "@/shell/layout-shell";
-import type { AtelierTopBarProps } from "@/shell/top-bar";
 import type { AtelierExtensionState } from "./extension-api";
 import {
 	getAtelierConfiguration,
@@ -10,7 +9,13 @@ import {
 } from "./atelier-instance";
 
 export type { AtelierPanelSide, AtelierSidePanel } from "./atelier-instance";
-export type { AtelierTopBarProps } from "@/shell/top-bar";
+
+export type AtelierTopBarProps = Omit<
+	ComponentPropsWithRef<"header">,
+	"children" | "dangerouslySetInnerHTML" | "role"
+> & {
+	readonly [attribute: `data-${string}`]: string | number | boolean | undefined;
+};
 
 export type AtelierEmptyPanelSlotContext = {
 	/** The panel whose empty state is being rendered. */

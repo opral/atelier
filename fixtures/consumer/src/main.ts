@@ -8,6 +8,7 @@ import {
 	type AtelierProps,
 	type AtelierRevisionSelection,
 	type AtelierSlots,
+	type AtelierTopBarProps,
 } from "@opral/atelier";
 import "@opral/atelier/style.css";
 import { createElement } from "react";
@@ -34,15 +35,18 @@ export function mountAtelier(lix: Lix): void {
 		},
 	} satisfies AtelierExtensionRegistration;
 	const atelier = createAtelier({ lix, extensions: [historyOverride] });
+	const topBarProps = {
+		"data-host-titlebar": true,
+	} satisfies AtelierTopBarProps;
 	const openDocument: (path: string) => Promise<void> = atelier.documents.open;
 	const startNewDocument: () => Promise<void> = atelier.documents.startNew;
 	const closeActiveDocument: () => Promise<void> =
 		atelier.documents.closeActive;
 	createRoot(element).render(
-		createElement(Atelier, { instance: atelier, slots }),
+		createElement(Atelier, { instance: atelier, slots, topBarProps }),
 	);
 
-	const props: AtelierProps = { instance: atelier, slots };
+	const props: AtelierProps = { instance: atelier, slots, topBarProps };
 	void Atelier;
 	void props;
 	void openDocument;

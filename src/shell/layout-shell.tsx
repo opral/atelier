@@ -30,7 +30,7 @@ import { useLix, useQuery } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
-import { TopBar, type AtelierTopBarProps } from "./top-bar";
+import { TopBar } from "./top-bar";
 import { StatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import type {
@@ -110,6 +110,7 @@ import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
 	AtelierSlots,
+	AtelierTopBarProps,
 } from "../create-atelier";
 import {
 	hostExtensionDefinition,
