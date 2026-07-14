@@ -251,7 +251,7 @@ function HistoryViewContent({
 						No checkpoints available
 					</div>
 				) : (
-					<div className="flex flex-col gap-0.5" role="list">
+					<ul className="flex flex-col gap-0.5">
 						{branches.map((branch) => {
 							const isActive = branch.id === activeBranchRow.id;
 							const isReviewing = currentRevision?.branchId === branch.id;
@@ -260,9 +260,8 @@ function HistoryViewContent({
 							const branchDisplayName = displayBranchName(branch.name);
 							const isPending = pendingAction === branch.id;
 							return (
-								<div
+								<li
 									key={branch.id}
-									role="listitem"
 									data-selected={isReviewing ? "true" : undefined}
 									className={clsx(
 										"group flex min-w-0 items-center rounded-[7px] transition-colors",
@@ -345,10 +344,10 @@ function HistoryViewContent({
 											</DropdownMenuItem>
 										</DropdownMenuContent>
 									</DropdownMenu>
-								</div>
+								</li>
 							);
 						})}
-					</div>
+					</ul>
 				)}
 			</div>
 		</div>

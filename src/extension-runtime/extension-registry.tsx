@@ -75,6 +75,7 @@ export const EXTENSION_MAP: Map<ExtensionKind, ExtensionDefinition> =
 	BASE_REGISTRY.extensionMap;
 
 const NOOP = () => {};
+const EMPTY_EXTENSION_DEFINITIONS: readonly ExtensionDefinition[] = [];
 
 const ExtensionRegistryContext = createContext<ExtensionRegistryValue>({
 	visibleExtensions: EXTENSION_DEFINITIONS,
@@ -84,7 +85,7 @@ const ExtensionRegistryContext = createContext<ExtensionRegistryValue>({
 
 export function ExtensionRegistryProvider({
 	children,
-	hostExtensions = [],
+	hostExtensions = EMPTY_EXTENSION_DEFINITIONS,
 }: {
 	children: ReactNode;
 	readonly hostExtensions?: readonly ExtensionDefinition[];

@@ -3,6 +3,9 @@ packages:
   - fixtures/consumer
   - preview/web
 
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+
 peerDependencyRules:
   allowedVersions:
     "@glideapps/glide-data-grid>react": ^19.0.0

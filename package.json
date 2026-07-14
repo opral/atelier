@@ -22,7 +22,7 @@
 		"./style.css": "./dist/atelier.css",
 		"./package.json": "./package.json"
 	},
-	"packageManager": "pnpm@10.13.1",
+	"packageManager": "pnpm@10.34.5",
 	"scripts": {
 		"dev": "pnpm --dir preview/web dev",
 		"build": "vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs",

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { CSSProperties } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type {
@@ -215,6 +222,8 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 `;
 
+const EMPTY_FILE_TREE_NODES: FilesystemTreeNode[] = [];
+
 /**
  * Adapter between Atelier's workspace-path model and @pierre/trees.
  *
@@ -222,7 +231,7 @@ const FILE_TREE_UNSAFE_CSS = `
  * <FileTree openFileView={(id) => console.log(id)} />
  */
 export function FileTree({
-	nodes = [],
+	nodes = EMPTY_FILE_TREE_NODES,
 	variant = "compact",
 	openFileView,
 	createRequest,
@@ -300,22 +309,6 @@ export function FileTree({
 		setInternalOpenDirectories,
 		treePaths: treeInput.paths,
 	});
-	stateRef.current = {
-		createRequest,
-		openDirectoryTreePaths,
-		openDirectories,
-		openFileView,
-		onCreateCancel,
-		onCreateCommit,
-		onOpenDirectoriesChange,
-		onSelectItem,
-		onClearSelection,
-		onRenameCommit,
-		pathInfoByTreePath: treeInput.pathInfoByTreePath,
-		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
-		setInternalOpenDirectories,
-		treePaths: treeInput.paths,
-	};
 
 	const modelRef = useRef<PierreFileTreeModel | null>(null);
 	const startedCreateRequestIdRef = useRef<number | null>(null);
@@ -328,93 +321,6 @@ export function FileTree({
 	const handleCanRenameRef = useRef(
 		(_item: FileTreeRenamingItem): boolean => false,
 	);
-
-	handleSelectionChangeRef.current = (selectedTreePaths) => {
-		const latestTreePath = selectedTreePaths.at(-1);
-		if (!latestTreePath) return;
-		setSuppressItemFocusRing(false);
-		const model = modelRef.current;
-		if (model) {
-			for (const treePath of selectedTreePaths) {
-				if (treePath !== latestTreePath) {
-					model.getItem(treePath)?.deselect();
-				}
-			}
-		}
-		const info = pathInfoForTreePath(
-			stateRef.current.pathInfoByTreePath,
-			latestTreePath,
-		);
-		if (info) {
-			stateRef.current.onSelectItem?.(info.appPath, info.kind, info.source);
-			if (
-				!suppressSelectionOpenRef.current &&
-				!suppressSelectionOpenForClickRef.current &&
-				info.kind === "file" &&
-				info.id
-			) {
-				void stateRef.current.openFileView?.(info.id, info.appPath);
-			}
-		}
-	};
-
-	handleCanRenameRef.current = (item) => {
-		const request = stateRef.current.createRequest;
-		const info = pathInfoForTreePath(
-			stateRef.current.pathInfoByTreePath,
-			item.path,
-		);
-		if (!info) return false;
-		if (item.isFolder !== (info.kind === "directory")) return false;
-		if (request) {
-			return info.createRequestId === request.id;
-		}
-		if (info.createRequestId != null) return false;
-		if (info.source === "watched") {
-			return info.kind === "file";
-		}
-		if (info.source === "checkpoint-diff") {
-			return false;
-		}
-		return true;
-	};
-
-	handleRenameRef.current = (event) => {
-		const request = stateRef.current.createRequest;
-		const sourceInfo = pathInfoForTreePath(
-			stateRef.current.pathInfoByTreePath,
-			event.sourcePath,
-		);
-		if (!sourceInfo) return;
-		if (request && sourceInfo.createRequestId === request.id) {
-			void stateRef.current.onCreateCommit?.(
-				request,
-				leafNameFromTreePath(event.destinationPath),
-			);
-			return;
-		}
-		if (request) return;
-		if (sourceInfo.createRequestId != null) {
-			return;
-		}
-		if (sourceInfo.source === "watched" && sourceInfo.kind !== "file") {
-			return;
-		}
-		if (sourceInfo.source === "checkpoint-diff") {
-			return;
-		}
-		void stateRef.current.onRenameCommit?.({
-			destinationPath:
-				sourceInfo.kind === "directory"
-					? treeDirectoryPathToAppPath(event.destinationPath)
-					: treeFilePathToAppPath(event.destinationPath),
-			id: sourceInfo.id,
-			kind: sourceInfo.kind,
-			source: sourceInfo.source ?? "lix",
-			sourcePath: sourceInfo.appPath,
-		});
-	};
-
 	const handleTreeClickCapture = useCallback(() => {
 		suppressSelectionOpenForClickRef.current = true;
 		window.setTimeout(() => {
@@ -458,7 +364,112 @@ export function FileTree({
 		stickyFolders: false,
 		unsafeCSS: FILE_TREE_UNSAFE_CSS,
 	});
-	modelRef.current = model;
+
+	useLayoutEffect(() => {
+		stateRef.current = {
+			createRequest,
+			openDirectoryTreePaths,
+			openDirectories,
+			openFileView,
+			onCreateCancel,
+			onCreateCommit,
+			onOpenDirectoriesChange,
+			onSelectItem,
+			onClearSelection,
+			onRenameCommit,
+			pathInfoByTreePath: treeInput.pathInfoByTreePath,
+			realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
+			setInternalOpenDirectories,
+			treePaths: treeInput.paths,
+		};
+		modelRef.current = model;
+		handleSelectionChangeRef.current = (selectedTreePaths) => {
+			const latestTreePath = selectedTreePaths.at(-1);
+			if (!latestTreePath) return;
+			setSuppressItemFocusRing(false);
+			for (const treePath of selectedTreePaths) {
+				if (treePath !== latestTreePath) {
+					model.getItem(treePath)?.deselect();
+				}
+			}
+			const info = pathInfoForTreePath(
+				stateRef.current.pathInfoByTreePath,
+				latestTreePath,
+			);
+			if (!info) return;
+			stateRef.current.onSelectItem?.(info.appPath, info.kind, info.source);
+			if (
+				!suppressSelectionOpenRef.current &&
+				!suppressSelectionOpenForClickRef.current &&
+				info.kind === "file" &&
+				info.id
+			) {
+				void stateRef.current.openFileView?.(info.id, info.appPath);
+			}
+		};
+		handleCanRenameRef.current = (item) => {
+			const request = stateRef.current.createRequest;
+			const info = pathInfoForTreePath(
+				stateRef.current.pathInfoByTreePath,
+				item.path,
+			);
+			if (!info) return false;
+			if (item.isFolder !== (info.kind === "directory")) return false;
+			if (request) return info.createRequestId === request.id;
+			if (info.createRequestId != null) return false;
+			if (info.source === "watched") return info.kind === "file";
+			return info.source !== "checkpoint-diff";
+		};
+		handleRenameRef.current = (event) => {
+			const request = stateRef.current.createRequest;
+			const sourceInfo = pathInfoForTreePath(
+				stateRef.current.pathInfoByTreePath,
+				event.sourcePath,
+			);
+			if (!sourceInfo) return;
+			if (request && sourceInfo.createRequestId === request.id) {
+				void stateRef.current.onCreateCommit?.(
+					request,
+					leafNameFromTreePath(event.destinationPath),
+				);
+				return;
+			}
+			if (
+				request ||
+				sourceInfo.createRequestId != null ||
+				(sourceInfo.source === "watched" && sourceInfo.kind !== "file") ||
+				sourceInfo.source === "checkpoint-diff"
+			) {
+				return;
+			}
+			void stateRef.current.onRenameCommit?.({
+				destinationPath:
+					sourceInfo.kind === "directory"
+						? treeDirectoryPathToAppPath(event.destinationPath)
+						: treeFilePathToAppPath(event.destinationPath),
+				id: sourceInfo.id,
+				kind: sourceInfo.kind,
+				source: sourceInfo.source ?? "lix",
+				sourcePath: sourceInfo.appPath,
+			});
+		};
+	}, [
+		createRequest,
+		model,
+		onCreateCancel,
+		onCreateCommit,
+		onClearSelection,
+		onOpenDirectoriesChange,
+		onRenameCommit,
+		onSelectItem,
+		openDirectories,
+		openDirectoryTreePaths,
+		openFileView,
+		setInternalOpenDirectories,
+		treeInput.pathInfoByTreePath,
+		treeInput.paths,
+		treeInput.realDirectoryTreePaths,
+	]);
 
 	useEffect(() => {
 		model.resetPaths(stateRef.current.treePaths, {

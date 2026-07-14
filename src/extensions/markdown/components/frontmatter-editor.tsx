@@ -120,7 +120,6 @@ function FieldKeyInput({
 	readonly onCommit: (value: string) => void;
 }) {
 	const [draft, setDraft] = useState(value);
-	useEffect(() => setDraft(value), [value]);
 	const commit = () => {
 		const requested = draft.trim();
 		if (!requested) {
@@ -276,10 +275,6 @@ function ArrayField({
 	const [adding, setAdding] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	useEffect(() => {
-		setDraft("");
-		setAdding(false);
-	}, [label]);
-	useEffect(() => {
 		if (adding) inputRef.current?.focus();
 	}, [adding]);
 	const addItem = () => {
@@ -354,7 +349,7 @@ function ObjectField({
 	return (
 		<div className="markdown-frontmatter-nested">
 			{Object.entries(value).map(([key, child], index) => (
-				<div className="markdown-frontmatter-nested-row" key={index}>
+				<div className="markdown-frontmatter-nested-row" key={key}>
 					<FieldKeyInput
 						value={key}
 						ariaLabel={`${label} nested field name: ${key}`}
@@ -548,7 +543,7 @@ export function FrontmatterEditorNodeView({
 			{mode === "fields" && parsed.value ? (
 				<div className="markdown-frontmatter-fields">
 					{entries.map(([key, value], index) => (
-						<div className="markdown-frontmatter-row" key={index}>
+						<div className="markdown-frontmatter-row" key={key}>
 							<div className="markdown-frontmatter-key-cell">
 								<FieldTypeIcon fieldKey={key} value={value} />
 								<FieldKeyInput
