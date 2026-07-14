@@ -19,12 +19,48 @@ export function parseMarkdown(markdown: string): AstRoot {
 
 /** Parses Markdown without discarding source positions used by review plans. */
 export function parseMarkdownSource(markdown: string): AstRoot {
-	return resolveReferences(
-		fromMarkdown(markdown, {
-			extensions: [gfm(), frontmatter(["yaml"])],
-			mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
-		}),
-	);
+	const ast = fromMarkdown(markdown, {
+		extensions: [gfm(), frontmatter(["yaml"])],
+		mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
+	});
+	restoreEmptyTaskItems(ast);
+	return resolveReferences(ast);
+}
+
+/**
+ * GFM only recognizes a task marker when text follows it, so the Markdown we
+ * serialize for an empty task (`- [ ] `) comes back as a plain list item whose
+ * text is `[ ]`. Restore the task semantics before building the editor doc.
+ */
+function restoreEmptyTaskItems(node: any, insideBulletList = false): void {
+	if (!node || typeof node !== "object") return;
+
+	if (
+		insideBulletList &&
+		node.type === "listItem" &&
+		typeof node.checked !== "boolean" &&
+		Array.isArray(node.children) &&
+		node.children.length === 1
+	) {
+		const paragraph = node.children[0];
+		const inline = paragraph?.type === "paragraph" ? paragraph.children : null;
+		const marker =
+			Array.isArray(inline) &&
+			inline.length === 1 &&
+			inline[0]?.type === "text" &&
+			typeof inline[0].value === "string"
+				? /^\[([ xX])\]$/.exec(inline[0].value)
+				: null;
+		if (marker) {
+			node.checked = marker[1]?.toLowerCase() === "x";
+			paragraph.children = [];
+		}
+	}
+
+	const childIsInsideBulletList = node.type === "list" && node.ordered !== true;
+	for (const child of Array.isArray(node.children) ? node.children : []) {
+		restoreEmptyTaskItems(child, childIsInsideBulletList);
+	}
 }
 
 function resolveReferences(ast: any): any {
