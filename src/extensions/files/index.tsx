@@ -1,7 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Files, FileUp, Plus } from "lucide-react";
+import {
+	forwardRef,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ButtonHTMLAttributes,
+	type ReactNode,
+} from "react";
+import { ChevronDown, Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
+import folderBlueIconUrl from "./assets/folder-blue.svg";
+import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileMdIconUrl from "./assets/file-md.svg";
 import { AtelierActionButton } from "@/components/ui/atelier-action-button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { selectFilesystemEntries } from "@/queries";
@@ -14,6 +33,9 @@ import type { ExtensionState, PanelSide } from "../../extension-runtime/types";
 import {
 	FileTree,
 	type FileTreeCreateRequest,
+	type FileTreeDeleteRequest,
+	type FileTreeFileType,
+	type FileTreeMoveRequest,
 	type FileTreeRenameRequest,
 } from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -208,7 +230,7 @@ function FilesViewContent({
 		? checkpointReviewStatuses
 		: undefined;
 	const creatingRef = useRef(false);
-	const renamingRef = useRef(false);
+	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
 	const [pendingDirectoryPaths, setPendingDirectoryPaths] = useState<string[]>(
 		[],
@@ -343,16 +365,21 @@ function FilesViewContent({
 	);
 	const resolveCreateDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
-		if (selectedPath.endsWith("/")) return selectedPath;
+		if (selectedKind === "directory") {
+			return ensureDirectoryPath(selectedPath);
+		}
 		const parts = selectedPath.split("/").filter(Boolean);
 		if (parts.length <= 1) return "/";
 		return `/${parts.slice(0, -1).join("/")}/`;
-	}, [selectedPath]);
-
+	}, [selectedKind, selectedPath]);
 	const startCreateRequest = useCallback(
-		(kind: "file" | "directory") => {
+		(
+			kind: "file" | "directory",
+			fileType: FileTreeFileType = "generic",
+			directoryOverride?: string,
+		) => {
 			if (createRequest) return;
-			const baseDirectory = resolveCreateDirectory();
+			const baseDirectory = directoryOverride ?? resolveCreateDirectory();
 			const directoryPath = ensureDirectoryPath(baseDirectory);
 			setLocalSelection(null);
 			if (directoryPath !== "/") {
@@ -363,10 +390,17 @@ function FilesViewContent({
 				});
 			}
 			nextCreateRequestIdRef.current += 1;
+			const initialInputValue = initialInputValueForCreateRequest(
+				kind,
+				fileType,
+			);
 			setCreateRequest({
 				directoryPath,
+				fileType: kind === "file" ? fileType : undefined,
 				id: nextCreateRequestIdRef.current,
-				initialValue: kind === "directory" ? "new-directory" : "new-file",
+				initialInputValue,
+				initialSelectionStart: initialInputValue === undefined ? undefined : 0,
+				initialValue: initialValueForCreateRequest(kind, fileType),
 				kind,
 			});
 		},
@@ -374,7 +408,15 @@ function FilesViewContent({
 	);
 
 	const handleNewFile = useCallback(() => {
-		startCreateRequest("file");
+		startCreateRequest("file", "generic");
+	}, [startCreateRequest]);
+
+	const handleNewMarkdown = useCallback(() => {
+		startCreateRequest("file", "markdown");
+	}, [startCreateRequest]);
+
+	const handleNewCsv = useCallback(() => {
+		startCreateRequest("file", "csv");
 	}, [startCreateRequest]);
 
 	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
@@ -390,11 +432,17 @@ function FilesViewContent({
 				setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 			};
 			const executeFileCreation = async () => {
-				const path = deriveMarkdownPathFromStem(
-					value,
-					directoryPath,
-					existingFilePaths,
-				);
+				const fileType = request.fileType ?? "generic";
+				const path =
+					fileType === "markdown"
+						? deriveMarkdownPathFromStem(
+								value,
+								directoryPath,
+								existingFilePaths,
+							)
+						: fileType === "csv"
+							? deriveCsvPathFromStem(value, directoryPath, existingFilePaths)
+							: deriveGenericFilePath(value, directoryPath, existingFilePaths);
 				if (!path) {
 					setSelectionOverride(null);
 					clearRequest();
@@ -406,7 +454,9 @@ function FilesViewContent({
 						.insertInto("lix_file")
 						.values({
 							path,
-							data: new TextEncoder().encode(""),
+							data: new TextEncoder().encode(
+								fileType === "csv" ? "Column 1\n" : "",
+							),
 						})
 						.execute();
 					const id = (
@@ -425,13 +475,6 @@ function FilesViewContent({
 						fileId: id,
 						kind: "file",
 						source: "lix",
-					});
-					context?.openFile?.({
-						panel: "central",
-						fileId: id,
-						filePath: path,
-						state: { focusOnLoad: true, defaultBlock: "heading1" },
-						focus: true,
 					});
 				} catch (error) {
 					setSelectionOverride(null);
@@ -480,23 +523,24 @@ function FilesViewContent({
 			}
 			return executeFileCreation();
 		},
-		[
-			context,
-			existingDirectoryPaths,
-			existingFilePaths,
-			lix,
-			setLocalSelection,
-		],
+		[existingDirectoryPaths, existingFilePaths, lix, setLocalSelection],
 	);
 
 	const handleCreateDirectory = useCallback(() => {
 		startCreateRequest("directory");
 	}, [startCreateRequest]);
 
-	const handleRenameCommit = useCallback(
-		async (request: FileTreeRenameRequest) => {
-			if (renamingRef.current) return;
-			if (request.source === "checkpoint-diff") return;
+	const handleCreateAtDirectory = useCallback(
+		(directoryPath: string, kind: "file" | "directory") => {
+			startCreateRequest(kind, "generic", directoryPath);
+		},
+		[startCreateRequest],
+	);
+
+	const moveLixTreeItem = useCallback(
+		async (request: FileTreeMoveRequest): Promise<boolean> => {
+			if (movingRef.current) return false;
+			if (request.source === "checkpoint-diff") return false;
 			const sourcePath =
 				request.kind === "directory"
 					? ensureDirectoryPath(request.sourcePath)
@@ -505,7 +549,7 @@ function FilesViewContent({
 				request.kind === "directory"
 					? ensureDirectoryPath(request.destinationPath)
 					: normalizeFilePath(request.destinationPath);
-			if (sourcePath === destinationPath) return;
+			if (sourcePath === destinationPath) return true;
 
 			const destinationExists =
 				request.kind === "directory"
@@ -513,10 +557,10 @@ function FilesViewContent({
 					: existingFilePaths.has(destinationPath);
 			if (destinationExists) {
 				console.warn(`Cannot rename '${sourcePath}' to '${destinationPath}'`);
-				return;
+				return false;
 			}
 
-			renamingRef.current = true;
+			movingRef.current = true;
 			try {
 				if (request.kind === "directory") {
 					await qb(lix)
@@ -539,7 +583,22 @@ function FilesViewContent({
 						kind: "directory",
 						source: "lix",
 					});
-					return;
+					if (
+						activeFileId &&
+						normalizedActiveFilePath?.startsWith(sourcePath)
+					) {
+						void context?.openFile?.({
+							panel: "central",
+							fileId: activeFileId,
+							filePath: remapFilePathInDirectory(
+								normalizedActiveFilePath,
+								sourcePath,
+								destinationPath,
+							),
+							focus: false,
+						});
+					}
+					return true;
 				}
 
 				const resolvedFileId = request.id;
@@ -568,19 +627,33 @@ function FilesViewContent({
 						focus: false,
 					});
 				}
+				return true;
 			} catch (error) {
-				console.error("Failed to rename entry", error);
+				console.error("Failed to move entry", error);
+				return false;
 			} finally {
-				renamingRef.current = false;
+				movingRef.current = false;
 			}
 		},
 		[
+			activeFileId,
 			context,
 			existingDirectoryPaths,
 			existingFilePaths,
 			lix,
+			normalizedActiveFilePath,
 			setLocalSelection,
 		],
+	);
+	const handleRenameCommit = useCallback(
+		async (request: FileTreeRenameRequest) => {
+			await moveLixTreeItem(request);
+		},
+		[moveLixTreeItem],
+	);
+	const handleMoveItem = useCallback(
+		(request: FileTreeMoveRequest) => moveLixTreeItem(request),
+		[moveLixTreeItem],
 	);
 
 	const handleCreateShortcut = useCallback(
@@ -602,10 +675,12 @@ function FilesViewContent({
 			panelSide,
 			viewInstance,
 			isActiveView,
-			handler: handleNewFile,
+			// The host-level document command keeps its established Markdown
+			// behavior. The visible New-file action remains extension-agnostic.
+			handler: handleNewMarkdown,
 		});
 	}, [
-		handleNewFile,
+		handleNewMarkdown,
 		isActiveView,
 		panelSide,
 		registerNewFileDraftHandler,
@@ -688,44 +763,60 @@ function FilesViewContent({
 		setLocalSelection(null);
 	}, [setLocalSelection]);
 
-	const handleDeleteSelection = useCallback(async () => {
-		if (!selectedPath || !selectedKind) return;
-		if (selectedSource === "checkpoint-diff") return;
-		const normalizedPath =
-			selectedKind === "file"
-				? selectedPath
-				: ensureDirectoryPath(selectedPath);
-		try {
-			if (selectedKind === "file") {
-				if (!selectedFileId) return;
-				await qb(lix)
-					.deleteFrom("lix_file")
-					.where("id", "=", selectedFileId)
-					.execute();
-				setPendingPaths((prev) =>
-					prev.filter((path) => path !== normalizedPath),
-				);
-				if (selectedFileId === activeFileId) {
-					context?.closeFileViews?.({ fileId: selectedFileId });
+	const handleDeleteItem = useCallback(
+		async (request: FileTreeDeleteRequest) => {
+			if (request.source !== "lix") return;
+			const normalizedPath =
+				request.kind === "file"
+					? request.sourcePath
+					: ensureDirectoryPath(request.sourcePath);
+			try {
+				if (request.kind === "file") {
+					if (!request.id) return;
+					await qb(lix)
+						.deleteFrom("lix_file")
+						.where("id", "=", request.id)
+						.execute();
+					setPendingPaths((prev) =>
+						prev.filter((path) => path !== normalizedPath),
+					);
+					if (request.id === activeFileId) {
+						context?.closeFileViews?.({ fileId: request.id });
+					}
+				} else {
+					await qb(lix)
+						.deleteFrom("lix_directory")
+						.where("path", "=", normalizedPath)
+						.execute();
+					setPendingDirectoryPaths((prev) =>
+						prev.filter((path) => path !== normalizedPath),
+					);
+					if (
+						activeFileId &&
+						normalizedActiveFilePath?.startsWith(normalizedPath)
+					) {
+						context?.closeFileViews?.({ fileId: activeFileId });
+					}
 				}
-			} else {
-				await qb(lix)
-					.deleteFrom("lix_directory")
-					.where("path", "=", normalizedPath)
-					.execute();
-				setPendingDirectoryPaths((prev) =>
-					prev.filter((path) => path !== normalizedPath),
-				);
+			} catch (error) {
+				console.error("Failed to delete entry", error);
+			} finally {
+				setSelectionOverride(null);
 			}
-		} catch (error) {
-			console.error("Failed to delete entry", error);
-		} finally {
-			setSelectionOverride(null);
-		}
+		},
+		[activeFileId, context, lix, normalizedActiveFilePath],
+	);
+
+	const handleDeleteSelection = useCallback(() => {
+		if (!selectedPath || !selectedKind || selectedSource !== "lix") return;
+		return handleDeleteItem({
+			id: selectedFileId ?? undefined,
+			kind: selectedKind,
+			source: selectedSource,
+			sourcePath: selectedPath,
+		});
 	}, [
-		activeFileId,
-		context,
-		lix,
+		handleDeleteItem,
 		selectedFileId,
 		selectedKind,
 		selectedPath,
@@ -752,7 +843,7 @@ function FilesViewContent({
 					event.shiftKey ||
 					!selectedPath ||
 					!selectedKind ||
-					selectedSource === "checkpoint-diff"
+					selectedSource !== "lix"
 				) {
 					return;
 				}
@@ -791,15 +882,15 @@ function FilesViewContent({
 	]);
 
 	const handleDragEnter = useCallback((e: React.DragEvent) => {
+		if (!isExternalFileDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		dragCounterRef.current += 1;
-		if (e.dataTransfer.types.includes("Files")) {
-			setIsDraggingOver(true);
-		}
+		setIsDraggingOver(true);
 	}, []);
 
 	const handleDragOver = useCallback((e: React.DragEvent) => {
+		if (!isExternalFileDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		if (e.dataTransfer) {
@@ -808,6 +899,7 @@ function FilesViewContent({
 	}, []);
 
 	const handleDragLeave = useCallback((e: React.DragEvent) => {
+		if (!isExternalFileDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		dragCounterRef.current -= 1;
@@ -818,6 +910,7 @@ function FilesViewContent({
 
 	const handleDrop = useCallback(
 		async (e: React.DragEvent) => {
+			if (!isExternalFileDrag(e.dataTransfer)) return;
 			e.preventDefault();
 			e.stopPropagation();
 			dragCounterRef.current = 0;
@@ -908,6 +1001,9 @@ function FilesViewContent({
 			createRequest={createRequest}
 			onCreateCancel={handleCreateCancel}
 			onCreateCommit={handleCreateCommit}
+			onCreateAtDirectory={handleCreateAtDirectory}
+			onDeleteItem={handleDeleteItem}
+			onMoveItem={handleMoveItem}
 			onRenameCommit={handleRenameCommit}
 		/>
 	);
@@ -931,15 +1027,18 @@ function FilesViewContent({
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						<div className="flex shrink-0 justify-end pb-6">
-							<AtelierActionButton
-								onClick={handleNewFile}
-								aria-label="New file"
-								data-attr="file-new-wide"
-							>
-								<Plus className="size-3.5" strokeWidth={2.4} />
-								<span>New file</span>
-								<span className="ml-0.5 text-xs font-semibold">⌘.</span>
-							</AtelierActionButton>
+							{createRequest ? (
+								<WideNewButton disabled />
+							) : (
+								<UnifiedNewMenu
+									onNewCsv={handleNewCsv}
+									onNewFile={handleNewFile}
+									onNewFolder={handleCreateDirectory}
+									onNewMarkdown={handleNewMarkdown}
+								>
+									<WideNewButton />
+								</UnifiedNewMenu>
+							)}
 						</div>
 						<div
 							data-testid="files-view-tree-scroll"
@@ -951,30 +1050,20 @@ function FilesViewContent({
 					</div>
 				</div>
 			) : null}
-			{/* Compact new-file row for side-panel use. */}
-			{context?.panelSide !== "central" && !createRequest ? (
-				<button
-					type="button"
-					onClick={handleNewFile}
-					className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-					aria-label="New file"
-					title="New file (⌘.)"
-					data-attr="file-new"
-				>
-					<span className="flex items-center gap-[6px]">
-						<img
-							src={fileNewIconUrl}
-							alt=""
-							aria-hidden="true"
-							className="size-3.25 shrink-0"
-							data-attr="file-new-icon"
-						/>
-						<span>New file</span>
-					</span>
-					<span className="text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
-						⌘ ·
-					</span>
-				</button>
+			{/* Compact New row for side-panel use. */}
+			{context?.panelSide !== "central" ? (
+				createRequest ? (
+					<CompactNewButton disabled />
+				) : (
+					<UnifiedNewMenu
+						onNewCsv={handleNewCsv}
+						onNewFile={handleNewFile}
+						onNewFolder={handleCreateDirectory}
+						onNewMarkdown={handleNewMarkdown}
+					>
+						<CompactNewButton />
+					</UnifiedNewMenu>
+				)
 			) : null}
 			{isDraggingOver && (
 				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">
@@ -997,6 +1086,152 @@ function FilesViewContent({
 				</div>
 			) : null}
 		</div>
+	);
+}
+
+const WideNewButton = forwardRef<
+	HTMLButtonElement,
+	ButtonHTMLAttributes<HTMLButtonElement>
+>(function WideNewButton(
+	{ disabled = false, title = "Create a new file or folder", ...props },
+	ref,
+) {
+	return (
+		<AtelierActionButton
+			ref={ref}
+			data-attr="file-new-wide"
+			disabled={disabled}
+			title={title}
+			{...props}
+		>
+			<Plus aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+			<span>New</span>
+			<ChevronDown aria-hidden="true" className="size-3 opacity-80" />
+		</AtelierActionButton>
+	);
+});
+
+const CompactNewButton = forwardRef<
+	HTMLButtonElement,
+	ButtonHTMLAttributes<HTMLButtonElement>
+>(function CompactNewButton(
+	{ disabled = false, title = "Create a new file or folder", ...props },
+	ref,
+) {
+	return (
+		<button
+			ref={ref}
+			type="button"
+			className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			data-attr="file-new"
+			disabled={disabled}
+			title={title}
+			{...props}
+		>
+			<span className="flex items-center gap-[6px]">
+				<img
+					src={fileNewIconUrl}
+					alt=""
+					aria-hidden="true"
+					className="size-3.25 shrink-0"
+					data-attr="file-new-icon"
+				/>
+				<span>New</span>
+			</span>
+			<ChevronDown
+				aria-hidden="true"
+				className="size-3 text-[var(--color-icon-tertiary)]"
+			/>
+		</button>
+	);
+});
+
+function UnifiedNewMenu({
+	children,
+	onNewCsv,
+	onNewFile,
+	onNewFolder,
+	onNewMarkdown,
+}: {
+	readonly children: ReactNode;
+	readonly onNewCsv: () => void;
+	readonly onNewFile: () => void;
+	readonly onNewFolder: () => void;
+	readonly onNewMarkdown: () => void;
+}) {
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+			<DropdownMenuContent
+				align="start"
+				aria-label="Create"
+				className="w-56 p-1.5 text-xs"
+				sideOffset={3}
+			>
+				<NewMenuItem
+					dataAttr="file-new-file"
+					iconUrl={fileNewIconUrl}
+					label="New file"
+					shortcut="⌘ ."
+					onSelect={onNewFile}
+				/>
+				<NewMenuItem
+					dataAttr="file-new-folder"
+					iconUrl={folderBlueIconUrl}
+					label="New folder"
+					shortcut="⇧⌘ ."
+					onSelect={onNewFolder}
+				/>
+				<DropdownMenuSeparator className="my-1.5" />
+				<NewMenuItem
+					dataAttr="file-new-markdown"
+					iconUrl={fileMdIconUrl}
+					label="New Markdown (.md)"
+					onSelect={onNewMarkdown}
+				/>
+				<NewMenuItem
+					dataAttr="file-new-csv"
+					iconUrl={fileCsvIconUrl}
+					label="New CSV (.csv)"
+					onSelect={onNewCsv}
+				/>
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
+
+function NewMenuItem({
+	dataAttr,
+	iconUrl,
+	label,
+	shortcut,
+	onSelect,
+}: {
+	readonly dataAttr: string;
+	readonly iconUrl: string;
+	readonly label: string;
+	readonly shortcut?: string;
+	readonly onSelect: () => void;
+}) {
+	return (
+		<DropdownMenuItem
+			className="gap-2 py-1.75 text-xs"
+			data-attr={dataAttr}
+			onSelect={onSelect}
+		>
+			<img
+				src={iconUrl}
+				alt=""
+				aria-hidden="true"
+				className="size-3.5 shrink-0"
+			/>
+			<span className="min-w-0 flex-1 truncate">{label}</span>
+			{shortcut ? (
+				<kbd className="ml-3 text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
+					{shortcut}
+				</kbd>
+			) : null}
+		</DropdownMenuItem>
 	);
 }
 
@@ -1166,6 +1401,10 @@ function isInteractiveEventTarget(event: Event): boolean {
 	return isInteractiveTarget(event.target);
 }
 
+function isExternalFileDrag(dataTransfer: DataTransfer | null): boolean {
+	return dataTransfer?.types.includes("Files") ?? false;
+}
+
 function detectMacPlatform(): boolean {
 	if (typeof navigator === "undefined") return false;
 	const platformCandidates = [
@@ -1182,28 +1421,95 @@ export function deriveMarkdownPathFromStem(
 	directory: string,
 	existingPaths: Set<string>,
 ): string | null {
-	const finalStem = normalizeNameStem(
-		(stem ?? "").trim().replace(/\.(?:md|markdown)$/i, ""),
+	return deriveTypedFilePathFromStem(
+		stem,
+		directory,
+		existingPaths,
+		"md",
+		/\.(?:md|markdown)$/i,
 	);
+}
+
+export function deriveCsvPathFromStem(
+	stem: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	return deriveTypedFilePathFromStem(
+		stem,
+		directory,
+		existingPaths,
+		"csv",
+		/\.csv$/i,
+	);
+}
+
+export function deriveGenericFilePath(
+	name: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	return deriveFilePathFromName(
+		normalizeNameStem(name),
+		directory,
+		existingPaths,
+	);
+}
+
+function deriveTypedFilePathFromStem(
+	stem: string,
+	directory: string,
+	existingPaths: Set<string>,
+	fileExtension: string,
+	suffixPattern: RegExp,
+): string | null {
+	const finalStem = normalizeNameStem(
+		(stem ?? "").trim().replace(suffixPattern, ""),
+	);
+	return deriveFilePathFromName(
+		`${finalStem}.${fileExtension}`,
+		directory,
+		existingPaths,
+	);
+}
+
+function deriveFilePathFromName(
+	name: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	const finalName = normalizeNameStem(name);
 	const sanitizedDirectory =
 		directory === "/"
 			? "/"
 			: directory.endsWith("/")
 				? directory
 				: `${directory}/`;
-	const primary = `${sanitizedDirectory}${finalStem}.md`;
+	const primary = `${sanitizedDirectory}${finalName}`;
 	if (!existingPaths.has(primary)) {
 		return primary;
 	}
+	const { baseName, extension: filenameSuffix } = splitFilename(finalName);
 	let suffix = 2;
 	while (suffix < 1000) {
-		const candidate = `${sanitizedDirectory}${finalStem}-${suffix}.md`;
+		const candidate = `${sanitizedDirectory}${baseName}-${suffix}${filenameSuffix}`;
 		if (!existingPaths.has(candidate)) {
 			return candidate;
 		}
 		suffix += 1;
 	}
 	return null;
+}
+
+function splitFilename(name: string): { baseName: string; extension: string } {
+	const dotIndex = name.lastIndexOf(".");
+	if (dotIndex <= 0 || dotIndex === name.length - 1) {
+		return { baseName: name, extension: "" };
+	}
+	return {
+		baseName: name.slice(0, dotIndex),
+		extension: name.slice(dotIndex),
+	};
 }
 
 function deriveDirectoryPathFromStem(
@@ -1245,6 +1551,26 @@ function normalizeNameStem(stem: string): string {
 		return "untitled";
 	}
 	return collapsedWhitespace;
+}
+
+function initialValueForCreateRequest(
+	kind: "file" | "directory",
+	fileType: FileTreeFileType,
+): string {
+	if (kind === "directory") return "new-folder";
+	if (fileType === "markdown") return "new-file.md";
+	if (fileType === "csv") return "new-file.csv";
+	return "new-file";
+}
+
+function initialInputValueForCreateRequest(
+	kind: "file" | "directory",
+	fileType: FileTreeFileType,
+): string | undefined {
+	if (kind !== "file") return undefined;
+	if (fileType === "markdown") return ".md";
+	if (fileType === "csv") return ".csv";
+	return "";
 }
 
 function ensureDirectoryPath(path: string): string {

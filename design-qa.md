@@ -70,3 +70,89 @@
 - Human visual review should confirm the original placeholder copy, the Emoji row in the Insert group, picker anchoring after `/emoji`, emoji baseline alignment, and light/dark appearance.
 
 final result: blocked
+
+---
+
+# Files tree unified New menu — design QA
+
+## Comparison target
+
+- Approved design mock: `.codex/audits/file-tree/mocks/07-new-as-tree-row-review-mode.png`.
+- Primary reference state: a compact, borderless `New` row in the file tree;
+  its open menu has a selected destination, generic file/folder actions with
+  shortcuts, and Markdown/CSV quick starts. A review-status dot is left of the
+  row ellipsis.
+- Implementation: `src/extensions/files/index.tsx` and
+  `src/extensions/files/file-tree.tsx`.
+
+## Implemented fidelity surfaces
+
+- The compact trigger is a normal tree row (`New`, orange file-plus icon,
+  discreet chevron), rather than a bordered button or toolbar.
+- The flat menu begins with `New file` (`⌘ .`) and `New folder` (`⇧⌘ .`), then
+  Markdown and CSV variants. It deliberately omits a `Create in:` destination
+  label to keep the interaction light; existing asset icons preserve the
+  repository's folder, Markdown, and CSV colors.
+- Creation resolves to the selected folder, the selected file's parent, or
+  root; generic names keep their supplied extension, while Markdown and CSV
+  variants append their extension only once.
+- Markdown and CSV drafts visibly begin as `.md` and `.csv` with the cursor
+  before the extension. Generic `New file` begins empty and commits an
+  extensionless name as typed—there is no hidden or implicit `.md` suffix.
+- Per-row actions use the native tree right-click and hover/focus ellipsis
+  affordance. Folder menus show the existing orange file-plus and blue folder
+  icons for New file/New folder, followed by a clean text-only Rename row and a
+  separated Delete action. Delete uses a compact filled trash icon at the
+  tree-icon weight, neutral secondary text at rest, and the review-mode
+  Backspace glyph in a `⌘ ⌫` keycap; the danger token appears only on hover or
+  keyboard focus. File menus offer Rename and Delete; watched and
+  checkpoint-diff rows remain non-destructive, with checkpoint rows retaining
+  Open only.
+- The upstream tree composition keeps the review-decoration lane before the
+  action lane, so an amber review dot appears before the ellipsis without
+  permanent action chrome.
+- The compact `New` chevron and tree overflow action share the same right-hand
+  action column. The overflow icon is a lighter 12px ellipsis in the shared
+  tertiary-icon token and appears only while its row is hovered (or while its
+  menu is open).
+- Pierre's native drag-and-drop interaction now moves Lix-backed files and
+  folders into a Lix-backed destination folder while retaining the item's name.
+  Its existing drag preview, target state, hover-to-open, and auto-scroll are
+  used directly; drafts, watched entries, and checkpoint-diff entries are not
+  draggable, and external file drops remain imports rather than moves.
+
+## Interaction and automated evidence
+
+- Focused Files tree tests: 59 passed. Coverage includes central New menu labels
+  and shortcuts, selected-folder creation, the visible extension and caret
+  position for Markdown/CSV drafts, extensionless generic-file creation,
+  generic-extension collision handling, right-click, ellipsis, rename,
+  icon-bearing create actions, the filled delete icon and semantic `⌘ ⌫`
+  shortcut for files and folders (including active descendant views), checkpoint
+  read-only behavior, watched-directory restrictions, review-dot/action
+  ordering, native file/folder drag requests, Lix persistence, descendant path
+  cascades, and active-file path remapping.
+- Full test suite: 787 passed, 1 skipped across 74 test files.
+- Typecheck: passed.
+- Production build: passed.
+- Lint: passed with 10 pre-existing warnings and no errors.
+- Scoped formatting and `git diff --check`: passed.
+
+## Visual verification limitation
+
+- The approved source mock was opened and inspected in this task.
+- A same-viewport implementation screenshot could not be captured: the Codex
+  in-app Browser runtime fails before opening a tab with
+  `Cannot redefine property: process`. No alternate browser was used because
+  no browser was selected for this task.
+- This is an environment/tooling limitation, not a claimed visual pass. Review
+  the open New-menu and row-ellipsis states in the PR preview before merge.
+
+## Findings
+
+- P0: none in automated interaction, type, lint, or production-build checks.
+- P1: manual visual comparison remains required because the in-app Browser
+  runtime could not initialize.
+- P2: none.
+
+final result: blocked — browser runtime unavailable for required screenshot comparison

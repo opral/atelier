@@ -6,10 +6,15 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
+import { Trash } from "lucide-react";
 import type {
+	ContextMenuItem as FileTreeContextMenuItem,
+	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
 	FileTreeDirectoryHandle,
+	FileTreeDropContext,
+	FileTreeDropResult,
 	FileTree as PierreFileTreeModel,
 	FileTreeItemHandle,
 	FileTreeRenameEvent,
@@ -22,13 +27,23 @@ import type {
 } from "@/extensions/files/build-filesystem-tree";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
+import fileNewIconUrl from "./assets/file-new.svg";
 import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
+
+export type FileTreeFileType = "generic" | "markdown" | "csv";
 
 export type FileTreeCreateRequest = {
 	readonly id: number;
 	readonly kind: "file" | "directory";
 	readonly directoryPath: string;
 	readonly initialValue: string;
+	/**
+	 * Display text for the inline rename field. The backing placeholder path
+	 * remains non-empty so @pierre/trees can start its native rename flow.
+	 */
+	readonly initialInputValue?: string;
+	readonly initialSelectionStart?: number;
+	readonly fileType?: FileTreeFileType;
 };
 
 export type FileTreeRenameRequest = {
@@ -37,6 +52,21 @@ export type FileTreeRenameRequest = {
 	readonly source: FilesystemTreeSource;
 	readonly sourcePath: string;
 	readonly destinationPath: string;
+};
+
+export type FileTreeMoveRequest = {
+	readonly id?: string;
+	readonly kind: "file" | "directory";
+	readonly source: FilesystemTreeSource;
+	readonly sourcePath: string;
+	readonly destinationPath: string;
+};
+
+export type FileTreeDeleteRequest = {
+	readonly id?: string;
+	readonly kind: "file" | "directory";
+	readonly source: FilesystemTreeSource;
+	readonly sourcePath: string;
 };
 
 export type FileTreeProps = {
@@ -64,8 +94,18 @@ export type FileTreeProps = {
 		value: string,
 	) => Promise<void> | void;
 	readonly onCreateCancel?: (request: FileTreeCreateRequest) => void;
+	readonly onCreateAtDirectory?: (
+		directoryPath: string,
+		kind: "file" | "directory",
+	) => void;
 	readonly onRenameCommit?: (
 		request: FileTreeRenameRequest,
+	) => Promise<void> | void;
+	readonly onMoveItem?: (
+		request: FileTreeMoveRequest,
+	) => Promise<boolean | void> | boolean | void;
+	readonly onDeleteItem?: (
+		request: FileTreeDeleteRequest,
 	) => Promise<void> | void;
 };
 
@@ -188,6 +228,23 @@ const FILE_TREE_UNSAFE_CSS = `
 		opacity: 0.75;
 	}
 
+	[data-type='context-menu-trigger'] {
+		color: var(--color-icon-tertiary);
+	}
+
+	[data-type='context-menu-trigger']
+		> [data-icon-name='file-tree-icon-ellipsis'] {
+		width: 12px;
+		height: 12px;
+	}
+
+	[data-file-tree-virtualized-root='true']:not(
+		:has([data-item-context-hover='true'])
+	)
+		> [data-type='context-menu-anchor']:not(:has([aria-expanded='true'])) {
+		display: none;
+	}
+
 	[data-type='item'][data-item-selected='true'][data-item-type='folder']
 		> [data-item-section='icon'] {
 		color: var(--color-icon-selection-current);
@@ -245,7 +302,10 @@ export function FileTree({
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
+	onCreateAtDirectory,
 	onRenameCommit,
+	onMoveItem,
+	onDeleteItem,
 }: FileTreeProps) {
 	const [internalOpenDirectories, setInternalOpenDirectories] = useState(
 		() => new Set<string>(),
@@ -298,11 +358,14 @@ export function FileTree({
 		openDirectoryTreePaths,
 		openDirectories,
 		openFileView,
+		onCreateAtDirectory,
 		onCreateCancel,
 		onCreateCommit,
 		onOpenDirectoriesChange,
 		onSelectItem,
 		onClearSelection,
+		onDeleteItem,
+		onMoveItem,
 		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -321,10 +384,17 @@ export function FileTree({
 	const handleCanRenameRef = useRef(
 		(_item: FileTreeRenamingItem): boolean => false,
 	);
+	const handleDropCompleteRef = useRef((_event: FileTreeDropResult) => {});
 	const handleTreeClickCapture = useCallback(() => {
 		suppressSelectionOpenForClickRef.current = true;
 		window.setTimeout(() => {
 			suppressSelectionOpenForClickRef.current = false;
+		}, 0);
+	}, []);
+	const suppressSelectionOpenForDrag = useCallback(() => {
+		suppressSelectionOpenRef.current = true;
+		window.setTimeout(() => {
+			suppressSelectionOpenRef.current = false;
 		}, 0);
 	}, []);
 
@@ -348,7 +418,32 @@ export function FileTree({
 	}, []);
 
 	const { model } = useFileTree({
-		dragAndDrop: false,
+		composition: {
+			contextMenu: {
+				buttonVisibility: "when-needed",
+				enabled: true,
+				triggerMode: "both",
+				onOpen: (item) => {
+					const info = pathInfoForTreePath(
+						stateRef.current.pathInfoByTreePath,
+						item.path,
+					);
+					if (!info || info.createRequestId != null) return;
+					stateRef.current.onSelectItem?.(info.appPath, info.kind, info.source);
+				},
+			},
+		},
+		dragAndDrop: {
+			canDrag: (treePaths) => {
+				const canDrag = canDragTreePaths(treePaths, stateRef.current);
+				if (canDrag) suppressSelectionOpenForDrag();
+				return canDrag;
+			},
+			canDrop: (event) => canDropTreePaths(event, stateRef.current),
+			onDropComplete: (event) => handleDropCompleteRef.current(event),
+			onDropError: (error) =>
+				console.warn("File tree drag and drop failed", error),
+		},
 		flattenEmptyDirectories: false,
 		icons: { set: "minimal", colored: false },
 		gitStatus: reviewGitStatusEntries as GitStatusEntry[],
@@ -364,6 +459,76 @@ export function FileTree({
 		stickyFolders: false,
 		unsafeCSS: FILE_TREE_UNSAFE_CSS,
 	});
+	const renderContextMenu = useCallback(
+		(
+			item: FileTreeContextMenuItem,
+			context: FileTreeContextMenuOpenContext,
+		) => {
+			const info = pathInfoForTreePath(
+				stateRef.current.pathInfoByTreePath,
+				item.path,
+			);
+			if (!info || info.createRequestId != null) return null;
+			const canRename = canRenameTreeItem(info);
+			const canDelete =
+				stateRef.current.onDeleteItem != null && canDeleteTreeItem(info);
+			const canCreateInDirectory =
+				info.kind === "directory" &&
+				info.source !== "checkpoint-diff" &&
+				info.source !== "watched" &&
+				stateRef.current.createRequest == null;
+			const canOpen = info.source === "checkpoint-diff";
+			if (!canRename && !canDelete && !canCreateInDirectory && !canOpen) {
+				return null;
+			}
+			return (
+				<TreeItemContextMenu
+					item={item}
+					context={context}
+					canCreateInDirectory={canCreateInDirectory}
+					canDelete={canDelete}
+					canOpen={canOpen}
+					canRename={canRename}
+					onCreate={(kind) => {
+						if (info.kind !== "directory") return;
+						context.close({ restoreFocus: false });
+						stateRef.current.onCreateAtDirectory?.(
+							ensureDirectoryPath(info.appPath),
+							kind,
+						);
+					}}
+					onOpen={() => {
+						context.close();
+						stateRef.current.onSelectItem?.(
+							info.appPath,
+							info.kind,
+							info.source,
+						);
+						if (info.kind === "file" && info.id) {
+							void stateRef.current.openFileView?.(info.id, info.appPath);
+						}
+					}}
+					onRename={() => {
+						context.close({ restoreFocus: false });
+						window.setTimeout(() => {
+							model.focusPath(item.path);
+							model.startRenaming(item.path);
+						}, 0);
+					}}
+					onDelete={() => {
+						context.close({ restoreFocus: false });
+						void stateRef.current.onDeleteItem?.({
+							id: info.id,
+							kind: info.kind,
+							source: info.source ?? "lix",
+							sourcePath: info.appPath,
+						});
+					}}
+				/>
+			);
+		},
+		[model],
+	);
 
 	useLayoutEffect(() => {
 		stateRef.current = {
@@ -371,11 +536,14 @@ export function FileTree({
 			openDirectoryTreePaths,
 			openDirectories,
 			openFileView,
+			onCreateAtDirectory,
 			onCreateCancel,
 			onCreateCommit,
 			onOpenDirectoriesChange,
 			onSelectItem,
 			onClearSelection,
+			onDeleteItem,
+			onMoveItem,
 			onRenameCommit,
 			pathInfoByTreePath: treeInput.pathInfoByTreePath,
 			realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -420,6 +588,27 @@ export function FileTree({
 			if (info.source === "watched") return info.kind === "file";
 			return info.source !== "checkpoint-diff";
 		};
+		handleDropCompleteRef.current = (event) => {
+			const request = buildTreeMoveRequest(event, stateRef.current);
+			// Pierre optimistically updates its own path store before this callback.
+			const restoreTreePaths = () => {
+				model.resetPaths(stateRef.current.treePaths, {
+					initialExpandedPaths: [...stateRef.current.openDirectoryTreePaths],
+				});
+			};
+			if (!request || !stateRef.current.onMoveItem) {
+				restoreTreePaths();
+				return;
+			}
+			void Promise.resolve(stateRef.current.onMoveItem(request))
+				.then((moved) => {
+					if (moved === false) restoreTreePaths();
+				})
+				.catch((error) => {
+					console.error("Failed to move file tree item", error);
+					restoreTreePaths();
+				});
+		};
 		handleRenameRef.current = (event) => {
 			const request = stateRef.current.createRequest;
 			const sourceInfo = pathInfoForTreePath(
@@ -456,9 +645,12 @@ export function FileTree({
 	}, [
 		createRequest,
 		model,
+		onCreateAtDirectory,
 		onCreateCancel,
 		onCreateCommit,
 		onClearSelection,
+		onDeleteItem,
+		onMoveItem,
 		onOpenDirectoriesChange,
 		onRenameCommit,
 		onSelectItem,
@@ -537,6 +729,7 @@ export function FileTree({
 		model.startRenaming(treeInput.createPlaceholderTreePath, {
 			removeIfCanceled: true,
 		});
+		return prepareInitialCreateInput(model, createRequest);
 	}, [
 		createRequest,
 		createRequest?.id,
@@ -576,7 +769,7 @@ export function FileTree({
 	}, [model]);
 
 	if (treeInput.paths.length === 0) {
-		// The "New file" row above the tree is the affordance; no extra copy.
+		// The tree-row "New" control above the tree is the affordance; no extra copy.
 		return null;
 	}
 
@@ -588,9 +781,367 @@ export function FileTree({
 			onClick={(event) => handleTreeClick(event.nativeEvent)}
 			onClickCapture={handleTreeClickCapture}
 			onKeyDownCapture={() => setSuppressItemFocusRing(false)}
+			renderContextMenu={renderContextMenu}
 			style={treeHostStyle(isPanelFocused, variant)}
 		/>
 	);
+}
+
+function TreeItemContextMenu({
+	item,
+	context,
+	canCreateInDirectory,
+	canDelete,
+	canOpen,
+	canRename,
+	onCreate,
+	onDelete,
+	onOpen,
+	onRename,
+}: {
+	readonly item: FileTreeContextMenuItem;
+	readonly context: FileTreeContextMenuOpenContext;
+	readonly canCreateInDirectory: boolean;
+	readonly canDelete: boolean;
+	readonly canOpen: boolean;
+	readonly canRename: boolean;
+	readonly onCreate: (kind: "file" | "directory") => void;
+	readonly onDelete: () => void;
+	readonly onOpen: () => void;
+	readonly onRename: () => void;
+}) {
+	const style = treeContextMenuStyle(context.anchorRect);
+	return (
+		<div
+			aria-label={`Actions for ${item.name}`}
+			className="z-50 min-w-44 rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 font-sans text-xs text-[var(--color-text-primary)] shadow-md"
+			data-file-tree-context-menu-root="true"
+			role="menu"
+			style={style}
+			tabIndex={-1}
+			onClick={(event) => event.stopPropagation()}
+			onKeyDown={(event) => event.stopPropagation()}
+			onPointerDown={(event) => event.stopPropagation()}
+		>
+			{canOpen ? (
+				<TreeItemContextMenuButton onClick={onOpen}>
+					Open
+				</TreeItemContextMenuButton>
+			) : null}
+			{canCreateInDirectory ? (
+				<>
+					<TreeItemContextMenuButton
+						icon={
+							<img
+								alt=""
+								aria-hidden="true"
+								className="size-3.5 shrink-0"
+								data-attr="file-tree-menu-new-file-icon"
+								src={fileNewIconUrl}
+							/>
+						}
+						onClick={() => onCreate("file")}
+					>
+						New file
+					</TreeItemContextMenuButton>
+					<TreeItemContextMenuButton
+						icon={
+							<img
+								alt=""
+								aria-hidden="true"
+								className="size-3.5 shrink-0"
+								data-attr="file-tree-menu-new-folder-icon"
+								src={folderBlueIconUrl}
+							/>
+						}
+						onClick={() => onCreate("directory")}
+					>
+						New folder
+					</TreeItemContextMenuButton>
+					<div
+						aria-hidden="true"
+						className="my-1 h-px bg-[var(--color-border-panel)]"
+					/>
+				</>
+			) : null}
+			{canRename ? (
+				<TreeItemContextMenuButton onClick={onRename}>
+					Rename
+				</TreeItemContextMenuButton>
+			) : null}
+			{canDelete && canRename ? (
+				<div
+					aria-hidden="true"
+					className="my-1 h-px bg-[var(--color-border-panel)]"
+				/>
+			) : null}
+			{canDelete ? (
+				<TreeItemContextMenuButton
+					destructive
+					icon={
+						<Trash
+							aria-hidden="true"
+							className="size-3 shrink-0"
+							data-attr="file-tree-menu-delete-icon"
+							fill="currentColor"
+							strokeWidth={1.7}
+						/>
+					}
+					ariaKeyShortcuts="Meta+Backspace"
+					onClick={onDelete}
+					shortcut={
+						<>
+							<span>⌘</span>
+							<span>⌫</span>
+						</>
+					}
+					shortcutLabel="Command Backspace"
+				>
+					Delete
+				</TreeItemContextMenuButton>
+			) : null}
+		</div>
+	);
+}
+
+function TreeItemContextMenuButton({
+	ariaKeyShortcuts,
+	children,
+	destructive = false,
+	icon,
+	onClick,
+	shortcut,
+	shortcutLabel,
+}: {
+	readonly ariaKeyShortcuts?: string;
+	readonly children: ReactNode;
+	readonly destructive?: boolean;
+	readonly icon?: ReactNode;
+	readonly onClick: () => void;
+	readonly shortcut?: ReactNode;
+	readonly shortcutLabel?: string;
+}) {
+	return (
+		<button
+			type="button"
+			role="menuitem"
+			aria-keyshortcuts={ariaKeyShortcuts}
+			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]${
+				destructive
+					? " text-[var(--color-text-secondary)] hover:text-[var(--color-text-status-danger)] focus-visible:text-[var(--color-text-status-danger)]"
+					: ""
+			}`}
+			onClick={onClick}
+		>
+			{icon ? (
+				<span className="flex size-3.5 shrink-0 items-center justify-center">
+					{icon}
+				</span>
+			) : null}
+			<span className="min-w-0 flex-1 truncate">{children}</span>
+			{shortcut ? (
+				<kbd
+					aria-label={shortcutLabel}
+					className="ml-auto inline-flex items-center gap-0.5 text-[10px] leading-none font-semibold text-[var(--color-icon-tertiary)]"
+				>
+					{shortcut}
+				</kbd>
+			) : null}
+		</button>
+	);
+}
+
+function treeContextMenuStyle(
+	anchorRect: FileTreeContextMenuOpenContext["anchorRect"],
+): CSSProperties {
+	const edge = 8;
+	const menuHeight = 172;
+	const menuWidth = 176;
+	const viewportWidth =
+		typeof window === "undefined" ? 1024 : window.innerWidth;
+	const viewportHeight =
+		typeof window === "undefined" ? 768 : window.innerHeight;
+	const top = Math.max(
+		edge,
+		Math.min(anchorRect.bottom + 4, viewportHeight - menuHeight - edge),
+	);
+	if (anchorRect.width === 0 && anchorRect.height === 0) {
+		return {
+			left: Math.max(
+				edge,
+				Math.min(anchorRect.left, viewportWidth - menuWidth - edge),
+			),
+			position: "fixed",
+			top,
+		};
+	}
+	return {
+		position: "fixed",
+		right: Math.max(edge, viewportWidth - anchorRect.right),
+		top,
+	};
+}
+
+function canRenameTreeItem(info: TreePathInfo): boolean {
+	if (info.createRequestId != null || info.source === "checkpoint-diff") {
+		return false;
+	}
+	return info.source !== "watched" || info.kind === "file";
+}
+
+type TreeDragAndDropState = {
+	readonly createRequest: FileTreeCreateRequest | null | undefined;
+	readonly onMoveItem: FileTreeProps["onMoveItem"];
+	readonly pathInfoByTreePath: ReadonlyMap<string, TreePathInfo>;
+};
+
+function canDragTreePaths(
+	paths: readonly string[],
+	state: TreeDragAndDropState,
+): boolean {
+	if (state.createRequest || !state.onMoveItem || paths.length !== 1) {
+		return false;
+	}
+	const sourcePath = paths[0];
+	if (!sourcePath) return false;
+	return canMoveTreeItem(
+		pathInfoForTreePath(state.pathInfoByTreePath, sourcePath),
+	);
+}
+
+function canDropTreePaths(
+	event: FileTreeDropContext,
+	state: TreeDragAndDropState,
+): boolean {
+	return buildTreeMoveRequest(event, state) != null;
+}
+
+function buildTreeMoveRequest(
+	event: FileTreeDropContext,
+	state: TreeDragAndDropState,
+): FileTreeMoveRequest | null {
+	if (!canDragTreePaths(event.draggedPaths, state)) return null;
+	const sourceTreePath = event.draggedPaths[0];
+	if (!sourceTreePath) return null;
+	const sourceInfo = pathInfoForTreePath(
+		state.pathInfoByTreePath,
+		sourceTreePath,
+	);
+	if (!canMoveTreeItem(sourceInfo)) return null;
+	const destinationDirectoryPath = dropTargetDirectoryPath(
+		event.target,
+		state.pathInfoByTreePath,
+	);
+	if (!destinationDirectoryPath) return null;
+	const sourcePath =
+		sourceInfo.kind === "directory"
+			? ensureDirectoryPath(sourceInfo.appPath)
+			: treeFilePathToAppPath(sourceInfo.appPath);
+	const destinationPath = childAppPath(
+		destinationDirectoryPath,
+		leafNameFromTreePath(sourceTreePath),
+		sourceInfo.kind,
+	);
+	if (sourcePath === destinationPath) return null;
+	return {
+		destinationPath,
+		id: sourceInfo.id,
+		kind: sourceInfo.kind,
+		source: sourceInfo.source ?? "lix",
+		sourcePath,
+	};
+}
+
+function dropTargetDirectoryPath(
+	target: FileTreeDropContext["target"],
+	pathInfoByTreePath: ReadonlyMap<string, TreePathInfo>,
+): string | null {
+	if (target.kind === "root") return "/";
+	if (!target.directoryPath) return null;
+	const targetInfo = pathInfoForTreePath(
+		pathInfoByTreePath,
+		target.directoryPath,
+	);
+	if (
+		!targetInfo ||
+		targetInfo.kind !== "directory" ||
+		!canMoveTreeItem(targetInfo)
+	) {
+		return null;
+	}
+	return ensureDirectoryPath(targetInfo.appPath);
+}
+
+function canMoveTreeItem(info: TreePathInfo | undefined): info is TreePathInfo {
+	return (
+		info != null &&
+		info.createRequestId == null &&
+		(info.source === undefined || info.source === "lix")
+	);
+}
+
+function canDeleteTreeItem(info: TreePathInfo): boolean {
+	return (
+		info.createRequestId == null &&
+		info.source !== "checkpoint-diff" &&
+		info.source !== "watched"
+	);
+}
+
+function prepareInitialCreateInput(
+	model: PierreFileTreeModel,
+	request: FileTreeCreateRequest,
+): (() => void) | undefined {
+	if (request.initialInputValue === undefined) return undefined;
+	const inputValue = request.initialInputValue;
+	const selectionStart = Math.max(
+		0,
+		Math.min(
+			request.initialSelectionStart ?? inputValue.length,
+			inputValue.length,
+		),
+	);
+	let disposed = false;
+	let handled = false;
+	let observer: MutationObserver | null = null;
+	let retryTimer: number | null = null;
+	const applyInitialValue = () => {
+		if (disposed || handled) return;
+		const shadowRoot = model.getFileTreeContainer()?.shadowRoot;
+		if (!shadowRoot) {
+			retryTimer = window.setTimeout(applyInitialValue, 0);
+			return;
+		}
+		const input = shadowRoot.querySelector("[data-item-rename-input]");
+		if (!(input instanceof HTMLInputElement)) {
+			observer ??= new MutationObserver(applyInitialValue);
+			observer.observe(shadowRoot, { childList: true, subtree: true });
+			return;
+		}
+		handled = true;
+		observer?.disconnect();
+		setNativeRenameInputValue(input, inputValue);
+		input.setSelectionRange(selectionStart, selectionStart);
+	};
+	retryTimer = window.setTimeout(applyInitialValue, 0);
+	return () => {
+		disposed = true;
+		if (retryTimer !== null) window.clearTimeout(retryTimer);
+		observer?.disconnect();
+	};
+}
+
+function setNativeRenameInputValue(input: HTMLInputElement, value: string) {
+	const valueSetter = Object.getOwnPropertyDescriptor(
+		HTMLInputElement.prototype,
+		"value",
+	)?.set;
+	if (valueSetter) {
+		valueSetter.call(input, value);
+	} else {
+		input.value = value;
+	}
+	input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
 }
 
 function buildTreeInput(
@@ -778,6 +1329,9 @@ function treeHostStyle(
 		"--trees-bg-muted-override": "var(--color-bg-hover)",
 		"--trees-border-color-override": "transparent",
 		"--trees-border-radius-override": isSpacious ? "9px" : "7px",
+		...(isSpacious
+			? {}
+			: { "--trees-context-menu-trigger-inline-offset": "2.5px" }),
 		"--trees-fg-muted-override": "var(--color-text-tertiary)",
 		"--trees-fg-override": "var(--color-text-secondary)",
 		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",
