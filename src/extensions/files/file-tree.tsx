@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
-import { Trash2 } from "lucide-react";
+import { Trash } from "lucide-react";
 import type {
 	ContextMenuItem as FileTreeContextMenuItem,
 	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
@@ -807,14 +807,23 @@ function TreeItemContextMenu({
 				<TreeItemContextMenuButton
 					destructive
 					icon={
-						<Trash2
+						<Trash
 							aria-hidden="true"
-							className="size-3.5 shrink-0"
+							className="size-3 shrink-0"
 							data-attr="file-tree-menu-delete-icon"
+							fill="currentColor"
+							strokeWidth={1.7}
 						/>
 					}
+					ariaKeyShortcuts="Meta+Backspace"
 					onClick={onDelete}
-					shortcut="⌘ Backspace"
+					shortcut={
+						<>
+							<span>⌘</span>
+							<span>⌫</span>
+						</>
+					}
+					shortcutLabel="Command Backspace"
 				>
 					Delete
 				</TreeItemContextMenuButton>
@@ -824,24 +833,31 @@ function TreeItemContextMenu({
 }
 
 function TreeItemContextMenuButton({
+	ariaKeyShortcuts,
 	children,
 	destructive = false,
 	icon,
 	onClick,
 	shortcut,
+	shortcutLabel,
 }: {
+	readonly ariaKeyShortcuts?: string;
 	readonly children: ReactNode;
 	readonly destructive?: boolean;
 	readonly icon?: ReactNode;
 	readonly onClick: () => void;
-	readonly shortcut?: string;
+	readonly shortcut?: ReactNode;
+	readonly shortcutLabel?: string;
 }) {
 	return (
 		<button
 			type="button"
 			role="menuitem"
+			aria-keyshortcuts={ariaKeyShortcuts}
 			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]${
-				destructive ? " text-[var(--color-text-status-danger)]" : ""
+				destructive
+					? " text-[var(--color-text-secondary)] hover:text-[var(--color-text-status-danger)] focus-visible:text-[var(--color-text-status-danger)]"
+					: ""
 			}`}
 			onClick={onClick}
 		>
@@ -852,7 +868,10 @@ function TreeItemContextMenuButton({
 			) : null}
 			<span className="min-w-0 flex-1 truncate">{children}</span>
 			{shortcut ? (
-				<kbd className="ml-auto text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
+				<kbd
+					aria-label={shortcutLabel}
+					className="ml-auto inline-flex items-center gap-0.5 text-[10px] leading-none font-semibold text-[var(--color-icon-tertiary)]"
+				>
 					{shortcut}
 				</kbd>
 			) : null}

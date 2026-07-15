@@ -393,16 +393,19 @@ describe("FileTree", () => {
 		expect(menu).toHaveTextContent("New folder");
 		expect(menu).toHaveTextContent("Rename");
 		expect(menu).toHaveTextContent("Delete");
-		expect(menu).toHaveTextContent("⌘ Backspace");
+		expect(menu).toHaveTextContent("⌘⌫");
 		expect(
 			menu.querySelector("[data-attr='file-tree-menu-new-file-icon']"),
 		).not.toBeNull();
 		expect(
 			menu.querySelector("[data-attr='file-tree-menu-new-folder-icon']"),
 		).not.toBeNull();
-		expect(
-			menu.querySelector("[data-attr='file-tree-menu-delete-icon']"),
-		).not.toBeNull();
+		const deleteIcon = menu.querySelector(
+			"[data-attr='file-tree-menu-delete-icon']",
+		);
+		expect(deleteIcon).not.toBeNull();
+		expect(deleteIcon).toHaveAttribute("fill", "currentColor");
+		expect(deleteIcon).toHaveClass("size-3");
 
 		fireEvent.click(getTreeContextMenuButton(menu, "New file"));
 		expect(handleCreateAtDirectory).toHaveBeenCalledWith("/docs/", "file");
@@ -426,7 +429,12 @@ describe("FileTree", () => {
 		openTreeContextMenu(container, "README.md");
 		const menu = await getTreeContextMenu(container);
 		const deleteButton = getTreeContextMenuButton(menu, "Delete");
-		expect(deleteButton).toHaveTextContent("⌘ Backspace");
+		expect(deleteButton).toHaveTextContent("⌘⌫");
+		expect(deleteButton).toHaveAttribute("aria-keyshortcuts", "Meta+Backspace");
+		expect(deleteButton.querySelector("kbd")).toHaveAttribute(
+			"aria-label",
+			"Command Backspace",
+		);
 		fireEvent.click(deleteButton);
 
 		expect(handleDeleteItem).toHaveBeenCalledWith({
