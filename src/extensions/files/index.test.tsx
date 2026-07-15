@@ -229,6 +229,8 @@ describe("FilesView", () => {
 
 		const newButton = await screen.findByRole("button", { name: "New" });
 		expect(newButton).toHaveAttribute("data-attr", "file-new-wide");
+		expect(newButton).toHaveAttribute("data-ui", "atelier-action-button");
+		expect(newButton).toHaveAttribute("data-variant", "primary");
 		openNewMenu(newButton);
 		expect(screen.getByRole("menuitem", { name: /New file/ })).toBeVisible();
 		expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeVisible();

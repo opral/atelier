@@ -6,11 +6,12 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { ChevronDown, Files, FileUp } from "lucide-react";
+import { ChevronDown, Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import fileCsvIconUrl from "./assets/file-csv.svg";
 import fileMdIconUrl from "./assets/file-md.svg";
+import { AtelierActionButton } from "@/components/ui/atelier-action-button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -1044,24 +1045,21 @@ function FilesViewContent({
 									onNewFolder={handleCreateDirectory}
 									onNewMarkdown={handleNewMarkdown}
 								>
-									<button
-										type="button"
-										className="flex h-8 select-none items-center gap-1.5 rounded-[7px] px-2.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+									<AtelierActionButton
 										data-attr="file-new-wide"
 										title="Create a new file or folder"
 									>
-										<img
-											src={fileNewIconUrl}
-											alt=""
+										<Plus
 											aria-hidden="true"
-											className="size-3.5 shrink-0"
+											className="size-3.5"
+											strokeWidth={2.4}
 										/>
 										<span>New</span>
 										<ChevronDown
 											aria-hidden="true"
-											className="size-3 text-[var(--color-icon-tertiary)]"
+											className="size-3 opacity-80"
 										/>
-									</button>
+									</AtelierActionButton>
 								</UnifiedNewMenu>
 							) : null}
 						</div>
