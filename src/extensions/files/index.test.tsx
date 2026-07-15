@@ -152,8 +152,14 @@ describe("FilesView", () => {
 		});
 
 		await chooseNewMenuItem("New Markdown (.md)");
-		const input = await waitFor(() => getFilesTreeRenameInput());
-		fireEvent.input(input, { target: { value: "launch-plan" } });
+		const input = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue(".md");
+			expect(draft.selectionStart).toBe(0);
+			expect(draft.selectionEnd).toBe(0);
+			return draft;
+		});
+		fireEvent.input(input, { target: { value: "launch-plan.md" } });
 		fireEvent.keyDown(input, { key: "Enter" });
 
 		await waitFor(async () => {
@@ -222,18 +228,31 @@ describe("FilesView", () => {
 		});
 
 		await chooseNewMenuItem("New file");
-		const genericInput = await waitFor(getFilesTreeRenameInput);
-		fireEvent.input(genericInput, { target: { value: "notes.csv" } });
+		const genericInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue("");
+			expect(draft.selectionStart).toBe(0);
+			expect(draft.selectionEnd).toBe(0);
+			return draft;
+		});
+		fireEvent.input(genericInput, { target: { value: "notes" } });
 		fireEvent.keyDown(genericInput, { key: "Enter" });
 		await waitFor(async () => {
 			expect(
 				await qb(lix)
 					.selectFrom("lix_file")
 					.select("path")
-					.where("path", "=", "/notes.csv")
+					.where("path", "=", "/notes")
 					.execute(),
 			).toHaveLength(1);
 		});
+		await expect(
+			qb(lix)
+				.selectFrom("lix_file")
+				.select("path")
+				.where("path", "=", "/notes.md")
+				.executeTakeFirst(),
+		).resolves.toBeUndefined();
 
 		await chooseNewMenuItem("New folder");
 		const folderInput = await waitFor(getFilesTreeRenameInput);
@@ -250,8 +269,14 @@ describe("FilesView", () => {
 		});
 
 		await chooseNewMenuItem("New CSV (.csv)");
-		const csvInput = await waitFor(getFilesTreeRenameInput);
-		fireEvent.input(csvInput, { target: { value: "budget" } });
+		const csvInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue(".csv");
+			expect(draft.selectionStart).toBe(0);
+			expect(draft.selectionEnd).toBe(0);
+			return draft;
+		});
+		fireEvent.input(csvInput, { target: { value: "budget.csv" } });
 		fireEvent.keyDown(csvInput, { key: "Enter" });
 		await waitFor(async () => {
 			const created = await qb(lix)

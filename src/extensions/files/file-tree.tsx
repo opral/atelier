@@ -33,6 +33,12 @@ export type FileTreeCreateRequest = {
 	readonly kind: "file" | "directory";
 	readonly directoryPath: string;
 	readonly initialValue: string;
+	/**
+	 * Display text for the inline rename field. The backing placeholder path
+	 * remains non-empty so @pierre/trees can start its native rename flow.
+	 */
+	readonly initialInputValue?: string;
+	readonly initialSelectionStart?: number;
 	readonly fileType?: FileTreeFileType;
 };
 
@@ -621,6 +627,7 @@ export function FileTree({
 		model.startRenaming(treeInput.createPlaceholderTreePath, {
 			removeIfCanceled: true,
 		});
+		return prepareInitialCreateInput(model, createRequest);
 	}, [
 		createRequest,
 		createRequest?.id,
@@ -793,6 +800,62 @@ function canRenameTreeItem(info: TreePathInfo): boolean {
 		return false;
 	}
 	return info.source !== "watched" || info.kind === "file";
+}
+
+function prepareInitialCreateInput(
+	model: PierreFileTreeModel,
+	request: FileTreeCreateRequest,
+): (() => void) | undefined {
+	if (request.initialInputValue === undefined) return undefined;
+	const inputValue = request.initialInputValue;
+	const selectionStart = Math.max(
+		0,
+		Math.min(
+			request.initialSelectionStart ?? inputValue.length,
+			inputValue.length,
+		),
+	);
+	let disposed = false;
+	let handled = false;
+	let observer: MutationObserver | null = null;
+	let retryTimer: number | null = null;
+	const applyInitialValue = () => {
+		if (disposed || handled) return;
+		const shadowRoot = model.getFileTreeContainer()?.shadowRoot;
+		if (!shadowRoot) {
+			retryTimer = window.setTimeout(applyInitialValue, 0);
+			return;
+		}
+		const input = shadowRoot.querySelector("[data-item-rename-input]");
+		if (!(input instanceof HTMLInputElement)) {
+			observer ??= new MutationObserver(applyInitialValue);
+			observer.observe(shadowRoot, { childList: true, subtree: true });
+			return;
+		}
+		handled = true;
+		observer?.disconnect();
+		setNativeRenameInputValue(input, inputValue);
+		input.setSelectionRange(selectionStart, selectionStart);
+	};
+	retryTimer = window.setTimeout(applyInitialValue, 0);
+	return () => {
+		disposed = true;
+		if (retryTimer !== null) window.clearTimeout(retryTimer);
+		observer?.disconnect();
+	};
+}
+
+function setNativeRenameInputValue(input: HTMLInputElement, value: string) {
+	const valueSetter = Object.getOwnPropertyDescriptor(
+		HTMLInputElement.prototype,
+		"value",
+	)?.set;
+	if (valueSetter) {
+		valueSetter.call(input, value);
+	} else {
+		input.value = value;
+	}
+	input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
 }
 
 function buildTreeInput(

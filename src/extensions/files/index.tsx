@@ -391,11 +391,17 @@ function FilesViewContent({
 				});
 			}
 			nextCreateRequestIdRef.current += 1;
+			const initialInputValue = initialInputValueForCreateRequest(
+				kind,
+				fileType,
+			);
 			setCreateRequest({
 				directoryPath,
 				fileType: kind === "file" ? fileType : undefined,
 				id: nextCreateRequestIdRef.current,
-				initialValue: initialValueForCreateRequest(kind),
+				initialInputValue,
+				initialSelectionStart: initialInputValue === undefined ? undefined : 0,
+				initialValue: initialValueForCreateRequest(kind, fileType),
 				kind,
 			});
 		},
@@ -1489,9 +1495,24 @@ function normalizeNameStem(stem: string): string {
 	return collapsedWhitespace;
 }
 
-function initialValueForCreateRequest(kind: "file" | "directory"): string {
+function initialValueForCreateRequest(
+	kind: "file" | "directory",
+	fileType: FileTreeFileType,
+): string {
 	if (kind === "directory") return "new-folder";
+	if (fileType === "markdown") return "new-file.md";
+	if (fileType === "csv") return "new-file.csv";
 	return "new-file";
+}
+
+function initialInputValueForCreateRequest(
+	kind: "file" | "directory",
+	fileType: FileTreeFileType,
+): string | undefined {
+	if (kind !== "file") return undefined;
+	if (fileType === "markdown") return ".md";
+	if (fileType === "csv") return ".csv";
+	return "";
 }
 
 function formatCreateDestination(directoryPath: string): string {

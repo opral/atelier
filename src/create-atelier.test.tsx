@@ -107,11 +107,15 @@ describe("Atelier instance file controller", () => {
 			const container = rendered?.container;
 			if (!container) throw new Error("Atelier test container is unavailable");
 			const input = await findFilesViewRenameInput(container);
-			expect(input.value).toBe("new-file");
+			await waitFor(() => {
+				expect(input.value).toBe(".md");
+				expect(input.selectionStart).toBe(0);
+				expect(input.selectionEnd).toBe(0);
+			});
 			await waitFor(() => {
 				expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);
 			});
-			fireEvent.input(input, { target: { value: "follow-up" } });
+			fireEvent.input(input, { target: { value: "follow-up.md" } });
 			fireEvent.keyDown(input, { key: "Enter" });
 
 			await waitFor(async () => {

@@ -96,6 +96,9 @@ final result: blocked
 - Creation resolves to the selected folder, the selected file's parent, or
   root; generic names keep their supplied extension, while Markdown and CSV
   variants append their extension only once.
+- Markdown and CSV drafts visibly begin as `.md` and `.csv` with the cursor
+  before the extension. Generic `New file` begins empty and commits an
+  extensionless name as typed—there is no hidden or implicit `.md` suffix.
 - Per-row actions use the native tree right-click and hover/focus ellipsis
   affordance. Folder menus offer New file, New folder, and Rename; file menus
   offer Rename. Checkpoint-diff rows stay read-only with Open only.
@@ -105,11 +108,13 @@ final result: blocked
 
 ## Interaction and automated evidence
 
-- Targeted Files tests: 47 passed. Coverage includes central New menu labels
-  and shortcuts, selected-folder creation, generic-extension collision
-  handling, CSV initialization, right-click, ellipsis, rename, checkpoint
-  read-only behavior, watched-directory restrictions, and review-dot/action
-  ordering.
+- Files/controller tests: 53 passed. Coverage includes central New menu labels
+  and shortcuts, selected-folder creation, the visible extension and caret
+  position for Markdown/CSV drafts, extensionless generic-file creation,
+  generic-extension collision handling, right-click, ellipsis, rename,
+  checkpoint read-only behavior, watched-directory restrictions, and
+  review-dot/action ordering.
+- Full test suite: 776 passed, 1 skipped across 74 test files.
 - Typecheck: passed.
 - Production build: passed.
 - Lint: passed with 10 pre-existing warnings and no errors.

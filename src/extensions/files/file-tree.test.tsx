@@ -187,6 +187,43 @@ describe("FileTree", () => {
 		expect(queryTreeRenameInput(container)).toHaveValue("work-in-progress");
 	});
 
+	test("uses the requested inline extension and cursor for create drafts", async () => {
+		const createRequest = {
+			directoryPath: "/",
+			id: 1,
+			initialInputValue: ".csv",
+			initialSelectionStart: 0,
+			initialValue: "new-file.csv",
+			kind: "file" as const,
+		};
+		const handleCreateCommit = vi.fn();
+		const { container } = render(
+			<FileTree
+				nodes={mockTree}
+				createRequest={createRequest}
+				onCreateCommit={handleCreateCommit}
+			/>,
+		);
+
+		const input = await waitFor(() => {
+			const renameInput = queryTreeRenameInput(container);
+			if (!renameInput) throw new Error("create input not found");
+			expect(renameInput).toHaveValue(".csv");
+			expect(renameInput.selectionStart).toBe(0);
+			expect(renameInput.selectionEnd).toBe(0);
+			return renameInput;
+		});
+		fireEvent.input(input, { target: { value: "budget.csv" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(() => {
+			expect(handleCreateCommit).toHaveBeenCalledWith(
+				createRequest,
+				"budget.csv",
+			);
+		});
+	});
+
 	test("reports controlled open directory changes", () => {
 		const handleOpenDirectoriesChange = vi.fn();
 		const { container, rerender } = render(
