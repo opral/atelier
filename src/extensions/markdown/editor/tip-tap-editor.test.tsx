@@ -14,6 +14,7 @@ import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
 	TipTapEditor,
 } from "./tip-tap-editor";
+import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { EditorProvider } from "./editor-context";
 import type { Editor } from "@tiptap/core";
 import { parseFrontmatterSource } from "./frontmatter-value";
@@ -132,6 +133,60 @@ async function settleMarkdownObserver(): Promise<void> {
 	});
 }
 
+function copySelectedMarkdown(editor: Editor): {
+	readonly event: Event;
+	readonly clipboardData: {
+		clearData: ReturnType<typeof vi.fn>;
+		setData: ReturnType<typeof vi.fn>;
+		getData: ReturnType<typeof vi.fn>;
+	};
+	readonly text: () => string;
+	readonly html: () => string;
+} {
+	const values = new Map<string, string>();
+	const clipboardData = {
+		clearData: vi.fn(() => values.clear()),
+		setData: vi.fn((type: string, value: string) => {
+			values.set(type, value);
+		}),
+		getData: vi.fn((type: string) => values.get(type) ?? ""),
+	};
+	const event = new Event("copy", { bubbles: true, cancelable: true });
+	Object.defineProperty(event, "clipboardData", { value: clipboardData });
+	editor.view.dom.dispatchEvent(event);
+	return {
+		event,
+		clipboardData,
+		text: () => values.get("text/plain") ?? "",
+		html: () => values.get("text/html") ?? "",
+	};
+}
+
+type MockClipboardPasteEvent = ClipboardEvent & {
+	readonly preventDefault: ReturnType<typeof vi.fn>;
+};
+
+function pasteMarkdownIntoMountedEditor(
+	editor: Editor,
+	text: string,
+): {
+	readonly event: MockClipboardPasteEvent;
+	readonly handled: boolean;
+} {
+	const event = {
+		preventDefault: vi.fn(),
+		clipboardData: {
+			getData: (type: string) => (type === "text/plain" ? text : ""),
+		},
+	} as unknown as MockClipboardPasteEvent;
+	let handled = false;
+	editor.view.someProp("handlePaste", (pasteHandler) => {
+		handled = pasteHandler(editor.view, event, undefined as any) === true;
+		return handled;
+	});
+	return { event, handled };
+}
+
 // Removed CaptureEditor and editor ref helpers; interact via DOM instead
 
 test("renders initial document content", async () => {
@@ -227,6 +282,207 @@ test("shows accessible feedback after pasting an image into the editor", async (
 		expect(asset?.path).toBe("/assets/pasted-image.png");
 		expect(Array.from(asset?.data ?? [])).toEqual(Array.from(imageBytes));
 	});
+});
+
+test("copies and pastes nested task-list Markdown through mounted editor views", async () => {
+	const markdown = [
+		"- [ ] release notes",
+		"  - [x] **proofread**",
+		"  - [ ] ",
+		"",
+		"1. [ ] ",
+		"2. [x] ",
+	].join("\n");
+	const source = await renderEditorForMarkdownFile({
+		fileId: "file_mounted_task_copy_source",
+		markdown,
+	});
+
+	await act(async () => {
+		source.editor.commands.focus();
+		source.editor.commands.setTextSelection({
+			from: 1,
+			to: source.editor.state.doc.content.size,
+		});
+	});
+	const copied = copySelectedMarkdown(source.editor);
+
+	expect(copied.event.defaultPrevented).toBe(true);
+	expect(copied.clipboardData.clearData).toHaveBeenCalledOnce();
+	expect(copied.text()).toBe(`${markdown}\n`);
+	expect(copied.html()).toContain('data-task="x"');
+
+	let firstTaskTextPosition = 0;
+	source.editor.state.doc.descendants((node, position) => {
+		if (node.isText && node.text === "release notes") {
+			firstTaskTextPosition = position;
+			return false;
+		}
+		return true;
+	});
+	expect(firstTaskTextPosition).toBeGreaterThan(0);
+	await act(async () => {
+		source.editor.commands.setTextSelection({
+			from: firstTaskTextPosition + 3,
+			to: source.editor.state.doc.content.size,
+		});
+	});
+	const partialCopy = copySelectedMarkdown(source.editor);
+	expect(partialCopy.text()).toContain("- [ ] ease notes");
+	expect(partialCopy.text()).toContain("  - [x] **proofread**");
+
+	const destination = await renderEditorForMarkdownFile({
+		fileId: "file_mounted_task_copy_destination",
+		markdown: "",
+		persistDebounceMs: 0,
+	});
+	const pasted = pasteMarkdownIntoMountedEditor(
+		destination.editor,
+		copied.text(),
+	);
+
+	expect(pasted.handled).toBe(true);
+	expect(pasted.event.preventDefault).toHaveBeenCalledOnce();
+	await waitFor(async () => {
+		expect(
+			await decodeFileMarkdown(
+				destination.lix,
+				"file_mounted_task_copy_destination",
+			),
+		).toBe(`${markdown}\n`);
+	});
+	const checkboxes = Array.from(
+		destination.editor.view.dom.querySelectorAll<HTMLInputElement>(
+			'input[type="checkbox"]',
+		),
+	);
+	expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
+		false,
+		true,
+		false,
+		false,
+		true,
+	]);
+});
+
+test("keeps soft source lines structural when a mounted editor persists an edit", async () => {
+	const fileId = "file_mounted_soft_line_persistence";
+	const markdown = [
+		"first line",
+		"second line",
+		"third line",
+		"",
+		"- [ ] tail sentinel",
+	].join("\n");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown,
+		persistDebounceMs: 0,
+	});
+	const proseMirror = editor.view.dom;
+	const paragraph = proseMirror.querySelector("p");
+	expect(paragraph).not.toBeNull();
+	expect(
+		Array.from(paragraph!.children).filter((child) => child.tagName === "BR"),
+	).toHaveLength(2);
+	expect(
+		Array.from(paragraph!.childNodes)
+			.filter((node) => node.nodeType === Node.TEXT_NODE)
+			.some((node) => node.textContent?.includes("\n")),
+	).toBe(false);
+
+	const softBreakPositions: number[] = [];
+	editor.state.doc.descendants((node, position) => {
+		if (node.type.name === "hardBreak" && node.attrs.soft === true) {
+			softBreakPositions.push(position);
+		}
+	});
+	expect(softBreakPositions).toHaveLength(2);
+	for (const position of softBreakPositions) {
+		for (const mappedPosition of [position, position + 1]) {
+			const dom = editor.view.domAtPos(mappedPosition);
+			expect(editor.view.posAtDOM(dom.node, dom.offset)).toBe(mappedPosition);
+		}
+	}
+
+	await act(async () => {
+		editor.commands.setTextSelection(softBreakPositions[1]);
+		editor.commands.insertContent("!");
+	});
+	const expectedMarkdown = [
+		"first line",
+		"second line!",
+		"third line",
+		"",
+		"- [ ] tail sentinel",
+		"",
+	].join("\n");
+	expect(buildNormalizedMarkdownFromEditor(editor)).toBe(expectedMarkdown);
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(expectedMarkdown);
+	});
+
+	await act(async () => {
+		hydrateMarkdownEditorAuthoritativeMarkdown(editor, expectedMarkdown);
+	});
+	expect(
+		Array.from(paragraph!.children).filter((child) => child.tagName === "BR"),
+	).toHaveLength(2);
+	expect(proseMirror).toHaveTextContent("first linesecond line!third line");
+	expect(proseMirror).toHaveTextContent("tail sentinel");
+});
+
+test("keeps the task caret in place when a mounted checkbox is toggled", async () => {
+	const fileId = "file_mounted_checkbox_caret";
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "- [ ] keep this caret\n\nTail stays put",
+		persistDebounceMs: 0,
+	});
+	let textPosition = 0;
+	editor.state.doc.descendants((node, position) => {
+		if (node.isText && node.text === "keep this caret") {
+			textPosition = position;
+			return false;
+		}
+		return true;
+	});
+	expect(textPosition).toBeGreaterThan(0);
+	await act(async () => {
+		editor.commands.focus();
+		editor.commands.setTextSelection(textPosition + 5);
+	});
+	const originalSelection = {
+		from: editor.state.selection.from,
+		to: editor.state.selection.to,
+	};
+	const checkbox = editor.view.dom.querySelector<HTMLInputElement>(
+		'input[type="checkbox"]',
+	);
+	expect(checkbox).not.toBeNull();
+	const mouseDown = new MouseEvent("mousedown", {
+		bubbles: true,
+		cancelable: true,
+	});
+	await act(async () => {
+		checkbox!.dispatchEvent(mouseDown);
+	});
+	expect(mouseDown.defaultPrevented).toBe(true);
+	expect(document.activeElement).toBe(editor.view.dom);
+
+	await act(async () => {
+		checkbox!.checked = true;
+		fireEvent.change(checkbox!);
+	});
+	expect(editor.state.selection.from).toBe(originalSelection.from);
+	expect(editor.state.selection.to).toBe(originalSelection.to);
+	expect(checkbox).toBeChecked();
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			"- [x] keep this caret\n\nTail stays put\n",
+		);
+	});
+	expect(editor.view.dom).toHaveTextContent("Tail stays put");
 });
 
 test("renders YAML frontmatter as editable fields", async () => {

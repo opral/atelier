@@ -32,15 +32,31 @@ function ensureTopLevelIds(children: any[]): void {
 export const normalizePersistedMarkdown = (markdown: string): string =>
 	markdown.endsWith("\n") ? markdown : `${markdown}\n`;
 
-export function buildMarkdownFromEditor(editor: any): string {
-	const ast = tiptapDocToAst(editor.getJSON() as any) as any;
+/**
+ * Serializes a TipTap document through the single Markdown bridge used by
+ * persistence and clipboard text. Callers that persist a whole document opt
+ * into stable block ids; a copied slice deliberately must not acquire them.
+ */
+export function serializeTiptapDocToMarkdown(
+	doc: any,
+	options: { assignTopLevelIds?: boolean } = {},
+): string {
+	const ast = tiptapDocToAst(doc as any) as any;
 	const children = (ast?.children ?? []) as any[];
-	ensureTopLevelIds(children);
+	if (options.assignTopLevelIds) {
+		ensureTopLevelIds(children);
+	}
 	const root = {
 		type: "root",
 		children,
 	} as any;
 	return serializeAst(root);
+}
+
+export function buildMarkdownFromEditor(editor: any): string {
+	return serializeTiptapDocToMarkdown(editor.getJSON(), {
+		assignTopLevelIds: true,
+	});
 }
 
 export function buildNormalizedMarkdownFromEditor(editor: any): string {
