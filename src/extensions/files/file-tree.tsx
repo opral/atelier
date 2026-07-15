@@ -228,6 +228,23 @@ const FILE_TREE_UNSAFE_CSS = `
 		opacity: 0.75;
 	}
 
+	[data-type='context-menu-trigger'] {
+		color: var(--color-icon-tertiary);
+	}
+
+	[data-type='context-menu-trigger']
+		> [data-icon-name='file-tree-icon-ellipsis'] {
+		width: 12px;
+		height: 12px;
+	}
+
+	[data-file-tree-virtualized-root='true']:not(
+		:has([data-item-context-hover='true'])
+	)
+		> [data-type='context-menu-anchor']:not(:has([aria-expanded='true'])) {
+		display: none;
+	}
+
 	[data-type='item'][data-item-selected='true'][data-item-type='folder']
 		> [data-item-section='icon'] {
 		color: var(--color-icon-selection-current);
@@ -1312,6 +1329,9 @@ function treeHostStyle(
 		"--trees-bg-muted-override": "var(--color-bg-hover)",
 		"--trees-border-color-override": "transparent",
 		"--trees-border-radius-override": isSpacious ? "9px" : "7px",
+		...(isSpacious
+			? {}
+			: { "--trees-context-menu-trigger-inline-offset": "2.5px" }),
 		"--trees-fg-muted-override": "var(--color-text-tertiary)",
 		"--trees-fg-override": "var(--color-text-secondary)",
 		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",

@@ -111,6 +111,10 @@ final result: blocked
 - The upstream tree composition keeps the review-decoration lane before the
   action lane, so an amber review dot appears before the ellipsis without
   permanent action chrome.
+- The compact `New` chevron and tree overflow action share the same right-hand
+  action column. The overflow icon is a lighter 12px ellipsis in the shared
+  tertiary-icon token and appears only while its row is hovered (or while its
+  menu is open).
 - Pierre's native drag-and-drop interaction now moves Lix-backed files and
   folders into a Lix-backed destination folder while retaining the item's name.
   Its existing drag preview, target state, hover-to-open, and auto-scroll are
@@ -119,7 +123,7 @@ final result: blocked
 
 ## Interaction and automated evidence
 
-- Focused Files tree tests: 58 passed. Coverage includes central New menu labels
+- Focused Files tree tests: 59 passed. Coverage includes central New menu labels
   and shortcuts, selected-folder creation, the visible extension and caret
   position for Markdown/CSV drafts, extensionless generic-file creation,
   generic-extension collision handling, right-click, ellipsis, rename,
@@ -128,7 +132,7 @@ final result: blocked
   read-only behavior, watched-directory restrictions, review-dot/action
   ordering, native file/folder drag requests, Lix persistence, descendant path
   cascades, and active-file path remapping.
-- Full test suite: 786 passed, 1 skipped across 74 test files.
+- Full test suite: 787 passed, 1 skipped across 74 test files.
 - Typecheck: passed.
 - Production build: passed.
 - Lint: passed with 10 pre-existing warnings and no errors.

@@ -35,6 +35,21 @@ describe("FileTree", () => {
 		);
 	});
 
+	test("aligns compact row actions and keeps their dots lightweight", () => {
+		const { container } = render(<FileTree nodes={mockTree} />);
+		const host = getTreeHost(container);
+		const unsafeStyle = getTreeRoot(container).querySelector(
+			"style[data-file-tree-unsafe-css]",
+		);
+
+		expect(
+			host.style.getPropertyValue("--trees-context-menu-trigger-inline-offset"),
+		).toBe("2.5px");
+		expect(unsafeStyle).toHaveTextContent("data-item-context-hover");
+		expect(unsafeStyle).toHaveTextContent("width: 12px");
+		expect(unsafeStyle).toHaveTextContent("color: var(--color-icon-tertiary)");
+	});
+
 	test("expands and collapses directories", async () => {
 		const { container } = render(<FileTree nodes={mockTree} />);
 
