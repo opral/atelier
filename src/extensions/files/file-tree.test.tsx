@@ -378,10 +378,12 @@ describe("FileTree", () => {
 
 	test("opens the folder action menu from right click and creates at that folder", async () => {
 		const handleCreateAtDirectory = vi.fn();
+		const handleDeleteItem = vi.fn();
 		const { container } = render(
 			<FileTree
 				nodes={mockTree}
 				onCreateAtDirectory={handleCreateAtDirectory}
+				onDeleteItem={handleDeleteItem}
 			/>,
 		);
 
@@ -390,9 +392,49 @@ describe("FileTree", () => {
 		expect(menu).toHaveTextContent("New file");
 		expect(menu).toHaveTextContent("New folder");
 		expect(menu).toHaveTextContent("Rename");
+		expect(menu).toHaveTextContent("Delete");
+		expect(menu).toHaveTextContent("⌘ Backspace");
+		expect(
+			menu.querySelector("[data-attr='file-tree-menu-new-file-icon']"),
+		).not.toBeNull();
+		expect(
+			menu.querySelector("[data-attr='file-tree-menu-new-folder-icon']"),
+		).not.toBeNull();
+		expect(
+			menu.querySelector("[data-attr='file-tree-menu-delete-icon']"),
+		).not.toBeNull();
 
 		fireEvent.click(getTreeContextMenuButton(menu, "New file"));
 		expect(handleCreateAtDirectory).toHaveBeenCalledWith("/docs/", "file");
+	});
+
+	test("runs Delete from a writable file action menu", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+				source: "lix",
+			},
+		];
+		const handleDeleteItem = vi.fn();
+		const { container } = render(
+			<FileTree nodes={nodes} onDeleteItem={handleDeleteItem} />,
+		);
+
+		openTreeContextMenu(container, "README.md");
+		const menu = await getTreeContextMenu(container);
+		const deleteButton = getTreeContextMenuButton(menu, "Delete");
+		expect(deleteButton).toHaveTextContent("⌘ Backspace");
+		fireEvent.click(deleteButton);
+
+		expect(handleDeleteItem).toHaveBeenCalledWith({
+			id: "file-readme",
+			kind: "file",
+			source: "lix",
+			sourcePath: "/README.md",
+		});
 	});
 
 	test("opens the same menu from the row ellipsis trigger", async () => {
@@ -458,12 +500,33 @@ describe("FileTree", () => {
 		expect(menu).toHaveTextContent("Open");
 		expect(menu).not.toHaveTextContent("Rename");
 		expect(menu).not.toHaveTextContent("New file");
+		expect(menu).not.toHaveTextContent("Delete");
 
 		fireEvent.click(getTreeContextMenuButton(menu, "Open"));
 		expect(handleOpen).toHaveBeenCalledWith(
 			"historical-file",
 			"/historical.md",
 		);
+	});
+
+	test("keeps watched-file menus non-destructive", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "watched:/README.md",
+				name: "README.md",
+				path: "/README.md",
+				source: "watched",
+			},
+		];
+		const { container } = render(
+			<FileTree nodes={nodes} onDeleteItem={vi.fn()} />,
+		);
+
+		openTreeContextMenu(container, "README.md");
+		const menu = await getTreeContextMenu(container);
+		expect(menu).toHaveTextContent("Rename");
+		expect(menu).not.toHaveTextContent("Delete");
 	});
 
 	test("does not start native renames for watched-only directories", async () => {
@@ -727,8 +790,8 @@ function getTreeContextMenuButton(
 	menu: HTMLElement,
 	name: string,
 ): HTMLElement {
-	const button = [...menu.querySelectorAll("button")].find(
-		(element) => element.textContent?.trim() === name,
+	const button = [...menu.querySelectorAll("button")].find((element) =>
+		element.textContent?.trim().startsWith(name),
 	);
 	if (!(button instanceof HTMLElement)) {
 		throw new Error(`context menu action '${name}' not found`);

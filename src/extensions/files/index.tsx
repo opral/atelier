@@ -31,6 +31,7 @@ import type { ExtensionState, PanelSide } from "../../extension-runtime/types";
 import {
 	FileTree,
 	type FileTreeCreateRequest,
+	type FileTreeDeleteRequest,
 	type FileTreeFileType,
 	type FileTreeRenameRequest,
 } from "./file-tree";
@@ -748,44 +749,60 @@ function FilesViewContent({
 		setLocalSelection(null);
 	}, [setLocalSelection]);
 
-	const handleDeleteSelection = useCallback(async () => {
-		if (!selectedPath || !selectedKind) return;
-		if (selectedSource === "checkpoint-diff") return;
-		const normalizedPath =
-			selectedKind === "file"
-				? selectedPath
-				: ensureDirectoryPath(selectedPath);
-		try {
-			if (selectedKind === "file") {
-				if (!selectedFileId) return;
-				await qb(lix)
-					.deleteFrom("lix_file")
-					.where("id", "=", selectedFileId)
-					.execute();
-				setPendingPaths((prev) =>
-					prev.filter((path) => path !== normalizedPath),
-				);
-				if (selectedFileId === activeFileId) {
-					context?.closeFileViews?.({ fileId: selectedFileId });
+	const handleDeleteItem = useCallback(
+		async (request: FileTreeDeleteRequest) => {
+			if (request.source !== "lix") return;
+			const normalizedPath =
+				request.kind === "file"
+					? request.sourcePath
+					: ensureDirectoryPath(request.sourcePath);
+			try {
+				if (request.kind === "file") {
+					if (!request.id) return;
+					await qb(lix)
+						.deleteFrom("lix_file")
+						.where("id", "=", request.id)
+						.execute();
+					setPendingPaths((prev) =>
+						prev.filter((path) => path !== normalizedPath),
+					);
+					if (request.id === activeFileId) {
+						context?.closeFileViews?.({ fileId: request.id });
+					}
+				} else {
+					await qb(lix)
+						.deleteFrom("lix_directory")
+						.where("path", "=", normalizedPath)
+						.execute();
+					setPendingDirectoryPaths((prev) =>
+						prev.filter((path) => path !== normalizedPath),
+					);
+					if (
+						activeFileId &&
+						normalizedActiveFilePath?.startsWith(normalizedPath)
+					) {
+						context?.closeFileViews?.({ fileId: activeFileId });
+					}
 				}
-			} else {
-				await qb(lix)
-					.deleteFrom("lix_directory")
-					.where("path", "=", normalizedPath)
-					.execute();
-				setPendingDirectoryPaths((prev) =>
-					prev.filter((path) => path !== normalizedPath),
-				);
+			} catch (error) {
+				console.error("Failed to delete entry", error);
+			} finally {
+				setSelectionOverride(null);
 			}
-		} catch (error) {
-			console.error("Failed to delete entry", error);
-		} finally {
-			setSelectionOverride(null);
-		}
+		},
+		[activeFileId, context, lix, normalizedActiveFilePath],
+	);
+
+	const handleDeleteSelection = useCallback(() => {
+		if (!selectedPath || !selectedKind || selectedSource !== "lix") return;
+		return handleDeleteItem({
+			id: selectedFileId ?? undefined,
+			kind: selectedKind,
+			source: selectedSource,
+			sourcePath: selectedPath,
+		});
 	}, [
-		activeFileId,
-		context,
-		lix,
+		handleDeleteItem,
 		selectedFileId,
 		selectedKind,
 		selectedPath,
@@ -812,7 +829,7 @@ function FilesViewContent({
 					event.shiftKey ||
 					!selectedPath ||
 					!selectedKind ||
-					selectedSource === "checkpoint-diff"
+					selectedSource !== "lix"
 				) {
 					return;
 				}
@@ -969,6 +986,7 @@ function FilesViewContent({
 			onCreateCancel={handleCreateCancel}
 			onCreateCommit={handleCreateCommit}
 			onCreateAtDirectory={handleCreateAtDirectory}
+			onDeleteItem={handleDeleteItem}
 			onRenameCommit={handleRenameCommit}
 		/>
 	);

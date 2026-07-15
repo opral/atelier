@@ -483,6 +483,83 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("deletes a Lix file from its row action menu", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toBeVisible();
+		});
+
+		fireEvent.contextMenu(getFilesTreeItem("README.md"), {
+			button: 2,
+			clientX: 24,
+			clientY: 24,
+		});
+		const menu = await getFilesTreeContextMenu();
+		expect(menu).toHaveTextContent("⌘ Backspace");
+		fireEvent.click(getFilesTreeContextMenuButton(menu, "Delete"));
+
+		await waitFor(async () => {
+			expect(await selectFileById(lix, "readme")).toBeUndefined();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("deletes a Lix folder from its row action menu", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ id: "docs", path: "/docs/" })
+			.execute();
+		await insertFile(lix, "guide", "/docs/guide.md", "# Guide\n");
+		const closeFileViews = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "guide",
+				activeFilePath: "/docs/guide.md",
+				closeFileViews,
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("docs/")).toBeVisible();
+		});
+
+		fireEvent.contextMenu(getFilesTreeItem("docs/"), {
+			button: 2,
+			clientX: 24,
+			clientY: 24,
+		});
+		const menu = await getFilesTreeContextMenu();
+		fireEvent.click(getFilesTreeContextMenuButton(menu, "Delete"));
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/docs/")
+					.executeTakeFirst(),
+			).toBeUndefined();
+			expect(await selectFileById(lix, "guide")).toBeUndefined();
+		});
+		expect(closeFileViews).toHaveBeenCalledWith({ fileId: "guide" });
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("deselects the active file when the tree background is clicked", async () => {
 		const lix = await openLix();
 		await insertReadme(lix);
@@ -900,6 +977,33 @@ function getFilesTreeItem(path: string): HTMLElement {
 	const item = queryFilesTreeItem(path);
 	if (!item) throw new Error(`file tree item not found: ${path}`);
 	return item;
+}
+
+async function getFilesTreeContextMenu(): Promise<HTMLElement> {
+	return waitFor(() => {
+		const host = screen.queryByLabelText("Files");
+		const menu =
+			host?.shadowRoot?.querySelector(
+				"[data-file-tree-context-menu-root='true']",
+			) ?? document.querySelector("[data-file-tree-context-menu-root='true']");
+		if (!(menu instanceof HTMLElement)) {
+			throw new Error("Files tree context menu not found");
+		}
+		return menu;
+	});
+}
+
+function getFilesTreeContextMenuButton(
+	menu: HTMLElement,
+	name: string,
+): HTMLElement {
+	const button = [...menu.querySelectorAll("button")].find((element) =>
+		element.textContent?.trim().startsWith(name),
+	);
+	if (!(button instanceof HTMLElement)) {
+		throw new Error(`Files tree context menu action '${name}' not found`);
+	}
+	return button;
 }
 
 function queryFilesTreeRenameInput(): HTMLInputElement | null {

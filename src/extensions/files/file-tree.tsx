@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
+import { Trash2 } from "lucide-react";
 import type {
 	ContextMenuItem as FileTreeContextMenuItem,
 	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
@@ -24,6 +25,7 @@ import type {
 } from "@/extensions/files/build-filesystem-tree";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
+import fileNewIconUrl from "./assets/file-new.svg";
 import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
 
 export type FileTreeFileType = "generic" | "markdown" | "csv";
@@ -48,6 +50,13 @@ export type FileTreeRenameRequest = {
 	readonly source: FilesystemTreeSource;
 	readonly sourcePath: string;
 	readonly destinationPath: string;
+};
+
+export type FileTreeDeleteRequest = {
+	readonly id?: string;
+	readonly kind: "file" | "directory";
+	readonly source: FilesystemTreeSource;
+	readonly sourcePath: string;
 };
 
 export type FileTreeProps = {
@@ -81,6 +90,9 @@ export type FileTreeProps = {
 	) => void;
 	readonly onRenameCommit?: (
 		request: FileTreeRenameRequest,
+	) => Promise<void> | void;
+	readonly onDeleteItem?: (
+		request: FileTreeDeleteRequest,
 	) => Promise<void> | void;
 };
 
@@ -262,6 +274,7 @@ export function FileTree({
 	onCreateCancel,
 	onCreateAtDirectory,
 	onRenameCommit,
+	onDeleteItem,
 }: FileTreeProps) {
 	const [internalOpenDirectories, setInternalOpenDirectories] = useState(
 		() => new Set<string>(),
@@ -320,6 +333,7 @@ export function FileTree({
 		onOpenDirectoriesChange,
 		onSelectItem,
 		onClearSelection,
+		onDeleteItem,
 		onRenameCommit,
 		pathInfoByTreePath: treeInput.pathInfoByTreePath,
 		realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -407,18 +421,23 @@ export function FileTree({
 			);
 			if (!info || info.createRequestId != null) return null;
 			const canRename = canRenameTreeItem(info);
+			const canDelete =
+				stateRef.current.onDeleteItem != null && canDeleteTreeItem(info);
 			const canCreateInDirectory =
 				info.kind === "directory" &&
 				info.source !== "checkpoint-diff" &&
 				info.source !== "watched" &&
 				stateRef.current.createRequest == null;
 			const canOpen = info.source === "checkpoint-diff";
-			if (!canRename && !canCreateInDirectory && !canOpen) return null;
+			if (!canRename && !canDelete && !canCreateInDirectory && !canOpen) {
+				return null;
+			}
 			return (
 				<TreeItemContextMenu
 					item={item}
 					context={context}
 					canCreateInDirectory={canCreateInDirectory}
+					canDelete={canDelete}
 					canOpen={canOpen}
 					canRename={canRename}
 					onCreate={(kind) => {
@@ -447,6 +466,15 @@ export function FileTree({
 							model.startRenaming(item.path);
 						}, 0);
 					}}
+					onDelete={() => {
+						context.close({ restoreFocus: false });
+						void stateRef.current.onDeleteItem?.({
+							id: info.id,
+							kind: info.kind,
+							source: info.source ?? "lix",
+							sourcePath: info.appPath,
+						});
+					}}
 				/>
 			);
 		},
@@ -465,6 +493,7 @@ export function FileTree({
 			onOpenDirectoriesChange,
 			onSelectItem,
 			onClearSelection,
+			onDeleteItem,
 			onRenameCommit,
 			pathInfoByTreePath: treeInput.pathInfoByTreePath,
 			realDirectoryTreePaths: treeInput.realDirectoryTreePaths,
@@ -549,6 +578,7 @@ export function FileTree({
 		onCreateCancel,
 		onCreateCommit,
 		onClearSelection,
+		onDeleteItem,
 		onOpenDirectoriesChange,
 		onRenameCommit,
 		onSelectItem,
@@ -689,18 +719,22 @@ function TreeItemContextMenu({
 	item,
 	context,
 	canCreateInDirectory,
+	canDelete,
 	canOpen,
 	canRename,
 	onCreate,
+	onDelete,
 	onOpen,
 	onRename,
 }: {
 	readonly item: FileTreeContextMenuItem;
 	readonly context: FileTreeContextMenuOpenContext;
 	readonly canCreateInDirectory: boolean;
+	readonly canDelete: boolean;
 	readonly canOpen: boolean;
 	readonly canRename: boolean;
 	readonly onCreate: (kind: "file" | "directory") => void;
+	readonly onDelete: () => void;
 	readonly onOpen: () => void;
 	readonly onRename: () => void;
 }) {
@@ -724,10 +758,32 @@ function TreeItemContextMenu({
 			) : null}
 			{canCreateInDirectory ? (
 				<>
-					<TreeItemContextMenuButton onClick={() => onCreate("file")}>
+					<TreeItemContextMenuButton
+						icon={
+							<img
+								alt=""
+								aria-hidden="true"
+								className="size-3.5 shrink-0"
+								data-attr="file-tree-menu-new-file-icon"
+								src={fileNewIconUrl}
+							/>
+						}
+						onClick={() => onCreate("file")}
+					>
 						New file
 					</TreeItemContextMenuButton>
-					<TreeItemContextMenuButton onClick={() => onCreate("directory")}>
+					<TreeItemContextMenuButton
+						icon={
+							<img
+								alt=""
+								aria-hidden="true"
+								className="size-3.5 shrink-0"
+								data-attr="file-tree-menu-new-folder-icon"
+								src={folderBlueIconUrl}
+							/>
+						}
+						onClick={() => onCreate("directory")}
+					>
 						New folder
 					</TreeItemContextMenuButton>
 					<div
@@ -741,25 +797,65 @@ function TreeItemContextMenu({
 					Rename
 				</TreeItemContextMenuButton>
 			) : null}
+			{canDelete && canRename ? (
+				<div
+					aria-hidden="true"
+					className="my-1 h-px bg-[var(--color-border-panel)]"
+				/>
+			) : null}
+			{canDelete ? (
+				<TreeItemContextMenuButton
+					destructive
+					icon={
+						<Trash2
+							aria-hidden="true"
+							className="size-3.5 shrink-0"
+							data-attr="file-tree-menu-delete-icon"
+						/>
+					}
+					onClick={onDelete}
+					shortcut="⌘ Backspace"
+				>
+					Delete
+				</TreeItemContextMenuButton>
+			) : null}
 		</div>
 	);
 }
 
 function TreeItemContextMenuButton({
 	children,
+	destructive = false,
+	icon,
 	onClick,
+	shortcut,
 }: {
 	readonly children: ReactNode;
+	readonly destructive?: boolean;
+	readonly icon?: ReactNode;
 	readonly onClick: () => void;
+	readonly shortcut?: string;
 }) {
 	return (
 		<button
 			type="button"
 			role="menuitem"
-			className="flex w-full items-center rounded-sm px-2 py-1.5 text-left outline-none hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]${
+				destructive ? " text-[var(--color-text-status-danger)]" : ""
+			}`}
 			onClick={onClick}
 		>
-			{children}
+			{icon ? (
+				<span className="flex size-3.5 shrink-0 items-center justify-center">
+					{icon}
+				</span>
+			) : null}
+			<span className="min-w-0 flex-1 truncate">{children}</span>
+			{shortcut ? (
+				<kbd className="ml-auto text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
+					{shortcut}
+				</kbd>
+			) : null}
 		</button>
 	);
 }
@@ -768,7 +864,7 @@ function treeContextMenuStyle(
 	anchorRect: FileTreeContextMenuOpenContext["anchorRect"],
 ): CSSProperties {
 	const edge = 8;
-	const menuHeight = 132;
+	const menuHeight = 172;
 	const menuWidth = 176;
 	const viewportWidth =
 		typeof window === "undefined" ? 1024 : window.innerWidth;
@@ -800,6 +896,14 @@ function canRenameTreeItem(info: TreePathInfo): boolean {
 		return false;
 	}
 	return info.source !== "watched" || info.kind === "file";
+}
+
+function canDeleteTreeItem(info: TreePathInfo): boolean {
+	return (
+		info.createRequestId == null &&
+		info.source !== "checkpoint-diff" &&
+		info.source !== "watched"
+	);
 }
 
 function prepareInitialCreateInput(

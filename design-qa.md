@@ -100,21 +100,26 @@ final result: blocked
   before the extension. Generic `New file` begins empty and commits an
   extensionless name as typed—there is no hidden or implicit `.md` suffix.
 - Per-row actions use the native tree right-click and hover/focus ellipsis
-  affordance. Folder menus offer New file, New folder, and Rename; file menus
-  offer Rename. Checkpoint-diff rows stay read-only with Open only.
+  affordance. Folder menus show the existing orange file-plus and blue folder
+  icons for New file/New folder, followed by Rename and a separated destructive
+  Delete action with a trash icon and visible `⌘ Backspace` shortcut. File
+  menus offer Rename and Delete; watched and checkpoint-diff rows remain
+  non-destructive, with checkpoint rows retaining Open only.
 - The upstream tree composition keeps the review-decoration lane before the
   action lane, so an amber review dot appears before the ellipsis without
   permanent action chrome.
 
 ## Interaction and automated evidence
 
-- Files/controller tests: 53 passed. Coverage includes central New menu labels
+- Files/controller tests: 57 passed. Coverage includes central New menu labels
   and shortcuts, selected-folder creation, the visible extension and caret
   position for Markdown/CSV drafts, extensionless generic-file creation,
   generic-extension collision handling, right-click, ellipsis, rename,
-  checkpoint read-only behavior, watched-directory restrictions, and
+  icon-bearing create actions, menu/shortcut deletion for files and folders
+  (including active descendant views), checkpoint read-only behavior,
+  watched-directory restrictions, and
   review-dot/action ordering.
-- Full test suite: 776 passed, 1 skipped across 74 test files.
+- Full test suite: 780 passed, 1 skipped across 74 test files.
 - Typecheck: passed.
 - Production build: passed.
 - Lint: passed with 10 pre-existing warnings and no errors.
