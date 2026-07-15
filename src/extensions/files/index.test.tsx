@@ -198,7 +198,7 @@ describe("FilesView", () => {
 		});
 
 		openNewMenu(await screen.findByRole("button", { name: "New" }));
-		expect(await screen.findByText("Create in: Workspace")).toBeVisible();
+		expect(screen.queryByText(/^Create in:/)).not.toBeInTheDocument();
 		expect(screen.getByRole("menuitem", { name: /New file/ })).toBeVisible();
 		expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeVisible();
 		expect(

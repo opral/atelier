@@ -15,7 +15,6 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -369,11 +368,6 @@ function FilesViewContent({
 		if (parts.length <= 1) return "/";
 		return `/${parts.slice(0, -1).join("/")}/`;
 	}, [selectedKind, selectedPath]);
-	const createDestinationLabel = useMemo(
-		() => formatCreateDestination(resolveCreateDirectory()),
-		[resolveCreateDirectory],
-	);
-
 	const startCreateRequest = useCallback(
 		(
 			kind: "file" | "directory",
@@ -1012,7 +1006,6 @@ function FilesViewContent({
 						<div className="flex shrink-0 justify-end pb-6">
 							{!createRequest ? (
 								<UnifiedNewMenu
-									destinationLabel={createDestinationLabel}
 									onNewCsv={handleNewCsv}
 									onNewFile={handleNewFile}
 									onNewFolder={handleCreateDirectory}
@@ -1052,7 +1045,6 @@ function FilesViewContent({
 			{/* Compact New row for side-panel use. */}
 			{context?.panelSide !== "central" && !createRequest ? (
 				<UnifiedNewMenu
-					destinationLabel={createDestinationLabel}
 					onNewCsv={handleNewCsv}
 					onNewFile={handleNewFile}
 					onNewFolder={handleCreateDirectory}
@@ -1107,14 +1099,12 @@ function FilesViewContent({
 
 function UnifiedNewMenu({
 	children,
-	destinationLabel,
 	onNewCsv,
 	onNewFile,
 	onNewFolder,
 	onNewMarkdown,
 }: {
 	readonly children: ReactNode;
-	readonly destinationLabel: string;
 	readonly onNewCsv: () => void;
 	readonly onNewFile: () => void;
 	readonly onNewFolder: () => void;
@@ -1129,9 +1119,6 @@ function UnifiedNewMenu({
 				className="w-56 p-1.5 text-xs"
 				sideOffset={3}
 			>
-				<DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
-					Create in: {destinationLabel}
-				</DropdownMenuLabel>
 				<NewMenuItem
 					dataAttr="file-new-file"
 					iconUrl={fileNewIconUrl}
@@ -1531,11 +1518,6 @@ function initialInputValueForCreateRequest(
 	if (fileType === "markdown") return ".md";
 	if (fileType === "csv") return ".csv";
 	return "";
-}
-
-function formatCreateDestination(directoryPath: string): string {
-	if (directoryPath === "/") return "Workspace";
-	return directoryPath.replace(/^\/+|\/+$/g, "") || "Workspace";
 }
 
 function ensureDirectoryPath(path: string): string {

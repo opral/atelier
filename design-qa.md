@@ -89,10 +89,10 @@ final result: blocked
 
 - The compact trigger is a normal tree row (`New`, orange file-plus icon,
   discreet chevron), rather than a bordered button or toolbar.
-- The flat menu names the creation destination and keeps the happy path in one
-  scan: `New file` (`⌘ .`), `New folder` (`⇧⌘ .`), then Markdown and CSV
-  variants. Existing asset icons preserve the repository's folder, Markdown,
-  and CSV colors.
+- The flat menu begins with `New file` (`⌘ .`) and `New folder` (`⇧⌘ .`), then
+  Markdown and CSV variants. It deliberately omits a `Create in:` destination
+  label to keep the interaction light; existing asset icons preserve the
+  repository's folder, Markdown, and CSV colors.
 - Creation resolves to the selected folder, the selected file's parent, or
   root; generic names keep their supplied extension, while Markdown and CSV
   variants append their extension only once.
