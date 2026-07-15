@@ -214,6 +214,37 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("uses the same unified New menu in the full-screen Files view", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<FilesView context={{ panelSide: "central" }} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const newButton = await screen.findByRole("button", { name: "New" });
+		expect(newButton).toHaveAttribute("data-attr", "file-new-wide");
+		openNewMenu(newButton);
+		expect(screen.getByRole("menuitem", { name: /New file/ })).toBeVisible();
+		expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeVisible();
+		expect(
+			screen.getByRole("menuitem", { name: /New Markdown \(.md\)/ }),
+		).toBeVisible();
+		expect(
+			screen.getByRole("menuitem", { name: /New CSV \(.csv\)/ }),
+		).toBeVisible();
+		expect(screen.getByText("⌘ .")).toBeVisible();
+		expect(screen.getByText("⇧⌘ .")).toBeVisible();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("creates generic files, folders, and CSV files from New", async () => {
 		const lix = await openLix();
 		let view: ReturnType<typeof render> | undefined;
