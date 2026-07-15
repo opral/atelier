@@ -4,6 +4,7 @@ import { createEditor } from "./create-editor";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import { handlePaste } from "./handle-paste";
+import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
 
@@ -205,6 +206,85 @@ test("clicking a rendered markdown link opens it externally", async () => {
 		editor.destroy();
 		editorDom.remove();
 		openWindow.mockRestore();
+	}
+});
+
+test("copying a task-list selection serializes its checkbox markers as Markdown", async () => {
+	const lix = await openLix();
+	const markdown = [
+		"- [ ] set up outbound campaigns for discovery",
+		"  - [x] agencies",
+		"  - [ ] company brain startups",
+	].join("\n");
+	const editor = createEditor({
+		lix,
+		initialMarkdown: markdown,
+		persistState: false,
+	});
+
+	try {
+		editor.commands.setTextSelection({
+			from: 1,
+			to: editor.state.doc.content.size,
+		});
+		const clipboard = editor.view.serializeForClipboard(
+			editor.state.selection.content(),
+		);
+
+		expect(clipboard.text).toBe(`${markdown}\n`);
+	} finally {
+		editor.destroy();
+	}
+});
+
+test("pasting copied Markdown round-trips rich task-list selections", async () => {
+	const lix = await openLix();
+	const markdown = [
+		"## Weekly goal",
+		"",
+		"- [ ] set up outbound campaigns for discovery",
+		"  - [x] agencies",
+		"  - [ ] company brain startups",
+		"",
+		"> Keep the **brief** linked to the [plan](https://example.com/plan).",
+	].join("\n");
+	const source = createEditor({
+		lix,
+		initialMarkdown: markdown,
+		persistState: false,
+	});
+	const destination = createEditor({
+		lix,
+		initialMarkdown: "",
+		persistState: false,
+	});
+
+	try {
+		source.commands.setTextSelection({
+			from: 1,
+			to: source.state.doc.content.size,
+		});
+		const clipboard = source.view.serializeForClipboard(
+			source.state.selection.content(),
+		);
+		const pasted = handlePaste({
+			editor: destination,
+			event: {
+				preventDefault: vi.fn(),
+				clipboardData: {
+					getData: (type: string) =>
+						type === "text/plain" ? clipboard.text : "",
+				},
+			},
+		});
+
+		expect(pasted).toBe(true);
+		expect(buildNormalizedMarkdownFromEditor(destination)).toBe(
+			`${markdown}\n`,
+		);
+	} finally {
+		source.destroy();
+		destination.destroy();
 	}
 });
 

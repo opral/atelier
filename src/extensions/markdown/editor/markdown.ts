@@ -32,11 +32,11 @@ export function parseMarkdownSource(markdown: string): AstRoot {
  * serialize for an empty task (`- [ ] `) comes back as a plain list item whose
  * text is `[ ]`. Restore the task semantics before building the editor doc.
  */
-function restoreEmptyTaskItems(node: any, insideBulletList = false): void {
+function restoreEmptyTaskItems(node: any, insideList = false): void {
 	if (!node || typeof node !== "object") return;
 
 	if (
-		insideBulletList &&
+		insideList &&
 		node.type === "listItem" &&
 		typeof node.checked !== "boolean" &&
 		Array.isArray(node.children) &&
@@ -57,9 +57,9 @@ function restoreEmptyTaskItems(node: any, insideBulletList = false): void {
 		}
 	}
 
-	const childIsInsideBulletList = node.type === "list" && node.ordered !== true;
+	const childIsInsideList = node.type === "list";
 	for (const child of Array.isArray(node.children) ? node.children : []) {
-		restoreEmptyTaskItems(child, childIsInsideBulletList);
+		restoreEmptyTaskItems(child, childIsInsideList);
 	}
 }
 

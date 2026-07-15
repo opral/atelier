@@ -120,6 +120,18 @@ function isEmptyParagraphPlaceholder(children: any[]): boolean {
 	);
 }
 
+function softBreakLines(pmDoc: any): string[] {
+	const lines = [""];
+	for (const node of pmDoc.content?.[0]?.content ?? []) {
+		if (node.type === "text") {
+			lines[lines.length - 1] += node.text ?? "";
+		} else if (node.type === "hardBreak" && node.attrs?.soft === true) {
+			lines.push("");
+		}
+	}
+	return lines;
+}
+
 describe("root & paragraph", () => {
 	test("simple paragraph", () => {
 		const input: Ast = {
@@ -135,6 +147,51 @@ describe("root & paragraph", () => {
 		expect(canonicalAst(output)).toEqual(canonicalAst(input));
 		const editorOutput = roundtripThroughEditor(input);
 		expect(canonicalAst(editorOutput)).toEqual(canonicalAst(input));
+	});
+
+	test("keeps soft Markdown line breaks structural while editing", () => {
+		const markdown = [
+			"set up outbound campaigns for discovery",
+			"-- [ ] agencies",
+			"-- [ ] company brain startups",
+			"-- [ ] internship nyc playbook",
+		].join("\n");
+		const initial = astToTiptapDoc(parseMarkdown(markdown));
+		const initialInline = initial.content?.[0]?.content ?? [];
+
+		expect(softBreakLines(initial)).toEqual(markdown.split("\n"));
+		expect(
+			initialInline.filter(
+				(node) => node.type === "hardBreak" && node.attrs?.soft === true,
+			),
+		).toHaveLength(3);
+		expect(roundtripMarkdownThroughEditor("first\nsecond\n")).toBe(
+			"first\nsecond\n",
+		);
+		expect(roundtripMarkdownThroughEditor("**first\nsecond**\n")).toBe(
+			"**first**\n**second**\n",
+		);
+
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: initial,
+		});
+		editor.commands.insertContentAt(1, "X");
+		const persisted = serializeAst(tiptapDocToAst(editor.getJSON()));
+		editor.destroy();
+
+		const reopened = astToTiptapDoc(parseMarkdown(persisted));
+		expect(softBreakLines(reopened)).toEqual([
+			"Xset up outbound campaigns for discovery",
+			"-- [ ] agencies",
+			"-- [ ] company brain startups",
+			"-- [ ] internship nyc playbook",
+		]);
+		expect(
+			(reopened.content?.[0]?.content ?? []).filter(
+				(node) => node.type === "hardBreak" && node.attrs?.soft === true,
+			),
+		).toHaveLength(3);
 	});
 
 	test("empty top-level paragraph serializes as a span placeholder", () => {
@@ -639,6 +696,33 @@ describe("lists", () => {
 
 		expect(reopened.children?.[0]?.children?.[0]?.checked).toBe(false);
 		expect(serializeAst(reopened)).toBe(markdown);
+	});
+
+	test("empty ordered task items stay tasks after reopening the editor", () => {
+		const markdown = "1. [ ] \n2. [x] \n";
+		const reopened = roundtripThroughEditor(parseMarkdown(markdown));
+
+		expect(reopened.children?.[0]?.children?.[0]?.checked).toBe(false);
+		expect(reopened.children?.[0]?.children?.[1]?.checked).toBe(true);
+		expect(serializeAst(reopened)).toBe(markdown);
+	});
+
+	test("task checkbox reflects dynamic editability", () => {
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(parseMarkdown("- [ ] todo\n")),
+		});
+		const checkbox = editor.view.dom.querySelector<HTMLInputElement>(
+			'input[type="checkbox"]',
+		);
+
+		expect(checkbox).not.toBeNull();
+		expect(checkbox?.disabled).toBe(false);
+		editor.setEditable(false);
+		expect(checkbox?.disabled).toBe(true);
+		editor.setEditable(true);
+		expect(checkbox?.disabled).toBe(false);
+		editor.destroy();
 	});
 
 	test("mixed plain and formatted task list markdown preserves markers", () => {
