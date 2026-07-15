@@ -137,7 +137,7 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
-	test("creates one markdown file from the expanded new-file form", async () => {
+	test("creates and selects a markdown file without opening it", async () => {
 		const lix = await openLix();
 		const openFile = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
@@ -172,14 +172,12 @@ describe("FilesView", () => {
 			expect(created).toHaveLength(1);
 		});
 		await waitFor(() => {
-			expect(openFile).toHaveBeenCalledTimes(1);
-			expect(openFile).toHaveBeenCalledWith(
-				expect.objectContaining({
-					filePath: "/launch-plan.md",
-					panel: "central",
-				}),
+			expect(getFilesTreeItem("launch-plan.md")).toHaveAttribute(
+				"data-item-selected",
+				"true",
 			);
 		});
+		expect(openFile).not.toHaveBeenCalled();
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -250,12 +248,13 @@ describe("FilesView", () => {
 
 	test("creates generic files, folders, and CSV files from New", async () => {
 		const lix = await openLix();
+		const openFile = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<FilesView />
+						<FilesView context={{ openFile }} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -321,6 +320,7 @@ describe("FilesView", () => {
 			expect(created?.path).toBe("/planning/budget.csv");
 			expect(new TextDecoder().decode(created?.data)).toBe("Column 1\n");
 		});
+		expect(openFile).not.toHaveBeenCalled();
 
 		await act(async () => view?.unmount());
 		await lix.close();

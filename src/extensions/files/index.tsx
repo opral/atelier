@@ -476,13 +476,6 @@ function FilesViewContent({
 						kind: "file",
 						source: "lix",
 					});
-					context?.openFile?.({
-						panel: "central",
-						fileId: id,
-						filePath: path,
-						state: { focusOnLoad: true, defaultBlock: "heading1" },
-						focus: true,
-					});
 				} catch (error) {
 					setSelectionOverride(null);
 					console.error("Failed to create file", error);
@@ -530,13 +523,7 @@ function FilesViewContent({
 			}
 			return executeFileCreation();
 		},
-		[
-			context,
-			existingDirectoryPaths,
-			existingFilePaths,
-			lix,
-			setLocalSelection,
-		],
+		[existingDirectoryPaths, existingFilePaths, lix, setLocalSelection],
 	);
 
 	const handleCreateDirectory = useCallback(() => {
