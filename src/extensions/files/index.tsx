@@ -1,9 +1,11 @@
 import {
+	forwardRef,
 	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
+	type ButtonHTMLAttributes,
 	type ReactNode,
 } from "react";
 import { ChevronDown, Files, FileUp, Plus } from "lucide-react";
@@ -1038,30 +1040,18 @@ function FilesViewContent({
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						<div className="flex shrink-0 justify-end pb-6">
-							{!createRequest ? (
+							{createRequest ? (
+								<WideNewButton disabled />
+							) : (
 								<UnifiedNewMenu
 									onNewCsv={handleNewCsv}
 									onNewFile={handleNewFile}
 									onNewFolder={handleCreateDirectory}
 									onNewMarkdown={handleNewMarkdown}
 								>
-									<AtelierActionButton
-										data-attr="file-new-wide"
-										title="Create a new file or folder"
-									>
-										<Plus
-											aria-hidden="true"
-											className="size-3.5"
-											strokeWidth={2.4}
-										/>
-										<span>New</span>
-										<ChevronDown
-											aria-hidden="true"
-											className="size-3 opacity-80"
-										/>
-									</AtelierActionButton>
+									<WideNewButton />
 								</UnifiedNewMenu>
-							) : null}
+							)}
 						</div>
 						<div
 							data-testid="files-view-tree-scroll"
@@ -1074,35 +1064,19 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{/* Compact New row for side-panel use. */}
-			{context?.panelSide !== "central" && !createRequest ? (
-				<UnifiedNewMenu
-					onNewCsv={handleNewCsv}
-					onNewFile={handleNewFile}
-					onNewFolder={handleCreateDirectory}
-					onNewMarkdown={handleNewMarkdown}
-				>
-					<button
-						type="button"
-						className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-						data-attr="file-new"
-						title="Create a new file or folder"
+			{context?.panelSide !== "central" ? (
+				createRequest ? (
+					<CompactNewButton disabled />
+				) : (
+					<UnifiedNewMenu
+						onNewCsv={handleNewCsv}
+						onNewFile={handleNewFile}
+						onNewFolder={handleCreateDirectory}
+						onNewMarkdown={handleNewMarkdown}
 					>
-						<span className="flex items-center gap-[6px]">
-							<img
-								src={fileNewIconUrl}
-								alt=""
-								aria-hidden="true"
-								className="size-3.25 shrink-0"
-								data-attr="file-new-icon"
-							/>
-							<span>New</span>
-						</span>
-						<ChevronDown
-							aria-hidden="true"
-							className="size-3 text-[var(--color-icon-tertiary)]"
-						/>
-					</button>
-				</UnifiedNewMenu>
+						<CompactNewButton />
+					</UnifiedNewMenu>
+				)
 			) : null}
 			{isDraggingOver && (
 				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">
@@ -1127,6 +1101,63 @@ function FilesViewContent({
 		</div>
 	);
 }
+
+const WideNewButton = forwardRef<
+	HTMLButtonElement,
+	ButtonHTMLAttributes<HTMLButtonElement>
+>(function WideNewButton(
+	{ disabled = false, title = "Create a new file or folder", ...props },
+	ref,
+) {
+	return (
+		<AtelierActionButton
+			ref={ref}
+			data-attr="file-new-wide"
+			disabled={disabled}
+			title={title}
+			{...props}
+		>
+			<Plus aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+			<span>New</span>
+			<ChevronDown aria-hidden="true" className="size-3 opacity-80" />
+		</AtelierActionButton>
+	);
+});
+
+const CompactNewButton = forwardRef<
+	HTMLButtonElement,
+	ButtonHTMLAttributes<HTMLButtonElement>
+>(function CompactNewButton(
+	{ disabled = false, title = "Create a new file or folder", ...props },
+	ref,
+) {
+	return (
+		<button
+			ref={ref}
+			type="button"
+			className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			data-attr="file-new"
+			disabled={disabled}
+			title={title}
+			{...props}
+		>
+			<span className="flex items-center gap-[6px]">
+				<img
+					src={fileNewIconUrl}
+					alt=""
+					aria-hidden="true"
+					className="size-3.25 shrink-0"
+					data-attr="file-new-icon"
+				/>
+				<span>New</span>
+			</span>
+			<ChevronDown
+				aria-hidden="true"
+				className="size-3 text-[var(--color-icon-tertiary)]"
+			/>
+		</button>
+	);
+});
 
 function UnifiedNewMenu({
 	children,

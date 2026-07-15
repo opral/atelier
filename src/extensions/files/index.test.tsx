@@ -159,6 +159,7 @@ describe("FilesView", () => {
 			expect(draft.selectionEnd).toBe(0);
 			return draft;
 		});
+		expect(screen.getByRole("button", { name: "New" })).toBeDisabled();
 		fireEvent.input(input, { target: { value: "launch-plan.md" } });
 		fireEvent.keyDown(input, { key: "Enter" });
 
@@ -422,8 +423,9 @@ describe("FilesView", () => {
 			...primaryModifier(),
 		});
 		await waitFor(() => {
-			expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+			expect(getFilesTreeRenameInput()).toBeVisible();
 		});
+		expect(screen.getByRole("button", { name: "New" })).toBeDisabled();
 
 		await act(async () => view?.unmount());
 		windowAddEventListener.mockRestore();
@@ -442,7 +444,7 @@ describe("FilesView", () => {
 		await screen.findByRole("button", { name: "New" });
 
 		fireCreateShortcut();
-		expect(screen.getByRole("button", { name: "New" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "New" })).toBeEnabled();
 
 		await act(async () => {
 			view?.rerender(
@@ -465,8 +467,9 @@ describe("FilesView", () => {
 		});
 		fireCreateShortcut();
 		await waitFor(() => {
-			expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+			expect(getFilesTreeRenameInput()).toBeVisible();
 		});
+		expect(screen.getByRole("button", { name: "New" })).toBeDisabled();
 
 		await act(async () => view?.unmount());
 		await lix.close();
