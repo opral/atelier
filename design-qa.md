@@ -111,19 +111,24 @@ final result: blocked
 - The upstream tree composition keeps the review-decoration lane before the
   action lane, so an amber review dot appears before the ellipsis without
   permanent action chrome.
+- Pierre's native drag-and-drop interaction now moves Lix-backed files and
+  folders into a Lix-backed destination folder while retaining the item's name.
+  Its existing drag preview, target state, hover-to-open, and auto-scroll are
+  used directly; drafts, watched entries, and checkpoint-diff entries are not
+  draggable, and external file drops remain imports rather than moves.
 
 ## Interaction and automated evidence
 
-- Focused Files tree tests: 52 passed. Coverage includes central New menu labels
+- Focused Files tree tests: 58 passed. Coverage includes central New menu labels
   and shortcuts, selected-folder creation, the visible extension and caret
   position for Markdown/CSV drafts, extensionless generic-file creation,
   generic-extension collision handling, right-click, ellipsis, rename,
   icon-bearing create actions, the filled delete icon and semantic `⌘ ⌫`
   shortcut for files and folders (including active descendant views), checkpoint
-  read-only behavior,
-  watched-directory restrictions, and
-  review-dot/action ordering.
-- Full test suite: 780 passed, 1 skipped across 74 test files.
+  read-only behavior, watched-directory restrictions, review-dot/action
+  ordering, native file/folder drag requests, Lix persistence, descendant path
+  cascades, and active-file path remapping.
+- Full test suite: 786 passed, 1 skipped across 74 test files.
 - Typecheck: passed.
 - Production build: passed.
 - Lint: passed with 10 pre-existing warnings and no errors.

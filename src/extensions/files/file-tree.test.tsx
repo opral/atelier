@@ -376,6 +376,223 @@ describe("FileTree", () => {
 		});
 	});
 
+	test("moves a Lix-backed file into a Lix-backed folder", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "directory",
+				id: "dir-docs",
+				name: "docs",
+				path: "/docs/",
+				source: "lix",
+				children: [],
+			},
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+				source: "lix",
+			},
+		];
+		const handleMoveItem = vi.fn().mockResolvedValue(true);
+		const openFileView = vi.fn();
+		const { container } = render(
+			<FileTree
+				nodes={nodes}
+				onMoveItem={handleMoveItem}
+				openFileView={openFileView}
+			/>,
+		);
+		const source = getTreeItem(container, "README.md");
+		const target = getTreeItem(container, "docs/");
+		const transfer = createDragDataTransfer();
+		setTreePointElement(container, target);
+
+		fireEvent.dragStart(source, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+		expect(openFileView).not.toHaveBeenCalled();
+		fireEvent.dragOver(target, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+		await waitFor(() => {
+			expect(target).toHaveAttribute("data-item-drag-target", "true");
+		});
+		fireEvent.drop(target, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+
+		await waitFor(() => {
+			expect(handleMoveItem).toHaveBeenCalledWith({
+				destinationPath: "/docs/README.md",
+				id: "file-readme",
+				kind: "file",
+				source: "lix",
+				sourcePath: "/README.md",
+			});
+		});
+	});
+
+	test("moves a Lix-backed folder into another Lix-backed folder", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "directory",
+				id: "dir-archive",
+				name: "archive",
+				path: "/archive/",
+				source: "lix",
+				children: [],
+			},
+			{
+				type: "directory",
+				id: "dir-docs",
+				name: "docs",
+				path: "/docs/",
+				source: "lix",
+				children: [
+					{
+						type: "file",
+						id: "file-readme",
+						name: "README.md",
+						path: "/docs/README.md",
+						source: "lix",
+					},
+				],
+			},
+		];
+		const handleMoveItem = vi.fn().mockResolvedValue(true);
+		const { container } = render(
+			<FileTree nodes={nodes} onMoveItem={handleMoveItem} />,
+		);
+		const source = getTreeItem(container, "docs/");
+		const target = getTreeItem(container, "archive/");
+		const transfer = createDragDataTransfer();
+		setTreePointElement(container, target);
+
+		fireEvent.dragStart(source, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+		fireEvent.dragOver(target, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+		fireEvent.drop(target, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+
+		await waitFor(() => {
+			expect(handleMoveItem).toHaveBeenCalledWith({
+				destinationPath: "/archive/docs/",
+				id: "dir-docs",
+				kind: "directory",
+				source: "lix",
+				sourcePath: "/docs/",
+			});
+		});
+	});
+
+	test("restores the tree when a move cannot be persisted", async () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "directory",
+				id: "dir-docs",
+				name: "docs",
+				path: "/docs/",
+				source: "lix",
+				children: [],
+			},
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+				source: "lix",
+			},
+		];
+		const handleMoveItem = vi.fn().mockResolvedValue(false);
+		const { container } = render(
+			<FileTree nodes={nodes} onMoveItem={handleMoveItem} />,
+		);
+		const source = getTreeItem(container, "README.md");
+		const target = getTreeItem(container, "docs/");
+		const transfer = createDragDataTransfer();
+		setTreePointElement(container, target);
+
+		fireEvent.dragStart(source, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+		fireEvent.dragOver(target, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+		fireEvent.drop(target, {
+			clientX: 20,
+			clientY: 20,
+			dataTransfer: transfer,
+		});
+
+		await waitFor(() => {
+			expect(handleMoveItem).toHaveBeenCalledTimes(1);
+			expect(getTreeItem(container, "README.md")).toBeVisible();
+		});
+	});
+
+	test("does not drag watched or checkpoint-diff entries", () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "directory",
+				id: "dir-docs",
+				name: "docs",
+				path: "/docs/",
+				source: "lix",
+				children: [],
+			},
+			{
+				type: "file",
+				id: "watched:README.md",
+				name: "README.md",
+				path: "/README.md",
+				source: "watched",
+			},
+			{
+				type: "file",
+				id: "checkpoint:historical.md",
+				name: "historical.md",
+				path: "/historical.md",
+				source: "checkpoint-diff",
+			},
+		];
+		const handleMoveItem = vi.fn();
+		const { container } = render(
+			<FileTree nodes={nodes} onMoveItem={handleMoveItem} />,
+		);
+		const transfer = createDragDataTransfer();
+
+		fireEvent.dragStart(getTreeItem(container, "README.md"), {
+			dataTransfer: transfer,
+		});
+		fireEvent.dragStart(getTreeItem(container, "historical.md"), {
+			dataTransfer: transfer,
+		});
+
+		expect(transfer.setData).not.toHaveBeenCalled();
+		expect(handleMoveItem).not.toHaveBeenCalled();
+	});
+
 	test("opens the folder action menu from right click and creates at that folder", async () => {
 		const handleCreateAtDirectory = vi.fn();
 		const handleDeleteItem = vi.fn();
@@ -741,6 +958,30 @@ function getTreeRoot(container: HTMLElement): ShadowRoot {
 		throw new Error("file tree shadow root not found");
 	}
 	return root;
+}
+
+function setTreePointElement(
+	container: HTMLElement,
+	element: HTMLElement,
+): void {
+	Object.defineProperty(getTreeRoot(container), "elementFromPoint", {
+		configurable: true,
+		value: () => element,
+	});
+}
+
+function createDragDataTransfer(): DataTransfer {
+	return {
+		clearData: vi.fn(),
+		dropEffect: "none",
+		effectAllowed: "uninitialized",
+		files: [] as unknown as FileList,
+		getData: vi.fn(() => ""),
+		items: [] as unknown as DataTransferItemList,
+		setData: vi.fn(),
+		setDragImage: vi.fn(),
+		types: ["text/plain"],
+	} as unknown as DataTransfer;
 }
 
 function getTreeItem(container: HTMLElement, path: string): HTMLElement {

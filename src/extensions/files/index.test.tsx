@@ -560,6 +560,96 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("moves a Lix file into a folder from the tree", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ id: "docs", path: "/docs/" })
+			.execute();
+		await insertReadme(lix);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toBeVisible();
+			expect(getFilesTreeItem("docs/")).toBeVisible();
+		});
+
+		await dragFilesTreeItemToDirectory("README.md", "docs/");
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/docs/README.md")
+					.executeTakeFirst(),
+			).toBeDefined();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("moves a Lix folder with its descendants from the tree", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values([
+				{ id: "archive", path: "/archive/" },
+				{ id: "docs", path: "/docs/" },
+			])
+			.execute();
+		await insertFile(lix, "guide", "/docs/guide.md", "# Guide\n");
+		const openFile = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFileId: "guide",
+				activeFilePath: "/docs/guide.md",
+				isActiveView: true,
+				isPanelFocused: true,
+				openFile,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("archive/")).toBeVisible();
+			expect(getFilesTreeItem("docs/")).toBeVisible();
+		});
+
+		await dragFilesTreeItemToDirectory("docs/", "archive/");
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/archive/docs/")
+					.executeTakeFirst(),
+			).toBeDefined();
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/archive/docs/guide.md")
+					.executeTakeFirst(),
+			).toBeDefined();
+		});
+		expect(openFile).toHaveBeenCalledWith({
+			fileId: "guide",
+			filePath: "/archive/docs/guide.md",
+			focus: false,
+			panel: "central",
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("deselects the active file when the tree background is clicked", async () => {
 		const lix = await openLix();
 		await insertReadme(lix);
@@ -977,6 +1067,47 @@ function getFilesTreeItem(path: string): HTMLElement {
 	const item = queryFilesTreeItem(path);
 	if (!item) throw new Error(`file tree item not found: ${path}`);
 	return item;
+}
+
+async function dragFilesTreeItemToDirectory(
+	sourcePath: string,
+	targetDirectoryPath: string,
+): Promise<void> {
+	const source = getFilesTreeItem(sourcePath);
+	const target = getFilesTreeItem(targetDirectoryPath);
+	const host = screen.getByLabelText("Files");
+	if (!host.shadowRoot) throw new Error("file tree shadow root not found");
+	Object.defineProperty(host.shadowRoot, "elementFromPoint", {
+		configurable: true,
+		value: () => target,
+	});
+	const dataTransfer = createTreeDragDataTransfer();
+	const eventInit = {
+		clientX: 20,
+		clientY: 20,
+		dataTransfer,
+	};
+
+	fireEvent.dragStart(source, eventInit);
+	fireEvent.dragOver(target, eventInit);
+	await waitFor(() => {
+		expect(target).toHaveAttribute("data-item-drag-target", "true");
+	});
+	fireEvent.drop(target, eventInit);
+}
+
+function createTreeDragDataTransfer(): DataTransfer {
+	return {
+		clearData: vi.fn(),
+		dropEffect: "none",
+		effectAllowed: "uninitialized",
+		files: [] as unknown as FileList,
+		getData: vi.fn(() => ""),
+		items: [] as unknown as DataTransferItemList,
+		setData: vi.fn(),
+		setDragImage: vi.fn(),
+		types: ["text/plain"],
+	} as unknown as DataTransfer;
 }
 
 async function getFilesTreeContextMenu(): Promise<HTMLElement> {

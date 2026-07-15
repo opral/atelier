@@ -32,6 +32,7 @@ import {
 	type FileTreeCreateRequest,
 	type FileTreeDeleteRequest,
 	type FileTreeFileType,
+	type FileTreeMoveRequest,
 	type FileTreeRenameRequest,
 } from "./file-tree";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -226,7 +227,7 @@ function FilesViewContent({
 		? checkpointReviewStatuses
 		: undefined;
 	const creatingRef = useRef(false);
-	const renamingRef = useRef(false);
+	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
 	const [pendingDirectoryPaths, setPendingDirectoryPaths] = useState<string[]>(
 		[],
@@ -546,10 +547,10 @@ function FilesViewContent({
 		[startCreateRequest],
 	);
 
-	const handleRenameCommit = useCallback(
-		async (request: FileTreeRenameRequest) => {
-			if (renamingRef.current) return;
-			if (request.source === "checkpoint-diff") return;
+	const moveLixTreeItem = useCallback(
+		async (request: FileTreeMoveRequest): Promise<boolean> => {
+			if (movingRef.current) return false;
+			if (request.source === "checkpoint-diff") return false;
 			const sourcePath =
 				request.kind === "directory"
 					? ensureDirectoryPath(request.sourcePath)
@@ -558,7 +559,7 @@ function FilesViewContent({
 				request.kind === "directory"
 					? ensureDirectoryPath(request.destinationPath)
 					: normalizeFilePath(request.destinationPath);
-			if (sourcePath === destinationPath) return;
+			if (sourcePath === destinationPath) return true;
 
 			const destinationExists =
 				request.kind === "directory"
@@ -566,10 +567,10 @@ function FilesViewContent({
 					: existingFilePaths.has(destinationPath);
 			if (destinationExists) {
 				console.warn(`Cannot rename '${sourcePath}' to '${destinationPath}'`);
-				return;
+				return false;
 			}
 
-			renamingRef.current = true;
+			movingRef.current = true;
 			try {
 				if (request.kind === "directory") {
 					await qb(lix)
@@ -592,7 +593,22 @@ function FilesViewContent({
 						kind: "directory",
 						source: "lix",
 					});
-					return;
+					if (
+						activeFileId &&
+						normalizedActiveFilePath?.startsWith(sourcePath)
+					) {
+						void context?.openFile?.({
+							panel: "central",
+							fileId: activeFileId,
+							filePath: remapFilePathInDirectory(
+								normalizedActiveFilePath,
+								sourcePath,
+								destinationPath,
+							),
+							focus: false,
+						});
+					}
+					return true;
 				}
 
 				const resolvedFileId = request.id;
@@ -621,19 +637,33 @@ function FilesViewContent({
 						focus: false,
 					});
 				}
+				return true;
 			} catch (error) {
-				console.error("Failed to rename entry", error);
+				console.error("Failed to move entry", error);
+				return false;
 			} finally {
-				renamingRef.current = false;
+				movingRef.current = false;
 			}
 		},
 		[
+			activeFileId,
 			context,
 			existingDirectoryPaths,
 			existingFilePaths,
 			lix,
+			normalizedActiveFilePath,
 			setLocalSelection,
 		],
+	);
+	const handleRenameCommit = useCallback(
+		async (request: FileTreeRenameRequest) => {
+			await moveLixTreeItem(request);
+		},
+		[moveLixTreeItem],
+	);
+	const handleMoveItem = useCallback(
+		(request: FileTreeMoveRequest) => moveLixTreeItem(request),
+		[moveLixTreeItem],
 	);
 
 	const handleCreateShortcut = useCallback(
@@ -862,15 +892,15 @@ function FilesViewContent({
 	]);
 
 	const handleDragEnter = useCallback((e: React.DragEvent) => {
+		if (!isExternalFileDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		dragCounterRef.current += 1;
-		if (e.dataTransfer.types.includes("Files")) {
-			setIsDraggingOver(true);
-		}
+		setIsDraggingOver(true);
 	}, []);
 
 	const handleDragOver = useCallback((e: React.DragEvent) => {
+		if (!isExternalFileDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		if (e.dataTransfer) {
@@ -879,6 +909,7 @@ function FilesViewContent({
 	}, []);
 
 	const handleDragLeave = useCallback((e: React.DragEvent) => {
+		if (!isExternalFileDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		dragCounterRef.current -= 1;
@@ -889,6 +920,7 @@ function FilesViewContent({
 
 	const handleDrop = useCallback(
 		async (e: React.DragEvent) => {
+			if (!isExternalFileDrag(e.dataTransfer)) return;
 			e.preventDefault();
 			e.stopPropagation();
 			dragCounterRef.current = 0;
@@ -981,6 +1013,7 @@ function FilesViewContent({
 			onCreateCommit={handleCreateCommit}
 			onCreateAtDirectory={handleCreateAtDirectory}
 			onDeleteItem={handleDeleteItem}
+			onMoveItem={handleMoveItem}
 			onRenameCommit={handleRenameCommit}
 		/>
 	);
@@ -1350,6 +1383,10 @@ function isInteractiveEventTarget(event: Event): boolean {
 		if (isInteractiveTarget(target)) return true;
 	}
 	return isInteractiveTarget(event.target);
+}
+
+function isExternalFileDrag(dataTransfer: DataTransfer | null): boolean {
+	return dataTransfer?.types.includes("Files") ?? false;
 }
 
 function detectMacPlatform(): boolean {
