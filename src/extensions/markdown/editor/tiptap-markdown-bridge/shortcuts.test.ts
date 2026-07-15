@@ -260,6 +260,25 @@ describe("Markdown typing shortcuts (input rules)", () => {
 		expect((para.textContent || "").trim()).toBe("");
 	});
 
+	test("typing [] keeps the cursor in the new task item", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{ type: "paragraph" },
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "next line" }],
+				},
+			],
+		});
+
+		typeText(editor, "[] ");
+
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.depth).toBe(3);
+		expect(editor.state.selection.$from.parent.textContent).toBe("");
+	});
+
 	test.each([
 		["- [] todo", "- [ ] todo\n", false],
 		["- [ ] todo", "- [ ] todo\n", false],

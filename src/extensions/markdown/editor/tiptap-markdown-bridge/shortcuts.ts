@@ -199,6 +199,10 @@ export const MarkdownWcShortcuts = Extension.create({
 								);
 								const bulletList = nodes.bulletList.create(null, listItem);
 								tr.replaceWith(fromPos, toPos, bulletList);
+								// The replacement maps the old paragraph selection past the
+								// new list. Keep the caret in the task item's paragraph so
+								// typing can continue on the same line.
+								tr.setSelection(TextSelection.create(tr.doc, fromPos + 3));
 								if (dispatch) dispatch(tr);
 								return true;
 							});
