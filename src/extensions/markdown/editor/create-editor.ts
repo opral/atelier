@@ -2,11 +2,7 @@ import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Lix } from "@lix-js/sdk";
-import {
-	MarkdownWc,
-	astToTiptapDoc,
-	tiptapDocToAst,
-} from "./tiptap-markdown-bridge";
+import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import {
@@ -23,6 +19,7 @@ import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
 	buildNormalizedMarkdownFromEditor,
 	normalizePersistedMarkdown,
+	serializeTiptapDocToMarkdown,
 } from "./build-markdown-from-editor";
 import {
 	loadMarkdownAsset,
@@ -139,8 +136,10 @@ function openExternalLink(url: string): void {
 function markdownClipboardText(slice: {
 	content: { toJSON: () => any };
 }): string {
-	const content = slice.content.toJSON();
-	return serializeAst(tiptapDocToAst({ type: "doc", content } as any) as any);
+	return serializeTiptapDocToMarkdown({
+		type: "doc",
+		content: slice.content.toJSON(),
+	});
 }
 
 function handleExternalLinkClick(event: MouseEvent): void {
