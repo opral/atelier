@@ -309,12 +309,7 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 		switch (n.type) {
 			case "text": {
 				const t = (n as any).value;
-				if (t)
-					out.push({
-						type: "text",
-						text: t,
-						marks: active.length ? [...active] : undefined,
-					});
+				if (t) out.push(...softLineBreakText(t, active));
 				break;
 			}
 			case "emphasis":
@@ -398,6 +393,34 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 			default:
 				// ignore unsupported inline nodes in this minimal pass
 				break;
+		}
+	}
+	return out;
+}
+
+/**
+ * Markdown soft line breaks are preserved in persisted text, but raw newline
+ * characters in a ProseMirror text node are unstable after browser DOM edits.
+ * Represent them as a distinct editor-only hard break so the DOM remains
+ * structural while serialization can restore the original soft newline.
+ */
+function softLineBreakText(value: string, active: PMMark[]): PMNode[] {
+	const lines = value.split(/\r\n|\r|\n/);
+	const out: PMNode[] = [];
+	for (let index = 0; index < lines.length; index += 1) {
+		const line = lines[index];
+		if (line) {
+			out.push({
+				type: "text",
+				text: line,
+				marks: active.length ? [...active] : undefined,
+			});
+		}
+		if (index < lines.length - 1) {
+			out.push({
+				type: "hardBreak",
+				attrs: { data: null, soft: true },
+			});
 		}
 	}
 	return out;

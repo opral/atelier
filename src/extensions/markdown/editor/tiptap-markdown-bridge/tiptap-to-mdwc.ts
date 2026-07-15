@@ -260,6 +260,10 @@ function pmInlineToMd(nodes: PMNode[]): any[] {
 		if (n.type === "text") {
 			out.push(applyMarksToText(n.text || "", n.marks || []));
 		} else if (n.type === "hardBreak") {
+			if (n.attrs?.soft === true) {
+				out.push({ type: "text", value: "\n" });
+				continue;
+			}
 			const br: any = isTrailingHardBreak(nodes, index)
 				? { type: "html", value: "<br>" }
 				: { type: "break" };
@@ -285,7 +289,8 @@ function pmInlineToMd(nodes: PMNode[]): any[] {
 
 function isTrailingHardBreak(nodes: PMNode[], index: number): boolean {
 	for (let nextIndex = index + 1; nextIndex < nodes.length; nextIndex += 1) {
-		if (nodes[nextIndex]?.type !== "hardBreak") return false;
+		const next = nodes[nextIndex];
+		if (next?.type !== "hardBreak" || next.attrs?.soft === true) return false;
 	}
 	return true;
 }

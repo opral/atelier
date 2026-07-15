@@ -38,6 +38,16 @@ describe("markdown parser", () => {
 		expect(items?.[1]?.children?.[0]?.children).toEqual([]);
 	});
 
+	test("parses empty ordered task items", () => {
+		const ast = parseMarkdown("1. [ ] \n2. [x] \n");
+		const items = ast.children[0]?.children;
+
+		expect(items?.[0]?.checked).toBe(false);
+		expect(items?.[1]?.checked).toBe(true);
+		expect(items?.[0]?.children?.[0]?.children).toEqual([]);
+		expect(items?.[1]?.children?.[0]?.children).toEqual([]);
+	});
+
 	test("parses YAML frontmatter", () => {
 		const ast = parseMarkdown("---\ntitle: Demo\n---\n\nBody");
 

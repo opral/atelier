@@ -288,13 +288,16 @@ export function markdownWcNodes(
 					const isTask =
 						node.attrs.checked === true || node.attrs.checked === false;
 					let input: HTMLInputElement | null = null;
+					const syncInputEditable = () => {
+						if (input) input.disabled = !editor.isEditable;
+					};
 					const content = document.createElement("div");
 					if (isTask) {
 						dom.setAttribute("data-task", node.attrs.checked ? "x" : " ");
 						input = document.createElement("input");
 						input.type = "checkbox";
 						input.checked = node.attrs.checked === true;
-						input.disabled = !editor.isEditable;
+						syncInputEditable();
 						input.addEventListener("mousedown", (e) => {
 							// Prevent focusing the checkbox from moving the caret unexpectedly
 							e.preventDefault();
@@ -309,6 +312,7 @@ export function markdownWcNodes(
 							});
 							editor.view.dispatch(tr);
 						});
+						editor.on("update", syncInputEditable);
 						dom.appendChild(input);
 					}
 					for (const [key, value] of Object.entries(
@@ -342,6 +346,9 @@ export function markdownWcNodes(
 							// @ts-ignore - node is captured; we can't reassign but it's fine for event handlers
 							node = newNode;
 							return true;
+						},
+						destroy: () => {
+							editor.off("update", syncInputEditable);
 						},
 					};
 				};
@@ -574,7 +581,7 @@ export function markdownWcNodes(
 			inline: true,
 			selectable: false,
 			addAttributes() {
-				return { data: { default: null } };
+				return { data: { default: null }, soft: { default: false } };
 			},
 			renderHTML({ node }) {
 				return ["br", diffAttrs(node, "element")];

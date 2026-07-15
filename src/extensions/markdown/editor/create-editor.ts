@@ -2,7 +2,11 @@ import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Lix } from "@lix-js/sdk";
-import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
+import {
+	MarkdownWc,
+	astToTiptapDoc,
+	tiptapDocToAst,
+} from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import {
@@ -124,6 +128,19 @@ function externalLinkUrlFromClick(event: MouseEvent): string | null {
 
 function openExternalLink(url: string): void {
 	window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * Browser clipboard text drops document structure (including task state),
+ * while Markdown is both portable to other editors and understood by our
+ * paste handler. Serialize the selected ProseMirror slice through the same
+ * Markdown bridge used for persisted documents.
+ */
+function markdownClipboardText(slice: {
+	content: { toJSON: () => any };
+}): string {
+	const content = slice.content.toJSON();
+	return serializeAst(tiptapDocToAst({ type: "doc", content } as any) as any);
 }
 
 function handleExternalLinkClick(event: MouseEvent): void {
@@ -327,6 +344,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 		},
 		editorProps: {
+			clipboardTextSerializer: (slice: any) => markdownClipboardText(slice),
 			handlePaste: (_view: any, event: ClipboardEvent) => {
 				if (!currentEditor) return false;
 				return defaultHandlePaste({
