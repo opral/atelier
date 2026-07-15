@@ -31,15 +31,6 @@
 		atelier-review-edge-glow 5.5s ease-in-out 320ms infinite;
 }
 
-.atelier-root [data-review-mode="true"] > header,
-.atelier-root [data-review-mode="true"] > footer {
-	background-color: color-mix(
-		in srgb,
-		var(--color-brand-500) 5%,
-		var(--color-bg-app)
-	);
-}
-
 .atelier-root [data-review-mode="true"] .atelier-panel-group {
 	box-shadow: 0 0 38px rgba(249, 115, 22, 0.12);
 }
