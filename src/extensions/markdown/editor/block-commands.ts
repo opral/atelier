@@ -202,11 +202,20 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 				}
 				rows.push({ type: "tableRow", content: cells });
 			}
-			editor
+			const inserted = editor
 				.chain()
 				.focus()
 				.insertContent({ type: "table", content: rows })
 				.run();
+			if (!inserted) return;
+
+			const { $from } = editor.state.selection;
+			for (let depth = $from.depth; depth > 0; depth--) {
+				if ($from.node(depth).type.name !== "table") continue;
+				// Enter the table, its first row, and its first cell.
+				editor.commands.setTextSelection($from.before(depth) + 3);
+				break;
+			}
 		},
 	},
 ];
