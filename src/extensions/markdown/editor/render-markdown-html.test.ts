@@ -29,7 +29,7 @@ describe("renderMarkdownAstEditorHtml", () => {
 		).toEqual(["left", "center", "right"]);
 	});
 
-	test("slash-inserted tables create a semantic header row", () => {
+	test("slash-inserted tables create a semantic header row and focus its first cell", () => {
 		const editor = new Editor({ extensions: MarkdownWc() });
 		const tableCommand = BLOCK_COMMANDS.find(
 			(command) => command.id === "table",
@@ -51,6 +51,13 @@ describe("renderMarkdownAstEditorHtml", () => {
 				(_, index) => table.child(1).child(index).attrs.isHeader,
 			),
 		).toEqual([false, false, false]);
+
+		const { $from } = editor.state.selection;
+		expect($from.parent.type.name).toBe("tableCell");
+		expect($from.parent.attrs.isHeader).toBe(true);
+		expect($from.index(1)).toBe(0);
+		expect($from.index(2)).toBe(0);
+		expect($from.parentOffset).toBe(0);
 		editor.destroy();
 	});
 

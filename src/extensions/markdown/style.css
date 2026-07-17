@@ -12,6 +12,8 @@
    gutter lives on the editor body wrapper instead. */
 	.markdown-view {
 		--markdown-radius: 4px;
+		--markdown-content-width: 744px;
+		--markdown-table-max-width: 1040px;
 		flex: 1 1 auto;
 		min-height: 0;
 	}
@@ -207,6 +209,12 @@
 		max-width: none;
 	}
 
+	/* EditorContent and ProseMirror both receive TipTap's class. The outer
+	   wrapper owns the panel-width query used by full-bleed document elements. */
+	.markdown-view .tiptap:not(.ProseMirror) {
+		container-type: inline-size;
+	}
+
 	.markdown-view .ProseMirror {
 		box-sizing: border-box;
 		color: color-mix(
@@ -225,7 +233,8 @@
 		letter-spacing: 0;
 		line-height: 1.6;
 		min-height: 100%;
-		padding: clamp(2.25rem, 5vw, 4rem) max(2rem, calc((100% - 744px) / 2)) 6rem;
+		padding: clamp(2.25rem, 5vw, 4rem)
+			max(2rem, calc((100% - var(--markdown-content-width)) / 2)) 6rem;
 		caret-color: var(--color-ring-focus-visible);
 		cursor: auto;
 		width: 100%;
@@ -888,15 +897,24 @@
 
 	/* Tables */
 	.markdown-view .ProseMirror table {
+		--markdown-table-width: min(
+			var(--markdown-table-max-width),
+			calc(100cqw - 4rem)
+		);
+		position: relative;
+		left: 50%;
 		border: 1px solid var(--color-border-subtle);
 		border-collapse: separate;
 		border-radius: var(--markdown-radius);
 		border-spacing: 0;
 		box-shadow: 0 1px 2px rgba(28, 25, 23, 0.035);
-		width: 100%;
+		width: max-content;
+		min-width: 100%;
+		max-width: var(--markdown-table-width);
 		margin-top: 1.5rem;
 		margin-bottom: 1.75rem;
 		overflow: hidden;
+		transform: translateX(-50%);
 	}
 
 	.markdown-view .ProseMirror table tr:first-child {
