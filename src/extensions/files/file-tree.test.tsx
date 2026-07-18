@@ -616,6 +616,7 @@ describe("FileTree", () => {
 				nodes={mockTree}
 				onCreateAtDirectory={handleCreateAtDirectory}
 				onDeleteItem={handleDeleteItem}
+				onRenameCommit={vi.fn()}
 			/>,
 		);
 
@@ -678,7 +679,9 @@ describe("FileTree", () => {
 	});
 
 	test("opens the same menu from the row ellipsis trigger", async () => {
-		const { container } = render(<FileTree nodes={mockTree} />);
+		const { container } = render(
+			<FileTree nodes={mockTree} onCreateAtDirectory={vi.fn()} />,
+		);
 		const docsRow = getTreeItem(container, "docs/");
 		fireEvent.pointerOver(docsRow);
 		const overflowTrigger = await waitFor(() => {
@@ -706,7 +709,9 @@ describe("FileTree", () => {
 				source: "lix",
 			},
 		];
-		const { container } = render(<FileTree nodes={nodes} />);
+		const { container } = render(
+			<FileTree nodes={nodes} onRenameCommit={vi.fn()} />,
+		);
 
 		openTreeContextMenu(container, "README.md");
 		const menu = await getTreeContextMenu(container);
@@ -760,7 +765,11 @@ describe("FileTree", () => {
 			},
 		];
 		const { container } = render(
-			<FileTree nodes={nodes} onDeleteItem={vi.fn()} />,
+			<FileTree
+				nodes={nodes}
+				onDeleteItem={vi.fn()}
+				onRenameCommit={vi.fn()}
+			/>,
 		);
 
 		openTreeContextMenu(container, "README.md");

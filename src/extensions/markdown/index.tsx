@@ -337,7 +337,7 @@ function MarkdownLiveViewLoaded({
 								onDocumentModified?.(resolvedPath);
 							}}
 						/>
-						{review && reviewDiff && liveEditor ? (
+						{!readOnly && review && reviewDiff && liveEditor ? (
 							<MarkdownLiveReviewController
 								fileId={effectiveFileRow.id}
 								sourceFilePath={effectiveFileRow.path}

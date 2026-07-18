@@ -413,7 +413,7 @@ function CsvReviewOverlay({
 					<span>Loading review…</span>
 				</div>
 			)}
-			{controls === "review" ? (
+			{controls === "review" && (onAccept || onReject) ? (
 				<ExternalWriteReviewControls
 					isActive={isActive}
 					onAccept={() =>
@@ -763,8 +763,12 @@ export const extension = createReactExtensionDefinition({
 						? view.state.afterFileId
 						: null
 				}
-				onAcceptReview={atelier.reviews.accept}
-				onRejectReview={atelier.reviews.reject}
+				{...(atelier.readOnly
+					? {}
+					: {
+							onAcceptReview: atelier.reviews.accept,
+							onRejectReview: atelier.reviews.reject,
+						})}
 				registerExternalWriteReview={atelier.reviews.register}
 				isActiveView={view.isActive}
 				isPanelFocused={view.isFocused}

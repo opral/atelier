@@ -122,6 +122,7 @@ function EditableTextView({
 		? decodeFileDataToText(reviewData.afterData)
 		: null;
 	const isReviewing = Boolean(review);
+	const isReadOnly = isReviewing || atelier.readOnly;
 	const [editorText, setEditorText] = useState(reviewText ?? fileText);
 	const localTextRef = useRef(editorText);
 	const lastCleanTextRef = useRef(fileText);
@@ -200,12 +201,12 @@ function EditableTextView({
 
 	const persistUserEdit = useCallback(
 		(nextText: string) => {
-			if (isReviewing) return;
+			if (isReadOnly) return;
 			localTextRef.current = nextText;
 			queuedTextRef.current = nextText;
 			void flushPersistence();
 		},
-		[flushPersistence, isReviewing],
+		[flushPersistence, isReadOnly],
 	);
 
 	useEffect(() => {
@@ -267,13 +268,13 @@ function EditableTextView({
 				key={fileId}
 				filePath={resolvedPath}
 				text={editorText}
-				readOnly={isReviewing}
+				readOnly={isReadOnly}
 				isActive={isActiveView}
 				isPanelFocused={isPanelFocused}
 				onChange={persistUserEdit}
 				saveError={saveError}
 			/>
-			{review && reviewData ? (
+			{!atelier.readOnly && review && reviewData ? (
 				<ExternalWriteReviewControls
 					isActive={isActiveView}
 					onAccept={() =>

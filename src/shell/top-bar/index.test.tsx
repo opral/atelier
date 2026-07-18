@@ -90,6 +90,25 @@ describe("TopBar", () => {
 		expect(screen.getByText("Reviewing")).toBeVisible();
 	});
 
+	test("shows a read-only chip beside the active file name", () => {
+		render(<TopBar activeFileName="note.md" isReadOnly />);
+
+		expect(screen.getByText("note.md")).toBeVisible();
+		expect(screen.getByText("Read-only")).toBeVisible();
+	});
+
+	test("shows the read-only chip even without an active file", () => {
+		render(<TopBar isReadOnly />);
+
+		expect(screen.getByText("Read-only")).toBeVisible();
+	});
+
+	test("does not show a read-only chip for writable workspaces", () => {
+		render(<TopBar activeFileName="note.md" />);
+
+		expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+	});
+
 	test("does not show reviewing label without an active file", () => {
 		render(<TopBar isReviewingCheckpoint={true} />);
 

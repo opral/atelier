@@ -203,12 +203,12 @@ function EditableExcalidrawView({
 
 	const persistUserEdit = useCallback(
 		(nextText: string) => {
-			if (reviewingRef.current) return;
+			if (reviewingRef.current || atelier.readOnly) return;
 			localTextRef.current = nextText;
 			queuedTextRef.current = nextText;
 			void flushPersistence();
 		},
-		[flushPersistence],
+		[atelier.readOnly, flushPersistence],
 	);
 
 	useEffect(() => {
@@ -284,7 +284,7 @@ function EditableExcalidrawView({
 				<ExcalidrawCanvas
 					key={fileId}
 					sceneJson={documentText}
-					readOnly={isReviewing}
+					readOnly={isReviewing || atelier.readOnly}
 					onSceneChange={persistUserEdit}
 				/>
 			</Suspense>
@@ -294,7 +294,7 @@ function EditableExcalidrawView({
 					<span>Save failed: {saveError}</span>
 				</div>
 			) : null}
-			{review && reviewData ? (
+			{!atelier.readOnly && review && reviewData ? (
 				<ExternalWriteReviewControls
 					isActive={isActiveView}
 					onAccept={() =>

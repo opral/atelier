@@ -36,8 +36,6 @@ export type AtelierSlots = {
 	readonly navbarStart?: ReactNode;
 	/** Host-owned content rendered before Atelier's final navbar control. */
 	readonly navbarEnd?: ReactNode;
-	/** Host-owned row rendered between the top bar and the panel layout. */
-	readonly belowTopBar?: ReactNode;
 	/** Host-owned content rendered when the left panel has no open views. */
 	readonly leftPanelEmpty?: AtelierEmptyPanelSlot;
 	/** Host-owned content rendered when the central panel has no open views. */

@@ -37,6 +37,8 @@ type HistoryViewProps = {
 	readonly currentRevision?: AtelierRevisionSelection | null;
 	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff?: () => void;
+	/** Keeps checkpoints browsable while hiding every mutation affordance. */
+	readonly readOnly?: boolean;
 };
 
 const CURRENT_CHECKPOINT_NAME = "main";
@@ -99,6 +101,7 @@ function HistoryViewContent({
 	currentRevision,
 	showCheckpointDiff,
 	clearCheckpointDiff,
+	readOnly = false,
 }: {
 	readonly lix: ReturnType<typeof useLix>;
 	readonly branches: BranchRow[];
@@ -108,6 +111,7 @@ function HistoryViewContent({
 	readonly currentRevision?: AtelierRevisionSelection | null;
 	readonly showCheckpointDiff?: (branchId: string) => Promise<void>;
 	readonly clearCheckpointDiff?: () => void;
+	readonly readOnly?: boolean;
 }) {
 	const activeBranchRow =
 		branches.find((branch) => branch.id === activeBranchId) ??
@@ -226,24 +230,26 @@ function HistoryViewContent({
 						Checkpoints
 					</span>
 				</div>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					className="size-7 rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
-					aria-label="Create checkpoint"
-					data-attr="checkpoint-create"
-					disabled={isBusy}
-					onClick={() => {
-						void handleCreateBranch();
-					}}
-				>
-					{pendingAction === "create" ? (
-						<Loader2 className="size-3.5 animate-spin" />
-					) : (
-						<Plus className="size-3.5" />
-					)}
-				</Button>
+				{readOnly ? null : (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="size-7 rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+						aria-label="Create checkpoint"
+						data-attr="checkpoint-create"
+						disabled={isBusy}
+						onClick={() => {
+							void handleCreateBranch();
+						}}
+					>
+						{pendingAction === "create" ? (
+							<Loader2 className="size-3.5 animate-spin" />
+						) : (
+							<Plus className="size-3.5" />
+						)}
+					</Button>
+				)}
 			</div>
 			<div className="min-h-0 flex-1 overflow-y-auto p-1.5">
 				{branches.length === 0 ? (
@@ -290,10 +296,14 @@ function HistoryViewContent({
 										<span className="truncate">{branchDisplayName}</span>
 									</button>
 									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
+										<DropdownMenuTrigger asChild disabled={readOnly}>
 											<button
 												type="button"
-												className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+												className={
+													readOnly
+														? "hidden"
+														: "mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+												}
 												data-branch-actions
 											>
 												<span className="sr-only">
@@ -378,6 +388,7 @@ export const extension = createReactExtensionDefinition({
 				currentRevision={atelier.revisions.current}
 				showCheckpointDiff={atelier.revisions.show}
 				clearCheckpointDiff={atelier.revisions.clear}
+				readOnly={atelier.readOnly}
 			/>
 		</LixProvider>
 	),
