@@ -68,7 +68,7 @@ describe("MarkdownView", () => {
 		});
 	});
 
-	test("keeps the formatting toolbar visible in host read-only mode", async () => {
+	test("hides the formatting toolbar in host read-only mode", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -101,11 +101,9 @@ describe("MarkdownView", () => {
 				"false",
 			);
 		});
-		const toolbar = screen.getByRole("toolbar", {
-			name: "Formatting toolbar",
-		});
-		expect(toolbar).toBeVisible();
-		expect(toolbar).toHaveAttribute("data-disabled", "true");
+		expect(
+			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
+		).not.toBeInTheDocument();
 
 		await act(async () => {
 			utils?.unmount();

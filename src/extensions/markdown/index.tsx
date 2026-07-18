@@ -311,9 +311,11 @@ function MarkdownLiveViewLoaded({
 						reviewLocked ? "markdown-review" : ""
 					}`}
 				>
-					<div className={editorReadOnly ? "pointer-events-none" : undefined}>
-						<FormattingToolbar disabled={editorReadOnly} />
-					</div>
+					{readOnly ? null : (
+						<div className={reviewLocked ? "pointer-events-none" : undefined}>
+							<FormattingToolbar disabled={reviewLocked} />
+						</div>
+					)}
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						<TipTapEditor
 							className="h-full"

@@ -2918,6 +2918,7 @@ function LayoutShellLoadedContent({
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
+				{slots?.belowTopBar}
 				<main className="flex flex-1 min-h-0 overflow-hidden px-2">
 					<Group
 						orientation="horizontal"
