@@ -255,6 +255,60 @@ describe("Atelier instance file controller", () => {
 			await lix.close();
 		}
 	});
+
+	test("closes a background document by path without touching the active one", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: "path-first",
+					path: "/first.md",
+					data: new TextEncoder().encode("# First\n"),
+				},
+				{
+					id: "path-second",
+					path: "/second.md",
+					data: new TextEncoder().encode("# Second\n"),
+				},
+			])
+			.execute();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let rendered: ReturnType<typeof render> | undefined;
+
+		try {
+			await act(async () => {
+				rendered = render(<Atelier instance={atelier} />);
+			});
+			await waitFor(() => {
+				expect(
+					rendered?.container.querySelector(".atelier-panel-group"),
+				).toBeTruthy();
+			});
+			await act(async () => atelier.documents.open("/first.md"));
+			await act(async () => atelier.documents.open("/second.md"));
+			await act(async () => atelier.documents.close("/first.md"));
+
+			await waitFor(() => {
+				const centralViews =
+					sessionStateStore.getSnapshot()?.panels.central.views ?? [];
+				const documentPaths = centralViews
+					.map((view) => view.state?.filePath)
+					.filter((path): path is string => typeof path === "string");
+				expect(documentPaths).toEqual(["/second.md"]);
+			});
+			expect(
+				await screen.findByRole("heading", { name: "Second" }),
+			).toBeVisible();
+
+			// Closing a path with no open views resolves as a no-op.
+			await act(async () => atelier.documents.close("/missing.md"));
+		} finally {
+			await act(async () => rendered?.unmount());
+			await lix.close();
+		}
+	});
 });
 
 describe("host built-in overrides", () => {

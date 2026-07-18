@@ -590,7 +590,10 @@ describe("FilesView", () => {
 			).toBeUndefined();
 			expect(await selectFileById(lix, "guide")).toBeUndefined();
 		});
-		expect(closeFileViews).toHaveBeenCalledWith({ fileId: "guide" });
+		expect(closeFileViews).toHaveBeenCalledWith({
+			fileId: "guide",
+			filePath: "/docs/guide.md",
+		});
 
 		await act(async () => view?.unmount());
 		await lix.close();

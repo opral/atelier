@@ -67,7 +67,10 @@ type FilesViewContext = {
 		readonly focus?: boolean;
 		readonly pending?: boolean;
 	}) => void | Promise<void>;
-	readonly closeFileViews?: (args: { readonly fileId: string }) => void;
+	readonly closeFileViews?: (args: {
+		readonly fileId: string;
+		readonly filePath?: string;
+	}) => void;
 	readonly checkpointDiff?: CheckpointDiff | null;
 	readonly checkpointBranchId?: string | null;
 	readonly activeFileId?: string | null;
@@ -790,9 +793,12 @@ function FilesViewContent({
 					setPendingPaths((prev) =>
 						prev.filter((path) => path !== normalizedPath),
 					);
-					if (request.id === activeFileId) {
-						context?.closeFileViews?.({ fileId: request.id });
-					}
+					// Close-by-path also clears views of the file open in the
+					// background; the host treats paths with no open view as a no-op.
+					context?.closeFileViews?.({
+						fileId: request.id,
+						filePath: normalizeFilePath(normalizedPath),
+					});
 				} else {
 					await qb(lix)
 						.deleteFrom("lix_directory")
@@ -805,7 +811,10 @@ function FilesViewContent({
 						activeFileId &&
 						normalizedActiveFilePath?.startsWith(normalizedPath)
 					) {
-						context?.closeFileViews?.({ fileId: activeFileId });
+						context?.closeFileViews?.({
+							fileId: activeFileId,
+							filePath: normalizedActiveFilePath,
+						});
 					}
 				}
 			} catch (error) {
@@ -1381,7 +1390,11 @@ export const extension = createReactExtensionDefinition({
 							...(state ? { state } : {}),
 							...(focus !== undefined ? { focus } : {}),
 						}),
-					closeFileViews: () => {
+					closeFileViews: ({ filePath }) => {
+						if (filePath) {
+							void atelier.documents.close(filePath);
+							return;
+						}
 						void atelier.documents.closeActive();
 					},
 					checkpointBranchId: atelier.revisions.current?.branchId ?? null,

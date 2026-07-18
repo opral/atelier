@@ -256,6 +256,9 @@ describe("createAtelier", () => {
 			closeActive: () => {
 				calls.push("close-active");
 			},
+			close: (path) => {
+				calls.push(`close:${path}`);
+			},
 			closeAll: () => {
 				calls.push("close-all");
 			},
@@ -263,6 +266,7 @@ describe("createAtelier", () => {
 		const open = atelier.documents.open("/queued.md");
 		const startNew = atelier.documents.startNew();
 		const close = atelier.documents.closeActive();
+		const closePath = atelier.documents.close("/queued.md");
 		const closeAll = atelier.documents.closeAll();
 
 		expect(calls).toEqual([]);
@@ -270,12 +274,13 @@ describe("createAtelier", () => {
 			activePath: null,
 			openPaths: [],
 		});
-		await Promise.all([open, startNew, close, closeAll]);
+		await Promise.all([open, startNew, close, closePath, closeAll]);
 
 		expect(calls).toEqual([
 			"open:/queued.md",
 			"start-new",
 			"close-active",
+			"close:/queued.md",
 			"close-all",
 		]);
 		unbind();
@@ -295,6 +300,7 @@ describe("createAtelier", () => {
 				throw new Error("start new failed");
 			}),
 			closeActive: vi.fn(),
+			close: vi.fn(),
 			closeAll: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, binding, {
@@ -322,6 +328,7 @@ describe("createAtelier", () => {
 			open: vi.fn(),
 			startNew: vi.fn(),
 			closeActive: vi.fn(),
+			close: vi.fn(),
 			closeAll: vi.fn(),
 		};
 		const unbind = bindAtelierDocumentsRuntime(atelier, firstBinding, {
@@ -336,6 +343,7 @@ describe("createAtelier", () => {
 			open: vi.fn(),
 			startNew: vi.fn(),
 			closeActive: vi.fn(),
+			close: vi.fn(),
 			closeAll: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, secondBinding, {
@@ -358,6 +366,7 @@ describe("createAtelier", () => {
 				}),
 				startNew: vi.fn(),
 				closeActive: vi.fn(),
+				close: vi.fn(),
 				closeAll: vi.fn(),
 			},
 			{
@@ -392,6 +401,7 @@ describe("createAtelier", () => {
 				}),
 				startNew: vi.fn(),
 				closeActive,
+				close: vi.fn(),
 				closeAll: vi.fn(),
 			},
 			{ activePath: null, openPaths: [] },
@@ -421,6 +431,7 @@ describe("createAtelier", () => {
 				}),
 				startNew: vi.fn(),
 				closeActive: vi.fn(),
+				close: vi.fn(),
 				closeAll: vi.fn(),
 			},
 			{ activePath: null, openPaths: [] },
@@ -437,6 +448,9 @@ describe("createAtelier", () => {
 		const atelier = createAtelier({ lix: {} as Lix });
 
 		await expect(atelier.documents.open("  ")).rejects.toThrow(
+			"requires a non-empty path",
+		);
+		await expect(atelier.documents.close("  ")).rejects.toThrow(
 			"requires a non-empty path",
 		);
 	});
