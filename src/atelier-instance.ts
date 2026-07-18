@@ -45,6 +45,11 @@ export type {
 
 export type AtelierOptions = {
 	readonly lix: Lix;
+	/**
+	 * Presents workspace content without mutation affordances. Bundled editors
+	 * remain visible and selectable while disabling writes.
+	 */
+	readonly readOnly?: boolean;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
 	readonly filesViewMode?: "landing" | "sidebar";
 	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
@@ -217,6 +222,7 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		preferencesStore,
 		branchSession,
 		reviewStatusStore,
+		...(options.readOnly !== undefined ? { readOnly: options.readOnly } : {}),
 		...(options.extensions !== undefined
 			? { extensions: [...options.extensions] }
 			: {}),

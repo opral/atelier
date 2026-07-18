@@ -68,6 +68,48 @@ describe("MarkdownView", () => {
 		});
 	});
 
+	test("hides the formatting toolbar in host read-only mode", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "file_read_only",
+				path: "/read-only.md",
+				data: new TextEncoder().encode("# Public document"),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId="file_read_only"
+							filePath="/read-only.md"
+							readOnly
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const editor = await screen.findByTestId("tiptap-editor");
+		await waitFor(() => {
+			expect(editor.querySelector(".ProseMirror")).toHaveAttribute(
+				"contenteditable",
+				"false",
+			);
+		});
+		expect(
+			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
+		).not.toBeInTheDocument();
+
+		await act(async () => {
+			utils?.unmount();
+		});
+	});
+
 	test("renders a read-only historical snapshot from afterCommitId", async () => {
 		const lix = await openLix();
 		const observe = vi.spyOn(lix, "observe");

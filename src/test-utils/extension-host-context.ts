@@ -13,6 +13,7 @@ export function createExtensionHostContext(
 	return {
 		atelier: {
 			lix,
+			readOnly: false,
 			events: { emit: () => {} },
 			documents: {
 				open: options.openDocument ?? (async () => {}),

@@ -68,6 +68,7 @@ import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/m
 type MarkdownViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
+	readonly readOnly?: boolean;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
 	readonly focusOnLoad?: boolean;
@@ -123,6 +124,7 @@ const EMPTY_FILE_DATA = new Uint8Array();
 export function MarkdownView({
 	fileId,
 	filePath,
+	readOnly,
 	isActiveView = true,
 	isPanelFocused = true,
 	focusOnLoad = false,
@@ -147,6 +149,7 @@ export function MarkdownView({
 			<MarkdownViewContent
 				fileId={fileId}
 				filePath={filePath}
+				readOnly={readOnly}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
 				focusOnLoad={focusOnLoad}
@@ -230,6 +233,7 @@ function MarkdownViewLoaded(
 
 function MarkdownLiveViewLoaded({
 	fileRow,
+	readOnly = false,
 	isActiveView = true,
 	isPanelFocused = true,
 	focusOnLoad = false,
@@ -287,6 +291,7 @@ function MarkdownLiveViewLoaded({
 	} | null>(null);
 	const reviewLocked =
 		isReviewing || finishingReview?.fileId === effectiveFileRow?.id;
+	const editorReadOnly = readOnly || reviewLocked;
 
 	let content: ReactNode;
 
@@ -306,9 +311,11 @@ function MarkdownLiveViewLoaded({
 						reviewLocked ? "markdown-review" : ""
 					}`}
 				>
-					<div className={reviewLocked ? "pointer-events-none" : undefined}>
-						<FormattingToolbar disabled={reviewLocked} />
-					</div>
+					{readOnly ? null : (
+						<div className={reviewLocked ? "pointer-events-none" : undefined}>
+							<FormattingToolbar disabled={reviewLocked} />
+						</div>
+					)}
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						<TipTapEditor
 							className="h-full"
@@ -318,7 +325,7 @@ function MarkdownLiveViewLoaded({
 							isActiveView={isActiveView}
 							focusOnLoad={focusOnLoad}
 							defaultBlock={defaultBlock}
-							readOnly={reviewLocked}
+							readOnly={editorReadOnly}
 							suspendExternalSync={reviewLocked}
 							additionalExtensions={MarkdownReviewExtensions}
 							onReady={(editor) => {
@@ -371,11 +378,11 @@ function MarkdownLiveViewLoaded({
 								}}
 							/>
 						) : null}
-						{isActiveView && isPanelFocused && !reviewLocked ? (
+						{isActiveView && isPanelFocused && !editorReadOnly ? (
 							<MarkdownAutosaveHint />
 						) : null}
 					</div>
-					{reviewLocked ? null : (
+					{editorReadOnly ? null : (
 						<>
 							<SlashCommandMenu />
 							<EmojiPickerMenu />
@@ -1157,6 +1164,7 @@ export const extension = createReactExtensionDefinition({
 			<MarkdownView
 				fileId={view.state.fileId as string}
 				filePath={view.state.filePath as string | undefined}
+				readOnly={atelier.readOnly}
 				isActiveView={view.isActive}
 				isPanelFocused={view.isFocused}
 				focusOnLoad={Boolean(view.state.focusOnLoad)}

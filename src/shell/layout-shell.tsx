@@ -1143,9 +1143,8 @@ function LayoutShellLoadedContent({
 	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
 		qb(queryLix).selectFrom("lix_file").select("id"),
 	);
-	const reviewRangeSessionId = getAtelierConfiguration(
-		effectiveAtelierInstance,
-	).reviewRangeSessionId;
+	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
+	const reviewRangeSessionId = configuration.reviewRangeSessionId;
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
@@ -2745,6 +2744,7 @@ function LayoutShellLoadedContent({
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
+			readOnly: configuration.readOnly ?? false,
 			events: { emit: emitEvent },
 			documents: {
 				...effectiveAtelierInstance.documents,
@@ -2773,6 +2773,7 @@ function LayoutShellLoadedContent({
 			},
 		}),
 		[
+			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
 			checkpointDiff,
@@ -2917,6 +2918,7 @@ function LayoutShellLoadedContent({
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
+				{slots?.belowTopBar}
 				<main className="flex flex-1 min-h-0 overflow-hidden px-2">
 					<Group
 						orientation="horizontal"
