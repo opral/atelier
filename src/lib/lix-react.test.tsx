@@ -270,3 +270,67 @@ test("useQuery can evict component-scoped results on unmount", async () => {
 	expect(execute).toHaveBeenCalledTimes(2);
 	await act(async () => second?.unmount());
 });
+
+test("useQuery re-executes a non-subscribed query after its last consumer unmounts", async () => {
+	let currentValue = "first mount";
+	const execute = vi.fn(async () => [{ value: currentValue }]);
+	const lix = {
+		observe: vi.fn(),
+	} as unknown as Lix;
+
+	function Probe({ id }: { readonly id: string }) {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM lifecycle_scoped_once_query",
+					parameters: [],
+				}),
+				execute,
+			}),
+			{ subscribe: false },
+		);
+		return <div data-testid={id}>{rows[0]?.value}</div>;
+	}
+
+	let first: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		first = render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe id="first-once-value" />
+					<Probe id="shared-once-value" />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+
+	expect(await screen.findByTestId("first-once-value")).toHaveTextContent(
+		"first mount",
+	);
+	expect(screen.getByTestId("shared-once-value")).toHaveTextContent(
+		"first mount",
+	);
+	expect(execute).toHaveBeenCalledTimes(1);
+	expect(lix.observe).not.toHaveBeenCalled();
+
+	await act(async () => first?.unmount());
+	currentValue = "second mount";
+
+	let second: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		second = render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe id="second-once-value" />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+
+	expect(await screen.findByTestId("second-once-value")).toHaveTextContent(
+		"second mount",
+	);
+	expect(execute).toHaveBeenCalledTimes(2);
+	expect(lix.observe).not.toHaveBeenCalled();
+	await act(async () => second?.unmount());
+});
