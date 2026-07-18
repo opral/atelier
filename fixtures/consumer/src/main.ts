@@ -10,6 +10,7 @@ import {
 	type AtelierSlots,
 	type AtelierTopBarProps,
 } from "@opral/atelier";
+import { fileIconUrl } from "@opral/atelier/file-icons";
 import "@opral/atelier/style.css";
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -52,6 +53,7 @@ export function mountAtelier(lix: Lix): void {
 	void openDocument;
 	void startNewDocument;
 	void closeActiveDocument;
+	void fileIconUrl("/README.md");
 }
 
 function FixtureExtensionIcon() {

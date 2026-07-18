@@ -7,6 +7,7 @@ const publicDeclarations = new Set([
 	"atelier-instance.d.ts",
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
+	"file-icons.d.ts",
 	"state-adapters.d.ts",
 	"dev-tools/developer-tools-menu.d.ts",
 	"dev-tools/simulate-agent-workflow.d.ts",
