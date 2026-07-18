@@ -14,6 +14,11 @@
 			"import": "./dist/atelier.js",
 			"default": "./dist/atelier.js"
 		},
+		"./file-icons": {
+			"types": "./dist/types/file-icons.d.ts",
+			"import": "./dist/file-icons.js",
+			"default": "./dist/file-icons.js"
+		},
 		"./state-adapters": {
 			"types": "./dist/types/state-adapters.d.ts",
 			"import": "./dist/state-adapters.js",

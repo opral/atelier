@@ -9,6 +9,7 @@ export default defineConfig({
 		lib: {
 			entry: {
 				atelier: path.resolve(__dirname, "src/build-entry.ts"),
+				"file-icons": path.resolve(__dirname, "src/file-icons.ts"),
 				"state-adapters": path.resolve(__dirname, "src/state-adapters.ts"),
 			},
 			formats: ["es"],
