@@ -85,6 +85,7 @@ navbar regions while Atelier retains ownership of the workspace chrome.
 | ------------ | ----------------------------------------------- |
 | Editor       | Markdown-native writing surface.                |
 | Files        | Browse and open the files in the lix workspace. |
+| Drawings     | Sketch on an Excalidraw canvas (`.excalidraw`). |
 | HTML         | Run self-contained interactive HTML artifacts.  |
 | Inline diffs | Keep or undo edits with word-level context.     |
 | History      | Inspect checkpoints and restore earlier drafts. |

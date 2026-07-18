@@ -2,6 +2,7 @@ import fileCodeIconUrl from "./assets/file-code.svg";
 import fileConfigIconUrl from "./assets/file-config.svg";
 import fileCssIconUrl from "./assets/file-css.svg";
 import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileExcalidrawIconUrl from "./assets/file-excalidraw.svg";
 import fileGenericIconUrl from "./assets/file-generic.svg";
 import fileHtmlIconUrl from "./assets/file-html.svg";
 import fileJpgIconUrl from "./assets/file-jpg.svg";
@@ -39,6 +40,7 @@ export const FILE_ICON_GROUPS = [
 	{ extensions: ["jpg", "jpeg"], iconUrl: fileJpgIconUrl },
 	{ extensions: ["pdf"], iconUrl: filePdfIconUrl },
 	{ extensions: ["html", "htm"], iconUrl: fileHtmlIconUrl },
+	{ extensions: ["excalidraw"], iconUrl: fileExcalidrawIconUrl },
 ] as const;
 
 const ICON_URL_BY_EXTENSION = new Map<string, string>(

@@ -30,7 +30,7 @@ import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
 import fileNewIconUrl from "./assets/file-new.svg";
 import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
 
-export type FileTreeFileType = "generic" | "markdown" | "csv";
+export type FileTreeFileType = "generic" | "markdown" | "csv" | "excalidraw";
 
 export type FileTreeCreateRequest = {
 	readonly id: number;

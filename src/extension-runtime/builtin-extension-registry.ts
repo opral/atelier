@@ -7,6 +7,7 @@ import { extension as imageExtensionDefinition } from "../extensions/image";
 import { extension as htmlExtensionDefinition } from "../extensions/html";
 import { extension as pdfExtensionDefinition } from "../extensions/pdf";
 import { extension as textExtensionDefinition } from "../extensions/text";
+import { extension as excalidrawExtensionDefinition } from "../extensions/excalidraw";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	filesExtensionDefinition,
@@ -20,6 +21,7 @@ export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	htmlExtensionDefinition,
 	pdfExtensionDefinition,
 	textExtensionDefinition,
+	excalidrawExtensionDefinition,
 ];
 
 export const BUILTIN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
