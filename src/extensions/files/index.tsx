@@ -82,6 +82,8 @@ type FilesViewContext = {
 	readonly panelSide?: PanelSide;
 	readonly viewInstance?: string;
 	readonly isActiveView?: boolean;
+	/** Hides every file mutation affordance for read-only hosts. */
+	readonly readOnly?: boolean;
 	readonly registerNewFileDraftHandler?: (registration: {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
@@ -900,13 +902,18 @@ function FilesViewContent({
 		shouldHandleGlobalShortcuts,
 	]);
 
-	const handleDragEnter = useCallback((e: React.DragEvent) => {
-		if (!isExternalFileDrag(e.dataTransfer)) return;
-		e.preventDefault();
-		e.stopPropagation();
-		dragCounterRef.current += 1;
-		setIsDraggingOver(true);
-	}, []);
+	const readOnly = Boolean(context?.readOnly);
+	const handleDragEnter = useCallback(
+		(e: React.DragEvent) => {
+			if (readOnly) return;
+			if (!isExternalFileDrag(e.dataTransfer)) return;
+			e.preventDefault();
+			e.stopPropagation();
+			dragCounterRef.current += 1;
+			setIsDraggingOver(true);
+		},
+		[readOnly],
+	);
 
 	const handleDragOver = useCallback((e: React.DragEvent) => {
 		if (!isExternalFileDrag(e.dataTransfer)) return;
@@ -929,6 +936,7 @@ function FilesViewContent({
 
 	const handleDrop = useCallback(
 		async (e: React.DragEvent) => {
+			if (readOnly) return;
 			if (!isExternalFileDrag(e.dataTransfer)) return;
 			e.preventDefault();
 			e.stopPropagation();
@@ -1002,7 +1010,7 @@ function FilesViewContent({
 				}
 			}
 		},
-		[existingFilePaths, lix, context],
+		[existingFilePaths, lix, context, readOnly],
 	);
 	const fileTree = (
 		<FileTree
@@ -1020,10 +1028,14 @@ function FilesViewContent({
 			createRequest={createRequest}
 			onCreateCancel={handleCreateCancel}
 			onCreateCommit={handleCreateCommit}
-			onCreateAtDirectory={handleCreateAtDirectory}
-			onDeleteItem={handleDeleteItem}
-			onMoveItem={handleMoveItem}
-			onRenameCommit={handleRenameCommit}
+			{...(readOnly
+				? {}
+				: {
+						onCreateAtDirectory: handleCreateAtDirectory,
+						onDeleteItem: handleDeleteItem,
+						onMoveItem: handleMoveItem,
+						onRenameCommit: handleRenameCommit,
+					})}
 		/>
 	);
 
@@ -1045,21 +1057,23 @@ function FilesViewContent({
 					data-testid="files-view-wide"
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
-						<div className="flex shrink-0 justify-end pb-6">
-							{createRequest ? (
-								<WideNewButton disabled />
-							) : (
-								<UnifiedNewMenu
-									onNewCsv={handleNewCsv}
-									onNewExcalidraw={handleNewExcalidraw}
-									onNewFile={handleNewFile}
-									onNewFolder={handleCreateDirectory}
-									onNewMarkdown={handleNewMarkdown}
-								>
-									<WideNewButton />
-								</UnifiedNewMenu>
-							)}
-						</div>
+						{readOnly ? null : (
+							<div className="flex shrink-0 justify-end pb-6">
+								{createRequest ? (
+									<WideNewButton disabled />
+								) : (
+									<UnifiedNewMenu
+										onNewCsv={handleNewCsv}
+										onNewExcalidraw={handleNewExcalidraw}
+										onNewFile={handleNewFile}
+										onNewFolder={handleCreateDirectory}
+										onNewMarkdown={handleNewMarkdown}
+									>
+										<WideNewButton />
+									</UnifiedNewMenu>
+								)}
+							</div>
+						)}
 						<div
 							data-testid="files-view-tree-scroll"
 							data-attr="file-tree"
@@ -1071,7 +1085,7 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{/* Compact New row for side-panel use. */}
-			{context?.panelSide !== "central" ? (
+			{context?.panelSide !== "central" && !readOnly ? (
 				createRequest ? (
 					<CompactNewButton disabled />
 				) : (
@@ -1407,6 +1421,7 @@ export const extension = createReactExtensionDefinition({
 					panelSide: view.panel,
 					viewInstance: view.instanceId,
 					isActiveView: view.isActive,
+					readOnly: atelier.readOnly,
 					registerNewFileDraftHandler: ({ handler }) =>
 						view.registerNewFileDraftHandler(handler),
 				}}

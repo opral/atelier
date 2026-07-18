@@ -469,10 +469,12 @@ export function FileTree({
 				item.path,
 			);
 			if (!info || info.createRequestId != null) return null;
-			const canRename = canRenameTreeItem(info);
+			const canRename =
+				stateRef.current.onRenameCommit != null && canRenameTreeItem(info);
 			const canDelete =
 				stateRef.current.onDeleteItem != null && canDeleteTreeItem(info);
 			const canCreateInDirectory =
+				stateRef.current.onCreateAtDirectory != null &&
 				info.kind === "directory" &&
 				info.source !== "checkpoint-diff" &&
 				info.source !== "watched" &&
@@ -584,6 +586,7 @@ export function FileTree({
 			if (!info) return false;
 			if (item.isFolder !== (info.kind === "directory")) return false;
 			if (request) return info.createRequestId === request.id;
+			if (stateRef.current.onRenameCommit == null) return false;
 			if (info.createRequestId != null) return false;
 			if (info.source === "watched") return info.kind === "file";
 			return info.source !== "checkpoint-diff";

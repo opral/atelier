@@ -1144,6 +1144,7 @@ function LayoutShellLoadedContent({
 		qb(queryLix).selectFrom("lix_file").select("id"),
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
+	const isHostReadOnly = Boolean(configuration.readOnly);
 	const reviewRangeSessionId = configuration.reviewRangeSessionId;
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
@@ -2541,6 +2542,7 @@ function LayoutShellLoadedContent({
 	}, [lix, resolveAndOpenFile]);
 
 	const handleRequestNewFile = useCallback(async () => {
+		if (isHostReadOnly) return null;
 		const visibleDraftHandlers = [
 			...newFileDraftHandlersRef.current.values(),
 		].filter((registration) => {
@@ -2562,6 +2564,7 @@ function LayoutShellLoadedContent({
 		focusPanel,
 		focusedPanel,
 		handleCreateNewFile,
+		isHostReadOnly,
 		isLeftCollapsed,
 		isRightCollapsed,
 	]);
@@ -2938,6 +2941,7 @@ function LayoutShellLoadedContent({
 				</Suspense>
 				<TopBar
 					activeFileName={activeFileName}
+					isReadOnly={isHostReadOnly}
 					isReviewingCheckpoint={isReviewMode}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
@@ -2947,7 +2951,6 @@ function LayoutShellLoadedContent({
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
-				{slots?.belowTopBar}
 				<main className="flex flex-1 min-h-0 overflow-hidden px-2">
 					<Group
 						orientation="horizontal"
@@ -2999,7 +3002,9 @@ function LayoutShellLoadedContent({
 									)
 								}
 								viewContext={extensionHostContext}
-								onCreateNewFile={() => void handleCreateNewFile()}
+								{...(isHostReadOnly
+									? {}
+									: { onCreateNewFile: () => void handleCreateNewFile() })}
 								emptyState={renderEmptyPanelSlot(
 									"central",
 									slots?.centralPanelEmpty,

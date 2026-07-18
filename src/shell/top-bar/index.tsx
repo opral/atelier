@@ -1,3 +1,4 @@
+import { Eye } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,8 @@ import {
 export type TopBarProps = {
 	/** Active document name, shown in the header center. */
 	readonly activeFileName?: string | null;
+	/** Whether the host opened this workspace without mutation access. */
+	readonly isReadOnly?: boolean;
 	/** Whether the active document is being shown as a checkpoint diff. */
 	readonly isReviewingCheckpoint?: boolean;
 	readonly onToggleLeftSidebar?: () => void;
@@ -31,6 +34,7 @@ export type TopBarProps = {
  */
 export function TopBar({
 	activeFileName = null,
+	isReadOnly = false,
 	isReviewingCheckpoint = false,
 	onToggleLeftSidebar,
 	onToggleRightSidebar,
@@ -91,21 +95,32 @@ export function TopBar({
 					</TooltipContent>
 				</Tooltip>
 			</div>
-			{activeFileName ? (
-				<div className="flex min-w-0 items-center justify-center px-2 text-[12.5px]">
-					<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
-						{activeFileName}
-					</span>
+			{activeFileName || isReadOnly ? (
+				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
+					{activeFileName ? (
+						<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
+							{activeFileName}
+						</span>
+					) : null}
 					{isReviewingCheckpoint ? (
 						<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
 							Reviewing
+						</span>
+					) : null}
+					{isReadOnly ? (
+						<span
+							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-bg-hover)] px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]"
+							data-attr="workspace-read-only-chip"
+						>
+							<Eye aria-hidden="true" className="size-3" strokeWidth={2.2} />
+							Read-only
 						</span>
 					) : null}
 				</div>
 			) : (
 				<div aria-hidden="true" />
 			)}
-			<div className="flex min-w-0 items-center justify-end gap-1.5">
+			<div className="flex items-center justify-end gap-1.5">
 				{navbarEnd !== undefined && navbarEnd !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-end">
 						{navbarEnd}
