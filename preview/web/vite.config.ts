@@ -9,6 +9,9 @@ const repositoryRoot = path.resolve(previewDir, "../..");
 
 export default defineConfig({
 	root: previewDir,
+	define: {
+		"process.env.IS_PREACT": "false",
+	},
 	build: {
 		outDir: path.resolve(repositoryRoot, ".preview/web"),
 		emptyOutDir: true,
@@ -16,6 +19,13 @@ export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	resolve: {
 		alias: [
+			{
+				find: "roughjs/bin/rough",
+				replacement: path.resolve(
+					repositoryRoot,
+					"node_modules/roughjs/bin/rough.js",
+				),
+			},
 			{
 				find: "@opral/atelier/style.css",
 				replacement: path.resolve(repositoryRoot, "src/index.css"),

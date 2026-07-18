@@ -18,6 +18,7 @@ export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	markdown: "atelier_file",
 	csv: "atelier_csv",
 	image: "atelier_image",
+	excalidraw: "atelier_excalidraw",
 	html: "atelier_html",
 	pdf: "atelier_pdf",
 	text: "atelier_text",

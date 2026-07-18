@@ -4,6 +4,7 @@ import { extension as historyExtensionDefinition } from "../extensions/history";
 import { extension as markdownExtensionDefinition } from "../extensions/markdown";
 import { extension as csvExtensionDefinition } from "../extensions/csv";
 import { extension as imageExtensionDefinition } from "../extensions/image";
+import { extension as excalidrawExtensionDefinition } from "../extensions/excalidraw";
 import { extension as htmlExtensionDefinition } from "../extensions/html";
 import { extension as pdfExtensionDefinition } from "../extensions/pdf";
 import { extension as textExtensionDefinition } from "../extensions/text";
@@ -17,6 +18,7 @@ export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	markdownExtensionDefinition,
 	csvExtensionDefinition,
 	imageExtensionDefinition,
+	excalidrawExtensionDefinition,
 	htmlExtensionDefinition,
 	pdfExtensionDefinition,
 	textExtensionDefinition,

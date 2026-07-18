@@ -2,6 +2,7 @@ import fileCodeIconUrl from "./assets/file-code.svg";
 import fileConfigIconUrl from "./assets/file-config.svg";
 import fileCssIconUrl from "./assets/file-css.svg";
 import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileExcalidrawIconUrl from "./assets/file-excalidraw.svg";
 import fileGenericIconUrl from "./assets/file-generic.svg";
 import fileHtmlIconUrl from "./assets/file-html.svg";
 import fileJpgIconUrl from "./assets/file-jpg.svg";
@@ -34,6 +35,7 @@ export const FILE_ICON_GROUPS = [
 		iconUrl: fileCodeIconUrl,
 	},
 	{ extensions: ["csv"], iconUrl: fileCsvIconUrl },
+	{ extensions: ["excalidraw"], iconUrl: fileExcalidrawIconUrl },
 	{ extensions: ["png"], iconUrl: filePngIconUrl },
 	{ extensions: ["svg"], iconUrl: fileSvgIconUrl },
 	{ extensions: ["jpg", "jpeg"], iconUrl: fileJpgIconUrl },

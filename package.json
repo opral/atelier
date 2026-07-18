@@ -44,6 +44,7 @@
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.6.0",
+		"@excalidraw/excalidraw": "0.18.1",
 		"@codemirror/commands": "^6.10.4",
 		"@codemirror/lang-css": "^6.3.1",
 		"@codemirror/lang-javascript": "^6.2.5",
@@ -82,6 +83,7 @@
 		"papaparse": "^5.5.4",
 		"pdfjs-dist": "5.4.624",
 		"react-resizable-panels": "^4.12.1",
+		"roughjs": "4.6.4",
 		"tailwind-merge": "^3.6.0",
 		"unicode-emoji-json": "0.9.0",
 		"use-sync-external-store": "^1.6.0",

@@ -1,0 +1,127 @@
+@scope (.atelier-root) {
+	.atelier-excalidraw-view {
+		position: relative;
+		height: 100%;
+		min-height: 0;
+		overflow: hidden;
+		background: var(--color-bg-panel-muted);
+	}
+
+	.atelier-excalidraw-canvas {
+		position: absolute;
+		inset: 0;
+	}
+
+	.atelier-excalidraw-canvas > .excalidraw {
+		height: 100%;
+		--color-primary: var(--color-brand-600);
+		--color-primary-darker: var(--color-brand-700);
+		--color-primary-darkest: var(--color-brand-800);
+		--color-primary-light: var(--color-brand-100);
+		--color-surface-primary-container: var(--color-brand-100);
+		--color-on-primary-container: var(--color-brand-900);
+		--focus-highlight-color: var(--color-ring-focus-visible);
+	}
+
+	.atelier-excalidraw-canvas .Island,
+	.atelier-excalidraw-canvas .main-menu-trigger,
+	.atelier-excalidraw-canvas .help-icon {
+		border: 1px solid
+			color-mix(in srgb, var(--color-border-panel) 82%, transparent);
+		box-shadow: 0 4px 18px rgba(28, 25, 23, 0.08);
+	}
+
+	.atelier-excalidraw-save-status {
+		position: absolute;
+		right: 16px;
+		bottom: 16px;
+		z-index: 4;
+		display: flex;
+		height: 26px;
+		align-items: center;
+		gap: 6px;
+		padding: 0 9px;
+		border: 1px solid
+			color-mix(in srgb, var(--color-border-panel) 88%, transparent);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--color-bg-panel) 92%, transparent);
+		box-shadow: 0 4px 14px rgba(28, 25, 23, 0.08);
+		color: var(--color-text-tertiary);
+		font-size: 11px;
+		font-weight: 500;
+		backdrop-filter: blur(12px);
+		pointer-events: none;
+	}
+
+	.atelier-excalidraw-save-status--saving svg {
+		animation: atelier-excalidraw-spin 0.9s linear infinite;
+	}
+	.atelier-excalidraw-save-status--error {
+		color: var(--color-text-status-danger);
+	}
+	.atelier-excalidraw-status-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--color-success-500);
+	}
+	.atelier-excalidraw-save-status--read-only .atelier-excalidraw-status-dot {
+		background: var(--color-neutral-400);
+	}
+	.atelier-excalidraw-save-status--error .atelier-excalidraw-status-dot {
+		background: var(--color-error-500);
+	}
+
+	.atelier-excalidraw-state {
+		display: flex;
+		height: 100%;
+		align-items: center;
+		justify-content: center;
+		gap: 9px;
+		background: var(--color-bg-panel-muted);
+		color: var(--color-text-tertiary);
+		font-size: 13px;
+	}
+
+	.atelier-excalidraw-spinner {
+		animation: atelier-excalidraw-spin 0.9s linear infinite;
+	}
+
+	.atelier-excalidraw-error-card {
+		display: flex;
+		max-width: 420px;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 18px 20px;
+		border: 1px solid var(--color-error-200);
+		border-radius: 12px;
+		background: var(--color-error-50);
+		color: var(--color-error-700);
+		box-shadow: var(--shadow-md);
+	}
+
+	.atelier-excalidraw-error-card div {
+		display: grid;
+		gap: 4px;
+	}
+	.atelier-excalidraw-error-card strong {
+		color: var(--color-error-900);
+		font-size: 13px;
+	}
+	.atelier-excalidraw-error-card span {
+		line-height: 1.45;
+	}
+
+	@keyframes atelier-excalidraw-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@media (max-width: 767px) {
+		.atelier-excalidraw-save-status {
+			right: 10px;
+			bottom: 10px;
+		}
+	}
+}

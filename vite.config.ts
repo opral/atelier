@@ -1,10 +1,13 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
+	define: {
+		"process.env.IS_PREACT": "false",
+	},
 	build: {
 		lib: {
 			entry: {
@@ -36,9 +39,20 @@ export default defineConfig({
 		}),
 		tailwindcss(),
 	],
+	test: {
+		server: {
+			deps: {
+				inline: [/@excalidraw\/excalidraw/, /roughjs/],
+			},
+		},
+	},
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "src"),
+			"roughjs/bin/rough": path.resolve(
+				__dirname,
+				"node_modules/roughjs/bin/rough.js",
+			),
 		},
 	},
 });

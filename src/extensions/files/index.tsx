@@ -12,7 +12,9 @@ import { ChevronDown, Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import fileCsvIconUrl from "./assets/file-csv.svg";
+import fileExcalidrawIconUrl from "./assets/file-excalidraw.svg";
 import fileMdIconUrl from "./assets/file-md.svg";
+import { EMPTY_EXCALIDRAW_DOCUMENT } from "@/extensions/excalidraw/document";
 import { AtelierActionButton } from "@/components/ui/atelier-action-button";
 import {
 	DropdownMenu,
@@ -419,6 +421,10 @@ function FilesViewContent({
 		startCreateRequest("file", "csv");
 	}, [startCreateRequest]);
 
+	const handleNewExcalidraw = useCallback(() => {
+		startCreateRequest("file", "excalidraw");
+	}, [startCreateRequest]);
+
 	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
 		setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 		setSelectionOverride(null);
@@ -442,7 +448,17 @@ function FilesViewContent({
 							)
 						: fileType === "csv"
 							? deriveCsvPathFromStem(value, directoryPath, existingFilePaths)
-							: deriveGenericFilePath(value, directoryPath, existingFilePaths);
+							: fileType === "excalidraw"
+								? deriveExcalidrawPathFromStem(
+										value,
+										directoryPath,
+										existingFilePaths,
+									)
+								: deriveGenericFilePath(
+										value,
+										directoryPath,
+										existingFilePaths,
+									);
 				if (!path) {
 					setSelectionOverride(null);
 					clearRequest();
@@ -455,7 +471,11 @@ function FilesViewContent({
 						.values({
 							path,
 							data: new TextEncoder().encode(
-								fileType === "csv" ? "Column 1\n" : "",
+								fileType === "csv"
+									? "Column 1\n"
+									: fileType === "excalidraw"
+										? EMPTY_EXCALIDRAW_DOCUMENT
+										: "",
 							),
 						})
 						.execute();
@@ -1032,6 +1052,7 @@ function FilesViewContent({
 							) : (
 								<UnifiedNewMenu
 									onNewCsv={handleNewCsv}
+									onNewExcalidraw={handleNewExcalidraw}
 									onNewFile={handleNewFile}
 									onNewFolder={handleCreateDirectory}
 									onNewMarkdown={handleNewMarkdown}
@@ -1057,6 +1078,7 @@ function FilesViewContent({
 				) : (
 					<UnifiedNewMenu
 						onNewCsv={handleNewCsv}
+						onNewExcalidraw={handleNewExcalidraw}
 						onNewFile={handleNewFile}
 						onNewFolder={handleCreateDirectory}
 						onNewMarkdown={handleNewMarkdown}
@@ -1149,12 +1171,14 @@ const CompactNewButton = forwardRef<
 function UnifiedNewMenu({
 	children,
 	onNewCsv,
+	onNewExcalidraw,
 	onNewFile,
 	onNewFolder,
 	onNewMarkdown,
 }: {
 	readonly children: ReactNode;
 	readonly onNewCsv: () => void;
+	readonly onNewExcalidraw: () => void;
 	readonly onNewFile: () => void;
 	readonly onNewFolder: () => void;
 	readonly onNewMarkdown: () => void;
@@ -1194,6 +1218,12 @@ function UnifiedNewMenu({
 					iconUrl={fileCsvIconUrl}
 					label="New CSV (.csv)"
 					onSelect={onNewCsv}
+				/>
+				<NewMenuItem
+					dataAttr="file-new-excalidraw"
+					iconUrl={fileExcalidrawIconUrl}
+					label="New Excalidraw (.excalidraw)"
+					onSelect={onNewExcalidraw}
 				/>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -1444,6 +1474,20 @@ export function deriveCsvPathFromStem(
 	);
 }
 
+export function deriveExcalidrawPathFromStem(
+	stem: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string | null {
+	return deriveTypedFilePathFromStem(
+		stem,
+		directory,
+		existingPaths,
+		"excalidraw",
+		/\.excalidraw$/i,
+	);
+}
+
 export function deriveGenericFilePath(
 	name: string,
 	directory: string,
@@ -1560,6 +1604,7 @@ function initialValueForCreateRequest(
 	if (kind === "directory") return "new-folder";
 	if (fileType === "markdown") return "new-file.md";
 	if (fileType === "csv") return "new-file.csv";
+	if (fileType === "excalidraw") return "new-drawing.excalidraw";
 	return "new-file";
 }
 
@@ -1570,6 +1615,7 @@ function initialInputValueForCreateRequest(
 	if (kind !== "file") return undefined;
 	if (fileType === "markdown") return ".md";
 	if (fileType === "csv") return ".csv";
+	if (fileType === "excalidraw") return ".excalidraw";
 	return "";
 }
 

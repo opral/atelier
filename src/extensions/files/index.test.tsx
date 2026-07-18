@@ -15,6 +15,7 @@ import type { Lix } from "@lix-js/sdk";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import {
 	deriveCsvPathFromStem,
+	deriveExcalidrawPathFromStem,
 	deriveGenericFilePath,
 	deriveMarkdownPathFromStem,
 	FilesView,
@@ -49,6 +50,12 @@ describe("file creation path helpers", () => {
 
 	test("does not duplicate the CSV suffix", () => {
 		expect(deriveCsvPathFromStem("data.csv", "/", new Set())).toBe("/data.csv");
+	});
+
+	test("does not duplicate the Excalidraw suffix", () => {
+		expect(
+			deriveExcalidrawPathFromStem("architecture.excalidraw", "/", new Set()),
+		).toBe("/architecture.excalidraw");
 	});
 });
 
@@ -1066,6 +1073,7 @@ async function chooseNewMenuItem(name: string) {
 		"New folder": "file-new-folder",
 		"New Markdown (.md)": "file-new-markdown",
 		"New CSV (.csv)": "file-new-csv",
+		"New Excalidraw (.excalidraw)": "file-new-excalidraw",
 	};
 	const dataAttr = dataAttrByName[name];
 	if (!dataAttr) throw new Error(`Unknown New menu item '${name}'`);
