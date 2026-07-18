@@ -210,41 +210,42 @@ function EditableTextView({
 
 	useEffect(() => {
 		const events = lix.observe(
-			`SELECT f.data, f.lixcol_change_id, c.origin_key
-			 FROM lix_file AS f
-			 LEFT JOIN lix_change AS c ON c.id = f.lixcol_change_id
-			 WHERE f.id = ?`,
+			"SELECT lixcol_change_id FROM lix_file WHERE id = ?",
 			[fileId],
 		);
 		let closed = false;
-		let initial = true;
+		const reconcile = async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file as file")
+				.leftJoin("lix_change as change", "change.id", "file.lixcol_change_id")
+				.select(["file.data as data", "change.origin_key as origin_key"])
+				.where("file.id", "=", fileId)
+				.executeTakeFirst();
+			if (!row || closed) return;
+			const nextText = decodeFileDataToText(row.data);
+			if (nextText === localTextRef.current) {
+				lastCleanTextRef.current = nextText;
+				return;
+			}
+			if (row.origin_key === originKey || reviewingRef.current) return;
+			// MVP conflict policy: a queued or running local edit wins.
+			if (
+				persistenceRunningRef.current ||
+				queuedTextRef.current !== null ||
+				localTextRef.current !== lastCleanTextRef.current
+			)
+				return;
+			lastCleanTextRef.current = nextText;
+			localTextRef.current = nextText;
+			setEditorText(nextText);
+		};
 		void (async () => {
 			try {
+				await reconcile();
 				while (!closed) {
 					const event = await events.next();
-					const row = event?.result.rows[0];
-					if (!row || closed) continue;
-					const nextText = decodeFileDataToText(row.get("data"));
-					const observedOrigin = row.get("origin_key");
-					if (initial) {
-						initial = false;
-						if (nextText === fileText) continue;
-					}
-					if (nextText === localTextRef.current) {
-						lastCleanTextRef.current = nextText;
-						continue;
-					}
-					if (observedOrigin === originKey || reviewingRef.current) continue;
-					// MVP conflict policy: a queued or running local edit wins.
-					if (
-						persistenceRunningRef.current ||
-						queuedTextRef.current !== null ||
-						localTextRef.current !== lastCleanTextRef.current
-					)
-						continue;
-					lastCleanTextRef.current = nextText;
-					localTextRef.current = nextText;
-					setEditorText(nextText);
+					if (!event || closed) continue;
+					await reconcile();
 				}
 			} catch (error) {
 				if (!closed)
@@ -258,7 +259,7 @@ function EditableTextView({
 			events.close();
 			queuedTextRef.current = null;
 		};
-	}, [fileId, fileText, lix, originKey]);
+	}, [fileId, lix, originKey]);
 
 	return (
 		<div className="atelier-text-view" data-testid="text-editor-view">
