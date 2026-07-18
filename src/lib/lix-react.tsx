@@ -36,6 +36,7 @@ type QueryCacheEntry<TRow> = {
 	promise: Promise<TRow[]>;
 	snapshot: QueryCacheSnapshot<TRow>;
 	listeners: Set<() => void>;
+	execute: () => Promise<TRow[]>;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
@@ -68,6 +69,7 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	promise: Promise.resolve(DISABLED_QUERY_ROWS),
 	snapshot: { status: "success", rows: DISABLED_QUERY_ROWS },
 	listeners: new Set(),
+	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
 };
 const DISABLED_OBSERVE_QUERY = { sql: "", params: [] } as const;
 
@@ -119,7 +121,10 @@ export function useQuery<TRow>(
 				while (!closed) {
 					const event = await events.next();
 					if (closed || event === undefined) break;
-					const nextRows = queryResultToRows<TRow>(event.result);
+					// Observe payloads may be cached by the SDK. Treat the event only
+					// as an invalidation signal and read authoritative rows directly.
+					const nextRows = await entry.execute();
+					if (closed) break;
 					setQueryRows(entry, nextRows);
 				}
 			} catch (error) {
@@ -193,15 +198,6 @@ export const useQueryTakeFirstOrThrow = <TResult,>(
 	return data;
 };
 
-function queryResultToRows<TRow>(result: {
-	rows?: ReadonlyArray<{
-		toObject(): Record<string, unknown>;
-	}>;
-}): TRow[] {
-	const rows = Array.isArray(result?.rows) ? result.rows : [];
-	return rows.map((row) => row.toObject() as TRow);
-}
-
 function rowsEqual(a: unknown, b: unknown): boolean {
 	if (Object.is(a, b)) return true;
 	try {
@@ -216,14 +212,18 @@ function getQueryCacheEntry<TRow>(
 	builder: QueryLike<TRow>,
 ): QueryCacheEntry<TRow> {
 	const cached = queryCache.get(cacheKey) as QueryCacheEntry<TRow> | undefined;
-	if (cached) return cached;
+	if (cached) {
+		cached.execute = () => builder.execute();
+		return cached;
+	}
 
 	const entry: QueryCacheEntry<TRow> = {
 		promise: Promise.resolve([]),
 		snapshot: { status: "pending" },
 		listeners: new Set(),
+		execute: () => builder.execute(),
 	};
-	entry.promise = builder.execute().then(
+	entry.promise = entry.execute().then(
 		(rows) => {
 			setQueryRows(entry, rows);
 			return rows;

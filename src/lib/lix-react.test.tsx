@@ -8,7 +8,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-test("useQuery applies the first observe snapshot over the initial read", async () => {
+test("useQuery re-reads authoritative rows instead of applying observe payloads", async () => {
 	let resolveFirstObserve:
 		| ((event: ObserveEvent | undefined) => void)
 		| undefined;
@@ -25,7 +25,10 @@ test("useQuery applies the first observe snapshot over the initial read", async 
 	const lix = {
 		observe: vi.fn(() => ({ next, close })),
 	} as unknown as Lix;
-	const execute = vi.fn(async () => [{ value: "stale" }]);
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial" }])
+		.mockResolvedValue([{ value: "fresh-direct-read" }]);
 
 	function Probe() {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -49,7 +52,7 @@ test("useQuery applies the first observe snapshot over the initial read", async 
 	});
 
 	await expect(screen.findByTestId("value")).resolves.toHaveTextContent(
-		"stale",
+		"initial",
 	);
 
 	resolveFirstObserve?.({
@@ -59,7 +62,7 @@ test("useQuery applies the first observe snapshot over the initial read", async 
 			columns: ["value"],
 			rows: [
 				{
-					toObject: () => ({ value: "fresh" }),
+					toObject: () => ({ value: "stale-observe-payload" }),
 				},
 			] as unknown as ObserveEvent["result"]["rows"],
 			rowsAffected: 0,
@@ -68,8 +71,9 @@ test("useQuery applies the first observe snapshot over the initial read", async 
 	});
 
 	await waitFor(() => {
-		expect(screen.getByTestId("value")).toHaveTextContent("fresh");
+		expect(screen.getByTestId("value")).toHaveTextContent("fresh-direct-read");
 	});
+	expect(execute).toHaveBeenCalledTimes(2);
 });
 
 test("useQuery publishes observed rows to every consumer of the cached query", async () => {
@@ -93,7 +97,10 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 				close: secondClose,
 			})),
 	} as unknown as Lix;
-	const execute = vi.fn(async () => [{ value: "initial" }]);
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial" }])
+		.mockResolvedValue([{ value: "shared-fresh" }]);
 
 	function Probe({ id }: { readonly id: string }) {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -143,6 +150,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 			"shared-fresh",
 		);
 	});
+	expect(execute).toHaveBeenCalledTimes(2);
 
 	view?.unmount();
 	expect(firstClose).toHaveBeenCalledTimes(1);
