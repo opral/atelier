@@ -98,6 +98,8 @@ export type AtelierEvent =
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
+	/** Whether the host has opened this workspace without mutation access. */
+	readonly readOnly: boolean;
 	readonly events: {
 		readonly emit: (event: AtelierEvent) => void;
 	};

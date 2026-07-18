@@ -168,6 +168,7 @@ function createRuntime(
 ): ExtensionRuntime {
 	return {
 		lix,
+		readOnly: false,
 		events: { emit: vi.fn() },
 		documents: {
 			open: vi.fn(),
