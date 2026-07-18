@@ -9,6 +9,8 @@ export {
 	createMemorySessionStateStore,
 } from "./state-adapters";
 export { ATELIER_BUILTIN_EXTENSION_IDS } from "./extension-api";
+export { useDebouncedPayloadPersistence } from "./extension-runtime/use-debounced-payload-persistence";
+export type { DebouncedPayloadPersistenceOptions } from "./extension-runtime/use-debounced-payload-persistence";
 export type {
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
