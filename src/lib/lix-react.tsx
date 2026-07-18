@@ -135,7 +135,10 @@ export function useQuery<TRow>(
 	}, [enabled, entry, subscribe, lix, observeQuery]);
 
 	useEffect(() => {
-		if (!enabled || !evictOnUnmount) return;
+		// A non-subscribed query is a snapshot for the current mounted
+		// lifecycle, not a process-wide snapshot. Keeping it after the last
+		// consumer unmounts would let a later view remount from stale rows.
+		if (!enabled || (subscribe && !evictOnUnmount)) return;
 		evictingQueryUsers.set(
 			cacheKey,
 			(evictingQueryUsers.get(cacheKey) ?? 0) + 1,
@@ -157,7 +160,7 @@ export function useQuery<TRow>(
 				observeQueryCache.delete(cacheKey);
 			});
 		};
-	}, [cacheKey, enabled, entry, evictOnUnmount]);
+	}, [cacheKey, enabled, entry, evictOnUnmount, subscribe]);
 
 	if (!enabled) {
 		return DISABLED_QUERY_ROWS;
