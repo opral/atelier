@@ -59,12 +59,12 @@ export function TopBar({
 		<header
 			{...rootProps}
 			className={cn(
-				"relative flex h-9 shrink-0 items-center px-2 text-[var(--color-text-secondary)]",
+				"relative grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] items-center px-2 text-[var(--color-text-secondary)]",
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
 		>
-			<div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+			<div className="flex min-w-0 items-center gap-1 text-sm">
 				{navbarStart !== undefined && navbarStart !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-start">
 						{navbarStart}
@@ -92,20 +92,20 @@ export function TopBar({
 				</Tooltip>
 			</div>
 			{activeFileName ? (
-				<div className="pointer-events-none absolute inset-x-0 flex min-w-0 items-center justify-center px-[88px]">
-					<div className="pointer-events-auto flex min-w-0 items-center text-[12.5px]">
-						<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
-							{activeFileName}
+				<div className="flex min-w-0 items-center justify-center px-2 text-[12.5px]">
+					<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
+						{activeFileName}
+					</span>
+					{isReviewingCheckpoint ? (
+						<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
+							Reviewing
 						</span>
-						{isReviewingCheckpoint ? (
-							<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
-								Reviewing
-							</span>
-						) : null}
-					</div>
+					) : null}
 				</div>
-			) : null}
-			<div className="flex flex-1 items-center justify-end gap-1.5">
+			) : (
+				<div aria-hidden="true" />
+			)}
+			<div className="flex min-w-0 items-center justify-end gap-1.5">
 				{navbarEnd !== undefined && navbarEnd !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-end">
 						{navbarEnd}
