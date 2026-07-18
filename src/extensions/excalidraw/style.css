@@ -1,0 +1,73 @@
+.atelier-excalidraw-view {
+	position: relative;
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	height: 100%;
+	background: var(--color-bg-panel);
+	isolation: isolate;
+}
+
+.atelier-excalidraw-view .excalidraw-wrapper {
+	min-height: 0;
+	flex: 1;
+}
+
+/*
+ * Re-tint Excalidraw's UI chrome with Atelier's warm neutral + orange
+ * brand tokens so the canvas feels native to the workspace. Canvas
+ * *content* colors (stroke palettes, backgrounds) are left untouched —
+ * those belong to the document, not the chrome.
+ */
+.atelier-excalidraw-view .excalidraw {
+	--color-primary: var(--color-brand-600);
+	--color-primary-darker: var(--color-brand-700);
+	--color-primary-darkest: var(--color-brand-800);
+	--color-primary-hover: var(--color-brand-700);
+	--color-primary-light: var(--color-brand-100);
+	--color-primary-light-darker: var(--color-brand-200);
+	--color-surface-primary-container: var(--color-brand-100);
+	--color-on-primary-container: var(--color-brand-900);
+	--color-brand-hover: var(--color-brand-700);
+	--color-brand-active: var(--color-brand-800);
+	--color-promo: var(--color-brand-700);
+	--color-logo-icon: var(--color-brand-700);
+
+	--island-bg-color: var(--color-bg-panel);
+	--default-bg-color: var(--color-bg-panel);
+	--color-surface-lowest: var(--color-bg-panel);
+	--color-surface-low: rgb(245, 242, 237);
+	--color-surface-mid: rgb(245, 242, 237);
+	--color-surface-high: rgb(240, 236, 230);
+	--color-on-surface: var(--color-text-primary);
+	--text-primary-color: var(--color-text-primary);
+
+	--color-border-outline: var(--color-neutral-400);
+	--color-border-outline-variant: var(--color-neutral-300);
+	--link-color: var(--color-brand-700);
+
+	--shadow-island:
+		0 0 0 1px var(--color-border-subtle), 0 1px 2px rgba(28, 25, 23, 0.05),
+		0 7px 14px rgba(28, 25, 23, 0.05);
+}
+
+.atelier-excalidraw-save-error {
+	position: absolute;
+	z-index: 20;
+	bottom: 14px;
+	left: 50%;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border: 1px solid var(--color-border-notice-warning);
+	border-radius: 999px;
+	background: var(--color-bg-notice-warning);
+	color: var(--color-text-notice-warning);
+	font-size: 12px;
+	line-height: 1.2;
+	transform: translateX(-50%);
+	box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+	pointer-events: none;
+}

@@ -21,6 +21,7 @@ export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	html: "atelier_html",
 	pdf: "atelier_pdf",
 	text: "atelier_text",
+	excalidraw: "atelier_excalidraw",
 } as const;
 
 export type AtelierBuiltinExtensionId =
