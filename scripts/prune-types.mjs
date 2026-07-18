@@ -13,6 +13,7 @@ const publicDeclarations = new Set([
 	"dev-tools/simulate-agent-workflow.d.ts",
 	"extension-runtime/external-write-review.d.ts",
 	"extension-runtime/types.d.ts",
+	"extension-runtime/use-debounced-payload-persistence.d.ts",
 	"shell/agent-turn-review-range.d.ts",
 	"shell/ui-state.d.ts",
 ]);
