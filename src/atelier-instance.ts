@@ -98,6 +98,7 @@ type AtelierDocumentsCommand =
 	  }
 	| { readonly kind: "start-new" }
 	| { readonly kind: "close-active" }
+	| { readonly kind: "close"; readonly path: string }
 	| { readonly kind: "close-all" };
 
 type QueuedAtelierDocumentsCommand = {
@@ -132,6 +133,11 @@ export type AtelierDocumentsRuntimeBinding = {
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
 	readonly closeActive: () =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
+	readonly close: (
+		path: string,
+	) =>
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
 	readonly closeAll: () =>
@@ -205,6 +211,19 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 				enqueueAtelierDocumentsCommand(documentsRuntime, {
 					kind: "close-active",
 				}),
+			close: (path) => {
+				if (typeof path !== "string" || path.trim().length === 0) {
+					return Promise.reject(
+						new TypeError(
+							"atelier.documents.close() requires a non-empty path.",
+						),
+					);
+				}
+				return enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "close",
+					path,
+				});
+			},
 			closeAll: () =>
 				enqueueAtelierDocumentsCommand(documentsRuntime, {
 					kind: "close-all",
@@ -404,6 +423,8 @@ async function runAtelierDocumentsCommand(
 			return binding.startNew();
 		case "close-active":
 			return binding.closeActive();
+		case "close":
+			return binding.close(command.path);
 		case "close-all":
 			return binding.closeAll();
 	}

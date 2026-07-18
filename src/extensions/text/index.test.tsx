@@ -174,6 +174,7 @@ function createRuntime(
 			open: vi.fn(),
 			startNew: vi.fn(),
 			closeActive: vi.fn(),
+			close: vi.fn(),
 			closeAll: vi.fn(),
 			activeFileId: null,
 			activeFilePath: null,

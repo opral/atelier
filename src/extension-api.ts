@@ -47,6 +47,8 @@ export type AtelierDocumentsApi = {
 	startNew(): Promise<void>;
 	/** Closes the active document. */
 	closeActive(): Promise<void>;
+	/** Closes every view showing the document at the workspace path. */
+	close(path: string): Promise<void>;
 	/** Closes every document in the central panel. */
 	closeAll(): Promise<void>;
 };

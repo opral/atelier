@@ -2603,6 +2603,28 @@ function LayoutShellLoadedContent({
 		});
 		return closingPath;
 	}, [activeCentralEntry, handleCloseView]);
+	const handleCloseDocumentAtPath = useCallback(
+		(path: string) => {
+			const targetPath = normalizeLixFileOpenPath(path);
+			if (!targetPath) return [];
+			const matchingViews = centralPanel.views.filter(
+				(view) => documentPathFromView(view) === targetPath,
+			);
+			if (matchingViews.length === 0) return [];
+			const wasActive = matchingViews.some(
+				(view) => view.instance === centralPanel.activeInstance,
+			);
+			for (const view of matchingViews) {
+				handleCloseView({
+					panel: "central",
+					instance: view.instance,
+					focus: wasActive,
+				});
+			}
+			return [targetPath];
+		},
+		[centralPanel.activeInstance, centralPanel.views, handleCloseView],
+	);
 	const handleCloseAllDocuments = useCallback(() => {
 		const documentViews = centralPanel.views.filter(isDocumentView);
 		if (documentViews.length === 0) return [];
@@ -2647,6 +2669,12 @@ function LayoutShellLoadedContent({
 			const closedPath = handleCloseActiveDocument();
 			return closedPath ? closedDocumentCompletion(closedPath) : undefined;
 		},
+		close: (path) => {
+			const closedPaths = handleCloseDocumentAtPath(path);
+			return closedPaths.length > 0
+				? closedDocumentsCompletion(closedPaths)
+				: undefined;
+		},
 		closeAll: () => {
 			const closedPaths = handleCloseAllDocuments();
 			return closedPaths.length > 0
@@ -2661,6 +2689,7 @@ function LayoutShellLoadedContent({
 					atelierDocumentsActionsRef.current?.open(path, options),
 				startNew: () => atelierDocumentsActionsRef.current?.startNew(),
 				closeActive: () => atelierDocumentsActionsRef.current?.closeActive(),
+				close: (path) => atelierDocumentsActionsRef.current?.close(path),
 				closeAll: () => atelierDocumentsActionsRef.current?.closeAll(),
 			}),
 			[],

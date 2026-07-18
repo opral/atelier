@@ -19,6 +19,7 @@ export function createExtensionHostContext(
 				open: options.openDocument ?? (async () => {}),
 				startNew: async () => {},
 				closeActive: async () => {},
+				close: async () => {},
 				closeAll: async () => {},
 				activeFileId: null,
 				activeFilePath: null,
