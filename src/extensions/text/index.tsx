@@ -34,6 +34,11 @@ type TextFileRow = {
 	readonly data: unknown;
 };
 
+type TextFileDelivery = {
+	readonly data: unknown;
+	readonly originKey: unknown;
+};
+
 export type TextViewProps = {
 	readonly atelier: ExtensionRuntime;
 	readonly fileId: string;
@@ -216,19 +221,14 @@ function EditableTextView({
 		);
 		let closed = false;
 		const reconcile = async () => {
-			const row = await qb(lix)
-				.selectFrom("lix_file as file")
-				.leftJoin("lix_change as change", "change.id", "file.lixcol_change_id")
-				.select(["file.data as data", "change.origin_key as origin_key"])
-				.where("file.id", "=", fileId)
-				.executeTakeFirst();
+			const row = await loadTextFileDelivery(lix, fileId);
 			if (!row || closed) return;
 			const nextText = decodeFileDataToText(row.data);
 			if (nextText === localTextRef.current) {
 				lastCleanTextRef.current = nextText;
 				return;
 			}
-			if (row.origin_key === originKey || reviewingRef.current) return;
+			if (row.originKey === originKey || reviewingRef.current) return;
 			// MVP conflict policy: a queued or running local edit wins.
 			if (
 				persistenceRunningRef.current ||
@@ -295,6 +295,49 @@ function EditableTextView({
 			) : null}
 		</div>
 	);
+}
+
+/**
+ * Reads the current file before resolving the writer origin. Keeping the
+ * change lookup separate lets Lix point-read the exact change row by both
+ * change and file id instead of evaluating a cross-provider join for every
+ * editor reconciliation. The unscoped fallback preserves origins for
+ * legacy/non-file change rows.
+ */
+async function loadTextFileDelivery(
+	lix: ReturnType<typeof useLix>,
+	fileId: string,
+): Promise<TextFileDelivery | undefined> {
+	const file = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["data", "lixcol_change_id as change_id"])
+		.where("id", "=", fileId)
+		.executeTakeFirst();
+	if (!file) return undefined;
+
+	const changeId = typeof file.change_id === "string" ? file.change_id : null;
+	if (!changeId) {
+		return { data: file.data, originKey: null };
+	}
+
+	const scopedChange = await qb(lix)
+		.selectFrom("lix_change")
+		.select("origin_key")
+		.where("id", "=", changeId)
+		.where("file_id", "=", fileId)
+		.executeTakeFirst();
+	const change =
+		scopedChange ??
+		(await qb(lix)
+			.selectFrom("lix_change")
+			.select("origin_key")
+			.where("id", "=", changeId)
+			.executeTakeFirst());
+
+	return {
+		data: file.data,
+		originKey: change?.origin_key ?? null,
+	};
 }
 
 function HistoricalTextView({
