@@ -27,11 +27,12 @@ import {
 	readAgentTurnCommitRanges,
 } from "./agent-turn-review-range";
 import {
-	createLixBranchSession,
 	createMemoryPreferencesStore,
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
 } from "../state-adapters";
+
+const ASYNC_UI_TIMEOUT = 10_000;
 
 describe("resolveLixFileForOpen", () => {
 	test("resolves normalized paths from Lix", async () => {
@@ -893,48 +894,45 @@ describe("agent turn review navigation", () => {
 		const onEvent = vi.fn();
 		const sessionStateStore = createMemorySessionStateStore();
 		const mainBranchId = await lix.activeBranchId();
-		let releaseFileQuery: () => void = () => undefined;
-		let markFileQueryStarted: () => void = () => undefined;
-		let markFileQueryFinished: () => void = () => undefined;
-		const fileQueryGate = new Promise<void>((resolve) => {
-			releaseFileQuery = resolve;
+		let releaseBranchCheck: () => void = () => undefined;
+		let markBranchCheckStarted: () => void = () => undefined;
+		let markBranchCheckFinished: () => void = () => undefined;
+		const branchCheckGate = new Promise<void>((resolve) => {
+			releaseBranchCheck = resolve;
 		});
-		const fileQueryStarted = new Promise<void>((resolve) => {
-			markFileQueryStarted = resolve;
+		const branchCheckStarted = new Promise<void>((resolve) => {
+			markBranchCheckStarted = resolve;
 		});
-		const fileQueryFinished = new Promise<void>((resolve) => {
-			markFileQueryFinished = resolve;
+		const branchCheckFinished = new Promise<void>((resolve) => {
+			markBranchCheckFinished = resolve;
 		});
-		let gateNextFileQuery = false;
-		const originalExecute = lix.execute.bind(lix);
+		let gateNextBranchCheck = false;
 		const originalActiveBranchId = lix.activeBranchId.bind(lix);
-		let activeBranchChecks = 0;
+		const originalObserve = lix.observe.bind(lix);
+		let rangeObserverStarted = false;
 		const activeBranchSpy = vi
 			.spyOn(lix, "activeBranchId")
 			.mockImplementation(async () => {
-				activeBranchChecks += 1;
-				return originalActiveBranchId();
-			});
-		const executeSpy = vi
-			.spyOn(lix, "execute")
-			.mockImplementation(async (sql, params, options) => {
-				const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
-				const shouldGate =
-					gateNextFileQuery &&
-					normalizedSql.startsWith("select") &&
-					normalizedSql.includes("lix_file") &&
-					normalizedSql.includes("order by") &&
-					normalizedSql.includes("path");
+				const shouldGate = gateNextBranchCheck;
 				if (shouldGate) {
-					gateNextFileQuery = false;
-					markFileQueryStarted();
-					await fileQueryGate;
+					gateNextBranchCheck = false;
+					markBranchCheckStarted();
+					await branchCheckGate;
 				}
 				try {
-					return await originalExecute(sql, params, options);
+					return await originalActiveBranchId();
 				} finally {
-					if (shouldGate) markFileQueryFinished();
+					if (shouldGate) markBranchCheckFinished();
 				}
+			});
+		const observeSpy = vi
+			.spyOn(lix, "observe")
+			.mockImplementation((sql, params) => {
+				const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
+				if (normalizedSql.includes("lix_key_value_by_branch")) {
+					rangeObserverStarted = true;
+				}
+				return originalObserve(sql, params);
 			});
 		let utils: ReturnType<typeof render> | undefined;
 		try {
@@ -958,7 +956,10 @@ describe("agent turn review navigation", () => {
 				lix,
 				onEvent,
 				sessionStateStore,
-				branchSession: createLixBranchSession(lix, mainBranchId),
+				branchSession: {
+					getSnapshot: () => mainBranchId,
+					subscribe: () => () => undefined,
+				},
 			});
 
 			await act(async () => {
@@ -971,26 +972,32 @@ describe("agent turn review navigation", () => {
 				);
 			});
 			await findFilesTreeItem("branch-race.md");
+			await waitFor(
+				() => {
+					expect(rangeObserverStarted).toBe(true);
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
 
-			gateNextFileQuery = true;
+			gateNextBranchCheck = true;
 			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "branch-race-range",
-					sourceId: "mcp",
-					beforeCommitId,
-					afterCommitId,
-					startedAt: 1,
-					completedAt: 2,
-				});
+				await appendAgentTurnCommitRange(
+					lix,
+					{
+						id: "branch-race-range",
+						sourceId: "mcp",
+						beforeCommitId,
+						afterCommitId,
+						startedAt: 1,
+						completedAt: 2,
+					},
+					{ branchId: mainBranchId },
+				);
 			});
-			await fileQueryStarted;
+			await branchCheckStarted;
 			await lix.switchBranch({ branchId: draftBranch.id });
-			const branchChecksBeforeRelease = activeBranchChecks;
-			releaseFileQuery();
-			await fileQueryFinished;
-			await waitFor(() => {
-				expect(activeBranchChecks).toBeGreaterThan(branchChecksBeforeRelease);
-			});
+			releaseBranchCheck();
+			await branchCheckFinished;
 
 			expect(
 				onEvent.mock.calls.some(
@@ -1006,12 +1013,9 @@ describe("agent turn review navigation", () => {
 						(view) => view.state?.fileId === "branch-race-file",
 					),
 			).toBe(false);
-			await act(async () => {
-				await atelier.branches.switch(draftBranch.id);
-			});
 		} finally {
-			releaseFileQuery();
-			executeSpy.mockRestore();
+			releaseBranchCheck();
+			observeSpy.mockRestore();
 			activeBranchSpy.mockRestore();
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -1165,7 +1169,7 @@ describe("agent turn review navigation", () => {
 				});
 				await waitFor(async () => {
 					const [range] = await readAgentTurnCommitRanges(lix);
-					const branchId = atelier.branches.activeId();
+					const branchId = await lix.activeBranchId();
 					expect(branchId).not.toBeNull();
 					expect(
 						await reviewStatusStore.loadResolvedReviewIds(branchId!),

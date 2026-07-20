@@ -1,12 +1,8 @@
 import type { Lix } from "@lix-js/sdk";
 import {
 	Atelier,
-	ATELIER_BUILTIN_EXTENSION_IDS,
 	createAtelier,
-	type AtelierExtensionRegistration,
-	type AtelierExtensionRuntime,
 	type AtelierProps,
-	type AtelierRevisionSelection,
 	type AtelierSlots,
 	type AtelierTopBarProps,
 } from "@opral/atelier";
@@ -22,20 +18,7 @@ export function mountAtelier(lix: Lix): void {
 		navbarStart: null,
 		navbarEnd: null,
 	} satisfies AtelierSlots;
-	const historyOverride = {
-		manifest: {
-			apiVersion: 1,
-			id: ATELIER_BUILTIN_EXTENSION_IDS.history,
-			name: "Host History",
-		},
-		entry: {
-			icon: FixtureExtensionIcon,
-			mount: ({ element: extensionElement }) => {
-				extensionElement.textContent = "Host history";
-			},
-		},
-	} satisfies AtelierExtensionRegistration;
-	const atelier = createAtelier({ lix, extensions: [historyOverride] });
+	const atelier = createAtelier({ lix });
 	const topBarProps = {
 		"data-host-titlebar": true,
 	} satisfies AtelierTopBarProps;
@@ -54,14 +37,4 @@ export function mountAtelier(lix: Lix): void {
 	void startNewDocument;
 	void closeActiveDocument;
 	void fileIconUrl("/README.md");
-}
-
-function FixtureExtensionIcon() {
-	return null;
-}
-
-export function currentRevision(
-	runtime: AtelierExtensionRuntime,
-): AtelierRevisionSelection | null {
-	return runtime.revisions.current;
 }

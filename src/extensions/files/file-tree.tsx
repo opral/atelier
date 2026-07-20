@@ -476,11 +476,9 @@ export function FileTree({
 			const canCreateInDirectory =
 				stateRef.current.onCreateAtDirectory != null &&
 				info.kind === "directory" &&
-				info.source !== "checkpoint-diff" &&
 				info.source !== "watched" &&
 				stateRef.current.createRequest == null;
-			const canOpen = info.source === "checkpoint-diff";
-			if (!canRename && !canDelete && !canCreateInDirectory && !canOpen) {
+			if (!canRename && !canDelete && !canCreateInDirectory) {
 				return null;
 			}
 			return (
@@ -489,7 +487,6 @@ export function FileTree({
 					context={context}
 					canCreateInDirectory={canCreateInDirectory}
 					canDelete={canDelete}
-					canOpen={canOpen}
 					canRename={canRename}
 					onCreate={(kind) => {
 						if (info.kind !== "directory") return;
@@ -498,17 +495,6 @@ export function FileTree({
 							ensureDirectoryPath(info.appPath),
 							kind,
 						);
-					}}
-					onOpen={() => {
-						context.close();
-						stateRef.current.onSelectItem?.(
-							info.appPath,
-							info.kind,
-							info.source,
-						);
-						if (info.kind === "file" && info.id) {
-							void stateRef.current.openFileView?.(info.id, info.appPath);
-						}
 					}}
 					onRename={() => {
 						context.close({ restoreFocus: false });
@@ -589,7 +575,7 @@ export function FileTree({
 			if (stateRef.current.onRenameCommit == null) return false;
 			if (info.createRequestId != null) return false;
 			if (info.source === "watched") return info.kind === "file";
-			return info.source !== "checkpoint-diff";
+			return true;
 		};
 		handleDropCompleteRef.current = (event) => {
 			const request = buildTreeMoveRequest(event, stateRef.current);
@@ -629,8 +615,7 @@ export function FileTree({
 			if (
 				request ||
 				sourceInfo.createRequestId != null ||
-				(sourceInfo.source === "watched" && sourceInfo.kind !== "file") ||
-				sourceInfo.source === "checkpoint-diff"
+				(sourceInfo.source === "watched" && sourceInfo.kind !== "file")
 			) {
 				return;
 			}
@@ -795,22 +780,18 @@ function TreeItemContextMenu({
 	context,
 	canCreateInDirectory,
 	canDelete,
-	canOpen,
 	canRename,
 	onCreate,
 	onDelete,
-	onOpen,
 	onRename,
 }: {
 	readonly item: FileTreeContextMenuItem;
 	readonly context: FileTreeContextMenuOpenContext;
 	readonly canCreateInDirectory: boolean;
 	readonly canDelete: boolean;
-	readonly canOpen: boolean;
 	readonly canRename: boolean;
 	readonly onCreate: (kind: "file" | "directory") => void;
 	readonly onDelete: () => void;
-	readonly onOpen: () => void;
 	readonly onRename: () => void;
 }) {
 	const style = treeContextMenuStyle(context.anchorRect);
@@ -826,11 +807,6 @@ function TreeItemContextMenu({
 			onKeyDown={(event) => event.stopPropagation()}
 			onPointerDown={(event) => event.stopPropagation()}
 		>
-			{canOpen ? (
-				<TreeItemContextMenuButton onClick={onOpen}>
-					Open
-				</TreeItemContextMenuButton>
-			) : null}
 			{canCreateInDirectory ? (
 				<>
 					<TreeItemContextMenuButton
@@ -986,7 +962,7 @@ function treeContextMenuStyle(
 }
 
 function canRenameTreeItem(info: TreePathInfo): boolean {
-	if (info.createRequestId != null || info.source === "checkpoint-diff") {
+	if (info.createRequestId != null) {
 		return false;
 	}
 	return info.source !== "watched" || info.kind === "file";
@@ -1084,11 +1060,7 @@ function canMoveTreeItem(info: TreePathInfo | undefined): info is TreePathInfo {
 }
 
 function canDeleteTreeItem(info: TreePathInfo): boolean {
-	return (
-		info.createRequestId == null &&
-		info.source !== "checkpoint-diff" &&
-		info.source !== "watched"
-	);
+	return info.createRequestId == null && info.source !== "watched";
 }
 
 function prepareInitialCreateInput(

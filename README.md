@@ -2,7 +2,7 @@
 
 ### The embeddable lix workspace
 
-Atelier is a workspace UI — editor, files, history, and diffs — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
+Atelier is a workspace UI — editor, files, and diffs — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
 
 Atelier is the workspace engine inside any host. The included web preview demonstrates a browser app backed by Lix.
 
@@ -16,27 +16,13 @@ That's this component's job. Lix holds the workspace — the files, the history,
 
 ```tsx
 import { openLix } from "@lix-js/sdk";
-import {
-	Atelier,
-	ATELIER_BUILTIN_EXTENSION_IDS,
-	createAtelier,
-} from "@opral/atelier";
+import { Atelier, createAtelier } from "@opral/atelier";
 import "@opral/atelier/style.css";
 
 // The host creates and owns the lix.
 const lix = await openLix();
 const atelier = createAtelier({
 	lix,
-	extensions: [
-		{
-			manifest: {
-				apiVersion: 1,
-				id: ATELIER_BUILTIN_EXTENSION_IDS.history,
-				name: "Host History",
-			},
-			entry: historyExtensionEntry,
-		},
-	],
 });
 
 <Atelier
@@ -71,10 +57,7 @@ Host extensions are passed as `{ manifest, entry }` registrations. The host
 manifest describes the view while `entry` supplies its already-loaded icon and
 mount function; module paths belong only to workspace-installed extension
 manifests. A registration using an id from `ATELIER_BUILTIN_EXTENSION_IDS`
-replaces that bundled view. Its runtime receives the same revision controls as
-the bundled History view through `atelier.revisions.current`, `.show(...)`, and
-`.clear()`. `current` contains only the transient reviewed branch id; extensions
-read branch and file history data directly from the host-owned Lix.
+replaces that bundled view.
 
 The target runtime is the browser. Atelier's fixed slots let a host fill bounded
 navbar regions while Atelier retains ownership of the workspace chrome.
@@ -88,7 +71,6 @@ navbar regions while Atelier retains ownership of the workspace chrome.
 | Drawings     | Sketch on an Excalidraw canvas (`.excalidraw`). |
 | HTML         | Run self-contained interactive HTML artifacts.  |
 | Inline diffs | Keep or undo edits with word-level context.     |
-| History      | Inspect checkpoints and restore earlier drafts. |
 
 ## Powered by Lix
 

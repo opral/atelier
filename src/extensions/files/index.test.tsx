@@ -10,7 +10,6 @@ import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import type { CheckpointDiff } from "@/extension-runtime/checkpoint-diff";
 import type { Lix } from "@lix-js/sdk";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import {
@@ -951,69 +950,6 @@ describe("FilesView", () => {
 		await act(async () => view?.unmount());
 		await lix.close();
 	});
-
-	test("resyncs the active selection when its entry reappears", async () => {
-		const lix = await openLix();
-		const visibleFiles = [{ fileId: "readme", path: "/README.md" }];
-		let view: ReturnType<typeof render> | undefined;
-		await act(async () => {
-			view = renderFilesView(lix, {
-				activeFileId: "readme",
-				activeFilePath: "/README.md",
-				checkpointDiff: checkpointDiff(visibleFiles),
-				isActiveView: true,
-				isPanelFocused: true,
-			});
-		});
-		await waitFor(() => {
-			expect(getFilesTreeItem("README.md")).toHaveAttribute(
-				"data-item-selected",
-				"true",
-			);
-		});
-
-		await act(async () => {
-			view?.rerender(
-				<FilesViewFixture
-					lix={lix}
-					context={{
-						activeFileId: "readme",
-						activeFilePath: "/README.md",
-						checkpointDiff: checkpointDiff([]),
-						isActiveView: true,
-						isPanelFocused: true,
-					}}
-				/>,
-			);
-		});
-		await waitFor(() => {
-			expect(queryFilesTreeItem("README.md")).toBeNull();
-		});
-
-		await act(async () => {
-			view?.rerender(
-				<FilesViewFixture
-					lix={lix}
-					context={{
-						activeFileId: "readme",
-						activeFilePath: "/README.md",
-						checkpointDiff: checkpointDiff(visibleFiles),
-						isActiveView: true,
-						isPanelFocused: true,
-					}}
-				/>,
-			);
-		});
-		await waitFor(() => {
-			expect(getFilesTreeItem("README.md")).toHaveAttribute(
-				"data-item-selected",
-				"true",
-			);
-		});
-
-		await act(async () => view?.unmount());
-		await lix.close();
-	});
 });
 
 type TestFilesViewContext = NonNullable<
@@ -1230,19 +1166,4 @@ async function selectFileById(lix: Lix, id: string) {
 		.select("id")
 		.where("id", "=", id)
 		.executeTakeFirst();
-}
-
-function checkpointDiff(
-	visibleFiles: CheckpointDiff["visibleFiles"],
-): CheckpointDiff {
-	return {
-		branchId: "branch-after",
-		branchName: "After",
-		beforeBranchId: "branch-before",
-		beforeBranchName: "Before",
-		beforeCommitId: "commit-before",
-		afterCommitId: "commit-after",
-		visibleFiles,
-		files: [],
-	};
 }

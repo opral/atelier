@@ -83,8 +83,8 @@ describe("TopBar", () => {
 		).toBeTruthy();
 	});
 
-	test("shows reviewing label after the active file name in checkpoint diff mode", () => {
-		render(<TopBar activeFileName="note.md" isReviewingCheckpoint={true} />);
+	test("shows reviewing label after the active file name in review mode", () => {
+		render(<TopBar activeFileName="note.md" isReviewing={true} />);
 
 		expect(screen.getByText("note.md")).toBeVisible();
 		expect(screen.getByText("Reviewing")).toBeVisible();
@@ -110,7 +110,7 @@ describe("TopBar", () => {
 	});
 
 	test("does not show reviewing label without an active file", () => {
-		render(<TopBar isReviewingCheckpoint={true} />);
+		render(<TopBar isReviewing={true} />);
 
 		expect(screen.queryByText("Reviewing")).toBeNull();
 	});

@@ -264,13 +264,6 @@ function createRuntime(
 		},
 		branches: {
 			activeId: "main",
-			create: vi.fn(async (name: string) => name),
-			switch: vi.fn(async () => {}),
-		},
-		revisions: {
-			current: null,
-			show: vi.fn(async () => {}),
-			clear: vi.fn(),
 		},
 		reviews: {
 			resolvedReviewIds: [],

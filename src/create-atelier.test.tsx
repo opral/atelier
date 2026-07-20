@@ -5,22 +5,15 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { FolderClock } from "lucide-react";
 import { describe, expect, test } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import type {
-	AtelierExtensionRegistration,
-	AtelierExtensionRuntime,
-} from "./extension-api";
-import { ATELIER_BUILTIN_EXTENSION_IDS } from "./extension-api";
 import { createAtelier } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
 import {
 	fileExtensionInstanceForKind,
 	FILES_EXTENSION_KIND,
 } from "./extension-runtime/extension-instance-helpers";
-import { DEFAULT_ATELIER_UI_STATE } from "./shell/ui-state";
 import {
 	createMemoryPreferencesStore,
 	createMemorySessionStateStore,
@@ -304,72 +297,6 @@ describe("Atelier instance file controller", () => {
 
 			// Closing a path with no open views resolves as a no-op.
 			await act(async () => atelier.documents.close("/missing.md"));
-		} finally {
-			await act(async () => rendered?.unmount());
-			await lix.close();
-		}
-	});
-});
-
-describe("host built-in overrides", () => {
-	test("mounts an exact-id History override with public revision controls", async () => {
-		const historyInstance = "host-history";
-		const lix = await openLix();
-		const sessionStateStore = createMemorySessionStateStore({
-			focusedPanel: DEFAULT_ATELIER_UI_STATE.focusedPanel,
-			panels: {
-				...DEFAULT_ATELIER_UI_STATE.panels,
-				left: {
-					views: [
-						{
-							instance: historyInstance,
-							kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
-						},
-					],
-					activeInstance: historyInstance,
-				},
-			},
-		});
-		const preferencesStore = createMemoryPreferencesStore({
-			version: 1,
-			layout: { sizes: { left: 20, central: 80, right: 0 } },
-		});
-		let mountedRuntime: AtelierExtensionRuntime | null = null;
-		const historyOverride: AtelierExtensionRegistration = {
-			manifest: {
-				apiVersion: 1,
-				id: ATELIER_BUILTIN_EXTENSION_IDS.history,
-				name: "FlashType History",
-			},
-			entry: {
-				icon: FolderClock,
-				mount: ({ atelier, element }) => {
-					mountedRuntime = atelier;
-					element.textContent = "FlashType history mounted";
-				},
-			},
-		};
-		const atelier = createAtelier({
-			lix,
-			extensions: [historyOverride],
-			sessionStateStore,
-			preferencesStore,
-		});
-		let rendered: ReturnType<typeof render> | undefined;
-
-		try {
-			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
-			});
-			await waitFor(() => expect(mountedRuntime).not.toBeNull());
-			const revisions = (mountedRuntime as unknown as AtelierExtensionRuntime)
-				.revisions;
-			expect(
-				(mountedRuntime as unknown as AtelierExtensionRuntime).documents,
-			).toMatchObject(atelier.documents);
-			expect(revisions.current).toBeNull();
-			expect(revisions.show).toEqual(expect.any(Function));
-			expect(revisions.clear).toEqual(expect.any(Function));
 		} finally {
 			await act(async () => rendered?.unmount());
 			await lix.close();

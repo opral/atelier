@@ -45,10 +45,6 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 			[file.id, file.path, file.data],
 		);
 	}
-
-	if (files.length > 0) {
-		await lix.createBranch({ name: "Seed workspace" });
-	}
 }
 
 export function decodeSeedAssetDataUrl(dataUrl: string): Uint8Array {

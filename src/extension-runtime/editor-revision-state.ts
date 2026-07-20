@@ -9,11 +9,6 @@ export type EditorRevisionState = {
 
 export type EditorRevisionMode = "editor" | "snapshot" | "diff";
 
-const BEFORE_COMMIT_ID_STATE_KEY = "beforeCommitId";
-const AFTER_COMMIT_ID_STATE_KEY = "afterCommitId";
-const BEFORE_FILE_ID_STATE_KEY = "beforeFileId";
-const AFTER_FILE_ID_STATE_KEY = "afterFileId";
-
 export function normalizeEditorRevisionState(
 	state:
 		| ExtensionState
@@ -47,20 +42,6 @@ export function hasHistoricalEditorRevisionState(
 ): boolean {
 	const revision = normalizeEditorRevisionState(state);
 	return revision.beforeCommitId !== null || revision.afterCommitId !== null;
-}
-
-export function stripEditorRevisionState(
-	state: ExtensionState | undefined,
-): ExtensionState | undefined {
-	if (!state) return undefined;
-	const {
-		[BEFORE_COMMIT_ID_STATE_KEY]: _beforeCommitId,
-		[AFTER_COMMIT_ID_STATE_KEY]: _afterCommitId,
-		[BEFORE_FILE_ID_STATE_KEY]: _beforeFileId,
-		[AFTER_FILE_ID_STATE_KEY]: _afterFileId,
-		...rest
-	} = state;
-	return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 export function editorRevisionReviewId(args: {

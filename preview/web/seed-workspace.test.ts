@@ -14,7 +14,6 @@ describe("seedWorkspace", () => {
 					inserts.push(parameters);
 				}
 			}),
-			createBranch: vi.fn(async () => undefined),
 		};
 
 		await seedWorkspace(lix as never);

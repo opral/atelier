@@ -48,10 +48,6 @@ import type {
 } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
-import type {
-	CheckpointDiff,
-	CheckpointDiffFile,
-} from "@/extension-runtime/checkpoint-diff";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
@@ -76,7 +72,6 @@ type MarkdownViewProps = {
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
 	readonly reviewRangeSessionId?: string;
-	readonly checkpointDiff?: CheckpointDiff | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
@@ -132,7 +127,6 @@ export function MarkdownView({
 	activeBranchId = "main",
 	resolvedReviewIds,
 	reviewRangeSessionId,
-	checkpointDiff,
 	beforeCommitId,
 	afterCommitId,
 	beforeFileId,
@@ -157,7 +151,6 @@ export function MarkdownView({
 				activeBranchId={activeBranchId}
 				resolvedReviewIds={resolvedReviewIds}
 				reviewRangeSessionId={reviewRangeSessionId}
-				checkpointDiff={checkpointDiff}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
 				beforeFileId={beforeFileId}
@@ -200,7 +193,6 @@ function MarkdownViewLoaded(
 		fileRow,
 		isActiveView = true,
 		isPanelFocused = true,
-		checkpointDiff,
 		beforeCommitId,
 		afterCommitId,
 		openWorkspaceFile,
@@ -221,7 +213,6 @@ function MarkdownViewLoaded(
 				fileRow={fileRow}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
-				checkpointDiff={checkpointDiff}
 				editorRevision={editorRevision}
 				openWorkspaceFile={openWorkspaceFile}
 			/>
@@ -477,7 +468,6 @@ function MarkdownHistoricalViewLoaded({
 	fileRow,
 	isActiveView,
 	isPanelFocused,
-	checkpointDiff,
 	editorRevision,
 	openWorkspaceFile,
 }: {
@@ -486,19 +476,14 @@ function MarkdownHistoricalViewLoaded({
 	readonly fileRow: MarkdownFileRow | undefined;
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
-	readonly checkpointDiff: CheckpointDiff | null | undefined;
 	readonly editorRevision: EditorRevisionState;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
 	const revisionMode = editorRevisionMode(editorRevision);
-	const checkpointDiffFile = useMemo(
-		() => checkpointDiffFileForRevision(checkpointDiff, fileId, editorRevision),
-		[checkpointDiff, editorRevision, fileId],
-	);
 	const { beforeSnapshot, afterSnapshot } = useFileSnapshotsAtCommits(
 		fileId,
-		checkpointDiffFile ? null : editorRevision.beforeCommitId,
-		checkpointDiffFile ? null : editorRevision.afterCommitId,
+		editorRevision.beforeCommitId,
+		editorRevision.afterCommitId,
 		editorRevision.beforeFileId,
 		editorRevision.afterFileId,
 	);
@@ -509,19 +494,10 @@ function MarkdownHistoricalViewLoaded({
 				filePath,
 				fileRow,
 				revision: editorRevision,
-				checkpointDiffFile,
 				beforeSnapshot,
 				afterSnapshot,
 			}),
-		[
-			beforeSnapshot,
-			checkpointDiffFile,
-			editorRevision,
-			fileId,
-			filePath,
-			fileRow,
-			afterSnapshot,
-		],
+		[beforeSnapshot, editorRevision, fileId, filePath, fileRow, afterSnapshot],
 	);
 	const effectiveFileRow = historicalFile?.fileRow;
 	const review = historicalFile?.review ?? null;
@@ -547,11 +523,7 @@ function MarkdownHistoricalViewLoaded({
 			<MarkdownSnapshotView
 				filePath={effectiveFileRow.path}
 				markdown={decodeFileDataToText(effectiveFileRow.data)}
-				sourceCommitId={
-					checkpointDiffFile?.afterCommitId ??
-					editorRevision.afterCommitId ??
-					undefined
-				}
+				sourceCommitId={editorRevision.afterCommitId ?? undefined}
 				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
@@ -1005,32 +977,11 @@ function emptyMarkdownBlocksQuery() {
 	};
 }
 
-function checkpointDiffFileForRevision(
-	checkpointDiff: CheckpointDiff | null | undefined,
-	fileId: string,
-	revision: EditorRevisionState,
-): CheckpointDiffFile | null {
-	if (!checkpointDiff) return null;
-	return (
-		checkpointDiff.files.find((file) => {
-			const afterCommitId = checkpointDiff.afterIsActiveHead
-				? null
-				: file.afterCommitId;
-			return (
-				file.fileId === fileId &&
-				file.beforeCommitId === revision.beforeCommitId &&
-				afterCommitId === revision.afterCommitId
-			);
-		}) ?? null
-	);
-}
-
 function buildHistoricalMarkdownFile(args: {
 	readonly fileId: string;
 	readonly filePath: string | undefined;
 	readonly fileRow: MarkdownFileRow | undefined;
 	readonly revision: EditorRevisionState;
-	readonly checkpointDiffFile: CheckpointDiffFile | null;
 	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
 	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
 }): HistoricalMarkdownFile | null {
@@ -1038,7 +989,6 @@ function buildHistoricalMarkdownFile(args: {
 	if (mode === "editor") return null;
 
 	const path =
-		args.checkpointDiffFile?.path ??
 		args.afterSnapshot?.path ??
 		args.beforeSnapshot?.path ??
 		args.fileRow?.path ??
@@ -1046,11 +996,9 @@ function buildHistoricalMarkdownFile(args: {
 	if (!path) return null;
 
 	if (mode === "snapshot") {
-		const data = args.checkpointDiffFile
-			? args.checkpointDiffFile.afterData
-			: args.afterSnapshot
-				? decodeFileDataToBytes(args.afterSnapshot.data)
-				: null;
+		const data = args.afterSnapshot
+			? decodeFileDataToBytes(args.afterSnapshot.data)
+			: null;
 		if (!data) return null;
 		return {
 			fileRow: {
@@ -1063,20 +1011,16 @@ function buildHistoricalMarkdownFile(args: {
 		};
 	}
 
-	const beforeData =
-		args.checkpointDiffFile?.beforeData ??
-		(args.beforeSnapshot
-			? decodeFileDataToBytes(args.beforeSnapshot.data)
-			: EMPTY_FILE_DATA);
-	const afterData =
-		args.checkpointDiffFile?.afterData ??
-		(args.revision.afterCommitId
-			? args.afterSnapshot
-				? decodeFileDataToBytes(args.afterSnapshot.data)
-				: EMPTY_FILE_DATA
-			: args.fileRow
-				? decodeFileDataToBytes(args.fileRow.data)
-				: EMPTY_FILE_DATA);
+	const beforeData = args.beforeSnapshot
+		? decodeFileDataToBytes(args.beforeSnapshot.data)
+		: EMPTY_FILE_DATA;
+	const afterData = args.revision.afterCommitId
+		? args.afterSnapshot
+			? decodeFileDataToBytes(args.afterSnapshot.data)
+			: EMPTY_FILE_DATA
+		: args.fileRow
+			? decodeFileDataToBytes(args.fileRow.data)
+			: EMPTY_FILE_DATA;
 
 	return {
 		fileRow: {
@@ -1087,14 +1031,12 @@ function buildHistoricalMarkdownFile(args: {
 		review: {
 			fileId: args.fileId,
 			path,
-			reviewId:
-				args.checkpointDiffFile?.reviewId ??
-				editorRevisionReviewId({
-					fileId: args.fileId,
-					path,
-					beforeCommitId: args.revision.beforeCommitId,
-					afterCommitId: args.revision.afterCommitId,
-				}),
+			reviewId: editorRevisionReviewId({
+				fileId: args.fileId,
+				path,
+				beforeCommitId: args.revision.beforeCommitId,
+				afterCommitId: args.revision.afterCommitId,
+			}),
 			beforeCommitId: args.revision.beforeCommitId ?? "",
 			afterCommitId: args.revision.afterCommitId ?? "",
 			agentTurnRangeIds: [],

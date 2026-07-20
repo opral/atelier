@@ -14,7 +14,6 @@ export type ExtensionManifest = {
 /** Stable ids for replacing Atelier's bundled extension views. */
 export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	files: "atelier_files",
-	history: "atelier_history",
 	markdown: "atelier_file",
 	csv: "atelier_csv",
 	image: "atelier_image",
@@ -51,10 +50,6 @@ export type AtelierDocumentsApi = {
 	close(path: string): Promise<void>;
 	/** Closes every document in the central panel. */
 	closeAll(): Promise<void>;
-};
-
-export type AtelierRevisionSelection = {
-	readonly branchId: string;
 };
 
 /** Product-domain events emitted for hosts that own analytics or auditing. */
@@ -112,13 +107,6 @@ export type AtelierExtensionRuntime = {
 	};
 	readonly branches: {
 		readonly activeId: string;
-		readonly create: (name: string) => Promise<string>;
-		readonly switch: (branchId: string) => Promise<void>;
-	};
-	readonly revisions: {
-		readonly current: AtelierRevisionSelection | null;
-		readonly show: (branchId: string) => Promise<void>;
-		readonly clear: () => void;
 	};
 };
 

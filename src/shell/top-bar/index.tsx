@@ -14,8 +14,8 @@ export type TopBarProps = {
 	readonly activeFileName?: string | null;
 	/** Whether the host opened this workspace without mutation access. */
 	readonly isReadOnly?: boolean;
-	/** Whether the active document is being shown as a checkpoint diff. */
-	readonly isReviewingCheckpoint?: boolean;
+	/** Whether the active document is being reviewed. */
+	readonly isReviewing?: boolean;
 	readonly onToggleLeftSidebar?: () => void;
 	readonly onToggleRightSidebar?: () => void;
 	readonly isLeftSidebarVisible?: boolean;
@@ -35,7 +35,7 @@ export type TopBarProps = {
 export function TopBar({
 	activeFileName = null,
 	isReadOnly = false,
-	isReviewingCheckpoint = false,
+	isReviewing = false,
 	onToggleLeftSidebar,
 	onToggleRightSidebar,
 	isLeftSidebarVisible = true,
@@ -102,7 +102,7 @@ export function TopBar({
 							{activeFileName}
 						</span>
 					) : null}
-					{isReviewingCheckpoint ? (
+					{isReviewing ? (
 						<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
 							Reviewing
 						</span>

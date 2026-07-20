@@ -1,6 +1,11 @@
 import { openLix } from "@lix-js/sdk";
 import type { Lix } from "@lix-js/sdk";
-import { Atelier, AtelierDeveloperTools, createAtelier } from "@opral/atelier";
+import {
+	Atelier,
+	AtelierDeveloperTools,
+	createAtelier,
+	createLixBranchSession,
+} from "@opral/atelier";
 import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
@@ -19,9 +24,11 @@ async function start() {
 
 function PreviewApp({ lix }: { readonly lix: Lix }) {
 	const [currentFile, setCurrentFile] = useState<string | null>(null);
+	const [branchSession] = useState(() => createLixBranchSession(lix));
 	const [atelier] = useState(() =>
 		createAtelier({
 			lix,
+			branchSession,
 			onEvent: (event) => {
 				if (event.type === "document_viewed") {
 					setCurrentFile(event.filePath);
@@ -32,9 +39,9 @@ function PreviewApp({ lix }: { readonly lix: Lix }) {
 		}),
 	);
 	const branchId = useSyncExternalStore(
-		atelier.branches.subscribe,
-		atelier.branches.activeId,
-		atelier.branches.activeId,
+		branchSession.subscribe,
+		branchSession.getSnapshot,
+		branchSession.getSnapshot,
 	);
 	return (
 		<Atelier

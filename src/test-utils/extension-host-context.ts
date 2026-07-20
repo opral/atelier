@@ -26,13 +26,6 @@ export function createExtensionHostContext(
 			},
 			branches: {
 				activeId: "main",
-				create: async (name) => name,
-				switch: async () => {},
-			},
-			revisions: {
-				current: null,
-				show: async () => {},
-				clear: () => {},
 			},
 			reviews: {
 				resolvedReviewIds: [],

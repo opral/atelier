@@ -28,7 +28,6 @@ export type {
 	AtelierOptions,
 	AtelierPreferencesStore,
 	AtelierProps,
-	AtelierRevisionSelection,
 	AtelierReviewOutcome,
 	AtelierReviewResolution,
 	AtelierReviewStatusStore,
