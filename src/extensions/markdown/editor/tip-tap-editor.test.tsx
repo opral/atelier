@@ -1610,6 +1610,84 @@ test("applies different-origin markdown update when editor is clean", async () =
 	});
 });
 
+test("keeps the loaded markdown when the observed file is deleted", async () => {
+	const fileId = "file_deleted_while_open";
+	const { lix } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Keep this loaded\n",
+	});
+
+	await lix.execute("DELETE FROM lix_file WHERE id = $1", [fileId]);
+	await settleMarkdownObserver();
+
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Keep this loaded",
+	);
+});
+
+test("does not retain another file's markdown while switching file ids", async () => {
+	const lix = await openLix({
+		keyValues: [
+			{
+				key: "lix_deterministic_mode",
+				value: { enabled: true },
+				lixcol_branch_id: "global",
+				lixcol_global: true,
+			},
+		],
+	});
+	const firstFileId = "file_switch_origin_first";
+	const secondFileId = "file_switch_origin_second";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: firstFileId,
+			path: "/first.md",
+			data: new TextEncoder().encode("First file\n"),
+		})
+		.execute();
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: secondFileId,
+			path: "/second.md",
+			data: new TextEncoder().encode("Second file\n"),
+		})
+		.execute();
+
+	let view: ReturnType<typeof render> | null = null;
+	await act(async () => {
+		view = render(
+			<Suspense>
+				<Providers lix={lix}>
+					<TipTapEditor fileId={firstFileId} />
+				</Providers>
+			</Suspense>,
+		);
+	});
+	await screen.findByTestId("tiptap-editor");
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent("First file");
+
+	await act(async () => {
+		view?.rerender(
+			<Suspense>
+				<Providers lix={lix}>
+					<TipTapEditor fileId={secondFileId} />
+				</Providers>
+			</Suspense>,
+		);
+	});
+
+	await waitFor(() => {
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"Second file",
+		);
+		expect(screen.getByTestId("tiptap-editor")).not.toHaveTextContent(
+			"First file",
+		);
+	});
+});
+
 test("persists edits on top of an externally hydrated markdown baseline", async () => {
 	const fileId = "file_external_hydration_baseline";
 	const { lix, editor } = await renderEditorForMarkdownFile({
