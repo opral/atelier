@@ -324,6 +324,11 @@ export function PanelV2({
 			onClickCapture={() => onFocusPanel(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
+			{/* A host-rendered strip floats on the app background above the
+			    island rather than inside its chrome. */}
+			{showTabBar && customTabStrip !== undefined ? (
+				<div data-atelier-part="custom-tab-strip">{customTabStrip}</div>
+			) : null}
 			<div
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]",
@@ -332,9 +337,7 @@ export function PanelV2({
 			>
 				{/* Most islands render the shared panel-header-height tab row; the central
 				    editor hides it and switches files from the left file list. */}
-				{showTabBar && customTabStrip !== undefined ? (
-					<div data-atelier-part="custom-tab-strip">{customTabStrip}</div>
-				) : showTabBar ? (
+				{showTabBar && customTabStrip === undefined ? (
 					<TabBar
 						extraContent={
 							tabBarExtraContent !== undefined ? (
