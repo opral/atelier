@@ -20,6 +20,8 @@ type CentralPanelProps = {
 	readonly emptyState?: ReactNode;
 	/** Renders the central tab strip (browser-style tabs mode). */
 	readonly showTabBar?: boolean;
+	/** Host-rendered strip replacing the built-in tab row. */
+	readonly customTabStrip?: ReactNode;
 };
 
 /**
@@ -44,6 +46,7 @@ export function CentralPanel({
 	onCreateNewFile,
 	emptyState: emptyStateOverride,
 	showTabBar = false,
+	customTabStrip,
 }: CentralPanelProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
@@ -83,6 +86,7 @@ export function CentralPanel({
 			emptyStatePlaceholder={emptyState}
 			dropId="central-panel"
 			showTabBar={showTabBar}
+			customTabStrip={customTabStrip}
 			tabBarExtraContent={
 				showTabBar && onCreateNewFile ? (
 					<NewTabButton onCreateNewFile={onCreateNewFile} />

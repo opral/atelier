@@ -66,7 +66,10 @@ const dirRegistration: AtelierExtensionRegistration = {
 const extensions = [homeRegistration, dirRegistration];
 
 async function renderTabbedShell(
-	options: { filesViewMode?: "landing" | "sidebar" } = {},
+	options: {
+		filesViewMode?: "landing" | "sidebar";
+		slots?: import("../create-atelier").AtelierSlots;
+	} = {},
 ) {
 	const filesViewMode = options.filesViewMode ?? "sidebar";
 	const lix = await openLix();
@@ -111,6 +114,7 @@ async function renderTabbedShell(
 						extensions={extensions}
 						filesViewMode={filesViewMode}
 						onEvent={onEvent}
+						slots={options.slots}
 					/>
 				</Suspense>
 			</LixProvider>,
@@ -319,6 +323,72 @@ describe("central tabs with a pinned home", () => {
 						(view) => view.kind === "atelier_files",
 					),
 				).toBe(false);
+			});
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("a host-rendered tab strip drives the same tab rules", async () => {
+		const shell = await renderTabbedShell({
+			slots: {
+				centralTabStrip: (context) => (
+					<div data-testid="host-strip">
+						{context.tabs.map((tab) => (
+							<button
+								key={tab.instanceId}
+								type="button"
+								data-testid={`host-tab-${tab.isPinned ? "home" : tab.label}`}
+								data-active={tab.isActive ? "true" : undefined}
+								onClick={tab.select}
+							>
+								{tab.label}
+								{tab.close ? (
+									<span
+										data-testid={`host-close-${tab.label}`}
+										onClick={(event) => {
+											event.stopPropagation();
+											tab.close?.();
+										}}
+									/>
+								) : null}
+							</button>
+						))}
+						{context.newTab ? (
+							<button
+								type="button"
+								data-testid="host-new-tab"
+								onClick={context.newTab}
+							/>
+						) : null}
+					</div>
+				),
+			},
+		});
+		try {
+			expect(await screen.findByTestId("host-strip")).toBeVisible();
+			// The pinned home has no close affordance; the built-in strip is gone.
+			expect(screen.getByTestId("host-tab-home")).toBeVisible();
+			expect(screen.queryByTestId("host-close-Home")).toBeNull();
+			expect(
+				document.querySelector("section button[data-view-instance]"),
+			).toBeNull();
+
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			expect(await screen.findByTestId("host-tab-one.md")).toBeVisible();
+
+			// Host chips drive selection and closing through Atelier's rules.
+			await act(async () => {
+				screen.getByTestId("host-tab-home").click();
+			});
+			expect(screen.getByTestId("host-tab-home").dataset.active).toBe("true");
+			await act(async () => {
+				screen.getByTestId("host-close-one.md").click();
+			});
+			await waitFor(() => {
+				expect(screen.queryByTestId("host-tab-one.md")).toBeNull();
 			});
 		} finally {
 			await shell.cleanup();

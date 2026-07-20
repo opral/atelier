@@ -85,6 +85,7 @@ export function PanelV2({
 	viewOverrides,
 	showTabBar = true,
 	tabBarExtraContent,
+	customTabStrip,
 }: PanelV2Props) {
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
@@ -331,7 +332,9 @@ export function PanelV2({
 			>
 				{/* Most islands render the shared panel-header-height tab row; the central
 				    editor hides it and switches files from the left file list. */}
-				{showTabBar ? (
+				{showTabBar && customTabStrip !== undefined ? (
+					<div data-atelier-part="custom-tab-strip">{customTabStrip}</div>
+				) : showTabBar ? (
 					<TabBar
 						extraContent={
 							tabBarExtraContent !== undefined ? (
@@ -438,6 +441,8 @@ export type PanelV2Props = {
 	readonly showTabBar?: boolean;
 	/** Replaces the default add-view menu at the end of the tab strip. */
 	readonly tabBarExtraContent?: ReactNode;
+	/** Host-rendered strip replacing the built-in tab row entirely. */
+	readonly customTabStrip?: ReactNode;
 };
 
 /** The "+" button lists views that are not already open in this panel. */

@@ -38,6 +38,8 @@ export type {
 	AtelierPanelSide,
 	AtelierProps,
 	AtelierSlots,
+	AtelierTabStripContext,
+	AtelierTabStripTab,
 	AtelierTopBarProps,
 } from "./create-atelier";
 export type {

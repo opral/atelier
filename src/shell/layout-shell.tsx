@@ -108,6 +108,8 @@ import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
 	AtelierSlots,
+	AtelierTabStripContext,
+	AtelierTabStripTab,
 	AtelierTopBarProps,
 } from "../create-atelier";
 import {
@@ -2718,6 +2720,59 @@ function LayoutShellLoadedContent({
 		[handleCloseView],
 	);
 
+	// Headless context for a host-rendered central tab strip: the host owns
+	// the chips, Atelier keeps the tab rules (pinning, selection, closing).
+	const centralTabStripContext = useMemo<AtelierTabStripContext | null>(() => {
+		if (!centralBehavior.tabs || !slots?.centralTabStrip) return null;
+		const activeInstance =
+			centralPanel.activeInstance ?? centralPanel.views[0]?.instance ?? null;
+		const tabs = centralPanel.views.flatMap(
+			(entry): AtelierTabStripTab[] => {
+				const definition = extensionMap.get(entry.kind);
+				if (!definition) return [];
+				return [
+					{
+						instanceId: entry.instance,
+						kind: entry.kind,
+						label:
+							(entry.state?.atelier?.label as string | undefined) ??
+							definition.label,
+						icon: definition.icon,
+						isActive: entry.instance === activeInstance,
+						isPinned: entry.isPinned === true,
+						isPending: entry.isPending === true,
+						select: () => handleSelectCentralView(entry.instance),
+						...(entry.isPinned
+							? {}
+							: {
+									close: () =>
+										handleCloseView({
+											panel: "central",
+											instance: entry.instance,
+											focus: true,
+										}),
+								}),
+					},
+				];
+			},
+		);
+		return {
+			tabs,
+			...(isHostReadOnly
+				? {}
+				: { newTab: () => void handleCreateNewFile() }),
+		};
+	}, [
+		centralBehavior.tabs,
+		centralPanel,
+		extensionMap,
+		handleCloseView,
+		handleCreateNewFile,
+		handleSelectCentralView,
+		isHostReadOnly,
+		slots?.centralTabStrip,
+	]);
+
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
@@ -2883,6 +2938,7 @@ function LayoutShellLoadedContent({
 					isLeftSidebarVisible={!isLeftCollapsed}
 					isRightSidebarVisible={!isRightCollapsed}
 					navbarStart={slots?.navbarStart}
+					navbarCenter={slots?.navbarCenter}
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
@@ -2941,6 +2997,13 @@ function LayoutShellLoadedContent({
 								{...(isHostReadOnly
 									? {}
 									: { onCreateNewFile: () => void handleCreateNewFile() })}
+								{...(centralTabStripContext && slots?.centralTabStrip
+									? {
+											customTabStrip: slots.centralTabStrip(
+												centralTabStripContext,
+											),
+										}
+									: {})}
 								emptyState={renderEmptyPanelSlot(
 									"central",
 									slots?.centralPanelEmpty,
