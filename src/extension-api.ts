@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 import type { Lix } from "@lix-js/sdk";
 
+export type AtelierPanelSide = "left" | "central" | "right";
+
 /** Metadata for an already-loaded host extension entry. */
 export type ExtensionManifest = {
 	readonly apiVersion: 1;
@@ -13,7 +15,7 @@ export type ExtensionManifest = {
 	 * Panel sides this view may occupy. Defaults to the side panels; central
 	 * placement is reserved for document editors unless declared here.
 	 */
-	readonly placement?: readonly ("left" | "right" | "central")[];
+	readonly placement?: readonly AtelierPanelSide[];
 	/**
 	 * Excludes the view from the add-view menus. Hidden views stay mountable
 	 * programmatically — right for views opened only through navigation or
@@ -58,15 +60,19 @@ export type AtelierDocumentOpenOptions = {
 export type AtelierViewOpenOptions = {
 	readonly state?: AtelierExtensionState;
 	/**
-	 * Stable identity for this view instance. An open view with the same key is
+	 * Stable identity for this view instance — the same value is reported back
+	 * as `instanceId` on views and events. An open view with the same id is
 	 * activated (and its state updated) instead of opening a duplicate.
 	 */
-	readonly instanceKey?: string;
+	readonly instanceId?: string;
 	/** Appends a new central tab instead of navigating the active tab in place. */
 	readonly newTab?: boolean;
 	readonly focus?: boolean;
-	/** Target panel. Defaults to "central". */
-	readonly panel?: "left" | "right" | "central";
+	/**
+	 * Target panel. Defaults to "central". Side panels follow the add-view
+	 * rules instead of the tab rules: `instanceId` and `newTab` are ignored.
+	 */
+	readonly panel?: AtelierPanelSide;
 };
 
 export type AtelierViewsApi = {
@@ -115,7 +121,7 @@ export type AtelierEvent =
 	| {
 			type: "extension_opened";
 			extensionId: string;
-			panel: "left" | "right" | "central";
+			panel: AtelierPanelSide;
 	  }
 	| {
 			/**
@@ -161,7 +167,7 @@ export type AtelierExtensionRuntime = {
 export type AtelierExtensionView = {
 	readonly instanceId: string;
 	readonly state: AtelierExtensionState;
-	readonly panel: "left" | "right" | "central";
+	readonly panel: AtelierPanelSide;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;

@@ -47,6 +47,25 @@ export function buildFileExtensionProps(args: {
 		: { fileId: args.fileId, atelier: { label } };
 }
 
+/** A central document editor bound to a workspace file. */
+export const isDocumentView = (
+	view: ExtensionInstance | null | undefined,
+): boolean => {
+	if (!view) return false;
+	const fileId =
+		typeof view.state?.fileId === "string" ? view.state.fileId : "";
+	if (!fileId) return false;
+	return view.instance === fileExtensionInstanceForKind(view.kind, fileId);
+};
+
+export const documentPathFromView = (
+	view: ExtensionInstance | null | undefined,
+): string | null => {
+	if (!view || !isDocumentView(view)) return null;
+	const path = view.state?.filePath;
+	return typeof path === "string" && path.length > 0 ? path : null;
+};
+
 export function activeFileIdFromExtensionInstance(
 	entry: ExtensionInstance | null | undefined,
 ): string | null {

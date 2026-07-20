@@ -105,7 +105,9 @@ function isViewInstance(value: unknown): value is PanelState["views"][number] {
 		typeof candidate.instance === "string" &&
 		typeof candidate.kind === "string" &&
 		(candidate.isPending === undefined ||
-			typeof candidate.isPending === "boolean")
+			typeof candidate.isPending === "boolean") &&
+		(candidate.isPinned === undefined ||
+			typeof candidate.isPinned === "boolean")
 	);
 }
 

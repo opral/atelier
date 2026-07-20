@@ -29,18 +29,23 @@ the Files landing view. There is no tab strip; switching files happens from
 the Files view. `documents.open(path)` replaces the current view. This is the
 mode FlashType uses.
 
-### Tabbed (`centralPanel.tabs`)
+### Tabbed (`centralPanel.mode: "tabs"`)
 
 ```ts
 createAtelier({
   lix,
   extensions: [homeExtension, dirExtension],
   centralPanel: {
-    tabs: true,
+    mode: "tabs",
     home: { extensionId: "my_home" },
   },
 });
 ```
+
+The two modes are a discriminated union — a `home` cannot be configured
+without tabs. With a pinned home configured, the Files view automatically
+lives in the sidebar (`filesViewMode` is treated as `"sidebar"`), since the
+home view owns the central landing.
 
 The central island renders a tab strip and keeps multiple content views open.
 The model is deliberately browser-like:
@@ -74,8 +79,9 @@ const manifest = {
 };
 ```
 
-- `placement` gates the panel sides a view can occupy (drag-and-drop and
-  programmatic opens both respect it). Document editors are always central.
+- `placement` gates the panel sides a view can occupy — add-view menus,
+  drag-and-drop, and programmatic opens all respect it. The default (no
+  `placement`) is the side panels. Document editors are always central.
 - `hidden` keeps an extension out of the add-view menus while remaining
   mountable programmatically — right for views that only open through
   navigation (a folder view) or configuration (a pinned home).
@@ -89,17 +95,20 @@ views — including a host's central content views — are driven by
 ```ts
 await instance.views.open("my_dir", {
   state: { path: "/assets", atelier: { label: "assets" } },
-  instanceKey: "my_dir:/assets", // stable identity for dedupe/activation
-  newTab: false,                  // default: navigate in place
-  panel: "central",               // default: "central"
+  instanceId: "my_dir:/assets", // stable identity for dedupe/activation
+  newTab: false,                 // default: navigate in place
+  panel: "central",              // default: "central"
 });
 ```
 
 `views.open` follows the same in-place rules as `documents.open`: an existing
-instance with the same `instanceKey` is activated (and its state updated);
-otherwise the active content tab is replaced, or a tab is appended when `newTab`
-is set or home is active. For side panels it behaves like the panel "+"
-menu (activate the existing singleton or add the view).
+instance with the same `instanceId` is activated (its state shallow-merged);
+otherwise the active content tab is replaced, or a tab is appended when
+`newTab` is set or home is active. The same `instanceId` is reported back on
+`central_view_activated`, so hosts can correlate tabs with URLs. For side
+panels the call behaves like the panel "+" menu (activate the existing
+singleton or add the view) — `instanceId` and `newTab` are ignored there.
+The id `"central-home"` is reserved for the configured home extension.
 
 The same API is available to mounted extensions via
 `atelier.views` on `AtelierExtensionRuntime`, so a host's home view can open

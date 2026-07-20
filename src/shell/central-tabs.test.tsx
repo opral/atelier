@@ -65,7 +65,10 @@ const dirRegistration: AtelierExtensionRegistration = {
 
 const extensions = [homeRegistration, dirRegistration];
 
-async function renderTabbedShell() {
+async function renderTabbedShell(
+	options: { filesViewMode?: "landing" | "sidebar" } = {},
+) {
+	const filesViewMode = options.filesViewMode ?? "sidebar";
 	const lix = await openLix();
 	const events: AtelierEvent[] = [];
 	const onEvent = vi.fn((event: AtelierEvent) => {
@@ -77,9 +80,9 @@ async function renderTabbedShell() {
 		onEvent,
 		extensions,
 		sessionStateStore,
-		filesViewMode: "sidebar",
+		filesViewMode,
 		centralPanel: {
-			tabs: true,
+			mode: "tabs",
 			home: { extensionId: HOME_EXTENSION_ID },
 		},
 	});
@@ -106,7 +109,7 @@ async function renderTabbedShell() {
 					<V2LayoutShell
 						instance={atelier}
 						extensions={extensions}
-						filesViewMode="sidebar"
+						filesViewMode={filesViewMode}
 						onEvent={onEvent}
 					/>
 				</Suspense>
@@ -227,7 +230,7 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.views.open(DIR_EXTENSION_ID, {
 					state: { path: "/assets", atelier: { label: "assets" } },
-					instanceKey: `${DIR_EXTENSION_ID}:/assets`,
+					instanceId: `${DIR_EXTENSION_ID}:/assets`,
 				});
 			});
 			expect(await screen.findByTestId("test-dir-view")).toBeVisible();
@@ -243,10 +246,80 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.views.open(DIR_EXTENSION_ID, {
 					state: { path: "/assets", atelier: { label: "assets" } },
-					instanceKey: `${DIR_EXTENSION_ID}:/assets`,
+					instanceId: `${DIR_EXTENSION_ID}:/assets`,
 				});
 			});
 			expect(centralTabLabels()).toEqual(["«home»", "assets"]);
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("closing a middle tab activates its right neighbor and reports it", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			await act(async () => {
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+			expect(centralTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
+			// Activate the middle tab, then close it.
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			await act(async () => {
+				await shell.atelier.documents.closeActive();
+			});
+			expect(centralTabLabels()).toEqual(["«home»", "two.md"]);
+			expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+			const closedEvents = shell.events.filter(
+				(event) => event.type === "document_closed",
+			);
+			expect(closedEvents.at(-1)).toMatchObject({
+				filePath: "/one.md",
+				nextFilePath: "/two.md",
+			});
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("views.open rejects unknown extensions and the reserved home id", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await expect(
+				shell.atelier.views.open("nope_missing"),
+			).rejects.toThrow(/Unknown Atelier extension/);
+			await expect(
+				shell.atelier.views.open(DIR_EXTENSION_ID, {
+					instanceId: "central-home",
+				}),
+			).rejects.toThrow(/reserved/);
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("landing files mode keeps Files in the sidebar instead of dropping it", async () => {
+		const shell = await renderTabbedShell({ filesViewMode: "landing" });
+		try {
+			// A pinned home owns the central landing; the Files view must
+			// survive in the left panel rather than vanish.
+			await waitFor(() => {
+				const snapshot = shell.sessionStateStore.getSnapshot();
+				expect(
+					snapshot?.panels.left.views.some(
+						(view) => view.kind === "atelier_files",
+					),
+				).toBe(true);
+				expect(
+					snapshot?.panels.central.views.some(
+						(view) => view.kind === "atelier_files",
+					),
+				).toBe(false);
+			});
 		} finally {
 			await shell.cleanup();
 		}

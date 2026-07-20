@@ -4,6 +4,7 @@ import type {
 	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
+	AtelierPanelSide,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
 } from "./extension-api";
@@ -19,7 +20,7 @@ import {
 	type AtelierSessionStateStore,
 } from "./state-adapters";
 
-export type AtelierPanelSide = "left" | "central" | "right";
+export type { AtelierPanelSide } from "./extension-api";
 export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
 
 export type AtelierDiffSource = {
@@ -47,21 +48,23 @@ export type {
 	AtelierViewsApi,
 } from "./extension-api";
 
-export type AtelierCentralPanelOptions = {
+export type AtelierCentralPanelOptions =
 	/**
-	 * Renders the tab strip above the central island and keeps multiple content
-	 * views open. Defaults to false: the central island is a single document
-	 * slot switched from the Files view.
+	 * The default: the central island is a single document slot switched from
+	 * the Files view, with no tab strip.
 	 */
-	readonly tabs?: boolean;
+	| { readonly mode: "document" }
 	/**
-	 * Extension pinned as the permanent first tab (like a browser's home
-	 * button). It cannot be closed and navigation never replaces it; closing the
-	 * last content tab lands on it. Requires `tabs: true` and an extension
-	 * registered with `placement` including "central".
+	 * Browser-style tabs: the central island renders a tab strip and keeps
+	 * multiple content views open. `home` pins an extension (registered with
+	 * `placement` including "central") as the permanent first tab — it cannot
+	 * be closed and navigation never replaces it; closing the last content tab
+	 * lands on it.
 	 */
-	readonly home?: { readonly extensionId: string };
-};
+	| {
+			readonly mode: "tabs";
+			readonly home?: { readonly extensionId: string };
+	  };
 
 export type AtelierOptions = {
 	readonly lix: Lix;
@@ -133,6 +136,8 @@ type QueuedAtelierDocumentsCommand = {
 export type AtelierDocumentsRuntimeState = {
 	readonly activePath: string | null;
 	readonly openPaths: readonly string[];
+	/** Instance id of the active central view (documents and host views). */
+	readonly activeViewInstance: string | null;
 };
 
 /** @internal */
@@ -385,6 +390,7 @@ function createAtelierDocumentsRuntime(): AtelierDocumentsRuntime {
 		state: freezeAtelierDocumentsState({
 			activePath: null,
 			openPaths: [],
+			activeViewInstance: null,
 		}),
 		listeners: new Set(),
 	};
@@ -533,6 +539,7 @@ function freezeAtelierDocumentsState(
 	return Object.freeze({
 		activePath: state.activePath,
 		openPaths: Object.freeze([...new Set(state.openPaths)]),
+		activeViewInstance: state.activeViewInstance,
 	});
 }
 
@@ -541,6 +548,7 @@ function atelierDocumentsStatesEqual(
 	right: AtelierDocumentsRuntimeState,
 ): boolean {
 	if (left.activePath !== right.activePath) return false;
+	if (left.activeViewInstance !== right.activeViewInstance) return false;
 	if (left.openPaths.length !== right.openPaths.length) return false;
 	return left.openPaths.every((path, index) => path === right.openPaths[index]);
 }

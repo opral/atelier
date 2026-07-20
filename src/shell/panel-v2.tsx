@@ -110,8 +110,8 @@ export function PanelV2({
 	const hasViews = panel.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
 	const availableViews = useMemo(
-		() => availableExtensionsForPanel(visibleExtensions, panel),
-		[panel, visibleExtensions],
+		() => availableExtensionsForPanel(visibleExtensions, panel, side),
+		[panel, side, visibleExtensions],
 	);
 	const panelElementRef = useRef<HTMLElement | null>(null);
 	const pendingAddedViewRef = useRef<{
@@ -520,10 +520,16 @@ function AddViewMenu({
 export function availableExtensionsForPanel(
 	visibleExtensions: readonly ExtensionDefinition[],
 	panel: PanelState,
+	side?: PanelSide,
 ): ExtensionDefinition[] {
 	const openKinds = new Set(panel.views.map((entry) => entry.kind));
 	return visibleExtensions.filter(
-		(view) => view.multiInstance || !openKinds.has(view.kind),
+		(view) =>
+			(view.multiInstance || !openKinds.has(view.kind)) &&
+			// Manifest placement gates the menus; the default is side panels only.
+			(side === undefined ||
+				view.placement === undefined ||
+				view.placement.includes(side)),
 	);
 }
 

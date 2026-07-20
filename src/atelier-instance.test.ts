@@ -275,6 +275,7 @@ describe("createAtelier", () => {
 		const unbind = bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
 			openPaths: [],
+			activeViewInstance: null,
 		});
 		await Promise.all([open, startNew, close, closePath, closeAll]);
 
@@ -309,6 +310,7 @@ describe("createAtelier", () => {
 		bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
 			openPaths: [],
+			activeViewInstance: null,
 		});
 
 		const open = atelier.documents.open("/one.md");
@@ -338,6 +340,7 @@ describe("createAtelier", () => {
 		const unbind = bindAtelierDocumentsRuntime(atelier, firstBinding, {
 			activePath: "/last.md",
 			openPaths: ["/last.md"],
+			activeViewInstance: null,
 		});
 		unbind();
 
@@ -354,6 +357,7 @@ describe("createAtelier", () => {
 		bindAtelierDocumentsRuntime(atelier, secondBinding, {
 			activePath: "/last.md",
 			openPaths: ["/last.md"],
+			activeViewInstance: null,
 		});
 		await queued;
 
@@ -378,6 +382,7 @@ describe("createAtelier", () => {
 			{
 				activePath: null,
 				openPaths: [],
+				activeViewInstance: null,
 			},
 		);
 
@@ -391,6 +396,7 @@ describe("createAtelier", () => {
 		publishAtelierDocumentsState(atelier, {
 			activePath: "/active.md",
 			openPaths: ["/active.md"],
+			activeViewInstance: null,
 		});
 		await open;
 		expect(resolved).toBe(true);
@@ -411,7 +417,7 @@ describe("createAtelier", () => {
 				closeAll: vi.fn(),
 				openView: vi.fn(),
 			},
-			{ activePath: null, openPaths: [] },
+			{ activePath: null, openPaths: [], activeViewInstance: null },
 		);
 
 		const open = atelier.documents.open("/first.md");
@@ -422,6 +428,7 @@ describe("createAtelier", () => {
 		publishAtelierDocumentsState(atelier, {
 			activePath: "/first.md",
 			openPaths: ["/first.md"],
+			activeViewInstance: null,
 		});
 		await open;
 		await close;
@@ -442,7 +449,7 @@ describe("createAtelier", () => {
 				closeAll: vi.fn(),
 				openView: vi.fn(),
 			},
-			{ activePath: null, openPaths: [] },
+			{ activePath: null, openPaths: [], activeViewInstance: null },
 		);
 
 		const open = atelier.documents.open("/unmounted.md");
