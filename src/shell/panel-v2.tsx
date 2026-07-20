@@ -486,7 +486,7 @@ function AddViewMenu({
 						title="Add view"
 						aria-label="Add view"
 						data-attr="panel-add-view"
-						className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+						className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
 					>
 						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
 					</button>
@@ -848,15 +848,15 @@ function SortableTab({
 }
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border border-transparent px-2.25 text-xs font-semibold transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
+	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border border-transparent px-3 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
 	// keyboard focus adds a ring on top of the same look.
 	focused:
-		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	active:
-		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	idle: "bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
 } as const;
 
@@ -932,25 +932,25 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 					</span>
 				)}
 				{isPinned ? null : (
-				<span className="relative flex size-3.25 items-center justify-center">
-					{onClose ? (
-						<X
-							data-attr="panel-tab-close"
-							className={clsx(
-								"h-3 w-3",
-								isActive && isFocused
-									? "text-[var(--color-action-selection-current)] hover:text-[var(--color-icon-selection-current)]"
-									: isActive
-										? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
-										: "text-[var(--color-icon-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-icon-secondary)]",
-							)}
-							onClick={(event) => {
-								event.stopPropagation();
-								onClose();
-							}}
-						/>
-					) : null}
-				</span>
+					<span className="relative flex size-3.25 items-center justify-center">
+						{onClose ? (
+							<X
+								data-attr="panel-tab-close"
+								className={clsx(
+									"size-[11px]",
+									isActive && isFocused
+										? "text-[var(--color-action-selection-current)] hover:text-[var(--color-icon-selection-current)]"
+										: isActive
+											? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
+											: "text-[var(--color-icon-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-icon-secondary)]",
+								)}
+								onClick={(event) => {
+									event.stopPropagation();
+									onClose();
+								}}
+							/>
+						) : null}
+					</span>
 				)}
 			</button>
 		);

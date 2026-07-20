@@ -267,7 +267,10 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		},
 		views: {
 			open: (extensionId, viewOptions) => {
-				if (typeof extensionId !== "string" || extensionId.trim().length === 0) {
+				if (
+					typeof extensionId !== "string" ||
+					extensionId.trim().length === 0
+				) {
 					return Promise.reject(
 						new TypeError(
 							"atelier.views.open() requires a non-empty extension id.",

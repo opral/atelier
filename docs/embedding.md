@@ -33,12 +33,12 @@ mode FlashType uses.
 
 ```ts
 createAtelier({
-  lix,
-  extensions: [homeExtension, dirExtension],
-  centralPanel: {
-    mode: "tabs",
-    home: { extensionId: "my_home" },
-  },
+	lix,
+	extensions: [homeExtension, dirExtension],
+	centralPanel: {
+		mode: "tabs",
+		home: { extensionId: "my_home" },
+	},
 });
 ```
 
@@ -70,12 +70,12 @@ Extensions declare where they may be placed via their manifest:
 
 ```ts
 const manifest = {
-  apiVersion: 1,
-  id: "my_dir",
-  name: "Folder",
-  placement: ["central"], // default: ["left", "right"]
-  hidden: true,           // exclude from the side panels' "+" add-view menus
-  multiInstance: true,
+	apiVersion: 1,
+	id: "my_dir",
+	name: "Folder",
+	placement: ["central"], // default: ["left", "right"]
+	hidden: true, // exclude from the side panels' "+" add-view menus
+	multiInstance: true,
 };
 ```
 
@@ -94,10 +94,10 @@ views — including a host's central content views — are driven by
 
 ```ts
 await instance.views.open("my_dir", {
-  state: { path: "/assets", atelier: { label: "assets" } },
-  instanceId: "my_dir:/assets", // stable identity for dedupe/activation
-  newTab: false,                 // default: navigate in place
-  panel: "central",              // default: "central"
+	state: { path: "/assets", atelier: { label: "assets" } },
+	instanceId: "my_dir:/assets", // stable identity for dedupe/activation
+	newTab: false, // default: navigate in place
+	panel: "central", // default: "central"
 });
 ```
 

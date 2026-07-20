@@ -1662,7 +1662,12 @@ function LayoutShellLoadedContent({
 				{ focus },
 			);
 		},
-		[canPlaceKindInSidePanel, centralBehavior, ensurePanelExpanded, setPanelState],
+		[
+			canPlaceKindInSidePanel,
+			centralBehavior,
+			ensurePanelExpanded,
+			setPanelState,
+		],
 	);
 
 	const openResolvedFileView = useCallback(
@@ -2535,9 +2540,10 @@ function LayoutShellLoadedContent({
 		return closedPaths;
 	}, [activeCentralEntry, centralPanel.views, emitEvent, setPanelState]);
 	const handleOpenExtensionView = useCallback(
-		(extensionId: string, options: AtelierViewOpenOptions = {}):
-			| string
-			| undefined => {
+		(
+			extensionId: string,
+			options: AtelierViewOpenOptions = {},
+		): string | undefined => {
 			const definition = extensionMap.get(extensionId);
 			if (!definition) {
 				throw new Error(`Unknown Atelier extension: ${extensionId}`);
@@ -2726,41 +2732,37 @@ function LayoutShellLoadedContent({
 		if (!centralBehavior.tabs || !slots?.centralTabStrip) return null;
 		const activeInstance =
 			centralPanel.activeInstance ?? centralPanel.views[0]?.instance ?? null;
-		const tabs = centralPanel.views.flatMap(
-			(entry): AtelierTabStripTab[] => {
-				const definition = extensionMap.get(entry.kind);
-				if (!definition) return [];
-				return [
-					{
-						instanceId: entry.instance,
-						kind: entry.kind,
-						label:
-							(entry.state?.atelier?.label as string | undefined) ??
-							definition.label,
-						icon: definition.icon,
-						isActive: entry.instance === activeInstance,
-						isPinned: entry.isPinned === true,
-						isPending: entry.isPending === true,
-						select: () => handleSelectCentralView(entry.instance),
-						...(entry.isPinned
-							? {}
-							: {
-									close: () =>
-										handleCloseView({
-											panel: "central",
-											instance: entry.instance,
-											focus: true,
-										}),
-								}),
-					},
-				];
-			},
-		);
+		const tabs = centralPanel.views.flatMap((entry): AtelierTabStripTab[] => {
+			const definition = extensionMap.get(entry.kind);
+			if (!definition) return [];
+			return [
+				{
+					instanceId: entry.instance,
+					kind: entry.kind,
+					label:
+						(entry.state?.atelier?.label as string | undefined) ??
+						definition.label,
+					icon: definition.icon,
+					isActive: entry.instance === activeInstance,
+					isPinned: entry.isPinned === true,
+					isPending: entry.isPending === true,
+					select: () => handleSelectCentralView(entry.instance),
+					...(entry.isPinned
+						? {}
+						: {
+								close: () =>
+									handleCloseView({
+										panel: "central",
+										instance: entry.instance,
+										focus: true,
+									}),
+							}),
+				},
+			];
+		});
 		return {
 			tabs,
-			...(isHostReadOnly
-				? {}
-				: { newTab: () => void handleCreateNewFile() }),
+			...(isHostReadOnly ? {} : { newTab: () => void handleCreateNewFile() }),
 		};
 	}, [
 		centralBehavior.tabs,
@@ -2971,7 +2973,13 @@ function LayoutShellLoadedContent({
 								emptyState={renderEmptyPanelSlot("left", slots?.leftPanelEmpty)}
 							/>
 						</Panel>
-						<Separator className="group relative flex w-1.75 items-center justify-center">
+						{/* A collapsed panel gives its space back — no residual gutter,
+						    the strip aligns with the top-bar mark. */}
+						<Separator
+							className={`group relative flex items-center justify-center ${
+								isLeftCollapsed ? "w-0" : "w-1.75"
+							}`}
+						>
 							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel
@@ -3010,7 +3018,11 @@ function LayoutShellLoadedContent({
 								)}
 							/>
 						</Panel>
-						<Separator className="group relative flex w-1.75 items-center justify-center">
+						<Separator
+							className={`group relative flex items-center justify-center ${
+								isRightCollapsed ? "w-0" : "w-1.75"
+							}`}
+						>
 							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel

@@ -138,16 +138,15 @@ async function renderTabbedShell(
 const centralTabButtons = () =>
 	Array.from(
 		document.querySelectorAll<HTMLButtonElement>(
-			'section button[data-view-instance]',
+			"section button[data-view-instance]",
 		),
 	);
 
 const centralTabLabels = () =>
-	centralTabButtons().map(
-		(button) =>
-			button.dataset.viewKey === HOME_EXTENSION_ID
-				? "«home»"
-				: (button.textContent ?? ""),
+	centralTabButtons().map((button) =>
+		button.dataset.viewKey === HOME_EXTENSION_ID
+			? "«home»"
+			: (button.textContent ?? ""),
 	);
 
 describe("central tabs with a pinned home", () => {
@@ -293,9 +292,9 @@ describe("central tabs with a pinned home", () => {
 	test("views.open rejects unknown extensions and the reserved home id", async () => {
 		const shell = await renderTabbedShell();
 		try {
-			await expect(
-				shell.atelier.views.open("nope_missing"),
-			).rejects.toThrow(/Unknown Atelier extension/);
+			await expect(shell.atelier.views.open("nope_missing")).rejects.toThrow(
+				/Unknown Atelier extension/,
+			);
 			await expect(
 				shell.atelier.views.open(DIR_EXTENSION_ID, {
 					instanceId: "central-home",
@@ -342,7 +341,7 @@ describe("central tabs with a pinned home", () => {
 								data-active={tab.isActive ? "true" : undefined}
 								onClick={tab.select}
 							>
-							{tab.label}
+								{tab.label}
 							</button>
 						))}
 						{context.tabs.map((tab) =>

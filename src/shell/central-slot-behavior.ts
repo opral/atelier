@@ -66,8 +66,7 @@ const panelViewsEqual = (left: PanelState, right: PanelState): boolean =>
 export const DOCUMENT_SLOT_BEHAVIOR: CentralSlotBehavior = {
 	tabs: false,
 	homeKind: null,
-	canHost: (view) =>
-		isDocumentView(view) || view.kind === FILES_EXTENSION_KIND,
+	canHost: (view) => isDocumentView(view) || view.kind === FILES_EXTENSION_KIND,
 	normalize: (panel) => {
 		const activeEntry = activeEntryOf(panel);
 		if (!activeEntry || !DOCUMENT_SLOT_BEHAVIOR.canHost(activeEntry)) {
