@@ -8,6 +8,7 @@ import type { ExternalWriteReview } from "@/extension-runtime/external-write-rev
 import {
 	getExternalWriteReview,
 	getExternalWriteReviewData,
+	getPendingExternalWriteReviewPaths,
 	useExternalWriteReview,
 	useExternalWriteReviewData,
 } from "./external-write-review-history";
@@ -334,6 +335,95 @@ describe("getExternalWriteReview", () => {
 			expect(review?.beforeCommitId).toBe(beforeCommitId);
 			expect(review?.afterCommitId).toBe(afterCommitId);
 			await expectReviewData(lix, review, "turn 1 before", "turn 2 after");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("batches pending paths without changing added, resolved, stale, or duplicate-file behavior", async () => {
+		const lix = await openLix();
+		try {
+			await Promise.all([
+				writeFile(lix, "unchanged-file", "/docs/unchanged.md", "same"),
+				writeFile(lix, "cleared-file", "/docs/cleared.md", "before"),
+				writeFile(lix, "resolved-file", "/docs/resolved.md", "before"),
+				writeFile(lix, "stale-file", "/docs/stale.md", "before"),
+				writeFile(lix, "duplicate-file", "/docs/duplicate.md", "before"),
+			]);
+			const beforeCommitId = await activeCommitId(lix);
+			await Promise.all([
+				writeFile(lix, "added-file", "/docs/added.md", "added"),
+				writeFile(lix, "cleared-file", "/docs/cleared.md", "after"),
+				writeFile(lix, "resolved-file", "/docs/resolved.md", "after"),
+				writeFile(lix, "stale-file", "/docs/stale.md", "range after"),
+				writeFile(lix, "duplicate-file", "/docs/duplicate.md", "after"),
+			]);
+			const afterCommitId = await activeCommitId(lix);
+			await writeFile(lix, "stale-file", "/docs/stale.md", "current after");
+			const range = {
+				...agentRange({
+					id: "range-batched-paths",
+					beforeCommitId,
+					afterCommitId,
+				}),
+				clearedFileIds: ["cleared-file"],
+			};
+
+			const pendingPaths = await getPendingExternalWriteReviewPaths(
+				lix,
+				[
+					{ fileId: "added-file", path: "/docs/added.md" },
+					{ fileId: "unchanged-file", path: "/docs/unchanged.md" },
+					{ fileId: "cleared-file", path: "/docs/cleared.md" },
+					{ fileId: "resolved-file", path: "/docs/resolved.md" },
+					{ fileId: "stale-file", path: "/docs/stale.md" },
+					{ fileId: "duplicate-file", path: "/docs/duplicate.md" },
+					{ fileId: "duplicate-file", path: "/alternate/duplicate.md" },
+					{ fileId: "missing-file", path: "/docs/missing.md" },
+				],
+				[range],
+				new Set([agentTurnReviewId("resolved-file", ["range-batched-paths"])]),
+			);
+
+			expect([...pendingPaths].sort()).toEqual([
+				"/alternate/duplicate.md",
+				"/docs/added.md",
+				"/docs/duplicate.md",
+			]);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("uses global ancestry ordering when batching multiple pending ranges", async () => {
+		const lix = await openLix();
+		try {
+			const file = { fileId: "batched-multi-file", path: "/docs/multi.md" };
+			await writeFile(lix, file.fileId, file.path, "turn 1 before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, file.fileId, file.path, "turn 1 after");
+			const middleCommitId = await activeCommitId(lix);
+			await writeFile(lix, file.fileId, file.path, "turn 2 after");
+			const afterCommitId = await activeCommitId(lix);
+
+			const pendingPaths = await getPendingExternalWriteReviewPaths(
+				lix,
+				[file],
+				[
+					agentRange({
+						id: "a-later-range",
+						beforeCommitId: middleCommitId,
+						afterCommitId,
+					}),
+					agentRange({
+						id: "z-earlier-range",
+						beforeCommitId,
+						afterCommitId: middleCommitId,
+					}),
+				],
+			);
+
+			expect([...pendingPaths]).toEqual([file.path]);
 		} finally {
 			await lix.close();
 		}
