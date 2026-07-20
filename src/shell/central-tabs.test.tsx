@@ -342,21 +342,24 @@ describe("central tabs with a pinned home", () => {
 								data-active={tab.isActive ? "true" : undefined}
 								onClick={tab.select}
 							>
-								{tab.label}
-								{tab.close ? (
-									<span
-										data-testid={`host-close-${tab.label}`}
-										onClick={(event) => {
-											event.stopPropagation();
-											tab.close?.();
-										}}
-									/>
-								) : null}
+							{tab.label}
 							</button>
 						))}
+						{context.tabs.map((tab) =>
+							tab.close ? (
+								<button
+									key={`close-${tab.instanceId}`}
+									type="button"
+									aria-label={`Close ${tab.label}`}
+									data-testid={`host-close-${tab.label}`}
+									onClick={tab.close}
+								/>
+							) : null,
+						)}
 						{context.newTab ? (
 							<button
 								type="button"
+								aria-label="New tab"
 								data-testid="host-new-tab"
 								onClick={context.newTab}
 							/>
