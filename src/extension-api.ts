@@ -9,6 +9,17 @@ export type ExtensionManifest = {
 	readonly description?: string;
 	readonly fileExtensions?: readonly string[];
 	readonly multiInstance?: boolean;
+	/**
+	 * Panel sides this view may occupy. Defaults to the side panels; central
+	 * placement is reserved for document editors unless declared here.
+	 */
+	readonly placement?: readonly ("left" | "right" | "central")[];
+	/**
+	 * Excludes the view from the add-view menus. Hidden views stay mountable
+	 * programmatically — right for views opened only through navigation or
+	 * configuration (a folder view, a pinned home).
+	 */
+	readonly hidden?: boolean;
 };
 
 /** Stable ids for replacing Atelier's bundled extension views. */
@@ -37,6 +48,30 @@ export type AtelierDocumentOpenOptions = {
 	readonly state?: AtelierExtensionState;
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;
+	/**
+	 * Appends a new central tab instead of navigating the active tab in place.
+	 * Only meaningful when the host enabled `centralPanel.tabs`.
+	 */
+	readonly newTab?: boolean;
+};
+
+export type AtelierViewOpenOptions = {
+	readonly state?: AtelierExtensionState;
+	/**
+	 * Stable identity for this view instance. An open view with the same key is
+	 * activated (and its state updated) instead of opening a duplicate.
+	 */
+	readonly instanceKey?: string;
+	/** Appends a new central tab instead of navigating the active tab in place. */
+	readonly newTab?: boolean;
+	readonly focus?: boolean;
+	/** Target panel. Defaults to "central". */
+	readonly panel?: "left" | "right" | "central";
+};
+
+export type AtelierViewsApi = {
+	/** Opens (or activates) a registered extension view. */
+	open(extensionId: string, options?: AtelierViewOpenOptions): Promise<void>;
 };
 
 export type AtelierDocumentsApi = {
@@ -83,6 +118,18 @@ export type AtelierEvent =
 			panel: "left" | "right" | "central";
 	  }
 	| {
+			/**
+			 * The active central view changed (open, tab click, close, restore).
+			 * Hosts that own routing map this to a URL.
+			 */
+			type: "central_view_activated";
+			viewKind: string;
+			instanceId: string;
+			/** Set when the active view is a document editor. */
+			filePath: string | null;
+			state?: AtelierExtensionState;
+	  }
+	| {
 			type: "diff_opened";
 			reviewId: string;
 			filePath: string;
@@ -105,6 +152,7 @@ export type AtelierExtensionRuntime = {
 		readonly activeFileId: string | null;
 		readonly activeFilePath: string | null;
 	};
+	readonly views: AtelierViewsApi;
 	readonly branches: {
 		readonly activeId: string;
 	};

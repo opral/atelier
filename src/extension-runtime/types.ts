@@ -35,6 +35,11 @@ export interface ExtensionInstance {
 	readonly kind: ExtensionKind;
 	readonly isPending?: boolean;
 	/**
+	 * Pinned views (a configured central home) cannot be closed or dragged
+	 * away, and navigation never replaces them.
+	 */
+	readonly isPinned?: boolean;
+	/**
 	 * Persisted view state (serializable).
 	 */
 	readonly state?: ExtensionState;
@@ -60,6 +65,10 @@ export interface ExtensionDefinition {
 	readonly fileExtensions?: readonly string[];
 	/** Allow more than one view of this extension in the same panel. */
 	readonly multiInstance?: boolean;
+	/** Panel sides this view may occupy. Defaults to the side panels. */
+	readonly placement?: readonly PanelSide[];
+	/** Excludes the view from add-view menus (still mountable programmatically). */
+	readonly hidden?: boolean;
 	readonly mount: (args: {
 		atelier: ExtensionRuntime;
 		view: ExtensionView;

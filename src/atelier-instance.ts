@@ -4,6 +4,8 @@ import type {
 	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
+	AtelierViewOpenOptions,
+	AtelierViewsApi,
 } from "./extension-api";
 import { appendAgentTurnCommitRange } from "./shell/agent-turn-review-range";
 import {
@@ -41,7 +43,25 @@ export type AtelierDiffApi = {
 export type {
 	AtelierDocumentOpenOptions,
 	AtelierDocumentsApi,
+	AtelierViewOpenOptions,
+	AtelierViewsApi,
 } from "./extension-api";
+
+export type AtelierCentralPanelOptions = {
+	/**
+	 * Renders the tab strip above the central island and keeps multiple content
+	 * views open. Defaults to false: the central island is a single document
+	 * slot switched from the Files view.
+	 */
+	readonly tabs?: boolean;
+	/**
+	 * Extension pinned as the permanent first tab (like a browser's home
+	 * button). It cannot be closed and navigation never replaces it; closing the
+	 * last content tab lands on it. Requires `tabs: true` and an extension
+	 * registered with `placement` including "central".
+	 */
+	readonly home?: { readonly extensionId: string };
+};
 
 export type AtelierOptions = {
 	readonly lix: Lix;
@@ -64,6 +84,8 @@ export type AtelierOptions = {
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
 	/** Only expose review ranges tagged with this account or session id. */
 	readonly reviewRangeSessionId?: string;
+	/** Central panel behavior. Omit for the single-document-slot default. */
+	readonly centralPanel?: AtelierCentralPanelOptions;
 };
 
 export type AtelierInstance = {
@@ -71,6 +93,7 @@ export type AtelierInstance = {
 	readonly lix: Lix;
 	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
+	readonly views: AtelierViewsApi;
 };
 
 export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
@@ -93,7 +116,12 @@ type AtelierDocumentsCommand =
 	| { readonly kind: "start-new" }
 	| { readonly kind: "close-active" }
 	| { readonly kind: "close"; readonly path: string }
-	| { readonly kind: "close-all" };
+	| { readonly kind: "close-all" }
+	| {
+			readonly kind: "open-view";
+			readonly extensionId: string;
+			readonly options?: AtelierViewOpenOptions;
+	  };
 
 type QueuedAtelierDocumentsCommand = {
 	readonly command: AtelierDocumentsCommand;
@@ -135,6 +163,12 @@ export type AtelierDocumentsRuntimeBinding = {
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
 	readonly closeAll: () =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
+	readonly openView: (
+		extensionId: string,
+		options?: AtelierViewOpenOptions,
+	) =>
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
 };
@@ -226,6 +260,22 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 					kind: "close-all",
 				}),
 		},
+		views: {
+			open: (extensionId, viewOptions) => {
+				if (typeof extensionId !== "string" || extensionId.trim().length === 0) {
+					return Promise.reject(
+						new TypeError(
+							"atelier.views.open() requires a non-empty extension id.",
+						),
+					);
+				}
+				return enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "open-view",
+					extensionId,
+					...(viewOptions ? { options: viewOptions } : {}),
+				});
+			},
+		},
 	};
 	const configuration: AtelierConfiguration = {
 		sessionStateStore,
@@ -245,6 +295,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
 		...(options.reviewRangeSessionId !== undefined
 			? { reviewRangeSessionId: options.reviewRangeSessionId }
+			: {}),
+		...(options.centralPanel !== undefined
+			? { centralPanel: options.centralPanel }
 			: {}),
 	};
 	Object.defineProperty(instance, CONFIGURATION, {
@@ -418,6 +471,10 @@ async function runAtelierDocumentsCommand(
 			return binding.close(command.path);
 		case "close-all":
 			return binding.closeAll();
+		case "open-view":
+			return command.options
+				? binding.openView(command.extensionId, command.options)
+				: binding.openView(command.extensionId);
 	}
 }
 

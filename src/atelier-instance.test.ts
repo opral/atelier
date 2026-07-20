@@ -47,7 +47,7 @@ describe("createAtelier", () => {
 		expect(atelier.lix).toBe(lix);
 		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents"]);
+		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents", "views"]);
 		expect(getAtelierConfiguration(atelier)).toEqual(
 			expect.objectContaining({
 				extensions: [],
@@ -261,6 +261,9 @@ describe("createAtelier", () => {
 			closeAll: () => {
 				calls.push("close-all");
 			},
+			openView: (extensionId) => {
+				calls.push(`open-view:${extensionId}`);
+			},
 		};
 		const open = atelier.documents.open("/queued.md");
 		const startNew = atelier.documents.startNew();
@@ -301,6 +304,7 @@ describe("createAtelier", () => {
 			closeActive: vi.fn(),
 			close: vi.fn(),
 			closeAll: vi.fn(),
+			openView: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
@@ -329,6 +333,7 @@ describe("createAtelier", () => {
 			closeActive: vi.fn(),
 			close: vi.fn(),
 			closeAll: vi.fn(),
+			openView: vi.fn(),
 		};
 		const unbind = bindAtelierDocumentsRuntime(atelier, firstBinding, {
 			activePath: "/last.md",
@@ -344,6 +349,7 @@ describe("createAtelier", () => {
 			closeActive: vi.fn(),
 			close: vi.fn(),
 			closeAll: vi.fn(),
+			openView: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, secondBinding, {
 			activePath: "/last.md",
@@ -367,6 +373,7 @@ describe("createAtelier", () => {
 				closeActive: vi.fn(),
 				close: vi.fn(),
 				closeAll: vi.fn(),
+				openView: vi.fn(),
 			},
 			{
 				activePath: null,
@@ -402,6 +409,7 @@ describe("createAtelier", () => {
 				closeActive,
 				close: vi.fn(),
 				closeAll: vi.fn(),
+				openView: vi.fn(),
 			},
 			{ activePath: null, openPaths: [] },
 		);
@@ -432,6 +440,7 @@ describe("createAtelier", () => {
 				closeActive: vi.fn(),
 				close: vi.fn(),
 				closeAll: vi.fn(),
+				openView: vi.fn(),
 			},
 			{ activePath: null, openPaths: [] },
 		);

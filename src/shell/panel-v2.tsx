@@ -84,6 +84,7 @@ export function PanelV2({
 	dropId,
 	viewOverrides,
 	showTabBar = true,
+	tabBarExtraContent,
 }: PanelV2Props) {
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
@@ -333,7 +334,9 @@ export function PanelV2({
 				{showTabBar ? (
 					<TabBar
 						extraContent={
-							onAddView ? (
+							tabBarExtraContent !== undefined ? (
+								tabBarExtraContent
+							) : onAddView ? (
 								<AddViewMenu
 									side={side}
 									availableViews={availableViews}
@@ -364,8 +367,13 @@ export function PanelV2({
 										isActive={isActive}
 										isFocused={isFocused && isActive}
 										isPending={entry.isPending}
+										isPinned={entry.isPinned}
 										onClick={() => onSelectView(entry.instance)}
-										onClose={() => handleRemoveView(entry.instance)}
+										onClose={
+											entry.isPinned
+												? undefined
+												: () => handleRemoveView(entry.instance)
+										}
 									/>
 								);
 							})}
@@ -428,6 +436,8 @@ export type PanelV2Props = {
 	readonly viewOverrides?: ExtensionDefinition[];
 	/** Hide the tab strip (central editor switches files from the file list). */
 	readonly showTabBar?: boolean;
+	/** Replaces the default add-view menu at the end of the tab strip. */
+	readonly tabBarExtraContent?: ReactNode;
 };
 
 /** The "+" button lists views that are not already open in this panel. */
@@ -764,6 +774,7 @@ function SortableTab({
 	isActive,
 	isFocused,
 	isPending,
+	isPinned,
 	onClick,
 	onClose,
 }: SortableTabProps) {
@@ -776,6 +787,7 @@ function SortableTab({
 		isDragging,
 	} = useSortable({
 		id: instance,
+		disabled: isPinned,
 		data: {
 			type: "panel-tab",
 			panel: panelSide,
@@ -798,6 +810,7 @@ function SortableTab({
 			isActive={isActive}
 			isFocused={isFocused}
 			isPending={isPending}
+			isPinned={isPinned}
 			onClick={onClick}
 			onClose={onClose}
 			isDragging={isDragging}
@@ -844,6 +857,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 			isActive,
 			isFocused,
 			isPending,
+			isPinned,
 			onClick,
 			onClose,
 			isDragging,
@@ -857,6 +871,8 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 	) => {
 		const state = isActive ? (isFocused ? "focused" : "active") : "idle";
 		const { onClick: dragOnClick, ...restButtonProps } = buttonProps ?? {};
+		// An inactive pinned tab compacts to its icon, like a browser home button.
+		const isCompact = isPinned && !isActive;
 		return (
 			<button
 				type="button"
@@ -868,6 +884,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				data-focused={dataFocused}
 				data-view-instance={dataViewInstance}
 				data-view-key={dataViewKind}
+				data-pinned={isPinned ? "true" : undefined}
 				className={clsx(
 					tabBaseClasses,
 					tabStateClasses[state],
@@ -883,13 +900,16 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				>
 					<Icon className="size-3.25" />
 				</span>
-				<span
-					data-attr="panel-tab-select"
-					className={clsx("max-w-[10rem] truncate", isPending && "italic")}
-					title={label}
-				>
-					{label}
-				</span>
+				{isCompact ? null : (
+					<span
+						data-attr="panel-tab-select"
+						className={clsx("max-w-[10rem] truncate", isPending && "italic")}
+						title={label}
+					>
+						{label}
+					</span>
+				)}
+				{isPinned ? null : (
 				<span className="relative flex size-3.25 items-center justify-center">
 					{onClose ? (
 						<X
@@ -909,6 +929,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 						/>
 					) : null}
 				</span>
+				)}
 			</button>
 		);
 	},
@@ -922,6 +943,7 @@ export type PanelTabPreviewProps = {
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly isPending?: boolean;
+	readonly isPinned?: boolean;
 };
 
 export function PanelTabPreview(props: PanelTabPreviewProps) {

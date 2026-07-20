@@ -1,5 +1,5 @@
 import { useCallback, type ReactNode } from "react";
-import { FilePlus } from "lucide-react";
+import { FilePlus, Plus } from "lucide-react";
 import type {
 	PanelState,
 	PanelSide,
@@ -18,6 +18,8 @@ type CentralPanelProps = {
 	readonly onFocusPanel: (side: PanelSide) => void;
 	readonly onFinalizePendingView?: (key: string) => void;
 	readonly emptyState?: ReactNode;
+	/** Renders the central tab strip (browser-style tabs mode). */
+	readonly showTabBar?: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export function CentralPanel({
 	onFinalizePendingView,
 	onCreateNewFile,
 	emptyState: emptyStateOverride,
+	showTabBar = false,
 }: CentralPanelProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
@@ -79,8 +82,33 @@ export function CentralPanel({
 			onActiveViewInteraction={finalizePendingIfNeeded}
 			emptyStatePlaceholder={emptyState}
 			dropId="central-panel"
-			showTabBar={false}
+			showTabBar={showTabBar}
+			tabBarExtraContent={
+				showTabBar && onCreateNewFile ? (
+					<NewTabButton onCreateNewFile={onCreateNewFile} />
+				) : undefined
+			}
 		/>
+	);
+}
+
+/** The tab-strip "+" — opens a fresh document in its own tab. */
+function NewTabButton({
+	onCreateNewFile,
+}: {
+	onCreateNewFile: () => void | Promise<void>;
+}) {
+	return (
+		<button
+			type="button"
+			title="New tab"
+			aria-label="New tab"
+			data-attr="central-new-tab"
+			onClick={() => void onCreateNewFile()}
+			className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+		>
+			<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
+		</button>
 	);
 }
 
