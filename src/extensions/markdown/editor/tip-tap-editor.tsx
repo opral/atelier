@@ -52,11 +52,11 @@ type TipTapEditorProps = {
 type MarkdownFileDelivery = {
 	readonly data: unknown;
 	readonly path: string;
-	readonly changeId: string | null;
-	readonly originKey: unknown;
+	readonly change_id: string | null;
+	readonly origin_key: unknown;
 };
 
-type MarkdownFileRow = Omit<MarkdownFileDelivery, "originKey">;
+type MarkdownFileRow = Omit<MarkdownFileDelivery, "origin_key">;
 
 type ResolvedMarkdownFile = {
 	readonly fileId: string;
@@ -195,7 +195,7 @@ function TipTapEditorFileContent({
 				.select([
 					"file.data as data",
 					"file.path as path",
-					"file.lixcol_change_id as changeId",
+					"file.lixcol_change_id as change_id",
 				])
 				.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
 				.where("file.id", "=", activeFileId),
@@ -242,7 +242,7 @@ function useMarkdownFileOrigin(
 		readonly changeId: string | null;
 		readonly error: unknown;
 	} | null>(null);
-	const changeId = sourceFile?.changeId ?? null;
+	const changeId = sourceFile?.change_id ?? null;
 
 	useEffect(() => {
 		let closed = false;
@@ -252,7 +252,7 @@ function useMarkdownFileOrigin(
 			setResolvedSourceFile({
 				fileId,
 				changeId,
-				delivery: { ...sourceFile, originKey: cachedOrigin.originKey },
+				delivery: { ...sourceFile, origin_key: cachedOrigin.originKey },
 			});
 			setLookupError(null);
 			return;
@@ -262,7 +262,7 @@ function useMarkdownFileOrigin(
 			setResolvedSourceFile({
 				fileId,
 				changeId: null,
-				delivery: { ...sourceFile, originKey: null },
+				delivery: { ...sourceFile, origin_key: null },
 			});
 			setLookupError(null);
 			return;
@@ -271,7 +271,7 @@ function useMarkdownFileOrigin(
 			try {
 				const scopedChange = await qb(lix)
 					.selectFrom("lix_change")
-					.select("origin_key as originKey")
+					.select("origin_key")
 					.where("id", "=", changeId)
 					.where("file_id", "=", fileId)
 					.executeTakeFirst();
@@ -279,14 +279,14 @@ function useMarkdownFileOrigin(
 					scopedChange ??
 					(await qb(lix)
 						.selectFrom("lix_change")
-						.select("origin_key as originKey")
+						.select("origin_key")
 						.where("id", "=", changeId)
 						.executeTakeFirst());
 				if (!closed) {
 					const resolvedOrigin = {
 						fileId,
 						changeId,
-						originKey: change?.originKey ?? null,
+						originKey: change?.origin_key ?? null,
 					};
 					resolvedOriginRef.current = resolvedOrigin;
 					setResolvedSourceFile({
@@ -294,7 +294,7 @@ function useMarkdownFileOrigin(
 						changeId,
 						delivery: {
 							...sourceFile,
-							originKey: resolvedOrigin.originKey,
+							origin_key: resolvedOrigin.originKey,
 						},
 					});
 					setLookupError(null);
@@ -314,13 +314,10 @@ function useMarkdownFileOrigin(
 	if (!resolvedSourceFile || resolvedSourceFile.fileId !== fileId) {
 		return undefined;
 	}
-	// A deleted active file keeps its last resolved delivery. A present file must
-	// match both keys, so an in-flight origin lookup never exposes another file
-	// or an older revision under the current editor boundary.
-	if (!sourceFile || resolvedSourceFile.changeId === changeId) {
-		return resolvedSourceFile.delivery;
-	}
-	return undefined;
+	// Keep the last delivery for the same file mounted while a newer revision's
+	// origin resolves. Otherwise the editor remounts with that revision as its
+	// initial content, bypassing external-sync origin suppression.
+	return resolvedSourceFile.delivery;
 }
 
 function TipTapEditorSourceBoundary({
@@ -662,7 +659,7 @@ function TipTapEditorLoadedContent({
 			syncState.pendingExternalMarkdown = null;
 			return;
 		}
-		if (sourceFile.originKey === editorOriginKey) {
+		if (sourceFile.origin_key === editorOriginKey) {
 			return;
 		}
 		if (currentMarkdown !== syncState.lastCleanPersistedMarkdown) {
