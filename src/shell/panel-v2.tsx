@@ -848,7 +848,7 @@ function SortableTab({
 }
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border border-transparent px-3 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
+	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border px-3 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
@@ -857,7 +857,7 @@ const tabStateClasses = {
 		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	active:
 		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
-	idle: "bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+	idle: "border-transparent bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {

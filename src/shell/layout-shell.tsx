@@ -2084,6 +2084,14 @@ function LayoutShellLoadedContent({
 					removedIndex === -1 ? undefined : currentPanel.views[removedIndex];
 				if (!removedView) continue;
 				if (removedView.isPinned) return;
+				// Closing the last chip of a side panel closes the island, not the
+				// view — the view survives so reopening the panel restores it (and
+				// canonicalization would re-ensure a Files view anyway).
+				if (side !== "central" && currentPanel.views.length === 1) {
+					updateSidePanelSize(side, 0);
+					(side === "left" ? leftPanelRef : rightPanelRef).current?.collapse();
+					return;
+				}
 				const wasActiveCentralDocument =
 					side === "central" &&
 					currentPanel.activeInstance === removedView.instance &&
@@ -2138,6 +2146,7 @@ function LayoutShellLoadedContent({
 			leftPanel,
 			rightPanel,
 			setPanelState,
+			updateSidePanelSize,
 		],
 	);
 
