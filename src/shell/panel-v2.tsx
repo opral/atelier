@@ -324,69 +324,67 @@ export function PanelV2({
 			onClickCapture={() => onFocusPanel(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
-			{/* A host-rendered strip floats on the app background above the
-			    island rather than inside its chrome. */}
+			{/* Tab rows float on the app background above the island — "its own
+			    chip group over its own island" — for both the built-in strip and
+			    a host-rendered one. */}
 			{showTabBar && customTabStrip !== undefined ? (
 				<div data-atelier-part="custom-tab-strip">{customTabStrip}</div>
+			) : showTabBar ? (
+				<TabBar
+					extraContent={
+						tabBarExtraContent !== undefined ? (
+							tabBarExtraContent
+						) : onAddView ? (
+							<AddViewMenu
+								side={side}
+								availableViews={availableViews}
+								onAddView={handleMenuAddView}
+								onSelectedViewSettled={focusPendingAddedTab}
+							/>
+						) : null
+					}
+				>
+					<SortableContext
+						id={`panel-${side}`}
+						items={panel.views.map((entry) => entry.instance)}
+						strategy={horizontalListSortingStrategy}
+					>
+						{panel.views.map((entry) => {
+							const view = resolveViewDefinition(entry.kind);
+							if (!view) return null;
+							const isActive = activeInstance === entry.instance;
+							const label = resolveLabel(view, entry, tabLabel);
+							return (
+								<SortableTab
+									key={entry.instance}
+									instance={entry.instance}
+									panelSide={side}
+									kind={entry.kind}
+									icon={view.icon}
+									label={label}
+									isActive={isActive}
+									isFocused={isFocused && isActive}
+									isPending={entry.isPending}
+									isPinned={entry.isPinned}
+									onClick={() => onSelectView(entry.instance)}
+									onClose={
+										entry.isPinned
+											? undefined
+											: () => handleRemoveView(entry.instance)
+									}
+								/>
+							);
+						})}
+					</SortableContext>
+				</TabBar>
 			) : null}
+
 			<div
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]",
 					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
 				)}
 			>
-				{/* Most islands render the shared panel-header-height tab row; the central
-				    editor hides it and switches files from the left file list. */}
-				{showTabBar && customTabStrip === undefined ? (
-					<TabBar
-						extraContent={
-							tabBarExtraContent !== undefined ? (
-								tabBarExtraContent
-							) : onAddView ? (
-								<AddViewMenu
-									side={side}
-									availableViews={availableViews}
-									onAddView={handleMenuAddView}
-									onSelectedViewSettled={focusPendingAddedTab}
-								/>
-							) : null
-						}
-					>
-						<SortableContext
-							id={`panel-${side}`}
-							items={panel.views.map((entry) => entry.instance)}
-							strategy={horizontalListSortingStrategy}
-						>
-							{panel.views.map((entry) => {
-								const view = resolveViewDefinition(entry.kind);
-								if (!view) return null;
-								const isActive = activeInstance === entry.instance;
-								const label = resolveLabel(view, entry, tabLabel);
-								return (
-									<SortableTab
-										key={entry.instance}
-										instance={entry.instance}
-										panelSide={side}
-										kind={entry.kind}
-										icon={view.icon}
-										label={label}
-										isActive={isActive}
-										isFocused={isFocused && isActive}
-										isPending={entry.isPending}
-										isPinned={entry.isPinned}
-										onClick={() => onSelectView(entry.instance)}
-										onClose={
-											entry.isPinned
-												? undefined
-												: () => handleRemoveView(entry.instance)
-										}
-									/>
-								);
-							})}
-						</SortableContext>
-					</TabBar>
-				) : null}
-
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
 						{panel.views.map((entry) => {
