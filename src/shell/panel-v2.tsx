@@ -839,14 +839,15 @@ function SortableTab({
 }
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] px-2.25 text-xs font-semibold transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]";
+	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border border-transparent px-2.25 text-xs font-semibold transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
-	// The focused chip marks the view receiving keyboard input.
+	// The visible view's chip always reads as a white card over the canvas;
+	// keyboard focus adds a ring on top of the same look.
 	focused:
-		"bg-[var(--color-bg-selection-current)] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-selection-current)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	active:
-		"bg-[var(--color-bg-hover)] text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	idle: "bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
 } as const;
 
