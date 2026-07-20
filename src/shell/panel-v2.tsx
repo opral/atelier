@@ -463,7 +463,7 @@ function AddViewMenu({
 	const selectedViewRef = useRef(false);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const isEmptyStateTrigger = variant === "empty-state";
-	if (availableViews.length === 0) return null;
+	if (isEmptyStateTrigger && availableViews.length === 0) return null;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -505,19 +505,28 @@ function AddViewMenu({
 				}}
 				className="w-44 border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg"
 			>
-				{availableViews.map((ext) => (
+				{availableViews.length === 0 ? (
 					<DropdownMenuItem
-						key={ext.kind}
-						onSelect={() => {
-							selectedViewRef.current = true;
-							onAddView(ext.kind);
-						}}
-						className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
+						disabled
+						className="px-3 py-1.5 text-sm text-[var(--color-text-tertiary)]"
 					>
-						<ext.icon className="h-4 w-4" />
-						<span>{ext.label}</span>
+						No views available
 					</DropdownMenuItem>
-				))}
+				) : (
+					availableViews.map((ext) => (
+						<DropdownMenuItem
+							key={ext.kind}
+							onSelect={() => {
+								selectedViewRef.current = true;
+								onAddView(ext.kind);
+							}}
+							className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
+						>
+							<ext.icon className="h-4 w-4" />
+							<span>{ext.label}</span>
+						</DropdownMenuItem>
+					))
+				)}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
