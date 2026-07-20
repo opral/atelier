@@ -118,6 +118,24 @@ async function writeMarkdownFileWithOrigin(
 	);
 }
 
+async function readMarkdownFileOrigin(
+	lix: Lix,
+	fileId: string,
+): Promise<unknown> {
+	const file = await qb(lix)
+		.selectFrom("lix_file")
+		.select("lixcol_change_id as change_id")
+		.where("id", "=", fileId)
+		.executeTakeFirstOrThrow();
+	const change = await qb(lix)
+		.selectFrom("lix_change")
+		.select("origin_key")
+		.where("id", "=", file.change_id)
+		.where("file_id", "=", fileId)
+		.executeTakeFirstOrThrow();
+	return change.origin_key;
+}
+
 async function decodeFileMarkdown(lix: Lix, fileId: string): Promise<string> {
 	const row = await qb(lix)
 		.selectFrom("lix_file")
@@ -1561,6 +1579,29 @@ test("ignores same-origin stale markdown autosave echoes", async () => {
 	const editorNode = screen.getByTestId("tiptap-editor");
 	expect(editorNode).toHaveTextContent("Local newer");
 	expect(editorNode).not.toHaveTextContent("Stale saved copy");
+});
+
+test("ignores clean same-origin markdown updates", async () => {
+	const originKey = "atelier.markdown-editor:same-origin-clean-update";
+	const fileId = "file_same_origin_clean_update";
+	const { lix } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+		originKey,
+	});
+
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Same-origin replacement\n",
+		originKey,
+	);
+	expect(await readMarkdownFileOrigin(lix, fileId)).toBe(originKey);
+	await settleMarkdownObserver();
+
+	const editorNode = screen.getByTestId("tiptap-editor");
+	expect(editorNode).toHaveTextContent("Initial");
+	expect(editorNode).not.toHaveTextContent("Same-origin replacement");
 });
 
 test("same-origin echo matching current markdown marks editor clean", async () => {
