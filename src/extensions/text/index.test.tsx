@@ -161,6 +161,89 @@ describe("TextView", () => {
 		utils!.unmount();
 		await lix.close();
 	});
+
+	test("keeps a self-originated delivery from replacing the local editor", async () => {
+		const lix = await openLix();
+		const executeSpy = vi.spyOn(lix, "execute");
+		const scopedOriginReadCount = () =>
+			executeSpy.mock.calls.filter(([statement]) => {
+				const normalized = String(statement).toLowerCase();
+				return (
+					normalized.includes("lix_change") && normalized.includes("file_id")
+				);
+			}).length;
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: "self-origin-file",
+				path: "/notes.txt",
+				data: new TextEncoder().encode("initial"),
+			})
+			.execute();
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<TextView
+							atelier={createRuntime(lix)}
+							fileId="self-origin-file"
+							isPanelFocused={false}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		const content = await waitFor(() => {
+			const element =
+				utils!.container.querySelector<HTMLElement>(".cm-content");
+			if (!element) throw new Error("Editor not mounted");
+			return element;
+		});
+		const view = EditorView.findFromDOM(content);
+		if (!view) throw new Error("Editor view not found");
+		await waitFor(() => expect(scopedOriginReadCount()).toBeGreaterThan(0));
+		const originReadsBeforeOwnWrite = scopedOriginReadCount();
+		act(() => {
+			view.dispatch({
+				changes: { from: 0, to: view.state.doc.length, insert: "user edit" },
+			});
+		});
+		const originKey = await waitFor(async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file as file")
+				.innerJoin("lix_change as change", "change.id", "file.lixcol_change_id")
+				.select("change.origin_key")
+				.where("file.id", "=", "self-origin-file")
+				.executeTakeFirst();
+			if (typeof row?.origin_key !== "string") {
+				throw new Error("Text editor origin was not persisted yet");
+			}
+			return row.origin_key;
+		});
+		await waitFor(() =>
+			expect(scopedOriginReadCount()).toBeGreaterThan(
+				originReadsBeforeOwnWrite,
+			),
+		);
+		const originReadsAfterOwnWrite = scopedOriginReadCount();
+
+		await act(async () => {
+			await lix.execute(
+				"UPDATE lix_file SET data = ? WHERE id = ?",
+				[new TextEncoder().encode("same-origin external"), "self-origin-file"],
+				{ originKey },
+			);
+		});
+		await waitFor(() =>
+			expect(scopedOriginReadCount()).toBeGreaterThan(originReadsAfterOwnWrite),
+		);
+		expect(view.state.doc.toString()).toBe("user edit");
+
+		utils!.unmount();
+		executeSpy.mockRestore();
+		await lix.close();
+	});
 });
 
 function createRuntime(
