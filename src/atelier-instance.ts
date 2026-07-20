@@ -71,12 +71,6 @@ export type AtelierInstance = {
 	readonly lix: Lix;
 	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
-	readonly branches: {
-		readonly activeId: () => string | null;
-		readonly subscribe: (listener: () => void) => () => void;
-		readonly create: (name: string) => Promise<string>;
-		readonly switch: (branchId: string) => Promise<void>;
-	};
 };
 
 export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
@@ -156,6 +150,7 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
+	const usesDefaultBranchSession = options.branchSession === undefined;
 	const branchSession =
 		options.branchSession ?? createLixBranchSession(options.lix);
 	const sessionStateStore =
@@ -184,7 +179,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 				return openDiff(
 					options.lix,
 					scopedDiffOptions,
-					await resolveBranchSessionId(branchSession),
+					usesDefaultBranchSession
+						? await options.lix.activeBranchId()
+						: await resolveBranchSessionId(branchSession),
 				);
 			},
 		},
@@ -228,12 +225,6 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 				enqueueAtelierDocumentsCommand(documentsRuntime, {
 					kind: "close-all",
 				}),
-		},
-		branches: {
-			activeId: () => branchSession.getSnapshot(),
-			subscribe: (listener) => branchSession.subscribe(listener),
-			create: (name) => branchSession.createBranch(name),
-			switch: (branchId) => branchSession.switchBranch(branchId),
 		},
 	};
 	const configuration: AtelierConfiguration = {

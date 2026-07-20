@@ -43,8 +43,6 @@ export type AtelierReviewStatusStore = {
 export type AtelierBranchSession = {
 	getSnapshot(): string | null;
 	subscribe(listener: () => void): () => void;
-	createBranch(name: string): Promise<string>;
-	switchBranch(branchId: string): Promise<void>;
 };
 
 export function createMemorySessionStateStore(
@@ -98,8 +96,9 @@ export function createLixBranchSession(
 	initialBranchId: string | null = null,
 ): AtelierBranchSession {
 	let branchId = initialBranchId;
-	let branchChangeVersion = 0;
 	const listeners = new Set<() => void>();
+	let startObserving: (() => void) | undefined;
+	let stopObserving: (() => void) | undefined;
 	const publish = (nextBranchId: string) => {
 		if (branchId === nextBranchId) return;
 		branchId = nextBranchId;
@@ -109,17 +108,56 @@ export function createLixBranchSession(
 	if (!branchId) {
 		const activeBranchId = (lix as Partial<Lix>).activeBranchId;
 		if (typeof activeBranchId === "function") {
-			const initialVersion = branchChangeVersion;
-			void activeBranchId
-				.call(lix)
-				.then((resolvedBranchId) => {
-					if (branchChangeVersion === initialVersion) {
-						publish(resolvedBranchId);
-					}
-				})
-				.catch((error: unknown) => {
+			let refreshVersion = 0;
+			const refreshActiveBranch = async () => {
+				const version = ++refreshVersion;
+				try {
+					const resolvedBranchId = await activeBranchId.call(lix);
+					if (version === refreshVersion) publish(resolvedBranchId);
+				} catch (error) {
+					if (version !== refreshVersion || isLixWorkerClosed(error)) return;
 					console.error("Failed to resolve the active Atelier branch", error);
-				});
+				}
+			};
+			void refreshActiveBranch();
+			const observe = (lix as Partial<Lix>).observe;
+			if (typeof observe === "function") {
+				startObserving = () => {
+					if (stopObserving) return;
+					const events = observe.call(
+						lix,
+						"SELECT value FROM lix_key_value WHERE key = $1",
+						["lix_workspace_branch_id"],
+					);
+					let observing = true;
+					stopObserving = () => {
+						if (!observing) return;
+						observing = false;
+						stopObserving = undefined;
+						events.close();
+					};
+					void (async () => {
+						try {
+							while (await events.next()) {
+								if (!observing) return;
+								await refreshActiveBranch();
+							}
+						} catch (error) {
+							if (!observing || isLixWorkerClosed(error)) return;
+							console.error(
+								"Failed to observe the active Atelier branch",
+								error,
+							);
+						} finally {
+							if (observing) {
+								observing = false;
+								stopObserving = undefined;
+								events.close();
+							}
+						}
+					})();
+				};
+			}
 		}
 	}
 
@@ -127,20 +165,22 @@ export function createLixBranchSession(
 		getSnapshot: () => branchId,
 		subscribe: (listener) => {
 			listeners.add(listener);
-			return () => listeners.delete(listener);
-		},
-		createBranch: async (name) => {
-			const branch = await lix.createBranch({ name });
-			branchChangeVersion += 1;
-			publish(branch.id);
-			return branch.id;
-		},
-		switchBranch: async (nextBranchId) => {
-			const receipt = await lix.switchBranch({ branchId: nextBranchId });
-			branchChangeVersion += 1;
-			publish(receipt.branchId);
+			startObserving?.();
+			return () => {
+				listeners.delete(listener);
+				if (listeners.size === 0) stopObserving?.();
+			};
 		},
 	};
+}
+
+function isLixWorkerClosed(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		error.code === "LIX_ERROR_CLOSED"
+	);
 }
 
 function jsonEqual(left: unknown, right: unknown): boolean {

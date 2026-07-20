@@ -50,7 +50,6 @@ export type {
 	AtelierExtensionState,
 	AtelierExtensionView,
 	AtelierMountedExtension,
-	AtelierRevisionSelection,
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
 } from "./extension-api";

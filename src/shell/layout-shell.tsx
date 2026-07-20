@@ -33,16 +33,6 @@ import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { StatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
-import type {
-	CheckpointDiff,
-	CheckpointDiffFile,
-	CheckpointDiffVisibleFile,
-} from "@/extension-runtime/checkpoint-diff";
-import {
-	hasHistoricalEditorRevisionState,
-	normalizeEditorRevisionState,
-	stripEditorRevisionState,
-} from "@/extension-runtime/editor-revision-state";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -129,7 +119,6 @@ import {
 	type AtelierDocumentsRuntimeCompletion,
 	type AtelierInstance,
 } from "../atelier-instance";
-import { resolveCheckpointDiffForBranch } from "./checkpoint-diff";
 import {
 	reconcileCurrentFileViewPanel,
 	reconcileCurrentFileViews,
@@ -478,135 +467,6 @@ export const syncPanelGroupLayout = (
 	group.setLayout(expected);
 	return true;
 };
-
-async function readCurrentLixFileIds(lix: Lix): Promise<ReadonlySet<string>> {
-	const rows = await qb(lix).selectFrom("lix_file").select(["id"]).execute();
-	return new Set(rows.map((row) => String(row.id)));
-}
-
-function transitionCheckpointEditorRevisionPanel(args: {
-	readonly panel: PanelState;
-	readonly previousDiff: CheckpointDiff | null;
-	readonly nextDiff: CheckpointDiff | null;
-	readonly currentFileIds: ReadonlySet<string>;
-}): PanelState {
-	const views: ExtensionInstance[] = [];
-	let changed = false;
-	for (const view of args.panel.views) {
-		let nextView = view;
-		if (isCheckpointEditorRevisionView(nextView, args.previousDiff)) {
-			const fileId =
-				typeof nextView.state?.fileId === "string"
-					? nextView.state.fileId
-					: null;
-			if (!fileId || !args.currentFileIds.has(fileId)) {
-				changed = true;
-				continue;
-			}
-			changed = true;
-			nextView = {
-				...nextView,
-				state: stripEditorRevisionState(nextView.state),
-			};
-		}
-		const nextDiff = args.nextDiff;
-		const nextDiffFile = checkpointDiffFileForView(nextView, nextDiff);
-		if (nextDiff && nextDiffFile) {
-			changed = true;
-			nextView = {
-				...nextView,
-				state: {
-					...(stripEditorRevisionState(nextView.state) ?? {}),
-					...checkpointRevisionState(nextDiff, nextDiffFile),
-				},
-			};
-		}
-		views.push(nextView);
-	}
-	if (!changed) return args.panel;
-	const activeInstance = views.some(
-		(view) => view.instance === args.panel.activeInstance,
-	)
-		? args.panel.activeInstance
-		: (views[views.length - 1]?.instance ?? null);
-	return { views, activeInstance };
-}
-
-function checkpointDiffFileForView(
-	view: ExtensionInstance,
-	checkpointDiff: CheckpointDiff | null,
-): CheckpointDiffVisibleFile | null {
-	if (!checkpointDiff) return null;
-	const fileId =
-		typeof view.state?.fileId === "string" ? view.state.fileId : "";
-	return (
-		checkpointDiffEditorFiles(checkpointDiff).find(
-			(file) => file.fileId === fileId,
-		) ?? null
-	);
-}
-
-function checkpointChangedFileForVisibleFile(
-	checkpointDiff: CheckpointDiff,
-	visibleFile: CheckpointDiffVisibleFile,
-): CheckpointDiffFile | null {
-	return (
-		checkpointDiff.files.find(
-			(file) =>
-				file.fileId === visibleFile.fileId ||
-				file.beforeFileId === visibleFile.fileId ||
-				file.afterFileId === visibleFile.fileId ||
-				file.beforePath === visibleFile.path ||
-				file.afterPath === visibleFile.path,
-		) ?? null
-	);
-}
-
-function checkpointRevisionState(
-	checkpointDiff: CheckpointDiff,
-	visibleFile: CheckpointDiffVisibleFile,
-): ExtensionState {
-	const changedFile = checkpointChangedFileForVisibleFile(
-		checkpointDiff,
-		visibleFile,
-	);
-	return {
-		beforeCommitId: checkpointDiff.beforeCommitId,
-		afterCommitId: checkpointDiff.afterIsActiveHead
-			? null
-			: checkpointDiff.afterCommitId,
-		beforeFileId: changedFile?.beforeFileId ?? visibleFile.fileId,
-		afterFileId: changedFile?.afterFileId ?? visibleFile.fileId,
-	};
-}
-
-function isCheckpointEditorRevisionView(
-	view: ExtensionInstance,
-	checkpointDiff: CheckpointDiff | null,
-): boolean {
-	if (!checkpointDiff || !hasHistoricalEditorRevisionState(view.state)) {
-		return false;
-	}
-	const fileId =
-		typeof view.state?.fileId === "string" ? view.state.fileId : "";
-	const revision = normalizeEditorRevisionState(view.state);
-	const afterCommitId = checkpointDiff.afterIsActiveHead
-		? null
-		: checkpointDiff.afterCommitId;
-	return (
-		revision.beforeCommitId === checkpointDiff.beforeCommitId &&
-		revision.afterCommitId === afterCommitId &&
-		checkpointDiffEditorFiles(checkpointDiff).some(
-			(file) => file.fileId === fileId,
-		)
-	);
-}
-
-function checkpointDiffEditorFiles(
-	checkpointDiff: CheckpointDiff,
-): readonly CheckpointDiffVisibleFile[] {
-	return checkpointDiff.visibleFiles ?? checkpointDiff.files;
-}
 
 const DEFAULT_PANEL_FALLBACK_SIZES = {
 	left: 20,
@@ -1251,10 +1111,6 @@ function LayoutShellLoadedContent({
 		collapseSide: Exclude<PanelSide, "central"> | null;
 		focusCentral: boolean;
 	} | null>(null);
-	const [checkpointDiff, setCheckpointDiff] = useState<CheckpointDiff | null>(
-		null,
-	);
-	const checkpointDiffRef = useRef<CheckpointDiff | null>(null);
 	const newFileDraftHandlersRef = useRef(
 		new Map<string, NewFileDraftHandlerRegistration>(),
 	);
@@ -1440,7 +1296,7 @@ function LayoutShellLoadedContent({
 		],
 	);
 	resolveDiffReviewRef.current = resolveDiffReview;
-	const isReviewMode = Boolean(checkpointDiff) || openExternalReviewCount > 0;
+	const isReviewMode = openExternalReviewCount > 0;
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -1606,54 +1462,6 @@ function LayoutShellLoadedContent({
 			updateWorkspace,
 		],
 	);
-
-	const transitionCheckpointEditorRevisions = useCallback(
-		(args: {
-			readonly previousDiff: CheckpointDiff | null;
-			readonly nextDiff: CheckpointDiff | null;
-		}) => {
-			void (async () => {
-				const currentWorkspaceFileIds = args.previousDiff
-					? await readCurrentLixFileIds(lix)
-					: new Set<string>();
-				const transitionPanel =
-					(side: PanelSide) =>
-					(panel: PanelState): PanelState =>
-						normalizePanelForDocumentSlot(
-							side,
-							transitionCheckpointEditorRevisionPanel({
-								panel,
-								previousDiff: args.previousDiff,
-								nextDiff: args.nextDiff,
-								currentFileIds: currentWorkspaceFileIds,
-							}),
-						);
-				updateWorkspace((current) => {
-					const panels = {
-						left: transitionPanel("left")(current.panels.left),
-						central: transitionPanel("central")(current.panels.central),
-						right: transitionPanel("right")(current.panels.right),
-					};
-					return panelsStructurallyEqual(current.panels, panels)
-						? current
-						: { ...current, panels };
-				});
-			})().catch((error: unknown) => {
-				console.error("Failed to update checkpoint revision state", error);
-			});
-		},
-		[lix, updateWorkspace],
-	);
-
-	const clearCheckpointDiff = useCallback(() => {
-		const previousDiff = checkpointDiffRef.current;
-		checkpointDiffRef.current = null;
-		setCheckpointDiff(null);
-		transitionCheckpointEditorRevisions({
-			previousDiff,
-			nextDiff: null,
-		});
-	}, [transitionCheckpointEditorRevisions]);
 
 	const ensurePanelExpanded = useCallback(
 		(side: PanelSide) => {
@@ -1930,20 +1738,6 @@ function LayoutShellLoadedContent({
 		[openResolvedFileView],
 	);
 
-	const showCheckpointDiff = useCallback(
-		async (branchId: string) => {
-			const previousDiff = checkpointDiffRef.current;
-			const nextDiff = await resolveCheckpointDiffForBranch({ lix, branchId });
-			checkpointDiffRef.current = nextDiff;
-			setCheckpointDiff(nextDiff);
-			transitionCheckpointEditorRevisions({
-				previousDiff,
-				nextDiff,
-			});
-		},
-		[lix, transitionCheckpointEditorRevisions],
-	);
-
 	const resolveAndOpenFile = useCallback(
 		async ({
 			panel,
@@ -1991,29 +1785,7 @@ function LayoutShellLoadedContent({
 			if (!normalizedPath) {
 				throw new Error(`Invalid workspace file path: ${filePath}`);
 			}
-			const requestedState = withoutDocumentIdentity(options.state);
-			const checkpoint = checkpointDiffRef.current;
-			const checkpointFile = checkpoint
-				? checkpointDiffEditorFiles(checkpoint).find(
-						(file) => file.path === normalizedPath,
-					)
-				: undefined;
-			if (checkpoint && checkpointFile) {
-				openResolvedFileView({
-					panel: "central",
-					fileId: checkpointFile.fileId,
-					filePath: normalizedPath,
-					state: {
-						...(requestedState ?? {}),
-						...checkpointRevisionState(checkpoint, checkpointFile),
-					},
-					focus: options.focus ?? true,
-					documentOrigin: options.documentOrigin ?? "existing",
-				});
-				return normalizedPath;
-			}
-
-			const state = requestedState;
+			const state = withoutDocumentIdentity(options.state);
 			const historicalCommitIds = [
 				typeof state?.sourceCommitId === "string" ? state.sourceCommitId : null,
 				typeof state?.afterCommitId === "string" ? state.afterCommitId : null,
@@ -2785,13 +2557,6 @@ function LayoutShellLoadedContent({
 			},
 			branches: {
 				activeId: activeBranchId,
-				create: effectiveAtelierInstance.branches.create,
-				switch: effectiveAtelierInstance.branches.switch,
-			},
-			revisions: {
-				current: checkpointDiff ? { branchId: checkpointDiff.branchId } : null,
-				show: showCheckpointDiff,
-				clear: clearCheckpointDiff,
 			},
 			reviews: {
 				resolvedReviewIds: privateResolvedReviewIds,
@@ -2808,17 +2573,12 @@ function LayoutShellLoadedContent({
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
-			checkpointDiff,
-			showCheckpointDiff,
-			clearCheckpointDiff,
 			handleAcceptExternalWriteReview,
 			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
 			effectiveAtelierInstance.documents,
 			activeCentralFileId,
 			activeDocumentPath,
-			effectiveAtelierInstance.branches.switch,
-			effectiveAtelierInstance.branches.create,
 			lix,
 			privateResolvedReviewIds,
 			reviewRangeSessionId,
@@ -2942,7 +2702,7 @@ function LayoutShellLoadedContent({
 				<TopBar
 					activeFileName={activeFileName}
 					isReadOnly={isHostReadOnly}
-					isReviewingCheckpoint={isReviewMode}
+					isReviewing={isReviewMode}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}

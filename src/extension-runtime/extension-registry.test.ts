@@ -66,22 +66,22 @@ describe("findFileHandlerExtension", () => {
 
 describe("buildExtensionRegistry", () => {
 	test("lets a host registration replace a built-in with the same id", () => {
-		const historyOverride = {
+		const filesOverride = {
 			...baseExtension,
-			kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
-			label: "Host History",
+			kind: ATELIER_BUILTIN_EXTENSION_IDS.files,
+			label: "Host Files",
 		};
 
-		const registry = buildExtensionRegistry([historyOverride], []);
+		const registry = buildExtensionRegistry([filesOverride], []);
 
-		expect(
-			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.history),
-		).toBe(historyOverride);
+		expect(registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.files)).toBe(
+			filesOverride,
+		);
 		expect(
 			registry.visibleExtensions.find(
-				(extension) => extension.kind === ATELIER_BUILTIN_EXTENSION_IDS.history,
+				(extension) => extension.kind === ATELIER_BUILTIN_EXTENSION_IDS.files,
 			),
-		).toBe(historyOverride);
+		).toBe(filesOverride);
 	});
 
 	test("exports every bundled extension id for host overrides", () => {
@@ -93,16 +93,16 @@ describe("buildExtensionRegistry", () => {
 	});
 
 	test("does not let workspace-installed extensions replace built-ins", () => {
-		const installedHistory = {
+		const installedFiles = {
 			...baseExtension,
-			kind: ATELIER_BUILTIN_EXTENSION_IDS.history,
-			label: "Workspace History",
+			kind: ATELIER_BUILTIN_EXTENSION_IDS.files,
+			label: "Workspace Files",
 		};
 
-		const registry = buildExtensionRegistry([], [installedHistory]);
+		const registry = buildExtensionRegistry([], [installedFiles]);
 
 		expect(
-			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.history),
-		).not.toBe(installedHistory);
+			registry.extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.files),
+		).not.toBe(installedFiles);
 	});
 });

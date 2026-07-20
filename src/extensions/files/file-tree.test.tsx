@@ -566,7 +566,7 @@ describe("FileTree", () => {
 		});
 	});
 
-	test("does not drag watched or checkpoint-diff entries", () => {
+	test("does not drag watched entries", () => {
 		const nodes: FilesystemTreeNode[] = [
 			{
 				type: "directory",
@@ -583,13 +583,6 @@ describe("FileTree", () => {
 				path: "/README.md",
 				source: "watched",
 			},
-			{
-				type: "file",
-				id: "checkpoint:historical.md",
-				name: "historical.md",
-				path: "/historical.md",
-				source: "checkpoint-diff",
-			},
 		];
 		const handleMoveItem = vi.fn();
 		const { container } = render(
@@ -600,10 +593,6 @@ describe("FileTree", () => {
 		fireEvent.dragStart(getTreeItem(container, "README.md"), {
 			dataTransfer: transfer,
 		});
-		fireEvent.dragStart(getTreeItem(container, "historical.md"), {
-			dataTransfer: transfer,
-		});
-
 		expect(transfer.setData).not.toHaveBeenCalled();
 		expect(handleMoveItem).not.toHaveBeenCalled();
 	});
@@ -723,35 +712,6 @@ describe("FileTree", () => {
 			return nextInput;
 		});
 		expect(input).toHaveValue("README.md");
-	});
-
-	test("keeps checkpoint-diff file menus read-only", async () => {
-		const nodes: FilesystemTreeNode[] = [
-			{
-				type: "file",
-				id: "historical-file",
-				name: "historical.md",
-				path: "/historical.md",
-				source: "checkpoint-diff",
-			},
-		];
-		const handleOpen = vi.fn();
-		const { container } = render(
-			<FileTree nodes={nodes} openFileView={handleOpen} />,
-		);
-
-		openTreeContextMenu(container, "historical.md");
-		const menu = await getTreeContextMenu(container);
-		expect(menu).toHaveTextContent("Open");
-		expect(menu).not.toHaveTextContent("Rename");
-		expect(menu).not.toHaveTextContent("New file");
-		expect(menu).not.toHaveTextContent("Delete");
-
-		fireEvent.click(getTreeContextMenuButton(menu, "Open"));
-		expect(handleOpen).toHaveBeenCalledWith(
-			"historical-file",
-			"/historical.md",
-		);
 	});
 
 	test("keeps watched-file menus non-destructive", async () => {

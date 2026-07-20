@@ -89,18 +89,6 @@ vi.mock("../extension-runtime/extension-registry", async () => {
 				};
 			},
 		},
-		{
-			kind: "atelier_history" as const,
-			label: "History",
-			description: "Review and restore checkpoints.",
-			icon: () => <svg></svg>,
-			mount: ({ element }: { element: HTMLElement }) => {
-				element.textContent = "History content";
-				return {
-					dispose: () => element.replaceChildren(),
-				};
-			},
-		},
 	];
 	return {
 		EXTENSION_DEFINITIONS: definitions,
@@ -188,9 +176,6 @@ describe("SidePanel", () => {
 		fireEvent.pointerDown(openView, { button: 0 });
 
 		const filesItem = await screen.findByRole("menuitem", { name: "Files" });
-		expect(
-			screen.getByRole("menuitem", { name: "History" }),
-		).toBeInTheDocument();
 		fireEvent.click(filesItem);
 		expect(handleAdd).toHaveBeenCalledWith(FILES_EXTENSION_KIND);
 		await waitFor(() => expect(openView).toHaveFocus());

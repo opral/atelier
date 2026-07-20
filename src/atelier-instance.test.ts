@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
+import { openLix } from "@/test-utils/node-lix-sdk";
 import type { AtelierPreferencesStore } from "./state-adapters";
 
 const mocks = vi.hoisted(() => ({
@@ -21,8 +22,6 @@ import {
 const branchSession = {
 	getSnapshot: () => "main",
 	subscribe: () => () => undefined,
-	createBranch: async (name: string) => name,
-	switchBranch: async () => undefined,
 };
 
 describe("createAtelier", () => {
@@ -48,15 +47,7 @@ describe("createAtelier", () => {
 		expect(atelier.lix).toBe(lix);
 		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
-		expect(atelier.branches.activeId).toEqual(expect.any(Function));
-		expect(atelier.branches.create).toEqual(expect.any(Function));
-		expect(atelier.branches.switch).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual([
-			"lix",
-			"diff",
-			"documents",
-			"branches",
-		]);
+		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents"]);
 		expect(getAtelierConfiguration(atelier)).toEqual(
 			expect.objectContaining({
 				extensions: [],
@@ -69,32 +60,6 @@ describe("createAtelier", () => {
 			}),
 		);
 		expect(getAtelierConfiguration(atelier).extensions).not.toBe(extensions);
-	});
-
-	test("keeps class-based branch adapter methods bound", async () => {
-		class BranchSession {
-			current = "main";
-			getSnapshot() {
-				return this.current;
-			}
-			subscribe() {
-				return () => undefined;
-			}
-			async createBranch(name: string) {
-				this.current = name;
-				return name;
-			}
-			async switchBranch(branchId: string) {
-				this.current = branchId;
-			}
-		}
-		const adapter = new BranchSession();
-		const atelier = createAtelier({ lix: {} as Lix, branchSession: adapter });
-
-		expect(atelier.branches.activeId()).toBe("main");
-		await expect(atelier.branches.create("draft")).resolves.toBe("draft");
-		await atelier.branches.switch("review");
-		expect(atelier.branches.activeId()).toBe("review");
 	});
 
 	test("serializes preference saves at the Atelier boundary", async () => {
@@ -166,6 +131,40 @@ describe("createAtelier", () => {
 			},
 			{ branchId: "main" },
 		);
+	});
+
+	test("scopes diff ranges to a Lix branch switched outside Atelier", async () => {
+		const lix = await openLix();
+		try {
+			const atelier = createAtelier({ lix });
+			const configuration = getAtelierConfiguration(atelier);
+			const unsubscribe = configuration.branchSession.subscribe(
+				() => undefined,
+			);
+			try {
+				const draft = await lix.createBranch({ name: "draft" });
+				await lix.switchBranch({ branchId: draft.id });
+
+				await atelier.diff.open({
+					beforeCommitId: "commit-before",
+					afterCommitId: "commit-after",
+					source: { id: "codex" },
+				});
+
+				expect(mocks.appendAgentTurnCommitRange).toHaveBeenCalledWith(
+					lix,
+					expect.any(Object),
+					{ branchId: draft.id },
+				);
+				await vi.waitFor(() => {
+					expect(configuration.branchSession.getSnapshot()).toBe(draft.id);
+				});
+			} finally {
+				unsubscribe();
+			}
+		} finally {
+			await lix.close();
+		}
 	});
 
 	test("omits unavailable source metadata", async () => {

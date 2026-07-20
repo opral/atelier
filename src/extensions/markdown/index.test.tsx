@@ -717,14 +717,14 @@ describe("MarkdownView", () => {
 		expect(new TextDecoder().decode(persisted.data)).toBe("# After");
 	});
 
-	test("renders checkpoint diffs without review controls for missing active files", async () => {
+	test("renders historical deleted-file diffs without review controls", async () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_checkpoint",
-				path: "/checkpoint.md",
+				id: "file_deleted_historical",
+				path: "/deleted.md",
 				data: new TextEncoder().encode("# Before"),
 			})
 			.execute();
@@ -732,12 +732,12 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("# After") })
-			.where("id", "=", "file_checkpoint")
+			.where("id", "=", "file_deleted_historical")
 			.execute();
 		const afterCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.deleteFrom("lix_file")
-			.where("id", "=", "file_checkpoint")
+			.where("id", "=", "file_deleted_historical")
 			.execute();
 
 		await act(async () => {
@@ -745,8 +745,8 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_checkpoint"
-							filePath="/checkpoint.md"
+							fileId="file_deleted_historical"
+							filePath="/deleted.md"
 							isActiveView
 							isPanelFocused
 							beforeCommitId={beforeCommitId}

@@ -105,9 +105,8 @@ final result: blocked
   separated Delete action. Delete uses a compact filled trash icon at the
   tree-icon weight, neutral secondary text at rest, and the review-mode
   Backspace glyph in a `⌘ ⌫` keycap; the danger token appears only on hover or
-  keyboard focus. File menus offer Rename and Delete; watched and
-  checkpoint-diff rows remain non-destructive, with checkpoint rows retaining
-  Open only.
+  keyboard focus. File menus offer Rename and Delete; watched rows remain
+  non-destructive and retain Open only.
 - The upstream tree composition keeps the review-decoration lane before the
   action lane, so an amber review dot appears before the ellipsis without
   permanent action chrome.
@@ -118,8 +117,8 @@ final result: blocked
 - Pierre's native drag-and-drop interaction now moves Lix-backed files and
   folders into a Lix-backed destination folder while retaining the item's name.
   Its existing drag preview, target state, hover-to-open, and auto-scroll are
-  used directly; drafts, watched entries, and checkpoint-diff entries are not
-  draggable, and external file drops remain imports rather than moves.
+  used directly; drafts and watched entries are not draggable, and external
+  file drops remain imports rather than moves.
 
 ## Interaction and automated evidence
 
@@ -128,10 +127,10 @@ final result: blocked
   position for Markdown/CSV drafts, extensionless generic-file creation,
   generic-extension collision handling, right-click, ellipsis, rename,
   icon-bearing create actions, the filled delete icon and semantic `⌘ ⌫`
-  shortcut for files and folders (including active descendant views), checkpoint
-  read-only behavior, watched-directory restrictions, review-dot/action
-  ordering, native file/folder drag requests, Lix persistence, descendant path
-  cascades, and active-file path remapping.
+  shortcut for files and folders (including active descendant views),
+  watched-directory restrictions, review-dot/action ordering, native
+  file/folder drag requests, Lix persistence, descendant path cascades, and
+  active-file path remapping.
 - Full test suite: 787 passed, 1 skipped across 74 test files.
 - Typecheck: passed.
 - Production build: passed.
