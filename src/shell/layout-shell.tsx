@@ -2062,12 +2062,17 @@ function LayoutShellLoadedContent({
 					removedIndex === -1 ? undefined : currentPanel.views[removedIndex];
 				if (!removedView) continue;
 				if (removedView.isPinned) return;
-				// Closing the last chip of a side panel closes the island, not the
-				// view — the view survives so reopening the panel restores it (and
-				// canonicalization would re-ensure a Files view anyway).
-				if (side !== "central" && currentPanel.views.length === 1) {
+				// The ensured left Files view cannot be removed (canonicalization
+				// resurrects it), so its ✕ closes the island instead. Any other
+				// view removes normally — the last one leaves the panel's empty
+				// state with its add-view affordance.
+				if (
+					side === "left" &&
+					removedView.kind === FILES_EXTENSION_KIND &&
+					currentPanel.views.length === 1
+				) {
 					updateSidePanelSize(side, 0);
-					(side === "left" ? leftPanelRef : rightPanelRef).current?.collapse();
+					leftPanelRef.current?.collapse();
 					return;
 				}
 				const wasActiveCentralDocument =
@@ -2157,9 +2162,17 @@ function LayoutShellLoadedContent({
 
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
-			emitEvent({ type: "extension_opened", extensionId: kind, panel: side });
+			// Files lives in the left sidebar by canonicalization; adding it
+			// from any panel focuses it there instead of silently no-oping.
+			const targetSide =
+				kind === FILES_EXTENSION_KIND && side !== "central" ? "left" : side;
+			emitEvent({
+				type: "extension_opened",
+				extensionId: kind,
+				panel: targetSide,
+			});
 			handleOpenView({
-				panel: side,
+				panel: targetSide,
 				kind,
 				state,
 				instance: extensionMap.get(kind)?.multiInstance

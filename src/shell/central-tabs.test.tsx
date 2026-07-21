@@ -1,6 +1,12 @@
 import { Suspense } from "react";
 import { describe, expect, test, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	render,
+	screen,
+	waitFor,
+	fireEvent,
+} from "@testing-library/react";
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
@@ -63,7 +69,29 @@ const dirRegistration: AtelierExtensionRegistration = {
 	},
 };
 
-const extensions = [homeRegistration, dirRegistration];
+const SIDE_EXTENSION_ID = "test_side_tool";
+
+const sideToolExtension: AtelierExtensionRegistration = {
+	manifest: {
+		apiVersion: 1,
+		id: SIDE_EXTENSION_ID,
+		name: "Side Tool",
+		description: "A removable side-panel view.",
+		placement: ["left", "right"],
+	},
+	entry: {
+		icon: TabIcon,
+		mount: ({ element }) => {
+			const view = document.createElement("div");
+			view.dataset.testid = "test-side-tool";
+			view.textContent = "side tool";
+			element.appendChild(view);
+			return {};
+		},
+	},
+};
+
+const extensions = [homeRegistration, dirRegistration, sideToolExtension];
 
 async function renderTabbedShell(
 	options: {
@@ -300,6 +328,50 @@ describe("central tabs with a pinned home", () => {
 				filePath: "/one.md",
 				nextFilePath: "/two.md",
 			});
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("closing side-panel chips: removable views leave the empty state; the ensured Files island collapses", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.views.open(SIDE_EXTENSION_ID, { panel: "right" });
+			});
+			expect(await screen.findByTestId("test-side-tool")).toBeInTheDocument();
+
+			// Closing the only removable view empties the panel — it does not
+			// collapse the island, so the add-view affordance stays reachable.
+			const sideTab = document.querySelector<HTMLElement>(
+				`aside button[data-view-key="${SIDE_EXTENSION_ID}"] [data-attr="panel-tab-close"]`,
+			);
+			expect(sideTab).toBeTruthy();
+			fireEvent.click(sideTab!);
+			await waitFor(() => {
+				expect(
+					document.querySelector(
+						`aside button[data-view-key="${SIDE_EXTENSION_ID}"]`,
+					),
+				).toBeNull();
+			});
+			expect(screen.getAllByText("This is a panel.").length).toBeGreaterThan(0);
+
+			// The ensured left Files view survives its ✕ (the island collapses
+			// instead; canonicalization would resurrect a removed Files view).
+			const filesClose = document.querySelector<HTMLElement>(
+				'aside button[data-view-key="atelier_files"] [data-attr="panel-tab-close"]',
+			);
+			if (filesClose) {
+				fireEvent.click(filesClose);
+				await waitFor(() => {
+					expect(
+						document.querySelector(
+							'aside button[data-view-key="atelier_files"]',
+						),
+					).toBeTruthy();
+				});
+			}
 		} finally {
 			await shell.cleanup();
 		}
