@@ -60,11 +60,11 @@ const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	focusedPanel: "central",
 	panels: {
-		left: { views: [], activeInstance: null },
-		central: {
+		left: {
 			views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-default",
 		},
+		central: { views: [], activeInstance: null },
 		right: { views: [], activeInstance: null },
 	},
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },

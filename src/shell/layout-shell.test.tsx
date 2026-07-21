@@ -1209,9 +1209,7 @@ describe("installed extension lifecycle", () => {
 
 			await waitFor(() => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.panels.left.views).toEqual([
-					expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
-				]);
+				expect(state?.panels.left.views).toEqual([]);
 			});
 
 			// A stale snapshot can also arrive after extension discovery has settled.
@@ -1219,9 +1217,7 @@ describe("installed extension lifecycle", () => {
 			act(() => sessionStateStore.setSnapshot(staleSessionState));
 			await waitFor(() => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.panels.left.views).toEqual([
-					expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
-				]);
+				expect(state?.panels.left.views).toEqual([]);
 			});
 
 			await act(async () => {

@@ -59,7 +59,6 @@ import {
 	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
 import {
-	ensureWorkspaceFilesView,
 	type FilesViewMode,
 	type WorkspacePanelState,
 } from "./workspace-panel-state";
@@ -1061,10 +1060,6 @@ function LayoutShellLoadedContent({
 		},
 		[extensionMap],
 	);
-	// Files always lives in the sidebar. Hosts with a pinned home decide
-	// their own default panels; homeless hosts get the left panel open so
-	// the file browser is visible on first run.
-	const effectiveFilesViewMode: FilesViewMode = "sidebar";
 	const defaultLeftPanelOpen = defaultOpenPanels.includes("left");
 	const defaultRightPanelOpen = defaultOpenPanels.includes("right");
 	const initialUiState = useMemo(
@@ -1102,14 +1097,15 @@ function LayoutShellLoadedContent({
 				panels,
 				focusedPanel,
 			};
-			return ensureWorkspaceFilesView(
-				reconciledWorkspace,
-				effectiveFilesViewMode,
-			);
+			return {
+				state: reconciledWorkspace,
+				didRestoreLandingView: false,
+				restoredFilesFrom: null,
+				sourceBecameEmpty: false,
+			};
 		},
 		[
 			centralBehavior,
-			effectiveFilesViewMode,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
 			preserveUnknownExtensionKinds,
@@ -2062,18 +2058,12 @@ function LayoutShellLoadedContent({
 					removedIndex === -1 ? undefined : currentPanel.views[removedIndex];
 				if (!removedView) continue;
 				if (removedView.isPinned) return;
-				// The ensured left Files view cannot be removed (canonicalization
-				// resurrects it), so its ✕ closes the island instead. Any other
-				// view removes normally — the last one leaves the panel's empty
-				// state with its add-view affordance.
-				if (
-					side === "left" &&
-					removedView.kind === FILES_EXTENSION_KIND &&
-					currentPanel.views.length === 1
-				) {
+				// Chips remove views; removing the last one also closes the
+				// island (re-expanding via the toggle shows the empty state
+				// with the add-view affordance).
+				if (side !== "central" && currentPanel.views.length === 1) {
 					updateSidePanelSize(side, 0);
-					leftPanelRef.current?.collapse();
-					return;
+					(side === "left" ? leftPanelRef : rightPanelRef).current?.collapse();
 				}
 				const wasActiveCentralDocument =
 					side === "central" &&

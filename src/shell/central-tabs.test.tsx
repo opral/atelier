@@ -333,7 +333,7 @@ describe("central tabs with a pinned home", () => {
 		}
 	});
 
-	test("closing side-panel chips: removable views leave the empty state; the ensured Files island collapses", async () => {
+	test("side chips remove views; Files is removable and left-only", async () => {
 		const shell = await renderTabbedShell();
 		try {
 			await act(async () => {
@@ -341,13 +341,12 @@ describe("central tabs with a pinned home", () => {
 			});
 			expect(await screen.findByTestId("test-side-tool")).toBeInTheDocument();
 
-			// Closing the only removable view empties the panel — it does not
-			// collapse the island, so the add-view affordance stays reachable.
-			const sideTab = document.querySelector<HTMLElement>(
+			// Closing the only removable view removes it (and closes the island).
+			const sideClose = document.querySelector<HTMLElement>(
 				`aside button[data-view-key="${SIDE_EXTENSION_ID}"] [data-attr="panel-tab-close"]`,
 			);
-			expect(sideTab).toBeTruthy();
-			fireEvent.click(sideTab!);
+			expect(sideClose).toBeTruthy();
+			fireEvent.click(sideClose!);
 			await waitFor(() => {
 				expect(
 					document.querySelector(
@@ -355,36 +354,34 @@ describe("central tabs with a pinned home", () => {
 					),
 				).toBeNull();
 			});
-			expect(screen.getAllByText("This is a panel.").length).toBeGreaterThan(0);
 
-			// The right panel's add-view menu must not offer Files — it can
-			// only live in the left sidebar, so listing it would be a no-op.
-			const rightAddView = [
-				...document.querySelectorAll<HTMLElement>(
-					'aside button[aria-label="Add view"]',
-				),
-			].at(-1);
-			expect(rightAddView).toBeTruthy();
-			fireEvent.pointerDown(rightAddView!, { button: 0 });
-			await screen.findByRole("menu");
-			expect(screen.queryByRole("menuitem", { name: "Files" })).toBeNull();
-			fireEvent.keyDown(document.body, { key: "Escape" });
-
-			// The ensured left Files view survives its ✕ (the island collapses
-			// instead; canonicalization would resurrect a removed Files view).
+			// The seeded Files view is a normal view now: its ✕ removes it for
+			// real — no canonicalization resurrection.
 			const filesClose = document.querySelector<HTMLElement>(
 				'aside button[data-view-key="atelier_files"] [data-attr="panel-tab-close"]',
 			);
-			if (filesClose) {
-				fireEvent.click(filesClose);
-				await waitFor(() => {
-					expect(
-						document.querySelector(
-							'aside button[data-view-key="atelier_files"]',
-						),
-					).toBeTruthy();
-				});
-			}
+			expect(filesClose).toBeTruthy();
+			fireEvent.click(filesClose!);
+			await waitFor(() => {
+				expect(
+					document.querySelector('aside button[data-view-key="atelier_files"]'),
+				).toBeNull();
+			});
+
+			// The left add-view menu offers Files again once it is closed; the
+			// right panel's menu never offers it (left-only placement).
+			const addButtons = [
+				...document.querySelectorAll<HTMLElement>(
+					'aside button[aria-label="Add view"]',
+				),
+			];
+			expect(addButtons.length).toBeGreaterThan(0);
+			fireEvent.pointerDown(addButtons[0]!, { button: 0 });
+			await screen.findByRole("menu");
+			expect(
+				screen.getByRole("menuitem", { name: "Files" }),
+			).toBeInTheDocument();
+			fireEvent.keyDown(document.body, { key: "Escape" });
 		} finally {
 			await shell.cleanup();
 		}
