@@ -7,7 +7,18 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { AlertTriangle, Loader2, Plus, Table2 } from "lucide-react";
+import {
+	AlertTriangle,
+	ArrowDownToLine,
+	ArrowLeftToLine,
+	ArrowRightToLine,
+	ArrowUpToLine,
+	Loader2,
+	Pencil,
+	Plus,
+	Table2,
+	Trash2,
+} from "lucide-react";
 import {
 	CompactSelection,
 	DataEditor,
@@ -1338,10 +1349,12 @@ function CsvGridMenu({
 			? [
 					{
 						label: "Insert row above",
+						icon: ArrowUpToLine,
 						onSelect: () => onInsertRow(menu.row),
 					},
 					{
 						label: "Insert row below",
+						icon: ArrowDownToLine,
 						onSelect: () => onInsertRow(menu.row + 1),
 					},
 					{
@@ -1349,6 +1362,7 @@ function CsvGridMenu({
 							menuRows.length > 1
 								? `Delete ${menuRows.length} rows`
 								: "Delete row",
+						icon: Trash2,
 						destructive: true,
 						onSelect: () => onDeleteRows(menuRows),
 					},
@@ -1356,14 +1370,17 @@ function CsvGridMenu({
 			: [
 					{
 						label: "Rename column",
+						icon: Pencil,
 						onSelect: () => onRenameColumn(menu.column, menu.headerBounds),
 					},
 					{
 						label: "Insert column left",
+						icon: ArrowLeftToLine,
 						onSelect: () => onInsertColumn(menu.column),
 					},
 					{
 						label: "Insert column right",
+						icon: ArrowRightToLine,
 						onSelect: () => onInsertColumn(menu.column + 1),
 					},
 					{
@@ -1373,6 +1390,7 @@ function CsvGridMenu({
 								: columnTitle
 									? `Delete column “${truncateLabel(columnTitle)}”`
 									: "Delete column",
+						icon: Trash2,
 						destructive: true,
 						onSelect: () => onDeleteColumns(menuColumns),
 					},
@@ -1407,7 +1425,12 @@ function CsvGridMenu({
 						}
 						onClick={item.onSelect}
 					>
-						{item.label}
+						<item.icon
+							aria-hidden="true"
+							size={14}
+							className="csv-grid-menu-item-icon"
+						/>
+						<span>{item.label}</span>
 					</button>
 				))}
 			</div>

@@ -175,6 +175,7 @@
 	.csv-grid-menu-item {
 		display: flex;
 		align-items: center;
+		gap: 8px;
 		border-radius: 6px;
 		padding: 7px 10px;
 		color: var(--color-text-primary);
@@ -182,6 +183,15 @@
 		line-height: 1.2;
 		text-align: left;
 		cursor: pointer;
+	}
+
+	.csv-grid-menu-item-icon {
+		flex-shrink: 0;
+		color: var(--color-icon-secondary, var(--color-text-tertiary));
+	}
+
+	.csv-grid-menu-item-destructive .csv-grid-menu-item-icon {
+		color: currentColor;
 	}
 
 	.csv-grid-menu-item:hover {
