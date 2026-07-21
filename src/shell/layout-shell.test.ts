@@ -76,7 +76,7 @@ describe("selectNewFileDraftHandler", () => {
 		expect(selectNewFileDraftHandler([left, right], "right")).toBe(right);
 	});
 
-	test("prefers active views, then falls back to a hidden central home", () => {
+	test("ignores inactive views and falls back in panel order", () => {
 		const inactiveCentral = {
 			panelSide: "central" as const,
 			viewInstance: "files-central",
@@ -93,9 +93,6 @@ describe("selectNewFileDraftHandler", () => {
 		expect(selectNewFileDraftHandler([inactiveCentral, left], "central")).toBe(
 			left,
 		);
-		// A hidden central Files home is still usable — the caller reveals it.
-		expect(selectNewFileDraftHandler([inactiveCentral], "central")).toBe(
-			inactiveCentral,
-		);
+		expect(selectNewFileDraftHandler([inactiveCentral], "central")).toBeNull();
 	});
 });

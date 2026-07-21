@@ -10,10 +10,10 @@ describe("TopBar", () => {
 		expect(container.querySelector("header")).toHaveClass("px-2");
 		expect(container.querySelector("header")).not.toHaveClass("px-3");
 		expect(screen.getByLabelText("Toggle left panel")).toHaveClass(
-			"justify-start",
+			"justify-center",
 		);
 		expect(screen.getByLabelText("Toggle right panel")).toHaveClass(
-			"justify-end",
+			"justify-center",
 		);
 	});
 

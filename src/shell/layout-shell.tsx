@@ -293,16 +293,16 @@ export const selectNewFileDraftHandler = (
 		"central" as const,
 		"right" as const,
 	].filter((side, index, sides) => sides.indexOf(side) === index);
-	const all = [...registrations];
-	const active = all.filter((registration) => registration.isActiveView);
+	const registered = [...registrations].filter(
+		(registration) => registration.isActiveView,
+	);
 	for (const panelSide of panelPreference) {
-		const registration = active.find(
+		const registration = registered.find(
 			(candidate) => candidate.panelSide === panelSide,
 		);
 		if (registration) return registration;
 	}
-	// The central Files home may be a hidden tab — the caller reveals it.
-	return all.find((candidate) => candidate.panelSide === "central") ?? null;
+	return null;
 };
 
 const sanitizePanels = (
@@ -706,9 +706,25 @@ function LayoutShellStateLoader(
 		configuration.sessionStateStore,
 	);
 	const activeBranchId = useAtelierStoreSnapshot(configuration.branchSession);
+	// Homeless hosts that configured nothing get the left panel open on
+	// first run, so the sidebar Files view is visible.
+	const resolvedDefaultOpenPanels = useMemo<readonly DefaultOpenPanel[]>(() => {
+		if (props.defaultOpenPanels.length > 0) return props.defaultOpenPanels;
+		if (
+			configuration.defaultOpenPanels === undefined &&
+			configuration.centralPanel?.home === undefined
+		) {
+			return ["left"];
+		}
+		return props.defaultOpenPanels;
+	}, [
+		configuration.centralPanel?.home,
+		configuration.defaultOpenPanels,
+		props.defaultOpenPanels,
+	]);
 	const initialUiState = useMemo(
-		() => createInitialAtelierUiState(props.defaultOpenPanels),
-		[props.defaultOpenPanels],
+		() => createInitialAtelierUiState(resolvedDefaultOpenPanels),
+		[resolvedDefaultOpenPanels],
 	);
 	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
 		coerceAtelierUserPreferences(initialUiState),
@@ -826,6 +842,7 @@ function LayoutShellStateLoader(
 	return (
 		<LayoutShellLoadedContent
 			{...props}
+			defaultOpenPanels={resolvedDefaultOpenPanels}
 			uiStateKV={uiStateKV}
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
@@ -1044,10 +1061,10 @@ function LayoutShellLoadedContent({
 		},
 		[extensionMap],
 	);
-	// With Files as the pinned home, it owns the central landing; a custom
-	// home banishes Files to the sidebar instead.
-	const effectiveFilesViewMode: FilesViewMode =
-		centralBehavior.homeKind === FILES_EXTENSION_KIND ? "landing" : "sidebar";
+	// Files always lives in the sidebar. Hosts with a pinned home decide
+	// their own default panels; homeless hosts get the left panel open so
+	// the file browser is visible on first run.
+	const effectiveFilesViewMode: FilesViewMode = "sidebar";
 	const defaultLeftPanelOpen = defaultOpenPanels.includes("left");
 	const defaultRightPanelOpen = defaultOpenPanels.includes("right");
 	const initialUiState = useMemo(
@@ -1062,20 +1079,8 @@ function LayoutShellLoadedContent({
 		() => coerceAtelierUiState(uiStateKV ?? initialUiState),
 		[initialUiState, uiStateKV],
 	);
-	const storedPanelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
-	const panelSizes =
-		effectiveFilesViewMode === "sidebar" &&
-		defaultLeftPanelOpen &&
-		storedPanelSizes.left <= MIN_VISIBLE_PANEL_SIZE
-			? {
-					...storedPanelSizes,
-					left: DEFAULT_PANEL_FALLBACK_SIZES.left,
-					central: Math.max(
-						30,
-						storedPanelSizes.central - DEFAULT_PANEL_FALLBACK_SIZES.left,
-					),
-				}
-			: storedPanelSizes;
+	// Stored sizes always win; fresh state opens panels via initialUiState.
+	const panelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const canonicalizeWorkspace = useCallback(
 		(state: AtelierUiState) => {
 			const panels = reconcilePanelsWithEnvironment({
@@ -2419,23 +2424,8 @@ function LayoutShellLoadedContent({
 			focusedPanel,
 		);
 		if (filesViewHandler) {
-			// Start the draft first (folder-relativity reads the still-active
-			// document), then reveal the Files home tab if it was hidden.
-			filesViewHandler.handler();
-			if (
-				filesViewHandler.panelSide === "central" &&
-				!filesViewHandler.isActiveView
-			) {
-				setPanelState(
-					"central",
-					(panel) => ({
-						views: panel.views,
-						activeInstance: filesViewHandler.viewInstance,
-					}),
-					{ focus: true },
-				);
-			}
 			focusPanel(filesViewHandler.panelSide);
+			filesViewHandler.handler();
 			return null;
 		}
 		return handleCreateNewFile();
@@ -2446,7 +2436,6 @@ function LayoutShellLoadedContent({
 		isHostReadOnly,
 		isLeftCollapsed,
 		isRightCollapsed,
-		setPanelState,
 	]);
 
 	const activeCentralFileId =

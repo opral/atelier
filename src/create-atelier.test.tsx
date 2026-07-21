@@ -134,7 +134,7 @@ describe("Atelier instance file controller", () => {
 		}
 	});
 
-	test("startNew reveals the Files home and starts a draft when the sidebar is collapsed", async () => {
+	test("falls back to direct creation when the Files view is collapsed", async () => {
 		const fileId = "active-file";
 		const filePath = "/active.md";
 		const documentKind = "atelier_file";
@@ -188,29 +188,14 @@ describe("Atelier instance file controller", () => {
 			).toBeVisible();
 			await act(async () => atelier.documents.startNew());
 
-			// The pinned Files home is revealed with a named draft instead of
-			// silently creating an untitled file. (The type-and-commit round
-			// trip is covered by the pre-mount drain test above.)
-			const container = rendered?.container;
-			if (!container) throw new Error("Atelier test container is unavailable");
-			const input = await findFilesViewRenameInput(container);
-			await waitFor(() => {
-				expect(input.value).toBe(".md");
+			await waitFor(async () => {
+				const created = await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/new-file.md")
+					.executeTakeFirst();
+				expect(created).toEqual({ path: "/new-file.md" });
 			});
-			// The draft lives in the pinned Files home tab, which the shell
-			// activates (asserted on the canonical store — jsdom's paint of the
-			// hidden→active switch is flaky in this suite).
-			const hostPanel = (input.getRootNode() as ShadowRoot).host.closest(
-				"[data-panel-side]",
-			);
-			expect(hostPanel?.getAttribute("data-panel-side")).toBe("central");
-			expect(hostPanel?.getAttribute("data-view-instance")).toBe(
-				"central-home",
-			);
-			// TODO(central-tabs): asserting the home tab also becomes the active
-			// central view is flaky under jsdom (an interaction handler races
-			// the reveal). Verify the reveal end-to-end in a real browser when
-			// FlashType adopts this flow.
 		} finally {
 			await act(async () => rendered?.unmount());
 			await lix.close();

@@ -1,7 +1,4 @@
-import {
-	FILES_EXTENSION_KIND,
-	isDocumentView,
-} from "../extension-runtime/extension-instance-helpers";
+import { isDocumentView } from "../extension-runtime/extension-instance-helpers";
 import type {
 	ExtensionInstance,
 	ExtensionKind,
@@ -145,22 +142,20 @@ export function createCentralSlotBehavior(config: {
 	readonly centralKinds: ReadonlySet<ExtensionKind>;
 }): CentralSlotBehavior {
 	const { homeKind, centralKinds } = config;
-	// Without a host-configured home, the Files view is the pinned home tab —
-	// same rules, one primitive: it cannot be closed or navigated away, and
-	// closing the last content tab lands on it.
-	const pinnedKind = homeKind ?? FILES_EXTENSION_KIND;
+	// The Files view always lives in the sidebar; the central slot hosts
+	// documents, host central views, and (when configured) the pinned home.
 	const canHost = (view: ExtensionInstance): boolean =>
 		isDocumentView(view) ||
-		// A configured home replaces the Files landing view in the central slot.
-		(view.kind === FILES_EXTENSION_KIND && homeKind === null) ||
 		view.kind === homeKind ||
 		centralKinds.has(view.kind);
 	return {
-		homeKind: pinnedKind,
+		homeKind,
 		canHost,
 		normalize: (panel) => {
 			let views: ExtensionInstance[] = panel.views.filter(canHost);
-			views = ensurePinnedHomeView(views, pinnedKind);
+			if (homeKind) {
+				views = ensurePinnedHomeView(views, homeKind);
+			}
 			const activeInstance = views.some(
 				(view) => view.instance === panel.activeInstance,
 			)
