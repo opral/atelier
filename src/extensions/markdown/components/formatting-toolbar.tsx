@@ -392,7 +392,7 @@ export function FormattingToolbar({
 	return (
 		<Toolbar.Root
 			className={clsx(
-				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden px-[max(2rem,calc((100%_-_var(--markdown-content-width))/2))] text-foreground opacity-70 transition-opacity duration-150 hover:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100",
+				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-[var(--color-border-subtle)] px-2.5 text-foreground",
 				className,
 			)}
 			aria-label="Formatting toolbar"
@@ -405,7 +405,7 @@ export function FormattingToolbar({
 					<Toolbar.Group
 						ref={formattingControlsRef}
 						className={clsx(
-							"markdown-format-toolbar-scroll -ml-2.25 flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
+							"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
 							controlsDisabled && "opacity-40",
 						)}
 						aria-label="Text formatting controls"
