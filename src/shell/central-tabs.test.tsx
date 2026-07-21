@@ -357,6 +357,19 @@ describe("central tabs with a pinned home", () => {
 			});
 			expect(screen.getAllByText("This is a panel.").length).toBeGreaterThan(0);
 
+			// The right panel's add-view menu must not offer Files — it can
+			// only live in the left sidebar, so listing it would be a no-op.
+			const rightAddView = [
+				...document.querySelectorAll<HTMLElement>(
+					'aside button[aria-label="Add view"]',
+				),
+			].at(-1);
+			expect(rightAddView).toBeTruthy();
+			fireEvent.pointerDown(rightAddView!, { button: 0 });
+			await screen.findByRole("menu");
+			expect(screen.queryByRole("menuitem", { name: "Files" })).toBeNull();
+			fireEvent.keyDown(document.body, { key: "Escape" });
+
 			// The ensured left Files view survives its ✕ (the island collapses
 			// instead; canonicalization would resurrect a removed Files view).
 			const filesClose = document.querySelector<HTMLElement>(

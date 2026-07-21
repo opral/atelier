@@ -2,5 +2,6 @@
 	"apiVersion": 1,
 	"id": "atelier_files",
 	"name": "Files",
-	"entry": "./index.js"
+	"entry": "./index.js",
+	"placement": ["left"]
 }
