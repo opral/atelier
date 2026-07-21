@@ -102,6 +102,11 @@ async function renderTabbedShell(
 				path: "/two.md",
 				data: new TextEncoder().encode("# Two\n"),
 			},
+			{
+				id: "three",
+				path: "/three.md",
+				data: new TextEncoder().encode("# Three\n"),
+			},
 		])
 		.execute();
 	let utils: ReturnType<typeof render> | undefined;
@@ -187,7 +192,7 @@ describe("central tabs with a pinned home", () => {
 		}
 	});
 
-	test("newTab appends beside the active tab; open activates an existing tab", async () => {
+	test("newTab appends at the end of the strip; open activates an existing tab", async () => {
 		const shell = await renderTabbedShell();
 		try {
 			await act(async () => {
@@ -205,6 +210,18 @@ describe("central tabs with a pinned home", () => {
 			});
 			expect(centralTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
 			expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
+
+			// With an EARLIER tab active, a new tab still joins at the END —
+			// A | B | + with A active yields A | B | C, not A | C | B.
+			await act(async () => {
+				await shell.atelier.documents.open("/three.md", { newTab: true });
+			});
+			expect(centralTabLabels()).toEqual([
+				"«home»",
+				"one.md",
+				"two.md",
+				"three.md",
+			]);
 		} finally {
 			await shell.cleanup();
 		}

@@ -163,10 +163,9 @@ const insertCentralTabView = (
 	const activeEntry = activeIndex !== -1 ? panel.views[activeIndex] : null;
 	const appendTab = intent.newTab ?? intent.documentOrigin === "new";
 	if (appendTab || !activeEntry || activeEntry.isPinned) {
-		const insertAt = activeEntry ? activeIndex + 1 : panel.views.length;
-		const views = [...panel.views];
-		views.splice(insertAt, 0, view);
-		return { views, activeInstance: view.instance };
+		// New tabs always join at the end of the strip, browser-style,
+		// regardless of which tab is active.
+		return { views: [...panel.views, view], activeInstance: view.instance };
 	}
 	const views = panel.views.map((entry, index) =>
 		index === activeIndex ? view : entry,
