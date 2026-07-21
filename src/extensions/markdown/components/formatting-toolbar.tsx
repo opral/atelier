@@ -51,7 +51,7 @@ type FormatState = {
 
 /** 28px square icon button, matching the panel-header chips in the islands UI. */
 const iconButtonClass =
-	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-[var(--color-text-tertiary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
+	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-[var(--color-icon-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
 
 /** Pressed state for a formatting toggle. */
 const iconButtonActiveClass =
@@ -426,7 +426,7 @@ export function FormattingToolbar({
 								render={<Select.Trigger />}
 								data-attr="markdown-block-selector"
 								className={clsx(
-									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
 									blockMenuOpen &&
 										"bg-[var(--color-bg-hover)] text-[var(--color-text-primary)]",
 								)}

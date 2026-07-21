@@ -486,7 +486,7 @@ function AddViewMenu({
 						title="Add view"
 						aria-label="Add view"
 						data-attr="panel-add-view"
-						className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+						className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
 					>
 						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
 					</button>
@@ -857,7 +857,7 @@ const tabStateClasses = {
 		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	active:
 		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
-	idle: "border-transparent bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+	idle: "border-transparent bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {
@@ -942,7 +942,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 										? "text-[var(--color-action-selection-current)] hover:text-[var(--color-icon-selection-current)]"
 										: isActive
 											? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
-											: "text-[var(--color-icon-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-icon-secondary)]",
+											: "text-[var(--color-icon-quaternary)] hover:text-[var(--color-icon-secondary)]",
 								)}
 								onClick={(event) => {
 									event.stopPropagation();
