@@ -3,5 +3,5 @@
 	"id": "atelier_files",
 	"name": "Files",
 	"entry": "./index.js",
-	"placement": ["left"]
+	"placement": ["left", "right"]
 }

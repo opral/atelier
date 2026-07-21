@@ -368,20 +368,26 @@ describe("central tabs with a pinned home", () => {
 				).toBeNull();
 			});
 
-			// The left add-view menu offers Files again once it is closed; the
-			// right panel's menu never offers it (left-only placement).
+			// Once closed, Files is offered back by BOTH side panels' add-view
+			// menus, and adding it to the right panel genuinely opens it there.
 			const addButtons = [
 				...document.querySelectorAll<HTMLElement>(
 					'aside button[aria-label="Add view"]',
 				),
 			];
 			expect(addButtons.length).toBeGreaterThan(0);
-			fireEvent.pointerDown(addButtons[0]!, { button: 0 });
+			const rightAdd = addButtons.at(-1)!;
+			fireEvent.pointerDown(rightAdd, { button: 0 });
 			await screen.findByRole("menu");
-			expect(
-				screen.getByRole("menuitem", { name: "Files" }),
-			).toBeInTheDocument();
-			fireEvent.keyDown(document.body, { key: "Escape" });
+			fireEvent.click(screen.getByRole("menuitem", { name: "Files" }));
+			await waitFor(() => {
+				const rightFiles = [
+					...document.querySelectorAll<HTMLElement>(
+						'aside button[data-view-key="atelier_files"]',
+					),
+				];
+				expect(rightFiles.length).toBeGreaterThan(0);
+			});
 		} finally {
 			await shell.cleanup();
 		}

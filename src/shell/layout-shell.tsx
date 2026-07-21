@@ -2152,17 +2152,9 @@ function LayoutShellLoadedContent({
 
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
-			// Files lives in the left sidebar by canonicalization; adding it
-			// from any panel focuses it there instead of silently no-oping.
-			const targetSide =
-				kind === FILES_EXTENSION_KIND && side !== "central" ? "left" : side;
-			emitEvent({
-				type: "extension_opened",
-				extensionId: kind,
-				panel: targetSide,
-			});
+			emitEvent({ type: "extension_opened", extensionId: kind, panel: side });
 			handleOpenView({
-				panel: targetSide,
+				panel: side,
 				kind,
 				state,
 				instance: extensionMap.get(kind)?.multiInstance
