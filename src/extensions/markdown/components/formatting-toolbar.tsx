@@ -392,7 +392,7 @@ export function FormattingToolbar({
 	return (
 		<Toolbar.Root
 			className={clsx(
-				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden px-[max(2rem,calc((100%_-_var(--markdown-content-width))/2))] pt-1.5 text-foreground",
+				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden px-[max(2rem,calc((100%_-_var(--markdown-content-width))/2))] text-foreground opacity-70 transition-opacity duration-150 hover:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100",
 				className,
 			)}
 			aria-label="Formatting toolbar"
@@ -428,7 +428,7 @@ export function FormattingToolbar({
 								className={clsx(
 									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
 									blockMenuOpen &&
-										"bg-[var(--color-bg-control-selected)] text-[var(--color-text-primary)]",
+										"bg-[var(--color-bg-hover)] text-[var(--color-text-primary)]",
 								)}
 								onMouseDown={suppressMouseDown}
 							>
