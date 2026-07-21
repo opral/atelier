@@ -876,6 +876,22 @@ function CsvTable({
 			width: widthState.overrides[index] ?? widthState.initial[index],
 			// The hover chevron that opens the column menu.
 			hasMenu: editable,
+			// One subtle "New row…" affordance in the first column instead of
+			// glide's default heavy plus icon repeated in every column.
+			...(editable
+				? {
+						trailingRowOptions:
+							index === 0
+								? {
+										hint: "New row…",
+										themeOverride: {
+											bgIconHeader: "rgb(168, 162, 158)",
+											textMedium: "rgb(120, 113, 108)",
+										},
+									}
+								: { disabled: true },
+					}
+				: {}),
 		}));
 	}, [editable, parsed.columns, widthState]);
 	const getCellContent = useCallback(
@@ -1161,7 +1177,7 @@ function CsvTable({
 				onPaste={editable ? handlePaste : false}
 				fillHandle={editable}
 				trailingRowOptions={
-					editable ? { hint: "New row…", tint: true } : undefined
+					editable ? { sticky: false, tint: false } : undefined
 				}
 				onRowAppended={editable ? handleRowAppended : undefined}
 				onCellContextMenu={editable ? handleCellContextMenu : undefined}
