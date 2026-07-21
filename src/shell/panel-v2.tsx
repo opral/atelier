@@ -328,7 +328,9 @@ export function PanelV2({
 			    chip group over its own island" — for both the built-in strip and
 			    a host-rendered one. */}
 			{showTabBar && customTabStrip !== undefined ? (
-				<div data-atelier-part="custom-tab-strip">{customTabStrip}</div>
+				<div data-atelier-part="custom-tab-strip" className="w-full min-w-0">
+					{customTabStrip}
+				</div>
 			) : showTabBar ? (
 				<TabBar
 					extraContent={
