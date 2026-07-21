@@ -48,23 +48,16 @@ export type {
 	AtelierViewsApi,
 } from "./extension-api";
 
-export type AtelierCentralPanelOptions =
-	/**
-	 * The default: the central island is a single document slot switched from
-	 * the Files view, with no tab strip.
-	 */
-	| { readonly mode: "document" }
-	/**
-	 * Browser-style tabs: the central island renders a tab strip and keeps
-	 * multiple content views open. `home` pins an extension (registered with
-	 * `placement` including "central") as the permanent first tab — it cannot
-	 * be closed and navigation never replaces it; closing the last content tab
-	 * lands on it.
-	 */
-	| {
-			readonly mode: "tabs";
-			readonly home?: { readonly extensionId: string };
-	  };
+/**
+ * The central island is browser-style tabs — the one UX primitive. `home`
+ * pins an extension (registered with `placement` including "central") as the
+ * permanent first tab: it cannot be closed, navigation never replaces it,
+ * and closing the last content tab lands on it. Without a home, the Files
+ * landing view is the first tab.
+ */
+export type AtelierCentralPanelOptions = {
+	readonly home?: { readonly extensionId: string };
+};
 
 export type AtelierOptions = {
 	readonly lix: Lix;
@@ -87,7 +80,7 @@ export type AtelierOptions = {
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
 	/** Only expose review ranges tagged with this account or session id. */
 	readonly reviewRangeSessionId?: string;
-	/** Central panel behavior. Omit for the single-document-slot default. */
+	/** Central tabs configuration (e.g. the pinned home). */
 	readonly centralPanel?: AtelierCentralPanelOptions;
 };
 

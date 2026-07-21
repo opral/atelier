@@ -85,7 +85,6 @@ async function renderTabbedShell(
 		sessionStateStore,
 		filesViewMode,
 		centralPanel: {
-			mode: "tabs",
 			home: { extensionId: HOME_EXTENSION_ID },
 		},
 	});

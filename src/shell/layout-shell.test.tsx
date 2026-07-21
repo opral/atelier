@@ -80,8 +80,14 @@ describe("syncPanelGroupLayout", () => {
 	});
 });
 
+const pinnedFilesHome = expect.objectContaining({
+	instance: "central-home",
+	kind: FILES_EXTENSION_KIND,
+	isPinned: true,
+});
+
 describe("open file lifecycle", () => {
-	test("moves the centered Files instance left when a document opens", async () => {
+	test("keeps Files pinned as the home tab when documents open", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
 		const sessionStateStore = createMemorySessionStateStore();
@@ -133,78 +139,55 @@ describe("open file lifecycle", () => {
 			documentOrigin: "existing",
 			viewKind: "atelier_file",
 		});
+		// The Files home stays mounted as the pinned first tab (hidden while
+		// the document is active) — nothing relocates to the sidebar.
 		await waitFor(() => {
-			expect(screen.queryByTestId("files-view-wide")).toBeNull();
 			expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
 		});
-
-		const fileTree = document.querySelector<HTMLElement>(
-			'[aria-label="Files"]',
-		);
-		expect(fileTree).toBeTruthy();
-		const secondFile = fileTree.shadowRoot?.querySelector<HTMLElement>(
-			'[data-item-path="two.md"]',
-		);
-		expect(secondFile).toBeTruthy();
-		fireEvent.click(secondFile!);
-		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
-		expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
-
-		await waitFor(async () => {
+		await waitFor(() => {
 			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.left?.views).toEqual([
-				expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
-			]);
-			expect(
-				value?.panels?.central?.views?.some(
-					(view) => view.kind === FILES_EXTENSION_KIND,
-				),
-			).toBe(false);
+			expect(value?.panels?.left?.views).toEqual([]);
 			expect(value?.panels?.central?.views).toEqual([
+				pinnedFilesHome,
+				expect.objectContaining({
+					state: expect.objectContaining({ fileId: "one" }),
+				}),
+			]);
+		});
+
+		// Back on the home tab, opening another file appends a tab — the
+		// pinned home is never navigated in place.
+		fireEvent.click(screen.getByRole("button", { name: "Files" }));
+		fireEvent.click(await findFilesTreeItem("two.md"));
+		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+		await waitFor(() => {
+			const value = sessionStateStore.getSnapshot();
+			expect(value?.panels?.central?.views).toEqual([
+				pinnedFilesHome,
+				expect.objectContaining({
+					state: expect.objectContaining({ fileId: "one" }),
+				}),
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: "two" }),
 				}),
 			]);
-			expect(
-				(await preferencesStore.load())?.layout.sizes.left,
-			).toBeGreaterThan(0);
 		});
 
+		// Deleting every open file lands back on the pinned home.
 		await act(async () => {
 			await qb(lix).deleteFrom("lix_file").where("id", "=", "two").execute();
 		});
-
+		await act(async () => {
+			await qb(lix).deleteFrom("lix_file").where("id", "=", "one").execute();
+		});
 		await waitFor(() => {
 			expect(screen.getByTestId("files-view-wide")).toBeVisible();
-			expect(
-				screen.getByRole("button", { name: "Toggle left panel" }),
-			).toHaveAttribute("aria-pressed", "false");
-			expect(
-				document.activeElement ===
-					screen.getByRole("button", { name: "New" }) ||
-					document.activeElement?.getAttribute("aria-label") === "Files",
-			).toBe(true);
 		});
-		await waitFor(async () => {
-			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.left?.views).toEqual([]);
-			expect(value?.panels?.central?.views).toEqual([
-				expect.objectContaining({
-					instance: "files-default",
-					kind: FILES_EXTENSION_KIND,
-				}),
-			]);
-			expect((await preferencesStore.load())?.layout.sizes.left).toBe(0);
-		});
-
-		const leftToggle = screen.getByRole("button", {
-			name: "Toggle left panel",
-		});
-		fireEvent.click(leftToggle);
 		await waitFor(() => {
-			expect(leftToggle).toHaveAttribute("aria-pressed", "true");
+			const value = sessionStateStore.getSnapshot();
+			expect(value?.panels?.central?.views).toEqual([pinnedFilesHome]);
+			expect(value?.panels?.central?.activeInstance).toBe("central-home");
 		});
-		fireEvent.click(leftToggle);
 
 		await act(async () => utils?.unmount());
 		await lix.close();
@@ -299,15 +282,9 @@ describe("open file lifecycle", () => {
 		await waitFor(async () => {
 			const state = sessionStateStore.getSnapshot();
 			expect(state?.panels.central).toEqual({
-				views: [
-					expect.objectContaining({
-						instance: "files-default",
-						kind: FILES_EXTENSION_KIND,
-					}),
-				],
-				activeInstance: "files-default",
+				views: [pinnedFilesHome],
+				activeInstance: "central-home",
 			});
-			expect(state?.focusedPanel).toBe("central");
 			expect((await preferencesStore.load())?.layout.sizes).toEqual({
 				left: 10,
 				central: 55,
@@ -348,8 +325,12 @@ describe("open file lifecycle", () => {
 
 async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 	return waitFor(() => {
-		const host = screen.getByLabelText("Files");
-		const item = host.shadowRoot?.querySelector(
+		// The compact pinned home tab is also labeled "Files"; the tree is the
+		// shadow-DOM host.
+		const host = screen
+			.getAllByLabelText("Files")
+			.find((candidate) => candidate.shadowRoot);
+		const item = host?.shadowRoot?.querySelector(
 			`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
 		);
 		if (!(item instanceof HTMLElement)) {
@@ -407,6 +388,7 @@ describe("agent turn review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("stable.md"));
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "stable-file" }),
 					}),
@@ -482,6 +464,7 @@ describe("agent turn review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("stable.md"));
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "stable-file" }),
 					}),
@@ -509,6 +492,7 @@ describe("agent turn review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "later-file" }),
 					}),
@@ -602,6 +586,7 @@ describe("agent turn review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "older-file" }),
 					}),
@@ -614,6 +599,7 @@ describe("agent turn review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("middle.md"));
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "stable-file" }),
 					}),
@@ -642,6 +628,7 @@ describe("agent turn review navigation", () => {
 
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "newer-file" }),
 					}),
@@ -715,6 +702,7 @@ describe("agent turn review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "active-review-file" }),
 					}),
@@ -756,6 +744,7 @@ describe("agent turn review navigation", () => {
 				expect(queuedFile).toHaveAttribute("data-item-git-status", "modified");
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+				pinnedFilesHome,
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: "active-review-file" }),
 				}),
@@ -769,6 +758,7 @@ describe("agent turn review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "queued-review-file" }),
 					}),
@@ -836,6 +826,7 @@ describe("agent turn review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("session-review.md"));
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "session-review-file" }),
 					}),
@@ -849,6 +840,7 @@ describe("agent turn review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("session-stable.md"));
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "session-stable-file" }),
 					}),
@@ -868,6 +860,7 @@ describe("agent turn review navigation", () => {
 
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+					pinnedFilesHome,
 					expect.objectContaining({
 						state: expect.objectContaining({ fileId: "session-review-file" }),
 					}),
@@ -1386,12 +1379,35 @@ describe("canonical UI state", () => {
 				);
 			});
 
-			fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+			// The snapshot canonicalizes once (the central slot gains its pinned
+			// Files home) while the sidebar Files view is preserved…
+			const canonicalPanels = {
+				left: initialState.panels.left,
+				central: {
+					views: [
+						pinnedFilesHome,
+						expect.objectContaining({ instance: documentInstance }),
+					],
+					activeInstance: documentInstance,
+				},
+				right: { views: [], activeInstance: null },
+			};
+			await waitFor(() => {
+				expect(sessionStateStore.getSnapshot()?.panels).toEqual(
+					canonicalPanels,
+				);
+			});
 
+			// …then focusing the sidebar persists only the focus change.
+			const leftFilesTab = document.querySelector<HTMLElement>(
+				'aside button[data-view-instance="files-default"]',
+			);
+			expect(leftFilesTab).toBeTruthy();
+			fireEvent.click(leftFilesTab!);
 			await waitFor(async () => {
 				const state = sessionStateStore.getSnapshot();
 				expect(state?.focusedPanel).toBe("left");
-				expect(state?.panels).toEqual(initialState.panels);
+				expect(state?.panels).toEqual(canonicalPanels);
 				expect((await preferencesStore.load())?.layout.sizes).toEqual(
 					initialState.layout.sizes,
 				);

@@ -227,9 +227,18 @@ export function PanelV2({
 		return map;
 	}, [panel.views, makeRuntime]);
 
-	const handleInteraction = () => {
+	const handleInteraction = (event: { target: EventTarget | null }) => {
 		if (!onActiveViewInteraction || !activeInstance) return;
-		onActiveViewInteraction(activeInstance);
+		// Activate the view the interaction happened IN — programmatic focus
+		// inside a just-revealed (still hidden) view must not re-select the
+		// previously active one.
+		const targetView =
+			event.target instanceof Element
+				? event.target
+						.closest("[data-view-instance]")
+						?.getAttribute("data-view-instance")
+				: null;
+		onActiveViewInteraction(targetView ?? activeInstance);
 	};
 
 	const ContainerElement =
@@ -900,6 +909,8 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 		return (
 			<button
 				type="button"
+				aria-label={isCompact ? label : undefined}
+				title={isCompact ? label : undefined}
 				onClick={(event) => {
 					dragOnClick?.(event);
 					onClick?.(event);

@@ -52,7 +52,7 @@ export type AtelierDocumentOpenOptions = {
 	readonly documentOrigin?: AtelierDocumentOrigin;
 	/**
 	 * Appends a new central tab instead of navigating the active tab in place.
-	 * Only meaningful when the host enabled `centralPanel.tabs`.
+	 * Appends a new central tab instead of navigating the active tab.
 	 */
 	readonly newTab?: boolean;
 };

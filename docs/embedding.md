@@ -13,42 +13,33 @@ This mirrors the pattern of other embeddable surfaces (Monaco's
 shadcn/Radix slot composition): the shell owns layout and interaction
 machinery, the host owns content and navigation policy.
 
-## The central panel: two modes
+## The central panel: browser-style tabs
 
 The central panel is the main content area between the left and right side
-panels. It operates in one of two modes:
-
-### Document slot (default)
+panels. It is **always** a tab strip with a pinned home — the one UX
+primitive shared by every host.
 
 ```ts
+// Default: the Files view is the pinned home tab.
 createAtelier({ lix });
-```
 
-The central island hosts exactly **one** view at a time — a document editor or
-the Files landing view. There is no tab strip; switching files happens from
-the Files view. `documents.open(path)` replaces the current view. This is the
-mode FlashType uses.
-
-### Tabbed (`centralPanel.mode: "tabs"`)
-
-```ts
+// Custom home: a host extension pins as the permanent first tab; the
+// Files view moves to the sidebar since the home owns the central landing.
 createAtelier({
 	lix,
 	extensions: [homeExtension, dirExtension],
 	centralPanel: {
-		mode: "tabs",
 		home: { extensionId: "my_home" },
 	},
 });
 ```
 
-The two modes are a discriminated union — a `home` cannot be configured
-without tabs. With a pinned home configured, the Files view automatically
-lives in the sidebar (`filesViewMode` is treated as `"sidebar"`), since the
-home view owns the central landing.
+Without a configured home the **Files view is the home tab** — same rules,
+zero configuration. With a custom home, the Files view automatically lives in
+the sidebar instead.
 
-The central island renders a tab strip and keeps multiple content views open.
-The model is deliberately browser-like:
+The central island keeps multiple content views open. The model is
+deliberately browser-like:
 
 - **`home`** pins the named extension as the permanent first tab. It cannot be
   closed, dragged out, or replaced by navigation — like a browser's home
@@ -59,8 +50,9 @@ The model is deliberately browser-like:
   is active — or there is no content tab — a new content tab is appended
   beside it instead.
 - **New tabs are explicit.** `documents.open(path, { newTab: true })` always
-  appends a new tab (hosts map ⌘-click to this). The tab-strip `＋` button and
-  newly created documents also open in their own tab.
+  appends a new tab at the end of the strip (hosts map ⌘-click to this). The
+  tab-strip `＋` button and newly created documents also open in their own
+  tab.
 - **Closing a tab** activates its neighbor; closing the last content tab lands
   on the pinned home.
 

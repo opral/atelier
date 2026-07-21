@@ -8,7 +8,7 @@ import type {
 	PanelState,
 } from "../extension-runtime/types";
 
-/** Reserved instance id of the pinned home tab in tabbed mode. */
+/** Reserved instance id of the pinned home tab. */
 export const CENTRAL_HOME_INSTANCE = "central-home";
 
 export type CentralPlaceIntent = {
@@ -17,14 +17,11 @@ export type CentralPlaceIntent = {
 };
 
 /**
- * The central island's mode as one cohesive object: the document-slot default
- * (one view, switched from the Files list) or browser-style tabs with an
- * optional pinned home. All tab-model rules live here so the shell reads
+ * The central island's rules as one cohesive object: browser-style tabs with
+ * an optional pinned home. All tab-model rules live here so the shell reads
  * `behavior.<rule>` instead of branching on flags at every call site.
  */
 export type CentralSlotBehavior = {
-	/** True in tabbed mode; drives the tab strip UI. */
-	readonly tabs: boolean;
 	/** Extension pinned as the permanent first tab, when configured. */
 	readonly homeKind: ExtensionKind | null;
 	/** Whether the central island can host this view. */
@@ -61,37 +58,6 @@ const panelViewsEqual = (left: PanelState, right: PanelState): boolean =>
 	left.activeInstance === right.activeInstance &&
 	left.views.length === right.views.length &&
 	left.views.every((view, index) => view === right.views[index]);
-
-/** The single-document slot: exactly one document (or Files landing) view. */
-export const DOCUMENT_SLOT_BEHAVIOR: CentralSlotBehavior = {
-	tabs: false,
-	homeKind: null,
-	canHost: (view) => isDocumentView(view) || view.kind === FILES_EXTENSION_KIND,
-	normalize: (panel) => {
-		const activeEntry = activeEntryOf(panel);
-		if (!activeEntry || !DOCUMENT_SLOT_BEHAVIOR.canHost(activeEntry)) {
-			return panel.views.length === 0 && panel.activeInstance === null
-				? panel
-				: { views: [], activeInstance: null };
-		}
-		if (
-			panel.views.length === 1 &&
-			panel.views[0] === activeEntry &&
-			panel.activeInstance === activeEntry.instance
-		) {
-			return panel;
-		}
-		return {
-			views: [activeEntry],
-			activeInstance: activeEntry.instance,
-		};
-	},
-	place: (_panel, view) => ({
-		views: [view],
-		activeInstance: view.instance,
-	}),
-	closeFallback: (views) => views[views.length - 1]?.instance ?? null,
-};
 
 /**
  * Keeps the configured home pinned as the permanent first view with the
@@ -173,12 +139,16 @@ const insertCentralTabView = (
 	return { views, activeInstance: view.instance };
 };
 
-export function createTabbedCentralSlotBehavior(config: {
+export function createCentralSlotBehavior(config: {
 	readonly homeKind: ExtensionKind | null;
 	/** Extension kinds declaring central placement (beyond document editors). */
 	readonly centralKinds: ReadonlySet<ExtensionKind>;
 }): CentralSlotBehavior {
 	const { homeKind, centralKinds } = config;
+	// Without a host-configured home, the Files view is the pinned home tab —
+	// same rules, one primitive: it cannot be closed or navigated away, and
+	// closing the last content tab lands on it.
+	const pinnedKind = homeKind ?? FILES_EXTENSION_KIND;
 	const canHost = (view: ExtensionInstance): boolean =>
 		isDocumentView(view) ||
 		// A configured home replaces the Files landing view in the central slot.
@@ -186,14 +156,11 @@ export function createTabbedCentralSlotBehavior(config: {
 		view.kind === homeKind ||
 		centralKinds.has(view.kind);
 	return {
-		tabs: true,
-		homeKind,
+		homeKind: pinnedKind,
 		canHost,
 		normalize: (panel) => {
 			let views: ExtensionInstance[] = panel.views.filter(canHost);
-			if (homeKind) {
-				views = ensurePinnedHomeView(views, homeKind);
-			}
+			views = ensurePinnedHomeView(views, pinnedKind);
 			const activeInstance = views.some(
 				(view) => view.instance === panel.activeInstance,
 			)

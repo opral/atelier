@@ -75,8 +75,7 @@ import {
 } from "../extension-runtime/extension-instance-helpers";
 import {
 	CENTRAL_HOME_INSTANCE,
-	createTabbedCentralSlotBehavior,
-	DOCUMENT_SLOT_BEHAVIOR,
+	createCentralSlotBehavior,
 	type CentralSlotBehavior,
 } from "./central-slot-behavior";
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
@@ -294,16 +293,16 @@ export const selectNewFileDraftHandler = (
 		"central" as const,
 		"right" as const,
 	].filter((side, index, sides) => sides.indexOf(side) === index);
-	const registered = [...registrations].filter(
-		(registration) => registration.isActiveView,
-	);
+	const all = [...registrations];
+	const active = all.filter((registration) => registration.isActiveView);
 	for (const panelSide of panelPreference) {
-		const registration = registered.find(
+		const registration = active.find(
 			(candidate) => candidate.panelSide === panelSide,
 		);
 		if (registration) return registration;
 	}
-	return null;
+	// The central Files home may be a hidden tab — the caller reveals it.
+	return all.find((candidate) => candidate.panelSide === "central") ?? null;
 };
 
 const sanitizePanels = (
@@ -1025,15 +1024,14 @@ function LayoutShellLoadedContent({
 	const { extensionMap, replaceInstalledExtensions } = useExtensionRegistry();
 	const centralPanelOptions = configuration.centralPanel;
 	const centralBehavior = useMemo<CentralSlotBehavior>(() => {
-		if (centralPanelOptions?.mode !== "tabs") return DOCUMENT_SLOT_BEHAVIOR;
 		const centralKinds = new Set<ExtensionKind>();
 		for (const definition of extensionMap.values()) {
 			if (definition.placement?.includes("central")) {
 				centralKinds.add(definition.kind);
 			}
 		}
-		return createTabbedCentralSlotBehavior({
-			homeKind: centralPanelOptions.home?.extensionId ?? null,
+		return createCentralSlotBehavior({
+			homeKind: centralPanelOptions?.home?.extensionId ?? null,
 			centralKinds,
 		});
 	}, [centralPanelOptions, extensionMap]);
@@ -1046,11 +1044,10 @@ function LayoutShellLoadedContent({
 		},
 		[extensionMap],
 	);
-	// A pinned home owns the central landing, so Files lives in the sidebar.
+	// With Files as the pinned home, it owns the central landing; a custom
+	// home banishes Files to the sidebar instead.
 	const effectiveFilesViewMode: FilesViewMode =
-		centralBehavior.tabs && centralBehavior.homeKind !== null
-			? "sidebar"
-			: filesViewMode;
+		centralBehavior.homeKind === FILES_EXTENSION_KIND ? "landing" : "sidebar";
 	const defaultLeftPanelOpen = defaultOpenPanels.includes("left");
 	const defaultRightPanelOpen = defaultOpenPanels.includes("right");
 	const initialUiState = useMemo(
@@ -1067,7 +1064,7 @@ function LayoutShellLoadedContent({
 	);
 	const storedPanelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const panelSizes =
-		filesViewMode === "sidebar" &&
+		effectiveFilesViewMode === "sidebar" &&
 		defaultLeftPanelOpen &&
 		storedPanelSizes.left <= MIN_VISIBLE_PANEL_SIZE
 			? {
@@ -1692,12 +1689,6 @@ function LayoutShellLoadedContent({
 			documentOrigin?: "existing" | "new";
 			newTab?: boolean;
 		}) => {
-			const centeredFilesView = panelStatesRef.current.central.views.find(
-				(view) => view.kind === FILES_EXTENSION_KIND,
-			);
-			if (centeredFilesView) {
-				ensurePanelExpanded("left");
-			}
 			const handler =
 				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
@@ -1727,23 +1718,6 @@ function LayoutShellLoadedContent({
 			};
 			updateWorkspace((current) => {
 				const panels = current.panels;
-				// The document-slot mode relocates a centered Files landing view
-				// into the sidebar; in tabs mode Files is just another tab.
-				const centeredFiles = centralBehavior.tabs
-					? undefined
-					: panels.central.views.find(
-							(view) => view.kind === FILES_EXTENSION_KIND,
-						);
-				let left = panels.left;
-				if (
-					centeredFiles &&
-					!left.views.some((view) => view.kind === FILES_EXTENSION_KIND)
-				) {
-					left = {
-						views: [...left.views, centeredFiles],
-						activeInstance: centeredFiles.instance,
-					};
-				}
 				const central = centralBehavior.place(panels.central, documentView, {
 					newTab,
 					documentOrigin,
@@ -1751,7 +1725,6 @@ function LayoutShellLoadedContent({
 				return {
 					panels: {
 						...panels,
-						left,
 						central,
 					},
 					focusedPanel: focus ? "central" : current.focusedPanel,
@@ -2446,8 +2419,23 @@ function LayoutShellLoadedContent({
 			focusedPanel,
 		);
 		if (filesViewHandler) {
-			focusPanel(filesViewHandler.panelSide);
+			// Start the draft first (folder-relativity reads the still-active
+			// document), then reveal the Files home tab if it was hidden.
 			filesViewHandler.handler();
+			if (
+				filesViewHandler.panelSide === "central" &&
+				!filesViewHandler.isActiveView
+			) {
+				setPanelState(
+					"central",
+					(panel) => ({
+						views: panel.views,
+						activeInstance: filesViewHandler.viewInstance,
+					}),
+					{ focus: true },
+				);
+			}
+			focusPanel(filesViewHandler.panelSide);
 			return null;
 		}
 		return handleCreateNewFile();
@@ -2458,6 +2446,7 @@ function LayoutShellLoadedContent({
 		isHostReadOnly,
 		isLeftCollapsed,
 		isRightCollapsed,
+		setPanelState,
 	]);
 
 	const activeCentralFileId =
@@ -2580,7 +2569,7 @@ function LayoutShellLoadedContent({
 				...(isHome ? { isPinned: true } : {}),
 				...(options.state ? { state: options.state } : {}),
 			};
-			if (!centralBehavior.tabs || !centralBehavior.canHost(view)) {
+			if (!centralBehavior.canHost(view)) {
 				throw new Error(
 					`Extension "${extensionId}" cannot be placed in the central panel.`,
 				);
@@ -2738,7 +2727,7 @@ function LayoutShellLoadedContent({
 	// Headless context for a host-rendered central tab strip: the host owns
 	// the chips, Atelier keeps the tab rules (pinning, selection, closing).
 	const centralTabStripContext = useMemo<AtelierTabStripContext | null>(() => {
-		if (!centralBehavior.tabs || !slots?.centralTabStrip) return null;
+		if (!slots?.centralTabStrip) return null;
 		const activeInstance =
 			centralPanel.activeInstance ?? centralPanel.views[0]?.instance ?? null;
 		const tabs = centralPanel.views.flatMap((entry): AtelierTabStripTab[] => {
@@ -2774,7 +2763,6 @@ function LayoutShellLoadedContent({
 			...(isHostReadOnly ? {} : { newTab: () => void handleCreateNewFile() }),
 		};
 	}, [
-		centralBehavior.tabs,
 		centralPanel,
 		extensionMap,
 		handleCloseView,
@@ -2998,7 +2986,7 @@ function LayoutShellLoadedContent({
 						>
 							<CentralPanel
 								panel={centralPanel}
-								showTabBar={centralBehavior.tabs}
+								showTabBar
 								isFocused={focusedPanel === "central"}
 								onFocusPanel={focusPanel}
 								onSelectView={handleSelectCentralView}
