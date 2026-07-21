@@ -36,6 +36,7 @@ export function parseExtensionManifest(
 		"entry",
 		"fileExtensions",
 		"multiInstance",
+		"placement",
 	]);
 	const unknownKeys = Object.keys(manifest).filter(
 		(key) => !allowedKeys.has(key),
@@ -83,6 +84,21 @@ export function parseExtensionManifest(
 			`Manifest at ${manifestPath} field "multiInstance" must be a boolean.`,
 		);
 	}
+	let placement: ("left" | "right" | "central")[] | undefined;
+	if (manifest.placement !== undefined) {
+		if (
+			!Array.isArray(manifest.placement) ||
+			manifest.placement.length === 0 ||
+			!manifest.placement.every(
+				(value) => value === "left" || value === "right" || value === "central",
+			)
+		) {
+			throw new Error(
+				`Manifest at ${manifestPath} field "placement" must be a non-empty array of "left" | "right" | "central".`,
+			);
+		}
+		placement = manifest.placement as ("left" | "right" | "central")[];
+	}
 	return {
 		apiVersion: 1,
 		id,
@@ -91,6 +107,7 @@ export function parseExtensionManifest(
 		entry,
 		fileExtensions,
 		...(manifest.multiInstance === true ? { multiInstance: true } : {}),
+		...(placement ? { placement } : {}),
 	};
 }
 

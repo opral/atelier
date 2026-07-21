@@ -2,7 +2,6 @@
 	position: relative;
 	height: var(--atelier-panel-header-height);
 	flex-shrink: 0;
-	border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .indicatorTrack {
@@ -31,7 +30,7 @@
 	align-items: center;
 	gap: 4px;
 	height: 100%;
-	padding: 0 8px;
+	padding: 0;
 	overflow-x: auto;
 	scrollbar-width: none;
 	-ms-overflow-style: none;

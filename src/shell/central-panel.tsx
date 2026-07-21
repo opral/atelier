@@ -18,6 +18,10 @@ type CentralPanelProps = {
 	readonly onFocusPanel: (side: PanelSide) => void;
 	readonly onFinalizePendingView?: (key: string) => void;
 	readonly emptyState?: ReactNode;
+	/** Renders the central tab strip (browser-style tabs mode). */
+	readonly showTabBar?: boolean;
+	/** Host-rendered strip replacing the built-in tab row. */
+	readonly customTabStrip?: ReactNode;
 };
 
 /**
@@ -41,6 +45,8 @@ export function CentralPanel({
 	onFinalizePendingView,
 	onCreateNewFile,
 	emptyState: emptyStateOverride,
+	showTabBar = false,
+	customTabStrip,
 }: CentralPanelProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
@@ -79,7 +85,8 @@ export function CentralPanel({
 			onActiveViewInteraction={finalizePendingIfNeeded}
 			emptyStatePlaceholder={emptyState}
 			dropId="central-panel"
-			showTabBar={false}
+			showTabBar={showTabBar}
+			customTabStrip={customTabStrip}
 		/>
 	);
 }

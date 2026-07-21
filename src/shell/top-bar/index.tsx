@@ -21,6 +21,7 @@ export type TopBarProps = {
 	readonly isLeftSidebarVisible?: boolean;
 	readonly isRightSidebarVisible?: boolean;
 	readonly navbarStart?: ReactNode;
+	readonly navbarCenter?: ReactNode;
 	readonly navbarEnd?: ReactNode;
 	/** Host props forwarded to the semantic top-bar header. */
 	readonly rootProps?: AtelierTopBarProps;
@@ -41,6 +42,7 @@ export function TopBar({
 	isLeftSidebarVisible = true,
 	isRightSidebarVisible = true,
 	navbarStart,
+	navbarCenter,
 	navbarEnd,
 	rootProps,
 }: TopBarProps) {
@@ -79,7 +81,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-start rounded-[7px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -95,7 +97,23 @@ export function TopBar({
 					</TooltipContent>
 				</Tooltip>
 			</div>
-			{activeFileName || isReadOnly ? (
+			{navbarCenter !== undefined && navbarCenter !== null ? (
+				<div
+					className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]"
+					data-slot="navbar-center"
+				>
+					{navbarCenter}
+					{isReadOnly ? (
+						<span
+							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-bg-hover)] px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]"
+							data-attr="workspace-read-only-chip"
+						>
+							<Eye aria-hidden="true" className="size-3" strokeWidth={2.2} />
+							Read-only
+						</span>
+					) : null}
+				</div>
+			) : activeFileName || isReadOnly ? (
 				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
 					{activeFileName ? (
 						<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
@@ -131,7 +149,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-end rounded-[7px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"

@@ -4,6 +4,10 @@ import type {
 	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
+	AtelierFilesViewOptions,
+	AtelierPanelSide,
+	AtelierViewOpenOptions,
+	AtelierViewsApi,
 } from "./extension-api";
 import { appendAgentTurnCommitRange } from "./shell/agent-turn-review-range";
 import {
@@ -17,7 +21,7 @@ import {
 	type AtelierSessionStateStore,
 } from "./state-adapters";
 
-export type AtelierPanelSide = "left" | "central" | "right";
+export type { AtelierPanelSide } from "./extension-api";
 export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
 
 export type AtelierDiffSource = {
@@ -41,7 +45,22 @@ export type AtelierDiffApi = {
 export type {
 	AtelierDocumentOpenOptions,
 	AtelierDocumentsApi,
+	AtelierFilesViewOptions,
+	AtelierViewOpenOptions,
+	AtelierViewsApi,
+	AtelierWatchedEntry,
 } from "./extension-api";
+
+/**
+ * The central island is browser-style tabs — the one UX primitive. `home`
+ * pins an extension (registered with `placement` including "central") as the
+ * permanent first tab: it cannot be closed, navigation never replaces it,
+ * and closing the last content tab lands on it. Without a home, the Files
+ * landing view is the first tab.
+ */
+export type AtelierCentralPanelOptions = {
+	readonly home?: { readonly extensionId: string };
+};
 
 export type AtelierOptions = {
 	readonly lix: Lix;
@@ -64,6 +83,13 @@ export type AtelierOptions = {
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
 	/** Only expose review ranges tagged with this account or session id. */
 	readonly reviewRangeSessionId?: string;
+	/**
+	 * Host data source for un-imported "watched" entries in the bundled Files
+	 * view (e.g. disk files surfaced by filesystem watchers).
+	 */
+	readonly filesView?: AtelierFilesViewOptions;
+	/** Central tabs configuration (e.g. the pinned home). */
+	readonly centralPanel?: AtelierCentralPanelOptions;
 };
 
 export type AtelierInstance = {
@@ -71,6 +97,7 @@ export type AtelierInstance = {
 	readonly lix: Lix;
 	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
+	readonly views: AtelierViewsApi;
 };
 
 export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
@@ -93,7 +120,12 @@ type AtelierDocumentsCommand =
 	| { readonly kind: "start-new" }
 	| { readonly kind: "close-active" }
 	| { readonly kind: "close"; readonly path: string }
-	| { readonly kind: "close-all" };
+	| { readonly kind: "close-all" }
+	| {
+			readonly kind: "open-view";
+			readonly extensionId: string;
+			readonly options?: AtelierViewOpenOptions;
+	  };
 
 type QueuedAtelierDocumentsCommand = {
 	readonly command: AtelierDocumentsCommand;
@@ -105,6 +137,8 @@ type QueuedAtelierDocumentsCommand = {
 export type AtelierDocumentsRuntimeState = {
 	readonly activePath: string | null;
 	readonly openPaths: readonly string[];
+	/** Instance id of the active central view (documents and host views). */
+	readonly activeViewInstance: string | null;
 };
 
 /** @internal */
@@ -135,6 +169,12 @@ export type AtelierDocumentsRuntimeBinding = {
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
 	readonly closeAll: () =>
+		| AtelierDocumentsRuntimeCommandResult
+		| Promise<AtelierDocumentsRuntimeCommandResult>;
+	readonly openView: (
+		extensionId: string,
+		options?: AtelierViewOpenOptions,
+	) =>
 		| AtelierDocumentsRuntimeCommandResult
 		| Promise<AtelierDocumentsRuntimeCommandResult>;
 };
@@ -226,6 +266,25 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 					kind: "close-all",
 				}),
 		},
+		views: {
+			open: (extensionId, viewOptions) => {
+				if (
+					typeof extensionId !== "string" ||
+					extensionId.trim().length === 0
+				) {
+					return Promise.reject(
+						new TypeError(
+							"atelier.views.open() requires a non-empty extension id.",
+						),
+					);
+				}
+				return enqueueAtelierDocumentsCommand(documentsRuntime, {
+					kind: "open-view",
+					extensionId,
+					...(viewOptions ? { options: viewOptions } : {}),
+				});
+			},
+		},
 	};
 	const configuration: AtelierConfiguration = {
 		sessionStateStore,
@@ -245,6 +304,12 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
 		...(options.reviewRangeSessionId !== undefined
 			? { reviewRangeSessionId: options.reviewRangeSessionId }
+			: {}),
+		...(options.filesView !== undefined
+			? { filesView: options.filesView }
+			: {}),
+		...(options.centralPanel !== undefined
+			? { centralPanel: options.centralPanel }
 			: {}),
 	};
 	Object.defineProperty(instance, CONFIGURATION, {
@@ -332,6 +397,7 @@ function createAtelierDocumentsRuntime(): AtelierDocumentsRuntime {
 		state: freezeAtelierDocumentsState({
 			activePath: null,
 			openPaths: [],
+			activeViewInstance: null,
 		}),
 		listeners: new Set(),
 	};
@@ -418,6 +484,10 @@ async function runAtelierDocumentsCommand(
 			return binding.close(command.path);
 		case "close-all":
 			return binding.closeAll();
+		case "open-view":
+			return command.options
+				? binding.openView(command.extensionId, command.options)
+				: binding.openView(command.extensionId);
 	}
 }
 
@@ -476,6 +546,7 @@ function freezeAtelierDocumentsState(
 	return Object.freeze({
 		activePath: state.activePath,
 		openPaths: Object.freeze([...new Set(state.openPaths)]),
+		activeViewInstance: state.activeViewInstance,
 	});
 }
 
@@ -484,6 +555,7 @@ function atelierDocumentsStatesEqual(
 	right: AtelierDocumentsRuntimeState,
 ): boolean {
 	if (left.activePath !== right.activePath) return false;
+	if (left.activeViewInstance !== right.activeViewInstance) return false;
 	if (left.openPaths.length !== right.openPaths.length) return false;
 	return left.openPaths.every((path, index) => path === right.openPaths[index]);
 }

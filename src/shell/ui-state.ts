@@ -60,11 +60,11 @@ const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	focusedPanel: "central",
 	panels: {
-		left: { views: [], activeInstance: null },
-		central: {
+		left: {
 			views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-default",
 		},
+		central: { views: [], activeInstance: null },
 		right: { views: [], activeInstance: null },
 	},
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
@@ -105,7 +105,9 @@ function isViewInstance(value: unknown): value is PanelState["views"][number] {
 		typeof candidate.instance === "string" &&
 		typeof candidate.kind === "string" &&
 		(candidate.isPending === undefined ||
-			typeof candidate.isPending === "boolean")
+			typeof candidate.isPending === "boolean") &&
+		(candidate.isPinned === undefined ||
+			typeof candidate.isPinned === "boolean")
 	);
 }
 

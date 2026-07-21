@@ -28,6 +28,7 @@ export function createReactExtensionDefinition(args: {
 		description: args.description,
 		icon: args.icon,
 		fileExtensions: normalizeFileExtensions(args.manifest.fileExtensions),
+		...(args.manifest.placement ? { placement: args.manifest.placement } : {}),
 		mount: ({ atelier, view, element }) => {
 			let root = (element as unknown as Record<symbol, Root | undefined>)[
 				ROOT_SLOT

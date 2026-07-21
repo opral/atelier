@@ -51,7 +51,7 @@ type FormatState = {
 
 /** 28px square icon button, matching the panel-header chips in the islands UI. */
 const iconButtonClass =
-	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-[var(--color-text-tertiary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
+	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-[var(--color-icon-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
 
 /** Pressed state for a formatting toggle. */
 const iconButtonActiveClass =
@@ -392,7 +392,7 @@ export function FormattingToolbar({
 	return (
 		<Toolbar.Root
 			className={clsx(
-				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-panel)] px-2 text-foreground",
+				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-[var(--color-border-subtle)] px-2.5 text-foreground",
 				className,
 			)}
 			aria-label="Formatting toolbar"
@@ -426,9 +426,13 @@ export function FormattingToolbar({
 								render={<Select.Trigger />}
 								data-attr="markdown-block-selector"
 								className={clsx(
-									"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
-									blockMenuOpen &&
-										"bg-[var(--color-bg-control-selected)] text-[var(--color-text-primary)]",
+									"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+									// While the menu is open the trigger stays completely
+									// unfilled — the cursor is usually still on it, so even
+									// the hover tint reads as a stuck pill.
+									blockMenuOpen
+										? "text-[var(--color-text-primary)]"
+										: "hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
 								)}
 								onMouseDown={suppressMouseDown}
 							>

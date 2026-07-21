@@ -81,7 +81,7 @@ describe("syncPanelGroupLayout", () => {
 });
 
 describe("open file lifecycle", () => {
-	test("moves the centered Files instance left when a document opens", async () => {
+	test("opens documents as central tabs beside the sidebar Files view", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
 		const sessionStateStore = createMemorySessionStateStore();
@@ -133,84 +133,60 @@ describe("open file lifecycle", () => {
 			documentOrigin: "existing",
 			viewKind: "atelier_file",
 		});
+		// Files stays in the sidebar; the document is the only central view.
 		await waitFor(() => {
-			expect(screen.queryByTestId("files-view-wide")).toBeNull();
-			expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
-		});
-
-		const fileTree = document.querySelector<HTMLElement>(
-			'[aria-label="Files"]',
-		);
-		expect(fileTree).toBeTruthy();
-		const secondFile = fileTree.shadowRoot?.querySelector<HTMLElement>(
-			'[data-item-path="two.md"]',
-		);
-		expect(secondFile).toBeTruthy();
-		fireEvent.click(secondFile!);
-		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
-		expect(screen.getAllByTestId("files-view-tree-scroll")).toHaveLength(1);
-
-		await waitFor(async () => {
 			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.left?.views).toEqual([
 				expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
 			]);
-			expect(
-				value?.panels?.central?.views?.some(
-					(view) => view.kind === FILES_EXTENSION_KIND,
-				),
-			).toBe(false);
+			expect(value?.panels?.central?.views).toEqual([
+				expect.objectContaining({
+					state: expect.objectContaining({ fileId: "one" }),
+				}),
+			]);
+		});
+
+		// A plain click navigates the active tab in place.
+		fireEvent.click(await findFilesTreeItem("two.md"));
+		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+		await waitFor(() => {
+			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.central?.views).toEqual([
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: "two" }),
 				}),
 			]);
-			expect(
-				(await preferencesStore.load())?.layout.sizes.left,
-			).toBeGreaterThan(0);
 		});
 
+		// newTab appends instead of replacing.
+		await act(async () => {
+			await atelier.documents.open("/one.md", { newTab: true });
+		});
+		await waitFor(() => {
+			expect(
+				sessionStateStore.getSnapshot()?.panels?.central?.views,
+			).toHaveLength(2);
+		});
+
+		// Deleting every open file leaves the central empty state.
 		await act(async () => {
 			await qb(lix).deleteFrom("lix_file").where("id", "=", "two").execute();
 		});
-
+		await act(async () => {
+			await qb(lix).deleteFrom("lix_file").where("id", "=", "one").execute();
+		});
 		await waitFor(() => {
-			expect(screen.getByTestId("files-view-wide")).toBeVisible();
-			expect(
-				screen.getByRole("button", { name: "Toggle left panel" }),
-			).toHaveAttribute("aria-pressed", "false");
-			expect(
-				document.activeElement ===
-					screen.getByRole("button", { name: "New" }) ||
-					document.activeElement?.getAttribute("aria-label") === "Files",
-			).toBe(true);
+			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
+			expect(sessionStateStore.getSnapshot()?.panels?.central?.views).toEqual(
+				[],
+			);
 		});
-		await waitFor(async () => {
-			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.left?.views).toEqual([]);
-			expect(value?.panels?.central?.views).toEqual([
-				expect.objectContaining({
-					instance: "files-default",
-					kind: FILES_EXTENSION_KIND,
-				}),
-			]);
-			expect((await preferencesStore.load())?.layout.sizes.left).toBe(0);
-		});
-
-		const leftToggle = screen.getByRole("button", {
-			name: "Toggle left panel",
-		});
-		fireEvent.click(leftToggle);
-		await waitFor(() => {
-			expect(leftToggle).toHaveAttribute("aria-pressed", "true");
-		});
-		fireEvent.click(leftToggle);
 
 		await act(async () => utils?.unmount());
 		await lix.close();
 	});
 
-	test("restores centered Files when the last open file is deleted", async () => {
+	test("shows the empty state when the last open file is deleted", async () => {
 		const fileId = "file_generic";
 		const imageKind = "atelier_image";
 		const instance = fileExtensionInstanceForKind(imageKind, fileId);
@@ -292,22 +268,15 @@ describe("open file lifecycle", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.getByTestId("files-view-wide")).toBeInTheDocument();
-			expect(screen.queryByTestId("central-panel-empty-state")).toBeNull();
+			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
 			expect(screen.queryByRole("img", { name: "photo.jpeg" })).toBeNull();
 		});
 		await waitFor(async () => {
 			const state = sessionStateStore.getSnapshot();
 			expect(state?.panels.central).toEqual({
-				views: [
-					expect.objectContaining({
-						instance: "files-default",
-						kind: FILES_EXTENSION_KIND,
-					}),
-				],
-				activeInstance: "files-default",
+				views: [],
+				activeInstance: null,
 			});
-			expect(state?.focusedPanel).toBe("central");
 			expect((await preferencesStore.load())?.layout.sizes).toEqual({
 				left: 10,
 				central: 55,
@@ -348,8 +317,12 @@ describe("open file lifecycle", () => {
 
 async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 	return waitFor(() => {
-		const host = screen.getByLabelText("Files");
-		const item = host.shadowRoot?.querySelector(
+		// The compact pinned home tab is also labeled "Files"; the tree is the
+		// shadow-DOM host.
+		const host = screen
+			.getAllByLabelText("Files")
+			.find((candidate) => candidate.shadowRoot);
+		const item = host?.shadowRoot?.querySelector(
 			`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
 		);
 		if (!(item instanceof HTMLElement)) {
@@ -1283,9 +1256,7 @@ describe("installed extension lifecycle", () => {
 				name: "Navigator",
 			});
 			fireEvent.pointerDown(
-				await within(navigator).findByRole("button", {
-					name: "Open a view",
-				}),
+				await within(navigator).findByRole("button", { name: "Add view" }),
 				{ button: 0 },
 			);
 			fireEvent.click(

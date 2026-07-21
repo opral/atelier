@@ -12,6 +12,7 @@ export { ATELIER_BUILTIN_EXTENSION_IDS } from "./extension-api";
 export { useDebouncedPayloadPersistence } from "./extension-runtime/use-debounced-payload-persistence";
 export type { DebouncedPayloadPersistenceOptions } from "./extension-runtime/use-debounced-payload-persistence";
 export type {
+	AtelierCentralPanelOptions,
 	AtelierDiffApi,
 	AtelierDiffOpenOptions,
 	AtelierDiffSource,
@@ -37,6 +38,8 @@ export type {
 	AtelierPanelSide,
 	AtelierProps,
 	AtelierSlots,
+	AtelierTabStripContext,
+	AtelierTabStripTab,
 	AtelierTopBarProps,
 } from "./create-atelier";
 export type {
@@ -49,7 +52,11 @@ export type {
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierExtensionView,
+	AtelierFilesViewOptions,
 	AtelierMountedExtension,
+	AtelierViewOpenOptions,
+	AtelierViewsApi,
+	AtelierWatchedEntry,
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
 } from "./extension-api";

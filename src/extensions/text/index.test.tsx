@@ -262,6 +262,9 @@ function createRuntime(
 			activeFileId: null,
 			activeFilePath: null,
 		},
+		views: {
+			open: vi.fn(),
+		},
 		branches: {
 			activeId: "main",
 		},

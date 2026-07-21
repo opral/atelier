@@ -904,6 +904,229 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("renders host watched entries merged with lix entries, deduped by path", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		const { watchEntries } = createWatchEntriesStub([
+			{ path: "/README.md", kind: "file" },
+			{ path: "/notes.md", kind: "file" },
+			{ path: "/drafts", kind: "directory" },
+		]);
+		const openFile = vi.fn();
+		const resolveFileForInteraction = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				openFile,
+				resolveFileForInteraction,
+				watchEntries,
+			});
+		});
+
+		await waitFor(() => {
+			expect(getFilesTreeItem("notes.md")).toBeVisible();
+			expect(getFilesTreeItem("drafts/")).toBeVisible();
+			expect(getFilesTreeItem("README.md")).toBeVisible();
+		});
+
+		// The lix row wins the path collision: opening README.md uses its
+		// canonical id without a resolve roundtrip.
+		fireEvent.click(getFilesTreeItem("README.md"));
+		await waitFor(() => {
+			expect(openFile).toHaveBeenCalledWith({
+				fileId: "readme",
+				filePath: "/README.md",
+				focus: false,
+				panel: "central",
+			});
+		});
+		expect(resolveFileForInteraction).not.toHaveBeenCalled();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("resubscribes the watched provider when a directory is expanded", async () => {
+		const lix = await openLix();
+		const { calls, unsubscribe, watchEntries } = createWatchEntriesStub([
+			{ path: "/drafts", kind: "directory" },
+			{ path: "/drafts/idea.md", kind: "file" },
+		]);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, { watchEntries });
+		});
+
+		await waitFor(() => {
+			expect(getFilesTreeItem("drafts/")).toBeVisible();
+		});
+		expect(calls).toEqual([["/"]]);
+		expect(unsubscribe).not.toHaveBeenCalled();
+
+		fireEvent.click(getFilesTreeItem("drafts/"));
+		await waitFor(() => {
+			expect(calls).toEqual([["/"], ["/", "/drafts/"]]);
+		});
+		expect(unsubscribe).toHaveBeenCalledTimes(1);
+		await waitFor(() => {
+			expect(getFilesTreeItem("drafts/idea.md")).toBeVisible();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("opens a watched file through resolveFileForInteraction", async () => {
+		const lix = await openLix();
+		const { watchEntries } = createWatchEntriesStub([
+			{ path: "/notes.md", kind: "file" },
+		]);
+		const openFile = vi.fn();
+		const resolveFileForInteraction = vi.fn(async (path: string) => {
+			await insertFile(lix, "notes", path, "# Notes\n");
+			return { fileId: "notes" };
+		});
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				openFile,
+				resolveFileForInteraction,
+				watchEntries,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("notes.md")).toBeVisible();
+		});
+
+		fireEvent.click(getFilesTreeItem("notes.md"));
+
+		await waitFor(() => {
+			expect(openFile).toHaveBeenCalledWith({
+				fileId: "notes",
+				filePath: "/notes.md",
+				focus: false,
+				panel: "central",
+			});
+		});
+		expect(resolveFileForInteraction).toHaveBeenCalledWith("/notes.md");
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("no-ops watched interactions when the host resolves null", async () => {
+		const lix = await openLix();
+		const { watchEntries } = createWatchEntriesStub([
+			{ path: "/notes.md", kind: "file" },
+		]);
+		const openFile = vi.fn();
+		const resolveFileForInteraction = vi.fn(async () => null);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				openFile,
+				resolveFileForInteraction,
+				watchEntries,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("notes.md")).toBeVisible();
+		});
+
+		fireEvent.click(getFilesTreeItem("notes.md"));
+
+		await waitFor(() => {
+			expect(resolveFileForInteraction).toHaveBeenCalledWith("/notes.md");
+		});
+		expect(openFile).not.toHaveBeenCalled();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("renames a watched file through resolveFileForInteraction", async () => {
+		const lix = await openLix();
+		const { watchEntries } = createWatchEntriesStub([
+			{ path: "/notes.md", kind: "file" },
+		]);
+		const openFile = vi.fn();
+		const resolveFileForInteraction = vi.fn(async (path: string) => {
+			await insertFile(lix, "notes", path, "# Notes\n");
+			return { fileId: "notes" };
+		});
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				isActiveView: true,
+				isPanelFocused: true,
+				openFile,
+				resolveFileForInteraction,
+				watchEntries,
+			});
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("notes.md")).toBeVisible();
+		});
+
+		fireEvent.contextMenu(getFilesTreeItem("notes.md"), {
+			button: 2,
+			clientX: 24,
+			clientY: 24,
+		});
+		const menu = await getFilesTreeContextMenu();
+		// Watched rows stay non-destructive: rename imports, delete is absent.
+		expect(menu).not.toHaveTextContent("Delete");
+		fireEvent.click(getFilesTreeContextMenuButton(menu, "Rename"));
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "renamed.md" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(resolveFileForInteraction).toHaveBeenCalledWith("/notes.md");
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("id", "=", "notes")
+					.executeTakeFirst(),
+			).toEqual({ path: "/renamed.md" });
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("changes nothing for hosts without a watched-files provider", async () => {
+		const lix = await openLix();
+		await insertReadme(lix);
+		const openFile = vi.fn();
+		const resolveFileForInteraction = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			// resolveFileForInteraction without watchEntries: nothing is watched,
+			// so the resolve hook must never run.
+			view = renderFilesView(lix, { openFile, resolveFileForInteraction });
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toBeVisible();
+		});
+		expect(queryFilesTreeItem("notes.md")).toBeNull();
+
+		fireEvent.click(getFilesTreeItem("README.md"));
+		await waitFor(() => {
+			expect(openFile).toHaveBeenCalledWith({
+				fileId: "readme",
+				filePath: "/README.md",
+				focus: false,
+				panel: "central",
+			});
+		});
+		expect(resolveFileForInteraction).not.toHaveBeenCalled();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("reacts to review range changes without retaining stale badges", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
@@ -974,6 +1197,27 @@ function FilesViewFixture({
 
 function renderFilesView(lix: Lix, context?: TestFilesViewContext) {
 	return render(<FilesViewFixture lix={lix} context={context} />);
+}
+
+type WatchedEntryStub = {
+	readonly path: string;
+	readonly kind: "file" | "directory";
+};
+
+function createWatchEntriesStub(entries: readonly WatchedEntryStub[]) {
+	const calls: string[][] = [];
+	const unsubscribe = vi.fn();
+	const watchEntries = vi.fn(
+		(args: {
+			readonly expandedDirectories: readonly string[];
+			readonly onChange: (next: readonly WatchedEntryStub[]) => void;
+		}) => {
+			calls.push([...args.expandedDirectories]);
+			args.onChange(entries);
+			return unsubscribe;
+		},
+	);
+	return { calls, unsubscribe, watchEntries };
 }
 
 function primaryModifier(): { ctrlKey: true } | { metaKey: true } {

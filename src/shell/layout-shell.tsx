@@ -59,18 +59,24 @@ import {
 	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
 import {
-	ensureWorkspaceFilesView,
 	type FilesViewMode,
 	type WorkspacePanelState,
 } from "./workspace-panel-state";
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
+	documentPathFromView,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
+	isDocumentView,
 } from "../extension-runtime/extension-instance-helpers";
+import {
+	CENTRAL_HOME_INSTANCE,
+	createCentralSlotBehavior,
+	type CentralSlotBehavior,
+} from "./central-slot-behavior";
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
 import {
 	coerceAtelierUiState,
@@ -100,6 +106,8 @@ import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
 	AtelierSlots,
+	AtelierTabStripContext,
+	AtelierTabStripTab,
 	AtelierTopBarProps,
 } from "../create-atelier";
 import {
@@ -109,6 +117,7 @@ import {
 import type {
 	AtelierDocumentOpenOptions,
 	AtelierEvent,
+	AtelierViewOpenOptions,
 } from "../extension-api";
 import {
 	bindAtelierDocumentsRuntime,
@@ -212,24 +221,6 @@ const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
 	return panel.views.find((entry) => entry.instance === activeInstance) ?? null;
 };
 
-const isDocumentView = (
-	view: ExtensionInstance | null | undefined,
-): boolean => {
-	if (!view) return false;
-	const fileId =
-		typeof view.state?.fileId === "string" ? view.state.fileId : "";
-	if (!fileId) return false;
-	return view.instance === fileExtensionInstanceForKind(view.kind, fileId);
-};
-
-const documentPathFromView = (
-	view: ExtensionInstance | null | undefined,
-): string | null => {
-	if (!view || !isDocumentView(view)) return null;
-	const path = view.state?.filePath;
-	return typeof path === "string" && path.length > 0 ? path : null;
-};
-
 const openDocumentPathsFromPanels = (
 	panels: readonly PanelState[],
 ): readonly string[] => {
@@ -246,52 +237,23 @@ const openDocumentPathsFromPanels = (
 const canPlaceViewInPanel = (
 	view: ExtensionInstance,
 	side: PanelSide,
+	behavior: CentralSlotBehavior,
 ): boolean =>
 	side === "central"
-		? isDocumentView(view) || view.kind === FILES_EXTENSION_KIND
-		: !isDocumentView(view);
+		? behavior.canHost(view)
+		: !isDocumentView(view) && !view.isPinned;
 
-const activeEntryForDocumentSlot = (
-	panel: PanelState,
-): ExtensionInstance | null => {
-	if (panel.activeInstance) {
-		const active = panel.views.find(
-			(entry) => entry.instance === panel.activeInstance,
-		);
-		if (active) return active;
-	}
-	return panel.views[0] ?? null;
-};
-
-const normalizePanelForDocumentSlot = (
+const normalizePanel = (
 	side: PanelSide,
 	panel: PanelState,
+	behavior: CentralSlotBehavior,
 ): PanelState => {
 	if (side === "central") {
-		const activeEntry = activeEntryForDocumentSlot(panel);
-		if (
-			!activeEntry ||
-			(!isDocumentView(activeEntry) &&
-				activeEntry.kind !== FILES_EXTENSION_KIND)
-		) {
-			return panel.views.length === 0 && panel.activeInstance === null
-				? panel
-				: { views: [], activeInstance: null };
-		}
-		if (
-			panel.views.length === 1 &&
-			panel.views[0] === activeEntry &&
-			panel.activeInstance === activeEntry.instance
-		) {
-			return panel;
-		}
-		return {
-			views: [activeEntry],
-			activeInstance: activeEntry.instance,
-		};
+		return behavior.normalize(panel);
 	}
-
-	const views = panel.views.filter((view) => !isDocumentView(view));
+	const views = panel.views.filter(
+		(view) => !isDocumentView(view) && !view.isPinned,
+	);
 	const activeInstance = views.some(
 		(view) => view.instance === panel.activeInstance,
 	)
@@ -306,12 +268,13 @@ const normalizePanelForDocumentSlot = (
 	return { views, activeInstance };
 };
 
-const normalizePanelsForDocumentSlot = (
+const normalizePanels = (
 	panels: Record<PanelSide, PanelState>,
+	behavior: CentralSlotBehavior,
 ): Record<PanelSide, PanelState> => ({
-	left: normalizePanelForDocumentSlot("left", panels.left),
-	central: normalizePanelForDocumentSlot("central", panels.central),
-	right: normalizePanelForDocumentSlot("right", panels.right),
+	left: normalizePanel("left", panels.left, behavior),
+	central: normalizePanel("central", panels.central, behavior),
+	right: normalizePanel("right", panels.right, behavior),
 });
 
 const newFileDraftHandlerKey = (
@@ -343,6 +306,7 @@ export const selectNewFileDraftHandler = (
 
 const sanitizePanels = (
 	panels: Record<PanelSide, PanelState>,
+	behavior: CentralSlotBehavior,
 ): Record<PanelSide, PanelState> => {
 	const sanitizePanel = (panel: PanelState): PanelState => {
 		const views = panel.views.map(sanitizeExtensionInstanceForPersistence);
@@ -354,11 +318,14 @@ const sanitizePanels = (
 		return { views, activeInstance };
 	};
 	return {
-		...normalizePanelsForDocumentSlot({
-			left: sanitizePanel(panels.left),
-			central: sanitizePanel(panels.central),
-			right: sanitizePanel(panels.right),
-		}),
+		...normalizePanels(
+			{
+				left: sanitizePanel(panels.left),
+				central: sanitizePanel(panels.central),
+				right: sanitizePanel(panels.right),
+			},
+			behavior,
+		),
 	};
 };
 
@@ -387,15 +354,17 @@ const reconcilePanelExtensionViews = (
 
 export const reconcilePersistedExtensionViews = reconcilePanelExtensionViews;
 
-const reconcilePanelExtensionViewsForDocumentSlot = (
+const reconcileAndNormalizePanel = (
 	side: PanelSide,
 	panel: PanelState,
 	extensionMap: Map<ExtensionKind, ExtensionDefinition>,
-	options: { preserveUnknownKinds?: boolean } = {},
+	options: { preserveUnknownKinds?: boolean },
+	behavior: CentralSlotBehavior,
 ): PanelState =>
-	normalizePanelForDocumentSlot(
+	normalizePanel(
 		side,
 		reconcilePanelExtensionViews(panel, extensionMap, options),
+		behavior,
 	);
 
 const reconcilePanelsWithEnvironment = ({
@@ -403,37 +372,42 @@ const reconcilePanelsWithEnvironment = ({
 	currentFileIds,
 	extensionMap,
 	preserveUnknownExtensionKinds,
+	centralBehavior,
 }: {
 	readonly panels: Record<PanelSide, PanelState>;
 	readonly currentFileIds: ReadonlySet<string>;
 	readonly extensionMap: Map<ExtensionKind, ExtensionDefinition>;
 	readonly preserveUnknownExtensionKinds: boolean;
+	readonly centralBehavior: CentralSlotBehavior;
 }): Record<PanelSide, PanelState> => {
 	const currentPanels = reconcileCurrentFileViews({
-		panels: sanitizePanels(panels),
+		panels: sanitizePanels(panels, centralBehavior),
 		currentFileIds,
 	});
 	const options = {
 		preserveUnknownKinds: preserveUnknownExtensionKinds,
 	};
 	return {
-		left: reconcilePanelExtensionViewsForDocumentSlot(
+		left: reconcileAndNormalizePanel(
 			"left",
 			currentPanels.left,
 			extensionMap,
 			options,
+			centralBehavior,
 		),
-		central: reconcilePanelExtensionViewsForDocumentSlot(
+		central: reconcileAndNormalizePanel(
 			"central",
 			currentPanels.central,
 			extensionMap,
 			options,
+			centralBehavior,
 		),
-		right: reconcilePanelExtensionViewsForDocumentSlot(
+		right: reconcileAndNormalizePanel(
 			"right",
 			currentPanels.right,
 			extensionMap,
 			options,
+			centralBehavior,
 		),
 	};
 };
@@ -599,6 +573,14 @@ function activeDocumentCompletion(
 	};
 }
 
+function activeViewCompletion(
+	instanceId: string,
+): AtelierDocumentsRuntimeCompletion {
+	return {
+		isComplete: (state) => state.activeViewInstance === instanceId,
+	};
+}
+
 function closedDocumentCompletion(
 	path: string,
 ): AtelierDocumentsRuntimeCompletion {
@@ -723,9 +705,25 @@ function LayoutShellStateLoader(
 		configuration.sessionStateStore,
 	);
 	const activeBranchId = useAtelierStoreSnapshot(configuration.branchSession);
+	// Homeless hosts that configured nothing get the left panel open on
+	// first run, so the sidebar Files view is visible.
+	const resolvedDefaultOpenPanels = useMemo<readonly DefaultOpenPanel[]>(() => {
+		if (props.defaultOpenPanels.length > 0) return props.defaultOpenPanels;
+		if (
+			configuration.defaultOpenPanels === undefined &&
+			configuration.centralPanel?.home === undefined
+		) {
+			return ["left"];
+		}
+		return props.defaultOpenPanels;
+	}, [
+		configuration.centralPanel?.home,
+		configuration.defaultOpenPanels,
+		props.defaultOpenPanels,
+	]);
 	const initialUiState = useMemo(
-		() => createInitialAtelierUiState(props.defaultOpenPanels),
-		[props.defaultOpenPanels],
+		() => createInitialAtelierUiState(resolvedDefaultOpenPanels),
+		[resolvedDefaultOpenPanels],
 	);
 	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
 		coerceAtelierUserPreferences(initialUiState),
@@ -843,6 +841,7 @@ function LayoutShellStateLoader(
 	return (
 		<LayoutShellLoadedContent
 			{...props}
+			defaultOpenPanels={resolvedDefaultOpenPanels}
 			uiStateKV={uiStateKV}
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
@@ -1039,6 +1038,28 @@ function LayoutShellLoadedContent({
 		new Map<string, ExtensionDefinition>(),
 	);
 	const { extensionMap, replaceInstalledExtensions } = useExtensionRegistry();
+	const centralPanelOptions = configuration.centralPanel;
+	const centralBehavior = useMemo<CentralSlotBehavior>(() => {
+		const centralKinds = new Set<ExtensionKind>();
+		for (const definition of extensionMap.values()) {
+			if (definition.placement?.includes("central")) {
+				centralKinds.add(definition.kind);
+			}
+		}
+		return createCentralSlotBehavior({
+			homeKind: centralPanelOptions?.home?.extensionId ?? null,
+			centralKinds,
+		});
+	}, [centralPanelOptions, extensionMap]);
+	// Side placement respects manifest declarations; the default is the side
+	// panels only (document editors are central-only regardless).
+	const canPlaceKindInSidePanel = useCallback(
+		(kind: ExtensionKind, side: Exclude<PanelSide, "central">): boolean => {
+			const placement = extensionMap.get(kind)?.placement;
+			return placement === undefined || placement.includes(side);
+		},
+		[extensionMap],
+	);
 	const defaultLeftPanelOpen = defaultOpenPanels.includes("left");
 	const defaultRightPanelOpen = defaultOpenPanels.includes("right");
 	const initialUiState = useMemo(
@@ -1053,20 +1074,8 @@ function LayoutShellLoadedContent({
 		() => coerceAtelierUiState(uiStateKV ?? initialUiState),
 		[initialUiState, uiStateKV],
 	);
-	const storedPanelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
-	const panelSizes =
-		filesViewMode === "sidebar" &&
-		defaultLeftPanelOpen &&
-		storedPanelSizes.left <= MIN_VISIBLE_PANEL_SIZE
-			? {
-					...storedPanelSizes,
-					left: DEFAULT_PANEL_FALLBACK_SIZES.left,
-					central: Math.max(
-						30,
-						storedPanelSizes.central - DEFAULT_PANEL_FALLBACK_SIZES.left,
-					),
-				}
-			: storedPanelSizes;
+	// Stored sizes always win; fresh state opens panels via initialUiState.
+	const panelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const canonicalizeWorkspace = useCallback(
 		(state: AtelierUiState) => {
 			const panels = reconcilePanelsWithEnvironment({
@@ -1074,6 +1083,7 @@ function LayoutShellLoadedContent({
 				currentFileIds: getCurrentFileIdsForReconciliation(),
 				extensionMap,
 				preserveUnknownExtensionKinds,
+				centralBehavior,
 			});
 			const sizes = normalizeLayoutSizes(state.layout?.sizes);
 			const focusedPanel =
@@ -1087,11 +1097,16 @@ function LayoutShellLoadedContent({
 				panels,
 				focusedPanel,
 			};
-			return ensureWorkspaceFilesView(reconciledWorkspace, filesViewMode);
+			return {
+				state: reconciledWorkspace,
+				didRestoreLandingView: false,
+				restoredFilesFrom: null,
+				sourceBecameEmpty: false,
+			};
 		},
 		[
+			centralBehavior,
 			extensionMap,
-			filesViewMode,
 			getCurrentFileIdsForReconciliation,
 			preserveUnknownExtensionKinds,
 		],
@@ -1350,10 +1365,13 @@ function LayoutShellLoadedContent({
 			setUiStateKV((currentValue) => {
 				const current = coerceAtelierUiState(currentValue ?? initialUiState);
 				const next = reducer(current);
-				return { ...next, panels: sanitizePanels(next.panels) };
+				return {
+					...next,
+					panels: sanitizePanels(next.panels, centralBehavior),
+				};
 			});
 		},
-		[initialUiState, setUiStateKV],
+		[centralBehavior, initialUiState, setUiStateKV],
 	);
 	const updateSidePanelSize = useCallback(
 		(side: Exclude<PanelSide, "central">, size: number) => {
@@ -1411,14 +1429,16 @@ function LayoutShellLoadedContent({
 				panel,
 				getCurrentFileIdsForReconciliation(),
 			);
-			return reconcilePanelExtensionViewsForDocumentSlot(
+			return reconcileAndNormalizePanel(
 				side,
 				currentPanel,
 				extensionMap,
 				{ preserveUnknownKinds: preserveUnknownExtensionKinds },
+				centralBehavior,
 			);
 		},
 		[
+			centralBehavior,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
 			preserveUnknownExtensionKinds,
@@ -1443,7 +1463,7 @@ function LayoutShellLoadedContent({
 				);
 				const panels = {
 					...current.panels,
-					[side]: normalizePanelForDocumentSlot(side, next),
+					[side]: normalizePanel(side, next, centralBehavior),
 				};
 				const nextFocusedPanel = options.focus ? side : current.focusedPanel;
 				if (
@@ -1456,6 +1476,7 @@ function LayoutShellLoadedContent({
 			});
 		},
 		[
+			centralBehavior,
 			extensionMap,
 			preserveUnknownExtensionKinds,
 			reconcilePanelForUpdate,
@@ -1571,12 +1592,11 @@ function LayoutShellLoadedContent({
 					state,
 					isPending: pending || undefined,
 				};
-				if (
-					!isDocumentView(candidate) &&
-					candidate.kind !== FILES_EXTENSION_KIND
-				) {
+				if (!centralBehavior.canHost(candidate)) {
 					return;
 				}
+			} else if (!canPlaceKindInSidePanel(kind, panel)) {
+				return;
 			}
 			ensurePanelExpanded(panel);
 			setPanelState(
@@ -1640,7 +1660,12 @@ function LayoutShellLoadedContent({
 				{ focus },
 			);
 		},
-		[ensurePanelExpanded, setPanelState],
+		[
+			canPlaceKindInSidePanel,
+			centralBehavior,
+			ensurePanelExpanded,
+			setPanelState,
+		],
 	);
 
 	const openResolvedFileView = useCallback(
@@ -1653,6 +1678,7 @@ function LayoutShellLoadedContent({
 			focus = true,
 			pending = false,
 			documentOrigin = "existing",
+			newTab,
 		}: {
 			panel: PanelSide;
 			fileId: string;
@@ -1662,13 +1688,8 @@ function LayoutShellLoadedContent({
 			focus?: boolean;
 			pending?: boolean;
 			documentOrigin?: "existing" | "new";
+			newTab?: boolean;
 		}) => {
-			const centeredFilesView = panelStatesRef.current.central.views.find(
-				(view) => view.kind === FILES_EXTENSION_KIND,
-			);
-			if (centeredFilesView) {
-				ensurePanelExpanded("left");
-			}
 			const handler =
 				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
@@ -1698,33 +1719,26 @@ function LayoutShellLoadedContent({
 			};
 			updateWorkspace((current) => {
 				const panels = current.panels;
-				const centeredFiles = panels.central.views.find(
-					(view) => view.kind === FILES_EXTENSION_KIND,
-				);
-				let left = panels.left;
-				if (
-					centeredFiles &&
-					!left.views.some((view) => view.kind === FILES_EXTENSION_KIND)
-				) {
-					left = {
-						views: [...left.views, centeredFiles],
-						activeInstance: centeredFiles.instance,
-					};
-				}
+				const central = centralBehavior.place(panels.central, documentView, {
+					newTab,
+					documentOrigin,
+				});
 				return {
 					panels: {
 						...panels,
-						left,
-						central: {
-							views: [documentView],
-							activeInstance: documentView.instance,
-						},
+						central,
 					},
 					focusedPanel: focus ? "central" : current.focusedPanel,
 				};
 			});
 		},
-		[emitEvent, ensurePanelExpanded, extensionMap, updateWorkspace],
+		[
+			centralBehavior,
+			emitEvent,
+			ensurePanelExpanded,
+			extensionMap,
+			updateWorkspace,
+		],
 	);
 	const openAutoRevealedFile = useCallback(
 		(file: { fileId: string; filePath: string }) => {
@@ -1746,6 +1760,7 @@ function LayoutShellLoadedContent({
 			focus,
 			pending,
 			documentOrigin,
+			newTab,
 		}: {
 			panel: PanelSide;
 			filePath: string;
@@ -1753,6 +1768,7 @@ function LayoutShellLoadedContent({
 			focus?: boolean;
 			pending?: boolean;
 			documentOrigin?: "existing" | "new";
+			newTab?: boolean;
 		}) => {
 			const resolvedFile = await resolveLixFileForOpen({ lix, filePath });
 			if (!resolvedFile) {
@@ -1770,6 +1786,7 @@ function LayoutShellLoadedContent({
 				focus,
 				pending,
 				documentOrigin,
+				newTab,
 			});
 			return resolvedFile.path;
 		},
@@ -1805,6 +1822,7 @@ function LayoutShellLoadedContent({
 					state,
 					focus: options.focus ?? true,
 					documentOrigin: options.documentOrigin ?? "existing",
+					newTab: options.newTab,
 				});
 				return historicalFile.path;
 			}
@@ -1815,6 +1833,7 @@ function LayoutShellLoadedContent({
 				state,
 				focus: options.focus ?? true,
 				documentOrigin: options.documentOrigin ?? "existing",
+				newTab: options.newTab,
 			});
 		},
 		[lix, openResolvedFileView, resolveAndOpenFile],
@@ -2034,8 +2053,18 @@ function LayoutShellLoadedContent({
 						: side === "central"
 							? centralPanel
 							: rightPanel;
-				const removedView = currentPanel.views.find(predicate);
+				const removedIndex = currentPanel.views.findIndex(predicate);
+				const removedView =
+					removedIndex === -1 ? undefined : currentPanel.views[removedIndex];
 				if (!removedView) continue;
+				if (removedView.isPinned) return;
+				// Chips remove views; removing the last one also closes the
+				// island (re-expanding via the toggle shows the empty state
+				// with the add-view affordance).
+				if (side !== "central" && currentPanel.views.length === 1) {
+					updateSidePanelSize(side, 0);
+					(side === "left" ? leftPanelRef : rightPanelRef).current?.collapse();
+				}
 				const wasActiveCentralDocument =
 					side === "central" &&
 					currentPanel.activeInstance === removedView.instance &&
@@ -2043,19 +2072,31 @@ function LayoutShellLoadedContent({
 				const remainingViews = currentPanel.views.filter(
 					(entry) => entry.instance !== removedView.instance,
 				);
+				const nextActiveCentralInstance = wasActiveCentralDocument
+					? centralBehavior.closeFallback(remainingViews, removedIndex)
+					: null;
 				const nextCentralDocument = wasActiveCentralDocument
-					? documentPathFromView(remainingViews[remainingViews.length - 1])
+					? documentPathFromView(
+							remainingViews.find(
+								(entry) => entry.instance === nextActiveCentralInstance,
+							),
+						)
 					: null;
 				setPanelState(
 					side,
 					(current) => {
 						const index = current.views.findIndex(predicate);
 						if (index === -1) return current;
-						const views = current.views.filter((_, idx) => idx !== index);
 						const removedEntry = current.views[index];
+						if (removedEntry?.isPinned) return current;
+						const views = current.views.filter((_, idx) => idx !== index);
+						const fallbackActive =
+							side === "central"
+								? centralBehavior.closeFallback(views, index)
+								: (views[views.length - 1]?.instance ?? null);
 						const activeInstance =
 							current.activeInstance === removedEntry?.instance
-								? (views[views.length - 1]?.instance ?? null)
+								? fallbackActive
 								: current.activeInstance;
 						return { views, activeInstance };
 					},
@@ -2071,12 +2112,43 @@ function LayoutShellLoadedContent({
 				break;
 			}
 		},
-		[centralPanel, emitEvent, leftPanel, rightPanel, setPanelState],
+		[
+			centralBehavior,
+			centralPanel,
+			emitEvent,
+			leftPanel,
+			rightPanel,
+			setPanelState,
+			updateSidePanelSize,
+		],
 	);
 
 	const activeCentralEntry = useMemo(() => {
 		return activeEntryFromPanel(centralPanel);
 	}, [centralPanel]);
+
+	// Hosts that own routing subscribe to the active central view — every
+	// open, tab click, close, and restore lands here exactly once.
+	const lastActivatedCentralViewRef = useRef<string | null>(null);
+	useEffect(() => {
+		const entry = activeCentralEntry;
+		if (!entry) {
+			lastActivatedCentralViewRef.current = null;
+			return;
+		}
+		const statePath =
+			typeof entry.state?.path === "string" ? entry.state.path : "";
+		const signature = `${entry.kind}::${entry.instance}::${statePath}`;
+		if (lastActivatedCentralViewRef.current === signature) return;
+		lastActivatedCentralViewRef.current = signature;
+		emitEvent({
+			type: "central_view_activated",
+			viewKind: entry.kind,
+			instanceId: entry.instance,
+			filePath: documentPathFromView(entry),
+			...(entry.state ? { state: entry.state } : {}),
+		});
+	}, [activeCentralEntry, emitEvent]);
 
 	const handleAddView = useCallback(
 		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
@@ -2235,7 +2307,13 @@ function LayoutShellLoadedContent({
 					current.panels[fromPanel],
 				);
 				const movedView = cloneExtensionInstance(sourcePanel, instance);
-				if (!movedView || !canPlaceViewInPanel(movedView, toPanel)) {
+				if (
+					!movedView ||
+					movedView.isPinned ||
+					!canPlaceViewInPanel(movedView, toPanel, centralBehavior) ||
+					(toPanel !== "central" &&
+						!canPlaceKindInSidePanel(movedView.kind, toPanel))
+				) {
 					return current;
 				}
 
@@ -2246,13 +2324,17 @@ function LayoutShellLoadedContent({
 				const remaining = sourcePanel.views.filter(
 					(entry) => entry.instance !== instance,
 				);
-				const nextSource = normalizePanelForDocumentSlot(fromPanel, {
-					views: remaining,
-					activeInstance:
-						sourcePanel.activeInstance === instance
-							? (remaining[remaining.length - 1]?.instance ?? null)
-							: sourcePanel.activeInstance,
-				});
+				const nextSource = normalizePanel(
+					fromPanel,
+					{
+						views: remaining,
+						activeInstance:
+							sourcePanel.activeInstance === instance
+								? (remaining[remaining.length - 1]?.instance ?? null)
+								: sourcePanel.activeInstance,
+					},
+					centralBehavior,
+				);
 
 				const targetViews = [...targetPanel.views];
 				let insertIndex = targetViews.length;
@@ -2265,10 +2347,14 @@ function LayoutShellLoadedContent({
 					if (targetIndex !== -1) insertIndex = targetIndex;
 				}
 				targetViews.splice(insertIndex, 0, movedView);
-				const nextTarget = normalizePanelForDocumentSlot(toPanel, {
-					views: targetViews,
-					activeInstance: movedView.instance,
-				});
+				const nextTarget = normalizePanel(
+					toPanel,
+					{
+						views: targetViews,
+						activeInstance: movedView.instance,
+					},
+					centralBehavior,
+				);
 				const panels = {
 					...current.panels,
 					[fromPanel]: nextSource,
@@ -2280,7 +2366,13 @@ function LayoutShellLoadedContent({
 				};
 			});
 		},
-		[reconcilePanelForUpdate, setPanelState, updateWorkspace],
+		[
+			canPlaceKindInSidePanel,
+			centralBehavior,
+			reconcilePanelForUpdate,
+			setPanelState,
+			updateWorkspace,
+		],
 	);
 
 	const activeDragData = activeId
@@ -2429,6 +2521,62 @@ function LayoutShellLoadedContent({
 		}
 		return closedPaths;
 	}, [activeCentralEntry, centralPanel.views, emitEvent, setPanelState]);
+	const handleOpenExtensionView = useCallback(
+		(
+			extensionId: string,
+			options: AtelierViewOpenOptions = {},
+		): string | undefined => {
+			const definition = extensionMap.get(extensionId);
+			if (!definition) {
+				throw new Error(`Unknown Atelier extension: ${extensionId}`);
+			}
+			const panel = options.panel ?? "central";
+			if (panel !== "central") {
+				handleAddView(panel, extensionId, options.state);
+				return undefined;
+			}
+			const isHome = centralBehavior.homeKind === extensionId;
+			if (!isHome && options.instanceId === CENTRAL_HOME_INSTANCE) {
+				throw new Error(
+					`The instance id "${CENTRAL_HOME_INSTANCE}" is reserved for the configured home extension.`,
+				);
+			}
+			const instanceId = isHome
+				? CENTRAL_HOME_INSTANCE
+				: (options.instanceId ??
+					(definition.multiInstance
+						? createExtensionInstanceId(extensionId)
+						: extensionId));
+			const view: ExtensionInstance = {
+				instance: instanceId,
+				kind: extensionId,
+				...(isHome ? { isPinned: true } : {}),
+				...(options.state ? { state: options.state } : {}),
+			};
+			if (!centralBehavior.canHost(view)) {
+				throw new Error(
+					`Extension "${extensionId}" cannot be placed in the central panel.`,
+				);
+			}
+			// A resync of the already-active view is a no-op, not an "open".
+			if (panelStatesRef.current.central.activeInstance !== instanceId) {
+				emitEvent({
+					type: "extension_opened",
+					extensionId,
+					panel: "central",
+				});
+			}
+			setPanelState(
+				"central",
+				(current) =>
+					centralBehavior.place(current, view, { newTab: options.newTab }),
+				{ focus: options.focus ?? true },
+			);
+			return instanceId;
+		},
+		[centralBehavior, emitEvent, extensionMap, handleAddView, setPanelState],
+	);
+
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);
 	atelierDocumentsActionsRef.current = {
@@ -2456,6 +2604,10 @@ function LayoutShellLoadedContent({
 				? closedDocumentsCompletion(closedPaths)
 				: undefined;
 		},
+		openView: (extensionId, options) => {
+			const instanceId = handleOpenExtensionView(extensionId, options);
+			return instanceId ? activeViewCompletion(instanceId) : undefined;
+		},
 	};
 	const atelierDocumentsRuntimeBinding =
 		useMemo<AtelierDocumentsRuntimeBinding>(
@@ -2466,16 +2618,21 @@ function LayoutShellLoadedContent({
 				closeActive: () => atelierDocumentsActionsRef.current?.closeActive(),
 				close: (path) => atelierDocumentsActionsRef.current?.close(path),
 				closeAll: () => atelierDocumentsActionsRef.current?.closeAll(),
+				openView: (extensionId, options) =>
+					atelierDocumentsActionsRef.current?.openView(extensionId, options),
 			}),
 			[],
 		);
+	const activeCentralInstanceId = activeCentralEntry?.instance ?? null;
 	const atelierDocumentsStateRef = useRef({
 		activePath: activeDocumentPath,
 		openPaths: openDocumentPaths,
+		activeViewInstance: activeCentralInstanceId,
 	});
 	atelierDocumentsStateRef.current = {
 		activePath: activeDocumentPath,
 		openPaths: openDocumentPaths,
+		activeViewInstance: activeCentralInstanceId,
 	};
 
 	useEffect(() => {
@@ -2490,8 +2647,14 @@ function LayoutShellLoadedContent({
 		publishAtelierDocumentsState(effectiveAtelierInstance, {
 			activePath: activeDocumentPath,
 			openPaths: openDocumentPaths,
+			activeViewInstance: activeCentralInstanceId,
 		});
-	}, [activeDocumentPath, effectiveAtelierInstance, openDocumentPaths]);
+	}, [
+		activeCentralInstanceId,
+		activeDocumentPath,
+		effectiveAtelierInstance,
+		openDocumentPaths,
+	]);
 
 	const addViewOnLeft = useCallback(
 		(type: ExtensionKind, state?: ExtensionState) =>
@@ -2545,16 +2708,68 @@ function LayoutShellLoadedContent({
 		[handleCloseView],
 	);
 
+	// Headless context for a host-rendered central tab strip: the host owns
+	// the chips, Atelier keeps the tab rules (pinning, selection, closing).
+	const centralTabStripContext = useMemo<AtelierTabStripContext | null>(() => {
+		if (!slots?.centralTabStrip) return null;
+		const activeInstance =
+			centralPanel.activeInstance ?? centralPanel.views[0]?.instance ?? null;
+		const tabs = centralPanel.views.flatMap((entry): AtelierTabStripTab[] => {
+			const definition = extensionMap.get(entry.kind);
+			if (!definition) return [];
+			return [
+				{
+					instanceId: entry.instance,
+					kind: entry.kind,
+					label:
+						(entry.state?.atelier?.label as string | undefined) ??
+						definition.label,
+					icon: definition.icon,
+					isActive: entry.instance === activeInstance,
+					isPinned: entry.isPinned === true,
+					isPending: entry.isPending === true,
+					select: () => handleSelectCentralView(entry.instance),
+					...(entry.isPinned
+						? {}
+						: {
+								close: () =>
+									handleCloseView({
+										panel: "central",
+										instance: entry.instance,
+										focus: true,
+									}),
+							}),
+				},
+			];
+		});
+		return {
+			tabs,
+			...(isHostReadOnly ? {} : { newTab: () => void handleCreateNewFile() }),
+		};
+	}, [
+		centralPanel,
+		extensionMap,
+		handleCloseView,
+		handleCreateNewFile,
+		handleSelectCentralView,
+		isHostReadOnly,
+		slots?.centralTabStrip,
+	]);
+
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
 			readOnly: configuration.readOnly ?? false,
+			...(configuration.filesView !== undefined
+				? { filesView: configuration.filesView }
+				: {}),
 			events: { emit: emitEvent },
 			documents: {
 				...effectiveAtelierInstance.documents,
 				activeFileId: activeCentralFileId,
 				activeFilePath: activeDocumentPath,
 			},
+			views: effectiveAtelierInstance.views,
 			branches: {
 				activeId: activeBranchId,
 			},
@@ -2570,6 +2785,7 @@ function LayoutShellLoadedContent({
 			},
 		}),
 		[
+			configuration.filesView,
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
@@ -2577,6 +2793,7 @@ function LayoutShellLoadedContent({
 			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
 			effectiveAtelierInstance.documents,
+			effectiveAtelierInstance.views,
 			activeCentralFileId,
 			activeDocumentPath,
 			lix,
@@ -2708,6 +2925,7 @@ function LayoutShellLoadedContent({
 					isLeftSidebarVisible={!isLeftCollapsed}
 					isRightSidebarVisible={!isRightCollapsed}
 					navbarStart={slots?.navbarStart}
+					navbarCenter={slots?.navbarCenter}
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
@@ -2740,7 +2958,13 @@ function LayoutShellLoadedContent({
 								emptyState={renderEmptyPanelSlot("left", slots?.leftPanelEmpty)}
 							/>
 						</Panel>
-						<Separator className="group relative flex w-1.75 items-center justify-center">
+						{/* A collapsed panel gives its space back — no residual gutter,
+						    the strip aligns with the top-bar mark. */}
+						<Separator
+							className={`group relative flex items-center justify-center ${
+								isLeftCollapsed ? "w-0" : "w-1.75"
+							}`}
+						>
 							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel
@@ -2750,6 +2974,7 @@ function LayoutShellLoadedContent({
 						>
 							<CentralPanel
 								panel={centralPanel}
+								showTabBar
 								isFocused={focusedPanel === "central"}
 								onFocusPanel={focusPanel}
 								onSelectView={handleSelectCentralView}
@@ -2765,13 +2990,24 @@ function LayoutShellLoadedContent({
 								{...(isHostReadOnly
 									? {}
 									: { onCreateNewFile: () => void handleCreateNewFile() })}
+								{...(centralTabStripContext && slots?.centralTabStrip
+									? {
+											customTabStrip: slots.centralTabStrip(
+												centralTabStripContext,
+											),
+										}
+									: {})}
 								emptyState={renderEmptyPanelSlot(
 									"central",
 									slots?.centralPanelEmpty,
 								)}
 							/>
 						</Panel>
-						<Separator className="group relative flex w-1.75 items-center justify-center">
+						<Separator
+							className={`group relative flex items-center justify-center ${
+								isRightCollapsed ? "w-0" : "w-1.75"
+							}`}
+						>
 							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel

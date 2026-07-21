@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 import type { Lix } from "@lix-js/sdk";
 
+export type AtelierPanelSide = "left" | "central" | "right";
+
 /** Metadata for an already-loaded host extension entry. */
 export type ExtensionManifest = {
 	readonly apiVersion: 1;
@@ -9,6 +11,17 @@ export type ExtensionManifest = {
 	readonly description?: string;
 	readonly fileExtensions?: readonly string[];
 	readonly multiInstance?: boolean;
+	/**
+	 * Panel sides this view may occupy. Defaults to the side panels; central
+	 * placement is reserved for document editors unless declared here.
+	 */
+	readonly placement?: readonly AtelierPanelSide[];
+	/**
+	 * Excludes the view from the add-view menus. Hidden views stay mountable
+	 * programmatically — right for views opened only through navigation or
+	 * configuration (a folder view, a pinned home).
+	 */
+	readonly hidden?: boolean;
 };
 
 /** Stable ids for replacing Atelier's bundled extension views. */
@@ -31,12 +44,73 @@ export type AtelierExtensionState = {
 	readonly [key: string]: unknown;
 };
 
+/** One host-contributed, not-yet-imported filesystem entry. */
+export type AtelierWatchedEntry = {
+	/** Workspace-absolute path, e.g. "/notes/todo.md" or "/notes/". */
+	readonly path: string;
+	readonly kind: "file" | "directory";
+};
+
+/**
+ * Host data source for un-imported "watched" entries in the bundled Files
+ * view. Watched entries render alongside lix entries (lix wins on path
+ * collisions) and are imported lazily on first interaction.
+ */
+export type AtelierFilesViewOptions = {
+	/**
+	 * Contribute un-imported entries. Called with the currently expanded
+	 * directories (the root "/" is always included) and resubscribed whenever
+	 * the expanded set changes. Push the current entries through `onChange`;
+	 * return an unsubscribe function.
+	 */
+	readonly watchEntries?: (args: {
+		readonly expandedDirectories: readonly string[];
+		readonly onChange: (entries: readonly AtelierWatchedEntry[]) => void;
+	}) => () => void;
+	/**
+	 * Resolve (import) a watched path to a canonical lix file before an
+	 * interaction such as open, rename, or delete. Returning `null` cancels
+	 * the interaction.
+	 */
+	readonly resolveFileForInteraction?: (
+		path: string,
+	) => Promise<{ readonly fileId: string } | null>;
+};
+
 export type AtelierDocumentOrigin = "existing" | "new";
 
 export type AtelierDocumentOpenOptions = {
 	readonly state?: AtelierExtensionState;
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;
+	/**
+	 * Appends a new central tab instead of navigating the active tab in place.
+	 * Appends a new central tab instead of navigating the active tab.
+	 */
+	readonly newTab?: boolean;
+};
+
+export type AtelierViewOpenOptions = {
+	readonly state?: AtelierExtensionState;
+	/**
+	 * Stable identity for this view instance — the same value is reported back
+	 * as `instanceId` on views and events. An open view with the same id is
+	 * activated (and its state updated) instead of opening a duplicate.
+	 */
+	readonly instanceId?: string;
+	/** Appends a new central tab instead of navigating the active tab in place. */
+	readonly newTab?: boolean;
+	readonly focus?: boolean;
+	/**
+	 * Target panel. Defaults to "central". Side panels follow the add-view
+	 * rules instead of the tab rules: `instanceId` and `newTab` are ignored.
+	 */
+	readonly panel?: AtelierPanelSide;
+};
+
+export type AtelierViewsApi = {
+	/** Opens (or activates) a registered extension view. */
+	open(extensionId: string, options?: AtelierViewOpenOptions): Promise<void>;
 };
 
 export type AtelierDocumentsApi = {
@@ -80,7 +154,19 @@ export type AtelierEvent =
 	| {
 			type: "extension_opened";
 			extensionId: string;
-			panel: "left" | "right" | "central";
+			panel: AtelierPanelSide;
+	  }
+	| {
+			/**
+			 * The active central view changed (open, tab click, close, restore).
+			 * Hosts that own routing map this to a URL.
+			 */
+			type: "central_view_activated";
+			viewKind: string;
+			instanceId: string;
+			/** Set when the active view is a document editor. */
+			filePath: string | null;
+			state?: AtelierExtensionState;
 	  }
 	| {
 			type: "diff_opened";
@@ -105,6 +191,7 @@ export type AtelierExtensionRuntime = {
 		readonly activeFileId: string | null;
 		readonly activeFilePath: string | null;
 	};
+	readonly views: AtelierViewsApi;
 	readonly branches: {
 		readonly activeId: string;
 	};
@@ -113,7 +200,7 @@ export type AtelierExtensionRuntime = {
 export type AtelierExtensionView = {
 	readonly instanceId: string;
 	readonly state: AtelierExtensionState;
-	readonly panel: "left" | "right" | "central";
+	readonly panel: AtelierPanelSide;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;

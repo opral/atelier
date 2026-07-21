@@ -47,6 +47,7 @@ import styles from "./panel.module.css";
 /** Lucide icons and image-based brand icons both fit this shape. */
 type TabIcon = ComponentType<{ className?: string }>;
 import { useExtensionViewRuntime } from "../extension-runtime/extension-view-runtime";
+import { fileIconUrl } from "../extensions/files/file-icons";
 import {
 	useExtensionHostRegistry,
 	type ExtensionHostRecord,
@@ -84,6 +85,8 @@ export function PanelV2({
 	dropId,
 	viewOverrides,
 	showTabBar = true,
+	tabBarExtraContent,
+	customTabStrip,
 }: PanelV2Props) {
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
@@ -109,8 +112,8 @@ export function PanelV2({
 	const hasViews = panel.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
 	const availableViews = useMemo(
-		() => availableExtensionsForPanel(visibleExtensions, panel),
-		[panel, visibleExtensions],
+		() => availableExtensionsForPanel(visibleExtensions, panel, side),
+		[panel, side, visibleExtensions],
 	);
 	const panelElementRef = useRef<HTMLElement | null>(null);
 	const pendingAddedViewRef = useRef<{
@@ -225,9 +228,18 @@ export function PanelV2({
 		return map;
 	}, [panel.views, makeRuntime]);
 
-	const handleInteraction = () => {
+	const handleInteraction = (event: { target: EventTarget | null }) => {
 		if (!onActiveViewInteraction || !activeInstance) return;
-		onActiveViewInteraction(activeInstance);
+		// Activate the view the interaction happened IN — programmatic focus
+		// inside a just-revealed (still hidden) view must not re-select the
+		// previously active one.
+		const targetView =
+			event.target instanceof Element
+				? event.target
+						.closest("[data-view-instance]")
+						?.getAttribute("data-view-instance")
+				: null;
+		onActiveViewInteraction(targetView ?? activeInstance);
 	};
 
 	const ContainerElement =
@@ -322,57 +334,73 @@ export function PanelV2({
 			onClickCapture={() => onFocusPanel(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
+			{/* Tab rows float on the app background above the island — "its own
+			    chip group over its own island" — for both the built-in strip and
+			    a host-rendered one. */}
+			{showTabBar && customTabStrip !== undefined ? (
+				<div data-atelier-part="custom-tab-strip" className="w-full min-w-0">
+					{customTabStrip}
+				</div>
+			) : showTabBar ? (
+				<TabBar
+					extraContent={
+						tabBarExtraContent !== undefined ? (
+							tabBarExtraContent
+						) : onAddView ? (
+							<AddViewMenu
+								side={side}
+								availableViews={availableViews}
+								onAddView={handleMenuAddView}
+								onSelectedViewSettled={focusPendingAddedTab}
+							/>
+						) : null
+					}
+				>
+					<SortableContext
+						id={`panel-${side}`}
+						items={panel.views.map((entry) => entry.instance)}
+						strategy={horizontalListSortingStrategy}
+					>
+						{panel.views.map((entry) => {
+							const view = resolveViewDefinition(entry.kind);
+							if (!view) return null;
+							const isActive = activeInstance === entry.instance;
+							const label = resolveLabel(view, entry, tabLabel);
+							return (
+								<SortableTab
+									key={entry.instance}
+									instance={entry.instance}
+									panelSide={side}
+									kind={entry.kind}
+									icon={
+										side === "central"
+											? (fileGlyphForLabel(label) ?? view.icon)
+											: view.icon
+									}
+									label={label}
+									isActive={isActive}
+									isFocused={isFocused && isActive}
+									isPending={entry.isPending}
+									isPinned={entry.isPinned}
+									onClick={() => onSelectView(entry.instance)}
+									onClose={
+										entry.isPinned
+											? undefined
+											: () => handleRemoveView(entry.instance)
+									}
+								/>
+							);
+						})}
+					</SortableContext>
+				</TabBar>
+			) : null}
+
 			<div
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]",
 					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
 				)}
 			>
-				{/* Most islands render the shared panel-header-height tab row; the central
-				    editor hides it and switches files from the left file list. */}
-				{showTabBar ? (
-					<TabBar
-						extraContent={
-							onAddView ? (
-								<AddViewMenu
-									side={side}
-									availableViews={availableViews}
-									onAddView={handleMenuAddView}
-									onSelectedViewSettled={focusPendingAddedTab}
-								/>
-							) : null
-						}
-					>
-						<SortableContext
-							id={`panel-${side}`}
-							items={panel.views.map((entry) => entry.instance)}
-							strategy={horizontalListSortingStrategy}
-						>
-							{panel.views.map((entry) => {
-								const view = resolveViewDefinition(entry.kind);
-								if (!view) return null;
-								const isActive = activeInstance === entry.instance;
-								const label = resolveLabel(view, entry, tabLabel);
-								return (
-									<SortableTab
-										key={entry.instance}
-										instance={entry.instance}
-										panelSide={side}
-										kind={entry.kind}
-										icon={view.icon}
-										label={label}
-										isActive={isActive}
-										isFocused={isFocused && isActive}
-										isPending={entry.isPending}
-										onClick={() => onSelectView(entry.instance)}
-										onClose={() => handleRemoveView(entry.instance)}
-									/>
-								);
-							})}
-						</SortableContext>
-					</TabBar>
-				) : null}
-
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
 						{panel.views.map((entry) => {
@@ -428,6 +456,10 @@ export type PanelV2Props = {
 	readonly viewOverrides?: ExtensionDefinition[];
 	/** Hide the tab strip (central editor switches files from the file list). */
 	readonly showTabBar?: boolean;
+	/** Replaces the default add-view menu at the end of the tab strip. */
+	readonly tabBarExtraContent?: ReactNode;
+	/** Host-rendered strip replacing the built-in tab row entirely. */
+	readonly customTabStrip?: ReactNode;
 };
 
 /** The "+" button lists views that are not already open in this panel. */
@@ -447,7 +479,7 @@ function AddViewMenu({
 	const selectedViewRef = useRef(false);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const isEmptyStateTrigger = variant === "empty-state";
-	if (availableViews.length === 0) return null;
+	if (isEmptyStateTrigger && availableViews.length === 0) return null;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -470,7 +502,7 @@ function AddViewMenu({
 						title="Add view"
 						aria-label="Add view"
 						data-attr="panel-add-view"
-						className="flex size-6 flex-none items-center justify-center rounded-md text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+						className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
 					>
 						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
 					</button>
@@ -489,19 +521,28 @@ function AddViewMenu({
 				}}
 				className="w-44 border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg"
 			>
-				{availableViews.map((ext) => (
+				{availableViews.length === 0 ? (
 					<DropdownMenuItem
-						key={ext.kind}
-						onSelect={() => {
-							selectedViewRef.current = true;
-							onAddView(ext.kind);
-						}}
-						className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
+						disabled
+						className="px-3 py-1.5 text-sm text-[var(--color-text-tertiary)]"
 					>
-						<ext.icon className="h-4 w-4" />
-						<span>{ext.label}</span>
+						No views available
 					</DropdownMenuItem>
-				))}
+				) : (
+					availableViews.map((ext) => (
+						<DropdownMenuItem
+							key={ext.kind}
+							onSelect={() => {
+								selectedViewRef.current = true;
+								onAddView(ext.kind);
+							}}
+							className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
+						>
+							<ext.icon className="h-4 w-4" />
+							<span>{ext.label}</span>
+						</DropdownMenuItem>
+					))
+				)}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
@@ -510,10 +551,16 @@ function AddViewMenu({
 export function availableExtensionsForPanel(
 	visibleExtensions: readonly ExtensionDefinition[],
 	panel: PanelState,
+	side?: PanelSide,
 ): ExtensionDefinition[] {
 	const openKinds = new Set(panel.views.map((entry) => entry.kind));
 	return visibleExtensions.filter(
-		(view) => view.multiInstance || !openKinds.has(view.kind),
+		(view) =>
+			(view.multiInstance || !openKinds.has(view.kind)) &&
+			// Manifest placement gates the menus; the default is side panels only.
+			(side === undefined ||
+				view.placement === undefined ||
+				view.placement.includes(side)),
 	);
 }
 
@@ -764,6 +811,7 @@ function SortableTab({
 	isActive,
 	isFocused,
 	isPending,
+	isPinned,
 	onClick,
 	onClose,
 }: SortableTabProps) {
@@ -776,6 +824,7 @@ function SortableTab({
 		isDragging,
 	} = useSortable({
 		id: instance,
+		disabled: isPinned,
 		data: {
 			type: "panel-tab",
 			panel: panelSide,
@@ -798,6 +847,7 @@ function SortableTab({
 			isActive={isActive}
 			isFocused={isFocused}
 			isPending={isPending}
+			isPinned={isPinned}
 			onClick={onClick}
 			onClose={onClose}
 			isDragging={isDragging}
@@ -813,16 +863,26 @@ function SortableTab({
 	);
 }
 
+/** Central document tabs show their file-type glyph, like a browser favicon. */
+const fileGlyphForLabel = (label: string): TabIcon | null => {
+	if (!/\.[a-z0-9]+$/i.test(label)) return null;
+	const FileGlyph = ({ className }: { className?: string }) => (
+		<img src={fileIconUrl(label)} alt="" className={className} />
+	);
+	return FileGlyph;
+};
+
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] px-2.25 text-xs font-semibold transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]";
+	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border px-3 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
-	// The focused chip marks the view receiving keyboard input.
+	// The visible view's chip always reads as a white card over the canvas;
+	// keyboard focus adds a ring on top of the same look.
 	focused:
-		"bg-[var(--color-bg-selection-current)] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-selection-current)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	active:
-		"bg-[var(--color-bg-hover)] text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
-	idle: "bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
+	idle: "border-transparent bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {
@@ -844,6 +904,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 			isActive,
 			isFocused,
 			isPending,
+			isPinned,
 			onClick,
 			onClose,
 			isDragging,
@@ -857,9 +918,13 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 	) => {
 		const state = isActive ? (isFocused ? "focused" : "active") : "idle";
 		const { onClick: dragOnClick, ...restButtonProps } = buttonProps ?? {};
+		// An inactive pinned tab compacts to its icon, like a browser home button.
+		const isCompact = isPinned && !isActive;
 		return (
 			<button
 				type="button"
+				aria-label={isCompact ? label : undefined}
+				title={isCompact ? label : undefined}
 				onClick={(event) => {
 					dragOnClick?.(event);
 					onClick?.(event);
@@ -868,6 +933,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				data-focused={dataFocused}
 				data-view-instance={dataViewInstance}
 				data-view-key={dataViewKind}
+				data-pinned={isPinned ? "true" : undefined}
 				className={clsx(
 					tabBaseClasses,
 					tabStateClasses[state],
@@ -883,32 +949,36 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				>
 					<Icon className="size-3.25" />
 				</span>
-				<span
-					data-attr="panel-tab-select"
-					className={clsx("max-w-[10rem] truncate", isPending && "italic")}
-					title={label}
-				>
-					{label}
-				</span>
-				<span className="relative flex size-3.25 items-center justify-center">
-					{onClose ? (
-						<X
-							data-attr="panel-tab-close"
-							className={clsx(
-								"h-3 w-3",
-								isActive && isFocused
-									? "text-[var(--color-action-selection-current)] hover:text-[var(--color-icon-selection-current)]"
-									: isActive
-										? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
-										: "text-[var(--color-icon-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-icon-secondary)]",
-							)}
-							onClick={(event) => {
-								event.stopPropagation();
-								onClose();
-							}}
-						/>
-					) : null}
-				</span>
+				{isCompact ? null : (
+					<span
+						data-attr="panel-tab-select"
+						className={clsx("max-w-[10rem] truncate", isPending && "italic")}
+						title={label}
+					>
+						{label}
+					</span>
+				)}
+				{isPinned ? null : (
+					<span className="relative flex size-3.25 items-center justify-center">
+						{onClose ? (
+							<X
+								data-attr="panel-tab-close"
+								className={clsx(
+									"size-[11px]",
+									isActive && isFocused
+										? "text-[var(--color-action-selection-current)] hover:text-[var(--color-icon-selection-current)]"
+										: isActive
+											? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
+											: "text-[var(--color-icon-quaternary)] hover:text-[var(--color-icon-secondary)]",
+								)}
+								onClick={(event) => {
+									event.stopPropagation();
+									onClose();
+								}}
+							/>
+						) : null}
+					</span>
+				)}
 			</button>
 		);
 	},
@@ -922,6 +992,7 @@ export type PanelTabPreviewProps = {
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly isPending?: boolean;
+	readonly isPinned?: boolean;
 };
 
 export function PanelTabPreview(props: PanelTabPreviewProps) {

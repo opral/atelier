@@ -47,7 +47,7 @@ describe("createAtelier", () => {
 		expect(atelier.lix).toBe(lix);
 		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents"]);
+		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents", "views"]);
 		expect(getAtelierConfiguration(atelier)).toEqual(
 			expect.objectContaining({
 				extensions: [],
@@ -261,6 +261,9 @@ describe("createAtelier", () => {
 			closeAll: () => {
 				calls.push("close-all");
 			},
+			openView: (extensionId) => {
+				calls.push(`open-view:${extensionId}`);
+			},
 		};
 		const open = atelier.documents.open("/queued.md");
 		const startNew = atelier.documents.startNew();
@@ -272,6 +275,7 @@ describe("createAtelier", () => {
 		const unbind = bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
 			openPaths: [],
+			activeViewInstance: null,
 		});
 		await Promise.all([open, startNew, close, closePath, closeAll]);
 
@@ -301,10 +305,12 @@ describe("createAtelier", () => {
 			closeActive: vi.fn(),
 			close: vi.fn(),
 			closeAll: vi.fn(),
+			openView: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, binding, {
 			activePath: null,
 			openPaths: [],
+			activeViewInstance: null,
 		});
 
 		const open = atelier.documents.open("/one.md");
@@ -329,10 +335,12 @@ describe("createAtelier", () => {
 			closeActive: vi.fn(),
 			close: vi.fn(),
 			closeAll: vi.fn(),
+			openView: vi.fn(),
 		};
 		const unbind = bindAtelierDocumentsRuntime(atelier, firstBinding, {
 			activePath: "/last.md",
 			openPaths: ["/last.md"],
+			activeViewInstance: null,
 		});
 		unbind();
 
@@ -344,10 +352,12 @@ describe("createAtelier", () => {
 			closeActive: vi.fn(),
 			close: vi.fn(),
 			closeAll: vi.fn(),
+			openView: vi.fn(),
 		};
 		bindAtelierDocumentsRuntime(atelier, secondBinding, {
 			activePath: "/last.md",
 			openPaths: ["/last.md"],
+			activeViewInstance: null,
 		});
 		await queued;
 
@@ -367,10 +377,12 @@ describe("createAtelier", () => {
 				closeActive: vi.fn(),
 				close: vi.fn(),
 				closeAll: vi.fn(),
+				openView: vi.fn(),
 			},
 			{
 				activePath: null,
 				openPaths: [],
+				activeViewInstance: null,
 			},
 		);
 
@@ -384,6 +396,7 @@ describe("createAtelier", () => {
 		publishAtelierDocumentsState(atelier, {
 			activePath: "/active.md",
 			openPaths: ["/active.md"],
+			activeViewInstance: null,
 		});
 		await open;
 		expect(resolved).toBe(true);
@@ -402,8 +415,9 @@ describe("createAtelier", () => {
 				closeActive,
 				close: vi.fn(),
 				closeAll: vi.fn(),
+				openView: vi.fn(),
 			},
-			{ activePath: null, openPaths: [] },
+			{ activePath: null, openPaths: [], activeViewInstance: null },
 		);
 
 		const open = atelier.documents.open("/first.md");
@@ -414,6 +428,7 @@ describe("createAtelier", () => {
 		publishAtelierDocumentsState(atelier, {
 			activePath: "/first.md",
 			openPaths: ["/first.md"],
+			activeViewInstance: null,
 		});
 		await open;
 		await close;
@@ -432,8 +447,9 @@ describe("createAtelier", () => {
 				closeActive: vi.fn(),
 				close: vi.fn(),
 				closeAll: vi.fn(),
+				openView: vi.fn(),
 			},
-			{ activePath: null, openPaths: [] },
+			{ activePath: null, openPaths: [], activeViewInstance: null },
 		);
 
 		const open = atelier.documents.open("/unmounted.md");

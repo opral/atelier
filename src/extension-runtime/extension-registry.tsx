@@ -56,7 +56,7 @@ export const buildExtensionRegistry = (
 		...builtinVisibleDefinitions,
 		...hostVisible,
 		...installedVisible,
-	];
+	].filter((definition) => !definition.hidden);
 	const extensionMap = new Map<ExtensionKind, ExtensionDefinition>(
 		[...builtinDefinitions, ...hostVisible, ...installedVisible].map((def) => [
 			def.kind,
