@@ -426,8 +426,13 @@ export function FormattingToolbar({
 								render={<Select.Trigger />}
 								data-attr="markdown-block-selector"
 								className={clsx(
-									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
-									blockMenuOpen && "text-[var(--color-text-primary)]",
+									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+									// While the menu is open the trigger stays completely
+									// unfilled — the cursor is usually still on it, so even
+									// the hover tint reads as a stuck pill.
+									blockMenuOpen
+										? "text-[var(--color-text-primary)]"
+										: "hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
 								)}
 								onMouseDown={suppressMouseDown}
 							>
