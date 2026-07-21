@@ -119,6 +119,7 @@ const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
 const ADD_COLUMN_ID = "csv-add-column";
 const ADD_COLUMN_WIDTH = 48;
+const ROW_MARKER_WIDTH = 44;
 const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 48;
 const HEADER_HEIGHT = 40;
@@ -871,6 +872,28 @@ function CsvTable({
 	useEffect(() => {
 		if (editable) ensureGlideOverlayPortal();
 	}, [editable]);
+	// Apple Numbers-style sizing: the grid canvas is only as large as the
+	// table itself (capped by the container), so no phantom cells or grid
+	// lines render beyond the last column and the trailing row.
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const [containerSize, setContainerSize] = useState<{
+		readonly width: number;
+		readonly height: number;
+	} | null>(null);
+	useLayoutEffect(() => {
+		const element = containerRef.current;
+		if (!element || typeof ResizeObserver === "undefined") return;
+		const update = () => {
+			setContainerSize({
+				width: element.clientWidth,
+				height: element.clientHeight,
+			});
+		};
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
 	const columns = useMemo<GridColumn[]>(() => {
 		const gridColumns: GridColumn[] = parsed.columns.map((title, index) => ({
 			id: String(index),
@@ -1198,16 +1221,41 @@ function CsvTable({
 		[clearSelection, closeMenu],
 	);
 
+	const contentWidth =
+		ROW_MARKER_WIDTH +
+		parsed.columns.reduce(
+			(sum, _, index) =>
+				sum +
+				(widthState.overrides[index] ??
+					widthState.initial[index] ??
+					COLUMN_MIN_WIDTH),
+			0,
+		) +
+		(editable ? ADD_COLUMN_WIDTH : 0) +
+		2;
+	const contentHeight =
+		HEADER_HEIGHT + (parsed.rows.length + (editable ? 1 : 0)) * ROW_HEIGHT + 2;
+	const gridWidth = containerSize
+		? Math.min(containerSize.width, contentWidth)
+		: "100%";
+	const gridHeight = containerSize
+		? Math.min(containerSize.height, contentHeight)
+		: "100%";
+
 	return (
-		<div className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background">
+		<div
+			ref={containerRef}
+			className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
+		>
 			<DataEditor
 				className="csv-data-grid"
 				columns={columns}
 				rows={parsed.rows.length}
 				getCellContent={getCellContent}
 				getCellsForSelection={true}
-				width="100%"
-				height="100%"
+				width={gridWidth}
+				height={gridHeight}
+				rowMarkerWidth={ROW_MARKER_WIDTH}
 				rowHeight={ROW_HEIGHT}
 				headerHeight={HEADER_HEIGHT}
 				minColumnWidth={COLUMN_MIN_WIDTH}
