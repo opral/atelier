@@ -1,14 +1,39 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, Table2 } from "lucide-react";
 import {
+	Suspense,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import {
+	AlertTriangle,
+	ArrowDownToLine,
+	ArrowLeftToLine,
+	ArrowRightToLine,
+	ArrowUpToLine,
+	Loader2,
+	Pencil,
+	Plus,
+	Table2,
+	Trash2,
+} from "lucide-react";
+import {
+	CompactSelection,
 	DataEditor,
 	GridCellKind,
+	type DrawHeaderCallback,
+	type EditableGridCell,
+	type EditListItem,
 	type GridCell,
 	type GridColumn,
+	type GridSelection,
 	type Item,
+	type Rectangle,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	type HistoricalFileSnapshot,
@@ -38,6 +63,21 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
+import {
+	appendDocumentRow,
+	CSV_SEED_TEXT,
+	csvDocumentView,
+	deleteDocumentColumns,
+	deleteDocumentRows,
+	insertDocumentColumn,
+	insertDocumentRow,
+	parseCsvDocument,
+	renameDocumentColumn,
+	serializeCsvDocument,
+	setDocumentCells,
+	type CsvCellEdit,
+	type CsvDocument,
+} from "./csv-document";
 import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
 import "./style.css";
 
@@ -49,6 +89,7 @@ type CsvViewProps = {
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
+	readonly readOnly?: boolean;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
@@ -68,15 +109,23 @@ type CsvViewProps = {
 	}) => Promise<void>;
 };
 
+type CsvReviewHandler = (args: {
+	readonly fileId: string;
+	readonly reviewId: string;
+	readonly review?: ExternalWriteReview;
+}) => Promise<void>;
+
 const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
+const ROW_MARKER_WIDTH = 44;
+const APPEND_STRIP_SIZE = 28;
 const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 48;
 const HEADER_HEIGHT = 40;
 const CSV_GRID_THEME = {
 	accentColor: "rgb(194, 65, 12)",
 	accentFg: "rgb(255, 255, 255)",
-	accentLight: "rgb(251, 239, 228)",
+	accentLight: "rgba(234, 88, 12, 0.07)",
 	bgHeader: "rgb(255, 255, 255)",
 	bgHeaderHasFocus: "rgb(255, 255, 255)",
 	bgHeaderHovered: "rgb(255, 255, 255)",
@@ -87,13 +136,37 @@ const CSV_GRID_THEME = {
 	resizeIndicatorColor: "rgb(234, 88, 12)",
 	textHeaderSelected: "rgb(124, 45, 18)",
 };
-const EMPTY_COLUMN_WIDTH_OVERRIDES: Record<number, number> = {};
 
 type CsvFileRow = {
 	readonly id: string;
 	readonly path: string;
 	readonly data: Uint8Array;
 };
+
+type CsvTableEditing = {
+	readonly onCellsEdited: (edits: readonly CsvCellEdit[]) => void;
+	readonly onRowAppended: () => void;
+	readonly onInsertRow: (atRow: number) => void;
+	readonly onDeleteRows: (rows: readonly number[]) => void;
+	readonly onInsertColumn: (atColumn: number) => void;
+	readonly onDeleteColumns: (columns: readonly number[]) => void;
+	readonly onRenameColumn: (column: number, name: string) => void;
+};
+
+type CsvGridMenuState =
+	| {
+			readonly kind: "row";
+			readonly row: number;
+			readonly x: number;
+			readonly y: number;
+	  }
+	| {
+			readonly kind: "column";
+			readonly column: number;
+			readonly x: number;
+			readonly y: number;
+			readonly headerBounds: Rectangle;
+	  };
 
 type HistoricalCsvFile = {
 	readonly fileRow: CsvFileRow;
@@ -112,6 +185,7 @@ export function CsvView({
 	filePath,
 	isActiveView = true,
 	isPanelFocused = true,
+	readOnly = false,
 	beforeCommitId,
 	afterCommitId,
 	beforeFileId,
@@ -130,6 +204,7 @@ export function CsvView({
 				filePath={filePath}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
+				readOnly={readOnly}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
 				beforeFileId={beforeFileId}
@@ -203,7 +278,11 @@ function CsvLiveViewData({
 	activeBranchId = "main",
 	resolvedReviewIds,
 	reviewRangeSessionId,
-	...props
+	readOnly = false,
+	isActiveView = true,
+	isPanelFocused = true,
+	onAcceptReview,
+	onRejectReview,
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
@@ -229,16 +308,332 @@ function CsvLiveViewData({
 				review={externalWriteReview}
 				register={registerExternalWriteReview}
 			/>
-			<CsvViewLoaded
+			<EditableCsvView
+				key={fileRow.id}
 				fileRow={fileRow}
-				activeBranchId={activeBranchId}
-				resolvedReviewIds={resolvedReviewIds}
-				reviewRangeSessionId={reviewRangeSessionId}
-				externalWriteReview={externalWriteReview}
-				reviewControls="review"
-				{...props}
+				review={externalWriteReview}
+				readOnly={readOnly}
+				isActiveView={isActiveView}
+				isPanelFocused={isPanelFocused}
+				onAcceptReview={onAcceptReview}
+				onRejectReview={onRejectReview}
 			/>
 		</>
+	);
+}
+
+/**
+ * Live CSV editor. Grid edits mutate a line-preserving document model, and
+ * the serialized text persists straight to lix_file with this editor's origin
+ * key — the same persistence pattern as the excalidraw extension: writes are
+ * queued and flushed sequentially, observe emissions are treated as change
+ * signals only (every reconcile re-reads the row), and a queued or running
+ * local edit wins over concurrent external writes.
+ */
+function EditableCsvView({
+	fileRow,
+	review,
+	readOnly,
+	isActiveView = true,
+	isPanelFocused = true,
+	onAcceptReview,
+	onRejectReview,
+}: {
+	readonly fileRow: CsvFileRow;
+	readonly review: ExternalWriteReview | null;
+	readonly readOnly: boolean;
+	readonly isActiveView?: boolean;
+	readonly isPanelFocused?: boolean;
+	readonly onAcceptReview?: CsvReviewHandler;
+	readonly onRejectReview?: CsvReviewHandler;
+}) {
+	const lix = useLix();
+	const fileId = fileRow.id;
+	const fileText = useMemo(
+		() => decodeFileDataToText(fileRow.data),
+		[fileRow.data],
+	);
+	const reviewData = useExternalWriteReviewData(review);
+	const reviewText = reviewData
+		? decodeFileDataToText(reviewData.afterData)
+		: null;
+	const isReviewing = Boolean(review);
+	const isReadOnly = isReviewing || readOnly;
+	const [documentText, setDocumentText] = useState(reviewText ?? fileText);
+	const localTextRef = useRef(documentText);
+	const lastCleanTextRef = useRef(fileText);
+	const persistenceRunningRef = useRef(false);
+	const queuedTextRef = useRef<string | null>(null);
+	const reviewingRef = useRef(isReviewing);
+	const wasReviewingRef = useRef(false);
+	const retryTimerRef = useRef<number | null>(null);
+	const [saveError, setSaveError] = useState<string | null>(null);
+
+	const originKey = useMemo(() => createCsvEditorOriginKey(), []);
+	useEffect(() => {
+		reviewingRef.current = isReviewing;
+		if (isReviewing && reviewText !== null) {
+			queuedTextRef.current = null;
+			localTextRef.current = reviewText;
+			setDocumentText(reviewText);
+		}
+		if (!isReviewing && wasReviewingRef.current) {
+			void qb(lix)
+				.selectFrom("lix_file")
+				.select("data")
+				.where("id", "=", fileId)
+				.executeTakeFirst()
+				.then((row) => {
+					if (!row || reviewingRef.current) return;
+					const nextText = decodeFileDataToText(row.data);
+					lastCleanTextRef.current = nextText;
+					localTextRef.current = nextText;
+					setDocumentText(nextText);
+				})
+				.catch((error) => {
+					if (!reviewingRef.current) {
+						setSaveError(
+							error instanceof Error
+								? error.message
+								: "Could not reload file after review",
+						);
+					}
+				});
+		}
+		wasReviewingRef.current = isReviewing;
+	}, [fileId, isReviewing, lix, reviewText]);
+
+	const flushPersistence = useCallback(async () => {
+		if (persistenceRunningRef.current || reviewingRef.current) return;
+		persistenceRunningRef.current = true;
+		try {
+			while (queuedTextRef.current !== null && !reviewingRef.current) {
+				const nextText = queuedTextRef.current;
+				queuedTextRef.current = null;
+				if (nextText === lastCleanTextRef.current) continue;
+				try {
+					await lix.execute(
+						"UPDATE lix_file SET data = ? WHERE id = ?",
+						[new TextEncoder().encode(nextText), fileId],
+						{ originKey },
+					);
+					lastCleanTextRef.current = nextText;
+					setSaveError(null);
+				} catch (error) {
+					setSaveError(
+						error instanceof Error ? error.message : "Could not save file",
+					);
+					// Retry later so one transient write failure does not leave
+					// the grid permanently ahead of the stored file.
+					if (retryTimerRef.current === null) {
+						retryTimerRef.current = window.setTimeout(() => {
+							retryTimerRef.current = null;
+							if (
+								queuedTextRef.current === null &&
+								localTextRef.current !== lastCleanTextRef.current
+							) {
+								queuedTextRef.current = localTextRef.current;
+							}
+							void flushPersistence();
+						}, 2000);
+					}
+					break;
+				}
+			}
+		} finally {
+			persistenceRunningRef.current = false;
+			if (queuedTextRef.current !== null) void flushPersistence();
+		}
+	}, [fileId, lix, originKey]);
+
+	const persistUserEdit = useCallback(
+		(nextText: string) => {
+			if (reviewingRef.current || readOnly) return;
+			localTextRef.current = nextText;
+			queuedTextRef.current = nextText;
+			void flushPersistence();
+		},
+		[flushPersistence, readOnly],
+	);
+
+	useEffect(() => {
+		// Observe emissions only signal that the file may have changed; their
+		// payload (and the mount-time Suspense row) can be served from caches
+		// that lag behind the store. Every reconcile therefore re-reads the
+		// file directly so a stale snapshot can never overwrite the grid.
+		const events = lix.observe(
+			`SELECT lixcol_change_id FROM lix_file WHERE id = ?`,
+			[fileId],
+		);
+		let closed = false;
+		const reconcile = async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("data")
+				.where("id", "=", fileId)
+				.executeTakeFirst();
+			if (!row || closed) return;
+			const nextText = decodeFileDataToText(row.data);
+			if (nextText === localTextRef.current) {
+				lastCleanTextRef.current = nextText;
+				return;
+			}
+			if (reviewingRef.current) return;
+			// MVP conflict policy: a queued or running local edit wins.
+			if (
+				persistenceRunningRef.current ||
+				queuedTextRef.current !== null ||
+				localTextRef.current !== lastCleanTextRef.current
+			)
+				return;
+			lastCleanTextRef.current = nextText;
+			localTextRef.current = nextText;
+			setDocumentText(nextText);
+		};
+		void (async () => {
+			try {
+				await reconcile();
+				while (!closed) {
+					const event = await events.next();
+					if (!event || closed) continue;
+					await reconcile();
+				}
+			} catch (error) {
+				if (!closed)
+					setSaveError(
+						error instanceof Error ? error.message : "Could not observe file",
+					);
+			}
+		})();
+		return () => {
+			closed = true;
+			events.close();
+			// The queue is intentionally NOT cleared here: an in-flight flush
+			// loop keeps draining it after unmount so the user's last edit
+			// (already serialized) still reaches lix when the view closes
+			// mid-write.
+		};
+	}, [fileId, lix]);
+
+	const csvDocument = useMemo(
+		() => parseCsvDocument(documentText),
+		[documentText],
+	);
+	const view = useMemo(() => csvDocumentView(csvDocument), [csvDocument]);
+	const documentRef = useRef(csvDocument);
+	useEffect(() => {
+		documentRef.current = csvDocument;
+	}, [csvDocument]);
+
+	const applyDocumentEdit = useCallback(
+		(mutate: (current: CsvDocument) => CsvDocument) => {
+			if (reviewingRef.current || readOnly) return;
+			const next = mutate(documentRef.current);
+			if (next === documentRef.current) return;
+			// The ref updates synchronously so rapid consecutive grid edits
+			// (paste, fill, overlay commits) compose before React re-renders.
+			documentRef.current = next;
+			const nextText = serializeCsvDocument(next);
+			setDocumentText(nextText);
+			persistUserEdit(nextText);
+		},
+		[persistUserEdit, readOnly],
+	);
+
+	const handleCellsEdited = useCallback(
+		(edits: readonly CsvCellEdit[]) => {
+			applyDocumentEdit((current) => setDocumentCells(current, edits));
+		},
+		[applyDocumentEdit],
+	);
+
+	const columnCount = view.columns.length;
+	const handleRowAppended = useCallback(() => {
+		applyDocumentEdit((current) => appendDocumentRow(current, columnCount));
+	}, [applyDocumentEdit, columnCount]);
+
+	const handleInsertRow = useCallback(
+		(atRow: number) => {
+			applyDocumentEdit((current) =>
+				insertDocumentRow(current, atRow, columnCount),
+			);
+		},
+		[applyDocumentEdit, columnCount],
+	);
+
+	const handleDeleteRows = useCallback(
+		(rows: readonly number[]) => {
+			applyDocumentEdit((current) => deleteDocumentRows(current, rows));
+		},
+		[applyDocumentEdit],
+	);
+
+	const handleInsertColumn = useCallback(
+		(atColumn: number) => {
+			applyDocumentEdit((current) => insertDocumentColumn(current, atColumn));
+		},
+		[applyDocumentEdit],
+	);
+
+	const handleDeleteColumns = useCallback(
+		(columns: readonly number[]) => {
+			applyDocumentEdit((current) => deleteDocumentColumns(current, columns));
+		},
+		[applyDocumentEdit],
+	);
+
+	const handleRenameColumn = useCallback(
+		(column: number, name: string) => {
+			applyDocumentEdit((current) =>
+				renameDocumentColumn(current, column, name),
+			);
+		},
+		[applyDocumentEdit],
+	);
+
+	const handleCreateTable = useCallback(() => {
+		applyDocumentEdit(() => parseCsvDocument(CSV_SEED_TEXT));
+	}, [applyDocumentEdit]);
+
+	const editing = useMemo<CsvTableEditing | undefined>(
+		() =>
+			isReadOnly
+				? undefined
+				: {
+						onCellsEdited: handleCellsEdited,
+						onRowAppended: handleRowAppended,
+						onInsertRow: handleInsertRow,
+						onDeleteRows: handleDeleteRows,
+						onInsertColumn: handleInsertColumn,
+						onDeleteColumns: handleDeleteColumns,
+						onRenameColumn: handleRenameColumn,
+					},
+		[
+			handleCellsEdited,
+			handleDeleteColumns,
+			handleDeleteRows,
+			handleInsertColumn,
+			handleInsertRow,
+			handleRenameColumn,
+			handleRowAppended,
+			isReadOnly,
+		],
+	);
+
+	return (
+		<CsvViewLoaded
+			fileRow={fileRow}
+			parsedOverride={view}
+			editing={editing}
+			onCreateTable={isReadOnly ? undefined : handleCreateTable}
+			saveError={saveError}
+			externalWriteReview={review}
+			reviewControls="review"
+			isActiveView={isActiveView}
+			isPanelFocused={isPanelFocused}
+			onAcceptReview={onAcceptReview}
+			onRejectReview={onRejectReview}
+		/>
 	);
 }
 
@@ -287,13 +682,20 @@ function CsvHistoricalViewData({
 			externalWriteReview={historicalFile.review}
 			reviewDataOverride={historicalFile.reviewData}
 			reviewControls={historicalFile.controls}
-			{...props}
+			isActiveView={props.isActiveView}
+			isPanelFocused={props.isPanelFocused}
+			onAcceptReview={props.onAcceptReview}
+			onRejectReview={props.onRejectReview}
 		/>
 	);
 }
 
 function CsvViewLoaded({
 	fileRow,
+	parsedOverride,
+	editing,
+	onCreateTable,
+	saveError = null,
 	externalWriteReview,
 	reviewDataOverride,
 	reviewControls = "review",
@@ -301,15 +703,23 @@ function CsvViewLoaded({
 	isPanelFocused = true,
 	onAcceptReview,
 	onRejectReview,
-}: Omit<CsvViewProps, "fileId"> & {
+}: {
 	readonly fileRow: CsvFileRow;
+	readonly parsedOverride?: CsvParseResult;
+	readonly editing?: CsvTableEditing;
+	readonly onCreateTable?: () => void;
+	readonly saveError?: string | null;
 	readonly externalWriteReview: ExternalWriteReview | null;
 	readonly reviewDataOverride?: ExternalWriteReviewData;
 	readonly reviewControls?: "review" | "none";
+	readonly isActiveView?: boolean;
+	readonly isPanelFocused?: boolean;
+	readonly onAcceptReview?: CsvReviewHandler;
+	readonly onRejectReview?: CsvReviewHandler;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
-		return parseCsv(decodeFileDataToText(fileRow.data));
-	}, [fileRow]);
+		return parsedOverride ?? parseCsv(decodeFileDataToText(fileRow.data));
+	}, [fileRow, parsedOverride]);
 
 	return (
 		<div className="csv-view flex min-h-0 flex-1 flex-col bg-background">
@@ -321,10 +731,23 @@ function CsvViewLoaded({
 			) : null}
 			<div className="relative min-h-0 flex-1 overflow-hidden">
 				{parsed.columns.length === 0 ? (
-					<CsvEmptyState filePath={fileRow.path} />
+					<CsvEmptyState
+						filePath={fileRow.path}
+						onCreateTable={onCreateTable}
+					/>
 				) : (
-					<CsvTable parsed={parsed} isActiveView={isActiveView} />
+					<CsvTable
+						parsed={parsed}
+						isActiveView={isActiveView}
+						editing={editing}
+					/>
 				)}
+				{saveError ? (
+					<div className="csv-save-error" role="alert">
+						<AlertTriangle aria-hidden="true" size={13} />
+						<span>Save failed: {saveError}</span>
+					</div>
+				) : null}
 				{externalWriteReview ? (
 					<CsvReviewOverlay
 						fileId={fileRow.id}
@@ -355,16 +778,8 @@ function CsvReviewOverlay({
 	readonly reviewDataOverride?: ExternalWriteReviewData;
 	readonly isActive: boolean;
 	readonly controls?: "review" | "none";
-	readonly onAccept?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onReject?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
+	readonly onAccept?: CsvReviewHandler;
+	readonly onReject?: CsvReviewHandler;
 }) {
 	const externalReviewData = useExternalWriteReviewData(
 		reviewDataOverride ? null : review,
@@ -406,25 +821,46 @@ function CsvReviewOverlay({
 function CsvTable({
 	parsed,
 	isActiveView,
+	editing,
 }: {
 	readonly parsed: CsvParseResult;
 	readonly isActiveView: boolean;
+	readonly editing?: CsvTableEditing;
 }) {
-	const initialColumnWidths = useMemo(
-		() =>
-			parsed.columns.map((header, index) =>
-				measureColumnWidth(header, parsed.rows, index),
-			),
-		[parsed.columns, parsed.rows],
-	);
+	const editable = editing !== undefined;
+	const columnCount = parsed.columns.length;
+	// Width state keyed by the column set (not the parse result identity) so
+	// user resizes and auto widths survive cell edits and only reset when the
+	// columns themselves change.
+	const columnsKey = parsed.columns.join("\u0000");
 	const [columnWidthState, setColumnWidthState] = useState<{
-		readonly source: CsvParseResult;
+		readonly key: string;
+		readonly initial: readonly number[];
 		readonly overrides: Record<number, number>;
-	}>(() => ({ source: parsed, overrides: {} }));
-	const columnWidthOverrides =
-		columnWidthState.source === parsed
-			? columnWidthState.overrides
-			: EMPTY_COLUMN_WIDTH_OVERRIDES;
+	}>(() => ({
+		key: columnsKey,
+		initial: parsed.columns.map((header, index) =>
+			measureColumnWidth(header, parsed.rows, index),
+		),
+		overrides: {},
+	}));
+	let widthState = columnWidthState;
+	if (widthState.key !== columnsKey) {
+		// Same column count means titles changed in place (a rename): keep the
+		// measured widths and user resizes. Only a count change (insert or
+		// delete shifts the indices) forces a full reset.
+		widthState =
+			widthState.initial.length === parsed.columns.length
+				? { ...widthState, key: columnsKey }
+				: {
+						key: columnsKey,
+						initial: parsed.columns.map((header, index) =>
+							measureColumnWidth(header, parsed.rows, index),
+						),
+						overrides: {},
+					};
+		setColumnWidthState(widthState);
+	}
 	useEffect(() => {
 		if (!isActiveView) return;
 		const frame = window.requestAnimationFrame(() => {
@@ -432,16 +868,55 @@ function CsvTable({
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [isActiveView]);
+	useEffect(() => {
+		if (editable) ensureGlideOverlayPortal();
+	}, [editable]);
+	// Apple Numbers-style sizing: the grid canvas is only as large as the
+	// table itself (capped by the container), so no phantom cells or grid
+	// lines render beyond the last column and the trailing row.
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const [containerSize, setContainerSize] = useState<{
+		readonly width: number;
+		readonly height: number;
+	} | null>(null);
+	useLayoutEffect(() => {
+		const element = containerRef.current;
+		if (!element || typeof ResizeObserver === "undefined") return;
+		const update = () => {
+			setContainerSize({
+				width: element.clientWidth,
+				height: element.clientHeight,
+			});
+		};
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
 	const columns = useMemo<GridColumn[]>(() => {
 		return parsed.columns.map((title, index) => ({
 			id: String(index),
 			title,
-			width: columnWidthOverrides[index] ?? initialColumnWidths[index],
+			width: widthState.overrides[index] ?? widthState.initial[index],
+			// The hover chevron that opens the column menu.
+			hasMenu: editable,
 		}));
-	}, [columnWidthOverrides, initialColumnWidths, parsed.columns]);
+	}, [editable, parsed.columns, widthState]);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
+			if (editable) {
+				// Editable cells are plain text so the overlay edits the raw
+				// value; URL/email link affordances stay in read-only views.
+				return {
+					kind: GridCellKind.Text,
+					data: value,
+					displayData: value,
+					allowOverlay: true,
+					readonly: false,
+					copyData: value,
+				};
+			}
 			const linkUrl = toExternalLinkUrl(value);
 			if (linkUrl) {
 				return {
@@ -467,31 +942,259 @@ function CsvTable({
 				copyData: value,
 			};
 		},
-		[parsed.rows],
+		[editable, parsed.rows],
 	);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
-			setColumnWidthState((current) => ({
-				source: parsed,
-				overrides: {
-					...(current.source === parsed ? current.overrides : {}),
-					[columnIndex]: clamp(newSize, COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH),
-				},
-			}));
+			setColumnWidthState((current) =>
+				current.key === columnsKey
+					? {
+							...current,
+							overrides: {
+								...current.overrides,
+								[columnIndex]: clamp(
+									newSize,
+									COLUMN_MIN_WIDTH,
+									COLUMN_MAX_WIDTH,
+								),
+							},
+						}
+					: current,
+			);
 		},
-		[parsed],
+		[columnsKey],
+	);
+	const handleCellsEdited = useCallback(
+		(items: readonly EditListItem[]) => {
+			if (!editing) return;
+			const edits: CsvCellEdit[] = [];
+			for (const item of items) {
+				const value = editedCellText(item.value);
+				if (value === null || item.location[0] >= columnCount) continue;
+				edits.push({
+					row: item.location[1],
+					column: item.location[0],
+					value,
+				});
+			}
+			if (edits.length > 0) editing.onCellsEdited(edits);
+			return true;
+		},
+		[columnCount, editing],
+	);
+	const handlePaste = useCallback(
+		(target: Item, values: readonly (readonly string[])[]) => {
+			if (!editing) return false;
+			const [startColumn, startRow] = target;
+			const edits: CsvCellEdit[] = [];
+			values.forEach((rowValues, rowOffset) => {
+				rowValues.forEach((value, columnOffset) => {
+					const column = startColumn + columnOffset;
+					// Pasting can extend rows but not add columns (yet).
+					if (column >= columnCount) return;
+					edits.push({ row: startRow + rowOffset, column, value });
+				});
+			});
+			if (edits.length > 0) editing.onCellsEdited(edits);
+			return false;
+		},
+		[columnCount, editing],
+	);
+	const [gridSelection, setGridSelection] = useState<GridSelection>(() => ({
+		columns: CompactSelection.empty(),
+		rows: CompactSelection.empty(),
+	}));
+	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
+	const closeMenu = useCallback(() => setMenu(null), []);
+	const clearSelection = useCallback(() => {
+		setGridSelection({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.empty(),
+		});
+	}, []);
+
+	const handleCellContextMenu = useCallback(
+		(
+			cell: Item,
+			event: {
+				readonly preventDefault: () => void;
+				readonly bounds: Rectangle;
+				readonly localEventX: number;
+				readonly localEventY: number;
+			},
+		) => {
+			if (!editing) return;
+			const [, row] = cell;
+			if (row < 0 || row >= parsed.rows.length) return;
+			event.preventDefault();
+			// Anchor the menu visually: select the clicked row unless it is
+			// already part of a multi-row selection the menu will act on.
+			setGridSelection((current) =>
+				current.rows.hasIndex(row)
+					? current
+					: {
+							columns: CompactSelection.empty(),
+							rows: CompactSelection.fromSingleSelection(row),
+						},
+			);
+			setMenu({
+				kind: "row",
+				row,
+				x: event.bounds.x + event.localEventX,
+				y: event.bounds.y + event.localEventY,
+			});
+		},
+		[editing, parsed.rows.length],
+	);
+	const handleHeaderContextMenu = useCallback(
+		(
+			columnIndex: number,
+			event: {
+				readonly preventDefault: () => void;
+				readonly bounds: Rectangle;
+				readonly localEventX: number;
+				readonly localEventY: number;
+			},
+		) => {
+			if (!editing || columnIndex < 0) return;
+			event.preventDefault();
+			setGridSelection((current) =>
+				current.columns.hasIndex(columnIndex)
+					? current
+					: {
+							columns: CompactSelection.fromSingleSelection(columnIndex),
+							rows: CompactSelection.empty(),
+						},
+			);
+			setMenu({
+				kind: "column",
+				column: columnIndex,
+				x: event.bounds.x + event.localEventX,
+				y: event.bounds.y + event.localEventY,
+				headerBounds: event.bounds,
+			});
+		},
+		[editing],
+	);
+	const handleHeaderMenuClick = useCallback(
+		(columnIndex: number, screenPosition: Rectangle) => {
+			if (!editing) return;
+			// screenPosition is the chevron rect at the right edge of the
+			// header cell; reconstruct the header cell rect from it.
+			const width =
+				widthState.overrides[columnIndex] ??
+				widthState.initial[columnIndex] ??
+				Math.max(screenPosition.width, 160);
+			setMenu({
+				kind: "column",
+				column: columnIndex,
+				x: screenPosition.x,
+				y: screenPosition.y + screenPosition.height,
+				headerBounds: {
+					x: screenPosition.x + screenPosition.width - width,
+					y: screenPosition.y,
+					width,
+					height: screenPosition.height,
+				},
+			});
+		},
+		[editing, widthState],
+	);
+	const [renaming, setRenaming] = useState<{
+		readonly column: number;
+		readonly bounds: Rectangle;
+	} | null>(null);
+	const handleHeaderClicked = useCallback(
+		(
+			columnIndex: number,
+			event: {
+				readonly isDoubleClick?: boolean;
+				readonly bounds: Rectangle;
+				readonly preventDefault: () => void;
+			},
+		) => {
+			if (!editing || !event.isDoubleClick || columnIndex < 0) return;
+			event.preventDefault();
+			setRenaming({ column: columnIndex, bounds: event.bounds });
+		},
+		[editing],
+	);
+	const commitRename = useCallback(
+		(column: number, name: string) => {
+			setRenaming(null);
+			const trimmed = name.trim();
+			if (trimmed.length === 0 || trimmed === parsed.columns[column]) return;
+			editing?.onRenameColumn(column, trimmed);
+		},
+		[editing, parsed.columns],
 	);
 
+	// Rows/columns the menu operates on: the multi-selection when the clicked
+	// target is part of it, otherwise just the clicked target.
+	const menuRows = useMemo<readonly number[]>(() => {
+		if (menu?.kind !== "row") return [];
+		const selectedRows = gridSelection.rows.toArray();
+		return selectedRows.includes(menu.row) ? selectedRows : [menu.row];
+	}, [gridSelection.rows, menu]);
+	const menuColumns = useMemo<readonly number[]>(() => {
+		if (menu?.kind !== "column") return [];
+		const selectedColumns = gridSelection.columns.toArray();
+		return selectedColumns.includes(menu.column)
+			? selectedColumns
+			: [menu.column];
+	}, [gridSelection.columns, menu]);
+
+	const runStructuralEdit = useCallback(
+		(action: () => void) => {
+			closeMenu();
+			clearSelection();
+			action();
+		},
+		[clearSelection, closeMenu],
+	);
+
+	const contentWidth =
+		ROW_MARKER_WIDTH +
+		parsed.columns.reduce(
+			(sum, _, index) =>
+				sum +
+				(widthState.overrides[index] ??
+					widthState.initial[index] ??
+					COLUMN_MIN_WIDTH),
+			0,
+		) +
+		2;
+	const contentHeight = HEADER_HEIGHT + parsed.rows.length * ROW_HEIGHT + 2;
+	// A gutter stays reserved for the append strips so they never cover the
+	// grid, even when the table overflows and scrolls.
+	const gutter = editable ? APPEND_STRIP_SIZE : 0;
+	const gridWidth = containerSize
+		? Math.max(
+				ROW_MARKER_WIDTH,
+				Math.min(containerSize.width - gutter, contentWidth),
+			)
+		: "100%";
+	const gridHeight = containerSize
+		? Math.max(
+				HEADER_HEIGHT,
+				Math.min(containerSize.height - gutter, contentHeight),
+			)
+		: "100%";
+
 	return (
-		<div className="ph-mask ph-no-capture h-full min-h-0 flex-1 bg-background">
+		<div
+			ref={containerRef}
+			className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
+		>
 			<DataEditor
 				className="csv-data-grid"
 				columns={columns}
 				rows={parsed.rows.length}
 				getCellContent={getCellContent}
 				getCellsForSelection={true}
-				width="100%"
-				height="100%"
+				width={gridWidth}
+				height={gridHeight}
+				rowMarkerWidth={ROW_MARKER_WIDTH}
 				rowHeight={ROW_HEIGHT}
 				headerHeight={HEADER_HEIGHT}
 				minColumnWidth={COLUMN_MIN_WIDTH}
@@ -503,19 +1206,331 @@ function CsvTable({
 				columnSelect="multi"
 				rowSelect="multi"
 				copyHeaders={true}
-				onPaste={false}
-				fillHandle={false}
+				gridSelection={gridSelection}
+				onGridSelectionChange={setGridSelection}
+				drawHeader={drawCsvHeader}
+				onCellsEdited={editable ? handleCellsEdited : undefined}
+				onPaste={editable ? handlePaste : false}
+				fillHandle={editable}
+				onCellContextMenu={editable ? handleCellContextMenu : undefined}
+				onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
+				onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
+				onHeaderClicked={editable ? handleHeaderClicked : undefined}
 				freezeColumns={0}
 				fixedShadowX={false}
 				fixedShadowY={false}
 				smoothScrollX={true}
 				theme={CSV_GRID_THEME}
 			/>
+			{editing &&
+			typeof gridWidth === "number" &&
+			typeof gridHeight === "number" ? (
+				<>
+					<button
+						type="button"
+						className="csv-append-column-strip"
+						style={{ left: gridWidth, height: gridHeight }}
+						title="Add column"
+						aria-label="Add column"
+						onClick={() => editing.onInsertColumn(columnCount)}
+					>
+						<Plus aria-hidden="true" size={14} />
+					</button>
+					<button
+						type="button"
+						className="csv-append-row-strip"
+						style={{ top: gridHeight, width: gridWidth }}
+						title="Add row"
+						aria-label="Add row"
+						onClick={() => editing.onRowAppended()}
+					>
+						<Plus aria-hidden="true" size={14} />
+					</button>
+				</>
+			) : null}
+			{menu && editing ? (
+				<CsvGridMenu
+					menu={menu}
+					menuRows={menuRows}
+					menuColumns={menuColumns}
+					columnTitle={
+						menu.kind === "column" ? parsed.columns[menu.column] : undefined
+					}
+					onClose={closeMenu}
+					onInsertRow={(atRow) =>
+						runStructuralEdit(() => editing.onInsertRow(atRow))
+					}
+					onDeleteRows={(rows) =>
+						runStructuralEdit(() => editing.onDeleteRows(rows))
+					}
+					onInsertColumn={(atColumn) =>
+						runStructuralEdit(() => editing.onInsertColumn(atColumn))
+					}
+					onDeleteColumns={(cols) =>
+						runStructuralEdit(() => editing.onDeleteColumns(cols))
+					}
+					onRenameColumn={(column, bounds) => {
+						closeMenu();
+						setRenaming({ column, bounds });
+					}}
+				/>
+			) : null}
+			{renaming && editing ? (
+				<CsvHeaderRenameInput
+					key={renaming.column}
+					bounds={renaming.bounds}
+					initialValue={parsed.columns[renaming.column] ?? ""}
+					onCommit={(name) => commitRename(renaming.column, name)}
+					onCancel={() => setRenaming(null)}
+				/>
+			) : null}
 		</div>
 	);
 }
 
-function CsvEmptyState({ filePath }: { readonly filePath: string }) {
+function CsvHeaderRenameInput({
+	bounds,
+	initialValue,
+	onCommit,
+	onCancel,
+}: {
+	readonly bounds: Rectangle;
+	readonly initialValue: string;
+	readonly onCommit: (name: string) => void;
+	readonly onCancel: () => void;
+}) {
+	const [value, setValue] = useState(initialValue);
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	useEffect(() => {
+		inputRef.current?.focus();
+		inputRef.current?.select();
+	}, []);
+	// Guards against the blur that fires while the input unmounts after
+	// Enter/Escape already resolved the rename.
+	const doneRef = useRef(false);
+	const finish = (action: () => void) => {
+		if (doneRef.current) return;
+		doneRef.current = true;
+		action();
+	};
+	return (
+		<input
+			className="csv-rename-input"
+			style={{
+				left: bounds.x,
+				top: bounds.y,
+				width: Math.max(bounds.width, 120),
+				height: bounds.height,
+			}}
+			value={value}
+			aria-label="Rename column"
+			ref={inputRef}
+			onChange={(event) => setValue(event.target.value)}
+			onBlur={() => finish(() => onCommit(value))}
+			onKeyDown={(event) => {
+				event.stopPropagation();
+				if (event.key === "Enter") {
+					event.preventDefault();
+					finish(() => onCommit(value));
+				} else if (event.key === "Escape") {
+					event.preventDefault();
+					finish(onCancel);
+				}
+			}}
+		/>
+	);
+}
+
+/**
+ * Repaints selected headers over glide's solid accent block: a soft accent
+ * wash plus a 2px accent underline, with the regular header text on top.
+ */
+const drawCsvHeader: DrawHeaderCallback = (args, drawContent) => {
+	if (args.isSelected) {
+		const { ctx, rect } = args;
+		ctx.fillStyle = CSV_GRID_THEME.bgHeader;
+		ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+		ctx.fillStyle = "rgba(234, 88, 12, 0.1)";
+		ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+		ctx.fillStyle = CSV_GRID_THEME.accentColor;
+		ctx.fillRect(rect.x, rect.y + rect.height - 2, rect.width, 2);
+	}
+	drawContent();
+};
+
+function CsvGridMenu({
+	menu,
+	menuRows,
+	menuColumns,
+	columnTitle,
+	onClose,
+	onInsertRow,
+	onDeleteRows,
+	onInsertColumn,
+	onDeleteColumns,
+	onRenameColumn,
+}: {
+	readonly menu: CsvGridMenuState;
+	readonly menuRows: readonly number[];
+	readonly menuColumns: readonly number[];
+	readonly columnTitle?: string | undefined;
+	readonly onClose: () => void;
+	readonly onInsertRow: (atRow: number) => void;
+	readonly onDeleteRows: (rows: readonly number[]) => void;
+	readonly onInsertColumn: (atColumn: number) => void;
+	readonly onDeleteColumns: (columns: readonly number[]) => void;
+	readonly onRenameColumn: (column: number, bounds: Rectangle) => void;
+}) {
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") onClose();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [onClose]);
+
+	// Clamp into the viewport so menus opened near the bottom/right edge
+	// stay fully visible.
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	const [position, setPosition] = useState({ x: menu.x, y: menu.y });
+	useLayoutEffect(() => {
+		const rect = menuRef.current?.getBoundingClientRect();
+		if (!rect) return;
+		setPosition({
+			x: Math.max(0, Math.min(menu.x, window.innerWidth - rect.width - 8)),
+			y: Math.max(0, Math.min(menu.y, window.innerHeight - rect.height - 8)),
+		});
+	}, [menu]);
+
+	const items =
+		menu.kind === "row"
+			? [
+					{
+						label: "Insert row above",
+						icon: ArrowUpToLine,
+						onSelect: () => onInsertRow(menu.row),
+					},
+					{
+						label: "Insert row below",
+						icon: ArrowDownToLine,
+						onSelect: () => onInsertRow(menu.row + 1),
+					},
+					{
+						label:
+							menuRows.length > 1
+								? `Delete ${menuRows.length} rows`
+								: "Delete row",
+						icon: Trash2,
+						destructive: true,
+						onSelect: () => onDeleteRows(menuRows),
+					},
+				]
+			: [
+					{
+						label: "Rename column",
+						icon: Pencil,
+						onSelect: () => onRenameColumn(menu.column, menu.headerBounds),
+					},
+					{
+						label: "Insert column left",
+						icon: ArrowLeftToLine,
+						onSelect: () => onInsertColumn(menu.column),
+					},
+					{
+						label: "Insert column right",
+						icon: ArrowRightToLine,
+						onSelect: () => onInsertColumn(menu.column + 1),
+					},
+					{
+						label:
+							menuColumns.length > 1
+								? `Delete ${menuColumns.length} columns`
+								: columnTitle
+									? `Delete column “${truncateLabel(columnTitle)}”`
+									: "Delete column",
+						icon: Trash2,
+						destructive: true,
+						onSelect: () => onDeleteColumns(menuColumns),
+					},
+				];
+
+	return (
+		<>
+			<div
+				role="presentation"
+				className="csv-grid-menu-backdrop"
+				onMouseDown={onClose}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					onClose();
+				}}
+			/>
+			<div
+				ref={menuRef}
+				className="csv-grid-menu"
+				role="menu"
+				style={{ left: position.x, top: position.y }}
+			>
+				{items.map((item) => (
+					<button
+						key={item.label}
+						type="button"
+						role="menuitem"
+						className={
+							item.destructive
+								? "csv-grid-menu-item csv-grid-menu-item-destructive"
+								: "csv-grid-menu-item"
+						}
+						onClick={item.onSelect}
+					>
+						<item.icon
+							aria-hidden="true"
+							size={14}
+							className="csv-grid-menu-item-icon"
+						/>
+						<span>{item.label}</span>
+					</button>
+				))}
+			</div>
+		</>
+	);
+}
+
+function truncateLabel(label: string): string {
+	return label.length > 24 ? `${label.slice(0, 24)}…` : label;
+}
+
+/**
+ * Glide's overlay editor mounts into a hardcoded `document.getElementById("portal")`
+ * and silently fails to open without it. Atelier is a library, so hosts cannot
+ * be expected to provide the div — create it on demand.
+ */
+function ensureGlideOverlayPortal(): void {
+	if (typeof document === "undefined") return;
+	if (document.getElementById("portal")) return;
+	const portal = document.createElement("div");
+	portal.id = "portal";
+	portal.style.position = "fixed";
+	portal.style.left = "0";
+	portal.style.top = "0";
+	portal.style.zIndex = "9999";
+	document.body.appendChild(portal);
+}
+
+function editedCellText(value: EditableGridCell): string | null {
+	if (value.kind === GridCellKind.Text || value.kind === GridCellKind.Uri) {
+		return typeof value.data === "string" ? value.data : "";
+	}
+	return null;
+}
+
+function CsvEmptyState({
+	filePath,
+	onCreateTable,
+}: {
+	readonly filePath: string;
+	readonly onCreateTable?: () => void;
+}) {
 	return (
 		<div className="flex h-full items-center justify-center px-6 py-8 text-center">
 			<div className="max-w-sm space-y-2 text-sm text-[var(--color-text-secondary)]">
@@ -528,6 +1543,16 @@ function CsvEmptyState({ filePath }: { readonly filePath: string }) {
 					</span>{" "}
 					is empty or does not contain a header row.
 				</p>
+				{onCreateTable ? (
+					<button
+						type="button"
+						className="csv-create-table-button"
+						onClick={onCreateTable}
+					>
+						<Plus aria-hidden="true" size={14} />
+						<span>Create table</span>
+					</button>
+				) : null}
 			</div>
 		</div>
 	);
@@ -669,6 +1694,16 @@ function buildHistoricalCsvFile(args: {
 	};
 }
 
+function createCsvEditorOriginKey(): string {
+	if (
+		typeof crypto !== "undefined" &&
+		typeof crypto.randomUUID === "function"
+	) {
+		return `atelier.csv-editor:${crypto.randomUUID()}`;
+	}
+	return `atelier.csv-editor:${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+}
+
 function assertFileId(fileId: unknown): asserts fileId is string {
 	if (typeof fileId !== "string" || fileId.length === 0) {
 		throw new Error("CsvView requires a non-empty fileId.");
@@ -680,7 +1715,7 @@ export const extension = createReactExtensionDefinition({
 		"bundled:atelier_csv/manifest.json",
 		JSON.stringify(manifestJson),
 	),
-	description: "Display CSV files as a table.",
+	description: "Display and edit CSV files as a table.",
 	icon: Table2,
 	component: ({ atelier, view }) => (
 		<LixProvider lix={atelier.lix}>
@@ -690,6 +1725,7 @@ export const extension = createReactExtensionDefinition({
 				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
 				reviewRangeSessionId={atelier.reviews.rangeSessionId}
 				filePath={view.state.filePath as string | undefined}
+				readOnly={atelier.readOnly}
 				beforeCommitId={
 					typeof view.state.beforeCommitId === "string"
 						? view.state.beforeCommitId

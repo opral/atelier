@@ -1,0 +1,4 @@
+name,role,email,website,notes
+Ada Lovelace,Engineer,ada@example.com,https://example.com/ada,"likes math, poetry"
+Grace Hopper,Admiral,grace@example.com,https://example.com/grace,wrote the first compiler
+Alan Turing,Researcher,alan@example.com,https://example.com/alan,"said ""machines can think"""
