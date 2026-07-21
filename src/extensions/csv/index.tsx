@@ -117,6 +117,8 @@ type CsvReviewHandler = (args: {
 
 const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
+const ADD_COLUMN_ID = "csv-add-column";
+const ADD_COLUMN_WIDTH = 48;
 const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 48;
 const HEADER_HEIGHT = 40;
@@ -870,7 +872,7 @@ function CsvTable({
 		if (editable) ensureGlideOverlayPortal();
 	}, [editable]);
 	const columns = useMemo<GridColumn[]>(() => {
-		return parsed.columns.map((title, index) => ({
+		const gridColumns: GridColumn[] = parsed.columns.map((title, index) => ({
 			id: String(index),
 			title,
 			width: widthState.overrides[index] ?? widthState.initial[index],
@@ -893,9 +895,37 @@ function CsvTable({
 					}
 				: {}),
 		}));
+		if (editable) {
+			// Slim trailing "+" column hugging the last real column; clicking
+			// its header appends a column (glide's rightElement would sit at
+			// the viewport edge instead).
+			gridColumns.push({
+				id: ADD_COLUMN_ID,
+				title: "+",
+				width: ADD_COLUMN_WIDTH,
+				hasMenu: false,
+				themeOverride: {
+					textHeader: "rgb(120, 113, 108)",
+					bgHeaderHovered: "rgb(251, 239, 228)",
+				},
+				trailingRowOptions: { disabled: true },
+			});
+		}
+		return gridColumns;
 	}, [editable, parsed.columns, widthState]);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
+			if (columnIndex >= columnCount) {
+				// Body cells of the trailing "+" column are inert.
+				return {
+					kind: GridCellKind.Text,
+					data: "",
+					displayData: "",
+					allowOverlay: false,
+					readonly: true,
+					copyData: "",
+				};
+			}
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
 			if (editable) {
 				// Editable cells are plain text so the overlay edits the raw
@@ -934,10 +964,11 @@ function CsvTable({
 				copyData: value,
 			};
 		},
-		[editable, parsed.rows],
+		[columnCount, editable, parsed.rows],
 	);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
+			if (columnIndex >= columnCount) return;
 			setColumnWidthState((current) =>
 				current.key === columnsKey
 					? {
@@ -954,7 +985,7 @@ function CsvTable({
 					: current,
 			);
 		},
-		[columnsKey],
+		[columnCount, columnsKey],
 	);
 	const handleCellsEdited = useCallback(
 		(items: readonly EditListItem[]) => {
@@ -962,7 +993,7 @@ function CsvTable({
 			const edits: CsvCellEdit[] = [];
 			for (const item of items) {
 				const value = editedCellText(item.value);
-				if (value === null) continue;
+				if (value === null || item.location[0] >= columnCount) continue;
 				edits.push({
 					row: item.location[1],
 					column: item.location[0],
@@ -972,7 +1003,7 @@ function CsvTable({
 			if (edits.length > 0) editing.onCellsEdited(edits);
 			return true;
 		},
-		[editing],
+		[columnCount, editing],
 	);
 	const handlePaste = useCallback(
 		(target: Item, values: readonly (readonly string[])[]) => {
@@ -1000,6 +1031,17 @@ function CsvTable({
 		columns: CompactSelection.empty(),
 		rows: CompactSelection.empty(),
 	}));
+	const handleGridSelectionChange = useCallback(
+		(selection: GridSelection) => {
+			// The trailing "+" column acts as a button and is never selected.
+			setGridSelection(
+				selection.columns.hasIndex(columnCount)
+					? { ...selection, columns: selection.columns.remove(columnCount) }
+					: selection,
+			);
+		},
+		[columnCount],
+	);
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => setMenu(null), []);
 	const clearSelection = useCallback(() => {
@@ -1052,7 +1094,7 @@ function CsvTable({
 				readonly localEventY: number;
 			},
 		) => {
-			if (!editing || columnIndex < 0) return;
+			if (!editing || columnIndex < 0 || columnIndex >= columnCount) return;
 			event.preventDefault();
 			setGridSelection((current) =>
 				current.columns.hasIndex(columnIndex)
@@ -1070,11 +1112,11 @@ function CsvTable({
 				headerBounds: event.bounds,
 			});
 		},
-		[editing],
+		[columnCount, editing],
 	);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
-			if (!editing) return;
+			if (!editing || columnIndex >= columnCount) return;
 			// screenPosition is the chevron rect at the right edge of the
 			// header cell; reconstruct the header cell rect from it.
 			const width =
@@ -1094,7 +1136,7 @@ function CsvTable({
 				},
 			});
 		},
-		[editing, widthState],
+		[columnCount, editing, widthState],
 	);
 	const [renaming, setRenaming] = useState<{
 		readonly column: number;
@@ -1109,11 +1151,18 @@ function CsvTable({
 				readonly preventDefault: () => void;
 			},
 		) => {
-			if (!editing || !event.isDoubleClick || columnIndex < 0) return;
+			if (!editing || columnIndex < 0) return;
+			if (columnIndex >= columnCount) {
+				// The trailing "+" column: any click appends a column.
+				event.preventDefault();
+				editing.onInsertColumn(columnCount);
+				return;
+			}
+			if (!event.isDoubleClick) return;
 			event.preventDefault();
 			setRenaming({ column: columnIndex, bounds: event.bounds });
 		},
-		[editing],
+		[columnCount, editing],
 	);
 	const commitRename = useCallback(
 		(column: number, name: string) => {
@@ -1171,7 +1220,7 @@ function CsvTable({
 				rowSelect="multi"
 				copyHeaders={true}
 				gridSelection={gridSelection}
-				onGridSelectionChange={setGridSelection}
+				onGridSelectionChange={handleGridSelectionChange}
 				drawHeader={drawCsvHeader}
 				onCellsEdited={editable ? handleCellsEdited : undefined}
 				onPaste={editable ? handlePaste : false}
@@ -1184,22 +1233,6 @@ function CsvTable({
 				onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
 				onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
 				onHeaderClicked={editable ? handleHeaderClicked : undefined}
-				rightElement={
-					editable ? (
-						<button
-							type="button"
-							className="csv-add-column-button"
-							title="Add column"
-							aria-label="Add column"
-							onClick={() => editing?.onInsertColumn(columnCount)}
-						>
-							<span aria-hidden="true">+</span>
-						</button>
-					) : undefined
-				}
-				rightElementProps={
-					editable ? { fill: false, sticky: false } : undefined
-				}
 				freezeColumns={0}
 				fixedShadowX={false}
 				fixedShadowY={false}
