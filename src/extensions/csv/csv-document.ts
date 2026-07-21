@@ -168,6 +168,25 @@ export function deleteDocumentColumns(
 	return { ...document, records };
 }
 
+/** Renames a column by rewriting only the header record. */
+export function renameDocumentColumn(
+	document: CsvDocument,
+	column: number,
+	name: string,
+): CsvDocument {
+	if (document.records.length === 0 || column < 0) return document;
+	const header = document.records[0]!;
+	if ((header.cells[column] ?? "") === name && header.raw !== null) {
+		return document;
+	}
+	const cells = [...header.cells];
+	while (cells.length <= column) cells.push("");
+	cells[column] = name;
+	const records = [...document.records];
+	records[0] = { cells, raw: null, terminator: header.terminator };
+	return { ...document, records };
+}
+
 /** Inserts an empty data row so it becomes data row `atRow` (header excluded). */
 export function insertDocumentRow(
 	document: CsvDocument,

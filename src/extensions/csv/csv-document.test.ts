@@ -7,6 +7,7 @@ import {
 	insertDocumentColumn,
 	insertDocumentRow,
 	parseCsvDocument,
+	renameDocumentColumn,
 	serializeCsvDocument,
 	serializeCsvRecord,
 	setDocumentCells,
@@ -189,6 +190,39 @@ describe("deleteDocumentColumns", () => {
 			[2],
 		);
 		expect(serializeCsvDocument(document)).toBe("a,b\n1\n2,3\n");
+	});
+});
+
+describe("renameDocumentColumn", () => {
+	test("rewrites only the header line", () => {
+		const text = 'name,notes\nalpha,"kept, quoting"\n';
+		const document = renameDocumentColumn(parseCsvDocument(text), 1, "remarks");
+		expect(serializeCsvDocument(document)).toBe(
+			'name,remarks\nalpha,"kept, quoting"\n',
+		);
+	});
+
+	test("quotes header names that need escaping", () => {
+		const document = renameDocumentColumn(
+			parseCsvDocument("a,b\n1,2\n"),
+			0,
+			"first, second",
+		);
+		expect(serializeCsvDocument(document)).toBe('"first, second",b\n1,2\n');
+	});
+
+	test("pads a short header row when renaming a virtual column", () => {
+		const document = renameDocumentColumn(
+			parseCsvDocument("a\n1,2,3\n"),
+			2,
+			"c",
+		);
+		expect(serializeCsvDocument(document)).toBe("a,,c\n1,2,3\n");
+	});
+
+	test("is a no-op when the name is unchanged", () => {
+		const source = parseCsvDocument("a,b\n1,2\n");
+		expect(renameDocumentColumn(source, 0, "a")).toBe(source);
 	});
 });
 

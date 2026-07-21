@@ -2,6 +2,7 @@ import {
 	Suspense,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -60,6 +61,7 @@ import {
 	insertDocumentColumn,
 	insertDocumentRow,
 	parseCsvDocument,
+	renameDocumentColumn,
 	serializeCsvDocument,
 	setDocumentCells,
 	type CsvCellEdit,
@@ -135,6 +137,7 @@ type CsvTableEditing = {
 	readonly onDeleteRows: (rows: readonly number[]) => void;
 	readonly onInsertColumn: (atColumn: number) => void;
 	readonly onDeleteColumns: (columns: readonly number[]) => void;
+	readonly onRenameColumn: (column: number, name: string) => void;
 };
 
 type CsvGridMenuState =
@@ -149,6 +152,7 @@ type CsvGridMenuState =
 			readonly column: number;
 			readonly x: number;
 			readonly y: number;
+			readonly headerBounds: Rectangle;
 	  };
 
 type HistoricalCsvFile = {
@@ -349,6 +353,7 @@ function EditableCsvView({
 	const queuedTextRef = useRef<string | null>(null);
 	const reviewingRef = useRef(isReviewing);
 	const wasReviewingRef = useRef(false);
+	const retryTimerRef = useRef<number | null>(null);
 	const [saveError, setSaveError] = useState<string | null>(null);
 
 	const originKey = useMemo(() => createCsvEditorOriginKey(), []);
@@ -405,6 +410,21 @@ function EditableCsvView({
 					setSaveError(
 						error instanceof Error ? error.message : "Could not save file",
 					);
+					// Retry later so one transient write failure does not leave
+					// the grid permanently ahead of the stored file.
+					if (retryTimerRef.current === null) {
+						retryTimerRef.current = window.setTimeout(() => {
+							retryTimerRef.current = null;
+							if (
+								queuedTextRef.current === null &&
+								localTextRef.current !== lastCleanTextRef.current
+							) {
+								queuedTextRef.current = localTextRef.current;
+							}
+							void flushPersistence();
+						}, 2000);
+					}
+					break;
 				}
 			}
 		} finally {
@@ -475,7 +495,10 @@ function EditableCsvView({
 		return () => {
 			closed = true;
 			events.close();
-			queuedTextRef.current = null;
+			// The queue is intentionally NOT cleared here: an in-flight flush
+			// loop keeps draining it after unmount so the user's last edit
+			// (already serialized) still reaches lix when the view closes
+			// mid-write.
 		};
 	}, [fileId, lix]);
 
@@ -546,6 +569,15 @@ function EditableCsvView({
 		[applyDocumentEdit],
 	);
 
+	const handleRenameColumn = useCallback(
+		(column: number, name: string) => {
+			applyDocumentEdit((current) =>
+				renameDocumentColumn(current, column, name),
+			);
+		},
+		[applyDocumentEdit],
+	);
+
 	const handleCreateTable = useCallback(() => {
 		applyDocumentEdit(() => parseCsvDocument(CSV_SEED_TEXT));
 	}, [applyDocumentEdit]);
@@ -561,6 +593,7 @@ function EditableCsvView({
 						onDeleteRows: handleDeleteRows,
 						onInsertColumn: handleInsertColumn,
 						onDeleteColumns: handleDeleteColumns,
+						onRenameColumn: handleRenameColumn,
 					},
 		[
 			handleCellsEdited,
@@ -568,6 +601,7 @@ function EditableCsvView({
 			handleDeleteRows,
 			handleInsertColumn,
 			handleInsertRow,
+			handleRenameColumn,
 			handleRowAppended,
 			isReadOnly,
 		],
@@ -799,13 +833,19 @@ function CsvTable({
 	}));
 	let widthState = columnWidthState;
 	if (widthState.key !== columnsKey) {
-		widthState = {
-			key: columnsKey,
-			initial: parsed.columns.map((header, index) =>
-				measureColumnWidth(header, parsed.rows, index),
-			),
-			overrides: {},
-		};
+		// Same column count means titles changed in place (a rename): keep the
+		// measured widths and user resizes. Only a count change (insert or
+		// delete shifts the indices) forces a full reset.
+		widthState =
+			widthState.initial.length === parsed.columns.length
+				? { ...widthState, key: columnsKey }
+				: {
+						key: columnsKey,
+						initial: parsed.columns.map((header, index) =>
+							measureColumnWidth(header, parsed.rows, index),
+						),
+						overrides: {},
+					};
 		setColumnWidthState(widthState);
 	}
 	useEffect(() => {
@@ -956,6 +996,16 @@ function CsvTable({
 			const [, row] = cell;
 			if (row < 0 || row >= parsed.rows.length) return;
 			event.preventDefault();
+			// Anchor the menu visually: select the clicked row unless it is
+			// already part of a multi-row selection the menu will act on.
+			setGridSelection((current) =>
+				current.rows.hasIndex(row)
+					? current
+					: {
+							columns: CompactSelection.empty(),
+							rows: CompactSelection.fromSingleSelection(row),
+						},
+			);
 			setMenu({
 				kind: "row",
 				row,
@@ -977,11 +1027,20 @@ function CsvTable({
 		) => {
 			if (!editing || columnIndex < 0) return;
 			event.preventDefault();
+			setGridSelection((current) =>
+				current.columns.hasIndex(columnIndex)
+					? current
+					: {
+							columns: CompactSelection.fromSingleSelection(columnIndex),
+							rows: CompactSelection.empty(),
+						},
+			);
 			setMenu({
 				kind: "column",
 				column: columnIndex,
 				x: event.bounds.x + event.localEventX,
 				y: event.bounds.y + event.localEventY,
+				headerBounds: event.bounds,
 			});
 		},
 		[editing],
@@ -989,23 +1048,70 @@ function CsvTable({
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
 			if (!editing) return;
+			// screenPosition is the chevron rect at the right edge of the
+			// header cell; reconstruct the header cell rect from it.
+			const width =
+				widthState.overrides[columnIndex] ??
+				widthState.initial[columnIndex] ??
+				Math.max(screenPosition.width, 160);
 			setMenu({
 				kind: "column",
 				column: columnIndex,
 				x: screenPosition.x,
 				y: screenPosition.y + screenPosition.height,
+				headerBounds: {
+					x: screenPosition.x + screenPosition.width - width,
+					y: screenPosition.y,
+					width,
+					height: screenPosition.height,
+				},
 			});
+		},
+		[editing, widthState],
+	);
+	const [renaming, setRenaming] = useState<{
+		readonly column: number;
+		readonly bounds: Rectangle;
+	} | null>(null);
+	const handleHeaderClicked = useCallback(
+		(
+			columnIndex: number,
+			event: {
+				readonly isDoubleClick?: boolean;
+				readonly bounds: Rectangle;
+				readonly preventDefault: () => void;
+			},
+		) => {
+			if (!editing || !event.isDoubleClick || columnIndex < 0) return;
+			event.preventDefault();
+			setRenaming({ column: columnIndex, bounds: event.bounds });
 		},
 		[editing],
 	);
+	const commitRename = useCallback(
+		(column: number, name: string) => {
+			setRenaming(null);
+			const trimmed = name.trim();
+			if (trimmed.length === 0 || trimmed === parsed.columns[column]) return;
+			editing?.onRenameColumn(column, trimmed);
+		},
+		[editing, parsed.columns],
+	);
 
-	// Rows the row menu operates on: the multi-row selection when the clicked
-	// row is part of it, otherwise just the clicked row.
+	// Rows/columns the menu operates on: the multi-selection when the clicked
+	// target is part of it, otherwise just the clicked target.
 	const menuRows = useMemo<readonly number[]>(() => {
 		if (menu?.kind !== "row") return [];
 		const selectedRows = gridSelection.rows.toArray();
 		return selectedRows.includes(menu.row) ? selectedRows : [menu.row];
 	}, [gridSelection.rows, menu]);
+	const menuColumns = useMemo<readonly number[]>(() => {
+		if (menu?.kind !== "column") return [];
+		const selectedColumns = gridSelection.columns.toArray();
+		return selectedColumns.includes(menu.column)
+			? selectedColumns
+			: [menu.column];
+	}, [gridSelection.columns, menu]);
 
 	const runStructuralEdit = useCallback(
 		(action: () => void) => {
@@ -1050,6 +1156,7 @@ function CsvTable({
 				onCellContextMenu={editable ? handleCellContextMenu : undefined}
 				onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
 				onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
+				onHeaderClicked={editable ? handleHeaderClicked : undefined}
 				rightElement={
 					editable ? (
 						<button
@@ -1076,6 +1183,7 @@ function CsvTable({
 				<CsvGridMenu
 					menu={menu}
 					menuRows={menuRows}
+					menuColumns={menuColumns}
 					columnTitle={
 						menu.kind === "column" ? parsed.columns[menu.column] : undefined
 					}
@@ -1092,9 +1200,75 @@ function CsvTable({
 					onDeleteColumns={(cols) =>
 						runStructuralEdit(() => editing.onDeleteColumns(cols))
 					}
+					onRenameColumn={(column, bounds) => {
+						closeMenu();
+						setRenaming({ column, bounds });
+					}}
+				/>
+			) : null}
+			{renaming && editing ? (
+				<CsvHeaderRenameInput
+					key={renaming.column}
+					bounds={renaming.bounds}
+					initialValue={parsed.columns[renaming.column] ?? ""}
+					onCommit={(name) => commitRename(renaming.column, name)}
+					onCancel={() => setRenaming(null)}
 				/>
 			) : null}
 		</div>
+	);
+}
+
+function CsvHeaderRenameInput({
+	bounds,
+	initialValue,
+	onCommit,
+	onCancel,
+}: {
+	readonly bounds: Rectangle;
+	readonly initialValue: string;
+	readonly onCommit: (name: string) => void;
+	readonly onCancel: () => void;
+}) {
+	const [value, setValue] = useState(initialValue);
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	useEffect(() => {
+		inputRef.current?.focus();
+		inputRef.current?.select();
+	}, []);
+	// Guards against the blur that fires while the input unmounts after
+	// Enter/Escape already resolved the rename.
+	const doneRef = useRef(false);
+	const finish = (action: () => void) => {
+		if (doneRef.current) return;
+		doneRef.current = true;
+		action();
+	};
+	return (
+		<input
+			className="csv-rename-input"
+			style={{
+				left: bounds.x,
+				top: bounds.y,
+				width: Math.max(bounds.width, 120),
+				height: bounds.height,
+			}}
+			value={value}
+			aria-label="Rename column"
+			ref={inputRef}
+			onChange={(event) => setValue(event.target.value)}
+			onBlur={() => finish(() => onCommit(value))}
+			onKeyDown={(event) => {
+				event.stopPropagation();
+				if (event.key === "Enter") {
+					event.preventDefault();
+					finish(() => onCommit(value));
+				} else if (event.key === "Escape") {
+					event.preventDefault();
+					finish(onCancel);
+				}
+			}}
+		/>
 	);
 }
 
@@ -1118,21 +1292,25 @@ const drawCsvHeader: DrawHeaderCallback = (args, drawContent) => {
 function CsvGridMenu({
 	menu,
 	menuRows,
+	menuColumns,
 	columnTitle,
 	onClose,
 	onInsertRow,
 	onDeleteRows,
 	onInsertColumn,
 	onDeleteColumns,
+	onRenameColumn,
 }: {
 	readonly menu: CsvGridMenuState;
 	readonly menuRows: readonly number[];
+	readonly menuColumns: readonly number[];
 	readonly columnTitle?: string | undefined;
 	readonly onClose: () => void;
 	readonly onInsertRow: (atRow: number) => void;
 	readonly onDeleteRows: (rows: readonly number[]) => void;
 	readonly onInsertColumn: (atColumn: number) => void;
 	readonly onDeleteColumns: (columns: readonly number[]) => void;
+	readonly onRenameColumn: (column: number, bounds: Rectangle) => void;
 }) {
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -1141,6 +1319,19 @@ function CsvGridMenu({
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [onClose]);
+
+	// Clamp into the viewport so menus opened near the bottom/right edge
+	// stay fully visible.
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	const [position, setPosition] = useState({ x: menu.x, y: menu.y });
+	useLayoutEffect(() => {
+		const rect = menuRef.current?.getBoundingClientRect();
+		if (!rect) return;
+		setPosition({
+			x: Math.max(0, Math.min(menu.x, window.innerWidth - rect.width - 8)),
+			y: Math.max(0, Math.min(menu.y, window.innerHeight - rect.height - 8)),
+		});
+	}, [menu]);
 
 	const items =
 		menu.kind === "row"
@@ -1164,6 +1355,10 @@ function CsvGridMenu({
 				]
 			: [
 					{
+						label: "Rename column",
+						onSelect: () => onRenameColumn(menu.column, menu.headerBounds),
+					},
+					{
 						label: "Insert column left",
 						onSelect: () => onInsertColumn(menu.column),
 					},
@@ -1172,11 +1367,14 @@ function CsvGridMenu({
 						onSelect: () => onInsertColumn(menu.column + 1),
 					},
 					{
-						label: columnTitle
-							? `Delete column “${truncateLabel(columnTitle)}”`
-							: "Delete column",
+						label:
+							menuColumns.length > 1
+								? `Delete ${menuColumns.length} columns`
+								: columnTitle
+									? `Delete column “${truncateLabel(columnTitle)}”`
+									: "Delete column",
 						destructive: true,
-						onSelect: () => onDeleteColumns([menu.column]),
+						onSelect: () => onDeleteColumns(menuColumns),
 					},
 				];
 
@@ -1192,9 +1390,10 @@ function CsvGridMenu({
 				}}
 			/>
 			<div
+				ref={menuRef}
 				className="csv-grid-menu"
 				role="menu"
-				style={{ left: menu.x, top: menu.y }}
+				style={{ left: position.x, top: position.y }}
 			>
 				{items.map((item) => (
 					<button

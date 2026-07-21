@@ -137,6 +137,20 @@
 		color: rgb(194, 65, 12);
 	}
 
+	.csv-rename-input {
+		position: fixed;
+		z-index: 41;
+		box-sizing: border-box;
+		padding: 0 15px;
+		border: 2px solid rgb(234, 88, 12);
+		border-radius: 0;
+		background: rgb(255, 255, 255);
+		color: var(--color-text-primary);
+		font-size: 14px;
+		font-weight: 700;
+		outline: none;
+	}
+
 	.csv-grid-menu-backdrop {
 		position: fixed;
 		inset: 0;

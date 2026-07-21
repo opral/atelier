@@ -1,5 +1,11 @@
 import { Suspense } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
@@ -28,6 +34,14 @@ type MockedDataEditorProps = {
 			bounds: { x: number; y: number; width: number; height: number };
 			localEventX: number;
 			localEventY: number;
+		},
+	) => void;
+	onHeaderClicked?: (
+		columnIndex: number,
+		event: {
+			isDoubleClick?: boolean;
+			bounds: { x: number; y: number; width: number; height: number };
+			preventDefault: () => void;
 		},
 	) => void;
 };
@@ -73,6 +87,11 @@ vi.mock("@glideapps/glide-data-grid", () => ({
 			toArray: () => [],
 			hasIndex: () => false,
 			length: 0,
+		}),
+		fromSingleSelection: (index: number) => ({
+			toArray: () => [index],
+			hasIndex: (candidate: number) => candidate === index,
+			length: 1,
 		}),
 	},
 }));
@@ -264,6 +283,71 @@ test("deletes a row via the context menu", async () => {
 				.executeTakeFirst();
 			expect(new TextDecoder().decode(row?.data as Uint8Array)).toBe(
 				'name,notes\nalpha,"kept, quoting"\n',
+			);
+		});
+	} finally {
+		if (utils) {
+			const rendered = utils;
+			await act(async () => {
+				rendered.unmount();
+			});
+		}
+		await lix.close();
+	}
+});
+
+test("renames a column via double-clicking the header", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		const fileId = "file_csv_rename_column";
+
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/rename.csv",
+				data: new TextEncoder().encode('name,notes\nalpha,"kept, quoting"\n'),
+			})
+			.execute();
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		expect(await screen.findByText("alpha")).toBeInTheDocument();
+
+		await act(async () => {
+			latestDataEditorProps.current?.onHeaderClicked?.(1, {
+				isDoubleClick: true,
+				bounds: { x: 100, y: 0, width: 120, height: 40 },
+				preventDefault: () => {},
+			});
+		});
+
+		const input = await screen.findByRole("textbox", {
+			name: /rename column/i,
+		});
+		expect(input).toHaveValue("notes");
+		await act(async () => {
+			fireEvent.change(input, { target: { value: "remarks" } });
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+
+		// Only the header line is rewritten; the quoted data row keeps its bytes.
+		await waitFor(async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("data")
+				.where("id", "=", fileId)
+				.executeTakeFirst();
+			expect(new TextDecoder().decode(row?.data as Uint8Array)).toBe(
+				'name,remarks\nalpha,"kept, quoting"\n',
 			);
 		});
 	} finally {
