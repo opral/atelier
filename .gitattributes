@@ -1,1 +1,2 @@
 *.pdf binary
+preview/web/seed/csv-extension/semicolon-crlf.csv -text
