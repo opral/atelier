@@ -117,24 +117,40 @@
 		background: rgb(154, 52, 18);
 	}
 
-	.csv-add-column-button {
+	.csv-append-column-strip,
+	.csv-append-row-strip {
+		position: absolute;
 		display: flex;
-		width: 40px;
-		height: 40px;
-		align-items: center;
-		justify-content: center;
-		border-bottom: 1px solid rgb(244, 241, 236);
-		border-left: 1px solid rgb(244, 241, 236);
-		background: rgb(255, 255, 255);
-		color: var(--color-text-tertiary);
-		font-size: 16px;
-		line-height: 1;
+		border-radius: 6px;
+		color: var(--color-icon-secondary, var(--color-text-tertiary));
 		cursor: pointer;
+		opacity: 0.6;
+		transition:
+			opacity 120ms ease,
+			background-color 120ms ease;
 	}
 
-	.csv-add-column-button:hover {
+	.csv-append-column-strip {
+		top: 0;
+		width: 28px;
+		align-items: flex-start;
+		justify-content: center;
+		padding-top: 13px;
+	}
+
+	.csv-append-row-strip {
+		left: 0;
+		height: 28px;
+		align-items: center;
+		justify-content: flex-start;
+		padding-left: 15px;
+	}
+
+	.csv-append-column-strip:hover,
+	.csv-append-row-strip:hover {
 		background: rgb(251, 239, 228);
 		color: rgb(194, 65, 12);
+		opacity: 1;
 	}
 
 	.csv-rename-input {

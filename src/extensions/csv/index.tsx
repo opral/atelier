@@ -117,9 +117,8 @@ type CsvReviewHandler = (args: {
 
 const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
-const ADD_COLUMN_ID = "csv-add-column";
-const ADD_COLUMN_WIDTH = 48;
 const ROW_MARKER_WIDTH = 44;
+const APPEND_STRIP_SIZE = 28;
 const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 48;
 const HEADER_HEIGHT = 40;
@@ -895,60 +894,16 @@ function CsvTable({
 		return () => observer.disconnect();
 	}, []);
 	const columns = useMemo<GridColumn[]>(() => {
-		const gridColumns: GridColumn[] = parsed.columns.map((title, index) => ({
+		return parsed.columns.map((title, index) => ({
 			id: String(index),
 			title,
 			width: widthState.overrides[index] ?? widthState.initial[index],
 			// The hover chevron that opens the column menu.
 			hasMenu: editable,
-			// One subtle "New row…" affordance in the first column instead of
-			// glide's default heavy plus icon repeated in every column.
-			...(editable
-				? {
-						trailingRowOptions:
-							index === 0
-								? {
-										hint: "New row…",
-										themeOverride: {
-											bgIconHeader: "rgb(168, 162, 158)",
-											textMedium: "rgb(120, 113, 108)",
-										},
-									}
-								: { disabled: true },
-					}
-				: {}),
 		}));
-		if (editable) {
-			// Slim trailing "+" column hugging the last real column; clicking
-			// its header appends a column (glide's rightElement would sit at
-			// the viewport edge instead).
-			gridColumns.push({
-				id: ADD_COLUMN_ID,
-				title: "+",
-				width: ADD_COLUMN_WIDTH,
-				hasMenu: false,
-				themeOverride: {
-					textHeader: "rgb(120, 113, 108)",
-					bgHeaderHovered: "rgb(251, 239, 228)",
-				},
-				trailingRowOptions: { disabled: true },
-			});
-		}
-		return gridColumns;
 	}, [editable, parsed.columns, widthState]);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
-			if (columnIndex >= columnCount) {
-				// Body cells of the trailing "+" column are inert.
-				return {
-					kind: GridCellKind.Text,
-					data: "",
-					displayData: "",
-					allowOverlay: false,
-					readonly: true,
-					copyData: "",
-				};
-			}
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
 			if (editable) {
 				// Editable cells are plain text so the overlay edits the raw
@@ -987,11 +942,10 @@ function CsvTable({
 				copyData: value,
 			};
 		},
-		[columnCount, editable, parsed.rows],
+		[editable, parsed.rows],
 	);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
-			if (columnIndex >= columnCount) return;
 			setColumnWidthState((current) =>
 				current.key === columnsKey
 					? {
@@ -1008,7 +962,7 @@ function CsvTable({
 					: current,
 			);
 		},
-		[columnCount, columnsKey],
+		[columnsKey],
 	);
 	const handleCellsEdited = useCallback(
 		(items: readonly EditListItem[]) => {
@@ -1046,25 +1000,10 @@ function CsvTable({
 		},
 		[columnCount, editing],
 	);
-	const handleRowAppended = useCallback(() => {
-		editing?.onRowAppended();
-	}, [editing]);
-
 	const [gridSelection, setGridSelection] = useState<GridSelection>(() => ({
 		columns: CompactSelection.empty(),
 		rows: CompactSelection.empty(),
 	}));
-	const handleGridSelectionChange = useCallback(
-		(selection: GridSelection) => {
-			// The trailing "+" column acts as a button and is never selected.
-			setGridSelection(
-				selection.columns.hasIndex(columnCount)
-					? { ...selection, columns: selection.columns.remove(columnCount) }
-					: selection,
-			);
-		},
-		[columnCount],
-	);
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => setMenu(null), []);
 	const clearSelection = useCallback(() => {
@@ -1117,7 +1056,7 @@ function CsvTable({
 				readonly localEventY: number;
 			},
 		) => {
-			if (!editing || columnIndex < 0 || columnIndex >= columnCount) return;
+			if (!editing || columnIndex < 0) return;
 			event.preventDefault();
 			setGridSelection((current) =>
 				current.columns.hasIndex(columnIndex)
@@ -1135,11 +1074,11 @@ function CsvTable({
 				headerBounds: event.bounds,
 			});
 		},
-		[columnCount, editing],
+		[editing],
 	);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
-			if (!editing || columnIndex >= columnCount) return;
+			if (!editing) return;
 			// screenPosition is the chevron rect at the right edge of the
 			// header cell; reconstruct the header cell rect from it.
 			const width =
@@ -1159,7 +1098,7 @@ function CsvTable({
 				},
 			});
 		},
-		[columnCount, editing, widthState],
+		[editing, widthState],
 	);
 	const [renaming, setRenaming] = useState<{
 		readonly column: number;
@@ -1174,18 +1113,11 @@ function CsvTable({
 				readonly preventDefault: () => void;
 			},
 		) => {
-			if (!editing || columnIndex < 0) return;
-			if (columnIndex >= columnCount) {
-				// The trailing "+" column: any click appends a column.
-				event.preventDefault();
-				editing.onInsertColumn(columnCount);
-				return;
-			}
-			if (!event.isDoubleClick) return;
+			if (!editing || !event.isDoubleClick || columnIndex < 0) return;
 			event.preventDefault();
 			setRenaming({ column: columnIndex, bounds: event.bounds });
 		},
-		[columnCount, editing],
+		[editing],
 	);
 	const commitRename = useCallback(
 		(column: number, name: string) => {
@@ -1231,15 +1163,22 @@ function CsvTable({
 					COLUMN_MIN_WIDTH),
 			0,
 		) +
-		(editable ? ADD_COLUMN_WIDTH : 0) +
 		2;
-	const contentHeight =
-		HEADER_HEIGHT + (parsed.rows.length + (editable ? 1 : 0)) * ROW_HEIGHT + 2;
+	const contentHeight = HEADER_HEIGHT + parsed.rows.length * ROW_HEIGHT + 2;
+	// A gutter stays reserved for the append strips so they never cover the
+	// grid, even when the table overflows and scrolls.
+	const gutter = editable ? APPEND_STRIP_SIZE : 0;
 	const gridWidth = containerSize
-		? Math.min(containerSize.width, contentWidth)
+		? Math.max(
+				ROW_MARKER_WIDTH,
+				Math.min(containerSize.width - gutter, contentWidth),
+			)
 		: "100%";
 	const gridHeight = containerSize
-		? Math.min(containerSize.height, contentHeight)
+		? Math.max(
+				HEADER_HEIGHT,
+				Math.min(containerSize.height - gutter, contentHeight),
+			)
 		: "100%";
 
 	return (
@@ -1268,15 +1207,11 @@ function CsvTable({
 				rowSelect="multi"
 				copyHeaders={true}
 				gridSelection={gridSelection}
-				onGridSelectionChange={handleGridSelectionChange}
+				onGridSelectionChange={setGridSelection}
 				drawHeader={drawCsvHeader}
 				onCellsEdited={editable ? handleCellsEdited : undefined}
 				onPaste={editable ? handlePaste : false}
 				fillHandle={editable}
-				trailingRowOptions={
-					editable ? { sticky: false, tint: false } : undefined
-				}
-				onRowAppended={editable ? handleRowAppended : undefined}
 				onCellContextMenu={editable ? handleCellContextMenu : undefined}
 				onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
 				onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
@@ -1287,6 +1222,32 @@ function CsvTable({
 				smoothScrollX={true}
 				theme={CSV_GRID_THEME}
 			/>
+			{editing &&
+			typeof gridWidth === "number" &&
+			typeof gridHeight === "number" ? (
+				<>
+					<button
+						type="button"
+						className="csv-append-column-strip"
+						style={{ left: gridWidth, height: gridHeight }}
+						title="Add column"
+						aria-label="Add column"
+						onClick={() => editing.onInsertColumn(columnCount)}
+					>
+						<Plus aria-hidden="true" size={14} />
+					</button>
+					<button
+						type="button"
+						className="csv-append-row-strip"
+						style={{ top: gridHeight, width: gridWidth }}
+						title="Add row"
+						aria-label="Add row"
+						onClick={() => editing.onRowAppended()}
+					>
+						<Plus aria-hidden="true" size={14} />
+					</button>
+				</>
+			) : null}
 			{menu && editing ? (
 				<CsvGridMenu
 					menu={menu}
