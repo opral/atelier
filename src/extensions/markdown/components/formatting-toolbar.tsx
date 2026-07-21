@@ -427,8 +427,7 @@ export function FormattingToolbar({
 								data-attr="markdown-block-selector"
 								className={clsx(
 									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
-									blockMenuOpen &&
-										"bg-[var(--color-bg-hover)] text-[var(--color-text-primary)]",
+									blockMenuOpen && "text-[var(--color-text-primary)]",
 								)}
 								onMouseDown={suppressMouseDown}
 							>
