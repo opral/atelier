@@ -405,7 +405,7 @@ export function FormattingToolbar({
 					<Toolbar.Group
 						ref={formattingControlsRef}
 						className={clsx(
-							"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
+							"markdown-format-toolbar-scroll -ml-2.25 flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
 							controlsDisabled && "opacity-40",
 						)}
 						aria-label="Text formatting controls"
@@ -426,7 +426,7 @@ export function FormattingToolbar({
 								render={<Select.Trigger />}
 								data-attr="markdown-block-selector"
 								className={clsx(
-									"-ml-2.25 inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+									"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
 									// While the menu is open the trigger stays completely
 									// unfilled — the cursor is usually still on it, so even
 									// the hover tint reads as a stuck pill.
