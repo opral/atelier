@@ -53,7 +53,6 @@ export type AtelierTabStripTab = {
 export type AtelierTabStripContext = {
 	readonly tabs: readonly AtelierTabStripTab[];
 	/** Opens a fresh document in its own tab; absent when read-only. */
-	readonly newTab?: () => void;
 };
 
 export type AtelierSlots = {

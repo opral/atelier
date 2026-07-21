@@ -371,14 +371,6 @@ describe("central tabs with a pinned home", () => {
 								/>
 							) : null,
 						)}
-						{context.newTab ? (
-							<button
-								type="button"
-								aria-label="New tab"
-								data-testid="host-new-tab"
-								onClick={context.newTab}
-							/>
-						) : null}
 					</div>
 				),
 			},

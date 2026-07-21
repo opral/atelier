@@ -81,7 +81,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-start rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -149,7 +149,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-end rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"
