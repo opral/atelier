@@ -28,9 +28,15 @@ import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import { selectFilesystemEntries } from "@/queries";
 import {
 	buildFilesystemTree,
+	isWatchedEntryId,
+	watchedEntryRows,
 	type FilesystemTreeNode,
 	type FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
+import type {
+	AtelierFilesViewOptions,
+	AtelierWatchedEntry,
+} from "@/extension-api";
 import type { PanelSide } from "../../extension-runtime/types";
 import {
 	FileTree,
@@ -75,6 +81,13 @@ type FilesViewContext = {
 	readonly isActiveView?: boolean;
 	/** Hides every file mutation affordance for read-only hosts. */
 	readonly readOnly?: boolean;
+	/**
+	 * Host data source for un-imported "watched" entries. Resubscribed whenever
+	 * the expanded directory set changes (the root "/" is always included).
+	 */
+	readonly watchEntries?: AtelierFilesViewOptions["watchEntries"];
+	/** Imports a watched path to a canonical lix file before an interaction. */
+	readonly resolveFileForInteraction?: AtelierFilesViewOptions["resolveFileForInteraction"];
 	readonly registerNewFileDraftHandler?: (registration: {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
@@ -133,7 +146,46 @@ function FilesViewContent({
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),
 	);
-	const nodes = useMemo(() => buildFilesystemTree(entries), [entries]);
+	const watchEntries = context?.watchEntries;
+	const resolveFileForInteraction = context?.resolveFileForInteraction;
+	const [watchedEntries, setWatchedEntries] = useState<
+		readonly AtelierWatchedEntry[]
+	>([]);
+	const expandedDirectoriesKey = useMemo(() => {
+		const paths = new Set<string>(["/"]);
+		for (const path of openDirectoryPaths) {
+			paths.add(ensureDirectoryPath(path));
+		}
+		return [...paths].sort().join("\0");
+	}, [openDirectoryPaths]);
+	useEffect(() => {
+		if (!watchEntries) {
+			setWatchedEntries((prev) => (prev.length === 0 ? prev : []));
+			return;
+		}
+		let active = true;
+		const unsubscribe = watchEntries({
+			expandedDirectories: expandedDirectoriesKey.split("\0"),
+			onChange: (next) => {
+				if (active) setWatchedEntries(next);
+			},
+		});
+		return () => {
+			active = false;
+			if (typeof unsubscribe === "function") unsubscribe();
+		};
+	}, [expandedDirectoriesKey, watchEntries]);
+	const mergedEntries = useMemo(
+		() =>
+			watchedEntries.length === 0
+				? entries
+				: [...entries, ...watchedEntryRows(watchedEntries)],
+		[entries, watchedEntries],
+	);
+	const nodes = useMemo(
+		() => buildFilesystemTree(mergedEntries),
+		[mergedEntries],
+	);
 	const pendingReviewPaths = usePendingExternalWriteReviewPaths(
 		lix,
 		nodes,
@@ -274,6 +326,26 @@ function FilesViewContent({
 			});
 		},
 		[activeSelectionKey],
+	);
+	const watchedInteractionTokenRef = useRef(0);
+	/**
+	 * Imports a watched path through the host and returns the canonical lix
+	 * file id. A newer interaction supersedes an older in-flight resolve.
+	 */
+	const resolveWatchedFile = useCallback(
+		async (path: string): Promise<string | null> => {
+			if (!resolveFileForInteraction) return null;
+			const token = ++watchedInteractionTokenRef.current;
+			try {
+				const resolved = await resolveFileForInteraction(path);
+				if (token !== watchedInteractionTokenRef.current) return null;
+				return resolved?.fileId ?? null;
+			} catch (error) {
+				console.error(`Failed to resolve watched file '${path}'`, error);
+				return null;
+			}
+		},
+		[resolveFileForInteraction],
 	);
 	const resolveCreateDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
@@ -566,9 +638,18 @@ function FilesViewContent({
 	);
 	const handleRenameCommit = useCallback(
 		async (request: FileTreeRenameRequest) => {
+			if (request.source === "watched") {
+				if (request.kind !== "file") return;
+				const resolvedId = await resolveWatchedFile(
+					normalizeFilePath(request.sourcePath),
+				);
+				if (!resolvedId) return;
+				await moveLixTreeItem({ ...request, id: resolvedId, source: "lix" });
+				return;
+			}
 			await moveLixTreeItem(request);
 		},
-		[moveLixTreeItem],
+		[moveLixTreeItem, resolveWatchedFile],
 	);
 	const handleMoveItem = useCallback(
 		(request: FileTreeMoveRequest) => moveLixTreeItem(request),
@@ -608,6 +689,31 @@ function FilesViewContent({
 
 	const handleOpenFile = useCallback(
 		(fileId: string, path: string) => {
+			if (isWatchedEntryId(fileId)) {
+				setLocalSelection({
+					path,
+					fileId: null,
+					kind: "file",
+					source: "watched",
+				});
+				void (async () => {
+					const resolvedId = await resolveWatchedFile(path);
+					if (!resolvedId) return;
+					setLocalSelection({
+						path,
+						fileId: resolvedId,
+						kind: "file",
+						source: "lix",
+					});
+					void context?.openFile?.({
+						panel: "central",
+						fileId: resolvedId,
+						filePath: path,
+						focus: false,
+					});
+				})();
+				return;
+			}
 			setLocalSelection({
 				path,
 				fileId,
@@ -621,7 +727,7 @@ function FilesViewContent({
 				focus: false,
 			});
 		},
-		[context, setLocalSelection],
+		[context, resolveWatchedFile, setLocalSelection],
 	);
 
 	const handleOpenDirectoriesChange = useCallback(
@@ -671,6 +777,8 @@ function FilesViewContent({
 
 	const handleDeleteItem = useCallback(
 		async (request: FileTreeDeleteRequest) => {
+			// Watched entries are not deletable from the tree; the row menu and
+			// keyboard guards keep watched interactions non-destructive.
 			if (request.source !== "lix") return;
 			const normalizedPath =
 				request.kind === "file"
@@ -1304,6 +1412,9 @@ export const extension = createReactExtensionDefinition({
 					viewInstance: view.instanceId,
 					isActiveView: view.isActive,
 					readOnly: atelier.readOnly,
+					watchEntries: atelier.filesView?.watchEntries,
+					resolveFileForInteraction:
+						atelier.filesView?.resolveFileForInteraction,
 					registerNewFileDraftHandler: ({ handler }) =>
 						view.registerNewFileDraftHandler(handler),
 				}}

@@ -106,6 +106,41 @@ The same API is available to mounted extensions via
 `atelier.views` on `AtelierExtensionRuntime`, so a host's home view can open
 its folder view directly.
 
+## Watched files (host data source)
+
+The bundled Files view can render host-contributed, not-yet-imported entries
+alongside lix files — e.g. disk files surfaced by filesystem watchers for a
+transient workspace:
+
+```ts
+createAtelier({
+	lix,
+	filesView: {
+		// Contribute un-imported entries; resubscribed whenever the set of
+		// expanded directories changes (the root "/" is always included).
+		watchEntries: ({ expandedDirectories, onChange }) => {
+			const watcher = watchDisk(expandedDirectories, (paths) =>
+				onChange(paths.map((path) => ({ path, kind: "file" }))),
+			);
+			return () => watcher.close();
+		},
+		// Import a watched path to a canonical lix file before an interaction.
+		resolveFileForInteraction: async (path) => {
+			const fileId = await importFromDisk(path);
+			return fileId ? { fileId } : null; // null cancels the interaction
+		},
+	},
+});
+```
+
+Watched entries render with `source: "watched"`, dedupe against lix entries by
+path (lix wins), and missing ancestor directories are synthesized. Opening or
+renaming a watched file first calls `resolveFileForInteraction(path)` and then
+proceeds with the canonical file id; resolving `null` is a graceful no-op.
+Watched rows are deliberately conservative: no delete, no drag-and-drop, and
+watched directories cannot be renamed or used as creation targets. Hosts that
+omit `filesView` see no behavior change.
+
 ## Host navigation (URLs)
 
 Atelier never touches the URL — the host owns routing. Two directions:

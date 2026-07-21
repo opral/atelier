@@ -4,6 +4,7 @@ import type {
 	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
+	AtelierFilesViewOptions,
 	AtelierPanelSide,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
@@ -44,8 +45,10 @@ export type AtelierDiffApi = {
 export type {
 	AtelierDocumentOpenOptions,
 	AtelierDocumentsApi,
+	AtelierFilesViewOptions,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
+	AtelierWatchedEntry,
 } from "./extension-api";
 
 /**
@@ -80,6 +83,11 @@ export type AtelierOptions = {
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
 	/** Only expose review ranges tagged with this account or session id. */
 	readonly reviewRangeSessionId?: string;
+	/**
+	 * Host data source for un-imported "watched" entries in the bundled Files
+	 * view (e.g. disk files surfaced by filesystem watchers).
+	 */
+	readonly filesView?: AtelierFilesViewOptions;
 	/** Central tabs configuration (e.g. the pinned home). */
 	readonly centralPanel?: AtelierCentralPanelOptions;
 };
@@ -296,6 +304,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
 		...(options.reviewRangeSessionId !== undefined
 			? { reviewRangeSessionId: options.reviewRangeSessionId }
+			: {}),
+		...(options.filesView !== undefined
+			? { filesView: options.filesView }
 			: {}),
 		...(options.centralPanel !== undefined
 			? { centralPanel: options.centralPanel }

@@ -44,6 +44,39 @@ export type AtelierExtensionState = {
 	readonly [key: string]: unknown;
 };
 
+/** One host-contributed, not-yet-imported filesystem entry. */
+export type AtelierWatchedEntry = {
+	/** Workspace-absolute path, e.g. "/notes/todo.md" or "/notes/". */
+	readonly path: string;
+	readonly kind: "file" | "directory";
+};
+
+/**
+ * Host data source for un-imported "watched" entries in the bundled Files
+ * view. Watched entries render alongside lix entries (lix wins on path
+ * collisions) and are imported lazily on first interaction.
+ */
+export type AtelierFilesViewOptions = {
+	/**
+	 * Contribute un-imported entries. Called with the currently expanded
+	 * directories (the root "/" is always included) and resubscribed whenever
+	 * the expanded set changes. Push the current entries through `onChange`;
+	 * return an unsubscribe function.
+	 */
+	readonly watchEntries?: (args: {
+		readonly expandedDirectories: readonly string[];
+		readonly onChange: (entries: readonly AtelierWatchedEntry[]) => void;
+	}) => () => void;
+	/**
+	 * Resolve (import) a watched path to a canonical lix file before an
+	 * interaction such as open, rename, or delete. Returning `null` cancels
+	 * the interaction.
+	 */
+	readonly resolveFileForInteraction?: (
+		path: string,
+	) => Promise<{ readonly fileId: string } | null>;
+};
+
 export type AtelierDocumentOrigin = "existing" | "new";
 
 export type AtelierDocumentOpenOptions = {

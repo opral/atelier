@@ -6,6 +6,7 @@ import type {
 import type {
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
+	AtelierFilesViewOptions,
 } from "../extension-api";
 
 /**
@@ -83,6 +84,8 @@ export interface MountedExtension {
 }
 
 export type ExtensionRuntime = AtelierExtensionRuntime & {
+	/** Host-configured data source for un-imported "watched" file entries. */
+	readonly filesView?: AtelierFilesViewOptions;
 	readonly reviews: {
 		readonly resolvedReviewIds: readonly string[];
 		readonly rangeSessionId?: string;

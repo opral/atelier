@@ -1,6 +1,68 @@
 import type { FilesystemEntryRow } from "@/queries";
+import type { AtelierWatchedEntry } from "@/extension-api";
 
 export type FilesystemTreeSource = "lix" | "watched";
+
+const WATCHED_ENTRY_ID_PREFIX = "watched:";
+
+/** Whether a tree file id is a synthetic id for an un-imported watched entry. */
+export function isWatchedEntryId(id: string): boolean {
+	return id.startsWith(WATCHED_ENTRY_ID_PREFIX);
+}
+
+/**
+ * Converts host-contributed watched entries into filesystem rows with
+ * synthetic ids. Missing ancestor directories are synthesized so watched
+ * files always attach below their real parent. Lix rows win on path
+ * collisions via `buildFilesystemTree`'s dedupe.
+ *
+ * @example
+ * const rows = watchedEntryRows([{ path: "/notes/todo.md", kind: "file" }]);
+ */
+export function watchedEntryRows(
+	entries: readonly AtelierWatchedEntry[],
+): FilesystemEntryRow[] {
+	const rowsByPath = new Map<string, FilesystemEntryRow>();
+	const addRow = (path: string, kind: "directory" | "file") => {
+		if (rowsByPath.has(path)) return;
+		rowsByPath.set(path, {
+			id: `${WATCHED_ENTRY_ID_PREFIX}${path}`,
+			parent_id: null,
+			path,
+			display_name: leafName(path),
+			kind,
+			source: "watched",
+		});
+	};
+	for (const entry of entries) {
+		const rawPath = entry.path.startsWith("/") ? entry.path : `/${entry.path}`;
+		const path =
+			entry.kind === "directory"
+				? normalizeDirectoryPath(rawPath)
+				: normalizeFilePath(rawPath);
+		if (path === "/" || path === "") continue;
+		for (const ancestor of ancestorDirectoryPaths(path)) {
+			addRow(ancestor, "directory");
+		}
+		addRow(path, entry.kind);
+	}
+	return [...rowsByPath.values()];
+}
+
+function ancestorDirectoryPaths(path: string): string[] {
+	const segments = path.split("/").filter(Boolean);
+	segments.pop();
+	const ancestors: string[] = [];
+	for (let index = 1; index <= segments.length; index += 1) {
+		ancestors.push(`/${segments.slice(0, index).join("/")}/`);
+	}
+	return ancestors;
+}
+
+function leafName(path: string): string {
+	const segments = path.split("/").filter(Boolean);
+	return segments.at(-1) ?? path;
+}
 
 export type FilesystemTreeFile = {
 	type: "file";

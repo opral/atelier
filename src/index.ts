@@ -52,9 +52,11 @@ export type {
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierExtensionView,
+	AtelierFilesViewOptions,
 	AtelierMountedExtension,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
+	AtelierWatchedEntry,
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
 } from "./extension-api";

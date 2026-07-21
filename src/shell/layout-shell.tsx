@@ -2765,6 +2765,9 @@ function LayoutShellLoadedContent({
 		() => ({
 			lix,
 			readOnly: configuration.readOnly ?? false,
+			...(configuration.filesView !== undefined
+				? { filesView: configuration.filesView }
+				: {}),
 			events: { emit: emitEvent },
 			documents: {
 				...effectiveAtelierInstance.documents,
@@ -2787,6 +2790,7 @@ function LayoutShellLoadedContent({
 			},
 		}),
 		[
+			configuration.filesView,
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
