@@ -2999,6 +2999,7 @@ function LayoutShellLoadedContent({
 									)
 								}
 								viewContext={extensionHostContext}
+								onNewTab={() => handleSelectCentralView(CENTRAL_HOME_INSTANCE)}
 								{...(isHostReadOnly
 									? {}
 									: { onCreateNewFile: () => void handleCreateNewFile() })}

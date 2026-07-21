@@ -47,6 +47,7 @@ import styles from "./panel.module.css";
 /** Lucide icons and image-based brand icons both fit this shape. */
 type TabIcon = ComponentType<{ className?: string }>;
 import { useExtensionViewRuntime } from "../extension-runtime/extension-view-runtime";
+import { fileIconUrl } from "../extensions/files/file-icons";
 import {
 	useExtensionHostRegistry,
 	type ExtensionHostRecord,
@@ -371,7 +372,11 @@ export function PanelV2({
 									instance={entry.instance}
 									panelSide={side}
 									kind={entry.kind}
-									icon={view.icon}
+									icon={
+										side === "central"
+											? (fileGlyphForLabel(label) ?? view.icon)
+											: view.icon
+									}
 									label={label}
 									isActive={isActive}
 									isFocused={isFocused && isActive}
@@ -858,6 +863,15 @@ function SortableTab({
 	);
 }
 
+/** Central document tabs show their file-type glyph, like a browser favicon. */
+const fileGlyphForLabel = (label: string): TabIcon | null => {
+	if (!/\.[a-z0-9]+$/i.test(label)) return null;
+	const FileGlyph = ({ className }: { className?: string }) => (
+		<img src={fileIconUrl(label)} alt="" className={className} />
+	);
+	return FileGlyph;
+};
+
 const tabBaseClasses =
 	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border px-3 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
@@ -865,7 +879,7 @@ const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
 	// keyboard focus adds a ring on top of the same look.
 	focused:
-		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-selection-current)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
+		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	active:
 		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
 	idle: "border-transparent bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]",
