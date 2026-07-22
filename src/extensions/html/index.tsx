@@ -37,7 +37,7 @@ export const HTML_ARTIFACT_CSP = [
 ].join("; ");
 
 /** Read-only renderer for an HTML artifact stored in the Lix workspace. */
-export function HtmlView({ fileId, filePath }: HtmlViewProps) {
+function HtmlView({ fileId, filePath }: HtmlViewProps) {
 	return (
 		<Suspense fallback={<HtmlLoadingState />}>
 			<HtmlViewContent fileId={fileId} filePath={filePath} />

@@ -17,7 +17,7 @@ export type CsvDocument = {
 	readonly warnings: readonly string[];
 };
 
-export type CsvDocumentRecord = {
+type CsvDocumentRecord = {
 	readonly cells: readonly string[];
 	/** Original raw record text; null for records created or changed by edits. */
 	readonly raw: string | null;

@@ -20,7 +20,7 @@ import {
 } from "./state-adapters";
 
 describe("Atelier instance file controller", () => {
-	test("keeps sidebar-mode panels collapsed when the host does not open them by default", async () => {
+	test("keeps panels collapsed when the host does not open them by default", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -32,7 +32,6 @@ describe("Atelier instance file controller", () => {
 			.execute();
 		const atelier = createAtelier({
 			lix,
-			filesViewMode: "sidebar",
 			defaultOpenPanels: [],
 		});
 		const queuedOpen = atelier.documents.open("/focused.md");

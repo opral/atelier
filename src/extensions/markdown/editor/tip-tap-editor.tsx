@@ -219,10 +219,9 @@ function TipTapEditorFileContent({
 
 /**
  * Resolves the immutable writer origin after the subscribed file row arrives.
- * The normal `id + file_id` lookup is point-addressable in Lix; falling back
- * to `id` retains the complete `lix_change` semantics for legacy/non-file rows.
- * A file-id/change-id key prevents a late lookup from applying an older writer
- * origin or a previous file's delivery.
+ * The `id + file_id` lookup is point-addressable in Lix. A file-id/change-id
+ * key prevents a late lookup from applying an older writer origin or a
+ * previous file's delivery.
  */
 function useMarkdownFileOrigin(
 	sourceFile: MarkdownFileRow | undefined,
@@ -269,19 +268,12 @@ function useMarkdownFileOrigin(
 		}
 		void (async () => {
 			try {
-				const scopedChange = await qb(lix)
+				const change = await qb(lix)
 					.selectFrom("lix_change")
 					.select("origin_key")
 					.where("id", "=", changeId)
 					.where("file_id", "=", fileId)
 					.executeTakeFirst();
-				const change =
-					scopedChange ??
-					(await qb(lix)
-						.selectFrom("lix_change")
-						.select("origin_key")
-						.where("id", "=", changeId)
-						.executeTakeFirst());
 				if (!closed) {
 					const resolvedOrigin = {
 						fileId,

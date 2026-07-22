@@ -8,7 +8,7 @@ import type {
 
 export type FileViewPanels = Record<PanelSide, PanelState>;
 
-export function currentFileIdFromView(view: ExtensionInstance): string | null {
+function currentFileIdFromView(view: ExtensionInstance): string | null {
 	if (hasHistoricalEditorRevisionState(view.state)) return null;
 	return activeFileIdFromExtensionInstance(view);
 }

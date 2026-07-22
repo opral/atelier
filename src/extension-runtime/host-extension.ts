@@ -2,11 +2,6 @@ import type { ExtensionDefinition } from "./types";
 import { normalizeFileExtensions } from "./file-handlers";
 import type { AtelierExtensionRegistration } from "../extension-api";
 
-export type {
-	AtelierExtensionRegistration,
-	ExtensionRuntimeEntry,
-} from "../extension-api";
-
 export function hostExtensionDefinition(
 	registration: AtelierExtensionRegistration,
 ): ExtensionDefinition {

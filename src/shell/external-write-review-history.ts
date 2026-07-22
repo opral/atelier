@@ -362,7 +362,6 @@ async function getAgentTurnExternalWriteReview(
 	for (const range of ranges) {
 		if (resolvedRangeIds.has(range.id)) continue;
 		if (range.beforeCommitId === range.afterCommitId) continue;
-		if (range.clearedFileIds?.includes(fileId)) continue;
 		const data = await getRangeFileData(lix, fileId, range);
 		if (!data) continue;
 		if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
@@ -488,7 +487,6 @@ function relevantAgentTurnRanges(
 	for (const range of ranges) {
 		if (resolvedRangeIds.has(range.id)) continue;
 		if (range.beforeCommitId === range.afterCommitId) continue;
-		if (range.clearedFileIds?.includes(fileId)) continue;
 		const data = getRangeFileDataFromSnapshots(fileId, range, snapshots);
 		if (!data) continue;
 		if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {

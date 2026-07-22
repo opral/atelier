@@ -17,36 +17,3 @@ export function renderMarkdownAstEditorHtml(
 		TableNavigationExtension,
 	]);
 }
-
-export function ensureDiffIds(node: any, path: string = "0"): void {
-	if (!node || typeof node !== "object") return;
-	if (supportsDiffId(node)) {
-		node.data = node.data && typeof node.data === "object" ? node.data : {};
-		if (typeof node.data.id !== "string" || node.data.id.length === 0) {
-			node.data.id = `diff_${path}`;
-		}
-	}
-	const children = Array.isArray(node.children) ? node.children : [];
-	children.forEach((child: any, index: number) => {
-		ensureDiffIds(child, `${path}_${index}`);
-	});
-}
-
-export function supportsDiffId(node: any): boolean {
-	return [
-		"paragraph",
-		"heading",
-		"list",
-		"listItem",
-		"blockquote",
-		"code",
-		"html",
-		"yaml",
-		"thematicBreak",
-		"table",
-		"tableRow",
-		"tableCell",
-		"break",
-		"image",
-	].includes(node.type);
-}

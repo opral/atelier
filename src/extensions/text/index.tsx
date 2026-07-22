@@ -301,8 +301,7 @@ function EditableTextView({
  * Reads the current file before resolving the writer origin. Keeping the
  * change lookup separate lets Lix point-read the exact change row by both
  * change and file id instead of evaluating a cross-provider join for every
- * editor reconciliation. The unscoped fallback preserves origins for
- * legacy/non-file change rows.
+ * editor reconciliation.
  */
 async function loadTextFileDelivery(
 	lix: ReturnType<typeof useLix>,
@@ -320,19 +319,12 @@ async function loadTextFileDelivery(
 		return { data: file.data, originKey: null };
 	}
 
-	const scopedChange = await qb(lix)
+	const change = await qb(lix)
 		.selectFrom("lix_change")
 		.select("origin_key")
 		.where("id", "=", changeId)
 		.where("file_id", "=", fileId)
 		.executeTakeFirst();
-	const change =
-		scopedChange ??
-		(await qb(lix)
-			.selectFrom("lix_change")
-			.select("origin_key")
-			.where("id", "=", changeId)
-			.executeTakeFirst());
 
 	return {
 		data: file.data,

@@ -31,7 +31,7 @@ function extractNodeData(attrs: PMNode["attrs"]): {
 	};
 }
 
-export type PMMark = {
+type PMMark = {
 	type: "bold" | "italic" | "strike" | "code" | "link";
 	attrs?: Record<string, any>;
 };

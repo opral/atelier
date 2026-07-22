@@ -64,7 +64,7 @@ function leafName(path: string): string {
 	return segments.at(-1) ?? path;
 }
 
-export type FilesystemTreeFile = {
+type FilesystemTreeFile = {
 	type: "file";
 	id: string;
 	name: string;
@@ -72,7 +72,7 @@ export type FilesystemTreeFile = {
 	source?: FilesystemTreeSource;
 };
 
-export type FilesystemTreeDirectory = {
+type FilesystemTreeDirectory = {
 	type: "directory";
 	id: string;
 	name: string;

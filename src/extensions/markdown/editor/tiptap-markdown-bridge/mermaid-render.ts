@@ -60,15 +60,6 @@ function ensureMermaidInitialized(): void {
 	}
 }
 
-export function resetMermaidForTests(): void {
-	initialized = false;
-	renderCounter = 0;
-	activeTheme = null;
-	themeObserver?.disconnect();
-	themeObserver = null;
-	themeChangeListeners.clear();
-}
-
 export async function renderMermaidDiagram(
 	source: string,
 	container: HTMLElement,

@@ -69,9 +69,9 @@ export const buildExtensionRegistry = (
 
 const BASE_REGISTRY = buildExtensionRegistry([], []);
 
-export const EXTENSION_DEFINITIONS: ExtensionDefinition[] =
+const EXTENSION_DEFINITIONS: ExtensionDefinition[] =
 	BASE_REGISTRY.visibleExtensions;
-export const EXTENSION_MAP: Map<ExtensionKind, ExtensionDefinition> =
+const EXTENSION_MAP: Map<ExtensionKind, ExtensionDefinition> =
 	BASE_REGISTRY.extensionMap;
 
 const NOOP = () => {};

@@ -1,12 +1,10 @@
 import type {
-	BundledPluginArchive,
 	Lix,
 	OpenLixOptions as SdkOpenLixOptions,
 	SqlParam,
 } from "@lix-js/sdk";
 
-export type { Lix, LixTransaction as SqlTransaction } from "@lix-js/sdk";
-export type { BundledPluginArchive };
+export type { Lix } from "@lix-js/sdk";
 
 type OpenLixKeyValueEntry = {
 	key: string;
@@ -39,11 +37,6 @@ export async function openLix(options: OpenTestLixOptions = {}): Promise<Lix> {
 		await seedKeyValues(lix, keyValues);
 	}
 	return lix;
-}
-
-export async function bundledPluginArchives(): Promise<BundledPluginArchive[]> {
-	const sdk = await loadSdk();
-	return await sdk.bundledPluginArchives();
 }
 
 async function loadSdk(): Promise<SdkModule> {

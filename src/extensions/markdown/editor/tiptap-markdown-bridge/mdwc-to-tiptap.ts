@@ -4,11 +4,11 @@ const SPREAD_META_KEY = "__mdwc_spread";
 export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__atelier_empty_scaffold";
 export const EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY = "__atelier_empty_paragraph";
 
-export type PMMark = {
+type PMMark = {
 	type: "bold" | "italic" | "strike" | "code" | "link";
 	attrs?: Record<string, any>;
 };
-export type PMNode = {
+type PMNode = {
 	type: string;
 	attrs?: Record<string, any>;
 	content?: PMNode[];

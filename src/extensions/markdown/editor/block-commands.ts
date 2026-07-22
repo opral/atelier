@@ -221,12 +221,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 ];
 
 /** Block commands that can be used in the toolbar (have toggle action) */
-export const TOOLBAR_BLOCK_COMMANDS = BLOCK_COMMANDS.filter(
-	(cmd) => cmd.toggle,
-);
-
-/** All block commands for slash menu */
-export const SLASH_BLOCK_COMMANDS = BLOCK_COMMANDS;
+const TOOLBAR_BLOCK_COMMANDS = BLOCK_COMMANDS.filter((cmd) => cmd.toggle);
 
 /** Block type values used by the toolbar dropdown */
 export type ToolbarBlockType =
