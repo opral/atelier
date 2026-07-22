@@ -1485,20 +1485,6 @@ export function deriveCsvPathFromStem(
 	);
 }
 
-export function deriveExcalidrawPathFromStem(
-	stem: string,
-	directory: string,
-	existingPaths: Set<string>,
-): string | null {
-	return deriveTypedFilePathFromStem(
-		stem,
-		directory,
-		existingPaths,
-		"excalidraw",
-		/\.excalidraw$/i,
-	);
-}
-
 export function deriveGenericFilePath(
 	name: string,
 	directory: string,

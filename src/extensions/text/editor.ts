@@ -46,7 +46,7 @@ export type TextEditorController = {
 	readonly destroy: () => void;
 };
 
-export type TextCursorPosition = {
+type TextCursorPosition = {
 	readonly line: number;
 	readonly column: number;
 };

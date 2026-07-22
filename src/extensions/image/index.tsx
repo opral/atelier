@@ -78,7 +78,7 @@ export function imageMimeTypeFromPath(filePath: string): string | undefined {
 }
 
 /** Read-only renderer for the current image stored in the Lix workspace. */
-export function ImageView({ fileId, filePath }: ImageViewProps) {
+function ImageView({ fileId, filePath }: ImageViewProps) {
 	return (
 		<Suspense fallback={<ImageLoadingState />}>
 			<ImageViewContent fileId={fileId} filePath={filePath} />

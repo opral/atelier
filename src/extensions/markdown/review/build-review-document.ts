@@ -12,7 +12,7 @@ type ReviewStatus = "added" | "removed";
 
 export type MarkdownReviewDecision = "keep" | "undo";
 
-export type MarkdownReviewChange = {
+type MarkdownReviewChange = {
 	readonly id: string;
 	readonly entityId?: string;
 	readonly kind: "insert" | "delete" | "replace" | "move";
@@ -29,7 +29,7 @@ export type MarkdownReviewDocument = {
 	readonly rawChunks: readonly MarkdownReviewRawChunk[];
 };
 
-export type MarkdownReviewRawChunk = {
+type MarkdownReviewRawChunk = {
 	readonly changeId?: string;
 	readonly beforeText: string;
 	readonly afterText: string;

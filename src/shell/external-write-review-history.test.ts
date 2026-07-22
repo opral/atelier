@@ -14,7 +14,6 @@ import {
 } from "./external-write-review-history";
 import {
 	appendAgentTurnCommitRange,
-	agentTurnCommitRangesFromValues,
 	agentTurnReviewId,
 	agentTurnReviewRangeIds,
 	readAgentTurnCommitRanges,
@@ -226,35 +225,6 @@ describe("getExternalWriteReview", () => {
 		}
 	});
 
-	test("preserves historical global clears when a normalized row has the same id", () => {
-		const normalized = agentRange({
-			id: "range-duplicate",
-			beforeCommitId: "before-duplicate",
-			afterCommitId: "after-duplicate",
-		});
-		const legacy = {
-			ranges: [{ ...normalized, clearedFileIds: ["historically-closed"] }],
-		};
-
-		expect(
-			agentTurnCommitRangesFromValues([normalized, legacy])[0]?.clearedFileIds,
-		).toEqual(["historically-closed"]);
-	});
-
-	test("ignores shared clears attached to normalized range events", () => {
-		const normalized = agentRange({
-			id: "range-normalized-clear",
-			beforeCommitId: "before-normalized-clear",
-			afterCommitId: "after-normalized-clear",
-		});
-
-		expect(
-			agentTurnCommitRangesFromValues([
-				{ ...normalized, clearedFileIds: ["must-stay-private"] },
-			])[0]?.clearedFileIds,
-		).toBeUndefined();
-	});
-
 	test("stores agent turn ranges on the active branch", async () => {
 		const lix = await openLix();
 		try {
@@ -345,7 +315,6 @@ describe("getExternalWriteReview", () => {
 		try {
 			await Promise.all([
 				writeFile(lix, "unchanged-file", "/docs/unchanged.md", "same"),
-				writeFile(lix, "cleared-file", "/docs/cleared.md", "before"),
 				writeFile(lix, "resolved-file", "/docs/resolved.md", "before"),
 				writeFile(lix, "stale-file", "/docs/stale.md", "before"),
 				writeFile(lix, "duplicate-file", "/docs/duplicate.md", "before"),
@@ -353,28 +322,23 @@ describe("getExternalWriteReview", () => {
 			const beforeCommitId = await activeCommitId(lix);
 			await Promise.all([
 				writeFile(lix, "added-file", "/docs/added.md", "added"),
-				writeFile(lix, "cleared-file", "/docs/cleared.md", "after"),
 				writeFile(lix, "resolved-file", "/docs/resolved.md", "after"),
 				writeFile(lix, "stale-file", "/docs/stale.md", "range after"),
 				writeFile(lix, "duplicate-file", "/docs/duplicate.md", "after"),
 			]);
 			const afterCommitId = await activeCommitId(lix);
 			await writeFile(lix, "stale-file", "/docs/stale.md", "current after");
-			const range = {
-				...agentRange({
-					id: "range-batched-paths",
-					beforeCommitId,
-					afterCommitId,
-				}),
-				clearedFileIds: ["cleared-file"],
-			};
+			const range = agentRange({
+				id: "range-batched-paths",
+				beforeCommitId,
+				afterCommitId,
+			});
 
 			const pendingPaths = await getPendingExternalWriteReviewPaths(
 				lix,
 				[
 					{ fileId: "added-file", path: "/docs/added.md" },
 					{ fileId: "unchanged-file", path: "/docs/unchanged.md" },
-					{ fileId: "cleared-file", path: "/docs/cleared.md" },
 					{ fileId: "resolved-file", path: "/docs/resolved.md" },
 					{ fileId: "stale-file", path: "/docs/stale.md" },
 					{ fileId: "duplicate-file", path: "/docs/duplicate.md" },
@@ -439,6 +403,9 @@ describe("getExternalWriteReview", () => {
 
 		expect(agentTurnReviewRangeIds(reviewId, fileId)).toEqual(rangeIds);
 		expect(agentTurnReviewRangeIds(reviewId, "other-file")).toEqual([]);
+		expect(agentTurnReviewRangeIds(`${fileId}:legacy-range`, fileId)).toEqual(
+			[],
+		);
 	});
 
 	test("excludes resolved ranges before combining a later review", async () => {

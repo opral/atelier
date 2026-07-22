@@ -29,7 +29,6 @@ const mermaidMock = vi.hoisted(() => {
 				container.replaceChildren(svg);
 			},
 		),
-		resetMermaidForTests: vi.fn(),
 		getMermaidRenderTheme: vi.fn(() => theme),
 		onMermaidThemeChange: vi.fn((listener: () => void) => {
 			themeListeners.add(listener);

@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from "react";
 import type { ExecuteResult, Lix, SqlParam } from "@lix-js/sdk";
 
-export const LixContext = createContext<Lix | null>(null);
+const LixContext = createContext<Lix | null>(null);
 
 export function LixProvider(props: { lix: Lix; children: ReactNode }) {
 	return (
@@ -226,17 +226,6 @@ export const useQueryTakeFirst = <TResult,>(
 	options: UseQueryOptions = {},
 ): TResult | undefined => {
 	return useQuery<TResult>(query, options)[0];
-};
-
-export const useQueryTakeFirstOrThrow = <TResult,>(
-	query: QueryFactory<TResult>,
-	options: UseQueryOptions = {},
-): TResult => {
-	const data = useQueryTakeFirst(query, options);
-	if (data === undefined) {
-		throw new Error("No result found");
-	}
-	return data;
 };
 
 function queryResultToRows<TRow>(result: ExecuteResult): TRow[] {

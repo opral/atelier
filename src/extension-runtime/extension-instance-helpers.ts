@@ -14,9 +14,6 @@ export const fileExtensionInstanceForKind = (
 	fileId: string,
 ): string => `${kind}:${fileId}`;
 
-export const fileExtensionInstance = (fileId: string): string =>
-	fileExtensionInstanceForKind(FILE_EXTENSION_KIND, fileId);
-
 export function fileNameFromPath(filePath?: string): string | undefined {
 	if (!filePath) return undefined;
 	return filePath.split("/").filter(Boolean).pop();

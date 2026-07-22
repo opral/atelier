@@ -5,33 +5,16 @@ type MarkdownFileWriteArgs = {
 	lix: Lix;
 	fileId: string;
 	markdown: string;
-	expectedMarkdown?: string;
+	expectedMarkdown: string;
 	path?: string;
 	metadata?: any;
 	createIfMissing?: boolean;
 	originKey?: string;
 };
 
-type MarkdownFileCompareAndSwapArgs = MarkdownFileWriteArgs & {
-	expectedMarkdown: string;
-};
-
-type MarkdownFileLegacyUpsertArgs = Omit<
-	MarkdownFileWriteArgs,
-	"expectedMarkdown"
-> & {
-	expectedMarkdown?: undefined;
-};
-
-export function upsertMarkdownFile(
-	args: MarkdownFileCompareAndSwapArgs,
-): Promise<boolean>;
-export function upsertMarkdownFile(
-	args: MarkdownFileLegacyUpsertArgs,
-): Promise<void>;
 export async function upsertMarkdownFile(
 	args: MarkdownFileWriteArgs,
-): Promise<boolean | void> {
+): Promise<boolean> {
 	const {
 		lix,
 		fileId,
@@ -65,28 +48,21 @@ export async function upsertMarkdownFile(
 		if (metadata !== undefined && metadata !== existing.lixcol_metadata) {
 			updateValues.lixcol_metadata = resolvedMetadata;
 		}
-		const expectedData =
-			expectedMarkdown === undefined
-				? undefined
-				: new TextEncoder().encode(expectedMarkdown);
+		const expectedData = new TextEncoder().encode(expectedMarkdown);
 		const result = await executeMarkdownFileWrite(
 			lix,
 			{
 				sql: `UPDATE lix_file SET ${Object.keys(updateValues)
 					.map((column) => `${column} = ?`)
-					.join(", ")} WHERE id = ?${expectedData ? " AND data = ?" : ""}`,
-				params: [
-					...Object.values(updateValues),
-					fileId,
-					...(expectedData ? [expectedData] : []),
-				],
+					.join(", ")} WHERE id = ? AND data = ?`,
+				params: [...Object.values(updateValues), fileId, expectedData],
 			},
 			originKey,
 		);
-		return expectedMarkdown === undefined ? undefined : result.rowsAffected > 0;
+		return result.rowsAffected > 0;
 	} else {
 		if (!createIfMissing) {
-			return expectedMarkdown === undefined ? undefined : false;
+			return false;
 		}
 		// Insert requires a path; use provided or fallback to /<fileId>.md
 		await executeMarkdownFileWrite(
@@ -97,7 +73,7 @@ export async function upsertMarkdownFile(
 			},
 			originKey,
 		);
-		return expectedMarkdown === undefined ? undefined : true;
+		return true;
 	}
 }
 

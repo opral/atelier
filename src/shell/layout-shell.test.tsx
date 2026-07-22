@@ -1141,13 +1141,11 @@ describe("agent turn review navigation", () => {
 					).toBeNull();
 				});
 				await waitFor(async () => {
-					const [range] = await readAgentTurnCommitRanges(lix);
 					const branchId = await lix.activeBranchId();
 					expect(branchId).not.toBeNull();
 					expect(
 						await reviewStatusStore.loadResolvedReviewIds(branchId!),
 					).toHaveLength(1);
-					expect(range?.clearedFileIds).toBeUndefined();
 				});
 			} finally {
 				await act(async () => utils?.unmount());

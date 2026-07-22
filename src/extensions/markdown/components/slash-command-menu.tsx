@@ -6,10 +6,7 @@ import {
 	slashCommandsPluginKey,
 	type SlashCommandState,
 } from "../editor/extensions/slash-commands";
-import {
-	SLASH_BLOCK_COMMANDS,
-	type BlockCommand,
-} from "../editor/block-commands";
+import { BLOCK_COMMANDS, type BlockCommand } from "../editor/block-commands";
 
 const INACTIVE_SLASH_STATE: SlashCommandState = {
 	active: false,
@@ -71,7 +68,7 @@ export function SlashCommandMenu() {
 	const filteredCommands = useMemo(
 		() =>
 			filterCommands(
-				SLASH_BLOCK_COMMANDS.filter(
+				BLOCK_COMMANDS.filter(
 					(command) =>
 						!command.isAvailable || !editor || command.isAvailable(editor),
 				),

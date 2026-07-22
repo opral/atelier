@@ -5,7 +5,7 @@ import type {
 } from "pdfjs-dist";
 
 export const MAX_PDF_IMAGE_PIXELS = 16_000_000;
-export const MAX_PDF_CANVAS_PIXELS = 16_000_000;
+const MAX_PDF_CANVAS_PIXELS = 16_000_000;
 export const MAX_PDF_CANVAS_BYTES = MAX_PDF_CANVAS_PIXELS * 4;
 const MAX_PDF_CSS_DIMENSION = 8_192;
 const MAX_ACCESSIBLE_PAGE_TEXT = 20_000;

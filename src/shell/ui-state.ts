@@ -70,7 +70,7 @@ export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
 };
 
-export const DEFAULT_ATELIER_USER_PREFERENCES: AtelierUserPreferencesV1 = {
+const DEFAULT_ATELIER_USER_PREFERENCES: AtelierUserPreferencesV1 = {
 	version: 1,
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
 };

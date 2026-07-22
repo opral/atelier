@@ -13,7 +13,7 @@ import {
 	type AtelierPanelSide,
 } from "./atelier-instance";
 
-export type { AtelierPanelSide, AtelierSidePanel } from "./atelier-instance";
+export type { AtelierPanelSide } from "./atelier-instance";
 
 export type AtelierTopBarProps = Omit<
 	ComponentPropsWithRef<"header">,
@@ -95,7 +95,6 @@ export function Atelier({ instance, slots, topBarProps }: AtelierProps) {
 						slots={slots}
 						topBarProps={topBarProps}
 						extensions={configuration.extensions}
-						filesViewMode={configuration.filesViewMode}
 						defaultOpenPanels={defaultOpenPanels}
 						onEvent={configuration.onEvent}
 					/>

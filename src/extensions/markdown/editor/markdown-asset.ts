@@ -37,9 +37,9 @@ type LoadMarkdownAssetArgs = {
 };
 
 const EXTERNAL_ASSET_PROTOCOLS = new Set(["http:", "https:", "data:", "blob:"]);
-export const DEFAULT_MAX_AUTO_PREVIEW_BYTES = 25 * 1024 * 1024;
-export const DEFAULT_MAX_REMOTE_PREVIEW_BYTES = 50 * 1024 * 1024;
-export const DEFAULT_REMOTE_PREVIEW_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_AUTO_PREVIEW_BYTES = 25 * 1024 * 1024;
+const DEFAULT_MAX_REMOTE_PREVIEW_BYTES = 50 * 1024 * 1024;
+const DEFAULT_REMOTE_PREVIEW_TIMEOUT_MS = 30_000;
 
 /**
  * Load a Markdown media target from either a web URL or the current Lix

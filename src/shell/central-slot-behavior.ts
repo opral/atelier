@@ -8,7 +8,7 @@ import type {
 /** Reserved instance id of the pinned home tab. */
 export const CENTRAL_HOME_INSTANCE = "central-home";
 
-export type CentralPlaceIntent = {
+type CentralPlaceIntent = {
 	readonly newTab?: boolean;
 	readonly documentOrigin?: "existing" | "new";
 };
@@ -39,16 +39,6 @@ export type CentralSlotBehavior = {
 		views: readonly ExtensionInstance[],
 		removedIndex: number,
 	) => string | null;
-};
-
-const activeEntryOf = (panel: PanelState): ExtensionInstance | null => {
-	if (panel.activeInstance) {
-		const active = panel.views.find(
-			(entry) => entry.instance === panel.activeInstance,
-		);
-		if (active) return active;
-	}
-	return panel.views[0] ?? null;
 };
 
 const panelViewsEqual = (left: PanelState, right: PanelState): boolean =>
