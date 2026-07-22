@@ -8,7 +8,46 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-test("useQuery re-reads authoritative rows instead of applying observe payloads", async () => {
+function createObserveStream() {
+	const pending: Array<(event: ObserveEvent | undefined) => void> = [];
+	return {
+		next: vi.fn(
+			() =>
+				new Promise<ObserveEvent | undefined>((resolve) => {
+					pending.push(resolve);
+				}),
+		),
+		close: vi.fn(),
+		emit(event: ObserveEvent) {
+			const resolve = pending.shift();
+			if (!resolve) throw new Error("observe stream has no pending next call");
+			resolve(event);
+		},
+	};
+}
+
+function eventWithValue(
+	sequence: number,
+	mutationSequence: number,
+	value: string,
+): ObserveEvent {
+	return {
+		sequence,
+		mutationSequence,
+		result: {
+			columns: ["value"],
+			rows: [
+				{
+					toObject: () => ({ value }),
+				},
+			] as unknown as ObserveEvent["result"]["rows"],
+			rowsAffected: 0,
+			notices: [],
+		},
+	};
+}
+
+test("useQuery re-reads the initial observe snapshot to protect resubscriptions", async () => {
 	let resolveFirstObserve:
 		| ((event: ObserveEvent | undefined) => void)
 		| undefined;
@@ -80,16 +119,31 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	let resolveFirstObserve:
 		| ((event: ObserveEvent | undefined) => void)
 		| undefined;
+	let resolveSecondObserve:
+		| ((event: ObserveEvent | undefined) => void)
+		| undefined;
+	const firstNext = vi
+		.fn()
+		.mockImplementationOnce(
+			() =>
+				new Promise<ObserveEvent | undefined>((resolve) => {
+					resolveFirstObserve = resolve;
+				}),
+		)
+		.mockImplementationOnce(
+			() =>
+				new Promise<ObserveEvent | undefined>((resolve) => {
+					resolveSecondObserve = resolve;
+				}),
+		)
+		.mockImplementation(() => new Promise<ObserveEvent | undefined>(() => {}));
 	const firstClose = vi.fn();
 	const secondClose = vi.fn();
 	const lix = {
 		observe: vi
 			.fn()
 			.mockImplementationOnce(() => ({
-				next: () =>
-					new Promise<ObserveEvent | undefined>((resolve) => {
-						resolveFirstObserve = resolve;
-					}),
+				next: firstNext,
 				close: firstClose,
 			}))
 			.mockImplementation(() => ({
@@ -100,7 +154,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	const execute = vi
 		.fn()
 		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValue([{ value: "shared-fresh" }]);
+		.mockResolvedValue([{ value: "initial-authoritative" }]);
 
 	function Probe({ id }: { readonly id: string }) {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -130,6 +184,28 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(execute).toHaveBeenCalledTimes(1);
 
 	resolveFirstObserve?.({
+		sequence: 0,
+		mutationSequence: 0,
+		result: {
+			columns: ["value"],
+			rows: [
+				{
+					toObject: () => ({ value: "stale-initial" }),
+				},
+			] as unknown as ObserveEvent["result"]["rows"],
+			rowsAffected: 0,
+			notices: [],
+		},
+	});
+	await waitFor(() => {
+		expect(screen.getByTestId("first-value")).toHaveTextContent(
+			"initial-authoritative",
+		);
+		expect(execute).toHaveBeenCalledTimes(2);
+		expect(resolveSecondObserve).toBeTypeOf("function");
+	});
+
+	resolveSecondObserve?.({
 		sequence: 1,
 		mutationSequence: 1,
 		result: {
@@ -155,6 +231,153 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	view?.unmount();
 	expect(firstClose).toHaveBeenCalledTimes(1);
 	expect(secondClose).toHaveBeenCalledTimes(1);
+});
+
+test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
+	const stream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => stream),
+	} as unknown as Lix;
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial" }])
+		.mockResolvedValueOnce([{ value: "initial-authoritative" }])
+		.mockResolvedValue([{ value: "fresh-direct-read" }]);
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM reconnect_observe_cache",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="reconnect-value">{rows[0]?.value}</div>;
+	}
+
+	await act(async () => {
+		render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+	expect(await screen.findByTestId("reconnect-value")).toHaveTextContent(
+		"initial",
+	);
+
+	await act(async () => stream.emit(eventWithValue(0, 10, "stale-initial")));
+	await waitFor(() => {
+		expect(screen.getByTestId("reconnect-value")).toHaveTextContent(
+			"initial-authoritative",
+		);
+	});
+
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(2));
+	await act(async () => stream.emit(eventWithValue(1, 11, "observed")));
+	await waitFor(() => {
+		expect(screen.getByTestId("reconnect-value")).toHaveTextContent("observed");
+	});
+	expect(execute).toHaveBeenCalledTimes(2);
+
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(3));
+	await act(async () => stream.emit(eventWithValue(2, 11, "stale-reconnect")));
+	await waitFor(() => {
+		expect(screen.getByTestId("reconnect-value")).toHaveTextContent(
+			"fresh-direct-read",
+		);
+	});
+	expect(execute).toHaveBeenCalledTimes(3);
+});
+
+test("useQuery orders mounted observers and resumes after owner failover", async () => {
+	const firstStream = createObserveStream();
+	const secondStream = createObserveStream();
+	const lix = {
+		observe: vi
+			.fn()
+			.mockImplementationOnce(() => firstStream)
+			.mockImplementationOnce(() => secondStream),
+	} as unknown as Lix;
+	let directValue = "initial";
+	const execute = vi.fn(async () => [{ value: directValue }]);
+
+	function Probe({ id }: { readonly id: string }) {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM ordered_observe_cache",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid={id}>{rows[0]?.value}</div>;
+	}
+
+	let view: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		view = render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe id="ordered-first" key="first" />
+					<Probe id="ordered-second" key="second" />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+	expect(await screen.findByTestId("ordered-first")).toHaveTextContent(
+		"initial",
+	);
+
+	await act(async () => firstStream.emit(eventWithValue(0, 0, "initial")));
+	await act(async () => secondStream.emit(eventWithValue(0, 0, "initial")));
+	await waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(2));
+	await act(async () => firstStream.emit(eventWithValue(1, 10, "newer")));
+	await waitFor(() => {
+		expect(screen.getByTestId("ordered-first")).toHaveTextContent("newer");
+		expect(screen.getByTestId("ordered-second")).toHaveTextContent("newer");
+	});
+
+	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(2));
+	await act(async () => secondStream.emit(eventWithValue(1, 9, "older")));
+	expect(screen.getByTestId("ordered-first")).toHaveTextContent("newer");
+	expect(screen.getByTestId("ordered-second")).toHaveTextContent("newer");
+	expect(execute).toHaveBeenCalledTimes(2);
+
+	directValue = "failover-authoritative";
+	await act(async () => {
+		view?.rerender(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe id="ordered-second" key="second" />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(3));
+	await act(async () =>
+		secondStream.emit(eventWithValue(2, 1, "stale-failover")),
+	);
+	await waitFor(() => {
+		expect(screen.getByTestId("ordered-second")).toHaveTextContent(
+			"failover-authoritative",
+		);
+	});
+	expect(execute).toHaveBeenCalledTimes(3);
+
+	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(4));
+	await act(async () =>
+		secondStream.emit(eventWithValue(3, 2, "after-failover")),
+	);
+	await waitFor(() => {
+		expect(screen.getByTestId("ordered-second")).toHaveTextContent(
+			"after-failover",
+		);
+	});
+	expect(execute).toHaveBeenCalledTimes(3);
 });
 
 test("useQuery skips disabled queries without suspending or subscribing", () => {

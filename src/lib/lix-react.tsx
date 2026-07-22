@@ -7,7 +7,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import type { Lix, SqlParam } from "@lix-js/sdk";
+import type { ExecuteResult, Lix, SqlParam } from "@lix-js/sdk";
 
 export const LixContext = createContext<Lix | null>(null);
 
@@ -37,6 +37,8 @@ type QueryCacheEntry<TRow> = {
 	snapshot: QueryCacheSnapshot<TRow>;
 	listeners: Set<() => void>;
 	execute: () => Promise<TRow[]>;
+	latestMutationSequence: number | undefined;
+	observationOwner: symbol | undefined;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
@@ -70,6 +72,8 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	snapshot: { status: "success", rows: DISABLED_QUERY_ROWS },
 	listeners: new Set(),
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
+	latestMutationSequence: undefined,
+	observationOwner: undefined,
 };
 const DISABLED_OBSERVE_QUERY = { sql: "", params: [] } as const;
 
@@ -112,6 +116,13 @@ export function useQuery<TRow>(
 	useEffect(() => {
 		if (!enabled || !subscribe) return;
 		let closed = false;
+		let previousMutationSequence: number | undefined;
+		const observationId = Symbol();
+		// Every hook keeps its observer warm for failover, but only one observer
+		// may publish into the shared cache entry at a time.
+		if (entry.observationOwner === undefined) {
+			entry.observationOwner = observationId;
+		}
 		const events = lix.observe(observeQuery.sql, [
 			...observeQuery.params,
 		] as SqlParam[]);
@@ -121,11 +132,38 @@ export function useQuery<TRow>(
 				while (!closed) {
 					const event = await events.next();
 					if (closed || event === undefined) break;
-					// Observe payloads may be cached by the SDK. Treat the event only
-					// as an invalidation signal and read authoritative rows directly.
-					const nextRows = await entry.execute();
-					if (closed) break;
-					setQueryRows(entry, nextRows);
+					const advancesObservation =
+						previousMutationSequence !== undefined &&
+						event.mutationSequence > previousMutationSequence;
+					previousMutationSequence = event.mutationSequence;
+					let claimedObservation = false;
+					if (entry.observationOwner === undefined) {
+						entry.observationOwner = observationId;
+						claimedObservation = true;
+					}
+					if (entry.observationOwner !== observationId) continue;
+
+					// SDK 0.8.x can return a stale first snapshot, and a remote
+					// reconnect can renumber another initial snapshot. Keep the direct
+					// read for those cases, then reuse advancing mutation results.
+					if (claimedObservation || !advancesObservation) {
+						const nextRows = await entry.execute();
+						if (closed) break;
+						entry.latestMutationSequence = event.mutationSequence;
+						setQueryRows(entry, nextRows);
+						continue;
+					}
+
+					// An observer taking ownership can have older events queued. Never let
+					// one of them overwrite the latest mutation already in the cache.
+					if (
+						entry.latestMutationSequence !== undefined &&
+						event.mutationSequence <= entry.latestMutationSequence
+					) {
+						continue;
+					}
+					entry.latestMutationSequence = event.mutationSequence;
+					setQueryRows(entry, queryResultToRows<TRow>(event.result));
 				}
 			} catch (error) {
 				if (closed) return;
@@ -135,6 +173,9 @@ export function useQuery<TRow>(
 
 		return () => {
 			closed = true;
+			if (entry.observationOwner === observationId) {
+				entry.observationOwner = undefined;
+			}
 			events.close();
 		};
 	}, [enabled, entry, subscribe, lix, observeQuery]);
@@ -198,6 +239,10 @@ export const useQueryTakeFirstOrThrow = <TResult,>(
 	return data;
 };
 
+function queryResultToRows<TRow>(result: ExecuteResult): TRow[] {
+	return result.rows.map((row) => row.toObject() as TRow);
+}
+
 function rowsEqual(a: unknown, b: unknown): boolean {
 	if (Object.is(a, b)) return true;
 	try {
@@ -222,6 +267,8 @@ function getQueryCacheEntry<TRow>(
 		snapshot: { status: "pending" },
 		listeners: new Set(),
 		execute: () => builder.execute(),
+		latestMutationSequence: undefined,
+		observationOwner: undefined,
 	};
 	entry.promise = entry.execute().then(
 		(rows) => {
