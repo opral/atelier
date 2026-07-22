@@ -40,7 +40,6 @@ describe("createAtelier", () => {
 		const atelier = createAtelier({
 			lix,
 			extensions,
-			filesViewMode: "sidebar",
 			defaultOpenPanels: ["right"],
 		});
 
@@ -51,7 +50,6 @@ describe("createAtelier", () => {
 		expect(getAtelierConfiguration(atelier)).toEqual(
 			expect.objectContaining({
 				extensions: [],
-				filesViewMode: "sidebar",
 				defaultOpenPanels: ["right"],
 				sessionStateStore: expect.any(Object),
 				preferencesStore: expect.any(Object),

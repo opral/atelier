@@ -2,8 +2,8 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { parseMarkdown } from "./markdown";
 
-export const MARKDOWN_EDITOR_FUZZ_PARAGRAPH_BREAK = "\x1E";
-export const MARKDOWN_EDITOR_FUZZ_HARD_BREAK = "\n";
+const MARKDOWN_EDITOR_FUZZ_PARAGRAPH_BREAK = "\x1E";
+const MARKDOWN_EDITOR_FUZZ_HARD_BREAK = "\n";
 export const MARKDOWN_EDITOR_FUZZ_OPERATION_COUNT = 10_000;
 export const MARKDOWN_EDITOR_FUZZ_DEFAULT_SEED =
 	"markdown-editor-plain-text-fuzz-v1";
@@ -14,7 +14,7 @@ export type SimplifiedState = {
 	head: number;
 };
 
-export type SimplifiedSelection = {
+type SimplifiedSelection = {
 	anchor: number;
 	head: number;
 	rawAnchor: number;
@@ -111,7 +111,7 @@ function replaceSelection(state: SimplifiedState, value: string): void {
 	state.head = next;
 }
 
-export function selectionBounds(state: SimplifiedState): {
+function selectionBounds(state: SimplifiedState): {
 	from: number;
 	to: number;
 } {
@@ -146,7 +146,7 @@ export function renderPlainTextFromMarkdown(markdown: string): string {
 	return renderPlainText(parseMarkdown(markdown));
 }
 
-export function renderPlainText(ast: any): string {
+function renderPlainText(ast: any): string {
 	return (ast?.children ?? [])
 		.map(renderBlockPlainText)
 		.join(MARKDOWN_EDITOR_FUZZ_PARAGRAPH_BREAK);
@@ -259,47 +259,6 @@ export function simplifiedSelectionFromEditor(
 	return simplifiedSelectionFromRawPositions(editor, rawAnchor, rawHead);
 }
 
-export function simplifiedSelectionFromDom(
-	editor: Editor,
-): MarkdownFuzzSnapshot["domSelection"] {
-	const view = editor.view as any;
-	const domSelection = view.domSelectionRange?.();
-	if (
-		!domSelection?.anchorNode ||
-		!domSelection?.focusNode ||
-		!isNodeInsideEditor(editor.view.dom, domSelection.anchorNode) ||
-		!isNodeInsideEditor(editor.view.dom, domSelection.focusNode)
-	) {
-		return null;
-	}
-
-	const rawAnchor = view.docView?.posFromDOM?.(
-		domSelection.anchorNode,
-		domSelection.anchorOffset,
-		1,
-	);
-	const rawHead = view.docView?.posFromDOM?.(
-		domSelection.focusNode,
-		domSelection.focusOffset,
-		1,
-	);
-	if (
-		typeof rawAnchor !== "number" ||
-		typeof rawHead !== "number" ||
-		rawAnchor < 0 ||
-		rawHead < 0
-	) {
-		return null;
-	}
-
-	return simplifiedSelectionFromRawPositions(editor, rawAnchor, rawHead);
-}
-
-function isNodeInsideEditor(editorDom: HTMLElement, node: Node): boolean {
-	const element = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
-	return Boolean(element && editorDom.contains(element));
-}
-
 function simplifiedSelectionFromRawPositions(
 	editor: Editor,
 	rawAnchor: number,
@@ -333,7 +292,7 @@ export function validateEditorPositionMap(
 	);
 }
 
-export function validateSimplifiedPositionMap(args: {
+function validateSimplifiedPositionMap(args: {
 	state: SimplifiedState;
 	positions: number[];
 	docSize: number;

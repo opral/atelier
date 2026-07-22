@@ -8,8 +8,8 @@ import {
 	parseExtensionManifest,
 } from "./extension-manifest";
 
-export const INSTALLED_EXTENSION_ROOT = "/.lix/app_data/atelier/extensions/";
-export const INSTALLED_EXTENSION_ROOT_UPPER_BOUND =
+const INSTALLED_EXTENSION_ROOT = "/.lix/app_data/atelier/extensions/";
+const INSTALLED_EXTENSION_ROOT_UPPER_BOUND =
 	"/.lix/app_data/atelier/extensions0";
 const MANIFEST_SUFFIX = "/manifest.json";
 

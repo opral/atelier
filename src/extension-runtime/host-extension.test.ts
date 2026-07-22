@@ -1,9 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { Terminal } from "lucide-react";
-import {
-	hostExtensionDefinition,
-	type AtelierExtensionRegistration,
-} from "./host-extension";
+import type { AtelierExtensionRegistration } from "../extension-api";
+import { hostExtensionDefinition } from "./host-extension";
 
 describe("hostExtensionDefinition", () => {
 	test("combines a host manifest with its already-loaded entry", () => {

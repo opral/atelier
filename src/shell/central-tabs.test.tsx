@@ -95,11 +95,9 @@ const extensions = [homeRegistration, dirRegistration, sideToolExtension];
 
 async function renderTabbedShell(
 	options: {
-		filesViewMode?: "landing" | "sidebar";
 		slots?: import("../create-atelier").AtelierSlots;
 	} = {},
 ) {
-	const filesViewMode = options.filesViewMode ?? "sidebar";
 	const lix = await openLix();
 	const events: AtelierEvent[] = [];
 	const onEvent = vi.fn((event: AtelierEvent) => {
@@ -111,7 +109,6 @@ async function renderTabbedShell(
 		onEvent,
 		extensions,
 		sessionStateStore,
-		filesViewMode,
 		centralPanel: {
 			home: { extensionId: HOME_EXTENSION_ID },
 		},
@@ -144,7 +141,6 @@ async function renderTabbedShell(
 					<V2LayoutShell
 						instance={atelier}
 						extensions={extensions}
-						filesViewMode={filesViewMode}
 						onEvent={onEvent}
 						slots={options.slots}
 					/>
@@ -409,8 +405,8 @@ describe("central tabs with a pinned home", () => {
 		}
 	});
 
-	test("landing files mode keeps Files in the sidebar instead of dropping it", async () => {
-		const shell = await renderTabbedShell({ filesViewMode: "landing" });
+	test("a pinned home keeps Files in the sidebar instead of dropping it", async () => {
+		const shell = await renderTabbedShell();
 		try {
 			// A pinned home owns the central landing; the Files view must
 			// survive in the left panel rather than vanish.

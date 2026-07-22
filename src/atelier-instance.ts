@@ -42,15 +42,6 @@ export type AtelierDiffApi = {
 	open(options: AtelierDiffOpenOptions): Promise<void>;
 };
 
-export type {
-	AtelierDocumentOpenOptions,
-	AtelierDocumentsApi,
-	AtelierFilesViewOptions,
-	AtelierViewOpenOptions,
-	AtelierViewsApi,
-	AtelierWatchedEntry,
-} from "./extension-api";
-
 /**
  * The central island is browser-style tabs — the one UX primitive. `home`
  * pins an extension (registered with `placement` including "central") as the
@@ -70,7 +61,6 @@ export type AtelierOptions = {
 	 */
 	readonly readOnly?: boolean;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
-	readonly filesViewMode?: "landing" | "sidebar";
 	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
 	/** Per-tab shell state. Hosts should normally back this with sessionStorage. */
@@ -294,9 +284,6 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		...(options.readOnly !== undefined ? { readOnly: options.readOnly } : {}),
 		...(options.extensions !== undefined
 			? { extensions: [...options.extensions] }
-			: {}),
-		...(options.filesViewMode !== undefined
-			? { filesViewMode: options.filesViewMode }
 			: {}),
 		...(options.defaultOpenPanels !== undefined
 			? { defaultOpenPanels: [...options.defaultOpenPanels] }

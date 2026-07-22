@@ -38,7 +38,7 @@ type ExcalidrawFileRow = {
 	readonly data: unknown;
 };
 
-export type ExcalidrawViewProps = {
+type ExcalidrawViewProps = {
 	readonly atelier: ExtensionRuntime;
 	readonly fileId: string;
 	readonly filePath?: string;
@@ -48,7 +48,7 @@ export type ExcalidrawViewProps = {
 	readonly afterCommitId?: string | null;
 };
 
-export function ExcalidrawView(props: ExcalidrawViewProps) {
+function ExcalidrawView(props: ExcalidrawViewProps) {
 	return (
 		<Suspense fallback={<ExcalidrawLoadingState />}>
 			<ExcalidrawViewContent {...props} />

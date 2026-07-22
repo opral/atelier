@@ -177,7 +177,7 @@ class LixQueryCompiler extends SqliteQueryCompiler {
 
 const cache = new WeakMap<object, Map<string, Kysely<LixDatabaseSchema>>>();
 
-export function createLixKysely(lix: Lix): Kysely<LixDatabaseSchema> {
+function createLixKysely(lix: Lix): Kysely<LixDatabaseSchema> {
 	const cacheKey = "__default__";
 	const cached = cache.get(lix as object)?.get(cacheKey);
 	if (cached) {

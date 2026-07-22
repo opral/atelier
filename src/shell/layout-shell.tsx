@@ -58,10 +58,6 @@ import {
 	reconcileInstalledExtensionCandidates,
 	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
-import {
-	type FilesViewMode,
-	type WorkspacePanelState,
-} from "./workspace-panel-state";
 import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
@@ -110,13 +106,11 @@ import type {
 	AtelierTabStripTab,
 	AtelierTopBarProps,
 } from "../create-atelier";
-import {
-	hostExtensionDefinition,
-	type AtelierExtensionRegistration,
-} from "../extension-runtime/host-extension";
+import { hostExtensionDefinition } from "../extension-runtime/host-extension";
 import type {
 	AtelierDocumentOpenOptions,
 	AtelierEvent,
+	AtelierExtensionRegistration,
 	AtelierViewOpenOptions,
 } from "../extension-api";
 import {
@@ -496,7 +490,6 @@ export function V2LayoutShell({
 	slots,
 	topBarProps,
 	extensions = EMPTY_ATELIER_EXTENSIONS,
-	filesViewMode = "landing",
 	defaultOpenPanels = EMPTY_DEFAULT_OPEN_PANELS,
 	onEvent,
 }: {
@@ -504,7 +497,6 @@ export function V2LayoutShell({
 	readonly slots?: AtelierSlots;
 	readonly topBarProps?: AtelierTopBarProps;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
-	readonly filesViewMode?: FilesViewMode;
 	readonly defaultOpenPanels?: readonly DefaultOpenPanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
 }) {
@@ -519,7 +511,6 @@ export function V2LayoutShell({
 					atelierInstance={atelierInstance}
 					slots={slots}
 					topBarProps={topBarProps}
-					filesViewMode={filesViewMode}
 					defaultOpenPanels={defaultOpenPanels}
 					onEvent={onEvent}
 				/>
@@ -532,9 +523,13 @@ type LayoutShellContentProps = {
 	readonly atelierInstance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	readonly topBarProps?: AtelierTopBarProps;
-	readonly filesViewMode: FilesViewMode;
 	readonly defaultOpenPanels: readonly DefaultOpenPanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
+};
+
+type WorkspacePanelState = {
+	readonly panels: Record<PanelSide, PanelState>;
+	readonly focusedPanel: PanelSide;
 };
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
@@ -988,7 +983,6 @@ function LayoutShellLoadedContent({
 	autoRevealedAgentTurnRangeKeysRef,
 	slots,
 	topBarProps,
-	filesViewMode,
 	defaultOpenPanels,
 	onEvent,
 }: LayoutShellLoadedContentProps) {
@@ -1732,13 +1726,7 @@ function LayoutShellLoadedContent({
 				};
 			});
 		},
-		[
-			centralBehavior,
-			emitEvent,
-			ensurePanelExpanded,
-			extensionMap,
-			updateWorkspace,
-		],
+		[centralBehavior, emitEvent, extensionMap, updateWorkspace],
 	);
 	const openAutoRevealedFile = useCallback(
 		(file: { fileId: string; filePath: string }) => {

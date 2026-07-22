@@ -1,6 +1,6 @@
 import type { ExtensionDefinition } from "./types";
 
-export function normalizeFileExtension(extension: string): string | undefined {
+function normalizeFileExtension(extension: string): string | undefined {
 	const normalized = extension.trim().replace(/^\./, "").toLowerCase();
 	return normalized.length > 0 ? normalized : undefined;
 }
