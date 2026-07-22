@@ -162,7 +162,7 @@ describe("TextView", () => {
 		await lix.close();
 	});
 
-	test("keeps a self-originated delivery from replacing the local editor", async () => {
+	test("applies authoritative observed bytes without origin reconciliation reads", async () => {
 		const lix = await openLix();
 		const executeSpy = vi.spyOn(lix, "execute");
 		const scopedOriginReadCount = () =>
@@ -171,6 +171,11 @@ describe("TextView", () => {
 				return (
 					normalized.includes("lix_change") && normalized.includes("file_id")
 				);
+			}).length;
+		const fileReadCount = () =>
+			executeSpy.mock.calls.filter(([statement]) => {
+				const normalized = String(statement).toLowerCase();
+				return normalized.includes("select") && normalized.includes("lix_file");
 			}).length;
 		await qb(lix)
 			.insertInto("lix_file")
@@ -202,8 +207,7 @@ describe("TextView", () => {
 		});
 		const view = EditorView.findFromDOM(content);
 		if (!view) throw new Error("Editor view not found");
-		await waitFor(() => expect(scopedOriginReadCount()).toBeGreaterThan(0));
-		const originReadsBeforeOwnWrite = scopedOriginReadCount();
+		expect(scopedOriginReadCount()).toBe(0);
 		act(() => {
 			view.dispatch({
 				changes: { from: 0, to: view.state.doc.length, insert: "user edit" },
@@ -221,12 +225,7 @@ describe("TextView", () => {
 			}
 			return row.origin_key;
 		});
-		await waitFor(() =>
-			expect(scopedOriginReadCount()).toBeGreaterThan(
-				originReadsBeforeOwnWrite,
-			),
-		);
-		const originReadsAfterOwnWrite = scopedOriginReadCount();
+		executeSpy.mockClear();
 
 		await act(async () => {
 			await lix.execute(
@@ -236,9 +235,10 @@ describe("TextView", () => {
 			);
 		});
 		await waitFor(() =>
-			expect(scopedOriginReadCount()).toBeGreaterThan(originReadsAfterOwnWrite),
+			expect(view.state.doc.toString()).toBe("same-origin external"),
 		);
-		expect(view.state.doc.toString()).toBe("user edit");
+		expect(scopedOriginReadCount()).toBe(0);
+		expect(fileReadCount()).toBe(0);
 
 		utils!.unmount();
 		executeSpy.mockRestore();

@@ -326,9 +326,8 @@ function CsvLiveViewData({
  * Live CSV editor. Grid edits mutate a line-preserving document model, and
  * the serialized text persists straight to lix_file with this editor's origin
  * key — the same persistence pattern as the excalidraw extension: writes are
- * queued and flushed sequentially, observe emissions are treated as change
- * signals only (every reconcile re-reads the row), and a queued or running
- * local edit wins over concurrent external writes.
+ * queued and flushed sequentially, observed file bytes reconcile directly,
+ * and a queued or running local edit wins over concurrent external writes.
  */
 function EditableCsvView({
 	fileRow,
@@ -457,23 +456,13 @@ function EditableCsvView({
 	);
 
 	useEffect(() => {
-		// Observe emissions only signal that the file may have changed; their
-		// payload (and the mount-time Suspense row) can be served from caches
-		// that lag behind the store. Every reconcile therefore re-reads the
-		// file directly so a stale snapshot can never overwrite the grid.
-		const events = lix.observe(
-			`SELECT lixcol_change_id FROM lix_file WHERE id = ?`,
-			[fileId],
-		);
+		const events = lix.observe(`SELECT data FROM lix_file WHERE id = ?`, [
+			fileId,
+		]);
 		let closed = false;
-		const reconcile = async () => {
-			const row = await qb(lix)
-				.selectFrom("lix_file")
-				.select("data")
-				.where("id", "=", fileId)
-				.executeTakeFirst();
-			if (!row || closed) return;
-			const nextText = decodeFileDataToText(row.data);
+		const reconcile = (data: unknown) => {
+			if (closed) return;
+			const nextText = decodeFileDataToText(data);
 			if (nextText === localTextRef.current) {
 				lastCleanTextRef.current = nextText;
 				return;
@@ -492,11 +481,11 @@ function EditableCsvView({
 		};
 		void (async () => {
 			try {
-				await reconcile();
 				while (!closed) {
 					const event = await events.next();
 					if (!event || closed) continue;
-					await reconcile();
+					const row = event.result.rows[0];
+					if (row) reconcile(row.get("data"));
 				}
 			} catch (error) {
 				if (!closed)
