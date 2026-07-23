@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
-import { Trash } from "lucide-react";
+import { PenLine, Trash2 } from "lucide-react";
 import type {
 	ContextMenuItem as FileTreeContextMenuItem,
 	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
@@ -844,7 +844,17 @@ function TreeItemContextMenu({
 				</>
 			) : null}
 			{canRename ? (
-				<TreeItemContextMenuButton onClick={onRename}>
+				<TreeItemContextMenuButton
+					icon={
+						<PenLine
+							aria-hidden="true"
+							className="size-4 shrink-0 text-[var(--color-icon-secondary)]"
+							data-attr="file-tree-menu-rename-icon"
+							strokeWidth={1.7}
+						/>
+					}
+					onClick={onRename}
+				>
 					Rename
 				</TreeItemContextMenuButton>
 			) : null}
@@ -858,11 +868,10 @@ function TreeItemContextMenu({
 				<TreeItemContextMenuButton
 					destructive
 					icon={
-						<Trash
+						<Trash2
 							aria-hidden="true"
-							className="size-3 shrink-0"
+							className="size-4 shrink-0"
 							data-attr="file-tree-menu-delete-icon"
-							fill="currentColor"
 							strokeWidth={1.7}
 						/>
 					}
@@ -905,15 +914,15 @@ function TreeItemContextMenuButton({
 			type="button"
 			role="menuitem"
 			aria-keyshortcuts={ariaKeyShortcuts}
-			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]${
+			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 				destructive
-					? " text-[var(--color-text-secondary)] hover:text-[var(--color-text-status-danger)] focus-visible:text-[var(--color-text-status-danger)]"
-					: ""
+					? "text-[var(--color-text-secondary)] hover:bg-[var(--color-error-50)] hover:text-[var(--color-text-status-danger)] focus-visible:bg-[var(--color-error-50)] focus-visible:text-[var(--color-text-status-danger)]"
+					: "hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)]"
 			}`}
 			onClick={onClick}
 		>
 			{icon ? (
-				<span className="flex size-3.5 shrink-0 items-center justify-center">
+				<span className="flex size-4 shrink-0 items-center justify-center">
 					{icon}
 				</span>
 			) : null}
@@ -944,19 +953,18 @@ function treeContextMenuStyle(
 		edge,
 		Math.min(anchorRect.bottom + 4, viewportHeight - menuHeight - edge),
 	);
-	if (anchorRect.width === 0 && anchorRect.height === 0) {
-		return {
-			left: Math.max(
-				edge,
-				Math.min(anchorRect.left, viewportWidth - menuWidth - edge),
-			),
-			position: "fixed",
-			top,
-		};
-	}
+	// Zero-size anchor = right-click point; otherwise align the menu's right
+	// edge with the trigger button. Both are clamped into the viewport.
+	const anchorLeft =
+		anchorRect.width === 0 && anchorRect.height === 0
+			? anchorRect.left
+			: anchorRect.right - menuWidth;
 	return {
+		left: Math.max(
+			edge,
+			Math.min(anchorLeft, viewportWidth - menuWidth - edge),
+		),
 		position: "fixed",
-		right: Math.max(edge, viewportWidth - anchorRect.right),
 		top,
 	};
 }
@@ -1300,7 +1308,9 @@ function treeHostStyle(
 ) {
 	const isSpacious = variant === "spacious";
 	return {
-		"--trees-bg-override": "transparent",
+		// Must be the opaque panel color (not transparent): the truncation
+		// ellipsis paints this over clipped label text to hide half-cut glyphs.
+		"--trees-bg-override": "var(--color-bg-panel)",
 		"--trees-bg-muted-override": "var(--color-bg-hover)",
 		"--trees-border-color-override": "transparent",
 		"--trees-border-radius-override": isSpacious ? "9px" : "7px",

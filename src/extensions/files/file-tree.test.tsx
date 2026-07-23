@@ -622,12 +622,15 @@ describe("FileTree", () => {
 		expect(
 			menu.querySelector("[data-attr='file-tree-menu-new-folder-icon']"),
 		).not.toBeNull();
+		expect(
+			menu.querySelector("[data-attr='file-tree-menu-rename-icon']"),
+		).not.toBeNull();
 		const deleteIcon = menu.querySelector(
 			"[data-attr='file-tree-menu-delete-icon']",
 		);
 		expect(deleteIcon).not.toBeNull();
-		expect(deleteIcon).toHaveAttribute("fill", "currentColor");
-		expect(deleteIcon).toHaveClass("size-3");
+		expect(deleteIcon).toHaveAttribute("fill", "none");
+		expect(deleteIcon).toHaveClass("size-4");
 
 		fireEvent.click(getTreeContextMenuButton(menu, "New file"));
 		expect(handleCreateAtDirectory).toHaveBeenCalledWith("/docs/", "file");

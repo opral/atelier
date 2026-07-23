@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"predev": "corepack pnpm --dir ../.. install --frozen-lockfile --prefer-offline",
-		"dev": "vite --config vite.config.ts --host 127.0.0.1 --port 4175 --strictPort",
+		"dev": "vite --config vite.config.ts --host 127.0.0.1 --port ${PORT:-4175} --strictPort",
 		"prebuild": "pnpm --dir ../.. build",
 		"build": "vite build --config vite.config.ts",
 		"typecheck": "tsc -p tsconfig.json --pretty false"
