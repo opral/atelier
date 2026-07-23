@@ -4,6 +4,40 @@
 	flex-shrink: 0;
 }
 
+/* Overflow fades: clipped chips at the strip edges dissolve into the app
+   background so a half-visible tab reads as "more tabs this way", not as a
+   rendering glitch. Toggled per side via data-overflow-left/right. */
+.tabBar::before,
+.tabBar::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 16px;
+	z-index: 2;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+
+.tabBar::before {
+	left: 0;
+	background: linear-gradient(to right, var(--color-bg-app), transparent);
+}
+
+.tabBar::after {
+	right: 0;
+	background: linear-gradient(to left, var(--color-bg-app), transparent);
+}
+
+.tabBar[data-overflow-left="true"]::before {
+	opacity: 1;
+}
+
+.tabBar[data-overflow-right="true"]::after {
+	opacity: 1;
+}
+
 .indicatorTrack {
 	position: absolute;
 	top: 0;
