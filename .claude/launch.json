@@ -4,8 +4,11 @@
 		{
 			"name": "atelier-preview",
 			"runtimeExecutable": "pnpm",
-			"runtimeArgs": ["dev"],
-			"port": 4175
+			"runtimeArgs": [
+				"dev"
+			],
+			"port": 4175,
+			"autoPort": true
 		}
 	]
 }

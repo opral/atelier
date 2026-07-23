@@ -1,0 +1,15 @@
+diff --git a/dist/render/FileTreeView.js b/dist/render/FileTreeView.js
+index 3d02080ad553347e7fe95e261c993b607b4134c2..72a3fc4981a2a38c4b064bcec3ae6739520b249c 100644
+--- a/dist/render/FileTreeView.js
++++ b/dist/render/FileTreeView.js
+@@ -367,9 +367,7 @@ function renderFileTreeRowContent(row, resolveIcon, { actionLaneEnabled = false,
+ 		}),
+ 		/* @__PURE__ */ jsx("div", {
+ 			"data-item-section": "content",
+-			children: row.isFlattened ? formatFlattenedSegments(row, renameInput, dragTargetFlattenedSegmentPath) : renameInput ?? /* @__PURE__ */ jsx(MiddleTruncate, {
+-				minimumLength: 5,
+-				split: "extension",
++			children: row.isFlattened ? formatFlattenedSegments(row, renameInput, dragTargetFlattenedSegmentPath) : renameInput ?? /* @__PURE__ */ jsx(Truncate, {
+ 				children: row.name
+ 			})
+ 		}),
