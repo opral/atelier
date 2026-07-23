@@ -1,4 +1,4 @@
-import type { Lix } from "@lix-js/sdk";
+import type { JsonValue, Lix } from "@lix-js/sdk";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {
@@ -8,6 +8,25 @@ export type FilesystemEntryRow = {
 	display_name: string;
 	kind: "directory" | "file";
 	source?: "lix" | "watched";
+};
+
+export type WorkingChangeRow = {
+	entity_pk: JsonValue;
+	schema_key: string;
+	file_id: string | null;
+	change_kind: "added" | "modified" | "removed";
+	before_change_id: string | null;
+	after_change_id: string | null;
+};
+
+export type WorkingChangeCountRow = {
+	change_count: number;
+};
+
+export type CheckpointRow = {
+	commit_id: string;
+	created_at: string;
+	lixcol_depth: number;
 };
 
 /**
@@ -42,4 +61,45 @@ export function selectFilesystemEntries(lix: Lix) {
 		)
 		.orderBy("path", "asc")
 		.$castTo<FilesystemEntryRow>();
+}
+
+/**
+ * Net tracked changes between the latest checkpoint and the active branch head.
+ */
+export function selectWorkingChanges(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_working_change")
+		.select([
+			"entity_pk",
+			"schema_key",
+			"file_id",
+			"change_kind",
+			"before_change_id",
+			"after_change_id",
+		])
+		.orderBy("schema_key", "asc")
+		.orderBy("entity_pk", "asc")
+		.$castTo<WorkingChangeRow>();
+}
+
+export function selectWorkingChangeCount(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_working_change")
+		.select((eb) => eb.fn.countAll<number>().as("change_count"))
+		.$castTo<WorkingChangeCountRow>();
+}
+
+/**
+ * Checkpoints reachable from the active branch, newest first.
+ */
+export function selectCheckpoints(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_checkpoint")
+		.select(["commit_id", "created_at", "lixcol_depth"])
+		.orderBy("lixcol_depth", "asc")
+		.$castTo<CheckpointRow>();
+}
+
+export function selectLatestCheckpoint(lix: Lix) {
+	return selectCheckpoints(lix).limit(1);
 }

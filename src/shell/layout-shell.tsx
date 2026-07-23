@@ -31,7 +31,7 @@ import type { Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
-import { StatusBar } from "./status-bar";
+import { CheckpointStatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb } from "@/lib/lix-kysely";
@@ -65,6 +65,7 @@ import {
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
+	HISTORY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 	isDocumentView,
 } from "../extension-runtime/extension-instance-helpers";
@@ -3025,7 +3026,14 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</Group>
 				</main>
-				<StatusBar />
+				<CheckpointStatusBar
+					readOnly={isHostReadOnly}
+					onOpenHistory={() =>
+						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
+							panel: "left",
+						})
+					}
+				/>
 			</div>
 			<DragOverlay>
 				{activeId && activeDragView ? (
