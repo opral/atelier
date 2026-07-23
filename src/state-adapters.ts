@@ -45,6 +45,10 @@ export type AtelierBranchSession = {
 	subscribe(listener: () => void): () => void;
 };
 
+type ActiveBranchLix = Partial<Lix> & {
+	subscribeActiveBranch?: (listener: () => void) => () => void;
+};
+
 export type AtelierClientState = {
 	get<T extends JsonValue = JsonValue>(key: string): T | undefined;
 	set(key: string, value: JsonValue): Promise<void>;
@@ -190,6 +194,7 @@ export function createLixBranchSession(
 ): AtelierBranchSession {
 	let branchId = initialBranchId;
 	const listeners = new Set<() => void>();
+	const activeBranchLix = lix as ActiveBranchLix;
 	let startObserving: (() => void) | undefined;
 	let stopObserving: (() => void) | undefined;
 	const publish = (nextBranchId: string) => {
@@ -199,7 +204,7 @@ export function createLixBranchSession(
 	};
 
 	if (!branchId) {
-		const activeBranchId = (lix as Partial<Lix>).activeBranchId;
+		const activeBranchId = activeBranchLix.activeBranchId;
 		if (typeof activeBranchId === "function") {
 			let refreshVersion = 0;
 			const refreshActiveBranch = async () => {
@@ -213,7 +218,7 @@ export function createLixBranchSession(
 				}
 			};
 			void refreshActiveBranch();
-			const subscribeActiveBranch = (lix as Partial<Lix>).subscribeActiveBranch;
+			const subscribeActiveBranch = activeBranchLix.subscribeActiveBranch;
 			if (typeof subscribeActiveBranch === "function") {
 				startObserving = () => {
 					if (stopObserving) return;
@@ -222,7 +227,7 @@ export function createLixBranchSession(
 					});
 				};
 			} else {
-				const observe = (lix as Partial<Lix>).observe;
+				const observe = activeBranchLix.observe;
 				if (typeof observe !== "function") return createStaticBranchSession();
 				startObserving = () => {
 					if (stopObserving) return;
