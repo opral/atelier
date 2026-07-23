@@ -343,6 +343,7 @@ export function PanelV2({
 				</div>
 			) : showTabBar ? (
 				<TabBar
+					activeInstance={activeInstance}
 					extraContent={
 						tabBarExtraContent !== undefined ? (
 							tabBarExtraContent
@@ -640,18 +641,28 @@ const resolveLabel = (
 interface TabBarProps {
 	readonly children: ReactNode;
 	readonly extraContent?: ReactNode;
+	/** Instance whose tab is kept scrolled into view. */
+	readonly activeInstance?: string | null;
 }
 
-function TabBar({ children, extraContent }: TabBarProps) {
+function TabBar({ children, extraContent, activeInstance }: TabBarProps) {
 	const scrollRef = useRef<HTMLDivElement | null>(null);
 	const [thumb, setThumb] = useState({ width: "0%", left: "0%" });
 	const [thumbVisible, setThumbVisible] = useState(false);
+	const [overflow, setOverflow] = useState({ left: false, right: false });
 	const hideTimeoutRef = useRef<number | null>(null);
 
 	const updateThumb = useCallback(() => {
 		const el = scrollRef.current;
 		if (!el) return;
 		const { scrollWidth, clientWidth, scrollLeft } = el;
+		const overflowLeft = scrollLeft > 1;
+		const overflowRight = scrollLeft < scrollWidth - clientWidth - 1;
+		setOverflow((previous) =>
+			previous.left === overflowLeft && previous.right === overflowRight
+				? previous
+				: { left: overflowLeft, right: overflowRight },
+		);
 		if (scrollWidth <= clientWidth) {
 			setThumb({ width: "0%", left: "0%" });
 			setThumbVisible(false);
@@ -699,8 +710,50 @@ function TabBar({ children, extraContent }: TabBarProps) {
 		updateThumb();
 	}, [children, extraContent, updateThumb]);
 
+	// Keep the active tab visible: a freshly added tab lands at the far end of
+	// the strip and selection can land on a clipped chip. A margin leaves the
+	// neighboring chip peeking out as the cue that the strip scrolls. Guarded
+	// per instance so unrelated re-renders never fight a manual scroll.
+	const lastEnsuredInstanceRef = useRef<string | null>(null);
+	const hasScrolledRef = useRef(false);
+	useLayoutEffect(() => {
+		const container = scrollRef.current;
+		if (!container || activeInstance == null) return;
+		if (lastEnsuredInstanceRef.current === activeInstance) return;
+		const tab = Array.from(
+			container.querySelectorAll<HTMLButtonElement>(
+				"button[data-view-instance]",
+			),
+		).find((button) => button.dataset.viewInstance === activeInstance);
+		if (!tab) return;
+		lastEnsuredInstanceRef.current = activeInstance;
+		const behavior = hasScrolledRef.current
+			? ("smooth" as const)
+			: ("auto" as const);
+		hasScrolledRef.current = true;
+		// The margin only widens a scroll that is needed anyway (so the next
+		// chip peeks out); a fully visible tab never triggers scrolling.
+		const margin = 28;
+		const tabStart = tab.offsetLeft;
+		const tabEnd = tabStart + tab.offsetWidth;
+		const viewStart = container.scrollLeft;
+		const viewEnd = viewStart + container.clientWidth;
+		if (tabStart < viewStart) {
+			container.scrollTo({ left: Math.max(0, tabStart - margin), behavior });
+		} else if (tabEnd > viewEnd) {
+			container.scrollTo({
+				left: tabEnd + margin - container.clientWidth,
+				behavior,
+			});
+		}
+	}, [activeInstance, children]);
+
 	return (
-		<div className={styles.tabBar}>
+		<div
+			className={styles.tabBar}
+			data-overflow-left={overflow.left ? "true" : undefined}
+			data-overflow-right={overflow.right ? "true" : undefined}
+		>
 			<div className={styles.indicatorTrack}>
 				<div
 					className={styles.indicatorThumb}
@@ -848,6 +901,7 @@ function SortableTab({
 			isFocused={isFocused}
 			isPending={isPending}
 			isPinned={isPinned}
+			closeOnHoverOnly={panelSide !== "central"}
 			onClick={onClick}
 			onClose={onClose}
 			isDragging={isDragging}
@@ -873,7 +927,7 @@ const fileGlyphForLabel = (label: string): TabIcon | null => {
 };
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border px-3 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
+	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
@@ -888,6 +942,11 @@ const tabStateClasses = {
 interface TabBaseProps extends PanelTabPreviewProps {
 	readonly onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
 	readonly onClose?: () => void;
+	/**
+	 * Side-panel chips reveal close as a corner badge on hover; central
+	 * document tabs keep the familiar always-visible inline X.
+	 */
+	readonly closeOnHoverOnly?: boolean;
 	readonly isDragging?: boolean;
 	readonly dataFocused?: string;
 	readonly dataViewInstance?: string;
@@ -905,6 +964,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 			isFocused,
 			isPending,
 			isPinned,
+			closeOnHoverOnly,
 			onClick,
 			onClose,
 			isDragging,
@@ -958,25 +1018,34 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 						{label}
 					</span>
 				)}
-				{isPinned ? null : (
+				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
+					// Progressive disclosure: the close affordance takes no chip width
+					// at rest and floats over the chip's top-right corner on hover or
+					// keyboard focus, so it never covers the label.
+					<span
+						className="absolute -top-1 -right-1 z-10 hidden size-3.5 items-center justify-center rounded-full border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-icon-tertiary)] shadow-sm transition-colors group-hover:flex group-focus-visible:flex hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)]"
+						onClick={(event) => {
+							event.stopPropagation();
+							onClose();
+						}}
+					>
+						<X data-attr="panel-tab-close" className="size-[9px]" />
+					</span>
+				) : (
 					<span className="relative flex size-3.25 items-center justify-center">
-						{onClose ? (
-							<X
-								data-attr="panel-tab-close"
-								className={clsx(
-									"size-[11px]",
-									isActive && isFocused
-										? "text-[var(--color-action-selection-current)] hover:text-[var(--color-icon-selection-current)]"
-										: isActive
-											? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
-											: "text-[var(--color-icon-quaternary)] hover:text-[var(--color-icon-secondary)]",
-								)}
-								onClick={(event) => {
-									event.stopPropagation();
-									onClose();
-								}}
-							/>
-						) : null}
+						<X
+							data-attr="panel-tab-close"
+							className={clsx(
+								"size-[11px]",
+								isActive
+									? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
+									: "text-[var(--color-icon-quaternary)] hover:text-[var(--color-icon-secondary)]",
+							)}
+							onClick={(event) => {
+								event.stopPropagation();
+								onClose();
+							}}
+						/>
 					</span>
 				)}
 			</button>
