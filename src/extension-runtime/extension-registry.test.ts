@@ -92,6 +92,20 @@ describe("buildExtensionRegistry", () => {
 		);
 	});
 
+	test("offers checkpoint history as a visible side-panel extension", () => {
+		const history = BUILTIN_EXTENSION_DEFINITIONS.find(
+			(definition) => definition.kind === ATELIER_BUILTIN_EXTENSION_IDS.history,
+		);
+
+		expect(history).toEqual(
+			expect.objectContaining({
+				label: "History",
+				placement: ["left", "right"],
+			}),
+		);
+		expect(history?.hidden).not.toBe(true);
+	});
+
 	test("does not let workspace-installed extensions replace built-ins", () => {
 		const installedFiles = {
 			...baseExtension,
