@@ -27,6 +27,7 @@ export type ExtensionManifest = {
 /** Stable ids for replacing Atelier's bundled extension views. */
 export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	files: "atelier_files",
+	history: "atelier_history",
 	markdown: "atelier_file",
 	csv: "atelier_csv",
 	image: "atelier_image",

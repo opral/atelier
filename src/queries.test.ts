@@ -1,7 +1,13 @@
 import { describe, test, expect } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { qb } from "@/lib/lix-kysely";
-import { selectFilesystemEntries } from "@/queries";
+import {
+	selectCheckpoints,
+	selectFilesystemEntries,
+	selectLatestCheckpoint,
+	selectWorkingChangeCount,
+	selectWorkingChanges,
+} from "@/queries";
 
 function isUserPath(path: string): boolean {
 	return !path.startsWith("/.lix/");
@@ -86,5 +92,57 @@ describe("selectFilesystemEntries", () => {
 		const nestedRow = rows.find((row) => row.id === "nested_file");
 		expect(docsRow).toBeDefined();
 		expect(nestedRow?.parent_id).toBe(docsRow?.id);
+	});
+});
+
+describe("checkpoint queries", () => {
+	test("returns net working changes and newest-first checkpoints", async () => {
+		const lix = await openLix();
+
+		const initialCheckpoints = await selectCheckpoints(lix).execute();
+		expect(initialCheckpoints).toHaveLength(1);
+		expect(initialCheckpoints[0]?.lixcol_depth).toBe(0);
+
+		await lix.execute(
+			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
+			["checkpoint-query-test", "one"],
+		);
+		await lix.execute("UPDATE lix_key_value SET value = $1 WHERE key = $2", [
+			"two",
+			"checkpoint-query-test",
+		]);
+
+		expect(await selectWorkingChanges(lix).execute()).toEqual([
+			expect.objectContaining({
+				entity_pk: ["checkpoint-query-test"],
+				schema_key: "lix_key_value",
+				change_kind: "added",
+				before_change_id: null,
+			}),
+		]);
+		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+			{ change_count: 1 },
+		]);
+
+		const checkpoint = await lix.createCheckpoint();
+
+		expect(await selectWorkingChanges(lix).execute()).toEqual([]);
+		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+			{ change_count: 0 },
+		]);
+		const checkpoints = await selectCheckpoints(lix).execute();
+		expect(checkpoints).toHaveLength(2);
+		expect(checkpoints[0]).toEqual(
+			expect.objectContaining({
+				commit_id: checkpoint.commitId,
+				lixcol_depth: 0,
+			}),
+		);
+		expect(checkpoints[1]?.commit_id).toBe(initialCheckpoints[0]?.commit_id);
+		expect(await selectLatestCheckpoint(lix).execute()).toEqual([
+			checkpoints[0],
+		]);
+
+		await lix.close();
 	});
 });
