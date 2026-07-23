@@ -8,6 +8,10 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { ExecuteResult, Lix, SqlParam } from "@lix-js/sdk";
+import {
+	createLixBranchSession,
+	type AtelierBranchSession,
+} from "@/state-adapters";
 
 const LixContext = createContext<Lix | null>(null);
 
@@ -25,6 +29,21 @@ export function useLix() {
 		throw new Error("useLix must be used inside <LixProvider>.");
 	}
 	return lix;
+}
+
+/** Resolves an omitted branch prop from the current Lix session. */
+export function useResolvedActiveBranchId(activeBranchId?: string): string {
+	const lix = useLix();
+	const branchSession =
+		activeBranchId === undefined
+			? getLixBranchSession(lix)
+			: EXPLICIT_BRANCH_SESSION;
+	const sessionBranchId = useSyncExternalStore(
+		branchSession.subscribe,
+		branchSession.getSnapshot,
+		branchSession.getSnapshot,
+	);
+	return activeBranchId ?? sessionBranchId ?? "";
 }
 
 type QueryCacheSnapshot<TRow> =
@@ -48,6 +67,11 @@ const observeQueryCache = new Map<
 >();
 const evictingQueryUsers = new Map<string, number>();
 const lixInstanceIds = new WeakMap<object, number>();
+const lixBranchSessions = new WeakMap<object, AtelierBranchSession>();
+const EXPLICIT_BRANCH_SESSION: AtelierBranchSession = {
+	getSnapshot: () => null,
+	subscribe: () => () => {},
+};
 let nextLixInstanceId = 1;
 
 interface UseQueryOptions {
@@ -328,6 +352,14 @@ function getLixInstanceId(lix: Lix): number {
 	const next = nextLixInstanceId++;
 	lixInstanceIds.set(asObject, next);
 	return next;
+}
+
+function getLixBranchSession(lix: Lix): AtelierBranchSession {
+	const cached = lixBranchSessions.get(lix);
+	if (cached) return cached;
+	const session = createLixBranchSession(lix);
+	lixBranchSessions.set(lix, session);
+	return session;
 }
 
 function getObserveQuery(

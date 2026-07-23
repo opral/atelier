@@ -12,7 +12,11 @@ import { EditorContent, useEditorState } from "@tiptap/react";
 import type { Editor, Extensions } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
 import { useEditorCtx } from "./editor-context";
-import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import {
+	useLix,
+	useQueryTakeFirst,
+	useResolvedActiveBranchId,
+} from "@/lib/lix-react";
 import {
 	acknowledgeMarkdownEditorPersistence,
 	createEditor,
@@ -111,7 +115,7 @@ export function hydrateMarkdownEditorAuthoritativeMarkdown(
  */
 export function TipTapEditor({
 	fileId,
-	activeBranchId = "main",
+	activeBranchId,
 	filePath,
 	className,
 	onReady,
@@ -126,10 +130,14 @@ export function TipTapEditor({
 	openWorkspaceFile,
 	onPersist,
 }: TipTapEditorProps) {
+	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
+	if (!resolvedActiveBranchId) {
+		return <TipTapEditorLoadingState className={className} />;
+	}
 	return (
 		<TipTapEditorContent
 			activeFileId={fileId}
-			activeBranchId={activeBranchId}
+			activeBranchId={resolvedActiveBranchId}
 			filePath={filePath}
 			className={className}
 			onReady={onReady}

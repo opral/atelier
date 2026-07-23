@@ -8,6 +8,7 @@ import {
 	useLix,
 	useQuery,
 	useQueryTakeFirst,
+	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -124,7 +125,7 @@ export function MarkdownView({
 	isPanelFocused = true,
 	focusOnLoad = false,
 	defaultBlock,
-	activeBranchId = "main",
+	activeBranchId,
 	resolvedReviewIds,
 	reviewRangeSessionId,
 	beforeCommitId,
@@ -138,6 +139,9 @@ export function MarkdownView({
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps) {
+	assertFileId(fileId);
+	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
+	if (!resolvedActiveBranchId) return <MarkdownLoadingSpinner />;
 	return (
 		<Suspense fallback={<MarkdownLoadingSpinner />}>
 			<MarkdownViewContent
@@ -148,7 +152,7 @@ export function MarkdownView({
 				isPanelFocused={isPanelFocused}
 				focusOnLoad={focusOnLoad}
 				defaultBlock={defaultBlock}
-				activeBranchId={activeBranchId}
+				activeBranchId={resolvedActiveBranchId}
 				resolvedReviewIds={resolvedReviewIds}
 				reviewRangeSessionId={reviewRangeSessionId}
 				beforeCommitId={beforeCommitId}
@@ -229,7 +233,7 @@ function MarkdownLiveViewLoaded({
 	isPanelFocused = true,
 	focusOnLoad = false,
 	defaultBlock,
-	activeBranchId = "main",
+	activeBranchId = "",
 	resolvedReviewIds,
 	reviewRangeSessionId,
 	registerExternalWriteReview,
