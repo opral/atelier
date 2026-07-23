@@ -33,7 +33,12 @@ import {
 	type Rectangle,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import {
+	LixProvider,
+	useLix,
+	useQueryTakeFirst,
+	useResolvedActiveBranchId,
+} from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	type HistoricalFileSnapshot,
@@ -179,7 +184,7 @@ const EMPTY_FILE_DATA = new Uint8Array();
 
 export function CsvView({
 	fileId,
-	activeBranchId = "main",
+	activeBranchId,
 	resolvedReviewIds,
 	reviewRangeSessionId,
 	filePath,
@@ -194,11 +199,14 @@ export function CsvView({
 	onAcceptReview,
 	onRejectReview,
 }: CsvViewProps) {
+	assertFileId(fileId);
+	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
+	if (!resolvedActiveBranchId) return <CsvLoadingSpinner />;
 	return (
 		<Suspense fallback={<CsvLoadingSpinner />}>
 			<CsvViewContent
 				fileId={fileId}
-				activeBranchId={activeBranchId}
+				activeBranchId={resolvedActiveBranchId}
 				resolvedReviewIds={resolvedReviewIds}
 				reviewRangeSessionId={reviewRangeSessionId}
 				filePath={filePath}
@@ -275,7 +283,7 @@ function CsvViewData({
 function CsvLiveViewData({
 	fileRow,
 	registerExternalWriteReview,
-	activeBranchId = "main",
+	activeBranchId = "",
 	resolvedReviewIds,
 	reviewRangeSessionId,
 	readOnly = false,

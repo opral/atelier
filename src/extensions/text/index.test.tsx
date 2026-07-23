@@ -62,7 +62,7 @@ describe("TextView", () => {
 				data: new TextEncoder().encode("class AgentSession:\n    pass\n"),
 			})
 			.execute();
-		const atelier = createRuntime(lix);
+		const atelier = await createRuntime(lix);
 
 		let utils: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -116,7 +116,7 @@ describe("TextView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<TextView
-							atelier={createRuntime(lix)}
+							atelier={await createRuntime(lix)}
 							fileId="origin-file"
 							isPanelFocused={false}
 						/>
@@ -191,7 +191,7 @@ describe("TextView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<TextView
-							atelier={createRuntime(lix)}
+							atelier={await createRuntime(lix)}
 							fileId="self-origin-file"
 							isPanelFocused={false}
 						/>
@@ -246,9 +246,10 @@ describe("TextView", () => {
 	});
 });
 
-function createRuntime(
+async function createRuntime(
 	lix: Awaited<ReturnType<typeof openLix>>,
-): ExtensionRuntime {
+): Promise<ExtensionRuntime> {
+	const activeBranchId = await lix.activeBranchId();
 	return {
 		lix,
 		readOnly: false,
@@ -266,7 +267,7 @@ function createRuntime(
 			open: vi.fn(),
 		},
 		branches: {
-			activeId: "main",
+			activeId: activeBranchId,
 		},
 		reviews: {
 			resolvedReviewIds: [],

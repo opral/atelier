@@ -3,7 +3,11 @@ export { createAtelier } from "./atelier-instance";
 export {
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
+	ATELIER_SESSION_UI_STATE_KEY,
+	ATELIER_USER_PREFERENCES_KEY,
 	createLixBranchSession,
+	createLixPreferencesStore,
+	createLixSessionStateStore,
 	createMemoryPreferencesStore,
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
@@ -22,6 +26,7 @@ export type {
 } from "./atelier-instance";
 export type {
 	AtelierBranchSession,
+	AtelierClientState,
 	AtelierPreferencesStore,
 	AtelierReviewOutcome,
 	AtelierReviewResolution,
