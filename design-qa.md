@@ -155,3 +155,97 @@ final result: blocked
 - P2: none.
 
 final result: blocked — browser runtime unavailable for required screenshot comparison
+
+---
+
+# Panel tab strip overflow — design QA
+
+## Comparison target
+
+- User feedback capture: sidebar tabs ("Files", "History") clipped mid-chip at
+  the panel edge; adding a view does not reveal the new tab; the chip row lacks
+  affordance that it belongs to the sidebar when the canvas around it is empty.
+- Implementation: `src/shell/panel-v2.tsx` (`TabBar`, `tabStateClasses`) and
+  `src/shell/panel.module.css`.
+
+## Reproduction evidence
+
+- Reproduced in the running web preview (in-app Browser, `pnpm dev`) by
+  injecting a multi-view left panel through the session-state store: with four
+  views, the strip clipped chips hard at both edges, the 2px scroll thumb was
+  the only overflow cue (auto-hidden after 250ms), and a newly added view
+  landed offscreen because tab focus uses `preventScroll` and nothing scrolled
+  the strip.
+
+## Changes
+
+- Overflow fades: 16px gradients from `--color-bg-app` at either strip edge,
+  toggled by `data-overflow-left/right` on the tab bar. A half-visible chip now
+  dissolves into the canvas and reads as "more tabs this way" instead of a
+  rendering glitch.
+- Active-tab visibility: a layout effect scrolls the active tab's chip into
+  view whenever the active instance changes — covering add-view, selecting a
+  clipped chip, and session restore (instant on first layout, smooth
+  afterwards). A 28px margin leaves the neighboring chip peeking, and only
+  widens a scroll that is needed anyway — a fully visible tab never triggers
+  scrolling. Guarded per instance so re-renders never fight a manual scroll.
+- Compact side-panel chips via progressive disclosure: the close X no longer
+  reserves chip width at rest. On hover or keyboard focus it appears as a
+  small circular badge floating over the chip's top-right corner (white
+  fill, panel border, soft shadow), so the label stays fully readable. The
+  badge is neutral in every tab state — tertiary-gray X, deepening with a
+  soft hover fill on the badge itself; the whole 14px circle is the click
+  target. Chip padding tightened from 12px to 10px per side. A "Files" chip
+  shrinks from 92px to 69px.
+- Central document tabs keep the familiar always-visible inline X
+  (`closeOnHoverOnly` is set per panel side), with the neutral gray icon
+  colors — the accent-colored X on the focused tab was dropped as redundant.
+
+## Iterations on user feedback
+
+1. First pass added a faint canvas tint to idle chips as the tab-group
+   affordance; feedback: too strong.
+2. Second pass replaced it with Notion-style icon-collapse for inactive
+   side-panel tabs; feedback: felt weird, undone.
+3. Final: idle chips return to text-only rest styling; the space win comes
+   from removing the resting close X (progressive disclosure) and tighter
+   padding, alongside the fades and scroll-into-view behavior.
+
+## Interaction evidence (in-app Browser, live preview)
+
+- Adding a fifth view scrolled the strip from 0 to the far end (420 of max
+  421) and the new chip rendered fully visible as the active white card.
+- Selecting a clipped chip smooth-scrolled it fully into view with the peek
+  margin.
+- Manual scroll away from the active chip survives unrelated re-renders and
+  focus changes (no snap-back).
+- Left/right fades appear only when scrollable in that direction; none at rest
+  when all chips fit.
+- Hovering a side-panel chip reveals the close badge at the chip's top-right
+  corner without covering the label; resting chips show icon + label only;
+  chip width does not change on hover.
+- Central document tabs verified with two open documents: inline X visible
+  at rest on active and idle chips, side-panel chip stays compact alongside.
+- No console errors.
+
+## Automated validation
+
+- All shell tests (11 files): 89 passed.
+- Full suite: 898 passed, 1 skipped, 1 failed —
+  `state-adapters > createLixBranchSession > tracks branch switches made
+  directly on Lix` also fails on a clean tree (pre-existing, unrelated).
+- Typecheck: passed. Formatted with the repo's `oxfmt`.
+
+## Findings
+
+- P0: none.
+- P2: dark mode currently only overrides shadcn tokens, not the atelier shell
+  tokens; the new fade and close-overlay backdrop use the same shell tokens as
+  the rest of the strip and will follow any future dark token work.
+- P3: the 2px scroll thumb indicator remains; with the fades it is secondary
+  and could be removed later if deemed redundant.
+- P3: the close badge overhangs the chip by 4px on the right; a last chip
+  sitting exactly flush with the strip edge would have the overhang clipped
+  (in practice the add-view button follows the last chip).
+
+final result: pass — verified live in the in-app Browser
