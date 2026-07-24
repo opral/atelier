@@ -517,6 +517,186 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("opens checkpoint working changes without requiring agent-turn metadata", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: { sizes: { left: 20, central: 80, right: 0 } },
+			review: { autoAcceptAgentChanges: true },
+		});
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			preferencesStore,
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: "auto-stable-file",
+						path: "/auto-stable.md",
+						data: new TextEncoder().encode("# Stable\n"),
+					},
+					{
+						id: "auto-changed-file",
+						path: "/auto-changed.md",
+						data: new TextEncoder().encode("# Before\n"),
+					},
+				])
+				.execute();
+			await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			expect(
+				await screen.findByRole("switch", {
+					name: "Auto-accept agent changes",
+				}),
+			).toHaveAttribute("aria-checked", "true");
+			fireEvent.click(await findFilesTreeItem("auto-changed.md"));
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.fileId,
+				).toBe("auto-changed-file");
+			});
+
+			await act(async () => {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ data: new TextEncoder().encode("# After\n") })
+					.where("id", "=", "auto-changed-file")
+					.execute();
+			});
+			await waitFor(() => {
+				expect(
+					screen.getByRole("button", {
+						name: "1 change since checkpoint. Open changes review",
+					}),
+				).toBeVisible();
+			});
+			expect(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
+			).toBe("auto-changed-file");
+			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
+			expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
+
+			fireEvent.click(
+				screen.getByRole("switch", {
+					name: "Auto-accept agent changes",
+				}),
+			);
+			await waitFor(() => {
+				expect(
+					screen.getByRole("switch", {
+						name: "Auto-accept agent changes",
+					}),
+				).toHaveAttribute("aria-checked", "false");
+			});
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", {
+						name: "1 change since checkpoint. Open changes review",
+					}),
+				);
+			});
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+
+			fireEvent.click(
+				screen.getByRole("switch", {
+					name: "Auto-accept agent changes",
+				}),
+			);
+			await waitFor(() => {
+				expect(
+					screen.getByRole("switch", {
+						name: "Auto-accept agent changes",
+					}),
+				).toHaveAttribute("aria-checked", "true");
+			});
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+
+			fireEvent.keyDown(window, { key: "Escape" });
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint/ }),
+				).toBeNull();
+			});
+			expect(
+				screen.getByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			).toBeVisible();
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+
+			fireEvent.click(await findFilesTreeItem("auto-stable.md"));
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.fileId,
+				).toBe("auto-stable-file");
+			});
+			expect(
+				document.querySelector("[data-review-mode='true']"),
+			).not.toBeNull();
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+
+			await act(async () => {
+				fireEvent.keyDown(window, { key: "Escape" });
+			});
+			await waitFor(() => {
+				expect(
+					document.querySelector("[data-review-mode='true']"),
+				).toBeNull();
+			});
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			expect(
+				await screen.findByRole("button", {
+					name: "Latest checkpoint. Open checkpoint history",
+				}),
+			).toBeVisible();
+			await waitFor(() => {
+				expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
+			});
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("opens the new range instead of an older non-active pending review", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();

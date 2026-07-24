@@ -61,7 +61,7 @@ function PdfViewContent({
 				.selectFrom("lix_file_history")
 				.select(["id", "path", "data"])
 				.where("id", "=", fileId)
-				.where("lixcol_start_commit_id", "=", sourceCommitId)
+				.where("lixcol_as_of_commit_id", "=", sourceCommitId)
 				.orderBy("lixcol_depth", "asc")
 				.limit(1);
 		}

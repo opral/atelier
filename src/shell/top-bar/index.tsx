@@ -116,13 +116,14 @@ export function TopBar({
 			) : activeFileName || isReadOnly ? (
 				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
 					{activeFileName ? (
-						<span className="ph-mask max-w-60 truncate px-1 font-semibold text-[var(--color-text-primary)]">
-							{activeFileName}
-						</span>
-					) : null}
-					{isReviewing ? (
-						<span className="ml-1 shrink-0 rounded-[5px] border border-[var(--color-border-panel)] px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]">
-							Reviewing
+						<span
+							className={`ph-mask max-w-60 truncate px-1 font-semibold ${
+								isReviewing
+									? "text-[var(--color-warning-600)]"
+									: "text-[var(--color-text-primary)]"
+							}`}
+						>
+							{isReviewing ? `Reviewing ${activeFileName}` : activeFileName}
 						</span>
 					) : null}
 					{isReadOnly ? (

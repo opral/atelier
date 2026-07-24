@@ -136,7 +136,7 @@ test("createLixSessionStateStore rolls back an unpersisted optimistic write", as
 	}
 });
 
-test("createLixPreferencesStore restores and persists layout through Lix client state", async () => {
+test("createLixPreferencesStore restores and persists private preferences through Lix client state", async () => {
 	const initialPreferences = {
 		version: 1 as const,
 		layout: { sizes: { left: 15, central: 70, right: 15 } },
@@ -153,19 +153,25 @@ test("createLixPreferencesStore restores and persists layout through Lix client 
 	};
 	const store = createLixPreferencesStore(clientState);
 
-	expect(await store.load()).toEqual(initialPreferences);
+	expect(await store.load()).toEqual({
+		...initialPreferences,
+		review: { autoAcceptAgentChanges: false },
+	});
 	await store.save({
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
+		review: { autoAcceptAgentChanges: true },
 	});
 
 	expect(values.get(ATELIER_USER_PREFERENCES_KEY)).toEqual({
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
+		review: { autoAcceptAgentChanges: true },
 	});
 	expect(await createLixPreferencesStore(clientState).load()).toEqual({
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
+		review: { autoAcceptAgentChanges: true },
 	});
 });
 

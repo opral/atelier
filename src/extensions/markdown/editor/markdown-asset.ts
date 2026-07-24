@@ -91,7 +91,7 @@ export async function loadMarkdownAsset({
 		? await qb(lix)
 				.selectFrom("lix_file_history")
 				.select(["id", "data", "path"])
-				.where("lixcol_start_commit_id", "=", sourceCommitId)
+				.where("lixcol_as_of_commit_id", "=", sourceCommitId)
 				.where("path", "=", workspacePath)
 				.orderBy("lixcol_depth", "asc")
 				.limit(1)

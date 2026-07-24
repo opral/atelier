@@ -33,8 +33,10 @@ import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
+import { ExternalWriteReviewCheckpointAction } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb } from "@/lib/lix-kysely";
+import { selectFileWorkingChanges } from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -62,6 +64,7 @@ import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
 	documentPathFromView,
+	fileNameFromPath,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
@@ -96,6 +99,7 @@ import {
 } from "./panel-utils";
 import {
 	getFileDataAtCommit,
+	getAgentTurnExternalWriteReview,
 	getPendingExternalWriteReviewPaths,
 	useAgentTurnCommitRanges,
 } from "./external-write-review-history";
@@ -540,6 +544,8 @@ type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly setUiStateKV: AtelierUiStateSetter;
 	readonly activeBranchId: string;
 	readonly resolvedReviewIds: readonly string[];
+	readonly autoAcceptAgentChanges: boolean;
+	readonly onAutoAcceptAgentChangesChange: (enabled: boolean) => void;
 	readonly autoRevealedAgentTurnRangeKeysRef: RefObject<Set<string>>;
 };
 
@@ -559,6 +565,13 @@ type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
 };
+
+const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
+const WORKING_CHANGE_REVIEW_KINDS = new Set<ExtensionKind>([
+	FILE_EXTENSION_KIND,
+	"atelier_text",
+	"atelier_csv",
+]);
 
 function activeDocumentCompletion(
 	path: string,
@@ -632,7 +645,7 @@ async function selectHistoricalLixFileForOpen(
 	const row = await qb(lix)
 		.selectFrom("lix_file_history")
 		.select(["id", "path"])
-		.where("lixcol_start_commit_id", "=", commitId)
+		.where("lixcol_as_of_commit_id", "=", commitId)
 		.where("path", "=", filePath)
 		.orderBy("lixcol_depth", "asc")
 		.limit(1)
@@ -724,6 +737,10 @@ function LayoutShellStateLoader(
 	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
 		coerceAtelierUserPreferences(initialUiState),
 	);
+	const preferencesRef = useRef(preferences);
+	useLayoutEffect(() => {
+		preferencesRef.current = preferences;
+	}, [preferences]);
 	const [preferencesReady, setPreferencesReady] = useState(false);
 	const [reviewStatusLoad, setReviewStatusLoad] = useState<{
 		readonly branchId: string | null;
@@ -807,7 +824,10 @@ function LayoutShellStateLoader(
 			configuration.sessionStateStore.setSnapshot(
 				coerceAtelierSessionUiState(next),
 			);
-			const nextPreferences = coerceAtelierUserPreferences(next);
+			const nextPreferences = coerceAtelierUserPreferences({
+				...next,
+				review: preferences.review,
+			});
 			if (
 				JSON.stringify(nextPreferences.layout) !==
 				JSON.stringify(preferences.layout)
@@ -824,7 +844,24 @@ function LayoutShellStateLoader(
 			configuration.preferencesStore,
 			configuration.sessionStateStore,
 			preferences.layout,
+			preferences.review,
 		],
+	);
+	const setAutoAcceptAgentChanges = useCallback(
+		(enabled: boolean) => {
+			const nextPreferences = coerceAtelierUserPreferences({
+				...preferencesRef.current,
+				review: { autoAcceptAgentChanges: enabled },
+			});
+			preferencesRef.current = nextPreferences;
+			setPreferences(nextPreferences);
+			void configuration.preferencesStore
+				.save(nextPreferences)
+				.catch((error: unknown) => {
+					console.error("Failed to save private Atelier preferences", error);
+				});
+		},
+		[configuration.preferencesStore],
 	);
 
 	if (
@@ -842,6 +879,10 @@ function LayoutShellStateLoader(
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
 			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
+			autoAcceptAgentChanges={
+				preferences.review?.autoAcceptAgentChanges ?? false
+			}
+			onAutoAcceptAgentChangesChange={setAutoAcceptAgentChanges}
 			autoRevealedAgentTurnRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
 		/>
 	);
@@ -981,6 +1022,8 @@ function LayoutShellLoadedContent({
 	setUiStateKV,
 	activeBranchId,
 	resolvedReviewIds,
+	autoAcceptAgentChanges,
+	onAutoAcceptAgentChangesChange,
 	autoRevealedAgentTurnRangeKeysRef,
 	slots,
 	topBarProps,
@@ -994,12 +1037,14 @@ function LayoutShellLoadedContent({
 		},
 		[onEvent],
 	);
-	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
-		qb(queryLix).selectFrom("lix_file").select("id"),
+	const currentFileRows = useQuery<{ id: string; path: string }>((queryLix) =>
+		qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
 	const isHostReadOnly = Boolean(configuration.readOnly);
 	const reviewRangeSessionId = configuration.reviewRangeSessionId;
+	const { rangeValues: agentTurnRangeValues, ranges: agentTurnRanges } =
+		useAgentTurnCommitRanges(activeBranchId, reviewRangeSessionId);
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
@@ -1162,6 +1207,31 @@ function LayoutShellLoadedContent({
 		new Map<string, ExternalWriteReview>(),
 	);
 	const [openExternalReviewCount, setOpenExternalReviewCount] = useState(0);
+	const [workingChangesReviewOpen, setWorkingChangesReviewOpen] =
+		useState(false);
+	const [workingChangeReviewFiles, setWorkingChangeReviewFiles] = useState<
+		readonly LixFileForOpen[]
+	>(EMPTY_LIX_FILES_FOR_OPEN);
+	const exitWorkingChangesReview = useCallback(() => {
+		setWorkingChangesReviewOpen(false);
+	}, []);
+	useEffect(() => {
+		if (!workingChangesReviewOpen) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			setWorkingChangesReviewOpen(false);
+		};
+		window.addEventListener("keydown", handleKeyDown, { capture: true });
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown, { capture: true });
+		};
+	}, [workingChangesReviewOpen]);
+	useEffect(() => {
+		setWorkingChangesReviewOpen(false);
+		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
+	}, [activeBranchId]);
 	const resolveDiffReviewRef = useRef<
 		((review: ExternalWriteReview) => boolean) | null
 	>(null);
@@ -1220,7 +1290,6 @@ function LayoutShellLoadedContent({
 		},
 		[activeBranchId, reviewStatusStore],
 	);
-
 	const registerExternalWriteReview = useCallback(
 		(review: ExternalWriteReview) => {
 			for (const rangeId of review.agentTurnRangeIds) {
@@ -1305,8 +1374,73 @@ function LayoutShellLoadedContent({
 			releaseDiffReviewResolution,
 		],
 	);
+	const handleCreateCheckpoint = useCallback(async () => {
+		const changedFiles = await selectFileWorkingChanges(lix).execute();
+		const changedFileIds = new Set(changedFiles.map((file) => file.id));
+		const changedCurrentFiles = currentFileRows
+			.filter((file) => changedFileIds.has(String(file.id)))
+			.map((file) => ({
+				fileId: String(file.id),
+				path: String(file.path),
+			}));
+		const pendingPaths = await getPendingExternalWriteReviewPaths(
+			lix,
+			changedCurrentFiles,
+			agentTurnRanges,
+			resolvedReviewIdsRef.current,
+		);
+		const pendingReviews = (
+			await Promise.all(
+				changedCurrentFiles
+					.filter((file) => pendingPaths.has(file.path))
+					.map((file) =>
+						getAgentTurnExternalWriteReview(
+							lix,
+							file.fileId,
+							file.path,
+							agentTurnRanges,
+							resolvedReviewIdsRef.current,
+						),
+					),
+			)
+		).filter((review): review is ExternalWriteReview => review !== null);
+
+		await lix.createCheckpoint();
+		setWorkingChangesReviewOpen(false);
+		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
+		for (const review of pendingReviews) {
+			try {
+				await runDiffReviewResolution(review, "accepted", async () => {
+					await persistReviewResolution(review, "accepted");
+				});
+			} catch (error) {
+				// The checkpoint is already durable. A stale private review marker
+				// should not turn successful checkpoint creation into a failure.
+				console.warn(
+					"[checkpoint] failed to retire an accepted review marker",
+					error,
+				);
+			}
+		}
+	}, [
+		agentTurnRanges,
+		currentFileRows,
+		lix,
+		persistReviewResolution,
+		runDiffReviewResolution,
+	]);
 	resolveDiffReviewRef.current = resolveDiffReview;
-	const isReviewMode = openExternalReviewCount > 0;
+	// A working-changes review is an explicit workspace-level session. Keep the
+	// shell in review mode while views swap: the outgoing file unregisters its
+	// diff before the incoming file can register, which briefly leaves the
+	// editor-level review count at zero.
+	const isReviewMode =
+		workingChangesReviewOpen ||
+		(!autoAcceptAgentChanges &&
+			openExternalReviewCount > 0 &&
+			[...openDiffReviewByFileIdRef.current.values()].some(
+				(review) => review.mode !== "working-changes",
+			));
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -1740,6 +1874,103 @@ function LayoutShellLoadedContent({
 		},
 		[openResolvedFileView],
 	);
+	const pendingReviewFilesKey = JSON.stringify([
+		agentTurnRangeValues,
+		privateResolvedReviewIds,
+		currentFileRows.map((file) => [file.id, file.path]),
+	]);
+	const [pendingReviewFileLoad, setPendingReviewFileLoad] = useState<{
+		readonly key: string;
+		readonly files: readonly LixFileForOpen[];
+	} | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		if (currentFileRows.length === 0 || agentTurnRanges.length === 0) {
+			setPendingReviewFileLoad({ key: pendingReviewFilesKey, files: [] });
+			return;
+		}
+		void getPendingExternalWriteReviewPaths(
+			lix,
+			currentFileRows.map((file) => ({
+				fileId: String(file.id),
+				path: String(file.path),
+			})),
+			agentTurnRanges,
+			new Set(privateResolvedReviewIds),
+		)
+			.then((paths) => {
+				if (cancelled) return;
+				setPendingReviewFileLoad({
+					key: pendingReviewFilesKey,
+					files: currentFileRows
+						.filter((file) => paths.has(String(file.path)))
+						.map((file) => ({
+							id: String(file.id),
+							path: String(file.path),
+						})),
+				});
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				console.warn(
+					"[agent-turn-review] failed to build changed file navigation",
+					error,
+				);
+				setPendingReviewFileLoad({ key: pendingReviewFilesKey, files: [] });
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		agentTurnRanges,
+		currentFileRows,
+		lix,
+		pendingReviewFilesKey,
+		privateResolvedReviewIds,
+	]);
+	const agentReviewFiles =
+		pendingReviewFileLoad?.key === pendingReviewFilesKey
+			? pendingReviewFileLoad.files
+			: EMPTY_LIX_FILES_FOR_OPEN;
+	const pendingReviewFiles = workingChangesReviewOpen
+		? workingChangeReviewFiles
+		: agentReviewFiles;
+	const navigationActiveView = centralPanel.views.find(
+		(view) => view.instance === centralPanel.activeInstance,
+	);
+	const navigationActiveFileId = navigationActiveView
+		? activeFileIdFromExtensionInstance(navigationActiveView)
+		: null;
+	const navigationActivePath = navigationActiveView
+		? documentPathFromView(navigationActiveView)
+		: null;
+	const activeReviewFileIndex = Math.max(
+		0,
+		pendingReviewFiles.findIndex(
+			(file) =>
+				file.id === navigationActiveFileId ||
+				file.path === navigationActivePath,
+		),
+	);
+	const reviewNavigation = useMemo(() => {
+		const activeFile = pendingReviewFiles[activeReviewFileIndex];
+		if (!activeFile) return undefined;
+		const openAtOffset = (offset: number) => {
+			const index =
+				(activeReviewFileIndex + offset + pendingReviewFiles.length) %
+				pendingReviewFiles.length;
+			const file = pendingReviewFiles[index];
+			if (!file) return;
+			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
+		};
+		return {
+			fileName: fileNameFromPath(activeFile.path) ?? activeFile.path,
+			activeIndex: activeReviewFileIndex,
+			fileCount: pendingReviewFiles.length,
+			onPrevious: () => openAtOffset(-1),
+			onNext: () => openAtOffset(1),
+		};
+	}, [activeReviewFileIndex, openAutoRevealedFile, pendingReviewFiles]);
 
 	const resolveAndOpenFile = useCallback(
 		async ({
@@ -2565,6 +2796,78 @@ function LayoutShellLoadedContent({
 		},
 		[centralBehavior, emitEvent, extensionMap, handleAddView, setPanelState],
 	);
+	const handleOpenWorkingChangesReview = useCallback(() => {
+		void (async () => {
+			const currentWorkingChanges =
+				await selectFileWorkingChanges(lix).execute();
+			const changedFileIds = new Set(
+				currentWorkingChanges.map((change) => change.id),
+			);
+			const checkpointFiles = currentFileRows
+				.filter((file) => {
+					if (!changedFileIds.has(String(file.id))) return false;
+					const handler = findFileHandlerExtension(
+						extensionMap.values(),
+						String(file.path),
+					);
+					return Boolean(
+						handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
+					);
+				})
+				.map((file) => ({
+					id: String(file.id),
+					path: String(file.path),
+				}))
+				.sort((left, right) => left.path.localeCompare(right.path));
+			let firstChangedFile = checkpointFiles[0];
+			if (firstChangedFile) {
+				setWorkingChangeReviewFiles(checkpointFiles);
+			}
+			if (
+				!firstChangedFile &&
+				currentFileRows.length > 0 &&
+				agentTurnRanges.length > 0
+			) {
+				const pendingPaths = await getPendingExternalWriteReviewPaths(
+					lix,
+					currentFileRows.map((file) => ({
+						fileId: String(file.id),
+						path: String(file.path),
+					})),
+					agentTurnRanges,
+					new Set(privateResolvedReviewIds),
+				);
+				const firstChangedRow = currentFileRows.find((file) =>
+					pendingPaths.has(String(file.path)),
+				);
+				if (firstChangedRow) {
+					firstChangedFile = {
+						id: String(firstChangedRow.id),
+						path: String(firstChangedRow.path),
+					};
+				}
+			}
+			if (!firstChangedFile) return;
+			setWorkingChangesReviewOpen(true);
+			handleOpenExtensionView(FILES_EXTENSION_KIND, {
+				panel: "left",
+			});
+			openAutoRevealedFile({
+				fileId: firstChangedFile.id,
+				filePath: firstChangedFile.path,
+			});
+		})().catch((error: unknown) => {
+			console.warn("[checkpoint] failed to open working changes review", error);
+		});
+	}, [
+		agentTurnRanges,
+		currentFileRows,
+		extensionMap,
+		handleOpenExtensionView,
+		lix,
+		openAutoRevealedFile,
+		privateResolvedReviewIds,
+	]);
 
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);
@@ -2764,6 +3067,15 @@ function LayoutShellLoadedContent({
 			},
 			reviews: {
 				resolvedReviewIds: privateResolvedReviewIds,
+				autoAccept: autoAcceptAgentChanges,
+				isOpen: !autoAcceptAgentChanges || workingChangesReviewOpen,
+				active: isReviewMode,
+				mode: workingChangesReviewOpen
+					? ("working-changes" as const)
+					: ("agent-turn" as const),
+				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
+				createCheckpoint: handleCreateCheckpoint,
+				...(workingChangesReviewOpen ? { exit: exitWorkingChangesReview } : {}),
 				...(reviewRangeSessionId !== undefined
 					? { rangeSessionId: reviewRangeSessionId }
 					: {}),
@@ -2778,17 +3090,23 @@ function LayoutShellLoadedContent({
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
+			autoAcceptAgentChanges,
+			exitWorkingChangesReview,
+			handleCreateCheckpoint,
 			handleAcceptExternalWriteReview,
 			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
+			isReviewMode,
 			effectiveAtelierInstance.documents,
 			effectiveAtelierInstance.views,
 			activeCentralFileId,
 			activeDocumentPath,
 			lix,
 			privateResolvedReviewIds,
+			reviewNavigation,
 			reviewRangeSessionId,
 			registerExternalWriteReview,
+			workingChangesReviewOpen,
 		],
 	);
 
@@ -2893,18 +3211,20 @@ function LayoutShellLoadedContent({
 				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
-				<Suspense fallback={null}>
-					<AgentTurnReviewAutoReveal
-						lix={lix}
-						activeBranchId={activeBranchId}
-						activeFileId={activeCentralFileId}
-						activeFilePath={activeDocumentPath}
-						resolvedReviewIds={privateResolvedReviewIds}
-						reviewRangeSessionId={reviewRangeSessionId}
-						autoRevealedRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
-						openFile={openAutoRevealedFile}
-					/>
-				</Suspense>
+				{autoAcceptAgentChanges ? null : (
+					<Suspense fallback={null}>
+						<AgentTurnReviewAutoReveal
+							lix={lix}
+							activeBranchId={activeBranchId}
+							activeFileId={activeCentralFileId}
+							activeFilePath={activeDocumentPath}
+							resolvedReviewIds={privateResolvedReviewIds}
+							reviewRangeSessionId={reviewRangeSessionId}
+							autoRevealedRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
+							openFile={openAutoRevealedFile}
+						/>
+					</Suspense>
+				)}
 				<TopBar
 					activeFileName={activeFileName}
 					isReadOnly={isHostReadOnly}
@@ -2961,36 +3281,46 @@ function LayoutShellLoadedContent({
 							defaultSize={`${panelSizes.central}%`}
 							minSize="30%"
 						>
-							<CentralPanel
-								panel={centralPanel}
-								showTabBar
-								isFocused={focusedPanel === "central"}
-								onFocusPanel={focusPanel}
-								onSelectView={handleSelectCentralView}
-								onRemoveView={(key) => handleRemoveView("central", key)}
-								onFinalizePendingView={(key) =>
-									setPanelState(
+							<div className="relative h-full min-h-0">
+								<CentralPanel
+									panel={centralPanel}
+									showTabBar
+									isFocused={focusedPanel === "central"}
+									onFocusPanel={focusPanel}
+									onSelectView={handleSelectCentralView}
+									onRemoveView={(key) => handleRemoveView("central", key)}
+									onFinalizePendingView={(key) =>
+										setPanelState(
+											"central",
+											(panel) => activatePanelExtension(panel, key),
+											{ focus: true },
+										)
+									}
+									viewContext={extensionHostContext}
+									{...(isHostReadOnly
+										? {}
+										: { onCreateNewFile: () => void handleCreateNewFile() })}
+									{...(centralTabStripContext && slots?.centralTabStrip
+										? {
+												customTabStrip: slots.centralTabStrip(
+													centralTabStripContext,
+												),
+											}
+										: {})}
+									emptyState={renderEmptyPanelSlot(
 										"central",
-										(panel) => activatePanelExtension(panel, key),
-										{ focus: true },
-									)
-								}
-								viewContext={extensionHostContext}
-								{...(isHostReadOnly
-									? {}
-									: { onCreateNewFile: () => void handleCreateNewFile() })}
-								{...(centralTabStripContext && slots?.centralTabStrip
-									? {
-											customTabStrip: slots.centralTabStrip(
-												centralTabStripContext,
-											),
-										}
-									: {})}
-								emptyState={renderEmptyPanelSlot(
-									"central",
-									slots?.centralPanelEmpty,
-								)}
-							/>
+										slots?.centralPanelEmpty,
+									)}
+								/>
+								{workingChangesReviewOpen && !isHostReadOnly ? (
+									<div className="external-write-review-actions external-write-review-actions-auto external-write-review-checkpoint-host">
+										<ExternalWriteReviewCheckpointAction
+											isActive
+											onCheckpoint={handleCreateCheckpoint}
+										/>
+									</div>
+								) : null}
+							</div>
 						</Panel>
 						<Separator
 							className={`group relative flex items-center justify-center ${
@@ -3028,6 +3358,11 @@ function LayoutShellLoadedContent({
 				</main>
 				<CheckpointStatusBar
 					readOnly={isHostReadOnly}
+					autoAcceptAgentChanges={autoAcceptAgentChanges}
+					isReviewing={isReviewMode}
+					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
+					onOpenWorkingChanges={handleOpenWorkingChangesReview}
+					onExitReview={exitWorkingChangesReview}
 					onOpenHistory={() =>
 						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
 							panel: "left",

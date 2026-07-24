@@ -10,6 +10,7 @@ import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
 import { seedWorkspace } from "./seed-workspace";
+import { IndexedDbSnapshotStorage } from "./indexeddb-snapshot-storage";
 import "./style.css";
 
 const element = document.querySelector<HTMLElement>("#atelier");
@@ -17,7 +18,7 @@ if (!element) throw new Error("Atelier web preview mount element is missing");
 const mountElement = element;
 
 async function start() {
-	const lix = await openLix();
+	const lix = await openLix({ storage: new IndexedDbSnapshotStorage() });
 	await seedWorkspace(lix);
 	createRoot(mountElement).render(<PreviewApp lix={lix} />);
 }

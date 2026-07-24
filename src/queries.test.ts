@@ -3,6 +3,8 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectCheckpoints,
+	selectCheckpointsWithFileCounts,
+	selectFileWorkingChanges,
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
 	selectWorkingChangeCount,
@@ -141,6 +143,35 @@ describe("checkpoint queries", () => {
 		expect(checkpoints[1]?.commit_id).toBe(initialCheckpoints[0]?.commit_id);
 		expect(await selectLatestCheckpoint(lix).execute()).toEqual([
 			checkpoints[0],
+		]);
+
+		await lix.close();
+	});
+
+	test("returns composed working files and checkpoint file counts", async () => {
+		const lix = await openLix();
+
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
+			["review-file", "/drafts/review.md", new TextEncoder().encode("draft")],
+		);
+		expect(await selectFileWorkingChanges(lix).execute()).toEqual([
+			{
+				id: "review-file",
+				path: "/drafts/review.md",
+				previous_path: null,
+				change_kind: "added",
+			},
+		]);
+
+		const checkpoint = await lix.createCheckpoint();
+		expect(await selectFileWorkingChanges(lix).execute()).toEqual([]);
+		expect(await selectCheckpointsWithFileCounts(lix).execute()).toEqual([
+			expect.objectContaining({
+				commit_id: checkpoint.commitId,
+				file_count: 1,
+			}),
+			expect.objectContaining({ file_count: 0 }),
 		]);
 
 		await lix.close();

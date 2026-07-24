@@ -39,13 +39,13 @@ export function useFileSnapshotsAtCommits(
 		(lix) => {
 			let query = qb(lix)
 				.selectFrom("lix_file_history")
-				.select(["id", "path", "data", "lixcol_start_commit_id as commit_id"])
+				.select(["id", "path", "data", "lixcol_as_of_commit_id as commit_id"])
 				.where("id", "in", fileIds);
 			query = commitIds.length
-				? query.where("lixcol_start_commit_id", "in", commitIds)
-				: query.where("lixcol_start_commit_id", "=", "");
+				? query.where("lixcol_as_of_commit_id", "in", commitIds)
+				: query.where("lixcol_as_of_commit_id", "=", "");
 			return query
-				.orderBy("lixcol_start_commit_id", "asc")
+				.orderBy("lixcol_as_of_commit_id", "asc")
 				.orderBy("lixcol_depth", "asc");
 		},
 		{

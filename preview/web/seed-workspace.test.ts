@@ -10,9 +10,13 @@ describe("seedWorkspace", () => {
 		const inserts: unknown[][] = [];
 		const lix = {
 			execute: vi.fn(async (sql: string, parameters?: unknown[]) => {
+				if (sql.startsWith("SELECT id FROM lix_file")) {
+					return { rows: [] };
+				}
 				if (sql.startsWith("INSERT INTO lix_file ") && parameters) {
 					inserts.push(parameters);
 				}
+				return { rows: [] };
 			}),
 		};
 

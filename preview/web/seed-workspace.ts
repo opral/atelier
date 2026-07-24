@@ -33,6 +33,14 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	const files = [...textFiles, ...assetFiles].sort((left, right) =>
 		left.path.localeCompare(right.path),
 	);
+	const seedProbe = files[0];
+	if (seedProbe) {
+		const existing = await lix.execute(
+			"SELECT id FROM lix_file WHERE id = $1 LIMIT 1",
+			[seedProbe.id],
+		);
+		if (existing.rows.length > 0) return;
+	}
 
 	await seedDirectories(
 		lix,

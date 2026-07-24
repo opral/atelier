@@ -287,6 +287,11 @@ function EditableExcalidrawView({
 			{!atelier.readOnly && review && reviewData ? (
 				<ExternalWriteReviewControls
 					isActive={isActiveView}
+					autoAccept={
+						atelier.reviews.mode === "working-changes" ||
+						atelier.reviews.autoAccept
+					}
+					navigation={atelier.reviews.navigation}
 					onAccept={() =>
 						void atelier.reviews.accept({
 							fileId,

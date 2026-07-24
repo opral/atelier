@@ -23,10 +23,21 @@ export type WorkingChangeCountRow = {
 	change_count: number;
 };
 
+export type FileWorkingChangeRow = {
+	id: string;
+	path: string | null;
+	previous_path: string | null;
+	change_kind: "added" | "modified" | "removed";
+};
+
 export type CheckpointRow = {
 	commit_id: string;
 	created_at: string;
 	lixcol_depth: number;
+};
+
+export type CheckpointWithFileCountRow = CheckpointRow & {
+	file_count: number;
 };
 
 /**
@@ -90,6 +101,18 @@ export function selectWorkingChangeCount(lix: Lix) {
 }
 
 /**
+ * Net logical files changed between the latest checkpoint and active head.
+ * Directory moves are expanded to their descendant files.
+ */
+export function selectFileWorkingChanges(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_file_working_change")
+		.select(["id", "path", "previous_path", "change_kind"])
+		.orderBy("path", "asc")
+		.$castTo<FileWorkingChangeRow>();
+}
+
+/**
  * Checkpoints reachable from the active branch, newest first.
  */
 export function selectCheckpoints(lix: Lix) {
@@ -102,4 +125,30 @@ export function selectCheckpoints(lix: Lix) {
 
 export function selectLatestCheckpoint(lix: Lix) {
 	return selectCheckpoints(lix).limit(1);
+}
+
+/**
+ * Files represented by the net changes stored in one checkpoint commit.
+ */
+export function selectCheckpointsWithFileCounts(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_checkpoint")
+		.leftJoin(
+			"lix_file_history",
+			"lix_file_history.lixcol_observed_commit_id",
+			"lix_checkpoint.commit_id",
+		)
+		.select([
+			"lix_checkpoint.commit_id",
+			"lix_checkpoint.created_at",
+			"lix_checkpoint.lixcol_depth",
+			sql<number>`count(distinct lix_file_history.id)`.as("file_count"),
+		])
+		.groupBy([
+			"lix_checkpoint.commit_id",
+			"lix_checkpoint.created_at",
+			"lix_checkpoint.lixcol_depth",
+		])
+		.orderBy("lix_checkpoint.lixcol_depth", "asc")
+		.$castTo<CheckpointWithFileCountRow>();
 }

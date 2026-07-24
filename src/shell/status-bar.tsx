@@ -1,13 +1,11 @@
-import { Suspense, useState, type JSX, type ReactNode } from "react";
-import {
-	BookmarkCheck,
-	BookmarkPlus,
-	History,
-	LoaderCircle,
-} from "lucide-react";
-import { useLix, useQuery } from "@/lib/lix-react";
+import { Suspense, type JSX, type ReactNode } from "react";
+import { Flag } from "lucide-react";
+import { useQuery } from "@/lib/lix-react";
 import { selectLatestCheckpoint, selectWorkingChangeCount } from "@/queries";
-import { formatCheckpointCreatedAt } from "@/lib/checkpoint-format";
+
+// Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
+// the status bar can consume the real title without changing its presentation.
+const LATEST_CHECKPOINT_TITLE = "Latest checkpoint";
 
 /**
  * Bottom status ribbon. Left carries workspace status and right carries
@@ -33,93 +31,122 @@ export function StatusBar({
 
 export function CheckpointStatusBar({
 	readOnly = false,
+	autoAcceptAgentChanges = false,
+	isReviewing = false,
+	onAutoAcceptAgentChangesChange,
+	onOpenWorkingChanges,
 	onOpenHistory,
+	onExitReview,
 }: {
 	readonly readOnly?: boolean;
+	readonly autoAcceptAgentChanges?: boolean;
+	readonly isReviewing?: boolean;
+	readonly onAutoAcceptAgentChangesChange?: (enabled: boolean) => void;
+	readonly onOpenWorkingChanges?: () => void;
 	readonly onOpenHistory?: () => void;
+	readonly onExitReview?: () => void;
 }): JSX.Element {
-	const lix = useLix();
-	const [isCreating, setIsCreating] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	const workingChangeCount = useQuery((queryLix) =>
 		selectWorkingChangeCount(queryLix),
 	);
 	const changeCount = workingChangeCount[0]?.change_count ?? 0;
 
-	const handleCreateCheckpoint = async () => {
-		if (isCreating || changeCount === 0) return;
-		setError(null);
-		setIsCreating(true);
-		try {
-			await lix.createCheckpoint();
-		} catch (cause) {
-			setError(
-				cause instanceof Error ? cause.message : "Checkpoint creation failed",
-			);
-		} finally {
-			setIsCreating(false);
-		}
-	};
-
 	const historyStatus =
 		changeCount === 0 ? (
 			<Suspense
 				fallback={
-					<CheckpointHistoryStatus
-						statusLabel="Checkpointed"
-						onOpenHistory={onOpenHistory}
+					<CheckpointStatus
+						statusLabel={LATEST_CHECKPOINT_TITLE}
+						onActivate={onOpenHistory}
 					/>
 				}
 			>
 				<CleanCheckpointStatus onOpenHistory={onOpenHistory} />
 			</Suspense>
 		) : (
-			<CheckpointHistoryStatus
-				statusLabel={`${changeCount} working ${
+			<CheckpointStatus
+				statusLabel={`${changeCount} ${
 					changeCount === 1 ? "change" : "changes"
-				}`}
+				} since checkpoint`}
 				hasWorkingChanges
-				onOpenHistory={onOpenHistory}
+				onActivate={onOpenWorkingChanges}
 			/>
 		);
 
 	return (
 		<StatusBar
 			left={
-				<>
-					{historyStatus}
-					{error ? (
-						<span
-							role="alert"
-							title={error}
-							className="truncate text-[var(--color-text-status-danger)]"
-						>
-							Couldn&apos;t create checkpoint
-						</span>
-					) : null}
-				</>
-			}
-			right={
-				readOnly || changeCount === 0 ? undefined : (
+				isReviewing ? (
 					<button
 						type="button"
-						onClick={() => void handleCreateCheckpoint()}
-						disabled={isCreating}
-						className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)] px-2 font-semibold text-[var(--color-text-link)] transition-colors hover:border-[var(--color-border-selection-current)] hover:text-[var(--color-text-link-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-default disabled:text-[var(--color-text-quaternary)]"
+						aria-label="Exit review"
+						onClick={onExitReview}
+						className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
-						{isCreating ? (
-							<LoaderCircle
-								aria-hidden="true"
-								className="h-3 w-3 animate-spin"
-							/>
-						) : (
-							<BookmarkPlus aria-hidden="true" className="h-3 w-3" />
-						)}
-						{isCreating ? "Checkpointing…" : "Checkpoint"}
+						<span>Exit review</span>
+						<kbd className="rounded bg-[var(--color-bg-control)] px-1 font-sans text-[10px] font-semibold uppercase text-[var(--color-text-quaternary)]">
+							Esc
+						</kbd>
 					</button>
+				) : (
+					historyStatus
+				)
+			}
+			right={
+				readOnly ? undefined : (
+					<div className="flex items-center gap-2">
+						<AutoAcceptToggle
+							checked={autoAcceptAgentChanges}
+							onCheckedChange={onAutoAcceptAgentChangesChange}
+						/>
+					</div>
 				)
 			}
 		/>
+	);
+}
+
+function AutoAcceptToggle({
+	checked,
+	onCheckedChange,
+}: {
+	readonly checked: boolean;
+	readonly onCheckedChange?: (enabled: boolean) => void;
+}) {
+	return (
+		<label
+			className={`inline-flex h-5 cursor-pointer select-none items-center gap-1.5 font-semibold transition-colors ${
+				checked
+					? "text-[var(--color-brand-700)]"
+					: "text-[var(--color-text-tertiary)]"
+			}`}
+		>
+			<span>Auto-accept</span>
+			<input
+				type="checkbox"
+				role="switch"
+				aria-label="Auto-accept agent changes"
+				aria-checked={checked}
+				checked={checked}
+				onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
+				className="peer sr-only"
+			/>
+			<span
+				aria-hidden="true"
+				className={`relative h-3 w-5 shrink-0 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-ring-focus-visible)] peer-focus-visible:ring-offset-1 ${
+					checked
+						? "border-[var(--color-brand-600)] bg-[var(--color-brand-600)]"
+						: "border-[var(--color-border-panel)] bg-[var(--color-bg-control)]"
+				}`}
+			>
+				<span
+					aria-hidden="true"
+					className={`absolute top-px left-px size-2 rounded-full bg-white shadow-sm transition-transform ${
+						checked ? "translate-x-2" : "translate-x-0"
+					}`}
+				/>
+			</span>
+		</label>
 	);
 }
 
@@ -131,36 +158,40 @@ function CleanCheckpointStatus({
 	const checkpoints = useQuery((lix) => selectLatestCheckpoint(lix));
 	const latestCheckpoint = checkpoints[0];
 	const statusLabel = latestCheckpoint
-		? `Checkpointed · ${formatCheckpointCreatedAt(latestCheckpoint.created_at)}`
-		: "Checkpointed";
+		? LATEST_CHECKPOINT_TITLE
+		: "No checkpoints";
 
 	return (
-		<CheckpointHistoryStatus
+		<CheckpointStatus
 			statusLabel={statusLabel}
-			onOpenHistory={onOpenHistory}
+			onActivate={onOpenHistory}
 		/>
 	);
 }
 
-function CheckpointHistoryStatus({
+function CheckpointStatus({
 	statusLabel,
 	hasWorkingChanges = false,
-	onOpenHistory,
+	onActivate,
 }: {
 	readonly statusLabel: string;
 	readonly hasWorkingChanges?: boolean;
-	readonly onOpenHistory?: () => void;
+	readonly onActivate?: () => void;
 }): JSX.Element {
-	const StatusIcon = hasWorkingChanges ? History : BookmarkCheck;
+	const actionLabel = hasWorkingChanges
+		? "Open changes review"
+		: "Open checkpoint history";
 
-	return onOpenHistory ? (
+	return onActivate ? (
 		<button
 			type="button"
-			aria-label={`${statusLabel}. Open checkpoint history`}
-			onClick={onOpenHistory}
+			aria-label={`${statusLabel}. ${actionLabel}`}
+			onClick={onActivate}
 			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 		>
-			<StatusIcon aria-hidden="true" className="h-3 w-3" />
+			{hasWorkingChanges ? null : (
+				<Flag aria-hidden="true" className="h-3 w-3" />
+			)}
 			{hasWorkingChanges ? (
 				<span
 					aria-hidden="true"
@@ -171,7 +202,15 @@ function CheckpointHistoryStatus({
 		</button>
 	) : (
 		<span className="inline-flex items-center gap-1.5">
-			<StatusIcon aria-hidden="true" className="h-3 w-3" />
+			{hasWorkingChanges ? null : (
+				<Flag aria-hidden="true" className="h-3 w-3" />
+			)}
+			{hasWorkingChanges ? (
+				<span
+					aria-hidden="true"
+					className="h-1.5 w-1.5 rounded-full bg-[var(--color-icon-brand)]"
+				/>
+			) : null}
 			<span>{statusLabel}</span>
 		</span>
 	);

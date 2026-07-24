@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
 import { useLix, useQuery } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
+import { selectWorkingChanges } from "@/queries";
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
@@ -181,6 +182,13 @@ export function useAgentTurnCommitRanges(
 	readonly rangeValues: readonly unknown[];
 	readonly ranges: readonly AgentTurnCommitRange[];
 } {
+	const resultRef = useRef<{
+		readonly key: string;
+		readonly value: {
+			readonly rangeValues: readonly unknown[];
+			readonly ranges: readonly AgentTurnCommitRange[];
+		};
+	} | null>(null);
 	const rangeRows = useQuery<{
 		value: unknown;
 		lixcol_branch_id: string | null;
@@ -195,31 +203,27 @@ export function useAgentTurnCommitRanges(
 	);
 	// Filtering again prevents a cached row for the previous branch from being
 	// interpreted as current while useQuery swaps subscriptions.
-	const storedRangeValues = useMemo(
-		() =>
-			rangeRows
-				.filter((row) => row.lixcol_branch_id === activeBranchId)
-				.map((row) => row.value),
-		[activeBranchId, rangeRows],
-	);
-	const storedRanges = useMemo(
-		() => agentTurnCommitRangesFromValues(storedRangeValues),
-		[storedRangeValues],
-	);
-	const ranges = useMemo(
-		() =>
-			reviewRangeSessionId === undefined
-				? storedRanges
-				: storedRanges.filter(
-						(range) => range.sessionId === reviewRangeSessionId,
-					),
-		[reviewRangeSessionId, storedRanges],
-	);
-	const rangeValues = useMemo<readonly unknown[]>(
-		() => (reviewRangeSessionId === undefined ? storedRangeValues : ranges),
-		[reviewRangeSessionId, storedRangeValues, ranges],
-	);
-	return useMemo(() => ({ rangeValues, ranges }), [rangeValues, ranges]);
+	const storedRangeValues = rangeRows
+		.filter((row) => row.lixcol_branch_id === activeBranchId)
+		.map((row) => row.value);
+	const storedRanges = agentTurnCommitRangesFromValues(storedRangeValues);
+	const ranges =
+		reviewRangeSessionId === undefined
+			? storedRanges
+			: storedRanges.filter(
+					(range) => range.sessionId === reviewRangeSessionId,
+				);
+	const rangeValues: readonly unknown[] =
+		reviewRangeSessionId === undefined ? storedRangeValues : ranges;
+	const key = JSON.stringify([
+		activeBranchId,
+		reviewRangeSessionId ?? null,
+		rangeValues,
+	]);
+	if (resultRef.current?.key !== key) {
+		resultRef.current = { key, value: { rangeValues, ranges } };
+	}
+	return resultRef.current.value;
 }
 
 export function useExternalWriteReview(args: {
@@ -228,11 +232,31 @@ export function useExternalWriteReview(args: {
 	readonly activeBranchId: string;
 	readonly resolvedReviewIds?: readonly string[];
 	readonly reviewRangeSessionId?: string;
+	readonly enabled?: boolean;
+	readonly reviewMode?: "agent-turn" | "working-changes";
 }): ExternalWriteReview | null {
 	const lix = useLix();
+	const reviewMode = args.reviewMode ?? "agent-turn";
 	const { rangeValues, ranges } = useAgentTurnCommitRanges(
 		args.activeBranchId,
 		args.reviewRangeSessionId,
+	);
+	const workingChanges = useQuery(
+		(queryLix) => selectWorkingChanges(queryLix),
+		{
+			enabled: args.enabled !== false && reviewMode === "working-changes",
+		},
+	);
+	const fileWorkingChangesKey = JSON.stringify(
+		workingChanges
+			.filter((change) => change.file_id === args.fileId)
+			.map((change) => [
+				change.schema_key,
+				change.entity_pk,
+				change.change_kind,
+				change.before_change_id,
+				change.after_change_id,
+			]),
 	);
 	const resolvedReviewKey = JSON.stringify(
 		[...(args.resolvedReviewIds ?? [])].sort(),
@@ -242,12 +266,15 @@ export function useExternalWriteReview(args: {
 		[resolvedReviewKey],
 	);
 	const reviewKey =
-		args.fileId && args.path
+		args.enabled !== false && args.fileId && args.path
 			? JSON.stringify([
 					args.activeBranchId,
 					args.fileId,
 					args.path,
-					rangeValues,
+					reviewMode,
+					reviewMode === "working-changes"
+						? fileWorkingChangesKey
+						: rangeValues,
 					resolvedReviewKey,
 				])
 			: null;
@@ -258,15 +285,19 @@ export function useExternalWriteReview(args: {
 		let cancelled = false;
 		if (!reviewKey || !args.fileId || !args.path) return;
 		const loadReview =
-			ranges.length === 0
-				? Promise.resolve(null)
-				: getAgentTurnExternalWriteReview(
-						lix,
-						args.fileId,
-						args.path,
-						ranges,
-						resolvedReviewIdSet,
-					);
+			reviewMode === "working-changes"
+				? fileWorkingChangesKey === "[]"
+					? Promise.resolve(null)
+					: getWorkingChangeExternalWriteReview(lix, args.fileId, args.path)
+				: ranges.length === 0
+					? Promise.resolve(null)
+					: getAgentTurnExternalWriteReview(
+							lix,
+							args.fileId,
+							args.path,
+							ranges,
+							resolvedReviewIdSet,
+						);
 		void loadReview
 			.then((nextReview) => {
 				if (!cancelled) {
@@ -288,7 +319,16 @@ export function useExternalWriteReview(args: {
 		return () => {
 			cancelled = true;
 		};
-	}, [lix, args.fileId, args.path, ranges, resolvedReviewIdSet, reviewKey]);
+	}, [
+		lix,
+		args.fileId,
+		args.path,
+		fileWorkingChangesKey,
+		ranges,
+		resolvedReviewIdSet,
+		reviewKey,
+		reviewMode,
+	]);
 
 	return resolvedReview?.key === reviewKey ? resolvedReview.review : null;
 }
@@ -350,7 +390,7 @@ export async function getFileDataAtCommit(
 	return snapshot ? decodeFileDataToBytes(snapshot.data) : null;
 }
 
-async function getAgentTurnExternalWriteReview(
+export async function getAgentTurnExternalWriteReview(
 	lix: Lix,
 	fileId: string,
 	path: string,
@@ -402,9 +442,64 @@ async function getAgentTurnExternalWriteReview(
 		fileId,
 		path,
 		reviewId: agentTurnReviewId(fileId, rangeIds),
+		mode: "agent-turn",
 		beforeCommitId: firstRange.beforeCommitId,
 		afterCommitId: lastRange.afterCommitId,
 		agentTurnRangeIds: rangeIds,
+	};
+}
+
+export async function getWorkingChangeExternalWriteReview(
+	lix: Lix,
+	fileId: string,
+	path: string,
+): Promise<ExternalWriteReview | null> {
+	const [checkpoint, headResult] = await Promise.all([
+		qb(lix)
+			.selectFrom("lix_checkpoint")
+			.select("commit_id")
+			.orderBy("lixcol_depth", "asc")
+			.limit(1)
+			.executeTakeFirst(),
+		lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
+	]);
+	const headCommitId = headResult.rows[0]?.get("commit_id");
+	if (
+		!checkpoint?.commit_id ||
+		typeof headCommitId !== "string" ||
+		checkpoint.commit_id === headCommitId
+	) {
+		return null;
+	}
+	const data = await getRangeFileData(lix, fileId, {
+		beforeCommitId: checkpoint.commit_id,
+		afterCommitId: headCommitId,
+	});
+	if (!data) return null;
+	if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
+		return null;
+	}
+	const current = await qb(lix)
+		.selectFrom("lix_file")
+		.select("data")
+		.where("id", "=", fileId)
+		.limit(1)
+		.executeTakeFirst();
+	if (
+		!current ||
+		!fileBytesEqual(decodeFileDataToBytes(current.data), data.afterData)
+	) {
+		return null;
+	}
+	const rangeId = `checkpoint:${checkpoint.commit_id}:${headCommitId}`;
+	return {
+		fileId,
+		path,
+		reviewId: agentTurnReviewId(fileId, [rangeId]),
+		mode: "working-changes",
+		beforeCommitId: checkpoint.commit_id,
+		afterCommitId: headCommitId,
+		agentTurnRangeIds: [rangeId],
 	};
 }
 
@@ -422,38 +517,15 @@ function resolvedAgentTurnRangeIds(
 }
 
 async function orderAgentTurnRangesByCommitAncestry(
-	lix: Lix,
+	_lix: Lix,
 	ranges: readonly AgentTurnCommitRange[],
 ): Promise<AgentTurnCommitRange[]> {
 	if (ranges.length < 2) return [...ranges];
-	const result = await lix.execute(
-		`
-			SELECT observed_commit_id AS commit_id, MAX(depth) AS depth
-			FROM lix_state_history
-			WHERE start_commit_id = lix_active_branch_commit_id()
-				AND schema_key = 'lix_commit'
-			GROUP BY observed_commit_id
-		`,
-	);
-	const depthByCommit = new Map<string, number>();
-	for (const row of result.rows) {
-		const commitId = row.get("commit_id");
-		const depth = row.get("depth");
-		if (typeof commitId === "string" && typeof depth === "number") {
-			depthByCommit.set(commitId, depth);
-		}
-	}
 	return [...ranges].sort((left, right) => {
-		const afterDepthDifference =
-			(depthByCommit.get(right.afterCommitId) ?? 0) -
-			(depthByCommit.get(left.afterCommitId) ?? 0);
-		if (afterDepthDifference !== 0) return afterDepthDifference;
-		const beforeDepthDifference =
-			(depthByCommit.get(right.beforeCommitId) ?? 0) -
-			(depthByCommit.get(left.beforeCommitId) ?? 0);
 		return (
-			beforeDepthDifference ||
 			left.completedAt - right.completedAt ||
+			left.beforeCommitId.localeCompare(right.beforeCommitId) ||
+			left.afterCommitId.localeCompare(right.afterCommitId) ||
 			left.id.localeCompare(right.id)
 		);
 	});
@@ -536,11 +608,11 @@ async function getFileHistorySnapshotsAtCommits(
 				.select([
 					"id",
 					"data",
-					"lixcol_start_commit_id as commit_id",
+					"lixcol_as_of_commit_id as commit_id",
 					"lixcol_depth as depth",
 				])
 				.where("id", "in", fileIdBatch)
-				.where("lixcol_start_commit_id", "in", commitIdBatch)
+				.where("lixcol_as_of_commit_id", "in", commitIdBatch)
 				.execute()) as BatchedFileHistoryRow[];
 			for (const row of rows) {
 				const fileSnapshots = snapshots.get(row.id) ?? new Map();
@@ -596,7 +668,7 @@ function fileHistorySnapshotQuery(lix: Lix, fileId: string, commitId: string) {
 	return qb(lix)
 		.selectFrom("lix_file_history")
 		.select("data")
-		.where("lixcol_start_commit_id", "=", commitId)
+		.where("lixcol_as_of_commit_id", "=", commitId)
 		.where("id", "=", fileId)
 		.orderBy("lixcol_depth", "asc")
 		.limit(1);

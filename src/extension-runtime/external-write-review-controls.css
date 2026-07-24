@@ -7,6 +7,13 @@
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
+		transform: translateX(-50%);
+	}
+
+	.external-write-review-scope {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
 		padding: 0.38rem;
 		border: 1px solid rgba(255, 255, 255, 0.08);
 		border-radius: 0.85rem;
@@ -15,8 +22,95 @@
 			0 26px 70px rgba(38, 34, 31, 0.28),
 			0 10px 30px rgba(38, 34, 31, 0.18),
 			0 1px 0 rgba(255, 255, 255, 0.08) inset;
-		transform: translateX(-50%);
 		backdrop-filter: blur(16px);
+	}
+
+	.external-write-review-actions-auto {
+		width: min(44rem, calc(100% - 2rem));
+		justify-content: space-between;
+	}
+
+	.external-write-review-checkpoint-host {
+		z-index: 21;
+		justify-content: flex-end;
+		pointer-events: none;
+	}
+
+	.external-write-review-checkpoint-host
+		.external-write-review-workspace-scope {
+		pointer-events: auto;
+	}
+
+	.external-write-review-file-scope {
+		min-width: 0;
+	}
+
+	.external-write-review-navigation {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 0.42rem;
+		padding: 0 0.55rem 0 0.12rem;
+		border-right: 1px solid rgba(255, 255, 255, 0.13);
+		color: rgba(255, 255, 255, 0.82);
+	}
+
+	.external-write-review-navigation > button {
+		display: inline-flex;
+		width: 1.35rem;
+		height: 1.6rem;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.42rem;
+		color: rgba(255, 255, 255, 0.65);
+	}
+
+	.external-write-review-navigation > button:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.09);
+		color: white;
+	}
+
+	.external-write-review-navigation > button:disabled {
+		opacity: 0.3;
+	}
+
+	.external-write-review-navigation svg {
+		width: 0.85rem;
+		height: 0.85rem;
+	}
+
+	.external-write-review-navigation .external-write-review-file-icon {
+		width: 0.78rem;
+		height: 0.78rem;
+		flex: none;
+		color: rgba(255, 255, 255, 0.72);
+	}
+
+	.external-write-review-navigation > span {
+		display: flex;
+		min-width: 0;
+		align-items: baseline;
+		gap: 0.42rem;
+		line-height: 1;
+	}
+
+	.external-write-review-navigation strong {
+		overflow: hidden;
+		max-width: 9rem;
+		font-size: 0.78rem;
+		font-weight: 720;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.external-write-review-navigation small {
+		color: rgba(255, 255, 255, 0.48);
+		font-size: 0.72rem;
+		white-space: nowrap;
+	}
+
+	.external-write-review-workspace-scope {
+		position: relative;
 	}
 
 	.external-write-review-button {
@@ -37,6 +131,16 @@
 			background-color 120ms ease,
 			border-color 120ms ease,
 			color 120ms ease;
+	}
+
+	.external-write-review-button > svg {
+		width: 0.82rem;
+		height: 0.82rem;
+	}
+
+	.external-write-review-button:disabled {
+		cursor: default;
+		opacity: 0.7;
 	}
 
 	.external-write-review-button-accept {
@@ -72,5 +176,18 @@
 
 	.external-write-review-shortcut-dark {
 		color: rgba(255, 255, 255, 0.58);
+	}
+
+	.external-write-review-error {
+		position: absolute;
+		right: 0;
+		bottom: calc(100% + 0.4rem);
+		width: max-content;
+		max-width: 15rem;
+		border-radius: 0.45rem;
+		background: var(--color-bg-status-danger);
+		padding: 0.3rem 0.5rem;
+		color: var(--color-text-status-danger);
+		font-size: 0.68rem;
 	}
 }

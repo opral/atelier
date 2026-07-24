@@ -9,6 +9,7 @@ import {
 	getExternalWriteReview,
 	getExternalWriteReviewData,
 	getPendingExternalWriteReviewPaths,
+	getWorkingChangeExternalWriteReview,
 	useExternalWriteReview,
 	useExternalWriteReviewData,
 } from "./external-write-review-history";
@@ -22,6 +23,38 @@ import {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+
+describe("getWorkingChangeExternalWriteReview", () => {
+	test("reviews the file from the latest checkpoint to the active head", async () => {
+		const lix = await openLix();
+		try {
+			await writeFile(lix, "checkpoint-file", "/checkpoint.md", "before");
+			const checkpoint = await lix.createCheckpoint();
+			await writeFile(lix, "checkpoint-file", "/checkpoint.md", "after");
+			const headCommitId = await activeCommitId(lix);
+
+			const review = await getWorkingChangeExternalWriteReview(
+				lix,
+				"checkpoint-file",
+				"/checkpoint.md",
+			);
+			expect(review).toEqual(
+				expect.objectContaining({
+					fileId: "checkpoint-file",
+					path: "/checkpoint.md",
+					beforeCommitId: checkpoint.commitId,
+					afterCommitId: headCommitId,
+				}),
+			);
+			if (!review) throw new Error("Expected a checkpoint working review");
+			const data = await getExternalWriteReviewData(lix, review);
+			expect(decoder.decode(data?.beforeData)).toBe("before");
+			expect(decoder.decode(data?.afterData)).toBe("after");
+		} finally {
+			await lix.close();
+		}
+	});
+});
 
 describe("getExternalWriteReview", () => {
 	test("returns no review when no agent turn range exists", async () => {

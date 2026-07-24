@@ -6,18 +6,20 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { HistoryView } from ".";
 
 describe("HistoryView", () => {
-	test("shows working changes and checkpoint history without mutation actions", async () => {
+	test("shows a simple read-only checkpoint list", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
-			["history-view-test", "checkpointed"],
+			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3), ($4, $5, $6)",
+			[
+				"history-file-one",
+				"/one.txt",
+				new TextEncoder().encode("one"),
+				"history-file-two",
+				"/two.txt",
+				new TextEncoder().encode("two"),
+			],
 		);
 		const checkpoint = await lix.createCheckpoint();
-		await lix.execute("UPDATE lix_key_value SET value = $1 WHERE key = $2", [
-			"working",
-			"history-view-test",
-		]);
-
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -29,21 +31,29 @@ describe("HistoryView", () => {
 			);
 		});
 
-		expect(await screen.findByText("Working changes")).toBeVisible();
-		expect(
-			screen.getByText("1 change since the latest checkpoint"),
-		).toBeVisible();
-		const checkpointList = screen.getByRole("list", {
+		const checkpointList = await screen.findByRole("list", {
 			name: "Checkpoints",
 		});
-		expect(within(checkpointList).getAllByRole("listitem")).toHaveLength(2);
+		const checkpointItems = within(checkpointList).getAllByRole("listitem");
+		expect(checkpointItems).toHaveLength(2);
+		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
 		expect(within(checkpointList).getByText("Latest checkpoint")).toBeVisible();
 		expect(
 			within(checkpointList).getByText("Initial checkpoint"),
 		).toBeVisible();
+		expect(within(checkpointItems[0]!).getByText("2 files")).toBeVisible();
+		expect(within(checkpointItems[1]!).getByText("0 files")).toBeVisible();
 		expect(
-			within(checkpointList).getByText(checkpoint.commitId.slice(-8)),
-		).toBeVisible();
+			checkpointItems[0]?.querySelector("[data-checkpoint-flag]"),
+		).not.toBeNull();
+		expect(
+			checkpointItems[1]?.querySelector("[data-checkpoint-flag]"),
+		).not.toBeNull();
+		expect(
+			within(checkpointList).queryByText(checkpoint.commitId.slice(-8)),
+		).toBeNull();
+		expect(screen.queryByText("Working changes")).toBeNull();
+		expect(screen.queryByText("Checkpoints")).toBeNull();
 		expect(screen.queryByRole("button")).toBeNull();
 
 		await act(async () => view?.unmount());

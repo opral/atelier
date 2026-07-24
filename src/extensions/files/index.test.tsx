@@ -1127,7 +1127,7 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
-	test("reacts to review range changes without retaining stale badges", async () => {
+	test("shows changed-file status only while review mode is active", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
 		await insertFile(lix, "review-file", "/review.md", "before");
@@ -1147,6 +1147,20 @@ describe("FilesView", () => {
 			view = renderFilesView(lix, { activeBranchId });
 		});
 		await waitFor(() => {
+			expect(getFilesTreeItem("review.md")).not.toHaveAttribute(
+				"data-item-git-status",
+			);
+		});
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{ activeBranchId, reviewModeActive: true }}
+				/>,
+			);
+		});
+		await waitFor(() => {
 			expect(getFilesTreeItem("review.md")).toHaveAttribute(
 				"data-item-git-status",
 				"modified",
@@ -1159,6 +1173,7 @@ describe("FilesView", () => {
 					lix={lix}
 					context={{
 						activeBranchId,
+						reviewModeActive: true,
 						resolvedReviewIds: ["review-file:files-review-range"],
 					}}
 				/>,

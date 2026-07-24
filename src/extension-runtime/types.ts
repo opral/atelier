@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type {
 	ExternalWriteReview,
+	ExternalWriteReviewNavigation,
 	ResolveExternalWriteReviewArgs,
 } from "./external-write-review";
 import type {
@@ -89,6 +90,13 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 	readonly reviews: {
 		readonly resolvedReviewIds: readonly string[];
 		readonly rangeSessionId?: string;
+		readonly autoAccept?: boolean;
+		readonly isOpen?: boolean;
+		readonly active?: boolean;
+		readonly mode?: "agent-turn" | "working-changes";
+		readonly navigation?: ExternalWriteReviewNavigation;
+		readonly createCheckpoint?: () => Promise<void>;
+		readonly exit?: () => void;
 		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
 		readonly accept: (args: {
 			readonly fileId: string;

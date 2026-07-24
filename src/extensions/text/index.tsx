@@ -116,6 +116,10 @@ function EditableTextView({
 		activeBranchId: atelier.branches.activeId,
 		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
 		reviewRangeSessionId: atelier.reviews.rangeSessionId,
+		enabled: atelier.reviews.isOpen,
+		reviewMode:
+			atelier.reviews.mode ??
+			(atelier.reviews.autoAccept ? "working-changes" : "agent-turn"),
 	});
 	const reviewData = useExternalWriteReviewData(review);
 	const reviewText = reviewData
@@ -270,6 +274,12 @@ function EditableTextView({
 			{!atelier.readOnly && review && reviewData ? (
 				<ExternalWriteReviewControls
 					isActive={isActiveView}
+					autoAccept={
+						atelier.reviews.mode === "working-changes" ||
+						atelier.reviews.autoAccept
+					}
+					navigation={atelier.reviews.navigation}
+					onExit={atelier.reviews.exit}
 					onAccept={() =>
 						void atelier.reviews.accept({
 							fileId,

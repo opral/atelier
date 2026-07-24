@@ -46,6 +46,7 @@ import {
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
+	ExternalWriteReviewNavigation,
 	ResolveExternalWriteReviewArgs,
 } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
@@ -94,6 +95,11 @@ type MarkdownViewProps = {
 	readonly onResolveReviewDiff?: (
 		args: ResolveExternalWriteReviewArgs,
 	) => Promise<void>;
+	readonly autoAcceptReviews?: boolean;
+	readonly reviewEnabled?: boolean;
+	readonly reviewMode?: "agent-turn" | "working-changes";
+	readonly reviewNavigation?: ExternalWriteReviewNavigation;
+	readonly onExitReview?: () => void;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly onDocumentModified?: (filePath: string) => void;
 };
@@ -137,6 +143,11 @@ export function MarkdownView({
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 	onResolveReviewDiff,
+	autoAcceptReviews,
+	reviewEnabled,
+	reviewMode,
+	reviewNavigation,
+	onExitReview,
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps) {
@@ -164,6 +175,11 @@ export function MarkdownView({
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
 				onResolveReviewDiff={onResolveReviewDiff}
+				autoAcceptReviews={autoAcceptReviews}
+				reviewEnabled={reviewEnabled}
+				reviewMode={reviewMode}
+				reviewNavigation={reviewNavigation}
+				onExitReview={onExitReview}
 				openWorkspaceFile={openWorkspaceFile}
 				onDocumentModified={onDocumentModified}
 			/>
@@ -241,6 +257,11 @@ function MarkdownLiveViewLoaded({
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 	onResolveReviewDiff,
+	autoAcceptReviews,
+	reviewEnabled = true,
+	reviewMode,
+	reviewNavigation,
+	onExitReview,
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps & {
@@ -252,6 +273,9 @@ function MarkdownLiveViewLoaded({
 		activeBranchId,
 		resolvedReviewIds,
 		reviewRangeSessionId,
+		enabled: reviewEnabled,
+		reviewMode:
+			reviewMode ?? (autoAcceptReviews ? "working-changes" : "agent-turn"),
 	});
 	const externalWriteReviewData =
 		useExternalWriteReviewData(externalWriteReview);
@@ -350,6 +374,9 @@ function MarkdownLiveViewLoaded({
 								onAccept={onAcceptReviewDiff}
 								onReject={onRejectReviewDiff}
 								onResolve={onResolveReviewDiff}
+								autoAccept={autoAcceptReviews}
+								navigation={reviewNavigation}
+								onExit={onExitReview}
 								onCompletionStart={() => {
 									setFinishingReview({
 										fileId: effectiveFileRow.id,
@@ -420,6 +447,9 @@ function MarkdownLiveReviewController({
 	onCompletionStart,
 	onCompletionSuccess,
 	onCompletionFailure,
+	autoAccept = false,
+	navigation,
+	onExit,
 }: MarkdownReviewOverlayProps & {
 	readonly editor: Editor;
 	readonly onCompletionStart: (markdown: string) => void;
@@ -430,6 +460,9 @@ function MarkdownLiveReviewController({
 		return (
 			<ExternalWriteReviewControls
 				isActive={isActive}
+				autoAccept={autoAccept}
+				navigation={navigation}
+				onExit={onExit}
 				onAccept={() => void onAccept?.({ fileId, reviewId, review })}
 				onReject={() => void onReject?.({ fileId, reviewId, review })}
 			/>
@@ -449,6 +482,29 @@ function MarkdownLiveReviewController({
 		onReject,
 		onResolve,
 	});
+	if (autoAccept) {
+		return (
+			<>
+				<MarkdownReviewEditor
+					key={`${reviewId}:${beforeCommitId}:${afterCommitId}:accepted`}
+					externalEditor={editor}
+					reviewDiff={enrichedReviewDiff}
+					sourceFilePath={sourceFilePath}
+					afterCommitId={afterCommitId}
+					openWorkspaceFile={openWorkspaceFile}
+					isActive={isActive}
+				/>
+				<ExternalWriteReviewControls
+					isActive={isActive}
+					autoAccept
+					navigation={navigation}
+					onExit={onExit}
+					onAccept={() => void onAccept?.({ fileId, reviewId, review })}
+					onReject={() => void onReject?.({ fileId, reviewId, review })}
+				/>
+			</>
+		);
+	}
 
 	return (
 		<MarkdownReviewEditor
@@ -669,6 +725,9 @@ type MarkdownReviewOverlayProps = {
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
 	readonly onResolve?: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
+	readonly autoAccept?: boolean;
+	readonly navigation?: ExternalWriteReviewNavigation;
+	readonly onExit?: () => void;
 };
 
 function MarkdownReviewOverlay({
@@ -936,44 +995,18 @@ function useMarkdownBlocksAtCommitsWithoutSuspense(
 }
 
 function historicalMarkdownBlocksQuery(
-	lix: ReturnType<typeof useLix>,
-	args: {
+	_lix: ReturnType<typeof useLix>,
+	_args: {
 		readonly beforeCommitId: string;
 		readonly afterCommitId: string;
 		readonly fileId: string;
 	},
 ) {
-	const sql = `
-		WITH ranked AS (
-			SELECT
-				start_commit_id,
-				entity_pk,
-				snapshot_content,
-				depth,
-				ROW_NUMBER() OVER (
-					PARTITION BY start_commit_id, entity_pk
-					ORDER BY depth ASC
-				) AS rn
-			FROM lix_state_history
-			WHERE start_commit_id IN (?, ?)
-				AND file_id = ?
-				AND schema_key = 'markdown_node'
-		)
-		SELECT start_commit_id, snapshot_content
-		FROM ranked
-		WHERE rn = 1
-			AND snapshot_content IS NOT NULL
-	`;
-	const parameters = [args.beforeCommitId, args.afterCommitId, args.fileId];
-	return {
-		compile: () => ({ sql, parameters }),
-		execute: async () => {
-			const result = await lix.execute(sql, parameters);
-			return result.rows.map(
-				(row) => row.toObject() as HistoricalMarkdownNodeRow,
-			);
-		},
-	};
+	// Stable block identities are an optional enhancement. A workspace can open
+	// Markdown without registering the plugin's typed entity surfaces, so review
+	// must not depend on markdown_node_history being present. The authoritative
+	// file snapshots still produce the complete text diff.
+	return emptyMarkdownBlocksQuery();
 }
 
 function emptyMarkdownBlocksQuery() {
@@ -1146,6 +1179,14 @@ export const extension = createReactExtensionDefinition({
 				onAcceptReviewDiff={atelier.reviews.accept}
 				onRejectReviewDiff={atelier.reviews.reject}
 				onResolveReviewDiff={atelier.reviews.resolve}
+				autoAcceptReviews={
+					atelier.reviews.mode === "working-changes" ||
+					atelier.reviews.autoAccept
+				}
+				reviewEnabled={atelier.reviews.isOpen}
+				reviewMode={atelier.reviews.mode}
+				reviewNavigation={atelier.reviews.navigation}
+				onExitReview={atelier.reviews.exit}
 				openWorkspaceFile={(args) =>
 					atelier.documents.open(args.filePath, {
 						...(args.state ? { state: args.state } : {}),

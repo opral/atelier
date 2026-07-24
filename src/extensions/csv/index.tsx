@@ -52,6 +52,7 @@ import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
+	ExternalWriteReviewNavigation,
 } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
 import {
@@ -112,6 +113,11 @@ type CsvViewProps = {
 		readonly reviewId: string;
 		readonly review?: ExternalWriteReview;
 	}) => Promise<void>;
+	readonly autoAcceptReviews?: boolean;
+	readonly reviewEnabled?: boolean;
+	readonly reviewMode?: "agent-turn" | "working-changes";
+	readonly reviewNavigation?: ExternalWriteReviewNavigation;
+	readonly onExitReview?: () => void;
 };
 
 type CsvReviewHandler = (args: {
@@ -198,6 +204,11 @@ export function CsvView({
 	registerExternalWriteReview,
 	onAcceptReview,
 	onRejectReview,
+	autoAcceptReviews,
+	reviewEnabled,
+	reviewMode,
+	reviewNavigation,
+	onExitReview,
 }: CsvViewProps) {
 	assertFileId(fileId);
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
@@ -220,6 +231,11 @@ export function CsvView({
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
+				autoAcceptReviews={autoAcceptReviews}
+				reviewEnabled={reviewEnabled}
+				reviewMode={reviewMode}
+				reviewNavigation={reviewNavigation}
+				onExitReview={onExitReview}
 			/>
 		</Suspense>
 	);
@@ -291,6 +307,11 @@ function CsvLiveViewData({
 	isPanelFocused = true,
 	onAcceptReview,
 	onRejectReview,
+	autoAcceptReviews,
+	reviewEnabled = true,
+	reviewMode,
+	reviewNavigation,
+	onExitReview,
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
@@ -300,6 +321,10 @@ function CsvLiveViewData({
 		activeBranchId,
 		resolvedReviewIds,
 		reviewRangeSessionId,
+		enabled: reviewEnabled,
+		reviewMode:
+			reviewMode ??
+			(autoAcceptReviews ? "working-changes" : "agent-turn"),
 	});
 
 	if (!fileRow) {
@@ -325,6 +350,9 @@ function CsvLiveViewData({
 				isPanelFocused={isPanelFocused}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
+				autoAcceptReviews={autoAcceptReviews}
+				reviewNavigation={reviewNavigation}
+				onExitReview={onExitReview}
 			/>
 		</>
 	);
@@ -345,6 +373,9 @@ function EditableCsvView({
 	isPanelFocused = true,
 	onAcceptReview,
 	onRejectReview,
+	autoAcceptReviews = false,
+	reviewNavigation,
+	onExitReview,
 }: {
 	readonly fileRow: CsvFileRow;
 	readonly review: ExternalWriteReview | null;
@@ -353,6 +384,9 @@ function EditableCsvView({
 	readonly isPanelFocused?: boolean;
 	readonly onAcceptReview?: CsvReviewHandler;
 	readonly onRejectReview?: CsvReviewHandler;
+	readonly autoAcceptReviews?: boolean;
+	readonly reviewNavigation?: ExternalWriteReviewNavigation;
+	readonly onExitReview?: () => void;
 }) {
 	const lix = useLix();
 	const fileId = fileRow.id;
@@ -630,6 +664,9 @@ function EditableCsvView({
 			isPanelFocused={isPanelFocused}
 			onAcceptReview={onAcceptReview}
 			onRejectReview={onRejectReview}
+			autoAcceptReviews={autoAcceptReviews}
+			reviewNavigation={reviewNavigation}
+			onExitReview={onExitReview}
 		/>
 	);
 }
@@ -700,6 +737,9 @@ function CsvViewLoaded({
 	isPanelFocused = true,
 	onAcceptReview,
 	onRejectReview,
+	autoAcceptReviews = false,
+	reviewNavigation,
+	onExitReview,
 }: {
 	readonly fileRow: CsvFileRow;
 	readonly parsedOverride?: CsvParseResult;
@@ -713,6 +753,9 @@ function CsvViewLoaded({
 	readonly isPanelFocused?: boolean;
 	readonly onAcceptReview?: CsvReviewHandler;
 	readonly onRejectReview?: CsvReviewHandler;
+	readonly autoAcceptReviews?: boolean;
+	readonly reviewNavigation?: ExternalWriteReviewNavigation;
+	readonly onExitReview?: () => void;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
 		return parsedOverride ?? parseCsv(decodeFileDataToText(fileRow.data));
@@ -753,6 +796,9 @@ function CsvViewLoaded({
 						isActive={isActiveView && isPanelFocused}
 						onAccept={onAcceptReview}
 						onReject={onRejectReview}
+						autoAccept={autoAcceptReviews}
+						navigation={reviewNavigation}
+						onExit={onExitReview}
 						controls={reviewControls}
 					/>
 				) : null}
@@ -769,6 +815,9 @@ function CsvReviewOverlay({
 	controls = "review",
 	onAccept,
 	onReject,
+	autoAccept = false,
+	navigation,
+	onExit,
 }: {
 	readonly fileId: string;
 	readonly review: ExternalWriteReview;
@@ -777,6 +826,9 @@ function CsvReviewOverlay({
 	readonly controls?: "review" | "none";
 	readonly onAccept?: CsvReviewHandler;
 	readonly onReject?: CsvReviewHandler;
+	readonly autoAccept?: boolean;
+	readonly navigation?: ExternalWriteReviewNavigation;
+	readonly onExit?: () => void;
 }) {
 	const externalReviewData = useExternalWriteReviewData(
 		reviewDataOverride ? null : review,
@@ -805,6 +857,9 @@ function CsvReviewOverlay({
 			{controls === "review" && (onAccept || onReject) ? (
 				<ExternalWriteReviewControls
 					isActive={isActive}
+					autoAccept={autoAccept}
+					navigation={navigation}
+					onExit={onExit}
 					onAccept={() =>
 						void onAccept?.({ fileId, reviewId: review.reviewId, review })
 					}
@@ -1748,6 +1803,13 @@ export const extension = createReactExtensionDefinition({
 					: {
 							onAcceptReview: atelier.reviews.accept,
 							onRejectReview: atelier.reviews.reject,
+							autoAcceptReviews:
+								atelier.reviews.mode === "working-changes" ||
+								atelier.reviews.autoAccept,
+							reviewEnabled: atelier.reviews.isOpen,
+							reviewMode: atelier.reviews.mode,
+							reviewNavigation: atelier.reviews.navigation,
+							onExitReview: atelier.reviews.exit,
 						})}
 				registerExternalWriteReview={atelier.reviews.register}
 				isActiveView={view.isActive}

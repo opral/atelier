@@ -25,7 +25,11 @@ import {
 import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
-import { selectFilesystemEntries } from "@/queries";
+import {
+	selectFileWorkingChanges,
+	selectFilesystemEntries,
+	selectWorkingChanges,
+} from "@/queries";
 import {
 	buildFilesystemTree,
 	isWatchedEntryId,
@@ -50,7 +54,11 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
 import { qb } from "@/lib/lix-kysely";
-import type { FilesystemEntryRow } from "@/queries";
+import type {
+	FileWorkingChangeRow,
+	FilesystemEntryRow,
+	WorkingChangeRow,
+} from "@/queries";
 import type { Lix } from "@lix-js/sdk";
 import {
 	getPendingExternalWriteReviewPaths,
@@ -75,6 +83,8 @@ type FilesViewContext = {
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
 	readonly reviewRangeSessionId?: string;
+	readonly reviewWorkingChanges?: boolean;
+	readonly reviewModeActive?: boolean;
 	readonly isPanelFocused?: boolean;
 	readonly panelSide?: PanelSide;
 	readonly viewInstance?: string;
@@ -132,16 +142,49 @@ export function FilesView({ context }: FilesViewProps) {
 	const entries = useQuery<FilesystemEntryRow>((queryLix) =>
 		selectFilesystemEntries(queryLix),
 	);
-	return <FilesViewContent context={context} lix={lix} entries={entries} />;
+	return (
+		<FilesViewWithWorkingChanges
+			context={context}
+			lix={lix}
+			entries={entries}
+		/>
+	);
 }
 
-function FilesViewContent({
+function FilesViewWithWorkingChanges({
 	context,
 	lix,
 	entries,
 }: FilesViewProps & {
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
+}) {
+	const workingChanges = useQuery((queryLix) => selectWorkingChanges(queryLix));
+	const fileWorkingChanges = useQuery((queryLix) =>
+		selectFileWorkingChanges(queryLix),
+	);
+	return (
+		<FilesViewContent
+			context={context}
+			lix={lix}
+			entries={entries}
+			workingChanges={workingChanges}
+			fileWorkingChanges={fileWorkingChanges}
+		/>
+	);
+}
+
+function FilesViewContent({
+	context,
+	lix,
+	entries,
+	workingChanges,
+	fileWorkingChanges,
+}: FilesViewProps & {
+	readonly lix: Lix;
+	readonly entries: FilesystemEntryRow[];
+	readonly workingChanges: WorkingChangeRow[];
+	readonly fileWorkingChanges: FileWorkingChangeRow[];
 }) {
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),
@@ -186,13 +229,45 @@ function FilesViewContent({
 		() => buildFilesystemTree(mergedEntries),
 		[mergedEntries],
 	);
-	const pendingReviewPaths = usePendingExternalWriteReviewPaths(
+	const agentReviewPaths = usePendingExternalWriteReviewPaths(
 		lix,
 		nodes,
 		context?.activeBranchId ?? "",
 		context?.resolvedReviewIds ?? [],
 		context?.reviewRangeSessionId,
 	);
+	const workingChangePaths = useMemo(() => {
+		return new Set(
+			fileWorkingChanges.flatMap((change) =>
+				change.path ? [change.path] : [],
+			),
+		);
+	}, [fileWorkingChanges]);
+	const pendingReviewPaths =
+		context?.reviewModeActive === true
+			? context.reviewWorkingChanges === true
+				? workingChangePaths
+				: agentReviewPaths
+			: EMPTY_REVIEW_PATHS;
+	const reviewChangeCounts = useMemo(() => {
+		const countsByFileId = new Map<string, number>();
+		for (const change of workingChanges) {
+			if (!change.file_id) continue;
+			countsByFileId.set(
+				change.file_id,
+				(countsByFileId.get(change.file_id) ?? 0) + 1,
+			);
+		}
+		const countsByPath = new Map<string, number>();
+		for (const entry of entries) {
+			if (entry.kind !== "file" || !pendingReviewPaths.has(entry.path)) {
+				continue;
+			}
+			const count = countsByFileId.get(entry.id);
+			if (count) countsByPath.set(entry.path, count);
+		}
+		return countsByPath;
+	}, [entries, pendingReviewPaths, workingChanges]);
 	const creatingRef = useRef(false);
 	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
@@ -1017,6 +1092,7 @@ function FilesViewContent({
 			variant={context?.panelSide === "central" ? "spacious" : "compact"}
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
+			reviewCounts={reviewChangeCounts}
 			onSelectItem={handleSelectItem}
 			onClearSelection={handleClearSelection}
 			selectedPath={selectedPath ?? undefined}
@@ -1407,6 +1483,8 @@ export const extension = createReactExtensionDefinition({
 					activeBranchId: atelier.branches.activeId,
 					resolvedReviewIds: atelier.reviews.resolvedReviewIds,
 					reviewRangeSessionId: atelier.reviews.rangeSessionId,
+					reviewWorkingChanges: true,
+					reviewModeActive: atelier.reviews.active,
 					isPanelFocused: view.isFocused,
 					panelSide: view.panel,
 					viewInstance: view.instanceId,

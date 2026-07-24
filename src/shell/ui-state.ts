@@ -41,6 +41,13 @@ export type AtelierUserPreferencesV1 = {
 	readonly layout: {
 		readonly sizes: PanelLayoutSizes;
 	};
+	/**
+	 * Review behavior is private to the current client. Optional keeps v1
+	 * preferences written by older Atelier builds forwards-compatible.
+	 */
+	readonly review?: {
+		readonly autoAcceptAgentChanges: boolean;
+	};
 };
 
 /**
@@ -73,6 +80,7 @@ export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 const DEFAULT_ATELIER_USER_PREFERENCES: AtelierUserPreferencesV1 = {
 	version: 1,
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
+	review: { autoAcceptAgentChanges: false },
 };
 
 /** Creates the fresh-workspace state with requested side panels visible. */
@@ -205,6 +213,13 @@ export function coerceAtelierUserPreferences(
 				(layout.sizes as Partial<Record<PanelSide, number>> | undefined) ??
 					undefined,
 			),
+		},
+		review: {
+			autoAcceptAgentChanges:
+				candidate.review !== null &&
+				typeof candidate.review === "object" &&
+				(candidate.review as Record<string, unknown>).autoAcceptAgentChanges ===
+					true,
 		},
 	};
 }
