@@ -1475,26 +1475,40 @@ function LayoutShellLoadedContent({
 		runDiffReviewResolution,
 	]);
 
-	// "Checkpoint with a name…" from the float's ▾ menu. Named checkpoints are
-	// not supported by the engine yet, so the name is intentionally dropped and
-	// this seals a regular checkpoint.
-	const handleCreateNamedCheckpoint = useCallback(async () => {
-		await handleCreateCheckpoint();
-	}, [handleCreateCheckpoint]);
-
-	// Keep all: accept every pending review across the workspace in one press.
+	// Keep: accept pending reviews for the ticked files (every file unless the
+	// user unticked some in the float's ▾ list).
+	const handleKeepReviews = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			const selected = new Set(selectedFileIds);
+			const pendingReviews = await collectPendingAgentTurnReviews();
+			for (const review of pendingReviews) {
+				if (!selected.has(review.fileId)) continue;
+				await runDiffReviewResolution(review, "accepted", async () => {
+					await persistReviewResolution(review, "accepted");
+				});
+			}
+		},
+		[
+			collectPendingAgentTurnReviews,
+			persistReviewResolution,
+			runDiffReviewResolution,
+		],
+	);
 	const handleKeepAllReviews = useCallback(async () => {
 		const pendingReviews = await collectPendingAgentTurnReviews();
-		for (const review of pendingReviews) {
-			await runDiffReviewResolution(review, "accepted", async () => {
-				await persistReviewResolution(review, "accepted");
-			});
-		}
-	}, [
-		collectPendingAgentTurnReviews,
-		persistReviewResolution,
-		runDiffReviewResolution,
-	]);
+		await handleKeepReviews(pendingReviews.map((review) => review.fileId));
+	}, [collectPendingAgentTurnReviews, handleKeepReviews]);
+
+	// Restore is intentionally inert until the engine exposes a restore
+	// surface; the float still carries the verb so the flow reads correctly.
+	const handleRestoreCheckpoint = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			console.info(
+				`[diff-mode] Restore (${selectedFileIds.length} files) is not wired to the engine yet`,
+			);
+		},
+		[],
+	);
 	resolveDiffReviewRef.current = resolveDiffReview;
 	// A working-changes review is an explicit workspace-level session. Keep the
 	// shell in review mode while views swap: the outgoing file unregisters its
@@ -1518,8 +1532,10 @@ function LayoutShellLoadedContent({
 	}, [agentTurnRangeKey]);
 
 	// Shell-level ESC fallback for when no float is mounted (e.g. the active
-	// view has no pending diff). The float handles ESC itself and stops
-	// propagation before this listener sees it.
+	// view has no pending diff). Registered on document, not window: the
+	// float's window-capture handler always runs first regardless of listener
+	// registration order and stops propagation when it consumes ESC (to close
+	// its file list without leaving diff mode).
 	useEffect(() => {
 		if (!isReviewMode) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -1528,9 +1544,11 @@ function LayoutShellLoadedContent({
 			event.stopPropagation();
 			exitDiffReview();
 		};
-		window.addEventListener("keydown", handleKeyDown, { capture: true });
+		document.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => {
-			window.removeEventListener("keydown", handleKeyDown, { capture: true });
+			document.removeEventListener("keydown", handleKeyDown, {
+				capture: true,
+			});
 		};
 	}, [exitDiffReview, isReviewMode]);
 
@@ -2094,6 +2112,38 @@ function LayoutShellLoadedContent({
 				? `Reviewing this turn${reviewFileCountLabel}`
 				: null;
 
+	// The float's orange verb, scoped by its ▾ checklist: every changed file
+	// unless the user unticked some.
+	const handleDiffPrimary = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			if (historicalReview) {
+				await handleRestoreCheckpoint(selectedFileIds);
+				return;
+			}
+			if (workingChangesReviewOpen) {
+				if (selectedFileIds.length >= pendingReviewFiles.length) {
+					await handleCreateCheckpoint();
+					return;
+				}
+				// Sealing a subset needs engine support for partial checkpoints —
+				// intentionally inert until it exists.
+				console.info(
+					`[diff-mode] Checkpoint of ${selectedFileIds.length} of ${pendingReviewFiles.length} files is not wired yet`,
+				);
+				return;
+			}
+			await handleKeepReviews(selectedFileIds);
+		},
+		[
+			handleCreateCheckpoint,
+			handleKeepReviews,
+			handleRestoreCheckpoint,
+			historicalReview,
+			pendingReviewFiles.length,
+			workingChangesReviewOpen,
+		],
+	);
+
 	const resolveAndOpenFile = useCallback(
 		async ({
 			panel,
@@ -2250,12 +2300,6 @@ function LayoutShellLoadedContent({
 		},
 		[closeHistoricalReviewViews, lix, resolveAndOpenDocument],
 	);
-
-	// Restore is intentionally inert until the engine exposes a restore
-	// surface; the float still carries the verb so the flow reads correctly.
-	const handleRestoreCheckpoint = useCallback(async () => {
-		console.info("[diff-mode] Restore is not wired to the engine yet");
-	}, []);
 
 	const getExternalWriteReviewForFile = useCallback(
 		({
@@ -2442,24 +2486,6 @@ function LayoutShellLoadedContent({
 			runDiffReviewResolution,
 		],
 	);
-
-	// The float's ▾ "Keep only <file>": accept just the stepped file's review.
-	const handleKeepActiveFileReview = useCallback(async () => {
-		const activeView = panelStatesRef.current.central.views.find(
-			(view) => view.instance === panelStatesRef.current.central.activeInstance,
-		);
-		const activeFileId = activeView
-			? activeFileIdFromExtensionInstance(activeView)
-			: null;
-		if (!activeFileId) return;
-		const review = openDiffReviewByFileIdRef.current.get(activeFileId);
-		if (!review) return;
-		await handleAcceptExternalWriteReview({
-			fileId: review.fileId,
-			reviewId: review.reviewId,
-			review,
-		});
-	}, [handleAcceptExternalWriteReview]);
 
 	// Undo all: walk the whole workspace back in one press.
 	const handleUndoAllReviews = useCallback(async () => {
@@ -3319,7 +3345,6 @@ function LayoutShellLoadedContent({
 					: ("agent-turn" as const),
 				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
 				createCheckpoint: handleCreateCheckpoint,
-				createNamedCheckpoint: handleCreateNamedCheckpoint,
 				keepAll: handleKeepAllReviews,
 				undoAll: handleUndoAllReviews,
 				exit: exitDiffReview,
@@ -3345,7 +3370,6 @@ function LayoutShellLoadedContent({
 			autoAcceptAgentChanges,
 			exitDiffReview,
 			handleCreateCheckpoint,
-			handleCreateNamedCheckpoint,
 			handleKeepAllReviews,
 			handleUndoAllReviews,
 			handleOpenWorkingChangesReview,
@@ -3605,25 +3629,16 @@ function LayoutShellLoadedContent({
 													: "agent-turn"
 										}
 										navigation={reviewNavigation}
+										files={pendingReviewFiles}
+										activeFileId={
+											pendingReviewFiles[activeReviewFileIndex]?.id ?? null
+										}
 										onUndoAll={
 											historicalReview
 												? undefined
 												: () => void handleUndoAllReviews()
 										}
-										onPrimary={
-											historicalReview
-												? handleRestoreCheckpoint
-												: workingChangesReviewOpen
-													? handleCreateCheckpoint
-													: handleKeepAllReviews
-										}
-										onMenuAction={
-											historicalReview
-												? handleRestoreCheckpoint
-												: workingChangesReviewOpen
-													? handleCreateNamedCheckpoint
-													: handleKeepActiveFileReview
-										}
+										onPrimary={handleDiffPrimary}
 										onExit={exitDiffReview}
 									/>
 								) : null}

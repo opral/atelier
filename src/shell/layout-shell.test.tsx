@@ -422,9 +422,7 @@ describe("agent turn review navigation", () => {
 						),
 				).toBe(true);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep all/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			await waitFor(() => {
 				expect(
 					onEvent.mock.calls.filter(
@@ -763,9 +761,7 @@ describe("agent turn review navigation", () => {
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep all/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 
 			fireEvent.click(await findFilesTreeItem("middle.md"));
 			await waitFor(() => {
@@ -803,9 +799,7 @@ describe("agent turn review navigation", () => {
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep all/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			expect(
 				onEvent.mock.calls.filter(
 					([event]) =>
@@ -878,9 +872,7 @@ describe("agent turn review navigation", () => {
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep all/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 
 			const beforeQueued = await activeCommitId(lix);
 			await act(async () => {
@@ -921,16 +913,16 @@ describe("agent turn review navigation", () => {
 				}),
 			]);
 
-			// S2: Keep all accepts every pending review — the active one and the
+			// S2: Keep accepts every pending review — the active one and the
 			// deferred queued one — so review mode ends instead of advancing.
 			const keepActiveReview = await screen.findByRole("button", {
-				name: /^Keep all/,
+				name: "Keep",
 			});
 			await act(async () => {
 				fireEvent.click(keepActiveReview);
 			});
 			await waitFor(() => {
-				expect(screen.queryByRole("button", { name: /^Keep all/ })).toBeNull();
+				expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 				expect.objectContaining({
@@ -1044,9 +1036,7 @@ describe("agent turn review navigation", () => {
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep all/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			await waitFor(() => {
 				const openedReviewIds = onEvent.mock.calls.flatMap(([event]) =>
 					event.type === "diff_opened" ? [event.reviewId] : [],

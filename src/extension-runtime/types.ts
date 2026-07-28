@@ -96,8 +96,6 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 		readonly mode?: "agent-turn" | "working-changes";
 		readonly navigation?: ExternalWriteReviewNavigation;
 		readonly createCheckpoint?: () => Promise<void>;
-		/** "Checkpoint with a name…" — the engine drops the name for now. */
-		readonly createNamedCheckpoint?: () => Promise<void>;
 		/** Accept every pending review across the workspace. */
 		readonly keepAll?: () => Promise<void>;
 		/** Walk every pending change back across the workspace. */
