@@ -28,6 +28,7 @@ import {
 } from "@dnd-kit/core";
 import { useLix, useQuery } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
+import { Clock } from "lucide-react";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
@@ -1241,11 +1242,27 @@ function LayoutShellLoadedContent({
 			}
 		}
 	}, []);
+	// The live document the historical view replaced (tabs navigate in place);
+	// restored on "Back to now" so exiting never strands an empty tab.
+	const preHistoricalDocumentRef = useRef<{
+		readonly fileId: string;
+		readonly filePath: string;
+	} | null>(null);
+	const reopenLiveDocumentRef = useRef<
+		((file: { fileId: string; filePath: string }) => void) | null
+	>(null);
 	const exitDiffReview = useCallback(() => {
 		setWorkingChangesReviewOpen(false);
 		setAgentTurnReviewDismissed(true);
 		setHistoricalReview((current) => {
-			if (current) closeHistoricalReviewViews(current.commitId);
+			if (current) {
+				closeHistoricalReviewViews(current.commitId);
+				const previousDocument = preHistoricalDocumentRef.current;
+				preHistoricalDocumentRef.current = null;
+				if (previousDocument) {
+					reopenLiveDocumentRef.current?.(previousDocument);
+				}
+			}
 			return null;
 		});
 	}, [closeHistoricalReviewViews]);
@@ -1949,6 +1966,7 @@ function LayoutShellLoadedContent({
 		},
 		[openResolvedFileView],
 	);
+	reopenLiveDocumentRef.current = openAutoRevealedFile;
 	const pendingReviewFilesKey = JSON.stringify([
 		agentTurnRangeValues,
 		privateResolvedReviewIds,
@@ -2203,6 +2221,26 @@ function LayoutShellLoadedContent({
 			setHistoricalReview((current) => {
 				if (current && current.commitId !== commitId) {
 					closeHistoricalReviewViews(current.commitId);
+				}
+				if (!current) {
+					// Entering the past: remember the live document this view will
+					// replace so "Back to now" can bring it back.
+					const activeView = panelStatesRef.current.central.views.find(
+						(view) =>
+							view.instance === panelStatesRef.current.central.activeInstance,
+					);
+					const activeFileId = activeView
+						? activeFileIdFromExtensionInstance(activeView)
+						: null;
+					const activePath = activeView
+						? documentPathFromView(activeView)
+						: null;
+					// A view already pointed at history has no live doc to restore.
+					const isLiveView = activeView?.state?.afterCommitId === undefined;
+					preHistoricalDocumentRef.current =
+						activeFileId && activePath && isLiveView
+							? { fileId: activeFileId, filePath: activePath }
+							: null;
 				}
 				return { commitId, createdAt, files };
 			});
@@ -3534,6 +3572,28 @@ function LayoutShellLoadedContent({
 										slots?.centralPanelEmpty,
 									)}
 								/>
+								{historicalReview ? (
+									<div
+										className="pointer-events-none absolute inset-x-0 top-11 z-10 flex justify-center"
+										data-attr="historical-read-only-banner"
+									>
+										<span
+											role="status"
+											className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[#F0E2C8] bg-[#FBF3E4] px-3 py-1 text-[11.5px] text-[#92400E] shadow-sm"
+										>
+											<Clock
+												aria-hidden="true"
+												className="h-3 w-3 text-[#B45309]"
+											/>
+											<span>
+												<b className="font-bold">Read-only</b>
+												{activeFileName
+													? ` · ${activeFileName} as it was at this checkpoint`
+													: " · this checkpoint's files"}
+											</span>
+										</span>
+									</div>
+								) : null}
 								{isReviewMode && !isHostReadOnly ? (
 									<ExternalWriteReviewControls
 										isActive
