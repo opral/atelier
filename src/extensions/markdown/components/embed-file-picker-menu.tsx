@@ -79,10 +79,6 @@ export function classifyEmbedFile(path: string): {
 	return { kind: "reference", insertsBlock: false };
 }
 
-export function embedFileKindLabel(kind: EmbedFileKind): string {
-	return kind === "reference" ? "no renderer → reference" : kind;
-}
-
 export type EmbedFileItem = {
 	readonly path: string;
 	readonly fileName: string;
@@ -439,7 +435,7 @@ function EmbedFilePickerContent({
 										{file.fileName}
 									</span>
 									<span className="markdown-slash-option-description">
-										{file.directoryLabel} · {embedFileKindLabel(file.kind)}
+										{file.directoryLabel}
 										{file.kind === "video" ? (
 											<VideoDurationSuffix lix={lix} path={file.path} />
 										) : null}
@@ -457,40 +453,40 @@ function EmbedFilePickerContent({
 							}
 						/>
 					) : null}
-					<div
-						id={`markdown-embed-file-option-${uploadIndex}`}
-						data-index={uploadIndex}
-						className="markdown-slash-option markdown-embed-file-option markdown-embed-file-upload"
-						data-selected={clampedIndex === uploadIndex}
-						role="option"
-						aria-selected={clampedIndex === uploadIndex}
-						aria-label="Upload from computer"
-						onMouseDown={(event) => event.preventDefault()}
-						onMouseEnter={() => setSelectedIndex(uploadIndex)}
-						onClick={() => fileInputRef.current?.click()}
-						tabIndex={-1}
-					>
-						<span
-							className="markdown-slash-option-icon markdown-embed-file-upload-icon"
-							aria-hidden="true"
-						>
-							<Upload />
-						</span>
-						<span className="markdown-slash-option-copy">
-							<span className="markdown-slash-option-label">
-								Upload from computer…
-							</span>
-							<span className="markdown-slash-option-description">
-								Copies next to this document
-							</span>
-						</span>
-					</div>
-					{uploadError ? (
-						<div className="markdown-embed-file-error" role="alert">
-							{uploadError}
-						</div>
-					) : null}
 				</div>
+			</div>
+			<div className="markdown-embed-file-upload-section">
+				<button
+					id={`markdown-embed-file-option-${uploadIndex}`}
+					data-index={uploadIndex}
+					className="markdown-slash-option markdown-embed-file-option markdown-embed-file-upload"
+					data-selected={clampedIndex === uploadIndex}
+					type="button"
+					onMouseDown={(event) => event.preventDefault()}
+					onMouseEnter={() => setSelectedIndex(uploadIndex)}
+					onClick={() => fileInputRef.current?.click()}
+					tabIndex={-1}
+				>
+					<span
+						className="markdown-slash-option-icon markdown-embed-file-upload-icon"
+						aria-hidden="true"
+					>
+						<Upload />
+					</span>
+					<span className="markdown-slash-option-copy">
+						<span className="markdown-slash-option-label">
+							Upload from computer…
+						</span>
+						<span className="markdown-slash-option-description">
+							Copies next to this document
+						</span>
+					</span>
+				</button>
+				{uploadError ? (
+					<div className="markdown-embed-file-error" role="alert">
+						{uploadError}
+					</div>
+				) : null}
 			</div>
 			<input
 				aria-hidden="true"

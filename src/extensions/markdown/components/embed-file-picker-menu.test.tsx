@@ -22,7 +22,6 @@ import {
 	buildEmbedFileItems,
 	classifyEmbedFile,
 	embedFileAlt,
-	embedFileKindLabel,
 } from "./embed-file-picker-menu";
 
 const editors: Editor[] = [];
@@ -44,11 +43,6 @@ describe("classifyEmbedFile", () => {
 		["/data/contacts.csv", "reference", false],
 	])("classifies %s as %s", (path, kind, insertsBlock) => {
 		expect(classifyEmbedFile(path)).toEqual({ kind, insertsBlock });
-	});
-
-	test("labels non-renderable files as references", () => {
-		expect(embedFileKindLabel("reference")).toBe("no renderer → reference");
-		expect(embedFileKindLabel("video")).toBe("video");
 	});
 });
 
@@ -175,10 +169,15 @@ describe("EmbedFilePickerMenu", () => {
 			"/assets/kickoff.mp4",
 			"/design/brand.sketch",
 			"/docs/other.md",
-			"Upload from computer",
 		]);
-		expect(options[1]).toHaveTextContent("no renderer → reference");
-		expect(options[2]).toHaveTextContent("./ · document");
+		// The meta line carries only the doc-relative directory — no kind column.
+		expect(options[1]).not.toHaveTextContent("reference");
+		expect(options[2]).toHaveTextContent("./");
+		// Upload lives outside the file list as its own pinned action.
+		const upload = screen.getByRole("button", {
+			name: /Upload from computer/,
+		});
+		expect(upload.closest(".markdown-slash-menu-scroll")).toBeNull();
 
 		fireEvent.keyDown(search, { key: "Enter" });
 		await waitFor(() => {
@@ -219,7 +218,7 @@ describe("EmbedFilePickerMenu", () => {
 		await act(async () => {
 			editor.commands.openEmbedFileMenu();
 		});
-		await screen.findByRole("option", { name: "Upload from computer" });
+		await screen.findByRole("button", { name: /Upload from computer/ });
 
 		const fileInput = container.ownerDocument.querySelector(
 			'input[type="file"]',
@@ -258,7 +257,7 @@ describe("EmbedFilePickerMenu", () => {
 			).toHaveTextContent("No files found");
 		});
 		expect(
-			screen.getByRole("option", { name: "Upload from computer" }),
+			screen.getByRole("button", { name: /Upload from computer/ }),
 		).toBeInTheDocument();
 	});
 
