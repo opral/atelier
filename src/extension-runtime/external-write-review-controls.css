@@ -29,7 +29,10 @@
 		overflow: hidden;
 	}
 
-	.external-write-review-split-primary {
+	/* Higher specificity than .external-write-review-button, which sets the
+	   standalone radius later in this file — inside the split, the halves
+	   share the wrapper's rounding and meet flat at the divider. */
+	.external-write-review-split .external-write-review-split-primary {
 		border-radius: 0;
 	}
 
