@@ -9,6 +9,19 @@ export type EditorRevisionState = {
 
 export type EditorRevisionMode = "editor" | "snapshot" | "diff";
 
+/**
+ * View-state keys that pin an editor to a historical revision. They are the
+ * tab's identity, not accumulated state: navigating a tab to the live
+ * document must drop them or the tab stays a read-only snapshot forever.
+ */
+export const EDITOR_REVISION_STATE_KEYS = [
+	"beforeCommitId",
+	"afterCommitId",
+	"beforeFileId",
+	"afterFileId",
+	"sourceCommitId",
+] as const;
+
 export function normalizeEditorRevisionState(
 	state:
 		| ExtensionState
