@@ -23,11 +23,11 @@ describe("seedWorkspace", () => {
 		await seedWorkspace(lix as never);
 
 		const pdf = inserts.find((parameters) =>
-			String(parameters[1]).endsWith("/assets/example.pdf"),
+			String(parameters[0]).endsWith("/assets/example.pdf"),
 		);
 		expect(pdf).toBeDefined();
-		expect(pdf?.[2]).toBeInstanceOf(Uint8Array);
-		const bytes = pdf?.[2] as Uint8Array;
+		expect(pdf?.[1]).toBeInstanceOf(Uint8Array);
+		const bytes = pdf?.[1] as Uint8Array;
 		expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe("%PDF-1.4");
 		expect(bytes.byteLength).toBeGreaterThan(2_000);
 	});

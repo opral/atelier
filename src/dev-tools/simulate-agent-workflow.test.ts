@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import type { Lix } from "@lix-js/sdk";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
 import { getExternalWriteReview } from "@/shell/external-write-review-history";
 import { readAgentTurnCommitRanges } from "@/shell/agent-turn-review-range";
@@ -51,7 +52,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
-			id: "devtools-readme",
+			id: fakeUuid("devtools-readme"),
 			path: "/README.md",
 			data: encoder.encode("# Original heading\n\nStable paragraph.\n"),
 		})
@@ -65,12 +66,12 @@ test("simulates a real completed agent turn that opens an external-write review"
 	const file = await qb(lix)
 		.selectFrom("lix_file")
 		.select("data")
-		.where("id", "=", "devtools-readme")
+		.where("id", "=", fakeUuid("devtools-readme"))
 		.executeTakeFirstOrThrow();
 	const ranges = await readAgentTurnCommitRanges(lix);
 	const review = await getExternalWriteReview(
 		lix,
-		"devtools-readme",
+		fakeUuid("devtools-readme"),
 		"/README.md",
 	);
 
@@ -83,7 +84,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 		afterCommitId: result.afterCommitId,
 	});
 	expect(review).toMatchObject({
-		fileId: "devtools-readme",
+		fileId: fakeUuid("devtools-readme"),
 		beforeCommitId: result.beforeCommitId,
 		afterCommitId: result.afterCommitId,
 	});

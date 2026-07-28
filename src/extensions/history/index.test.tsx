@@ -3,6 +3,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { HistoryView } from ".";
 
 describe("HistoryView", () => {
@@ -11,10 +12,10 @@ describe("HistoryView", () => {
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
-				"history-file-one",
+				fakeUuid("history-file-one"),
 				"/one.txt",
 				new TextEncoder().encode("one"),
-				"history-file-two",
+				fakeUuid("history-file-two"),
 				"/two.txt",
 				new TextEncoder().encode("two"),
 			],

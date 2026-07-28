@@ -8,6 +8,7 @@ import {
 import { describe, expect, test } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createAtelier } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
 import {
@@ -25,7 +26,7 @@ describe("Atelier instance file controller", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "focused-file",
+				id: fakeUuid("focused-file"),
 				path: "/focused.md",
 				data: new TextEncoder().encode("# Focused\n"),
 			})
@@ -72,7 +73,7 @@ describe("Atelier instance file controller", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "queued-file",
+				id: fakeUuid("queued-file"),
 				path: "/docs/queued.md",
 				data: new TextEncoder().encode("# Queued\n"),
 			})
@@ -134,7 +135,7 @@ describe("Atelier instance file controller", () => {
 	});
 
 	test("falls back to direct creation when the Files view is collapsed", async () => {
-		const fileId = "active-file";
+		const fileId = fakeUuid("active-file");
 		const filePath = "/active.md";
 		const documentKind = "atelier_file";
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
@@ -207,12 +208,12 @@ describe("Atelier instance file controller", () => {
 			.insertInto("lix_file")
 			.values([
 				{
-					id: "root-first",
+					id: fakeUuid("root-first"),
 					path: "/first.md",
 					data: new TextEncoder().encode("# First\n"),
 				},
 				{
-					id: "root-second",
+					id: fakeUuid("root-second"),
 					path: "/second.md",
 					data: new TextEncoder().encode("# Second\n"),
 				},
@@ -254,12 +255,12 @@ describe("Atelier instance file controller", () => {
 			.insertInto("lix_file")
 			.values([
 				{
-					id: "path-first",
+					id: fakeUuid("path-first"),
 					path: "/first.md",
 					data: new TextEncoder().encode("# First\n"),
 				},
 				{
-					id: "path-second",
+					id: fakeUuid("path-second"),
 					path: "/second.md",
 					data: new TextEncoder().encode("# Second\n"),
 				},

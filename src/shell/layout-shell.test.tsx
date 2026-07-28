@@ -31,6 +31,7 @@ import {
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
 } from "../state-adapters";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ASYNC_UI_TIMEOUT = 10_000;
 
@@ -40,7 +41,7 @@ describe("resolveLixFileForOpen", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "readme",
+				id: fakeUuid("readme"),
 				path: "/docs/README.md",
 				data: new TextEncoder().encode("# README\n"),
 			})
@@ -48,7 +49,7 @@ describe("resolveLixFileForOpen", () => {
 
 		await expect(
 			resolveLixFileForOpen({ lix, filePath: "docs/./README.md" }),
-		).resolves.toEqual({ id: "readme", path: "/docs/README.md" });
+		).resolves.toEqual({ id: fakeUuid("readme"), path: "/docs/README.md" });
 		await lix.close();
 	});
 
@@ -96,12 +97,12 @@ describe("open file lifecycle", () => {
 			.insertInto("lix_file")
 			.values([
 				{
-					id: "one",
+					id: fakeUuid("one"),
 					path: "/one.md",
 					data: new TextEncoder().encode("# One\n"),
 				},
 				{
-					id: "two",
+					id: fakeUuid("two"),
 					path: "/two.md",
 					data: new TextEncoder().encode("# Two\n"),
 				},
@@ -141,7 +142,7 @@ describe("open file lifecycle", () => {
 			]);
 			expect(value?.panels?.central?.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: "one" }),
+					state: expect.objectContaining({ fileId: fakeUuid("one") }),
 				}),
 			]);
 		});
@@ -153,7 +154,7 @@ describe("open file lifecycle", () => {
 			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.central?.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: "two" }),
+					state: expect.objectContaining({ fileId: fakeUuid("two") }),
 				}),
 			]);
 		});
@@ -170,10 +171,10 @@ describe("open file lifecycle", () => {
 
 		// Deleting every open file leaves the central empty state.
 		await act(async () => {
-			await qb(lix).deleteFrom("lix_file").where("id", "=", "two").execute();
+			await qb(lix).deleteFrom("lix_file").where("id", "=", fakeUuid("two")).execute();
 		});
 		await act(async () => {
-			await qb(lix).deleteFrom("lix_file").where("id", "=", "one").execute();
+			await qb(lix).deleteFrom("lix_file").where("id", "=", fakeUuid("one")).execute();
 		});
 		await waitFor(() => {
 			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
@@ -187,7 +188,7 @@ describe("open file lifecycle", () => {
 	});
 
 	test("shows the empty state when the last open file is deleted", async () => {
-		const fileId = "file_generic";
+		const fileId = fakeUuid("file_generic");
 		const imageKind = "atelier_image";
 		const instance = fileExtensionInstanceForKind(imageKind, fileId);
 		const createObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
@@ -288,7 +289,7 @@ describe("open file lifecycle", () => {
 			await qb(lix)
 				.insertInto("lix_file")
 				.values({
-					id: "next-file",
+					id: fakeUuid("next-file"),
 					path: "/next.md",
 					data: new TextEncoder().encode("# Next\n"),
 				})
@@ -348,17 +349,17 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "stable-file",
+						id: fakeUuid("stable-file"),
 						path: "/stable.md",
 						data: new TextEncoder().encode("# Stable\n"),
 					},
 					{
-						id: "changed-file",
+						id: fakeUuid("changed-file"),
 						path: "/changed.md",
 						data: new TextEncoder().encode("# Before\n"),
 					},
 					{
-						id: "later-file",
+						id: fakeUuid("later-file"),
 						path: "/later.md",
 						data: new TextEncoder().encode("# Later before\n"),
 					},
@@ -381,7 +382,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
 					}),
 				]);
 			});
@@ -390,7 +391,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# After\n") })
-					.where("id", "=", "changed-file")
+					.where("id", "=", fakeUuid("changed-file"))
 					.execute();
 			});
 			const afterCommitId = await activeCommitId(lix);
@@ -411,7 +412,7 @@ describe("agent turn review navigation", () => {
 					sessionStateStore
 						.getSnapshot()
 						?.panels.central.views.some(
-							(view) => view.state?.fileId === "changed-file",
+							(view) => view.state?.fileId === fakeUuid("changed-file"),
 						),
 				).toBe(true);
 			});
@@ -456,7 +457,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
 					}),
 				]);
 			});
@@ -466,7 +467,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Later after\n") })
-					.where("id", "=", "later-file")
+					.where("id", "=", fakeUuid("later-file"))
 					.execute();
 			});
 			const afterLaterCommitId = await activeCommitId(lix);
@@ -483,7 +484,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "later-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("later-file") }),
 					}),
 				]);
 			});
@@ -536,12 +537,12 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "auto-stable-file",
+						id: fakeUuid("auto-stable-file"),
 						path: "/auto-stable.md",
 						data: new TextEncoder().encode("# Stable\n"),
 					},
 					{
-						id: "auto-changed-file",
+						id: fakeUuid("auto-changed-file"),
 						path: "/auto-changed.md",
 						data: new TextEncoder().encode("# Before\n"),
 					},
@@ -568,14 +569,14 @@ describe("agent turn review navigation", () => {
 				expect(
 					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
 						?.fileId,
-				).toBe("auto-changed-file");
+				).toBe(fakeUuid("auto-changed-file"));
 			});
 
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# After\n") })
-					.where("id", "=", "auto-changed-file")
+					.where("id", "=", fakeUuid("auto-changed-file"))
 					.execute();
 			});
 			await waitFor(() => {
@@ -587,7 +588,7 @@ describe("agent turn review navigation", () => {
 			});
 			expect(
 				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
-			).toBe("auto-changed-file");
+			).toBe(fakeUuid("auto-changed-file"));
 			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
 			expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
 
@@ -657,7 +658,7 @@ describe("agent turn review navigation", () => {
 				expect(
 					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
 						?.fileId,
-				).toBe("auto-stable-file");
+				).toBe(fakeUuid("auto-stable-file"));
 			});
 			expect(
 				document.querySelector("[data-review-mode='true']"),
@@ -708,17 +709,17 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "older-file",
+						id: fakeUuid("older-file"),
 						path: "/a-older.md",
 						data: new TextEncoder().encode("# Older before\n"),
 					},
 					{
-						id: "stable-file",
+						id: fakeUuid("stable-file"),
 						path: "/middle.md",
 						data: new TextEncoder().encode("# Stable\n"),
 					},
 					{
-						id: "newer-file",
+						id: fakeUuid("newer-file"),
 						path: "/z-newer.md",
 						data: new TextEncoder().encode("# Newer before\n"),
 					},
@@ -739,7 +740,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Older after\n") })
-					.where("id", "=", "older-file")
+					.where("id", "=", fakeUuid("older-file"))
 					.execute();
 			});
 			const afterOlder = await activeCommitId(lix);
@@ -756,7 +757,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "older-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("older-file") }),
 					}),
 				]);
 			});
@@ -768,7 +769,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
 					}),
 				]);
 			});
@@ -778,7 +779,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Newer after\n") })
-					.where("id", "=", "newer-file")
+					.where("id", "=", fakeUuid("newer-file"))
 					.execute();
 			});
 			const afterNewer = await activeCommitId(lix);
@@ -796,7 +797,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "newer-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("newer-file") }),
 					}),
 				]);
 			});
@@ -826,12 +827,12 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "active-review-file",
+						id: fakeUuid("active-review-file"),
 						path: "/active.md",
 						data: new TextEncoder().encode("# Active before\n"),
 					},
 					{
-						id: "queued-review-file",
+						id: fakeUuid("queued-review-file"),
 						path: "/queued.md",
 						data: new TextEncoder().encode("# Queued before\n"),
 					},
@@ -852,7 +853,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Active after\n") })
-					.where("id", "=", "active-review-file")
+					.where("id", "=", fakeUuid("active-review-file"))
 					.execute();
 			});
 			const afterActive = await activeCommitId(lix);
@@ -869,7 +870,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "active-review-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("active-review-file") }),
 					}),
 				]);
 			});
@@ -882,7 +883,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Queued after\n") })
-					.where("id", "=", "queued-review-file")
+					.where("id", "=", fakeUuid("queued-review-file"))
 					.execute();
 			});
 			const afterQueued = await activeCommitId(lix);
@@ -910,7 +911,7 @@ describe("agent turn review navigation", () => {
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: "active-review-file" }),
+					state: expect.objectContaining({ fileId: fakeUuid("active-review-file") }),
 				}),
 			]);
 
@@ -923,7 +924,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "queued-review-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("queued-review-file") }),
 					}),
 				]);
 			});
@@ -943,12 +944,12 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "session-stable-file",
+						id: fakeUuid("session-stable-file"),
 						path: "/session-stable.md",
 						data: new TextEncoder().encode("# Session stable\n"),
 					},
 					{
-						id: "session-review-file",
+						id: fakeUuid("session-review-file"),
 						path: "/session-review.md",
 						data: new TextEncoder().encode("# Session before\n"),
 					},
@@ -958,7 +959,7 @@ describe("agent turn review navigation", () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ data: new TextEncoder().encode("# Session after\n") })
-				.where("id", "=", "session-review-file")
+				.where("id", "=", fakeUuid("session-review-file"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
 			await appendAgentTurnCommitRange(lix, {
@@ -990,7 +991,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "session-review-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("session-review-file") }),
 					}),
 				]);
 			});
@@ -1003,7 +1004,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "session-stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("session-stable-file") }),
 					}),
 				]);
 			});
@@ -1022,7 +1023,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "session-review-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("session-review-file") }),
 					}),
 				]);
 			});
@@ -1092,7 +1093,7 @@ describe("agent turn review navigation", () => {
 			await qb(lix)
 				.insertInto("lix_file")
 				.values({
-					id: "branch-race-file",
+					id: fakeUuid("branch-race-file"),
 					path: "/branch-race.md",
 					data: new TextEncoder().encode("# Before\n"),
 				})
@@ -1101,7 +1102,7 @@ describe("agent turn review navigation", () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ data: new TextEncoder().encode("# After\n") })
-				.where("id", "=", "branch-race-file")
+				.where("id", "=", fakeUuid("branch-race-file"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
 			const draftBranch = await lix.createBranch({ name: "Draft" });
@@ -1163,7 +1164,7 @@ describe("agent turn review navigation", () => {
 				sessionStateStore
 					.getSnapshot()
 					?.panels.central.views.some(
-						(view) => view.state?.fileId === "branch-race-file",
+						(view) => view.state?.fileId === fakeUuid("branch-race-file"),
 					),
 			).toBe(false);
 		} finally {
@@ -1196,7 +1197,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.insertInto("lix_file")
 					.values({
-						id: "agent-created-file",
+						id: fakeUuid("agent-created-file"),
 						path: "/agent-created.md",
 						data: new TextEncoder().encode("# Created by agent\n"),
 					})
@@ -1236,7 +1237,7 @@ describe("agent turn review navigation", () => {
 				const file = await qb(lix)
 					.selectFrom("lix_file")
 					.select("id")
-					.where("id", "=", "agent-created-file")
+					.where("id", "=", fakeUuid("agent-created-file"))
 					.executeTakeFirst();
 				expect(file).toBeUndefined();
 			});
@@ -1282,7 +1283,7 @@ describe("agent turn review navigation", () => {
 					await qb(lix)
 						.insertInto("lix_file")
 						.values({
-							id: "empty-agent-created-file",
+							id: fakeUuid("empty-agent-created-file"),
 							path: "/empty-agent-created.md",
 							data: new Uint8Array(),
 						})
@@ -1313,7 +1314,7 @@ describe("agent turn review navigation", () => {
 					const file = await qb(lix)
 						.selectFrom("lix_file")
 						.select("id")
-						.where("id", "=", "empty-agent-created-file")
+						.where("id", "=", fakeUuid("empty-agent-created-file"))
 						.executeTakeFirst();
 					expect(Boolean(file)).toBe(shouldExist);
 					expect(
@@ -1479,7 +1480,7 @@ describe("installed extension lifecycle", () => {
 
 describe("canonical UI state", () => {
 	test("persists panel focus without rebuilding the rest of the snapshot", async () => {
-		const fileId = "focus-file";
+		const fileId = fakeUuid("focus-file");
 		const documentKind = "atelier_file";
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
 		const initialState = {

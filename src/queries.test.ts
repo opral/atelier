@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectCheckpoints,
@@ -31,9 +32,9 @@ describe("selectFilesystemEntries", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
-				{ id: "f_root", path: "/README.md", data: new Uint8Array() },
+				{ id: fakeUuid("f_root"), path: "/README.md", data: new Uint8Array() },
 				{
-					id: "f_nested",
+					id: fakeUuid("f_nested"),
 					path: "/docs/guides/intro.md",
 					data: new Uint8Array(),
 				},
@@ -82,16 +83,16 @@ describe("selectFilesystemEntries", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
-				{ id: "root_file", path: "/root.md", data: new Uint8Array() },
-				{ id: "nested_file", path: "/docs/deep.md", data: new Uint8Array() },
+				{ id: fakeUuid("root_file"), path: "/root.md", data: new Uint8Array() },
+				{ id: fakeUuid("nested_file"), path: "/docs/deep.md", data: new Uint8Array() },
 			])
 			.execute();
 
 		const rows = await selectFilesystemEntries(lix).execute();
-		const rootRow = rows.find((row) => row.id === "root_file");
+		const rootRow = rows.find((row) => row.id === fakeUuid("root_file"));
 		expect(rootRow?.parent_id).toBeNull();
 		const docsRow = rows.find((row) => row.path === "/docs/");
-		const nestedRow = rows.find((row) => row.id === "nested_file");
+		const nestedRow = rows.find((row) => row.id === fakeUuid("nested_file"));
 		expect(docsRow).toBeDefined();
 		expect(nestedRow?.parent_id).toBe(docsRow?.id);
 	});
@@ -153,11 +154,11 @@ describe("checkpoint queries", () => {
 
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
-			["review-file", "/drafts/review.md", new TextEncoder().encode("draft")],
+			[fakeUuid("review-file"), "/drafts/review.md", new TextEncoder().encode("draft")],
 		);
 		expect(await selectFileWorkingChanges(lix).execute()).toEqual([
 			{
-				id: "review-file",
+				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
 				previous_path: null,
 				change_kind: "added",

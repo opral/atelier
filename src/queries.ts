@@ -102,13 +102,32 @@ export function selectWorkingChangeCount(lix: Lix) {
 
 /**
  * Net logical files changed between the latest checkpoint and active head.
- * Directory moves are expanded to their descendant files.
+ *
+ * Derived from `lix_working_change` instead of `lix_file_working_change`:
+ * the engine's composed surface currently returns no rows unless the working
+ * range also touches a directory descriptor (upstream bug in
+ * filesystem_working_change.rs). Files removed since the checkpoint are not
+ * reported; no consumer acts on removed files today.
  */
 export function selectFileWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_file_working_change")
-		.select(["id", "path", "previous_path", "change_kind"])
-		.orderBy("path", "asc")
+		.selectFrom("lix_working_change")
+		.innerJoin("lix_file", (join) =>
+			join.on(
+				sql`lix_file.id = coalesce(lix_working_change.file_id, case when lix_working_change.schema_key = 'lix_file_descriptor' then lix_json_get_text(lix_working_change.entity_pk, 0) end)`,
+			),
+		)
+		.select([
+			"lix_file.id",
+			"lix_file.path",
+			sql<string | null>`null`.as("previous_path"),
+			// File descriptor rows carry the file id in entity_pk, not file_id.
+			sql<string>`case when max(case when lix_working_change.schema_key = 'lix_file_descriptor' and lix_working_change.change_kind = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
+				"change_kind",
+			),
+		])
+		.groupBy(["lix_file.id", "lix_file.path"])
+		.orderBy("lix_file.path", "asc")
 		.$castTo<FileWorkingChangeRow>();
 }
 

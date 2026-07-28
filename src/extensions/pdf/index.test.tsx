@@ -5,6 +5,7 @@ import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builti
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const pdfRendererMocks = vi.hoisted(() => ({
 	render: vi.fn(),
@@ -157,7 +158,7 @@ describe("PdfPreview", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "historical-pdf",
+				id: fakeUuid("historical-pdf"),
 				path: "/assets/history.pdf",
 				data: new TextEncoder().encode("%PDF-1.7 historical"),
 			})
@@ -169,7 +170,7 @@ describe("PdfPreview", () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("%PDF-1.7 current") })
-			.where("id", "=", "historical-pdf")
+			.where("id", "=", fakeUuid("historical-pdf"))
 			.execute();
 
 		let view: ReturnType<typeof render> | undefined;
@@ -177,7 +178,7 @@ describe("PdfPreview", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<PdfView
-						fileId="historical-pdf"
+						fileId={fakeUuid("historical-pdf")}
 						filePath="/assets/history.pdf"
 						sourceCommitId={sourceCommitId}
 					/>

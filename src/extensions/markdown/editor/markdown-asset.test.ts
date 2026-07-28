@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import {
 	isPdfAssetSrc,
 	isVideoAssetSrc,
@@ -182,7 +183,7 @@ test("loads a workspace PDF as a disposable object URL", async () => {
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
-			id: "pdf-asset",
+			id: fakeUuid("pdf-asset"),
 			path: "/docs/assets/brief.pdf",
 			data: new TextEncoder().encode("%PDF-1.7"),
 		})
@@ -210,7 +211,7 @@ test("loads a workspace PDF as a disposable object URL", async () => {
 	expect(asset?.src).toBe("blob:atelier-pdf#page=4");
 	expect(asset?.preview).toBe("auto");
 	expect(asset?.workspaceFile).toEqual({
-		fileId: "pdf-asset",
+		fileId: fakeUuid("pdf-asset"),
 		filePath: "/docs/assets/brief.pdf",
 		page: 4,
 	});
@@ -224,7 +225,7 @@ test("loads workspace assets from the requested historical commit", async () => 
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
-			id: "historical-pdf-asset",
+			id: fakeUuid("historical-pdf-asset"),
 			path: "/docs/brief.pdf",
 			data: new TextEncoder().encode("%PDF-1.7 historical bytes"),
 		})
@@ -233,7 +234,7 @@ test("loads workspace assets from the requested historical commit", async () => 
 	await qb(lix)
 		.updateTable("lix_file")
 		.set({ data: new TextEncoder().encode("%PDF-1.7 current bytes") })
-		.where("id", "=", "historical-pdf-asset")
+		.where("id", "=", fakeUuid("historical-pdf-asset"))
 		.execute();
 
 	let createdBlob: Blob | undefined;
@@ -252,7 +253,7 @@ test("loads workspace assets from the requested historical commit", async () => 
 	expect(asset?.src).toBe("blob:historical-pdf");
 	expect(await createdBlob?.text()).toBe("%PDF-1.7 historical bytes");
 	expect(asset?.workspaceFile).toEqual({
-		fileId: "historical-pdf-asset",
+		fileId: fakeUuid("historical-pdf-asset"),
 		filePath: "/docs/brief.pdf",
 		sourceCommitId: historicalCommitId,
 	});
@@ -375,7 +376,7 @@ test("rejects local files without a PDF signature", async () => {
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
-			id: "fake-pdf",
+			id: fakeUuid("fake-pdf"),
 			path: "/fake.pdf",
 			data: new TextEncoder().encode("<html>not a pdf</html>"),
 		})
@@ -395,7 +396,7 @@ test("requires a click before previewing an oversized local PDF", async () => {
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
-			id: "large-pdf",
+			id: fakeUuid("large-pdf"),
 			path: "/large.pdf",
 			data: new TextEncoder().encode("%PDF-1.7 oversized"),
 		})

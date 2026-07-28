@@ -18,14 +18,12 @@ const seedAssetUrls = import.meta.glob("./seed/**/assets/**/*", {
 export async function seedWorkspace(lix: Lix): Promise<void> {
 	const textFiles = Object.entries(seedTextModules).map(
 		([modulePath, contents]) => ({
-			id: `preview-seed:${modulePath.slice("./seed".length)}`,
 			path: modulePath.slice("./seed".length),
 			data: new TextEncoder().encode(embedSeedAssets(modulePath, contents)),
 		}),
 	);
 	const assetFiles = Object.entries(seedAssetUrls).map(
 		([modulePath, dataUrl]) => ({
-			id: `preview-seed:${modulePath.slice("./seed".length)}`,
 			path: modulePath.slice("./seed".length),
 			data: decodeSeedAssetDataUrl(dataUrl),
 		}),
@@ -36,8 +34,8 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	const seedProbe = files[0];
 	if (seedProbe) {
 		const existing = await lix.execute(
-			"SELECT id FROM lix_file WHERE id = $1 LIMIT 1",
-			[seedProbe.id],
+			"SELECT id FROM lix_file WHERE path = $1 LIMIT 1",
+			[seedProbe.path],
 		);
 		if (existing.rows.length > 0) return;
 	}
@@ -48,10 +46,10 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	);
 
 	for (const file of files) {
-		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
-			[file.id, file.path, file.data],
-		);
+		await lix.execute("INSERT INTO lix_file (path, data) VALUES ($1, $2)", [
+			file.path,
+			file.data,
+		]);
 	}
 }
 

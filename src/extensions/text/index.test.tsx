@@ -17,6 +17,7 @@ import {
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { TextView, extension } from "./index";
 
 describe("text extension routing", () => {
@@ -57,7 +58,7 @@ describe("TextView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "text-file",
+				id: fakeUuid("text-file"),
 				path: "/src/session.py",
 				data: new TextEncoder().encode("class AgentSession:\n    pass\n"),
 			})
@@ -72,7 +73,7 @@ describe("TextView", () => {
 						<Suspense fallback={null}>
 							<TextView
 								atelier={atelier}
-								fileId="text-file"
+								fileId={fakeUuid("text-file")}
 								filePath="/src/session.py"
 								isActiveView
 								isPanelFocused={false}
@@ -105,7 +106,7 @@ describe("TextView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "origin-file",
+				id: fakeUuid("origin-file"),
 				path: "/notes.txt",
 				data: new TextEncoder().encode("initial"),
 			})
@@ -117,7 +118,7 @@ describe("TextView", () => {
 					<Suspense fallback={null}>
 						<TextView
 							atelier={await createRuntime(lix)}
-							fileId="origin-file"
+							fileId={fakeUuid("origin-file")}
 							isPanelFocused={false}
 						/>
 					</Suspense>
@@ -141,7 +142,7 @@ describe("TextView", () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
 				.select("data")
-				.where("id", "=", "origin-file")
+				.where("id", "=", fakeUuid("origin-file"))
 				.executeTakeFirstOrThrow();
 			expect(new TextDecoder().decode(row.data as Uint8Array)).toBe(
 				"user edit",
@@ -151,7 +152,7 @@ describe("TextView", () => {
 		await act(async () => {
 			await lix.execute(
 				"UPDATE lix_file SET data = ? WHERE id = ?",
-				[new TextEncoder().encode("external edit"), "origin-file"],
+				[new TextEncoder().encode("external edit"), fakeUuid("origin-file")],
 				{ originKey: "test.external" },
 			);
 		});
@@ -180,7 +181,7 @@ describe("TextView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "self-origin-file",
+				id: fakeUuid("self-origin-file"),
 				path: "/notes.txt",
 				data: new TextEncoder().encode("initial"),
 			})
@@ -192,7 +193,7 @@ describe("TextView", () => {
 					<Suspense fallback={null}>
 						<TextView
 							atelier={await createRuntime(lix)}
-							fileId="self-origin-file"
+							fileId={fakeUuid("self-origin-file")}
 							isPanelFocused={false}
 						/>
 					</Suspense>
@@ -218,7 +219,7 @@ describe("TextView", () => {
 				.selectFrom("lix_file as file")
 				.innerJoin("lix_change as change", "change.id", "file.lixcol_change_id")
 				.select("change.origin_key")
-				.where("file.id", "=", "self-origin-file")
+				.where("file.id", "=", fakeUuid("self-origin-file"))
 				.executeTakeFirst();
 			if (typeof row?.origin_key !== "string") {
 				throw new Error("Text editor origin was not persisted yet");
@@ -230,7 +231,7 @@ describe("TextView", () => {
 		await act(async () => {
 			await lix.execute(
 				"UPDATE lix_file SET data = ? WHERE id = ?",
-				[new TextEncoder().encode("same-origin external"), "self-origin-file"],
+				[new TextEncoder().encode("same-origin external"), fakeUuid("self-origin-file")],
 				{ originKey },
 			);
 		});
