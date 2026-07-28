@@ -3,6 +3,7 @@ import {
 	useEffect,
 	useId,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	type ReactNode,
@@ -28,6 +29,8 @@ export type DiffFloatFile = {
 	readonly id: string;
 	readonly path: string;
 };
+
+const EMPTY_FILES: readonly DiffFloatFile[] = [];
 
 type ExternalWriteReviewControlsProps = {
 	readonly isActive: boolean;
@@ -90,7 +93,7 @@ export function ExternalWriteReviewControls({
 	const chipRef = useRef<HTMLButtonElement | null>(null);
 	const listRef = useRef<HTMLDivElement | null>(null);
 
-	const listFiles = files ?? [];
+	const listFiles = useMemo(() => files ?? EMPTY_FILES, [files]);
 	const selectedFiles = listFiles.filter(
 		(file) => !untickedFileIds.has(file.id),
 	);
