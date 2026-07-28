@@ -194,6 +194,11 @@ export type AtelierExtensionRuntime = {
 		readonly activeFilePath: string | null;
 	};
 	readonly views: AtelierViewsApi;
+	/** Canonical Atelier iconography, shared by views, floats, and lists. */
+	readonly icons: {
+		/** Icon URL for a workspace file path (resolved by extension). */
+		readonly fileUrl: (path: string) => string;
+	};
 	readonly branches: {
 		readonly activeId: string;
 	};

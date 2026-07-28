@@ -1,4 +1,4 @@
-import { File as FileIcon, History } from "lucide-react";
+import { History } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider, useQuery } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
@@ -207,9 +207,10 @@ function CheckpointFileList({
 						data-attr="history-open-checkpoint-file"
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
-						<FileIcon
-							aria-hidden="true"
-							className="h-3 w-3 shrink-0 text-[var(--color-icon-quaternary)]"
+						<img
+							src={atelier.icons.fileUrl(file.path)}
+							alt=""
+							className="h-3.5 w-3.5 shrink-0"
 						/>
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}

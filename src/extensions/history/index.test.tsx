@@ -17,6 +17,7 @@ function atelierStub(overrides?: {
 	readonly openWorkingChanges?: () => void;
 }): ExtensionRuntime {
 	return {
+		icons: { fileUrl: () => "" },
 		reviews: {
 			resolvedReviewIds: [],
 			viewCheckpoint: overrides?.viewCheckpoint ?? (async () => {}),

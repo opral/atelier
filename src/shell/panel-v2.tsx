@@ -47,7 +47,7 @@ import styles from "./panel.module.css";
 /** Lucide icons and image-based brand icons both fit this shape. */
 type TabIcon = ComponentType<{ className?: string }>;
 import { useExtensionViewRuntime } from "../extension-runtime/extension-view-runtime";
-import { fileIconUrl } from "../extensions/files/file-icons";
+import { fileIconUrl } from "../file-icons";
 import {
 	useExtensionHostRegistry,
 	type ExtensionHostRecord,

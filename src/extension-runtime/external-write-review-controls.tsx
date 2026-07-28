@@ -14,12 +14,12 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	ChevronUp,
-	File,
 	Flag,
 	LoaderCircle,
 	Minus,
 	RotateCcw,
 } from "lucide-react";
+import { fileIconUrl } from "@/file-icons";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
 
@@ -266,8 +266,9 @@ export function ExternalWriteReviewControls({
 								>
 									{ticked ? <Check /> : null}
 								</span>
-								<File
-									aria-hidden="true"
+								<img
+									src={fileIconUrl(file.path)}
+									alt=""
 									className="external-write-review-menu-file-icon"
 								/>
 								<span className="external-write-review-menu-name">
@@ -293,8 +294,9 @@ export function ExternalWriteReviewControls({
 								<ChevronLeft aria-hidden="true" />
 							</button>
 						) : null}
-						<File
-							aria-hidden="true"
+						<img
+							src={fileIconUrl(navigation.fileName)}
+							alt=""
 							className="external-write-review-file-icon"
 						/>
 						<span title={navigation.fileName}>

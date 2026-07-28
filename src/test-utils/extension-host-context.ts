@@ -27,6 +27,7 @@ export function createExtensionHostContext(
 			views: {
 				open: async () => {},
 			},
+			icons: { fileUrl: () => "" },
 			branches: {
 				activeId: "main",
 			},

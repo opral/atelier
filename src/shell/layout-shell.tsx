@@ -34,6 +34,7 @@ import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
+import { fileIconUrl } from "@/file-icons";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
@@ -569,6 +570,10 @@ type LixFileForOpen = {
 };
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
+
+// Stable identity: the icon resolver is pure, so every runtime rebuild can
+// share one object.
+const ATELIER_RUNTIME_ICONS = { fileUrl: fileIconUrl } as const;
 const WORKING_CHANGE_REVIEW_KINDS = new Set<ExtensionKind>([
 	FILE_EXTENSION_KIND,
 	"atelier_text",
@@ -3338,6 +3343,7 @@ function LayoutShellLoadedContent({
 				activeFilePath: activeDocumentPath,
 			},
 			views: effectiveAtelierInstance.views,
+			icons: ATELIER_RUNTIME_ICONS,
 			branches: {
 				activeId: activeBranchId,
 			},
