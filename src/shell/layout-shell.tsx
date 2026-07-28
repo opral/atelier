@@ -35,6 +35,7 @@ import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import { fileIconUrl } from "@/file-icons";
+import { hasHistoricalEditorRevisionState } from "@/extension-runtime/editor-revision-state";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
@@ -1230,6 +1231,8 @@ function LayoutShellLoadedContent({
 		readonly commitId: string;
 		readonly createdAt: string;
 		readonly files: readonly LixFileForOpen[];
+		/** True once the first snapshot view finished opening. */
+		readonly opened?: boolean;
 	} | null>(null);
 	const handleCloseViewRef = useRef<
 		((args: { panel?: PanelSide; instance?: string }) => void) | null
@@ -1256,21 +1259,25 @@ function LayoutShellLoadedContent({
 	const reopenLiveDocumentRef = useRef<
 		((file: { fileId: string; filePath: string }) => void) | null
 	>(null);
-	const exitDiffReview = useCallback(() => {
-		setWorkingChangesReviewOpen(false);
-		setAgentTurnReviewDismissed(true);
-		setHistoricalReview((current) => {
-			if (current) {
-				closeHistoricalReviewViews(current.commitId);
-				const previousDocument = preHistoricalDocumentRef.current;
-				preHistoricalDocumentRef.current = null;
-				if (previousDocument) {
-					reopenLiveDocumentRef.current?.(previousDocument);
+	const exitDiffReview = useCallback(
+		(options?: { readonly restoreLiveDocument?: boolean }) => {
+			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
+			setWorkingChangesReviewOpen(false);
+			setAgentTurnReviewDismissed(true);
+			setHistoricalReview((current) => {
+				if (current) {
+					closeHistoricalReviewViews(current.commitId);
+					const previousDocument = preHistoricalDocumentRef.current;
+					preHistoricalDocumentRef.current = null;
+					if (restoreLiveDocument && previousDocument) {
+						reopenLiveDocumentRef.current?.(previousDocument);
+					}
 				}
-			}
-			return null;
-		});
-	}, [closeHistoricalReviewViews]);
+				return null;
+			});
+		},
+		[closeHistoricalReviewViews],
+	);
 	useEffect(() => {
 		setWorkingChangesReviewOpen(false);
 		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
@@ -2100,6 +2107,22 @@ function LayoutShellLoadedContent({
 		pendingReviewFiles,
 	]);
 
+	// Leaving the past ends diff mode: when the user navigates to a live
+	// document while viewing a checkpoint, exit instead of showing the
+	// read-only banner and Restore float over an editable file. Entry is
+	// exempt until the first snapshot view finished opening, and the exit
+	// must not restore the pre-historical document — the user just chose
+	// where to go.
+	useEffect(() => {
+		if (!historicalReview?.opened) return;
+		const activeView = centralPanel.views.find(
+			(view) => view.instance === centralPanel.activeInstance,
+		);
+		if (!activeView || !isDocumentView(activeView)) return;
+		if (hasHistoricalEditorRevisionState(activeView.state)) return;
+		exitDiffReview({ restoreLiveDocument: false });
+	}, [centralPanel, exitDiffReview, historicalReview]);
+
 	// Diff mode's headline: what is being compared, shown in the top bar.
 	const reviewFileCountLabel =
 		pendingReviewFiles.length > 0
@@ -2302,6 +2325,11 @@ function LayoutShellLoadedContent({
 			await resolveAndOpenDocument(files[0]!.path, {
 				state: { afterCommitId: commitId, sourceCommitId: commitId },
 			});
+			setHistoricalReview((current) =>
+				current && current.commitId === commitId
+					? { ...current, opened: true }
+					: current,
+			);
 		},
 		[closeHistoricalReviewViews, lix, resolveAndOpenDocument],
 	);
