@@ -911,6 +911,7 @@ describe("inline", () => {
 	test.each([
 		["image", "assets/product.png", "Delete image"],
 		["PDF embed", "assets/brief.pdf", "Delete PDF embed"],
+		["video embed", "assets/kickoff.mp4", "Delete video embed"],
 	])("deletes a standalone %s from its trash action", (_label, src, name) => {
 		const editor = new Editor({
 			extensions: [...MarkdownWc(), History],
@@ -1014,6 +1015,131 @@ describe("inline", () => {
 			'href="docs/brief.pdf#page=3"',
 		);
 		editor.destroy();
+	});
+
+	test("renders a standalone video paragraph as a playing embed with caption", async () => {
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:workspace-video",
+					preview: "auto" as const,
+					workspaceFile: {
+						fileId: "video-1",
+						filePath: "/assets/kickoff.mp4",
+					},
+					dispose: vi.fn(),
+				}),
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown("![Kickoff recording](assets/kickoff.mp4)"),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-video]",
+		);
+		expect(embed).not.toBeNull();
+		expect(embed?.dataset.assetState).toBe("ready");
+		expect(embed?.dataset.markdownImageBlock).toBe("");
+		const video = embed?.querySelector("video");
+		expect(video?.getAttribute("src")).toBe("blob:workspace-video");
+		expect(embed?.querySelector(".markdown-video-caption")?.textContent).toBe(
+			"Kickoff recording",
+		);
+		expect(
+			embed?.querySelector(".markdown-video-open")?.getAttribute("href"),
+		).toBe("blob:workspace-video");
+
+		const markdown = serializeAst(tiptapDocToAst(editor.getJSON() as any));
+		expect(markdown).toBe("![Kickoff recording](assets/kickoff.mp4)\n");
+		editor.destroy();
+	});
+
+	test("opens the workspace video through the file opener instead of the blob", async () => {
+		const openWorkspaceFile = vi.fn();
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:workspace-video",
+					preview: "auto" as const,
+					workspaceFile: {
+						fileId: "video-1",
+						filePath: "/assets/kickoff.mp4",
+					},
+					dispose: vi.fn(),
+				}),
+				openWorkspaceFile,
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown("![Kickoff recording](assets/kickoff.mp4)"),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		const open = editor.view.dom.querySelector<HTMLAnchorElement>(
+			".markdown-video-open",
+		);
+		expect(open?.getAttribute("target")).toBeNull();
+		const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+		open?.dispatchEvent(click);
+
+		expect(click.defaultPrevented).toBe(true);
+		expect(openWorkspaceFile).toHaveBeenCalledWith({
+			filePath: "/assets/kickoff.mp4",
+		});
+		editor.destroy();
+	});
+
+	test("marks a video embed unavailable when the workspace file is missing", async () => {
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => null,
+			}),
+			content: astToTiptapDoc(parseMarkdown("![Clip](assets/missing.mp4)")),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-video]",
+		);
+		expect(embed?.dataset.assetState).toBe("unavailable");
+		expect(embed).toHaveTextContent("Video unavailable");
+		expect(embed?.querySelector("video")?.getAttribute("src")).toBeNull();
+		editor.destroy();
+	});
+
+	test("keeps inline videos in prose as inline embeds", () => {
+		const pmDoc = astToTiptapDoc(
+			parseMarkdown("Watch ![the demo](assets/demo.webm) before the call."),
+		);
+		expect(pmDoc.content?.[0]?.type).toBe("paragraph");
+		expect(pmDoc.content?.[0]?.content?.map((node) => node.type)).toEqual([
+			"text",
+			"image",
+			"text",
+		]);
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: pmDoc,
+		});
+		const embed = editor.view.dom.querySelector<HTMLElement>(
+			"[data-markdown-video]",
+		);
+		expect(embed).not.toBeNull();
+		expect(embed?.dataset.markdownImageBlock).toBeUndefined();
+		expect(embed?.querySelector(".markdown-asset-delete")).toBeNull();
+		editor.destroy();
+	});
+
+	test("renders static video markup for review and diff surfaces", () => {
+		const ast = parseMarkdown(
+			"![Kickoff recording](https://files.example/kickoff.mp4)",
+		);
+		const html = renderMarkdownAstEditorHtml(ast);
+		expect(html).toContain("markdown-video-embed");
+		expect(html).toContain('src="https://files.example/kickoff.mp4"');
+		expect(html).toContain("Kickoff recording");
 	});
 
 	test("previews a remote PDF only after explicit consent", async () => {

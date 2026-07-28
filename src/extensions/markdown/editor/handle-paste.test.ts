@@ -1141,7 +1141,8 @@ describe("handleImageDrop", () => {
 		expect(statuses).toEqual([
 			{
 				state: "error",
-				message: "Drop a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
+				message:
+					"Drop a PNG, JPEG, GIF, WebP, AVIF, or SVG image, or an MP4, MOV, or WebM video.",
 			},
 		]);
 		expect(buildMarkdownFromEditor(editor)).toBe("Unchanged\n");

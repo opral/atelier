@@ -8,6 +8,11 @@ const IMAGE_EXTENSION_BY_MIME_TYPE = new Map<string, string>([
 	["image/webp", "webp"],
 	["image/avif", "avif"],
 	["image/svg+xml", "svg"],
+	// Videos share the pasted-asset pipeline: the file lands in /assets and the
+	// document embeds it with the same ![…](…) syntax as an image.
+	["video/mp4", "mp4"],
+	["video/quicktime", "mov"],
+	["video/webm", "webm"],
 ]);
 
 const GENERIC_IMAGE_STEMS = new Set([
@@ -15,7 +20,9 @@ const GENERIC_IMAGE_STEMS = new Set([
 	"clipboard",
 	"image",
 	"pasted-image",
+	"pasted-video",
 	"untitled",
+	"video",
 ]);
 
 const MAX_FILENAME_STEM_LENGTH = 80;
@@ -53,18 +60,21 @@ export async function storePastedMarkdownImage({
 	const extension = pastedImageExtension(mimeType);
 	if (!extension) {
 		throw new PastedMarkdownImageError(
-			"Use a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
+			"Use a PNG, JPEG, GIF, WebP, AVIF, or SVG image, or an MP4, MOV, or WebM video.",
 		);
 	}
+	const kind = pastedMediaKind(mimeType);
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	if (bytes.byteLength === 0) {
-		throw new PastedMarkdownImageError("The image was empty.");
+		throw new PastedMarkdownImageError(
+			kind === "video" ? "The video was empty." : "The image was empty.",
+		);
 	}
 	await assertAssetsDirectoryAvailable(lix, ROOT_ASSETS_FILE_PATH);
 
-	const suggestedStem = pastedImageStem(file.name);
-	const alt = pastedImageAlt(file.name, suggestedStem);
+	const suggestedStem = pastedImageStem(file.name, kind);
+	const alt = pastedImageAlt(file.name, suggestedStem, kind);
 	for (let attempt = 1; attempt <= MAX_FILENAME_ATTEMPTS; attempt += 1) {
 		const suffix = attempt === 1 ? "" : `-${attempt}`;
 		const fileName = `${suggestedStem}${suffix}.${extension}`;
@@ -166,12 +176,21 @@ function pastedImageFileId(): string {
 		.slice(2)}`;
 }
 
+export type PastedMediaKind = "image" | "video";
+
+export function pastedMediaKind(mimeType: string): PastedMediaKind {
+	return mimeType.trim().toLowerCase().startsWith("video/") ? "video" : "image";
+}
+
 export function pastedImageExtension(mimeType: string): string | null {
 	const normalizedMimeType = mimeType.split(";", 1)[0]?.trim().toLowerCase();
 	return IMAGE_EXTENSION_BY_MIME_TYPE.get(normalizedMimeType ?? "") ?? null;
 }
 
-export function pastedImageStem(fileName: string): string {
+export function pastedImageStem(
+	fileName: string,
+	kind: PastedMediaKind = "image",
+): string {
 	const withoutExtension = fileName.trim().replace(/\.[^.]*$/, "");
 	const normalized = withoutExtension
 		.normalize("NFKD")
@@ -183,12 +202,16 @@ export function pastedImageStem(fileName: string): string {
 		.slice(0, MAX_FILENAME_STEM_LENGTH)
 		.replace(/[-_.]+$/g, "");
 	if (!normalized || GENERIC_IMAGE_STEMS.has(normalized)) {
-		return "pasted-image";
+		return kind === "video" ? "pasted-video" : "pasted-image";
 	}
 	return normalized;
 }
 
-export function pastedImageAlt(fileName: string, safeStem?: string): string {
+export function pastedImageAlt(
+	fileName: string,
+	safeStem?: string,
+	kind: PastedMediaKind = "image",
+): string {
 	const originalStem = fileName.trim().replace(/\.[^.]*$/, "");
 	const readable = originalStem
 		.replace(/[-_]+/g, " ")
@@ -199,9 +222,10 @@ export function pastedImageAlt(fileName: string, safeStem?: string): string {
 	if (
 		!readable ||
 		GENERIC_IMAGE_STEMS.has(normalizedReadable) ||
-		safeStem === "pasted-image"
+		safeStem === "pasted-image" ||
+		safeStem === "pasted-video"
 	) {
-		return "Pasted image";
+		return kind === "video" ? "Pasted video" : "Pasted image";
 	}
 	return readable;
 }
