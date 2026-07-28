@@ -1,33 +1,104 @@
-import { useCallback, useEffect, useState } from "react";
 import {
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
+import {
+	Check,
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	File,
 	Flag,
 	LoaderCircle,
+	RotateCcw,
 } from "lucide-react";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
 
+export type DiffFloatMode = "agent-turn" | "working-changes" | "historical";
+
 type ExternalWriteReviewControlsProps = {
 	readonly isActive: boolean;
-	readonly autoAccept?: boolean;
+	/** Which diff-mode flow the float commits: agent turn, working changes, or a historical checkpoint. */
+	readonly mode?: DiffFloatMode;
 	readonly navigation?: ExternalWriteReviewNavigation;
-	readonly onAccept?: () => void;
-	readonly onReject?: () => void;
-	readonly onCheckpoint?: () => Promise<void>;
+	/** Workspace-wide walk-back. Hidden in historical mode (the past is read-only). */
+	readonly onUndoAll?: () => void;
+	/** The orange verb: Keep all / Checkpoint / Restore. Always workspace-wide. */
+	readonly onPrimary?: () => void | Promise<void>;
+	/** The ▾ menu action: keep/restore only the stepped file, or checkpoint with a name. */
+	readonly onMenuAction?: () => void | Promise<void>;
 	readonly onExit?: () => void;
 };
 
+const PRIMARY_VERBS: Record<
+	DiffFloatMode,
+	{ label: string; busyLabel: string }
+> = {
+	"agent-turn": { label: "Keep all", busyLabel: "Keeping…" },
+	"working-changes": { label: "Checkpoint", busyLabel: "Checkpointing…" },
+	historical: { label: "Restore", busyLabel: "Restoring…" },
+};
+
+/**
+ * Diff mode's floating action bar.
+ *
+ * One bar, one scope: the stepper navigates changed files, "Undo all" walks
+ * everything back, and the orange verb commits everything in one press (⌘⏎).
+ * Anything smaller happens inline on the change itself — never here. The ▾
+ * holds the single allowed refinement per flow: "only this file" for keep and
+ * restore, "with a name…" for checkpoint.
+ */
 export function ExternalWriteReviewControls({
 	isActive,
-	autoAccept = false,
+	mode = "agent-turn",
 	navigation,
-	onAccept,
-	onReject,
-	onCheckpoint,
+	onUndoAll,
+	onPrimary,
+	onMenuAction,
 	onExit,
 }: ExternalWriteReviewControlsProps) {
+	const [isCommitting, setIsCommitting] = useState(false);
+	const [commitError, setCommitError] = useState<string | null>(null);
+	const [isMenuOpen, setIsMenuOpen] = useState(false);
+	const menuId = useId();
+	const rootRef = useRef<HTMLDivElement | null>(null);
+
+	const runPrimary = useCallback(async () => {
+		if (!onPrimary || isCommitting) return;
+		setCommitError(null);
+		setIsCommitting(true);
+		try {
+			await onPrimary();
+		} catch (cause) {
+			setCommitError(
+				cause instanceof Error ? cause.message : "The action failed",
+			);
+		} finally {
+			setIsCommitting(false);
+		}
+	}, [isCommitting, onPrimary]);
+
+	const runMenuAction = useCallback(async () => {
+		if (!onMenuAction || isCommitting) return;
+		setIsMenuOpen(false);
+		setCommitError(null);
+		setIsCommitting(true);
+		try {
+			await onMenuAction();
+		} catch (cause) {
+			setCommitError(
+				cause instanceof Error ? cause.message : "The action failed",
+			);
+		} finally {
+			setIsCommitting(false);
+		}
+	}, [isCommitting, onMenuAction]);
+
 	useEffect(() => {
 		if (!isActive) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -35,11 +106,11 @@ export function ExternalWriteReviewControls({
 				event.preventDefault();
 				event.stopPropagation();
 				event.stopImmediatePropagation();
-				if (onExit) {
-					onExit?.();
-				} else {
-					onReject?.();
+				if (isMenuOpen) {
+					setIsMenuOpen(false);
+					return;
 				}
+				onExit?.();
 				return;
 			}
 			const usesPrimaryModifier =
@@ -47,33 +118,41 @@ export function ExternalWriteReviewControls({
 			if (!usesPrimaryModifier) return;
 			if (event.altKey || event.shiftKey) return;
 			if (event.key === "Enter") {
-				if (autoAccept) return;
 				event.preventDefault();
 				event.stopPropagation();
-				onAccept?.();
-				return;
-			}
-			if (event.key === "Backspace" || event.key === "Delete") {
-				event.preventDefault();
-				event.stopPropagation();
-				onReject?.();
+				void runPrimary();
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown, { capture: true });
 		};
-	}, [autoAccept, isActive, onAccept, onExit, onReject]);
+	}, [isActive, isMenuOpen, onExit, runPrimary]);
+
+	useEffect(() => {
+		if (!isMenuOpen) return;
+		const handlePointerDown = (event: PointerEvent) => {
+			if (rootRef.current?.contains(event.target as Node)) return;
+			setIsMenuOpen(false);
+		};
+		window.addEventListener("pointerdown", handlePointerDown);
+		return () => {
+			window.removeEventListener("pointerdown", handlePointerDown);
+		};
+	}, [isMenuOpen]);
+
+	const verb = PRIMARY_VERBS[mode];
+	const menuLabel = floatMenuLabel(mode, navigation?.fileName);
 
 	return (
 		<div
-			className={`external-write-review-actions ${
-				autoAccept ? "external-write-review-actions-auto" : ""
-			}`}
+			ref={rootRef}
+			className="external-write-review-actions"
 			role="group"
-			aria-label="External write review actions"
+			aria-label="Diff review actions"
+			data-diff-float-mode={mode}
 		>
-			<div className="external-write-review-scope external-write-review-file-scope">
+			<div className="external-write-review-scope">
 				{navigation ? (
 					<div
 						className="external-write-review-navigation"
@@ -107,115 +186,95 @@ export function ExternalWriteReviewControls({
 						</button>
 					</div>
 				) : null}
-				<button
-					type="button"
-					className="external-write-review-button external-write-review-button-reject"
-					onClick={onReject}
-					data-attr="diff-reject"
-				>
-					<span>Undo</span>
-					<kbd className="external-write-review-shortcut external-write-review-shortcut-dark">
-						⌫
-					</kbd>
-				</button>
-				{autoAccept ? null : (
+				{mode !== "historical" && onUndoAll ? (
 					<button
 						type="button"
-						className="external-write-review-button external-write-review-button-accept"
-						onClick={onAccept}
-						data-attr="diff-accept"
+						className="external-write-review-button external-write-review-button-reject"
+						onClick={onUndoAll}
+						disabled={isCommitting}
+						data-attr="diff-undo-all"
 					>
-						<span>Keep</span>
-						<kbd className="external-write-review-shortcut">
-							{isMacPlatform() ? "⌘↩" : "Ctrl↩"}
-						</kbd>
+						<RotateCcw aria-hidden="true" />
+						<span>Undo all</span>
 					</button>
-				)}
+				) : null}
+				{onPrimary ? (
+					<div className="external-write-review-split">
+						<button
+							type="button"
+							className="external-write-review-button external-write-review-button-accept external-write-review-split-primary"
+							onClick={() => void runPrimary()}
+							disabled={isCommitting}
+							data-attr="diff-primary"
+							title={commitError ?? undefined}
+						>
+							{isCommitting ? (
+								<LoaderCircle aria-hidden="true" className="animate-spin" />
+							) : (
+								<PrimaryVerbIcon mode={mode} />
+							)}
+							<span>{isCommitting ? verb.busyLabel : verb.label}</span>
+							<kbd className="external-write-review-shortcut">
+								{isMacPlatform() ? "⌘↩" : "Ctrl↩"}
+							</kbd>
+						</button>
+						{onMenuAction && menuLabel ? (
+							<button
+								type="button"
+								className="external-write-review-split-caret"
+								aria-label="More options"
+								aria-haspopup="menu"
+								aria-expanded={isMenuOpen}
+								aria-controls={menuId}
+								onClick={() => setIsMenuOpen((open) => !open)}
+								disabled={isCommitting}
+								data-attr="diff-primary-menu"
+							>
+								<ChevronDown aria-hidden="true" />
+							</button>
+						) : null}
+						{isMenuOpen && onMenuAction && menuLabel ? (
+							<div
+								id={menuId}
+								role="menu"
+								className="external-write-review-menu"
+							>
+								<button
+									type="button"
+									role="menuitem"
+									onClick={() => void runMenuAction()}
+								>
+									{menuLabel}
+								</button>
+							</div>
+						) : null}
+					</div>
+				) : null}
 			</div>
-			{autoAccept && onCheckpoint ? (
-				<ExternalWriteReviewCheckpointAction
-					isActive={isActive}
-					onCheckpoint={onCheckpoint}
-				/>
+			{commitError ? (
+				<span className="external-write-review-error" role="alert">
+					{commitError}
+				</span>
 			) : null}
 		</div>
 	);
 }
 
-export function ExternalWriteReviewCheckpointAction({
-	isActive,
-	onCheckpoint,
-}: {
-	readonly isActive: boolean;
-	readonly onCheckpoint: () => Promise<void>;
-}) {
-	const [isCheckpointing, setIsCheckpointing] = useState(false);
-	const [checkpointError, setCheckpointError] = useState<string | null>(null);
-	const checkpoint = useCallback(async () => {
-		if (isCheckpointing) return;
-		setCheckpointError(null);
-		setIsCheckpointing(true);
-		try {
-			await onCheckpoint();
-		} catch (cause) {
-			setCheckpointError(
-				cause instanceof Error ? cause.message : "Checkpoint creation failed",
-			);
-		} finally {
-			setIsCheckpointing(false);
-		}
-	}, [isCheckpointing, onCheckpoint]);
+function PrimaryVerbIcon({ mode }: { readonly mode: DiffFloatMode }): ReactNode {
+	if (mode === "working-changes") return <Flag aria-hidden="true" />;
+	if (mode === "historical") return <RotateCcw aria-hidden="true" />;
+	return <Check aria-hidden="true" />;
+}
 
-	useEffect(() => {
-		if (!isActive) return;
-		const handleKeyDown = (event: KeyboardEvent) => {
-			const usesPrimaryModifier =
-				event.metaKey || (event.ctrlKey && !event.metaKey);
-			if (
-				!usesPrimaryModifier ||
-				event.altKey ||
-				event.shiftKey ||
-				event.key !== "Enter"
-			) {
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			void checkpoint();
-		};
-		window.addEventListener("keydown", handleKeyDown, { capture: true });
-		return () => {
-			window.removeEventListener("keydown", handleKeyDown, { capture: true });
-		};
-	}, [checkpoint, isActive]);
-
-	return (
-		<div className="external-write-review-scope external-write-review-workspace-scope">
-			<button
-				type="button"
-				className="external-write-review-button external-write-review-button-accept"
-				onClick={() => void checkpoint()}
-				disabled={isCheckpointing}
-				data-attr="create-checkpoint"
-				title={checkpointError ?? undefined}
-			>
-				{isCheckpointing ? (
-					<LoaderCircle aria-hidden="true" className="animate-spin" />
-				) : (
-					<Flag aria-hidden="true" />
-				)}
-				<span>{isCheckpointing ? "Checkpointing…" : "Checkpoint"}</span>
-				<kbd className="external-write-review-shortcut">
-					{isMacPlatform() ? "⌘↩" : "Ctrl↩"}
-				</kbd>
-			</button>
-			{checkpointError ? (
-				<span className="external-write-review-error" role="alert">
-					Couldn&apos;t create checkpoint
-				</span>
-			) : null}
-		</div>
-	);
+function floatMenuLabel(
+	mode: DiffFloatMode,
+	fileName: string | undefined,
+): string | null {
+	if (mode === "working-changes") return "Checkpoint with a name…";
+	if (!fileName) return null;
+	return mode === "historical"
+		? `Restore only ${fileName}`
+		: `Keep only ${fileName}`;
 }
 
 function isMacPlatform(): boolean {

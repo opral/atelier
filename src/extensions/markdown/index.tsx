@@ -50,7 +50,6 @@ import type {
 	ResolveExternalWriteReviewArgs,
 } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
-import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
@@ -456,17 +455,10 @@ function MarkdownLiveReviewController({
 	readonly onCompletionSuccess: (markdown: string) => void;
 	readonly onCompletionFailure: () => void;
 }) {
+	// The diff-mode float is shell-owned (one float, workspace scope). A no-op
+	// diff renders no overlay at all: the float alone carries the actions.
 	if (reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown) {
-		return (
-			<ExternalWriteReviewControls
-				isActive={isActive}
-				autoAccept={autoAccept}
-				navigation={navigation}
-				onExit={onExit}
-				onAccept={() => void onAccept?.({ fileId, reviewId, review })}
-				onReject={() => void onReject?.({ fileId, reviewId, review })}
-			/>
-		);
+		return null;
 	}
 	const enrichedReviewDiff = enrichMarkdownReviewDiff(
 		reviewDiff,
@@ -484,25 +476,15 @@ function MarkdownLiveReviewController({
 	});
 	if (autoAccept) {
 		return (
-			<>
-				<MarkdownReviewEditor
-					key={`${reviewId}:${beforeCommitId}:${afterCommitId}:accepted`}
-					externalEditor={editor}
-					reviewDiff={enrichedReviewDiff}
-					sourceFilePath={sourceFilePath}
-					afterCommitId={afterCommitId}
-					openWorkspaceFile={openWorkspaceFile}
-					isActive={isActive}
-				/>
-				<ExternalWriteReviewControls
-					isActive={isActive}
-					autoAccept
-					navigation={navigation}
-					onExit={onExit}
-					onAccept={() => void onAccept?.({ fileId, reviewId, review })}
-					onReject={() => void onReject?.({ fileId, reviewId, review })}
-				/>
-			</>
+			<MarkdownReviewEditor
+				key={`${reviewId}:${beforeCommitId}:${afterCommitId}:accepted`}
+				externalEditor={editor}
+				reviewDiff={enrichedReviewDiff}
+				sourceFilePath={sourceFilePath}
+				afterCommitId={afterCommitId}
+				openWorkspaceFile={openWorkspaceFile}
+				isActive={isActive}
+			/>
 		);
 	}
 

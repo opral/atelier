@@ -417,7 +417,7 @@ describe("agent turn review navigation", () => {
 				).toBe(true);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
+				await screen.findByRole("button", { name: /^Keep all/ }),
 			).toBeVisible();
 			await waitFor(() => {
 				expect(
@@ -762,7 +762,7 @@ describe("agent turn review navigation", () => {
 				]);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
+				await screen.findByRole("button", { name: /^Keep all/ }),
 			).toBeVisible();
 
 			fireEvent.click(await findFilesTreeItem("middle.md"));
@@ -802,7 +802,7 @@ describe("agent turn review navigation", () => {
 				]);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
+				await screen.findByRole("button", { name: /^Keep all/ }),
 			).toBeVisible();
 			expect(
 				onEvent.mock.calls.filter(
@@ -875,7 +875,7 @@ describe("agent turn review navigation", () => {
 				]);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
+				await screen.findByRole("button", { name: /^Keep all/ }),
 			).toBeVisible();
 
 			const beforeQueued = await activeCommitId(lix);
@@ -915,19 +915,26 @@ describe("agent turn review navigation", () => {
 				}),
 			]);
 
+			// S2: Keep all accepts every pending review — the active one and the
+			// deferred queued one — so review mode ends instead of advancing.
 			const keepActiveReview = await screen.findByRole("button", {
-				name: /^Keep/,
+				name: /^Keep all/,
 			});
 			await act(async () => {
 				fireEvent.click(keepActiveReview);
 			});
 			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("queued-review-file") }),
-					}),
-				]);
+				expect(
+					screen.queryByRole("button", { name: /^Keep all/ }),
+				).toBeNull();
 			});
+			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+				expect.objectContaining({
+					state: expect.objectContaining({
+						fileId: fakeUuid("active-review-file"),
+					}),
+				}),
+			]);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -1028,7 +1035,7 @@ describe("agent turn review navigation", () => {
 				]);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
+				await screen.findByRole("button", { name: /^Keep all/ }),
 			).toBeVisible();
 			await waitFor(() => {
 				const openedReviewIds = onEvent.mock.calls.flatMap(([event]) =>
@@ -1214,7 +1221,7 @@ describe("agent turn review navigation", () => {
 			});
 
 			expect(
-				await screen.findByRole("button", { name: /^Undo/ }),
+				await screen.findByRole("button", { name: /^Undo all/ }),
 			).toBeVisible();
 			expect(
 				onEvent.mock.calls.filter(
@@ -1224,14 +1231,9 @@ describe("agent turn review navigation", () => {
 				),
 			).toHaveLength(1);
 
+			// S2: Undo all walks the whole turn back in one press.
 			await act(async () => {
-				fireEvent.click(screen.getByRole("button", { name: /^Undo/ }));
-			});
-			await waitFor(() => {
-				expect(screen.getByText("2 of 2")).toBeVisible();
-			});
-			await act(async () => {
-				fireEvent.click(screen.getByRole("button", { name: /^Undo/ }));
+				fireEvent.click(screen.getByRole("button", { name: /^Undo all/ }));
 			});
 			await waitFor(async () => {
 				const file = await qb(lix)

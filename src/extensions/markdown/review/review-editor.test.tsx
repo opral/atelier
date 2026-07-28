@@ -41,25 +41,23 @@ test("reviews entity groups one at a time and completes with exact mixed Markdow
 		);
 	});
 
-	expect(await screen.findByText("1 of 2")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 1 of 2" }),
+	).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Undo change" })).toHaveAttribute(
 		"data-attr",
 		"review-change-undo",
 	);
 	expect(
-		screen.getByRole("button", { name: "Keep current change" }),
+		screen.getByRole("button", { name: "Keep change" }),
 	).toHaveAttribute("data-attr", "review-change-keep");
-	const keepAll = screen.getByRole("button", {
-		name: "Keep all 2 remaining changes",
-	});
-	expect(keepAll).toHaveAttribute("data-attr", "review-change-keep-all");
-	expect(keepAll).toHaveAttribute("aria-keyshortcuts", primaryShortcut());
-	expect(keepAll).toHaveClass("markdown-change-review-button-primary");
+	// S2: change-level verbs live inline on the change; there is no in-file
+	// "Keep all" — the workspace float owns that verb.
 	expect(
-		view!.container.querySelector(".markdown-change-review-decisions"),
-	).not.toBeNull();
+		screen.queryByRole("button", { name: /Keep all/ }),
+	).not.toBeInTheDocument();
 	expect(
-		screen.getByRole("button", { name: "Keep current change" }),
+		screen.getByRole("button", { name: "Keep change" }),
 	).toHaveAttribute("aria-keyshortcuts", individualShortcut());
 	await waitFor(() => {
 		expect(
@@ -68,17 +66,11 @@ test("reviews entity groups one at a time and completes with exact mixed Markdow
 	});
 
 	await act(async () => {
-		fireEvent.click(
-			screen.getByRole("button", { name: "Keep current change" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "Keep change" }));
 	});
-	expect(await screen.findByText("2 of 2")).toBeInTheDocument();
 	expect(
-		screen.queryByRole("button", { name: /Keep all/ }),
-	).not.toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "Keep change" })).toHaveClass(
-		"markdown-change-review-button-primary",
-	);
+		await screen.findByRole("group", { name: "Review change 2 of 2" }),
+	).toBeInTheDocument();
 	expect(screen.getByTestId("markdown-review-editor")).toHaveAttribute(
 		"data-review-resolved-count",
 		"1",
@@ -117,17 +109,17 @@ test("keeps the same Tiptap editor mounted after a partial decision", async () =
 		);
 	});
 
-	await screen.findByText("1 of 2");
+	await screen.findByRole("group", { name: "Review change 1 of 2" });
 	const proseMirror = view!.container.querySelector(".ProseMirror");
 	expect(proseMirror).not.toBeNull();
 
 	await act(async () => {
-		fireEvent.click(
-			screen.getByRole("button", { name: "Keep current change" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "Keep change" }));
 	});
 
-	expect(await screen.findByText("2 of 2")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 2 of 2" }),
+	).toBeInTheDocument();
 	await waitFor(() => {
 		expect(view!.container).not.toHaveTextContent("First old.");
 		expect(view!.container).toHaveTextContent("First new.");
@@ -158,20 +150,21 @@ test("keeps all unresolved changes without overriding earlier decisions", async 
 		);
 	});
 
-	await screen.findByText("1 of 3");
-	expect(
-		screen.getByRole("button", { name: "Keep all 3 remaining changes" }),
-	).toHaveAttribute("data-attr", "review-change-keep-all");
+	await screen.findByRole("group", { name: "Review change 1 of 3" });
 
 	await act(async () => {
 		fireEvent.click(screen.getByRole("button", { name: "Undo change" }));
 	});
-	expect(await screen.findByText("2 of 3")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 2 of 3" }),
+	).toBeInTheDocument();
 
 	await act(async () => {
-		fireEvent.click(
-			screen.getByRole("button", { name: "Keep all 2 remaining changes" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "Keep change" }));
+	});
+	await screen.findByRole("group", { name: "Review change 3 of 3" });
+	await act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Keep change" }));
 	});
 	await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
 	expect(onComplete).toHaveBeenCalledWith(
@@ -181,7 +174,7 @@ test("keeps all unresolved changes without overriding earlier decisions", async 
 	await act(async () => view?.unmount());
 });
 
-test("uses Keep all as the default shortcut and Shift for the current change", async () => {
+test("keeps the current change with Shift+⌘⏎ and leaves plain ⌘⏎ to the float", async () => {
 	lix = await openLix();
 	const onComplete = vi.fn(async () => {});
 	let view: ReturnType<typeof render> | undefined;
@@ -202,30 +195,37 @@ test("uses Keep all as the default shortcut and Shift for the current change", a
 		);
 	});
 
-	await screen.findByText("1 of 3");
+	await screen.findByRole("group", { name: "Review change 1 of 3" });
 	const input = document.createElement("input");
 	document.body.append(input);
 	const blockedWhileTyping = new KeyboardEvent("keydown", {
 		key: "Enter",
 		...primaryModifier(),
+		shiftKey: true,
 		bubbles: true,
 		cancelable: true,
 	});
 	await act(async () => input.dispatchEvent(blockedWhileTyping));
 	expect(blockedWhileTyping.defaultPrevented).toBe(false);
-	expect(screen.getByText("1 of 3")).toBeInTheDocument();
+	expect(
+		screen.getByRole("group", { name: "Review change 1 of 3" }),
+	).toBeInTheDocument();
 	input.remove();
 
-	const repeated = new KeyboardEvent("keydown", {
+	// Plain ⌘⏎ is the workspace float's verb (Keep all) — the review editor
+	// must not swallow it.
+	const floatShortcut = new KeyboardEvent("keydown", {
 		key: "Enter",
 		...primaryModifier(),
-		repeat: true,
 		bubbles: true,
 		cancelable: true,
 	});
-	await act(async () => window.dispatchEvent(repeated));
-	expect(repeated.defaultPrevented).toBe(false);
-	expect(screen.getByText("1 of 3")).toBeInTheDocument();
+	await act(async () => window.dispatchEvent(floatShortcut));
+	expect(floatShortcut.defaultPrevented).toBe(false);
+	expect(
+		screen.getByRole("group", { name: "Review change 1 of 3" }),
+	).toBeInTheDocument();
+	expect(onComplete).not.toHaveBeenCalled();
 
 	const keepCurrent = new KeyboardEvent("keydown", {
 		key: "Enter",
@@ -236,21 +236,10 @@ test("uses Keep all as the default shortcut and Shift for the current change", a
 	});
 	await act(async () => window.dispatchEvent(keepCurrent));
 	expect(keepCurrent.defaultPrevented).toBe(true);
-	expect(await screen.findByText("2 of 3")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 2 of 3" }),
+	).toBeInTheDocument();
 	expect(onComplete).not.toHaveBeenCalled();
-
-	const keepAll = new KeyboardEvent("keydown", {
-		key: "Enter",
-		...primaryModifier(),
-		bubbles: true,
-		cancelable: true,
-	});
-	await act(async () => window.dispatchEvent(keepAll));
-	expect(keepAll.defaultPrevented).toBe(true);
-	await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-	expect(onComplete).toHaveBeenCalledWith(
-		"First new.\n\nSecond new.\n\nThird new.\n",
-	);
 
 	await act(async () => view?.unmount());
 });
@@ -311,7 +300,9 @@ test("applies semantic identity hints that arrive before review starts", async (
 			</LixProvider>,
 		);
 	});
-	expect(await screen.findByText("1 of 2")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 1 of 2" }),
+	).toBeInTheDocument();
 
 	await act(async () => {
 		view!.rerender(
@@ -338,7 +329,9 @@ test("applies semantic identity hints that arrive before review starts", async (
 	});
 
 	await waitFor(() => {
-		expect(screen.getByText("1 of 1")).toBeInTheDocument();
+		expect(
+			screen.getByRole("group", { name: "Review change 1 of 1" }),
+		).toBeInTheDocument();
 	});
 	await act(async () => view?.unmount());
 	editor.destroy();
@@ -362,7 +355,7 @@ test("clicking any marked fragment selects its whole change group", async () => 
 		);
 	});
 
-	await screen.findByText("1 of 2");
+	await screen.findByRole("group", { name: "Review change 1 of 2" });
 	const marked = Array.from(
 		view!.container.querySelectorAll<HTMLElement>("[data-review-change-id]"),
 	);
@@ -376,7 +369,9 @@ test("clicking any marked fragment selects its whole change group", async () => 
 	)!;
 
 	await act(async () => fireEvent.click(secondFragment));
-	expect(await screen.findByText("2 of 2")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 2 of 2" }),
+	).toBeInTheDocument();
 	await waitFor(() => {
 		const active = Array.from(
 			view!.container.querySelectorAll<HTMLElement>(
@@ -413,7 +408,7 @@ test("uses Backspace rather than Escape to undo the active change", async () => 
 		);
 	});
 
-	await screen.findByText("1 of 2");
+	await screen.findByRole("group", { name: "Review change 1 of 2" });
 	const escape = new KeyboardEvent("keydown", {
 		key: "Escape",
 		bubbles: true,
@@ -421,7 +416,9 @@ test("uses Backspace rather than Escape to undo the active change", async () => 
 	});
 	await act(async () => window.dispatchEvent(escape));
 	expect(escape.defaultPrevented).toBe(false);
-	expect(screen.getByText("1 of 2")).toBeInTheDocument();
+	expect(
+		screen.getByRole("group", { name: "Review change 1 of 2" }),
+	).toBeInTheDocument();
 
 	const backspace = new KeyboardEvent("keydown", {
 		key: "Backspace",
@@ -430,7 +427,9 @@ test("uses Backspace rather than Escape to undo the active change", async () => 
 	});
 	await act(async () => window.dispatchEvent(backspace));
 	expect(backspace.defaultPrevented).toBe(true);
-	expect(await screen.findByText("2 of 2")).toBeInTheDocument();
+	expect(
+		await screen.findByRole("group", { name: "Review change 2 of 2" }),
+	).toBeInTheDocument();
 	await waitFor(() => {
 		expect(view!.container).toHaveTextContent("First old.");
 		expect(view!.container).not.toHaveTextContent("First new.");
@@ -441,10 +440,6 @@ test("uses Backspace rather than Escape to undo the active change", async () => 
 
 function primaryModifier(): { metaKey: true } | { ctrlKey: true } {
 	return isMacTestPlatform() ? { metaKey: true } : { ctrlKey: true };
-}
-
-function primaryShortcut(): "Meta+Enter" | "Control+Enter" {
-	return isMacTestPlatform() ? "Meta+Enter" : "Control+Enter";
 }
 
 function individualShortcut(): "Meta+Shift+Enter" | "Control+Shift+Enter" {

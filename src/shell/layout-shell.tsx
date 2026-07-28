@@ -33,7 +33,7 @@ import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
-import { ExternalWriteReviewCheckpointAction } from "@/extension-runtime/external-write-review-controls";
+import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { qb } from "@/lib/lix-kysely";
 import { selectFileWorkingChanges } from "@/queries";
@@ -1212,25 +1212,22 @@ function LayoutShellLoadedContent({
 	const [workingChangeReviewFiles, setWorkingChangeReviewFiles] = useState<
 		readonly LixFileForOpen[]
 	>(EMPTY_LIX_FILES_FOR_OPEN);
+	// ESC leaves an agent-turn review without resolving it; the pending changes
+	// stay reachable through the "N changes since checkpoint" pill. A new agent
+	// turn re-opens diff mode.
+	const [agentTurnReviewDismissed, setAgentTurnReviewDismissed] =
+		useState(false);
 	const exitWorkingChangesReview = useCallback(() => {
 		setWorkingChangesReviewOpen(false);
 	}, []);
-	useEffect(() => {
-		if (!workingChangesReviewOpen) return;
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			event.stopPropagation();
-			setWorkingChangesReviewOpen(false);
-		};
-		window.addEventListener("keydown", handleKeyDown, { capture: true });
-		return () => {
-			window.removeEventListener("keydown", handleKeyDown, { capture: true });
-		};
-	}, [workingChangesReviewOpen]);
+	const exitDiffReview = useCallback(() => {
+		setWorkingChangesReviewOpen(false);
+		setAgentTurnReviewDismissed(true);
+	}, []);
 	useEffect(() => {
 		setWorkingChangesReviewOpen(false);
 		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
+		setAgentTurnReviewDismissed(false);
 	}, [activeBranchId]);
 	const resolveDiffReviewRef = useRef<
 		((review: ExternalWriteReview) => boolean) | null
@@ -1374,7 +1371,9 @@ function LayoutShellLoadedContent({
 			releaseDiffReviewResolution,
 		],
 	);
-	const handleCreateCheckpoint = useCallback(async () => {
+	const collectPendingAgentTurnReviews = useCallback(async (): Promise<
+		readonly ExternalWriteReview[]
+	> => {
 		const changedFiles = await selectFileWorkingChanges(lix).execute();
 		const changedFileIds = new Set(changedFiles.map((file) => file.id));
 		const changedCurrentFiles = currentFileRows
@@ -1389,7 +1388,7 @@ function LayoutShellLoadedContent({
 			agentTurnRanges,
 			resolvedReviewIdsRef.current,
 		);
-		const pendingReviews = (
+		return (
 			await Promise.all(
 				changedCurrentFiles
 					.filter((file) => pendingPaths.has(file.path))
@@ -1404,6 +1403,10 @@ function LayoutShellLoadedContent({
 					),
 			)
 		).filter((review): review is ExternalWriteReview => review !== null);
+	}, [agentTurnRanges, currentFileRows, lix]);
+
+	const handleCreateCheckpoint = useCallback(async () => {
+		const pendingReviews = await collectPendingAgentTurnReviews();
 
 		await lix.createCheckpoint();
 		setWorkingChangesReviewOpen(false);
@@ -1423,9 +1426,29 @@ function LayoutShellLoadedContent({
 			}
 		}
 	}, [
-		agentTurnRanges,
-		currentFileRows,
+		collectPendingAgentTurnReviews,
 		lix,
+		persistReviewResolution,
+		runDiffReviewResolution,
+	]);
+
+	// "Checkpoint with a name…" from the float's ▾ menu. Named checkpoints are
+	// not supported by the engine yet, so the name is intentionally dropped and
+	// this seals a regular checkpoint.
+	const handleCreateNamedCheckpoint = useCallback(async () => {
+		await handleCreateCheckpoint();
+	}, [handleCreateCheckpoint]);
+
+	// Keep all: accept every pending review across the workspace in one press.
+	const handleKeepAllReviews = useCallback(async () => {
+		const pendingReviews = await collectPendingAgentTurnReviews();
+		for (const review of pendingReviews) {
+			await runDiffReviewResolution(review, "accepted", async () => {
+				await persistReviewResolution(review, "accepted");
+			});
+		}
+	}, [
+		collectPendingAgentTurnReviews,
 		persistReviewResolution,
 		runDiffReviewResolution,
 	]);
@@ -1437,10 +1460,35 @@ function LayoutShellLoadedContent({
 	const isReviewMode =
 		workingChangesReviewOpen ||
 		(!autoAcceptAgentChanges &&
+			!agentTurnReviewDismissed &&
 			openExternalReviewCount > 0 &&
 			[...openDiffReviewByFileIdRef.current.values()].some(
 				(review) => review.mode !== "working-changes",
 			));
+
+	// A fresh agent turn re-enters diff mode even if the previous one was left
+	// with ESC.
+	const agentTurnRangeKey = agentTurnRanges.map((range) => range.id).join("\n");
+	useEffect(() => {
+		setAgentTurnReviewDismissed(false);
+	}, [agentTurnRangeKey]);
+
+	// Shell-level ESC fallback for when no float is mounted (e.g. the active
+	// view has no pending diff). The float handles ESC itself and stops
+	// propagation before this listener sees it.
+	useEffect(() => {
+		if (!isReviewMode) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			exitDiffReview();
+		};
+		window.addEventListener("keydown", handleKeyDown, { capture: true });
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown, { capture: true });
+		};
+	}, [exitDiffReview, isReviewMode]);
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -2244,6 +2292,50 @@ function LayoutShellLoadedContent({
 			runDiffReviewResolution,
 		],
 	);
+
+	// The float's ▾ "Keep only <file>": accept just the stepped file's review.
+	const handleKeepActiveFileReview = useCallback(async () => {
+		const activeView = panelStatesRef.current.central.views.find(
+			(view) =>
+				view.instance === panelStatesRef.current.central.activeInstance,
+		);
+		const activeFileId = activeView
+			? activeFileIdFromExtensionInstance(activeView)
+			: null;
+		if (!activeFileId) return;
+		const review = openDiffReviewByFileIdRef.current.get(activeFileId);
+		if (!review) return;
+		await handleAcceptExternalWriteReview({
+			fileId: review.fileId,
+			reviewId: review.reviewId,
+			review,
+		});
+	}, [handleAcceptExternalWriteReview]);
+
+	// Undo all: walk the whole workspace back in one press.
+	const handleUndoAllReviews = useCallback(async () => {
+		if (workingChangesReviewOpen) {
+			// Working-changes "Undo all" reverts to the last checkpoint. The
+			// engine has no restore surface yet — intentionally a no-op until it
+			// does.
+			console.info(
+				"[diff-mode] Undo all to the last checkpoint is not wired yet",
+			);
+			return;
+		}
+		const pendingReviews = await collectPendingAgentTurnReviews();
+		for (const review of pendingReviews) {
+			await handleRejectExternalWriteReview({
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				review,
+			});
+		}
+	}, [
+		collectPendingAgentTurnReviews,
+		handleRejectExternalWriteReview,
+		workingChangesReviewOpen,
+	]);
 
 	const handleCloseView = useCallback(
 		({
@@ -3068,14 +3160,19 @@ function LayoutShellLoadedContent({
 			reviews: {
 				resolvedReviewIds: privateResolvedReviewIds,
 				autoAccept: autoAcceptAgentChanges,
-				isOpen: !autoAcceptAgentChanges || workingChangesReviewOpen,
+				isOpen:
+					(!autoAcceptAgentChanges && !agentTurnReviewDismissed) ||
+					workingChangesReviewOpen,
 				active: isReviewMode,
 				mode: workingChangesReviewOpen
 					? ("working-changes" as const)
 					: ("agent-turn" as const),
 				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
 				createCheckpoint: handleCreateCheckpoint,
-				...(workingChangesReviewOpen ? { exit: exitWorkingChangesReview } : {}),
+				createNamedCheckpoint: handleCreateNamedCheckpoint,
+				keepAll: handleKeepAllReviews,
+				undoAll: handleUndoAllReviews,
+				exit: exitDiffReview,
 				...(reviewRangeSessionId !== undefined
 					? { rangeSessionId: reviewRangeSessionId }
 					: {}),
@@ -3090,9 +3187,13 @@ function LayoutShellLoadedContent({
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
+			agentTurnReviewDismissed,
 			autoAcceptAgentChanges,
-			exitWorkingChangesReview,
+			exitDiffReview,
 			handleCreateCheckpoint,
+			handleCreateNamedCheckpoint,
+			handleKeepAllReviews,
+			handleUndoAllReviews,
 			handleAcceptExternalWriteReview,
 			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
@@ -3312,13 +3413,28 @@ function LayoutShellLoadedContent({
 										slots?.centralPanelEmpty,
 									)}
 								/>
-								{workingChangesReviewOpen && !isHostReadOnly ? (
-									<div className="external-write-review-actions external-write-review-actions-auto external-write-review-checkpoint-host">
-										<ExternalWriteReviewCheckpointAction
-											isActive
-											onCheckpoint={handleCreateCheckpoint}
-										/>
-									</div>
+								{isReviewMode && !isHostReadOnly ? (
+									<ExternalWriteReviewControls
+										isActive
+										mode={
+											workingChangesReviewOpen
+												? "working-changes"
+												: "agent-turn"
+										}
+										navigation={reviewNavigation}
+										onUndoAll={() => void handleUndoAllReviews()}
+										onPrimary={
+											workingChangesReviewOpen
+												? handleCreateCheckpoint
+												: handleKeepAllReviews
+										}
+										onMenuAction={
+											workingChangesReviewOpen
+												? handleCreateNamedCheckpoint
+												: handleKeepActiveFileReview
+										}
+										onExit={exitDiffReview}
+									/>
 								) : null}
 							</div>
 						</Panel>

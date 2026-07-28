@@ -25,24 +25,80 @@
 		backdrop-filter: blur(16px);
 	}
 
-	.external-write-review-actions-auto {
-		width: min(44rem, calc(100% - 2rem));
-		justify-content: space-between;
+	.external-write-review-split {
+		position: relative;
+		display: flex;
+		align-items: stretch;
+		border-radius: 0.68rem;
+		overflow: visible;
 	}
 
-	.external-write-review-checkpoint-host {
-		z-index: 21;
-		justify-content: flex-end;
-		pointer-events: none;
+	.external-write-review-split-primary {
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
 	}
 
-	.external-write-review-checkpoint-host
-		.external-write-review-workspace-scope {
-		pointer-events: auto;
+	.external-write-review-split-caret {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.65rem;
+		border: 1px solid transparent;
+		border-left: 1px solid rgba(0, 0, 0, 0.25);
+		border-top-right-radius: 0.68rem;
+		border-bottom-right-radius: 0.68rem;
+		background: var(--color-bg-action-primary-hover);
+		color: var(--color-text-on-action-primary);
+		transition: background-color 120ms ease;
 	}
 
-	.external-write-review-file-scope {
-		min-width: 0;
+	.external-write-review-split-caret:hover:not(:disabled) {
+		filter: brightness(1.08);
+	}
+
+	.external-write-review-split-caret:disabled {
+		cursor: default;
+		opacity: 0.7;
+	}
+
+	.external-write-review-split-caret > svg {
+		width: 0.72rem;
+		height: 0.72rem;
+	}
+
+	.external-write-review-menu {
+		position: absolute;
+		right: 0;
+		bottom: calc(100% + 0.55rem);
+		min-width: 12rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		padding: 0.3rem;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 0.65rem;
+		background: rgb(38, 34, 31);
+		box-shadow:
+			0 18px 44px rgba(38, 34, 31, 0.36),
+			0 1px 0 rgba(255, 255, 255, 0.08) inset;
+	}
+
+	.external-write-review-menu > button {
+		display: flex;
+		align-items: center;
+		gap: 0.42rem;
+		padding: 0.45rem 0.6rem;
+		border-radius: 0.42rem;
+		color: rgba(255, 255, 255, 0.85);
+		font-size: 0.78rem;
+		font-weight: 620;
+		text-align: left;
+		white-space: nowrap;
+	}
+
+	.external-write-review-menu > button:hover {
+		background: rgba(255, 255, 255, 0.09);
+		color: white;
 	}
 
 	.external-write-review-navigation {
@@ -157,12 +213,13 @@
 
 	.external-write-review-button-reject {
 		background: transparent;
-		color: rgba(255, 255, 255, 0.88);
+		/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
+		color: rgb(235, 165, 156);
 	}
 
 	.external-write-review-button-reject:hover {
 		background: rgba(255, 255, 255, 0.09);
-		color: rgb(255, 255, 255);
+		color: rgb(244, 198, 191);
 	}
 
 	.external-write-review-shortcut {

@@ -48,7 +48,6 @@ import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
 } from "@/lib/decode-file-data";
-import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
@@ -790,16 +789,8 @@ function CsvViewLoaded({
 				) : null}
 				{externalWriteReview ? (
 					<CsvReviewOverlay
-						fileId={fileRow.id}
 						review={externalWriteReview}
 						reviewDataOverride={reviewDataOverride}
-						isActive={isActiveView && isPanelFocused}
-						onAccept={onAcceptReview}
-						onReject={onRejectReview}
-						autoAccept={autoAcceptReviews}
-						navigation={reviewNavigation}
-						onExit={onExitReview}
-						controls={reviewControls}
 					/>
 				) : null}
 			</div>
@@ -808,27 +799,11 @@ function CsvViewLoaded({
 }
 
 function CsvReviewOverlay({
-	fileId,
 	review,
 	reviewDataOverride,
-	isActive,
-	controls = "review",
-	onAccept,
-	onReject,
-	autoAccept = false,
-	navigation,
-	onExit,
 }: {
-	readonly fileId: string;
 	readonly review: ExternalWriteReview;
 	readonly reviewDataOverride?: ExternalWriteReviewData;
-	readonly isActive: boolean;
-	readonly controls?: "review" | "none";
-	readonly onAccept?: CsvReviewHandler;
-	readonly onReject?: CsvReviewHandler;
-	readonly autoAccept?: boolean;
-	readonly navigation?: ExternalWriteReviewNavigation;
-	readonly onExit?: () => void;
 }) {
 	const externalReviewData = useExternalWriteReviewData(
 		reviewDataOverride ? null : review,
@@ -838,8 +813,6 @@ function CsvReviewOverlay({
 		() => (reviewData ? renderCsvReviewDiffHtml(reviewData) : null),
 		[reviewData],
 	);
-	const rejectReview = () =>
-		void onReject?.({ fileId, reviewId: review.reviewId, review });
 
 	return (
 		<div className="csv-review-overlay">
@@ -854,18 +827,6 @@ function CsvReviewOverlay({
 					<span>Loading review…</span>
 				</div>
 			)}
-			{controls === "review" && (onAccept || onReject) ? (
-				<ExternalWriteReviewControls
-					isActive={isActive}
-					autoAccept={autoAccept}
-					navigation={navigation}
-					onExit={onExit}
-					onAccept={() =>
-						void onAccept?.({ fileId, reviewId: review.reviewId, review })
-					}
-					onReject={rejectReview}
-				/>
-			) : null}
 		</div>
 	);
 }
