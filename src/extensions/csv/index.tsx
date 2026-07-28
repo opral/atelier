@@ -119,12 +119,6 @@ type CsvViewProps = {
 	readonly onExitReview?: () => void;
 };
 
-type CsvReviewHandler = (args: {
-	readonly fileId: string;
-	readonly reviewId: string;
-	readonly review?: ExternalWriteReview;
-}) => Promise<void>;
-
 const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
 const ROW_MARKER_WIDTH = 44;
@@ -303,14 +297,9 @@ function CsvLiveViewData({
 	reviewRangeSessionId,
 	readOnly = false,
 	isActiveView = true,
-	isPanelFocused = true,
-	onAcceptReview,
-	onRejectReview,
 	autoAcceptReviews,
 	reviewEnabled = true,
 	reviewMode,
-	reviewNavigation,
-	onExitReview,
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
@@ -322,8 +311,7 @@ function CsvLiveViewData({
 		reviewRangeSessionId,
 		enabled: reviewEnabled,
 		reviewMode:
-			reviewMode ??
-			(autoAcceptReviews ? "working-changes" : "agent-turn"),
+			reviewMode ?? (autoAcceptReviews ? "working-changes" : "agent-turn"),
 	});
 
 	if (!fileRow) {
@@ -346,12 +334,6 @@ function CsvLiveViewData({
 				review={externalWriteReview}
 				readOnly={readOnly}
 				isActiveView={isActiveView}
-				isPanelFocused={isPanelFocused}
-				onAcceptReview={onAcceptReview}
-				onRejectReview={onRejectReview}
-				autoAcceptReviews={autoAcceptReviews}
-				reviewNavigation={reviewNavigation}
-				onExitReview={onExitReview}
 			/>
 		</>
 	);
@@ -369,23 +351,11 @@ function EditableCsvView({
 	review,
 	readOnly,
 	isActiveView = true,
-	isPanelFocused = true,
-	onAcceptReview,
-	onRejectReview,
-	autoAcceptReviews = false,
-	reviewNavigation,
-	onExitReview,
 }: {
 	readonly fileRow: CsvFileRow;
 	readonly review: ExternalWriteReview | null;
 	readonly readOnly: boolean;
 	readonly isActiveView?: boolean;
-	readonly isPanelFocused?: boolean;
-	readonly onAcceptReview?: CsvReviewHandler;
-	readonly onRejectReview?: CsvReviewHandler;
-	readonly autoAcceptReviews?: boolean;
-	readonly reviewNavigation?: ExternalWriteReviewNavigation;
-	readonly onExitReview?: () => void;
 }) {
 	const lix = useLix();
 	const fileId = fileRow.id;
@@ -658,14 +628,7 @@ function EditableCsvView({
 			onCreateTable={isReadOnly ? undefined : handleCreateTable}
 			saveError={saveError}
 			externalWriteReview={review}
-			reviewControls="review"
 			isActiveView={isActiveView}
-			isPanelFocused={isPanelFocused}
-			onAcceptReview={onAcceptReview}
-			onRejectReview={onRejectReview}
-			autoAcceptReviews={autoAcceptReviews}
-			reviewNavigation={reviewNavigation}
-			onExitReview={onExitReview}
 		/>
 	);
 }
@@ -714,11 +677,7 @@ function CsvHistoricalViewData({
 			fileRow={historicalFile.fileRow}
 			externalWriteReview={historicalFile.review}
 			reviewDataOverride={historicalFile.reviewData}
-			reviewControls={historicalFile.controls}
 			isActiveView={props.isActiveView}
-			isPanelFocused={props.isPanelFocused}
-			onAcceptReview={props.onAcceptReview}
-			onRejectReview={props.onRejectReview}
 		/>
 	);
 }
@@ -731,14 +690,7 @@ function CsvViewLoaded({
 	saveError = null,
 	externalWriteReview,
 	reviewDataOverride,
-	reviewControls = "review",
 	isActiveView = true,
-	isPanelFocused = true,
-	onAcceptReview,
-	onRejectReview,
-	autoAcceptReviews = false,
-	reviewNavigation,
-	onExitReview,
 }: {
 	readonly fileRow: CsvFileRow;
 	readonly parsedOverride?: CsvParseResult;
@@ -747,14 +699,7 @@ function CsvViewLoaded({
 	readonly saveError?: string | null;
 	readonly externalWriteReview: ExternalWriteReview | null;
 	readonly reviewDataOverride?: ExternalWriteReviewData;
-	readonly reviewControls?: "review" | "none";
 	readonly isActiveView?: boolean;
-	readonly isPanelFocused?: boolean;
-	readonly onAcceptReview?: CsvReviewHandler;
-	readonly onRejectReview?: CsvReviewHandler;
-	readonly autoAcceptReviews?: boolean;
-	readonly reviewNavigation?: ExternalWriteReviewNavigation;
-	readonly onExitReview?: () => void;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
 		return parsedOverride ?? parseCsv(decodeFileDataToText(fileRow.data));

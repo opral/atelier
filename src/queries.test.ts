@@ -84,7 +84,11 @@ describe("selectFilesystemEntries", () => {
 			.insertInto("lix_file")
 			.values([
 				{ id: fakeUuid("root_file"), path: "/root.md", data: new Uint8Array() },
-				{ id: fakeUuid("nested_file"), path: "/docs/deep.md", data: new Uint8Array() },
+				{
+					id: fakeUuid("nested_file"),
+					path: "/docs/deep.md",
+					data: new Uint8Array(),
+				},
 			])
 			.execute();
 
@@ -154,7 +158,11 @@ describe("checkpoint queries", () => {
 
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
-			[fakeUuid("review-file"), "/drafts/review.md", new TextEncoder().encode("draft")],
+			[
+				fakeUuid("review-file"),
+				"/drafts/review.md",
+				new TextEncoder().encode("draft"),
+			],
 		);
 		expect(await selectFileWorkingChanges(lix).execute()).toEqual([
 			{

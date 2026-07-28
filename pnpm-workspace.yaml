@@ -34,7 +34,7 @@ overrides:
   prosemirror-transform: 1.12.0
   prosemirror-view: 1.42.0
 patchedDependencies:
-  '@pierre/trees': patches/@pierre__trees.patch
+  "@pierre/trees": patches/@pierre__trees.patch
 
 peerDependencyRules:
   allowedVersions:

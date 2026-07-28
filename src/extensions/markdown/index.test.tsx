@@ -43,7 +43,10 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId={fakeUuid("file_1")} filePath="/docs/readme.md" />
+						<MarkdownView
+							fileId={fakeUuid("file_1")}
+							filePath="/docs/readme.md"
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -422,7 +425,10 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId={fakeUuid("file_uppercase")} filePath="/docs/README.MD" />
+						<MarkdownView
+							fileId={fakeUuid("file_uppercase")}
+							filePath="/docs/README.MD"
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -495,7 +501,11 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId={fakeUuid("file_csv")} filePath="/data.csv" isActiveView />
+						<MarkdownView
+							fileId={fakeUuid("file_csv")}
+							filePath="/data.csv"
+							isActiveView
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -558,7 +568,11 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId={fakeUuid("file_beta")} filePath="/beta.md" isActiveView />
+						<MarkdownView
+							fileId={fakeUuid("file_beta")}
+							filePath="/beta.md"
+							isActiveView
+						/>
 					</Suspense>
 				</LixProvider>,
 			);

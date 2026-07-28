@@ -231,7 +231,10 @@ describe("TextView", () => {
 		await act(async () => {
 			await lix.execute(
 				"UPDATE lix_file SET data = ? WHERE id = ?",
-				[new TextEncoder().encode("same-origin external"), fakeUuid("self-origin-file")],
+				[
+					new TextEncoder().encode("same-origin external"),
+					fakeUuid("self-origin-file"),
+				],
 				{ originKey },
 			);
 		});

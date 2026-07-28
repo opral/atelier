@@ -103,6 +103,17 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 		/** Walk every pending change back across the workspace. */
 		readonly undoAll?: () => Promise<void>;
 		readonly exit?: () => void;
+		/** Open the working-changes review (now vs last checkpoint). */
+		readonly openWorkingChanges?: () => void;
+		/** Open diff mode pointed at a checkpoint — read-only, never restores. */
+		readonly viewCheckpoint?: (args: {
+			readonly commitId: string;
+			readonly createdAt: string;
+		}) => Promise<void>;
+		/** Open one file as it was at the checkpoint being viewed. */
+		readonly openCheckpointFile?: (path: string) => void;
+		/** Set while diff mode is pointed at a checkpoint. */
+		readonly historicalCommitId?: string;
 		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
 		readonly accept: (args: {
 			readonly fileId: string;

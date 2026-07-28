@@ -16,6 +16,11 @@ export type TopBarProps = {
 	readonly isReadOnly?: boolean;
 	/** Whether the active document is being reviewed. */
 	readonly isReviewing?: boolean;
+	/**
+	 * Diff-mode headline ("Reviewing this turn · 2 files"). Replaces the
+	 * file-name center while diff mode is open.
+	 */
+	readonly reviewTitle?: string | null;
 	readonly onToggleLeftSidebar?: () => void;
 	readonly onToggleRightSidebar?: () => void;
 	readonly isLeftSidebarVisible?: boolean;
@@ -37,6 +42,7 @@ export function TopBar({
 	activeFileName = null,
 	isReadOnly = false,
 	isReviewing = false,
+	reviewTitle = null,
 	onToggleLeftSidebar,
 	onToggleRightSidebar,
 	isLeftSidebarVisible = true,
@@ -113,9 +119,16 @@ export function TopBar({
 						</span>
 					) : null}
 				</div>
-			) : activeFileName || isReadOnly ? (
+			) : reviewTitle || activeFileName || isReadOnly ? (
 				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
-					{activeFileName ? (
+					{reviewTitle ? (
+						<span
+							className="max-w-80 truncate px-1 font-bold text-[var(--color-brand-700)]"
+							data-attr="diff-mode-title"
+						>
+							{reviewTitle}
+						</span>
+					) : activeFileName ? (
 						<span
 							className={`ph-mask max-w-60 truncate px-1 font-semibold ${
 								isReviewing

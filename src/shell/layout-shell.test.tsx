@@ -171,10 +171,16 @@ describe("open file lifecycle", () => {
 
 		// Deleting every open file leaves the central empty state.
 		await act(async () => {
-			await qb(lix).deleteFrom("lix_file").where("id", "=", fakeUuid("two")).execute();
+			await qb(lix)
+				.deleteFrom("lix_file")
+				.where("id", "=", fakeUuid("two"))
+				.execute();
 		});
 		await act(async () => {
-			await qb(lix).deleteFrom("lix_file").where("id", "=", fakeUuid("one")).execute();
+			await qb(lix)
+				.deleteFrom("lix_file")
+				.where("id", "=", fakeUuid("one"))
+				.execute();
 		});
 		await waitFor(() => {
 			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
@@ -663,17 +669,13 @@ describe("agent turn review navigation", () => {
 			expect(
 				document.querySelector("[data-review-mode='true']"),
 			).not.toBeNull();
-			expect(
-				screen.getByRole("button", { name: /^Checkpoint/ }),
-			).toBeVisible();
+			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
 
 			await act(async () => {
 				fireEvent.keyDown(window, { key: "Escape" });
 			});
 			await waitFor(() => {
-				expect(
-					document.querySelector("[data-review-mode='true']"),
-				).toBeNull();
+				expect(document.querySelector("[data-review-mode='true']")).toBeNull();
 			});
 			fireEvent.click(
 				screen.getByRole("button", {
@@ -870,7 +872,9 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("active-review-file") }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("active-review-file"),
+						}),
 					}),
 				]);
 			});
@@ -911,7 +915,9 @@ describe("agent turn review navigation", () => {
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: fakeUuid("active-review-file") }),
+					state: expect.objectContaining({
+						fileId: fakeUuid("active-review-file"),
+					}),
 				}),
 			]);
 
@@ -924,9 +930,7 @@ describe("agent turn review navigation", () => {
 				fireEvent.click(keepActiveReview);
 			});
 			await waitFor(() => {
-				expect(
-					screen.queryByRole("button", { name: /^Keep all/ }),
-				).toBeNull();
+				expect(screen.queryByRole("button", { name: /^Keep all/ })).toBeNull();
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 				expect.objectContaining({
@@ -998,7 +1002,9 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("session-review-file") }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("session-review-file"),
+						}),
 					}),
 				]);
 			});
@@ -1011,7 +1017,9 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("session-stable-file") }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("session-stable-file"),
+						}),
 					}),
 				]);
 			});
@@ -1030,7 +1038,9 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("session-review-file") }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("session-review-file"),
+						}),
 					}),
 				]);
 			});

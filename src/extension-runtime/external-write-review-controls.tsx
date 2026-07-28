@@ -260,7 +260,11 @@ export function ExternalWriteReviewControls({
 	);
 }
 
-function PrimaryVerbIcon({ mode }: { readonly mode: DiffFloatMode }): ReactNode {
+function PrimaryVerbIcon({
+	mode,
+}: {
+	readonly mode: DiffFloatMode;
+}): ReactNode {
 	if (mode === "working-changes") return <Flag aria-hidden="true" />;
 	if (mode === "historical") return <RotateCcw aria-hidden="true" />;
 	return <Check aria-hidden="true" />;

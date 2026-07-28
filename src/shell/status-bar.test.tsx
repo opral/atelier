@@ -132,10 +132,7 @@ describe("CheckpointStatusBar", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<CheckpointStatusBar
-							isReviewing
-							onExitReview={exitReview}
-						/>
+						<CheckpointStatusBar isReviewing onExitReview={exitReview} />
 					</Suspense>
 				</LixProvider>,
 			);

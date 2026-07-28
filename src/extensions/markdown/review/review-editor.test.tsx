@@ -48,17 +48,19 @@ test("reviews entity groups one at a time and completes with exact mixed Markdow
 		"data-attr",
 		"review-change-undo",
 	);
-	expect(
-		screen.getByRole("button", { name: "Keep change" }),
-	).toHaveAttribute("data-attr", "review-change-keep");
+	expect(screen.getByRole("button", { name: "Keep change" })).toHaveAttribute(
+		"data-attr",
+		"review-change-keep",
+	);
 	// S2: change-level verbs live inline on the change; there is no in-file
 	// "Keep all" — the workspace float owns that verb.
 	expect(
 		screen.queryByRole("button", { name: /Keep all/ }),
 	).not.toBeInTheDocument();
-	expect(
-		screen.getByRole("button", { name: "Keep change" }),
-	).toHaveAttribute("aria-keyshortcuts", individualShortcut());
+	expect(screen.getByRole("button", { name: "Keep change" })).toHaveAttribute(
+		"aria-keyshortcuts",
+		individualShortcut(),
+	);
 	await waitFor(() => {
 		expect(
 			view!.container.querySelectorAll('[data-review-active="true"]').length,

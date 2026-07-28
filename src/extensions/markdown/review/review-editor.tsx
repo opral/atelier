@@ -282,7 +282,6 @@ export function MarkdownReviewEditor({
 			onCompletionFailure,
 			onCompletionStart,
 			onCompletionSuccess,
-			pendingChanges,
 			reviewDocument,
 		],
 	);

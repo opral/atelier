@@ -102,7 +102,6 @@ function EditableExcalidrawView({
 	fileId,
 	filePath,
 	fileRow,
-	isActiveView = true,
 }: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: ExcalidrawFileRow;
 }) {

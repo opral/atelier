@@ -1175,7 +1175,9 @@ describe("FilesView", () => {
 					context={{
 						activeBranchId,
 						reviewModeActive: true,
-						resolvedReviewIds: [`${fakeUuid("review-file")}:files-review-range`],
+						resolvedReviewIds: [
+							`${fakeUuid("review-file")}:files-review-range`,
+						],
 					}}
 				/>,
 			);

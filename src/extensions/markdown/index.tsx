@@ -447,8 +447,6 @@ function MarkdownLiveReviewController({
 	onCompletionSuccess,
 	onCompletionFailure,
 	autoAccept = false,
-	navigation,
-	onExit,
 }: MarkdownReviewOverlayProps & {
 	readonly editor: Editor;
 	readonly onCompletionStart: (markdown: string) => void;

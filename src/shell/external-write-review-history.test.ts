@@ -29,9 +29,19 @@ describe("getWorkingChangeExternalWriteReview", () => {
 	test("reviews the file from the latest checkpoint to the active head", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(lix, fakeUuid("checkpoint-file"), "/checkpoint.md", "before");
+			await writeFile(
+				lix,
+				fakeUuid("checkpoint-file"),
+				"/checkpoint.md",
+				"before",
+			);
 			const checkpoint = await lix.createCheckpoint();
-			await writeFile(lix, fakeUuid("checkpoint-file"), "/checkpoint.md", "after");
+			await writeFile(
+				lix,
+				fakeUuid("checkpoint-file"),
+				"/checkpoint.md",
+				"after",
+			);
 			const headCommitId = await activeCommitId(lix);
 
 			const review = await getWorkingChangeExternalWriteReview(
@@ -61,8 +71,18 @@ describe("getExternalWriteReview", () => {
 	test("returns no review when no agent turn range exists", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(lix, fakeUuid("history-file"), "/docs/history.md", "before");
-			await writeFile(lix, fakeUuid("history-file"), "/docs/history.md", "after");
+			await writeFile(
+				lix,
+				fakeUuid("history-file"),
+				"/docs/history.md",
+				"before",
+			);
+			await writeFile(
+				lix,
+				fakeUuid("history-file"),
+				"/docs/history.md",
+				"after",
+			);
 
 			const review = await getExternalWriteReview(
 				lix,
@@ -79,10 +99,25 @@ describe("getExternalWriteReview", () => {
 	test("uses an agent turn range for the review diff", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(lix, fakeUuid("agent-file"), "/docs/agent.md", "turn before");
+			await writeFile(
+				lix,
+				fakeUuid("agent-file"),
+				"/docs/agent.md",
+				"turn before",
+			);
 			const beforeCommitId = await activeCommitId(lix);
-			await writeFile(lix, fakeUuid("agent-file"), "/docs/agent.md", "intermediate");
-			await writeFile(lix, fakeUuid("agent-file"), "/docs/agent.md", "turn after");
+			await writeFile(
+				lix,
+				fakeUuid("agent-file"),
+				"/docs/agent.md",
+				"intermediate",
+			);
+			await writeFile(
+				lix,
+				fakeUuid("agent-file"),
+				"/docs/agent.md",
+				"turn after",
+			);
 			const afterCommitId = await activeCommitId(lix);
 
 			await appendAgentTurnCommitRange(
@@ -300,9 +335,19 @@ describe("getExternalWriteReview", () => {
 	test("combines unresolved ranges in commit order rather than id order", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(lix, fakeUuid("multi-file"), "/docs/multi.md", "turn 1 before");
+			await writeFile(
+				lix,
+				fakeUuid("multi-file"),
+				"/docs/multi.md",
+				"turn 1 before",
+			);
 			const beforeCommitId = await activeCommitId(lix);
-			await writeFile(lix, fakeUuid("multi-file"), "/docs/multi.md", "turn 1 after");
+			await writeFile(
+				lix,
+				fakeUuid("multi-file"),
+				"/docs/multi.md",
+				"turn 1 after",
+			);
 			const middleCommitId = await activeCommitId(lix);
 			await appendAgentTurnCommitRange(
 				lix,
@@ -312,7 +357,12 @@ describe("getExternalWriteReview", () => {
 					afterCommitId: middleCommitId,
 				}),
 			);
-			await writeFile(lix, fakeUuid("multi-file"), "/docs/multi.md", "turn 2 after");
+			await writeFile(
+				lix,
+				fakeUuid("multi-file"),
+				"/docs/multi.md",
+				"turn 2 after",
+			);
 			const afterCommitId = await activeCommitId(lix);
 			await appendAgentTurnCommitRange(
 				lix,
@@ -330,7 +380,10 @@ describe("getExternalWriteReview", () => {
 			);
 
 			expect(review?.reviewId).toBe(
-				agentTurnReviewId(fakeUuid("multi-file"), ["z-earlier-range", "a-later-range"]),
+				agentTurnReviewId(fakeUuid("multi-file"), [
+					"z-earlier-range",
+					"a-later-range",
+				]),
 			);
 			expect(review?.agentTurnRangeIds).toEqual([
 				"z-earlier-range",
@@ -348,20 +401,45 @@ describe("getExternalWriteReview", () => {
 		const lix = await openLix();
 		try {
 			await Promise.all([
-				writeFile(lix, fakeUuid("unchanged-file"), "/docs/unchanged.md", "same"),
-				writeFile(lix, fakeUuid("resolved-file"), "/docs/resolved.md", "before"),
+				writeFile(
+					lix,
+					fakeUuid("unchanged-file"),
+					"/docs/unchanged.md",
+					"same",
+				),
+				writeFile(
+					lix,
+					fakeUuid("resolved-file"),
+					"/docs/resolved.md",
+					"before",
+				),
 				writeFile(lix, fakeUuid("stale-file"), "/docs/stale.md", "before"),
-				writeFile(lix, fakeUuid("duplicate-file"), "/docs/duplicate.md", "before"),
+				writeFile(
+					lix,
+					fakeUuid("duplicate-file"),
+					"/docs/duplicate.md",
+					"before",
+				),
 			]);
 			const beforeCommitId = await activeCommitId(lix);
 			await Promise.all([
 				writeFile(lix, fakeUuid("added-file"), "/docs/added.md", "added"),
 				writeFile(lix, fakeUuid("resolved-file"), "/docs/resolved.md", "after"),
 				writeFile(lix, fakeUuid("stale-file"), "/docs/stale.md", "range after"),
-				writeFile(lix, fakeUuid("duplicate-file"), "/docs/duplicate.md", "after"),
+				writeFile(
+					lix,
+					fakeUuid("duplicate-file"),
+					"/docs/duplicate.md",
+					"after",
+				),
 			]);
 			const afterCommitId = await activeCommitId(lix);
-			await writeFile(lix, fakeUuid("stale-file"), "/docs/stale.md", "current after");
+			await writeFile(
+				lix,
+				fakeUuid("stale-file"),
+				"/docs/stale.md",
+				"current after",
+			);
 			const range = agentRange({
 				id: "range-batched-paths",
 				beforeCommitId,
@@ -376,11 +454,16 @@ describe("getExternalWriteReview", () => {
 					{ fileId: fakeUuid("resolved-file"), path: "/docs/resolved.md" },
 					{ fileId: fakeUuid("stale-file"), path: "/docs/stale.md" },
 					{ fileId: fakeUuid("duplicate-file"), path: "/docs/duplicate.md" },
-					{ fileId: fakeUuid("duplicate-file"), path: "/alternate/duplicate.md" },
+					{
+						fileId: fakeUuid("duplicate-file"),
+						path: "/alternate/duplicate.md",
+					},
 					{ fileId: fakeUuid("missing-file"), path: "/docs/missing.md" },
 				],
 				[range],
-				new Set([agentTurnReviewId(fakeUuid("resolved-file"), ["range-batched-paths"])]),
+				new Set([
+					agentTurnReviewId(fakeUuid("resolved-file"), ["range-batched-paths"]),
+				]),
 			);
 
 			expect([...pendingPaths].sort()).toEqual([
@@ -396,7 +479,10 @@ describe("getExternalWriteReview", () => {
 	test("uses global ancestry ordering when batching multiple pending ranges", async () => {
 		const lix = await openLix();
 		try {
-			const file = { fileId: fakeUuid("batched-multi-file"), path: "/docs/multi.md" };
+			const file = {
+				fileId: fakeUuid("batched-multi-file"),
+				path: "/docs/multi.md",
+			};
 			await writeFile(lix, file.fileId, file.path, "turn 1 before");
 			const beforeCommitId = await activeCommitId(lix);
 			await writeFile(lix, file.fileId, file.path, "turn 1 after");
@@ -429,9 +515,9 @@ describe("getExternalWriteReview", () => {
 
 	test("round-trips structured range ids without delimiter collisions", () => {
 		// Lix now requires canonical UUID file ids, so the file id itself can no
-	// longer carry delimiter characters; the range ids below still exercise
-	// delimiter handling inside the review id encoding.
-	const fileId = fakeUuid("file:with,delimiters");
+		// longer carry delimiter characters; the range ids below still exercise
+		// delimiter handling inside the review id encoding.
+		const fileId = fakeUuid("file:with,delimiters");
 		const rangeIds = [
 			JSON.stringify(["atelier-diff", "codex", "session,1"]),
 			"plain,range:id",
@@ -439,7 +525,9 @@ describe("getExternalWriteReview", () => {
 		const reviewId = agentTurnReviewId(fileId, rangeIds);
 
 		expect(agentTurnReviewRangeIds(reviewId, fileId)).toEqual(rangeIds);
-		expect(agentTurnReviewRangeIds(reviewId, fakeUuid("other-file"))).toEqual([]);
+		expect(agentTurnReviewRangeIds(reviewId, fakeUuid("other-file"))).toEqual(
+			[],
+		);
 		expect(agentTurnReviewRangeIds(`${fileId}:legacy-range`, fileId)).toEqual(
 			[],
 		);
@@ -495,9 +583,19 @@ describe("getExternalWriteReview", () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
 		try {
-			await writeFile(lix, fakeUuid("live-file"), "/docs/live.md", "live before");
+			await writeFile(
+				lix,
+				fakeUuid("live-file"),
+				"/docs/live.md",
+				"live before",
+			);
 			const beforeCommitId = await activeCommitId(lix);
-			await writeFile(lix, fakeUuid("live-file"), "/docs/live.md", "live after");
+			await writeFile(
+				lix,
+				fakeUuid("live-file"),
+				"/docs/live.md",
+				"live after",
+			);
 			const afterCommitId = await activeCommitId(lix);
 			const activeBranchId = await lix.activeBranchId();
 			const reviews: Array<ExternalWriteReview | null> = [];
