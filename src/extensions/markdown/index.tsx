@@ -33,6 +33,7 @@ import manifestJson from "./manifest.json";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
+import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
 import {
 	historicalMarkdownNodeBlocks,
@@ -381,6 +382,7 @@ function MarkdownLiveViewLoaded({
 						<>
 							<SlashCommandMenu />
 							<EmojiPickerMenu />
+							<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
 						</>
 					)}
 				</div>

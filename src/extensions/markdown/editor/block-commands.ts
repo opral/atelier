@@ -8,6 +8,7 @@ import {
 	ListOrdered,
 	Minus,
 	PanelTopDashed,
+	Paperclip,
 	Pilcrow,
 	Smile,
 	Table,
@@ -132,6 +133,26 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 					],
 				})
 				.run();
+		},
+	},
+	{
+		id: "embedFile",
+		label: "Embed file",
+		description: "Embed an image, video, or PDF",
+		icon: Paperclip,
+		keywords: [
+			"embed",
+			"file",
+			"image",
+			"video",
+			"pdf",
+			"media",
+			"attachment",
+			"picture",
+			"clip",
+		],
+		insert: (editor) => {
+			editor.commands.openEmbedFileMenu();
 		},
 	},
 	{

@@ -14,6 +14,7 @@ import {
 } from "./handle-paste";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { EmojiCommandsExtension } from "./extensions/emoji-commands";
+import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
@@ -287,6 +288,9 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				onStateChange: () => {},
 			}),
 			EmojiCommandsExtension.configure({
+				onStateChange: () => {},
+			}),
+			EmbedFileCommandsExtension.configure({
 				onStateChange: () => {},
 			}),
 			TableNavigationExtension,

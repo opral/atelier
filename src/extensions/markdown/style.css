@@ -2091,6 +2091,25 @@
 		text-align: center;
 	}
 
+	.markdown-embed-file-option-icon img {
+		width: 1.05rem;
+		height: 1.05rem;
+	}
+
+	.markdown-embed-file-option .markdown-slash-option-description {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.markdown-embed-file-empty {
+		padding: 1.35rem 0.75rem 1.55rem;
+		color: var(--color-text-tertiary);
+		font-size: 0.78rem;
+		line-height: 1.35;
+		text-align: center;
+	}
+
 	.markdown-review {
 		position: relative;
 		container-type: inline-size;
