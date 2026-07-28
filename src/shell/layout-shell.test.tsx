@@ -1220,9 +1220,7 @@ describe("agent turn review navigation", () => {
 				});
 			});
 
-			expect(
-				await screen.findByRole("button", { name: /^Undo all/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Undo" })).toBeVisible();
 			expect(
 				onEvent.mock.calls.filter(
 					([event]) =>
@@ -1231,9 +1229,9 @@ describe("agent turn review navigation", () => {
 				),
 			).toHaveLength(1);
 
-			// S2: Undo all walks the whole turn back in one press.
+			// S2: Undo walks the whole working set back in one press.
 			await act(async () => {
-				fireEvent.click(screen.getByRole("button", { name: /^Undo all/ }));
+				fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 			});
 			await waitFor(async () => {
 				const file = await qb(lix)

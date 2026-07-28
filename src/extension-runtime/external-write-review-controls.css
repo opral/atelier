@@ -7,7 +7,7 @@
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
-		align-items: flex-end;
+		align-items: flex-start;
 		gap: 0.55rem;
 		transform: translateX(-50%);
 	}
@@ -20,52 +20,6 @@
 		border-radius: 0.75rem;
 		background: rgb(28, 25, 23);
 		box-shadow: 0 14px 32px rgba(28, 25, 23, 0.42);
-	}
-
-	.external-write-review-split {
-		display: flex;
-		align-items: stretch;
-		border-radius: 0.5rem;
-		overflow: hidden;
-	}
-
-	/* Higher specificity than .external-write-review-button, which sets the
-	   standalone radius later in this file — inside the split, the halves
-	   share the wrapper's rounding and meet flat at the divider. */
-	.external-write-review-split .external-write-review-split-primary {
-		border-radius: 0;
-	}
-
-	.external-write-review-split-caret {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.4375rem;
-		border-left: 1px solid rgba(0, 0, 0, 0.25);
-		background: rgb(163, 54, 10);
-		color: rgb(244, 208, 189);
-		transition:
-			background-color 120ms ease,
-			color 120ms ease;
-	}
-
-	.external-write-review-split-caret[data-open] {
-		background: rgb(140, 46, 8);
-		color: rgb(255, 255, 255);
-	}
-
-	.external-write-review-split-caret:hover:not(:disabled) {
-		filter: brightness(1.08);
-	}
-
-	.external-write-review-split-caret:disabled {
-		cursor: default;
-		opacity: 0.7;
-	}
-
-	.external-write-review-split-caret > svg {
-		width: 0.6875rem;
-		height: 0.6875rem;
 	}
 
 	/* The ▾ file checklist: every changed file, all ticked by default.
@@ -116,9 +70,7 @@
 		box-sizing: border-box;
 	}
 
-	.external-write-review-menu
-		> button[data-ticked]
-		.external-write-review-menu-tick {
+	.external-write-review-menu-tick[data-ticked] {
 		border-color: var(--color-bg-action-primary);
 		background: var(--color-bg-action-primary);
 	}
@@ -149,26 +101,52 @@
 		text-overflow: ellipsis;
 	}
 
-	.external-write-review-menu-viewing {
-		margin-left: auto;
-		padding-left: 0.625rem;
-		color: rgb(140, 133, 124);
-		font-size: 0.625rem;
-		font-weight: 600;
-	}
-
-	.external-write-review-menu-count {
-		margin-left: auto;
-		padding-left: 0.625rem;
-		color: rgb(140, 133, 124);
-		font-size: 0.6875rem;
-		font-weight: 600;
-	}
-
 	.external-write-review-menu-divider {
 		height: 1px;
 		margin: 0.25rem 0.125rem;
 		background: rgb(58, 53, 47);
+	}
+
+	/* The scope chip: the working set, visible even with the list closed.
+	   Stretches to the row height so its box matches the orange verb beside
+	   it, border included. */
+	.external-write-review-scope-chip {
+		display: inline-flex;
+		align-self: stretch;
+		align-items: center;
+		gap: 0.375rem;
+		margin: 0 0.25rem 0 0.0625rem;
+		padding: 0 0.5rem;
+		border: 1px solid rgb(58, 53, 47);
+		border-radius: 0.5rem;
+		background: rgb(42, 38, 32);
+		color: rgb(231, 226, 218);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1;
+		white-space: nowrap;
+		transition: background-color 120ms ease;
+	}
+
+	.external-write-review-scope-chip:hover:not(:disabled) {
+		background: rgb(52, 47, 40);
+	}
+
+	.external-write-review-scope-chip:disabled {
+		cursor: default;
+		opacity: 0.7;
+	}
+
+	.external-write-review-scope-chip > svg {
+		width: 0.625rem;
+		height: 0.625rem;
+		color: rgb(201, 194, 184);
+	}
+
+	.external-write-review-scope-chip .external-write-review-menu-tick {
+		width: 0.8125rem;
+		height: 0.8125rem;
+		border-radius: 0.21875rem;
 	}
 
 	.external-write-review-navigation {

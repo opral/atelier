@@ -2487,30 +2487,38 @@ function LayoutShellLoadedContent({
 		],
 	);
 
-	// Undo all: walk the whole workspace back in one press.
+	// Undo: walk the scope chip's selection back.
+	const handleUndoReviews = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			if (workingChangesReviewOpen) {
+				// Working-changes Undo reverts to the last checkpoint. The engine
+				// has no restore surface yet — intentionally a no-op until it does.
+				console.info(
+					`[diff-mode] Undo to the last checkpoint (${selectedFileIds.length} files) is not wired yet`,
+				);
+				return;
+			}
+			const selected = new Set(selectedFileIds);
+			const pendingReviews = await collectPendingAgentTurnReviews();
+			for (const review of pendingReviews) {
+				if (!selected.has(review.fileId)) continue;
+				await handleRejectExternalWriteReview({
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					review,
+				});
+			}
+		},
+		[
+			collectPendingAgentTurnReviews,
+			handleRejectExternalWriteReview,
+			workingChangesReviewOpen,
+		],
+	);
 	const handleUndoAllReviews = useCallback(async () => {
-		if (workingChangesReviewOpen) {
-			// Working-changes "Undo all" reverts to the last checkpoint. The
-			// engine has no restore surface yet — intentionally a no-op until it
-			// does.
-			console.info(
-				"[diff-mode] Undo all to the last checkpoint is not wired yet",
-			);
-			return;
-		}
 		const pendingReviews = await collectPendingAgentTurnReviews();
-		for (const review of pendingReviews) {
-			await handleRejectExternalWriteReview({
-				fileId: review.fileId,
-				reviewId: review.reviewId,
-				review,
-			});
-		}
-	}, [
-		collectPendingAgentTurnReviews,
-		handleRejectExternalWriteReview,
-		workingChangesReviewOpen,
-	]);
+		await handleUndoReviews(pendingReviews.map((review) => review.fileId));
+	}, [collectPendingAgentTurnReviews, handleUndoReviews]);
 
 	const handleCloseView = useCallback(
 		({
@@ -3630,13 +3638,11 @@ function LayoutShellLoadedContent({
 										}
 										navigation={reviewNavigation}
 										files={pendingReviewFiles}
-										activeFileId={
-											pendingReviewFiles[activeReviewFileIndex]?.id ?? null
-										}
-										onUndoAll={
+										onUndo={
 											historicalReview
 												? undefined
-												: () => void handleUndoAllReviews()
+												: (selectedFileIds) =>
+														void handleUndoReviews(selectedFileIds)
 										}
 										onPrimary={handleDiffPrimary}
 										onExit={exitDiffReview}
