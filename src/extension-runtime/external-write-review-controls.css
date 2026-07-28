@@ -82,11 +82,12 @@
 		stroke-width: 3.2;
 	}
 
+	/* Same box as the tick beside it — the glyph's inner padding otherwise
+	   makes it read smaller. */
 	.external-write-review-menu-file-icon {
-		width: 0.8125rem;
-		height: 0.8125rem;
+		width: 0.875rem;
+		height: 0.875rem;
 		flex: none;
-		color: rgba(255, 255, 255, 0.72);
 	}
 
 	.external-write-review-menu
