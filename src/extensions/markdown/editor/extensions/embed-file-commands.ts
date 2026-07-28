@@ -6,9 +6,10 @@ declare module "@tiptap/core" {
 		embedFileCommands: {
 			openEmbedFileMenu: () => ReturnType;
 			closeEmbedFileMenu: () => ReturnType;
-			insertEmbedFileFromQuery: (attrs: {
+			insertEmbedFileBlock: (attrs: { src: string; alt: string }) => ReturnType;
+			insertEmbedFileReference: (attrs: {
 				src: string;
-				alt: string;
+				label: string;
 			}) => ReturnType;
 		};
 	}
@@ -16,8 +17,8 @@ declare module "@tiptap/core" {
 
 export type EmbedFileCommandState = {
 	active: boolean;
-	query: string;
-	range: { from: number; to: number } | null;
+	/** Document position that receives the embed; remapped on every change. */
+	pos: number | null;
 };
 
 export type EmbedFileCommandsOptions = {
@@ -30,14 +31,14 @@ export const embedFileCommandsPluginKey = new PluginKey<EmbedFileCommandState>(
 
 const INACTIVE_EMBED_FILE_STATE: EmbedFileCommandState = {
 	active: false,
-	query: "",
-	range: null,
+	pos: null,
 };
 
 /**
- * Tracks the workspace-file query opened by the `/embed` slash command. The
- * query is typed directly into the document (like the emoji picker) and is
- * replaced by the embed block on selection.
+ * Anchors the workspace-file picker opened by the `/Embed file` slash
+ * command. Unlike the emoji flow, the search query lives inside the picker's
+ * own input, so this plugin only tracks the insertion position — it survives
+ * concurrent document changes by remapping through each transaction.
  */
 export const EmbedFileCommandsExtension =
 	Extension.create<EmbedFileCommandsOptions>({
@@ -62,32 +63,10 @@ export const EmbedFileCommandsExtension =
 								if (!newState.selection.empty) {
 									return INACTIVE_EMBED_FILE_STATE;
 								}
-								const position = newState.selection.from;
-								return {
-									active: true,
-									query: "",
-									range: { from: position, to: position },
-								};
+								return { active: true, pos: newState.selection.from };
 							}
-							if (previous.active && previous.range) {
-								if (!newState.selection.empty) {
-									return INACTIVE_EMBED_FILE_STATE;
-								}
-								const from = tr.mapping.map(previous.range.from, -1);
-								const to = tr.mapping.map(previous.range.to, 1);
-								if (newState.selection.from !== to || from > to) {
-									return INACTIVE_EMBED_FILE_STATE;
-								}
-								const query = newState.doc.textBetween(
-									from,
-									to,
-									undefined,
-									"￼",
-								);
-								if (query.includes("￼") || query.length > 256) {
-									return INACTIVE_EMBED_FILE_STATE;
-								}
-								return { active: true, query, range: { from, to } };
+							if (previous.active && previous.pos !== null) {
+								return { active: true, pos: tr.mapping.map(previous.pos, -1) };
 							}
 							return previous;
 						},
@@ -145,19 +124,17 @@ export const EmbedFileCommandsExtension =
 						}
 						return true;
 					},
-				insertEmbedFileFromQuery:
+				insertEmbedFileBlock:
 					(attrs: { src: string; alt: string }) =>
 					({ state, chain }: CommandProps) => {
 						const pluginState = embedFileCommandsPluginKey.getState(state);
-						if (!pluginState?.active || !pluginState.range) return false;
-						const { from, to } = pluginState.range;
+						if (!pluginState?.active || pluginState.pos === null) return false;
 						return chain()
 							.command(({ tr }: { tr: any }) => {
 								tr.setMeta(embedFileCommandsPluginKey, { close: true });
-								if (to > from) tr.delete(from, to);
 								return true;
 							})
-							.insertContentAt(from, {
+							.insertContentAt(pluginState.pos, {
 								type: "imageBlock",
 								attrs: {
 									src: attrs.src,
@@ -167,6 +144,30 @@ export const EmbedFileCommandsExtension =
 									imageData: null,
 								},
 							})
+							.run();
+					},
+				insertEmbedFileReference:
+					(attrs: { src: string; label: string }) =>
+					({ state, chain }: CommandProps) => {
+						const pluginState = embedFileCommandsPluginKey.getState(state);
+						if (!pluginState?.active || pluginState.pos === null) return false;
+						return chain()
+							.command(({ tr }: { tr: any }) => {
+								tr.setMeta(embedFileCommandsPluginKey, { close: true });
+								return true;
+							})
+							.insertContentAt(pluginState.pos, [
+								{
+									type: "text",
+									marks: [
+										{
+											type: "link",
+											attrs: { href: attrs.src, title: null },
+										},
+									],
+									text: attrs.label,
+								},
+							])
 							.run();
 					},
 			};

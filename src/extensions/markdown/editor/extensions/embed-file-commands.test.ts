@@ -29,18 +29,21 @@ function createTestEditor(): Editor {
 	return editor;
 }
 
+function markdownOf(editor: Editor): string {
+	return serializeAst(tiptapDocToAst(editor.getJSON() as any));
+}
+
 describe("EmbedFileCommandsExtension", () => {
-	test("opens explicitly, tracks the query, and replaces it with an embed", () => {
+	test("anchors at the caret and inserts a media embed block", () => {
 		const editor = createTestEditor();
 		expect(editor.commands.openEmbedFileMenu()).toBe(true);
-		editor.commands.insertContent("kick off");
-
 		expect(embedFileCommandsPluginKey.getState(editor.state)).toMatchObject({
 			active: true,
-			query: "kick off",
+			pos: 1,
 		});
+
 		expect(
-			editor.commands.insertEmbedFileFromQuery({
+			editor.commands.insertEmbedFileBlock({
 				src: "assets/kickoff.mp4",
 				alt: "kickoff",
 			}),
@@ -48,34 +51,56 @@ describe("EmbedFileCommandsExtension", () => {
 		expect(embedFileCommandsPluginKey.getState(editor.state)?.active).toBe(
 			false,
 		);
-		expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
-			"![kickoff](assets/kickoff.mp4)\n",
+		expect(markdownOf(editor)).toBe("![kickoff](assets/kickoff.mp4)\n");
+	});
+
+	test("inserts non-renderable files as reference links", () => {
+		const editor = createTestEditor();
+		editor.commands.openEmbedFileMenu();
+		expect(
+			editor.commands.insertEmbedFileReference({
+				src: "design/brand.sketch",
+				label: "brand.sketch",
+			}),
+		).toBe(true);
+		expect(markdownOf(editor)).toBe("[brand.sketch](design/brand.sketch)\n");
+		expect(embedFileCommandsPluginKey.getState(editor.state)?.active).toBe(
+			false,
 		);
 	});
 
-	test("does not fire without an open query", () => {
+	test("remaps the anchor through concurrent document changes", () => {
+		const editor = createTestEditor();
+		editor.commands.insertContent("tail");
+		editor.commands.focus("end");
+		editor.commands.openEmbedFileMenu();
+
+		// A concurrent write lands before the anchor while the picker is open.
+		editor.commands.insertContentAt(1, "grew ");
+		expect(
+			editor.commands.insertEmbedFileReference({
+				src: "notes.txt",
+				label: "notes.txt",
+			}),
+		).toBe(true);
+		expect(markdownOf(editor)).toBe("grew tail[notes.txt](notes.txt)\n");
+	});
+
+	test("does not fire without an open picker", () => {
 		const editor = createTestEditor();
 		expect(
-			editor.commands.insertEmbedFileFromQuery({
+			editor.commands.insertEmbedFileBlock({
 				src: "assets/kickoff.mp4",
 				alt: "kickoff",
 			}),
 		).toBe(false);
+		expect(
+			editor.commands.insertEmbedFileReference({
+				src: "notes.txt",
+				label: "notes.txt",
+			}),
+		).toBe(false);
 		expect(editor.getText()).toBe("");
-	});
-
-	test("closes when the caret leaves the query", () => {
-		const editor = createTestEditor();
-		editor.commands.insertContent("Before ");
-		editor.commands.openEmbedFileMenu();
-		editor.commands.insertContent("clip");
-		expect(embedFileCommandsPluginKey.getState(editor.state)?.active).toBe(
-			true,
-		);
-		editor.commands.setTextSelection(1);
-		expect(embedFileCommandsPluginKey.getState(editor.state)?.active).toBe(
-			false,
-		);
 	});
 
 	test("does not open in code blocks or inline code", () => {
@@ -102,16 +127,16 @@ describe("EmbedFileCommandsExtension", () => {
 		expect(editor.commands.openEmbedFileMenu()).toBe(false);
 	});
 
-	test("Escape closes the query without touching the document", () => {
+	test("Escape closes the picker without touching the document", () => {
 		const editor = createTestEditor();
+		editor.commands.insertContent("text");
 		editor.commands.openEmbedFileMenu();
-		editor.commands.insertContent("clip");
 		editor.view.dom.dispatchEvent(
 			new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
 		);
 		expect(embedFileCommandsPluginKey.getState(editor.state)?.active).toBe(
 			false,
 		);
-		expect(editor.getText()).toBe("clip");
+		expect(editor.getText()).toBe("text");
 	});
 });

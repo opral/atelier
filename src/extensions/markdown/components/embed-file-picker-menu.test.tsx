@@ -19,8 +19,10 @@ import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
 	EmbedFilePickerMenu,
+	buildEmbedFileItems,
+	classifyEmbedFile,
 	embedFileAlt,
-	embeddableFilesFromPaths,
+	embedFileKindLabel,
 } from "./embed-file-picker-menu";
 
 const editors: Editor[] = [];
@@ -31,39 +33,58 @@ afterEach(async () => {
 	for (const lix of lixInstances.splice(0)) await lix.close();
 });
 
-describe("embeddableFilesFromPaths", () => {
-	test("keeps only embeddable media, sorted, with directory labels", () => {
-		const files = embeddableFilesFromPaths(
-			[
-				"/notes/readme.md",
-				"/assets/zebra.png",
+describe("classifyEmbedFile", () => {
+	test.each([
+		["/assets/logo.png", "image", true],
+		["/assets/kickoff.mp4", "video", true],
+		["/brief.pdf", "pdf", true],
+		["/notes/readme.md", "document", false],
+		["/notes.txt", "document", false],
+		["/design/brand.sketch", "reference", false],
+		["/data/contacts.csv", "reference", false],
+	])("classifies %s as %s", (path, kind, insertsBlock) => {
+		expect(classifyEmbedFile(path)).toEqual({ kind, insertsBlock });
+	});
+
+	test("labels non-renderable files as references", () => {
+		expect(embedFileKindLabel("reference")).toBe("no renderer → reference");
+		expect(embedFileKindLabel("video")).toBe("video");
+	});
+});
+
+describe("buildEmbedFileItems", () => {
+	test("lists every workspace file except the document itself", () => {
+		const items = buildEmbedFileItems({
+			paths: [
+				"/docs/notes.md",
+				"/docs/sibling.md",
 				"/assets/kickoff.mp4",
-				"/brief.pdf",
-				"/src/session.py",
-				"/clip.webm",
+				"/brand.sketch",
 			],
-			"",
-		);
-		expect(files.map((file) => file.path)).toEqual([
-			"/assets/kickoff.mp4",
-			"/assets/zebra.png",
-			"/brief.pdf",
-			"/clip.webm",
-		]);
-		expect(files[0]).toEqual({
-			path: "/assets/kickoff.mp4",
-			fileName: "kickoff.mp4",
-			directory: "assets",
+			query: "",
+			sourceFilePath: "/docs/notes.md",
 		});
-		expect(files[2]?.directory).toBe("/");
+		expect(items.map((item) => item.path)).toEqual([
+			"/assets/kickoff.mp4",
+			"/brand.sketch",
+			"/docs/sibling.md",
+		]);
+		expect(items.map((item) => item.directoryLabel)).toEqual([
+			"../assets/",
+			"../",
+			"./",
+		]);
+		expect(items[0]?.kind).toBe("video");
+		expect(items[1]?.kind).toBe("reference");
 	});
 
 	test("filters by a case-insensitive path query", () => {
-		const files = embeddableFilesFromPaths(
-			["/assets/Kickoff.mp4", "/assets/logo.png"],
-			"kick",
-		);
-		expect(files.map((file) => file.fileName)).toEqual(["Kickoff.mp4"]);
+		const items = buildEmbedFileItems({
+			paths: ["/assets/Kickoff.mp4", "/assets/logo.png"],
+			query: "kick",
+			sourceFilePath: "/docs/notes.md",
+		});
+		expect(items.map((item) => item.fileName)).toEqual(["Kickoff.mp4"]);
 	});
 });
 
@@ -96,8 +117,13 @@ async function setup() {
 				path: "/assets/kickoff.mp4",
 				data: new Uint8Array([1]),
 			},
-			{ id: "file-image", path: "/assets/logo.png", data: new Uint8Array([2]) },
+			{
+				id: "file-sketch",
+				path: "/design/brand.sketch",
+				data: new Uint8Array([2]),
+			},
 			{ id: "file-doc", path: "/docs/notes.md", data: new Uint8Array([3]) },
+			{ id: "file-other", path: "/docs/other.md", data: new Uint8Array([4]) },
 		])
 		.execute();
 
@@ -118,7 +144,7 @@ async function setup() {
 		left: 20,
 		right: 20,
 	});
-	render(
+	const utils = render(
 		<LixProvider lix={lix}>
 			<EditorProvider>
 				<InjectEditor editor={editor} />
@@ -126,45 +152,55 @@ async function setup() {
 			</EditorProvider>
 		</LixProvider>,
 	);
-	return editor;
+	return { editor, lix, ...utils };
+}
+
+function markdownOf(editor: Editor): string {
+	return serializeAst(tiptapDocToAst(editor.getJSON() as any));
 }
 
 describe("EmbedFilePickerMenu", () => {
-	test("lists embeddable workspace files and inserts a relative embed", async () => {
-		const editor = await setup();
+	test("lists all workspace files with an upload row and embeds media", async () => {
+		const { editor } = await setup();
 		await act(async () => {
 			editor.commands.openEmbedFileMenu();
 		});
 
-		expect(
-			await screen.findByRole("listbox", { name: "Embed file picker" }),
-		).toBeInTheDocument();
+		const search = await screen.findByRole("combobox", {
+			name: "Search workspace files",
+		});
+		expect(search).toHaveFocus();
 		const options = await screen.findAllByRole("option");
 		expect(options.map((option) => option.getAttribute("aria-label"))).toEqual([
 			"/assets/kickoff.mp4",
-			"/assets/logo.png",
+			"/design/brand.sketch",
+			"/docs/other.md",
+			"Upload from computer",
 		]);
+		expect(options[1]).toHaveTextContent("no renderer → reference");
+		expect(options[2]).toHaveTextContent("./ · document");
 
-		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+		fireEvent.keyDown(search, { key: "Enter" });
 		await waitFor(() => {
-			expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
-				"![kickoff](../assets/kickoff.mp4)\n",
-			);
+			expect(markdownOf(editor)).toBe("![kickoff](../assets/kickoff.mp4)\n");
 		});
 		expect(
-			screen.queryByRole("listbox", { name: "Embed file picker" }),
+			screen.queryByRole("dialog", { name: "Embed file picker" }),
 		).toBeNull();
 	});
 
-	test("filters by the typed query and inserts on click", async () => {
-		const editor = await setup();
+	test("filters through the search field and inserts references as links", async () => {
+		const { editor } = await setup();
 		await act(async () => {
 			editor.commands.openEmbedFileMenu();
-			editor.commands.insertContent("logo");
 		});
+		const search = await screen.findByRole("combobox", {
+			name: "Search workspace files",
+		});
+		fireEvent.change(search, { target: { value: "sketch" } });
 
 		const option = await screen.findByRole("option", {
-			name: "/assets/logo.png",
+			name: "/design/brand.sketch",
 		});
 		expect(
 			screen.queryByRole("option", { name: "/assets/kickoff.mp4" }),
@@ -172,24 +208,74 @@ describe("EmbedFilePickerMenu", () => {
 
 		fireEvent.click(option);
 		await waitFor(() => {
-			expect(serializeAst(tiptapDocToAst(editor.getJSON() as any))).toBe(
-				"![logo](../assets/logo.png)\n",
+			expect(markdownOf(editor)).toBe(
+				"[brand.sketch](../design/brand.sketch)\n",
 			);
 		});
 	});
 
-	test("shows an empty state for queries with no matches", async () => {
-		const editor = await setup();
+	test("uploads a file next to the document and embeds it", async () => {
+		const { editor, lix, container } = await setup();
 		await act(async () => {
 			editor.commands.openEmbedFileMenu();
-			editor.commands.insertContent("nothing-here");
+		});
+		await screen.findByRole("option", { name: "Upload from computer" });
+
+		const fileInput = container.ownerDocument.querySelector(
+			'input[type="file"]',
+		) as HTMLInputElement;
+		const uploaded = new File([new Uint8Array([9, 9, 9])], "Team Photo.png", {
+			type: "image/png",
+		});
+		await act(async () => {
+			fireEvent.change(fileInput, { target: { files: [uploaded] } });
 		});
 
-		const listbox = await screen.findByRole("listbox", {
-			name: "Embed file picker",
-		});
 		await waitFor(() => {
-			expect(listbox).toHaveTextContent("No embeddable files found");
+			expect(markdownOf(editor)).toBe("![team photo](team-photo.png)\n");
 		});
+		const stored = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["path"])
+			.where("path", "=", "/docs/team-photo.png")
+			.executeTakeFirst();
+		expect(stored?.path).toBe("/docs/team-photo.png");
+	});
+
+	test("shows an empty state but keeps the upload row for no matches", async () => {
+		const { editor } = await setup();
+		await act(async () => {
+			editor.commands.openEmbedFileMenu();
+		});
+		const search = await screen.findByRole("combobox", {
+			name: "Search workspace files",
+		});
+		fireEvent.change(search, { target: { value: "nothing-here" } });
+
+		await waitFor(() => {
+			expect(
+				screen.getByRole("dialog", { name: "Embed file picker" }),
+			).toHaveTextContent("No files found");
+		});
+		expect(
+			screen.getByRole("option", { name: "Upload from computer" }),
+		).toBeInTheDocument();
+	});
+
+	test("Escape in the search field closes the picker and refocuses the editor", async () => {
+		const { editor } = await setup();
+		await act(async () => {
+			editor.commands.openEmbedFileMenu();
+		});
+		const search = await screen.findByRole("combobox", {
+			name: "Search workspace files",
+		});
+		fireEvent.keyDown(search, { key: "Escape" });
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("dialog", { name: "Embed file picker" }),
+			).toBeNull();
+		});
+		expect(editor.getText()).toBe("");
 	});
 });

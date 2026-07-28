@@ -138,7 +138,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 	{
 		id: "embedFile",
 		label: "Embed file",
-		description: "Embed an image, video, or PDF",
+		description: "Embed or link a workspace file",
 		icon: Paperclip,
 		keywords: [
 			"embed",
@@ -148,6 +148,9 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 			"pdf",
 			"media",
 			"attachment",
+			"upload",
+			"attach",
+			"link",
 			"picture",
 			"clip",
 		],
