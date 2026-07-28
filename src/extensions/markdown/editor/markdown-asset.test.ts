@@ -3,6 +3,7 @@ import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
 	isPdfAssetSrc,
+	isVideoAssetSrc,
 	loadMarkdownAsset,
 	markdownAssetLabel,
 	relativeMarkdownAssetSrc,
@@ -123,6 +124,57 @@ describe("PDF asset metadata", () => {
 			"product brief.pdf",
 		);
 	});
+});
+
+describe("video asset metadata", () => {
+	test("recognizes video paths without being confused by query strings", () => {
+		expect(isVideoAssetSrc("./Kickoff.MP4?download=1#t=30")).toBe(true);
+		expect(isVideoAssetSrc("assets/screen-rec.mov")).toBe(true);
+		expect(isVideoAssetSrc("assets/clip.webm")).toBe(true);
+		expect(isVideoAssetSrc("./preview.png?format=mp4")).toBe(false);
+		expect(isVideoAssetSrc("./brief.pdf")).toBe(false);
+	});
+});
+
+test("loads a workspace video as a disposable object URL", async () => {
+	const lix = await openLix();
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: "video-asset",
+			path: "/docs/assets/kickoff.mp4",
+			data: new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]),
+		})
+		.execute();
+
+	let createdBlob: Blob | undefined;
+	const createObjectURL = vi
+		.spyOn(URL, "createObjectURL")
+		.mockImplementation((blob) => {
+			createdBlob = blob as Blob;
+			return "blob:atelier-video";
+		});
+	const revokeObjectURL = vi
+		.spyOn(URL, "revokeObjectURL")
+		.mockImplementation(() => {});
+
+	const asset = await loadMarkdownAsset({
+		lix,
+		sourceFilePath: "/docs/readme.md",
+		src: "assets/kickoff.mp4",
+	});
+
+	expect(createObjectURL).toHaveBeenCalledOnce();
+	expect(createdBlob?.type).toBe("video/mp4");
+	expect(asset?.src).toBe("blob:atelier-video");
+	expect(asset?.preview).toBe("auto");
+	expect(asset?.workspaceFile).toEqual({
+		fileId: "video-asset",
+		filePath: "/docs/assets/kickoff.mp4",
+	});
+	asset?.dispose?.();
+	expect(revokeObjectURL).toHaveBeenCalledWith("blob:atelier-video");
+	await lix.close();
 });
 
 test("loads a workspace PDF as a disposable object URL", async () => {

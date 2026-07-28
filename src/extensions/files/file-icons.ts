@@ -16,6 +16,7 @@ import fileSqlIconUrl from "./assets/file-sql.svg";
 import fileSvgIconUrl from "./assets/file-svg.svg";
 import fileTsIconUrl from "./assets/file-ts.svg";
 import fileTxtIconUrl from "./assets/file-txt.svg";
+import fileVideoIconUrl from "./assets/file-video.svg";
 
 export const FILE_ICON_GROUPS = [
 	{ extensions: ["md", "markdown"], iconUrl: fileMdIconUrl },
@@ -39,6 +40,7 @@ export const FILE_ICON_GROUPS = [
 	{ extensions: ["svg"], iconUrl: fileSvgIconUrl },
 	{ extensions: ["jpg", "jpeg"], iconUrl: fileJpgIconUrl },
 	{ extensions: ["pdf"], iconUrl: filePdfIconUrl },
+	{ extensions: ["mp4", "mov", "webm"], iconUrl: fileVideoIconUrl },
 	{ extensions: ["html", "htm"], iconUrl: fileHtmlIconUrl },
 	{ extensions: ["excalidraw"], iconUrl: fileExcalidrawIconUrl },
 ] as const;

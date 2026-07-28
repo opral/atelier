@@ -129,7 +129,8 @@ export function handleImageDrop(args: {
 	if (!droppedImage) {
 		notifyImagePasteStatus(onImagePasteStatus, {
 			state: "error",
-			message: "Drop a PNG, JPEG, GIF, WebP, AVIF, or SVG image.",
+			message:
+				"Drop a PNG, JPEG, GIF, WebP, AVIF, or SVG image, or an MP4, MOV, or WebM video.",
 		});
 		return true;
 	}
@@ -478,13 +479,25 @@ function firstImageFromDataTransfer(
 	return null;
 }
 
+const PASTABLE_VIDEO_MIME_TYPES = new Set([
+	"video/mp4",
+	"video/quicktime",
+	"video/webm",
+]);
+
 function imageFromFile(
 	file: File | null | undefined,
 	suggestedMimeType?: unknown,
 ): TransferredImage | null {
 	if (!file) return null;
 	const mimeType = String(suggestedMimeType || file.type || "").toLowerCase();
-	if (!mimeType.startsWith("image/")) return null;
+	const baseMimeType = mimeType.split(";", 1)[0]?.trim() ?? "";
+	if (
+		!baseMimeType.startsWith("image/") &&
+		!PASTABLE_VIDEO_MIME_TYPES.has(baseMimeType)
+	) {
+		return null;
+	}
 	return { file, mimeType };
 }
 

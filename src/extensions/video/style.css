@@ -1,0 +1,331 @@
+/*
+ * Player chrome is deliberately theme-independent: the stage is always a dark
+ * surface (like a paused frame), so the glass controls keep the design's fixed
+ * dark palette in both light and dark app themes.
+ */
+@scope (.atelier-root) {
+	.atelier-video-view {
+		position: relative;
+		display: block;
+		height: 100%;
+		min-height: 0;
+		overflow: hidden;
+		background: #17140f;
+	}
+
+	.atelier-video-player {
+		position: relative;
+		display: block;
+		width: 100%;
+		height: 100%;
+		background: #17140f;
+		outline: none;
+	}
+
+	.atelier-video-player[data-idle="true"] {
+		cursor: none;
+	}
+
+	.atelier-video-surface {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+	}
+
+	/* ── floating chips (standalone) ── */
+
+	.atelier-video-chip {
+		position: absolute;
+		top: 12px;
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		padding: 5px 12px 5px 9px;
+		border: 1px solid rgb(255 255 255 / 8%);
+		border-radius: 999px;
+		background: rgb(20 16 10 / 55%);
+		backdrop-filter: blur(10px);
+		font-size: 11px;
+		font-weight: 600;
+		color: #e7e2da;
+		transition: opacity 0.3s ease;
+	}
+
+	.atelier-video-chip--file {
+		left: 12px;
+	}
+
+	.atelier-video-chip--specs {
+		right: 12px;
+		padding: 5px 12px;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 10px;
+		font-weight: 500;
+		color: #a39c95;
+	}
+
+	.atelier-video-chip-icon {
+		width: 12px;
+		height: 12px;
+		color: #e8a87c;
+	}
+
+	.atelier-video-chip-label {
+		white-space: nowrap;
+	}
+
+	.atelier-video-chip-divider {
+		width: 1px;
+		height: 10px;
+		background: rgb(255 255 255 / 14%);
+	}
+
+	.atelier-video-chip-muted {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		color: #a39c95;
+		font-weight: 500;
+	}
+
+	.atelier-video-chip-muted svg {
+		width: 10px;
+		height: 10px;
+	}
+
+	/* ── center play puck ── */
+
+	.atelier-video-puck {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 68px;
+		height: 68px;
+		padding: 0;
+		border: 1px solid rgb(255 255 255 / 16%);
+		border-radius: 50%;
+		background: rgb(20 16 10 / 50%);
+		backdrop-filter: blur(10px);
+		box-shadow: 0 12px 40px rgb(0 0 0 / 40%);
+		color: #f4f2ef;
+		cursor: pointer;
+		transform: translate(-50%, -50%);
+		transition:
+			background 0.15s ease,
+			opacity 0.2s ease;
+	}
+
+	.atelier-video-puck:hover {
+		background: rgb(194 65 12 / 75%);
+	}
+
+	.atelier-video-puck svg {
+		width: 24px;
+		height: 24px;
+		margin-left: 3px;
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-puck {
+		width: 48px;
+		height: 48px;
+		box-shadow: 0 10px 32px rgb(0 0 0 / 40%);
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-puck svg {
+		width: 17px;
+		height: 17px;
+		margin-left: 2px;
+	}
+
+	.atelier-video-player[data-playing="true"] .atelier-video-puck,
+	.atelier-video-player[data-video-state="error"] .atelier-video-puck {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	/* ── glass control pill ── */
+
+	.atelier-video-pill {
+		position: absolute;
+		right: 12px;
+		bottom: 12px;
+		left: 12px;
+		display: flex;
+		align-items: center;
+		gap: 11px;
+		padding: 9px 16px 9px 11px;
+		border: 1px solid rgb(255 255 255 / 9%);
+		border-radius: 999px;
+		background: rgb(20 16 10 / 55%);
+		backdrop-filter: blur(14px);
+		transition: opacity 0.3s ease;
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-pill {
+		right: 8px;
+		bottom: 8px;
+		left: 8px;
+		gap: 9px;
+		padding: 6px 12px 6px 9px;
+	}
+
+	.atelier-video-player[data-idle="true"] .atelier-video-pill,
+	.atelier-video-player[data-idle="true"] .atelier-video-chip {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.atelier-video-player[data-video-state="error"] .atelier-video-pill {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.atelier-video-pill button {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: none;
+		background: none;
+		color: #f4f2ef;
+		cursor: pointer;
+	}
+
+	.atelier-video-toggle {
+		width: 26px;
+		height: 26px;
+	}
+
+	.atelier-video-toggle svg {
+		width: 15px;
+		height: 15px;
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-toggle {
+		width: 18px;
+		height: 18px;
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-toggle svg {
+		width: 12px;
+		height: 12px;
+	}
+
+	.atelier-video-icon-pause,
+	.atelier-video-player[data-playing="true"] .atelier-video-icon-play {
+		display: none;
+	}
+
+	.atelier-video-player[data-playing="true"] .atelier-video-icon-pause {
+		display: block;
+	}
+
+	.atelier-video-timecode {
+		flex-shrink: 0;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 11px;
+		color: rgb(244 242 239 / 90%);
+		white-space: nowrap;
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-timecode {
+		font-size: 10px;
+		color: rgb(244 242 239 / 85%);
+	}
+
+	.atelier-video-track {
+		position: relative;
+		display: block;
+		flex: 1;
+		height: 4px;
+		border-radius: 2px;
+		background: rgb(255 255 255 / 18%);
+		cursor: pointer;
+		touch-action: none;
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-track {
+		height: 3px;
+	}
+
+	.atelier-video-track-fill {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		display: block;
+		width: 0%;
+		border-radius: 2px;
+		background: linear-gradient(90deg, #f97316, #e8590c);
+	}
+
+	.atelier-video-track-knob {
+		position: absolute;
+		top: -3px;
+		left: -5px;
+		display: block;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #ffffff;
+		box-shadow: 0 1px 6px rgb(0 0 0 / 50%);
+	}
+
+	.atelier-video-rate {
+		font-size: 10.5px;
+		font-weight: 700;
+		color: rgb(244 242 239 / 75%);
+	}
+
+	.atelier-video-mute svg {
+		width: 14px;
+		height: 14px;
+		color: rgb(244 242 239 / 75%);
+	}
+
+	.atelier-video-icon-muted,
+	.atelier-video-player[data-muted="true"] .atelier-video-icon-volume {
+		display: none;
+	}
+
+	.atelier-video-player[data-muted="true"] .atelier-video-icon-muted {
+		display: block;
+	}
+
+	.atelier-video-fullscreen svg {
+		width: 13px;
+		height: 13px;
+		color: rgb(244 242 239 / 75%);
+	}
+
+	.atelier-video-player[data-variant="embed"] .atelier-video-fullscreen svg {
+		width: 12px;
+		color: rgb(244 242 239 / 85%);
+	}
+
+	/* ── error state ── */
+
+	.atelier-video-error[hidden] {
+		display: none;
+	}
+
+	.atelier-video-error {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		display: block;
+		padding: 8px 14px;
+		border: 1px solid rgb(255 255 255 / 10%);
+		border-radius: 8px;
+		background: rgb(20 16 10 / 70%);
+		font-size: 12.5px;
+		color: #e7e2da;
+		transform: translate(-50%, -50%);
+		white-space: nowrap;
+	}
+}

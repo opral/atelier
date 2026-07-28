@@ -32,6 +32,7 @@ export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	image: "atelier_image",
 	html: "atelier_html",
 	pdf: "atelier_pdf",
+	video: "atelier_video",
 	text: "atelier_text",
 	excalidraw: "atelier_excalidraw",
 } as const;

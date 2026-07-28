@@ -12,10 +12,15 @@ import { codeLanguageLabel } from "./code-language-label";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
 import {
 	isPdfAssetSrc,
+	isVideoAssetSrc,
 	markdownAssetLabel,
 	type LoadedMarkdownAsset,
 	type MarkdownWorkspaceFileOpener,
 } from "../markdown-asset";
+import {
+	createVideoPlayer,
+	formatVideoTimecode,
+} from "@/extensions/video/video-player";
 import type {
 	PdfPreviewController,
 	PdfPreviewRenderer,
@@ -673,6 +678,14 @@ export function markdownWcNodes(
 						diffAttributes: diffAttrs(node, "element"),
 					});
 				}
+				if (typeof src === "string" && isVideoAssetSrc(src)) {
+					return videoRenderSpec({
+						src: safeVideoSrc(renderedSrc),
+						caption: typeof alt === "string" ? alt.trim() : "",
+						title,
+						diffAttributes: diffAttrs(node, "element"),
+					});
+				}
 				const attrs: any = {};
 				if (renderedSrc) attrs.src = renderedSrc;
 				if (alt) attrs.alt = alt;
@@ -681,7 +694,7 @@ export function markdownWcNodes(
 			},
 			addNodeView() {
 				return ({ node, editor, getPos }) =>
-					createMarkdownAssetNodeView({
+					createMarkdownMediaNodeView({
 						node,
 						resolveImageSrc,
 						loadAsset,
@@ -728,6 +741,15 @@ export function markdownWcNodes(
 						diffAttributes: diffAttrs(node, "element"),
 					});
 				}
+				if (typeof src === "string" && isVideoAssetSrc(src)) {
+					return videoRenderSpec({
+						src: safeVideoSrc(renderedSrc),
+						caption: typeof alt === "string" ? alt.trim() : "",
+						title,
+						diffAttributes: diffAttrs(node, "element"),
+						isBlock: true,
+					});
+				}
 				const attrs: any = {
 					class: "markdown-image-block",
 					"data-markdown-image-block": "",
@@ -739,7 +761,7 @@ export function markdownWcNodes(
 			},
 			addNodeView() {
 				return ({ node, editor, getPos }) =>
-					createMarkdownAssetNodeView({
+					createMarkdownMediaNodeView({
 						node,
 						resolveImageSrc,
 						loadAsset,
@@ -750,6 +772,25 @@ export function markdownWcNodes(
 			},
 		}),
 	];
+}
+
+/**
+ * Route an image-syntax node to the node view for its media type. Videos get
+ * a playing embed; images and PDFs keep the shared asset node view.
+ */
+function createMarkdownMediaNodeView(args: {
+	readonly node: any;
+	readonly resolveImageSrc?: MarkdownImageSrcResolver;
+	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly renderPdfPreview?: PdfPreviewRenderer;
+	readonly deleteNode?: () => boolean;
+}) {
+	const src = String(args.node.attrs?.src ?? "");
+	if (isVideoAssetSrc(src)) {
+		return createMarkdownVideoNodeView(args);
+	}
+	return createMarkdownAssetNodeView(args);
 }
 
 function pdfRenderSpec({
@@ -816,6 +857,328 @@ function pdfRenderSpec({
 			],
 		],
 	];
+}
+
+function videoRenderSpec({
+	src,
+	caption,
+	title,
+	diffAttributes,
+	isBlock = false,
+}: {
+	readonly src: string;
+	readonly caption: string;
+	readonly title?: string | null;
+	readonly diffAttributes: Record<string, string>;
+	readonly isBlock?: boolean;
+}): any {
+	const available = src.length > 0;
+	return [
+		"span",
+		{
+			class: `markdown-video-embed${isBlock ? " markdown-image-block" : ""}`,
+			"data-markdown-video": "",
+			...(isBlock ? { "data-markdown-image-block": "" } : {}),
+			"data-asset-state": available ? "ready" : "unavailable",
+			contenteditable: "false",
+			...(title ? { title } : {}),
+			...diffAttributes,
+		},
+		[
+			"span",
+			{ class: "markdown-video-frame" },
+			available
+				? [
+						"video",
+						{
+							class: "markdown-video-surface",
+							src,
+							controls: "controls",
+							preload: "metadata",
+							playsinline: "",
+						},
+					]
+				: ["span", { class: "markdown-video-status" }, "Video unavailable"],
+		],
+		...(caption
+			? [["span", { class: "markdown-video-caption" }, caption]]
+			: []),
+	];
+}
+
+/**
+ * Node view for `![…](….mp4|mov|webm)`. Mounts the shared embed player, keeps
+ * the alt text as a caption below the frame, and offers Open file (workspace
+ * tab when the target resolves inside the workspace) plus the block delete
+ * affordance shared with images.
+ */
+function createMarkdownVideoNodeView({
+	node,
+	resolveImageSrc,
+	loadAsset,
+	openWorkspaceFile,
+	deleteNode,
+}: {
+	readonly node: any;
+	readonly resolveImageSrc?: MarkdownImageSrcResolver;
+	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly renderPdfPreview?: PdfPreviewRenderer;
+	readonly deleteNode?: () => boolean;
+}) {
+	const nodeTypeName = node.type.name;
+	let disposed = false;
+	let generation = 0;
+	let loadedAsset: LoadedMarkdownAsset | null = null;
+	let currentSource: string | null = null;
+	let currentAlt = "";
+	let videoDuration = 0;
+
+	const dom = document.createElement("span");
+	dom.className = "markdown-video-embed";
+	dom.dataset.markdownVideo = "";
+	dom.contentEditable = "false";
+	if (nodeTypeName === "imageBlock") {
+		dom.classList.add("markdown-image-block");
+		dom.dataset.markdownImageBlock = "";
+		dom.draggable = true;
+	}
+
+	const frame = document.createElement("span");
+	frame.className = "markdown-video-frame";
+	const player = createVideoPlayer({
+		variant: "embed",
+		onMetadata: ({ duration }) => {
+			videoDuration = duration;
+			refreshCaption();
+		},
+	});
+	frame.append(player.element);
+
+	const toolbar = document.createElement("span");
+	toolbar.className = "markdown-video-toolbar";
+	const openAction = document.createElement("a");
+	openAction.className = "markdown-video-open";
+	openAction.textContent = "Open file";
+	toolbar.append(openAction);
+	const deleteAction =
+		nodeTypeName === "imageBlock"
+			? createAssetDeleteButton("video embed")
+			: null;
+	if (deleteAction) {
+		const divider = document.createElement("span");
+		divider.className = "markdown-video-toolbar-divider";
+		toolbar.append(divider, deleteAction);
+	}
+	frame.append(toolbar);
+
+	const status = document.createElement("span");
+	status.className = "markdown-video-status";
+	status.role = "status";
+	status.textContent = "Loading video…";
+	frame.append(status);
+
+	const caption = document.createElement("span");
+	caption.className = "markdown-video-caption";
+	caption.hidden = true;
+	dom.append(frame, caption);
+
+	const refreshCaption = () => {
+		if (!currentAlt) {
+			caption.hidden = true;
+			caption.textContent = "";
+			return;
+		}
+		caption.hidden = false;
+		caption.textContent =
+			videoDuration > 0
+				? `${currentAlt} · ${formatVideoTimecode(videoDuration)}`
+				: currentAlt;
+	};
+
+	const applyAttributes = (nextNode: any) => {
+		currentAlt =
+			typeof nextNode.attrs?.alt === "string" ? nextNode.attrs.alt.trim() : "";
+		const title =
+			typeof nextNode.attrs?.title === "string" ? nextNode.attrs.title : null;
+		if (title) dom.title = title;
+		else dom.removeAttribute("title");
+		for (const attribute of [
+			"data-diff-key",
+			"data-diff-mode",
+			"data-diff-show-when-removed",
+		]) {
+			dom.removeAttribute(attribute);
+		}
+		for (const [key, value] of Object.entries(diffAttrs(nextNode, "element"))) {
+			dom.setAttribute(key, String(value));
+		}
+		refreshCaption();
+	};
+
+	const setOpenDestination = (
+		destination: "workspace" | "external" | "none",
+		href: string,
+	) => {
+		if (destination === "none") {
+			openAction.removeAttribute("href");
+			toolbar.dataset.openAvailable = "false";
+			return;
+		}
+		toolbar.dataset.openAvailable = "true";
+		openAction.href = href;
+		if (destination === "workspace") {
+			openAction.removeAttribute("target");
+			openAction.removeAttribute("rel");
+			openAction.ariaLabel = "Open video in the center panel";
+			return;
+		}
+		openAction.target = "_blank";
+		openAction.rel = "noopener noreferrer";
+		openAction.ariaLabel = "Open video in a new tab";
+	};
+
+	const setState = (state: "loading" | "ready" | "unavailable") => {
+		dom.dataset.assetState = state;
+		if (state === "loading") {
+			dom.setAttribute("aria-busy", "true");
+			status.textContent = "Loading video…";
+		} else {
+			dom.removeAttribute("aria-busy");
+			if (state === "unavailable") status.textContent = "Video unavailable";
+		}
+	};
+
+	const handleDeletePointerDown = (event: Event) => {
+		event.preventDefault();
+		event.stopPropagation();
+	};
+	const handleDelete = (event: Event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		deleteNode?.();
+	};
+	deleteAction?.addEventListener("pointerdown", handleDeletePointerDown);
+	deleteAction?.addEventListener("click", handleDelete);
+
+	const handleOpenWorkspaceFile = (event: MouseEvent) => {
+		const workspaceFile = loadedAsset?.workspaceFile;
+		if (!workspaceFile || !openWorkspaceFile || event.button !== 0) return;
+		event.preventDefault();
+		event.stopPropagation();
+		event.stopImmediatePropagation();
+		void openWorkspaceFile({
+			filePath: workspaceFile.filePath,
+			...(workspaceFile.sourceCommitId
+				? { state: { sourceCommitId: workspaceFile.sourceCommitId } }
+				: {}),
+		});
+	};
+	openAction.addEventListener("click", handleOpenWorkspaceFile);
+
+	const disposeLoadedAsset = () => {
+		loadedAsset?.dispose?.();
+		loadedAsset = null;
+	};
+
+	const updateSource = (nextNode: any) => {
+		generation += 1;
+		const loadGeneration = generation;
+		disposeLoadedAsset();
+		videoDuration = 0;
+		const src = String(nextNode.attrs?.src ?? "");
+		currentSource = src;
+		applyAttributes(nextNode);
+		if (!loadAsset) {
+			const renderedSrc = safeVideoSrc(
+				resolveRenderedImageSrc(src, resolveImageSrc),
+			);
+			if (renderedSrc) {
+				player.setSource(renderedSrc);
+				setOpenDestination("external", renderedSrc);
+				setState("ready");
+			} else {
+				player.setSource(null);
+				setOpenDestination("none", "");
+				setState("unavailable");
+			}
+			return;
+		}
+		setState("loading");
+		player.setSource(null);
+		setOpenDestination("none", "");
+		void loadAsset(src).then(
+			(asset) => {
+				if (disposed || generation !== loadGeneration) {
+					asset?.dispose?.();
+					return;
+				}
+				loadedAsset = asset;
+				const safeSrc = asset ? safeVideoSrc(asset.src) : "";
+				if (!asset || !safeSrc) {
+					disposeLoadedAsset();
+					player.setSource(null);
+					setState("unavailable");
+					return;
+				}
+				player.setSource(safeSrc);
+				setOpenDestination(
+					asset.workspaceFile && openWorkspaceFile ? "workspace" : "external",
+					safeSrc,
+				);
+				setState("ready");
+			},
+			() => {
+				if (!disposed && generation === loadGeneration) {
+					player.setSource(null);
+					setState("unavailable");
+				}
+			},
+		);
+	};
+
+	updateSource(node);
+	return {
+		dom,
+		update: (nextNode: any) => {
+			if (nextNode.type.name !== nodeTypeName) return false;
+			const nextSource = String(nextNode.attrs?.src ?? "");
+			if (!isVideoAssetSrc(nextSource)) return false;
+			if (nextSource === currentSource) {
+				applyAttributes(nextNode);
+				return true;
+			}
+			updateSource(nextNode);
+			return true;
+		},
+		destroy: () => {
+			disposed = true;
+			generation += 1;
+			openAction.removeEventListener("click", handleOpenWorkspaceFile);
+			deleteAction?.removeEventListener("pointerdown", handleDeletePointerDown);
+			deleteAction?.removeEventListener("click", handleDelete);
+			player.destroy();
+			disposeLoadedAsset();
+		},
+	};
+}
+
+function safeVideoSrc(src: string): string {
+	if (!src || src.startsWith("//")) return "";
+	try {
+		const absolute = new URL(src);
+		if (
+			absolute.protocol === "http:" ||
+			absolute.protocol === "https:" ||
+			absolute.protocol === "blob:" ||
+			absolute.protocol === "data:"
+		) {
+			return src;
+		}
+		return "";
+	} catch {
+		return "";
+	}
 }
 
 function createMarkdownAssetNodeView({
@@ -1163,6 +1526,9 @@ function createMarkdownAssetNodeView({
 			if (isPdfAssetSrc(String(nextNode.attrs?.src ?? "")) !== rendersPdf) {
 				return false;
 			}
+			// A source edit can turn this asset into a video — rebuild as the
+			// video node view instead of updating in place.
+			if (isVideoAssetSrc(String(nextNode.attrs?.src ?? ""))) return false;
 			const nextSource = String(nextNode.attrs?.src ?? "");
 			if (nextSource === currentSource) {
 				updateAssetDomAttributes(dom, nextNode);
@@ -1310,7 +1676,7 @@ function markdownImageElement(dom: HTMLElement): HTMLImageElement | null {
 }
 
 function createAssetDeleteButton(
-	label: "image" | "PDF embed",
+	label: "image" | "PDF embed" | "video embed",
 ): HTMLButtonElement {
 	const button = document.createElement("button");
 	button.type = "button";

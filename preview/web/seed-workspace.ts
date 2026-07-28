@@ -77,9 +77,10 @@ export function embedSeedAssets(modulePath: string, contents: string): string {
 			assetWorkspacePath.startsWith(`${markdownDirectory}/`)
 				? assetWorkspacePath.slice(markdownDirectory.length + 1)
 				: assetWorkspacePath;
-		// PDFs must remain workspace-relative so the Markdown asset loader can
-		// validate their bytes and render them through the consent-aware path.
-		if (assetWorkspacePath.toLowerCase().endsWith(".pdf")) continue;
+		// PDFs and videos must remain workspace-relative so the Markdown asset
+		// loader can resolve their bytes from the workspace (validated preview
+		// path for PDFs, blob playback + Open file for videos).
+		if (/\.(pdf|mp4|mov|webm)$/i.test(assetWorkspacePath)) continue;
 		markdown = markdown.replaceAll(`](${relativeAssetPath}`, `](${dataUrl}`);
 	}
 	return markdown;

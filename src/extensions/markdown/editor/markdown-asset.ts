@@ -1,6 +1,7 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
 import type { ExtensionState } from "@/extension-runtime/types";
+import { VIDEO_FILE_EXTENSIONS } from "@/extensions/video/video-player";
 
 export type MarkdownWorkspaceFileOpener = (args: {
 	readonly filePath: string;
@@ -313,6 +314,18 @@ export function isPdfAssetSrc(src: string): boolean {
 	}
 }
 
+export function isVideoAssetSrc(src: string): boolean {
+	try {
+		const url = new URL(src, "https://atelier.workspace/");
+		const pathname = decodeURIComponent(url.pathname).toLowerCase();
+		return VIDEO_FILE_EXTENSIONS.some((extension) =>
+			pathname.endsWith(`.${extension}`),
+		);
+	} catch {
+		return false;
+	}
+}
+
 export function markdownAssetLabel(src: string, alt?: string | null): string {
 	const preferred = alt?.trim();
 	if (preferred) return preferred;
@@ -425,6 +438,12 @@ function markdownAssetMimeType(path: string): string {
 			return "image/webp";
 		case "avif":
 			return "image/avif";
+		case "mp4":
+			return "video/mp4";
+		case "mov":
+			return "video/quicktime";
+		case "webm":
+			return "video/webm";
 		default:
 			return "application/octet-stream";
 	}
