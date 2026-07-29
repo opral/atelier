@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
 import { useLix, useQuery } from "@/lib/lix-react";
-import { qb } from "@/lib/lix-kysely";
+import { selectFileHistory } from "@/lib/lix-file-history";
+import { qb, sql } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { selectWorkingChanges } from "@/queries";
 import type {
@@ -59,7 +60,6 @@ type FileHistorySnapshots = Map<
 
 const EMPTY_FILE_DATA = new Uint8Array();
 const HISTORY_QUERY_MAX_PARAMETERS = 900;
-const HISTORY_COMMIT_BATCH_SIZE = 400;
 
 export type ExternalWriteReviewFile = {
 	readonly fileId: string;
@@ -594,25 +594,17 @@ async function getFileHistorySnapshotsAtCommits(
 ): Promise<FileHistorySnapshots> {
 	const snapshots: FileHistorySnapshots = new Map();
 	if (fileIds.length === 0 || commitIds.length === 0) return snapshots;
-	for (const commitIdBatch of chunkValues(
-		commitIds,
-		HISTORY_COMMIT_BATCH_SIZE,
-	)) {
-		const fileIdBatchSize = Math.max(
-			1,
-			HISTORY_QUERY_MAX_PARAMETERS - commitIdBatch.length,
-		);
+	for (const commitId of commitIds) {
+		const fileIdBatchSize = Math.max(1, HISTORY_QUERY_MAX_PARAMETERS - 1);
 		for (const fileIdBatch of chunkValues(fileIds, fileIdBatchSize)) {
-			const rows = (await qb(lix)
-				.selectFrom("lix_file_history")
+			const rows = (await selectFileHistory(lix, commitId)
 				.select([
 					"id",
 					"data",
-					"lixcol_as_of_commit_id as commit_id",
+					sql<string>`${commitId}`.as("commit_id"),
 					"lixcol_depth as depth",
 				])
 				.where("id", "in", fileIdBatch)
-				.where("lixcol_as_of_commit_id", "in", commitIdBatch)
 				.execute()) as BatchedFileHistoryRow[];
 			for (const row of rows) {
 				const fileSnapshots = snapshots.get(row.id) ?? new Map();
@@ -665,10 +657,8 @@ function* chunkValues<T>(
 }
 
 function fileHistorySnapshotQuery(lix: Lix, fileId: string, commitId: string) {
-	return qb(lix)
-		.selectFrom("lix_file_history")
+	return selectFileHistory(lix, commitId)
 		.select("data")
-		.where("lixcol_as_of_commit_id", "=", commitId)
 		.where("id", "=", fileId)
 		.orderBy("lixcol_depth", "asc")
 		.limit(1);

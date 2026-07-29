@@ -567,7 +567,7 @@ function FilesViewContent({
 				try {
 					await qb(lix)
 						.insertInto("lix_directory")
-						.values({ path } as any)
+						.values({ path: normalizeFilePath(path) } as any)
 						.execute();
 					setPendingDirectoryPaths((prev) => [...prev, path]);
 					setLocalSelection({
@@ -631,8 +631,8 @@ function FilesViewContent({
 				if (request.kind === "directory") {
 					await qb(lix)
 						.updateTable("lix_directory")
-						.set({ path: destinationPath } as any)
-						.where("path", "=", sourcePath)
+						.set({ path: normalizeFilePath(destinationPath) } as any)
+						.where("path", "=", normalizeFilePath(sourcePath))
 						.execute();
 					setOpenDirectoryPaths((prev) =>
 						remapDirectoryPathSet(prev, sourcePath, destinationPath),
@@ -878,7 +878,7 @@ function FilesViewContent({
 				} else {
 					await qb(lix)
 						.deleteFrom("lix_directory")
-						.where("path", "=", normalizedPath)
+						.where("path", "=", normalizeFilePath(normalizedPath))
 						.execute();
 					setPendingDirectoryPaths((prev) =>
 						prev.filter((path) => path !== normalizedPath),

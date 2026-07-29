@@ -1,4 +1,5 @@
 import type { JsonValue, Lix } from "@lix-js/sdk";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {
@@ -11,6 +12,7 @@ export type FilesystemEntryRow = {
 };
 
 export type WorkingChangeRow = {
+	diff_id: string;
 	entity_pk: JsonValue;
 	schema_key: string;
 	file_id: string | null;
@@ -53,7 +55,10 @@ export function selectFilesystemEntries(lix: Lix) {
 		.select((eb) => [
 			eb.ref("lix_directory.id").as("id"),
 			eb.ref("lix_directory.parent_id").as("parent_id"),
-			eb.ref("lix_directory.path").as("path"),
+			sql<string>`case
+				when lix_directory.path = '/' then '/'
+				else lix_directory.path || '/'
+			end`.as("path"),
 			eb.ref("lix_directory.name").as("display_name"),
 			sql<string>`'directory'`.as("kind"),
 			sql<string>`'lix'`.as("source"),
@@ -79,8 +84,9 @@ export function selectFilesystemEntries(lix: Lix) {
  */
 export function selectWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_change")
+		.selectFrom("lix_working_diff")
 		.select([
+			"diff_id",
 			"entity_pk",
 			"schema_key",
 			"file_id",
@@ -95,7 +101,7 @@ export function selectWorkingChanges(lix: Lix) {
 
 export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_change")
+		.selectFrom("lix_working_diff")
 		.select((eb) => eb.fn.countAll<number>().as("change_count"))
 		.$castTo<WorkingChangeCountRow>();
 }
@@ -103,7 +109,7 @@ export function selectWorkingChangeCount(lix: Lix) {
 /**
  * Net logical files changed between the latest checkpoint and active head.
  *
- * Derived from `lix_working_change` instead of `lix_file_working_change`:
+ * Derived from `lix_working_diff` instead of `lix_file_working_change`:
  * the engine's composed surface currently returns no rows unless the working
  * range also touches a directory descriptor (upstream bug in
  * filesystem_working_change.rs). Files removed since the checkpoint are not
@@ -111,10 +117,10 @@ export function selectWorkingChangeCount(lix: Lix) {
  */
 export function selectFileWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_change")
+		.selectFrom("lix_working_diff")
 		.innerJoin("lix_file", (join) =>
 			join.on(
-				sql`lix_file.id = coalesce(lix_working_change.file_id, case when lix_working_change.schema_key = 'lix_file_descriptor' then lix_json_get_text(lix_working_change.entity_pk, 0) end)`,
+				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_json_get_text(lix_working_diff.entity_pk, 0) end)`,
 			),
 		)
 		.select([
@@ -122,7 +128,7 @@ export function selectFileWorkingChanges(lix: Lix) {
 			"lix_file.path",
 			sql<string | null>`null`.as("previous_path"),
 			// File descriptor rows carry the file id in entity_pk, not file_id.
-			sql<string>`case when max(case when lix_working_change.schema_key = 'lix_file_descriptor' and lix_working_change.change_kind = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
+			sql<string>`case when max(case when lix_working_diff.schema_key = 'lix_file_descriptor' and lix_working_diff.change_kind = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
 				"change_kind",
 			),
 		])
@@ -153,7 +159,9 @@ export function selectCheckpointsWithFileCounts(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_checkpoint")
 		.leftJoin(
-			"lix_file_history",
+			selectFileHistory(lix)
+				.selectAll("lix_file_history")
+				.as("lix_file_history"),
 			"lix_file_history.lixcol_observed_commit_id",
 			"lix_checkpoint.commit_id",
 		)

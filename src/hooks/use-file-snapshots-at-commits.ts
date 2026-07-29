@@ -1,5 +1,6 @@
 import { useQuery } from "@/lib/lix-react";
-import { qb } from "@/lib/lix-kysely";
+import { selectFileHistory } from "@/lib/lix-file-history";
+import { sql } from "@/lib/lix-kysely";
 
 export type HistoricalFileSnapshot = {
 	readonly id: string;
@@ -29,24 +30,29 @@ export function useFileSnapshotsAtCommits(
 	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
 	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
 } {
-	const commitIds = [beforeCommitId, afterCommitId].filter(
-		(commitId): commitId is string => Boolean(commitId),
-	);
+	const commitIds = [beforeCommitId, afterCommitId]
+		.filter((commitId): commitId is string => Boolean(commitId))
+		.filter((commitId, index, commits) => commits.indexOf(commitId) === index);
 	const fileIds = [beforeFileId ?? fileId, afterFileId ?? fileId].filter(
 		(candidate, index, candidates) => candidates.indexOf(candidate) === index,
 	);
 	const rows = useQuery<HistoricalFileSnapshotRow>(
 		(lix) => {
-			let query = qb(lix)
-				.selectFrom("lix_file_history")
-				.select(["id", "path", "data", "lixcol_as_of_commit_id as commit_id"])
-				.where("id", "in", fileIds);
-			query = commitIds.length
-				? query.where("lixcol_as_of_commit_id", "in", commitIds)
-				: query.where("lixcol_as_of_commit_id", "=", "");
-			return query
-				.orderBy("lixcol_as_of_commit_id", "asc")
-				.orderBy("lixcol_depth", "asc");
+			const selectAtCommit = (commitId: string) =>
+				selectFileHistory(lix, commitId)
+					.select([
+						"id",
+						"path",
+						"data",
+						"lixcol_depth",
+						sql<string>`${commitId}`.as("commit_id"),
+					])
+					.where("id", "in", fileIds);
+			let query = selectAtCommit(commitIds[0] ?? "");
+			for (const commitId of commitIds.slice(1)) {
+				query = query.unionAll(selectAtCommit(commitId));
+			}
+			return query.orderBy("commit_id", "asc").orderBy("lixcol_depth", "asc");
 		},
 		{
 			subscribe: false,

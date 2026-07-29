@@ -22,11 +22,11 @@ describe("selectFilesystemEntries", () => {
 
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ path: "/docs/" } as any)
+			.values({ path: "/docs" } as any)
 			.execute();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ path: "/docs/guides/" } as any)
+			.values({ path: "/docs/guides" } as any)
 			.execute();
 
 		await qb(lix)
@@ -77,7 +77,7 @@ describe("selectFilesystemEntries", () => {
 
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ path: "/docs/" } as any)
+			.values({ path: "/docs" } as any)
 			.execute();
 
 		await qb(lix)

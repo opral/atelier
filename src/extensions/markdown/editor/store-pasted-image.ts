@@ -140,7 +140,6 @@ async function assertAssetsDirectoryAvailable(
 	lix: Lix,
 	assetsDirectoryFilePath: string,
 ): Promise<void> {
-	const assetsDirectoryPath = `${assetsDirectoryFilePath}/`;
 	const fileBlockers = await lix.execute(
 		"SELECT path FROM lix_file WHERE lower(path) = lower(?) LIMIT 1",
 		[assetsDirectoryFilePath],
@@ -152,10 +151,10 @@ async function assertAssetsDirectoryAvailable(
 	}
 	const directories = await lix.execute(
 		"SELECT path FROM lix_directory WHERE lower(path) = lower(?)",
-		[assetsDirectoryPath],
+		[assetsDirectoryFilePath],
 	);
 	const caseOnlyDirectory = directories.rows.some(
-		(row) => row.get("path") !== assetsDirectoryPath,
+		(row) => row.get("path") !== assetsDirectoryFilePath,
 	);
 	if (caseOnlyDirectory) {
 		throw new PastedMarkdownImageError(

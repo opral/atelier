@@ -1,7 +1,7 @@
 import { History } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider, useQuery } from "@/lib/lix-react";
-import { qb } from "@/lib/lix-kysely";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import {
 	selectCheckpointsWithFileCounts,
 	selectWorkingChangeCount,
@@ -185,8 +185,7 @@ function CheckpointFileList({
 }) {
 	const files = useQuery(
 		(lix) =>
-			qb(lix)
-				.selectFrom("lix_file_history")
+			selectFileHistory(lix)
 				.select(["id", "path"])
 				.where("lixcol_observed_commit_id", "=", commitId)
 				.orderBy("path", "asc")

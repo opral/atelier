@@ -39,6 +39,12 @@ import { hasHistoricalEditorRevisionState } from "@/extension-runtime/editor-rev
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
+import {
+	createCheckpointForFiles,
+	restoreCheckpointFiles,
+	revertWorkingChangesForFiles,
+} from "@/lib/lix-diff-commands";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb } from "@/lib/lix-kysely";
 import { selectFileWorkingChanges } from "@/queries";
 import {
@@ -650,10 +656,8 @@ async function selectHistoricalLixFileForOpen(
 	filePath: string,
 	commitId: string,
 ): Promise<LixFileForOpen | null> {
-	const row = await qb(lix)
-		.selectFrom("lix_file_history")
+	const row = await selectFileHistory(lix, commitId)
 		.select(["id", "path"])
-		.where("lixcol_as_of_commit_id", "=", commitId)
 		.where("path", "=", filePath)
 		.orderBy("lixcol_depth", "asc")
 		.limit(1)
@@ -1460,32 +1464,49 @@ function LayoutShellLoadedContent({
 		).filter((review): review is ExternalWriteReview => review !== null);
 	}, [agentTurnRanges, currentFileRows, lix]);
 
-	const handleCreateCheckpoint = useCallback(async () => {
-		const pendingReviews = await collectPendingAgentTurnReviews();
+	const handleCreateCheckpoint = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			const selected = new Set(selectedFileIds);
+			if (selected.size === 0) return;
+			const pendingReviews = await collectPendingAgentTurnReviews();
+			const selectedEveryWorkingFile = workingChangeReviewFiles.every((file) =>
+				selected.has(file.id),
+			);
 
-		await lix.createCheckpoint();
-		setWorkingChangesReviewOpen(false);
-		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
-		for (const review of pendingReviews) {
-			try {
-				await runDiffReviewResolution(review, "accepted", async () => {
-					await persistReviewResolution(review, "accepted");
-				});
-			} catch (error) {
-				// The checkpoint is already durable. A stale private review marker
-				// should not turn successful checkpoint creation into a failure.
-				console.warn(
-					"[checkpoint] failed to retire an accepted review marker",
-					error,
-				);
+			if (selectedEveryWorkingFile) {
+				await lix.createCheckpoint();
+			} else {
+				await createCheckpointForFiles(lix, selectedFileIds);
 			}
-		}
-	}, [
-		collectPendingAgentTurnReviews,
-		lix,
-		persistReviewResolution,
-		runDiffReviewResolution,
-	]);
+			const remainingFiles = workingChangeReviewFiles.filter(
+				(file) => !selected.has(file.id),
+			);
+			setWorkingChangesReviewOpen(remainingFiles.length > 0);
+			setWorkingChangeReviewFiles(remainingFiles);
+			for (const review of pendingReviews) {
+				if (!selected.has(review.fileId)) continue;
+				try {
+					await runDiffReviewResolution(review, "accepted", async () => {
+						await persistReviewResolution(review, "accepted");
+					});
+				} catch (error) {
+					// The checkpoint is already durable. A stale private review marker
+					// should not turn successful checkpoint creation into a failure.
+					console.warn(
+						"[checkpoint] failed to retire an accepted review marker",
+						error,
+					);
+				}
+			}
+		},
+		[
+			collectPendingAgentTurnReviews,
+			lix,
+			persistReviewResolution,
+			runDiffReviewResolution,
+			workingChangeReviewFiles,
+		],
+	);
 
 	// Keep: accept pending reviews for the ticked files (every file unless the
 	// user unticked some in the float's ▾ list).
@@ -1511,15 +1532,29 @@ function LayoutShellLoadedContent({
 		await handleKeepReviews(pendingReviews.map((review) => review.fileId));
 	}, [collectPendingAgentTurnReviews, handleKeepReviews]);
 
-	// Restore is intentionally inert until the engine exposes a restore
-	// surface; the float still carries the verb so the flow reads correctly.
 	const handleRestoreCheckpoint = useCallback(
 		async (selectedFileIds: readonly string[]) => {
-			console.info(
-				`[diff-mode] Restore (${selectedFileIds.length} files) is not wired to the engine yet`,
+			if (!historicalReview || selectedFileIds.length === 0) return;
+			await restoreCheckpointFiles(
+				lix,
+				historicalReview.commitId,
+				selectedFileIds,
+			);
+			const selected = new Set(selectedFileIds);
+			const remainingFiles = historicalReview.files.filter(
+				(file) => !selected.has(file.id),
+			);
+			if (remainingFiles.length === 0) {
+				exitDiffReview();
+				return;
+			}
+			setHistoricalReview((current) =>
+				current?.commitId === historicalReview.commitId
+					? { ...current, files: remainingFiles }
+					: current,
 			);
 		},
-		[],
+		[exitDiffReview, historicalReview, lix],
 	);
 	resolveDiffReviewRef.current = resolveDiffReview;
 	// A working-changes review is an explicit workspace-level session. Keep the
@@ -2149,15 +2184,7 @@ function LayoutShellLoadedContent({
 				return;
 			}
 			if (workingChangesReviewOpen) {
-				if (selectedFileIds.length >= pendingReviewFiles.length) {
-					await handleCreateCheckpoint();
-					return;
-				}
-				// Sealing a subset needs engine support for partial checkpoints —
-				// intentionally inert until it exists.
-				console.info(
-					`[diff-mode] Checkpoint of ${selectedFileIds.length} of ${pendingReviewFiles.length} files is not wired yet`,
-				);
+				await handleCreateCheckpoint(selectedFileIds);
 				return;
 			}
 			await handleKeepReviews(selectedFileIds);
@@ -2167,7 +2194,6 @@ function LayoutShellLoadedContent({
 			handleKeepReviews,
 			handleRestoreCheckpoint,
 			historicalReview,
-			pendingReviewFiles.length,
 			workingChangesReviewOpen,
 		],
 	);
@@ -2287,7 +2313,7 @@ function LayoutShellLoadedContent({
 			readonly createdAt: string;
 		}) => {
 			const result = await lix.execute(
-				"SELECT id, path FROM lix_file_history WHERE lixcol_observed_commit_id = $1 ORDER BY path",
+				"SELECT id, path FROM lix_file_history() WHERE lixcol_observed_commit_id = $1 ORDER BY path",
 				[commitId],
 			);
 			const files = result.rows.map((row) => ({
@@ -2524,11 +2550,28 @@ function LayoutShellLoadedContent({
 	const handleUndoReviews = useCallback(
 		async (selectedFileIds: readonly string[]) => {
 			if (workingChangesReviewOpen) {
-				// Working-changes Undo reverts to the last checkpoint. The engine
-				// has no restore surface yet — intentionally a no-op until it does.
-				console.info(
-					`[diff-mode] Undo to the last checkpoint (${selectedFileIds.length} files) is not wired yet`,
+				if (selectedFileIds.length === 0) return;
+				await revertWorkingChangesForFiles(lix, selectedFileIds);
+				const selected = new Set(selectedFileIds);
+				const remainingFiles = workingChangeReviewFiles.filter(
+					(file) => !selected.has(file.id),
 				);
+				setWorkingChangesReviewOpen(remainingFiles.length > 0);
+				setWorkingChangeReviewFiles(remainingFiles);
+				const pendingReviews = await collectPendingAgentTurnReviews();
+				for (const review of pendingReviews) {
+					if (!selected.has(review.fileId)) continue;
+					try {
+						await runDiffReviewResolution(review, "rejected", async () => {
+							await persistReviewResolution(review, "rejected");
+						});
+					} catch (error) {
+						console.warn(
+							"[working-changes] failed to retire a reverted review marker",
+							error,
+						);
+					}
+				}
 				return;
 			}
 			const selected = new Set(selectedFileIds);
@@ -2545,13 +2588,26 @@ function LayoutShellLoadedContent({
 		[
 			collectPendingAgentTurnReviews,
 			handleRejectExternalWriteReview,
+			lix,
+			persistReviewResolution,
+			runDiffReviewResolution,
+			workingChangeReviewFiles,
 			workingChangesReviewOpen,
 		],
 	);
 	const handleUndoAllReviews = useCallback(async () => {
+		if (workingChangesReviewOpen) {
+			await handleUndoReviews(workingChangeReviewFiles.map((file) => file.id));
+			return;
+		}
 		const pendingReviews = await collectPendingAgentTurnReviews();
 		await handleUndoReviews(pendingReviews.map((review) => review.fileId));
-	}, [collectPendingAgentTurnReviews, handleUndoReviews]);
+	}, [
+		collectPendingAgentTurnReviews,
+		handleUndoReviews,
+		workingChangeReviewFiles,
+		workingChangesReviewOpen,
+	]);
 
 	const handleCloseView = useCallback(
 		({
@@ -3386,7 +3442,10 @@ function LayoutShellLoadedContent({
 					? ("working-changes" as const)
 					: ("agent-turn" as const),
 				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
-				createCheckpoint: handleCreateCheckpoint,
+				createCheckpoint: () =>
+					handleCreateCheckpoint(
+						workingChangeReviewFiles.map((file) => file.id),
+					),
 				keepAll: handleKeepAllReviews,
 				undoAll: handleUndoAllReviews,
 				exit: exitDiffReview,
@@ -3416,6 +3475,7 @@ function LayoutShellLoadedContent({
 			handleUndoAllReviews,
 			handleOpenWorkingChangesReview,
 			handleViewCheckpoint,
+			workingChangeReviewFiles,
 			historicalCommitId,
 			openHistoricalCheckpointFile,
 			handleAcceptExternalWriteReview,

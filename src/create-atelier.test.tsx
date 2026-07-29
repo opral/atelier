@@ -68,7 +68,7 @@ describe("Atelier instance file controller", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ path: "/docs/" } as any)
+			.values({ path: "/docs" } as any)
 			.execute();
 		await qb(lix)
 			.insertInto("lix_file")

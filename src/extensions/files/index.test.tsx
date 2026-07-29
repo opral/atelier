@@ -87,7 +87,7 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ id: fakeUuid("docs"), path: "/docs/" })
+			.values({ id: fakeUuid("docs"), path: "/docs" })
 			.execute();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -296,7 +296,7 @@ describe("FilesView", () => {
 				await qb(lix)
 					.selectFrom("lix_directory")
 					.select("path")
-					.where("path", "=", "/planning/")
+					.where("path", "=", "/planning")
 					.execute(),
 			).toHaveLength(1);
 		});
@@ -554,7 +554,7 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ id: fakeUuid("docs"), path: "/docs/" })
+			.values({ id: fakeUuid("docs"), path: "/docs" })
 			.execute();
 		await insertFile(lix, fakeUuid("guide"), "/docs/guide.md", "# Guide\n");
 		const closeFileViews = vi.fn();
@@ -603,7 +603,7 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ id: fakeUuid("docs"), path: "/docs/" })
+			.values({ id: fakeUuid("docs"), path: "/docs" })
 			.execute();
 		await insertReadme(lix);
 		let view: ReturnType<typeof render> | undefined;
@@ -639,8 +639,8 @@ describe("FilesView", () => {
 		await qb(lix)
 			.insertInto("lix_directory")
 			.values([
-				{ id: fakeUuid("archive"), path: "/archive/" },
-				{ id: fakeUuid("docs"), path: "/docs/" },
+				{ id: fakeUuid("archive"), path: "/archive" },
+				{ id: fakeUuid("docs"), path: "/docs" },
 			])
 			.execute();
 		await insertFile(lix, fakeUuid("guide"), "/docs/guide.md", "# Guide\n");
@@ -667,7 +667,7 @@ describe("FilesView", () => {
 				await qb(lix)
 					.selectFrom("lix_directory")
 					.select("path")
-					.where("path", "=", "/archive/docs/")
+					.where("path", "=", "/archive/docs")
 					.executeTakeFirst(),
 			).toBeDefined();
 			expect(
@@ -851,7 +851,7 @@ describe("FilesView", () => {
 		await insertFile(lix, fakeUuid("second"), "/second.md", "# Second\n");
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ path: "/notes/" } as any)
+			.values({ path: "/notes" } as any)
 			.execute();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {

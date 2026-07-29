@@ -3,6 +3,7 @@ import { FileText, FileWarning } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
 import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { renderPdfPreview } from "./pdf-preview";
@@ -57,11 +58,9 @@ function PdfViewContent({
 	assertFileId(fileId);
 	const fileRow = useQueryTakeFirst<PdfFileRow>((lix) => {
 		if (sourceCommitId) {
-			return qb(lix)
-				.selectFrom("lix_file_history")
+			return selectFileHistory(lix, sourceCommitId)
 				.select(["id", "path", "data"])
 				.where("id", "=", fileId)
-				.where("lixcol_as_of_commit_id", "=", sourceCommitId)
 				.orderBy("lixcol_depth", "asc")
 				.limit(1);
 		}
