@@ -15,8 +15,8 @@ import manifestJson from "./manifest.json";
 
 /**
  * The History tab lists workspace moments: working changes first, then
- * checkpoints. One click on a checkpoint opens diff mode pointed at the past
- * — it never restores anything.
+ * checkpoints. One click on a checkpoint opens a read-only comparison from its
+ * immediate predecessor to that checkpoint — it never restores anything.
  */
 export function HistoryView({
 	atelier,
@@ -88,6 +88,7 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 					key={checkpoint.commit_id}
 					atelier={atelier}
 					checkpoint={checkpoint}
+					previousCommitId={checkpoints[index + 1]?.commit_id}
 					fileCount={checkpoint.file_count}
 					index={index}
 					count={checkpoints.length}
@@ -100,12 +101,14 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 function CheckpointItem({
 	atelier,
 	checkpoint,
+	previousCommitId,
 	fileCount,
 	index,
 	count,
 }: {
 	readonly atelier: ExtensionRuntime;
 	readonly checkpoint: CheckpointRow;
+	readonly previousCommitId: string | undefined;
 	readonly fileCount: number;
 	readonly index: number;
 	readonly count: number;
@@ -131,12 +134,15 @@ function CheckpointItem({
 		>
 			<button
 				type="button"
-				disabled={!viewCheckpoint || fileCount === 0}
+				disabled={!viewCheckpoint || !previousCommitId || fileCount === 0}
 				onClick={() =>
-					void viewCheckpoint?.({
-						commitId: checkpoint.commit_id,
-						createdAt: checkpoint.created_at,
-					})
+					previousCommitId
+						? void viewCheckpoint?.({
+								commitId: checkpoint.commit_id,
+								previousCommitId,
+								createdAt: checkpoint.created_at,
+							})
+						: undefined
 				}
 				data-attr="history-view-checkpoint"
 				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${

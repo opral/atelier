@@ -258,6 +258,9 @@ describe("MarkdownView", () => {
 			"false",
 		);
 		expect(
+			reviewEditor.querySelector('[data-review-active="true"]'),
+		).toBeNull();
+		expect(
 			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
 		).toHaveAttribute("aria-disabled", "true");
 		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();

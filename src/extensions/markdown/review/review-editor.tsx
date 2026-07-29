@@ -164,6 +164,7 @@ export function MarkdownReviewEditor({
 		let firstActive: HTMLElement | undefined;
 		for (const element of changedElements) {
 			const active =
+				reviewEnabled &&
 				activeChangeId !== null &&
 				element.dataset.reviewChangeId === activeChangeId;
 			if (active) {
@@ -175,7 +176,7 @@ export function MarkdownReviewEditor({
 		}
 		setActiveChangeElement(firstActive ?? null);
 		firstActive?.scrollIntoView?.({ block: "center", behavior: "smooth" });
-	}, [activeChangeId, displayDocument, editor]);
+	}, [activeChangeId, displayDocument, editor, reviewEnabled]);
 
 	useEffect(() => {
 		if (!editor || !reviewEnabled) return;

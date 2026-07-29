@@ -718,11 +718,18 @@ describe("agent turn review navigation", () => {
 					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
 						?.beforeCommitId,
 				).toEqual(expect.any(String));
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.afterCommitId,
+				).toEqual(expect.any(String));
 			});
 			expect(
 				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+					?.beforeCommitId,
+			).not.toBe(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
 					?.afterCommitId,
-			).toBeUndefined();
+			);
 			expect(await screen.findByTestId("markdown-review-editor")).toBeVisible();
 			expect(
 				document.querySelector(

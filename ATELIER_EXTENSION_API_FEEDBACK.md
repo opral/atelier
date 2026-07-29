@@ -84,3 +84,32 @@ different component (`LayoutShellLoadedContent`).
 
 The exact triggering transition still needs isolation, but checkpoint QA should
 remain console-clean before this workflow is considered complete.
+
+## QA: checkpoint comparison semantics were pointed at HEAD
+
+The initial History integration modeled a selected Markdown checkpoint as
+`selected checkpoint → current workspace`. That makes every historical row
+change as HEAD changes and does not explain what the checkpoint itself
+introduced.
+
+Resolution: History now passes both the selected checkpoint and its immediate
+predecessor to the shell. Markdown opens the pair as `beforeCommitId` and
+`afterCommitId`, so each row shows `previous checkpoint → selected checkpoint`.
+Working changes remains the only `latest checkpoint → current workspace`
+comparison.
+
+The last three local checkpoints were verified as an incremental sequence:
+
+1. `Hello world` added.
+2. `How are you?` added.
+3. `Good and you?` added.
+
+## QA: active review focus leaked into read-only checkpoint diffs
+
+The orange border was the active-change `box-shadow` used to anchor interactive
+per-change review controls. Historical diffs disable those controls, but the
+review editor still assigned `data-review-active="true"` to the first change.
+
+Resolution: read-only review editors no longer assign an active change. The
+green/red diff styling remains, while the interactive orange focus ring is
+limited to reviews where individual changes can actually be acted on.

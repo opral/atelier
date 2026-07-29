@@ -103,12 +103,13 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 		readonly exit?: () => void;
 		/** Open the working-changes review (now vs last checkpoint). */
 		readonly openWorkingChanges?: () => void;
-		/** Open diff mode pointed at a checkpoint — read-only, never restores. */
+		/** Open a read-only diff from the preceding checkpoint to this checkpoint. */
 		readonly viewCheckpoint?: (args: {
 			readonly commitId: string;
+			readonly previousCommitId: string;
 			readonly createdAt: string;
 		}) => Promise<void>;
-		/** Open one file as it was at the checkpoint being viewed. */
+		/** Open one file in the checkpoint-to-checkpoint comparison being viewed. */
 		readonly openCheckpointFile?: (path: string) => void;
 		/** Set while diff mode is pointed at a checkpoint. */
 		readonly historicalCommitId?: string;

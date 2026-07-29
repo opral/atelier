@@ -18,6 +18,7 @@ function atelierStub(overrides?: {
 	readonly historicalCommitId?: string;
 	readonly viewCheckpoint?: (args: {
 		readonly commitId: string;
+		readonly previousCommitId: string;
 		readonly createdAt: string;
 	}) => Promise<void>;
 	readonly openCheckpointFile?: (path: string) => void;
@@ -98,6 +99,7 @@ describe("HistoryView", () => {
 		);
 		expect(viewCheckpoint).toHaveBeenCalledWith({
 			commitId: checkpoint.commitId,
+			previousCommitId: expect.any(String),
 			createdAt: expect.any(String),
 		});
 

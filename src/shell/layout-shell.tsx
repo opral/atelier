@@ -1232,6 +1232,7 @@ function LayoutShellLoadedContent({
 	// the float's only verb is Restore.
 	const [historicalReview, setHistoricalReview] = useState<{
 		readonly commitId: string;
+		readonly previousCommitId: string;
 		readonly createdAt: string;
 		readonly files: readonly LixFileForOpen[];
 		/** True once the first snapshot view finished opening. */
@@ -2288,10 +2289,18 @@ function LayoutShellLoadedContent({
 	);
 
 	const historicalRevisionStateForPath = useCallback(
-		(path: string, commitId: string): ExtensionState => {
+		(
+			path: string,
+			commitId: string,
+			previousCommitId: string,
+		): ExtensionState => {
 			const handler = findFileHandlerExtension(extensionMap.values(), path);
 			return handler?.kind === FILE_EXTENSION_KIND
-				? { beforeCommitId: commitId, sourceCommitId: commitId }
+				? {
+						beforeCommitId: previousCommitId,
+						afterCommitId: commitId,
+						sourceCommitId: commitId,
+					}
 				: { afterCommitId: commitId, sourceCommitId: commitId };
 		},
 		[extensionMap],
@@ -2302,7 +2311,11 @@ function LayoutShellLoadedContent({
 			const commitId = historicalReview?.commitId;
 			if (!commitId) return;
 			void resolveAndOpenDocument(path, {
-				state: historicalRevisionStateForPath(path, commitId),
+				state: historicalRevisionStateForPath(
+					path,
+					commitId,
+					historicalReview.previousCommitId,
+				),
 			}).catch((error: unknown) => {
 				console.warn(
 					"[historical-review] failed to open a checkpoint file",
@@ -2323,9 +2336,11 @@ function LayoutShellLoadedContent({
 	const handleViewCheckpoint = useCallback(
 		async ({
 			commitId,
+			previousCommitId,
 			createdAt,
 		}: {
 			readonly commitId: string;
+			readonly previousCommitId: string;
 			readonly createdAt: string;
 		}) => {
 			const result = await lix.execute(
@@ -2364,10 +2379,14 @@ function LayoutShellLoadedContent({
 							? { fileId: activeFileId, filePath: activePath }
 							: null;
 				}
-				return { commitId, createdAt, files };
+				return { commitId, previousCommitId, createdAt, files };
 			});
 			await resolveAndOpenDocument(files[0]!.path, {
-				state: historicalRevisionStateForPath(files[0]!.path, commitId),
+				state: historicalRevisionStateForPath(
+					files[0]!.path,
+					commitId,
+					previousCommitId,
+				),
 			});
 			setHistoricalReview((current) =>
 				current && current.commitId === commitId
