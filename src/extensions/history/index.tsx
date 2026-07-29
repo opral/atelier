@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider, useQuery } from "@/lib/lix-react";
@@ -51,7 +51,7 @@ function WorkingChangesRow({
 	return (
 		<div
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-[8px] border ${
+			className={`rounded-[8px] border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
 					: "border-transparent"
@@ -88,7 +88,9 @@ function WorkingChangesRow({
 					</span>
 				</span>
 			</button>
-			{isViewing ? <WorkingChangeFileList atelier={atelier} /> : null}
+			<AnimatedHistoryDisclosure open={isViewing}>
+				<WorkingChangeFileList atelier={atelier} />
+			</AnimatedHistoryDisclosure>
 		</div>
 	);
 }
@@ -176,7 +178,7 @@ function CheckpointItem({
 	return (
 		<li
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-[8px] border ${
+			className={`rounded-[8px] border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
 					: "border-transparent"
@@ -226,7 +228,7 @@ function CheckpointItem({
 					</span>
 				</span>
 			</button>
-			{isViewing ? (
+			<AnimatedHistoryDisclosure open={isViewing}>
 				<Suspense
 					fallback={
 						<div
@@ -241,8 +243,66 @@ function CheckpointItem({
 						commitId={checkpoint.commit_id}
 					/>
 				</Suspense>
-			) : null}
+			</AnimatedHistoryDisclosure>
 		</li>
+	);
+}
+
+const HISTORY_DISCLOSURE_DURATION_MS = 200;
+
+function AnimatedHistoryDisclosure({
+	open,
+	children,
+}: {
+	readonly open: boolean;
+	readonly children: ReactNode;
+}) {
+	const [isMounted, setIsMounted] = useState(open);
+	const [isExpanded, setIsExpanded] = useState(open);
+
+	useEffect(() => {
+		let firstFrame: number | undefined;
+		let secondFrame: number | undefined;
+		let unmountTimer: ReturnType<typeof setTimeout> | undefined;
+
+		if (open) {
+			setIsMounted(true);
+			firstFrame = window.requestAnimationFrame(() => {
+				secondFrame = window.requestAnimationFrame(() => {
+					setIsExpanded(true);
+				});
+			});
+		} else {
+			setIsExpanded(false);
+			unmountTimer = setTimeout(
+				() => setIsMounted(false),
+				HISTORY_DISCLOSURE_DURATION_MS,
+			);
+		}
+
+		return () => {
+			if (firstFrame !== undefined) window.cancelAnimationFrame(firstFrame);
+			if (secondFrame !== undefined) window.cancelAnimationFrame(secondFrame);
+			if (unmountTimer !== undefined) clearTimeout(unmountTimer);
+		};
+	}, [open]);
+
+	return (
+		<div
+			aria-hidden={!open}
+			data-attr="history-disclosure"
+			data-state={open ? "open" : "closed"}
+			inert={open ? undefined : true}
+			className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${
+				isExpanded
+					? "grid-rows-[1fr] opacity-100"
+					: "pointer-events-none grid-rows-[0fr] opacity-0"
+			}`}
+		>
+			<div className="min-h-0 overflow-hidden">
+				{isMounted ? children : null}
+			</div>
+		</div>
 	);
 }
 

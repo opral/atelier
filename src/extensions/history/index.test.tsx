@@ -207,6 +207,11 @@ describe("HistoryView", () => {
 		});
 		const checkpointItems = within(checkpointList).getAllByRole("listitem");
 		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
+		const checkpointDisclosures = checkpointList.querySelectorAll(
+			"[data-attr='history-disclosure']",
+		);
+		expect(checkpointDisclosures[0]).toHaveAttribute("data-state", "open");
+		expect(checkpointDisclosures[1]).toHaveAttribute("data-state", "closed");
 
 		const fileList = await screen.findByRole("list", {
 			name: "Files at this checkpoint",
@@ -298,9 +303,7 @@ describe("HistoryView", () => {
 		).toBeVisible();
 		expect(screen.queryByTestId("history-root-loading")).toBeNull();
 		expect(
-			document.querySelector(
-				"[data-attr='history-checkpoint-files-loading']",
-			),
+			document.querySelector("[data-attr='history-checkpoint-files-loading']"),
 		).not.toBeNull();
 
 		await act(async () => releaseFileListQuery());

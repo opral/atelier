@@ -134,3 +134,13 @@ was no visible checklist equivalent to an expanded checkpoint.
 Resolution: the active Working changes row now expands to show its ordered file
 list. Selecting a file navigates the central review directly while keeping the
 History tab and review mode active.
+
+## QA: Checkpoint file lists switched abruptly
+
+Changing the selected checkpoint unmounted the previous file list immediately
+and mounted the next one at full height. The timeline jumped even though the
+History view itself stayed mounted.
+
+Resolution: checkpoint and Working changes file lists now remain mounted during
+a short collapse/expand transition. Collapsed content is inert and removed after
+the animation, and reduced-motion preferences disable the transition.
