@@ -19,6 +19,7 @@ import {
 import {
 	fileExtensionInstanceForKind,
 	FILES_EXTENSION_KIND,
+	HISTORY_EXTENSION_KIND,
 } from "@/extension-runtime/extension-instance-helpers";
 import { DEFAULT_ATELIER_UI_STATE } from "./ui-state";
 import { createAtelier } from "../atelier-instance";
@@ -675,6 +676,18 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(document.querySelector("[data-review-mode='true']")).toBeNull();
 			});
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			let activeHistoryInstance: string | null = null;
+			await waitFor(() => {
+				const leftPanel = sessionStateStore.getSnapshot()?.panels.left;
+				const activeView = leftPanel?.views.find(
+					(view) => view.instance === leftPanel.activeInstance,
+				);
+				expect(activeView?.kind).toBe(HISTORY_EXTENSION_KIND);
+				activeHistoryInstance = leftPanel?.activeInstance ?? null;
+			});
 			fireEvent.click(
 				screen.getByRole("button", {
 					name: "1 change since checkpoint. Open changes review",
@@ -686,6 +699,9 @@ describe("agent turn review navigation", () => {
 			expect(
 				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
 			).toBe(fakeUuid("auto-stable-file"));
+			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+				activeHistoryInstance,
+			);
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			expect(
 				await screen.findByRole("button", {

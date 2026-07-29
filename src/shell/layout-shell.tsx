@@ -3214,12 +3214,9 @@ function LayoutShellLoadedContent({
 			}
 			if (!firstChangedFile) return;
 			setWorkingChangesReviewOpen(true);
-			handleOpenExtensionView(FILES_EXTENSION_KIND, {
-				panel: "left",
-			});
 			// Opening the workspace-level review must not navigate away from the
-			// user's active document. The review navigator remains available when
-			// they explicitly want to step through changed files.
+			// user's active document or sidebar views. The review navigator remains
+			// available when they explicitly want to step through changed files.
 		})().catch((error: unknown) => {
 			console.warn("[checkpoint] failed to open working changes review", error);
 		});
@@ -3227,7 +3224,6 @@ function LayoutShellLoadedContent({
 		agentTurnRanges,
 		currentFileRows,
 		extensionMap,
-		handleOpenExtensionView,
 		lix,
 		privateResolvedReviewIds,
 	]);
