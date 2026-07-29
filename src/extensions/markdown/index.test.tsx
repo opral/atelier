@@ -275,6 +275,70 @@ describe("MarkdownView", () => {
 		await lix.close();
 	});
 
+	test("refreshes HEAD when a mounted live view becomes a historical diff", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_live_to_head_diff");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/live-to-head-diff.md",
+				data: new TextEncoder().encode("# Before version"),
+			})
+			.execute();
+		const beforeCommitId = await activeCommitId(lix);
+
+		const renderMarkdown = (revision?: { beforeCommitId: string }) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath="/live-to-head-diff.md"
+						beforeCommitId={revision?.beforeCommitId}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(renderMarkdown());
+		});
+		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
+			"Before version",
+		);
+
+		await act(async () => {
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ data: new TextEncoder().encode("# Fresh HEAD version") })
+				.where("id", "=", fileId)
+				.execute();
+		});
+		await waitFor(() => {
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+				"Fresh HEAD version",
+			);
+		});
+
+		await act(async () => {
+			utils?.rerender(renderMarkdown({ beforeCommitId }));
+		});
+		const reviewEditor = await screen.findByTestId("markdown-review-editor");
+		await waitFor(() => {
+			expect(reviewEditor).toHaveTextContent("Fresh HEAD version");
+			expect(
+				reviewEditor.querySelector('[data-review-status="added"]'),
+			).toHaveTextContent("Fresh HEAD");
+		});
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		await lix.close();
+	});
+
 	test("does not mark unchanged before-to-HEAD files as fully added", async () => {
 		const lix = await openLix();
 		await qb(lix)

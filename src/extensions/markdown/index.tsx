@@ -191,6 +191,15 @@ export function MarkdownView({
 
 function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 	assertFileId(fileId);
+	const editorRevision = normalizeEditorRevisionState({
+		beforeCommitId: props.beforeCommitId,
+		afterCommitId: props.afterCommitId,
+		beforeFileId: props.beforeFileId,
+		afterFileId: props.afterFileId,
+	});
+	const comparesAgainstCurrentFile =
+		editorRevision.beforeCommitId !== null &&
+		editorRevision.afterCommitId === null;
 
 	const fileRow = useQueryTakeFirst<MarkdownFileRow>(
 		(lix) =>
@@ -199,7 +208,7 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 				.select(["id", "path", "data"])
 				.where("id", "=", fileId)
 				.limit(1),
-		{ subscribe: false },
+		{ subscribe: comparesAgainstCurrentFile },
 	);
 
 	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
