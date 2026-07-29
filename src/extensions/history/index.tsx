@@ -51,13 +51,13 @@ function WorkingChangesRow({
 			disabled={changeCount === 0 || !openWorkingChanges}
 			onClick={openWorkingChanges}
 			data-attr="history-working-changes"
-			className={`flex w-full min-h-10 items-start gap-2 rounded-[8px] border border-transparent px-2 py-1.5 text-left ${
+			className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] border border-transparent py-1.5 text-left ${
 				changeCount === 0
 					? "opacity-55"
 					: "hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 			}`}
 		>
-			<span className="flex h-5 w-5 shrink-0 items-center justify-center">
+			<span className="flex h-5 w-4 shrink-0 items-center justify-center">
 				<span
 					aria-hidden="true"
 					className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
@@ -138,12 +138,12 @@ function CheckpointItem({
 					})
 				}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 items-start gap-2 rounded-[8px] px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
 				}`}
 			>
 				<span
-					className={`flex h-5 w-5 shrink-0 items-center justify-center ${
+					className={`flex h-5 w-4 shrink-0 items-center justify-center ${
 						isViewing
 							? "text-[var(--color-icon-brand)]"
 							: "text-[var(--color-icon-quaternary)]"
