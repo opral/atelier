@@ -257,6 +257,10 @@ describe("MarkdownView", () => {
 			"contenteditable",
 			"false",
 		);
+		expect(
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();

@@ -570,28 +570,31 @@ function MarkdownHistoricalViewLoaded({
 		);
 	} else {
 		content = (
-			<div className="markdown-view markdown-review flex h-full flex-col bg-background">
-				<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
-					{reviewDiff && review ? (
-						<Suspense fallback={<MarkdownReviewOverlayFallback />}>
-							<MarkdownReviewOverlayWithBlockHistory
-								fileId={effectiveFileRow.id}
-								sourceFilePath={effectiveFileRow.path}
-								review={review}
-								reviewDiff={reviewDiff}
-								reviewId={review.reviewId}
-								beforeCommitId={review.beforeCommitId}
-								afterCommitId={review.afterCommitId}
-								openWorkspaceFile={openWorkspaceFile}
-								isActive={isActiveView && isPanelFocused}
-								controls="none"
-							/>
-						</Suspense>
-					) : (
-						<MarkdownReviewOverlayFallback />
-					)}
+			<EditorProvider>
+				<div className="markdown-view markdown-review flex h-full flex-col bg-background">
+					<FormattingToolbar disabled />
+					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
+						{reviewDiff && review ? (
+							<Suspense fallback={<MarkdownReviewOverlayFallback />}>
+								<MarkdownReviewOverlayWithBlockHistory
+									fileId={effectiveFileRow.id}
+									sourceFilePath={effectiveFileRow.path}
+									review={review}
+									reviewDiff={reviewDiff}
+									reviewId={review.reviewId}
+									beforeCommitId={review.beforeCommitId}
+									afterCommitId={review.afterCommitId}
+									openWorkspaceFile={openWorkspaceFile}
+									isActive={isActiveView && isPanelFocused}
+									controls="none"
+								/>
+							</Suspense>
+						) : (
+							<MarkdownReviewOverlayFallback />
+						)}
+					</div>
 				</div>
-			</div>
+			</EditorProvider>
 		);
 	}
 

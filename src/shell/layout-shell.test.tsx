@@ -716,9 +716,14 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(
 					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
-						?.afterCommitId,
+						?.beforeCommitId,
 				).toEqual(expect.any(String));
 			});
+			expect(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+					?.afterCommitId,
+			).toBeUndefined();
+			expect(await screen.findByTestId("markdown-review-editor")).toBeVisible();
 			expect(
 				document.querySelector(
 					"[data-attr='historical-read-only-banner']",
@@ -741,6 +746,7 @@ describe("agent turn review navigation", () => {
 					fakeUuid("auto-stable-file"),
 				);
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
+				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
 				activeHistoryInstance,

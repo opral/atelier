@@ -1245,7 +1245,10 @@ function LayoutShellLoadedContent({
 	>(null);
 	const closeHistoricalReviewViews = useCallback((commitId: string) => {
 		for (const view of panelStatesRef.current.central.views) {
-			if (view.state?.afterCommitId === commitId) {
+			if (
+				view.state?.afterCommitId === commitId ||
+				view.state?.beforeCommitId === commitId
+			) {
 				handleCloseViewRef.current?.({
 					panel: "central",
 					instance: view.instance,
@@ -2284,12 +2287,22 @@ function LayoutShellLoadedContent({
 		[lix, openResolvedFileView, resolveAndOpenFile],
 	);
 
+	const historicalRevisionStateForPath = useCallback(
+		(path: string, commitId: string): ExtensionState => {
+			const handler = findFileHandlerExtension(extensionMap.values(), path);
+			return handler?.kind === FILE_EXTENSION_KIND
+				? { beforeCommitId: commitId, sourceCommitId: commitId }
+				: { afterCommitId: commitId, sourceCommitId: commitId };
+		},
+		[extensionMap],
+	);
+
 	const openHistoricalCheckpointFile = useCallback(
 		(path: string) => {
 			const commitId = historicalReview?.commitId;
 			if (!commitId) return;
 			void resolveAndOpenDocument(path, {
-				state: { afterCommitId: commitId, sourceCommitId: commitId },
+				state: historicalRevisionStateForPath(path, commitId),
 			}).catch((error: unknown) => {
 				console.warn(
 					"[historical-review] failed to open a checkpoint file",
@@ -2297,7 +2310,11 @@ function LayoutShellLoadedContent({
 				);
 			});
 		},
-		[historicalReview?.commitId, resolveAndOpenDocument],
+		[
+			historicalReview?.commitId,
+			historicalRevisionStateForPath,
+			resolveAndOpenDocument,
+		],
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
@@ -2339,7 +2356,9 @@ function LayoutShellLoadedContent({
 						? documentPathFromView(activeView)
 						: null;
 					// A view already pointed at history has no live doc to restore.
-					const isLiveView = activeView?.state?.afterCommitId === undefined;
+					const isLiveView = !hasHistoricalEditorRevisionState(
+						activeView?.state,
+					);
 					preHistoricalDocumentRef.current =
 						activeFileId && activePath && isLiveView
 							? { fileId: activeFileId, filePath: activePath }
@@ -2348,7 +2367,7 @@ function LayoutShellLoadedContent({
 				return { commitId, createdAt, files };
 			});
 			await resolveAndOpenDocument(files[0]!.path, {
-				state: { afterCommitId: commitId, sourceCommitId: commitId },
+				state: historicalRevisionStateForPath(files[0]!.path, commitId),
 			});
 			setHistoricalReview((current) =>
 				current && current.commitId === commitId
@@ -2356,7 +2375,12 @@ function LayoutShellLoadedContent({
 					: current,
 			);
 		},
-		[closeHistoricalReviewViews, lix, resolveAndOpenDocument],
+		[
+			closeHistoricalReviewViews,
+			historicalRevisionStateForPath,
+			lix,
+			resolveAndOpenDocument,
+		],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
