@@ -1,5 +1,6 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
+import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 
 export const AGENT_TURN_COMMIT_RANGE_KEY =
 	"atelier_agent_turn_commit_range" as const;
@@ -74,7 +75,7 @@ export async function appendAgentTurnCommitRange(
 			key: agentTurnCommitRangeKey(range.id),
 			value,
 			lixcol_branch_id: branchId,
-			lixcol_global: branchId === "global",
+			lixcol_global: branchId === GLOBAL_BRANCH_ID,
 			lixcol_untracked: true,
 		})
 		.onConflict((oc) => oc.columns(["key", "lixcol_branch_id"]).doNothing())

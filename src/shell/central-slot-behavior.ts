@@ -1,4 +1,5 @@
 import { isDocumentView } from "../extension-runtime/extension-instance-helpers";
+import { EDITOR_REVISION_STATE_KEYS } from "../extension-runtime/editor-revision-state";
 import type {
 	ExtensionInstance,
 	ExtensionKind,
@@ -94,10 +95,18 @@ const insertCentralTabView = (
 	if (existingIndex !== -1) {
 		const existing = panel.views[existingIndex] as ExtensionInstance;
 		// Activation, not replacement: keep accumulated state, let the new
-		// identity fields win.
+		// identity fields win. Revision keys ARE identity — a tab that once
+		// showed a historical snapshot must not stay pinned to it when the
+		// document is opened live again, so the merge never inherits them.
+		const existingState = existing.state ? { ...existing.state } : undefined;
+		if (existingState) {
+			for (const key of EDITOR_REVISION_STATE_KEYS) {
+				delete existingState[key];
+			}
+		}
 		const mergedState =
-			existing.state || view.state
-				? { ...(existing.state ?? {}), ...(view.state ?? {}) }
+			existingState || view.state
+				? { ...(existingState ?? {}), ...(view.state ?? {}) }
 				: undefined;
 		const merged: ExtensionInstance = {
 			...existing,

@@ -18,14 +18,12 @@ const seedAssetUrls = import.meta.glob("./seed/**/assets/**/*", {
 export async function seedWorkspace(lix: Lix): Promise<void> {
 	const textFiles = Object.entries(seedTextModules).map(
 		([modulePath, contents]) => ({
-			id: `preview-seed:${modulePath.slice("./seed".length)}`,
 			path: modulePath.slice("./seed".length),
 			data: new TextEncoder().encode(embedSeedAssets(modulePath, contents)),
 		}),
 	);
 	const assetFiles = Object.entries(seedAssetUrls).map(
 		([modulePath, dataUrl]) => ({
-			id: `preview-seed:${modulePath.slice("./seed".length)}`,
 			path: modulePath.slice("./seed".length),
 			data: decodeSeedAssetDataUrl(dataUrl),
 		}),
@@ -33,6 +31,14 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	const files = [...textFiles, ...assetFiles].sort((left, right) =>
 		left.path.localeCompare(right.path),
 	);
+	const seedProbe = files[0];
+	if (seedProbe) {
+		const existing = await lix.execute(
+			"SELECT id FROM lix_file WHERE path = $1 LIMIT 1",
+			[seedProbe.path],
+		);
+		if (existing.rows.length > 0) return;
+	}
 
 	await seedDirectories(
 		lix,
@@ -40,10 +46,10 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	);
 
 	for (const file of files) {
-		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
-			[file.id, file.path, file.data],
-		);
+		await lix.execute("INSERT INTO lix_file (path, data) VALUES ($1, $2)", [
+			file.path,
+			file.data,
+		]);
 	}
 }
 
@@ -91,13 +97,14 @@ async function seedDirectories(lix: Lix, filePaths: string[]): Promise<void> {
 	for (const filePath of filePaths) {
 		const segments = filePath.split("/").filter(Boolean);
 		for (let index = 1; index < segments.length; index += 1) {
-			directories.add(`/${segments.slice(0, index).join("/")}/`);
+			directories.add(`/${segments.slice(0, index).join("/")}`);
 		}
 	}
 
 	for (const directory of [...directories].sort()) {
-		await lix.execute("INSERT INTO lix_directory (path) VALUES ($1)", [
-			directory,
-		]);
+		await lix.execute(
+			"INSERT INTO lix_directory (path) VALUES ($1) ON CONFLICT(path) DO NOTHING",
+			[directory],
+		);
 	}
 }

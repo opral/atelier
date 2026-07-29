@@ -10,9 +10,8 @@
 
 ### Development
 
-1. Clone the repository
-2. Install dependencies from the repo root: `pnpm install`
-3. Start the app: `pnpm run dev`
+1. Install dependencies from the repo root: `pnpm install`
+2. Start the app: `pnpm run dev`
 
 ### Example
 

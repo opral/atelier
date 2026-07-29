@@ -1,4 +1,5 @@
-import type { Lix } from "@lix-js/sdk";
+import type { JsonValue, Lix } from "@lix-js/sdk";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {
@@ -8,6 +9,37 @@ export type FilesystemEntryRow = {
 	display_name: string;
 	kind: "directory" | "file";
 	source?: "lix" | "watched";
+};
+
+export type WorkingChangeRow = {
+	diff_id: string;
+	entity_pk: JsonValue;
+	schema_key: string;
+	file_id: string | null;
+	diff_type: "added" | "modified" | "removed";
+	before_change_id: string | null;
+	after_change_id: string | null;
+};
+
+export type WorkingChangeCountRow = {
+	change_count: number;
+};
+
+export type FileWorkingChangeRow = {
+	id: string;
+	path: string | null;
+	previous_path: string | null;
+	diff_type: "added" | "modified" | "removed";
+};
+
+export type CheckpointRow = {
+	commit_id: string;
+	created_at: string;
+	lixcol_depth: number;
+};
+
+export type CheckpointWithFileCountRow = CheckpointRow & {
+	file_count: number;
 };
 
 /**
@@ -23,7 +55,10 @@ export function selectFilesystemEntries(lix: Lix) {
 		.select((eb) => [
 			eb.ref("lix_directory.id").as("id"),
 			eb.ref("lix_directory.parent_id").as("parent_id"),
-			eb.ref("lix_directory.path").as("path"),
+			sql<string>`case
+				when lix_directory.path = '/' then '/'
+				else lix_directory.path || '/'
+			end`.as("path"),
 			eb.ref("lix_directory.name").as("display_name"),
 			sql<string>`'directory'`.as("kind"),
 			sql<string>`'lix'`.as("source"),
@@ -42,4 +77,105 @@ export function selectFilesystemEntries(lix: Lix) {
 		)
 		.orderBy("path", "asc")
 		.$castTo<FilesystemEntryRow>();
+}
+
+/**
+ * Net tracked changes between the latest checkpoint and the active branch head.
+ */
+export function selectWorkingChanges(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_working_diff")
+		.select([
+			"diff_id",
+			"entity_pk",
+			"schema_key",
+			"file_id",
+			"diff_type",
+			"before_change_id",
+			"after_change_id",
+		])
+		.orderBy("schema_key", "asc")
+		.orderBy("entity_pk", "asc")
+		.$castTo<WorkingChangeRow>();
+}
+
+export function selectWorkingChangeCount(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_working_diff")
+		.select((eb) => eb.fn.countAll<number>().as("change_count"))
+		.$castTo<WorkingChangeCountRow>();
+}
+
+/**
+ * Net logical files changed between the latest checkpoint and active head.
+ *
+ * Derived from `lix_working_diff` instead of `lix_file_working_change`:
+ * the engine's composed surface currently returns no rows unless the working
+ * range also touches a directory descriptor (upstream bug in
+ * filesystem_working_change.rs). Files removed since the checkpoint are not
+ * reported; no consumer acts on removed files today.
+ */
+export function selectFileWorkingChanges(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_working_diff")
+		.innerJoin("lix_file", (join) =>
+			join.on(
+				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_json_get_text(lix_working_diff.entity_pk, 0) end)`,
+			),
+		)
+		.select([
+			"lix_file.id",
+			"lix_file.path",
+			sql<string | null>`null`.as("previous_path"),
+			// File descriptor rows carry the file id in entity_pk, not file_id.
+			sql<string>`case when max(case when lix_working_diff.schema_key = 'lix_file_descriptor' and lix_working_diff.diff_type = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
+				"diff_type",
+			),
+		])
+		.groupBy(["lix_file.id", "lix_file.path"])
+		.orderBy("lix_file.path", "asc")
+		.$castTo<FileWorkingChangeRow>();
+}
+
+/**
+ * Checkpoints reachable from the active branch, newest first.
+ */
+export function selectCheckpoints(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_checkpoint")
+		.select(["commit_id", "created_at", "lixcol_depth"])
+		.orderBy("lixcol_depth", "asc")
+		.$castTo<CheckpointRow>();
+}
+
+export function selectLatestCheckpoint(lix: Lix) {
+	return selectCheckpoints(lix).limit(1);
+}
+
+/**
+ * Files represented by the net changes stored in one checkpoint commit.
+ */
+export function selectCheckpointsWithFileCounts(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_checkpoint")
+		.leftJoin(
+			selectFileHistory(lix)
+				.selectAll("lix_file_history")
+				.as("lix_file_history"),
+			"lix_file_history.lixcol_observed_commit_id",
+			"lix_checkpoint.commit_id",
+		)
+		.select([
+			"lix_checkpoint.commit_id",
+			"lix_checkpoint.created_at",
+			"lix_checkpoint.lixcol_depth",
+			sql<number>`count(distinct lix_file_history.id)`.as("file_count"),
+		])
+		.groupBy([
+			"lix_checkpoint.commit_id",
+			"lix_checkpoint.created_at",
+			"lix_checkpoint.lixcol_depth",
+		])
+		.orderBy("lix_checkpoint.lixcol_depth", "asc")
+		.$castTo<CheckpointWithFileCountRow>();
 }

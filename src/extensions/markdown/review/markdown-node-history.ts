@@ -3,7 +3,10 @@ import type { MarkdownBlockSnapshot } from "../review-diff";
 
 export type HistoricalMarkdownNodeRow = {
 	readonly start_commit_id: string;
-	readonly snapshot_content: unknown;
+	readonly snapshot_content?: unknown;
+	readonly id?: string;
+	readonly parent_id?: string | null;
+	readonly order_key?: string | null;
 };
 
 type MarkdownNodeSnapshot = {
@@ -24,7 +27,15 @@ export function historicalMarkdownNodeBlocks(
 ): MarkdownBlockSnapshot[] | undefined {
 	const nodes = rows
 		.filter((row) => row.start_commit_id === commitId)
-		.map((row) => parseMarkdownNodeSnapshot(row.snapshot_content))
+		.map((row) =>
+			row.id
+				? parseMarkdownNodeSnapshot({
+						id: row.id,
+						parent_id: row.parent_id,
+						order_key: row.order_key,
+					})
+				: parseMarkdownNodeSnapshot(row.snapshot_content),
+		)
 		.filter(
 			(node): node is MarkdownNodeSnapshot =>
 				node !== null && node.parentId === "root" && node.orderKey !== null,

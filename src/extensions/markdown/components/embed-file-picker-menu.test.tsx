@@ -17,6 +17,7 @@ import { EditorProvider, useEditorCtx } from "../editor/editor-context";
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import {
 	EmbedFilePickerMenu,
 	buildEmbedFileItems,
@@ -107,17 +108,25 @@ async function setup() {
 		.insertInto("lix_file")
 		.values([
 			{
-				id: "file-video",
+				id: fakeUuid("file-video"),
 				path: "/assets/kickoff.mp4",
 				data: new Uint8Array([1]),
 			},
 			{
-				id: "file-sketch",
+				id: fakeUuid("file-sketch"),
 				path: "/design/brand.sketch",
 				data: new Uint8Array([2]),
 			},
-			{ id: "file-doc", path: "/docs/notes.md", data: new Uint8Array([3]) },
-			{ id: "file-other", path: "/docs/other.md", data: new Uint8Array([4]) },
+			{
+				id: fakeUuid("file-doc"),
+				path: "/docs/notes.md",
+				data: new Uint8Array([3]),
+			},
+			{
+				id: fakeUuid("file-other"),
+				path: "/docs/other.md",
+				data: new Uint8Array([4]),
+			},
 		])
 		.execute();
 

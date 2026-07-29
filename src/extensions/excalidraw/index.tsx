@@ -14,7 +14,6 @@ import {
 	editorRevisionMode,
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
@@ -103,7 +102,6 @@ function EditableExcalidrawView({
 	fileId,
 	filePath,
 	fileRow,
-	isActiveView = true,
 }: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: ExcalidrawFileRow;
 }) {
@@ -283,25 +281,6 @@ function EditableExcalidrawView({
 					<TriangleAlert aria-hidden="true" size={13} />
 					<span>Save failed: {saveError}</span>
 				</div>
-			) : null}
-			{!atelier.readOnly && review && reviewData ? (
-				<ExternalWriteReviewControls
-					isActive={isActiveView}
-					onAccept={() =>
-						void atelier.reviews.accept({
-							fileId,
-							reviewId: review.reviewId,
-							review,
-						})
-					}
-					onReject={() =>
-						void atelier.reviews.reject({
-							fileId,
-							reviewId: review.reviewId,
-							review,
-						})
-					}
-				/>
 			) : null}
 		</div>
 	);

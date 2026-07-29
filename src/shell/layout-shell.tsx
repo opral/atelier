@@ -31,10 +31,21 @@ import type { Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
-import { StatusBar } from "./status-bar";
+import { CheckpointStatusBar } from "./status-bar";
+import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
+import { fileIconUrl } from "@/file-icons";
+import { hasHistoricalEditorRevisionState } from "@/extension-runtime/editor-revision-state";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
+import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
+import {
+	createCheckpointForFiles,
+	restoreCheckpointFiles,
+	revertWorkingChangesForFiles,
+} from "@/lib/lix-diff-commands";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb } from "@/lib/lix-kysely";
+import { selectFileWorkingChanges } from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -62,9 +73,11 @@ import { PanelTabPreview } from "./panel-v2";
 import {
 	buildFileExtensionProps,
 	documentPathFromView,
+	fileNameFromPath,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
+	HISTORY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 	isDocumentView,
 } from "../extension-runtime/extension-instance-helpers";
@@ -95,6 +108,7 @@ import {
 } from "./panel-utils";
 import {
 	getFileDataAtCommit,
+	getAgentTurnExternalWriteReview,
 	getPendingExternalWriteReviewPaths,
 	useAgentTurnCommitRanges,
 } from "./external-write-review-history";
@@ -539,6 +553,8 @@ type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly setUiStateKV: AtelierUiStateSetter;
 	readonly activeBranchId: string;
 	readonly resolvedReviewIds: readonly string[];
+	readonly autoAcceptAgentChanges: boolean;
+	readonly onAutoAcceptAgentChangesChange: (enabled: boolean) => void;
 	readonly autoRevealedAgentTurnRangeKeysRef: RefObject<Set<string>>;
 };
 
@@ -558,6 +574,17 @@ type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
 };
+
+const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
+
+// Stable identity: the icon resolver is pure, so every runtime rebuild can
+// share one object.
+const ATELIER_RUNTIME_ICONS = { fileUrl: fileIconUrl } as const;
+const WORKING_CHANGE_REVIEW_KINDS = new Set<ExtensionKind>([
+	FILE_EXTENSION_KIND,
+	"atelier_text",
+	"atelier_csv",
+]);
 
 function activeDocumentCompletion(
 	path: string,
@@ -628,10 +655,8 @@ async function selectHistoricalLixFileForOpen(
 	filePath: string,
 	commitId: string,
 ): Promise<LixFileForOpen | null> {
-	const row = await qb(lix)
-		.selectFrom("lix_file_history")
+	const row = await selectFileHistory(lix, commitId)
 		.select(["id", "path"])
-		.where("lixcol_start_commit_id", "=", commitId)
 		.where("path", "=", filePath)
 		.orderBy("lixcol_depth", "asc")
 		.limit(1)
@@ -723,6 +748,10 @@ function LayoutShellStateLoader(
 	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
 		coerceAtelierUserPreferences(initialUiState),
 	);
+	const preferencesRef = useRef(preferences);
+	useLayoutEffect(() => {
+		preferencesRef.current = preferences;
+	}, [preferences]);
 	const [preferencesReady, setPreferencesReady] = useState(false);
 	const [reviewStatusLoad, setReviewStatusLoad] = useState<{
 		readonly branchId: string | null;
@@ -806,7 +835,10 @@ function LayoutShellStateLoader(
 			configuration.sessionStateStore.setSnapshot(
 				coerceAtelierSessionUiState(next),
 			);
-			const nextPreferences = coerceAtelierUserPreferences(next);
+			const nextPreferences = coerceAtelierUserPreferences({
+				...next,
+				review: preferences.review,
+			});
 			if (
 				JSON.stringify(nextPreferences.layout) !==
 				JSON.stringify(preferences.layout)
@@ -823,7 +855,24 @@ function LayoutShellStateLoader(
 			configuration.preferencesStore,
 			configuration.sessionStateStore,
 			preferences.layout,
+			preferences.review,
 		],
+	);
+	const setAutoAcceptAgentChanges = useCallback(
+		(enabled: boolean) => {
+			const nextPreferences = coerceAtelierUserPreferences({
+				...preferencesRef.current,
+				review: { autoAcceptAgentChanges: enabled },
+			});
+			preferencesRef.current = nextPreferences;
+			setPreferences(nextPreferences);
+			void configuration.preferencesStore
+				.save(nextPreferences)
+				.catch((error: unknown) => {
+					console.error("Failed to save private Atelier preferences", error);
+				});
+		},
+		[configuration.preferencesStore],
 	);
 
 	if (
@@ -841,6 +890,10 @@ function LayoutShellStateLoader(
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
 			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
+			autoAcceptAgentChanges={
+				preferences.review?.autoAcceptAgentChanges ?? false
+			}
+			onAutoAcceptAgentChangesChange={setAutoAcceptAgentChanges}
 			autoRevealedAgentTurnRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
 		/>
 	);
@@ -980,6 +1033,8 @@ function LayoutShellLoadedContent({
 	setUiStateKV,
 	activeBranchId,
 	resolvedReviewIds,
+	autoAcceptAgentChanges,
+	onAutoAcceptAgentChangesChange,
 	autoRevealedAgentTurnRangeKeysRef,
 	slots,
 	topBarProps,
@@ -993,12 +1048,14 @@ function LayoutShellLoadedContent({
 		},
 		[onEvent],
 	);
-	const currentFileRows = useQuery<{ id: string }>((queryLix) =>
-		qb(queryLix).selectFrom("lix_file").select("id"),
+	const currentFileRows = useQuery<{ id: string; path: string }>((queryLix) =>
+		qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
 	const isHostReadOnly = Boolean(configuration.readOnly);
 	const reviewRangeSessionId = configuration.reviewRangeSessionId;
+	const { rangeValues: agentTurnRangeValues, ranges: agentTurnRanges } =
+		useAgentTurnCommitRanges(activeBranchId, reviewRangeSessionId);
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
@@ -1161,6 +1218,79 @@ function LayoutShellLoadedContent({
 		new Map<string, ExternalWriteReview>(),
 	);
 	const [openExternalReviewCount, setOpenExternalReviewCount] = useState(0);
+	const [workingChangesReviewOpen, setWorkingChangesReviewOpen] =
+		useState(false);
+	const [workingChangeReviewFiles, setWorkingChangeReviewFiles] = useState<
+		readonly LixFileForOpen[]
+	>(EMPTY_LIX_FILES_FOR_OPEN);
+	// ESC leaves an agent-turn review without resolving it; the pending changes
+	// stay reachable through the "N changes since checkpoint" pill. A new agent
+	// turn re-opens diff mode.
+	const [agentTurnReviewDismissed, setAgentTurnReviewDismissed] =
+		useState(false);
+	// Diff mode pointed at the past: a checkpoint clicked in History. Read-only;
+	// the float's only verb is Restore.
+	const [historicalReview, setHistoricalReview] = useState<{
+		readonly commitId: string;
+		readonly previousCommitId: string;
+		readonly createdAt: string;
+		readonly files: readonly LixFileForOpen[];
+		/** True once the first snapshot view finished opening. */
+		readonly opened?: boolean;
+	} | null>(null);
+	const handleCloseViewRef = useRef<
+		((args: { panel?: PanelSide; instance?: string }) => void) | null
+	>(null);
+	const openHistoricalCheckpointFileRef = useRef<
+		((path: string) => void) | null
+	>(null);
+	const closeHistoricalReviewViews = useCallback((commitId: string) => {
+		for (const view of panelStatesRef.current.central.views) {
+			if (
+				view.state?.afterCommitId === commitId ||
+				view.state?.beforeCommitId === commitId
+			) {
+				handleCloseViewRef.current?.({
+					panel: "central",
+					instance: view.instance,
+				});
+			}
+		}
+	}, []);
+	// The live document the historical view replaced (tabs navigate in place);
+	// restored on "Back to now" so exiting never strands an empty tab.
+	const preHistoricalDocumentRef = useRef<{
+		readonly fileId: string;
+		readonly filePath: string;
+	} | null>(null);
+	const reopenLiveDocumentRef = useRef<
+		((file: { fileId: string; filePath: string }) => void) | null
+	>(null);
+	const exitDiffReview = useCallback(
+		(options?: { readonly restoreLiveDocument?: boolean }) => {
+			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
+			setWorkingChangesReviewOpen(false);
+			setAgentTurnReviewDismissed(true);
+			setHistoricalReview((current) => {
+				if (current) {
+					closeHistoricalReviewViews(current.commitId);
+					const previousDocument = preHistoricalDocumentRef.current;
+					preHistoricalDocumentRef.current = null;
+					if (restoreLiveDocument && previousDocument) {
+						reopenLiveDocumentRef.current?.(previousDocument);
+					}
+				}
+				return null;
+			});
+		},
+		[closeHistoricalReviewViews],
+	);
+	useEffect(() => {
+		setWorkingChangesReviewOpen(false);
+		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
+		setAgentTurnReviewDismissed(false);
+		setHistoricalReview(null);
+	}, [activeBranchId]);
 	const resolveDiffReviewRef = useRef<
 		((review: ExternalWriteReview) => boolean) | null
 	>(null);
@@ -1219,7 +1349,6 @@ function LayoutShellLoadedContent({
 		},
 		[activeBranchId, reviewStatusStore],
 	);
-
 	const registerExternalWriteReview = useCallback(
 		(review: ExternalWriteReview) => {
 			for (const rangeId of review.agentTurnRangeIds) {
@@ -1304,8 +1433,174 @@ function LayoutShellLoadedContent({
 			releaseDiffReviewResolution,
 		],
 	);
+	const collectPendingAgentTurnReviews = useCallback(async (): Promise<
+		readonly ExternalWriteReview[]
+	> => {
+		const changedFiles = await selectFileWorkingChanges(lix).execute();
+		const changedFileIds = new Set(changedFiles.map((file) => file.id));
+		const changedCurrentFiles = currentFileRows
+			.filter((file) => changedFileIds.has(String(file.id)))
+			.map((file) => ({
+				fileId: String(file.id),
+				path: String(file.path),
+			}));
+		const pendingPaths = await getPendingExternalWriteReviewPaths(
+			lix,
+			changedCurrentFiles,
+			agentTurnRanges,
+			resolvedReviewIdsRef.current,
+		);
+		return (
+			await Promise.all(
+				changedCurrentFiles
+					.filter((file) => pendingPaths.has(file.path))
+					.map((file) =>
+						getAgentTurnExternalWriteReview(
+							lix,
+							file.fileId,
+							file.path,
+							agentTurnRanges,
+							resolvedReviewIdsRef.current,
+						),
+					),
+			)
+		).filter((review): review is ExternalWriteReview => review !== null);
+	}, [agentTurnRanges, currentFileRows, lix]);
+
+	const handleCreateCheckpoint = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			const selected = new Set(selectedFileIds);
+			if (selected.size === 0) return;
+			const pendingReviews = await collectPendingAgentTurnReviews();
+			const selectedEveryWorkingFile = workingChangeReviewFiles.every((file) =>
+				selected.has(file.id),
+			);
+
+			if (selectedEveryWorkingFile) {
+				await lix.createCheckpoint();
+			} else {
+				await createCheckpointForFiles(lix, selectedFileIds);
+			}
+			const remainingFiles = workingChangeReviewFiles.filter(
+				(file) => !selected.has(file.id),
+			);
+			setWorkingChangesReviewOpen(remainingFiles.length > 0);
+			setWorkingChangeReviewFiles(remainingFiles);
+			for (const review of pendingReviews) {
+				if (!selected.has(review.fileId)) continue;
+				try {
+					await runDiffReviewResolution(review, "accepted", async () => {
+						await persistReviewResolution(review, "accepted");
+					});
+				} catch (error) {
+					// The checkpoint is already durable. A stale private review marker
+					// should not turn successful checkpoint creation into a failure.
+					console.warn(
+						"[checkpoint] failed to retire an accepted review marker",
+						error,
+					);
+				}
+			}
+		},
+		[
+			collectPendingAgentTurnReviews,
+			lix,
+			persistReviewResolution,
+			runDiffReviewResolution,
+			workingChangeReviewFiles,
+		],
+	);
+
+	// Keep: accept pending reviews for the ticked files (every file unless the
+	// user unticked some in the float's ▾ list).
+	const handleKeepReviews = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			const selected = new Set(selectedFileIds);
+			const pendingReviews = await collectPendingAgentTurnReviews();
+			for (const review of pendingReviews) {
+				if (!selected.has(review.fileId)) continue;
+				await runDiffReviewResolution(review, "accepted", async () => {
+					await persistReviewResolution(review, "accepted");
+				});
+			}
+		},
+		[
+			collectPendingAgentTurnReviews,
+			persistReviewResolution,
+			runDiffReviewResolution,
+		],
+	);
+	const handleKeepAllReviews = useCallback(async () => {
+		const pendingReviews = await collectPendingAgentTurnReviews();
+		await handleKeepReviews(pendingReviews.map((review) => review.fileId));
+	}, [collectPendingAgentTurnReviews, handleKeepReviews]);
+
+	const handleRestoreCheckpoint = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			if (!historicalReview || selectedFileIds.length === 0) return;
+			await restoreCheckpointFiles(
+				lix,
+				historicalReview.commitId,
+				selectedFileIds,
+			);
+			const selected = new Set(selectedFileIds);
+			const remainingFiles = historicalReview.files.filter(
+				(file) => !selected.has(file.id),
+			);
+			if (remainingFiles.length === 0) {
+				exitDiffReview();
+				return;
+			}
+			setHistoricalReview((current) =>
+				current?.commitId === historicalReview.commitId
+					? { ...current, files: remainingFiles }
+					: current,
+			);
+		},
+		[exitDiffReview, historicalReview, lix],
+	);
 	resolveDiffReviewRef.current = resolveDiffReview;
-	const isReviewMode = openExternalReviewCount > 0;
+	// A working-changes review is an explicit workspace-level session. Keep the
+	// shell in review mode while views swap: the outgoing file unregisters its
+	// diff before the incoming file can register, which briefly leaves the
+	// editor-level review count at zero.
+	const isReviewMode =
+		workingChangesReviewOpen ||
+		historicalReview !== null ||
+		(!autoAcceptAgentChanges &&
+			!agentTurnReviewDismissed &&
+			openExternalReviewCount > 0 &&
+			[...openDiffReviewByFileIdRef.current.values()].some(
+				(review) => review.mode !== "working-changes",
+			));
+
+	// A fresh agent turn re-enters diff mode even if the previous one was left
+	// with ESC.
+	const agentTurnRangeKey = agentTurnRanges.map((range) => range.id).join("\n");
+	useEffect(() => {
+		setAgentTurnReviewDismissed(false);
+	}, [agentTurnRangeKey]);
+
+	// Shell-level ESC fallback for when no float is mounted (e.g. the active
+	// view has no pending diff). Registered on document, not window: the
+	// float's window-capture handler always runs first regardless of listener
+	// registration order and stops propagation when it consumes ESC (to close
+	// its file list without leaving diff mode).
+	useEffect(() => {
+		if (!isReviewMode) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			exitDiffReview();
+		};
+		document.addEventListener("keydown", handleKeyDown, { capture: true });
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown, {
+				capture: true,
+			});
+		};
+	}, [exitDiffReview, isReviewMode]);
 
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
@@ -1739,6 +2034,182 @@ function LayoutShellLoadedContent({
 		},
 		[openResolvedFileView],
 	);
+	reopenLiveDocumentRef.current = openAutoRevealedFile;
+	const openWorkingChangeFile = useCallback(
+		(path: string) => {
+			const file = workingChangeReviewFiles.find(
+				(candidate) => candidate.path === path,
+			);
+			if (!file) return;
+			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
+		},
+		[openAutoRevealedFile, workingChangeReviewFiles],
+	);
+	const pendingReviewFilesKey = JSON.stringify([
+		agentTurnRangeValues,
+		privateResolvedReviewIds,
+		currentFileRows.map((file) => [file.id, file.path]),
+	]);
+	const [pendingReviewFileLoad, setPendingReviewFileLoad] = useState<{
+		readonly key: string;
+		readonly files: readonly LixFileForOpen[];
+	} | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		if (currentFileRows.length === 0 || agentTurnRanges.length === 0) {
+			setPendingReviewFileLoad({ key: pendingReviewFilesKey, files: [] });
+			return;
+		}
+		void getPendingExternalWriteReviewPaths(
+			lix,
+			currentFileRows.map((file) => ({
+				fileId: String(file.id),
+				path: String(file.path),
+			})),
+			agentTurnRanges,
+			new Set(privateResolvedReviewIds),
+		)
+			.then((paths) => {
+				if (cancelled) return;
+				setPendingReviewFileLoad({
+					key: pendingReviewFilesKey,
+					files: currentFileRows
+						.filter((file) => paths.has(String(file.path)))
+						.map((file) => ({
+							id: String(file.id),
+							path: String(file.path),
+						})),
+				});
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				console.warn(
+					"[agent-turn-review] failed to build changed file navigation",
+					error,
+				);
+				setPendingReviewFileLoad({ key: pendingReviewFilesKey, files: [] });
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		agentTurnRanges,
+		currentFileRows,
+		lix,
+		pendingReviewFilesKey,
+		privateResolvedReviewIds,
+	]);
+	const agentReviewFiles =
+		pendingReviewFileLoad?.key === pendingReviewFilesKey
+			? pendingReviewFileLoad.files
+			: EMPTY_LIX_FILES_FOR_OPEN;
+	const pendingReviewFiles = historicalReview
+		? historicalReview.files
+		: workingChangesReviewOpen
+			? workingChangeReviewFiles
+			: agentReviewFiles;
+	const navigationActiveView = centralPanel.views.find(
+		(view) => view.instance === centralPanel.activeInstance,
+	);
+	const navigationActiveFileId = navigationActiveView
+		? activeFileIdFromExtensionInstance(navigationActiveView)
+		: null;
+	const navigationActivePath = navigationActiveView
+		? documentPathFromView(navigationActiveView)
+		: null;
+	const activeReviewFileIndex = Math.max(
+		0,
+		pendingReviewFiles.findIndex(
+			(file) =>
+				file.id === navigationActiveFileId ||
+				file.path === navigationActivePath,
+		),
+	);
+	const historicalCommitId = historicalReview?.commitId ?? null;
+	const reviewNavigation = useMemo(() => {
+		const activeFile = pendingReviewFiles[activeReviewFileIndex];
+		if (!activeFile) return undefined;
+		const openAtOffset = (offset: number) => {
+			const index =
+				(activeReviewFileIndex + offset + pendingReviewFiles.length) %
+				pendingReviewFiles.length;
+			const file = pendingReviewFiles[index];
+			if (!file) return;
+			if (historicalCommitId) {
+				openHistoricalCheckpointFileRef.current?.(file.path);
+				return;
+			}
+			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
+		};
+		return {
+			fileName: fileNameFromPath(activeFile.path) ?? activeFile.path,
+			activeIndex: activeReviewFileIndex,
+			fileCount: pendingReviewFiles.length,
+			onPrevious: () => openAtOffset(-1),
+			onNext: () => openAtOffset(1),
+		};
+	}, [
+		activeReviewFileIndex,
+		historicalCommitId,
+		openAutoRevealedFile,
+		pendingReviewFiles,
+	]);
+
+	// Leaving the past ends diff mode: when the user navigates to a live
+	// document while viewing a checkpoint, exit instead of showing the
+	// read-only banner and Restore float over an editable file. Entry is
+	// exempt until the first snapshot view finished opening, and the exit
+	// must not restore the pre-historical document — the user just chose
+	// where to go.
+	useEffect(() => {
+		if (!historicalReview?.opened) return;
+		const activeView = centralPanel.views.find(
+			(view) => view.instance === centralPanel.activeInstance,
+		);
+		if (!activeView || !isDocumentView(activeView)) return;
+		if (hasHistoricalEditorRevisionState(activeView.state)) return;
+		exitDiffReview({ restoreLiveDocument: false });
+	}, [centralPanel, exitDiffReview, historicalReview]);
+
+	// Diff mode's headline: what is being compared, shown in the top bar.
+	const reviewFileCountLabel =
+		pendingReviewFiles.length > 0
+			? ` · ${pendingReviewFiles.length} ${
+					pendingReviewFiles.length === 1 ? "file" : "files"
+				}`
+			: "";
+	const reviewTitle = historicalReview
+		? `Viewing checkpoint · ${formatCheckpointRelativeTime(
+				historicalReview.createdAt,
+			)}`
+		: workingChangesReviewOpen
+			? `Reviewing changes since checkpoint${reviewFileCountLabel}`
+			: isReviewMode
+				? `Reviewing this turn${reviewFileCountLabel}`
+				: null;
+
+	// The float's orange verb, scoped by its ▾ checklist: every changed file
+	// unless the user unticked some.
+	const handleDiffPrimary = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			if (historicalReview) {
+				await handleRestoreCheckpoint(selectedFileIds);
+				return;
+			}
+			if (workingChangesReviewOpen) {
+				await handleCreateCheckpoint(selectedFileIds);
+				return;
+			}
+			await handleKeepReviews(selectedFileIds);
+		},
+		[
+			handleCreateCheckpoint,
+			handleKeepReviews,
+			handleRestoreCheckpoint,
+			historicalReview,
+			workingChangesReviewOpen,
+		],
+	);
 
 	const resolveAndOpenFile = useCallback(
 		async ({
@@ -1825,6 +2296,120 @@ function LayoutShellLoadedContent({
 			});
 		},
 		[lix, openResolvedFileView, resolveAndOpenFile],
+	);
+
+	const historicalRevisionStateForPath = useCallback(
+		(
+			path: string,
+			commitId: string,
+			previousCommitId: string,
+		): ExtensionState => {
+			const handler = findFileHandlerExtension(extensionMap.values(), path);
+			return handler?.kind === FILE_EXTENSION_KIND
+				? {
+						beforeCommitId: previousCommitId,
+						afterCommitId: commitId,
+						sourceCommitId: commitId,
+					}
+				: { afterCommitId: commitId, sourceCommitId: commitId };
+		},
+		[extensionMap],
+	);
+
+	const openHistoricalCheckpointFile = useCallback(
+		(path: string) => {
+			const commitId = historicalReview?.commitId;
+			if (!commitId) return;
+			void resolveAndOpenDocument(path, {
+				state: historicalRevisionStateForPath(
+					path,
+					commitId,
+					historicalReview.previousCommitId,
+				),
+			}).catch((error: unknown) => {
+				console.warn(
+					"[historical-review] failed to open a checkpoint file",
+					error,
+				);
+			});
+		},
+		[
+			historicalReview?.commitId,
+			historicalRevisionStateForPath,
+			resolveAndOpenDocument,
+		],
+	);
+	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
+
+	// One click on a History checkpoint opens diff mode pointed at the past.
+	// It never restores anything by itself.
+	const handleViewCheckpoint = useCallback(
+		async ({
+			commitId,
+			previousCommitId,
+			createdAt,
+		}: {
+			readonly commitId: string;
+			readonly previousCommitId: string;
+			readonly createdAt: string;
+		}) => {
+			const result = await lix.execute(
+				"SELECT id, path FROM lix_file_history() WHERE lixcol_observed_commit_id = $1 ORDER BY path",
+				[commitId],
+			);
+			const files = result.rows.map((row) => ({
+				id: String(row.get("id")),
+				path: String(row.get("path")),
+			}));
+			if (files.length === 0) return;
+			setWorkingChangesReviewOpen(false);
+			setHistoricalReview((current) => {
+				if (current && current.commitId !== commitId) {
+					closeHistoricalReviewViews(current.commitId);
+				}
+				if (!current) {
+					// Entering the past: remember the live document this view will
+					// replace so "Back to now" can bring it back.
+					const activeView = panelStatesRef.current.central.views.find(
+						(view) =>
+							view.instance === panelStatesRef.current.central.activeInstance,
+					);
+					const activeFileId = activeView
+						? activeFileIdFromExtensionInstance(activeView)
+						: null;
+					const activePath = activeView
+						? documentPathFromView(activeView)
+						: null;
+					// A view already pointed at history has no live doc to restore.
+					const isLiveView = !hasHistoricalEditorRevisionState(
+						activeView?.state,
+					);
+					preHistoricalDocumentRef.current =
+						activeFileId && activePath && isLiveView
+							? { fileId: activeFileId, filePath: activePath }
+							: null;
+				}
+				return { commitId, previousCommitId, createdAt, files };
+			});
+			await resolveAndOpenDocument(files[0]!.path, {
+				state: historicalRevisionStateForPath(
+					files[0]!.path,
+					commitId,
+					previousCommitId,
+				),
+			});
+			setHistoricalReview((current) =>
+				current && current.commitId === commitId
+					? { ...current, opened: true }
+					: current,
+			);
+		},
+		[
+			closeHistoricalReviewViews,
+			historicalRevisionStateForPath,
+			lix,
+			resolveAndOpenDocument,
+		],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
@@ -2013,6 +2598,69 @@ function LayoutShellLoadedContent({
 		],
 	);
 
+	// Undo: walk the scope chip's selection back.
+	const handleUndoReviews = useCallback(
+		async (selectedFileIds: readonly string[]) => {
+			if (workingChangesReviewOpen) {
+				if (selectedFileIds.length === 0) return;
+				await revertWorkingChangesForFiles(lix, selectedFileIds);
+				const selected = new Set(selectedFileIds);
+				const remainingFiles = workingChangeReviewFiles.filter(
+					(file) => !selected.has(file.id),
+				);
+				setWorkingChangesReviewOpen(remainingFiles.length > 0);
+				setWorkingChangeReviewFiles(remainingFiles);
+				const pendingReviews = await collectPendingAgentTurnReviews();
+				for (const review of pendingReviews) {
+					if (!selected.has(review.fileId)) continue;
+					try {
+						await runDiffReviewResolution(review, "rejected", async () => {
+							await persistReviewResolution(review, "rejected");
+						});
+					} catch (error) {
+						console.warn(
+							"[working-changes] failed to retire a reverted review marker",
+							error,
+						);
+					}
+				}
+				return;
+			}
+			const selected = new Set(selectedFileIds);
+			const pendingReviews = await collectPendingAgentTurnReviews();
+			for (const review of pendingReviews) {
+				if (!selected.has(review.fileId)) continue;
+				await handleRejectExternalWriteReview({
+					fileId: review.fileId,
+					reviewId: review.reviewId,
+					review,
+				});
+			}
+		},
+		[
+			collectPendingAgentTurnReviews,
+			handleRejectExternalWriteReview,
+			lix,
+			persistReviewResolution,
+			runDiffReviewResolution,
+			workingChangeReviewFiles,
+			workingChangesReviewOpen,
+		],
+	);
+	const handleUndoAllReviews = useCallback(async () => {
+		if (workingChangesReviewOpen) {
+			await handleUndoReviews(workingChangeReviewFiles.map((file) => file.id));
+			return;
+		}
+		const pendingReviews = await collectPendingAgentTurnReviews();
+		await handleUndoReviews(pendingReviews.map((review) => review.fileId));
+	}, [
+		collectPendingAgentTurnReviews,
+		handleUndoReviews,
+		workingChangeReviewFiles,
+		workingChangesReviewOpen,
+	]);
+
 	const handleCloseView = useCallback(
 		({
 			panel,
@@ -2110,6 +2758,7 @@ function LayoutShellLoadedContent({
 			updateSidePanelSize,
 		],
 	);
+	handleCloseViewRef.current = handleCloseView;
 
 	const activeCentralEntry = useMemo(() => {
 		return activeEntryFromPanel(centralPanel);
@@ -2564,6 +3213,94 @@ function LayoutShellLoadedContent({
 		},
 		[centralBehavior, emitEvent, extensionMap, handleAddView, setPanelState],
 	);
+	const handleOpenWorkingChangesReview = useCallback(() => {
+		void (async () => {
+			const currentWorkingChanges =
+				await selectFileWorkingChanges(lix).execute();
+			const changedFileIds = new Set(
+				currentWorkingChanges.map((change) => change.id),
+			);
+			const checkpointFiles = currentFileRows
+				.filter((file) => {
+					if (!changedFileIds.has(String(file.id))) return false;
+					const handler = findFileHandlerExtension(
+						extensionMap.values(),
+						String(file.path),
+					);
+					return Boolean(
+						handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
+					);
+				})
+				.map((file) => ({
+					id: String(file.id),
+					path: String(file.path),
+				}))
+				.sort((left, right) => left.path.localeCompare(right.path));
+			let firstChangedFile = checkpointFiles[0];
+			if (firstChangedFile) {
+				setWorkingChangeReviewFiles(checkpointFiles);
+			}
+			if (
+				!firstChangedFile &&
+				currentFileRows.length > 0 &&
+				agentTurnRanges.length > 0
+			) {
+				const pendingPaths = await getPendingExternalWriteReviewPaths(
+					lix,
+					currentFileRows.map((file) => ({
+						fileId: String(file.id),
+						path: String(file.path),
+					})),
+					agentTurnRanges,
+					new Set(privateResolvedReviewIds),
+				);
+				const firstChangedRow = currentFileRows.find((file) =>
+					pendingPaths.has(String(file.path)),
+				);
+				if (firstChangedRow) {
+					firstChangedFile = {
+						id: String(firstChangedRow.id),
+						path: String(firstChangedRow.path),
+					};
+				}
+			}
+			if (!firstChangedFile) return;
+			if (historicalReview) {
+				// Working changes and a historical checkpoint are two targets of
+				// the same diff mode. Returning to "now" must first release the
+				// snapshot view and restore the live document that it replaced.
+				exitDiffReview();
+			}
+			setWorkingChangesReviewOpen(true);
+			// Opening the workspace-level review must not navigate away from the
+			// user's active document or sidebar views. The review navigator remains
+			// available when they explicitly want to step through changed files.
+			// With no active document, reveal the first changed file so diff mode
+			// never opens over the central empty state.
+			const activeCentralView =
+				panelStatesRef.current.central.views.find(
+					(view) =>
+						view.instance === panelStatesRef.current.central.activeInstance,
+				) ?? null;
+			if (!activeCentralView || !isDocumentView(activeCentralView)) {
+				openAutoRevealedFile({
+					fileId: firstChangedFile.id,
+					filePath: firstChangedFile.path,
+				});
+			}
+		})().catch((error: unknown) => {
+			console.warn("[checkpoint] failed to open working changes review", error);
+		});
+	}, [
+		agentTurnRanges,
+		currentFileRows,
+		exitDiffReview,
+		extensionMap,
+		historicalReview,
+		lix,
+		openAutoRevealedFile,
+		privateResolvedReviewIds,
+	]);
 
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);
@@ -2758,11 +3495,34 @@ function LayoutShellLoadedContent({
 				activeFilePath: activeDocumentPath,
 			},
 			views: effectiveAtelierInstance.views,
+			icons: ATELIER_RUNTIME_ICONS,
 			branches: {
 				activeId: activeBranchId,
 			},
 			reviews: {
 				resolvedReviewIds: privateResolvedReviewIds,
+				autoAccept: autoAcceptAgentChanges,
+				isOpen:
+					(!autoAcceptAgentChanges && !agentTurnReviewDismissed) ||
+					workingChangesReviewOpen,
+				active: isReviewMode,
+				mode: workingChangesReviewOpen
+					? ("working-changes" as const)
+					: ("agent-turn" as const),
+				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
+				createCheckpoint: () =>
+					handleCreateCheckpoint(
+						workingChangeReviewFiles.map((file) => file.id),
+					),
+				keepAll: handleKeepAllReviews,
+				undoAll: handleUndoAllReviews,
+				exit: exitDiffReview,
+				openWorkingChanges: handleOpenWorkingChangesReview,
+				workingChangeFiles: workingChangeReviewFiles,
+				openWorkingChangeFile,
+				viewCheckpoint: handleViewCheckpoint,
+				openCheckpointFile: openHistoricalCheckpointFile,
+				...(historicalCommitId ? { historicalCommitId } : {}),
 				...(reviewRangeSessionId !== undefined
 					? { rangeSessionId: reviewRangeSessionId }
 					: {}),
@@ -2777,17 +3537,32 @@ function LayoutShellLoadedContent({
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
+			agentTurnReviewDismissed,
+			autoAcceptAgentChanges,
+			exitDiffReview,
+			handleCreateCheckpoint,
+			handleKeepAllReviews,
+			handleUndoAllReviews,
+			handleOpenWorkingChangesReview,
+			openWorkingChangeFile,
+			handleViewCheckpoint,
+			workingChangeReviewFiles,
+			historicalCommitId,
+			openHistoricalCheckpointFile,
 			handleAcceptExternalWriteReview,
 			handleResolveExternalWriteReview,
 			handleRejectExternalWriteReview,
+			isReviewMode,
 			effectiveAtelierInstance.documents,
 			effectiveAtelierInstance.views,
 			activeCentralFileId,
 			activeDocumentPath,
 			lix,
 			privateResolvedReviewIds,
+			reviewNavigation,
 			reviewRangeSessionId,
 			registerExternalWriteReview,
+			workingChangesReviewOpen,
 		],
 	);
 
@@ -2892,22 +3667,25 @@ function LayoutShellLoadedContent({
 				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
-				<Suspense fallback={null}>
-					<AgentTurnReviewAutoReveal
-						lix={lix}
-						activeBranchId={activeBranchId}
-						activeFileId={activeCentralFileId}
-						activeFilePath={activeDocumentPath}
-						resolvedReviewIds={privateResolvedReviewIds}
-						reviewRangeSessionId={reviewRangeSessionId}
-						autoRevealedRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
-						openFile={openAutoRevealedFile}
-					/>
-				</Suspense>
+				{autoAcceptAgentChanges ? null : (
+					<Suspense fallback={null}>
+						<AgentTurnReviewAutoReveal
+							lix={lix}
+							activeBranchId={activeBranchId}
+							activeFileId={activeCentralFileId}
+							activeFilePath={activeDocumentPath}
+							resolvedReviewIds={privateResolvedReviewIds}
+							reviewRangeSessionId={reviewRangeSessionId}
+							autoRevealedRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
+							openFile={openAutoRevealedFile}
+						/>
+					</Suspense>
+				)}
 				<TopBar
 					activeFileName={activeFileName}
 					isReadOnly={isHostReadOnly}
 					isReviewing={isReviewMode}
+					reviewTitle={reviewTitle}
 					onToggleLeftSidebar={toggleLeftSidebar}
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}
@@ -2960,36 +3738,60 @@ function LayoutShellLoadedContent({
 							defaultSize={`${panelSizes.central}%`}
 							minSize="30%"
 						>
-							<CentralPanel
-								panel={centralPanel}
-								showTabBar
-								isFocused={focusedPanel === "central"}
-								onFocusPanel={focusPanel}
-								onSelectView={handleSelectCentralView}
-								onRemoveView={(key) => handleRemoveView("central", key)}
-								onFinalizePendingView={(key) =>
-									setPanelState(
+							<div className="relative h-full min-h-0">
+								<CentralPanel
+									panel={centralPanel}
+									showTabBar
+									isFocused={focusedPanel === "central"}
+									onFocusPanel={focusPanel}
+									onSelectView={handleSelectCentralView}
+									onRemoveView={(key) => handleRemoveView("central", key)}
+									onFinalizePendingView={(key) =>
+										setPanelState(
+											"central",
+											(panel) => activatePanelExtension(panel, key),
+											{ focus: true },
+										)
+									}
+									viewContext={extensionHostContext}
+									{...(isHostReadOnly
+										? {}
+										: { onCreateNewFile: () => void handleCreateNewFile() })}
+									{...(centralTabStripContext && slots?.centralTabStrip
+										? {
+												customTabStrip: slots.centralTabStrip(
+													centralTabStripContext,
+												),
+											}
+										: {})}
+									emptyState={renderEmptyPanelSlot(
 										"central",
-										(panel) => activatePanelExtension(panel, key),
-										{ focus: true },
-									)
-								}
-								viewContext={extensionHostContext}
-								{...(isHostReadOnly
-									? {}
-									: { onCreateNewFile: () => void handleCreateNewFile() })}
-								{...(centralTabStripContext && slots?.centralTabStrip
-									? {
-											customTabStrip: slots.centralTabStrip(
-												centralTabStripContext,
-											),
+										slots?.centralPanelEmpty,
+									)}
+								/>
+								{isReviewMode && !isHostReadOnly ? (
+									<ExternalWriteReviewControls
+										isActive
+										mode={
+											historicalReview
+												? "historical"
+												: workingChangesReviewOpen
+													? "working-changes"
+													: "agent-turn"
 										}
-									: {})}
-								emptyState={renderEmptyPanelSlot(
-									"central",
-									slots?.centralPanelEmpty,
-								)}
-							/>
+										navigation={reviewNavigation}
+										files={pendingReviewFiles}
+										onUndo={
+											historicalReview
+												? undefined
+												: (selectedFileIds) =>
+														void handleUndoReviews(selectedFileIds)
+										}
+										onPrimary={handleDiffPrimary}
+										onExit={exitDiffReview}
+									/>
+								) : null}
+							</div>
 						</Panel>
 						<Separator
 							className={`group relative flex items-center justify-center ${
@@ -3025,7 +3827,20 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</Group>
 				</main>
-				<StatusBar />
+				<CheckpointStatusBar
+					readOnly={isHostReadOnly}
+					autoAcceptAgentChanges={autoAcceptAgentChanges}
+					isReviewing={isReviewMode}
+					exitLabel={historicalReview ? "Back to now" : "Exit review"}
+					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
+					onOpenWorkingChanges={handleOpenWorkingChangesReview}
+					onExitReview={exitDiffReview}
+					onOpenHistory={() =>
+						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
+							panel: "left",
+						})
+					}
+				/>
 			</div>
 			<DragOverlay>
 				{activeId && activeDragView ? (

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import {
 	storeUploadedWorkspaceFile,
 	uploadedFileExtension,
@@ -34,8 +35,16 @@ test("stores an upload next to the document and suffixes collisions", async () =
 	await qb(lix)
 		.insertInto("lix_file")
 		.values([
-			{ id: "doc", path: "/docs/notes.md", data: new Uint8Array([1]) },
-			{ id: "existing", path: "/docs/photo.png", data: new Uint8Array([2]) },
+			{
+				id: fakeUuid("doc"),
+				path: "/docs/notes.md",
+				data: new Uint8Array([1]),
+			},
+			{
+				id: fakeUuid("existing"),
+				path: "/docs/photo.png",
+				data: new Uint8Array([2]),
+			},
 		])
 		.execute();
 

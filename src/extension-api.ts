@@ -27,6 +27,7 @@ export type ExtensionManifest = {
 /** Stable ids for replacing Atelier's bundled extension views. */
 export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	files: "atelier_files",
+	history: "atelier_history",
 	markdown: "atelier_file",
 	csv: "atelier_csv",
 	image: "atelier_image",
@@ -183,7 +184,10 @@ export type AtelierEvent =
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
-	/** Whether the host has opened this workspace without mutation access. */
+	/**
+	 * Whether this extension view must render without mutation affordances.
+	 * True for a host-level read-only workspace and for historical revisions.
+	 */
 	readonly readOnly: boolean;
 	readonly events: {
 		readonly emit: (event: AtelierEvent) => void;
@@ -193,6 +197,11 @@ export type AtelierExtensionRuntime = {
 		readonly activeFilePath: string | null;
 	};
 	readonly views: AtelierViewsApi;
+	/** Canonical Atelier iconography, shared by views, floats, and lists. */
+	readonly icons: {
+		/** Icon URL for a workspace file path (resolved by extension). */
+		readonly fileUrl: (path: string) => string;
+	};
 	readonly branches: {
 		readonly activeId: string;
 	};

@@ -1,76 +1,289 @@
 @scope (.atelier-root) {
+	/* Values mirror the diff-mode mocks: #1C1917 pill, 12px radius, 7px pad. */
 	.external-write-review-actions {
 		position: absolute;
 		left: 50%;
 		bottom: 1.5rem;
 		z-index: 20;
 		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.38rem;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 0.85rem;
-		background: rgb(38, 34, 31);
-		box-shadow:
-			0 26px 70px rgba(38, 34, 31, 0.28),
-			0 10px 30px rgba(38, 34, 31, 0.18),
-			0 1px 0 rgba(255, 255, 255, 0.08) inset;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.55rem;
 		transform: translateX(-50%);
-		backdrop-filter: blur(16px);
+	}
+
+	.external-write-review-scope {
+		display: flex;
+		align-items: center;
+		gap: 0.125rem;
+		padding: 0.4375rem;
+		border-radius: 0.75rem;
+		background: rgb(28, 25, 23);
+		box-shadow: 0 14px 32px rgba(28, 25, 23, 0.42);
+	}
+
+	/* The ▾ file checklist: every changed file, all ticked by default.
+	   Rendered above the bottom-anchored pill, right edges aligned. */
+	.external-write-review-menu {
+		min-width: 13.125rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		padding: 0.375rem;
+		border: 1px solid rgb(58, 53, 47);
+		border-radius: 0.625rem;
+		background: rgb(28, 25, 23);
+		box-shadow: 0 14px 32px rgba(28, 25, 23, 0.42);
+	}
+
+	.external-write-review-menu > button {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4375rem 0.625rem;
+		border-radius: 0.375rem;
+		color: rgb(201, 194, 184);
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-align: left;
+		white-space: nowrap;
+	}
+
+	.external-write-review-menu > button[data-ticked] {
+		color: rgb(231, 226, 218);
+		font-weight: 700;
+	}
+
+	.external-write-review-menu > button:hover {
+		background: rgb(42, 38, 32);
+	}
+
+	.external-write-review-menu-tick {
+		display: flex;
+		width: 0.875rem;
+		height: 0.875rem;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		border: 1.5px solid rgb(87, 83, 78);
+		border-radius: 0.25rem;
+		box-sizing: border-box;
+	}
+
+	.external-write-review-menu-tick[data-ticked] {
+		border-color: var(--color-bg-action-primary);
+		background: var(--color-bg-action-primary);
+	}
+
+	.external-write-review-menu-tick > svg {
+		width: 0.5625rem;
+		height: 0.5625rem;
+		color: white;
+		stroke-width: 3.2;
+	}
+
+	/* Same box as the tick beside it — the glyph's inner padding otherwise
+	   makes it read smaller. */
+	.external-write-review-menu-file-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex: none;
+	}
+
+	.external-write-review-menu
+		> button:not([data-ticked])
+		.external-write-review-menu-file-icon {
+		opacity: 0.6;
+	}
+
+	.external-write-review-menu-name {
+		overflow: hidden;
+		max-width: 13rem;
+		text-overflow: ellipsis;
+	}
+
+	.external-write-review-menu-divider {
+		height: 1px;
+		margin: 0.25rem 0.125rem;
+		background: rgb(58, 53, 47);
+	}
+
+	/* The scope chip: the working set, visible even with the list closed.
+	   Stretches to the row height so its box matches the orange verb beside
+	   it, border included. */
+	.external-write-review-scope-chip {
+		display: inline-flex;
+		align-self: stretch;
+		align-items: center;
+		gap: 0.375rem;
+		margin: 0 0.25rem 0 0.0625rem;
+		padding: 0 0.5rem;
+		border: 1px solid rgb(58, 53, 47);
+		border-radius: 0.5rem;
+		background: rgb(42, 38, 32);
+		color: rgb(231, 226, 218);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1;
+		white-space: nowrap;
+		transition: background-color 120ms ease;
+	}
+
+	.external-write-review-scope-chip:hover:not(:disabled) {
+		background: rgb(52, 47, 40);
+	}
+
+	.external-write-review-scope-chip:disabled {
+		cursor: default;
+		opacity: 0.7;
+	}
+
+	.external-write-review-scope-chip > svg {
+		width: 0.625rem;
+		height: 0.625rem;
+		color: rgb(201, 194, 184);
+	}
+
+	.external-write-review-scope-chip .external-write-review-menu-tick {
+		width: 0.8125rem;
+		height: 0.8125rem;
+		border-radius: 0.21875rem;
+	}
+
+	.external-write-review-navigation {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 0.42rem;
+		padding: 0 0.55rem 0 0.12rem;
+		color: rgb(231, 226, 218);
+	}
+
+	.external-write-review-navigation > button {
+		display: inline-flex;
+		width: 1.5rem;
+		height: 1.5rem;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.4375rem;
+		color: rgb(201, 194, 184);
+	}
+
+	.external-write-review-navigation > button:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.09);
+		color: white;
+	}
+
+	.external-write-review-navigation svg {
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	.external-write-review-navigation .external-write-review-file-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex: none;
+		color: rgba(255, 255, 255, 0.72);
+	}
+
+	.external-write-review-navigation > span {
+		display: flex;
+		min-width: 0;
+		align-items: baseline;
+		gap: 0.42rem;
+		line-height: 1;
+	}
+
+	.external-write-review-navigation strong {
+		overflow: hidden;
+		max-width: 9rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.external-write-review-navigation small {
+		color: rgb(140, 133, 124);
+		font-size: 0.72rem;
+		white-space: nowrap;
 	}
 
 	.external-write-review-button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.42rem;
-		height: 2.05rem;
-		min-width: 4.9rem;
-		padding: 0 0.85rem;
-		border: 1px solid transparent;
-		border-radius: 0.68rem;
-		font-size: 0.86rem;
-		font-weight: 720;
+		gap: 0.375rem;
+		padding: 0.375rem 0.6875rem;
+		border-radius: 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 700;
 		line-height: 1;
 		white-space: nowrap;
 		transition:
 			background-color 120ms ease,
-			border-color 120ms ease,
 			color 120ms ease;
+	}
+
+	.external-write-review-button > svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	.external-write-review-button:disabled {
+		cursor: default;
+		opacity: 0.7;
 	}
 
 	.external-write-review-button-accept {
 		background: var(--color-bg-action-primary);
 		color: var(--color-text-on-action-primary);
-		box-shadow:
-			0 1px 0 rgba(255, 255, 255, 0.18) inset,
-			0 8px 18px rgba(0, 0, 0, 0.14);
 	}
 
-	.external-write-review-button-accept:hover {
+	.external-write-review-button-accept:hover:not(:disabled) {
 		background: var(--color-bg-action-primary-hover);
 	}
 
 	.external-write-review-button-reject {
+		margin-right: 0.125rem;
+		padding: 0.3125rem 0.5625rem;
 		background: transparent;
-		color: rgba(255, 255, 255, 0.88);
+		/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
+		color: rgb(235, 165, 156);
+		font-weight: 600;
 	}
 
-	.external-write-review-button-reject:hover {
+	.external-write-review-button-reject:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.09);
-		color: rgb(255, 255, 255);
+		color: rgb(244, 198, 191);
+	}
+
+	/* The pill divider between the stepper and the verbs. */
+	.external-write-review-navigation::after {
+		content: "";
+		width: 1px;
+		height: 1rem;
+		margin-left: 0.125rem;
+		background: rgb(58, 53, 47);
 	}
 
 	.external-write-review-shortcut {
-		color: rgba(255, 255, 255, 0.72);
+		border-radius: 0.25rem;
+		background: rgba(255, 255, 255, 0.18);
+		padding: 0.125rem 0.3125rem;
+		color: rgb(244, 208, 189);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-		font-size: 0.68rem;
+		font-size: 0.59rem;
 		font-weight: 700;
 		line-height: 1;
 	}
 
-	.external-write-review-shortcut-dark {
-		color: rgba(255, 255, 255, 0.58);
+	.external-write-review-error {
+		border-radius: 0.45rem;
+		background: var(--color-bg-status-danger);
+		padding: 0.3rem 0.5rem;
+		color: var(--color-text-status-danger);
+		font-size: 0.68rem;
 	}
 }

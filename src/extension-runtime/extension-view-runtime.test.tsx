@@ -66,4 +66,42 @@ describe("useExtensionViewRuntime", () => {
 			true,
 		);
 	});
+
+	test("exposes one effective read-only signal for historical views", () => {
+		const panel: PanelState = {
+			views: [
+				{
+					instance: "live",
+					kind: "atelier_file",
+					state: { fileId: "live-file" },
+				},
+				{
+					instance: "historical",
+					kind: "atelier_file",
+					state: {
+						fileId: "historical-file",
+						afterCommitId: "checkpoint-1",
+						sourceCommitId: "checkpoint-1",
+					},
+				},
+			],
+			activeInstance: "historical",
+		};
+		const { result } = renderHook(useExtensionViewRuntime, {
+			initialProps: {
+				panel,
+				panelSide: "central" as const,
+				isFocused: true,
+				host,
+			},
+		});
+
+		expect(result.current.makeRuntime(panel.views[0]!).atelier.readOnly).toBe(
+			false,
+		);
+		expect(result.current.makeRuntime(panel.views[1]!).atelier.readOnly).toBe(
+			true,
+		);
+		expect(host.atelier.readOnly).toBe(false);
+	});
 });

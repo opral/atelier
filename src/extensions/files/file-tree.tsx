@@ -88,6 +88,7 @@ export type FileTreeProps = {
 	readonly openDirectories?: ReadonlySet<string>;
 	readonly reviewPaths?: ReadonlySet<string>;
 	readonly reviewStatuses?: ReadonlyMap<string, ReviewGitStatus>;
+	readonly reviewCounts?: ReadonlyMap<string, number>;
 	readonly onOpenDirectoriesChange?: (paths: ReadonlySet<string>) => void;
 	readonly onCreateCommit?: (
 		request: FileTreeCreateRequest,
@@ -213,6 +214,28 @@ const FILE_TREE_UNSAFE_CSS = `
 		background: currentColor;
 	}
 
+	[data-item-git-status='modified']
+		> [data-item-section='git']
+		> span[data-review-count] {
+		width: auto;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		border-radius: 5px;
+		background: color-mix(in srgb, currentColor 16%, transparent);
+		font-size: 0;
+		font-weight: 750;
+		line-height: 16px;
+		text-align: center;
+	}
+
+	[data-item-git-status='modified']
+		> [data-item-section='git']
+		> span[data-review-count]::before {
+		content: attr(data-review-count);
+		font-size: 9px;
+	}
+
 	[data-item-git-status='recreated'] {
 		--trees-item-git-status-color: var(--trees-git-renamed-color);
 	}
@@ -299,6 +322,7 @@ export function FileTree({
 	openDirectories,
 	reviewPaths,
 	reviewStatuses,
+	reviewCounts,
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
@@ -374,6 +398,7 @@ export function FileTree({
 	});
 
 	const modelRef = useRef<PierreFileTreeModel | null>(null);
+	const treeContainerRef = useRef<HTMLDivElement | null>(null);
 	const startedCreateRequestIdRef = useRef<number | null>(null);
 	const suppressSelectionOpenRef = useRef(false);
 	const suppressSelectionOpenForClickRef = useRef(false);
@@ -661,6 +686,49 @@ export function FileTree({
 		model.setGitStatus(reviewGitStatusEntries as GitStatusEntry[]);
 	}, [model, reviewGitStatusEntries, reviewGitStatusKey]);
 
+	const reviewCountKey = useMemo(
+		() =>
+			[...(reviewCounts ?? [])]
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([path, count]) => `${path}:${count}`)
+				.join("\0"),
+		[reviewCounts],
+	);
+	useEffect(() => {
+		const container = treeContainerRef.current;
+		if (!container) return;
+		let frame = 0;
+		let shadowObserver: MutationObserver | null = null;
+		const applyCounts = () => {
+			const host = container.querySelector<HTMLElement>("[aria-label='Files']");
+			const root = host?.shadowRoot;
+			if (!root) {
+				frame = window.requestAnimationFrame(applyCounts);
+				return;
+			}
+			for (const badge of root.querySelectorAll("[data-review-count]")) {
+				badge.removeAttribute("data-review-count");
+			}
+			for (const [path, count] of reviewCounts ?? []) {
+				const treePath = appPathToTreePath(path, false);
+				const item = root.querySelector(
+					`[data-type='item'][data-item-path='${CSS.escape(treePath)}']`,
+				);
+				const badge = item?.querySelector("[data-item-section='git'] > span");
+				if (badge) badge.setAttribute("data-review-count", String(count));
+			}
+			if (!shadowObserver) {
+				shadowObserver = new MutationObserver(applyCounts);
+				shadowObserver.observe(root, { childList: true, subtree: true });
+			}
+		};
+		frame = window.requestAnimationFrame(applyCounts);
+		return () => {
+			window.cancelAnimationFrame(frame);
+			shadowObserver?.disconnect();
+		};
+	}, [reviewCountKey, reviewCounts, treePathsKey]);
+
 	useEffect(() => {
 		for (const directoryTreePath of treeInput.directoryTreePaths) {
 			const item = toDirectoryHandle(model.getItem(directoryTreePath));
@@ -762,16 +830,20 @@ export function FileTree({
 	}
 
 	return (
-		<PierreFileTree
-			aria-label="Files"
-			data-suppress-item-focus-ring={suppressItemFocusRing ? "true" : undefined}
-			model={model}
-			onClick={(event) => handleTreeClick(event.nativeEvent)}
-			onClickCapture={handleTreeClickCapture}
-			onKeyDownCapture={() => setSuppressItemFocusRing(false)}
-			renderContextMenu={renderContextMenu}
-			style={treeHostStyle(isPanelFocused, variant)}
-		/>
+		<div ref={treeContainerRef} className="contents">
+			<PierreFileTree
+				aria-label="Files"
+				data-suppress-item-focus-ring={
+					suppressItemFocusRing ? "true" : undefined
+				}
+				model={model}
+				onClick={(event) => handleTreeClick(event.nativeEvent)}
+				onClickCapture={handleTreeClickCapture}
+				onKeyDownCapture={() => setSuppressItemFocusRing(false)}
+				renderContextMenu={renderContextMenu}
+				style={treeHostStyle(isPanelFocused, variant)}
+			/>
+		</div>
 	);
 }
 

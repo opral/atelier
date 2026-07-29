@@ -10,6 +10,7 @@ import {
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { V2LayoutShell } from "./layout-shell";
 import { createAtelier } from "../atelier-instance";
 import { createMemorySessionStateStore } from "../state-adapters";
@@ -117,17 +118,17 @@ async function renderTabbedShell(
 		.insertInto("lix_file")
 		.values([
 			{
-				id: "one",
+				id: fakeUuid("one"),
 				path: "/one.md",
 				data: new TextEncoder().encode("# One\n"),
 			},
 			{
-				id: "two",
+				id: fakeUuid("two"),
 				path: "/two.md",
 				data: new TextEncoder().encode("# Two\n"),
 			},
 			{
-				id: "three",
+				id: fakeUuid("three"),
 				path: "/three.md",
 				data: new TextEncoder().encode("# Three\n"),
 			},

@@ -7,6 +7,8 @@ import { handlePaste } from "./handle-paste";
 import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
+import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ensureTrailingNewline = (value: string) =>
 	value.endsWith("\n") ? value : `${value}\n`;
@@ -324,7 +326,7 @@ test("clicking a relative or fragment markdown link does not open externally", a
 // TipTap + Lix persistence image-input tests (no React)
 test("editor paste hook stores a clipboard image and persists its relative reference", async () => {
 	const lix = await openLix();
-	const fileId = "paste_image_asset";
+	const fileId = fakeUuid("paste_image_asset");
 	const sourceFilePath = "/docs/guide.md";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -392,7 +394,7 @@ test("editor paste hook stores a clipboard image and persists its relative refer
 
 test("dropping an external image prevents navigation and persists it at the drop position", async () => {
 	const lix = await openLix();
-	const fileId = "drop_image_asset";
+	const fileId = fakeUuid("drop_image_asset");
 	const sourceFilePath = "/docs/guides/guide.md";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -517,12 +519,12 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
-	const fileId = "paste_start_before";
+	const fileId = fakeUuid("paste_start_before");
 
 	// Seed initial file content
 	await qb(lix)
@@ -567,7 +569,7 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 
 test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_end_after";
+	const fileId = fakeUuid("paste_end_after");
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -606,7 +608,7 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 
 test("replace word selection with paste (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_replace_word";
+	const fileId = fakeUuid("paste_replace_word");
 	const initial = "Replace THIS TEXT here.";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -646,7 +648,7 @@ test("replace word selection with paste (TipTap + Lix)", async () => {
 
 test("replace entire document with paste (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_replace_all";
+	const fileId = fakeUuid("paste_replace_all");
 	const initial = "Old content\n\nTo be replaced";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -688,7 +690,7 @@ test("replace entire document with paste (TipTap + Lix)", async () => {
 
 test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_plain_multi";
+	const fileId = fakeUuid("paste_plain_multi");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -727,7 +729,7 @@ test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () 
 
 test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 	const lix = await openLix();
-	const fileId = "enter_split_ids_unique";
+	const fileId = fakeUuid("enter_split_ids_unique");
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -774,7 +776,7 @@ test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 
 test("does not persist editor transactions while persistence is suspended", async () => {
 	const lix = await openLix();
-	const fileId = "suspended_persistence";
+	const fileId = fakeUuid("suspended_persistence");
 	const initialMarkdown = "Agent result\n";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -815,7 +817,7 @@ test("does not persist editor transactions while persistence is suspended", asyn
 
 test("does not flush stale editor content when destroyed while suspended", async () => {
 	const lix = await openLix();
-	const fileId = "suspended_destroy";
+	const fileId = fakeUuid("suspended_destroy");
 	const externalMarkdown = "# Agent after\n";
 	await qb(lix)
 		.insertInto("lix_file")
@@ -842,7 +844,7 @@ test("does not flush stale editor content when destroyed while suspended", async
 
 test("stale in-flight autosave cannot overwrite a concurrent external write", async () => {
 	const lix = await openLix();
-	const fileId = "autosave_compare_and_swap";
+	const fileId = fakeUuid("autosave_compare_and_swap");
 	const initialMarkdown = "Initial\n";
 	const externalMarkdown = "External wins\n";
 	await qb(lix)
@@ -902,7 +904,7 @@ test("stale in-flight autosave cannot overwrite a concurrent external write", as
 
 test("two Enters create three persisted paragraphs in order", async () => {
 	const lix = await openLix();
-	const fileId = "enter_split_three";
+	const fileId = fakeUuid("enter_split_three");
 
 	// Seed with a single paragraph
 	await qb(lix)
@@ -947,7 +949,7 @@ test("two Enters create three persisted paragraphs in order", async () => {
 
 test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_crlf";
+	const fileId = fakeUuid("paste_crlf");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -982,7 +984,7 @@ test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 
 test("paste complex markdown with lists and code blocks (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_complex";
+	const fileId = fakeUuid("paste_complex");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1026,7 +1028,7 @@ test("paste complex markdown with lists and code blocks (TipTap + Lix)", async (
 
 test("paste inline formatting markdown (TipTap + Lix)", async () => {
 	const lix = await openLix();
-	const fileId = "paste_inline_format";
+	const fileId = fakeUuid("paste_inline_format");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1070,7 +1072,7 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
  */
 test("rapid Enter/type coalescing persists 3 paragraphs", async () => {
 	const lix = await openLix();
-	const fileId = "rapid_enter_coalesce";
+	const fileId = fakeUuid("rapid_enter_coalesce");
 
 	// Seed with a single paragraph
 	await qb(lix)
@@ -1126,7 +1128,7 @@ test("rapid Enter/type coalescing persists 3 paragraphs", async () => {
 
 test("delete removes the middle paragraph from persisted markdown", async () => {
 	const lix = await openLix();
-	const fileId = "delete_middle_cleanup";
+	const fileId = fakeUuid("delete_middle_cleanup");
 
 	// Seed with three paragraphs
 	await qb(lix)
@@ -1166,7 +1168,7 @@ test("delete removes the middle paragraph from persisted markdown", async () => 
 
 test("destroy flushes pending autosave for an existing file", async () => {
 	const lix = await openLix();
-	const fileId = "destroy_flush_pending_autosave";
+	const fileId = fakeUuid("destroy_flush_pending_autosave");
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -1199,7 +1201,7 @@ test("destroy flushes pending autosave for an existing file", async () => {
 
 test("destroy flushes pending autosave without recreating a deleted file", async () => {
 	const lix = await openLix();
-	const fileId = "destroy_cancel_pending_autosave";
+	const fileId = fakeUuid("destroy_cancel_pending_autosave");
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -1234,7 +1236,7 @@ test("destroy flushes pending autosave without recreating a deleted file", async
 
 test("editing a long markdown document does not truncate content below the edit point", async () => {
 	const lix = await openLix();
-	const fileId = "long_markdown_mid_edit";
+	const fileId = fakeUuid("long_markdown_mid_edit");
 	const initial = buildLongMarkdownRepro();
 
 	await qb(lix)

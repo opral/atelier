@@ -10,6 +10,7 @@ import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { CsvView } from "./index";
 
 type MockedDataEditorProps = {
@@ -106,7 +107,7 @@ test("updates when CSV file data changes in Lix", async () => {
 		}).length;
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_reactive";
+		const fileId = fakeUuid("file_csv_reactive");
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -181,7 +182,7 @@ test("persists cell edits to lix_file with the CSV editor origin", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_edit";
+		const fileId = fakeUuid("file_csv_edit");
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -245,7 +246,7 @@ test("deletes a row via the context menu", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_delete_row";
+		const fileId = fakeUuid("file_csv_delete_row");
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -310,7 +311,7 @@ test("renames a column via double-clicking the header", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_rename_column";
+		const fileId = fakeUuid("file_csv_rename_column");
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -375,7 +376,7 @@ test("does not edit cells when the view is read only", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_read_only";
+		const fileId = fakeUuid("file_csv_read_only");
 		const csvText = "name,value\nalpha,1\n";
 
 		await qb(lix)
@@ -417,7 +418,7 @@ test("creates a seeded table in an empty CSV file", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_empty_seed";
+		const fileId = fakeUuid("file_csv_empty_seed");
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -472,7 +473,7 @@ test("refreshes the grid layout when an existing CSV view becomes active", async
 	const dispatchEvent = vi.spyOn(window, "dispatchEvent");
 	let utils: ReturnType<typeof render> | undefined;
 	try {
-		const fileId = "file_csv_activation";
+		const fileId = fakeUuid("file_csv_activation");
 
 		await qb(lix)
 			.insertInto("lix_file")
@@ -531,7 +532,7 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_csv_snapshot",
+				id: fakeUuid("file_csv_snapshot"),
 				path: "/snapshot.csv",
 				data: new TextEncoder().encode("name,value\nsnapshot,1"),
 			})
@@ -540,7 +541,7 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("name,value\nhead,2") })
-			.where("id", "=", "file_csv_snapshot")
+			.where("id", "=", fakeUuid("file_csv_snapshot"))
 			.execute();
 
 		await act(async () => {
@@ -548,7 +549,7 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<CsvView
-							fileId="file_csv_snapshot"
+							fileId={fakeUuid("file_csv_snapshot")}
 							filePath="/snapshot.csv"
 							afterCommitId={snapshotCommitId}
 							isActiveView
@@ -585,7 +586,7 @@ test("renders a read-only CSV diff from beforeCommitId to HEAD", async () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_csv_head_diff",
+				id: fakeUuid("file_csv_head_diff"),
 				path: "/head-diff.csv",
 				data: new TextEncoder().encode("name,value\nbefore,1"),
 			})
@@ -594,7 +595,7 @@ test("renders a read-only CSV diff from beforeCommitId to HEAD", async () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("name,value\nhead,2") })
-			.where("id", "=", "file_csv_head_diff")
+			.where("id", "=", fakeUuid("file_csv_head_diff"))
 			.execute();
 
 		await act(async () => {
@@ -602,7 +603,7 @@ test("renders a read-only CSV diff from beforeCommitId to HEAD", async () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<CsvView
-							fileId="file_csv_head_diff"
+							fileId={fakeUuid("file_csv_head_diff")}
 							filePath="/head-diff.csv"
 							beforeCommitId={beforeCommitId}
 							isActiveView
@@ -635,7 +636,7 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_csv_unchanged_head_diff",
+				id: fakeUuid("file_csv_unchanged_head_diff"),
 				path: "/unchanged-head-diff.csv",
 				data: new TextEncoder().encode("name,value\nstable,1"),
 			})
@@ -643,7 +644,7 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_csv_other_head_diff",
+				id: fakeUuid("file_csv_other_head_diff"),
 				path: "/other-head-diff.csv",
 				data: new TextEncoder().encode("name,value\nbefore,1"),
 			})
@@ -652,7 +653,7 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("name,value\nafter,2") })
-			.where("id", "=", "file_csv_other_head_diff")
+			.where("id", "=", fakeUuid("file_csv_other_head_diff"))
 			.execute();
 
 		await act(async () => {
@@ -660,7 +661,7 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<CsvView
-							fileId="file_csv_unchanged_head_diff"
+							fileId={fakeUuid("file_csv_unchanged_head_diff")}
 							filePath="/unchanged-head-diff.csv"
 							beforeCommitId={beforeCommitId}
 							isActiveView

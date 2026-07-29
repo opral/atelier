@@ -3,8 +3,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { MarkdownView } from "./index";
 import { qb } from "@/lib/lix-kysely";
+import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 
 describe("MarkdownView", () => {
@@ -19,7 +21,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_1",
+				id: fakeUuid("file_1"),
 				path: "/docs/readme.md",
 				data: new TextEncoder().encode("# Hello world"),
 			})
@@ -29,8 +31,8 @@ describe("MarkdownView", () => {
 			.insertInto("lix_key_value_by_branch")
 			.values({
 				key: "atelier_active_file_id",
-				value: "file_1",
-				lixcol_branch_id: "global",
+				value: fakeUuid("file_1"),
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			})
@@ -41,7 +43,10 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId="file_1" filePath="/docs/readme.md" />
+						<MarkdownView
+							fileId={fakeUuid("file_1")}
+							filePath="/docs/readme.md"
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -60,7 +65,7 @@ describe("MarkdownView", () => {
 				.where("key", "=", "atelier_active_file_id")
 				.select(["value"])
 				.execute();
-			expect(rows[0]?.value).toBe("file_1");
+			expect(rows[0]?.value).toBe(fakeUuid("file_1"));
 		});
 
 		await act(async () => {
@@ -68,12 +73,12 @@ describe("MarkdownView", () => {
 		});
 	});
 
-	test("hides the formatting toolbar in host read-only mode", async () => {
+	test("keeps the formatting toolbar visible but disabled in host read-only mode", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_read_only",
+				id: fakeUuid("file_read_only"),
 				path: "/read-only.md",
 				data: new TextEncoder().encode("# Public document"),
 			})
@@ -85,7 +90,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_read_only"
+							fileId={fakeUuid("file_read_only")}
 							filePath="/read-only.md"
 							readOnly
 						/>
@@ -102,8 +107,9 @@ describe("MarkdownView", () => {
 			);
 		});
 		expect(
-			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
-		).not.toBeInTheDocument();
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 
 		await act(async () => {
 			utils?.unmount();
@@ -117,14 +123,14 @@ describe("MarkdownView", () => {
 			.insertInto("lix_file")
 			.values([
 				{
-					id: "file_snapshot",
+					id: fakeUuid("file_snapshot"),
 					path: "/snapshot.md",
 					data: new TextEncoder().encode(
 						"# Snapshot version\n\n![Historical asset](asset.png)",
 					),
 				},
 				{
-					id: "file_snapshot_asset",
+					id: fakeUuid("file_snapshot_asset"),
 					path: "/asset.png",
 					data: new TextEncoder().encode("historical asset bytes"),
 				},
@@ -134,12 +140,12 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("# Head version") })
-			.where("id", "=", "file_snapshot")
+			.where("id", "=", fakeUuid("file_snapshot"))
 			.execute();
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("current asset bytes") })
-			.where("id", "=", "file_snapshot_asset")
+			.where("id", "=", fakeUuid("file_snapshot_asset"))
 			.execute();
 		let snapshotAssetBlob: Blob | undefined;
 		const createObjectUrl = vi
@@ -158,7 +164,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_snapshot"
+							fileId={fakeUuid("file_snapshot")}
 							filePath="/snapshot.md"
 							afterCommitId={snapshotCommitId}
 							isActiveView
@@ -174,6 +180,10 @@ describe("MarkdownView", () => {
 		});
 		expect(utils!.container).not.toHaveTextContent("Head version");
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		await waitFor(() => {
@@ -205,7 +215,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_head_diff",
+				id: fakeUuid("file_head_diff"),
 				path: "/head-diff.md",
 				data: new TextEncoder().encode("# Before version"),
 			})
@@ -214,7 +224,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("# Head version") })
-			.where("id", "=", "file_head_diff")
+			.where("id", "=", fakeUuid("file_head_diff"))
 			.execute();
 
 		let utils: ReturnType<typeof render> | undefined;
@@ -223,7 +233,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_head_diff"
+							fileId={fakeUuid("file_head_diff")}
 							filePath="/head-diff.md"
 							beforeCommitId={beforeCommitId}
 							isActiveView
@@ -247,6 +257,13 @@ describe("MarkdownView", () => {
 			"contenteditable",
 			"false",
 		);
+		expect(
+			reviewEditor.querySelector('[data-review-active="true"]'),
+		).toBeNull();
+		expect(
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();
@@ -261,12 +278,76 @@ describe("MarkdownView", () => {
 		await lix.close();
 	});
 
+	test("refreshes HEAD when a mounted live view becomes a historical diff", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_live_to_head_diff");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/live-to-head-diff.md",
+				data: new TextEncoder().encode("# Before version"),
+			})
+			.execute();
+		const beforeCommitId = await activeCommitId(lix);
+
+		const renderMarkdown = (revision?: { beforeCommitId: string }) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath="/live-to-head-diff.md"
+						beforeCommitId={revision?.beforeCommitId}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(renderMarkdown());
+		});
+		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
+			"Before version",
+		);
+
+		await act(async () => {
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ data: new TextEncoder().encode("# Fresh HEAD version") })
+				.where("id", "=", fileId)
+				.execute();
+		});
+		await waitFor(() => {
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+				"Fresh HEAD version",
+			);
+		});
+
+		await act(async () => {
+			utils?.rerender(renderMarkdown({ beforeCommitId }));
+		});
+		const reviewEditor = await screen.findByTestId("markdown-review-editor");
+		await waitFor(() => {
+			expect(reviewEditor).toHaveTextContent("Fresh HEAD version");
+			expect(
+				reviewEditor.querySelector('[data-review-status="added"]'),
+			).toHaveTextContent("Fresh HEAD");
+		});
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		await lix.close();
+	});
+
 	test("does not mark unchanged before-to-HEAD files as fully added", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_unchanged_head_diff",
+				id: fakeUuid("file_unchanged_head_diff"),
 				path: "/unchanged-head-diff.md",
 				data: new TextEncoder().encode("# Stable version"),
 			})
@@ -274,7 +355,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_other_head_diff",
+				id: fakeUuid("file_other_head_diff"),
 				path: "/other-head-diff.md",
 				data: new TextEncoder().encode("# Other before"),
 			})
@@ -283,7 +364,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("# Other after") })
-			.where("id", "=", "file_other_head_diff")
+			.where("id", "=", fakeUuid("file_other_head_diff"))
 			.execute();
 
 		let utils: ReturnType<typeof render> | undefined;
@@ -292,7 +373,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_unchanged_head_diff"
+							fileId={fakeUuid("file_unchanged_head_diff")}
 							filePath="/unchanged-head-diff.md"
 							beforeCommitId={beforeCommitId}
 							isActiveView
@@ -324,7 +405,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_autosave_hint",
+				id: fakeUuid("file_autosave_hint"),
 				path: "/docs/autosave.md",
 				data: new TextEncoder().encode("# Autosave"),
 			})
@@ -336,7 +417,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_autosave_hint"
+							fileId={fakeUuid("file_autosave_hint")}
 							filePath="/docs/autosave.md"
 							isActiveView
 							isPanelFocused
@@ -377,7 +458,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_markdown",
+				id: fakeUuid("file_markdown"),
 				path: "/docs/guide.markdown",
 				data: new TextEncoder().encode("# Guide"),
 			})
@@ -389,7 +470,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_markdown"
+							fileId={fakeUuid("file_markdown")}
 							filePath="/docs/guide.markdown"
 						/>
 					</Suspense>
@@ -409,7 +490,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_uppercase",
+				id: fakeUuid("file_uppercase"),
 				path: "/docs/README.MD",
 				data: new TextEncoder().encode("# Readme"),
 			})
@@ -420,7 +501,10 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId="file_uppercase" filePath="/docs/README.MD" />
+						<MarkdownView
+							fileId={fakeUuid("file_uppercase")}
+							filePath="/docs/README.MD"
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -438,7 +522,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_csv",
+				id: fakeUuid("file_csv"),
 				path: "/data.csv",
 				data: new TextEncoder().encode("name,value\nalpha,1"),
 			})
@@ -449,7 +533,7 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId="file_csv" filePath="/data.csv" />
+						<MarkdownView fileId={fakeUuid("file_csv")} filePath="/data.csv" />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -472,7 +556,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_csv",
+				id: fakeUuid("file_csv"),
 				path: "/data.csv",
 				data: new TextEncoder().encode("name,value\nalpha,1"),
 			})
@@ -482,7 +566,7 @@ describe("MarkdownView", () => {
 			.values({
 				key: "atelier_active_file_id",
 				value: "existing_markdown",
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			})
@@ -493,7 +577,11 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId="file_csv" filePath="/data.csv" isActiveView />
+						<MarkdownView
+							fileId={fakeUuid("file_csv")}
+							filePath="/data.csv"
+							isActiveView
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -524,7 +612,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_alpha",
+				id: fakeUuid("file_alpha"),
 				path: "/alpha.md",
 				data: new TextEncoder().encode("# Alpha"),
 			})
@@ -533,7 +621,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_beta",
+				id: fakeUuid("file_beta"),
 				path: "/beta.md",
 				data: new TextEncoder().encode("# Beta"),
 			})
@@ -544,8 +632,8 @@ describe("MarkdownView", () => {
 			.insertInto("lix_key_value_by_branch")
 			.values({
 				key: "atelier_active_file_id",
-				value: "file_alpha",
-				lixcol_branch_id: "global",
+				value: fakeUuid("file_alpha"),
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			})
@@ -556,7 +644,11 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId="file_beta" filePath="/beta.md" isActiveView />
+						<MarkdownView
+							fileId={fakeUuid("file_beta")}
+							filePath="/beta.md"
+							isActiveView
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
@@ -571,7 +663,7 @@ describe("MarkdownView", () => {
 				.select(["value"])
 				.where("key", "=", "atelier_active_file_id")
 				.executeTakeFirst();
-			expect(record?.value).toBe("file_alpha");
+			expect(record?.value).toBe(fakeUuid("file_alpha"));
 		});
 
 		await act(async () => {
@@ -585,7 +677,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_review_startup",
+				id: fakeUuid("file_review_startup"),
 				path: "/review-startup.md",
 				data: new TextEncoder().encode("# Before"),
 			})
@@ -598,7 +690,7 @@ describe("MarkdownView", () => {
 			<LixProvider lix={lix}>
 				<Suspense fallback={null}>
 					<MarkdownView
-						fileId="file_review_startup"
+						fileId={fakeUuid("file_review_startup")}
 						filePath="/review-startup.md"
 						activeBranchId={activeBranchId}
 						resolvedReviewIds={resolvedReviewIds}
@@ -649,7 +741,7 @@ describe("MarkdownView", () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ data: new TextEncoder().encode("# After") })
-				.where("id", "=", "file_review_startup")
+				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
 		});
 		const afterCommitId = await activeCommitId(lix);
@@ -712,7 +804,7 @@ describe("MarkdownView", () => {
 		const persisted = await qb(lix)
 			.selectFrom("lix_file")
 			.select("data")
-			.where("id", "=", "file_review_startup")
+			.where("id", "=", fakeUuid("file_review_startup"))
 			.executeTakeFirstOrThrow();
 		expect(new TextDecoder().decode(persisted.data)).toBe("# After");
 	});
@@ -723,7 +815,7 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "file_deleted_historical",
+				id: fakeUuid("file_deleted_historical"),
 				path: "/deleted.md",
 				data: new TextEncoder().encode("# Before"),
 			})
@@ -732,12 +824,12 @@ describe("MarkdownView", () => {
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ data: new TextEncoder().encode("# After") })
-			.where("id", "=", "file_deleted_historical")
+			.where("id", "=", fakeUuid("file_deleted_historical"))
 			.execute();
 		const afterCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.deleteFrom("lix_file")
-			.where("id", "=", "file_deleted_historical")
+			.where("id", "=", fakeUuid("file_deleted_historical"))
 			.execute();
 
 		await act(async () => {
@@ -745,7 +837,7 @@ describe("MarkdownView", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<MarkdownView
-							fileId="file_deleted_historical"
+							fileId={fakeUuid("file_deleted_historical")}
 							filePath="/deleted.md"
 							isActiveView
 							isPanelFocused
@@ -784,7 +876,7 @@ describe("MarkdownView", () => {
 			utils = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<MarkdownView fileId="missing_file" />
+						<MarkdownView fileId={fakeUuid("missing_file")} />
 					</Suspense>
 				</LixProvider>,
 			);

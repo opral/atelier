@@ -6,17 +6,10 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
-import {
-	Check,
-	CheckCheck,
-	ChevronLeft,
-	ChevronRight,
-	CornerDownLeft,
-	FileText,
-	RotateCcw,
-} from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 import { useLix } from "@/lib/lix-react";
 import { createEditor } from "../editor/create-editor";
 import type { MarkdownWorkspaceFileOpener } from "../editor/markdown-asset";
@@ -101,7 +94,6 @@ export function MarkdownReviewEditor({
 		: 0;
 	const [ownedEditor, setOwnedEditor] = useState<Editor | null>(null);
 	const editor = externalEditor ?? ownedEditor;
-	const fileName = workspaceFileName(sourceFilePath);
 	const completionSucceeded = useRef(false);
 
 	useEffect(() => {
@@ -162,6 +154,8 @@ export function MarkdownReviewEditor({
 		setReviewEditorDocument(editor, displayDocument);
 	}, [displayDocument, editor]);
 
+	const [activeChangeElement, setActiveChangeElement] =
+		useState<HTMLElement | null>(null);
 	useEffect(() => {
 		if (!editor) return;
 		const changedElements = Array.from(
@@ -170,6 +164,7 @@ export function MarkdownReviewEditor({
 		let firstActive: HTMLElement | undefined;
 		for (const element of changedElements) {
 			const active =
+				reviewEnabled &&
 				activeChangeId !== null &&
 				element.dataset.reviewChangeId === activeChangeId;
 			if (active) {
@@ -179,8 +174,9 @@ export function MarkdownReviewEditor({
 				delete element.dataset.reviewActive;
 			}
 		}
+		setActiveChangeElement(firstActive ?? null);
 		firstActive?.scrollIntoView?.({ block: "center", behavior: "smooth" });
-	}, [activeChangeId, editor]);
+	}, [activeChangeId, displayDocument, editor, reviewEnabled]);
 
 	useEffect(() => {
 		if (!editor || !reviewEnabled) return;
@@ -215,15 +211,10 @@ export function MarkdownReviewEditor({
 	);
 
 	const decide = useCallback(
-		async (decision: MarkdownReviewDecision, allPendingChanges = false) => {
+		async (decision: MarkdownReviewDecision) => {
 			if (!activeChange || busy || !editor) return;
 			const nextDecisions = new Map(decisions);
-			const changesToDecide = allPendingChanges
-				? pendingChanges
-				: [activeChange];
-			for (const change of changesToDecide) {
-				nextDecisions.set(change.id, decision);
-			}
+			nextDecisions.set(activeChange.id, decision);
 			const remaining = reviewDocument.changes.filter(
 				(change) => !nextDecisions.has(change.id),
 			);
@@ -292,7 +283,6 @@ export function MarkdownReviewEditor({
 			onCompletionFailure,
 			onCompletionStart,
 			onCompletionSuccess,
-			pendingChanges,
 			reviewDocument,
 		],
 	);
@@ -312,11 +302,13 @@ export function MarkdownReviewEditor({
 				? event.metaKey && !event.ctrlKey
 				: event.ctrlKey && !event.metaKey;
 			const hasCommandModifier = event.metaKey || event.ctrlKey;
-			if (usesPrimaryModifier && event.key === "Enter") {
+			// Plain ⌘⏎ belongs to the diff-mode float (Keep all, workspace-wide).
+			// ⇧⌘⏎ keeps just the active change.
+			if (usesPrimaryModifier && event.key === "Enter" && event.shiftKey) {
 				event.preventDefault();
 				event.stopPropagation();
 				event.stopImmediatePropagation();
-				void decide("keep", !event.shiftKey && pendingChanges.length > 1);
+				void decide("keep");
 				return;
 			}
 			if (event.shiftKey) return;
@@ -356,21 +348,15 @@ export function MarkdownReviewEditor({
 					/>
 				</div>
 			)}
-			{reviewEnabled && activeChange ? (
-				<MarkdownChangeReviewControls
-					fileName={fileName}
+			{reviewEnabled && activeChange && activeChangeElement ? (
+				<InlineChangeReviewChip
+					anchor={activeChangeElement}
 					activeOrdinal={activeOrdinal}
 					total={reviewDocument.changes.length}
-					remainingCount={pendingChanges.length}
-					canNavigate={pendingChanges.length > 1}
 					busy={busy}
 					error={error}
-					onPrevious={() => navigate(-1)}
-					onNext={() => navigate(1)}
 					onUndo={() => void decide("undo")}
-					onKeepAll={() => void decide("keep", true)}
 					onKeep={() => void decide("keep")}
-					showKeepAll={pendingChanges.length > 1}
 				/>
 			) : null}
 		</>
@@ -393,137 +379,110 @@ function setReviewEditorDocument(
 		.run();
 }
 
-function MarkdownChangeReviewControls({
-	fileName,
+/**
+ * S2 inline decision chip: change-level verbs live on the change itself,
+ * where their scope is literally visible. Anchored above the active change,
+ * repositioned on scroll/resize, hidden while the anchor is off-screen.
+ */
+function InlineChangeReviewChip({
+	anchor,
 	activeOrdinal,
 	total,
-	remainingCount,
-	canNavigate,
 	busy,
 	error,
-	onPrevious,
-	onNext,
 	onUndo,
-	onKeepAll,
 	onKeep,
-	showKeepAll,
 }: {
-	readonly fileName: string;
+	readonly anchor: HTMLElement;
 	readonly activeOrdinal: number;
 	readonly total: number;
-	readonly remainingCount: number;
-	readonly canNavigate: boolean;
 	readonly busy: boolean;
 	readonly error: string | null;
-	readonly onPrevious: () => void;
-	readonly onNext: () => void;
 	readonly onUndo: () => void;
-	readonly onKeepAll: () => void;
 	readonly onKeep: () => void;
-	readonly showKeepAll: boolean;
 }) {
-	const primaryShortcut = isMacPlatform() ? "Meta+Enter" : "Control+Enter";
+	const [placement, setPlacement] = useState<{
+		readonly top: number;
+		readonly right: number;
+	} | null>(null);
+
+	useLayoutEffect(() => {
+		let frame = 0;
+		const update = () => {
+			const rect = anchor.getBoundingClientRect();
+			// Hide only when clearly scrolled out of view. jsdom reports all-zero
+			// rects, which must still count as visible.
+			const offScreen = rect.bottom < 0 || rect.top > window.innerHeight;
+			setPlacement(
+				offScreen
+					? null
+					: {
+							top: Math.max(rect.top - 30, 4),
+							right: Math.max(window.innerWidth - rect.right, 4),
+						},
+			);
+		};
+		const scheduleUpdate = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(update);
+		};
+		update();
+		window.addEventListener("scroll", scheduleUpdate, {
+			capture: true,
+			passive: true,
+		});
+		window.addEventListener("resize", scheduleUpdate);
+		const observer = new ResizeObserver(scheduleUpdate);
+		observer.observe(anchor);
+		return () => {
+			cancelAnimationFrame(frame);
+			window.removeEventListener("scroll", scheduleUpdate, { capture: true });
+			window.removeEventListener("resize", scheduleUpdate);
+			observer.disconnect();
+		};
+	}, [anchor]);
+
+	if (!placement) return null;
 	const individualShortcut = isMacPlatform()
 		? "Meta+Shift+Enter"
 		: "Control+Shift+Enter";
-
-	return (
-		<div className="markdown-change-review-wrap">
+	return createPortal(
+		<div
+			className="markdown-inline-review-chip"
+			style={{ top: placement.top, right: placement.right }}
+			role="group"
+			aria-label={`Review change ${activeOrdinal} of ${total}`}
+		>
 			{error ? (
-				<div className="markdown-change-review-error" role="alert">
+				<span className="markdown-inline-review-chip-error" role="alert">
 					{error}
-				</div>
+				</span>
 			) : null}
-			<div
-				className="markdown-change-review-actions"
-				role="group"
-				aria-label={`Review change ${activeOrdinal} of ${total}, ${remainingCount} remaining`}
+			<button
+				type="button"
+				aria-label="Undo change"
+				data-attr="review-change-undo"
+				disabled={busy}
+				onClick={onUndo}
 			>
-				<div className="markdown-change-review-nav">
-					<button
-						type="button"
-						className="markdown-change-review-icon-button"
-						aria-label="Previous change"
-						disabled={!canNavigate || busy}
-						onClick={onPrevious}
-					>
-						<ChevronLeft aria-hidden />
-					</button>
-					<span className="markdown-change-review-file">
-						<FileText aria-hidden />
-						<strong>{fileName}</strong>
-					</span>
-					<span className="markdown-change-review-count">
-						{activeOrdinal} of {total}
-					</span>
-					<button
-						type="button"
-						className="markdown-change-review-icon-button"
-						aria-label="Next change"
-						disabled={!canNavigate || busy}
-						onClick={onNext}
-					>
-						<ChevronRight aria-hidden />
-					</button>
-				</div>
-				<div className="markdown-change-review-divider" />
-				<div className="markdown-change-review-decisions">
-					<button
-						type="button"
-						className="markdown-change-review-button markdown-change-review-button-undo"
-						aria-label="Undo change"
-						data-attr="review-change-undo"
-						disabled={busy}
-						onClick={onUndo}
-					>
-						<RotateCcw aria-hidden />
-						Undo
-						<kbd className="markdown-change-review-keycap">⌫</kbd>
-					</button>
-					<button
-						type="button"
-						className={`markdown-change-review-button markdown-change-review-button-keep${showKeepAll ? "" : " markdown-change-review-button-primary"}`}
-						aria-label={showKeepAll ? "Keep current change" : "Keep change"}
-						aria-keyshortcuts={
-							showKeepAll ? individualShortcut : primaryShortcut
-						}
-						data-attr="review-change-keep"
-						disabled={busy}
-						onClick={onKeep}
-					>
-						<Check aria-hidden />
-						{busy ? "Saving…" : showKeepAll ? "Keep this" : "Keep"}
-						<ReviewShortcutKeycap shift={showKeepAll} />
-					</button>
-					{showKeepAll ? (
-						<button
-							type="button"
-							className="markdown-change-review-button markdown-change-review-button-keep-all markdown-change-review-button-primary"
-							aria-label={`Keep all ${remainingCount} remaining changes`}
-							aria-keyshortcuts={primaryShortcut}
-							data-attr="review-change-keep-all"
-							disabled={busy}
-							onClick={onKeepAll}
-						>
-							<CheckCheck aria-hidden />
-							{busy ? "Saving…" : "Keep all"}
-							<ReviewShortcutKeycap />
-						</button>
-					) : null}
-				</div>
-			</div>
-		</div>
-	);
-}
-
-function ReviewShortcutKeycap({ shift = false }: { readonly shift?: boolean }) {
-	const isMac = isMacPlatform();
-	return (
-		<kbd className="markdown-change-review-keycap">
-			{shift ? <span>{isMac ? "⇧" : "Shift"}</span> : null}
-			<span>{isMac ? "⌘" : "Ctrl"}</span>
-			<CornerDownLeft aria-hidden />
-		</kbd>
+				<RotateCcw aria-hidden />
+				Undo
+			</button>
+			<span className="markdown-inline-review-chip-divider" />
+			<button
+				type="button"
+				aria-label="Keep change"
+				aria-keyshortcuts={individualShortcut}
+				data-attr="review-change-keep"
+				className="markdown-inline-review-chip-keep"
+				disabled={busy}
+				onClick={onKeep}
+			>
+				<Check aria-hidden />
+				{busy ? "Saving…" : "Keep"}
+			</button>
+		</div>,
+		document.body,
 	);
 }
 
@@ -539,9 +498,4 @@ function isReviewShortcutBlockedTarget(target: EventTarget | null): boolean {
 function isMacPlatform(): boolean {
 	if (typeof navigator === "undefined") return true;
 	return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-}
-
-function workspaceFileName(path: string): string {
-	const segments = path.split("/").filter(Boolean);
-	return segments.at(-1) ?? path;
 }

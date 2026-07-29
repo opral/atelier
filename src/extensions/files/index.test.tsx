@@ -10,6 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { Lix } from "@lix-js/sdk";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import {
@@ -57,7 +58,7 @@ describe("FilesView", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "readme",
+				id: fakeUuid("readme"),
 				path: "/README.md",
 				data: new TextEncoder().encode("# README\n"),
 			})
@@ -86,18 +87,18 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ id: "docs", path: "/docs/" })
+			.values({ id: fakeUuid("docs"), path: "/docs" })
 			.execute();
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
 				{
-					id: "readme",
+					id: fakeUuid("readme"),
 					path: "/README.md",
 					data: new TextEncoder().encode("# README\n"),
 				},
 				{
-					id: "guide",
+					id: fakeUuid("guide"),
 					path: "/docs/guide.md",
 					data: new TextEncoder().encode("# Guide\n"),
 				},
@@ -295,7 +296,7 @@ describe("FilesView", () => {
 				await qb(lix)
 					.selectFrom("lix_directory")
 					.select("path")
-					.where("path", "=", "/planning/")
+					.where("path", "=", "/planning")
 					.execute(),
 			).toHaveLength(1);
 		});
@@ -480,7 +481,7 @@ describe("FilesView", () => {
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "readme",
+				activeFileId: fakeUuid("readme"),
 				activeFilePath: "/README.md",
 				isActiveView: false,
 				isPanelFocused: true,
@@ -494,14 +495,14 @@ describe("FilesView", () => {
 		});
 
 		fireDeleteShortcut();
-		expect(await selectFileById(lix, "readme")).toBeDefined();
+		expect(await selectFileById(lix, fakeUuid("readme"))).toBeDefined();
 
 		await act(async () => {
 			view?.rerender(
 				<FilesViewFixture
 					lix={lix}
 					context={{
-						activeFileId: "readme",
+						activeFileId: fakeUuid("readme"),
 						activeFilePath: "/README.md",
 						isActiveView: true,
 						isPanelFocused: true,
@@ -511,7 +512,7 @@ describe("FilesView", () => {
 		});
 		fireDeleteShortcut();
 		await waitFor(async () => {
-			expect(await selectFileById(lix, "readme")).toBeUndefined();
+			expect(await selectFileById(lix, fakeUuid("readme"))).toBeUndefined();
 		});
 
 		await act(async () => view?.unmount());
@@ -542,7 +543,7 @@ describe("FilesView", () => {
 		fireEvent.click(getFilesTreeContextMenuButton(menu, "Delete"));
 
 		await waitFor(async () => {
-			expect(await selectFileById(lix, "readme")).toBeUndefined();
+			expect(await selectFileById(lix, fakeUuid("readme"))).toBeUndefined();
 		});
 
 		await act(async () => view?.unmount());
@@ -553,14 +554,14 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ id: "docs", path: "/docs/" })
+			.values({ id: fakeUuid("docs"), path: "/docs" })
 			.execute();
-		await insertFile(lix, "guide", "/docs/guide.md", "# Guide\n");
+		await insertFile(lix, fakeUuid("guide"), "/docs/guide.md", "# Guide\n");
 		const closeFileViews = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "guide",
+				activeFileId: fakeUuid("guide"),
 				activeFilePath: "/docs/guide.md",
 				closeFileViews,
 				isActiveView: true,
@@ -587,10 +588,10 @@ describe("FilesView", () => {
 					.where("path", "=", "/docs/")
 					.executeTakeFirst(),
 			).toBeUndefined();
-			expect(await selectFileById(lix, "guide")).toBeUndefined();
+			expect(await selectFileById(lix, fakeUuid("guide"))).toBeUndefined();
 		});
 		expect(closeFileViews).toHaveBeenCalledWith({
-			fileId: "guide",
+			fileId: fakeUuid("guide"),
 			filePath: "/docs/guide.md",
 		});
 
@@ -602,7 +603,7 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ id: "docs", path: "/docs/" })
+			.values({ id: fakeUuid("docs"), path: "/docs" })
 			.execute();
 		await insertReadme(lix);
 		let view: ReturnType<typeof render> | undefined;
@@ -638,16 +639,16 @@ describe("FilesView", () => {
 		await qb(lix)
 			.insertInto("lix_directory")
 			.values([
-				{ id: "archive", path: "/archive/" },
-				{ id: "docs", path: "/docs/" },
+				{ id: fakeUuid("archive"), path: "/archive" },
+				{ id: fakeUuid("docs"), path: "/docs" },
 			])
 			.execute();
-		await insertFile(lix, "guide", "/docs/guide.md", "# Guide\n");
+		await insertFile(lix, fakeUuid("guide"), "/docs/guide.md", "# Guide\n");
 		const openFile = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "guide",
+				activeFileId: fakeUuid("guide"),
 				activeFilePath: "/docs/guide.md",
 				isActiveView: true,
 				isPanelFocused: true,
@@ -666,7 +667,7 @@ describe("FilesView", () => {
 				await qb(lix)
 					.selectFrom("lix_directory")
 					.select("path")
-					.where("path", "=", "/archive/docs/")
+					.where("path", "=", "/archive/docs")
 					.executeTakeFirst(),
 			).toBeDefined();
 			expect(
@@ -678,7 +679,7 @@ describe("FilesView", () => {
 			).toBeDefined();
 		});
 		expect(openFile).toHaveBeenCalledWith({
-			fileId: "guide",
+			fileId: fakeUuid("guide"),
 			filePath: "/archive/docs/guide.md",
 			focus: false,
 			panel: "central",
@@ -694,7 +695,7 @@ describe("FilesView", () => {
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "readme",
+				activeFileId: fakeUuid("readme"),
 				activeFilePath: "/README.md",
 				isActiveView: true,
 				isPanelFocused: true,
@@ -716,7 +717,7 @@ describe("FilesView", () => {
 			);
 		});
 		fireDeleteShortcut();
-		expect(await selectFileById(lix, "readme")).toBeDefined();
+		expect(await selectFileById(lix, fakeUuid("readme"))).toBeDefined();
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -725,11 +726,11 @@ describe("FilesView", () => {
 	test("restores the active selection after deleting a local selection", async () => {
 		const lix = await openLix();
 		await insertReadme(lix);
-		await insertFile(lix, "second", "/second.md", "# Second\n");
+		await insertFile(lix, fakeUuid("second"), "/second.md", "# Second\n");
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "readme",
+				activeFileId: fakeUuid("readme"),
 				activeFilePath: "/README.md",
 				isActiveView: true,
 				isPanelFocused: true,
@@ -752,7 +753,7 @@ describe("FilesView", () => {
 
 		fireDeleteShortcut();
 		await waitFor(async () => {
-			expect(await selectFileById(lix, "second")).toBeUndefined();
+			expect(await selectFileById(lix, fakeUuid("second"))).toBeUndefined();
 		});
 		await waitFor(() => {
 			expect(getFilesTreeItem("README.md")).toHaveAttribute(
@@ -771,7 +772,7 @@ describe("FilesView", () => {
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "readme",
+				activeFileId: fakeUuid("readme"),
 				activeFilePath: "/README.md",
 				isActiveView: true,
 				isPanelFocused: true,
@@ -806,7 +807,7 @@ describe("FilesView", () => {
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "readme",
+				activeFileId: fakeUuid("readme"),
 				activeFilePath: "/README.md",
 				isActiveView: true,
 				isPanelFocused: true,
@@ -847,15 +848,15 @@ describe("FilesView", () => {
 	test("drops a local directory selection when the active file changes", async () => {
 		const lix = await openLix();
 		await insertReadme(lix);
-		await insertFile(lix, "second", "/second.md", "# Second\n");
+		await insertFile(lix, fakeUuid("second"), "/second.md", "# Second\n");
 		await qb(lix)
 			.insertInto("lix_directory")
-			.values({ path: "/notes/" } as any)
+			.values({ path: "/notes" } as any)
 			.execute();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, {
-				activeFileId: "readme",
+				activeFileId: fakeUuid("readme"),
 				activeFilePath: "/README.md",
 				isActiveView: true,
 				isPanelFocused: true,
@@ -881,7 +882,7 @@ describe("FilesView", () => {
 				<FilesViewFixture
 					lix={lix}
 					context={{
-						activeFileId: "second",
+						activeFileId: fakeUuid("second"),
 						activeFilePath: "/second.md",
 						isActiveView: true,
 						isPanelFocused: true,
@@ -934,7 +935,7 @@ describe("FilesView", () => {
 		fireEvent.click(getFilesTreeItem("README.md"));
 		await waitFor(() => {
 			expect(openFile).toHaveBeenCalledWith({
-				fileId: "readme",
+				fileId: fakeUuid("readme"),
 				filePath: "/README.md",
 				focus: false,
 				panel: "central",
@@ -983,8 +984,8 @@ describe("FilesView", () => {
 		]);
 		const openFile = vi.fn();
 		const resolveFileForInteraction = vi.fn(async (path: string) => {
-			await insertFile(lix, "notes", path, "# Notes\n");
-			return { fileId: "notes" };
+			await insertFile(lix, fakeUuid("notes"), path, "# Notes\n");
+			return { fileId: fakeUuid("notes") };
 		});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -1002,7 +1003,7 @@ describe("FilesView", () => {
 
 		await waitFor(() => {
 			expect(openFile).toHaveBeenCalledWith({
-				fileId: "notes",
+				fileId: fakeUuid("notes"),
 				filePath: "/notes.md",
 				focus: false,
 				panel: "central",
@@ -1051,8 +1052,8 @@ describe("FilesView", () => {
 		]);
 		const openFile = vi.fn();
 		const resolveFileForInteraction = vi.fn(async (path: string) => {
-			await insertFile(lix, "notes", path, "# Notes\n");
-			return { fileId: "notes" };
+			await insertFile(lix, fakeUuid("notes"), path, "# Notes\n");
+			return { fileId: fakeUuid("notes") };
 		});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -1087,7 +1088,7 @@ describe("FilesView", () => {
 				await qb(lix)
 					.selectFrom("lix_file")
 					.select("path")
-					.where("id", "=", "notes")
+					.where("id", "=", fakeUuid("notes"))
 					.executeTakeFirst(),
 			).toEqual({ path: "/renamed.md" });
 		});
@@ -1115,7 +1116,7 @@ describe("FilesView", () => {
 		fireEvent.click(getFilesTreeItem("README.md"));
 		await waitFor(() => {
 			expect(openFile).toHaveBeenCalledWith({
-				fileId: "readme",
+				fileId: fakeUuid("readme"),
 				filePath: "/README.md",
 				focus: false,
 				panel: "central",
@@ -1127,12 +1128,12 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
-	test("reacts to review range changes without retaining stale badges", async () => {
+	test("shows changed-file status only while review mode is active", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
-		await insertFile(lix, "review-file", "/review.md", "before");
+		await insertFile(lix, fakeUuid("review-file"), "/review.md", "before");
 		const beforeCommitId = await activeCommitId(lix);
-		await insertFile(lix, "review-file", "/review.md", "after");
+		await insertFile(lix, fakeUuid("review-file"), "/review.md", "after");
 		const afterCommitId = await activeCommitId(lix);
 		await appendAgentTurnCommitRange(lix, {
 			id: "files-review-range",
@@ -1147,6 +1148,20 @@ describe("FilesView", () => {
 			view = renderFilesView(lix, { activeBranchId });
 		});
 		await waitFor(() => {
+			expect(getFilesTreeItem("review.md")).not.toHaveAttribute(
+				"data-item-git-status",
+			);
+		});
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{ activeBranchId, reviewModeActive: true }}
+				/>,
+			);
+		});
+		await waitFor(() => {
 			expect(getFilesTreeItem("review.md")).toHaveAttribute(
 				"data-item-git-status",
 				"modified",
@@ -1159,7 +1174,10 @@ describe("FilesView", () => {
 					lix={lix}
 					context={{
 						activeBranchId,
-						resolvedReviewIds: ["review-file:files-review-range"],
+						reviewModeActive: true,
+						resolvedReviewIds: [
+							`${fakeUuid("review-file")}:files-review-range`,
+						],
 					}}
 				/>,
 			);
@@ -1369,7 +1387,7 @@ function getFilesTreeRenameInput(): HTMLInputElement {
 }
 
 async function insertReadme(lix: Lix): Promise<void> {
-	await insertFile(lix, "readme", "/README.md", "# README\n");
+	await insertFile(lix, fakeUuid("readme"), "/README.md", "# README\n");
 }
 
 async function insertFile(

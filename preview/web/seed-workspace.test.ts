@@ -8,24 +8,36 @@ import {
 describe("seedWorkspace", () => {
 	test("stores the seeded PDF as its original binary bytes", async () => {
 		const inserts: unknown[][] = [];
+		const directories: unknown[][] = [];
 		const lix = {
 			execute: vi.fn(async (sql: string, parameters?: unknown[]) => {
+				if (sql.startsWith("SELECT id FROM lix_file")) {
+					return { rows: [] };
+				}
 				if (sql.startsWith("INSERT INTO lix_file ") && parameters) {
 					inserts.push(parameters);
 				}
+				if (sql.startsWith("INSERT INTO lix_directory ") && parameters) {
+					directories.push(parameters);
+				}
+				return { rows: [] };
 			}),
 		};
 
 		await seedWorkspace(lix as never);
 
 		const pdf = inserts.find((parameters) =>
-			String(parameters[1]).endsWith("/assets/example.pdf"),
+			String(parameters[0]).endsWith("/assets/example.pdf"),
 		);
 		expect(pdf).toBeDefined();
-		expect(pdf?.[2]).toBeInstanceOf(Uint8Array);
-		const bytes = pdf?.[2] as Uint8Array;
+		expect(pdf?.[1]).toBeInstanceOf(Uint8Array);
+		const bytes = pdf?.[1] as Uint8Array;
 		expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe("%PDF-1.4");
 		expect(bytes.byteLength).toBeGreaterThan(2_000);
+		expect(directories.length).toBeGreaterThan(0);
+		expect(directories.every(([path]) => !String(path).endsWith("/"))).toBe(
+			true,
+		);
 	});
 });
 

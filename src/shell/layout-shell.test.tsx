@@ -19,6 +19,7 @@ import {
 import {
 	fileExtensionInstanceForKind,
 	FILES_EXTENSION_KIND,
+	HISTORY_EXTENSION_KIND,
 } from "@/extension-runtime/extension-instance-helpers";
 import { DEFAULT_ATELIER_UI_STATE } from "./ui-state";
 import { createAtelier } from "../atelier-instance";
@@ -31,6 +32,7 @@ import {
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
 } from "../state-adapters";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ASYNC_UI_TIMEOUT = 10_000;
 
@@ -40,7 +42,7 @@ describe("resolveLixFileForOpen", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
-				id: "readme",
+				id: fakeUuid("readme"),
 				path: "/docs/README.md",
 				data: new TextEncoder().encode("# README\n"),
 			})
@@ -48,7 +50,7 @@ describe("resolveLixFileForOpen", () => {
 
 		await expect(
 			resolveLixFileForOpen({ lix, filePath: "docs/./README.md" }),
-		).resolves.toEqual({ id: "readme", path: "/docs/README.md" });
+		).resolves.toEqual({ id: fakeUuid("readme"), path: "/docs/README.md" });
 		await lix.close();
 	});
 
@@ -96,12 +98,12 @@ describe("open file lifecycle", () => {
 			.insertInto("lix_file")
 			.values([
 				{
-					id: "one",
+					id: fakeUuid("one"),
 					path: "/one.md",
 					data: new TextEncoder().encode("# One\n"),
 				},
 				{
-					id: "two",
+					id: fakeUuid("two"),
 					path: "/two.md",
 					data: new TextEncoder().encode("# Two\n"),
 				},
@@ -141,7 +143,7 @@ describe("open file lifecycle", () => {
 			]);
 			expect(value?.panels?.central?.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: "one" }),
+					state: expect.objectContaining({ fileId: fakeUuid("one") }),
 				}),
 			]);
 		});
@@ -153,7 +155,7 @@ describe("open file lifecycle", () => {
 			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.central?.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: "two" }),
+					state: expect.objectContaining({ fileId: fakeUuid("two") }),
 				}),
 			]);
 		});
@@ -170,10 +172,16 @@ describe("open file lifecycle", () => {
 
 		// Deleting every open file leaves the central empty state.
 		await act(async () => {
-			await qb(lix).deleteFrom("lix_file").where("id", "=", "two").execute();
+			await qb(lix)
+				.deleteFrom("lix_file")
+				.where("id", "=", fakeUuid("two"))
+				.execute();
 		});
 		await act(async () => {
-			await qb(lix).deleteFrom("lix_file").where("id", "=", "one").execute();
+			await qb(lix)
+				.deleteFrom("lix_file")
+				.where("id", "=", fakeUuid("one"))
+				.execute();
 		});
 		await waitFor(() => {
 			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
@@ -187,7 +195,7 @@ describe("open file lifecycle", () => {
 	});
 
 	test("shows the empty state when the last open file is deleted", async () => {
-		const fileId = "file_generic";
+		const fileId = fakeUuid("file_generic");
 		const imageKind = "atelier_image";
 		const instance = fileExtensionInstanceForKind(imageKind, fileId);
 		const createObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
@@ -288,7 +296,7 @@ describe("open file lifecycle", () => {
 			await qb(lix)
 				.insertInto("lix_file")
 				.values({
-					id: "next-file",
+					id: fakeUuid("next-file"),
 					path: "/next.md",
 					data: new TextEncoder().encode("# Next\n"),
 				})
@@ -348,17 +356,17 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "stable-file",
+						id: fakeUuid("stable-file"),
 						path: "/stable.md",
 						data: new TextEncoder().encode("# Stable\n"),
 					},
 					{
-						id: "changed-file",
+						id: fakeUuid("changed-file"),
 						path: "/changed.md",
 						data: new TextEncoder().encode("# Before\n"),
 					},
 					{
-						id: "later-file",
+						id: fakeUuid("later-file"),
 						path: "/later.md",
 						data: new TextEncoder().encode("# Later before\n"),
 					},
@@ -381,7 +389,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
 					}),
 				]);
 			});
@@ -390,7 +398,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# After\n") })
-					.where("id", "=", "changed-file")
+					.where("id", "=", fakeUuid("changed-file"))
 					.execute();
 			});
 			const afterCommitId = await activeCommitId(lix);
@@ -411,13 +419,11 @@ describe("agent turn review navigation", () => {
 					sessionStateStore
 						.getSnapshot()
 						?.panels.central.views.some(
-							(view) => view.state?.fileId === "changed-file",
+							(view) => view.state?.fileId === fakeUuid("changed-file"),
 						),
 				).toBe(true);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			await waitFor(() => {
 				expect(
 					onEvent.mock.calls.filter(
@@ -456,7 +462,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
 					}),
 				]);
 			});
@@ -466,7 +472,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Later after\n") })
-					.where("id", "=", "later-file")
+					.where("id", "=", fakeUuid("later-file"))
 					.execute();
 			});
 			const afterLaterCommitId = await activeCommitId(lix);
@@ -483,7 +489,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "later-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("later-file") }),
 					}),
 				]);
 			});
@@ -517,6 +523,353 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("opens checkpoint working changes without requiring agent-turn metadata", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: { sizes: { left: 20, central: 80, right: 0 } },
+			review: { autoAcceptAgentChanges: true },
+		});
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			preferencesStore,
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: fakeUuid("auto-stable-file"),
+						path: "/auto-stable.md",
+						data: new TextEncoder().encode("# Stable\n"),
+					},
+					{
+						id: fakeUuid("auto-changed-file"),
+						path: "/auto-changed.md",
+						data: new TextEncoder().encode("# Before\n"),
+					},
+				])
+				.execute();
+			await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			expect(
+				await screen.findByRole("switch", {
+					name: "Auto-accept agent changes",
+				}),
+			).toHaveAttribute("aria-checked", "true");
+			fireEvent.click(await findFilesTreeItem("auto-changed.md"));
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.fileId,
+				).toBe(fakeUuid("auto-changed-file"));
+			});
+
+			await act(async () => {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ data: new TextEncoder().encode("# After\n") })
+					.where("id", "=", fakeUuid("auto-changed-file"))
+					.execute();
+			});
+			await waitFor(() => {
+				expect(
+					screen.getByRole("button", {
+						name: "1 change since checkpoint. Open changes review",
+					}),
+				).toBeVisible();
+			});
+			expect(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
+			).toBe(fakeUuid("auto-changed-file"));
+			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
+			expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
+
+			fireEvent.click(
+				screen.getByRole("switch", {
+					name: "Auto-accept agent changes",
+				}),
+			);
+			await waitFor(() => {
+				expect(
+					screen.getByRole("switch", {
+						name: "Auto-accept agent changes",
+					}),
+				).toHaveAttribute("aria-checked", "false");
+			});
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", {
+						name: "1 change since checkpoint. Open changes review",
+					}),
+				);
+			});
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+
+			fireEvent.click(
+				screen.getByRole("switch", {
+					name: "Auto-accept agent changes",
+				}),
+			);
+			await waitFor(() => {
+				expect(
+					screen.getByRole("switch", {
+						name: "Auto-accept agent changes",
+					}),
+				).toHaveAttribute("aria-checked", "true");
+			});
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+
+			fireEvent.keyDown(window, { key: "Escape" });
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint/ }),
+				).toBeNull();
+			});
+			expect(
+				screen.getByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			).toBeVisible();
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+
+			fireEvent.click(await findFilesTreeItem("auto-stable.md"));
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.fileId,
+				).toBe(fakeUuid("auto-stable-file"));
+			});
+			expect(
+				document.querySelector("[data-review-mode='true']"),
+			).not.toBeNull();
+			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
+
+			await act(async () => {
+				fireEvent.keyDown(window, { key: "Escape" });
+			});
+			await waitFor(() => {
+				expect(document.querySelector("[data-review-mode='true']")).toBeNull();
+			});
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			let activeHistoryInstance: string | null = null;
+			await waitFor(() => {
+				const leftPanel = sessionStateStore.getSnapshot()?.panels.left;
+				const activeView = leftPanel?.views.find(
+					(view) => view.instance === leftPanel.activeInstance,
+				);
+				expect(activeView?.kind).toBe(HISTORY_EXTENSION_KIND);
+				activeHistoryInstance = leftPanel?.activeInstance ?? null;
+			});
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
+			).toBe(fakeUuid("auto-stable-file"));
+			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+				activeHistoryInstance,
+			);
+			const checkpointList = await screen.findByRole("list", {
+				name: "Checkpoints",
+			});
+			fireEvent.click(
+				within(checkpointList).getByRole("button", {
+					name: /Latest checkpoint/,
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: "Back to now" }),
+			).toBeVisible();
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.beforeCommitId,
+				).toEqual(expect.any(String));
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.afterCommitId,
+				).toEqual(expect.any(String));
+			});
+			expect(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+					?.beforeCommitId,
+			).not.toBe(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+					?.afterCommitId,
+			);
+			expect(await screen.findByTestId("markdown-review-editor")).toBeVisible();
+			expect(
+				document.querySelector(
+					"[data-attr='historical-read-only-banner']",
+				),
+			).toBeNull();
+
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "Working changes",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: "Back to now" })).toBeNull();
+			await waitFor(() => {
+				const activeView =
+					sessionStateStore.getSnapshot()?.panels.central.views[0];
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("auto-stable-file"),
+				);
+				expect(activeView?.state?.afterCommitId).toBeUndefined();
+				expect(activeView?.state?.beforeCommitId).toBeUndefined();
+			});
+			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+				activeHistoryInstance,
+			);
+			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			expect(
+				await screen.findByRole("button", {
+					name: "Latest checkpoint. Open checkpoint history",
+				}),
+			).toBeVisible();
+			await waitFor(() => {
+				expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
+			});
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("lists changed files and opens the first one when working changes starts without an active document", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: fakeUuid("empty-state-working-change-a"),
+						path: "/a-empty-state-working-change.md",
+						data: new TextEncoder().encode("# Before A\n"),
+					},
+					{
+						id: fakeUuid("empty-state-working-change-z"),
+						path: "/z-empty-state-working-change.md",
+						data: new TextEncoder().encode("# Before Z\n"),
+					},
+				])
+				.execute();
+			await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+			const initialCentral = sessionStateStore.getSnapshot()?.panels.central;
+			const initialActiveView = initialCentral?.views.find(
+				(view) => view.instance === initialCentral.activeInstance,
+			);
+			expect(initialActiveView?.state?.fileId).toBeUndefined();
+
+			await act(async () => {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ data: new TextEncoder().encode("# After\n") })
+					.execute();
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			const workingChanges = await screen.findByRole("button", {
+				name: "Working changes",
+			});
+			await waitFor(() => expect(workingChanges).toBeEnabled());
+			fireEvent.click(workingChanges);
+
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("empty-state-working-change-a"),
+				);
+			});
+			const workingFiles = await screen.findByRole("list", {
+				name: "Files in working changes",
+			});
+			const workingFileButtons = within(workingFiles).getAllByRole("button");
+			expect(workingFileButtons.map((button) => button.textContent)).toEqual([
+				"a-empty-state-working-change.md",
+				"z-empty-state-working-change.md",
+			]);
+			expect(
+				await screen.findByTestId(
+					"tiptap-editor",
+					{},
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toHaveTextContent("After");
+			await act(async () => {
+				fireEvent.click(workingFileButtons[1]!);
+			});
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("empty-state-working-change-z"),
+				);
+			});
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("opens the new range instead of an older non-active pending review", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
@@ -528,17 +881,17 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "older-file",
+						id: fakeUuid("older-file"),
 						path: "/a-older.md",
 						data: new TextEncoder().encode("# Older before\n"),
 					},
 					{
-						id: "stable-file",
+						id: fakeUuid("stable-file"),
 						path: "/middle.md",
 						data: new TextEncoder().encode("# Stable\n"),
 					},
 					{
-						id: "newer-file",
+						id: fakeUuid("newer-file"),
 						path: "/z-newer.md",
 						data: new TextEncoder().encode("# Newer before\n"),
 					},
@@ -559,7 +912,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Older after\n") })
-					.where("id", "=", "older-file")
+					.where("id", "=", fakeUuid("older-file"))
 					.execute();
 			});
 			const afterOlder = await activeCommitId(lix);
@@ -576,19 +929,17 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "older-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("older-file") }),
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 
 			fireEvent.click(await findFilesTreeItem("middle.md"));
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "stable-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
 					}),
 				]);
 			});
@@ -598,7 +949,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Newer after\n") })
-					.where("id", "=", "newer-file")
+					.where("id", "=", fakeUuid("newer-file"))
 					.execute();
 			});
 			const afterNewer = await activeCommitId(lix);
@@ -616,13 +967,11 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "newer-file" }),
+						state: expect.objectContaining({ fileId: fakeUuid("newer-file") }),
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			expect(
 				onEvent.mock.calls.filter(
 					([event]) =>
@@ -646,12 +995,12 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "active-review-file",
+						id: fakeUuid("active-review-file"),
 						path: "/active.md",
 						data: new TextEncoder().encode("# Active before\n"),
 					},
 					{
-						id: "queued-review-file",
+						id: fakeUuid("queued-review-file"),
 						path: "/queued.md",
 						data: new TextEncoder().encode("# Queued before\n"),
 					},
@@ -672,7 +1021,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Active after\n") })
-					.where("id", "=", "active-review-file")
+					.where("id", "=", fakeUuid("active-review-file"))
 					.execute();
 			});
 			const afterActive = await activeCommitId(lix);
@@ -689,20 +1038,20 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "active-review-file" }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("active-review-file"),
+						}),
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 
 			const beforeQueued = await activeCommitId(lix);
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# Queued after\n") })
-					.where("id", "=", "queued-review-file")
+					.where("id", "=", fakeUuid("queued-review-file"))
 					.execute();
 			});
 			const afterQueued = await activeCommitId(lix);
@@ -730,23 +1079,30 @@ describe("agent turn review navigation", () => {
 			});
 			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 				expect.objectContaining({
-					state: expect.objectContaining({ fileId: "active-review-file" }),
+					state: expect.objectContaining({
+						fileId: fakeUuid("active-review-file"),
+					}),
 				}),
 			]);
 
+			// S2: Keep accepts every pending review — the active one and the
+			// deferred queued one — so review mode ends instead of advancing.
 			const keepActiveReview = await screen.findByRole("button", {
-				name: /^Keep/,
+				name: "Keep",
 			});
 			await act(async () => {
 				fireEvent.click(keepActiveReview);
 			});
 			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "queued-review-file" }),
-					}),
-				]);
+				expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();
 			});
+			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
+				expect.objectContaining({
+					state: expect.objectContaining({
+						fileId: fakeUuid("active-review-file"),
+					}),
+				}),
+			]);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -763,12 +1119,12 @@ describe("agent turn review navigation", () => {
 				.insertInto("lix_file")
 				.values([
 					{
-						id: "session-stable-file",
+						id: fakeUuid("session-stable-file"),
 						path: "/session-stable.md",
 						data: new TextEncoder().encode("# Session stable\n"),
 					},
 					{
-						id: "session-review-file",
+						id: fakeUuid("session-review-file"),
 						path: "/session-review.md",
 						data: new TextEncoder().encode("# Session before\n"),
 					},
@@ -778,7 +1134,7 @@ describe("agent turn review navigation", () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ data: new TextEncoder().encode("# Session after\n") })
-				.where("id", "=", "session-review-file")
+				.where("id", "=", fakeUuid("session-review-file"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
 			await appendAgentTurnCommitRange(lix, {
@@ -810,7 +1166,9 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "session-review-file" }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("session-review-file"),
+						}),
 					}),
 				]);
 			});
@@ -823,7 +1181,9 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "session-stable-file" }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("session-stable-file"),
+						}),
 					}),
 				]);
 			});
@@ -842,13 +1202,13 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
 					expect.objectContaining({
-						state: expect.objectContaining({ fileId: "session-review-file" }),
+						state: expect.objectContaining({
+							fileId: fakeUuid("session-review-file"),
+						}),
 					}),
 				]);
 			});
-			expect(
-				await screen.findByRole("button", { name: /^Keep/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			await waitFor(() => {
 				const openedReviewIds = onEvent.mock.calls.flatMap(([event]) =>
 					event.type === "diff_opened" ? [event.reviewId] : [],
@@ -912,7 +1272,7 @@ describe("agent turn review navigation", () => {
 			await qb(lix)
 				.insertInto("lix_file")
 				.values({
-					id: "branch-race-file",
+					id: fakeUuid("branch-race-file"),
 					path: "/branch-race.md",
 					data: new TextEncoder().encode("# Before\n"),
 				})
@@ -921,7 +1281,7 @@ describe("agent turn review navigation", () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ data: new TextEncoder().encode("# After\n") })
-				.where("id", "=", "branch-race-file")
+				.where("id", "=", fakeUuid("branch-race-file"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
 			const draftBranch = await lix.createBranch({ name: "Draft" });
@@ -983,7 +1343,7 @@ describe("agent turn review navigation", () => {
 				sessionStateStore
 					.getSnapshot()
 					?.panels.central.views.some(
-						(view) => view.state?.fileId === "branch-race-file",
+						(view) => view.state?.fileId === fakeUuid("branch-race-file"),
 					),
 			).toBe(false);
 		} finally {
@@ -1016,7 +1376,7 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.insertInto("lix_file")
 					.values({
-						id: "agent-created-file",
+						id: fakeUuid("agent-created-file"),
 						path: "/agent-created.md",
 						data: new TextEncoder().encode("# Created by agent\n"),
 					})
@@ -1032,9 +1392,7 @@ describe("agent turn review navigation", () => {
 				});
 			});
 
-			expect(
-				await screen.findByRole("button", { name: /^Undo/ }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Undo" })).toBeVisible();
 			expect(
 				onEvent.mock.calls.filter(
 					([event]) =>
@@ -1043,20 +1401,15 @@ describe("agent turn review navigation", () => {
 				),
 			).toHaveLength(1);
 
+			// S2: Undo walks the whole working set back in one press.
 			await act(async () => {
-				fireEvent.click(screen.getByRole("button", { name: /^Undo/ }));
-			});
-			await waitFor(() => {
-				expect(screen.getByText("2 of 2")).toBeVisible();
-			});
-			await act(async () => {
-				fireEvent.click(screen.getByRole("button", { name: /^Undo/ }));
+				fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 			});
 			await waitFor(async () => {
 				const file = await qb(lix)
 					.selectFrom("lix_file")
 					.select("id")
-					.where("id", "=", "agent-created-file")
+					.where("id", "=", fakeUuid("agent-created-file"))
 					.executeTakeFirst();
 				expect(file).toBeUndefined();
 			});
@@ -1102,7 +1455,7 @@ describe("agent turn review navigation", () => {
 					await qb(lix)
 						.insertInto("lix_file")
 						.values({
-							id: "empty-agent-created-file",
+							id: fakeUuid("empty-agent-created-file"),
 							path: "/empty-agent-created.md",
 							data: new Uint8Array(),
 						})
@@ -1133,7 +1486,7 @@ describe("agent turn review navigation", () => {
 					const file = await qb(lix)
 						.selectFrom("lix_file")
 						.select("id")
-						.where("id", "=", "empty-agent-created-file")
+						.where("id", "=", fakeUuid("empty-agent-created-file"))
 						.executeTakeFirst();
 					expect(Boolean(file)).toBe(shouldExist);
 					expect(
@@ -1299,7 +1652,7 @@ describe("installed extension lifecycle", () => {
 
 describe("canonical UI state", () => {
 	test("persists panel focus without rebuilding the rest of the snapshot", async () => {
-		const fileId = "focus-file";
+		const fileId = fakeUuid("focus-file");
 		const documentKind = "atelier_file";
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
 		const initialState = {

@@ -86,8 +86,7 @@ describe("TopBar", () => {
 	test("shows reviewing label after the active file name in review mode", () => {
 		render(<TopBar activeFileName="note.md" isReviewing={true} />);
 
-		expect(screen.getByText("note.md")).toBeVisible();
-		expect(screen.getByText("Reviewing")).toBeVisible();
+		expect(screen.getByText("Reviewing note.md")).toBeVisible();
 	});
 
 	test("shows a read-only chip beside the active file name", () => {

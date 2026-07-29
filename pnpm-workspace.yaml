@@ -12,11 +12,11 @@ allowBuilds:
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
-  - "@lix-js/sdk-darwin-arm64@0.8.2"
-  - "@lix-js/sdk-linux-arm64@0.8.2"
-  - "@lix-js/sdk-linux-x64@0.8.2"
-  - "@lix-js/sdk-win32-x64@0.8.2"
-  - "@lix-js/sdk@0.8.2"
+  - "@lix-js/sdk-darwin-arm64@0.9.0"
+  - "@lix-js/sdk-linux-arm64@0.9.0"
+  - "@lix-js/sdk-linux-x64@0.9.0"
+  - "@lix-js/sdk-win32-x64@0.9.0"
+  - "@lix-js/sdk@0.9.0"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
@@ -27,7 +27,7 @@ overrides:
   prosemirror-transform: 1.12.0
   prosemirror-view: 1.42.0
 patchedDependencies:
-  '@pierre/trees': patches/@pierre__trees.patch
+  "@pierre/trees": patches/@pierre__trees.patch
 
 peerDependencyRules:
   allowedVersions:

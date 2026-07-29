@@ -1,6 +1,7 @@
 import React, { Suspense, StrictMode } from "react";
 import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
+import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 import {
 	render,
 	waitFor,
@@ -10,6 +11,7 @@ import {
 } from "@testing-library/react";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
 	TipTapEditor,
@@ -46,13 +48,13 @@ async function renderEditorForMarkdownFile({
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -213,12 +215,12 @@ test("renders initial document content", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
-	const fileId = "file_render_doc";
+	const fileId = fakeUuid("file_render_doc");
 
 	await qb(lix)
 		.insertInto("lix_file")
@@ -234,7 +236,7 @@ test("renders initial document content", async () => {
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: "global",
+			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -255,7 +257,7 @@ test("renders initial document content", async () => {
 });
 
 test("shows accessible feedback after pasting an image into the editor", async () => {
-	const fileId = "file_image_paste_feedback";
+	const fileId = fakeUuid("file_image_paste_feedback");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Before",
@@ -312,7 +314,7 @@ test("copies and pastes nested task-list Markdown through mounted editor views",
 		"2. [x] ",
 	].join("\n");
 	const source = await renderEditorForMarkdownFile({
-		fileId: "file_mounted_task_copy_source",
+		fileId: fakeUuid("file_mounted_task_copy_source"),
 		markdown,
 	});
 
@@ -350,7 +352,7 @@ test("copies and pastes nested task-list Markdown through mounted editor views",
 	expect(partialCopy.text()).toContain("  - [x] **proofread**");
 
 	const destination = await renderEditorForMarkdownFile({
-		fileId: "file_mounted_task_copy_destination",
+		fileId: fakeUuid("file_mounted_task_copy_destination"),
 		markdown: "",
 		persistDebounceMs: 0,
 	});
@@ -365,7 +367,7 @@ test("copies and pastes nested task-list Markdown through mounted editor views",
 		expect(
 			await decodeFileMarkdown(
 				destination.lix,
-				"file_mounted_task_copy_destination",
+				fakeUuid("file_mounted_task_copy_destination"),
 			),
 		).toBe(`${markdown}\n`);
 	});
@@ -384,7 +386,7 @@ test("copies and pastes nested task-list Markdown through mounted editor views",
 });
 
 test("keeps soft source lines structural when a mounted editor persists an edit", async () => {
-	const fileId = "file_mounted_soft_line_persistence";
+	const fileId = fakeUuid("file_mounted_soft_line_persistence");
 	const markdown = [
 		"first line",
 		"second line",
@@ -451,7 +453,7 @@ test("keeps soft source lines structural when a mounted editor persists an edit"
 });
 
 test("keeps the task caret in place when a mounted checkbox is toggled", async () => {
-	const fileId = "file_mounted_checkbox_caret";
+	const fileId = fakeUuid("file_mounted_checkbox_caret");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "- [ ] keep this caret\n\nTail stays put",
@@ -505,7 +507,7 @@ test("keeps the task caret in place when a mounted checkbox is toggled", async (
 
 test("renders YAML frontmatter as editable fields", async () => {
 	await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_fields",
+		fileId: fakeUuid("file_frontmatter_fields"),
 		markdown: "---\ntitle: Demo\npublished: true\n---\n\nHello",
 	});
 
@@ -520,7 +522,7 @@ test("renders YAML frontmatter as editable fields", async () => {
 
 test("preserves existing empty frontmatter until the user removes it", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_empty_frontmatter",
+		fileId: fakeUuid("file_empty_frontmatter"),
 		markdown: "---\n{}\n---\n\nHello",
 	});
 
@@ -549,7 +551,7 @@ test("preserves existing empty frontmatter until the user removes it", async () 
 
 test("keeps complex or source-annotated YAML in raw mode", async () => {
 	await renderEditorForMarkdownFile({
-		fileId: "file_complex_frontmatter",
+		fileId: fakeUuid("file_complex_frontmatter"),
 		markdown:
 			"---\n# preserve this context\nmeta:\n  author:\n    name: Atelier\n---\n\nHello",
 	});
@@ -565,7 +567,7 @@ test("keeps complex or source-annotated YAML in raw mode", async () => {
 
 test("switches an open fields editor to raw mode when YAML becomes non-lossless", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_mode_sync",
+		fileId: fakeUuid("file_frontmatter_mode_sync"),
 		markdown: "---\ntitle: Demo\n---\n\nHello",
 	});
 	expect(
@@ -592,7 +594,7 @@ test("switches an open fields editor to raw mode when YAML becomes non-lossless"
 
 test("keeps unsafe YAML integers in raw mode without rounding them", async () => {
 	await renderEditorForMarkdownFile({
-		fileId: "file_large_integer_frontmatter",
+		fileId: fakeUuid("file_large_integer_frontmatter"),
 		markdown: "---\nid: 9007199254740993\ntitle: Demo\n---\n\nHello",
 	});
 
@@ -607,7 +609,7 @@ test.each([
 	["exponent", "9.007199254740993e+15"],
 ])("keeps unsafe %s YAML numbers in raw mode", async (kind, number) => {
 	await renderEditorForMarkdownFile({
-		fileId: `file_unsafe_${kind}_frontmatter`,
+		fileId: fakeUuid(`file_unsafe_${kind}_frontmatter`),
 		markdown: `---\nid: ${number}\ntitle: Demo\n---\n\nHello`,
 	});
 
@@ -619,7 +621,7 @@ test.each([
 
 test("keeps both values when a frontmatter field is renamed to an existing key", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_duplicate_frontmatter_key",
+		fileId: fakeUuid("file_duplicate_frontmatter_key"),
 		markdown: "---\ntitle: Demo\nslug: demo\n---\n\nHello",
 	});
 
@@ -643,7 +645,7 @@ test("keeps both values when a frontmatter field is renamed to an existing key",
 
 test("allows a renamed key to extend an existing key prefix", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_key_prefix",
+		fileId: fakeUuid("file_frontmatter_key_prefix"),
 		markdown: "---\ntitle: Demo\nslug: demo\n---\n\nHello",
 	});
 	const keyInput = await screen.findByDisplayValue("title");
@@ -676,7 +678,7 @@ test("allows a renamed key to extend an existing key prefix", async () => {
 
 test("temporarily clearing a numeric field preserves its numeric type", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_numeric_frontmatter",
+		fileId: fakeUuid("file_numeric_frontmatter"),
 		markdown: "---\ncount: 3\n---\n\nHello",
 	});
 	const input = await screen.findByRole("spinbutton", { name: "count value" });
@@ -698,7 +700,7 @@ test("temporarily clearing a numeric field preserves its numeric type", async ()
 
 test("numeric fields commit safe values and reject unsafe or invalid drafts", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_numeric_frontmatter_validation",
+		fileId: fakeUuid("file_numeric_frontmatter_validation"),
 		markdown: "---\ncount: 3\n---\n\nHello",
 	});
 	const input = await screen.findByRole("spinbutton", { name: "count value" });
@@ -740,7 +742,7 @@ test("numeric fields commit safe values and reject unsafe or invalid drafts", as
 
 test("deactivates and restores the toolbar around real frontmatter focus", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_toolbar_focus",
+		fileId: fakeUuid("file_frontmatter_toolbar_focus"),
 		markdown: "---\ntitle: Demo\n---\n\n- after",
 		withToolbar: true,
 	});
@@ -773,7 +775,7 @@ test("deactivates and restores the toolbar around real frontmatter focus", async
 
 test("adds frontmatter from the first Markdown block disclosure", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_disclosure",
+		fileId: fakeUuid("file_frontmatter_disclosure"),
 		markdown: "Hello",
 	});
 	const firstBlock = screen
@@ -809,7 +811,7 @@ test("adds frontmatter from the first Markdown block disclosure", async () => {
 
 test("preserves newly created frontmatter after it has held a property", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_created_then_emptied",
+		fileId: fakeUuid("file_frontmatter_created_then_emptied"),
 		markdown: "Hello",
 	});
 	const firstBlock = screen
@@ -852,7 +854,7 @@ test("preserves newly created frontmatter after it has held a property", async (
 
 test("keeps the frontmatter disclosure visible across the area above the first block", async () => {
 	await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_disclosure_hover_zone",
+		fileId: fakeUuid("file_frontmatter_disclosure_hover_zone"),
 		markdown: "# Hello",
 	});
 	const editorNode = screen.getByTestId("tiptap-editor");
@@ -894,7 +896,7 @@ test("keeps the frontmatter disclosure visible across the area above the first b
 
 test("reveals the frontmatter disclosure when reached by keyboard focus", async () => {
 	await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_disclosure_keyboard",
+		fileId: fakeUuid("file_frontmatter_disclosure_keyboard"),
 		markdown: "Hello",
 	});
 	const button = screen.getByRole("button", { name: "Add frontmatter" });
@@ -910,7 +912,7 @@ test("reveals the frontmatter disclosure when reached by keyboard focus", async 
 
 test("removing the final property removes frontmatter and restores its disclosure", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_remove_last",
+		fileId: fakeUuid("file_frontmatter_remove_last"),
 		markdown: "---\ntitle: Demo\n---\n\nHello",
 	});
 
@@ -938,7 +940,7 @@ test("removing the final property removes frontmatter and restores its disclosur
 
 test("cancelling the first property returns to the no-frontmatter state", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_frontmatter_cancel_first",
+		fileId: fakeUuid("file_frontmatter_cancel_first"),
 		markdown: "Hello",
 	});
 	const firstBlock = screen
@@ -961,7 +963,7 @@ test("cancelling the first property returns to the no-frontmatter state", async 
 
 test("reopens a file from fresh data instead of the prior query cache", async () => {
 	const lix = await openLix();
-	const fileId = "file_reopen_fresh";
+	const fileId = fakeUuid("file_reopen_fresh");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1013,7 +1015,7 @@ test("reopens a file from fresh data instead of the prior query cache", async ()
 
 test("does not recreate the editor when the workspace opener identity changes", async () => {
 	const lix = await openLix();
-	const fileId = "file_stable_workspace_opener";
+	const fileId = fakeUuid("file_stable_workspace_opener");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1056,7 +1058,7 @@ test("does not recreate the editor when the workspace opener identity changes", 
 });
 
 test("persists state changes on edit (paragraph append)", async () => {
-	const fileId = "file_1";
+	const fileId = fakeUuid("file_1");
 	const markdown = "# Title\n\nHello";
 
 	const lix = await openLix({
@@ -1064,13 +1066,13 @@ test("persists state changes on edit (paragraph append)", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1127,13 +1129,13 @@ test("renders content under React.StrictMode", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
 
-	const fileId = "file_strict";
+	const fileId = fakeUuid("file_strict");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1148,7 +1150,7 @@ test("renders content under React.StrictMode", async () => {
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: "global",
+			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1171,19 +1173,19 @@ test("renders content under React.StrictMode", async () => {
 });
 
 test("shows the command hint only while focused on an empty document", async () => {
-	const fileId = "file_placeholder_focus";
+	const fileId = fakeUuid("file_placeholder_focus");
 	const lix = await openLix({
 		keyValues: [
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1247,7 +1249,7 @@ test("shows the command hint only while focused on an empty document", async () 
 
 test("shows the command hint on a focused empty paragraph after Enter", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_placeholder_new_line",
+		fileId: fakeUuid("file_placeholder_new_line"),
 		markdown: "Existing paragraph",
 	});
 	const editorNode = screen.getByTestId("tiptap-editor");
@@ -1270,7 +1272,7 @@ test("shows the command hint on a focused empty paragraph after Enter", async ()
 
 test("keeps the command hint on only the active empty paragraph", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
-		fileId: "file_placeholder_arrow_navigation",
+		fileId: fakeUuid("file_placeholder_arrow_navigation"),
 		markdown: "Existing paragraph",
 	});
 	const editorNode = screen.getByTestId("tiptap-editor");
@@ -1308,19 +1310,19 @@ test("keeps the command hint on only the active empty paragraph", async () => {
 });
 
 test("uses heading 1 as the requested empty document default", async () => {
-	const fileId = "file_default_heading";
+	const fileId = fakeUuid("file_default_heading");
 	const lix = await openLix({
 		keyValues: [
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1377,19 +1379,19 @@ test("uses heading 1 as the requested empty document default", async () => {
 });
 
 test("clicking the surface focuses the editor even when content exists", async () => {
-	const fileId = "file_focus_surface";
+	const fileId = fakeUuid("file_focus_surface");
 	const lix = await openLix({
 		keyValues: [
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1437,14 +1439,14 @@ test("updates editor when switching to a branch with different external state", 
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
 
 	// Create a file and set it active
-	const fileId = "file_switch_branch";
+	const fileId = fakeUuid("file_switch_branch");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1459,7 +1461,7 @@ test("updates editor when switching to a branch with different external state", 
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: "global",
+			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1504,13 +1506,13 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
 
-	const fileId = "file_update_blob";
+	const fileId = fakeUuid("file_update_blob");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1525,7 +1527,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: "global",
+			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1560,7 +1562,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 
 test("ignores same-origin stale markdown autosave echoes", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-stale";
-	const fileId = "file_same_origin_stale";
+	const fileId = fakeUuid("file_same_origin_stale");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -1583,7 +1585,7 @@ test("ignores same-origin stale markdown autosave echoes", async () => {
 
 test("ignores clean same-origin markdown updates", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-clean-update";
-	const fileId = "file_same_origin_clean_update";
+	const fileId = fakeUuid("file_same_origin_clean_update");
 	const { lix } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -1606,7 +1608,7 @@ test("ignores clean same-origin markdown updates", async () => {
 
 test("same-origin echo matching current markdown marks editor clean", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-clean";
-	const fileId = "file_same_origin_clean";
+	const fileId = fakeUuid("file_same_origin_clean");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -1631,7 +1633,7 @@ test("same-origin echo matching current markdown marks editor clean", async () =
 });
 
 test("applies different-origin markdown update when editor is clean", async () => {
-	const fileId = "file_external_clean";
+	const fileId = fakeUuid("file_external_clean");
 	const { lix } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -1652,7 +1654,7 @@ test("applies different-origin markdown update when editor is clean", async () =
 });
 
 test("keeps the loaded markdown when the observed file is deleted", async () => {
-	const fileId = "file_deleted_while_open";
+	const fileId = fakeUuid("file_deleted_while_open");
 	const { lix } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Keep this loaded\n",
@@ -1672,13 +1674,13 @@ test("does not retain another file's markdown while switching file ids", async (
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
-	const firstFileId = "file_switch_origin_first";
-	const secondFileId = "file_switch_origin_second";
+	const firstFileId = fakeUuid("file_switch_origin_first");
+	const secondFileId = fakeUuid("file_switch_origin_second");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1730,7 +1732,7 @@ test("does not retain another file's markdown while switching file ids", async (
 });
 
 test("persists edits on top of an externally hydrated markdown baseline", async () => {
-	const fileId = "file_external_hydration_baseline";
+	const fileId = fakeUuid("file_external_hydration_baseline");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -1764,7 +1766,7 @@ test("persists edits on top of an externally hydrated markdown baseline", async 
 
 test("suspends the same editor instance while read-only and still applies external updates", async () => {
 	const lix = await openLix();
-	const fileId = "file_review_read_only";
+	const fileId = fakeUuid("file_review_read_only");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1837,7 +1839,7 @@ test("suspends the same editor instance while read-only and still applies extern
 
 test("keeps a synthetic review document in the live editor through authoritative review hydration", async () => {
 	const lix = await openLix();
-	const fileId = "file_review_synthetic_override";
+	const fileId = fakeUuid("file_review_synthetic_override");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1913,7 +1915,7 @@ test("keeps a synthetic review document in the live editor through authoritative
 
 test("read-only inactive editor replaces dirty content with authoritative file updates", async () => {
 	const lix = await openLix();
-	const fileId = "file_review_inactive_authoritative";
+	const fileId = fakeUuid("file_review_inactive_authoritative");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -1985,7 +1987,7 @@ test("read-only inactive editor replaces dirty content with authoritative file u
 });
 
 test("does not clobber dirty editor content with different-origin markdown update", async () => {
-	const fileId = "file_external_dirty";
+	const fileId = fakeUuid("file_external_dirty");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -2006,7 +2008,7 @@ test("does not clobber dirty editor content with different-origin markdown updat
 });
 
 test("applies a queued external update after undo returns the editor to clean content", async () => {
-	const fileId = "file_external_pending";
+	const fileId = fakeUuid("file_external_pending");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -2042,13 +2044,13 @@ test("preserves main content when switching to a new branch and back", async () 
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: "global",
+				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
 	});
 
-	const fileId = "file_regression_main_preserve";
+	const fileId = fakeUuid("file_regression_main_preserve");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
@@ -2064,7 +2066,7 @@ test("preserves main content when switching to a new branch and back", async () 
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: "global",
+			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -2106,7 +2108,7 @@ test("preserves main content when switching to a new branch and back", async () 
 
 test("claims file drops on the editor surface outside the ProseMirror content", async () => {
 	const { lix, editor } = await renderEditorForMarkdownFile({
-		fileId: "surface-drop",
+		fileId: fakeUuid("surface-drop"),
 		markdown: "Existing line",
 	});
 

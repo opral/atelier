@@ -13,7 +13,6 @@ import {
 	editorRevisionMode,
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
@@ -116,6 +115,10 @@ function EditableTextView({
 		activeBranchId: atelier.branches.activeId,
 		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
 		reviewRangeSessionId: atelier.reviews.rangeSessionId,
+		enabled: atelier.reviews.isOpen,
+		reviewMode:
+			atelier.reviews.mode ??
+			(atelier.reviews.autoAccept ? "working-changes" : "agent-turn"),
 	});
 	const reviewData = useExternalWriteReviewData(review);
 	const reviewText = reviewData
@@ -267,25 +270,6 @@ function EditableTextView({
 				onChange={persistUserEdit}
 				saveError={saveError}
 			/>
-			{!atelier.readOnly && review && reviewData ? (
-				<ExternalWriteReviewControls
-					isActive={isActiveView}
-					onAccept={() =>
-						void atelier.reviews.accept({
-							fileId,
-							reviewId: review.reviewId,
-							review,
-						})
-					}
-					onReject={() =>
-						void atelier.reviews.reject({
-							fileId,
-							reviewId: review.reviewId,
-							review,
-						})
-					}
-				/>
-			) : null}
 		</div>
 	);
 }

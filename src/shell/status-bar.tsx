@@ -1,4 +1,11 @@
-import type { JSX, ReactNode } from "react";
+import { Suspense, type JSX, type ReactNode } from "react";
+import { Flag } from "lucide-react";
+import { useQuery } from "@/lib/lix-react";
+import { selectLatestCheckpoint, selectWorkingChangeCount } from "@/queries";
+
+// Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
+// the status bar can consume the real title without changing its presentation.
+const LATEST_CHECKPOINT_TITLE = "Latest checkpoint";
 
 /**
  * Bottom status ribbon. Left carries workspace status and right carries
@@ -19,5 +26,192 @@ export function StatusBar({
 			<div className="flex min-w-0 items-center gap-1.5">{left}</div>
 			<div className="flex min-w-0 items-center gap-1.5">{right}</div>
 		</footer>
+	);
+}
+
+export function CheckpointStatusBar({
+	readOnly = false,
+	autoAcceptAgentChanges = false,
+	isReviewing = false,
+	exitLabel = "Exit review",
+	onAutoAcceptAgentChangesChange,
+	onOpenWorkingChanges,
+	onOpenHistory,
+	onExitReview,
+}: {
+	readonly readOnly?: boolean;
+	readonly autoAcceptAgentChanges?: boolean;
+	readonly isReviewing?: boolean;
+	/** "Exit review" normally; "Back to now" while viewing a checkpoint. */
+	readonly exitLabel?: string;
+	readonly onAutoAcceptAgentChangesChange?: (enabled: boolean) => void;
+	readonly onOpenWorkingChanges?: () => void;
+	readonly onOpenHistory?: () => void;
+	readonly onExitReview?: () => void;
+}): JSX.Element {
+	const workingChangeCount = useQuery((queryLix) =>
+		selectWorkingChangeCount(queryLix),
+	);
+	const changeCount = workingChangeCount[0]?.change_count ?? 0;
+
+	const historyStatus =
+		changeCount === 0 ? (
+			<Suspense
+				fallback={
+					<CheckpointStatus
+						statusLabel={LATEST_CHECKPOINT_TITLE}
+						onActivate={onOpenHistory}
+					/>
+				}
+			>
+				<CleanCheckpointStatus onOpenHistory={onOpenHistory} />
+			</Suspense>
+		) : (
+			<CheckpointStatus
+				statusLabel={`${changeCount} ${
+					changeCount === 1 ? "change" : "changes"
+				} since checkpoint`}
+				hasWorkingChanges
+				onActivate={onOpenWorkingChanges}
+			/>
+		);
+
+	return (
+		<StatusBar
+			left={
+				isReviewing ? (
+					<button
+						type="button"
+						aria-label={exitLabel}
+						onClick={onExitReview}
+						className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+					>
+						<span>{exitLabel}</span>
+						<kbd className="rounded bg-[var(--color-bg-control)] px-1 font-sans text-[10px] font-semibold uppercase text-[var(--color-text-quaternary)]">
+							Esc
+						</kbd>
+					</button>
+				) : (
+					historyStatus
+				)
+			}
+			right={
+				readOnly ? undefined : (
+					<div className="flex items-center gap-2">
+						<AutoAcceptToggle
+							checked={autoAcceptAgentChanges}
+							onCheckedChange={onAutoAcceptAgentChangesChange}
+						/>
+					</div>
+				)
+			}
+		/>
+	);
+}
+
+function AutoAcceptToggle({
+	checked,
+	onCheckedChange,
+}: {
+	readonly checked: boolean;
+	readonly onCheckedChange?: (enabled: boolean) => void;
+}) {
+	return (
+		<label
+			className={`inline-flex h-5 cursor-pointer select-none items-center gap-1.5 font-semibold transition-colors ${
+				checked
+					? "text-[var(--color-brand-700)]"
+					: "text-[var(--color-text-tertiary)]"
+			}`}
+		>
+			<span>Auto-accept</span>
+			<input
+				type="checkbox"
+				role="switch"
+				aria-label="Auto-accept agent changes"
+				aria-checked={checked}
+				checked={checked}
+				onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
+				className="peer sr-only"
+			/>
+			<span
+				aria-hidden="true"
+				className={`relative h-3 w-5 shrink-0 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-ring-focus-visible)] peer-focus-visible:ring-offset-1 ${
+					checked
+						? "border-[var(--color-brand-600)] bg-[var(--color-brand-600)]"
+						: "border-[var(--color-border-panel)] bg-[var(--color-bg-control)]"
+				}`}
+			>
+				<span
+					aria-hidden="true"
+					className={`absolute top-px left-px size-2 rounded-full bg-white shadow-sm transition-transform ${
+						checked ? "translate-x-2" : "translate-x-0"
+					}`}
+				/>
+			</span>
+		</label>
+	);
+}
+
+function CleanCheckpointStatus({
+	onOpenHistory,
+}: {
+	readonly onOpenHistory?: () => void;
+}): JSX.Element {
+	const checkpoints = useQuery((lix) => selectLatestCheckpoint(lix));
+	const latestCheckpoint = checkpoints[0];
+	const statusLabel = latestCheckpoint
+		? LATEST_CHECKPOINT_TITLE
+		: "No checkpoints";
+
+	return (
+		<CheckpointStatus statusLabel={statusLabel} onActivate={onOpenHistory} />
+	);
+}
+
+function CheckpointStatus({
+	statusLabel,
+	hasWorkingChanges = false,
+	onActivate,
+}: {
+	readonly statusLabel: string;
+	readonly hasWorkingChanges?: boolean;
+	readonly onActivate?: () => void;
+}): JSX.Element {
+	const actionLabel = hasWorkingChanges
+		? "Open changes review"
+		: "Open checkpoint history";
+
+	return onActivate ? (
+		<button
+			type="button"
+			aria-label={`${statusLabel}. ${actionLabel}`}
+			onClick={onActivate}
+			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+		>
+			{hasWorkingChanges ? null : (
+				<Flag aria-hidden="true" className="h-3 w-3" />
+			)}
+			{hasWorkingChanges ? (
+				<span
+					aria-hidden="true"
+					className="h-1.5 w-1.5 rounded-full bg-[var(--color-icon-brand)]"
+				/>
+			) : null}
+			<span>{statusLabel}</span>
+		</button>
+	) : (
+		<span className="inline-flex items-center gap-1.5">
+			{hasWorkingChanges ? null : (
+				<Flag aria-hidden="true" className="h-3 w-3" />
+			)}
+			{hasWorkingChanges ? (
+				<span
+					aria-hidden="true"
+					className="h-1.5 w-1.5 rounded-full bg-[var(--color-icon-brand)]"
+				/>
+			) : null}
+			<span>{statusLabel}</span>
+		</span>
 	);
 }

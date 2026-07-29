@@ -4,11 +4,12 @@ import { expect, test, vi } from "vitest";
 import { qb } from "./lix-kysely";
 import { LixProvider, useQueryTakeFirst } from "./lix-react";
 import { openLix } from "../test-utils/node-lix-sdk";
+import { fakeUuid } from "../test-utils/fake-uuid";
 import { upsertMarkdownFile } from "../extensions/markdown/editor/upsert-markdown-file";
 
 test("performs 100 markdown autosaves without duplicate direct reads", async () => {
 	const lix = await openLix();
-	const fileId = "reactive_autosave_benchmark";
+	const fileId = fakeUuid("reactive_autosave_benchmark");
 	const initialMarkdown = "# initial";
 	await qb(lix)
 		.insertInto("lix_file")

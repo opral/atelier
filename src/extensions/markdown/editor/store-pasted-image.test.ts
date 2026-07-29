@@ -246,7 +246,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_directory")
-				.values({ path: "/Assets/" })
+				.values({ path: "/Assets" })
 				.execute();
 
 			await expect(
@@ -272,7 +272,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_directory")
-				.values({ path: "/assets/" })
+				.values({ path: "/assets" })
 				.execute();
 
 			const stored = await storePastedMarkdownImage({
@@ -468,22 +468,24 @@ async function expectDirectory(
 	lix: Awaited<ReturnType<typeof openLix>>,
 	path: string,
 ): Promise<void> {
+	const storedPath = path.endsWith("/") ? path.slice(0, -1) : path;
 	const directories = await qb(lix)
 		.selectFrom("lix_directory")
 		.select("path")
-		.where("path", "=", path)
+		.where("path", "=", storedPath)
 		.execute();
-	expect(directories).toEqual([{ path }]);
+	expect(directories).toEqual([{ path: storedPath }]);
 }
 
 async function expectNoDirectory(
 	lix: Awaited<ReturnType<typeof openLix>>,
 	path: string,
 ): Promise<void> {
+	const storedPath = path.endsWith("/") ? path.slice(0, -1) : path;
 	const directories = await qb(lix)
 		.selectFrom("lix_directory")
 		.select("path")
-		.where("path", "=", path)
+		.where("path", "=", storedPath)
 		.execute();
 	expect(directories).toEqual([]);
 }
