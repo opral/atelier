@@ -28,7 +28,6 @@ import {
 } from "@dnd-kit/core";
 import { useLix, useQuery } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
-import { Clock } from "lucide-react";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
@@ -3700,28 +3699,6 @@ function LayoutShellLoadedContent({
 										slots?.centralPanelEmpty,
 									)}
 								/>
-								{historicalReview ? (
-									<div
-										className="pointer-events-none absolute inset-x-0 top-11 z-10 flex justify-center"
-										data-attr="historical-read-only-banner"
-									>
-										<span
-											role="status"
-											className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[#F0E2C8] bg-[#FBF3E4] px-3 py-1 text-[11.5px] text-[#92400E] shadow-sm"
-										>
-											<Clock
-												aria-hidden="true"
-												className="h-3 w-3 text-[#B45309]"
-											/>
-											<span>
-												<b className="font-bold">Read-only</b>
-												{activeFileName
-													? ` · ${activeFileName} as it was at this checkpoint`
-													: " · this checkpoint's files"}
-											</span>
-										</span>
-									</div>
-								) : null}
 								{isReviewMode && !isHostReadOnly ? (
 									<ExternalWriteReviewControls
 										isActive

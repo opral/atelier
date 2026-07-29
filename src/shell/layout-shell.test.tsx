@@ -719,6 +719,11 @@ describe("agent turn review navigation", () => {
 						?.afterCommitId,
 				).toEqual(expect.any(String));
 			});
+			expect(
+				document.querySelector(
+					"[data-attr='historical-read-only-banner']",
+				),
+			).toBeNull();
 
 			fireEvent.click(
 				screen.getByRole("button", {
