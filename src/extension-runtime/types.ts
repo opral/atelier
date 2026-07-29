@@ -103,6 +103,13 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 		readonly exit?: () => void;
 		/** Open the working-changes review (now vs last checkpoint). */
 		readonly openWorkingChanges?: () => void;
+		/** Supported files in the active working-changes review. */
+		readonly workingChangeFiles?: readonly {
+			readonly id: string;
+			readonly path: string;
+		}[];
+		/** Open one file in the active working-changes review. */
+		readonly openWorkingChangeFile?: (path: string) => void;
 		/** Open a read-only diff from the preceding checkpoint to this checkpoint. */
 		readonly viewCheckpoint?: (args: {
 			readonly commitId: string;

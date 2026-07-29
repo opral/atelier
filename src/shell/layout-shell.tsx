@@ -2035,6 +2035,16 @@ function LayoutShellLoadedContent({
 		[openResolvedFileView],
 	);
 	reopenLiveDocumentRef.current = openAutoRevealedFile;
+	const openWorkingChangeFile = useCallback(
+		(path: string) => {
+			const file = workingChangeReviewFiles.find(
+				(candidate) => candidate.path === path,
+			);
+			if (!file) return;
+			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
+		},
+		[openAutoRevealedFile, workingChangeReviewFiles],
+	);
 	const pendingReviewFilesKey = JSON.stringify([
 		agentTurnRangeValues,
 		privateResolvedReviewIds,
@@ -3508,6 +3518,8 @@ function LayoutShellLoadedContent({
 				undoAll: handleUndoAllReviews,
 				exit: exitDiffReview,
 				openWorkingChanges: handleOpenWorkingChangesReview,
+				workingChangeFiles: workingChangeReviewFiles,
+				openWorkingChangeFile,
 				viewCheckpoint: handleViewCheckpoint,
 				openCheckpointFile: openHistoricalCheckpointFile,
 				...(historicalCommitId ? { historicalCommitId } : {}),
@@ -3532,6 +3544,7 @@ function LayoutShellLoadedContent({
 			handleKeepAllReviews,
 			handleUndoAllReviews,
 			handleOpenWorkingChangesReview,
+			openWorkingChangeFile,
 			handleViewCheckpoint,
 			workingChangeReviewFiles,
 			historicalCommitId,

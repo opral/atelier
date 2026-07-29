@@ -124,3 +124,13 @@ was selected. The user could see review actions but not the change itself.
 Resolution: Working changes still preserves an existing active document. If the
 central active view is missing or is not a document, Atelier now opens the first
 supported changed file automatically.
+
+## QA: Working changes hid its multi-file scope
+
+The workspace review navigator knew every supported changed file, but History
+only showed the Working changes summary row. With several modified files there
+was no visible checklist equivalent to an expanded checkpoint.
+
+Resolution: the active Working changes row now expands to show its ordered file
+list. Selecting a file navigates the central review directly while keeping the
+History tab and review mode active.

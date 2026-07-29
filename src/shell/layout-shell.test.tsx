@@ -773,7 +773,7 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
-	test("opens the first changed file when working changes starts without an active document", async () => {
+	test("lists changed files and opens the first one when working changes starts without an active document", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const atelier = createAtelier({ lix, sessionStateStore });
@@ -781,11 +781,18 @@ describe("agent turn review navigation", () => {
 		try {
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({
-					id: fakeUuid("empty-state-working-change"),
-					path: "/empty-state-working-change.md",
-					data: new TextEncoder().encode("# Before\n"),
-				})
+				.values([
+					{
+						id: fakeUuid("empty-state-working-change-a"),
+						path: "/a-empty-state-working-change.md",
+						data: new TextEncoder().encode("# Before A\n"),
+					},
+					{
+						id: fakeUuid("empty-state-working-change-z"),
+						path: "/z-empty-state-working-change.md",
+						data: new TextEncoder().encode("# Before Z\n"),
+					},
+				])
 				.execute();
 			await lix.createCheckpoint();
 
@@ -809,7 +816,6 @@ describe("agent turn review navigation", () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ data: new TextEncoder().encode("# After\n") })
-					.where("id", "=", fakeUuid("empty-state-working-change"))
 					.execute();
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
 			});
@@ -825,11 +831,36 @@ describe("agent turn review navigation", () => {
 					(view) => view.instance === central.activeInstance,
 				);
 				expect(activeView?.state?.fileId).toBe(
-					fakeUuid("empty-state-working-change"),
+					fakeUuid("empty-state-working-change-a"),
 				);
 			});
-			expect(await screen.findByTestId("tiptap-editor")).toBeVisible();
-			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent("After");
+			const workingFiles = await screen.findByRole("list", {
+				name: "Files in working changes",
+			});
+			const workingFileButtons = within(workingFiles).getAllByRole("button");
+			expect(workingFileButtons.map((button) => button.textContent)).toEqual([
+				"a-empty-state-working-change.md",
+				"z-empty-state-working-change.md",
+			]);
+			expect(
+				await screen.findByTestId(
+					"tiptap-editor",
+					{},
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toHaveTextContent("After");
+			await act(async () => {
+				fireEvent.click(workingFileButtons[1]!);
+			});
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("empty-state-working-change-z"),
+				);
+			});
 			expect(
 				screen.getByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();

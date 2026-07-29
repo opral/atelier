@@ -23,6 +23,12 @@ function atelierStub(overrides?: {
 	}) => Promise<void>;
 	readonly openCheckpointFile?: (path: string) => void;
 	readonly openWorkingChanges?: () => void;
+	readonly workingChangeFiles?: readonly {
+		readonly id: string;
+		readonly path: string;
+	}[];
+	readonly openWorkingChangeFile?: (path: string) => void;
+	readonly workingChangesActive?: boolean;
 }): ExtensionRuntime {
 	return {
 		icons: {
@@ -34,6 +40,11 @@ function atelierStub(overrides?: {
 			viewCheckpoint: overrides?.viewCheckpoint ?? (async () => {}),
 			openCheckpointFile: overrides?.openCheckpointFile ?? (() => {}),
 			openWorkingChanges: overrides?.openWorkingChanges ?? (() => {}),
+			workingChangeFiles: overrides?.workingChangeFiles ?? [],
+			openWorkingChangeFile: overrides?.openWorkingChangeFile ?? (() => {}),
+			...(overrides?.workingChangesActive
+				? { active: true, mode: "working-changes" as const }
+				: {}),
 			...(overrides?.historicalCommitId
 				? { historicalCommitId: overrides.historicalCommitId }
 				: {}),
@@ -42,6 +53,59 @@ function atelierStub(overrides?: {
 }
 
 describe("HistoryView", () => {
+	test("lists files while working changes is active", async () => {
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3), ($4, $5, $6)",
+			[
+				fakeUuid("working-file-one"),
+				"/docs/one.md",
+				new TextEncoder().encode("before one"),
+				fakeUuid("working-file-two"),
+				"/two.md",
+				new TextEncoder().encode("before two"),
+			],
+		);
+		await lix.createCheckpoint();
+		await lix.execute("UPDATE lix_file SET data = $1", [
+			new TextEncoder().encode("after"),
+		]);
+		const openWorkingChangeFile = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<HistoryView
+							atelier={atelierStub({
+								workingChangesActive: true,
+								workingChangeFiles: [
+									{ id: fakeUuid("working-file-one"), path: "/docs/one.md" },
+									{ id: fakeUuid("working-file-two"), path: "/two.md" },
+								],
+								openWorkingChangeFile,
+							})}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const fileList = await screen.findByRole("list", {
+			name: "Files in working changes",
+		});
+		const fileButtons = within(fileList).getAllByRole("button");
+		expect(fileButtons.map((button) => button.textContent)).toEqual([
+			"one.md",
+			"two.md",
+		]);
+		fireEvent.click(fileButtons[1]!);
+		expect(openWorkingChangeFile).toHaveBeenCalledWith("/two.md");
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("lists workspace moments and opens a checkpoint on click", async () => {
 		const lix = await openLix();
 		await lix.execute(

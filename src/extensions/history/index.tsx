@@ -44,37 +44,87 @@ function WorkingChangesRow({
 	);
 	const changeCount = workingChangeCount[0]?.change_count ?? 0;
 	const openWorkingChanges = atelier.reviews.openWorkingChanges;
+	const isViewing =
+		atelier.reviews.active === true &&
+		atelier.reviews.mode === "working-changes";
 
 	return (
-		<button
-			type="button"
-			aria-label="Working changes"
-			disabled={changeCount === 0 || !openWorkingChanges}
-			onClick={openWorkingChanges}
-			data-attr="history-working-changes"
-			className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] border border-transparent py-1.5 text-left ${
-				changeCount === 0
-					? "opacity-55"
-					: "hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+		<div
+			aria-current={isViewing ? "true" : undefined}
+			className={`rounded-[8px] border ${
+				isViewing
+					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
+					: "border-transparent"
 			}`}
 		>
-			<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-				<span
-					aria-hidden="true"
-					className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
-				/>
-			</span>
-			<span className="min-w-0">
-				<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
-					Working changes
+			<button
+				type="button"
+				aria-label="Working changes"
+				disabled={changeCount === 0 || !openWorkingChanges}
+				onClick={openWorkingChanges}
+				data-attr="history-working-changes"
+				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left ${
+					changeCount === 0
+						? "opacity-55"
+						: isViewing
+							? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+							: "hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+				}`}
+			>
+				<span className="flex h-5 w-4 shrink-0 items-center justify-center">
+					<span
+						aria-hidden="true"
+						className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
+					/>
 				</span>
-				<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
-					{changeCount === 0
-						? "now · nothing new"
-						: `now · ${changeCount} ${changeCount === 1 ? "change" : "changes"}`}
+				<span className="min-w-0">
+					<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
+						Working changes
+					</span>
+					<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
+						{changeCount === 0
+							? "now · nothing new"
+							: `now · ${changeCount} ${changeCount === 1 ? "change" : "changes"}`}
+					</span>
 				</span>
-			</span>
-		</button>
+			</button>
+			{isViewing ? <WorkingChangeFileList atelier={atelier} /> : null}
+		</div>
+	);
+}
+
+function WorkingChangeFileList({
+	atelier,
+}: {
+	readonly atelier: ExtensionRuntime;
+}) {
+	const files = atelier.reviews.workingChangeFiles ?? [];
+	const openWorkingChangeFile = atelier.reviews.openWorkingChangeFile;
+	if (files.length === 0) return null;
+
+	return (
+		<ul aria-label="Files in working changes" className="px-2 pb-2 pl-7">
+			{files.map((file) => (
+				<li key={file.id}>
+					<button
+						type="button"
+						disabled={!openWorkingChangeFile}
+						onClick={() => openWorkingChangeFile?.(file.path)}
+						data-attr="history-open-working-change-file"
+						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+					>
+						<img
+							src={atelier.icons.fileUrl(file.path)}
+							alt=""
+							className="h-3.5 w-3.5 shrink-0"
+						/>
+						<span className="truncate">
+							{fileNameFromHistoryPath(file.path)}
+						</span>
+					</button>
+				</li>
+			))}
+		</ul>
 	);
 }
 
