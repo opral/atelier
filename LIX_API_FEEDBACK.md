@@ -123,3 +123,27 @@ its newly rebased tests to use canonical deterministic UUIDs.
 
 Suggestion: validate `lix_file.id` directly and mention the UUID requirement in
 the file API migration notes so consumers get an error at the value they wrote.
+
+### Fresh release requires release-age exceptions for every platform package
+
+Atelier's seven-day `minimumReleaseAge` policy initially rejected the newly
+published `@lix-js/sdk@0.9.0`. Allowing the SDK alone is not sufficient because
+its four platform-specific optional packages are versioned and published
+separately, so all five packages need explicit exceptions.
+
+This is expected pnpm behavior rather than a Lix bug, but a release checklist
+snippet listing the SDK and platform package names would make immediate upgrades
+less error-prone for consumers with dependency-age policies.
+
+### Published 0.9 schema uses `diff_type`, not `change_kind`
+
+Switching from the source pin to `@lix-js/sdk@0.9.0` made every query selecting
+`lix_working_diff.change_kind` fail with `LIX_COLUMN_NOT_FOUND`. The published
+table exposes `diff_type` with the same `added | modified | removed` values.
+Atelier now uses `diff_type` throughout its own query rows and consumers.
+
+The runtime error clearly listed the available columns, which made diagnosis
+straightforward. The friction is that TypeScript still accepted the stale
+column reference, so this incompatibility appeared only at runtime. Generated
+query types or a 0.9 migration note explicitly calling out the rename would
+catch or explain this much earlier.

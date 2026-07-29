@@ -253,7 +253,7 @@ export function useExternalWriteReview(args: {
 			.map((change) => [
 				change.schema_key,
 				change.entity_pk,
-				change.change_kind,
+				change.diff_type,
 				change.before_change_id,
 				change.after_change_id,
 			]),

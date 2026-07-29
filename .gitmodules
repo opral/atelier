@@ -1,3 +1,0 @@
-[submodule "vendor/lix"]
-	path = vendor/lix
-	url = https://github.com/opral/lix.git

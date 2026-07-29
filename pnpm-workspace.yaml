@@ -2,8 +2,6 @@ packages:
   - .
   - fixtures/consumer
   - preview/web
-  - vendor/lix/packages/js-sdk
-  - "!vendor/lix/packages/**/dist"
 
 allowBuilds:
   "@parcel/watcher": true
@@ -14,16 +12,11 @@ allowBuilds:
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
-  - "@lix-js/sdk-darwin-arm64@0.8.2"
-  - "@lix-js/sdk-darwin-arm64@0.8.4"
-  - "@lix-js/sdk-linux-arm64@0.8.2"
-  - "@lix-js/sdk-linux-arm64@0.8.4"
-  - "@lix-js/sdk-linux-x64@0.8.2"
-  - "@lix-js/sdk-linux-x64@0.8.4"
-  - "@lix-js/sdk-win32-x64@0.8.2"
-  - "@lix-js/sdk-win32-x64@0.8.4"
-  - "@lix-js/sdk@0.8.2"
-  - "@lix-js/sdk@0.8.4"
+  - "@lix-js/sdk-darwin-arm64@0.9.0"
+  - "@lix-js/sdk-linux-arm64@0.9.0"
+  - "@lix-js/sdk-linux-x64@0.9.0"
+  - "@lix-js/sdk-win32-x64@0.9.0"
+  - "@lix-js/sdk@0.9.0"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
@@ -40,5 +33,3 @@ peerDependencyRules:
   allowedVersions:
     "@glideapps/glide-data-grid>react": ^19.0.0
     "@glideapps/glide-data-grid>react-dom": ^19.0.0
-    # The pinned checkpoint PR still reports the pre-release package version.
-    "@opral/atelier>@lix-js/sdk": 0.8.4

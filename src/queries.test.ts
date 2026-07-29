@@ -123,7 +123,7 @@ describe("checkpoint queries", () => {
 			expect.objectContaining({
 				entity_pk: ["checkpoint-query-test"],
 				schema_key: "lix_key_value",
-				change_kind: "added",
+				diff_type: "added",
 				before_change_id: null,
 			}),
 		]);
@@ -169,7 +169,7 @@ describe("checkpoint queries", () => {
 				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
 				previous_path: null,
-				change_kind: "added",
+				diff_type: "added",
 			},
 		]);
 

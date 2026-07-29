@@ -16,7 +16,7 @@ export type WorkingChangeRow = {
 	entity_pk: JsonValue;
 	schema_key: string;
 	file_id: string | null;
-	change_kind: "added" | "modified" | "removed";
+	diff_type: "added" | "modified" | "removed";
 	before_change_id: string | null;
 	after_change_id: string | null;
 };
@@ -29,7 +29,7 @@ export type FileWorkingChangeRow = {
 	id: string;
 	path: string | null;
 	previous_path: string | null;
-	change_kind: "added" | "modified" | "removed";
+	diff_type: "added" | "modified" | "removed";
 };
 
 export type CheckpointRow = {
@@ -90,7 +90,7 @@ export function selectWorkingChanges(lix: Lix) {
 			"entity_pk",
 			"schema_key",
 			"file_id",
-			"change_kind",
+			"diff_type",
 			"before_change_id",
 			"after_change_id",
 		])
@@ -128,8 +128,8 @@ export function selectFileWorkingChanges(lix: Lix) {
 			"lix_file.path",
 			sql<string | null>`null`.as("previous_path"),
 			// File descriptor rows carry the file id in entity_pk, not file_id.
-			sql<string>`case when max(case when lix_working_diff.schema_key = 'lix_file_descriptor' and lix_working_diff.change_kind = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
-				"change_kind",
+			sql<string>`case when max(case when lix_working_diff.schema_key = 'lix_file_descriptor' and lix_working_diff.diff_type = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
+				"diff_type",
 			),
 		])
 		.groupBy(["lix_file.id", "lix_file.path"])
