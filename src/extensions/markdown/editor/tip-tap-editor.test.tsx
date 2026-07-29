@@ -2108,7 +2108,7 @@ test("preserves main content when switching to a new branch and back", async () 
 
 test("claims file drops on the editor surface outside the ProseMirror content", async () => {
 	const { lix, editor } = await renderEditorForMarkdownFile({
-		fileId: "surface-drop",
+		fileId: fakeUuid("surface-drop"),
 		markdown: "Existing line",
 	});
 

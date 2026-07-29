@@ -142,7 +142,7 @@ test("loads a workspace video as a disposable object URL", async () => {
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
-			id: "video-asset",
+			id: fakeUuid("video-asset"),
 			path: "/docs/assets/kickoff.mp4",
 			data: new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]),
 		})
@@ -170,7 +170,7 @@ test("loads a workspace video as a disposable object URL", async () => {
 	expect(asset?.src).toBe("blob:atelier-video");
 	expect(asset?.preview).toBe("auto");
 	expect(asset?.workspaceFile).toEqual({
-		fileId: "video-asset",
+		fileId: fakeUuid("video-asset"),
 		filePath: "/docs/assets/kickoff.mp4",
 	});
 	asset?.dispose?.();

@@ -107,3 +107,19 @@ database boundary and restores it in the filesystem query.
 Suggestion: document the directory path invariant prominently. If the strict
 form is intentional, exposing a canonical path conversion helper would reduce
 duplicated boundary normalization in clients.
+
+### File descriptor IDs now require canonical UUID strings
+
+After advancing from `d0c2c4d5` to `d8d5423c1`, inserts into `lix_file` with
+human-readable fixture IDs fail while deriving `lix_file_descriptor.entity_pk`:
+
+```text
+value at primary-key pointer '/id' must be a valid canonical UUID string
+```
+
+The stricter invariant is reasonable, but it surfaced through the derived file
+descriptor schema rather than at the `lix_file.id` boundary. Atelier updated
+its newly rebased tests to use canonical deterministic UUIDs.
+
+Suggestion: validate `lix_file.id` directly and mention the UUID requirement in
+the file API migration notes so consumers get an error at the value they wrote.
