@@ -1241,7 +1241,7 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(buildMarkdownFromEditor(editor)).toBe("- Hello world\n");
 	});
 
-	test("Backspace on empty list item with nested content keeps nested content", () => {
+	test("Backspace promotes a list pasted into an empty bullet item", () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
@@ -1260,7 +1260,26 @@ describe("Keyboard shortcuts (keymap)", () => {
 											content: [
 												{
 													type: "paragraph",
-													content: [{ type: "text", text: "child" }],
+													content: [
+														{
+															type: "text",
+															text: "Images not loading",
+														},
+													],
+												},
+											],
+										},
+										{
+											type: "listItem",
+											content: [
+												{
+													type: "paragraph",
+													content: [
+														{
+															type: "text",
+															text: "Html images not showing",
+														},
+													],
 												},
 											],
 										},
@@ -1277,10 +1296,15 @@ describe("Keyboard shortcuts (keymap)", () => {
 		sendKey(editor, "Backspace");
 
 		const root: any = editor.state.doc;
-		const item = root.child(0).child(0);
-		expect(item.childCount).toBe(2);
-		expect(item.child(1).type.name).toBe("bulletList");
-		expect(buildMarkdownFromEditor(editor)).toContain("child");
+		expect(root.child(0).type.name).toBe("bulletList");
+		expect(root.child(0).childCount).toBe(2);
+		expect(buildMarkdownFromEditor(editor)).toBe(
+			"- Images not loading\n- Html images not showing\n",
+		);
+		expect(editor.state.selection.$from.parent.textContent).toBe(
+			"Images not loading",
+		);
+		expect(editor.state.selection.$from.parentOffset).toBe(0);
 	});
 
 	test("Enter on empty ordered list item exits the list", () => {

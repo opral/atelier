@@ -806,7 +806,32 @@ export const MarkdownWcShortcuts = Extension.create({
 						.insertContent({ type: "paragraph" })
 						.run();
 				}
-				if (listItem.childCount > 1) return true;
+				if (listItem.childCount > 1) {
+					const nestedList = listItem.maybeChild(1);
+					if (
+						listItem.childCount === 2 &&
+						nestedList?.type === listNode?.type
+					) {
+						// Pasting a Markdown list into an empty list item (notably
+						// from Apple Notes) creates an empty wrapper item whose
+						// second child is another list. Backspace should remove
+						// that accidental indentation, not consume the key and
+						// leave the caret trapped in the empty wrapper.
+						return this.editor.commands.command(({ tr, dispatch }) => {
+							const itemFrom = $from.before(listItemDepth);
+							const itemTo = $from.after(listItemDepth);
+							const promotedItems: any[] = [];
+							nestedList.forEach((child: any) => promotedItems.push(child));
+							tr.replaceWith(itemFrom, itemTo, promotedItems);
+							tr.setSelection(
+								TextSelection.near(tr.doc.resolve(itemFrom + 2), 1),
+							);
+							if (dispatch) dispatch(tr.scrollIntoView());
+							return true;
+						});
+					}
+					return true;
+				}
 
 				return false;
 			},
