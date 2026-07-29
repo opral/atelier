@@ -113,3 +113,14 @@ review editor still assigned `data-review-active="true"` to the first change.
 Resolution: read-only review editors no longer assign an active change. The
 green/red diff styling remains, while the interactive orange focus ring is
 limited to reviews where individual changes can actually be acted on.
+
+## QA: Working changes could open over the central empty state
+
+Opening Working changes intentionally preserves the active document and sidebar
+tab. When no document was active, that rule preserved the central “Start
+writing” empty state while the workspace review controls claimed a changed file
+was selected. The user could see review actions but not the change itself.
+
+Resolution: Working changes still preserves an existing active document. If the
+central active view is missing or is not a document, Atelier now opens the first
+supported changed file automatically.

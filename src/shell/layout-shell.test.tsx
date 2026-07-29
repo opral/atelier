@@ -773,6 +773,72 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("opens the first changed file when working changes starts without an active document", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("empty-state-working-change"),
+					path: "/empty-state-working-change.md",
+					data: new TextEncoder().encode("# Before\n"),
+				})
+				.execute();
+			await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+			const initialCentral = sessionStateStore.getSnapshot()?.panels.central;
+			const initialActiveView = initialCentral?.views.find(
+				(view) => view.instance === initialCentral.activeInstance,
+			);
+			expect(initialActiveView?.state?.fileId).toBeUndefined();
+
+			await act(async () => {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ data: new TextEncoder().encode("# After\n") })
+					.where("id", "=", fakeUuid("empty-state-working-change"))
+					.execute();
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			const workingChanges = await screen.findByRole("button", {
+				name: "Working changes",
+			});
+			await waitFor(() => expect(workingChanges).toBeEnabled());
+			fireEvent.click(workingChanges);
+
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("empty-state-working-change"),
+				);
+			});
+			expect(await screen.findByTestId("tiptap-editor")).toBeVisible();
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent("After");
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("opens the new range instead of an older non-active pending review", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();

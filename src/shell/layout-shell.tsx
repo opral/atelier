@@ -3265,6 +3265,19 @@ function LayoutShellLoadedContent({
 			// Opening the workspace-level review must not navigate away from the
 			// user's active document or sidebar views. The review navigator remains
 			// available when they explicitly want to step through changed files.
+			// With no active document, reveal the first changed file so diff mode
+			// never opens over the central empty state.
+			const activeCentralView =
+				panelStatesRef.current.central.views.find(
+					(view) =>
+						view.instance === panelStatesRef.current.central.activeInstance,
+				) ?? null;
+			if (!activeCentralView || !isDocumentView(activeCentralView)) {
+				openAutoRevealedFile({
+					fileId: firstChangedFile.id,
+					filePath: firstChangedFile.path,
+				});
+			}
 		})().catch((error: unknown) => {
 			console.warn("[checkpoint] failed to open working changes review", error);
 		});
@@ -3275,6 +3288,7 @@ function LayoutShellLoadedContent({
 		extensionMap,
 		historicalReview,
 		lix,
+		openAutoRevealedFile,
 		privateResolvedReviewIds,
 	]);
 
