@@ -33,7 +33,12 @@ import {
 import type { MarkdownWorkspaceFileOpener } from "./markdown-asset";
 import { FrontmatterDisclosure } from "../components/frontmatter-disclosure";
 import { AlertTriangle, Check, Loader2, X } from "lucide-react";
-import type { MarkdownImagePasteStatus } from "./handle-paste";
+import {
+	handleImageDrop,
+	type MarkdownImagePasteStatus,
+	type StorePastedImage,
+} from "./handle-paste";
+import { storePastedMarkdownImage } from "./store-pasted-image";
 
 type TipTapEditorProps = {
 	fileId: string;
@@ -470,6 +475,48 @@ function TipTapEditorLoadedContent({
 		[editor, readOnly],
 	);
 
+	// The editor surface is larger than the ProseMirror element (margins, the
+	// area below a short document). ProseMirror only claims file drags over its
+	// own DOM, so a release just outside it would otherwise navigate the
+	// browser to the dropped file. Claim the whole surface and route drops
+	// through the same pipeline as in-content drops.
+	const storeSurfaceImage = useMemo<StorePastedImage | undefined>(() => {
+		if (!sourceFilePath) return undefined;
+		return ({ file, mimeType }) =>
+			storePastedMarkdownImage({
+				lix,
+				sourceFilePath,
+				file,
+				mimeType,
+				originKey: editorOriginKey,
+			});
+	}, [editorOriginKey, lix, sourceFilePath]);
+	const handleSurfaceDragOver = useCallback(
+		(event: React.DragEvent<HTMLDivElement>) => {
+			// Already claimed by ProseMirror's own dragover handling.
+			if (event.defaultPrevented) return;
+			if (!dragEventCarriesFiles(event)) return;
+			event.preventDefault();
+			event.dataTransfer.dropEffect = readOnly ? "none" : "copy";
+		},
+		[readOnly],
+	);
+	const handleSurfaceDrop = useCallback(
+		(event: React.DragEvent<HTMLDivElement>) => {
+			// Already claimed by the editor's DOM-level drop handler.
+			if (event.defaultPrevented) return;
+			if (!editor || !dragEventCarriesFiles(event)) return;
+			handleImageDrop({
+				editor,
+				view: editor.view,
+				event: event.nativeEvent,
+				storeImage: storeSurfaceImage,
+				onImagePasteStatus: notifyImagePasteStatus,
+			});
+		},
+		[editor, storeSurfaceImage],
+	);
+
 	// Custom overlay scrollbar avoids flaky native scrollbar repaint behavior.
 	const scrollIdleTimerRef = useRef<number | null>(null);
 	const scrollFrameRef = useRef<number | null>(null);
@@ -760,6 +807,8 @@ function TipTapEditorLoadedContent({
 				className="ph-mask tiptap-container relative w-full h-full bg-background cursor-text overflow-y-auto"
 				data-editor-focused={isEditorFocused ? "true" : "false"}
 				onMouseDown={handleSurfacePointerDown}
+				onDragOver={handleSurfaceDragOver}
+				onDrop={handleSurfaceDrop}
 			>
 				<EditorContent
 					editor={editor}
@@ -833,6 +882,12 @@ function MarkdownImagePasteHint({
 
 function workspacePathLabel(workspacePath: string): string {
 	return workspacePath.replace(/^\/+/, "") || "assets";
+}
+
+function dragEventCarriesFiles(event: React.DragEvent): boolean {
+	return Array.from(event.dataTransfer?.types ?? []).some(
+		(type) => String(type).toLowerCase() === "files",
+	);
 }
 
 function TipTapEditorLoadingState({

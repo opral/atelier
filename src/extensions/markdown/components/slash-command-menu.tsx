@@ -29,7 +29,7 @@ const COMMAND_GROUPS = [
 	},
 	{
 		label: "Insert",
-		commandIds: ["emoji", "codeBlock", "table", "horizontalRule"],
+		commandIds: ["embedFile", "emoji", "codeBlock", "table", "horizontalRule"],
 	},
 ] as const;
 

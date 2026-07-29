@@ -141,7 +141,7 @@ export function handleImageDrop(args: {
 		// the dropped local file in a new tab.
 		notifyImagePasteStatus(onImagePasteStatus, {
 			state: "error",
-			message: "Drop the image over the document.",
+			message: "Drop the file over the document.",
 		});
 		return true;
 	}
@@ -356,8 +356,15 @@ function captureDropTarget(
 		left: event?.clientX,
 		top: event?.clientY,
 	})?.pos;
-	if (!Number.isInteger(position)) return null;
-	return resolvePasteTarget(editor, position, position);
+	if (Number.isInteger(position)) {
+		return resolvePasteTarget(editor, position, position);
+	}
+	// The editor surface extends past the rendered content (margins, the area
+	// below a short document). A release there has no resolvable coordinate —
+	// append at the end of the document, never at the unrelated live caret.
+	const documentEnd = editor?.state?.doc?.content?.size;
+	if (!Number.isInteger(documentEnd)) return null;
+	return resolvePasteTarget(editor, documentEnd, documentEnd);
 }
 
 function resolvePasteTarget(

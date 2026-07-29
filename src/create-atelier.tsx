@@ -83,11 +83,33 @@ export type AtelierProps = {
 	readonly topBarProps?: AtelierTopBarProps;
 };
 
+/**
+ * Last-resort guard for external file drags. Surfaces that accept files
+ * (the markdown editor, the Files tree) claim their events first; anywhere
+ * else an unhandled release would navigate the browser to the dropped file
+ * and destroy the session. Signal "no drop here" instead.
+ */
+function claimUnhandledFileDrag(event: React.DragEvent<HTMLDivElement>) {
+	if (event.defaultPrevented) return;
+	const carriesFiles = Array.from(event.dataTransfer?.types ?? []).some(
+		(type) => String(type).toLowerCase() === "files",
+	);
+	if (!carriesFiles) return;
+	event.preventDefault();
+	if (event.type === "dragover") {
+		event.dataTransfer.dropEffect = "none";
+	}
+}
+
 export function Atelier({ instance, slots, topBarProps }: AtelierProps) {
 	const configuration = getAtelierConfiguration(instance);
 	const defaultOpenPanels = configuration.defaultOpenPanels ?? [];
 	return (
-		<div className="atelier-root h-full w-full overflow-hidden">
+		<div
+			className="atelier-root h-full w-full overflow-hidden"
+			onDragOver={claimUnhandledFileDrag}
+			onDrop={claimUnhandledFileDrag}
+		>
 			<LixProvider lix={instance.lix}>
 				<Suspense fallback={<AtelierLoadingPlaceholder />}>
 					<V2LayoutShell

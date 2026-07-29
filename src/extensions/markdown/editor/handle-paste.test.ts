@@ -1150,16 +1150,22 @@ describe("handleImageDrop", () => {
 		editor.destroy();
 	});
 
-	test("does not fall back to the live caret when the drop coordinate is unavailable", () => {
+	test("appends at the document end when the drop coordinate is unavailable", async () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
 				{
 					type: "paragraph",
-					content: [{ type: "text", text: "Unchanged" }],
+					content: [{ type: "text", text: "First" }],
+				},
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "Second" }],
 				},
 			],
 		});
+		// The live caret sits in the middle — the fallback must never use it.
+		editor.commands.setTextSelection(3);
 		const event = makeImageDropEvent();
 		const storeImage = vi.fn(async () => storedImage());
 		const statuses: MarkdownImagePasteStatus[] = [];
@@ -1174,14 +1180,12 @@ describe("handleImageDrop", () => {
 
 		expect(handled).toBe(true);
 		expect(event.preventDefault).toHaveBeenCalledOnce();
-		expect(storeImage).not.toHaveBeenCalled();
-		expect(statuses).toEqual([
-			{
-				state: "error",
-				message: "Drop the image over the document.",
-			},
-		]);
-		expect(buildMarkdownFromEditor(editor)).toBe("Unchanged\n");
+		await vi.waitFor(() =>
+			expect(buildMarkdownFromEditor(editor)).toBe(
+				"First\n\nSecond\n\n![Pasted image](assets/pasted-image.png)\n",
+			),
+		);
+		expect(statuses.at(-1)?.state).toBe("saved");
 
 		editor.destroy();
 	});

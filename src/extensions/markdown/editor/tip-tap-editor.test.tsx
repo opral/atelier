@@ -2103,3 +2103,55 @@ test("preserves main content when switching to a new branch and back", async () 
 		);
 	});
 });
+
+test("claims file drops on the editor surface outside the ProseMirror content", async () => {
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId: "surface-drop",
+		markdown: "Existing line",
+	});
+
+	const surface = editor.view.dom.closest(".tiptap-container");
+	expect(surface).not.toBeNull();
+
+	const file = new File([new Uint8Array([137, 80, 78, 71])], "diagram.png", {
+		type: "image/png",
+	});
+	const dataTransfer = {
+		files: [file],
+		items: [{ kind: "file", type: file.type, getAsFile: () => file }],
+		types: ["Files"],
+		dropEffect: "none",
+	};
+
+	// A drag hovering the surface (not the ProseMirror element) must be
+	// claimed so the browser never shows the "no drop" cursor or navigates.
+	const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
+	Object.defineProperty(dragOver, "dataTransfer", { value: dataTransfer });
+	surface!.dispatchEvent(dragOver);
+	expect(dragOver.defaultPrevented).toBe(true);
+
+	// happy-dom has no layout, so posAtCoords cannot resolve the release
+	// point — the drop falls back to appending at the document end.
+	const drop = new Event("drop", { bubbles: true, cancelable: true });
+	Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+	Object.defineProperties(drop, {
+		clientX: { value: 10 },
+		clientY: { value: 4000 },
+	});
+	await act(async () => {
+		surface!.dispatchEvent(drop);
+	});
+	expect(drop.defaultPrevented).toBe(true);
+
+	await waitFor(() => {
+		expect(buildNormalizedMarkdownFromEditor(editor)).toBe(
+			"Existing line\n\n![diagram](assets/diagram.png)\n",
+		);
+	});
+	const stored = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["path"])
+		.where("path", "=", "/assets/diagram.png")
+		.executeTakeFirst();
+	expect(stored?.path).toBe("/assets/diagram.png");
+});
