@@ -16,7 +16,10 @@ import {
 	useFileSnapshotsAtCommits,
 } from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
-import { EditorProvider } from "@/extensions/markdown/editor/editor-context";
+import {
+	EditorProvider,
+	useEditorCtx,
+} from "@/extensions/markdown/editor/editor-context";
 import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
 	TipTapEditor,
@@ -330,11 +333,7 @@ function MarkdownLiveViewLoaded({
 						reviewLocked ? "markdown-review" : ""
 					}`}
 				>
-					{readOnly ? null : (
-						<div className={reviewLocked ? "pointer-events-none" : undefined}>
-							<FormattingToolbar disabled={reviewLocked} />
-						</div>
-					)}
+					<FormattingToolbar disabled={editorReadOnly} />
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						<TipTapEditor
 							className="h-full"
@@ -671,7 +670,24 @@ function MarkdownSnapshotView({
 	useEffect(() => () => editor.destroy(), [editor]);
 
 	return (
+		<EditorProvider>
+			<MarkdownSnapshotEditor editor={editor} />
+		</EditorProvider>
+	);
+}
+
+function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
+	const { setEditor } = useEditorCtx();
+	useEffect(() => {
+		setEditor(editor);
+		return () => {
+			setEditor((current) => (current === editor ? null : current));
+		};
+	}, [editor, setEditor]);
+
+	return (
 		<div className="markdown-view flex h-full flex-col bg-background">
+			<FormattingToolbar disabled />
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
 					<EditorContent editor={editor} className="tiptap mx-auto w-full" />

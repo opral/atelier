@@ -3213,6 +3213,12 @@ function LayoutShellLoadedContent({
 				}
 			}
 			if (!firstChangedFile) return;
+			if (historicalReview) {
+				// Working changes and a historical checkpoint are two targets of
+				// the same diff mode. Returning to "now" must first release the
+				// snapshot view and restore the live document that it replaced.
+				exitDiffReview();
+			}
 			setWorkingChangesReviewOpen(true);
 			// Opening the workspace-level review must not navigate away from the
 			// user's active document or sidebar views. The review navigator remains
@@ -3223,7 +3229,9 @@ function LayoutShellLoadedContent({
 	}, [
 		agentTurnRanges,
 		currentFileRows,
+		exitDiffReview,
 		extensionMap,
+		historicalReview,
 		lix,
 		privateResolvedReviewIds,
 	]);

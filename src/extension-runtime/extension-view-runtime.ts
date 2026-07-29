@@ -7,6 +7,7 @@ import type {
 	ExtensionRuntime,
 	ExtensionView,
 } from "./types";
+import { hasHistoricalEditorRevisionState } from "./editor-revision-state";
 
 type UseExtensionViewRuntimeArgs = {
 	panel: PanelState;
@@ -29,8 +30,14 @@ export function useExtensionViewRuntime({
 	const makeRuntime = useCallback(
 		(instance: ExtensionInstance) => {
 			const isActive = panel.activeInstance === instance.instance;
+			const readOnly =
+				host.atelier.readOnly ||
+				hasHistoricalEditorRevisionState(instance.state);
 			return {
-				atelier: host.atelier,
+				atelier:
+					readOnly === host.atelier.readOnly
+						? host.atelier
+						: { ...host.atelier, readOnly },
 				view: {
 					instanceId: instance.instance,
 					state: instance.state ?? {},

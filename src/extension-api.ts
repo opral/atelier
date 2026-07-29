@@ -184,7 +184,10 @@ export type AtelierEvent =
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
-	/** Whether the host has opened this workspace without mutation access. */
+	/**
+	 * Whether this extension view must render without mutation affordances.
+	 * True for a host-level read-only workspace and for historical revisions.
+	 */
 	readonly readOnly: boolean;
 	readonly events: {
 		readonly emit: (event: AtelierEvent) => void;

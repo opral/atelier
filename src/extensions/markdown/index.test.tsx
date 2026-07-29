@@ -73,7 +73,7 @@ describe("MarkdownView", () => {
 		});
 	});
 
-	test("hides the formatting toolbar in host read-only mode", async () => {
+	test("keeps the formatting toolbar visible but disabled in host read-only mode", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -107,8 +107,9 @@ describe("MarkdownView", () => {
 			);
 		});
 		expect(
-			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
-		).not.toBeInTheDocument();
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 
 		await act(async () => {
 			utils?.unmount();
@@ -179,6 +180,10 @@ describe("MarkdownView", () => {
 		});
 		expect(utils!.container).not.toHaveTextContent("Head version");
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		await waitFor(() => {

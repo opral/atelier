@@ -702,6 +702,44 @@ describe("agent turn review navigation", () => {
 			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
+			const checkpointList = await screen.findByRole("list", {
+				name: "Checkpoints",
+			});
+			fireEvent.click(
+				within(checkpointList).getByRole("button", {
+					name: /Latest checkpoint/,
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: "Back to now" }),
+			).toBeVisible();
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.afterCommitId,
+				).toEqual(expect.any(String));
+			});
+
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "Working changes",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: "Back to now" })).toBeNull();
+			await waitFor(() => {
+				const activeView =
+					sessionStateStore.getSnapshot()?.panels.central.views[0];
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("auto-stable-file"),
+				);
+				expect(activeView?.state?.afterCommitId).toBeUndefined();
+			});
+			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+				activeHistoryInstance,
+			);
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			expect(
 				await screen.findByRole("button", {
