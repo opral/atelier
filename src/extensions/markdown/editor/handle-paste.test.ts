@@ -98,6 +98,20 @@ function createEditor(initialContent?: any): Editor {
 	});
 }
 
+function sendKey(editor: Editor, key: string): boolean {
+	const event = new KeyboardEvent("keydown", {
+		key,
+		bubbles: true,
+		cancelable: true,
+	});
+	let handled = false;
+	editor.view.someProp("handleKeyDown", (handler: any) => {
+		handled = handler(editor.view, event) || handled;
+		return handled;
+	});
+	return handled;
+}
+
 function textRange(editor: Editor, text: string): { from: number; to: number } {
 	let from = -1;
 	editor.state.doc.descendants((node, pos) => {
@@ -457,6 +471,50 @@ describe("handlePaste - edge cases", () => {
 		expect(editor.getText()).toContain("Title");
 		expect(editor.getText()).toContain("Item 1");
 		expect(editor.getText()).toContain("Ordered item");
+
+		editor.destroy();
+	});
+
+	test("Backspace escapes an Apple Notes list pasted into an empty bullet", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [{ type: "paragraph" }],
+						},
+					],
+				},
+			],
+		});
+		editor.commands.setTextSelection(3);
+
+		const pasted = handlePaste({
+			editor,
+			event: makeClipboardEvent(`- Images not loading
+- Html images not showing
+
+- Team onboarding (add people like, copy slack, super basic)
+- Agent onboarding`),
+		});
+
+		expect(pasted).toBe(true);
+		const wrapper = editor.state.doc.child(0).child(0);
+		expect(wrapper.child(0).type.name).toBe("paragraph");
+		expect(wrapper.child(0).content.size).toBe(0);
+		expect(wrapper.child(1).type.name).toBe("bulletList");
+
+		editor.commands.setTextSelection(3);
+		expect(sendKey(editor, "Backspace")).toBe(true);
+		expect(buildMarkdownFromEditor(editor)).toBe(
+			"- Images not loading\n" +
+				"- Html images not showing\n" +
+				"- Team onboarding (add people like, copy slack, super basic)\n" +
+				"- Agent onboarding\n",
+		);
 
 		editor.destroy();
 	});
