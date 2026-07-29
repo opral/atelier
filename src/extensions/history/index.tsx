@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { History } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider, useQuery } from "@/lib/lix-react";
@@ -170,7 +171,20 @@ function CheckpointItem({
 				</span>
 			</button>
 			{isViewing ? (
-				<CheckpointFileList atelier={atelier} commitId={checkpoint.commit_id} />
+				<Suspense
+					fallback={
+						<div
+							aria-hidden="true"
+							data-attr="history-checkpoint-files-loading"
+							className="h-8"
+						/>
+					}
+				>
+					<CheckpointFileList
+						atelier={atelier}
+						commitId={checkpoint.commit_id}
+					/>
+				</Suspense>
 			) : null}
 		</li>
 	);
