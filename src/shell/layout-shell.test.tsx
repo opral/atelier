@@ -683,6 +683,9 @@ describe("agent turn review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
+			expect(
+				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
+			).toBe(fakeUuid("auto-stable-file"));
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			expect(
 				await screen.findByRole("button", {

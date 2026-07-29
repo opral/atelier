@@ -97,13 +97,14 @@ async function seedDirectories(lix: Lix, filePaths: string[]): Promise<void> {
 	for (const filePath of filePaths) {
 		const segments = filePath.split("/").filter(Boolean);
 		for (let index = 1; index < segments.length; index += 1) {
-			directories.add(`/${segments.slice(0, index).join("/")}/`);
+			directories.add(`/${segments.slice(0, index).join("/")}`);
 		}
 	}
 
 	for (const directory of [...directories].sort()) {
-		await lix.execute("INSERT INTO lix_directory (path) VALUES ($1)", [
-			directory,
-		]);
+		await lix.execute(
+			"INSERT INTO lix_directory (path) VALUES ($1) ON CONFLICT(path) DO NOTHING",
+			[directory],
+		);
 	}
 }

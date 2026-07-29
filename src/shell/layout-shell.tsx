@@ -3217,10 +3217,9 @@ function LayoutShellLoadedContent({
 			handleOpenExtensionView(FILES_EXTENSION_KIND, {
 				panel: "left",
 			});
-			openAutoRevealedFile({
-				fileId: firstChangedFile.id,
-				filePath: firstChangedFile.path,
-			});
+			// Opening the workspace-level review must not navigate away from the
+			// user's active document. The review navigator remains available when
+			// they explicitly want to step through changed files.
 		})().catch((error: unknown) => {
 			console.warn("[checkpoint] failed to open working changes review", error);
 		});
@@ -3230,7 +3229,6 @@ function LayoutShellLoadedContent({
 		extensionMap,
 		handleOpenExtensionView,
 		lix,
-		openAutoRevealedFile,
 		privateResolvedReviewIds,
 	]);
 

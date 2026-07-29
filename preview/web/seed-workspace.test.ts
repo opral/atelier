@@ -8,6 +8,7 @@ import {
 describe("seedWorkspace", () => {
 	test("stores the seeded PDF as its original binary bytes", async () => {
 		const inserts: unknown[][] = [];
+		const directories: unknown[][] = [];
 		const lix = {
 			execute: vi.fn(async (sql: string, parameters?: unknown[]) => {
 				if (sql.startsWith("SELECT id FROM lix_file")) {
@@ -15,6 +16,9 @@ describe("seedWorkspace", () => {
 				}
 				if (sql.startsWith("INSERT INTO lix_file ") && parameters) {
 					inserts.push(parameters);
+				}
+				if (sql.startsWith("INSERT INTO lix_directory ") && parameters) {
+					directories.push(parameters);
 				}
 				return { rows: [] };
 			}),
@@ -30,6 +34,10 @@ describe("seedWorkspace", () => {
 		const bytes = pdf?.[1] as Uint8Array;
 		expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe("%PDF-1.4");
 		expect(bytes.byteLength).toBeGreaterThan(2_000);
+		expect(directories.length).toBeGreaterThan(0);
+		expect(directories.every(([path]) => !String(path).endsWith("/"))).toBe(
+			true,
+		);
 	});
 });
 
