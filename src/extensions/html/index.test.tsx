@@ -6,7 +6,9 @@ import {
 	HTML_ARTIFACT_CSP,
 	HtmlPreview,
 	buildSandboxedHtmlDocument,
+	collectHtmlWorkspaceImagePaths,
 	extension,
+	resolveHtmlWorkspaceImagePath,
 } from "./index";
 
 describe("HTML extension routing", () => {
@@ -43,6 +45,27 @@ describe("buildSandboxedHtmlDocument", () => {
 		expect(result).toContain("<body>Hi</body>");
 	});
 
+	test("allows remote images without opening other network capabilities", () => {
+		expect(HTML_ARTIFACT_CSP).toContain("img-src data: blob: http: https:");
+		expect(HTML_ARTIFACT_CSP).toContain("connect-src 'none'");
+	});
+
+	test("rewrites local image sources to resolved workspace URLs", () => {
+		const result = buildSandboxedHtmlDocument(
+			'<img src="images/hero.png"><img src="https://example.com/remote.png"><picture><source srcset="images/hero.png 1x, /shared/hero@2x.png 2x"></picture>',
+			{
+				filePath: "/artifacts/report.html",
+				workspaceImageUrls: new Map([
+					["/artifacts/images/hero.png", "blob:hero"],
+					["/shared/hero@2x.png", "blob:hero-2x"],
+				]),
+			},
+		);
+		expect(result).toContain('<img src="blob:hero">');
+		expect(result).toContain('src="https://example.com/remote.png"');
+		expect(result).toContain('srcset="blob:hero 1x, blob:hero-2x 2x"');
+	});
+
 	test.each([
 		"<!-- <head>decoy</head> --><html><head><title>Comment</title></head><body></body></html>",
 		'<html data-note="x>y"><head data-note="x>y"><title>Attribute</title></head><body></body></html>',
@@ -50,6 +73,37 @@ describe("buildSandboxedHtmlDocument", () => {
 		"<template><head>decoy</head></template><html><head><title>Template</title></head><body></body></html>",
 	])("cannot redirect policy injection with decoy markup", (source) => {
 		expectPolicyIsFirstInHead(buildSandboxedHtmlDocument(source));
+	});
+});
+
+describe("HTML workspace images", () => {
+	test.each([
+		["images/photo.png", "/docs/report.html", "/docs/images/photo.png"],
+		["../photo.png?size=2#preview", "/docs/report.html", "/photo.png"],
+		["/assets/photo%20one.png", "/docs/report.html", "/assets/photo one.png"],
+		["https://example.com/photo.png", "/docs/report.html", null],
+		["data:image/png;base64,AAAA", "/docs/report.html", null],
+		["#embedded-image", "/docs/report.html", null],
+	])("resolves %s from %s", (src, filePath, expected) => {
+		expect(resolveHtmlWorkspaceImagePath(src, filePath)).toBe(expected);
+	});
+
+	test("collects unique image and srcset workspace paths", () => {
+		expect(
+			collectHtmlWorkspaceImagePaths(
+				'<img src="images/a.png"><img src="images/a.png"><source srcset="images/a.png 1x, ../b.png 2x"><svg><image href="/c.svg"></image></svg>',
+				"/docs/report.html",
+			),
+		).toEqual(["/b.png", "/c.svg", "/docs/images/a.png"]);
+	});
+
+	test("does not treat data srcset payloads as workspace paths", () => {
+		expect(
+			collectHtmlWorkspaceImagePaths(
+				'<img srcset="data:image/png;base64,AAAA 1x">',
+				"/docs/report.html",
+			),
+		).toEqual([]);
 	});
 });
 
