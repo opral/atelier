@@ -1,8 +1,11 @@
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { FileCode2 } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
-import { decodeFileDataToText } from "@/lib/decode-file-data";
-import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import {
+	decodeFileDataToBytes,
+	decodeFileDataToText,
+} from "@/lib/decode-file-data";
+import { LixProvider, useQuery, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -22,6 +25,13 @@ type HtmlFileRow = {
 	readonly data: unknown;
 };
 
+type HtmlImageFileRow = {
+	readonly path: string;
+	readonly data: unknown;
+};
+
+const EMPTY_HTML_IMAGE_FILES: ReadonlyArray<HtmlImageFileRow> = [];
+
 export const HTML_ARTIFACT_CSP = [
 	"default-src 'none'",
 	"base-uri 'none'",
@@ -29,7 +39,7 @@ export const HTML_ARTIFACT_CSP = [
 	"font-src data:",
 	"form-action 'none'",
 	"frame-src 'none'",
-	"img-src data: blob:",
+	"img-src data: blob: http: https:",
 	"media-src data: blob:",
 	"object-src 'none'",
 	"script-src 'unsafe-inline'",
@@ -63,10 +73,39 @@ function HtmlViewContent({ fileId, filePath }: HtmlViewProps) {
 		);
 	}
 
+	return <HtmlWorkspacePreview fileRow={fileRow} filePath={filePath} />;
+}
+
+function HtmlWorkspacePreview({
+	fileRow,
+	filePath,
+}: {
+	readonly fileRow: HtmlFileRow;
+	readonly filePath?: string;
+}) {
+	const resolvedFilePath = fileRow.path || filePath || "artifact.html";
+	const source = useMemo(
+		() => decodeFileDataToText(fileRow.data),
+		[fileRow.data],
+	);
+	const imagePaths = useMemo(
+		() => collectHtmlWorkspaceImagePaths(source, resolvedFilePath),
+		[source, resolvedFilePath],
+	);
+	const imageFiles = useQuery<HtmlImageFileRow>(
+		(lix) =>
+			qb(lix)
+				.selectFrom("lix_file")
+				.select(["path", "data"])
+				.where("path", "in", imagePaths),
+		{ enabled: imagePaths.length > 0 },
+	);
+
 	return (
 		<HtmlPreview
 			data={fileRow.data}
-			filePath={fileRow.path || filePath || "artifact.html"}
+			filePath={resolvedFilePath}
+			workspaceImageFiles={imageFiles}
 		/>
 	);
 }
@@ -74,14 +113,21 @@ function HtmlViewContent({ fileId, filePath }: HtmlViewProps) {
 export function HtmlPreview({
 	data,
 	filePath,
+	workspaceImageFiles = EMPTY_HTML_IMAGE_FILES,
 }: {
 	readonly data: unknown;
 	readonly filePath: string;
+	readonly workspaceImageFiles?: ReadonlyArray<HtmlImageFileRow>;
 }) {
 	const source = useMemo(() => decodeFileDataToText(data), [data]);
+	const workspaceImageUrls = useWorkspaceImageUrls(workspaceImageFiles);
 	const documentSource = useMemo(
-		() => buildSandboxedHtmlDocument(source),
-		[source],
+		() =>
+			buildSandboxedHtmlDocument(source, {
+				filePath,
+				workspaceImageUrls,
+			}),
+		[source, filePath, workspaceImageUrls],
 	);
 	const fileName = fileNameFromPath(filePath) ?? "HTML artifact";
 
@@ -125,8 +171,21 @@ function HtmlPreviewDocument({
 }
 
 /** Parse the artifact and prepend a restrictive policy to its actual document head. */
-export function buildSandboxedHtmlDocument(source: string): string {
+export function buildSandboxedHtmlDocument(
+	source: string,
+	options: {
+		readonly filePath?: string;
+		readonly workspaceImageUrls?: ReadonlyMap<string, string>;
+	} = {},
+): string {
 	const artifactDocument = new DOMParser().parseFromString(source, "text/html");
+	if (options.filePath && options.workspaceImageUrls?.size) {
+		rewriteWorkspaceImageSources(
+			artifactDocument,
+			options.filePath,
+			options.workspaceImageUrls,
+		);
+	}
 	const policy = artifactDocument.createElement("meta");
 	policy.httpEquiv = "Content-Security-Policy";
 	policy.content = HTML_ARTIFACT_CSP;
@@ -136,6 +195,166 @@ export function buildSandboxedHtmlDocument(source: string): string {
 		? `<!doctype ${artifactDocument.doctype.name}>`
 		: "";
 	return `${doctype}${artifactDocument.documentElement.outerHTML}`;
+}
+
+/** Return the canonical workspace paths referenced by HTML image elements. */
+export function collectHtmlWorkspaceImagePaths(
+	source: string,
+	filePath: string,
+): string[] {
+	const document = new DOMParser().parseFromString(source, "text/html");
+	const paths = new Set<string>();
+	forEachHtmlImageSource(document, (src) => {
+		const path = resolveHtmlWorkspaceImagePath(src, filePath);
+		if (path) paths.add(path);
+		return src;
+	});
+	return [...paths].sort();
+}
+
+function rewriteWorkspaceImageSources(
+	document: Document,
+	filePath: string,
+	workspaceImageUrls: ReadonlyMap<string, string>,
+) {
+	forEachHtmlImageSource(document, (src) => {
+		const path = resolveHtmlWorkspaceImagePath(src, filePath);
+		const objectUrl = path ? workspaceImageUrls.get(path) : undefined;
+		if (!objectUrl) return src;
+		const hashIndex = src.indexOf("#");
+		return hashIndex >= 0 ? `${objectUrl}${src.slice(hashIndex)}` : objectUrl;
+	});
+}
+
+function forEachHtmlImageSource(
+	document: Document,
+	transform: (src: string) => string,
+) {
+	for (const element of document.querySelectorAll(
+		"img[src], input[type='image'][src]",
+	)) {
+		rewriteAttribute(element, "src", transform);
+	}
+	for (const element of document.querySelectorAll("image[href]")) {
+		rewriteAttribute(element, "href", transform);
+	}
+	for (const element of document.querySelectorAll(
+		"img[srcset], source[srcset]",
+	)) {
+		const srcset = element.getAttribute("srcset");
+		if (srcset === null) continue;
+		// A data URL may contain unescaped commas, so leave the full responsive
+		// source list intact rather than mistaking its payload for a candidate.
+		if (srcset.includes("data:")) continue;
+		const candidates = srcset.split(",");
+		let changed = false;
+		const rewritten = candidates.map((candidate) => {
+			const match = /^(\s*)(\S+)([\s\S]*)$/.exec(candidate);
+			if (!match) return candidate;
+			const nextSrc = transform(match[2]!);
+			if (nextSrc !== match[2]) changed = true;
+			return `${match[1]}${nextSrc}${match[3]}`;
+		});
+		if (changed) element.setAttribute("srcset", rewritten.join(","));
+	}
+}
+
+function rewriteAttribute(
+	element: Element,
+	attribute: string,
+	transform: (src: string) => string,
+) {
+	const src = element.getAttribute(attribute);
+	if (src === null) return;
+	const nextSrc = transform(src);
+	if (nextSrc !== src) element.setAttribute(attribute, nextSrc);
+}
+
+export function resolveHtmlWorkspaceImagePath(
+	src: string,
+	filePath: string,
+): string | null {
+	if (
+		!src ||
+		!filePath.startsWith("/") ||
+		src.startsWith("//") ||
+		src.startsWith("#") ||
+		src.startsWith("?")
+	) {
+		return null;
+	}
+	try {
+		const absoluteUrl = new URL(src);
+		if (absoluteUrl.protocol) return null;
+	} catch {
+		// A relative URL is expected to fail construction without a base.
+	}
+	try {
+		const base = new URL(filePath, "https://atelier.workspace");
+		const resolved = new URL(src, base);
+		if (resolved.origin !== base.origin) return null;
+		const segments = resolved.pathname.split("/");
+		const decoded = segments.map((segment) => decodeURIComponent(segment));
+		if (
+			decoded.some((segment) => segment.includes("/") || segment.includes("\\"))
+		) {
+			return null;
+		}
+		return decoded.join("/") || null;
+	} catch {
+		return null;
+	}
+}
+
+function useWorkspaceImageUrls(
+	files: ReadonlyArray<HtmlImageFileRow>,
+): ReadonlyMap<string, string> {
+	const [urls, setUrls] = useState<ReadonlyMap<string, string>>(
+		() => new Map(),
+	);
+
+	useEffect(() => {
+		const nextUrls = new Map<string, string>();
+		for (const file of files) {
+			const bytes = decodeFileDataToBytes(file.data);
+			if (bytes.byteLength === 0) continue;
+			const blobBytes = Uint8Array.from(bytes);
+			nextUrls.set(
+				file.path,
+				URL.createObjectURL(
+					new Blob([blobBytes.buffer], { type: htmlImageMimeType(file.path) }),
+				),
+			);
+		}
+		setUrls(nextUrls);
+		return () => {
+			for (const url of nextUrls.values()) URL.revokeObjectURL(url);
+		};
+	}, [files]);
+
+	return urls;
+}
+
+function htmlImageMimeType(filePath: string): string {
+	switch (fileExtensionFromPath(filePath)) {
+		case "svg":
+			return "image/svg+xml";
+		case "png":
+			return "image/png";
+		case "jpg":
+		case "jpeg":
+			return "image/jpeg";
+		case "gif":
+			return "image/gif";
+		case "webp":
+			return "image/webp";
+		case "avif":
+			return "image/avif";
+		case "ico":
+			return "image/x-icon";
+		default:
+			return "application/octet-stream";
+	}
 }
 
 function isHtmlFilePath(filePath: string): boolean {
