@@ -59,7 +59,7 @@ type TipTapEditorProps = {
 };
 
 type MarkdownFileDelivery = {
-	readonly data: unknown;
+	readonly content: unknown;
 	readonly path: string;
 	readonly change_id: string | null;
 	readonly origin_key: unknown;
@@ -206,7 +206,7 @@ function TipTapEditorFileContent({
 			qb(lix)
 				.selectFrom("lix_file as file")
 				.select([
-					"file.data as data",
+					"file.content as content",
 					"file.path as path",
 					"file.lixcol_change_id as change_id",
 				])
@@ -340,7 +340,7 @@ function TipTapEditorSourceBoundary({
 		<TipTapEditorLoadedContent
 			{...props}
 			hasInitialFile={Boolean(initialFile)}
-			initialMarkdown={decodeMarkdownData(initialFile?.data)}
+			initialMarkdown={decodeMarkdownData(initialFile?.content)}
 			sourceFilePath={props.filePath ?? initialFile?.path ?? null}
 			sourceFile={sourceFile}
 		/>
@@ -682,7 +682,7 @@ function TipTapEditorLoadedContent({
 		}
 		const syncState = externalSyncState;
 		if (!syncState || syncState.editor !== editor) return;
-		const sourceMarkdown = decodeMarkdownData(sourceFile.data);
+		const sourceMarkdown = decodeMarkdownData(sourceFile.content);
 		const nextMarkdown = normalizePersistedMarkdown(sourceMarkdown);
 		const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
 		if (!syncState.sawInitialSnapshot) {

@@ -13,14 +13,14 @@ export async function assembleMdAst(args: {
 	const file = await qb(lix)
 		.selectFrom("lix_file")
 		.where("id", "=", fileId)
-		.select(["data"])
+		.select(["content"])
 		.executeTakeFirst();
 
-	if (!file?.data) {
+	if (!file?.content) {
 		return { type: "root", children: [] };
 	}
 
-	const markdown = decodeMarkdownData(file.data);
+	const markdown = decodeMarkdownData(file.content);
 	if (!markdown.trim()) {
 		return { type: "root", children: [] };
 	}

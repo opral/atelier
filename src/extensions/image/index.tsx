@@ -41,7 +41,7 @@ type ImageViewProps = {
 type ImageFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type ImageDimensions = {
@@ -91,7 +91,7 @@ function ImageViewContent({ fileId, filePath }: ImageViewProps) {
 	const fileRow = useQueryTakeFirst<ImageFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "data"])
+			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
@@ -106,7 +106,7 @@ function ImageViewContent({ fileId, filePath }: ImageViewProps) {
 
 	return (
 		<ImagePreview
-			data={fileRow.data}
+			data={fileRow.content}
 			filePath={fileRow.path || filePath || "image"}
 		/>
 	);

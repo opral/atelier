@@ -16,7 +16,7 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 		.values({
 			id: fileId,
 			path: "/reactive-autosave-benchmark.md",
-			data: new TextEncoder().encode(initialMarkdown),
+			content: new TextEncoder().encode(initialMarkdown),
 		})
 		.execute();
 	const execute = vi.spyOn(lix, "execute");
@@ -24,14 +24,14 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 	const renderWaiters = new Map<string, () => void>();
 
 	function Probe() {
-		const row = useQueryTakeFirst<{ data: Uint8Array }>(() =>
+		const row = useQueryTakeFirst<{ content: Uint8Array }>(() =>
 			qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
-				.$castTo<{ data: Uint8Array }>(),
+				.$castTo<{ content: Uint8Array }>(),
 		);
-		const value = row ? new TextDecoder().decode(row.data) : undefined;
+		const value = row ? new TextDecoder().decode(row.content) : undefined;
 		useEffect(() => {
 			if (value === undefined) return;
 			renderedValues.add(value);

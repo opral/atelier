@@ -144,7 +144,7 @@ const CSV_GRID_THEME = {
 type CsvFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: Uint8Array;
+	readonly content: Uint8Array;
 };
 
 type CsvTableEditing = {
@@ -240,7 +240,7 @@ function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 	const fileRow = useQueryTakeFirst<CsvFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "data"])
+			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
@@ -360,8 +360,8 @@ function EditableCsvView({
 	const lix = useLix();
 	const fileId = fileRow.id;
 	const fileText = useMemo(
-		() => decodeFileDataToText(fileRow.data),
-		[fileRow.data],
+		() => decodeFileDataToText(fileRow.content),
+		[fileRow.content],
 	);
 	const reviewData = useExternalWriteReviewData(review);
 	const reviewText = reviewData
@@ -390,12 +390,12 @@ function EditableCsvView({
 		if (!isReviewing && wasReviewingRef.current) {
 			void qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst()
 				.then((row) => {
 					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.data);
+					const nextText = decodeFileDataToText(row.content);
 					lastCleanTextRef.current = nextText;
 					localTextRef.current = nextText;
 					setDocumentText(nextText);
@@ -423,7 +423,7 @@ function EditableCsvView({
 				if (nextText === lastCleanTextRef.current) continue;
 				try {
 					await lix.execute(
-						"UPDATE lix_file SET data = ? WHERE id = ?",
+						"UPDATE lix_file SET content = ? WHERE id = ?",
 						[new TextEncoder().encode(nextText), fileId],
 						{ originKey },
 					);
@@ -467,7 +467,7 @@ function EditableCsvView({
 	);
 
 	useEffect(() => {
-		const events = lix.observe(`SELECT data FROM lix_file WHERE id = ?`, [
+		const events = lix.observe(`SELECT content FROM lix_file WHERE id = ?`, [
 			fileId,
 		]);
 		let closed = false;
@@ -496,7 +496,7 @@ function EditableCsvView({
 					const event = await events.next();
 					if (!event || closed) continue;
 					const row = event.result.rows[0];
-					if (row) reconcile(row.get("data"));
+					if (row) reconcile(row.get("content"));
 				}
 			} catch (error) {
 				if (!closed)
@@ -702,7 +702,7 @@ function CsvViewLoaded({
 	readonly isActiveView?: boolean;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
-		return parsedOverride ?? parseCsv(decodeFileDataToText(fileRow.data));
+		return parsedOverride ?? parseCsv(decodeFileDataToText(fileRow.content));
 	}, [fileRow, parsedOverride]);
 
 	return (
@@ -1599,14 +1599,14 @@ function buildHistoricalCsvFile(args: {
 
 	if (mode === "snapshot") {
 		const data = args.afterSnapshot
-			? decodeFileDataToBytes(args.afterSnapshot.data)
+			? decodeFileDataToBytes(args.afterSnapshot.content)
 			: null;
 		if (!data) return null;
 		return {
 			fileRow: {
 				id: args.fileId,
 				path,
-				data,
+				content: data,
 			},
 			review: null,
 			reviewData: undefined,
@@ -1615,21 +1615,21 @@ function buildHistoricalCsvFile(args: {
 	}
 
 	const beforeData = args.beforeSnapshot
-		? decodeFileDataToBytes(args.beforeSnapshot.data)
+		? decodeFileDataToBytes(args.beforeSnapshot.content)
 		: EMPTY_FILE_DATA;
 	const afterData = args.revision.afterCommitId
 		? args.afterSnapshot
-			? decodeFileDataToBytes(args.afterSnapshot.data)
+			? decodeFileDataToBytes(args.afterSnapshot.content)
 			: EMPTY_FILE_DATA
 		: args.fileRow
-			? decodeFileDataToBytes(args.fileRow.data)
+			? decodeFileDataToBytes(args.fileRow.content)
 			: EMPTY_FILE_DATA;
 
 	return {
 		fileRow: {
 			id: args.fileId,
 			path,
-			data: afterData,
+			content: afterData,
 		},
 		review: {
 			fileId: args.fileId,

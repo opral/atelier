@@ -69,10 +69,10 @@ describe("storePastedMarkdownImage", () => {
 			});
 			const asset = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("path", "=", stored.workspacePath)
 				.executeTakeFirstOrThrow();
-			expect(decodeFileDataToBytes(asset.data)).toEqual(expectedBytes);
+			expect(decodeFileDataToBytes(asset.content)).toEqual(expectedBytes);
 			await expectDirectory(lix, "/assets/");
 			await expectNoDirectory(lix, "/docs/assets/");
 		} finally {
@@ -132,7 +132,7 @@ describe("storePastedMarkdownImage", () => {
 			const originalBytes = new Uint8Array([9, 8, 7]);
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/assets/diagram.png", data: originalBytes })
+				.values({ path: "/assets/diagram.png", content: originalBytes })
 				.execute();
 
 			const pastedBytes = new Uint8Array([1, 3, 5, 7]);
@@ -146,7 +146,7 @@ describe("storePastedMarkdownImage", () => {
 			expect(stored.markdownSrc).toBe("../assets/diagram-2.png");
 			const assets = await qb(lix)
 				.selectFrom("lix_file")
-				.select(["path", "data"])
+				.select(["path", "content"])
 				.where("path", "in", ["/assets/diagram.png", "/assets/diagram-2.png"])
 				.orderBy("path")
 				.execute();
@@ -154,8 +154,8 @@ describe("storePastedMarkdownImage", () => {
 				"/assets/diagram-2.png",
 				"/assets/diagram.png",
 			]);
-			expect(decodeFileDataToBytes(assets[0]?.data)).toEqual(pastedBytes);
-			expect(decodeFileDataToBytes(assets[1]?.data)).toEqual(originalBytes);
+			expect(decodeFileDataToBytes(assets[0]?.content)).toEqual(pastedBytes);
+			expect(decodeFileDataToBytes(assets[1]?.content)).toEqual(originalBytes);
 		} finally {
 			await lix.close();
 		}
@@ -169,7 +169,7 @@ describe("storePastedMarkdownImage", () => {
 				.insertInto("lix_file")
 				.values({
 					path: "/assets/Diagram.png",
-					data: new Uint8Array([9]),
+					content: new Uint8Array([9]),
 				})
 				.execute();
 
@@ -194,7 +194,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/assets", data: new Uint8Array([9]) })
+				.values({ path: "/assets", content: new Uint8Array([9]) })
 				.execute();
 
 			await expect(
@@ -220,7 +220,7 @@ describe("storePastedMarkdownImage", () => {
 			await seedMarkdownFile(lix, "/docs/readme.md");
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/Assets", data: new Uint8Array([9]) })
+				.values({ path: "/Assets", content: new Uint8Array([9]) })
 				.execute();
 
 			await expect(
@@ -297,7 +297,7 @@ describe("storePastedMarkdownImage", () => {
 			const localBytes = new Uint8Array([9, 8, 7]);
 			await qb(lix)
 				.insertInto("lix_file")
-				.values({ path: "/docs/assets/diagram.png", data: localBytes })
+				.values({ path: "/docs/assets/diagram.png", content: localBytes })
 				.execute();
 
 			const stored = await storePastedMarkdownImage({
@@ -312,10 +312,10 @@ describe("storePastedMarkdownImage", () => {
 			expect(stored.markdownSrc).toBe("../assets/diagram.png");
 			const localAsset = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("path", "=", "/docs/assets/diagram.png")
 				.executeTakeFirstOrThrow();
-			expect(decodeFileDataToBytes(localAsset.data)).toEqual(localBytes);
+			expect(decodeFileDataToBytes(localAsset.content)).toEqual(localBytes);
 		} finally {
 			await lix.close();
 		}
@@ -366,7 +366,7 @@ describe("storePastedMarkdownImage", () => {
 			});
 			await qb(lix)
 				.updateTable("lix_file")
-				.set({ data: new Uint8Array([2]) })
+				.set({ content: new Uint8Array([2]) })
 				.where("path", "=", stored.workspacePath)
 				.execute();
 
@@ -374,10 +374,12 @@ describe("storePastedMarkdownImage", () => {
 
 			const changed = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("path", "=", stored.workspacePath)
 				.executeTakeFirstOrThrow();
-			expect(decodeFileDataToBytes(changed.data)).toEqual(new Uint8Array([2]));
+			expect(decodeFileDataToBytes(changed.content)).toEqual(
+				new Uint8Array([2]),
+			);
 		} finally {
 			await lix.close();
 		}
@@ -460,7 +462,7 @@ async function seedMarkdownFile(
 ): Promise<void> {
 	await qb(lix)
 		.insertInto("lix_file")
-		.values({ path, data: new TextEncoder().encode("# Document\n") })
+		.values({ path, content: new TextEncoder().encode("# Document\n") })
 		.execute();
 }
 

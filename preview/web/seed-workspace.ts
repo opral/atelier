@@ -19,13 +19,13 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	const textFiles = Object.entries(seedTextModules).map(
 		([modulePath, contents]) => ({
 			path: modulePath.slice("./seed".length),
-			data: new TextEncoder().encode(embedSeedAssets(modulePath, contents)),
+			content: new TextEncoder().encode(embedSeedAssets(modulePath, contents)),
 		}),
 	);
 	const assetFiles = Object.entries(seedAssetUrls).map(
 		([modulePath, dataUrl]) => ({
 			path: modulePath.slice("./seed".length),
-			data: decodeSeedAssetDataUrl(dataUrl),
+			content: decodeSeedAssetDataUrl(dataUrl),
 		}),
 	);
 	const files = [...textFiles, ...assetFiles].sort((left, right) =>
@@ -46,9 +46,9 @@ export async function seedWorkspace(lix: Lix): Promise<void> {
 	);
 
 	for (const file of files) {
-		await lix.execute("INSERT INTO lix_file (path, data) VALUES ($1, $2)", [
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
 			file.path,
-			file.data,
+			file.content,
 		]);
 	}
 }

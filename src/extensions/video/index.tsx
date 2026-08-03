@@ -23,7 +23,7 @@ type VideoViewProps = {
 type VideoFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 /** Read-only player for the current video stored in the Lix workspace. */
@@ -42,7 +42,7 @@ function VideoViewContent({ fileId, filePath }: VideoViewProps) {
 	const fileRow = useQueryTakeFirst<VideoFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "data"])
+			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
@@ -57,7 +57,7 @@ function VideoViewContent({ fileId, filePath }: VideoViewProps) {
 
 	return (
 		<VideoPreview
-			data={fileRow.data}
+			data={fileRow.content}
 			filePath={fileRow.path || filePath || "video"}
 		/>
 	);

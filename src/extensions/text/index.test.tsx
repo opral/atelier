@@ -60,7 +60,7 @@ describe("TextView", () => {
 			.values({
 				id: fakeUuid("text-file"),
 				path: "/src/session.py",
-				data: new TextEncoder().encode("class AgentSession:\n    pass\n"),
+				content: new TextEncoder().encode("class AgentSession:\n    pass\n"),
 			})
 			.execute();
 		const atelier = await createRuntime(lix);
@@ -108,7 +108,7 @@ describe("TextView", () => {
 			.values({
 				id: fakeUuid("origin-file"),
 				path: "/notes.txt",
-				data: new TextEncoder().encode("initial"),
+				content: new TextEncoder().encode("initial"),
 			})
 			.execute();
 		let utils: ReturnType<typeof render> | undefined;
@@ -141,17 +141,17 @@ describe("TextView", () => {
 		await waitFor(async () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fakeUuid("origin-file"))
 				.executeTakeFirstOrThrow();
-			expect(new TextDecoder().decode(row.data as Uint8Array)).toBe(
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
 				"user edit",
 			);
 		});
 
 		await act(async () => {
 			await lix.execute(
-				"UPDATE lix_file SET data = ? WHERE id = ?",
+				"UPDATE lix_file SET content = ? WHERE id = ?",
 				[new TextEncoder().encode("external edit"), fakeUuid("origin-file")],
 				{ originKey: "test.external" },
 			);
@@ -183,7 +183,7 @@ describe("TextView", () => {
 			.values({
 				id: fakeUuid("self-origin-file"),
 				path: "/notes.txt",
-				data: new TextEncoder().encode("initial"),
+				content: new TextEncoder().encode("initial"),
 			})
 			.execute();
 		let utils: ReturnType<typeof render> | undefined;
@@ -230,7 +230,7 @@ describe("TextView", () => {
 
 		await act(async () => {
 			await lix.execute(
-				"UPDATE lix_file SET data = ? WHERE id = ?",
+				"UPDATE lix_file SET content = ? WHERE id = ?",
 				[
 					new TextEncoder().encode("same-origin external"),
 					fakeUuid("self-origin-file"),

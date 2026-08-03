@@ -22,12 +22,12 @@ type HtmlViewProps = {
 type HtmlFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type HtmlImageFileRow = {
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 const EMPTY_HTML_IMAGE_FILES: ReadonlyArray<HtmlImageFileRow> = [];
@@ -60,7 +60,7 @@ function HtmlViewContent({ fileId, filePath }: HtmlViewProps) {
 	const fileRow = useQueryTakeFirst<HtmlFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "data"])
+			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
@@ -85,8 +85,8 @@ function HtmlWorkspacePreview({
 }) {
 	const resolvedFilePath = fileRow.path || filePath || "artifact.html";
 	const source = useMemo(
-		() => decodeFileDataToText(fileRow.data),
-		[fileRow.data],
+		() => decodeFileDataToText(fileRow.content),
+		[fileRow.content],
 	);
 	const imagePaths = useMemo(
 		() => collectHtmlWorkspaceImagePaths(source, resolvedFilePath),
@@ -96,14 +96,14 @@ function HtmlWorkspacePreview({
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
-				.select(["path", "data"])
+				.select(["path", "content"])
 				.where("path", "in", imagePaths),
 		{ enabled: imagePaths.length > 0 },
 	);
 
 	return (
 		<HtmlPreview
-			data={fileRow.data}
+			data={fileRow.content}
 			filePath={resolvedFilePath}
 			workspaceImageFiles={imageFiles}
 		/>
@@ -316,7 +316,7 @@ function useWorkspaceImageUrls(
 	useEffect(() => {
 		const nextUrls = new Map<string, string>();
 		for (const file of files) {
-			const bytes = decodeFileDataToBytes(file.data);
+			const bytes = decodeFileDataToBytes(file.content);
 			if (bytes.byteLength === 0) continue;
 			const blobBytes = Uint8Array.from(bytes);
 			nextUrls.set(

@@ -56,7 +56,7 @@ describe("HistoryView", () => {
 	test("lists files while working changes is active", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3), ($4, $5, $6)",
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
 				fakeUuid("working-file-one"),
 				"/docs/one.md",
@@ -67,7 +67,7 @@ describe("HistoryView", () => {
 			],
 		);
 		await lix.createCheckpoint();
-		await lix.execute("UPDATE lix_file SET data = $1", [
+		await lix.execute("UPDATE lix_file SET content = $1", [
 			new TextEncoder().encode("after"),
 		]);
 		const openWorkingChangeFile = vi.fn();
@@ -109,7 +109,7 @@ describe("HistoryView", () => {
 	test("lists workspace moments and opens a checkpoint on click", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3), ($4, $5, $6)",
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
 				fakeUuid("history-file-one"),
 				"/one.txt",
@@ -174,7 +174,7 @@ describe("HistoryView", () => {
 	test("marks the viewed checkpoint and lists its files", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3), ($4, $5, $6)",
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
 				fakeUuid("history-file-one"),
 				"/docs/one.txt",
@@ -232,11 +232,11 @@ describe("HistoryView", () => {
 		const lix = await openLix();
 		const fileId = fakeUuid("history-switch-file");
 		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
 			[fileId, "/switch.txt", new TextEncoder().encode("older")],
 		);
 		const olderCheckpoint = await lix.createCheckpoint();
-		await lix.execute("UPDATE lix_file SET data = $1 WHERE id = $2", [
+		await lix.execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
 			new TextEncoder().encode("newer"),
 			fileId,
 		]);

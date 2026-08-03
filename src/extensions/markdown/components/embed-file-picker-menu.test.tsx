@@ -110,22 +110,22 @@ async function setup() {
 			{
 				id: fakeUuid("file-video"),
 				path: "/assets/kickoff.mp4",
-				data: new Uint8Array([1]),
+				content: new Uint8Array([1]),
 			},
 			{
 				id: fakeUuid("file-sketch"),
 				path: "/design/brand.sketch",
-				data: new Uint8Array([2]),
+				content: new Uint8Array([2]),
 			},
 			{
 				id: fakeUuid("file-doc"),
 				path: "/docs/notes.md",
-				data: new Uint8Array([3]),
+				content: new Uint8Array([3]),
 			},
 			{
 				id: fakeUuid("file-other"),
 				path: "/docs/other.md",
-				data: new Uint8Array([4]),
+				content: new Uint8Array([4]),
 			},
 		])
 		.execute();

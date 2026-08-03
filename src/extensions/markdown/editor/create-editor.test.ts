@@ -20,9 +20,9 @@ async function readMarkdown(
 	const row = await qb(lix)
 		.selectFrom("lix_file")
 		.where("id", "=", fileId)
-		.select("data")
+		.select("content")
 		.executeTakeFirst();
-	return new TextDecoder().decode(row?.data ?? new Uint8Array());
+	return new TextDecoder().decode(row?.content ?? new Uint8Array());
 }
 
 async function waitForMarkdown(
@@ -159,11 +159,11 @@ async function createEditorFromFile(args: {
 	const row = await qb(args.lix)
 		.selectFrom("lix_file")
 		.where("id", "=", args.fileId)
-		.select(["data"])
+		.select(["content"])
 		.executeTakeFirst();
 
 	const initialMarkdown = new TextDecoder().decode(
-		row?.data ?? new Uint8Array(),
+		row?.content ?? new Uint8Array(),
 	);
 	const editor = createEditor({
 		lix: args.lix,
@@ -333,7 +333,7 @@ test("editor paste hook stores a clipboard image and persists its relative refer
 		.values({
 			id: fileId,
 			path: sourceFilePath,
-			data: new TextEncoder().encode("Before"),
+			content: new TextEncoder().encode("Before"),
 		})
 		.execute();
 
@@ -381,11 +381,13 @@ test("editor paste hook stores a clipboard image and persists its relative refer
 	);
 	const storedImage = await qb(lix)
 		.selectFrom("lix_file")
-		.select(["path", "data"])
+		.select(["path", "content"])
 		.where("path", "=", "/assets/product-screenshot.png")
 		.executeTakeFirst();
 	expect(storedImage?.path).toBe("/assets/product-screenshot.png");
-	expect(Array.from(storedImage?.data ?? [])).toEqual(Array.from(imageBytes));
+	expect(Array.from(storedImage?.content ?? [])).toEqual(
+		Array.from(imageBytes),
+	);
 	expect(statuses.map((status) => status.state)).toEqual(["saving", "saved"]);
 
 	editor.destroy();
@@ -401,7 +403,7 @@ test("dropping an external image prevents navigation and persists it at the drop
 		.values({
 			id: fileId,
 			path: sourceFilePath,
-			data: new TextEncoder().encode("Before\n\nAfter"),
+			content: new TextEncoder().encode("Before\n\nAfter"),
 		})
 		.execute();
 
@@ -440,11 +442,13 @@ test("dropping an external image prevents navigation and persists it at the drop
 	);
 	const storedImage = await qb(lix)
 		.selectFrom("lix_file")
-		.select(["path", "data"])
+		.select(["path", "content"])
 		.where("path", "=", "/assets/dropped-image.png")
 		.executeTakeFirst();
 	expect(storedImage?.path).toBe("/assets/dropped-image.png");
-	expect(Array.from(storedImage?.data ?? [])).toEqual(Array.from(imageBytes));
+	expect(Array.from(storedImage?.content ?? [])).toEqual(
+		Array.from(imageBytes),
+	);
 	expect(statuses.map((status) => status.state)).toEqual(["saving", "saved"]);
 
 	editor.destroy();
@@ -532,7 +536,7 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 		.values({
 			id: fileId,
 			path: "/paste-start.md",
-			data: new TextEncoder().encode("Start"),
+			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
 
@@ -576,7 +580,7 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 		.values({
 			id: fileId,
 			path: "/paste-end.md",
-			data: new TextEncoder().encode("Start"),
+			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
 
@@ -615,7 +619,7 @@ test("replace word selection with paste (TipTap + Lix)", async () => {
 		.values({
 			id: fileId,
 			path: "/paste-replace-word.md",
-			data: new TextEncoder().encode(initial),
+			content: new TextEncoder().encode(initial),
 		})
 		.execute();
 
@@ -655,7 +659,7 @@ test("replace entire document with paste (TipTap + Lix)", async () => {
 		.values({
 			id: fileId,
 			path: "/paste-replace-all.md",
-			data: new TextEncoder().encode(initial),
+			content: new TextEncoder().encode(initial),
 		})
 		.execute();
 
@@ -696,7 +700,7 @@ test("paste multi-paragraph plain text into empty doc (TipTap + Lix)", async () 
 		.values({
 			id: fileId,
 			path: "/paste-plain-multi.md",
-			data: new TextEncoder().encode(""),
+			content: new TextEncoder().encode(""),
 		})
 		.execute();
 
@@ -736,7 +740,7 @@ test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 		.values({
 			id: fileId,
 			path: "/enter-split.md",
-			data: new TextEncoder().encode("Hello world."),
+			content: new TextEncoder().encode("Hello world."),
 		})
 		.execute();
 
@@ -783,7 +787,7 @@ test("does not persist editor transactions while persistence is suspended", asyn
 		.values({
 			id: fileId,
 			path: "/suspended-persistence.md",
-			data: new TextEncoder().encode(initialMarkdown),
+			content: new TextEncoder().encode(initialMarkdown),
 		})
 		.execute();
 
@@ -824,7 +828,7 @@ test("does not flush stale editor content when destroyed while suspended", async
 		.values({
 			id: fileId,
 			path: "/suspended-destroy.md",
-			data: new TextEncoder().encode(externalMarkdown),
+			content: new TextEncoder().encode(externalMarkdown),
 		})
 		.execute();
 
@@ -852,7 +856,7 @@ test("stale in-flight autosave cannot overwrite a concurrent external write", as
 		.values({
 			id: fileId,
 			path: "/autosave-compare-and-swap.md",
-			data: new TextEncoder().encode(initialMarkdown),
+			content: new TextEncoder().encode(initialMarkdown),
 		})
 		.execute();
 
@@ -864,11 +868,11 @@ test("stale in-flight autosave cannot overwrite a concurrent external write", as
 					const [statement] = args;
 					if (
 						!interleavedExternalWrite &&
-						statement.startsWith("UPDATE lix_file SET data = ? WHERE id = ?")
+						statement.startsWith("UPDATE lix_file SET content = ? WHERE id = ?")
 					) {
 						interleavedExternalWrite = true;
 						await target.execute(
-							"UPDATE lix_file SET data = ? WHERE id = ?",
+							"UPDATE lix_file SET content = ? WHERE id = ?",
 							[new TextEncoder().encode(externalMarkdown), fileId],
 							{ originKey: "external-writer" },
 						);
@@ -912,7 +916,7 @@ test("two Enters create three persisted paragraphs in order", async () => {
 		.values({
 			id: fileId,
 			path: "/enter-split-three.md",
-			data: new TextEncoder().encode("Hello world"),
+			content: new TextEncoder().encode("Hello world"),
 		})
 		.execute();
 
@@ -955,7 +959,7 @@ test("normalize CRLF line endings on paste (TipTap + Lix)", async () => {
 		.values({
 			id: fileId,
 			path: "/paste-crlf.md",
-			data: new TextEncoder().encode(""),
+			content: new TextEncoder().encode(""),
 		})
 		.execute();
 	const editor: Editor = await createEditorFromFile({
@@ -990,7 +994,7 @@ test("paste complex markdown with lists and code blocks (TipTap + Lix)", async (
 		.values({
 			id: fileId,
 			path: "/paste-complex.md",
-			data: new TextEncoder().encode(""),
+			content: new TextEncoder().encode(""),
 		})
 		.execute();
 	const editor: Editor = await createEditorFromFile({
@@ -1034,7 +1038,7 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
 		.values({
 			id: fileId,
 			path: "/paste-inline-format.md",
-			data: new TextEncoder().encode(""),
+			content: new TextEncoder().encode(""),
 		})
 		.execute();
 	const editor: Editor = await createEditorFromFile({
@@ -1080,7 +1084,7 @@ test("rapid Enter/type coalescing persists 3 paragraphs", async () => {
 		.values({
 			id: fileId,
 			path: "/rapid-enter.md",
-			data: new TextEncoder().encode("Start"),
+			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
 
@@ -1136,7 +1140,7 @@ test("delete removes the middle paragraph from persisted markdown", async () => 
 		.values({
 			id: fileId,
 			path: "/delete-cleanup.md",
-			data: new TextEncoder().encode("Start\n\nSecond\n\nThird"),
+			content: new TextEncoder().encode("Start\n\nSecond\n\nThird"),
 		})
 		.execute();
 
@@ -1175,7 +1179,7 @@ test("destroy flushes pending autosave for an existing file", async () => {
 		.values({
 			id: fileId,
 			path: "/destroy-flush-pending-autosave.md",
-			data: new TextEncoder().encode("Start"),
+			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
 
@@ -1208,7 +1212,7 @@ test("destroy flushes pending autosave without recreating a deleted file", async
 		.values({
 			id: fileId,
 			path: "/destroy-cancel-pending-autosave.md",
-			data: new TextEncoder().encode("Start"),
+			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
 
@@ -1244,7 +1248,7 @@ test("editing a long markdown document does not truncate content below the edit 
 		.values({
 			id: fileId,
 			path: "/long-markdown-mid-edit.md",
-			data: new TextEncoder().encode(initial),
+			content: new TextEncoder().encode(initial),
 		})
 		.execute();
 

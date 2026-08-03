@@ -38,13 +38,13 @@ export async function simulateMarkdownAgentWorkflow(
 	}
 	const file = await qb(lix)
 		.selectFrom("lix_file")
-		.select(["id", "path", "data"])
+		.select(["id", "path", "content"])
 		.where("path", "=", args.filePath)
 		.limit(1)
 		.executeTakeFirst();
 	if (!file) throw new Error(`File not found: ${args.filePath}`);
 
-	const beforeBytes = fileDataBytes(file.data);
+	const beforeBytes = fileDataBytes(file.content);
 	const beforeMarkdown = decoder.decode(beforeBytes);
 	const afterMarkdown = applyDeveloperWorkflowScenario(
 		beforeMarkdown,
@@ -58,7 +58,7 @@ export async function simulateMarkdownAgentWorkflow(
 	const beforeCommitId = await activeCommitId(lix);
 	const rangeId = developerWorkflowId();
 	const writeResult = await lix.execute(
-		"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
+		"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
 		[encoder.encode(afterMarkdown), file.id, beforeBytes],
 		{ originKey: `atelier.devtools:codex:${rangeId}` },
 	);

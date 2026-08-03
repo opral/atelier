@@ -842,9 +842,9 @@ async function writeFile(
 ): Promise<void> {
 	await qb(lix)
 		.insertInto("lix_file")
-		.values({ id, path, data: encoder.encode(text) })
+		.values({ id, path, content: encoder.encode(text) })
 		.onConflict((oc) =>
-			oc.column("id").doUpdateSet({ path, data: encoder.encode(text) }),
+			oc.column("id").doUpdateSet({ path, content: encoder.encode(text) }),
 		)
 		.execute();
 }

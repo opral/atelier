@@ -97,7 +97,7 @@ export async function storePastedMarkdownImage({
 
 		try {
 			const result = await lix.execute(
-				"INSERT INTO lix_file (id, path, data) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
+				"INSERT INTO lix_file (id, path, content) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
 				[fileId, workspacePath, bytes],
 				originKey ? { originKey } : undefined,
 			);
@@ -110,7 +110,7 @@ export async function storePastedMarkdownImage({
 				alt,
 				remove: async () => {
 					await lix.execute(
-						"DELETE FROM lix_file WHERE id = ? AND path = ? AND data = ?",
+						"DELETE FROM lix_file WHERE id = ? AND path = ? AND content = ?",
 						[fileId, workspacePath, bytes],
 						originKey ? { originKey } : undefined,
 					);

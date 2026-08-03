@@ -34,7 +34,7 @@ const ExcalidrawCanvas = lazy(() => import("./excalidraw-canvas"));
 type ExcalidrawFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type ExcalidrawViewProps = {
@@ -62,7 +62,7 @@ function ExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 	const fileRow = useQueryTakeFirst<ExcalidrawFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "data"])
+			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
@@ -108,8 +108,8 @@ function EditableExcalidrawView({
 	const lix = useLix();
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.excalidraw`;
 	const fileText = useMemo(
-		() => decodeFileDataToText(fileRow.data),
-		[fileRow.data],
+		() => decodeFileDataToText(fileRow.content),
+		[fileRow.content],
 	);
 	const review = useExternalWriteReview({
 		fileId,
@@ -148,12 +148,12 @@ function EditableExcalidrawView({
 		if (!isReviewing && wasReviewingRef.current) {
 			void qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst()
 				.then((row) => {
 					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.data);
+					const nextText = decodeFileDataToText(row.content);
 					lastCleanTextRef.current = nextText;
 					localTextRef.current = nextText;
 					setDocumentText(nextText);
@@ -181,7 +181,7 @@ function EditableExcalidrawView({
 				if (nextText === lastCleanTextRef.current) continue;
 				try {
 					await lix.execute(
-						"UPDATE lix_file SET data = ? WHERE id = ?",
+						"UPDATE lix_file SET content = ? WHERE id = ?",
 						[new TextEncoder().encode(nextText), fileId],
 						{ originKey },
 					);
@@ -210,7 +210,7 @@ function EditableExcalidrawView({
 	);
 
 	useEffect(() => {
-		const events = lix.observe(`SELECT data FROM lix_file WHERE id = ?`, [
+		const events = lix.observe(`SELECT content FROM lix_file WHERE id = ?`, [
 			fileId,
 		]);
 		let closed = false;
@@ -239,7 +239,7 @@ function EditableExcalidrawView({
 					const event = await events.next();
 					if (!event || closed) continue;
 					const row = event.result.rows[0];
-					if (row) reconcile(row.get("data"));
+					if (row) reconcile(row.get("content"));
 				}
 			} catch (error) {
 				if (!closed)
@@ -303,7 +303,7 @@ function HistoricalExcalidrawView({
 		setSnapshotText(null);
 		setLoadError(false);
 		if (!commitId) {
-			setSnapshotText(decodeFileDataToText(fileRow.data));
+			setSnapshotText(decodeFileDataToText(fileRow.content));
 			return;
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
@@ -318,7 +318,7 @@ function HistoricalExcalidrawView({
 		return () => {
 			cancelled = true;
 		};
-	}, [commitId, fileId, fileRow.data, lix]);
+	}, [commitId, fileId, fileRow.content, lix]);
 
 	if (loadError) {
 		return (

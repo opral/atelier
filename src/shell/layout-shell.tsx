@@ -2436,7 +2436,7 @@ function LayoutShellLoadedContent({
 			const [current, afterData] = await Promise.all([
 				qb(lix)
 					.selectFrom("lix_file")
-					.select(["data"])
+					.select(["content"])
 					.where("id", "=", review.fileId)
 					.limit(1)
 					.executeTakeFirst(),
@@ -2445,7 +2445,7 @@ function LayoutShellLoadedContent({
 			return (
 				!!current &&
 				!!afterData &&
-				fileBytesEqual(decodeFileDataToBytes(current.data), afterData)
+				fileBytesEqual(decodeFileDataToBytes(current.content), afterData)
 			);
 		},
 		[lix],
@@ -2454,7 +2454,7 @@ function LayoutShellLoadedContent({
 	const deleteAddedExternalWriteReviewFile = useCallback(
 		async (review: ExternalWriteReview, afterData: Uint8Array) => {
 			const result = await lix.execute(
-				"DELETE FROM lix_file WHERE id = $1 AND data = $2",
+				"DELETE FROM lix_file WHERE id = $1 AND content = $2",
 				[review.fileId, afterData],
 				{ originKey: `atelier.review:${review.reviewId}` },
 			);
@@ -2509,7 +2509,7 @@ function LayoutShellLoadedContent({
 					await deleteAddedExternalWriteReviewFile(review, afterData);
 				} else {
 					const result = await lix.execute(
-						"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
+						"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
 						[args.data, review.fileId, afterData],
 						{ originKey: `atelier.review:${review.reviewId}` },
 					);
@@ -2576,7 +2576,7 @@ function LayoutShellLoadedContent({
 					throw new Error("The reviewed file snapshot is no longer available.");
 				}
 				const result = await lix.execute(
-					"UPDATE lix_file SET data = $1 WHERE id = $2 AND data = $3",
+					"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
 					[beforeData, review.fileId, afterData],
 					{ originKey: `atelier.review:${review.reviewId}` },
 				);
@@ -3030,7 +3030,7 @@ function LayoutShellLoadedContent({
 			.insertInto("lix_file")
 			.values({
 				path,
-				data: new TextEncoder().encode(""),
+				content: new TextEncoder().encode(""),
 			})
 			.execute();
 		return resolveAndOpenFile({

@@ -5,13 +5,13 @@ import { sql } from "@/lib/lix-kysely";
 export type HistoricalFileSnapshot = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type HistoricalFileSnapshotRow = {
 	readonly id: string;
 	readonly path: string | null;
-	readonly data: unknown | null;
+	readonly content: unknown | null;
 	readonly commit_id: string;
 };
 
@@ -43,7 +43,7 @@ export function useFileSnapshotsAtCommits(
 					.select([
 						"id",
 						"path",
-						"data",
+						"content",
 						"lixcol_depth",
 						sql<string>`${commitId}`.as("commit_id"),
 					])
@@ -86,8 +86,8 @@ export function useFileSnapshotsAtCommits(
 function visibleSnapshot(
 	row: HistoricalFileSnapshotRow,
 ): HistoricalFileSnapshot | undefined {
-	if (typeof row.path !== "string" || row.data === null) {
+	if (typeof row.path !== "string" || row.content === null) {
 		return undefined;
 	}
-	return { id: row.id, path: row.path, data: row.data };
+	return { id: row.id, path: row.path, content: row.content };
 }

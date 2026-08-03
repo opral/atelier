@@ -144,7 +144,7 @@ test("loads a workspace video as a disposable object URL", async () => {
 		.values({
 			id: fakeUuid("video-asset"),
 			path: "/docs/assets/kickoff.mp4",
-			data: new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]),
+			content: new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]),
 		})
 		.execute();
 
@@ -185,7 +185,7 @@ test("loads a workspace PDF as a disposable object URL", async () => {
 		.values({
 			id: fakeUuid("pdf-asset"),
 			path: "/docs/assets/brief.pdf",
-			data: new TextEncoder().encode("%PDF-1.7"),
+			content: new TextEncoder().encode("%PDF-1.7"),
 		})
 		.execute();
 
@@ -227,13 +227,13 @@ test("loads workspace assets from the requested historical commit", async () => 
 		.values({
 			id: fakeUuid("historical-pdf-asset"),
 			path: "/docs/brief.pdf",
-			data: new TextEncoder().encode("%PDF-1.7 historical bytes"),
+			content: new TextEncoder().encode("%PDF-1.7 historical bytes"),
 		})
 		.execute();
 	const historicalCommitId = await activeCommitId(lix);
 	await qb(lix)
 		.updateTable("lix_file")
-		.set({ data: new TextEncoder().encode("%PDF-1.7 current bytes") })
+		.set({ content: new TextEncoder().encode("%PDF-1.7 current bytes") })
 		.where("id", "=", fakeUuid("historical-pdf-asset"))
 		.execute();
 
@@ -378,7 +378,7 @@ test("rejects local files without a PDF signature", async () => {
 		.values({
 			id: fakeUuid("fake-pdf"),
 			path: "/fake.pdf",
-			data: new TextEncoder().encode("<html>not a pdf</html>"),
+			content: new TextEncoder().encode("<html>not a pdf</html>"),
 		})
 		.execute();
 	await expect(
@@ -398,7 +398,7 @@ test("requires a click before previewing an oversized local PDF", async () => {
 		.values({
 			id: fakeUuid("large-pdf"),
 			path: "/large.pdf",
-			data: new TextEncoder().encode("%PDF-1.7 oversized"),
+			content: new TextEncoder().encode("%PDF-1.7 oversized"),
 		})
 		.execute();
 	vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:large-pdf");
