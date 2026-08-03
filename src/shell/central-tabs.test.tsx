@@ -120,17 +120,17 @@ async function renderTabbedShell(
 			{
 				id: fakeUuid("one"),
 				path: "/one.md",
-				data: new TextEncoder().encode("# One\n"),
+				content: new TextEncoder().encode("# One\n"),
 			},
 			{
 				id: fakeUuid("two"),
 				path: "/two.md",
-				data: new TextEncoder().encode("# Two\n"),
+				content: new TextEncoder().encode("# Two\n"),
 			},
 			{
 				id: fakeUuid("three"),
 				path: "/three.md",
-				data: new TextEncoder().encode("# Three\n"),
+				content: new TextEncoder().encode("# Three\n"),
 			},
 		])
 		.execute();

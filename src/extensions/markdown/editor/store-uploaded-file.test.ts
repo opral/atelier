@@ -38,12 +38,12 @@ test("stores an upload next to the document and suffixes collisions", async () =
 			{
 				id: fakeUuid("doc"),
 				path: "/docs/notes.md",
-				data: new Uint8Array([1]),
+				content: new Uint8Array([1]),
 			},
 			{
 				id: fakeUuid("existing"),
 				path: "/docs/photo.png",
-				data: new Uint8Array([2]),
+				content: new Uint8Array([2]),
 			},
 		])
 		.execute();

@@ -90,22 +90,22 @@ export async function loadMarkdownAsset({
 
 	const file = sourceCommitId
 		? await selectFileHistory(lix, sourceCommitId)
-				.select(["id", "data", "path"])
+				.select(["id", "content", "path"])
 				.where("path", "=", workspacePath)
 				.orderBy("lixcol_depth", "asc")
 				.limit(1)
 				.executeTakeFirst()
 		: await qb(lix)
 				.selectFrom("lix_file")
-				.select(["id", "data", "path"])
+				.select(["id", "content", "path"])
 				.where("path", "=", workspacePath)
 				.limit(1)
 				.executeTakeFirst();
-	if (!file?.data) return null;
+	if (!file?.content) return null;
 	const bytes =
-		file.data instanceof Uint8Array
-			? file.data
-			: new Uint8Array(file.data as ArrayBuffer);
+		file.content instanceof Uint8Array
+			? file.content
+			: new Uint8Array(file.content as ArrayBuffer);
 	if (isPdf && !hasPdfSignature(bytes)) return null;
 
 	const objectUrl = URL.createObjectURL(

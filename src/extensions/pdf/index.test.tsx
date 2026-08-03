@@ -160,7 +160,7 @@ describe("PdfPreview", () => {
 			.values({
 				id: fakeUuid("historical-pdf"),
 				path: "/assets/history.pdf",
-				data: new TextEncoder().encode("%PDF-1.7 historical"),
+				content: new TextEncoder().encode("%PDF-1.7 historical"),
 			})
 			.execute();
 		const result = await lix.execute(
@@ -169,7 +169,7 @@ describe("PdfPreview", () => {
 		const sourceCommitId = result.rows[0]?.get("commit_id") as string;
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("%PDF-1.7 current") })
+			.set({ content: new TextEncoder().encode("%PDF-1.7 current") })
 			.where("id", "=", fakeUuid("historical-pdf"))
 			.execute();
 

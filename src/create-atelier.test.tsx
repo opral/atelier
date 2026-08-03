@@ -28,7 +28,7 @@ describe("Atelier instance file controller", () => {
 			.values({
 				id: fakeUuid("focused-file"),
 				path: "/focused.md",
-				data: new TextEncoder().encode("# Focused\n"),
+				content: new TextEncoder().encode("# Focused\n"),
 			})
 			.execute();
 		const atelier = createAtelier({
@@ -75,7 +75,7 @@ describe("Atelier instance file controller", () => {
 			.values({
 				id: fakeUuid("queued-file"),
 				path: "/docs/queued.md",
-				data: new TextEncoder().encode("# Queued\n"),
+				content: new TextEncoder().encode("# Queued\n"),
 			})
 			.execute();
 		const atelier = createAtelier({ lix });
@@ -169,7 +169,7 @@ describe("Atelier instance file controller", () => {
 			.values({
 				id: fileId,
 				path: filePath,
-				data: new TextEncoder().encode("# Active\n"),
+				content: new TextEncoder().encode("# Active\n"),
 			})
 			.execute();
 		const atelier = createAtelier({
@@ -210,12 +210,12 @@ describe("Atelier instance file controller", () => {
 				{
 					id: fakeUuid("root-first"),
 					path: "/first.md",
-					data: new TextEncoder().encode("# First\n"),
+					content: new TextEncoder().encode("# First\n"),
 				},
 				{
 					id: fakeUuid("root-second"),
 					path: "/second.md",
-					data: new TextEncoder().encode("# Second\n"),
+					content: new TextEncoder().encode("# Second\n"),
 				},
 			])
 			.execute();
@@ -257,12 +257,12 @@ describe("Atelier instance file controller", () => {
 				{
 					id: fakeUuid("path-first"),
 					path: "/first.md",
-					data: new TextEncoder().encode("# First\n"),
+					content: new TextEncoder().encode("# First\n"),
 				},
 				{
 					id: fakeUuid("path-second"),
 					path: "/second.md",
-					data: new TextEncoder().encode("# Second\n"),
+					content: new TextEncoder().encode("# Second\n"),
 				},
 			])
 			.execute();

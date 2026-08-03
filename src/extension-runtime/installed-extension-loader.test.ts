@@ -17,8 +17,8 @@ async function writeInstalledExtensionFile(
 	data: string,
 ): Promise<void> {
 	await lix.execute(
-		"INSERT INTO lix_file (path, data) VALUES (?, ?) \
-		 ON CONFLICT (path) DO UPDATE SET data = excluded.data",
+		"INSERT INTO lix_file (path, content) VALUES (?, ?) \
+		 ON CONFLICT (path) DO UPDATE SET content = excluded.content",
 		[
 			`/.lix/app_data/atelier/extensions/table-viewer/${path}`,
 			textEncoder.encode(data),
@@ -148,7 +148,7 @@ describe("parseManifest", () => {
 			[
 				{
 					path: manifestPath,
-					data: textEncoder.encode(
+					content: textEncoder.encode(
 						JSON.stringify({
 							apiVersion: 1,
 							id: "table-viewer",
@@ -159,7 +159,7 @@ describe("parseManifest", () => {
 				},
 				{
 					path: entryPath,
-					data: textEncoder.encode("export default { mount() {} }"),
+					content: textEncoder.encode("export default { mount() {} }"),
 				},
 			],
 			{ importModule },

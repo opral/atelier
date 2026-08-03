@@ -60,7 +60,7 @@ describe("FilesView", () => {
 			.values({
 				id: fakeUuid("readme"),
 				path: "/README.md",
-				data: new TextEncoder().encode("# README\n"),
+				content: new TextEncoder().encode("# README\n"),
 			})
 			.execute();
 
@@ -95,12 +95,12 @@ describe("FilesView", () => {
 				{
 					id: fakeUuid("readme"),
 					path: "/README.md",
-					data: new TextEncoder().encode("# README\n"),
+					content: new TextEncoder().encode("# README\n"),
 				},
 				{
 					id: fakeUuid("guide"),
 					path: "/docs/guide.md",
-					data: new TextEncoder().encode("# Guide\n"),
+					content: new TextEncoder().encode("# Guide\n"),
 				},
 			])
 			.execute();
@@ -314,11 +314,11 @@ describe("FilesView", () => {
 		await waitFor(async () => {
 			const created = await qb(lix)
 				.selectFrom("lix_file")
-				.select(["data", "path"])
+				.select(["content", "path"])
 				.where("path", "=", "/planning/budget.csv")
 				.executeTakeFirst();
 			expect(created?.path).toBe("/planning/budget.csv");
-			expect(new TextDecoder().decode(created?.data)).toBe("Column 1\n");
+			expect(new TextDecoder().decode(created?.content)).toBe("Column 1\n");
 		});
 		expect(openFile).not.toHaveBeenCalled();
 
@@ -1401,12 +1401,12 @@ async function insertFile(
 		.values({
 			id,
 			path,
-			data: new TextEncoder().encode(content),
+			content: new TextEncoder().encode(content),
 		})
 		.onConflict((conflict) =>
 			conflict
 				.column("id")
-				.doUpdateSet({ path, data: new TextEncoder().encode(content) }),
+				.doUpdateSet({ path, content: new TextEncoder().encode(content) }),
 		)
 		.execute();
 }

@@ -10,7 +10,7 @@ test("assembleMdAst returns empty root when file is missing", async () => {
 	expect(ast).toEqual({ type: "root", children: [] });
 });
 
-test("assembleMdAst parses markdown from lix_file.data", async () => {
+test("assembleMdAst parses markdown from lix_file.content", async () => {
 	const lix = await openLix();
 
 	const fileId = fakeUuid("util_file_1");
@@ -20,7 +20,7 @@ test("assembleMdAst parses markdown from lix_file.data", async () => {
 		.values({
 			id: fileId,
 			path: "/util.md",
-			data: new TextEncoder().encode(markdown),
+			content: new TextEncoder().encode(markdown),
 		})
 		.execute();
 

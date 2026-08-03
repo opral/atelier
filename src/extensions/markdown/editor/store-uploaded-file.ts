@@ -89,7 +89,7 @@ export async function storeUploadedWorkspaceFile({
 
 		try {
 			const result = await lix.execute(
-				"INSERT INTO lix_file (id, path, data) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
+				"INSERT INTO lix_file (id, path, content) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
 				[uploadedFileId(), workspacePath, bytes],
 				originKey ? { originKey } : undefined,
 			);

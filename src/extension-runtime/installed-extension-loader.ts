@@ -41,19 +41,19 @@ export function reconcileInstalledExtensionCandidates(
 
 export type InstalledExtensionFileRow = {
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type LoadInstalledExtensionsOptions = {
 	readonly importModule?: typeof importExtensionModule;
 };
 
-function decodeFileData(data: InstalledExtensionFileRow["data"]): string {
-	if (data === null || data === undefined) {
+function decodeFileData(content: InstalledExtensionFileRow["content"]): string {
+	if (content === null || content === undefined) {
 		throw new Error("Expected non-null file data.");
 	}
-	if (typeof data === "string" || data instanceof Uint8Array) {
-		return decodeFileDataToText(data);
+	if (typeof content === "string" || content instanceof Uint8Array) {
+		return decodeFileDataToText(content);
 	}
 	throw new Error("Expected file data as string or binary.");
 }
@@ -127,7 +127,7 @@ export async function loadInstalledExtensionsFromRows(
 		try {
 			const manifest = parseExtensionManifest(
 				row.path,
-				decodeFileData(row.data),
+				decodeFileData(row.content),
 			);
 			const entryPath = resolveExtensionEntryPath(row.path, manifest.entry);
 			const entryRow = filesByPath.get(entryPath);
@@ -135,7 +135,7 @@ export async function loadInstalledExtensionsFromRows(
 				throw new Error(`Missing extension entry file: ${entryPath}`);
 			}
 			const module = await importModule(
-				decodeFileData(entryRow.data),
+				decodeFileData(entryRow.content),
 				entryPath,
 			);
 			candidates.push({
@@ -183,7 +183,7 @@ export async function loadInstalledExtensionsFromRows(
 export function installedExtensionFilesQuery(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_file")
-		.select(["path", "data"])
+		.select(["path", "content"])
 		.where("path", ">=", INSTALLED_EXTENSION_ROOT)
 		.where("path", "<", INSTALLED_EXTENSION_ROOT_UPPER_BOUND);
 }

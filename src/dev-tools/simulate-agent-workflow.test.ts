@@ -54,7 +54,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 		.values({
 			id: fakeUuid("devtools-readme"),
 			path: "/README.md",
-			data: encoder.encode("# Original heading\n\nStable paragraph.\n"),
+			content: encoder.encode("# Original heading\n\nStable paragraph.\n"),
 		})
 		.execute();
 
@@ -65,7 +65,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 	});
 	const file = await qb(lix)
 		.selectFrom("lix_file")
-		.select("data")
+		.select("content")
 		.where("id", "=", fakeUuid("devtools-readme"))
 		.executeTakeFirstOrThrow();
 	const ranges = await readAgentTurnCommitRanges(lix);
@@ -75,7 +75,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 		"/README.md",
 	);
 
-	expect(decoder.decode(file.data)).toContain("agent-reviewed-copy");
+	expect(decoder.decode(file.content)).toContain("agent-reviewed-copy");
 	expect(result.beforeCommitId).not.toBe(result.afterCommitId);
 	expect(ranges.at(-1)).toMatchObject({
 		id: result.rangeId,

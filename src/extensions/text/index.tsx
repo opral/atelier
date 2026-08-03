@@ -30,7 +30,7 @@ import "./style.css";
 type TextFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 export type TextViewProps = {
@@ -57,7 +57,7 @@ function TextViewContent({ fileId, ...props }: TextViewProps) {
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
-				.select(["id", "path", "data"])
+				.select(["id", "path", "content"])
 				.where("id", "=", fileId)
 				.limit(1),
 		{ subscribe: false },
@@ -106,8 +106,8 @@ function EditableTextView({
 	const lix = useLix();
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
 	const fileText = useMemo(
-		() => decodeFileDataToText(fileRow.data),
-		[fileRow.data],
+		() => decodeFileDataToText(fileRow.content),
+		[fileRow.content],
 	);
 	const review = useExternalWriteReview({
 		fileId,
@@ -151,12 +151,12 @@ function EditableTextView({
 		if (!isReviewing && wasReviewingRef.current) {
 			void qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst()
 				.then((row) => {
 					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.data);
+					const nextText = decodeFileDataToText(row.content);
 					lastCleanTextRef.current = nextText;
 					localTextRef.current = nextText;
 					setEditorText(nextText);
@@ -184,7 +184,7 @@ function EditableTextView({
 				if (nextText === lastCleanTextRef.current) continue;
 				try {
 					await lix.execute(
-						"UPDATE lix_file SET data = ? WHERE id = ?",
+						"UPDATE lix_file SET content = ? WHERE id = ?",
 						[new TextEncoder().encode(nextText), fileId],
 						{ originKey },
 					);
@@ -213,7 +213,7 @@ function EditableTextView({
 	);
 
 	useEffect(() => {
-		const events = lix.observe("SELECT data FROM lix_file WHERE id = ?", [
+		const events = lix.observe("SELECT content FROM lix_file WHERE id = ?", [
 			fileId,
 		]);
 		let closed = false;
@@ -242,7 +242,7 @@ function EditableTextView({
 					const event = await events.next();
 					if (!event || closed) continue;
 					const row = event.result.rows[0];
-					if (row) reconcile(row.get("data"));
+					if (row) reconcile(row.get("content"));
 				}
 			} catch (error) {
 				if (!closed)
@@ -293,7 +293,7 @@ function HistoricalTextView({
 		setSnapshotText(null);
 		setLoadError(false);
 		if (!commitId) {
-			setSnapshotText(decodeFileDataToText(fileRow.data));
+			setSnapshotText(decodeFileDataToText(fileRow.content));
 			return;
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
@@ -308,7 +308,7 @@ function HistoricalTextView({
 		return () => {
 			cancelled = true;
 		};
-	}, [commitId, fileId, fileRow.data, lix]);
+	}, [commitId, fileId, fileRow.content, lix]);
 
 	if (loadError) {
 		return (

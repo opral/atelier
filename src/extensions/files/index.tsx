@@ -517,7 +517,7 @@ function FilesViewContent({
 						.insertInto("lix_file")
 						.values({
 							path,
-							data: new TextEncoder().encode(
+							content: new TextEncoder().encode(
 								fileType === "csv"
 									? "Column 1\n"
 									: fileType === "excalidraw"
@@ -1059,7 +1059,7 @@ function FilesViewContent({
 						.insertInto("lix_file")
 						.values({
 							path: filePath,
-							data: new TextEncoder().encode(content),
+							content: new TextEncoder().encode(content),
 						})
 						.execute();
 					// Open the first dropped file

@@ -18,18 +18,19 @@ async function writeFile(
 	data: string,
 ) {
 	await lix.execute(
-		`INSERT INTO lix_file (id, path, data)
+		`INSERT INTO lix_file (id, path, content)
 		 VALUES ($1, $2, $3)
-		 ON CONFLICT (id) DO UPDATE SET data = excluded.data`,
+		 ON CONFLICT (id) DO UPDATE SET content = excluded.content`,
 		[id, path, encoder.encode(data)],
 	);
 }
 
 async function readFile(lix: Awaited<ReturnType<typeof openLix>>, id: string) {
-	const result = await lix.execute("SELECT data FROM lix_file WHERE id = $1", [
-		id,
-	]);
-	const data = result.rows[0]?.get("data");
+	const result = await lix.execute(
+		"SELECT content FROM lix_file WHERE id = $1",
+		[id],
+	);
+	const data = result.rows[0]?.get("content");
 	return data instanceof Uint8Array ? decoder.decode(data) : null;
 }
 

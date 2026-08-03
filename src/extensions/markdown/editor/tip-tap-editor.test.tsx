@@ -65,7 +65,7 @@ async function renderEditorForMarkdownFile({
 		.values({
 			id: fileId,
 			path: `/${fileId}.md`,
-			data: new TextEncoder().encode(markdown),
+			content: new TextEncoder().encode(markdown),
 		})
 		.execute();
 
@@ -114,7 +114,7 @@ async function writeMarkdownFileWithOrigin(
 	originKey?: string,
 ): Promise<void> {
 	await lix.execute(
-		"UPDATE lix_file SET data = $1 WHERE id = $2",
+		"UPDATE lix_file SET content = $1 WHERE id = $2",
 		[new TextEncoder().encode(markdown), fileId],
 		originKey ? { originKey } : undefined,
 	);
@@ -141,10 +141,10 @@ async function readMarkdownFileOrigin(
 async function decodeFileMarkdown(lix: Lix, fileId: string): Promise<string> {
 	const row = await qb(lix)
 		.selectFrom("lix_file")
-		.select("data")
+		.select("content")
 		.where("id", "=", fileId)
 		.executeTakeFirstOrThrow();
-	return new TextDecoder().decode(row.data);
+	return new TextDecoder().decode(row.content);
 }
 
 async function settleMarkdownObserver(): Promise<void> {
@@ -227,7 +227,7 @@ test("renders initial document content", async () => {
 		.values({
 			id: fileId,
 			path: "/render.md",
-			data: new TextEncoder().encode("Hello"),
+			content: new TextEncoder().encode("Hello"),
 		})
 		.execute();
 
@@ -296,11 +296,11 @@ test("shows accessible feedback after pasting an image into the editor", async (
 	await waitFor(async () => {
 		const asset = await qb(lix)
 			.selectFrom("lix_file")
-			.select(["path", "data"])
+			.select(["path", "content"])
 			.where("path", "=", "/assets/pasted-image.png")
 			.executeTakeFirst();
 		expect(asset?.path).toBe("/assets/pasted-image.png");
-		expect(Array.from(asset?.data ?? [])).toEqual(Array.from(imageBytes));
+		expect(Array.from(asset?.content ?? [])).toEqual(Array.from(imageBytes));
 	});
 });
 
@@ -969,7 +969,7 @@ test("reopens a file from fresh data instead of the prior query cache", async ()
 		.values({
 			id: fileId,
 			path: "/reopen.md",
-			data: new TextEncoder().encode("First version"),
+			content: new TextEncoder().encode("First version"),
 		})
 		.execute();
 
@@ -998,7 +998,7 @@ test("reopens a file from fresh data instead of the prior query cache", async ()
 
 	await qb(lix)
 		.updateTable("lix_file")
-		.set({ data: new TextEncoder().encode("Second version") })
+		.set({ content: new TextEncoder().encode("Second version") })
 		.where("id", "=", fileId)
 		.execute();
 
@@ -1021,7 +1021,7 @@ test("does not recreate the editor when the workspace opener identity changes", 
 		.values({
 			id: fileId,
 			path: "/stable-workspace-opener.md",
-			data: new TextEncoder().encode("Stable editor"),
+			content: new TextEncoder().encode("Stable editor"),
 		})
 		.execute();
 
@@ -1084,7 +1084,7 @@ test("persists state changes on edit (paragraph append)", async () => {
 		.values({
 			id: fileId,
 			path: "/test.md",
-			data: new TextEncoder().encode(markdown),
+			content: new TextEncoder().encode(markdown),
 		})
 		.execute();
 
@@ -1116,9 +1116,9 @@ test("persists state changes on edit (paragraph append)", async () => {
 		const row = await qb(lix)
 			.selectFrom("lix_file")
 			.where("id", "=", fileId)
-			.select("data")
+			.select("content")
 			.executeTakeFirstOrThrow();
-		const markdown = new TextDecoder().decode(row.data ?? new Uint8Array());
+		const markdown = new TextDecoder().decode(row.content ?? new Uint8Array());
 		expect(markdown).toContain("New Paragraph");
 	});
 });
@@ -1141,7 +1141,7 @@ test("renders content under React.StrictMode", async () => {
 		.values({
 			id: fileId,
 			path: "/strict.md",
-			data: new TextEncoder().encode("Hello Strict"),
+			content: new TextEncoder().encode("Hello Strict"),
 		})
 		.execute();
 
@@ -1197,7 +1197,7 @@ test("shows the command hint only while focused on an empty document", async () 
 		.values({
 			id: fileId,
 			path: "/placeholder.md",
-			data: new TextEncoder().encode(""),
+			content: new TextEncoder().encode(""),
 		})
 		.execute();
 
@@ -1334,7 +1334,7 @@ test("uses heading 1 as the requested empty document default", async () => {
 		.values({
 			id: fileId,
 			path: "/default-heading.md",
-			data: new TextEncoder().encode(""),
+			content: new TextEncoder().encode(""),
 		})
 		.execute();
 
@@ -1371,9 +1371,9 @@ test("uses heading 1 as the requested empty document default", async () => {
 		const row = await qb(lix)
 			.selectFrom("lix_file")
 			.where("id", "=", fileId)
-			.select("data")
+			.select("content")
 			.executeTakeFirstOrThrow();
-		const markdown = new TextDecoder().decode(row.data ?? new Uint8Array());
+		const markdown = new TextDecoder().decode(row.content ?? new Uint8Array());
 		expect(markdown).toBe("# Document title\n");
 	});
 });
@@ -1403,7 +1403,7 @@ test("clicking the surface focuses the editor even when content exists", async (
 		.values({
 			id: fileId,
 			path: "/has-content.md",
-			data: new TextEncoder().encode("Hello world"),
+			content: new TextEncoder().encode("Hello world"),
 		})
 		.execute();
 
@@ -1452,7 +1452,7 @@ test("updates editor when switching to a branch with different external state", 
 		.values({
 			id: fileId,
 			path: "/switch.md",
-			data: new TextEncoder().encode("Hello A"),
+			content: new TextEncoder().encode("Hello A"),
 		})
 		.execute();
 
@@ -1471,7 +1471,7 @@ test("updates editor when switching to a branch with different external state", 
 
 	await qb(lix)
 		.updateTable("lix_file_by_branch")
-		.set({ data: new TextEncoder().encode("Hello B") })
+		.set({ content: new TextEncoder().encode("Hello B") })
 		.where("id", "=", fileId)
 		.where("lixcol_branch_id", "=", branchB.id)
 		.execute();
@@ -1500,7 +1500,7 @@ test("updates editor when switching to a branch with different external state", 
 	});
 });
 
-test("updates editor when file.data is updated externally (simulate updateFile with markdown)", async () => {
+test("updates editor when file.content is updated externally (simulate updateFile with markdown)", async () => {
 	const lix = await openLix({
 		keyValues: [
 			{
@@ -1518,7 +1518,7 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 		.values({
 			id: fileId,
 			path: "/blob.md",
-			data: new TextEncoder().encode("Hello A"),
+			content: new TextEncoder().encode("Hello A"),
 		})
 		.execute();
 
@@ -1546,17 +1546,17 @@ test("updates editor when file.data is updated externally (simulate updateFile w
 	const editorA = await screen.findByTestId("tiptap-editor");
 	expect(editorA).toHaveTextContent("Hello A");
 
-	// External: write markdown into file.data directly (simulating lix.updateFile)
+	// External: write markdown into file.content directly (simulating lix.updateFile)
 	await qb(lix)
 		.updateTable("lix_file")
-		.set({ data: new TextEncoder().encode("Hello B from file.data") })
+		.set({ content: new TextEncoder().encode("Hello B from file.content") })
 		.where("id", "=", fileId)
 		.execute();
 
 	// Expect editor to pick up the updated file content (currently fails)
 	await waitFor(async () => {
 		const editorB = await screen.findByTestId("tiptap-editor");
-		expect(editorB).toHaveTextContent("Hello B from file.data");
+		expect(editorB).toHaveTextContent("Hello B from file.content");
 	});
 });
 
@@ -1686,7 +1686,7 @@ test("does not retain another file's markdown while switching file ids", async (
 		.values({
 			id: firstFileId,
 			path: "/first.md",
-			data: new TextEncoder().encode("First file\n"),
+			content: new TextEncoder().encode("First file\n"),
 		})
 		.execute();
 	await qb(lix)
@@ -1694,7 +1694,7 @@ test("does not retain another file's markdown while switching file ids", async (
 		.values({
 			id: secondFileId,
 			path: "/second.md",
-			data: new TextEncoder().encode("Second file\n"),
+			content: new TextEncoder().encode("Second file\n"),
 		})
 		.execute();
 
@@ -1755,10 +1755,10 @@ test("persists edits on top of an externally hydrated markdown baseline", async 
 	await waitFor(async () => {
 		const row = await qb(lix)
 			.selectFrom("lix_file")
-			.select("data")
+			.select("content")
 			.where("id", "=", fileId)
 			.executeTakeFirstOrThrow();
-		expect(new TextDecoder().decode(row.data)).toBe(
+		expect(new TextDecoder().decode(row.content)).toBe(
 			"Local edit after hydration\n",
 		);
 	});
@@ -1772,7 +1772,7 @@ test("suspends the same editor instance while read-only and still applies extern
 		.values({
 			id: fileId,
 			path: "/review-read-only.md",
-			data: new TextEncoder().encode("Before review\n"),
+			content: new TextEncoder().encode("Before review\n"),
 		})
 		.execute();
 
@@ -1829,10 +1829,10 @@ test("suspends the same editor instance while read-only and still applies extern
 			(
 				await qb(lix)
 					.selectFrom("lix_file")
-					.select("data")
+					.select("content")
 					.where("id", "=", fileId)
 					.executeTakeFirstOrThrow()
-			).data,
+			).content,
 		),
 	).toBe("External while reviewing\n");
 });
@@ -1845,7 +1845,7 @@ test("keeps a synthetic review document in the live editor through authoritative
 		.values({
 			id: fileId,
 			path: "/review-synthetic-override.md",
-			data: new TextEncoder().encode("Before review\n"),
+			content: new TextEncoder().encode("Before review\n"),
 		})
 		.execute();
 
@@ -1921,7 +1921,7 @@ test("read-only inactive editor replaces dirty content with authoritative file u
 		.values({
 			id: fileId,
 			path: "/review-inactive-authoritative.md",
-			data: new TextEncoder().encode("Persisted before review\n"),
+			content: new TextEncoder().encode("Persisted before review\n"),
 		})
 		.execute();
 
@@ -2056,7 +2056,7 @@ test("preserves main content when switching to a new branch and back", async () 
 		.values({
 			id: fileId,
 			path: "/regression.md",
-			data: new TextEncoder().encode("Hello world"),
+			content: new TextEncoder().encode("Hello world"),
 		})
 		.execute();
 

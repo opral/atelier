@@ -19,7 +19,7 @@ import {
 } from "./agent-turn-review-range";
 
 type FileHistoryRow = {
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type BatchedFileHistoryRow = FileHistoryRow & {
@@ -30,7 +30,7 @@ type BatchedFileHistoryRow = FileHistoryRow & {
 
 type CurrentFileRow = {
 	readonly id: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type ResolvedExternalWriteReview = {
@@ -55,7 +55,7 @@ type PendingFileReviewCandidate = {
 
 type FileHistorySnapshots = Map<
 	string,
-	Map<string, { readonly data: unknown; readonly depth: number }>
+	Map<string, { readonly content: unknown; readonly depth: number }>
 >;
 
 const EMPTY_FILE_DATA = new Uint8Array();
@@ -387,7 +387,7 @@ export async function getFileDataAtCommit(
 	commitId: string,
 ): Promise<Uint8Array | null> {
 	const snapshot = await getFileHistorySnapshotAtCommit(lix, fileId, commitId);
-	return snapshot ? decodeFileDataToBytes(snapshot.data) : null;
+	return snapshot ? decodeFileDataToBytes(snapshot.content) : null;
 }
 
 export async function getAgentTurnExternalWriteReview(
@@ -427,13 +427,13 @@ export async function getAgentTurnExternalWriteReview(
 	}
 	const current = await qb(lix)
 		.selectFrom("lix_file")
-		.select("data")
+		.select("content")
 		.where("id", "=", fileId)
 		.limit(1)
 		.executeTakeFirst();
 	if (
 		!current ||
-		!fileBytesEqual(decodeFileDataToBytes(current.data), data.afterData)
+		!fileBytesEqual(decodeFileDataToBytes(current.content), data.afterData)
 	) {
 		return null;
 	}
@@ -481,13 +481,13 @@ export async function getWorkingChangeExternalWriteReview(
 	}
 	const current = await qb(lix)
 		.selectFrom("lix_file")
-		.select("data")
+		.select("content")
 		.where("id", "=", fileId)
 		.limit(1)
 		.executeTakeFirst();
 	if (
 		!current ||
-		!fileBytesEqual(decodeFileDataToBytes(current.data), data.afterData)
+		!fileBytesEqual(decodeFileDataToBytes(current.content), data.afterData)
 	) {
 		return null;
 	}
@@ -578,11 +578,11 @@ function getRangeFileDataFromSnapshots(
 	const afterSnapshot = snapshots.get(fileId)?.get(range.afterCommitId);
 	if (!afterSnapshot) return null;
 	const beforeData = beforeSnapshot
-		? decodeFileDataToBytes(beforeSnapshot.data)
+		? decodeFileDataToBytes(beforeSnapshot.content)
 		: null;
 	return {
 		beforeData: beforeData ?? EMPTY_FILE_DATA,
-		afterData: decodeFileDataToBytes(afterSnapshot.data),
+		afterData: decodeFileDataToBytes(afterSnapshot.content),
 		beforeExists: beforeData !== null,
 	};
 }
@@ -600,7 +600,7 @@ async function getFileHistorySnapshotsAtCommits(
 			const rows = (await selectFileHistory(lix, commitId)
 				.select([
 					"id",
-					"data",
+					"content",
 					sql<string>`${commitId}`.as("commit_id"),
 					"lixcol_depth as depth",
 				])
@@ -611,7 +611,7 @@ async function getFileHistorySnapshotsAtCommits(
 				const existing = fileSnapshots.get(row.commit_id);
 				if (!existing || row.depth < existing.depth) {
 					fileSnapshots.set(row.commit_id, {
-						data: row.data,
+						content: row.content,
 						depth: row.depth,
 					});
 				}
@@ -633,11 +633,11 @@ async function getCurrentFileData(
 	)) {
 		const rows = (await qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "data"])
+			.select(["id", "content"])
 			.where("id", "in", fileIdBatch)
 			.execute()) as CurrentFileRow[];
 		for (const row of rows) {
-			currentDataByFileId.set(row.id, decodeFileDataToBytes(row.data));
+			currentDataByFileId.set(row.id, decodeFileDataToBytes(row.content));
 		}
 	}
 	return currentDataByFileId;
@@ -658,7 +658,7 @@ function* chunkValues<T>(
 
 function fileHistorySnapshotQuery(lix: Lix, fileId: string, commitId: string) {
 	return selectFileHistory(lix, commitId)
-		.select("data")
+		.select("content")
 		.where("id", "=", fileId)
 		.orderBy("lixcol_depth", "asc")
 		.limit(1);

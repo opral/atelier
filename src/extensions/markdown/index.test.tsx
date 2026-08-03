@@ -23,7 +23,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_1"),
 				path: "/docs/readme.md",
-				data: new TextEncoder().encode("# Hello world"),
+				content: new TextEncoder().encode("# Hello world"),
 			})
 			.execute();
 
@@ -80,7 +80,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_read_only"),
 				path: "/read-only.md",
-				data: new TextEncoder().encode("# Public document"),
+				content: new TextEncoder().encode("# Public document"),
 			})
 			.execute();
 
@@ -125,26 +125,26 @@ describe("MarkdownView", () => {
 				{
 					id: fakeUuid("file_snapshot"),
 					path: "/snapshot.md",
-					data: new TextEncoder().encode(
+					content: new TextEncoder().encode(
 						"# Snapshot version\n\n![Historical asset](asset.png)",
 					),
 				},
 				{
 					id: fakeUuid("file_snapshot_asset"),
 					path: "/asset.png",
-					data: new TextEncoder().encode("historical asset bytes"),
+					content: new TextEncoder().encode("historical asset bytes"),
 				},
 			])
 			.execute();
 		const snapshotCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("# Head version") })
+			.set({ content: new TextEncoder().encode("# Head version") })
 			.where("id", "=", fakeUuid("file_snapshot"))
 			.execute();
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("current asset bytes") })
+			.set({ content: new TextEncoder().encode("current asset bytes") })
 			.where("id", "=", fakeUuid("file_snapshot_asset"))
 			.execute();
 		let snapshotAssetBlob: Blob | undefined;
@@ -217,13 +217,13 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_head_diff"),
 				path: "/head-diff.md",
-				data: new TextEncoder().encode("# Before version"),
+				content: new TextEncoder().encode("# Before version"),
 			})
 			.execute();
 		const beforeCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("# Head version") })
+			.set({ content: new TextEncoder().encode("# Head version") })
 			.where("id", "=", fakeUuid("file_head_diff"))
 			.execute();
 
@@ -286,7 +286,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fileId,
 				path: "/live-to-head-diff.md",
-				data: new TextEncoder().encode("# Before version"),
+				content: new TextEncoder().encode("# Before version"),
 			})
 			.execute();
 		const beforeCommitId = await activeCommitId(lix);
@@ -315,7 +315,7 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			await qb(lix)
 				.updateTable("lix_file")
-				.set({ data: new TextEncoder().encode("# Fresh HEAD version") })
+				.set({ content: new TextEncoder().encode("# Fresh HEAD version") })
 				.where("id", "=", fileId)
 				.execute();
 		});
@@ -349,7 +349,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_unchanged_head_diff"),
 				path: "/unchanged-head-diff.md",
-				data: new TextEncoder().encode("# Stable version"),
+				content: new TextEncoder().encode("# Stable version"),
 			})
 			.execute();
 		await qb(lix)
@@ -357,13 +357,13 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_other_head_diff"),
 				path: "/other-head-diff.md",
-				data: new TextEncoder().encode("# Other before"),
+				content: new TextEncoder().encode("# Other before"),
 			})
 			.execute();
 		const beforeCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("# Other after") })
+			.set({ content: new TextEncoder().encode("# Other after") })
 			.where("id", "=", fakeUuid("file_other_head_diff"))
 			.execute();
 
@@ -407,7 +407,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_autosave_hint"),
 				path: "/docs/autosave.md",
-				data: new TextEncoder().encode("# Autosave"),
+				content: new TextEncoder().encode("# Autosave"),
 			})
 			.execute();
 
@@ -460,7 +460,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_markdown"),
 				path: "/docs/guide.markdown",
-				data: new TextEncoder().encode("# Guide"),
+				content: new TextEncoder().encode("# Guide"),
 			})
 			.execute();
 
@@ -492,7 +492,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_uppercase"),
 				path: "/docs/README.MD",
-				data: new TextEncoder().encode("# Readme"),
+				content: new TextEncoder().encode("# Readme"),
 			})
 			.execute();
 
@@ -524,7 +524,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_csv"),
 				path: "/data.csv",
-				data: new TextEncoder().encode("name,value\nalpha,1"),
+				content: new TextEncoder().encode("name,value\nalpha,1"),
 			})
 			.execute();
 
@@ -558,7 +558,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_csv"),
 				path: "/data.csv",
-				data: new TextEncoder().encode("name,value\nalpha,1"),
+				content: new TextEncoder().encode("name,value\nalpha,1"),
 			})
 			.execute();
 		await qb(lix)
@@ -614,7 +614,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_alpha"),
 				path: "/alpha.md",
-				data: new TextEncoder().encode("# Alpha"),
+				content: new TextEncoder().encode("# Alpha"),
 			})
 			.execute();
 
@@ -623,7 +623,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_beta"),
 				path: "/beta.md",
-				data: new TextEncoder().encode("# Beta"),
+				content: new TextEncoder().encode("# Beta"),
 			})
 			.execute();
 
@@ -679,7 +679,7 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_review_startup"),
 				path: "/review-startup.md",
-				data: new TextEncoder().encode("# Before"),
+				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
 
@@ -699,7 +699,7 @@ describe("MarkdownView", () => {
 						onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
 							await qb(lix)
 								.updateTable("lix_file")
-								.set({ data })
+								.set({ content: data })
 								.where("id", "=", fileId)
 								.execute();
 							utils?.rerender(renderReviewMarkdown([reviewId]));
@@ -740,7 +740,7 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			await qb(lix)
 				.updateTable("lix_file")
-				.set({ data: new TextEncoder().encode("# After") })
+				.set({ content: new TextEncoder().encode("# After") })
 				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
 		});
@@ -803,10 +803,10 @@ describe("MarkdownView", () => {
 		});
 		const persisted = await qb(lix)
 			.selectFrom("lix_file")
-			.select("data")
+			.select("content")
 			.where("id", "=", fakeUuid("file_review_startup"))
 			.executeTakeFirstOrThrow();
-		expect(new TextDecoder().decode(persisted.data)).toBe("# After");
+		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
 	});
 
 	test("renders historical deleted-file diffs without review controls", async () => {
@@ -817,13 +817,13 @@ describe("MarkdownView", () => {
 			.values({
 				id: fakeUuid("file_deleted_historical"),
 				path: "/deleted.md",
-				data: new TextEncoder().encode("# Before"),
+				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
 		const beforeCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("# After") })
+			.set({ content: new TextEncoder().encode("# After") })
 			.where("id", "=", fakeUuid("file_deleted_historical"))
 			.execute();
 		const afterCommitId = await activeCommitId(lix);

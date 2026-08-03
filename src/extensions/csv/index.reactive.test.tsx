@@ -114,7 +114,7 @@ test("updates when CSV file data changes in Lix", async () => {
 			.values({
 				id: fileId,
 				path: "/data.csv",
-				data: new TextEncoder().encode(
+				content: new TextEncoder().encode(
 					"name,value,email,url\nalpha,1,alice@example.com,https://example.com",
 				),
 			})
@@ -156,7 +156,7 @@ test("updates when CSV file data changes in Lix", async () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({
-					data: new TextEncoder().encode("person,score\nbeta,2\ngamma,3"),
+					content: new TextEncoder().encode("person,score\nbeta,2\ngamma,3"),
 				})
 				.where("id", "=", fileId)
 				.execute();
@@ -189,7 +189,7 @@ test("persists cell edits to lix_file with the CSV editor origin", async () => {
 			.values({
 				id: fileId,
 				path: "/edit.csv",
-				data: new TextEncoder().encode(
+				content: new TextEncoder().encode(
 					'name,notes\nalpha,"kept, quoting"\nbeta,2\n',
 				),
 			})
@@ -217,10 +217,10 @@ test("persists cell edits to lix_file with the CSV editor origin", async () => {
 		await waitFor(async () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
-				.select(["data", "lixcol_change_id as change_id"])
+				.select(["content", "lixcol_change_id as change_id"])
 				.where("id", "=", fileId)
 				.executeTakeFirst();
-			expect(new TextDecoder().decode(row?.data as Uint8Array)).toBe(
+			expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
 				'name,notes\nalpha,"kept, quoting"\nbeta,42\n',
 			);
 			const change = await qb(lix)
@@ -253,7 +253,7 @@ test("deletes a row via the context menu", async () => {
 			.values({
 				id: fileId,
 				path: "/delete-row.csv",
-				data: new TextEncoder().encode(
+				content: new TextEncoder().encode(
 					'name,notes\nalpha,"kept, quoting"\nbeta,2\n',
 				),
 			})
@@ -289,10 +289,10 @@ test("deletes a row via the context menu", async () => {
 		await waitFor(async () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst();
-			expect(new TextDecoder().decode(row?.data as Uint8Array)).toBe(
+			expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
 				'name,notes\nalpha,"kept, quoting"\n',
 			);
 		});
@@ -318,7 +318,9 @@ test("renames a column via double-clicking the header", async () => {
 			.values({
 				id: fileId,
 				path: "/rename.csv",
-				data: new TextEncoder().encode('name,notes\nalpha,"kept, quoting"\n'),
+				content: new TextEncoder().encode(
+					'name,notes\nalpha,"kept, quoting"\n',
+				),
 			})
 			.execute();
 
@@ -354,10 +356,10 @@ test("renames a column via double-clicking the header", async () => {
 		await waitFor(async () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst();
-			expect(new TextDecoder().decode(row?.data as Uint8Array)).toBe(
+			expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
 				'name,remarks\nalpha,"kept, quoting"\n',
 			);
 		});
@@ -384,7 +386,7 @@ test("does not edit cells when the view is read only", async () => {
 			.values({
 				id: fileId,
 				path: "/read-only.csv",
-				data: new TextEncoder().encode(csvText),
+				content: new TextEncoder().encode(csvText),
 			})
 			.execute();
 
@@ -425,7 +427,7 @@ test("creates a seeded table in an empty CSV file", async () => {
 			.values({
 				id: fileId,
 				path: "/empty.csv",
-				data: new Uint8Array(),
+				content: new Uint8Array(),
 			})
 			.execute();
 
@@ -449,10 +451,10 @@ test("creates a seeded table in an empty CSV file", async () => {
 		await waitFor(async () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
-				.select("data")
+				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst();
-			expect(new TextDecoder().decode(row?.data as Uint8Array)).toBe(
+			expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
 				"Column 1,Column 2,Column 3\n",
 			);
 		});
@@ -480,7 +482,7 @@ test("refreshes the grid layout when an existing CSV view becomes active", async
 			.values({
 				id: fileId,
 				path: "/activation.csv",
-				data: new TextEncoder().encode("name,value\nalpha,1"),
+				content: new TextEncoder().encode("name,value\nalpha,1"),
 			})
 			.execute();
 
@@ -534,13 +536,13 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 			.values({
 				id: fakeUuid("file_csv_snapshot"),
 				path: "/snapshot.csv",
-				data: new TextEncoder().encode("name,value\nsnapshot,1"),
+				content: new TextEncoder().encode("name,value\nsnapshot,1"),
 			})
 			.execute();
 		const snapshotCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("name,value\nhead,2") })
+			.set({ content: new TextEncoder().encode("name,value\nhead,2") })
 			.where("id", "=", fakeUuid("file_csv_snapshot"))
 			.execute();
 
@@ -588,13 +590,13 @@ test("renders a read-only CSV diff from beforeCommitId to HEAD", async () => {
 			.values({
 				id: fakeUuid("file_csv_head_diff"),
 				path: "/head-diff.csv",
-				data: new TextEncoder().encode("name,value\nbefore,1"),
+				content: new TextEncoder().encode("name,value\nbefore,1"),
 			})
 			.execute();
 		const beforeCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("name,value\nhead,2") })
+			.set({ content: new TextEncoder().encode("name,value\nhead,2") })
 			.where("id", "=", fakeUuid("file_csv_head_diff"))
 			.execute();
 
@@ -638,7 +640,7 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 			.values({
 				id: fakeUuid("file_csv_unchanged_head_diff"),
 				path: "/unchanged-head-diff.csv",
-				data: new TextEncoder().encode("name,value\nstable,1"),
+				content: new TextEncoder().encode("name,value\nstable,1"),
 			})
 			.execute();
 		await qb(lix)
@@ -646,13 +648,13 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 			.values({
 				id: fakeUuid("file_csv_other_head_diff"),
 				path: "/other-head-diff.csv",
-				data: new TextEncoder().encode("name,value\nbefore,1"),
+				content: new TextEncoder().encode("name,value\nbefore,1"),
 			})
 			.execute();
 		const beforeCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
-			.set({ data: new TextEncoder().encode("name,value\nafter,2") })
+			.set({ content: new TextEncoder().encode("name,value\nafter,2") })
 			.where("id", "=", fakeUuid("file_csv_other_head_diff"))
 			.execute();
 

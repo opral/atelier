@@ -554,10 +554,10 @@ function VideoDurationSuffix({
 		void (async () => {
 			try {
 				const result = await lix.execute(
-					"SELECT data FROM lix_file WHERE path = ? LIMIT 1",
+					"SELECT content FROM lix_file WHERE path = ? LIMIT 1",
 					[path],
 				);
-				const data = result.rows[0]?.get("data");
+				const data = result.rows[0]?.get("content");
 				if (disposed || data === undefined || data === null) return;
 				const bytes = decodeFileDataToBytes(data);
 				if (bytes.byteLength === 0) return;

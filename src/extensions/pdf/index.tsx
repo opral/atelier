@@ -23,7 +23,7 @@ type PdfViewProps = {
 type PdfFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type PdfPreviewState = "loading" | "ready" | "error";
@@ -59,14 +59,14 @@ function PdfViewContent({
 	const fileRow = useQueryTakeFirst<PdfFileRow>((lix) => {
 		if (sourceCommitId) {
 			return selectFileHistory(lix, sourceCommitId)
-				.select(["id", "path", "data"])
+				.select(["id", "path", "content"])
 				.where("id", "=", fileId)
 				.orderBy("lixcol_depth", "asc")
 				.limit(1);
 		}
 		return qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "data"])
+			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1);
 	});
@@ -81,7 +81,7 @@ function PdfViewContent({
 
 	return (
 		<PdfPreview
-			data={fileRow.data}
+			data={fileRow.content}
 			filePath={fileRow.path || filePath || "document.pdf"}
 			initialPage={initialPage}
 		/>

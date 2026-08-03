@@ -38,10 +38,10 @@ export async function upsertMarkdownFile(
 		const resolvedPath = path ?? existing.path ?? `/${fileId}.md`;
 		const resolvedMetadata = metadata ?? existing.lixcol_metadata ?? null;
 		const updateValues: {
-			data: Uint8Array;
+			content: Uint8Array;
 			path?: string;
 			lixcol_metadata?: any;
-		} = { data };
+		} = { content: data };
 		if (path !== undefined && resolvedPath !== existing.path) {
 			updateValues.path = resolvedPath;
 		}
@@ -54,7 +54,7 @@ export async function upsertMarkdownFile(
 			{
 				sql: `UPDATE lix_file SET ${Object.keys(updateValues)
 					.map((column) => `${column} = ?`)
-					.join(", ")} WHERE id = ? AND data = ?`,
+					.join(", ")} WHERE id = ? AND content = ?`,
 				params: [...Object.values(updateValues), fileId, expectedData],
 			},
 			originKey,
@@ -68,7 +68,7 @@ export async function upsertMarkdownFile(
 		await executeMarkdownFileWrite(
 			lix,
 			{
-				sql: "INSERT INTO lix_file (id, path, data, lixcol_metadata) VALUES (?, ?, ?, ?)",
+				sql: "INSERT INTO lix_file (id, path, content, lixcol_metadata) VALUES (?, ?, ?, ?)",
 				params: [fileId, path ?? `/${fileId}.md`, data, metadata ?? null],
 			},
 			originKey,

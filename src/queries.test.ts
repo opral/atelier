@@ -32,11 +32,15 @@ describe("selectFilesystemEntries", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
-				{ id: fakeUuid("f_root"), path: "/README.md", data: new Uint8Array() },
+				{
+					id: fakeUuid("f_root"),
+					path: "/README.md",
+					content: new Uint8Array(),
+				},
 				{
 					id: fakeUuid("f_nested"),
 					path: "/docs/guides/intro.md",
-					data: new Uint8Array(),
+					content: new Uint8Array(),
 				},
 			])
 			.execute();
@@ -83,11 +87,15 @@ describe("selectFilesystemEntries", () => {
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
-				{ id: fakeUuid("root_file"), path: "/root.md", data: new Uint8Array() },
+				{
+					id: fakeUuid("root_file"),
+					path: "/root.md",
+					content: new Uint8Array(),
+				},
 				{
 					id: fakeUuid("nested_file"),
 					path: "/docs/deep.md",
-					data: new Uint8Array(),
+					content: new Uint8Array(),
 				},
 			])
 			.execute();
@@ -157,7 +165,7 @@ describe("checkpoint queries", () => {
 		const lix = await openLix();
 
 		await lix.execute(
-			"INSERT INTO lix_file (id, path, data) VALUES ($1, $2, $3)",
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
 			[
 				fakeUuid("review-file"),
 				"/drafts/review.md",

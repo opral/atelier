@@ -44,7 +44,7 @@ describe("resolveLixFileForOpen", () => {
 			.values({
 				id: fakeUuid("readme"),
 				path: "/docs/README.md",
-				data: new TextEncoder().encode("# README\n"),
+				content: new TextEncoder().encode("# README\n"),
 			})
 			.execute();
 
@@ -100,12 +100,12 @@ describe("open file lifecycle", () => {
 				{
 					id: fakeUuid("one"),
 					path: "/one.md",
-					data: new TextEncoder().encode("# One\n"),
+					content: new TextEncoder().encode("# One\n"),
 				},
 				{
 					id: fakeUuid("two"),
 					path: "/two.md",
-					data: new TextEncoder().encode("# Two\n"),
+					content: new TextEncoder().encode("# Two\n"),
 				},
 			])
 			.execute();
@@ -248,7 +248,7 @@ describe("open file lifecycle", () => {
 			.values({
 				id: fileId,
 				path: "/photo.jpeg",
-				data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+				content: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
 			})
 			.execute();
 
@@ -298,7 +298,7 @@ describe("open file lifecycle", () => {
 				.values({
 					id: fakeUuid("next-file"),
 					path: "/next.md",
-					data: new TextEncoder().encode("# Next\n"),
+					content: new TextEncoder().encode("# Next\n"),
 				})
 				.execute();
 		});
@@ -358,17 +358,17 @@ describe("agent turn review navigation", () => {
 					{
 						id: fakeUuid("stable-file"),
 						path: "/stable.md",
-						data: new TextEncoder().encode("# Stable\n"),
+						content: new TextEncoder().encode("# Stable\n"),
 					},
 					{
 						id: fakeUuid("changed-file"),
 						path: "/changed.md",
-						data: new TextEncoder().encode("# Before\n"),
+						content: new TextEncoder().encode("# Before\n"),
 					},
 					{
 						id: fakeUuid("later-file"),
 						path: "/later.md",
-						data: new TextEncoder().encode("# Later before\n"),
+						content: new TextEncoder().encode("# Later before\n"),
 					},
 				])
 				.execute();
@@ -397,7 +397,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# After\n") })
+					.set({ content: new TextEncoder().encode("# After\n") })
 					.where("id", "=", fakeUuid("changed-file"))
 					.execute();
 			});
@@ -471,7 +471,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# Later after\n") })
+					.set({ content: new TextEncoder().encode("# Later after\n") })
 					.where("id", "=", fakeUuid("later-file"))
 					.execute();
 			});
@@ -544,12 +544,12 @@ describe("agent turn review navigation", () => {
 					{
 						id: fakeUuid("auto-stable-file"),
 						path: "/auto-stable.md",
-						data: new TextEncoder().encode("# Stable\n"),
+						content: new TextEncoder().encode("# Stable\n"),
 					},
 					{
 						id: fakeUuid("auto-changed-file"),
 						path: "/auto-changed.md",
-						data: new TextEncoder().encode("# Before\n"),
+						content: new TextEncoder().encode("# Before\n"),
 					},
 				])
 				.execute();
@@ -580,7 +580,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# After\n") })
+					.set({ content: new TextEncoder().encode("# After\n") })
 					.where("id", "=", fakeUuid("auto-changed-file"))
 					.execute();
 			});
@@ -732,9 +732,7 @@ describe("agent turn review navigation", () => {
 			);
 			expect(await screen.findByTestId("markdown-review-editor")).toBeVisible();
 			expect(
-				document.querySelector(
-					"[data-attr='historical-read-only-banner']",
-				),
+				document.querySelector("[data-attr='historical-read-only-banner']"),
 			).toBeNull();
 
 			fireEvent.click(
@@ -749,9 +747,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				const activeView =
 					sessionStateStore.getSnapshot()?.panels.central.views[0];
-				expect(activeView?.state?.fileId).toBe(
-					fakeUuid("auto-stable-file"),
-				);
+				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-stable-file"));
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
 				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
@@ -785,12 +781,12 @@ describe("agent turn review navigation", () => {
 					{
 						id: fakeUuid("empty-state-working-change-a"),
 						path: "/a-empty-state-working-change.md",
-						data: new TextEncoder().encode("# Before A\n"),
+						content: new TextEncoder().encode("# Before A\n"),
 					},
 					{
 						id: fakeUuid("empty-state-working-change-z"),
 						path: "/z-empty-state-working-change.md",
-						data: new TextEncoder().encode("# Before Z\n"),
+						content: new TextEncoder().encode("# Before Z\n"),
 					},
 				])
 				.execute();
@@ -815,7 +811,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# After\n") })
+					.set({ content: new TextEncoder().encode("# After\n") })
 					.execute();
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
 			});
@@ -861,9 +857,7 @@ describe("agent turn review navigation", () => {
 					fakeUuid("empty-state-working-change-z"),
 				);
 			});
-			expect(
-				screen.getByRole("button", { name: /^Checkpoint/ }),
-			).toBeVisible();
+			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -883,17 +877,17 @@ describe("agent turn review navigation", () => {
 					{
 						id: fakeUuid("older-file"),
 						path: "/a-older.md",
-						data: new TextEncoder().encode("# Older before\n"),
+						content: new TextEncoder().encode("# Older before\n"),
 					},
 					{
 						id: fakeUuid("stable-file"),
 						path: "/middle.md",
-						data: new TextEncoder().encode("# Stable\n"),
+						content: new TextEncoder().encode("# Stable\n"),
 					},
 					{
 						id: fakeUuid("newer-file"),
 						path: "/z-newer.md",
-						data: new TextEncoder().encode("# Newer before\n"),
+						content: new TextEncoder().encode("# Newer before\n"),
 					},
 				])
 				.execute();
@@ -911,7 +905,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# Older after\n") })
+					.set({ content: new TextEncoder().encode("# Older after\n") })
 					.where("id", "=", fakeUuid("older-file"))
 					.execute();
 			});
@@ -948,7 +942,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# Newer after\n") })
+					.set({ content: new TextEncoder().encode("# Newer after\n") })
 					.where("id", "=", fakeUuid("newer-file"))
 					.execute();
 			});
@@ -997,12 +991,12 @@ describe("agent turn review navigation", () => {
 					{
 						id: fakeUuid("active-review-file"),
 						path: "/active.md",
-						data: new TextEncoder().encode("# Active before\n"),
+						content: new TextEncoder().encode("# Active before\n"),
 					},
 					{
 						id: fakeUuid("queued-review-file"),
 						path: "/queued.md",
-						data: new TextEncoder().encode("# Queued before\n"),
+						content: new TextEncoder().encode("# Queued before\n"),
 					},
 				])
 				.execute();
@@ -1020,7 +1014,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# Active after\n") })
+					.set({ content: new TextEncoder().encode("# Active after\n") })
 					.where("id", "=", fakeUuid("active-review-file"))
 					.execute();
 			});
@@ -1050,7 +1044,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
-					.set({ data: new TextEncoder().encode("# Queued after\n") })
+					.set({ content: new TextEncoder().encode("# Queued after\n") })
 					.where("id", "=", fakeUuid("queued-review-file"))
 					.execute();
 			});
@@ -1121,19 +1115,19 @@ describe("agent turn review navigation", () => {
 					{
 						id: fakeUuid("session-stable-file"),
 						path: "/session-stable.md",
-						data: new TextEncoder().encode("# Session stable\n"),
+						content: new TextEncoder().encode("# Session stable\n"),
 					},
 					{
 						id: fakeUuid("session-review-file"),
 						path: "/session-review.md",
-						data: new TextEncoder().encode("# Session before\n"),
+						content: new TextEncoder().encode("# Session before\n"),
 					},
 				])
 				.execute();
 			const beforeCommitId = await activeCommitId(lix);
 			await qb(lix)
 				.updateTable("lix_file")
-				.set({ data: new TextEncoder().encode("# Session after\n") })
+				.set({ content: new TextEncoder().encode("# Session after\n") })
 				.where("id", "=", fakeUuid("session-review-file"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
@@ -1274,13 +1268,13 @@ describe("agent turn review navigation", () => {
 				.values({
 					id: fakeUuid("branch-race-file"),
 					path: "/branch-race.md",
-					data: new TextEncoder().encode("# Before\n"),
+					content: new TextEncoder().encode("# Before\n"),
 				})
 				.execute();
 			const beforeCommitId = await activeCommitId(lix);
 			await qb(lix)
 				.updateTable("lix_file")
-				.set({ data: new TextEncoder().encode("# After\n") })
+				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "=", fakeUuid("branch-race-file"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
@@ -1378,7 +1372,7 @@ describe("agent turn review navigation", () => {
 					.values({
 						id: fakeUuid("agent-created-file"),
 						path: "/agent-created.md",
-						data: new TextEncoder().encode("# Created by agent\n"),
+						content: new TextEncoder().encode("# Created by agent\n"),
 					})
 					.execute();
 			});
@@ -1457,7 +1451,7 @@ describe("agent turn review navigation", () => {
 						.values({
 							id: fakeUuid("empty-agent-created-file"),
 							path: "/empty-agent-created.md",
-							data: new Uint8Array(),
+							content: new Uint8Array(),
 						})
 						.execute();
 				});
@@ -1577,7 +1571,7 @@ describe("installed extension lifecycle", () => {
 					.values([
 						{
 							path: "/.lix/app_data/atelier/extensions/recovered/manifest.json",
-							data: new TextEncoder().encode(
+							content: new TextEncoder().encode(
 								JSON.stringify({
 									apiVersion: 1,
 									id: extensionKind,
@@ -1588,7 +1582,7 @@ describe("installed extension lifecycle", () => {
 						},
 						{
 							path: "/.lix/app_data/atelier/extensions/recovered/index.js",
-							data: new TextEncoder().encode("export default {}"),
+							content: new TextEncoder().encode("export default {}"),
 						},
 					])
 					.execute();
@@ -1693,7 +1687,7 @@ describe("canonical UI state", () => {
 			.values({
 				id: fileId,
 				path: "/focus.md",
-				data: new TextEncoder().encode("# Focus\n"),
+				content: new TextEncoder().encode("# Focus\n"),
 			})
 			.execute();
 		let utils: ReturnType<typeof render> | undefined;

@@ -109,7 +109,7 @@ type MarkdownViewProps = {
 type MarkdownFileRow = {
 	readonly id: string;
 	readonly path: string;
-	readonly data: unknown;
+	readonly content: unknown;
 };
 
 type HistoricalMarkdownFile = {
@@ -205,7 +205,7 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
-				.select(["id", "path", "data"])
+				.select(["id", "path", "content"])
 				.where("id", "=", fileId)
 				.limit(1),
 		{ subscribe: comparesAgainstCurrentFile },
@@ -572,7 +572,7 @@ function MarkdownHistoricalViewLoaded({
 		content = (
 			<MarkdownSnapshotView
 				filePath={effectiveFileRow.path}
-				markdown={decodeFileDataToText(effectiveFileRow.data)}
+				markdown={decodeFileDataToText(effectiveFileRow.content)}
 				sourceCommitId={editorRevision.afterCommitId ?? undefined}
 				openWorkspaceFile={openWorkspaceFile}
 			/>
@@ -1044,14 +1044,14 @@ function buildHistoricalMarkdownFile(args: {
 
 	if (mode === "snapshot") {
 		const data = args.afterSnapshot
-			? decodeFileDataToBytes(args.afterSnapshot.data)
+			? decodeFileDataToBytes(args.afterSnapshot.content)
 			: null;
 		if (!data) return null;
 		return {
 			fileRow: {
 				id: args.fileId,
 				path,
-				data,
+				content: data,
 			},
 			review: null,
 			reviewData: null,
@@ -1059,21 +1059,21 @@ function buildHistoricalMarkdownFile(args: {
 	}
 
 	const beforeData = args.beforeSnapshot
-		? decodeFileDataToBytes(args.beforeSnapshot.data)
+		? decodeFileDataToBytes(args.beforeSnapshot.content)
 		: EMPTY_FILE_DATA;
 	const afterData = args.revision.afterCommitId
 		? args.afterSnapshot
-			? decodeFileDataToBytes(args.afterSnapshot.data)
+			? decodeFileDataToBytes(args.afterSnapshot.content)
 			: EMPTY_FILE_DATA
 		: args.fileRow
-			? decodeFileDataToBytes(args.fileRow.data)
+			? decodeFileDataToBytes(args.fileRow.content)
 			: EMPTY_FILE_DATA;
 
 	return {
 		fileRow: {
 			id: args.fileId,
 			path,
-			data: afterData,
+			content: afterData,
 		},
 		review: {
 			fileId: args.fileId,
