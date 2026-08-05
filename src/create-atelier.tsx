@@ -2,10 +2,15 @@ import {
 	Suspense,
 	type ComponentPropsWithRef,
 	type ComponentType,
+	type ErrorInfo,
 	type ReactNode,
 } from "react";
 import { LixProvider } from "@/lib/lix-react";
 import { V2LayoutShell } from "@/shell/layout-shell";
+import {
+	AtelierErrorBoundary,
+	type AtelierErrorFallback,
+} from "./atelier-error-boundary";
 import type { AtelierExtensionState } from "./extension-api";
 import {
 	getAtelierConfiguration,
@@ -76,11 +81,20 @@ export type AtelierSlots = {
 	readonly rightPanelEmpty?: AtelierEmptyPanelSlot;
 };
 
+export type {
+	AtelierErrorFallback,
+	AtelierErrorFallbackContext,
+} from "./atelier-error-boundary";
+
 export type AtelierProps = {
 	readonly instance: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	/** Props forwarded to Atelier's semantic top-bar header. */
 	readonly topBarProps?: AtelierTopBarProps;
+	/** Called when the Atelier shell or one of its rendered views throws. */
+	readonly onError?: (error: unknown, errorInfo: ErrorInfo) => void;
+	/** Replaces the default visible render-error state. */
+	readonly errorFallback?: AtelierErrorFallback;
 };
 
 /**
@@ -101,7 +115,25 @@ function claimUnhandledFileDrag(event: React.DragEvent<HTMLDivElement>) {
 	}
 }
 
-export function Atelier({ instance, slots, topBarProps }: AtelierProps) {
+export function Atelier({
+	instance,
+	slots,
+	topBarProps,
+	onError,
+	errorFallback,
+}: AtelierProps) {
+	return (
+		<AtelierErrorBoundary onError={onError} errorFallback={errorFallback}>
+			<AtelierContent
+				instance={instance}
+				slots={slots}
+				topBarProps={topBarProps}
+			/>
+		</AtelierErrorBoundary>
+	);
+}
+
+function AtelierContent({ instance, slots, topBarProps }: AtelierProps) {
 	const configuration = getAtelierConfiguration(instance);
 	const defaultOpenPanels = configuration.defaultOpenPanels ?? [];
 	return (

@@ -5,7 +5,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
@@ -21,6 +21,32 @@ import {
 } from "./state-adapters";
 
 describe("Atelier instance file controller", () => {
+	test("shows a visible fallback when the Atelier shell throws", async () => {
+		const onError = vi.fn();
+		let rendered: ReturnType<typeof render> | undefined;
+
+		try {
+			await act(async () => {
+				rendered = render(
+					<Atelier
+						instance={{} as Parameters<typeof Atelier>[0]["instance"]}
+						onError={onError}
+					/>,
+				);
+			});
+
+			expect(await screen.findByRole("alert")).toHaveTextContent(
+				"Unable to render Atelier",
+			);
+			expect(onError).toHaveBeenCalledWith(
+				expect.any(TypeError),
+				expect.objectContaining({ componentStack: expect.any(String) }),
+			);
+		} finally {
+			await act(async () => rendered?.unmount());
+		}
+	});
+
 	test("keeps panels collapsed when the host does not open them by default", async () => {
 		const lix = await openLix();
 		await qb(lix)
