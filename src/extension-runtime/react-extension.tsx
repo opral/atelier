@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { LucideIcon } from "lucide-react";
+import { AtelierErrorBoundary } from "../atelier-error-boundary";
 import type {
 	ExtensionDefinition,
 	ExtensionRuntime,
@@ -43,17 +44,19 @@ export function createReactExtensionDefinition(args: {
 				view: ExtensionView;
 			}) =>
 				root?.render(
-					<Suspense
-						fallback={
-							<div
-								aria-hidden="true"
-								className="min-h-0 flex-1"
-								data-atelier-extension-suspended=""
-							/>
-						}
-					>
-						{args.component(next)}
-					</Suspense>,
+					<AtelierErrorBoundary>
+						<Suspense
+							fallback={
+								<div
+									aria-hidden="true"
+									className="min-h-0 flex-1"
+									data-atelier-extension-suspended=""
+								/>
+							}
+						>
+							{args.component(next)}
+						</Suspense>
+					</AtelierErrorBoundary>,
 				);
 			render({ atelier, view });
 			return {

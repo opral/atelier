@@ -40,6 +40,8 @@ export type {
 export type {
 	AtelierEmptyPanelSlot,
 	AtelierEmptyPanelSlotContext,
+	AtelierErrorFallback,
+	AtelierErrorFallbackContext,
 	AtelierPanelSide,
 	AtelierProps,
 	AtelierSlots,
