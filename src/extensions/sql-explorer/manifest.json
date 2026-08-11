@@ -1,0 +1,8 @@
+{
+	"apiVersion": 1,
+	"id": "sql_explorer",
+	"name": "SQL Explorer",
+	"description": "Browse tables and run SQL queries against the workspace database.",
+	"entry": "./index.js",
+	"placement": ["left", "right", "central"]
+}

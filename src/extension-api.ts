@@ -36,6 +36,7 @@ export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	video: "atelier_video",
 	text: "atelier_text",
 	excalidraw: "atelier_excalidraw",
+	sqlExplorer: "sql_explorer",
 } as const;
 
 export type AtelierBuiltinExtensionId =

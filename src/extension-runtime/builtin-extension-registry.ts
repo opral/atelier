@@ -9,10 +9,12 @@ import { extension as pdfExtensionDefinition } from "../extensions/pdf";
 import { extension as textExtensionDefinition } from "../extensions/text";
 import { extension as excalidrawExtensionDefinition } from "../extensions/excalidraw";
 import { extension as videoExtensionDefinition } from "../extensions/video";
+import { extension as sqlExplorerExtensionDefinition } from "../extensions/sql-explorer";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	filesExtensionDefinition,
 	historyExtensionDefinition,
+	sqlExplorerExtensionDefinition,
 ];
 
 export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
