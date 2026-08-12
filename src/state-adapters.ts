@@ -50,7 +50,7 @@ type ActiveBranchLix = Partial<Lix> & {
 };
 
 export type AtelierClientState = {
-	get<T extends JsonValue = JsonValue>(key: string): T | undefined;
+	get<T extends JsonValue = JsonValue>(key: string): Promise<T | undefined>;
 	set(key: string, value: JsonValue): Promise<void>;
 	subscribe(listener: () => void): () => void;
 };
@@ -81,9 +81,9 @@ export function createMemorySessionStateStore(
 /**
  * Stores Atelier's per-client shell state in Lix client state.
  *
- * The store remains synchronous for React's external-store contract because
- * `lix.clientState` is hydrated before `openLix()` resolves. Writes are
- * optimistic in the current UI and durably queued by Lix.
+ * The store keeps a synchronous React snapshot while client-state reads happen
+ * asynchronously. Writes are optimistic in the current UI and durably queued
+ * by Lix.
  */
 export function createLixSessionStateStore(
 	clientState: AtelierClientState,
@@ -94,7 +94,7 @@ export function createLixSessionStateStore(
 			"createLixSessionStateStore() requires Lix client state",
 		);
 	}
-	let value = coerceStoredSessionUiState(clientState.get(key));
+	let value: AtelierSessionUiState | null = null;
 	const listeners = new Set<() => void>();
 	let stopObserving: (() => void) | undefined;
 	let pendingWrites = 0;
@@ -103,6 +103,21 @@ export function createLixSessionStateStore(
 		value = next;
 		for (const listener of [...listeners]) listener();
 	};
+	let refreshSequence = 0;
+	const refresh = () => {
+		const sequence = ++refreshSequence;
+		void clientState
+			.get(key)
+			.then((stored) => {
+				if (sequence === refreshSequence && pendingWrites === 0) {
+					publish(coerceStoredSessionUiState(stored));
+				}
+			})
+			.catch((error: unknown) => {
+				console.error("Failed to read Atelier client state", error);
+			});
+	};
+	refresh();
 	return {
 		getSnapshot: () => value,
 		setSnapshot: (nextValue) => {
@@ -118,19 +133,19 @@ export function createLixSessionStateStore(
 				} finally {
 					pendingWrites -= 1;
 					if (pendingWrites === 0) {
-						publish(coerceStoredSessionUiState(clientState.get(key)));
+						refresh();
 					}
 				}
 			})();
 		},
 		subscribe: (listener) => {
 			if (pendingWrites === 0) {
-				publish(coerceStoredSessionUiState(clientState.get(key)));
+				refresh();
 			}
 			listeners.add(listener);
 			stopObserving ??= clientState.subscribe(() => {
 				if (pendingWrites !== 0) return;
-				publish(coerceStoredSessionUiState(clientState.get(key)));
+				refresh();
 			});
 			return () => {
 				listeners.delete(listener);
@@ -166,7 +181,7 @@ export function createLixPreferencesStore(
 		);
 	}
 	return {
-		load: async () => coerceStoredUserPreferences(clientState.get(key)),
+		load: async () => coerceStoredUserPreferences(await clientState.get(key)),
 		save: async (value) => {
 			const next = coerceAtelierUserPreferences(value);
 			await clientState.set(key, next as unknown as JsonValue);
