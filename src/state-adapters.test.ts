@@ -25,7 +25,7 @@ test("createLixSessionStateStore restores and publishes Lix client state", async
 	]);
 	const observers = new Set<() => void>();
 	const clientState: AtelierClientState = {
-		get: (key) => values.get(key) as never,
+		get: async (key) => values.get(key) as never,
 		set: async (key, value) => {
 			values.set(key, value);
 			for (const observer of observers) observer();
@@ -39,7 +39,8 @@ test("createLixSessionStateStore restores and publishes Lix client state", async
 	const listener = vi.fn();
 	const unsubscribe = store.subscribe(listener);
 
-	expect(store.getSnapshot()).toEqual(shellState);
+	await vi.waitFor(() => expect(store.getSnapshot()).toEqual(shellState));
+	listener.mockClear();
 	store.setSnapshot({ ...shellState, focusedPanel: "right" });
 	expect(store.getSnapshot()?.focusedPanel).toBe("right");
 	await vi.waitFor(() => {
@@ -64,7 +65,7 @@ test("createLixSessionStateStore does not regress while rapid writes persist in 
 		commit(): void;
 	}> = [];
 	const clientState: AtelierClientState = {
-		get: (key) => values.get(key) as never,
+		get: async (key) => values.get(key) as never,
 		set: (key, value) =>
 			new Promise<void>((resolve) => {
 				writes.push({
@@ -83,6 +84,7 @@ test("createLixSessionStateStore does not regress while rapid writes persist in 
 	};
 	const store = createLixSessionStateStore(clientState);
 	store.subscribe(() => undefined);
+	await vi.waitFor(() => expect(store.getSnapshot()).toEqual(shellState));
 	const first = { ...shellState, focusedPanel: "left" as const };
 	const second = { ...shellState, focusedPanel: "right" as const };
 
@@ -113,7 +115,7 @@ test("createLixSessionStateStore rolls back an unpersisted optimistic write", as
 	]);
 	let rejectWrite: (error: Error) => void = () => undefined;
 	const clientState: AtelierClientState = {
-		get: (key) => values.get(key) as never,
+		get: async (key) => values.get(key) as never,
 		set: () =>
 			new Promise<void>((_resolve, reject) => {
 				rejectWrite = reject;
@@ -123,6 +125,7 @@ test("createLixSessionStateStore rolls back an unpersisted optimistic write", as
 	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 	try {
 		const store = createLixSessionStateStore(clientState);
+		await vi.waitFor(() => expect(store.getSnapshot()).toEqual(shellState));
 		store.setSnapshot({ ...shellState, focusedPanel: "right" });
 		expect(store.getSnapshot()?.focusedPanel).toBe("right");
 
@@ -145,7 +148,7 @@ test("createLixPreferencesStore restores and persists private preferences throug
 		[ATELIER_USER_PREFERENCES_KEY, initialPreferences],
 	]);
 	const clientState: AtelierClientState = {
-		get: (key) => values.get(key) as never,
+		get: async (key) => values.get(key) as never,
 		set: async (key, value) => {
 			values.set(key, value);
 		},
@@ -177,7 +180,7 @@ test("createLixPreferencesStore restores and persists private preferences throug
 
 test("createLixPreferencesStore returns null when client preferences are absent", async () => {
 	const clientState: AtelierClientState = {
-		get: () => undefined,
+		get: async () => undefined,
 		set: async () => undefined,
 		subscribe: () => () => undefined,
 	};
