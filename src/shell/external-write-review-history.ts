@@ -458,7 +458,7 @@ export async function getWorkingChangeExternalWriteReview(
 		qb(lix)
 			.selectFrom("lix_checkpoint")
 			.select("commit_id")
-			.orderBy("lixcol_depth", "asc")
+			.orderBy("lixcol_created_at", "desc")
 			.limit(1)
 			.executeTakeFirst(),
 		lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),

@@ -116,7 +116,6 @@ describe("checkpoint queries", () => {
 
 		const initialCheckpoints = await selectCheckpoints(lix).execute();
 		expect(initialCheckpoints).toHaveLength(1);
-		expect(initialCheckpoints[0]?.lixcol_depth).toBe(0);
 
 		await lix.execute(
 			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
@@ -150,7 +149,6 @@ describe("checkpoint queries", () => {
 		expect(checkpoints[0]).toEqual(
 			expect.objectContaining({
 				commit_id: checkpoint.commitId,
-				lixcol_depth: 0,
 			}),
 		);
 		expect(checkpoints[1]?.commit_id).toBe(initialCheckpoints[0]?.commit_id);

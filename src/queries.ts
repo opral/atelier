@@ -35,7 +35,6 @@ export type FileWorkingChangeRow = {
 export type CheckpointRow = {
 	commit_id: string;
 	created_at: string;
-	lixcol_depth: number;
 };
 
 export type CheckpointWithFileCountRow = CheckpointRow & {
@@ -143,8 +142,8 @@ export function selectFileWorkingChanges(lix: Lix) {
 export function selectCheckpoints(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_checkpoint")
-		.select(["commit_id", "created_at", "lixcol_depth"])
-		.orderBy("lixcol_depth", "asc")
+		.select(["commit_id", "lixcol_created_at as created_at"])
+		.orderBy("created_at", "desc")
 		.$castTo<CheckpointRow>();
 }
 
@@ -167,15 +166,10 @@ export function selectCheckpointsWithFileCounts(lix: Lix) {
 		)
 		.select([
 			"lix_checkpoint.commit_id",
-			"lix_checkpoint.created_at",
-			"lix_checkpoint.lixcol_depth",
+			"lix_checkpoint.lixcol_created_at as created_at",
 			sql<number>`count(distinct lix_file_history.id)`.as("file_count"),
 		])
-		.groupBy([
-			"lix_checkpoint.commit_id",
-			"lix_checkpoint.created_at",
-			"lix_checkpoint.lixcol_depth",
-		])
-		.orderBy("lix_checkpoint.lixcol_depth", "asc")
+		.groupBy(["lix_checkpoint.commit_id", "created_at"])
+		.orderBy("created_at", "desc")
 		.$castTo<CheckpointWithFileCountRow>();
 }

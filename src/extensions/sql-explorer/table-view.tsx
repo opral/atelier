@@ -83,7 +83,10 @@ export function buildTableQuery({
 		filters.length === 0
 			? ""
 			: ` WHERE ${filters
-					.map((filter) => `${filter.column} ${filter.operator} ?`)
+					.map(
+						(filter, index) =>
+							`${filter.column} ${filter.operator} $${index + 1}`,
+					)
 					.join(" AND ")}`;
 	const orderBy =
 		sort === null

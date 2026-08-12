@@ -90,14 +90,14 @@ export async function storePastedMarkdownImage({
 			);
 		}
 		const caseInsensitiveCollision = await lix.execute(
-			"SELECT id FROM lix_file WHERE lower(path) = lower(?) LIMIT 1",
+			"SELECT id FROM lix_file WHERE lower(path) = lower($1) LIMIT 1",
 			[workspacePath],
 		);
 		if (caseInsensitiveCollision.rows.length > 0) continue;
 
 		try {
 			const result = await lix.execute(
-				"INSERT INTO lix_file (id, path, content) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3) ON CONFLICT(path) DO NOTHING",
 				[fileId, workspacePath, bytes],
 				originKey ? { originKey } : undefined,
 			);
@@ -110,7 +110,7 @@ export async function storePastedMarkdownImage({
 				alt,
 				remove: async () => {
 					await lix.execute(
-						"DELETE FROM lix_file WHERE id = ? AND path = ? AND content = ?",
+						"DELETE FROM lix_file WHERE id = $1 AND path = $2 AND content = $3",
 						[fileId, workspacePath, bytes],
 						originKey ? { originKey } : undefined,
 					);
@@ -141,7 +141,7 @@ async function assertAssetsDirectoryAvailable(
 	assetsDirectoryFilePath: string,
 ): Promise<void> {
 	const fileBlockers = await lix.execute(
-		"SELECT path FROM lix_file WHERE lower(path) = lower(?) LIMIT 1",
+		"SELECT path FROM lix_file WHERE lower(path) = lower($1) LIMIT 1",
 		[assetsDirectoryFilePath],
 	);
 	if (fileBlockers.rows.length > 0) {
@@ -150,7 +150,7 @@ async function assertAssetsDirectoryAvailable(
 		);
 	}
 	const directories = await lix.execute(
-		"SELECT path FROM lix_directory WHERE lower(path) = lower(?)",
+		"SELECT path FROM lix_directory WHERE lower(path) = lower($1)",
 		[assetsDirectoryFilePath],
 	);
 	const caseOnlyDirectory = directories.rows.some(
