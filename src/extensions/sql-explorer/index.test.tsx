@@ -181,10 +181,10 @@ describe("buildTableQuery", () => {
 			pageSize: 50,
 		});
 		expect(sql).toBe(
-			"SELECT * FROM lix_file WHERE path LIKE ? AND hidden = ? ORDER BY path DESC LIMIT 50 OFFSET 100",
+			"SELECT * FROM lix_file WHERE path LIKE $1 AND hidden = $2 ORDER BY path DESC LIMIT 50 OFFSET 100",
 		);
 		expect(countSql).toBe(
-			"SELECT COUNT(*) AS row_count FROM lix_file WHERE path LIKE ? AND hidden = ?",
+			"SELECT COUNT(*) AS row_count FROM lix_file WHERE path LIKE $1 AND hidden = $2",
 		);
 		expect(params).toEqual(["%.md", "0"]);
 	});
@@ -207,7 +207,7 @@ describe("SqlExplorerView", () => {
 	beforeAll(async () => {
 		lix = await openLix({});
 		await lix.execute(
-			"INSERT INTO lix_file (path, content) VALUES ('/notes/hello.md', ?)",
+			"INSERT INTO lix_file (path, content) VALUES ('/notes/hello.md', $1)",
 			[new TextEncoder().encode("# Hello")],
 		);
 	});

@@ -5,6 +5,7 @@ const typesDirectory = path.resolve("dist/types");
 const publicDeclarations = new Set([
 	"index.d.ts",
 	"atelier-instance.d.ts",
+	"atelier-error-boundary.d.ts",
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
 	"file-icons.d.ts",

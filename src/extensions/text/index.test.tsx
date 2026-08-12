@@ -151,7 +151,7 @@ describe("TextView", () => {
 
 		await act(async () => {
 			await lix.execute(
-				"UPDATE lix_file SET content = ? WHERE id = ?",
+				"UPDATE lix_file SET content = $1 WHERE id = $2",
 				[new TextEncoder().encode("external edit"), fakeUuid("origin-file")],
 				{ originKey: "test.external" },
 			);
@@ -230,7 +230,7 @@ describe("TextView", () => {
 
 		await act(async () => {
 			await lix.execute(
-				"UPDATE lix_file SET content = ? WHERE id = ?",
+				"UPDATE lix_file SET content = $1 WHERE id = $2",
 				[
 					new TextEncoder().encode("same-origin external"),
 					fakeUuid("self-origin-file"),

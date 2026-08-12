@@ -470,7 +470,7 @@ function deriveUntitledMarkdownPathForSuffix(suffix: number | null): string {
 /**
  * Resolves a unique root-level markdown path for a new untitled document.
  *
- * Uses targeted existence checks (`WHERE path = ?`) to avoid scanning all
+ * Uses targeted existence checks (`WHERE path = $1`) to avoid scanning all
  * file paths as repositories grow.
  */
 async function resolveNextUntitledMarkdownPath(

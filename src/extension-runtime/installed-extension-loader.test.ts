@@ -17,7 +17,7 @@ async function writeInstalledExtensionFile(
 	data: string,
 ): Promise<void> {
 	await lix.execute(
-		"INSERT INTO lix_file (path, content) VALUES (?, ?) \
+		"INSERT INTO lix_file (path, content) VALUES ($1, $2) \
 		 ON CONFLICT (path) DO UPDATE SET content = excluded.content",
 		[
 			`/.lix/app_data/atelier/extensions/table-viewer/${path}`,

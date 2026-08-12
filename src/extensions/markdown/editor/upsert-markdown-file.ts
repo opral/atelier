@@ -53,8 +53,10 @@ export async function upsertMarkdownFile(
 			lix,
 			{
 				sql: `UPDATE lix_file SET ${Object.keys(updateValues)
-					.map((column) => `${column} = ?`)
-					.join(", ")} WHERE id = ? AND content = ?`,
+					.map((column, index) => `${column} = $${index + 1}`)
+					.join(
+						", ",
+					)} WHERE id = $${Object.keys(updateValues).length + 1} AND content = $${Object.keys(updateValues).length + 2}`,
 				params: [...Object.values(updateValues), fileId, expectedData],
 			},
 			originKey,
@@ -68,7 +70,7 @@ export async function upsertMarkdownFile(
 		await executeMarkdownFileWrite(
 			lix,
 			{
-				sql: "INSERT INTO lix_file (id, path, content, lixcol_metadata) VALUES (?, ?, ?, ?)",
+				sql: "INSERT INTO lix_file (id, path, content, lixcol_metadata) VALUES ($1, $2, $3, $4)",
 				params: [fileId, path ?? `/${fileId}.md`, data, metadata ?? null],
 			},
 			originKey,

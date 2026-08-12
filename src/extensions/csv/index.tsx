@@ -423,7 +423,7 @@ function EditableCsvView({
 				if (nextText === lastCleanTextRef.current) continue;
 				try {
 					await lix.execute(
-						"UPDATE lix_file SET content = ? WHERE id = ?",
+						"UPDATE lix_file SET content = $1 WHERE id = $2",
 						[new TextEncoder().encode(nextText), fileId],
 						{ originKey },
 					);
@@ -467,7 +467,7 @@ function EditableCsvView({
 	);
 
 	useEffect(() => {
-		const events = lix.observe(`SELECT content FROM lix_file WHERE id = ?`, [
+		const events = lix.observe(`SELECT content FROM lix_file WHERE id = $1`, [
 			fileId,
 		]);
 		let closed = false;

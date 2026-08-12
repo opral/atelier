@@ -868,11 +868,13 @@ test("stale in-flight autosave cannot overwrite a concurrent external write", as
 					const [statement] = args;
 					if (
 						!interleavedExternalWrite &&
-						statement.startsWith("UPDATE lix_file SET content = ? WHERE id = ?")
+						statement.startsWith(
+							"UPDATE lix_file SET content = $1 WHERE id = $2",
+						)
 					) {
 						interleavedExternalWrite = true;
 						await target.execute(
-							"UPDATE lix_file SET content = ? WHERE id = ?",
+							"UPDATE lix_file SET content = $1 WHERE id = $2",
 							[new TextEncoder().encode(externalMarkdown), fileId],
 							{ originKey: "external-writer" },
 						);

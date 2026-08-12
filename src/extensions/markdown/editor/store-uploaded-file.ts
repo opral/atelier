@@ -82,14 +82,14 @@ export async function storeUploadedWorkspaceFile({
 			);
 		}
 		const caseInsensitiveCollision = await lix.execute(
-			"SELECT id FROM lix_file WHERE lower(path) = lower(?) LIMIT 1",
+			"SELECT id FROM lix_file WHERE lower(path) = lower($1) LIMIT 1",
 			[workspacePath],
 		);
 		if (caseInsensitiveCollision.rows.length > 0) continue;
 
 		try {
 			const result = await lix.execute(
-				"INSERT INTO lix_file (id, path, content) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3) ON CONFLICT(path) DO NOTHING",
 				[uploadedFileId(), workspacePath, bytes],
 				originKey ? { originKey } : undefined,
 			);

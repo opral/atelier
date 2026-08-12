@@ -166,6 +166,10 @@ class LixDriver implements Driver {
 }
 
 class LixQueryCompiler extends SqliteQueryCompiler {
+	protected override getCurrentParameterPlaceholder(): string {
+		return `$${this.numParameters}`;
+	}
+
 	protected override getLeftIdentifierWrapper(): string {
 		return "";
 	}
