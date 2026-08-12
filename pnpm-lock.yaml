@@ -4,16 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  prosemirror-model: 1.25.10
-  prosemirror-transform: 1.12.0
-  prosemirror-view: 1.42.0
-
-patchedDependencies:
-  '@pierre/trees':
-    hash: 9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6
-    path: patches/@pierre__trees.patch
-
 importers:
 
   .:
@@ -71,7 +61,7 @@ importers:
         version: 0.1.0
       '@pierre/trees':
         specifier: 1.0.0-beta.5
-        version: 1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.0.0-beta.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-dropdown-menu':
         specifier: ^2.1.20
         version: 2.1.20(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -152,8 +142,8 @@ importers:
         version: 2.8.2
     devDependencies:
       '@lix-js/sdk':
-        specifier: 0.10.0
-        version: 0.10.0
+        specifier: 0.11.0
+        version: 0.11.0
       '@tailwindcss/vite':
         specifier: ^4.3.2
         version: 4.3.2(vite@8.1.4(@types/node@24.10.15)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -1269,8 +1259,18 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@lix-js/sdk-darwin-arm64@0.11.0':
+    resolution: {integrity: sha512-+VBH3NZ1ecXdLzIPm4GDuyGLboYqwbPGAkeNaHrFF9G+vkeDV/rol6Yo3POhUVXhdhY7YAgh1D49AtHk6WWsaw==}
+    cpu: [arm64]
+    os: [darwin]
+
   '@lix-js/sdk-linux-arm64@0.10.0':
     resolution: {integrity: sha512-81FWVa6RppbiGLXqcQfUp87SiHz9zkrEfVNpFRzs4c7zYN7Oss0ibAsZdXuUSMVa3J9YLXmZar++tkefg8hevQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@lix-js/sdk-linux-arm64@0.11.0':
+    resolution: {integrity: sha512-ew+n15rxXK6OOPwoF7DYo64txwedo6Gk355Q1X5oeLlTQkpkpkmP90W10LBI/4uZYF1ifsXllOufkHmu6Lor1Q==}
     cpu: [arm64]
     os: [linux]
 
@@ -1279,13 +1279,26 @@ packages:
     cpu: [x64]
     os: [linux]
 
+  '@lix-js/sdk-linux-x64@0.11.0':
+    resolution: {integrity: sha512-WtM2Zqz3JgXEv3uNYJbeC15iqYl+rRUegxG98UH+Kc/3cCHheFFgWtjOhIPYeXmkSsYEaer99hdbEkl4uyEErw==}
+    cpu: [x64]
+    os: [linux]
+
   '@lix-js/sdk-win32-x64@0.10.0':
     resolution: {integrity: sha512-i3Yx4fHJ5mz1y54Yq1sWU2Z0upHsAXXiq00e+L0klOlb0WPQHYhwFXx8RHQwrvq+mvY4FsS8UgA7ui8xJYUv+A==}
     cpu: [x64]
     os: [win32]
 
+  '@lix-js/sdk-win32-x64@0.11.0':
+    resolution: {integrity: sha512-QJA2H1LWnkCa1pbogJehWmRAJ9e4w5JWXHKoXz7fy2+8CbHtfP4EwVl1x7OreV4zwwrM/Hb6LL8Bf0GoWYpB7A==}
+    cpu: [x64]
+    os: [win32]
+
   '@lix-js/sdk@0.10.0':
     resolution: {integrity: sha512-59NKGDPiikFOepU7G36Bt5i/P3TO6g+16QsnP5EfB9plUfVgQnPaFcLuHIqpOlaPS3L/C/d/TTcEKhVmxTwjBw==}
+
+  '@lix-js/sdk@0.11.0':
+    resolution: {integrity: sha512-0P2FN7N5b2WBH4DArAExXlnBAU9HG/KVY7rZ2GC1y+FTT+np2UwhYT1alp5xKCHnsOAwBrBUjHfNDxlUKYjsPA==}
 
   '@marijn/find-cluster-break@1.0.3':
     resolution: {integrity: sha512-FY+MKLBoTsLNJF/eLWaOsXGdz6uh3Iu1axjPf6TUq92IYumcTcXWHoS747JARLkcdlJ/Waiaxc5wQfFO8jC6NA==}
@@ -5749,13 +5762,25 @@ snapshots:
   '@lix-js/sdk-darwin-arm64@0.10.0':
     optional: true
 
+  '@lix-js/sdk-darwin-arm64@0.11.0':
+    optional: true
+
   '@lix-js/sdk-linux-arm64@0.10.0':
+    optional: true
+
+  '@lix-js/sdk-linux-arm64@0.11.0':
     optional: true
 
   '@lix-js/sdk-linux-x64@0.10.0':
     optional: true
 
+  '@lix-js/sdk-linux-x64@0.11.0':
+    optional: true
+
   '@lix-js/sdk-win32-x64@0.10.0':
+    optional: true
+
+  '@lix-js/sdk-win32-x64@0.11.0':
     optional: true
 
   '@lix-js/sdk@0.10.0':
@@ -5766,6 +5791,15 @@ snapshots:
       '@lix-js/sdk-linux-arm64': 0.10.0
       '@lix-js/sdk-linux-x64': 0.10.0
       '@lix-js/sdk-win32-x64': 0.10.0
+
+  '@lix-js/sdk@0.11.0':
+    dependencies:
+      fflate: 0.8.3
+    optionalDependencies:
+      '@lix-js/sdk-darwin-arm64': 0.11.0
+      '@lix-js/sdk-linux-arm64': 0.11.0
+      '@lix-js/sdk-linux-x64': 0.11.0
+      '@lix-js/sdk-win32-x64': 0.11.0
 
   '@marijn/find-cluster-break@1.0.3': {}
 
@@ -6017,7 +6051,7 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@pierre/trees@1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@pierre/trees@1.0.0-beta.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@pierre/theming': 0.0.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       preact: 11.0.0-beta.0
