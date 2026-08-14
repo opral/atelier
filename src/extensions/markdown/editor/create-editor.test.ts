@@ -778,6 +778,35 @@ test("Enter splits paragraph into persisted markdown paragraphs", async () => {
 	editor.destroy();
 });
 
+test("opening noncanonical markdown without a document edit preserves exact bytes", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("open_noncanonical_without_edit");
+	const initialMarkdown =
+		"|a|bb|\n|-|-|\n|x|y|\n\n*italic* stays source-exact.\n";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/open-noncanonical.md",
+			content: new TextEncoder().encode(initialMarkdown),
+		})
+		.execute();
+
+	const editor = await createEditorFromFile({
+		lix,
+		fileId,
+		persistDebounceMs: 0,
+	});
+	editor.commands.focus("end");
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	expect(await readMarkdown(lix, fileId)).toBe(initialMarkdown);
+
+	editor.destroy();
+	await lix.close();
+});
+
 test("does not persist editor transactions while persistence is suspended", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("suspended_persistence");

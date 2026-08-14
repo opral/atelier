@@ -56,6 +56,8 @@ type CreateEditorArgs = {
 type MarkdownPersistenceBaseline = {
 	lastAcknowledgedMarkdown: string;
 	expectedFileMarkdown: string;
+	documentRevision: number;
+	acknowledgedRevision: number;
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
@@ -72,6 +74,7 @@ export function acknowledgeMarkdownEditorPersistence(
 	if (!baseline) return;
 	baseline.lastAcknowledgedMarkdown = normalizePersistedMarkdown(markdown);
 	baseline.expectedFileMarkdown = markdown;
+	baseline.acknowledgedRevision = baseline.documentRevision;
 }
 
 export const createMarkdownEditorOriginKey = (): string => {
@@ -194,16 +197,23 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	const persistenceBaseline: MarkdownPersistenceBaseline = {
 		lastAcknowledgedMarkdown: normalizePersistedMarkdown(initialFileMarkdown),
 		expectedFileMarkdown: initialFileMarkdown,
+		documentRevision: 0,
+		acknowledgedRevision: 0,
 	};
 	const persistDebounceMsResolved = persistDebounceMs ?? 0;
 	const persistOnce = async (editor: Editor) => {
 		if (!shouldPersist()) return;
+		const revision = persistenceBaseline.documentRevision;
+		if (revision === persistenceBaseline.acknowledgedRevision) return;
 		// Review projections deliberately contain both sides of a suggestion.
 		// They are presentation state, never valid file content. This guard keeps
 		// an accidental mode transition or destroy flush from serializing them.
 		if (containsMarkdownReviewProjection(editor)) return;
 		const markdown = buildNormalizedMarkdownFromEditor(editor);
-		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) return;
+		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) {
+			persistenceBaseline.acknowledgedRevision = revision;
+			return;
+		}
 		const didPersist = await upsertMarkdownFile({
 			lix,
 			fileId: fileId!,
@@ -215,6 +225,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		if (!didPersist) return;
 		persistenceBaseline.lastAcknowledgedMarkdown = markdown;
 		persistenceBaseline.expectedFileMarkdown = markdown;
+		persistenceBaseline.acknowledgedRevision = revision;
 		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
 	};
 	const runPersist = (editor: Editor): Promise<void> => {
@@ -237,7 +248,6 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		})();
 		return persistPromise;
 	};
-
 	const placeholderConfig: any = {
 		placeholder: ({ node }: { node: any }) => {
 			if (node.childCount !== 0) return "";
@@ -305,9 +315,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			persistenceBaselines.set(editor, persistenceBaseline);
 			onCreate?.({ editor });
 		},
-		onUpdate: ({ editor }) => {
+		onUpdate: ({ editor, transaction }) => {
 			if (destroyed) return;
 			if (onUpdate?.({ editor }) === false) return;
+			if (!transaction.docChanged) return;
+			persistenceBaseline.documentRevision += 1;
 			if (!fileId || !persistState) return;
 			const scheduleRun = () => {
 				if (destroyed) return;
