@@ -378,7 +378,7 @@ export const extension = createReactExtensionDefinition({
 		"bundled:atelier_history/manifest.json",
 		JSON.stringify(manifestJson),
 	),
-	description: "Browse workspace checkpoints.",
+	description: "Browse repository checkpoints.",
 	icon: History,
 	component: ({ atelier }) => (
 		<LixProvider lix={atelier.lix}>

@@ -382,7 +382,7 @@ function EmbedFilePickerContent({
 				<input
 					aria-activedescendant={`markdown-embed-file-option-${clampedIndex}`}
 					aria-controls="markdown-embed-file-options"
-					aria-label="Search workspace files"
+					aria-label="Search repository files"
 					autoFocus
 					onChange={(event) => {
 						setQuery(event.target.value);
@@ -402,10 +402,10 @@ function EmbedFilePickerContent({
 					className="markdown-slash-group"
 					id="markdown-embed-file-options"
 					role="listbox"
-					aria-label="Workspace files"
+					aria-label="Repository files"
 				>
 					<div className="markdown-slash-group-label" aria-hidden="true">
-						{query ? "Files" : "Workspace files"}
+						{query ? "Files" : "Repository files"}
 					</div>
 					{files.map((file, index) => {
 						const isSelected = index === clampedIndex;
@@ -449,7 +449,7 @@ function EmbedFilePickerContent({
 							message={
 								query
 									? `No files found for “${query}”`
-									: "No other files in this workspace yet."
+									: "No other files in this repository yet."
 							}
 						/>
 					) : null}

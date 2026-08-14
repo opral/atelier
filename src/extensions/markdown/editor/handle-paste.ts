@@ -171,7 +171,7 @@ function queueMarkdownImage({
 	if (!storeImage) {
 		notifyImagePasteStatus(onImagePasteStatus, {
 			state: "error",
-			message: "This document cannot store workspace assets.",
+			message: "This document cannot store repository assets.",
 		});
 		return true;
 	}

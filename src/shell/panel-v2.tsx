@@ -617,7 +617,7 @@ function DefaultPanelEmptyState({
 								/>
 							</div>
 							<p className="mt-4 max-w-56 text-[12.5px] leading-[18px] text-[var(--color-text-tertiary)] text-pretty">
-								Choose Files or another workspace view.
+								Choose Files or another repository view.
 							</p>
 						</>
 					) : null}

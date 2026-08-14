@@ -78,7 +78,7 @@ export async function storeUploadedWorkspaceFile({
 		});
 		if (!markdownSrc) {
 			throw new UploadedWorkspaceFileError(
-				"This document does not have a valid workspace path.",
+				"This document does not have a valid repository path.",
 			);
 		}
 		const caseInsensitiveCollision = await lix.execute(

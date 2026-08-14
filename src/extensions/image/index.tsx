@@ -216,7 +216,7 @@ function ImagePreviewSource({
 				<div className="atelier-image-canvas" style={canvasStyle}>
 					{objectUrl && !hasError ? (
 						<img
-							alt={fileNameFromPath(filePath) ?? "Workspace image"}
+							alt={fileNameFromPath(filePath) ?? "Repository image"}
 							className="atelier-image-preview"
 							draggable={false}
 							onError={() => setHasError(true)}

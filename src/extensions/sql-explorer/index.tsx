@@ -366,7 +366,7 @@ function QueryView({
 		const sqlText = sqlSource.replace(/;\s*$/, "").trim();
 		if (sqlText.length === 0) return;
 		if (readOnly && !isReadOnlyStatement(sqlText)) {
-			setError("This workspace is read-only — only SELECT queries can run.");
+			setError("This repository is read-only — only SELECT queries can run.");
 			setRun(null);
 			return;
 		}
@@ -825,7 +825,7 @@ export const extension = createReactExtensionDefinition({
 		JSON.stringify(manifestJson),
 	),
 	description:
-		"Browse tables and run SQL queries against the workspace database.",
+		"Browse tables and run SQL queries against the repository database.",
 	icon: Database,
 	component: ({ atelier, view }) => (
 		<SqlExplorerView
