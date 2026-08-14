@@ -850,7 +850,7 @@ describe("handlePaste - clipboard images", () => {
 		expect(statuses).toEqual([
 			{
 				state: "error",
-				message: "This document cannot store workspace assets.",
+				message: "This document cannot store repository assets.",
 			},
 		]);
 		expect(buildMarkdownFromEditor(editor)).toBe(before);

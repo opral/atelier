@@ -102,7 +102,7 @@ export function ExtensionRegistryProvider({
 			const accepted = definitions.filter((definition) => {
 				if (!builtinKinds.has(definition.kind)) return true;
 				console.warn(
-					`[extension-loader] Workspace extension id "${definition.kind}" conflicts with a bundled extension.`,
+					`[extension-loader] Repository extension id "${definition.kind}" conflicts with a bundled extension.`,
 				);
 				return false;
 			});

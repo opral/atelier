@@ -124,7 +124,7 @@ describe("parseManifest", () => {
 			expect(tableViewer).toMatchObject({
 				kind: "table-viewer",
 				label: "Table Viewer",
-				description: "Workspace extension: Table Viewer",
+				description: "Repository extension: Table Viewer",
 				fileExtensions: ["csv"],
 			});
 			expect(tableViewer?.mount).toEqual(expect.any(Function));

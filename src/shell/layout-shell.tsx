@@ -2231,7 +2231,7 @@ function LayoutShellLoadedContent({
 		}) => {
 			const resolvedFile = await resolveLixFileForOpen({ lix, filePath });
 			if (!resolvedFile) {
-				throw new Error(`File not found in the opened workspace: ${filePath}`);
+				throw new Error(`File not found in the opened repository: ${filePath}`);
 			}
 
 			if (!currentFileIds.has(resolvedFile.id)) {
@@ -2259,7 +2259,7 @@ function LayoutShellLoadedContent({
 		): Promise<string> => {
 			const normalizedPath = normalizeLixFileOpenPath(filePath);
 			if (!normalizedPath) {
-				throw new Error(`Invalid workspace file path: ${filePath}`);
+				throw new Error(`Invalid repository file path: ${filePath}`);
 			}
 			const state = withoutDocumentIdentity(options.state);
 			const historicalCommitIds = [

@@ -448,7 +448,7 @@ describe("storePastedMarkdownImage", () => {
 						type: "image/png",
 					}),
 				}),
-			).rejects.toThrow("This document does not have a valid workspace path.");
+			).rejects.toThrow("This document does not have a valid repository path.");
 			expect(await assetFilePaths(lix)).toEqual([]);
 		} finally {
 			await lix.close();

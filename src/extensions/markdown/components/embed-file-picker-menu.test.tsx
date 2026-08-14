@@ -170,7 +170,7 @@ describe("EmbedFilePickerMenu", () => {
 		});
 
 		const search = await screen.findByRole("combobox", {
-			name: "Search workspace files",
+			name: "Search repository files",
 		});
 		expect(search).toHaveFocus();
 		const options = await screen.findAllByRole("option");
@@ -203,7 +203,7 @@ describe("EmbedFilePickerMenu", () => {
 			editor.commands.openEmbedFileMenu();
 		});
 		const search = await screen.findByRole("combobox", {
-			name: "Search workspace files",
+			name: "Search repository files",
 		});
 		fireEvent.change(search, { target: { value: "sketch" } });
 
@@ -256,7 +256,7 @@ describe("EmbedFilePickerMenu", () => {
 			editor.commands.openEmbedFileMenu();
 		});
 		const search = await screen.findByRole("combobox", {
-			name: "Search workspace files",
+			name: "Search repository files",
 		});
 		fireEvent.change(search, { target: { value: "nothing-here" } });
 
@@ -276,7 +276,7 @@ describe("EmbedFilePickerMenu", () => {
 			editor.commands.openEmbedFileMenu();
 		});
 		const search = await screen.findByRole("combobox", {
-			name: "Search workspace files",
+			name: "Search repository files",
 		});
 		fireEvent.keyDown(search, { key: "Escape" });
 		await waitFor(() => {

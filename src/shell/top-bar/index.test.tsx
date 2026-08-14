@@ -40,7 +40,7 @@ describe("TopBar", () => {
 		const { container } = render(
 			<TopBar
 				rootProps={{
-					"aria-label": "Workspace controls",
+					"aria-label": "Repository controls",
 					"data-app-titlebar": true,
 					className: "bg-red-500",
 					onPointerDown,
@@ -52,7 +52,7 @@ describe("TopBar", () => {
 		const header = container.querySelector("header");
 		expect(header).toHaveAttribute("data-atelier-part", "top-bar");
 		expect(header).toHaveAttribute("data-app-titlebar", "true");
-		expect(header).toHaveAttribute("aria-label", "Workspace controls");
+		expect(header).toHaveAttribute("aria-label", "Repository controls");
 		expect(header).toHaveClass("bg-red-500", "px-2");
 		expect(ref.current).toBe(header);
 		if (!header) throw new Error("Top bar header is unavailable");

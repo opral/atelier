@@ -86,7 +86,7 @@ export async function storePastedMarkdownImage({
 		});
 		if (!markdownSrc) {
 			throw new PastedMarkdownImageError(
-				"This document does not have a valid workspace path.",
+				"This document does not have a valid repository path.",
 			);
 		}
 		const caseInsensitiveCollision = await lix.execute(
