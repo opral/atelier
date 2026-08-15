@@ -128,7 +128,7 @@ describe("checkpoint queries", () => {
 
 		expect(await selectWorkingChanges(lix).execute()).toEqual([
 			expect.objectContaining({
-				entity_pk: ["checkpoint-query-test"],
+				row_pk: ["checkpoint-query-test"],
 				schema_key: "lix_key_value",
 				diff_type: "added",
 				before_change_id: null,

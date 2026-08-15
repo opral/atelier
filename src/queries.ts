@@ -13,7 +13,7 @@ export type FilesystemEntryRow = {
 
 export type WorkingChangeRow = {
 	diff_id: string;
-	entity_pk: JsonValue;
+	row_pk: JsonValue;
 	schema_key: string;
 	file_id: string | null;
 	diff_type: "added" | "modified" | "removed";
@@ -86,7 +86,7 @@ export function selectWorkingChanges(lix: Lix) {
 		.selectFrom("lix_working_diff")
 		.select([
 			"diff_id",
-			"row_pk as entity_pk",
+			"row_pk",
 			"schema_key",
 			"file_id",
 			"diff_type",
