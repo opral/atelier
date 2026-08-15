@@ -28,7 +28,8 @@ import {
 import {
 	executeServerTimingCount,
 	formatDurationMs,
-	formatServerTimings,
+	formatQueryTimingDetails,
+	formatQueryTimings,
 	serverTimingsSince,
 	type LixrayServerTimings,
 } from "./timing";
@@ -497,10 +498,12 @@ function QueryView({
 						·{" "}
 						<span
 							className="font-semibold text-[var(--color-text-status-success)]"
-							title="SDK round trip; Lixray web auth and resolution; Lixray server round trip (including Lix Server Protocol); client row decoding; and UI render"
+							title={formatQueryTimingDetails(
+								run.clientDurationMs,
+								run.serverTimings,
+							)}
 						>
-							SDK round trip {formatDurationMs(run.clientDurationMs)} ms
-							{formatServerTimings(run.serverTimings)}
+							{formatQueryTimings(run.clientDurationMs, run.serverTimings)}
 							{` · decode ${formatDurationMs(run.decodeDurationMs)} ms`}
 							{uiRenderDurationMs === null
 								? null

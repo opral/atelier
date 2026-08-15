@@ -98,6 +98,37 @@ export function formatServerTimings(
 		.join("");
 }
 
+/**
+ * Formats the two timings users need to judge query performance.
+ *
+ * The Lix server reports protocol execution separately. Everything left in the
+ * SDK round trip is transport and hosting overhead, so it is presented as
+ * network rather than being attributed to Lix execution.
+ */
+export function formatQueryTimings(
+	clientDurationMs: number,
+	timings: LixrayServerTimings | null,
+): string {
+	const executeDurationMs = timings?.["lix-server-protocol"];
+	if (executeDurationMs === undefined) {
+		return `execute ${formatDurationMs(clientDurationMs)} ms`;
+	}
+
+	const networkDurationMs = Math.max(0, clientDurationMs - executeDurationMs);
+	return `execute ${formatDurationMs(executeDurationMs)} ms · network ${formatDurationMs(networkDurationMs)} ms`;
+}
+
+export function formatQueryTimingDetails(
+	clientDurationMs: number,
+	timings: LixrayServerTimings | null,
+): string {
+	if (timings?.["lix-server-protocol"] === undefined) {
+		return "Execute uses the SDK round trip because no remote Lix execution timing was reported.";
+	}
+
+	return `Execute is Lix server protocol time. Network is the remaining SDK round trip, including transport, Lixray hosting, and SDK overhead. SDK round trip ${formatDurationMs(clientDurationMs)} ms${formatServerTimings(timings)}.`;
+}
+
 export function formatDurationMs(durationMs: number): string {
 	return durationMs < 10
 		? durationMs.toFixed(1)

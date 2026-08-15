@@ -11,7 +11,8 @@ import {
 import {
 	executeServerTimingCount,
 	formatDurationMs,
-	formatServerTimings,
+	formatQueryTimingDetails,
+	formatQueryTimings,
 	serverTimingsSince,
 	type LixrayServerTimings,
 } from "./timing";
@@ -240,9 +241,14 @@ export function TableView({
 				<span className="flex-1" />
 				{data === null ? null : (
 					<span className="font-mono text-[11.5px] whitespace-nowrap">
-						<span className="font-semibold text-[var(--color-text-status-success)]">
-							SDK round trip {formatDurationMs(data.clientDurationMs)} ms
-							{formatServerTimings(data.serverTimings)}
+						<span
+							className="font-semibold text-[var(--color-text-status-success)]"
+							title={formatQueryTimingDetails(
+								data.clientDurationMs,
+								data.serverTimings,
+							)}
+						>
+							{formatQueryTimings(data.clientDurationMs, data.serverTimings)}
 							{` · decode ${formatDurationMs(data.decodeDurationMs)} ms`}
 							{uiRenderDurationMs === null
 								? null

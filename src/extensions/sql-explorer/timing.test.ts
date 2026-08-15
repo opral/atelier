@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
 	executeServerTimingCount,
+	formatQueryTimingDetails,
+	formatQueryTimings,
 	formatServerTimings,
 	serverTimingsSince,
 } from "./timing";
@@ -76,6 +78,35 @@ describe("SQL Explorer server timing bridge", () => {
 			}),
 		).toBe(
 			" · Lixray web auth 1.3 ms · Lixray web resolve 2.5 ms · Lixray server round trip 13 ms · Lix server protocol 1.5 ms",
+		);
+	});
+
+	test("splits Lix execution from the remaining network round trip", () => {
+		const timings = {
+			"lixray-web-auth": 1.25,
+			"lixray-web-resolve": 2.5,
+			"lixray-server-roundtrip": 12.6,
+			"lix-server-protocol": 1.5,
+		};
+
+		expect(formatQueryTimings(120, timings)).toBe(
+			"execute 1.5 ms · network 119 ms",
+		);
+		expect(formatQueryTimingDetails(120, timings)).toContain(
+			"SDK round trip 120 ms",
+		);
+		expect(formatQueryTimingDetails(120, timings)).toContain(
+			"Lix server protocol 1.5 ms",
+		);
+	});
+
+	test("uses the local SDK duration as execute time without remote timing", () => {
+		expect(formatQueryTimings(1.25, null)).toBe("execute 1.3 ms");
+	});
+
+	test("never reports a negative network duration", () => {
+		expect(formatQueryTimings(1, { "lix-server-protocol": 1.5 })).toBe(
+			"execute 1.5 ms · network 0.0 ms",
 		);
 	});
 });
