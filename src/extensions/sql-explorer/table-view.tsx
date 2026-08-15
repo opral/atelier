@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Search, Table, X } from "lucide-react";
 import type { Lix } from "@lix-js/sdk";
 import {
@@ -8,6 +8,11 @@ import {
 	type GridColumnSpec,
 	type GridSort,
 } from "./data-grid";
+import {
+	executeServerTimingCount,
+	formatDurationMs,
+	serverProtocolDurationMsSince,
+} from "./timing";
 
 /** Variant surfaces of a base table, switched in the toolbar. */
 export const TABLE_SURFACES = ["current", "_by_branch", "_history"] as const;
@@ -103,7 +108,9 @@ export function buildTableQuery({
 type TableData = {
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
 	readonly totalRows: number;
-	readonly durationMs: number;
+	readonly clientDurationMs: number;
+	readonly serverProtocolDurationMs: number | null;
+	readonly decodeDurationMs: number;
 };
 
 export function TableView({
@@ -123,7 +130,11 @@ export function TableView({
 	const [page, setPage] = useState(0);
 	const [pageSize, setPageSize] = useState(GRID_DEFAULT_PAGE_SIZE);
 	const [data, setData] = useState<TableData | null>(null);
+	const [uiRenderDurationMs, setUiRenderDurationMs] = useState<number | null>(
+		null,
+	);
 	const [error, setError] = useState<string | null>(null);
+	const pendingUiRenderStartedAtRef = useRef<number | null>(null);
 
 	const columns = columnsBySurface.get(surface) ?? [];
 	const tableName = surfaceTableName(baseTable, surface);
@@ -137,17 +148,23 @@ export function TableView({
 			page,
 			pageSize,
 		});
-		const startedAt = performance.now();
+		const executeCount = executeServerTimingCount();
+		const clientStartedAt = performance.now();
 		Promise.all([lix.execute(sql, params), lix.execute(countSql, params)])
 			.then(([result, countResult]) => {
 				if (isCancelled) return;
+				const clientDurationMs = performance.now() - clientStartedAt;
+				const decodeStartedAt = performance.now();
 				setError(null);
+				pendingUiRenderStartedAtRef.current = performance.now();
 				setData({
 					rows: result.rows.map((row) => row.toObject()),
 					totalRows: Number(
 						countResult.rows[0]?.toObject().row_count ?? result.rows.length,
 					),
-					durationMs: performance.now() - startedAt,
+					clientDurationMs,
+					serverProtocolDurationMs: serverProtocolDurationMsSince(executeCount),
+					decodeDurationMs: performance.now() - decodeStartedAt,
 				});
 			})
 			.catch((queryError) => {
@@ -161,6 +178,13 @@ export function TableView({
 			isCancelled = true;
 		};
 	}, [lix, tableName, filters, sort, page, pageSize]);
+
+	useLayoutEffect(() => {
+		const startedAt = pendingUiRenderStartedAtRef.current;
+		if (startedAt === null || data === null) return;
+		pendingUiRenderStartedAtRef.current = null;
+		setUiRenderDurationMs(performance.now() - startedAt);
+	}, [data]);
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -214,10 +238,14 @@ export function TableView({
 				{data === null ? null : (
 					<span className="font-mono text-[11.5px] whitespace-nowrap">
 						<span className="font-semibold text-[var(--color-text-status-success)]">
-							{data.durationMs < 10
-								? data.durationMs.toFixed(1)
-								: Math.round(data.durationMs)}{" "}
-							ms
+							SDK round trip {formatDurationMs(data.clientDurationMs)} ms
+							{data.serverProtocolDurationMs === null
+								? null
+								: ` · server protocol ${formatDurationMs(data.serverProtocolDurationMs)} ms`}
+							{` · decode ${formatDurationMs(data.decodeDurationMs)} ms`}
+							{uiRenderDurationMs === null
+								? null
+								: ` · ui render ${formatDurationMs(uiRenderDurationMs)} ms`}
 						</span>
 					</span>
 				)}
