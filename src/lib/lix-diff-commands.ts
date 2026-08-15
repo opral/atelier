@@ -10,7 +10,7 @@ function fileIdPredicate(fileIds: readonly string[], firstParameter: number) {
 		file_id,
 		case
 			when schema_key = 'lix_file_descriptor'
-			then lix_json_get_text(entity_pk, 0)
+			then row_pk ->> 0
 		end
 	) in (${parameters})`;
 }

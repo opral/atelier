@@ -12,11 +12,11 @@ allowBuilds:
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
-  - "@lix-js/sdk-darwin-arm64@0.11.0"
-  - "@lix-js/sdk-linux-arm64@0.11.0"
-  - "@lix-js/sdk-linux-x64@0.11.0"
-  - "@lix-js/sdk-win32-x64@0.11.0"
-  - "@lix-js/sdk@0.11.0"
+  - "@lix-js/sdk-darwin-arm64@0.12.1"
+  - "@lix-js/sdk-linux-arm64@0.12.1"
+  - "@lix-js/sdk-linux-x64@0.12.1"
+  - "@lix-js/sdk-win32-x64@0.12.1"
+  - "@lix-js/sdk@0.12.1"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
