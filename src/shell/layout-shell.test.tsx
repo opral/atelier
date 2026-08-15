@@ -619,6 +619,12 @@ describe("agent turn review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
+			const reviewFloat = document.querySelector(
+				".external-write-review-actions",
+			);
+			expect(reviewFloat?.parentElement).toBe(
+				document.querySelector("[data-review-mode='true']"),
+			);
 			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
 
 			fireEvent.click(

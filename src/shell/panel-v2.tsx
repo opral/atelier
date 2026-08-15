@@ -1346,7 +1346,7 @@ interface TabBaseProps extends PanelTabPreviewProps {
 	readonly onClose?: () => void;
 	/**
 	 * Side-panel chips reveal close as a corner badge on hover; central
-	 * document tabs keep the familiar always-visible inline X.
+	 * document tabs use an inline X when active and reveal it on hover otherwise.
 	 */
 	readonly closeOnHoverOnly?: boolean;
 	readonly isDragging?: boolean;
@@ -1381,6 +1381,8 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 		const state = isActive ? (isFocused ? "focused" : "active") : "idle";
 		const { onClick: dragOnClick, ...restButtonProps } = buttonProps ?? {};
 		// An inactive pinned tab compacts to its icon, like a browser home button.
+		// Keep the label mounted so the native tab can animate between its full
+		// and compact forms instead of popping in and out of the layout.
 		const isCompact = isPinned && !isActive;
 		return (
 			<button
@@ -1399,6 +1401,7 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				className={clsx(
 					tabBaseClasses,
 					tabStateClasses[state],
+					isPinned && "gap-0",
 					isDragging && "opacity-50 cursor-grabbing",
 				)}
 				style={style}
@@ -1411,19 +1414,26 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				>
 					<Icon className="size-3.25" />
 				</span>
-				{isCompact ? null : (
-					<span
-						data-attr="panel-tab-select"
-						className={clsx("max-w-[10rem] truncate", isPending && "italic")}
-						title={label}
-					>
-						{label}
-					</span>
-				)}
+				<span
+					data-attr="panel-tab-select"
+					aria-hidden={isCompact ? true : undefined}
+					className={clsx(
+						"overflow-hidden truncate whitespace-nowrap transition-[max-width,opacity,margin-left] duration-200 ease-out",
+						isPinned
+							? isCompact
+								? "ml-0 max-w-0 opacity-0"
+								: "ml-1.5 max-w-[10rem] opacity-100"
+							: "max-w-[10rem]",
+						isPending && "italic",
+					)}
+					title={label}
+				>
+					{label}
+				</span>
+				{/* Side-panel tabs keep their floating hover affordance. Active
+				    central tabs reserve inline space, while inactive central tabs
+				    reveal an overlay without changing width. */}
 				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
-					// Progressive disclosure: the close affordance takes no chip width
-					// at rest and floats over the chip's top-right corner on hover or
-					// keyboard focus, so it never covers the label.
 					<span
 						className="absolute -top-1 -right-1 z-10 hidden size-3.5 items-center justify-center rounded-full border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-icon-tertiary)] shadow-sm transition-colors group-hover:flex group-focus-visible:flex hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)]"
 						onClick={(event) => {
@@ -1433,22 +1443,33 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 					>
 						<X data-attr="panel-tab-close" className="size-[9px]" />
 					</span>
+				) : isActive ? (
+					<span
+						className="ml-0.5 flex size-4 flex-none items-center justify-center rounded-[4px] text-[var(--color-icon-tertiary)] transition-colors hover:text-[var(--color-icon-secondary)]"
+						onClick={(event) => {
+							event.stopPropagation();
+							onClose();
+						}}
+					>
+						<X data-attr="panel-tab-close" className="size-[11px]" />
+					</span>
 				) : (
-					<span className="relative flex size-3.25 items-center justify-center">
-						<X
-							data-attr="panel-tab-close"
-							className={clsx(
-								"size-[11px]",
-								isActive
-									? "text-[var(--color-icon-tertiary)] hover:text-[var(--color-icon-secondary)]"
-									: "text-[var(--color-icon-quaternary)] hover:text-[var(--color-icon-secondary)]",
-							)}
+					<>
+						<span
+							aria-hidden="true"
+							data-attr="panel-tab-close-fade"
+							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--color-bg-hover-canvas)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+						/>
+						<span
+							className="pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-[5px] bg-[var(--color-bg-hover-canvas)] text-[var(--color-icon-tertiary)] opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:opacity-100 hover:text-[var(--color-icon-secondary)]"
 							onClick={(event) => {
 								event.stopPropagation();
 								onClose();
 							}}
-						/>
-					</span>
+						>
+							<X data-attr="panel-tab-close" className="size-[11px]" />
+						</span>
+					</>
 				)}
 			</button>
 		);

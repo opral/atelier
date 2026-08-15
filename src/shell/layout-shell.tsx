@@ -3776,7 +3776,7 @@ function LayoutShellLoadedContent({
 							defaultSize={`${panelSizes.central}%`}
 							minSize="30%"
 						>
-							<div className="relative h-full min-h-0">
+							<div className="h-full min-h-0">
 								<CentralPanel
 									panel={centralPanel}
 									showTabBar={false}
@@ -3801,28 +3801,6 @@ function LayoutShellLoadedContent({
 										slots?.centralPanelEmpty,
 									)}
 								/>
-								{isReviewMode && !isHostReadOnly ? (
-									<ExternalWriteReviewControls
-										isActive
-										mode={
-											historicalReview
-												? "historical"
-												: workingChangesReviewOpen
-													? "working-changes"
-													: "agent-turn"
-										}
-										navigation={reviewNavigation}
-										files={pendingReviewFiles}
-										onUndo={
-											historicalReview
-												? undefined
-												: (selectedFileIds) =>
-														void handleUndoReviews(selectedFileIds)
-										}
-										onPrimary={handleDiffPrimary}
-										onExit={exitDiffReview}
-									/>
-								) : null}
 							</div>
 						</Panel>
 						<Separator
@@ -3862,6 +3840,27 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</Group>
 				</main>
+				{isReviewMode && !isHostReadOnly ? (
+					<ExternalWriteReviewControls
+						isActive
+						mode={
+							historicalReview
+								? "historical"
+								: workingChangesReviewOpen
+									? "working-changes"
+									: "agent-turn"
+						}
+						navigation={reviewNavigation}
+						files={pendingReviewFiles}
+						onUndo={
+							historicalReview
+								? undefined
+								: (selectedFileIds) => void handleUndoReviews(selectedFileIds)
+						}
+						onPrimary={handleDiffPrimary}
+						onExit={exitDiffReview}
+					/>
+				) : null}
 				<CheckpointStatusBar
 					readOnly={isHostReadOnly}
 					autoAcceptAgentChanges={autoAcceptAgentChanges}

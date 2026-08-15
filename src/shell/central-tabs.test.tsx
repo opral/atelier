@@ -216,6 +216,85 @@ describe("central tabs with a pinned home", () => {
 		}
 	});
 
+	test("animates the pinned home label between expanded and compact states", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			const homeTab = () =>
+				document.querySelector<HTMLButtonElement>(
+					'header [data-slot="central-tab-strip"] button[data-pinned="true"]',
+				);
+			const homeLabel = () =>
+				homeTab()?.querySelector<HTMLElement>(
+					'[data-attr="panel-tab-select"] + [data-attr="panel-tab-select"]',
+				);
+
+			expect(homeLabel()?.className).toContain("max-w-[10rem]");
+			expect(homeLabel()?.className).toContain(
+				"transition-[max-width,opacity,margin-left]",
+			);
+
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			expect(homeTab()).toHaveAttribute("aria-label", "Home");
+			expect(homeLabel()).toHaveAttribute("aria-hidden", "true");
+			expect(homeLabel()?.className).toContain("max-w-0");
+
+			await act(async () => {
+				homeTab()?.click();
+			});
+			expect(homeTab()).not.toHaveAttribute("aria-label");
+			expect(homeLabel()).not.toHaveAttribute("aria-hidden");
+			expect(homeLabel()?.className).toContain("max-w-[10rem]");
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("keeps active close inline and discloses inactive close on hover", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+
+			const inactiveTab = screen.getByRole("button", { name: "one.md" });
+			const activeTab = screen.getByRole("button", { name: "two.md" });
+			const inactiveClose = inactiveTab.querySelector(
+				'[data-attr="panel-tab-close"]',
+			);
+			expect(inactiveClose).toBeInTheDocument();
+			expect(inactiveClose?.parentElement?.className).toContain("opacity-0");
+			expect(inactiveClose?.parentElement?.className).toContain(
+				"group-hover:opacity-100",
+			);
+			expect(inactiveClose?.parentElement?.className).toContain(
+				"bg-[var(--color-bg-hover-canvas)]",
+			);
+			const closeFade = inactiveTab.querySelector(
+				'[data-attr="panel-tab-close-fade"]',
+			);
+			expect(closeFade).toBeInTheDocument();
+			expect(closeFade?.className).toContain("w-12");
+			expect(closeFade?.className).toContain("var(--color-bg-hover-canvas)");
+			const activeClose = activeTab.querySelector(
+				'[data-attr="panel-tab-close"]',
+			);
+			expect(activeClose).toBeInTheDocument();
+			expect(activeClose?.parentElement?.className).toContain("flex-none");
+			expect(activeClose?.parentElement?.className).toContain("size-4");
+			expect(activeClose?.parentElement?.className).not.toContain("absolute");
+			expect(activeClose?.parentElement?.className).not.toContain("opacity-0");
+			const activeCloseFade = activeTab.querySelector(
+				'[data-attr="panel-tab-close-fade"]',
+			);
+			expect(activeCloseFade).not.toBeInTheDocument();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("newTab appends at the end of the strip; open activates an existing tab", async () => {
 		const shell = await renderTabbedShell();
 		try {
