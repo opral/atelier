@@ -232,10 +232,8 @@ describe("SqlExplorerView", () => {
 		expect(await screen.findByText("/notes/hello.md")).toBeInTheDocument();
 		expect(screen.getByText("1 row", { exact: false })).toBeInTheDocument();
 		expect(screen.getByText(/execute .* ms/)).toBeInTheDocument();
-		expect(screen.getByText(/decode .* ms/)).toBeInTheDocument();
-		await waitFor(() => {
-			expect(screen.getByText(/ui render .* ms/)).toBeInTheDocument();
-		});
+		expect(screen.queryByText(/decode .* ms/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/ui render .* ms/)).not.toBeInTheDocument();
 		expect(screen.getByText("Page 1", { exact: false })).toBeInTheDocument();
 	});
 

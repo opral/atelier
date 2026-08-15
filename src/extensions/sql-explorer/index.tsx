@@ -1,7 +1,6 @@
 import {
 	useCallback,
 	useEffect,
-	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -27,7 +26,6 @@ import {
 } from "./table-view";
 import {
 	executeServerTimingCount,
-	formatDurationMs,
 	formatQueryTimingDetails,
 	formatQueryTimings,
 	serverTimingsSince,
@@ -347,7 +345,6 @@ type QueryRun = {
 	readonly hasResultColumns: boolean;
 	readonly clientDurationMs: number;
 	readonly serverTimings: LixrayServerTimings | null;
-	readonly decodeDurationMs: number;
 };
 
 function QueryView({
@@ -371,11 +368,7 @@ function QueryView({
 	const [sort, setSort] = useState<GridSort | null>(null);
 	const [page, setPage] = useState(0);
 	const [pageSize, setPageSize] = useState(GRID_DEFAULT_PAGE_SIZE);
-	const [uiRenderDurationMs, setUiRenderDurationMs] = useState<number | null>(
-		null,
-	);
 	const runIdRef = useRef(0);
-	const pendingUiRenderStartedAtRef = useRef<number | null>(null);
 
 	const runQuery = async (sqlSource: string) => {
 		const sqlText = sqlSource.replace(/;\s*$/, "").trim();
@@ -395,10 +388,7 @@ function QueryView({
 			const result = await lix.execute(sqlText);
 			if (runId !== runIdRef.current) return;
 			const clientDurationMs = performance.now() - clientStartedAt;
-			const decodeStartedAt = performance.now();
 			const rows = result.rows.map((row) => row.toObject());
-			const decodeDurationMs = performance.now() - decodeStartedAt;
-			pendingUiRenderStartedAtRef.current = performance.now();
 			setRun({
 				columns: inferResultColumns(result.columns, rows),
 				rows,
@@ -406,7 +396,6 @@ function QueryView({
 				hasResultColumns: result.columns.length > 0,
 				clientDurationMs,
 				serverTimings: serverTimingsSince(executeCount),
-				decodeDurationMs,
 			});
 			setSort(null);
 			setPage(0);
@@ -421,13 +410,6 @@ function QueryView({
 			if (runId === runIdRef.current) setIsRunning(false);
 		}
 	};
-
-	useLayoutEffect(() => {
-		const startedAt = pendingUiRenderStartedAtRef.current;
-		if (startedAt === null || run === null) return;
-		pendingUiRenderStartedAtRef.current = null;
-		setUiRenderDurationMs(performance.now() - startedAt);
-	}, [run]);
 
 	// A history selection re-runs the (read-only) query it loaded. The effect
 	// runs unguarded by deps and gates on the nonce so the latest query and
@@ -504,10 +486,6 @@ function QueryView({
 							)}
 						>
 							{formatQueryTimings(run.clientDurationMs, run.serverTimings)}
-							{` · decode ${formatDurationMs(run.decodeDurationMs)} ms`}
-							{uiRenderDurationMs === null
-								? null
-								: ` · ui render ${formatDurationMs(uiRenderDurationMs)} ms`}
 						</span>
 					</span>
 				)}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, Table, X } from "lucide-react";
 import type { Lix } from "@lix-js/sdk";
 import {
@@ -10,7 +10,6 @@ import {
 } from "./data-grid";
 import {
 	executeServerTimingCount,
-	formatDurationMs,
 	formatQueryTimingDetails,
 	formatQueryTimings,
 	serverTimingsSince,
@@ -113,7 +112,6 @@ type TableData = {
 	readonly totalRows: number;
 	readonly clientDurationMs: number;
 	readonly serverTimings: LixrayServerTimings | null;
-	readonly decodeDurationMs: number;
 };
 
 export function TableView({
@@ -133,11 +131,7 @@ export function TableView({
 	const [page, setPage] = useState(0);
 	const [pageSize, setPageSize] = useState(GRID_DEFAULT_PAGE_SIZE);
 	const [data, setData] = useState<TableData | null>(null);
-	const [uiRenderDurationMs, setUiRenderDurationMs] = useState<number | null>(
-		null,
-	);
 	const [error, setError] = useState<string | null>(null);
-	const pendingUiRenderStartedAtRef = useRef<number | null>(null);
 
 	const columns = columnsBySurface.get(surface) ?? [];
 	const tableName = surfaceTableName(baseTable, surface);
@@ -158,9 +152,7 @@ export function TableView({
 			.then(([result, countResult]) => {
 				if (isCancelled) return;
 				const clientDurationMs = performance.now() - clientStartedAt;
-				const decodeStartedAt = performance.now();
 				setError(null);
-				pendingUiRenderStartedAtRef.current = performance.now();
 				setData({
 					rows: result.rows.map((row) => row.toObject()),
 					totalRows: Number(
@@ -168,7 +160,6 @@ export function TableView({
 					),
 					clientDurationMs,
 					serverTimings: serverTimingsSince(executeCount),
-					decodeDurationMs: performance.now() - decodeStartedAt,
 				});
 			})
 			.catch((queryError) => {
@@ -182,13 +173,6 @@ export function TableView({
 			isCancelled = true;
 		};
 	}, [lix, tableName, filters, sort, page, pageSize]);
-
-	useLayoutEffect(() => {
-		const startedAt = pendingUiRenderStartedAtRef.current;
-		if (startedAt === null || data === null) return;
-		pendingUiRenderStartedAtRef.current = null;
-		setUiRenderDurationMs(performance.now() - startedAt);
-	}, [data]);
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -249,10 +233,6 @@ export function TableView({
 							)}
 						>
 							{formatQueryTimings(data.clientDurationMs, data.serverTimings)}
-							{` · decode ${formatDurationMs(data.decodeDurationMs)} ms`}
-							{uiRenderDurationMs === null
-								? null
-								: ` · ui render ${formatDurationMs(uiRenderDurationMs)} ms`}
 						</span>
 					</span>
 				)}
