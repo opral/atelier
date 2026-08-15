@@ -28,7 +28,9 @@ import {
 import {
 	executeServerTimingCount,
 	formatDurationMs,
-	serverProtocolDurationMsSince,
+	formatServerTimings,
+	serverTimingsSince,
+	type LixrayServerTimings,
 } from "./timing";
 import manifestJson from "./manifest.json";
 import "./style.css";
@@ -343,7 +345,7 @@ type QueryRun = {
 	readonly rowsAffected: number;
 	readonly hasResultColumns: boolean;
 	readonly clientDurationMs: number;
-	readonly serverProtocolDurationMs: number | null;
+	readonly serverTimings: LixrayServerTimings | null;
 	readonly decodeDurationMs: number;
 };
 
@@ -385,6 +387,7 @@ function QueryView({
 		const runId = ++runIdRef.current;
 		setIsRunning(true);
 		setError(null);
+		setRun(null);
 		const executeCount = executeServerTimingCount();
 		const clientStartedAt = performance.now();
 		try {
@@ -401,7 +404,7 @@ function QueryView({
 				rowsAffected: result.rowsAffected,
 				hasResultColumns: result.columns.length > 0,
 				clientDurationMs,
-				serverProtocolDurationMs: serverProtocolDurationMsSince(executeCount),
+				serverTimings: serverTimingsSince(executeCount),
 				decodeDurationMs,
 			});
 			setSort(null);
@@ -494,12 +497,10 @@ function QueryView({
 						·{" "}
 						<span
 							className="font-semibold text-[var(--color-text-status-success)]"
-							title="SDK round trip, server protocol time, client row decoding, and UI render"
+							title="SDK round trip; Lixray web auth and resolution; Lixray server round trip (including Lix Server Protocol); client row decoding; and UI render"
 						>
 							SDK round trip {formatDurationMs(run.clientDurationMs)} ms
-							{run.serverProtocolDurationMs === null
-								? null
-								: ` · server protocol ${formatDurationMs(run.serverProtocolDurationMs)} ms`}
+							{formatServerTimings(run.serverTimings)}
 							{` · decode ${formatDurationMs(run.decodeDurationMs)} ms`}
 							{uiRenderDurationMs === null
 								? null

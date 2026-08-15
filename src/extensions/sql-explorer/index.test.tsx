@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import {
 	buildTableQuery,
 	formatByteSize,
@@ -287,6 +287,44 @@ describe("SqlExplorerView", () => {
 		fireEvent.click(screen.getByRole("button", { name: /Run/ }));
 		const alert = await screen.findByRole("alert");
 		expect(alert).toHaveTextContent(/does_not_exist/);
+	});
+
+	test("clears previous query results while a refresh fails", async () => {
+		const originalExecute = lix.execute.bind(lix);
+		let failNextQuery = false;
+		const executeSpy = vi
+			.spyOn(lix, "execute")
+			.mockImplementation(async (sql, params, options) => {
+				if (failNextQuery && String(sql).includes("SELECT 43 AS answer")) {
+					throw new Error("The preview session has expired");
+				}
+				return originalExecute(sql, params, options);
+			});
+
+		try {
+			render(
+				<SqlExplorerView
+					lix={lix}
+					readOnly={false}
+					instanceId="test-stale-results"
+					initialQuery="SELECT 42 AS answer;"
+				/>,
+			);
+
+			fireEvent.click(screen.getByRole("button", { name: /Run/ }));
+			await screen.findByText("42");
+
+			const editor = screen.getByRole("textbox", { name: "SQL query" });
+			fireEvent.change(editor, { target: { value: "SELECT 43 AS answer;" } });
+			failNextQuery = true;
+			fireEvent.click(screen.getByRole("button", { name: /Run/ }));
+
+			const alert = await screen.findByRole("alert");
+			expect(alert).toHaveTextContent(/session has expired/);
+			expect(screen.queryByText("42")).not.toBeInTheDocument();
+		} finally {
+			executeSpy.mockRestore();
+		}
 	});
 
 	test("sidebar collapses and reopens through the resize handle", async () => {

@@ -11,7 +11,9 @@ import {
 import {
 	executeServerTimingCount,
 	formatDurationMs,
-	serverProtocolDurationMsSince,
+	formatServerTimings,
+	serverTimingsSince,
+	type LixrayServerTimings,
 } from "./timing";
 
 /** Variant surfaces of a base table, switched in the toolbar. */
@@ -109,7 +111,7 @@ type TableData = {
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
 	readonly totalRows: number;
 	readonly clientDurationMs: number;
-	readonly serverProtocolDurationMs: number | null;
+	readonly serverTimings: LixrayServerTimings | null;
 	readonly decodeDurationMs: number;
 };
 
@@ -141,6 +143,7 @@ export function TableView({
 
 	useEffect(() => {
 		let isCancelled = false;
+		setData(null);
 		const { sql, countSql, params } = buildTableQuery({
 			table: tableName,
 			filters,
@@ -163,7 +166,7 @@ export function TableView({
 						countResult.rows[0]?.toObject().row_count ?? result.rows.length,
 					),
 					clientDurationMs,
-					serverProtocolDurationMs: serverProtocolDurationMsSince(executeCount),
+					serverTimings: serverTimingsSince(executeCount),
 					decodeDurationMs: performance.now() - decodeStartedAt,
 				});
 			})
@@ -239,9 +242,7 @@ export function TableView({
 					<span className="font-mono text-[11.5px] whitespace-nowrap">
 						<span className="font-semibold text-[var(--color-text-status-success)]">
 							SDK round trip {formatDurationMs(data.clientDurationMs)} ms
-							{data.serverProtocolDurationMs === null
-								? null
-								: ` · server protocol ${formatDurationMs(data.serverProtocolDurationMs)} ms`}
+							{formatServerTimings(data.serverTimings)}
 							{` · decode ${formatDurationMs(data.decodeDurationMs)} ms`}
 							{uiRenderDurationMs === null
 								? null
