@@ -231,6 +231,7 @@ describe("SqlExplorerView", () => {
 
 		expect(await screen.findByText("/notes/hello.md")).toBeInTheDocument();
 		expect(screen.getByText("1 row", { exact: false })).toBeInTheDocument();
+		expect(screen.getByText(/ui render .* ms/)).toBeInTheDocument();
 		expect(screen.getByText("Page 1", { exact: false })).toBeInTheDocument();
 	});
 
