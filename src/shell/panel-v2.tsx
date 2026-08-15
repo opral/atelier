@@ -719,7 +719,12 @@ export function PanelTabStrip({
 			(button) => !previousInstances.has(button.dataset.viewInstance ?? ""),
 		);
 		if (!addedTab) return false;
-		addedTab.focus({ preventScroll: true });
+		// Move focus without painting a ring — adding a tab is not a keyboard
+		// navigation moment, and the ring on the fresh tab read as a glitch.
+		addedTab.focus({
+			preventScroll: true,
+			focusVisible: false,
+		} as FocusOptions);
 		return true;
 	};
 
