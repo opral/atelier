@@ -6,3 +6,89 @@ body,
 	margin: 0;
 	overflow: hidden;
 }
+
+/* Host-owned repository picker (see host-navbar.tsx). Atelier styles none of
+   this — the slot only reserves the space. */
+.host-repo {
+	position: relative;
+}
+
+.host-repo__chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	height: 28px;
+	padding: 0 8px 0 6px;
+	border: 0;
+	border-radius: 7px;
+	background: rgb(236, 234, 229);
+	color: rgb(168, 162, 158);
+	cursor: pointer;
+	font: inherit;
+}
+
+.host-repo__chip:hover {
+	background: rgb(228, 225, 219);
+}
+
+.host-repo__name {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: rgb(28, 25, 23);
+}
+
+.host-repo__avatar {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 17px;
+	height: 17px;
+	border-radius: 5px;
+	background: rgb(253, 227, 211);
+	color: rgb(194, 65, 12);
+	font-size: 8px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.host-repo__menu {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	min-width: 180px;
+	padding: 6px;
+	border: 1px solid rgb(227, 225, 220);
+	border-radius: 10px;
+	background: #ffffff;
+	box-shadow: 0 16px 40px rgba(28, 25, 23, 0.16);
+}
+
+.host-repo__item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 30px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: rgb(68, 64, 60);
+	font: inherit;
+	font-size: 12.5px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.host-repo__item[aria-checked="true"] {
+	background: rgb(245, 244, 241);
+	font-weight: 600;
+	color: rgb(28, 25, 23);
+}
+
+.host-repo__item:hover {
+	background: rgb(245, 244, 241);
+}

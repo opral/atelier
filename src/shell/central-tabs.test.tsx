@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import { describe, expect, test, vi } from "vitest";
 import {
 	act,
+	fireEvent,
 	render,
 	screen,
 	waitFor,
-	fireEvent,
 } from "@testing-library/react";
 import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
@@ -167,7 +167,7 @@ async function renderTabbedShell(
 const centralTabButtons = () =>
 	Array.from(
 		document.querySelectorAll<HTMLButtonElement>(
-			"section button[data-view-instance]",
+			'header [data-slot="central-tab-strip"] button[data-view-instance]',
 		),
 	);
 
@@ -330,7 +330,7 @@ describe("central tabs with a pinned home", () => {
 		}
 	});
 
-	test("side chips remove views; Files is removable and left-only", async () => {
+	test("side views use section pickers instead of tab chips", async () => {
 		const shell = await renderTabbedShell();
 		try {
 			await act(async () => {
@@ -338,53 +338,16 @@ describe("central tabs with a pinned home", () => {
 			});
 			expect(await screen.findByTestId("test-side-tool")).toBeInTheDocument();
 
-			// Closing the only removable view removes it (and closes the island).
-			const sideClose = document.querySelector<HTMLElement>(
-				`aside button[data-view-key="${SIDE_EXTENSION_ID}"] [data-attr="panel-tab-close"]`,
-			);
-			expect(sideClose).toBeTruthy();
-			fireEvent.click(sideClose!);
-			await waitFor(() => {
-				expect(
-					document.querySelector(
-						`aside button[data-view-key="${SIDE_EXTENSION_ID}"]`,
-					),
-				).toBeNull();
-			});
-
-			// The seeded Files view is a normal view now: its ✕ removes it for
-			// real — no canonicalization resurrection.
-			const filesClose = document.querySelector<HTMLElement>(
-				'aside button[data-view-key="atelier_files"] [data-attr="panel-tab-close"]',
-			);
-			expect(filesClose).toBeTruthy();
-			fireEvent.click(filesClose!);
-			await waitFor(() => {
-				expect(
-					document.querySelector('aside button[data-view-key="atelier_files"]'),
-				).toBeNull();
-			});
-
-			// Once closed, Files is offered back by BOTH side panels' add-view
-			// menus, and adding it to the right panel genuinely opens it there.
-			const addButtons = [
-				...document.querySelectorAll<HTMLElement>(
-					'aside button[aria-label="Add view"]',
+			expect(
+				document.querySelector(
+					`aside button[aria-label="Side Tool panel view menu"]`,
 				),
-			];
-			expect(addButtons.length).toBeGreaterThan(0);
-			const rightAdd = addButtons.at(-1)!;
-			fireEvent.pointerDown(rightAdd, { button: 0 });
-			await screen.findByRole("menu");
-			fireEvent.click(screen.getByRole("menuitem", { name: "Files" }));
-			await waitFor(() => {
-				const rightFiles = [
-					...document.querySelectorAll<HTMLElement>(
-						'aside button[data-view-key="atelier_files"]',
-					),
-				];
-				expect(rightFiles.length).toBeGreaterThan(0);
-			});
+			).toBeTruthy();
+			expect(
+				document.querySelector(
+					`aside button[data-view-key="${SIDE_EXTENSION_ID}"]`,
+				),
+			).toBeNull();
 		} finally {
 			await shell.cleanup();
 		}
@@ -424,6 +387,74 @@ describe("central tabs with a pinned home", () => {
 					),
 				).toBe(false);
 			});
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("the built-in strip's + opens the shared view menu, gated by placement", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await screen.findByTestId("test-home-view");
+			const addView = screen.getByRole("button", { name: "Add view" });
+			expect(addView).toHaveAttribute("data-attr", "panel-add-view");
+			fireEvent.pointerDown(addView, { button: 0, ctrlKey: false });
+
+			// The + is the shared view menu: built-in repository views with
+			// central placement are offered; side-panel-only views are not.
+			const filesItem = await screen.findByRole("menuitem", { name: "Files" });
+			expect(
+				screen.getByRole("menuitem", { name: "SQL Explorer" }),
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole("menuitem", { name: "History" }),
+			).toBeInTheDocument();
+			expect(screen.queryByRole("menuitem", { name: "Side Tool" })).toBeNull();
+
+			fireEvent.click(filesItem);
+			await waitFor(() => {
+				expect(
+					centralTabButtons().some(
+						(tab) => tab.dataset.viewKey === "atelier_files",
+					),
+				).toBe(true);
+			});
+			// Close-focus lands on the new tab, not back on the "+" (which would
+			// paint a stray focus ring there).
+			const addedTab = centralTabButtons().find(
+				(tab) => tab.dataset.viewKey === "atelier_files",
+			);
+			await waitFor(() => expect(addedTab).toHaveFocus());
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("host identity slots render, divided from the document tabs", async () => {
+		const shell = await renderTabbedShell({
+			slots: {
+				navbarBrand: <span data-testid="host-brand">mark</span>,
+				navbarRepository: <span data-testid="host-repo">peter-parker</span>,
+			},
+		});
+		try {
+			expect(await screen.findByTestId("host-brand")).toBeVisible();
+			expect(screen.getByTestId("host-repo")).toBeVisible();
+			expect(
+				document.querySelector('[data-atelier-part="top-bar-divider"]'),
+			).toBeTruthy();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("omits the top-bar divider when the host claims no identity slots", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await screen.findByTestId("test-home-view");
+			expect(
+				document.querySelector('[data-atelier-part="top-bar-divider"]'),
+			).toBeNull();
 		} finally {
 			await shell.cleanup();
 		}

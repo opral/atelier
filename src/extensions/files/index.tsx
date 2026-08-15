@@ -1118,7 +1118,9 @@ function FilesViewContent({
 			className={
 				context?.panelSide === "central"
 					? "relative flex min-h-0 flex-1 flex-col"
-					: "relative flex min-h-0 flex-1 flex-col p-2"
+					: // No horizontal padding: the rows' own 8px padding puts row icons
+						// on the same x as the section label's text (its px-2).
+						"relative flex min-h-0 flex-1 flex-col pt-1 pb-2"
 			}
 			onDragEnter={handleDragEnter}
 			onDragOver={handleDragOver}
@@ -1228,29 +1230,27 @@ const CompactNewButton = forwardRef<
 	ref,
 ) {
 	return (
+		// Reads as one more tree row: same height, padding, icon slot, type, and
+		// hover fill as the items below it. No trailing chevron — the FILES
+		// section label above already carries a caret, and two stacked carets
+		// read as noise.
 		<button
 			ref={ref}
 			type="button"
-			className="mb-px flex h-7 w-full select-none items-center justify-between gap-2 rounded-[7px] px-2.25 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 			data-attr="file-new"
 			disabled={disabled}
 			title={title}
 			{...props}
 		>
-			<span className="flex items-center gap-[6px]">
-				<img
-					src={fileNewIconUrl}
-					alt=""
-					aria-hidden="true"
-					className="size-3.25 shrink-0"
-					data-attr="file-new-icon"
-				/>
-				<span>New</span>
-			</span>
-			<ChevronDown
+			<img
+				src={fileNewIconUrl}
+				alt=""
 				aria-hidden="true"
-				className="size-3 text-[var(--color-icon-tertiary)]"
+				className="size-3.5 shrink-0"
+				data-attr="file-new-icon"
 			/>
+			<span>New</span>
 		</button>
 	);
 });

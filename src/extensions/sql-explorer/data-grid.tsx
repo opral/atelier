@@ -531,7 +531,7 @@ export function GridFooter({
 	const format = (n: number) => n.toLocaleString("en-US");
 
 	return (
-		<div className="flex h-9 shrink-0 items-center gap-3 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5">
+		<div className="atelier-sql-grid-footer flex h-9 shrink-0 items-center gap-3 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5">
 			<span
 				data-attr="sql-grid-row-range"
 				className="font-mono text-[11.5px] text-[var(--color-text-tertiary)]"
@@ -544,8 +544,15 @@ export function GridFooter({
 				</span>
 			</span>
 			<span className="flex-1" />
-			<PageSizeSelect pageSize={pageSize} onPageSizeChange={onPageSizeChange} />
-			<span className="h-4 w-px bg-[var(--color-border-panel)]" />
+			{/* Sidebar-width hosts drop the page-size chooser — the row range and
+			    pager are the essentials. */}
+			<span className="contents @max-[560px]:hidden">
+				<PageSizeSelect
+					pageSize={pageSize}
+					onPageSizeChange={onPageSizeChange}
+				/>
+				<span className="h-4 w-px bg-[var(--color-border-panel)]" />
+			</span>
 			<span className="inline-flex items-center gap-1">
 				<PagerButton
 					label="Previous page"

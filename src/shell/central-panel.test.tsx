@@ -99,11 +99,11 @@ describe("CentralPanel", () => {
 		).toBeNull();
 	});
 
-	test("renders a new-tab action in the tab strip", async () => {
-		const onCreateNewFile = vi.fn();
+	test("renders the shared add-view action in the tab strip", async () => {
+		const onAddView = vi.fn();
 		const panelState: PanelState = {
-			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
-			activeInstance: "search-1",
+			views: [],
+			activeInstance: null,
 		};
 
 		await renderWithProviders(
@@ -115,17 +115,21 @@ describe("CentralPanel", () => {
 					viewContext={createViewContext()}
 					isFocused={true}
 					onFocusPanel={vi.fn()}
-					onCreateNewFile={onCreateNewFile}
+					onAddView={onAddView}
 					showTabBar
 				/>
 			</DndContext>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "New tab" }));
-		expect(onCreateNewFile).toHaveBeenCalledOnce();
+		fireEvent.pointerDown(screen.getByRole("button", { name: "Add view" }), {
+			button: 0,
+			ctrlKey: false,
+		});
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Search" }));
+		expect(onAddView).toHaveBeenCalledWith(TEST_SEARCH_EXTENSION_KIND);
 	});
 
-	test("does not render a new-tab action when document creation is unavailable", async () => {
+	test("does not render an add-view action when view creation is unavailable", async () => {
 		const panelState: PanelState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
@@ -145,7 +149,7 @@ describe("CentralPanel", () => {
 			</DndContext>,
 		);
 
-		expect(screen.queryByRole("button", { name: "New tab" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Add view" })).toBeNull();
 	});
 
 	test("renders the active view without a tab strip", async () => {

@@ -1,10 +1,11 @@
 @scope (.atelier-root) {
+	/* No background of its own: the hosting panel island decides the surface.
+	 * Central paints it white; side islands stay canvas-transparent. */
 	.atelier-sql-view {
 		display: flex;
 		height: 100%;
 		min-height: 0;
 		container-type: inline-size;
-		background: var(--color-bg-panel);
 	}
 
 	.atelier-sql-sidebar {
@@ -48,15 +49,6 @@
 			var(--color-brand-300) 5px,
 			transparent 5px
 		);
-	}
-
-	/* Narrow hosts (side panels) drop the sidebar; the main surface stays
-	 * usable at any width. */
-	@container (max-width: 559px) {
-		.atelier-sql-sidebar,
-		.atelier-sql-resize-handle {
-			display: none;
-		}
 	}
 
 	.atelier-sql-editor-shell {
@@ -148,5 +140,70 @@
 			0px 12px 32px -4px rgba(0, 0, 0, 0.08),
 			0px 4px 8px -2px rgba(0, 0, 0, 0.08);
 		padding: 4px;
+	}
+
+	/* Narrow hosts (side panels) drop the sidebar; the main surface stays
+	 * usable at any width. Kept last: these override the base rules above at
+	 * equal specificity, so source order decides. */
+	@container (max-width: 559px) {
+		.atelier-sql-sidebar,
+		.atelier-sql-resize-handle {
+			display: none;
+		}
+
+		/* On the transparent side island the editor and results become white
+		 * cards on the canvas — the sidebar's version of the central white
+		 * island — while the run row sits quietly on the canvas between them. */
+		.atelier-sql-editor-shell {
+			margin: 2px 8px 0;
+			border: 1px solid var(--color-border-panel);
+			border-radius: 9px;
+			background: var(--color-bg-panel);
+		}
+
+		.atelier-sql-editor,
+		.atelier-sql-highlight {
+			padding: 12px 14px 10px;
+		}
+
+		.atelier-sql-runbar {
+			height: auto;
+			min-height: 40px;
+			flex-wrap: wrap;
+			row-gap: 2px;
+			border: 0;
+			background: transparent;
+			padding: 4px 10px;
+		}
+
+		.atelier-sql-results {
+			margin: 0 8px 8px;
+			border: 1px solid var(--color-border-panel);
+			border-radius: 9px;
+			background: var(--color-bg-panel);
+		}
+
+		/* When a pager follows, it closes the results card instead of the
+		 * results rounding off on their own. */
+		.atelier-sql-results:has(+ .atelier-sql-grid-footer) {
+			margin-bottom: 0;
+			border-bottom: 0;
+			border-radius: 9px 9px 0 0;
+		}
+
+		.atelier-sql-grid-footer {
+			height: auto;
+			min-height: 36px;
+			flex-wrap: wrap;
+			margin: 0 8px 8px;
+			border: 1px solid var(--color-border-panel);
+			border-top-color: var(--color-border-subtle);
+			border-radius: 0 0 9px 9px;
+			padding: 2px 10px;
+		}
+
+		.atelier-sql-grid-footer [data-attr="sql-grid-row-range"] {
+			white-space: nowrap;
+		}
 	}
 }

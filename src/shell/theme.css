@@ -38,6 +38,8 @@
 	--color-bg-hover-canvas: rgb(236, 231, 223);
 	/* Pressed/tonal fill for quiet chips (12f "or start yourself"). */
 	--color-bg-active: rgb(239, 232, 221);
+	/* Selected row sitting directly on the canvas (sidebar file tree). */
+	--color-bg-selection-row: rgb(233, 231, 225);
 	--color-border-panel: rgb(236, 232, 226);
 	--color-border-subtle: rgb(244, 241, 236);
 	--color-text-primary: var(--color-neutral-900);

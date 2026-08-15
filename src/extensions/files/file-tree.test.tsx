@@ -836,7 +836,7 @@ describe("FileTree", () => {
 			"true",
 		);
 		expect(host.style.getPropertyValue("--trees-selected-bg-override")).toBe(
-			"var(--color-bg-selection-current)",
+			"var(--color-bg-selection-row)",
 		);
 
 		rerender(
@@ -847,6 +847,37 @@ describe("FileTree", () => {
 			/>,
 		);
 		expect(host.style.getPropertyValue("--trees-selected-bg-override")).toBe(
+			"var(--color-bg-hover-canvas)",
+		);
+	});
+
+	test("paints the surface the tree actually sits on", () => {
+		const nodes: FilesystemTreeNode[] = [
+			{
+				type: "file",
+				id: "file-readme",
+				name: "README.md",
+				path: "/README.md",
+			},
+		];
+
+		// Compact runs in a transparent side island over the canvas; a
+		// panel-colored background would render as a white card there.
+		const { container, rerender } = render(<FileTree nodes={nodes} />);
+		const host = getTreeHost(container);
+		expect(host.style.getPropertyValue("--trees-bg-override")).toBe(
+			"var(--color-bg-app)",
+		);
+		expect(host.style.getPropertyValue("--trees-bg-muted-override")).toBe(
+			"var(--color-bg-hover-canvas)",
+		);
+
+		// Spacious runs inside the central white island.
+		rerender(<FileTree nodes={nodes} variant="spacious" />);
+		expect(host.style.getPropertyValue("--trees-bg-override")).toBe(
+			"var(--color-bg-panel)",
+		);
+		expect(host.style.getPropertyValue("--trees-bg-muted-override")).toBe(
 			"var(--color-bg-hover)",
 		);
 	});

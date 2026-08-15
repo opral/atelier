@@ -38,6 +38,7 @@ import { hasHistoricalEditorRevisionState } from "@/extension-runtime/editor-rev
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
+import { isMacPlatform } from "@/lib/platform";
 import {
 	createCheckpointForFiles,
 	restoreCheckpointFiles,
@@ -69,7 +70,7 @@ import {
 	reconcileInstalledExtensionCandidates,
 	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
-import { PanelTabPreview } from "./panel-v2";
+import { PanelTabPreview, PanelTabStrip } from "./panel-v2";
 import {
 	buildFileExtensionProps,
 	documentPathFromView,
@@ -1088,7 +1089,8 @@ function LayoutShellLoadedContent({
 	const installedExtensionsByManifestRef = useRef(
 		new Map<string, ExtensionDefinition>(),
 	);
-	const { extensionMap, replaceInstalledExtensions } = useExtensionRegistry();
+	const { extensionMap, visibleExtensions, replaceInstalledExtensions } =
+		useExtensionRegistry();
 	const centralPanelOptions = configuration.centralPanel;
 	const centralBehavior = useMemo<CentralSlotBehavior>(() => {
 		const centralKinds = new Set<ExtensionKind>();
@@ -3387,6 +3389,12 @@ function LayoutShellLoadedContent({
 		[handleAddView],
 	);
 
+	const addViewOnCentral = useCallback(
+		(type: ExtensionKind, state?: ExtensionState) =>
+			handleAddView("central", type, state),
+		[handleAddView],
+	);
+
 	const addViewOnRight = useCallback(
 		(type: ExtensionKind, state?: ExtensionState) =>
 			handleAddView("right", type, state),
@@ -3479,6 +3487,38 @@ function LayoutShellLoadedContent({
 		handleSelectCentralView,
 		isHostReadOnly,
 		slots?.centralTabStrip,
+	]);
+	// Read off `slots` here: hosts pass an inline object literal, so depending on
+	// `slots` itself would rebuild the strip on every render.
+	const renderHostTabStrip = slots?.centralTabStrip;
+	// Rendered even with zero tabs so the "+" add-view affordance is always
+	// available in the top bar.
+	const centralTabStrip = useMemo(() => {
+		if (centralTabStripContext && renderHostTabStrip) {
+			return renderHostTabStrip(centralTabStripContext);
+		}
+		return (
+			<PanelTabStrip
+				side="central"
+				panel={centralPanel}
+				visibleExtensions={visibleExtensions}
+				extensionMap={extensionMap}
+				isFocused={focusedPanel === "central"}
+				onSelectView={handleSelectCentralView}
+				onRemoveView={(instance) => handleRemoveView("central", instance)}
+				onAddView={addViewOnCentral}
+			/>
+		);
+	}, [
+		addViewOnCentral,
+		centralPanel,
+		centralTabStripContext,
+		extensionMap,
+		focusedPanel,
+		handleRemoveView,
+		handleSelectCentralView,
+		renderHostTabStrip,
+		visibleExtensions,
 	]);
 
 	const extensionRuntime = useMemo(
@@ -3615,20 +3655,10 @@ function LayoutShellLoadedContent({
 		}
 	}, [isRightCollapsed, panelSizes.right, updateSidePanelSize]);
 
-	const isMacPlatform = useMemo(() => {
-		if (typeof navigator === "undefined") return false;
-		const platformCandidates = [
-			((navigator as any).userAgentData?.platform as string | undefined) ??
-				null,
-			navigator.platform ?? null,
-			navigator.userAgent ?? null,
-		].filter(Boolean) as string[];
-		const combined = platformCandidates.join(" ").toLowerCase();
-		return /mac|iphone|ipad|ipod/.test(combined);
-	}, []);
+	const isMac = useMemo(() => isMacPlatform(), []);
 
 	const handlePanelShortcut = useEffectEvent((event: KeyboardEvent) => {
-		const usesPrimaryModifier = isMacPlatform
+		const usesPrimaryModifier = isMac
 			? event.metaKey && !event.ctrlKey
 			: event.ctrlKey && !event.metaKey;
 		if (!usesPrimaryModifier || event.altKey || event.shiftKey) return;
@@ -3690,8 +3720,11 @@ function LayoutShellLoadedContent({
 					onToggleRightSidebar={toggleRightSidebar}
 					isLeftSidebarVisible={!isLeftCollapsed}
 					isRightSidebarVisible={!isRightCollapsed}
+					navbarBrand={slots?.navbarBrand}
+					navbarRepository={slots?.navbarRepository}
 					navbarStart={slots?.navbarStart}
 					navbarCenter={slots?.navbarCenter}
+					centralTabStrip={centralTabStrip}
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
@@ -3720,6 +3753,7 @@ function LayoutShellLoadedContent({
 								onSelectView={handleSelectLeftView}
 								onAddView={addViewOnLeft}
 								onRemoveView={(key) => handleRemoveView("left", key)}
+								onHidePanel={toggleLeftSidebar}
 								viewContext={extensionHostContext}
 								emptyState={renderEmptyPanelSlot("left", slots?.leftPanelEmpty)}
 							/>
@@ -3727,11 +3761,15 @@ function LayoutShellLoadedContent({
 						{/* A collapsed panel gives its space back — no residual gutter,
 						    the strip aligns with the top-bar mark. */}
 						<Separator
-							className={`group relative flex items-center justify-center ${
-								isLeftCollapsed ? "w-0" : "w-1.75"
+							className={`group relative z-10 flex items-center justify-center ${
+								isLeftCollapsed ? "w-0" : "w-1"
 							}`}
 						>
-							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+							{/* Wider invisible hit zone keeps the thin gutter grabbable. */}
+							<div className="absolute inset-y-0 -left-1 -right-1" />
+							{/* The drag indicator rides the central island's own border,
+							    not the middle of the gutter. */}
+							<div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel
 							id="central"
@@ -3741,7 +3779,7 @@ function LayoutShellLoadedContent({
 							<div className="relative h-full min-h-0">
 								<CentralPanel
 									panel={centralPanel}
-									showTabBar
+									showTabBar={false}
 									isFocused={focusedPanel === "central"}
 									onFocusPanel={focusPanel}
 									onSelectView={handleSelectCentralView}
@@ -3754,16 +3792,10 @@ function LayoutShellLoadedContent({
 										)
 									}
 									viewContext={extensionHostContext}
+									onAddView={addViewOnCentral}
 									{...(isHostReadOnly
 										? {}
 										: { onCreateNewFile: () => void handleCreateNewFile() })}
-									{...(centralTabStripContext && slots?.centralTabStrip
-										? {
-												customTabStrip: slots.centralTabStrip(
-													centralTabStripContext,
-												),
-											}
-										: {})}
 									emptyState={renderEmptyPanelSlot(
 										"central",
 										slots?.centralPanelEmpty,
@@ -3794,11 +3826,13 @@ function LayoutShellLoadedContent({
 							</div>
 						</Panel>
 						<Separator
-							className={`group relative flex items-center justify-center ${
-								isRightCollapsed ? "w-0" : "w-1.75"
+							className={`group relative z-10 flex items-center justify-center ${
+								isRightCollapsed ? "w-0" : "w-1"
 							}`}
 						>
-							<div className="absolute inset-y-0 left-1/2 h-full w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+							<div className="absolute inset-y-0 -left-1 -right-1" />
+							{/* Mirrored: the indicator hugs the island's right border. */}
+							<div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel
 							id="right"
@@ -3818,6 +3852,7 @@ function LayoutShellLoadedContent({
 								onSelectView={handleSelectRightView}
 								onAddView={addViewOnRight}
 								onRemoveView={(key) => handleRemoveView("right", key)}
+								onHidePanel={toggleRightSidebar}
 								viewContext={extensionHostContext}
 								emptyState={renderEmptyPanelSlot(
 									"right",

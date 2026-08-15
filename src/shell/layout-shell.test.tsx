@@ -1592,20 +1592,18 @@ describe("installed extension lifecycle", () => {
 				await new Promise((resolve) => window.setTimeout(resolve, 50));
 			});
 
+			// No resurrected view: the empty-state chips may legitimately offer
+			// the newly installed extension, but no view instance exists for it.
 			expect(
-				screen.queryByRole("button", { name: "Recovered Extension" }),
+				document.querySelector('[data-view-key="recovered_extension"]'),
 			).toBeNull();
 			expect(screen.queryByText("Recovered extension content")).toBeNull();
 
 			const navigator = screen.getByRole("complementary", {
 				name: "Navigator",
 			});
-			fireEvent.pointerDown(
-				await within(navigator).findByRole("button", { name: "Add view" }),
-				{ button: 0 },
-			);
 			fireEvent.click(
-				await screen.findByRole("menuitem", {
+				await within(navigator).findByRole("button", {
 					name: "Recovered Extension",
 				}),
 			);
@@ -1702,7 +1700,11 @@ describe("canonical UI state", () => {
 				);
 			});
 
-			fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "Files panel view menu",
+				}),
+			);
 
 			await waitFor(async () => {
 				const state = sessionStateStore.getSnapshot();

@@ -64,7 +64,9 @@
 	align-items: center;
 	gap: 4px;
 	height: 100%;
-	padding: 0;
+	/* Room for the chips' focus ring (2px + 1px offset): the scroll clip
+	   would otherwise cut it off at the strip edges. */
+	padding: 0 4px;
 	overflow-x: auto;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
