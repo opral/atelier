@@ -51,8 +51,8 @@ deliberately browser-like:
   beside it instead.
 - **New tabs are explicit.** `documents.open(path, { newTab: true })` always
   appends a new tab at the end of the strip (hosts map ⌘-click to this).
-  Newly created documents also open in their own tab. There is deliberately
-  no tab-strip `＋` — the pinned home is the place new tabs come from.
+  Newly created documents also open in their own tab. The built-in strip shows
+  a `＋` when document creation is available; read-only hosts omit it.
 - **Closing a tab** activates its neighbor; closing the last content tab lands
   on the pinned home.
 

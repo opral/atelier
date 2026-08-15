@@ -430,38 +430,43 @@ describe("central tabs with a pinned home", () => {
 	});
 
 	test("a host-rendered tab strip drives the same tab rules", async () => {
+		let newTab: (() => void) | undefined;
 		const shell = await renderTabbedShell({
 			slots: {
-				centralTabStrip: (context) => (
-					<div data-testid="host-strip">
-						{context.tabs.map((tab) => (
-							<button
-								key={tab.instanceId}
-								type="button"
-								data-testid={`host-tab-${tab.isPinned ? "home" : tab.label}`}
-								data-active={tab.isActive ? "true" : undefined}
-								onClick={tab.select}
-							>
-								{tab.label}
-							</button>
-						))}
-						{context.tabs.map((tab) =>
-							tab.close ? (
+				centralTabStrip: (context) => {
+					newTab = context.newTab;
+					return (
+						<div data-testid="host-strip">
+							{context.tabs.map((tab) => (
 								<button
-									key={`close-${tab.instanceId}`}
+									key={tab.instanceId}
 									type="button"
-									aria-label={`Close ${tab.label}`}
-									data-testid={`host-close-${tab.label}`}
-									onClick={tab.close}
-								/>
-							) : null,
-						)}
-					</div>
-				),
+									data-testid={`host-tab-${tab.isPinned ? "home" : tab.label}`}
+									data-active={tab.isActive ? "true" : undefined}
+									onClick={tab.select}
+								>
+									{tab.label}
+								</button>
+							))}
+							{context.tabs.map((tab) =>
+								tab.close ? (
+									<button
+										key={`close-${tab.instanceId}`}
+										type="button"
+										aria-label={`Close ${tab.label}`}
+										data-testid={`host-close-${tab.label}`}
+										onClick={tab.close}
+									/>
+								) : null,
+							)}
+						</div>
+					);
+				},
 			},
 		});
 		try {
 			expect(await screen.findByTestId("host-strip")).toBeVisible();
+			expect(newTab).toEqual(expect.any(Function));
 			// The pinned home has no close affordance; the built-in strip is gone.
 			expect(screen.getByTestId("host-tab-home")).toBeVisible();
 			expect(screen.queryByTestId("host-close-Home")).toBeNull();

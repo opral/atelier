@@ -1,5 +1,5 @@
 import { useCallback, type ReactNode } from "react";
-import { FilePlus } from "lucide-react";
+import { FilePlus, Plus } from "lucide-react";
 import type {
 	PanelState,
 	PanelSide,
@@ -86,6 +86,20 @@ export function CentralPanel({
 			emptyStatePlaceholder={emptyState}
 			dropId="central-panel"
 			showTabBar={showTabBar}
+			tabBarExtraContent={
+				onCreateNewFile ? (
+					<button
+						type="button"
+						title="New tab"
+						aria-label="New tab"
+						data-attr="central-new-tab"
+						onClick={() => void onCreateNewFile()}
+						className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+					>
+						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
+					</button>
+				) : null
+			}
 			customTabStrip={customTabStrip}
 		/>
 	);

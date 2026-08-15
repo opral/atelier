@@ -99,6 +99,55 @@ describe("CentralPanel", () => {
 		).toBeNull();
 	});
 
+	test("renders a new-tab action in the tab strip", async () => {
+		const onCreateNewFile = vi.fn();
+		const panelState: PanelState = {
+			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
+			activeInstance: "search-1",
+		};
+
+		await renderWithProviders(
+			<DndContext>
+				<CentralPanel
+					panel={panelState}
+					onSelectView={() => {}}
+					onRemoveView={() => {}}
+					viewContext={createViewContext()}
+					isFocused={true}
+					onFocusPanel={vi.fn()}
+					onCreateNewFile={onCreateNewFile}
+					showTabBar
+				/>
+			</DndContext>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "New tab" }));
+		expect(onCreateNewFile).toHaveBeenCalledOnce();
+	});
+
+	test("does not render a new-tab action when document creation is unavailable", async () => {
+		const panelState: PanelState = {
+			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
+			activeInstance: "search-1",
+		};
+
+		await renderWithProviders(
+			<DndContext>
+				<CentralPanel
+					panel={panelState}
+					onSelectView={() => {}}
+					onRemoveView={() => {}}
+					viewContext={createViewContext()}
+					isFocused={true}
+					onFocusPanel={vi.fn()}
+					showTabBar
+				/>
+			</DndContext>,
+		);
+
+		expect(screen.queryByRole("button", { name: "New tab" })).toBeNull();
+	});
+
 	test("renders the active view without a tab strip", async () => {
 		// The central editor hides tabs; files are switched from the left list.
 		const panelState: PanelState = {
