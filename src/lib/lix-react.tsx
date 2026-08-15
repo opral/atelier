@@ -290,7 +290,9 @@ function getQueryCacheEntry<TRow>(
 		},
 		(error: unknown) => {
 			setQueryError(entry, error);
-			queryCache.delete(cacheKey);
+			if (!isPermanentQueryError(error)) {
+				queryCache.delete(cacheKey);
+			}
 			throw error;
 		},
 	);
@@ -308,12 +310,25 @@ function subscribeToQueryEntry<TRow>(
 		entry.listeners.delete(listener);
 		if (
 			entry.snapshot.status === "error" &&
+			!isPermanentQueryError(entry.snapshot.error) &&
 			entry.listeners.size === 0 &&
 			queryCache.get(cacheKey) === entry
 		) {
 			queryCache.delete(cacheKey);
 		}
 	};
+}
+
+function isPermanentQueryError(error: unknown): boolean {
+	if (!(error instanceof Error) || !("status" in error)) return false;
+	const status = (error as Error & { status?: unknown }).status;
+	return (
+		typeof status === "number" &&
+		status >= 400 &&
+		status < 500 &&
+		status !== 408 &&
+		status !== 429
+	);
 }
 
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
