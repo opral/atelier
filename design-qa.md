@@ -213,8 +213,7 @@ final result: blocked — browser runtime unavailable for required screenshot co
 
 ## Interaction evidence (in-app Browser, live preview)
 
-- Adding a fifth view scrolled the strip from 0 to the far end (420 of max
-  421) and the new chip rendered fully visible as the active white card.
+- Adding a fifth view scrolled the strip from 0 to the far end (420 of max 421) and the new chip rendered fully visible as the active white card.
 - Selecting a clipped chip smooth-scrolled it fully into view with the peek
   margin.
 - Manual scroll away from the active chip survives unrelated re-renders and
@@ -233,7 +232,7 @@ final result: blocked — browser runtime unavailable for required screenshot co
 - All shell tests (11 files): 89 passed.
 - Full suite: 898 passed, 1 skipped, 1 failed —
   `state-adapters > createLixBranchSession > tracks branch switches made
-  directly on Lix` also fails on a clean tree (pre-existing, unrelated).
+directly on Lix` also fails on a clean tree (pre-existing, unrelated).
 - Typecheck: passed. Formatted with the repo's `oxfmt`.
 
 ## Findings
