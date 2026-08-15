@@ -1,4 +1,4 @@
-import { openLix } from "@lix-js/sdk";
+import { IndexedDbStorage, openLix } from "@lix-js/sdk";
 import type { Lix } from "@lix-js/sdk";
 import {
 	Atelier,
@@ -10,7 +10,6 @@ import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
 import { seedWorkspace } from "./seed-workspace";
-import { IndexedDbSnapshotStorage } from "./indexeddb-snapshot-storage";
 import "./style.css";
 
 const element = document.querySelector<HTMLElement>("#atelier");
@@ -18,7 +17,9 @@ if (!element) throw new Error("Atelier web preview mount element is missing");
 const mountElement = element;
 
 async function start() {
-	const lix = await openLix({ storage: new IndexedDbSnapshotStorage() });
+	const lix = await openLix({
+		storage: new IndexedDbStorage({ name: "atelier-preview-lix-0.12" }),
+	});
 	await seedWorkspace(lix);
 	createRoot(mountElement).render(<PreviewApp lix={lix} />);
 }

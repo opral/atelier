@@ -86,7 +86,7 @@ export function selectWorkingChanges(lix: Lix) {
 		.selectFrom("lix_working_diff")
 		.select([
 			"diff_id",
-			"entity_pk",
+			"row_pk as entity_pk",
 			"schema_key",
 			"file_id",
 			"diff_type",
@@ -94,7 +94,7 @@ export function selectWorkingChanges(lix: Lix) {
 			"after_change_id",
 		])
 		.orderBy("schema_key", "asc")
-		.orderBy("entity_pk", "asc")
+		.orderBy("row_pk", "asc")
 		.$castTo<WorkingChangeRow>();
 }
 
@@ -119,14 +119,14 @@ export function selectFileWorkingChanges(lix: Lix) {
 		.selectFrom("lix_working_diff")
 		.innerJoin("lix_file", (join) =>
 			join.on(
-				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_json_get_text(lix_working_diff.entity_pk, 0) end)`,
+				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_working_diff.row_pk ->> 0 end)`,
 			),
 		)
 		.select([
 			"lix_file.id",
 			"lix_file.path",
 			sql<string | null>`null`.as("previous_path"),
-			// File descriptor rows carry the file id in entity_pk, not file_id.
+			// File descriptor rows carry the file id in row_pk, not file_id.
 			sql<string>`case when max(case when lix_working_diff.schema_key = 'lix_file_descriptor' and lix_working_diff.diff_type = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
 				"diff_type",
 			),
