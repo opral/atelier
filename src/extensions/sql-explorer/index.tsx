@@ -1,6 +1,7 @@
 import {
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -27,7 +28,9 @@ import {
 import {
 	executeServerTimingCount,
 	formatDurationMs,
-	serverProtocolDurationMsSince,
+	formatServerTimings,
+	serverTimingsSince,
+	type LixrayServerTimings,
 } from "./timing";
 import manifestJson from "./manifest.json";
 import "./style.css";
@@ -341,7 +344,9 @@ type QueryRun = {
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
 	readonly rowsAffected: number;
 	readonly hasResultColumns: boolean;
-	readonly executionDurationMs: number;
+	readonly clientDurationMs: number;
+	readonly serverTimings: LixrayServerTimings | null;
+	readonly decodeDurationMs: number;
 };
 
 function QueryView({
@@ -365,7 +370,11 @@ function QueryView({
 	const [sort, setSort] = useState<GridSort | null>(null);
 	const [page, setPage] = useState(0);
 	const [pageSize, setPageSize] = useState(GRID_DEFAULT_PAGE_SIZE);
+	const [uiRenderDurationMs, setUiRenderDurationMs] = useState<number | null>(
+		null,
+	);
 	const runIdRef = useRef(0);
+	const pendingUiRenderStartedAtRef = useRef<number | null>(null);
 
 	const runQuery = async (sqlSource: string) => {
 		const sqlText = sqlSource.replace(/;\s*$/, "").trim();
@@ -378,21 +387,25 @@ function QueryView({
 		const runId = ++runIdRef.current;
 		setIsRunning(true);
 		setError(null);
+		setRun(null);
 		const executeCount = executeServerTimingCount();
-		const executionStartedAt = performance.now();
+		const clientStartedAt = performance.now();
 		try {
 			const result = await lix.execute(sqlText);
 			if (runId !== runIdRef.current) return;
-			const clientDurationMs = performance.now() - executionStartedAt;
-			const executionDurationMs =
-				serverProtocolDurationMsSince(executeCount) ?? clientDurationMs;
+			const clientDurationMs = performance.now() - clientStartedAt;
+			const decodeStartedAt = performance.now();
 			const rows = result.rows.map((row) => row.toObject());
+			const decodeDurationMs = performance.now() - decodeStartedAt;
+			pendingUiRenderStartedAtRef.current = performance.now();
 			setRun({
 				columns: inferResultColumns(result.columns, rows),
 				rows,
 				rowsAffected: result.rowsAffected,
 				hasResultColumns: result.columns.length > 0,
-				executionDurationMs,
+				clientDurationMs,
+				serverTimings: serverTimingsSince(executeCount),
+				decodeDurationMs,
 			});
 			setSort(null);
 			setPage(0);
@@ -407,6 +420,13 @@ function QueryView({
 			if (runId === runIdRef.current) setIsRunning(false);
 		}
 	};
+
+	useLayoutEffect(() => {
+		const startedAt = pendingUiRenderStartedAtRef.current;
+		if (startedAt === null || run === null) return;
+		pendingUiRenderStartedAtRef.current = null;
+		setUiRenderDurationMs(performance.now() - startedAt);
+	}, [run]);
 
 	// A history selection re-runs the (read-only) query it loaded. The effect
 	// runs unguarded by deps and gates on the nonce so the latest query and
@@ -477,9 +497,14 @@ function QueryView({
 						·{" "}
 						<span
 							className="font-semibold text-[var(--color-text-status-success)]"
-							title="SQL execution time"
+							title="SDK round trip; Lixray web auth and resolution; Lixray server round trip (including Lix Server Protocol); client row decoding; and UI render"
 						>
-							execution {formatDurationMs(run.executionDurationMs)} ms
+							SDK round trip {formatDurationMs(run.clientDurationMs)} ms
+							{formatServerTimings(run.serverTimings)}
+							{` · decode ${formatDurationMs(run.decodeDurationMs)} ms`}
+							{uiRenderDurationMs === null
+								? null
+								: ` · ui render ${formatDurationMs(uiRenderDurationMs)} ms`}
 						</span>
 					</span>
 				)}
