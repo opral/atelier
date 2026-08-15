@@ -419,6 +419,12 @@ describe("central tabs with a pinned home", () => {
 					),
 				).toBe(true);
 			});
+			// Close-focus lands on the new tab, not back on the "+" (which would
+			// paint a stray focus ring there).
+			const addedTab = centralTabButtons().find(
+				(tab) => tab.dataset.viewKey === "atelier_files",
+			);
+			await waitFor(() => expect(addedTab).toHaveFocus());
 		} finally {
 			await shell.cleanup();
 		}

@@ -13,6 +13,7 @@ import {
 	type HTMLAttributes,
 	type MouseEvent,
 	type ReactNode,
+	type RefObject,
 } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
@@ -696,16 +697,43 @@ export function PanelTabStrip({
 		visibleExtensions.find((definition) => definition.kind === kind) ??
 		null;
 
+	// After the "+" menu adds a view, focus moves to the new tab. Without this
+	// the menu's close-focus lands back on the "+" and paints a stray
+	// focus-visible ring there.
+	const stripRef = useRef<HTMLDivElement | null>(null);
+	const previousInstancesRef = useRef<ReadonlySet<string> | null>(null);
+	const handleMenuAddView = (kind: ExtensionKind, state?: ExtensionState) => {
+		previousInstancesRef.current = new Set(
+			panel.views.map((entry) => entry.instance),
+		);
+		onAddView?.(kind, state);
+	};
+	const focusAddedTab = () => {
+		const previousInstances = previousInstancesRef.current;
+		previousInstancesRef.current = null;
+		const strip = stripRef.current;
+		if (!previousInstances || !strip) return false;
+		const addedTab = Array.from(
+			strip.querySelectorAll<HTMLButtonElement>("button[data-view-instance]"),
+		).find(
+			(button) => !previousInstances.has(button.dataset.viewInstance ?? ""),
+		);
+		if (!addedTab) return false;
+		addedTab.focus({ preventScroll: true });
+		return true;
+	};
+
 	return (
 		<TabBar
+			rootRef={stripRef}
 			activeInstance={activeInstance}
 			extraContent={
 				onAddView ? (
 					<AddViewMenu
 						side={side}
 						availableViews={availableViews}
-						onAddView={onAddView}
-						onSelectedViewSettled={() => false}
+						onAddView={handleMenuAddView}
+						onSelectedViewSettled={focusAddedTab}
 					/>
 				) : null
 			}
@@ -1003,6 +1031,8 @@ interface TabBarProps {
 	/** Instance whose tab is kept scrolled into view. */
 	readonly activeInstance?: string | null;
 	readonly height?: "default" | "topbar";
+	/** Exposes the strip's root element (e.g. to find a freshly added tab). */
+	readonly rootRef?: RefObject<HTMLDivElement | null>;
 }
 
 function TabBar({
@@ -1010,6 +1040,7 @@ function TabBar({
 	extraContent,
 	activeInstance,
 	height = "default",
+	rootRef,
 }: TabBarProps) {
 	const scrollRef = useRef<HTMLDivElement | null>(null);
 	const [thumb, setThumb] = useState({ width: "0%", left: "0%" });
@@ -1115,6 +1146,7 @@ function TabBar({
 
 	return (
 		<div
+			ref={rootRef}
 			className={clsx(styles.tabBar, height === "topbar" && "h-[46px]")}
 			data-overflow-left={overflow.left ? "true" : undefined}
 			data-overflow-right={overflow.right ? "true" : undefined}
