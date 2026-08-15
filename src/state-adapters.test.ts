@@ -2,12 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
-	ATELIER_SESSION_UI_STATE_KEY,
-	ATELIER_USER_PREFERENCES_KEY,
 	createLixBranchSession,
-	createLixPreferencesStore,
-	createLixSessionStateStore,
-	type AtelierClientState,
+	createMemoryPreferencesStore,
+	createMemorySessionStateStore,
 } from "./state-adapters";
 
 const shellState = {
@@ -19,173 +16,40 @@ const shellState = {
 	},
 };
 
-test("createLixSessionStateStore restores and publishes Lix client state", async () => {
-	const values = new Map<string, unknown>([
-		[ATELIER_SESSION_UI_STATE_KEY, shellState],
-	]);
-	const observers = new Set<() => void>();
-	const clientState: AtelierClientState = {
-		get: async (key) => values.get(key) as never,
-		set: async (key, value) => {
-			values.set(key, value);
-			for (const observer of observers) observer();
-		},
-		subscribe: (observer) => {
-			observers.add(observer);
-			return () => observers.delete(observer);
-		},
-	};
-	const store = createLixSessionStateStore(clientState);
+test("memory session state publishes changes", () => {
+	const store = createMemorySessionStateStore(shellState);
 	const listener = vi.fn();
 	const unsubscribe = store.subscribe(listener);
 
-	await vi.waitFor(() => expect(store.getSnapshot()).toEqual(shellState));
-	listener.mockClear();
 	store.setSnapshot({ ...shellState, focusedPanel: "right" });
+
 	expect(store.getSnapshot()?.focusedPanel).toBe("right");
-	await vi.waitFor(() => {
-		expect(
-			(values.get(ATELIER_SESSION_UI_STATE_KEY) as typeof shellState)
-				.focusedPanel,
-		).toBe("right");
-	});
 	expect(listener).toHaveBeenCalledOnce();
-
 	unsubscribe();
-	expect(observers.size).toBe(0);
 });
 
-test("createLixSessionStateStore does not regress while rapid writes persist in order", async () => {
-	const values = new Map<string, unknown>([
-		[ATELIER_SESSION_UI_STATE_KEY, shellState],
-	]);
-	const observers = new Set<() => void>();
-	const writes: Array<{
-		value: unknown;
-		commit(): void;
-	}> = [];
-	const clientState: AtelierClientState = {
-		get: async (key) => values.get(key) as never,
-		set: (key, value) =>
-			new Promise<void>((resolve) => {
-				writes.push({
-					value,
-					commit: () => {
-						values.set(key, value);
-						for (const observer of observers) observer();
-						resolve();
-					},
-				});
-			}),
-		subscribe: (observer) => {
-			observers.add(observer);
-			return () => observers.delete(observer);
-		},
-	};
-	const store = createLixSessionStateStore(clientState);
-	store.subscribe(() => undefined);
-	await vi.waitFor(() => expect(store.getSnapshot()).toEqual(shellState));
-	const first = { ...shellState, focusedPanel: "left" as const };
-	const second = { ...shellState, focusedPanel: "right" as const };
-
-	store.setSnapshot(first);
-	store.setSnapshot(second);
-	expect(store.getSnapshot()).toEqual(second);
-	expect(writes).toHaveLength(2);
-
-	writes[0]!.commit();
-	await vi.waitFor(() =>
-		expect(values.get(ATELIER_SESSION_UI_STATE_KEY)).toEqual(first),
-	);
-	expect(
-		store.getSnapshot(),
-		"the first persistence notification must not replace the newer UI",
-	).toEqual(second);
-
-	writes[1]!.commit();
-	await vi.waitFor(() =>
-		expect(values.get(ATELIER_SESSION_UI_STATE_KEY)).toEqual(second),
-	);
-	expect(store.getSnapshot()).toEqual(second);
-});
-
-test("createLixSessionStateStore rolls back an unpersisted optimistic write", async () => {
-	const values = new Map<string, unknown>([
-		[ATELIER_SESSION_UI_STATE_KEY, shellState],
-	]);
-	let rejectWrite: (error: Error) => void = () => undefined;
-	const clientState: AtelierClientState = {
-		get: async (key) => values.get(key) as never,
-		set: () =>
-			new Promise<void>((_resolve, reject) => {
-				rejectWrite = reject;
-			}),
-		subscribe: () => () => undefined,
-	};
-	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-	try {
-		const store = createLixSessionStateStore(clientState);
-		await vi.waitFor(() => expect(store.getSnapshot()).toEqual(shellState));
-		store.setSnapshot({ ...shellState, focusedPanel: "right" });
-		expect(store.getSnapshot()?.focusedPanel).toBe("right");
-
-		rejectWrite(new Error("storage unavailable"));
-		await vi.waitFor(() => {
-			expect(store.getSnapshot()).toEqual(shellState);
-		});
-		expect(consoleError).toHaveBeenCalledOnce();
-	} finally {
-		consoleError.mockRestore();
-	}
-});
-
-test("createLixPreferencesStore restores and persists private preferences through Lix client state", async () => {
-	const initialPreferences = {
-		version: 1 as const,
+test("memory preferences coerce and persist changes", async () => {
+	const store = createMemoryPreferencesStore({
+		version: 1,
 		layout: { sizes: { left: 15, central: 70, right: 15 } },
-	};
-	const values = new Map<string, unknown>([
-		[ATELIER_USER_PREFERENCES_KEY, initialPreferences],
-	]);
-	const clientState: AtelierClientState = {
-		get: async (key) => values.get(key) as never,
-		set: async (key, value) => {
-			values.set(key, value);
-		},
-		subscribe: () => () => undefined,
-	};
-	const store = createLixPreferencesStore(clientState);
+	});
 
 	expect(await store.load()).toEqual({
-		...initialPreferences,
+		version: 1,
+		layout: { sizes: { left: 15, central: 70, right: 15 } },
 		review: { autoAcceptAgentChanges: false },
 	});
+
 	await store.save({
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
 		review: { autoAcceptAgentChanges: true },
 	});
-
-	expect(values.get(ATELIER_USER_PREFERENCES_KEY)).toEqual({
+	expect(await store.load()).toEqual({
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
 		review: { autoAcceptAgentChanges: true },
 	});
-	expect(await createLixPreferencesStore(clientState).load()).toEqual({
-		version: 1,
-		layout: { sizes: { left: 25, central: 50, right: 25 } },
-		review: { autoAcceptAgentChanges: true },
-	});
-});
-
-test("createLixPreferencesStore returns null when client preferences are absent", async () => {
-	const clientState: AtelierClientState = {
-		get: async () => undefined,
-		set: async () => undefined,
-		subscribe: () => () => undefined,
-	};
-
-	expect(await createLixPreferencesStore(clientState).load()).toBeNull();
 });
 
 describe("createLixBranchSession", () => {
