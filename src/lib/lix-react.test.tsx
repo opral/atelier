@@ -1,6 +1,7 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+import { AtelierErrorBoundary } from "../atelier-error-boundary";
 import { LixProvider, useQuery } from "./lix-react";
 import type { Lix, ObserveEvent } from "@lix-js/sdk";
 
@@ -9,21 +10,43 @@ afterEach(() => {
 });
 
 function createObserveStream() {
-	const pending: Array<(event: ObserveEvent | undefined) => void> = [];
+	const pending: Array<{
+		resolve: (event: ObserveEvent | undefined) => void;
+		reject: (error: unknown) => void;
+	}> = [];
 	return {
 		next: vi.fn(
 			() =>
-				new Promise<ObserveEvent | undefined>((resolve) => {
-					pending.push(resolve);
+				new Promise<ObserveEvent | undefined>((resolve, reject) => {
+					pending.push({ resolve, reject });
 				}),
 		),
 		close: vi.fn(),
 		emit(event: ObserveEvent) {
-			const resolve = pending.shift();
-			if (!resolve) throw new Error("observe stream has no pending next call");
-			resolve(event);
+			const next = pending.shift();
+			if (!next) throw new Error("observe stream has no pending next call");
+			next.resolve(event);
+		},
+		fail(error: unknown) {
+			const next = pending.shift();
+			if (!next) throw new Error("observe stream has no pending next call");
+			next.reject(error);
 		},
 	};
+}
+
+function renderWithErrorBoundary(
+	lix: Lix,
+	children: ReactNode,
+	errorTestId: string,
+) {
+	return render(
+		<LixProvider lix={lix}>
+			<AtelierErrorBoundary errorFallback={<div data-testid={errorTestId} />}>
+				<Suspense fallback={null}>{children}</Suspense>
+			</AtelierErrorBoundary>
+		</LixProvider>,
+	);
 }
 
 function eventWithValue(
@@ -453,6 +476,147 @@ test("useQuery starts a query when it becomes enabled", async () => {
 
 	view.unmount();
 	expect(close).toHaveBeenCalledTimes(1);
+});
+
+test("useQuery retains a permanent initial query error across remounts", async () => {
+	const error = Object.assign(new Error("missing column"), {
+		name: "LixError",
+		code: "LIX_COLUMN_NOT_FOUND",
+		status: 404,
+	});
+	let rejectExecute!: (error: unknown) => void;
+	const execute = vi.fn(
+		() =>
+			new Promise<Array<{ value: string }>>((_resolve, reject) => {
+				rejectExecute = reject;
+			}),
+	);
+	const lix = { observe: vi.fn() } as unknown as Lix;
+
+	function Probe() {
+		useQuery(
+			() => ({
+				compile: () => ({
+					sql: "SELECT missing FROM initial_query_error",
+					parameters: [],
+				}),
+				execute,
+			}),
+			{ subscribe: false },
+		);
+		return null;
+	}
+
+	const renderProbe = () =>
+		renderWithErrorBoundary(lix, <Probe />, "initial-query-error");
+
+	let first!: ReturnType<typeof render>;
+	await act(async () => {
+		first = renderProbe();
+	});
+	await act(async () => rejectExecute(error));
+	await screen.findByTestId("initial-query-error");
+	first.unmount();
+
+	let second!: ReturnType<typeof render>;
+	await act(async () => {
+		second = renderProbe();
+	});
+	await screen.findByTestId("initial-query-error");
+	expect(execute).toHaveBeenCalledTimes(1);
+	second.unmount();
+});
+
+test("useQuery retains a permanent observed query error across remounts", async () => {
+	const error = Object.assign(new Error("missing column"), {
+		name: "LixError",
+		code: "LIX_COLUMN_NOT_FOUND",
+		status: 404,
+	});
+	const stream = createObserveStream();
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
+	const lix = { observe: vi.fn(() => stream) } as unknown as Lix;
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT missing FROM permanent_query_error",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="permanent-query-value">{rows[0]?.value}</div>;
+	}
+
+	const renderProbe = () =>
+		renderWithErrorBoundary(lix, <Probe />, "permanent-query-error");
+
+	let first!: ReturnType<typeof render>;
+	await act(async () => {
+		first = renderProbe();
+	});
+	await screen.findByTestId("permanent-query-value");
+	await act(async () => stream.fail(error));
+	await screen.findByTestId("permanent-query-error");
+	first.unmount();
+
+	let second!: ReturnType<typeof render>;
+	await act(async () => {
+		second = renderProbe();
+	});
+	await screen.findByTestId("permanent-query-error");
+	expect(execute).toHaveBeenCalledTimes(1);
+	second.unmount();
+});
+
+test("useQuery retries a rate-limited observed query after remount", async () => {
+	const error = Object.assign(new Error("rate limited"), {
+		name: "LixError",
+		code: "LIX_REMOTE_REQUEST_FAILED",
+		status: 429,
+	});
+	const firstStream = createObserveStream();
+	const secondStream = createObserveStream();
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial" }])
+		.mockResolvedValue([{ value: "recovered" }]);
+	const lix = {
+		observe: vi
+			.fn()
+			.mockReturnValueOnce(firstStream)
+			.mockReturnValue(secondStream),
+	} as unknown as Lix;
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM retryable_query_error",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="retryable-query-value">{rows[0]?.value}</div>;
+	}
+
+	let first!: ReturnType<typeof render>;
+	await act(async () => {
+		first = renderWithErrorBoundary(lix, <Probe />, "retryable-query-error");
+	});
+	await screen.findByTestId("retryable-query-value");
+	await act(async () => firstStream.fail(error));
+	await screen.findByTestId("retryable-query-error");
+	first.unmount();
+
+	let second!: ReturnType<typeof render>;
+	await act(async () => {
+		second = renderWithErrorBoundary(lix, <Probe />, "retryable-query-error");
+	});
+	expect(await screen.findByTestId("retryable-query-value")).toHaveTextContent(
+		"recovered",
+	);
+	expect(execute).toHaveBeenCalledTimes(2);
+	second.unmount();
 });
 
 test("useQuery can evict component-scoped results on unmount", async () => {
