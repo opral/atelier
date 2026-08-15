@@ -21,15 +21,14 @@ import {
 	horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, X } from "lucide-react";
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AtelierActionButton } from "@/components/ui/atelier-action-button";
-import panelEmptyStatePreview from "../assets/panel-empty-state-preview.png";
+import { panelShortcutHint } from "@/lib/platform";
 import type {
 	PanelSide,
 	PanelState,
@@ -78,13 +77,14 @@ export function PanelV2({
 	onSelectView,
 	onRemoveView,
 	onAddView,
+	onHidePanel,
 	viewContext,
 	tabLabel,
 	emptyStatePlaceholder,
 	onActiveViewInteraction,
 	dropId,
 	viewOverrides,
-	showTabBar = true,
+	showTabBar = side === "central",
 	tabBarExtraContent,
 	customTabStrip,
 }: PanelV2Props) {
@@ -310,6 +310,9 @@ export function PanelV2({
 					'[data-attr="panel-empty-open-view"]',
 				) ??
 				panelElement.querySelector<HTMLButtonElement>(
+					'[data-attr="panel-section-picker"]',
+				) ??
+				panelElement.querySelector<HTMLButtonElement>(
 					'[data-attr="panel-add-view"]',
 				));
 		nextTarget?.focus({ preventScroll: true });
@@ -320,12 +323,24 @@ export function PanelV2({
 			<DefaultPanelEmptyState
 				side={side}
 				availableViews={availableViews}
-				onAddView={handleMenuAddView}
-				onSelectedViewSettled={focusPendingAddedTab}
+				onAddView={(kind) => requestAddView(kind, undefined, false)}
 			/>
 		) : (
 			emptyStatePlaceholder
 		);
+	const sideSectionPicker =
+		side !== "central" && hasViews ? (
+			<SidebarSectionPicker
+				side={side}
+				panel={panel}
+				availableViews={availableViews}
+				resolveViewDefinition={resolveViewDefinition}
+				onSelectView={onSelectView}
+				onAddView={onAddView}
+				onHidePanel={onHidePanel}
+				tabLabel={tabLabel}
+			/>
+		) : null;
 
 	return (
 		<ContainerElement
@@ -334,9 +349,9 @@ export function PanelV2({
 			onClickCapture={() => onFocusPanel(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
-			{/* Tab rows float on the app background above the island — "its own
-			    chip group over its own island" — for both the built-in strip and
-			    a host-rendered one. */}
+			{sideSectionPicker}
+			{/* Central tabs remain the only document tab strip. Side panels use the
+			    section picker above so their views do not read as documents. */}
 			{showTabBar && customTabStrip !== undefined ? (
 				<div data-atelier-part="custom-tab-strip" className="w-full min-w-0">
 					{customTabStrip}
@@ -396,9 +411,17 @@ export function PanelV2({
 				</TabBar>
 			) : null}
 
+			{/* Every panel body shares the island geometry (rounded corners) so
+			    the sides align with the central editor, but only central is the
+			    elevated white surface with a border. Side islands are invisible —
+			    the canvas shows through and their views style themselves for
+			    that surface. */}
 			<div
 				className={clsx(
-					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]",
+					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
+					side === "central"
+						? "border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]"
+						: "bg-transparent",
 					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
 				)}
 			>
@@ -446,6 +469,8 @@ export type PanelV2Props = {
 	readonly onRemoveView: (instance: string) => void;
 	/** Enables the "+" add-view menu in the tab row. */
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
+	/** Adds "Hide sidebar" to a side panel's section picker. */
+	readonly onHidePanel?: () => void;
 	readonly viewContext: ExtensionHostContext;
 	readonly tabLabel?: (
 		view: ExtensionDefinition,
@@ -455,7 +480,11 @@ export type PanelV2Props = {
 	readonly onActiveViewInteraction?: (instance: string) => void;
 	readonly dropId?: string;
 	readonly viewOverrides?: ExtensionDefinition[];
-	/** Hide the tab strip (central editor switches files from the file list). */
+	/**
+	 * Renders a tab strip inside the panel body. The workspace never sets this:
+	 * document tabs live in the top bar (`PanelTabStrip`) and side panels use
+	 * the section picker, so the workspace has exactly one tab strip.
+	 */
 	readonly showTabBar?: boolean;
 	/** Replaces the default add-view menu at the end of the tab strip. */
 	readonly tabBarExtraContent?: ReactNode;
@@ -463,51 +492,285 @@ export type PanelV2Props = {
 	readonly customTabStrip?: ReactNode;
 };
 
+// Reference rows are regular-weight with muted icons; only the active row is
+// semibold. Anything heavier makes the whole menu read as bold.
+const sectionPickerItemClasses =
+	"h-[30px] rounded-md px-2 text-[12.5px] font-normal text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]";
+const sectionPickerIconClasses = "size-3.25 text-[var(--color-icon-tertiary)]";
+
+/**
+ * A side panel's only chrome: a caption-weight label that opens the view
+ * picker in place. Switching views swaps the sidebar's content and relabels
+ * the caption — the top bar never changes, so side views never read as
+ * documents.
+ */
+function SidebarSectionPicker({
+	side,
+	panel,
+	availableViews,
+	resolveViewDefinition,
+	onSelectView,
+	onAddView,
+	onHidePanel,
+	tabLabel,
+}: {
+	readonly side: Exclude<PanelSide, "central">;
+	readonly panel: PanelState;
+	readonly availableViews: readonly ExtensionDefinition[];
+	readonly resolveViewDefinition: (
+		kind: ExtensionKind,
+	) => ExtensionDefinition | null;
+	readonly onSelectView: (instance: string) => void;
+	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
+	readonly onHidePanel?: () => void;
+	readonly tabLabel?: PanelV2Props["tabLabel"];
+}) {
+	const activeEntry =
+		panel.views.find((entry) => entry.instance === panel.activeInstance) ??
+		panel.views[0] ??
+		null;
+	const activeDefinition = activeEntry
+		? resolveViewDefinition(activeEntry.kind)
+		: null;
+	const activeLabel = activeDefinition
+		? resolveLabel(activeDefinition, activeEntry, tabLabel)
+		: "Views";
+
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<button
+					type="button"
+					aria-label={`${activeLabel} panel view menu`}
+					data-attr="panel-section-picker"
+					// Caption, not chrome: no fill, no border. It darkens on hover and
+					// while open, which is the whole affordance. px-2 puts the label
+					// text exactly over the tree rows' icon column below it.
+					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-neutral-600)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
+				>
+					<span>{activeLabel}</span>
+					<ChevronDown
+						aria-hidden="true"
+						className="size-2.25 text-[var(--color-icon-quaternary)] transition-[transform,color] group-hover/section:text-[var(--color-neutral-600)] group-data-[state=open]/section:rotate-180 group-data-[state=open]/section:text-[var(--color-neutral-600)]"
+						strokeWidth={2.6}
+					/>
+				</button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent
+				// Always anchored to the label, on either side: the picker replaces
+				// the sidebar's content ambiguity in place.
+				align="start"
+				sideOffset={2}
+				className="w-[212px] rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg"
+			>
+				{/* Open views and openable views read as one list: the picker answers
+				    "what is this sidebar showing?", not "what is already loaded?". */}
+				{panel.views.map((entry) => {
+					const definition = resolveViewDefinition(entry.kind);
+					if (!definition) return null;
+					const label = resolveLabel(definition, entry, tabLabel);
+					const isActive = entry.instance === (activeEntry?.instance ?? null);
+					return (
+						<DropdownMenuItem
+							key={entry.instance}
+							onSelect={() => onSelectView(entry.instance)}
+							className={clsx(
+								sectionPickerItemClasses,
+								isActive &&
+									"bg-[var(--color-bg-hover)] font-semibold text-[var(--color-text-primary)]",
+							)}
+						>
+							<definition.icon
+								className={clsx(
+									"size-3.25",
+									isActive
+										? "text-[var(--color-icon-secondary)]"
+										: "text-[var(--color-icon-tertiary)]",
+								)}
+							/>
+							<span className="truncate">{label}</span>
+							{isActive ? (
+								<Check
+									aria-hidden="true"
+									className="ml-auto size-3 text-[var(--color-icon-brand)]"
+									strokeWidth={2.6}
+								/>
+							) : null}
+						</DropdownMenuItem>
+					);
+				})}
+				{onAddView
+					? availableViews.map((definition) => (
+							<DropdownMenuItem
+								key={definition.kind}
+								onSelect={() => onAddView(definition.kind)}
+								className={sectionPickerItemClasses}
+							>
+								<definition.icon className={sectionPickerIconClasses} />
+								<span className="truncate">{definition.label}</span>
+							</DropdownMenuItem>
+						))
+					: null}
+				{onHidePanel ? (
+					<>
+						<div className="my-1.5 mx-1 h-px bg-[var(--color-border-subtle)]" />
+						<DropdownMenuItem
+							onSelect={() => onHidePanel()}
+							className={sectionPickerItemClasses}
+						>
+							<PanelIcon side={side} className={sectionPickerIconClasses} />
+							<span>Hide sidebar</span>
+							<span className="ml-auto text-[11px] font-medium text-[var(--color-text-quaternary)]">
+								{panelShortcutHint(side)}
+							</span>
+						</DropdownMenuItem>
+					</>
+				) : null}
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
+
+/** Matches the top bar's panel toggles, so "Hide sidebar" reads as the same act. */
+function PanelIcon({
+	side,
+	className,
+}: {
+	readonly side: "left" | "right";
+	readonly className?: string;
+}) {
+	return (
+		<svg
+			aria-hidden="true"
+			className={className}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="3" y="3" width="18" height="18" rx="2" />
+			<path d={side === "left" ? "M9 3v18" : "M15 3v18"} />
+		</svg>
+	);
+}
+
+/**
+ * Renders a panel's tab strip independently from its content island. The
+ * workspace uses this for central document tabs in the top bar; it is the
+ * workspace's only tab strip. Side panels use the section picker instead, so
+ * their views never read as open documents.
+ */
+export function PanelTabStrip({
+	side,
+	panel,
+	visibleExtensions,
+	extensionMap,
+	isFocused,
+	onSelectView,
+	onRemoveView,
+	onAddView,
+	tabLabel,
+}: {
+	readonly side: PanelSide;
+	readonly panel: PanelState;
+	readonly visibleExtensions: readonly ExtensionDefinition[];
+	readonly extensionMap: ReadonlyMap<ExtensionKind, ExtensionDefinition>;
+	readonly isFocused: boolean;
+	readonly onSelectView: (instance: string) => void;
+	readonly onRemoveView: (instance: string) => void;
+	/** Enables the trailing "+" — the same view menu the sidebars offer. */
+	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
+	readonly tabLabel?: PanelV2Props["tabLabel"];
+}) {
+	const activeInstance =
+		panel.activeInstance ?? panel.views[0]?.instance ?? null;
+	const availableViews = availableExtensionsForPanel(
+		visibleExtensions,
+		panel,
+		side,
+	);
+	const resolveViewDefinition = (kind: ExtensionKind) =>
+		extensionMap.get(kind) ??
+		visibleExtensions.find((definition) => definition.kind === kind) ??
+		null;
+
+	return (
+		<TabBar
+			activeInstance={activeInstance}
+			extraContent={
+				onAddView ? (
+					<AddViewMenu
+						side={side}
+						availableViews={availableViews}
+						onAddView={onAddView}
+						onSelectedViewSettled={() => false}
+					/>
+				) : null
+			}
+			height="topbar"
+		>
+			<SortableContext
+				id={`panel-${side}`}
+				items={panel.views.map((entry) => entry.instance)}
+				strategy={horizontalListSortingStrategy}
+			>
+				{panel.views.map((entry) => {
+					const view = resolveViewDefinition(entry.kind);
+					if (!view) return null;
+					const label = resolveLabel(view, entry, tabLabel);
+					return (
+						<SortableTab
+							key={entry.instance}
+							instance={entry.instance}
+							panelSide={side}
+							kind={entry.kind}
+							icon={fileGlyphForLabel(label) ?? view.icon}
+							label={label}
+							isActive={activeInstance === entry.instance}
+							isFocused={isFocused && activeInstance === entry.instance}
+							isPending={entry.isPending}
+							isPinned={entry.isPinned}
+							onClick={() => onSelectView(entry.instance)}
+							onClose={
+								entry.isPinned ? undefined : () => onRemoveView(entry.instance)
+							}
+						/>
+					);
+				})}
+			</SortableContext>
+		</TabBar>
+	);
+}
+
 /** The "+" button lists views that are not already open in this panel. */
 function AddViewMenu({
 	side,
 	availableViews,
 	onAddView,
 	onSelectedViewSettled,
-	variant = "tab-bar",
 }: {
 	readonly side: PanelSide;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly onSelectedViewSettled: () => boolean;
-	readonly variant?: "tab-bar" | "empty-state";
 }) {
 	const selectedViewRef = useRef(false);
 	const triggerRef = useRef<HTMLButtonElement>(null);
-	const isEmptyStateTrigger = variant === "empty-state";
-	if (isEmptyStateTrigger && availableViews.length === 0) return null;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				{isEmptyStateTrigger ? (
-					<AtelierActionButton
-						ref={triggerRef}
-						aria-label="Open a view"
-						data-attr="panel-empty-open-view"
-						variant="secondary"
-						fullWidth
-						className="focus-visible:ring-offset-[var(--color-bg-panel)]"
-					>
-						<Plus aria-hidden="true" className="size-4" strokeWidth={2.25} />
-						<span>Open a view</span>
-					</AtelierActionButton>
-				) : (
-					<button
-						ref={triggerRef}
-						type="button"
-						title="Add view"
-						aria-label="Add view"
-						data-attr="panel-add-view"
-						className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
-					>
-						<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
-					</button>
-				)}
+				<button
+					ref={triggerRef}
+					type="button"
+					title="Add view"
+					aria-label="Add view"
+					data-attr="panel-add-view"
+					className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+				>
+					<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
+				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align={side === "right" ? "end" : "start"}
@@ -525,7 +788,7 @@ function AddViewMenu({
 				{availableViews.length === 0 ? (
 					<DropdownMenuItem
 						disabled
-						className="px-3 py-1.5 text-sm text-[var(--color-text-tertiary)]"
+						className="h-7 rounded-[7px] px-2 text-xs font-medium text-[var(--color-text-tertiary)]"
 					>
 						No views available
 					</DropdownMenuItem>
@@ -537,7 +800,7 @@ function AddViewMenu({
 								selectedViewRef.current = true;
 								onAddView(ext.kind);
 							}}
-							className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:bg-[var(--color-bg-hover)]"
+							className="h-7 rounded-[7px] px-2 text-xs font-medium text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]"
 						>
 							<ext.icon className="h-4 w-4" />
 							<span>{ext.label}</span>
@@ -569,15 +832,16 @@ function DefaultPanelEmptyState({
 	side,
 	availableViews,
 	onAddView,
-	onSelectedViewSettled,
 }: {
 	readonly side: PanelSide;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
-	readonly onSelectedViewSettled: () => boolean;
 }) {
 	const headingId = useId();
 	const hasAvailableViews = availableViews.length > 0;
+	const illustrationSide = side === "right" ? "right" : "left";
+	const sideLabel =
+		side === "central" ? "This is a panel." : `This is the ${side} sidebar.`;
 
 	return (
 		<div className="@container min-h-0 flex-1 overflow-y-auto">
@@ -588,42 +852,137 @@ function DefaultPanelEmptyState({
 					data-panel-side={side}
 					className="flex w-full max-w-64 flex-col items-center pb-10 text-center @max-[300px]:max-w-56 @max-[300px]:pb-4"
 				>
-					<img
-						src={panelEmptyStatePreview}
-						alt=""
-						aria-hidden="true"
-						className="w-40 max-w-full object-contain @max-[300px]:w-32"
+					<SidebarIllustration
+						side={illustrationSide}
+						className="w-40 max-w-full @max-[300px]:w-32"
 					/>
 					<h2
 						id={headingId}
 						className="mt-6 text-xl font-bold tracking-[-0.025em] text-[var(--color-text-primary)] @max-[300px]:mt-5 @max-[300px]:text-lg"
 					>
-						{hasAvailableViews ? "This is a panel." : "No views available"}
+						{hasAvailableViews ? sideLabel : "No views available"}
 					</h2>
 					<p className="mt-2 text-sm leading-5 text-[var(--color-text-tertiary)]">
 						{hasAvailableViews
-							? "It can open views."
+							? "Open a view to get started."
 							: "Available views will appear here."}
 					</p>
 					{hasAvailableViews ? (
-						<>
-							<div className="mt-7 w-full max-w-52 @max-[300px]:mt-6">
-								<AddViewMenu
-									side={side}
-									availableViews={availableViews}
-									onAddView={onAddView}
-									onSelectedViewSettled={onSelectedViewSettled}
-									variant="empty-state"
-								/>
-							</div>
-							<p className="mt-4 max-w-56 text-[12.5px] leading-[18px] text-[var(--color-text-tertiary)] text-pretty">
-								Choose Files or another repository view.
-							</p>
-						</>
+						// One chip per view: opening is a single click, and the chips
+						// double as the list of what this sidebar can show.
+						<div className="mt-7 flex flex-wrap items-center justify-center gap-2 @max-[300px]:mt-6">
+							{availableViews.map((ext) => (
+								<button
+									key={ext.kind}
+									type="button"
+									data-attr="panel-empty-open-view"
+									data-view-kind={ext.kind}
+									onClick={() => onAddView(ext.kind)}
+									className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--color-border-action-secondary)] bg-[var(--color-bg-panel)] px-3.5 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]"
+								>
+									<ext.icon className="size-3.5 text-[var(--color-icon-tertiary)]" />
+									{ext.label}
+								</button>
+							))}
+						</div>
 					) : null}
 				</section>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * Miniature of the workspace with the matching sidebar column highlighted, so
+ * the empty state explains where the reader is standing.
+ */
+function SidebarIllustration({
+	side,
+	className,
+}: {
+	readonly side: "left" | "right";
+	readonly className?: string;
+}) {
+	const columnX = side === "left" ? 7 : 107;
+	const dividerX = side === "left" ? 53 : 107;
+	const rowX = columnX + 8;
+	const contentX = side === "left" ? 65 : 19;
+	return (
+		<svg
+			aria-hidden="true"
+			className={className}
+			viewBox="0 0 160 104"
+			fill="none"
+		>
+			<rect
+				x="1"
+				y="1"
+				width="158"
+				height="102"
+				rx="10"
+				fill="var(--color-bg-panel)"
+				stroke="var(--color-border-panel)"
+				strokeWidth="2"
+			/>
+			<rect
+				x={columnX}
+				y="7"
+				width="46"
+				height="90"
+				rx="6"
+				fill="var(--color-bg-hover-canvas)"
+			/>
+			<line
+				x1={dividerX}
+				y1="7"
+				x2={dividerX}
+				y2="97"
+				stroke="var(--color-border-panel)"
+				strokeWidth="1.5"
+			/>
+			{/* Sidebar rows — the top one active. */}
+			<rect
+				x={rowX}
+				y="16"
+				width="30"
+				height="7"
+				rx="3.5"
+				fill="var(--color-brand-400)"
+			/>
+			<rect
+				x={rowX}
+				y="31"
+				width="24"
+				height="7"
+				rx="3.5"
+				fill="var(--color-neutral-300)"
+			/>
+			<rect
+				x={rowX}
+				y="46"
+				width="27"
+				height="7"
+				rx="3.5"
+				fill="var(--color-neutral-200)"
+			/>
+			{/* Document lines in the main area. */}
+			<rect
+				x={contentX}
+				y="24"
+				width="70"
+				height="8"
+				rx="4"
+				fill="var(--color-neutral-200)"
+			/>
+			<rect
+				x={contentX}
+				y="41"
+				width="46"
+				height="8"
+				rx="4"
+				fill="var(--color-neutral-100)"
+			/>
+		</svg>
 	);
 }
 
@@ -643,9 +1002,15 @@ interface TabBarProps {
 	readonly extraContent?: ReactNode;
 	/** Instance whose tab is kept scrolled into view. */
 	readonly activeInstance?: string | null;
+	readonly height?: "default" | "topbar";
 }
 
-function TabBar({ children, extraContent, activeInstance }: TabBarProps) {
+function TabBar({
+	children,
+	extraContent,
+	activeInstance,
+	height = "default",
+}: TabBarProps) {
 	const scrollRef = useRef<HTMLDivElement | null>(null);
 	const [thumb, setThumb] = useState({ width: "0%", left: "0%" });
 	const [thumbVisible, setThumbVisible] = useState(false);
@@ -750,7 +1115,7 @@ function TabBar({ children, extraContent, activeInstance }: TabBarProps) {
 
 	return (
 		<div
-			className={styles.tabBar}
+			className={clsx(styles.tabBar, height === "topbar" && "h-[46px]")}
 			data-overflow-left={overflow.left ? "true" : undefined}
 			data-overflow-right={overflow.right ? "true" : undefined}
 		>

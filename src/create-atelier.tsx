@@ -62,6 +62,10 @@ export type AtelierTabStripContext = {
 };
 
 export type AtelierSlots = {
+	/** Host-owned brand mark rendered at the far left of the top bar. */
+	readonly navbarBrand?: ReactNode;
+	/** Host-owned repository control rendered after the left panel toggle. */
+	readonly navbarRepository?: ReactNode;
 	/** Host-owned content rendered before Atelier's navbar controls. */
 	readonly navbarStart?: ReactNode;
 	/** Host-owned content rendered before Atelier's final navbar control. */

@@ -1,7 +1,6 @@
 import {
 	useCallback,
 	useEffect,
-	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -342,9 +341,7 @@ type QueryRun = {
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
 	readonly rowsAffected: number;
 	readonly hasResultColumns: boolean;
-	readonly clientDurationMs: number;
-	readonly serverProtocolDurationMs: number | null;
-	readonly decodeDurationMs: number;
+	readonly executionDurationMs: number;
 };
 
 function QueryView({
@@ -368,11 +365,7 @@ function QueryView({
 	const [sort, setSort] = useState<GridSort | null>(null);
 	const [page, setPage] = useState(0);
 	const [pageSize, setPageSize] = useState(GRID_DEFAULT_PAGE_SIZE);
-	const [uiRenderDurationMs, setUiRenderDurationMs] = useState<number | null>(
-		null,
-	);
 	const runIdRef = useRef(0);
-	const pendingUiRenderStartedAtRef = useRef<number | null>(null);
 
 	const runQuery = async (sqlSource: string) => {
 		const sqlText = sqlSource.replace(/;\s*$/, "").trim();
@@ -386,23 +379,20 @@ function QueryView({
 		setIsRunning(true);
 		setError(null);
 		const executeCount = executeServerTimingCount();
-		const clientStartedAt = performance.now();
+		const executionStartedAt = performance.now();
 		try {
 			const result = await lix.execute(sqlText);
 			if (runId !== runIdRef.current) return;
-			const clientDurationMs = performance.now() - clientStartedAt;
-			const decodeStartedAt = performance.now();
+			const clientDurationMs = performance.now() - executionStartedAt;
+			const executionDurationMs =
+				serverProtocolDurationMsSince(executeCount) ?? clientDurationMs;
 			const rows = result.rows.map((row) => row.toObject());
-			const decodeDurationMs = performance.now() - decodeStartedAt;
-			pendingUiRenderStartedAtRef.current = performance.now();
 			setRun({
 				columns: inferResultColumns(result.columns, rows),
 				rows,
 				rowsAffected: result.rowsAffected,
 				hasResultColumns: result.columns.length > 0,
-				clientDurationMs,
-				serverProtocolDurationMs: serverProtocolDurationMsSince(executeCount),
-				decodeDurationMs,
+				executionDurationMs,
 			});
 			setSort(null);
 			setPage(0);
@@ -417,13 +407,6 @@ function QueryView({
 			if (runId === runIdRef.current) setIsRunning(false);
 		}
 	};
-
-	useLayoutEffect(() => {
-		const startedAt = pendingUiRenderStartedAtRef.current;
-		if (startedAt === null || run === null) return;
-		pendingUiRenderStartedAtRef.current = null;
-		setUiRenderDurationMs(performance.now() - startedAt);
-	}, [run]);
 
 	// A history selection re-runs the (read-only) query it loaded. The effect
 	// runs unguarded by deps and gates on the nonce so the latest query and
@@ -464,7 +447,7 @@ function QueryView({
 				onQueryChange={onQueryChange}
 				onRun={() => void runQuery(query)}
 			/>
-			<div className="flex h-11 shrink-0 items-center gap-3 border-y border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-6">
+			<div className="atelier-sql-runbar flex h-11 shrink-0 items-center gap-3 border-y border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-6">
 				<button
 					type="button"
 					onClick={() => void runQuery(query)}
@@ -494,16 +477,9 @@ function QueryView({
 						·{" "}
 						<span
 							className="font-semibold text-[var(--color-text-status-success)]"
-							title="SDK round trip, server protocol time, client row decoding, and UI render"
+							title="SQL execution time"
 						>
-							SDK round trip {formatDurationMs(run.clientDurationMs)} ms
-							{run.serverProtocolDurationMs === null
-								? null
-								: ` · server protocol ${formatDurationMs(run.serverProtocolDurationMs)} ms`}
-							{` · decode ${formatDurationMs(run.decodeDurationMs)} ms`}
-							{uiRenderDurationMs === null
-								? null
-								: ` · ui render ${formatDurationMs(uiRenderDurationMs)} ms`}
+							execution {formatDurationMs(run.executionDurationMs)} ms
 						</span>
 					</span>
 				)}

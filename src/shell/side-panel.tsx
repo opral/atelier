@@ -15,6 +15,8 @@ interface SidePanelProps {
 	readonly onSelectView: (key: string) => void;
 	readonly onAddView: (toolId: ExtensionKind, state?: ExtensionState) => void;
 	readonly onRemoveView: (key: string) => void;
+	/** Adds "Hide sidebar" to the section picker, mirroring the bar toggle. */
+	readonly onHidePanel?: () => void;
 	readonly viewContext: ExtensionHostContext;
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
@@ -34,6 +36,7 @@ export function SidePanel({
 	onSelectView,
 	onAddView,
 	onRemoveView,
+	onHidePanel,
 	viewContext,
 	isFocused,
 	onFocusPanel,
@@ -49,8 +52,10 @@ export function SidePanel({
 			onSelectView={onSelectView}
 			onRemoveView={onRemoveView}
 			onAddView={onAddView}
+			{...(onHidePanel ? { onHidePanel } : {})}
 			viewContext={viewContext}
 			emptyStatePlaceholder={emptyStateOverride}
+			showTabBar={false}
 		/>
 	);
 }

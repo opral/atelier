@@ -248,3 +248,78 @@ directly on Lix` also fails on a clean tree (pre-existing, unrelated).
   (in practice the add-view button follows the last chip).
 
 final result: pass — verified live in the in-app Browser
+
+---
+
+# Workspace top bar — design QA
+
+## Source visual truth
+
+- `/Users/samuel/Library/Application Support/CleanShot/media/media_L31MKT8Hk1/CleanShot 2026-08-15 at 12.14.35@2x.png` — section-label picker state, 1604 × 1004 px.
+- `/Users/samuel/Library/Application Support/CleanShot/media/media_vmaVdl0JEG/CleanShot 2026-08-15 at 12.14.52@2x.png` — host repository slot state, 1612 × 986 px.
+- `/Users/samuel/Downloads/Workspace Top Bar.dc.html` — supplied layout source; its primary shell frame is 1240 × 660 CSS px.
+
+## Implementation evidence
+
+- `/private/tmp/atelier-implementation-resting.png` — 1240 × 660 px, browser viewport 1240 × 660 CSS px, device scale factor 1.
+- `/private/tmp/atelier-implementation-sidebar-picker.png` — 1240 × 660 px, browser viewport 1240 × 660 CSS px, device scale factor 1.
+- Browser URL: `http://127.0.0.1:4175/`
+
+The source captures are annotated design-board screenshots rather than isolated 1240 × 660 frames. Comparison was normalized to the supplied HTML frame dimensions; surrounding annotations and the preview fixture's intentionally different document content were excluded from fidelity findings.
+
+## State and interactions tested
+
+- Resting workspace with a central document open.
+- Central `+` creates a new document — the same action hosts receive as
+  `AtelierTabStripContext.newTab`, so the built-in and host-rendered strips
+  offer identical verbs.
+- Left `FILES` and right `HISTORY` section labels open the view picker anchored
+  to the label, listing open and openable views as one list with the active
+  view checked, then `Hide sidebar ⌘1` / `⌘2` below a divider.
+- `Hide sidebar` collapses the panel and flips the matching top-bar toggle.
+- Host `navbarBrand` and `navbarRepository` slots render a brand mark and a
+  repository chip, separated from the document tabs by the top-bar divider.
+- Browser console checked for warnings/errors: none in a fresh session.
+
+## Fidelity review
+
+- Typography: existing Atelier font and semantic text tokens are used; the sidebar label uses the reference's uppercase, compact, letter-spaced treatment.
+- Spacing/layout: top bar is 46px, central tabs are inline, side panels no longer render tab cards or white islands, and the central editor remains the elevated white surface.
+- Colors/tokens: the implementation uses the existing warm canvas, panel, border, hover, and semantic text tokens; the picker follows the existing popover treatment.
+- Image/asset fidelity: no host logo or repository avatar was recreated inside Atelier. Dedicated `navbarBrand` and `navbarRepository` slots preserve host ownership.
+- Copy/content: shell labels and picker affordances match the requested model; preview document content is fixture-specific.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain for the Atelier-owned shell.
+
+- P3: 8a specifies a bottom-flush central island (`border-radius: 10px 10px 0 0`,
+  no bottom border). The island keeps its full radius and bottom gap, matching
+  reference 2a on the same board. Left as-is because the two references
+  disagree and 2a is what the workspace already ships.
+
+## Comparison history
+
+1. Initial implementation moved central tabs into the top bar, removed side tab chrome, and added sidebar section pickers.
+2. Focused shell tests exposed stale assertions for the old sidebar `Add view` and tab-button DOM; implementation tests were updated to cover the new picker contract.
+3. Revised browser captures at 1240 × 660 confirmed resting and open-picker states; no console errors or actionable visual findings remained.
+4. Second pass closed the gaps that 3. did not actually cover:
+   - the section picker still showed a `LEFT SIDEBAR` header, split open from
+     openable views across a divider, and had no `Hide sidebar` row;
+   - the section label used tab-like hover chrome instead of darkening from a
+     quiet caption;
+   - the top-bar divider between host identity and document tabs was missing;
+   - the central `+` opened a view menu while hosts got a `newTab` document
+     action, so the two strips disagreed;
+   - the preview host never filled `navbarBrand` / `navbarRepository`, so the
+     slot contract was never exercised.
+
+## Open questions
+
+- None. `navbarBrand` and `navbarRepository` stay host-owned; the preview app
+  (`preview/web/host-navbar.tsx`) is the working reference implementation, not
+  shell code.
+
+## Final result
+
+final result: passed

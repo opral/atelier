@@ -268,14 +268,19 @@ const FILE_TREE_UNSAFE_CSS = `
 		display: none;
 	}
 
+	/* Reference selection is quiet: neutral fill, semibold label, no accent. */
+	[data-type='item'][data-item-selected='true'] {
+		font-weight: 600;
+	}
+
 	[data-type='item'][data-item-selected='true'][data-item-type='folder']
 		> [data-item-section='icon'] {
-		color: var(--color-icon-selection-current);
+		color: var(--color-icon-secondary);
 	}
 
 	[data-type='item'][data-item-selected='true'][data-item-type='file']
 		> [data-item-section='icon'] {
-		color: var(--color-icon-selection-current);
+		color: var(--color-icon-secondary);
 	}
 
 	:host([data-suppress-item-focus-ring='true'])
@@ -1379,11 +1384,18 @@ function treeHostStyle(
 	variant: "compact" | "spacious",
 ) {
 	const isSpacious = variant === "spacious";
+	// The tree names the surface it sits on: spacious runs inside the central
+	// white island, compact runs bare on the app canvas in a sidebar. Getting
+	// this wrong paints a white card into the sidebar.
+	const surface = isSpacious ? "--color-bg-panel" : "--color-bg-app";
+	const surfaceHover = isSpacious
+		? "--color-bg-hover"
+		: "--color-bg-hover-canvas";
 	return {
-		// Must be the opaque panel color (not transparent): the truncation
-		// ellipsis paints this over clipped label text to hide half-cut glyphs.
-		"--trees-bg-override": "var(--color-bg-panel)",
-		"--trees-bg-muted-override": "var(--color-bg-hover)",
+		// Must be opaque (not transparent): the truncation ellipsis paints this
+		// over clipped label text to hide half-cut glyphs.
+		"--trees-bg-override": `var(${surface})`,
+		"--trees-bg-muted-override": `var(${surfaceHover})`,
 		"--trees-border-color-override": "transparent",
 		"--trees-border-radius-override": isSpacious ? "9px" : "7px",
 		...(isSpacious
@@ -1393,21 +1405,31 @@ function treeHostStyle(
 		"--trees-fg-override": "var(--color-text-secondary)",
 		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",
 		"--trees-font-family-override": "inherit",
-		"--trees-font-size-override": isSpacious ? "15px" : "12px",
+		"--trees-font-size-override": isSpacious ? "15px" : "13px",
 		"--trees-git-modified-color-override": "var(--color-warning-600)",
-		"--trees-icon-width-override": isSpacious ? "26px" : "13px",
+		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
-		"--trees-item-padding-x-override": isSpacious ? "14px" : "9px",
+		// 8px keeps compact row icons on the same x as the sidebar section
+		// label's text (the label's px-2).
+		"--trees-item-padding-x-override": isSpacious ? "14px" : "8px",
+		// Reference rows breathe 8px between the icon slot and the label; the
+		// action lane shrinks to the 12px ellipsis so labels truncate later.
+		...(isSpacious
+			? {}
+			: {
+					"--trees-item-row-gap-override": "8px",
+					"--trees-action-lane-width-override": "12px",
+				}),
 		"--trees-level-gap-override": "1px",
 		"--trees-padding-inline-override": "0px",
 		"--trees-scrollbar-gutter-override": "0px",
+		// Selection is a quiet neutral fill (no accent border); losing panel
+		// focus dims it to the plain hover tint.
 		"--trees-selected-bg-override": isPanelFocused
-			? "var(--color-bg-selection-current)"
-			: "var(--color-bg-hover)",
-		"--trees-selected-focused-border-color-override": isPanelFocused
-			? "var(--color-border-selection-current)"
-			: "transparent",
+			? "var(--color-bg-selection-row)"
+			: `var(${surfaceHover})`,
+		"--trees-selected-focused-border-color-override": "transparent",
 		"--trees-selected-fg-override": isPanelFocused
 			? "var(--color-text-primary)"
 			: "var(--color-text-secondary)",

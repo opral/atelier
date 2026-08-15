@@ -7,8 +7,8 @@ describe("TopBar", () => {
 	test("matches the panel frame horizontal inset", () => {
 		const { container } = render(<TopBar />);
 
-		expect(container.querySelector("header")).toHaveClass("px-2");
-		expect(container.querySelector("header")).not.toHaveClass("px-3");
+		expect(container.querySelector("header")).toHaveClass("px-3.5");
+		expect(container.querySelector("header")).not.toHaveClass("px-2");
 		expect(screen.getByLabelText("Toggle left panel")).toHaveClass(
 			"justify-center",
 		);
@@ -53,7 +53,7 @@ describe("TopBar", () => {
 		expect(header).toHaveAttribute("data-atelier-part", "top-bar");
 		expect(header).toHaveAttribute("data-app-titlebar", "true");
 		expect(header).toHaveAttribute("aria-label", "Repository controls");
-		expect(header).toHaveClass("bg-red-500", "px-2");
+		expect(header).toHaveClass("bg-red-500", "px-3.5");
 		expect(ref.current).toBe(header);
 		if (!header) throw new Error("Top bar header is unavailable");
 		fireEvent.pointerDown(header);
@@ -79,6 +79,27 @@ describe("TopBar", () => {
 		).toBeTruthy();
 		expect(
 			end.compareDocumentPosition(rightToggle) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
+	test("places host brand and repository slots in the shell-owned order", () => {
+		render(
+			<TopBar
+				navbarBrand={<span>Brand</span>}
+				navbarRepository={<span>Repository</span>}
+			/>,
+		);
+
+		const brand = screen.getByText("Brand");
+		const leftToggle = screen.getByLabelText("Toggle left panel");
+		const repository = screen.getByText("Repository");
+		expect(
+			brand.compareDocumentPosition(leftToggle) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			leftToggle.compareDocumentPosition(repository) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 	});

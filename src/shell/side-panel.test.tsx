@@ -160,30 +160,21 @@ describe("SidePanel", () => {
 		);
 
 		expect(
-			screen.getByRole("heading", { name: "This is a panel." }),
+			screen.getByRole("heading", { name: "This is the left sidebar." }),
 		).toBeInTheDocument();
-		expect(screen.getByText("It can open views.")).toBeInTheDocument();
+		expect(screen.getByText("Open a view to get started.")).toBeInTheDocument();
 		expect(
 			screen.getByRole("complementary", { name: "Navigator" }),
 		).toBeInTheDocument();
-		const openView = screen.getByRole("button", { name: "Open a view" });
-		expect(openView).toHaveAttribute("data-attr", "panel-empty-open-view");
-		expect(openView).toHaveAttribute("data-ui", "atelier-action-button");
-		expect(openView).toHaveAttribute("data-variant", "secondary");
-		expect(
-			screen.queryByRole("button", { name: "Open Files view" }),
-		).toBeNull();
-		fireEvent.pointerDown(openView, { button: 0 });
-
-		const filesItem = await screen.findByRole("menuitem", { name: "Files" });
-		fireEvent.click(filesItem);
+		// Views open from one-click chips, not a dropdown.
+		const filesChip = screen.getByRole("button", { name: "Files" });
+		expect(filesChip).toHaveAttribute("data-attr", "panel-empty-open-view");
+		fireEvent.click(filesChip);
 		expect(handleAdd).toHaveBeenCalledWith(FILES_EXTENSION_KIND);
-		await waitFor(() => expect(openView).toHaveFocus());
-		expect(screen.getByLabelText("Add view")).toBeInTheDocument();
 		expect(screen.queryByText("No view open")).toBeNull();
 	});
 
-	test("moves focus into an opened view and back to the picker on close", async () => {
+	test("uses the section picker for an opened view", async () => {
 		render(
 			<ExtensionHostRegistryProvider>
 				<DndContext>
@@ -192,27 +183,14 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		const openView = screen.getByRole("button", { name: "Open a view" });
-		openView.focus();
-		fireEvent.keyDown(openView, { key: "ArrowDown", code: "ArrowDown" });
-		const filesItem = await screen.findByRole("menuitem", { name: "Files" });
-		await waitFor(() => expect(filesItem).toHaveFocus());
-		fireEvent.keyDown(filesItem, { key: "Enter", code: "Enter" });
+		fireEvent.click(screen.getByRole("button", { name: "Files" }));
 
-		const filesTab = await screen.findByRole("button", { name: "Files" });
-		await waitFor(() => expect(filesTab).toHaveFocus());
-		const closeControl = filesTab.querySelector<SVGElement>(
-			'[data-attr="panel-tab-close"]',
-		);
-		expect(closeControl).not.toBeNull();
-		fireEvent.click(closeControl as SVGElement);
-
-		await waitFor(() =>
-			expect(screen.getByRole("button", { name: "Open a view" })).toHaveFocus(),
-		);
+		expect(
+			await screen.findByRole("button", { name: "Files panel view menu" }),
+		).toBeInTheDocument();
 	});
 
-	test("keeps focus on the opened tab after keyboard selection from the add menu", async () => {
+	test("opens the section picker after keyboard selection", async () => {
 		render(
 			<ExtensionHostRegistryProvider>
 				<DndContext>
@@ -221,16 +199,91 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		const addView = screen.getByRole("button", { name: "Add view" });
-		addView.focus();
-		fireEvent.keyDown(addView, { key: "ArrowDown", code: "ArrowDown" });
+		fireEvent.click(screen.getByRole("button", { name: "Files" }));
+
+		const picker = await screen.findByRole("button", {
+			name: "Files panel view menu",
+		});
+		picker.focus();
+		fireEvent.keyDown(picker, { key: "ArrowDown", code: "ArrowDown" });
 
 		const filesItem = await screen.findByRole("menuitem", { name: "Files" });
 		await waitFor(() => expect(filesItem).toHaveFocus());
 		fireEvent.keyDown(filesItem, { key: "Enter", code: "Enter" });
 
-		const filesTab = await screen.findByRole("button", { name: "Files" });
-		await waitFor(() => expect(filesTab).toHaveFocus());
+		expect(
+			await screen.findByRole("button", { name: "Files panel view menu" }),
+		).toBeInTheDocument();
+	});
+
+	test("hides the sidebar from the section picker", async () => {
+		const handleHide = vi.fn();
+		const panelState: PanelState = {
+			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
+			activeInstance: "files-1",
+		};
+
+		render(
+			<ExtensionHostRegistryProvider>
+				<DndContext>
+					<SidePanel
+						side="left"
+						title="Navigator"
+						panel={panelState}
+						onSelectView={() => {}}
+						onAddView={() => {}}
+						onRemoveView={() => {}}
+						onHidePanel={handleHide}
+						viewContext={createViewContext()}
+						isFocused={false}
+						onFocusPanel={() => {}}
+					/>
+				</DndContext>
+			</ExtensionHostRegistryProvider>,
+		);
+
+		fireEvent.pointerDown(
+			screen.getByRole("button", { name: "Files panel view menu" }),
+			{ button: 0 },
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: /Hide sidebar/ }),
+		);
+		expect(handleHide).toHaveBeenCalledOnce();
+	});
+
+	test("omits Hide sidebar when the host cannot collapse the panel", async () => {
+		const panelState: PanelState = {
+			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
+			activeInstance: "files-1",
+		};
+
+		render(
+			<ExtensionHostRegistryProvider>
+				<DndContext>
+					<SidePanel
+						side="left"
+						title="Navigator"
+						panel={panelState}
+						onSelectView={() => {}}
+						onAddView={() => {}}
+						onRemoveView={() => {}}
+						viewContext={createViewContext()}
+						isFocused={false}
+						onFocusPanel={() => {}}
+					/>
+				</DndContext>
+			</ExtensionHostRegistryProvider>,
+		);
+
+		fireEvent.pointerDown(
+			screen.getByRole("button", { name: "Files panel view menu" }),
+			{ button: 0 },
+		);
+		expect(
+			await screen.findByRole("menuitem", { name: "Files" }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("menuitem", { name: /Hide sidebar/ })).toBeNull();
 	});
 
 	test("renders a host-provided empty state", () => {
@@ -258,8 +311,10 @@ describe("SidePanel", () => {
 		expect(
 			screen.getByRole("button", { name: "Start agent" }),
 		).toBeInTheDocument();
-		expect(screen.queryByText("This is a panel.")).toBeNull();
-		expect(screen.queryByRole("button", { name: "Open a view" })).toBeNull();
+		expect(screen.queryByText("This is the right sidebar.")).toBeNull();
+		expect(
+			document.querySelector('[data-attr="panel-empty-open-view"]'),
+		).toBeNull();
 	});
 
 	test("preserves an intentional blank empty-state override", () => {
@@ -282,11 +337,11 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		expect(screen.queryByText("This is a panel.")).toBeNull();
-		expect(screen.queryByRole("button", { name: "Open a view" })).toBeNull();
+		expect(screen.queryByText("This is the right sidebar.")).toBeNull();
 		expect(
-			screen.getByRole("button", { name: "Add view" }),
-		).toBeInTheDocument();
+			document.querySelector('[data-attr="panel-empty-open-view"]'),
+		).toBeNull();
+		expect(screen.queryByRole("button", { name: "Add view" })).toBeNull();
 	});
 
 	test("renders the active view and forwards interactions", async () => {
@@ -318,12 +373,12 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		const filesTab = await screen.findByRole("button", { name: "Files" });
-
-		fireEvent.click(filesTab);
+		const filesPicker = await screen.findByRole("button", {
+			name: "Files panel view menu",
+		});
+		fireEvent.pointerDown(filesPicker, { button: 0 });
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Files" }));
 		expect(handleSelect).toHaveBeenCalledWith("files-1");
-
-		expect(filesTab.getAttribute("data-focused")).toBe("true");
 
 		const fileRow = await screen.findByRole(
 			"button",
@@ -366,7 +421,8 @@ describe("SidePanel", () => {
 			</ExtensionHostRegistryProvider>,
 		);
 
-		const filesTab = await screen.findByRole("button", { name: "Files" });
-		expect(filesTab.getAttribute("data-focused")).toBeNull();
+		expect(
+			await screen.findByRole("button", { name: "Files panel view menu" }),
+		).toBeInTheDocument();
 	});
 });

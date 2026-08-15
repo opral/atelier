@@ -1,7 +1,8 @@
 import { Eye } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { panelShortcutHint } from "@/lib/platform";
 import type { AtelierTopBarProps } from "@/create-atelier";
 import {
 	Tooltip,
@@ -25,8 +26,11 @@ export type TopBarProps = {
 	readonly onToggleRightSidebar?: () => void;
 	readonly isLeftSidebarVisible?: boolean;
 	readonly isRightSidebarVisible?: boolean;
+	readonly navbarBrand?: ReactNode;
+	readonly navbarRepository?: ReactNode;
 	readonly navbarStart?: ReactNode;
 	readonly navbarCenter?: ReactNode;
+	readonly centralTabStrip?: ReactNode;
 	readonly navbarEnd?: ReactNode;
 	/** Host props forwarded to the semantic top-bar header. */
 	readonly rootProps?: AtelierTopBarProps;
@@ -47,36 +51,35 @@ export function TopBar({
 	onToggleRightSidebar,
 	isLeftSidebarVisible = true,
 	isRightSidebarVisible = true,
+	navbarBrand,
+	navbarRepository,
 	navbarStart,
 	navbarCenter,
+	centralTabStrip,
 	navbarEnd,
 	rootProps,
 }: TopBarProps) {
-	const isMacPlatform = useMemo(() => {
-		if (typeof navigator === "undefined") return false;
-		const platformCandidates = [
-			((navigator as any).userAgentData?.platform as string | undefined) ??
-				null,
-			navigator.platform ?? null,
-			navigator.userAgent ?? null,
-		].filter(Boolean) as string[];
-		const combined = platformCandidates.join(" ").toLowerCase();
-		return /mac|iphone|ipad|ipod/.test(combined);
-	}, []);
-
-	const modifierKey = isMacPlatform ? "⌘" : "Ctrl";
-	const leftShortcut = isMacPlatform ? `${modifierKey}1` : `${modifierKey}+1`;
-	const rightShortcut = isMacPlatform ? `${modifierKey}2` : `${modifierKey}+2`;
+	const leftShortcut = panelShortcutHint("left");
+	const rightShortcut = panelShortcutHint("right");
+	const hasHostIdentitySlots =
+		(navbarBrand !== undefined && navbarBrand !== null) ||
+		(navbarStart !== undefined && navbarStart !== null) ||
+		(navbarRepository !== undefined && navbarRepository !== null);
 	return (
 		<header
 			{...rootProps}
 			className={cn(
-				"relative grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] items-center px-2 text-[var(--color-text-secondary)]",
+				"relative grid h-[46px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[var(--color-text-secondary)]",
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
 		>
-			<div className="flex min-w-0 items-center gap-1 text-sm">
+			<div className="flex min-w-0 items-center gap-2 text-sm">
+				{navbarBrand !== undefined && navbarBrand !== null ? (
+					<div className="flex shrink-0 items-center" data-slot="navbar-brand">
+						{navbarBrand}
+					</div>
+				) : null}
 				{navbarStart !== undefined && navbarStart !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-start">
 						{navbarStart}
@@ -102,8 +105,32 @@ export function TopBar({
 						Toggle left panel ({leftShortcut})
 					</TooltipContent>
 				</Tooltip>
+				{navbarRepository !== undefined && navbarRepository !== null ? (
+					<div
+						className="flex min-w-0 shrink items-center"
+						data-slot="navbar-repository"
+					>
+						{navbarRepository}
+					</div>
+				) : null}
+				{/* Keeps "where you are" (host brand and repository) visually separate
+				    from "what's open" (the document tabs). */}
+				{hasHostIdentitySlots && centralTabStrip ? (
+					<span
+						aria-hidden="true"
+						data-atelier-part="top-bar-divider"
+						className="mx-1 h-4 w-px shrink-0 bg-[var(--color-border-action-secondary)]"
+					/>
+				) : null}
 			</div>
-			{navbarCenter !== undefined && navbarCenter !== null ? (
+			{centralTabStrip !== undefined && centralTabStrip !== null ? (
+				<div
+					className="flex min-w-0 items-center overflow-hidden"
+					data-slot="central-tab-strip"
+				>
+					{centralTabStrip}
+				</div>
+			) : navbarCenter !== undefined && navbarCenter !== null ? (
 				<div
 					className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]"
 					data-slot="navbar-center"

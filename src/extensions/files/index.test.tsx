@@ -76,9 +76,14 @@ describe("FilesView", () => {
 		});
 
 		expect(await screen.findByLabelText("Files")).toBeVisible();
+		// The compact New row keeps its tree-item glyph but no trailing chevron —
+		// the FILES section label above already carries the caret.
+		const newRow = document.querySelector('[data-attr="file-new"]');
+		expect(newRow).toBeInTheDocument();
 		expect(
-			document.querySelector('[data-attr="file-new-icon"]'),
+			newRow?.querySelector('[data-attr="file-new-icon"]'),
 		).toBeInTheDocument();
+		expect(newRow?.querySelector("svg")).toBeNull();
 		await act(async () => view?.unmount());
 		await lix.close();
 	});

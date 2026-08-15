@@ -100,7 +100,7 @@ describe("buildExtensionRegistry", () => {
 		expect(history).toEqual(
 			expect.objectContaining({
 				label: "History",
-				placement: ["left", "right"],
+				placement: ["left", "right", "central"],
 			}),
 		);
 		expect(history?.hidden).not.toBe(true);

@@ -9,6 +9,7 @@ import {
 import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
+import { HostBrandMark, HostRepositoryPicker } from "./host-navbar";
 import { seedWorkspace } from "./seed-workspace";
 import "./style.css";
 
@@ -49,6 +50,8 @@ function PreviewApp({ lix }: { readonly lix: Lix }) {
 		<Atelier
 			instance={atelier}
 			slots={{
+				navbarBrand: <HostBrandMark />,
+				navbarRepository: <HostRepositoryPicker />,
 				navbarEnd: (
 					<AtelierDeveloperTools
 						lix={lix}

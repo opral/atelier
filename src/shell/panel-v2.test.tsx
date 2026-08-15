@@ -90,7 +90,7 @@ function StatefulMultiInstancePanel() {
 	const nextInstance = React.useRef(2);
 	return (
 		<PanelV2
-			side="left"
+			side="central"
 			panel={panel}
 			isFocused={true}
 			onFocusPanel={vi.fn()}
@@ -245,20 +245,11 @@ describe("PanelV2", () => {
 		);
 
 		expect(
-			screen.getByRole("button", { name: "Custom Search" }),
+			screen.getByRole("button", { name: "Custom Search panel view menu" }),
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: "Custom Search" }),
-		).not.toHaveAttribute("data-attr", "panel-tab-select");
-		expect(screen.getByText("Custom Search")).toHaveAttribute(
-			"data-attr",
-			"panel-tab-select",
-		);
-		expect(
-			screen
-				.getByRole("button", { name: "Custom Search" })
-				.querySelector("[data-attr='panel-tab-close']"),
-		).toBeInTheDocument();
+			screen.getByRole("button", { name: "Custom Search panel view menu" }),
+		).toHaveAttribute("data-attr", "panel-section-picker");
 	});
 
 	test("registers sortable handlers for tabs", () => {
@@ -266,7 +257,7 @@ describe("PanelV2", () => {
 		sortableMock.mockClear();
 		renderWithinProvider(
 			<PanelV2
-				side="left"
+				side="central"
 				panel={singleSearchPanel}
 				isFocused={false}
 				onFocusPanel={vi.fn()}
@@ -282,8 +273,8 @@ describe("PanelV2", () => {
 				id: "search-1",
 				data: expect.objectContaining({
 					instance: "search-1",
-					panel: "left",
-					fromPanel: "left",
+					panel: "central",
+					fromPanel: "central",
 				}),
 			}),
 		);
@@ -292,7 +283,7 @@ describe("PanelV2", () => {
 	test("renders the add-view button when onAddView is provided", () => {
 		renderWithinProvider(
 			<PanelV2
-				side="left"
+				side="central"
 				panel={singleSearchPanel}
 				isFocused={false}
 				onFocusPanel={vi.fn()}
