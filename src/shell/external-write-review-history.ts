@@ -252,7 +252,7 @@ export function useExternalWriteReview(args: {
 			.filter((change) => change.file_id === args.fileId)
 			.map((change) => [
 				change.schema_key,
-				change.entity_pk,
+				change.row_pk,
 				change.diff_type,
 				change.before_change_id,
 				change.after_change_id,
