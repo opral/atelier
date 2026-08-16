@@ -411,6 +411,30 @@ test.each(MARKDOWN_DIFF_FIXTURES)(
 	},
 );
 
+test("keeps invisible empty-paragraph placeholders exact in review decisions", () => {
+	const before = "# Hello World";
+	const after = "<span></span>\n\n# Hello World";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+
+	expect(review.changes).toHaveLength(1);
+	expect(review.changes[0]?.kind).toBe("insert");
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map([[review.changes[0]!.id, "keep"]]),
+		),
+	).toBe(after);
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map([[review.changes[0]!.id, "undo"]]),
+		),
+	).toBe(before);
+});
+
 function markedText(doc: any, status: "added" | "removed"): string {
 	const values: string[] = [];
 	visit(doc, (node) => {
