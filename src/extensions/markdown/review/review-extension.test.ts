@@ -99,3 +99,26 @@ test("decorates inline edits and inserted items inside one rendered list", () =>
 	).find((node) => node.textContent?.includes("Added item"));
 	expect(addedItem).toBeDefined();
 });
+
+test("keeps invisible empty-paragraph changes targetable without painting them", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "# Hello World",
+		afterMarkdown: "<span></span>\n\n# Hello World",
+	});
+	editor = new Editor({
+		extensions: [...MarkdownWc(), ...MarkdownReviewExtensions],
+		editable: false,
+		content: review.doc,
+	});
+	document.body.appendChild(editor.view.dom);
+
+	const emptyParagraph = editor.view.dom.querySelector(
+		'p[data-review-status="added"]',
+	);
+	expect(emptyParagraph).toHaveAttribute("data-review-empty", "true");
+	expect(emptyParagraph).toHaveAttribute(
+		"data-review-change-id",
+		review.changes[0]!.id,
+	);
+	expect(emptyParagraph).toHaveTextContent("");
+});

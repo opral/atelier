@@ -36,10 +36,12 @@ function reviewMetadata(value: unknown): MarkdownReviewMetadata | null {
 
 function decorationAttributes(
 	metadata: MarkdownReviewMetadata,
+	options: { readonly emptyParagraph?: boolean } = {},
 ): Record<string, string> {
 	return {
 		"data-review-change-id": metadata.changeId,
 		"data-review-status": metadata.status,
+		...(options.emptyParagraph ? { "data-review-empty": "true" } : {}),
 	};
 }
 
@@ -52,11 +54,15 @@ function buildReviewDecorations(doc: ProseMirrorNode): DecorationSet {
 				?.markdownReview,
 		);
 		if (nodeMetadata && !node.isText) {
+			const emptyParagraph =
+				node.type.name === "paragraph" &&
+				node.content.size === 0 &&
+				node.attrs?.data?.["__atelier_empty_paragraph"] === true;
 			decorations.push(
 				Decoration.node(
 					position,
 					position + node.nodeSize,
-					decorationAttributes(nodeMetadata),
+					decorationAttributes(nodeMetadata, { emptyParagraph }),
 				),
 			);
 		}
