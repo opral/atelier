@@ -22,7 +22,21 @@ import {
 	horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, ChevronDown, Plus, X } from "lucide-react";
+import {
+	ArrowRightToLine,
+	Check,
+	ChevronDown,
+	CopyMinus,
+	Plus,
+	X,
+} from "lucide-react";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -749,10 +763,17 @@ export function PanelTabStrip({
 				items={panel.views.map((entry) => entry.instance)}
 				strategy={horizontalListSortingStrategy}
 			>
-				{panel.views.map((entry) => {
+				{panel.views.map((entry, index) => {
 					const view = resolveViewDefinition(entry.kind);
 					if (!view) return null;
 					const label = resolveLabel(view, entry, tabLabel);
+					const closableOthers = panel.views.filter(
+						(sibling) =>
+							!sibling.isPinned && sibling.instance !== entry.instance,
+					);
+					const closableRight = panel.views
+						.slice(index + 1)
+						.filter((sibling) => !sibling.isPinned);
 					return (
 						<SortableTab
 							key={entry.instance}
@@ -768,6 +789,24 @@ export function PanelTabStrip({
 							onClick={() => onSelectView(entry.instance)}
 							onClose={
 								entry.isPinned ? undefined : () => onRemoveView(entry.instance)
+							}
+							onCloseOthers={
+								closableOthers.length > 0
+									? () => {
+											for (const sibling of closableOthers) {
+												onRemoveView(sibling.instance);
+											}
+										}
+									: undefined
+							}
+							onCloseRight={
+								closableRight.length > 0
+									? () => {
+											for (const sibling of closableRight) {
+												onRemoveView(sibling.instance);
+											}
+										}
+									: undefined
 							}
 						/>
 					);
@@ -1153,6 +1192,7 @@ function TabBar({
 		<div
 			ref={rootRef}
 			className={clsx(styles.tabBar, height === "topbar" && "h-[46px]")}
+			data-height={height}
 			data-overflow-left={overflow.left ? "true" : undefined}
 			data-overflow-right={overflow.right ? "true" : undefined}
 		>
@@ -1254,7 +1294,72 @@ interface SortableTabProps extends PanelTabPreviewProps {
 	readonly kind: ExtensionKind;
 	readonly onClick?: () => void;
 	readonly onClose?: () => void;
+	/** Close every closable sibling; absent when there is none. */
+	readonly onCloseOthers?: () => void;
+	/** Close every closable tab after this one; absent when there is none. */
+	readonly onCloseRight?: () => void;
 	readonly isPending?: boolean;
+}
+
+const tabMenuItemClasses =
+	"gap-2 rounded-[6px] px-2 py-[5px] text-[12.5px] leading-tight text-[var(--color-text-secondary)] [&_svg]:size-3.25 [&_svg]:text-[var(--color-icon-tertiary)]";
+
+/**
+ * Right-click menu for tab chips. Pinned tabs (no onClose) drop the Close
+ * item but keep the bulk actions, which never touch pinned siblings.
+ */
+function TabContextMenu({
+	children,
+	onClose,
+	onCloseOthers,
+	onCloseRight,
+}: {
+	readonly children: ReactNode;
+	readonly onClose?: () => void;
+	readonly onCloseOthers?: () => void;
+	readonly onCloseRight?: () => void;
+}) {
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+			<ContextMenuContent
+				className="w-[182px] min-w-[182px] rounded-[9px] p-1 shadow-lg"
+				data-attr="panel-tab-context-menu"
+			>
+				{onClose ? (
+					<>
+						<ContextMenuItem
+							className={tabMenuItemClasses}
+							onSelect={onClose}
+							data-attr="panel-tab-context-close"
+						>
+							<X aria-hidden="true" />
+							Close
+						</ContextMenuItem>
+						<ContextMenuSeparator className="mx-1.5 my-1 bg-[var(--color-border-subtle)]" />
+					</>
+				) : null}
+				<ContextMenuItem
+					className={tabMenuItemClasses}
+					disabled={!onCloseOthers}
+					onSelect={onCloseOthers}
+					data-attr="panel-tab-context-close-others"
+				>
+					<CopyMinus aria-hidden="true" />
+					Close other tabs
+				</ContextMenuItem>
+				<ContextMenuItem
+					className={tabMenuItemClasses}
+					disabled={!onCloseRight}
+					onSelect={onCloseRight}
+					data-attr="panel-tab-context-close-right"
+				>
+					<ArrowRightToLine aria-hidden="true" />
+					Close tabs to the right
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
+	);
 }
 
 function SortableTab({
@@ -1269,6 +1374,8 @@ function SortableTab({
 	isPinned,
 	onClick,
 	onClose,
+	onCloseOthers,
+	onCloseRight,
 }: SortableTabProps) {
 	const {
 		attributes,
@@ -1295,27 +1402,33 @@ function SortableTab({
 	};
 
 	return (
-		<TabButtonBase
-			ref={setNodeRef}
-			icon={icon}
-			label={label}
-			isActive={isActive}
-			isFocused={isFocused}
-			isPending={isPending}
-			isPinned={isPinned}
-			closeOnHoverOnly={panelSide !== "central"}
-			onClick={onClick}
+		<TabContextMenu
 			onClose={onClose}
-			isDragging={isDragging}
-			dataFocused={isFocused ? "true" : undefined}
-			dataViewInstance={instance}
-			dataViewKind={kind}
-			style={style}
-			buttonProps={{
-				...(attributes as ButtonHTMLAttributes<HTMLButtonElement>),
-				...(listeners as ButtonHTMLAttributes<HTMLButtonElement>),
-			}}
-		/>
+			onCloseOthers={onCloseOthers}
+			onCloseRight={onCloseRight}
+		>
+			<TabButtonBase
+				ref={setNodeRef}
+				icon={icon}
+				label={label}
+				isActive={isActive}
+				isFocused={isFocused}
+				isPending={isPending}
+				isPinned={isPinned}
+				closeOnHoverOnly={panelSide !== "central"}
+				onClick={onClick}
+				onClose={onClose}
+				isDragging={isDragging}
+				dataFocused={isFocused ? "true" : undefined}
+				dataViewInstance={instance}
+				dataViewKind={kind}
+				style={style}
+				buttonProps={{
+					...(attributes as ButtonHTMLAttributes<HTMLButtonElement>),
+					...(listeners as ButtonHTMLAttributes<HTMLButtonElement>),
+				}}
+			/>
+		</TabContextMenu>
 	);
 }
 
@@ -1329,7 +1442,7 @@ const fileGlyphForLabel = (label: string): TabIcon | null => {
 };
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
+	"group relative flex h-7 flex-none max-w-80 items-center rounded-[7px] border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
@@ -1357,7 +1470,10 @@ interface TabBaseProps extends PanelTabPreviewProps {
 	readonly style?: CSSProperties;
 }
 
-const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
+const TabButtonBase = forwardRef<
+	HTMLButtonElement,
+	TabBaseProps & ButtonHTMLAttributes<HTMLButtonElement>
+>(
 	(
 		{
 			icon: Icon,
@@ -1375,6 +1491,10 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 			dataViewKind,
 			buttonProps = null,
 			style,
+			className,
+			// Wrappers like the context-menu trigger slot extra DOM props onto
+			// this button; they must reach the element for those to work.
+			...rest
 		},
 		ref,
 	) => {
@@ -1401,11 +1521,19 @@ const TabButtonBase = forwardRef<HTMLButtonElement, TabBaseProps>(
 				className={clsx(
 					tabBaseClasses,
 					tabStateClasses[state],
-					isPinned && "gap-0",
+					// A compact pinned tab is icon-only; center the icon so the chip
+					// (and its hover fill) stays a square instead of a wide pill.
+					isCompact ? "px-[6.5px]" : "px-2.5",
+					// The label animates via margin, so pinned tabs opt out of gap;
+					// the classes are mutually exclusive because stylesheet order,
+					// not clsx order, would decide a gap-1.5/gap-0 conflict.
+					isPinned ? "gap-0" : "gap-1.5",
 					isDragging && "opacity-50 cursor-grabbing",
+					className,
 				)}
 				style={style}
 				{...restButtonProps}
+				{...rest}
 			>
 				<span
 					data-tab-icon

@@ -4,6 +4,16 @@
 	flex-shrink: 0;
 }
 
+/* In the top bar the strip sits in a row flex cell; without shrink and a
+   width bound it grows to its content width, the cell clips it hard, and
+   the scroll container never overflows — so it must stay shrinkable here
+   for sideways scrolling and the edge fades to engage. */
+.tabBar[data-height="topbar"] {
+	flex-shrink: 1;
+	min-width: 0;
+	width: 100%;
+}
+
 /* Overflow fades: clipped chips at the strip edges dissolve into the app
    background so a half-visible tab reads as "more tabs this way", not as a
    rendering glitch. Toggled per side via data-overflow-left/right. */
