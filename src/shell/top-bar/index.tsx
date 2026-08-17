@@ -74,7 +74,7 @@ export function TopBar({
 			)}
 			data-atelier-part="top-bar"
 		>
-			<div className="flex min-w-0 items-center gap-2 text-sm">
+			<div className="flex min-w-0 items-center gap-1 text-sm">
 				{navbarBrand !== undefined && navbarBrand !== null ? (
 					<div className="flex shrink-0 items-center" data-slot="navbar-brand">
 						{navbarBrand}
@@ -129,6 +129,16 @@ export function TopBar({
 					data-slot="central-tab-strip"
 				>
 					{centralTabStrip}
+					{/* End divider: appears only while tabs overflow to the right,
+					    marking where the scrollable strip ends before the top bar's
+					    right-side controls. */}
+					{/* ml mirrors the left divider's distance to the strip edge
+					    (its 4px margin plus the top bar's 8px column gap). */}
+					<span
+						aria-hidden="true"
+						data-atelier-part="top-bar-divider-end"
+						className="ml-3 mr-1 h-4 w-px shrink-0 bg-[var(--color-border-action-secondary)] opacity-0 transition-opacity duration-150 [[data-overflow-right=true]+&]:opacity-100"
+					/>
 				</div>
 			) : navbarCenter !== undefined && navbarCenter !== null ? (
 				<div
