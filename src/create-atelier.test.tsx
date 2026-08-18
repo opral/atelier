@@ -11,7 +11,6 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createAtelier } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
-import { createLixProtocolSessionGoneError } from "./lib/lix-session-error";
 import {
 	fileExtensionInstanceForKind,
 	FILES_EXTENSION_KIND,
@@ -140,76 +139,6 @@ describe("Atelier instance file controller", () => {
 			expect(screen.queryByRole("button", { name: /^Keep$/ })).toBeNull();
 			expect(screen.queryByText("Unable to render Atelier")).toBeNull();
 		} finally {
-			await act(async () => rendered?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("recovers a closed protocol session when opening working changes", async () => {
-		const lix = await openLix();
-		const sessionStateStore = createMemorySessionStateStore();
-		const onSessionExpired = vi.fn();
-		const atelier = createAtelier({
-			lix,
-			sessionStateStore,
-			defaultOpenPanels: ["left"],
-		});
-		const originalExecute = lix.execute.bind(lix);
-		let failNext = false;
-		vi.spyOn(lix, "execute").mockImplementation(
-			async (...args: Parameters<typeof lix.execute>) => {
-				if (failNext) {
-					failNext = false;
-					throw createLixProtocolSessionGoneError();
-				}
-				return originalExecute(...args);
-			},
-		);
-		let rendered: ReturnType<typeof render> | undefined;
-		try {
-			await qb(lix)
-				.insertInto("lix_file")
-				.values({
-					id: fakeUuid("session-file"),
-					path: "/session.md",
-					content: new TextEncoder().encode("# Before\n"),
-				})
-				.execute();
-			await lix.createCheckpoint();
-			await qb(lix)
-				.updateTable("lix_file")
-				.set({ content: new TextEncoder().encode("# After\n") })
-				.where("id", "=", fakeUuid("session-file"))
-				.execute();
-
-			await act(async () => {
-				rendered = render(
-					<Atelier instance={atelier} onSessionExpired={onSessionExpired} />,
-				);
-			});
-			const pill = await screen.findByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
-			});
-			failNext = true;
-			await act(async () => {
-				fireEvent.click(pill);
-			});
-			await waitFor(() => {
-				expect(screen.queryByText("Unable to render Atelier")).toBeNull();
-				expect(onSessionExpired).toHaveBeenCalled();
-			});
-			const recoveredPill = await screen.findByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
-			});
-			await act(async () => {
-				fireEvent.click(recoveredPill);
-			});
-			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
-			).toBeVisible();
-			expect(screen.queryByText("Unable to render Atelier")).toBeNull();
-		} finally {
-			vi.restoreAllMocks();
 			await act(async () => rendered?.unmount());
 			await lix.close();
 		}

@@ -98,14 +98,6 @@ export type AtelierProps = {
 	readonly topBarProps?: AtelierTopBarProps;
 	/** Called when the Atelier shell or one of its rendered views throws. */
 	readonly onError?: (error: unknown, errorInfo: ErrorInfo) => void;
-	/**
-	 * Called when a Lix protocol session is unknown, expired, or closed (410 /
-	 * `LIX_ERROR_PROTOCOL_SESSION_GONE`). Reopen a client session in the host
-	 * (`openRepositoryLixSession` in LixRay) and remount Atelier with the new
-	 * `lix`. Atelier remounts its shell either way so it does not stick on
-	 * "Unable to render Atelier".
-	 */
-	readonly onSessionExpired?: (error: unknown) => void;
 	/** Replaces the default visible render-error state. */
 	readonly errorFallback?: AtelierErrorFallback;
 };
@@ -133,15 +125,10 @@ export function Atelier({
 	slots,
 	topBarProps,
 	onError,
-	onSessionExpired,
 	errorFallback,
 }: AtelierProps) {
 	return (
-		<AtelierErrorBoundary
-			onError={onError}
-			onSessionExpired={onSessionExpired}
-			errorFallback={errorFallback}
-		>
+		<AtelierErrorBoundary onError={onError} errorFallback={errorFallback}>
 			<AtelierContent
 				instance={instance}
 				slots={slots}

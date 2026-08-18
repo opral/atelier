@@ -333,13 +333,6 @@ function isPermanentQueryError(error: unknown): boolean {
 	);
 }
 
-/** Drops cached rows so a remounted shell can handshake against a live session. */
-export function evictAllLixQueryCaches(): void {
-	queryCache.clear();
-	observeQueryCache.clear();
-	evictingQueryUsers.clear();
-}
-
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
 	if (
 		entry.snapshot.status === "success" &&

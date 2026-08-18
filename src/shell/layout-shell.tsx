@@ -27,7 +27,6 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { useLix, useQuery } from "@/lib/lix-react";
-import { isRecoverableLixSessionError } from "@/lib/lix-session-error";
 import type { Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
@@ -1226,8 +1225,6 @@ function LayoutShellLoadedContent({
 	const [openExternalReviewCount, setOpenExternalReviewCount] = useState(0);
 	const [workingChangesReviewOpen, setWorkingChangesReviewOpen] =
 		useState(false);
-	const [lixSessionRenderError, setLixSessionRenderError] =
-		useState<unknown>(null);
 	const [workingChangeReviewFiles, setWorkingChangeReviewFiles] = useState<
 		readonly LixFileForOpen[]
 	>(EMPTY_LIX_FILES_FOR_OPEN);
@@ -3398,10 +3395,6 @@ function LayoutShellLoadedContent({
 				}
 			}
 		})().catch((error: unknown) => {
-			if (isRecoverableLixSessionError(error)) {
-				setLixSessionRenderError(error);
-				return;
-			}
 			if (!isHostReadOnly) revealHistory();
 			console.warn("[checkpoint] failed to open working changes review", error);
 		});
@@ -3808,7 +3801,6 @@ function LayoutShellLoadedContent({
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
 		>
-			<ThrowRenderError error={lixSessionRenderError} />
 			<div
 				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				data-review-mode={isReviewMode ? "true" : undefined}
@@ -4006,9 +3998,4 @@ function LayoutShellLoadedContent({
 			</DragOverlay>
 		</DndContext>
 	);
-}
-
-function ThrowRenderError({ error }: { readonly error: unknown }) {
-	if (error) throw error;
-	return null;
 }

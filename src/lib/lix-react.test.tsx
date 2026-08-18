@@ -596,19 +596,28 @@ test("useQuery retries a protocol-session-gone observed query after remount", as
 		return <div data-testid="session-gone-query-value">{rows[0]?.value}</div>;
 	}
 
-	let view!: ReturnType<typeof render>;
+	let first!: ReturnType<typeof render>;
 	await act(async () => {
-		view = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
+		first = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
 	});
 	await screen.findByTestId("session-gone-query-value");
 	await act(async () => firstStream.fail(error));
+	await screen.findByTestId("session-gone-query-error");
+	first.unmount();
+
+	let second!: ReturnType<typeof render>;
+	await act(async () => {
+		second = renderWithErrorBoundary(
+			lix,
+			<Probe />,
+			"session-gone-query-error",
+		);
+	});
 	expect(
 		await screen.findByTestId("session-gone-query-value"),
 	).toHaveTextContent("recovered");
-	expect(screen.queryByTestId("session-gone-query-error")).toBeNull();
-	expect(screen.queryByText("Unable to render Atelier")).toBeNull();
 	expect(execute).toHaveBeenCalledTimes(2);
-	view.unmount();
+	second.unmount();
 });
 
 test("useQuery retries a rate-limited observed query after remount", async () => {

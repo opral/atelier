@@ -4,9 +4,10 @@ const SESSION_GONE_MESSAGE = "open a new client session";
 
 /**
  * True when a Lix failure means the protocol client session is gone and a
- * new handshake is required. The JS SDK (`RemoteLixBinding.open`) and the
- * LixRay host (`openRepositoryLixSession`) own that handshake; Atelier can
- * only remount and ask the host to reopen.
+ * new handshake is required. The JS SDK owns that handshake
+ * (`RemoteLixBinding.open` without a dead `lix-session-id`). Atelier must
+ * not cache this as a permanent query error the way a missing column is
+ * cached.
  */
 export function isRecoverableLixSessionError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
