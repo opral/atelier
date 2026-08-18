@@ -499,12 +499,23 @@ function waitForAtelierDocumentsCompletion(
 	}
 
 	return new Promise<void>((resolve, reject) => {
+		// A command's completion can be stolen after it executes — e.g. a
+		// session-state restore replacing the panels right after an open-view
+		// added its tab. Without a deadline that wait never settles and, worse,
+		// deadlocks the whole command queue behind it. The command itself DID
+		// run; resolving on the deadline is the safe outcome.
+		const deadline = setTimeout(() => {
+			runtime.listeners.delete(listener);
+			resolve();
+		}, 5_000);
 		const listener = () => {
 			try {
 				if (!checkCompletion()) return;
+				clearTimeout(deadline);
 				runtime.listeners.delete(listener);
 				resolve();
 			} catch (error) {
+				clearTimeout(deadline);
 				runtime.listeners.delete(listener);
 				reject(error);
 			}
