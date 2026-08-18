@@ -111,8 +111,7 @@ export function selectWorkingChangeCount(lix: Lix) {
  * Derived from `lix_working_diff` instead of `lix_file_working_change`:
  * the engine's composed surface currently returns no rows unless the working
  * range also touches a directory descriptor (upstream bug in
- * filesystem_working_change.rs). Files removed since the checkpoint are not
- * reported; no consumer acts on removed files today.
+ * filesystem_working_change.rs).
  */
 export function selectFileWorkingChanges(lix: Lix) {
 	return qb(lix)
@@ -134,6 +133,63 @@ export function selectFileWorkingChanges(lix: Lix) {
 		.groupBy(["lix_file.id", "lix_file.path"])
 		.orderBy("lix_file.path", "asc")
 		.$castTo<FileWorkingChangeRow>();
+}
+
+/**
+ * Working files that can be reviewed, including files deleted after the
+ * latest checkpoint. Deleted files are reconstructed from that checkpoint
+ * because they no longer have a row in the current `lix_file` view.
+ */
+export async function selectReviewableFileWorkingChanges(
+	lix: Lix,
+): Promise<FileWorkingChangeRow[]> {
+	const [currentFiles, workingChanges, latestCheckpoint] = await Promise.all([
+		selectFileWorkingChanges(lix).execute(),
+		selectWorkingChanges(lix).execute(),
+		selectLatestCheckpoint(lix).executeTakeFirst(),
+	]);
+	if (!latestCheckpoint) return currentFiles;
+
+	const currentIds = new Set(currentFiles.map((file) => file.id));
+	const removedIds = new Set<string>();
+	for (const change of workingChanges) {
+		if (change.diff_type !== "removed") continue;
+		const descriptorFileId =
+			change.schema_key === "lix_file_descriptor" &&
+			Array.isArray(change.row_pk) &&
+			typeof change.row_pk[0] === "string"
+				? change.row_pk[0]
+				: null;
+		const fileId = change.file_id ?? descriptorFileId;
+		if (fileId && !currentIds.has(fileId)) removedIds.add(fileId);
+	}
+	if (removedIds.size === 0) return currentFiles;
+
+	const historicalRows = await selectFileHistory(
+		lix,
+		latestCheckpoint.commit_id,
+	)
+		.select(["id", "path", "lixcol_depth"])
+		.where("id", "in", [...removedIds])
+		.orderBy("lixcol_depth", "asc")
+		.execute();
+	const removedFiles: FileWorkingChangeRow[] = [];
+	const resolvedIds = new Set<string>();
+	for (const row of historicalRows) {
+		if (resolvedIds.has(row.id)) continue;
+		resolvedIds.add(row.id);
+		if (typeof row.path !== "string") continue;
+		removedFiles.push({
+			id: row.id,
+			path: row.path,
+			previous_path: row.path,
+			diff_type: "removed",
+		});
+	}
+
+	return [...currentFiles, ...removedFiles].sort((left, right) =>
+		(left.path ?? "").localeCompare(right.path ?? ""),
+	);
 }
 
 /**
