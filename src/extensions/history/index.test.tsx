@@ -171,7 +171,7 @@ describe("HistoryView", () => {
 		await lix.close();
 	});
 
-	test("marks the viewed checkpoint and lists its files", async () => {
+	test("opens a checkpoint file without collapsing the checkpoint", async () => {
 		const lix = await openLix();
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
@@ -186,6 +186,7 @@ describe("HistoryView", () => {
 		);
 		const checkpoint = await lix.createCheckpoint();
 		const openCheckpointFile = vi.fn();
+		const viewCheckpoint = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -195,6 +196,7 @@ describe("HistoryView", () => {
 							atelier={atelierStub({
 								historicalCommitId: checkpoint.commitId,
 								openCheckpointFile,
+								viewCheckpoint,
 							})}
 						/>
 					</Suspense>
@@ -223,6 +225,20 @@ describe("HistoryView", () => {
 		]);
 		fireEvent.click(fileButtons[1]!);
 		expect(openCheckpointFile).toHaveBeenCalledWith("/two.txt");
+		expect(viewCheckpoint).not.toHaveBeenCalled();
+		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
+		expect(checkpointDisclosures[0]).toHaveAttribute("data-state", "open");
+
+		fireEvent.click(
+			within(checkpointItems[0]!).getByRole("button", {
+				name: /Latest checkpoint/,
+			}),
+		);
+		expect(viewCheckpoint).toHaveBeenCalledWith({
+			commitId: checkpoint.commitId,
+			previousCommitId: expect.any(String),
+			createdAt: expect.any(String),
+		});
 
 		await act(async () => view?.unmount());
 		await lix.close();
