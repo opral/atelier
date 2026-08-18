@@ -11,11 +11,12 @@ import { createLixProtocolSessionGoneError } from "./lib/lix-session-error";
 
 describe("AtelierErrorBoundary", () => {
 	test("remounts after a protocol session error instead of the fatal fallback", async () => {
-		let shouldThrow = true;
-		const onSessionExpired = vi.fn();
+		let allowRender = false;
+		const onSessionExpired = vi.fn(() => {
+			allowRender = true;
+		});
 		function Flaky() {
-			if (shouldThrow) {
-				shouldThrow = false;
+			if (!allowRender) {
 				throw createLixProtocolSessionGoneError();
 			}
 			return <div>recovered</div>;
@@ -36,7 +37,7 @@ describe("AtelierErrorBoundary", () => {
 
 	test("keeps a retry control when the session stays expired", async () => {
 		const onSessionExpired = vi.fn();
-		function AlwaysThrow() {
+		function AlwaysThrow(): never {
 			throw createLixProtocolSessionGoneError();
 		}
 
@@ -66,12 +67,14 @@ describe("AtelierErrorBoundary", () => {
 	});
 
 	test("still shows the fatal fallback for unrelated render errors", async () => {
+		function Boom(): never {
+			throw new TypeError("not a lix");
+		}
+
 		await act(async () => {
 			render(
 				<AtelierErrorBoundary>
-					{(() => {
-						throw new TypeError("not a lix");
-					})()}
+					<Boom />
 				</AtelierErrorBoundary>,
 			);
 		});
