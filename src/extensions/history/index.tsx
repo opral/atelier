@@ -111,7 +111,10 @@ function WorkingChangeFileList({
 					<button
 						type="button"
 						disabled={!openWorkingChangeFile}
-						onClick={() => openWorkingChangeFile?.(file.path)}
+						onClick={(event) => {
+							event.stopPropagation();
+							openWorkingChangeFile?.(file.path);
+						}}
 						data-attr="history-open-working-change-file"
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
@@ -332,7 +335,10 @@ function CheckpointFileList({
 					<button
 						type="button"
 						disabled={!openCheckpointFile}
-						onClick={() => openCheckpointFile?.(file.path)}
+						onClick={(event) => {
+							event.stopPropagation();
+							openCheckpointFile?.(file.path);
+						}}
 						data-attr="history-open-checkpoint-file"
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>

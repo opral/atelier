@@ -870,6 +870,116 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("opens a checkpoint file without collapsing the checkpoint", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: fakeUuid("checkpoint-file-a"),
+						path: "/a-checkpoint.md",
+						content: new TextEncoder().encode("# A before\n"),
+					},
+					{
+						id: fakeUuid("checkpoint-file-z"),
+						path: "/z-checkpoint.md",
+						content: new TextEncoder().encode("# Z before\n"),
+					},
+				])
+				.execute();
+			await lix.createCheckpoint();
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.execute();
+			await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+
+			const checkpointList = await screen.findByRole(
+				"list",
+				{ name: "Checkpoints" },
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			const latestCheckpoint = within(checkpointList).getByRole("button", {
+				name: /Latest checkpoint/,
+			});
+			expect(latestCheckpoint).toBeEnabled();
+			await act(async () => {
+				fireEvent.click(latestCheckpoint);
+			});
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "Back to now" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			const fileList = await screen.findByRole(
+				"list",
+				{ name: "Files at this checkpoint" },
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			const fileButtons = within(fileList).getAllByRole("button");
+			expect(fileButtons.map((button) => button.textContent)).toEqual([
+				"a-checkpoint.md",
+				"z-checkpoint.md",
+			]);
+			await waitFor(
+				() => {
+					const central = sessionStateStore.getSnapshot()?.panels.central;
+					const activeView = central?.views.find(
+						(view) => view.instance === central.activeInstance,
+					);
+					expect(activeView?.state?.afterCommitId).toEqual(expect.any(String));
+					expect(activeView?.state?.filePath).toBe("/a-checkpoint.md");
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+
+			await act(async () => {
+				fireEvent.click(fileButtons[1]!);
+			});
+			await waitFor(
+				() => {
+					const central = sessionStateStore.getSnapshot()?.panels.central;
+					const activeView = central?.views.find(
+						(view) => view.instance === central.activeInstance,
+					);
+					expect(activeView?.state?.filePath).toBe("/z-checkpoint.md");
+					expect(activeView?.state?.afterCommitId).toEqual(expect.any(String));
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			expect(
+				screen.getByRole("list", { name: "Files at this checkpoint" }),
+			).toBeVisible();
+			expect(screen.getByRole("button", { name: "Back to now" })).toBeVisible();
+			expect(
+				within(checkpointList).getAllByRole("listitem")[0],
+			).toHaveAttribute("aria-current", "true");
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("opens the new range instead of an older non-active pending review", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
