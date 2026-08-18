@@ -12,6 +12,7 @@ import {
 	createLixBranchSession,
 	type AtelierBranchSession,
 } from "@/state-adapters";
+import { isRecoverableLixSessionError } from "@/lib/lix-session-error";
 
 const LixContext = createContext<Lix | null>(null);
 
@@ -320,6 +321,7 @@ function subscribeToQueryEntry<TRow>(
 }
 
 function isPermanentQueryError(error: unknown): boolean {
+	if (isRecoverableLixSessionError(error)) return false;
 	if (!(error instanceof Error) || !("status" in error)) return false;
 	const status = (error as Error & { status?: unknown }).status;
 	return (
@@ -329,6 +331,13 @@ function isPermanentQueryError(error: unknown): boolean {
 		status !== 408 &&
 		status !== 429
 	);
+}
+
+/** Drops cached rows so a remounted shell can handshake against a live session. */
+export function evictAllLixQueryCaches(): void {
+	queryCache.clear();
+	observeQueryCache.clear();
+	evictingQueryUsers.clear();
 }
 
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {

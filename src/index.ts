@@ -1,4 +1,5 @@
 export { Atelier } from "./create-atelier";
+export { isRecoverableLixSessionError } from "./lib/lix-session-error";
 export { createAtelier } from "./atelier-instance";
 export {
 	coerceAtelierSessionUiState,

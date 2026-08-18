@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { AtelierErrorBoundary } from "../atelier-error-boundary";
 import { LixProvider, useQuery } from "./lix-react";
+import { createLixProtocolSessionGoneError } from "./lix-session-error";
 import type { Lix, ObserveEvent } from "@lix-js/sdk";
 
 afterEach(() => {
@@ -567,6 +568,47 @@ test("useQuery retains a permanent observed query error across remounts", async 
 	await screen.findByTestId("permanent-query-error");
 	expect(execute).toHaveBeenCalledTimes(1);
 	second.unmount();
+});
+
+test("useQuery retries a protocol-session-gone observed query after remount", async () => {
+	const error = createLixProtocolSessionGoneError();
+	const firstStream = createObserveStream();
+	const secondStream = createObserveStream();
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial" }])
+		.mockResolvedValue([{ value: "recovered" }]);
+	const lix = {
+		observe: vi
+			.fn()
+			.mockReturnValueOnce(firstStream)
+			.mockReturnValue(secondStream),
+	} as unknown as Lix;
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM session_gone_query_error",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="session-gone-query-value">{rows[0]?.value}</div>;
+	}
+
+	let view!: ReturnType<typeof render>;
+	await act(async () => {
+		view = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
+	});
+	await screen.findByTestId("session-gone-query-value");
+	await act(async () => firstStream.fail(error));
+	expect(
+		await screen.findByTestId("session-gone-query-value"),
+	).toHaveTextContent("recovered");
+	expect(screen.queryByTestId("session-gone-query-error")).toBeNull();
+	expect(screen.queryByText("Unable to render Atelier")).toBeNull();
+	expect(execute).toHaveBeenCalledTimes(2);
+	view.unmount();
 });
 
 test("useQuery retries a rate-limited observed query after remount", async () => {
