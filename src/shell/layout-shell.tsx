@@ -2264,6 +2264,19 @@ function LayoutShellLoadedContent({
 				throw new Error(`Invalid repository file path: ${filePath}`);
 			}
 			const state = withoutDocumentIdentity(options.state);
+			// Hosts such as LixRay's file route echo every tab activation with
+			// documents.open() and no revision keys. Re-placing that live open
+			// would strip a checkpoint snapshot; the "left the past" effect then
+			// dismisses the checkpoint the user just clicked a file in.
+			const activeView = activeEntryFromPanel(panelStatesRef.current.central);
+			if (
+				!options.newTab &&
+				!hasHistoricalEditorRevisionState(state) &&
+				documentPathFromView(activeView) === normalizedPath &&
+				hasHistoricalEditorRevisionState(activeView?.state)
+			) {
+				return normalizedPath;
+			}
 			const historicalCommitIds = [
 				typeof state?.sourceCommitId === "string" ? state.sourceCommitId : null,
 				typeof state?.afterCommitId === "string" ? state.afterCommitId : null,

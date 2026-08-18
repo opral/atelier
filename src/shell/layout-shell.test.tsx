@@ -775,6 +775,147 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("keeps the checkpoint open when a listed file is clicked", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const preferencesStore = createMemoryPreferencesStore({
+			version: 1,
+			layout: { sizes: { left: 20, central: 80, right: 0 } },
+		});
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			preferencesStore,
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: fakeUuid("checkpoint-alpha"),
+						path: "/alpha.md",
+						content: new TextEncoder().encode("# Alpha before\n"),
+					},
+					{
+						id: fakeUuid("checkpoint-zeta"),
+						path: "/zeta.md",
+						content: new TextEncoder().encode("# Zeta before\n"),
+					},
+				])
+				.execute();
+			await lix.createCheckpoint();
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# Alpha after\n") })
+				.where("id", "=", fakeUuid("checkpoint-alpha"))
+				.execute();
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# Zeta after\n") })
+				.where("id", "=", fakeUuid("checkpoint-zeta"))
+				.execute();
+			const latestCheckpoint = await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "Latest checkpoint. Open checkpoint history" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			await waitFor(() => {
+				const leftPanel = sessionStateStore.getSnapshot()?.panels.left;
+				const activeView = leftPanel?.views.find(
+					(view) => view.instance === leftPanel.activeInstance,
+				);
+				expect(activeView?.kind).toBe(HISTORY_EXTENSION_KIND);
+			});
+			const checkpointList = await screen.findByRole(
+				"list",
+				{ name: "Checkpoints" },
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			fireEvent.click(
+				within(checkpointList).getByRole("button", {
+					name: /Latest checkpoint/,
+				}),
+			);
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "Back to now" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			const checkpointFiles = await screen.findByRole(
+				"list",
+				{ name: "Files at this checkpoint" },
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			const checkpointFileButtons =
+				within(checkpointFiles).getAllByRole("button");
+			expect(checkpointFileButtons.map((button) => button.textContent)).toEqual(
+				["alpha.md", "zeta.md"],
+			);
+			expect(
+				within(checkpointList).getAllByRole("listitem")[0],
+			).toHaveAttribute("aria-current", "true");
+
+			fireEvent.click(checkpointFileButtons[1]!);
+			await waitFor(
+				() => {
+					const central = sessionStateStore.getSnapshot()?.panels.central;
+					const activeView = central?.views.find(
+						(view) => view.instance === central.activeInstance,
+					);
+					expect(activeView?.state?.fileId).toBe(fakeUuid("checkpoint-zeta"));
+					expect(activeView?.state?.afterCommitId).toBe(
+						latestCheckpoint.commitId,
+					);
+					expect(activeView?.state?.beforeCommitId).toEqual(expect.any(String));
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+
+			// LixRay's file route echoes tab activation with documents.open()
+			// and no revision keys — the same path the host uses for deep links.
+			await act(async () => {
+				await atelier.documents.open("/zeta.md");
+			});
+
+			expect(screen.getByRole("button", { name: "Back to now" })).toBeVisible();
+			expect(
+				screen.getByRole("list", { name: "Files at this checkpoint" }),
+			).toBeVisible();
+			expect(
+				within(checkpointList).getAllByRole("listitem")[0],
+			).toHaveAttribute("aria-current", "true");
+			const central = sessionStateStore.getSnapshot()?.panels.central;
+			const activeView = central?.views.find(
+				(view) => view.instance === central.activeInstance,
+			);
+			expect(activeView?.state?.fileId).toBe(fakeUuid("checkpoint-zeta"));
+			expect(activeView?.state?.afterCommitId).toBe(latestCheckpoint.commitId);
+			expect(activeView?.state?.beforeCommitId).toEqual(expect.any(String));
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("lists changed files and opens the first one when working changes starts without an active document", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();

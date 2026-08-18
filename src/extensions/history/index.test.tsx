@@ -186,6 +186,7 @@ describe("HistoryView", () => {
 		);
 		const checkpoint = await lix.createCheckpoint();
 		const openCheckpointFile = vi.fn();
+		const viewCheckpoint = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -195,6 +196,7 @@ describe("HistoryView", () => {
 							atelier={atelierStub({
 								historicalCommitId: checkpoint.commitId,
 								openCheckpointFile,
+								viewCheckpoint,
 							})}
 						/>
 					</Suspense>
@@ -223,6 +225,9 @@ describe("HistoryView", () => {
 		]);
 		fireEvent.click(fileButtons[1]!);
 		expect(openCheckpointFile).toHaveBeenCalledWith("/two.txt");
+		expect(viewCheckpoint).not.toHaveBeenCalled();
+		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
+		expect(checkpointDisclosures[0]).toHaveAttribute("data-state", "open");
 
 		await act(async () => view?.unmount());
 		await lix.close();
