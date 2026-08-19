@@ -140,11 +140,13 @@ const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
  */
 export function FilesView({ context }: FilesViewProps) {
 	const lix = useLix();
-	const directories = useQuery<FilesystemEntryRow>((queryLix) =>
-		selectFilesystemDirectories(queryLix),
+	const directories = useQuery<FilesystemEntryRow>(
+		(queryLix) => selectFilesystemDirectories(queryLix),
+		{ reuseObservedResult: false },
 	);
-	const files = useQuery<FilesystemEntryRow>((queryLix) =>
-		selectFilesystemFiles(queryLix),
+	const files = useQuery<FilesystemEntryRow>(
+		(queryLix) => selectFilesystemFiles(queryLix),
+		{ reuseObservedResult: false },
 	);
 	const entries = useMemo(
 		() => [...directories, ...files],
