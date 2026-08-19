@@ -35,6 +35,31 @@ describe("FileTree", () => {
 		);
 	});
 
+	test("dims revealed dot-prefixed entries like Finder", async () => {
+		const hiddenNodes: FilesystemTreeNode[] = [
+			{
+				type: "directory",
+				id: "hidden-directory",
+				name: ".lix",
+				path: "/.lix/",
+				children: [],
+			},
+		];
+		const { container } = render(<FileTree nodes={hiddenNodes} />);
+
+		await waitFor(() => {
+			expect(getTreeItem(container, ".lix/")).toHaveAttribute(
+				"data-hidden-entry",
+				"true",
+			);
+		});
+		expect(
+			getTreeRoot(container).querySelector(
+				"style[data-file-tree-unsafe-css]",
+			),
+		).toHaveTextContent("opacity: 0.48");
+	});
+
 	test("aligns compact row actions and keeps their dots lightweight", () => {
 		const { container } = render(<FileTree nodes={mockTree} />);
 		const host = getTreeHost(container);

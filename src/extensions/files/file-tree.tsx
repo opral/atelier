@@ -120,6 +120,7 @@ type ReviewGitStatusEntry = {
 type TreePathInfo = {
 	readonly appPath: string;
 	readonly kind: "file" | "directory";
+	readonly hidden?: boolean;
 	readonly id?: string;
 	readonly createRequestId?: number;
 	readonly source?: FilesystemTreeSource;
@@ -130,6 +131,7 @@ type TreeInput = {
 	readonly pathInfoByTreePath: Map<string, TreePathInfo>;
 	readonly directoryTreePaths: string[];
 	readonly realDirectoryTreePaths: string[];
+	readonly hiddenTreePaths: string[];
 	readonly createPlaceholderTreePath: string | null;
 };
 
@@ -253,6 +255,15 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	[data-type='context-menu-trigger'] {
 		color: var(--color-icon-tertiary);
+	}
+
+	/* Finder-style reveal: visible and interactive, but clearly hidden. */
+	[data-type='item'][data-hidden-entry='true'] {
+		opacity: 0.48;
+	}
+
+	[data-type='item'][data-hidden-entry='true'][data-item-selected='true'] {
+		opacity: 0.62;
 	}
 
 	[data-type='context-menu-trigger']
@@ -734,6 +745,44 @@ export function FileTree({
 		};
 	}, [reviewCountKey, reviewCounts, treePathsKey]);
 
+	const hiddenTreePathsKey = useMemo(
+		() => treeInput.hiddenTreePaths.join("\0"),
+		[treeInput.hiddenTreePaths],
+	);
+	useEffect(() => {
+		const container = treeContainerRef.current;
+		if (!container) return;
+		let frame = 0;
+		let shadowObserver: MutationObserver | null = null;
+		const applyHiddenEntryState = () => {
+			const host = container.querySelector<HTMLElement>("[aria-label='Files']");
+			const root = host?.shadowRoot;
+			if (!root) {
+				frame = window.requestAnimationFrame(applyHiddenEntryState);
+				return;
+			}
+			for (const item of root.querySelectorAll("[data-hidden-entry]")) {
+				item.removeAttribute("data-hidden-entry");
+			}
+			for (const treePath of treeInput.hiddenTreePaths) {
+				root
+					.querySelector(
+						`[data-type='item'][data-item-path='${CSS.escape(treePath)}']`,
+					)
+					?.setAttribute("data-hidden-entry", "true");
+			}
+			if (!shadowObserver) {
+				shadowObserver = new MutationObserver(applyHiddenEntryState);
+				shadowObserver.observe(root, { childList: true, subtree: true });
+			}
+		};
+		frame = window.requestAnimationFrame(applyHiddenEntryState);
+		return () => {
+			window.cancelAnimationFrame(frame);
+			shadowObserver?.disconnect();
+		};
+	}, [hiddenTreePathsKey, treeInput.hiddenTreePaths, treePathsKey]);
+
 	useEffect(() => {
 		for (const directoryTreePath of treeInput.directoryTreePaths) {
 			const item = toDirectoryHandle(model.getItem(directoryTreePath));
@@ -1212,6 +1261,7 @@ function buildTreeInput(
 	const paths: string[] = [];
 	const directoryTreePaths: string[] = [];
 	const realDirectoryTreePaths: string[] = [];
+	const hiddenTreePaths: string[] = [];
 
 	const addPath = (treePath: string, info: TreePathInfo) => {
 		if (!pathInfoByTreePath.has(treePath)) {
@@ -1222,6 +1272,7 @@ function buildTreeInput(
 					realDirectoryTreePaths.push(treePath);
 				}
 			}
+			if (info.hidden) hiddenTreePaths.push(treePath);
 		}
 		pathInfoByTreePath.set(treePath, info);
 	};
@@ -1231,6 +1282,7 @@ function buildTreeInput(
 			const treePath = appPathToTreePath(node.path, true);
 			addPath(treePath, {
 				appPath: node.path,
+				hidden: isDotPrefixedTreePath(treePath),
 				id: node.id,
 				kind: "directory",
 				source: node.source,
@@ -1243,6 +1295,7 @@ function buildTreeInput(
 		const treePath = appPathToTreePath(node.path, false);
 		addPath(treePath, {
 			appPath: node.path,
+			hidden: isDotPrefixedTreePath(treePath),
 			id: node.id,
 			kind: "file",
 			source: node.source,
@@ -1270,10 +1323,18 @@ function buildTreeInput(
 	return {
 		createPlaceholderTreePath,
 		directoryTreePaths,
+		hiddenTreePaths,
 		pathInfoByTreePath,
 		paths,
 		realDirectoryTreePaths,
 	};
+}
+
+function isDotPrefixedTreePath(treePath: string): boolean {
+	const normalized = treePath.endsWith("/")
+		? treePath.slice(0, -1)
+		: treePath;
+	return normalized.split("/").at(-1)?.startsWith(".") === true;
 }
 
 function buildReviewGitStatusEntries(

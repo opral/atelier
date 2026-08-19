@@ -248,6 +248,17 @@ export type AtelierExtensionRuntime = {
 		readonly activeFilePath: string | null;
 	};
 	readonly views: AtelierViewsApi;
+	/**
+	 * Read another extension's current preference without taking ownership of
+	 * its default or mutation behavior. This lets host surfaces mirror a
+	 * bundled extension while that extension remains the sole writer.
+	 */
+	readonly preferences: {
+		readonly get: (
+			extensionId: string,
+			key: string,
+		) => AtelierJsonValue | undefined;
+	};
 	/** Canonical Atelier iconography, shared by views, floats, and lists. */
 	readonly icons: {
 		/** Icon URL for a workspace file path (resolved by extension). */

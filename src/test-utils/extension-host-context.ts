@@ -29,6 +29,10 @@ export function createExtensionHostContext(
 			views: {
 				open: async () => {},
 			},
+			preferences: {
+				get: (extensionId, key) =>
+					extensionPreferences.get(`${extensionId}\0${key}`),
+			},
 			icons: { fileUrl: () => "" },
 			branches: {
 				activeId: "main",

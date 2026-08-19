@@ -3692,6 +3692,10 @@ function LayoutShellLoadedContent({
 				activeFilePath: activeDocumentPath,
 			},
 			views: effectiveAtelierInstance.views,
+			preferences: {
+				get: (extensionId: string, key: string) =>
+					preferencesFor(extensionId).get(key),
+			},
 			icons: ATELIER_RUNTIME_ICONS,
 			branches: {
 				activeId: activeBranchId,
@@ -3752,6 +3756,7 @@ function LayoutShellLoadedContent({
 			isReviewMode,
 			effectiveAtelierInstance.documents,
 			effectiveAtelierInstance.views,
+			preferencesFor,
 			activeCentralFileId,
 			activeDocumentPath,
 			lix,
