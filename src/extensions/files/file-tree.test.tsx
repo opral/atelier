@@ -54,9 +54,7 @@ describe("FileTree", () => {
 			);
 		});
 		expect(
-			getTreeRoot(container).querySelector(
-				"style[data-file-tree-unsafe-css]",
-			),
+			getTreeRoot(container).querySelector("style[data-file-tree-unsafe-css]"),
 		).toHaveTextContent("opacity: 0.48");
 	});
 

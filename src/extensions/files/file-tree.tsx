@@ -1331,9 +1331,7 @@ function buildTreeInput(
 }
 
 function isDotPrefixedTreePath(treePath: string): boolean {
-	const normalized = treePath.endsWith("/")
-		? treePath.slice(0, -1)
-		: treePath;
+	const normalized = treePath.endsWith("/") ? treePath.slice(0, -1) : treePath;
 	return normalized.split("/").at(-1)?.startsWith(".") === true;
 }
 
