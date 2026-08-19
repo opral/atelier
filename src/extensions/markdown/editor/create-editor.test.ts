@@ -7,7 +7,6 @@ import { handlePaste } from "./handle-paste";
 import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
-import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ensureTrailingNewline = (value: string) =>
@@ -523,7 +522,6 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
