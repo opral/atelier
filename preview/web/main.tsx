@@ -1,5 +1,6 @@
-import { IndexedDbStorage, openLix } from "@lix-js/sdk";
+import { openLix } from "@lix-js/sdk";
 import type { Lix } from "@lix-js/sdk";
+import { OpfsStorage } from "@lix-js/storage-opfs";
 import {
 	Atelier,
 	AtelierDeveloperTools,
@@ -19,7 +20,7 @@ const mountElement = element;
 
 async function start() {
 	const lix = await openLix({
-		storage: new IndexedDbStorage({ name: "atelier-preview-lix-0.12" }),
+		storage: new OpfsStorage({ name: "atelier-preview-lix-opfs-0.12" }),
 	});
 	await seedWorkspace(lix);
 	createRoot(mountElement).render(<PreviewApp lix={lix} />);

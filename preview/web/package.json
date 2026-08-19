@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@lix-js/sdk": "0.12.2",
+		"@lix-js/storage-opfs": "0.12.2",
 		"@opral/atelier": "workspace:*"
 	},
 	"devDependencies": {
