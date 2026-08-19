@@ -139,8 +139,9 @@ const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
  */
 export function FilesView({ context }: FilesViewProps) {
 	const lix = useLix();
-	const entries = useQuery<FilesystemEntryRow>((queryLix) =>
-		selectFilesystemEntries(queryLix),
+	const entries = useQuery<FilesystemEntryRow>(
+		(queryLix) => selectFilesystemEntries(queryLix),
+		{ reuseObservedResult: false },
 	);
 	return (
 		<FilesViewWithWorkingChanges

@@ -315,6 +315,72 @@ test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
 	expect(execute).toHaveBeenCalledTimes(3);
 });
 
+test("useQuery can treat advancing observer results as invalidations", async () => {
+	const stream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => stream),
+	} as unknown as Lix;
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial-file" }])
+		.mockResolvedValueOnce([{ value: "initial-authoritative" }])
+		.mockResolvedValue([{ value: "synced-file" }]);
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM filesystem_union",
+					parameters: [],
+				}),
+				execute,
+			}),
+			{ reuseObservedResult: false },
+		);
+		return <div data-testid="invalidated-value">{rows[0]?.value}</div>;
+	}
+
+	await act(async () => {
+		render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe />
+				</Suspense>
+			</LixProvider>,
+		);
+	});
+	expect(await screen.findByTestId("invalidated-value")).toHaveTextContent(
+		"initial-file",
+	);
+
+	await act(async () => stream.emit(eventWithValue(0, 0, "stale-initial")));
+	await waitFor(() => {
+		expect(screen.getByTestId("invalidated-value")).toHaveTextContent(
+			"initial-authoritative",
+		);
+	});
+
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(2));
+	await act(async () =>
+		stream.emit({
+			sequence: 1,
+			mutationSequence: 1,
+			result: {
+				columns: ["value"],
+				rows: [],
+				rowsAffected: 0,
+				notices: [],
+			},
+		}),
+	);
+	await waitFor(() => {
+		expect(screen.getByTestId("invalidated-value")).toHaveTextContent(
+			"synced-file",
+		);
+	});
+	expect(execute).toHaveBeenCalledTimes(3);
+});
+
 test("useQuery orders mounted observers and resumes after owner failover", async () => {
 	const firstStream = createObserveStream();
 	const secondStream = createObserveStream();
