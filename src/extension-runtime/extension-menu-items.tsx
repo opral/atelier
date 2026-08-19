@@ -54,6 +54,7 @@ export function ExtensionDropdownMenuItems({
 			);
 		}
 		if (item.kind === "checkbox") {
+			const Icon = item.icon;
 			return (
 				<DropdownMenuCheckboxItem
 					key={item.key}
@@ -63,6 +64,11 @@ export function ExtensionDropdownMenuItems({
 					className={itemClassName}
 					data-extension-menu-key={item.key}
 				>
+					{Icon ? (
+						<Icon aria-hidden={true} className="size-4 shrink-0" />
+					) : (
+						<span aria-hidden="true" className="size-4 shrink-0" />
+					)}
 					<span>{item.label}</span>
 				</DropdownMenuCheckboxItem>
 			);
@@ -75,7 +81,12 @@ export function ExtensionDropdownMenuItems({
 				className={itemClassName}
 				data-extension-menu-key={item.key}
 			>
-				<span className="pl-4">{item.label}</span>
+				{item.icon ? (
+					<item.icon aria-hidden={true} className="size-4 shrink-0" />
+				) : (
+					<span aria-hidden="true" className="size-4 shrink-0" />
+				)}
+				<span>{item.label}</span>
 			</DropdownMenuItem>
 		);
 	});
@@ -97,6 +108,7 @@ export function ExtensionContextMenuItems({
 			);
 		}
 		if (item.kind === "checkbox") {
+			const Icon = item.icon;
 			return (
 				<ContextMenuCheckboxItem
 					key={item.key}
@@ -106,6 +118,11 @@ export function ExtensionContextMenuItems({
 					className={itemClassName}
 					data-extension-menu-key={item.key}
 				>
+					{Icon ? (
+						<Icon aria-hidden={true} className="size-4 shrink-0" />
+					) : (
+						<span aria-hidden="true" className="size-4 shrink-0" />
+					)}
 					<span>{item.label}</span>
 				</ContextMenuCheckboxItem>
 			);
@@ -118,7 +135,12 @@ export function ExtensionContextMenuItems({
 				className={itemClassName}
 				data-extension-menu-key={item.key}
 			>
-				<span className="pl-4">{item.label}</span>
+				{item.icon ? (
+					<item.icon aria-hidden={true} className="size-4 shrink-0" />
+				) : (
+					<span aria-hidden="true" className="size-4 shrink-0" />
+				)}
+				<span>{item.label}</span>
 			</ContextMenuItem>
 		);
 	});

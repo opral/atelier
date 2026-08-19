@@ -65,6 +65,11 @@ export type AtelierExtensionPreferences = {
 type AtelierExtensionMenuItemBase = {
 	/** Locally unique within this extension's menu. */
 	readonly key: string;
+	/** Optional shell-rendered leading icon. */
+	readonly icon?: ComponentType<{
+		className?: string;
+		"aria-hidden"?: boolean;
+	}>;
 	readonly disabled?: boolean;
 };
 

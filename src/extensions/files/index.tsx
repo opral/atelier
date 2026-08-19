@@ -8,7 +8,7 @@ import {
 	type ButtonHTMLAttributes,
 	type ReactNode,
 } from "react";
-import { ChevronDown, Files, FileUp, Plus } from "lucide-react";
+import { ChevronDown, Eye, Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import fileCsvIconUrl from "./assets/file-csv.svg";
@@ -1473,6 +1473,7 @@ export const extension = createReactExtensionDefinition({
 			{
 				key: "showHiddenFiles",
 				kind: "checkbox",
+				icon: Eye,
 				label: "Show hidden files",
 				checked: showHiddenFiles,
 				onSelect: () => preferences.set("showHiddenFiles", !showHiddenFiles),

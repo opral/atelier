@@ -136,6 +136,7 @@ describe("extension menu preferences", () => {
 				name: "Show hidden files",
 			});
 			expect(sidebarToggle).toHaveAttribute("aria-checked", "false");
+			expect(sidebarToggle.querySelector(".lucide-eye")).not.toBeNull();
 			fireEvent.click(sidebarToggle);
 			await waitFor(() => expect(treeContains(".lix/")).toBe(true));
 			await waitFor(async () => {
@@ -163,6 +164,8 @@ describe("extension menu preferences", () => {
 				name: "Show hidden files",
 			});
 			expect(tabToggle).toHaveAttribute("aria-checked", "true");
+			expect(tabToggle.querySelector(".lucide-eye")).not.toBeNull();
+			expect(tabToggle.querySelector(".lucide-check")).not.toBeNull();
 			fireEvent.click(tabToggle);
 			await waitFor(() => expect(treeContains(".lix/")).toBe(false));
 		} finally {

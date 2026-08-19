@@ -73,12 +73,15 @@ function DropdownMenuCheckboxItem({
 			)}
 			{...props}
 		>
-			<span className="flex size-4 shrink-0 items-center justify-center">
+			{children}
+			<span className="ml-auto flex size-4 shrink-0 items-center justify-center">
 				<DropdownMenuPrimitive.ItemIndicator>
-					<CheckIcon className="size-3.5" />
+					<CheckIcon
+						className="size-3.5 text-[var(--color-icon-brand)]"
+						strokeWidth={2.6}
+					/>
 				</DropdownMenuPrimitive.ItemIndicator>
 			</span>
-			{children}
 		</DropdownMenuPrimitive.CheckboxItem>
 	);
 }
