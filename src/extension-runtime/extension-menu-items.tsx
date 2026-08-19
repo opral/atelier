@@ -65,9 +65,12 @@ export function ExtensionDropdownMenuItems({
 					data-extension-menu-key={item.key}
 				>
 					{Icon ? (
-						<Icon aria-hidden={true} className="size-4 shrink-0" />
+						<Icon
+							aria-hidden={true}
+							className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+						/>
 					) : (
-						<span aria-hidden="true" className="size-4 shrink-0" />
+						<span aria-hidden="true" className="size-3.25 shrink-0" />
 					)}
 					<span>{item.label}</span>
 				</DropdownMenuCheckboxItem>
@@ -82,9 +85,12 @@ export function ExtensionDropdownMenuItems({
 				data-extension-menu-key={item.key}
 			>
 				{item.icon ? (
-					<item.icon aria-hidden={true} className="size-4 shrink-0" />
+					<item.icon
+						aria-hidden={true}
+						className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+					/>
 				) : (
-					<span aria-hidden="true" className="size-4 shrink-0" />
+					<span aria-hidden="true" className="size-3.25 shrink-0" />
 				)}
 				<span>{item.label}</span>
 			</DropdownMenuItem>
@@ -119,9 +125,12 @@ export function ExtensionContextMenuItems({
 					data-extension-menu-key={item.key}
 				>
 					{Icon ? (
-						<Icon aria-hidden={true} className="size-4 shrink-0" />
+						<Icon
+							aria-hidden={true}
+							className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+						/>
 					) : (
-						<span aria-hidden="true" className="size-4 shrink-0" />
+						<span aria-hidden="true" className="size-3.25 shrink-0" />
 					)}
 					<span>{item.label}</span>
 				</ContextMenuCheckboxItem>
@@ -136,9 +145,12 @@ export function ExtensionContextMenuItems({
 				data-extension-menu-key={item.key}
 			>
 				{item.icon ? (
-					<item.icon aria-hidden={true} className="size-4 shrink-0" />
+					<item.icon
+						aria-hidden={true}
+						className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+					/>
 				) : (
-					<span aria-hidden="true" className="size-4 shrink-0" />
+					<span aria-hidden="true" className="size-3.25 shrink-0" />
 				)}
 				<span>{item.label}</span>
 			</ContextMenuItem>
