@@ -81,8 +81,8 @@ Queries written as `FROM lix_file_history` now fail during planning with:
 table 'datafusion.public.lix_file_history' not found
 ```
 
-The new form is `lix_file_history()` for active-head history or
-`lix_file_history($commit_id)` for an as-of snapshot. Atelier had to migrate
+The new form is `lix_history('lix_file')` for active-head history or
+`lix_history('lix_file', $commit_id)` for an as-of snapshot. Atelier had to migrate
 every history consumer and add a Kysely adapter for the table-valued function.
 Queries that previously batched multiple `lixcol_as_of_commit_id` values now
 need one table-function invocation per commit and a `UNION ALL` or multiple

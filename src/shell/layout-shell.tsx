@@ -2416,7 +2416,7 @@ function LayoutShellLoadedContent({
 			readonly createdAt: string;
 		}) => {
 			const result = await lix.execute(
-				"SELECT id, path FROM lix_file_history() WHERE lixcol_observed_commit_id = $1 ORDER BY path",
+				"SELECT id, path FROM lix_history('lix_file') WHERE lixcol_observed_commit_id = $1 ORDER BY path",
 				[commitId],
 			);
 			const files = result.rows.map((row) => ({

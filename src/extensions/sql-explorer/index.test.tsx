@@ -136,14 +136,10 @@ describe("parseJsonValue and refineJsonColumns", () => {
 
 describe("groupBaseTables", () => {
 	test("lists each table exactly once with its variant surfaces", () => {
-		const bases = groupBaseTables([
-			"lix_file",
-			"lix_file_by_branch",
-			"lix_file_history",
-			"lix_change",
-			"lix_file_working_change",
-			"lix_file_working_change_by_branch",
-		]);
+		const bases = groupBaseTables(
+			["lix_file", "lix_change", "lix_file_working_change"],
+			["lix_file"],
+		);
 		expect(bases.map((base) => base.name)).toEqual([
 			"lix_change",
 			"lix_file",
@@ -151,8 +147,7 @@ describe("groupBaseTables", () => {
 		]);
 		expect(bases.find((base) => base.name === "lix_file")?.surfaces).toEqual([
 			"current",
-			"_by_branch",
-			"_history",
+			"history",
 		]);
 		expect(bases.find((base) => base.name === "lix_change")?.surfaces).toEqual([
 			"current",
@@ -161,10 +156,9 @@ describe("groupBaseTables", () => {
 
 	test("surfaceTableName maps surfaces to table names", () => {
 		expect(surfaceTableName("lix_file", "current")).toBe("lix_file");
-		expect(surfaceTableName("lix_file", "_by_branch")).toBe(
-			"lix_file_by_branch",
+		expect(surfaceTableName("lix_file", "history")).toBe(
+			"lix_history('lix_file')",
 		);
-		expect(surfaceTableName("lix_file", "_history")).toBe("lix_file_history");
 	});
 });
 

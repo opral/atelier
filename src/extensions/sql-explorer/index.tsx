@@ -174,13 +174,14 @@ type Schema = {
 /** Groups variant surfaces under their base so each table lists once. */
 export function groupBaseTables(
 	tableNames: readonly string[],
+	historyRelations: readonly string[] = [],
 ): SchemaBaseTable[] {
 	const names = new Set(tableNames);
+	const history = new Set(historyRelations);
 	const bases: SchemaBaseTable[] = [];
 	for (const name of [...names].sort()) {
-		if (/_by_branch$|_history$/.test(name)) continue;
-		const surfaces = TABLE_SURFACES.filter((surface) =>
-			names.has(surfaceTableName(name, surface)),
+		const surfaces = TABLE_SURFACES.filter(
+			(surface) => surface === "current" || history.has(name),
 		);
 		bases.push({ name, surfaces });
 	}
@@ -188,9 +189,14 @@ export function groupBaseTables(
 }
 
 async function loadSchema(lix: Lix): Promise<Schema> {
-	const result = await lix.execute(
-		"SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position",
-	);
+	const [result, historyResult] = await Promise.all([
+		lix.execute(
+			"SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position",
+		),
+		lix.execute(
+			"SELECT source_relation AS table_name, result_column AS column_name, data_type FROM information_schema.table_functions WHERE function_schema = 'public' AND function_name = 'lix_history' ORDER BY source_relation, ordinal_position",
+		),
+	]);
 	const tables = new Map<string, SchemaColumn[]>();
 	for (const row of result.rows) {
 		const record = row.toObject();
@@ -202,7 +208,26 @@ async function loadSchema(lix: Lix): Promise<Schema> {
 		});
 		tables.set(tableName, columns);
 	}
-	return { tables, baseTables: groupBaseTables([...tables.keys()]) };
+	const historyRelations = new Set<string>();
+	for (const row of historyResult.rows) {
+		const record = row.toObject();
+		const tableName = String(record.table_name);
+		historyRelations.add(tableName);
+		const surfaceName = surfaceTableName(tableName, "history");
+		const columns = tables.get(surfaceName) ?? [];
+		columns.push({
+			name: String(record.column_name),
+			type: friendlyDataType(String(record.data_type)),
+		});
+		tables.set(surfaceName, columns);
+	}
+	const currentTables = [...tables.keys()].filter(
+		(name) => !name.startsWith("lix_history("),
+	);
+	return {
+		tables,
+		baseTables: groupBaseTables(currentTables, [...historyRelations]),
+	};
 }
 
 export function SqlExplorerView({
