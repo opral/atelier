@@ -4,7 +4,7 @@ import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider, useQuery } from "@/lib/lix-react";
 import { selectFileHistory } from "@/lib/lix-file-history";
 import {
-	selectCheckpointsWithFileCounts,
+	selectCheckpoints,
 	selectWorkingChangeCount,
 	type CheckpointRow,
 } from "@/queries";
@@ -134,7 +134,7 @@ function WorkingChangeFileList({
 }
 
 function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
-	const checkpoints = useQuery((lix) => selectCheckpointsWithFileCounts(lix));
+	const checkpoints = useQuery((lix) => selectCheckpoints(lix));
 
 	return (
 		<ol aria-label="Checkpoints" className="space-y-0">
@@ -144,7 +144,6 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 					atelier={atelier}
 					checkpoint={checkpoint}
 					previousCommitId={checkpoints[index + 1]?.commit_id}
-					fileCount={checkpoint.file_count}
 					index={index}
 					count={checkpoints.length}
 				/>
@@ -157,14 +156,12 @@ function CheckpointItem({
 	atelier,
 	checkpoint,
 	previousCommitId,
-	fileCount,
 	index,
 	count,
 }: {
 	readonly atelier: ExtensionRuntime;
 	readonly checkpoint: CheckpointRow;
 	readonly previousCommitId: string | undefined;
-	readonly fileCount: number;
 	readonly index: number;
 	readonly count: number;
 }) {
@@ -189,7 +186,7 @@ function CheckpointItem({
 		>
 			<button
 				type="button"
-				disabled={!viewCheckpoint || !previousCommitId || fileCount === 0}
+				disabled={!viewCheckpoint || !previousCommitId}
 				onClick={() =>
 					previousCommitId
 						? void viewCheckpoint?.({
@@ -224,10 +221,6 @@ function CheckpointItem({
 						>
 							{formatCheckpointRelativeTime(checkpoint.created_at)}
 						</time>
-						<span aria-hidden="true"> · </span>
-						<span>
-							{fileCount} {fileCount === 1 ? "file" : "files"}
-						</span>
 					</span>
 				</span>
 			</button>
@@ -318,7 +311,7 @@ function CheckpointFileList({
 }) {
 	const files = useQuery(
 		(lix) =>
-			selectFileHistory(lix)
+			selectFileHistory(lix, commitId)
 				.select(["id", "path"])
 				.where("lixcol_observed_commit_id", "=", commitId)
 				.orderBy("path", "asc")

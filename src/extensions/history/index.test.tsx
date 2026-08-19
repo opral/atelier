@@ -120,6 +120,16 @@ describe("HistoryView", () => {
 			],
 		);
 		const checkpoint = await lix.createCheckpoint();
+		const originalExecute = lix.execute.bind(lix);
+		let coldHistoryReads = 0;
+		vi.spyOn(lix, "execute").mockImplementation(
+			async (...args: Parameters<typeof lix.execute>) => {
+				if (String(args[0]).toLowerCase().includes("lix_file_history")) {
+					coldHistoryReads += 1;
+				}
+				return originalExecute(...args);
+			},
+		);
 		const viewCheckpoint = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -148,8 +158,8 @@ describe("HistoryView", () => {
 		expect(
 			within(checkpointList).getByText("Initial checkpoint"),
 		).toBeVisible();
-		expect(within(checkpointItems[0]!).getByText("2 files")).toBeVisible();
-		expect(within(checkpointItems[1]!).getByText("0 files")).toBeVisible();
+		expect(within(checkpointItems[0]!).getByText(/ago|now/)).toBeVisible();
+		expect(coldHistoryReads).toBe(0);
 		// Nothing is viewed yet, so no row is current and no file list shows.
 		expect(checkpointItems[0]).not.toHaveAttribute("aria-current");
 		expect(
