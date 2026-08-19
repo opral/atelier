@@ -98,6 +98,68 @@ describe("CheckpointStatusBar", () => {
 		await lix.close();
 	});
 
+	test("keeps the working-changes pill clickable in read-only workspaces", async () => {
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
+			["checkpoint-status-readonly", "working"],
+		);
+		const openWorkingChanges = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CheckpointStatusBar
+							readOnly
+							onOpenWorkingChanges={openWorkingChanges}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const historyButton = await screen.findByRole("button", {
+			name: "1 change since checkpoint. Open changes review",
+		});
+		fireEvent.click(historyButton);
+		expect(openWorkingChanges).toHaveBeenCalledOnce();
+		expect(
+			screen.queryByRole("switch", { name: "Auto-accept agent changes" }),
+		).toBeNull();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("does not render a dead working-changes button without an activate handler", async () => {
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
+			["checkpoint-status-readonly-plain", "working"],
+		);
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CheckpointStatusBar readOnly />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		expect(await screen.findByText("1 change since checkpoint")).toBeVisible();
+		expect(
+			screen.queryByRole("button", {
+				name: "1 change since checkpoint. Open changes review",
+			}),
+		).toBeNull();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("keeps checkpoint creation out of read-only workspaces", async () => {
 		const lix = await openLix();
 		let view: ReturnType<typeof render> | undefined;

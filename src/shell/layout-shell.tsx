@@ -3275,7 +3275,17 @@ function LayoutShellLoadedContent({
 		},
 		[centralBehavior, emitEvent, extensionMap, handleAddView, setPanelState],
 	);
+	const revealHistory = useCallback(() => {
+		handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
+			panel: "left",
+		});
+	}, [handleOpenExtensionView]);
 	const handleOpenWorkingChangesReview = useCallback(() => {
+		// Read-only / anonymous must never look like a clickable no-op. History
+		// is always reachable even when the review query finds no files.
+		if (isHostReadOnly) {
+			revealHistory();
+		}
 		void (async () => {
 			const currentWorkingChanges =
 				await selectReviewableFileWorkingChanges(lix);
@@ -3353,7 +3363,10 @@ function LayoutShellLoadedContent({
 					};
 				}
 			}
-			if (!firstChangedFile) return;
+			if (!firstChangedFile) {
+				if (!isHostReadOnly) revealHistory();
+				return;
+			}
 			if (historicalReview) {
 				// Working changes and a historical checkpoint are two targets of
 				// the same diff mode. Returning to "now" must first release the
@@ -3382,6 +3395,7 @@ function LayoutShellLoadedContent({
 				}
 			}
 		})().catch((error: unknown) => {
+			if (!isHostReadOnly) revealHistory();
 			console.warn("[checkpoint] failed to open working changes review", error);
 		});
 	}, [
@@ -3390,10 +3404,12 @@ function LayoutShellLoadedContent({
 		exitDiffReview,
 		extensionMap,
 		historicalReview,
+		isHostReadOnly,
 		lix,
 		openAutoRevealedFile,
 		openWorkingChangeFileAtRange,
 		privateResolvedReviewIds,
+		revealHistory,
 	]);
 
 	const atelierDocumentsActionsRef =
@@ -3932,7 +3948,7 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</Group>
 				</main>
-				{isReviewMode && !isHostReadOnly ? (
+				{isReviewMode ? (
 					<ExternalWriteReviewControls
 						isActive
 						mode={
@@ -3945,11 +3961,11 @@ function LayoutShellLoadedContent({
 						navigation={reviewNavigation}
 						files={pendingReviewFiles}
 						onUndo={
-							historicalReview
+							isHostReadOnly || historicalReview
 								? undefined
 								: (selectedFileIds) => void handleUndoReviews(selectedFileIds)
 						}
-						onPrimary={handleDiffPrimary}
+						onPrimary={isHostReadOnly ? undefined : handleDiffPrimary}
 						onExit={exitDiffReview}
 					/>
 				) : null}
