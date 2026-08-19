@@ -5,6 +5,8 @@ import type {
 	ResolveExternalWriteReviewArgs,
 } from "./external-write-review";
 import type {
+	AtelierExtensionMenuItems,
+	AtelierExtensionPreferences,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierFilesViewOptions,
@@ -71,6 +73,8 @@ export interface ExtensionDefinition {
 	readonly placement?: readonly PanelSide[];
 	/** Excludes the view from add-view menus (still mountable programmatically). */
 	readonly hidden?: boolean;
+	/** Dynamic menu items rendered by Atelier on every view surface. */
+	readonly menuItems?: AtelierExtensionMenuItems;
 	readonly mount: (args: {
 		atelier: ExtensionRuntime;
 		view: ExtensionView;
@@ -141,11 +145,15 @@ export interface ExtensionView {
 	readonly panel: PanelSide;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
+	readonly preferences: AtelierExtensionPreferences;
 	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;
 }
 
 export interface ExtensionHostContext {
 	readonly atelier: ExtensionRuntime;
+	readonly preferencesFor: (
+		extensionId: ExtensionKind,
+	) => AtelierExtensionPreferences;
 	readonly registerNewFileDraftHandler: (registration: {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;

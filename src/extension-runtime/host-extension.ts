@@ -17,6 +17,7 @@ export function hostExtensionDefinition(
 		multiInstance: registration.manifest.multiInstance,
 		placement: registration.manifest.placement,
 		hidden: registration.manifest.hidden,
+		menuItems: registration.entry.menuItems,
 		mount: registration.entry.mount as ExtensionDefinition["mount"],
 	};
 }

@@ -128,7 +128,9 @@ import { hostExtensionDefinition } from "../extension-runtime/host-extension";
 import type {
 	AtelierDocumentOpenOptions,
 	AtelierEvent,
+	AtelierExtensionPreferences,
 	AtelierExtensionRegistration,
+	AtelierJsonValue,
 	AtelierViewOpenOptions,
 } from "../extension-api";
 import {
@@ -559,6 +561,12 @@ type LayoutShellLoadedContentProps = LayoutShellContentProps & {
 	readonly resolvedReviewIds: readonly string[];
 	readonly autoAcceptAgentChanges: boolean;
 	readonly onAutoAcceptAgentChangesChange: (enabled: boolean) => void;
+	readonly extensionPreferences: AtelierUserPreferencesV1["extensions"];
+	readonly onExtensionPreferenceChange: (
+		extensionId: string,
+		key: string,
+		value: AtelierJsonValue | undefined,
+	) => void;
 	readonly autoRevealedAgentTurnRangeKeysRef: RefObject<Set<string>>;
 };
 
@@ -839,14 +847,16 @@ function LayoutShellStateLoader(
 			configuration.sessionStateStore.setSnapshot(
 				coerceAtelierSessionUiState(next),
 			);
+			const currentPreferences = preferencesRef.current;
 			const nextPreferences = coerceAtelierUserPreferences({
-				...next,
-				review: preferences.review,
+				...currentPreferences,
+				layout: next.layout,
 			});
 			if (
 				JSON.stringify(nextPreferences.layout) !==
-				JSON.stringify(preferences.layout)
+				JSON.stringify(currentPreferences.layout)
 			) {
+				preferencesRef.current = nextPreferences;
 				setPreferences(nextPreferences);
 				void configuration.preferencesStore
 					.save(nextPreferences)
@@ -855,12 +865,7 @@ function LayoutShellStateLoader(
 					});
 			}
 		},
-		[
-			configuration.preferencesStore,
-			configuration.sessionStateStore,
-			preferences.layout,
-			preferences.review,
-		],
+		[configuration.preferencesStore, configuration.sessionStateStore],
 	);
 	const setAutoAcceptAgentChanges = useCallback(
 		(enabled: boolean) => {
@@ -874,6 +879,36 @@ function LayoutShellStateLoader(
 				.save(nextPreferences)
 				.catch((error: unknown) => {
 					console.error("Failed to save private Atelier preferences", error);
+				});
+		},
+		[configuration.preferencesStore],
+	);
+	const setExtensionPreference = useCallback(
+		(extensionId: string, key: string, value: AtelierJsonValue | undefined) => {
+			if (!extensionId || !key) return;
+			const current = preferencesRef.current;
+			const namespace = { ...(current.extensions?.[extensionId] ?? {}) };
+			if (value === undefined) {
+				delete namespace[key];
+			} else {
+				namespace[key] = value;
+			}
+			const extensions = { ...(current.extensions ?? {}) };
+			if (Object.keys(namespace).length === 0) {
+				delete extensions[extensionId];
+			} else {
+				extensions[extensionId] = namespace;
+			}
+			const nextPreferences = coerceAtelierUserPreferences({
+				...current,
+				extensions,
+			});
+			preferencesRef.current = nextPreferences;
+			setPreferences(nextPreferences);
+			void configuration.preferencesStore
+				.save(nextPreferences)
+				.catch((error: unknown) => {
+					console.error("Failed to save extension preferences", error);
 				});
 		},
 		[configuration.preferencesStore],
@@ -898,6 +933,8 @@ function LayoutShellStateLoader(
 				preferences.review?.autoAcceptAgentChanges ?? false
 			}
 			onAutoAcceptAgentChangesChange={setAutoAcceptAgentChanges}
+			extensionPreferences={preferences.extensions}
+			onExtensionPreferenceChange={setExtensionPreference}
 			autoRevealedAgentTurnRangeKeysRef={autoRevealedAgentTurnRangeKeysRef}
 		/>
 	);
@@ -1039,6 +1076,8 @@ function LayoutShellLoadedContent({
 	resolvedReviewIds,
 	autoAcceptAgentChanges,
 	onAutoAcceptAgentChangesChange,
+	extensionPreferences,
+	onExtensionPreferenceChange,
 	autoRevealedAgentTurnRangeKeysRef,
 	slots,
 	topBarProps,
@@ -1056,6 +1095,14 @@ function LayoutShellLoadedContent({
 		qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
+	const preferencesFor = useCallback(
+		(extensionId: string): AtelierExtensionPreferences => ({
+			get: (key) => extensionPreferences?.[extensionId]?.[key],
+			set: (key, value) => onExtensionPreferenceChange(extensionId, key, value),
+			delete: (key) => onExtensionPreferenceChange(extensionId, key, undefined),
+		}),
+		[extensionPreferences, onExtensionPreferenceChange],
+	);
 	const isHostReadOnly = Boolean(configuration.readOnly);
 	const reviewRangeSessionId = configuration.reviewRangeSessionId;
 	const { rangeValues: agentTurnRangeValues, ranges: agentTurnRanges } =
@@ -3615,6 +3662,7 @@ function LayoutShellLoadedContent({
 				onSelectView={handleSelectCentralView}
 				onRemoveView={(instance) => handleRemoveView("central", instance)}
 				onAddView={addViewOnCentral}
+				preferencesFor={preferencesFor}
 			/>
 		);
 	}, [
@@ -3626,6 +3674,7 @@ function LayoutShellLoadedContent({
 		handleRemoveView,
 		handleSelectCentralView,
 		renderHostTabStrip,
+		preferencesFor,
 		visibleExtensions,
 	]);
 
@@ -3717,9 +3766,10 @@ function LayoutShellLoadedContent({
 	const extensionHostContext = useMemo(
 		() => ({
 			atelier: extensionRuntime,
+			preferencesFor,
 			registerNewFileDraftHandler,
 		}),
-		[extensionRuntime, registerNewFileDraftHandler],
+		[extensionRuntime, preferencesFor, registerNewFileDraftHandler],
 	);
 
 	const toggleLeftSidebar = useCallback(() => {

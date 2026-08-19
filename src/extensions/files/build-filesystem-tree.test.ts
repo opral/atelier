@@ -69,7 +69,7 @@ describe("buildFilesystemTree", () => {
 	});
 
 	test("omits paths with dot-prefixed segments", () => {
-		const tree = buildFilesystemTree([
+		const entries: FilesystemEntryRow[] = [
 			{
 				id: "file_visible",
 				parent_id: null,
@@ -126,11 +126,24 @@ describe("buildFilesystemTree", () => {
 				display_name: "outline.md",
 				kind: "file",
 			},
-		]);
+		];
+		const tree = buildFilesystemTree(entries);
 
 		expect(collectPaths(tree)).toEqual([
 			"/docs/",
 			"/docs/visible.md",
+			"/visible.md",
+		]);
+		expect(
+			collectPaths(buildFilesystemTree(entries, { showHiddenFiles: true })),
+		).toEqual([
+			"/.lix/",
+			"/.lix/config.json",
+			"/docs/",
+			"/docs/.drafts/",
+			"/docs/.drafts/outline.md",
+			"/docs/visible.md",
+			"/.hidden.md",
 			"/visible.md",
 		]);
 	});
