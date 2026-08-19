@@ -88,6 +88,25 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("renders a file inserted after the tree starts observing", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix);
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		await act(async () => {
+			await insertReadme(lix);
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toBeVisible();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("renders the same hierarchical file tree in the central panel", async () => {
 		const lix = await openLix();
 		await qb(lix)

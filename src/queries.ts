@@ -49,6 +49,14 @@ export type CheckpointWithFileCountRow = CheckpointRow & {
  * the client.
  */
 export function selectFilesystemEntries(lix: Lix) {
+	return selectFilesystemDirectories(lix)
+		.unionAll(selectFilesystemFiles(lix))
+		.orderBy("path", "asc")
+		.$castTo<FilesystemEntryRow>();
+}
+
+/** Directory half of the filesystem listing, kept observable without a UNION. */
+export function selectFilesystemDirectories(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_directory")
 		.select((eb) => [
@@ -62,19 +70,21 @@ export function selectFilesystemEntries(lix: Lix) {
 			sql<string>`'directory'`.as("kind"),
 			sql<string>`'lix'`.as("source"),
 		])
-		.unionAll(
-			qb(lix)
-				.selectFrom("lix_file")
-				.select((eb) => [
-					eb.ref("lix_file.id").as("id"),
-					eb.ref("lix_file.directory_id").as("parent_id"),
-					eb.ref("lix_file.path").as("path"),
-					eb.ref("lix_file.name").as("display_name"),
-					sql<string>`'file'`.as("kind"),
-					sql<string>`'lix'`.as("source"),
-				]),
-		)
-		.orderBy("path", "asc")
+		.$castTo<FilesystemEntryRow>();
+}
+
+/** File half of the filesystem listing, kept observable without a UNION. */
+export function selectFilesystemFiles(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_file")
+		.select((eb) => [
+			eb.ref("lix_file.id").as("id"),
+			eb.ref("lix_file.directory_id").as("parent_id"),
+			eb.ref("lix_file.path").as("path"),
+			eb.ref("lix_file.name").as("display_name"),
+			sql<string>`'file'`.as("kind"),
+			sql<string>`'lix'`.as("source"),
+		])
 		.$castTo<FilesystemEntryRow>();
 }
 

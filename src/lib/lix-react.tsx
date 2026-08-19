@@ -78,8 +78,6 @@ interface UseQueryOptions {
 	subscribe?: boolean;
 	enabled?: boolean;
 	evictOnUnmount?: boolean;
-	/** Treat observer events as invalidations and re-run the query. */
-	reuseObservedResult?: boolean;
 }
 
 interface QueryLike<TRow> {
@@ -108,18 +106,12 @@ export function useQuery<TRow>(
 	options: UseQueryOptions = {},
 ): TRow[] {
 	const lix = useLix();
-	const {
-		subscribe = true,
-		enabled = true,
-		evictOnUnmount = false,
-		reuseObservedResult = true,
-	} = options;
+	const { subscribe = true, enabled = true, evictOnUnmount = false } = options;
 	const builder = enabled ? query(lix) : undefined;
 	const compiled = builder?.compile();
 	const cacheKey =
 		enabled && compiled
 			? `${getLixInstanceId(lix)}:${subscribe ? "sub" : "once"}:` +
-				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
 				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
 			: "disabled";
 	const observeQuery =
@@ -194,12 +186,8 @@ export function useQuery<TRow>(
 					) {
 						continue;
 					}
-					const nextRows = reuseObservedResult
-						? queryResultToRows<TRow>(event.result)
-						: await entry.execute();
-					if (closed) break;
 					entry.latestMutationSequence = event.mutationSequence;
-					setQueryRows(entry, nextRows);
+					setQueryRows(entry, queryResultToRows<TRow>(event.result));
 				}
 			} catch (error) {
 				if (closed) return;
@@ -214,7 +202,7 @@ export function useQuery<TRow>(
 			}
 			events.close();
 		};
-	}, [enabled, entry, subscribe, lix, observeQuery, reuseObservedResult]);
+	}, [enabled, entry, subscribe, lix, observeQuery]);
 
 	useEffect(() => {
 		// A non-subscribed query is a snapshot for the current mounted

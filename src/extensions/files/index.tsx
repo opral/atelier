@@ -27,7 +27,8 @@ import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
 	selectFileWorkingChanges,
-	selectFilesystemEntries,
+	selectFilesystemDirectories,
+	selectFilesystemFiles,
 	selectWorkingChanges,
 } from "@/queries";
 import {
@@ -139,9 +140,15 @@ const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
  */
 export function FilesView({ context }: FilesViewProps) {
 	const lix = useLix();
-	const entries = useQuery<FilesystemEntryRow>(
-		(queryLix) => selectFilesystemEntries(queryLix),
-		{ reuseObservedResult: false },
+	const directories = useQuery<FilesystemEntryRow>((queryLix) =>
+		selectFilesystemDirectories(queryLix),
+	);
+	const files = useQuery<FilesystemEntryRow>((queryLix) =>
+		selectFilesystemFiles(queryLix),
+	);
+	const entries = useMemo(
+		() => [...directories, ...files],
+		[directories, files],
 	);
 	return (
 		<FilesViewWithWorkingChanges
