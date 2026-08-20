@@ -7,6 +7,8 @@ import { fakeUuid } from "@/test-utils/fake-uuid";
 import { MarkdownView } from "./index";
 import { qb } from "@/lib/lix-kysely";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
+import { HistoryView } from "@/extensions/history";
+import type { ExtensionRuntime } from "@/extension-runtime/types";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -69,6 +71,86 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils?.unmount();
 		});
+	});
+
+	test("shares one live file delivery with TipTap while History is open", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_history_startup_delivery");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/history-startup.md",
+				content: new TextEncoder().encode("# Initial delivery"),
+			})
+			.execute();
+		const execute = vi.spyOn(lix, "execute");
+		const observe = vi.spyOn(lix, "observe");
+		const isLiveDeliveryStatement = (statement: unknown) => {
+			const sql = String(statement);
+			return (
+				/\bfrom\s+"?lix_file"?\s+as\s+"?file"?/i.test(sql) &&
+				/\bleft\s+join\s+"?lix_change"?\s+as\s+"?change"?/i.test(sql) &&
+				/\bfile\.?"?content"?/i.test(sql)
+			);
+		};
+		const liveDeliveryReads = () =>
+			execute.mock.calls.filter(([statement]) =>
+				isLiveDeliveryStatement(statement),
+			).length;
+		const liveDeliveryObservers = () =>
+			observe.mock.calls.filter(([statement]) =>
+				isLiveDeliveryStatement(statement),
+			).length;
+		const atelier = {
+			reviews: {
+				active: false,
+				workingChangeFiles: [],
+			},
+			icons: { fileUrl: () => "" },
+		} as unknown as ExtensionRuntime;
+
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<div>
+							<HistoryView atelier={atelier} />
+							<MarkdownView fileId={fileId} filePath="/history-startup.md" />
+						</div>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		expect(
+			await screen.findByRole("region", { name: "Checkpoint history" }),
+		).toBeVisible();
+		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
+			"Initial delivery",
+		);
+		// One subscribed query owns the row. It executes once for Suspense and
+		// once when the SDK's initial observer snapshot is verified against a
+		// direct read; the previous split owners executed this delivery three times.
+		await waitFor(() => expect(liveDeliveryReads()).toBe(2));
+		expect(liveDeliveryObservers()).toBe(1);
+
+		await lix.execute(
+			"UPDATE lix_file SET content = $1 WHERE id = $2",
+			[new TextEncoder().encode("# Later delivery"), fileId],
+			{ originKey: "external-history-startup-test" },
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+				"Later delivery",
+			),
+		);
+		expect(liveDeliveryReads()).toBe(2);
+		expect(liveDeliveryObservers()).toBe(1);
+
+		await act(async () => utils?.unmount());
+		await lix.close();
 	});
 
 	test("keeps the formatting toolbar visible but disabled in host read-only mode", async () => {

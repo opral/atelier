@@ -58,12 +58,36 @@ type TipTapEditorProps = {
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
 };
 
-type MarkdownFileDelivery = {
+export type MarkdownFileDelivery = {
+	readonly id: string;
 	readonly content: unknown;
 	readonly path: string;
 	readonly change_id: string | null;
 	readonly origin_key: unknown;
 };
+
+export function selectMarkdownFileDelivery(
+	lix: Parameters<typeof qb>[0],
+	activeBranchId: string,
+	fileId: string,
+) {
+	return qb(lix)
+		.selectFrom("lix_file as file")
+		.leftJoin("lix_change as change", (join) =>
+			join
+				.onRef("change.id", "=", "file.lixcol_change_id")
+				.onRef("change.file_id", "=", "file.id"),
+		)
+		.select([
+			"file.id as id",
+			"file.content as content",
+			"file.path as path",
+			"file.lixcol_change_id as change_id",
+			"change.origin_key as origin_key",
+		])
+		.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
+		.where("file.id", "=", fileId);
+}
 
 type MarkdownExternalSyncState = {
 	readonly editor: Editor;
@@ -194,22 +218,7 @@ function TipTapEditorFileContent({
 	readonly activeFileId: string;
 }) {
 	const sourceFile = useQueryTakeFirst<MarkdownFileDelivery>(
-		(lix) =>
-			qb(lix)
-				.selectFrom("lix_file as file")
-				.leftJoin("lix_change as change", (join) =>
-					join
-						.onRef("change.id", "=", "file.lixcol_change_id")
-						.onRef("change.file_id", "=", "file.id"),
-				)
-				.select([
-					"file.content as content",
-					"file.path as path",
-					"file.lixcol_change_id as change_id",
-					"change.origin_key as origin_key",
-				])
-				.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
-				.where("file.id", "=", activeFileId),
+		(lix) => selectMarkdownFileDelivery(lix, activeBranchId, activeFileId),
 		{ evictOnUnmount: true },
 	);
 

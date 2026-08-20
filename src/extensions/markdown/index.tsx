@@ -8,7 +8,6 @@ import {
 	useQueryTakeFirst,
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
-import { qb } from "@/lib/lix-kysely";
 import {
 	type HistoricalFileSnapshot,
 	useFileSnapshotsAtCommits,
@@ -20,7 +19,9 @@ import {
 } from "@/extensions/markdown/editor/editor-context";
 import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
+	selectMarkdownFileDelivery,
 	TipTapEditor,
+	type MarkdownFileDelivery,
 } from "@/extensions/markdown/editor/tip-tap-editor";
 import { EditorContent } from "@tiptap/react";
 import { createEditor } from "@/extensions/markdown/editor/create-editor";
@@ -195,14 +196,13 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		editorRevision.beforeCommitId !== null &&
 		editorRevision.afterCommitId === null;
 
-	const fileRow = useQueryTakeFirst<MarkdownFileRow>(
+	const ownsLiveFileDelivery = editorRevisionMode(editorRevision) === "editor";
+	const fileRow = useQueryTakeFirst<MarkdownFileDelivery>(
 		(lix) =>
-			qb(lix)
-				.selectFrom("lix_file")
-				.select(["id", "path", "content"])
-				.where("id", "=", fileId)
-				.limit(1),
-		{ subscribe: comparesAgainstCurrentFile },
+			selectMarkdownFileDelivery(lix, props.activeBranchId ?? "", fileId),
+		{
+			subscribe: ownsLiveFileDelivery || comparesAgainstCurrentFile,
+		},
 	);
 
 	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
