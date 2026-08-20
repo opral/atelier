@@ -65,14 +65,6 @@ type MarkdownFileDelivery = {
 	readonly origin_key: unknown;
 };
 
-type MarkdownFileRow = Omit<MarkdownFileDelivery, "origin_key">;
-
-type ResolvedMarkdownFile = {
-	readonly fileId: string;
-	readonly changeId: string | null;
-	readonly delivery: MarkdownFileDelivery;
-};
-
 type MarkdownExternalSyncState = {
 	readonly editor: Editor;
 	readonly initialObservedMarkdown: string;
@@ -201,23 +193,25 @@ function TipTapEditorFileContent({
 	readonly activeBranchId: string;
 	readonly activeFileId: string;
 }) {
-	const sourceFile = useQueryTakeFirst<MarkdownFileRow>(
+	const sourceFile = useQueryTakeFirst<MarkdownFileDelivery>(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file as file")
+				.leftJoin("lix_change as change", (join) =>
+					join
+						.onRef("change.id", "=", "file.lixcol_change_id")
+						.onRef("change.file_id", "=", "file.id"),
+				)
 				.select([
 					"file.content as content",
 					"file.path as path",
 					"file.lixcol_change_id as change_id",
+					"change.origin_key as origin_key",
 				])
 				.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
 				.where("file.id", "=", activeFileId),
 		{ evictOnUnmount: true },
 	);
-	const sourceFileWithOrigin = useMarkdownFileOrigin(sourceFile, activeFileId);
-	if (sourceFile && !sourceFileWithOrigin) {
-		return <TipTapEditorLoadingState className={props.className} />;
-	}
 
 	return (
 		<TipTapEditorSourceBoundary
@@ -225,104 +219,9 @@ function TipTapEditorFileContent({
 			{...props}
 			activeFileId={activeFileId}
 			activeBranchId={activeBranchId}
-			sourceFile={sourceFileWithOrigin}
+			sourceFile={sourceFile}
 		/>
 	);
-}
-
-/**
- * Resolves the immutable writer origin after the subscribed file row arrives.
- * The `id + file_id` lookup is point-addressable in Lix. A file-id/change-id
- * key prevents a late lookup from applying an older writer origin or a
- * previous file's delivery.
- */
-function useMarkdownFileOrigin(
-	sourceFile: MarkdownFileRow | undefined,
-	fileId: string,
-): MarkdownFileDelivery | undefined {
-	const lix = useLix();
-	const [resolvedSourceFile, setResolvedSourceFile] = useState<
-		ResolvedMarkdownFile | undefined
-	>();
-	const resolvedOriginRef = useRef<{
-		readonly fileId: string;
-		readonly changeId: string | null;
-		readonly originKey: unknown;
-	} | null>(null);
-	const [lookupError, setLookupError] = useState<{
-		readonly fileId: string;
-		readonly changeId: string | null;
-		readonly error: unknown;
-	} | null>(null);
-	const changeId = sourceFile?.change_id ?? null;
-
-	useEffect(() => {
-		let closed = false;
-		if (!sourceFile) return;
-		const cachedOrigin = resolvedOriginRef.current;
-		if (cachedOrigin?.fileId === fileId && cachedOrigin.changeId === changeId) {
-			setResolvedSourceFile({
-				fileId,
-				changeId,
-				delivery: { ...sourceFile, origin_key: cachedOrigin.originKey },
-			});
-			setLookupError(null);
-			return;
-		}
-		if (!changeId) {
-			resolvedOriginRef.current = { fileId, changeId: null, originKey: null };
-			setResolvedSourceFile({
-				fileId,
-				changeId: null,
-				delivery: { ...sourceFile, origin_key: null },
-			});
-			setLookupError(null);
-			return;
-		}
-		void (async () => {
-			try {
-				const change = await qb(lix)
-					.selectFrom("lix_change")
-					.select("origin_key")
-					.where("id", "=", changeId)
-					.where("file_id", "=", fileId)
-					.executeTakeFirst();
-				if (!closed) {
-					const resolvedOrigin = {
-						fileId,
-						changeId,
-						originKey: change?.origin_key ?? null,
-					};
-					resolvedOriginRef.current = resolvedOrigin;
-					setResolvedSourceFile({
-						fileId,
-						changeId,
-						delivery: {
-							...sourceFile,
-							origin_key: resolvedOrigin.originKey,
-						},
-					});
-					setLookupError(null);
-				}
-			} catch (error) {
-				if (!closed) setLookupError({ fileId, changeId, error });
-			}
-		})();
-		return () => {
-			closed = true;
-		};
-	}, [changeId, fileId, lix, sourceFile]);
-
-	if (lookupError?.fileId === fileId && lookupError.changeId === changeId) {
-		throw lookupError.error;
-	}
-	if (!resolvedSourceFile || resolvedSourceFile.fileId !== fileId) {
-		return undefined;
-	}
-	// Keep the last delivery for the same file mounted while a newer revision's
-	// origin resolves. Otherwise the editor remounts with that revision as its
-	// initial content, bypassing external-sync origin suppression.
-	return resolvedSourceFile.delivery;
 }
 
 function TipTapEditorSourceBoundary({

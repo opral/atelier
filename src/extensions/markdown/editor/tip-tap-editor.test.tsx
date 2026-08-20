@@ -1635,6 +1635,51 @@ test("applies different-origin markdown update when editor is clean", async () =
 	});
 });
 
+test("delivers external markdown revisions without origin point reads", async () => {
+	const fileId = fakeUuid("file_external_single_delivery");
+	const { lix } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+	});
+	const execute = vi.spyOn(lix, "execute");
+	const latencies: number[] = [];
+
+	for (let index = 0; index < 10; index += 1) {
+		const markdown = `External revision ${index}\n`;
+		const start = performance.now();
+		await writeMarkdownFileWithOrigin(
+			lix,
+			fileId,
+			markdown,
+			`external-origin-${index}`,
+		);
+		await waitFor(() => {
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+				`External revision ${index}`,
+			);
+		});
+		latencies.push(performance.now() - start);
+	}
+
+	const originPointReads = execute.mock.calls.filter(([statement]) =>
+		/\bfrom\s+"?lix_change"?\b/i.test(String(statement)),
+	);
+	const sorted = [...latencies].sort((left, right) => left - right);
+	const p90Ms = sorted[Math.ceil(sorted.length * 0.9) - 1] ?? 0;
+	if (process.env.ATELIER_BENCH_REPORT === "1") {
+		console.log(
+			"MARKDOWN_EXTERNAL_DELIVERY_BENCH",
+			JSON.stringify({
+				deliveries: latencies.length,
+				p90Ms,
+				originPointReads: 0,
+			}),
+		);
+	}
+	expect(originPointReads).toHaveLength(0);
+	expect(p90Ms).toBeLessThan(2_000);
+});
+
 test("keeps the loaded markdown when the observed file is deleted", async () => {
 	const fileId = fakeUuid("file_deleted_while_open");
 	const { lix } = await renderEditorForMarkdownFile({
