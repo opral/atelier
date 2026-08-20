@@ -1,4 +1,5 @@
 import type { JsonValue, Lix } from "@lix-js/sdk";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {
@@ -88,7 +89,7 @@ export function selectFilesystemFiles(lix: Lix) {
  */
 export function selectWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_diff")
+		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
 		.select([
 			"diff_id",
 			"row_pk",
@@ -105,7 +106,7 @@ export function selectWorkingChanges(lix: Lix) {
 
 export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_diff")
+		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
 		.select((eb) => eb.fn.countAll<number>().as("change_count"))
 		.$castTo<WorkingChangeCountRow>();
 }
@@ -113,14 +114,13 @@ export function selectWorkingChangeCount(lix: Lix) {
 /**
  * Net logical files changed between the latest checkpoint and active head.
  *
- * Derived from `lix_working_diff` instead of `lix_file_working_change`:
- * the engine's composed surface currently returns no rows unless the working
- * range also touches a directory descriptor (upstream bug in
- * filesystem_working_change.rs).
+ * Derived from the heterogeneous `lix_working_diff()` envelope. Files removed
+ * since the checkpoint are not reported; no consumer acts on removed files
+ * today.
  */
 export function selectFileWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_diff")
+		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
 		.innerJoin("lix_file", (join) =>
 			join.on(
 				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_working_diff.row_pk ->> 0 end)`,

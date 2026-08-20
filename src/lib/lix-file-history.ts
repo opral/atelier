@@ -9,7 +9,7 @@ import { qb, sql } from "@/lib/lix-kysely";
  */
 export function selectFileHistory(lix: Lix, asOfCommitId?: string) {
 	const table = asOfCommitId
-		? sql<any>`lix_file_history(${asOfCommitId})`
-		: sql<any>`lix_file_history()`;
-	return qb(lix).selectFrom(table.as("lix_file_history"));
+		? sql<any>`lix_history('lix_file', ${asOfCommitId})`
+		: sql<any>`lix_history('lix_file')`;
+	return qb(lix).selectFrom(table.as("file_history"));
 }

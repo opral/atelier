@@ -37,7 +37,7 @@ async function executeSelectedDiffs(
 }
 
 function workingDiffSelection(fileIds: readonly string[]) {
-	return `FROM lix_working_diff
+	return `FROM lix_working_diff()
 		WHERE ${fileIdPredicate(fileIds, 1)}`;
 }
 
