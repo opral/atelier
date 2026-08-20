@@ -1498,6 +1498,7 @@ function LayoutShellLoadedContent({
 	const collectPendingAgentTurnReviews = useCallback(async (): Promise<
 		readonly ExternalWriteReview[]
 	> => {
+		if (agentTurnRanges.length === 0) return [];
 		const changedFiles = await selectFileWorkingChanges(lix).execute();
 		const changedFileIds = new Set(changedFiles.map((file) => file.id));
 		const changedCurrentFiles = currentFileRows

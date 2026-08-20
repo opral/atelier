@@ -851,12 +851,18 @@ describe("agent turn review navigation", () => {
 			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
+			const execute = vi.spyOn(lix, "execute");
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			expect(
 				await screen.findByRole("button", {
 					name: "Latest checkpoint. Open checkpoint history",
 				}),
 			).toBeVisible();
+			expect(
+				execute.mock.calls.some(([statement]) =>
+					String(statement).includes("lix_working_diff"),
+				),
+			).toBe(false);
 			await waitFor(() => {
 				expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
 			});
