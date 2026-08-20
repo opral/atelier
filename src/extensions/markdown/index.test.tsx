@@ -714,7 +714,9 @@ describe("MarkdownView", () => {
 		const formattingToolbar = screen.getByRole("toolbar", {
 			name: "Formatting toolbar",
 		});
-		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		await waitFor(() => {
+			expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		});
 		expect(liveEditor.querySelector(".ProseMirror")).toHaveAttribute(
 			"contenteditable",
 			"true",
