@@ -97,10 +97,8 @@ describe("extension menu preferences", () => {
 				},
 				{
 					id: fakeUuid("hidden-file"),
-					path: "/.lix/permissions/policies.cedar",
-					content: new TextEncoder().encode(
-						"permit(principal, action, resource);",
-					),
+					path: "/.lix/config.json",
+					content: new TextEncoder().encode('{"hidden":true}'),
 				},
 			])
 			.execute();
