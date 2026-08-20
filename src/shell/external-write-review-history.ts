@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
 import { useLix, useQuery } from "@/lib/lix-react";
+import {
+	openLixBranchSession,
+	withLixBranchSession,
+} from "@/lib/lix-branch-session";
 import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb, sql } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
@@ -14,6 +18,7 @@ import {
 	agentTurnCommitRangesFromValues,
 	agentTurnReviewId,
 	agentTurnReviewRangeIds,
+	readAgentTurnCommitRangeValues,
 	readAgentTurnCommitRanges,
 	type AgentTurnCommitRange,
 } from "./agent-turn-review-range";
@@ -75,17 +80,23 @@ export async function getExternalWriteReview(
 		readonly resolvedReviewIds?: ReadonlySet<string>;
 	},
 ): Promise<ExternalWriteReview | null> {
-	const ranges = await readAgentTurnCommitRanges(lix, options?.branchId);
-	const review = await getAgentTurnExternalWriteReview(
-		lix,
-		fileId,
-		path,
-		ranges,
-		options?.resolvedReviewIds,
-	);
-	return review && !options?.resolvedReviewIds?.has(review.reviewId)
-		? review
-		: null;
+	const load = async (branchLix: Lix) => {
+		const ranges = agentTurnCommitRangesFromValues(
+			await readAgentTurnCommitRangeValues(branchLix),
+		);
+		const review = await getAgentTurnExternalWriteReview(
+			branchLix,
+			fileId,
+			path,
+			ranges,
+			options?.resolvedReviewIds,
+		);
+		return review && !options?.resolvedReviewIds?.has(review.reviewId)
+			? review
+			: null;
+	};
+	const targetBranchId = options?.branchId ?? (await lix.activeBranchId());
+	return withLixBranchSession(lix, targetBranchId, load);
 }
 
 export async function getPendingExternalWriteReviewPaths(
@@ -189,23 +200,82 @@ export function useAgentTurnCommitRanges(
 			readonly ranges: readonly AgentTurnCommitRange[];
 		};
 	} | null>(null);
-	const rangeRows = useQuery<{
-		value: unknown;
-		lixcol_branch_id: string | null;
-	}>(
-		(queryLix) =>
-			qb(queryLix)
-				.selectFrom("lix_key_value_by_branch")
-				.select(["value", "lixcol_branch_id"])
-				.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
-				.where("lixcol_branch_id", "=", activeBranchId),
-		{ enabled: activeBranchId.length > 0 },
-	);
-	// Filtering again prevents a cached row for the previous branch from being
-	// interpreted as current while useQuery swaps subscriptions.
-	const storedRangeValues = rangeRows
-		.filter((row) => row.lixcol_branch_id === activeBranchId)
-		.map((row) => row.value);
+	const lix = useLix();
+	const [observedRanges, setObservedRanges] = useState<{
+		readonly branchId: string;
+		readonly values: readonly unknown[];
+	}>({ branchId: "", values: [] });
+
+	useEffect(() => {
+		if (activeBranchId.length === 0) return;
+		let cancelled = false;
+		let closeObservation: (() => void) | undefined;
+		let closeSession: (() => Promise<void>) | undefined;
+		void (async () => {
+			const session = await openLixBranchSession(lix, activeBranchId);
+			if (cancelled) {
+				if (session.owned) await session.lix.close();
+				return;
+			}
+			let sessionOpen = session.owned;
+			const closeCurrentSession = async () => {
+				if (!sessionOpen) return;
+				sessionOpen = false;
+				await session.lix.close();
+			};
+			closeSession = closeCurrentSession;
+			try {
+				const events = session.lix.observe(
+					"SELECT value FROM lix_key_value WHERE key LIKE $1",
+					[`${AGENT_TURN_COMMIT_RANGE_KEY}%`],
+				);
+				let observationOpen = true;
+				const closeCurrentObservation = () => {
+					if (!observationOpen) return;
+					observationOpen = false;
+					events.close();
+				};
+				closeObservation = closeCurrentObservation;
+				try {
+					let receivedSnapshot = false;
+					for (;;) {
+						if (cancelled) break;
+						const event = await events.next();
+						if (cancelled || event === undefined) break;
+						// The first observation snapshot can lag a just-opened SDK session.
+						// Pin it with one direct read, then consume advancing snapshots.
+						const values = receivedSnapshot
+							? event.result.rows.map((row) => row.get("value"))
+							: await readAgentTurnCommitRangeValues(session.lix);
+						receivedSnapshot = true;
+						if (!cancelled) {
+							setObservedRanges({ branchId: activeBranchId, values });
+						}
+					}
+				} finally {
+					closeCurrentObservation();
+					closeObservation = undefined;
+				}
+			} finally {
+				await closeCurrentSession();
+				closeSession = undefined;
+			}
+		})().catch((error: unknown) => {
+			if (cancelled) return;
+			console.warn("[agent-turn-review] failed to observe ranges", error);
+			setObservedRanges({ branchId: activeBranchId, values: [] });
+		});
+		return () => {
+			cancelled = true;
+			closeObservation?.();
+			void closeSession?.();
+		};
+	}, [activeBranchId, lix]);
+
+	// The branch key prevents the previous session's cache from being rendered
+	// while a replacement observation is opening.
+	const storedRangeValues =
+		observedRanges.branchId === activeBranchId ? observedRanges.values : [];
 	const storedRanges = agentTurnCommitRangesFromValues(storedRangeValues);
 	const ranges =
 		reviewRangeSessionId === undefined
@@ -291,12 +361,14 @@ export function useExternalWriteReview(args: {
 					: getWorkingChangeExternalWriteReview(lix, args.fileId, args.path)
 				: ranges.length === 0
 					? Promise.resolve(null)
-					: getAgentTurnExternalWriteReview(
-							lix,
-							args.fileId,
-							args.path,
-							ranges,
-							resolvedReviewIdSet,
+					: withLixBranchSession(lix, args.activeBranchId, (branchLix) =>
+							getAgentTurnExternalWriteReview(
+								branchLix,
+								args.fileId!,
+								args.path!,
+								ranges,
+								resolvedReviewIdSet,
+							),
 						);
 		void loadReview
 			.then((nextReview) => {
@@ -321,6 +393,7 @@ export function useExternalWriteReview(args: {
 		};
 	}, [
 		lix,
+		args.activeBranchId,
 		args.fileId,
 		args.path,
 		fileWorkingChangesKey,

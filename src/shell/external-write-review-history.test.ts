@@ -1,10 +1,11 @@
 import { createElement, Suspense, useEffect, type ComponentType } from "react";
 import { act, render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
+import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
 	getExternalWriteReview,
@@ -135,6 +136,54 @@ describe("getExternalWriteReview", () => {
 			expect(review?.beforeCommitId).toBe(beforeCommitId);
 			expect(review?.afterCommitId).toBe(afterCommitId);
 			await expectReviewData(lix, review, "turn before", "turn after");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("resolves the complete review against the explicitly targeted branch", async () => {
+		const lix = await openLix();
+		try {
+			const mainBranchId = await lix.activeBranchId();
+			await writeFile(
+				lix,
+				fakeUuid("target-branch-file"),
+				"/docs/target.md",
+				"before",
+			);
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(
+				lix,
+				fakeUuid("target-branch-file"),
+				"/docs/target.md",
+				"main after",
+			);
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-target-main",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			);
+
+			const draft = await lix.createBranch({ name: "Draft" });
+			await lix.switchBranch({ branchId: draft.id });
+			await writeFile(
+				lix,
+				fakeUuid("target-branch-file"),
+				"/docs/target.md",
+				"draft after",
+			);
+
+			const review = await getExternalWriteReview(
+				lix,
+				fakeUuid("target-branch-file"),
+				"/docs/target.md",
+				{ branchId: mainBranchId },
+			);
+			expect(review?.agentTurnRangeIds).toEqual(["range-target-main"]);
 		} finally {
 			await lix.close();
 		}
@@ -327,6 +376,70 @@ describe("getExternalWriteReview", () => {
 			expect(
 				(await readAgentTurnCommitRanges(lix)).map((range) => range.id),
 			).toEqual(["range-main"]);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("pins the captured active branch before writing", async () => {
+		const lix = await openLix();
+		try {
+			const mainBranchId = await lix.activeBranchId();
+			const draft = await lix.createBranch({ name: "Draft" });
+			const originalActiveBranchId = lix.activeBranchId.bind(lix);
+			const activeBranchSpy = vi
+				.spyOn(lix, "activeBranchId")
+				.mockImplementationOnce(async () => {
+					const captured = await originalActiveBranchId();
+					await lix.switchBranch({ branchId: draft.id });
+					return captured;
+				});
+
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-captured-main",
+					beforeCommitId: "commit-captured-before",
+					afterCommitId: "commit-captured-after",
+				}),
+			);
+			activeBranchSpy.mockRestore();
+
+			expect(await lix.activeBranchId()).toBe(draft.id);
+			expect(
+				(await readAgentTurnCommitRanges(lix, mainBranchId)).map(
+					(range) => range.id,
+				),
+			).toContain("range-captured-main");
+			expect(
+				(await readAgentTurnCommitRanges(lix, draft.id)).map(
+					(range) => range.id,
+				),
+			).not.toContain("range-captured-main");
+		} finally {
+			vi.restoreAllMocks();
+			await lix.close();
+		}
+	});
+
+	test("stores an explicitly global range as global state", async () => {
+		const lix = await openLix();
+		try {
+			await appendAgentTurnCommitRange(
+				lix,
+				agentRange({
+					id: "range-global",
+					beforeCommitId: "commit-global-before",
+					afterCommitId: "commit-global-after",
+				}),
+				{ branchId: GLOBAL_BRANCH_ID },
+			);
+			const draft = await lix.createBranch({ name: "Draft" });
+			await lix.switchBranch({ branchId: draft.id });
+
+			expect(
+				(await readAgentTurnCommitRanges(lix)).map((range) => range.id),
+			).toContain("range-global");
 		} finally {
 			await lix.close();
 		}
@@ -641,6 +754,68 @@ describe("getExternalWriteReview", () => {
 				expect(review?.beforeCommitId).toBe(beforeCommitId);
 				expect(review?.afterCommitId).toBe(afterCommitId);
 			});
+		} finally {
+			await act(async () => {
+				utils?.unmount();
+			});
+			await lix.close();
+		}
+	});
+
+	test("keeps a mounted review hook pinned when the primary session switches branches", async () => {
+		const lix = await openLix();
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			const fileId = fakeUuid("pinned-live-file");
+			const path = "/docs/pinned-live.md";
+			await writeFile(lix, fileId, path, "pinned before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, fileId, path, "pinned after");
+			const afterCommitId = await activeCommitId(lix);
+			const mainBranchId = await lix.activeBranchId();
+			const draftBranch = await lix.createBranch({ name: "Draft" });
+			const reviews: Array<ExternalWriteReview | null> = [];
+
+			await act(async () => {
+				utils = render(
+					createElement(
+						LixProvider as ComponentType<{ lix: Lix }>,
+						{ lix },
+						createElement(
+							Suspense,
+							{ fallback: null },
+							createElement(ExternalWriteReviewProbe, {
+								fileId,
+								path,
+								activeBranchId: mainBranchId,
+								onReview: (review) => reviews.push(review),
+							}),
+						),
+					),
+				);
+			});
+
+			await waitFor(() => expect(reviews.at(-1)).toBeNull());
+			await lix.switchBranch({ branchId: draftBranch.id });
+			await act(async () => {
+				await appendAgentTurnCommitRange(
+					lix,
+					agentRange({
+						id: "range-pinned-live-hook",
+						beforeCommitId,
+						afterCommitId,
+					}),
+					{ branchId: mainBranchId },
+				);
+			});
+
+			await waitFor(() => {
+				const review = reviews.at(-1);
+				expect(review?.agentTurnRangeIds).toEqual(["range-pinned-live-hook"]);
+				expect(review?.beforeCommitId).toBe(beforeCommitId);
+				expect(review?.afterCommitId).toBe(afterCommitId);
+			});
+			expect(await lix.activeBranchId()).toBe(draftBranch.id);
 		} finally {
 			await act(async () => {
 				utils?.unmount();

@@ -13,6 +13,7 @@ const view: ExtensionView = {
 	panel: "left",
 	isActive: true,
 	isFocused: true,
+	preferences: { get: () => undefined, set: () => {}, delete: () => {} },
 	registerNewFileDraftHandler: () => () => {},
 };
 

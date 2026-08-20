@@ -247,7 +247,7 @@ describe("SqlExplorerView", () => {
 		expect(historyEntries.length).toBeGreaterThan(0);
 	});
 
-	test("clicking a table opens the read-only datagrid with surfaces", async () => {
+	test("clicking a table opens the read-only datagrid without by-branch surfaces", async () => {
 		render(
 			<SqlExplorerView
 				lix={lix}
@@ -263,8 +263,11 @@ describe("SqlExplorerView", () => {
 		fireEvent.click(tableButton);
 
 		await screen.findByText("/notes/hello.md");
-		const surfaceTabs = screen.getAllByRole("tab");
-		expect(surfaceTabs.map((tab) => tab.textContent)).toContain("current");
+		expect(
+			Array.from(
+				document.querySelectorAll("[data-attr='sql-table-surface']"),
+			).map((surface) => surface.textContent),
+		).not.toContain("_by_branch");
 		expect(
 			document.querySelector("[data-attr='sql-grid-row-range']"),
 		).toHaveTextContent(/1–1 of 1 row/);

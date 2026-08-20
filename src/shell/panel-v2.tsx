@@ -43,6 +43,15 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type {
+	AtelierExtensionMenuItem,
+	AtelierExtensionPreferences,
+} from "../extension-api";
+import {
+	ExtensionContextMenuItems,
+	ExtensionDropdownMenuItems,
+	resolveExtensionMenuItems,
+} from "../extension-runtime/extension-menu-items";
 import { panelShortcutHint } from "@/lib/platform";
 import type {
 	PanelSide,
@@ -350,6 +359,7 @@ export function PanelV2({
 				panel={panel}
 				availableViews={availableViews}
 				resolveViewDefinition={resolveViewDefinition}
+				preferencesFor={viewContext.preferencesFor}
 				onSelectView={onSelectView}
 				onAddView={onAddView}
 				onHidePanel={onHidePanel}
@@ -512,6 +522,11 @@ export type PanelV2Props = {
 const sectionPickerItemClasses =
 	"h-[30px] rounded-md px-2 text-[12.5px] font-normal text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]";
 const sectionPickerIconClasses = "size-3.25 text-[var(--color-icon-tertiary)]";
+const EMPTY_EXTENSION_PREFERENCES: AtelierExtensionPreferences = {
+	get: () => undefined,
+	set: () => undefined,
+	delete: () => undefined,
+};
 
 /**
  * A side panel's only chrome: a caption-weight label that opens the view
@@ -524,6 +539,7 @@ function SidebarSectionPicker({
 	panel,
 	availableViews,
 	resolveViewDefinition,
+	preferencesFor,
 	onSelectView,
 	onAddView,
 	onHidePanel,
@@ -535,6 +551,9 @@ function SidebarSectionPicker({
 	readonly resolveViewDefinition: (
 		kind: ExtensionKind,
 	) => ExtensionDefinition | null;
+	readonly preferencesFor: (
+		extensionId: ExtensionKind,
+	) => AtelierExtensionPreferences;
 	readonly onSelectView: (instance: string) => void;
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly onHidePanel?: () => void;
@@ -550,6 +569,12 @@ function SidebarSectionPicker({
 	const activeLabel = activeDefinition
 		? resolveLabel(activeDefinition, activeEntry, tabLabel)
 		: "Views";
+	const extensionMenuItems = activeEntry
+		? resolveExtensionMenuItems(
+				activeDefinition,
+				preferencesFor(activeEntry.kind),
+			)
+		: [];
 
 	return (
 		<DropdownMenu>
@@ -626,6 +651,16 @@ function SidebarSectionPicker({
 							</DropdownMenuItem>
 						))
 					: null}
+				{extensionMenuItems.length > 0 ? (
+					<>
+						<div className="my-1.5 mx-1 h-px bg-[var(--color-border-subtle)]" />
+						<ExtensionDropdownMenuItems
+							items={extensionMenuItems}
+							itemClassName={sectionPickerItemClasses}
+							separatorClassName="mx-1 my-1"
+						/>
+					</>
+				) : null}
 				{onHidePanel ? (
 					<>
 						<div className="my-1.5 mx-1 h-px bg-[var(--color-border-subtle)]" />
@@ -687,6 +722,7 @@ export function PanelTabStrip({
 	onRemoveView,
 	onAddView,
 	tabLabel,
+	preferencesFor,
 }: {
 	readonly side: PanelSide;
 	readonly panel: PanelState;
@@ -698,6 +734,9 @@ export function PanelTabStrip({
 	/** Enables the trailing "+" — the same view menu the sidebars offer. */
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly tabLabel?: PanelV2Props["tabLabel"];
+	readonly preferencesFor?: (
+		extensionId: ExtensionKind,
+	) => AtelierExtensionPreferences;
 }) {
 	const activeInstance =
 		panel.activeInstance ?? panel.views[0]?.instance ?? null;
@@ -774,6 +813,10 @@ export function PanelTabStrip({
 					const closableRight = panel.views
 						.slice(index + 1)
 						.filter((sibling) => !sibling.isPinned);
+					const extensionMenuItems = resolveExtensionMenuItems(
+						view,
+						preferencesFor?.(entry.kind) ?? EMPTY_EXTENSION_PREFERENCES,
+					);
 					return (
 						<SortableTab
 							key={entry.instance}
@@ -808,6 +851,7 @@ export function PanelTabStrip({
 										}
 									: undefined
 							}
+							extensionMenuItems={extensionMenuItems}
 						/>
 					);
 				})}
@@ -1298,6 +1342,7 @@ interface SortableTabProps extends PanelTabPreviewProps {
 	readonly onCloseOthers?: () => void;
 	/** Close every closable tab after this one; absent when there is none. */
 	readonly onCloseRight?: () => void;
+	readonly extensionMenuItems?: readonly AtelierExtensionMenuItem[];
 	readonly isPending?: boolean;
 }
 
@@ -1310,11 +1355,13 @@ const tabMenuItemClasses =
  */
 function TabContextMenu({
 	children,
+	extensionMenuItems = [],
 	onClose,
 	onCloseOthers,
 	onCloseRight,
 }: {
 	readonly children: ReactNode;
+	readonly extensionMenuItems?: readonly AtelierExtensionMenuItem[];
 	readonly onClose?: () => void;
 	readonly onCloseOthers?: () => void;
 	readonly onCloseRight?: () => void;
@@ -1326,6 +1373,16 @@ function TabContextMenu({
 				className="w-[182px] min-w-[182px] rounded-[9px] p-1 shadow-lg"
 				data-attr="panel-tab-context-menu"
 			>
+				{extensionMenuItems.length > 0 ? (
+					<>
+						<ExtensionContextMenuItems
+							items={extensionMenuItems}
+							itemClassName={tabMenuItemClasses}
+							separatorClassName="mx-1.5 my-1"
+						/>
+						<ContextMenuSeparator className="mx-1.5 my-1 bg-[var(--color-border-subtle)]" />
+					</>
+				) : null}
 				{onClose ? (
 					<>
 						<ContextMenuItem
@@ -1376,6 +1433,7 @@ function SortableTab({
 	onClose,
 	onCloseOthers,
 	onCloseRight,
+	extensionMenuItems,
 }: SortableTabProps) {
 	const {
 		attributes,
@@ -1403,6 +1461,7 @@ function SortableTab({
 
 	return (
 		<TabContextMenu
+			extensionMenuItems={extensionMenuItems}
 			onClose={onClose}
 			onCloseOthers={onCloseOthers}
 			onCloseRight={onCloseRight}

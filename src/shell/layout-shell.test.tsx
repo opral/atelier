@@ -82,6 +82,97 @@ describe("syncPanelGroupLayout", () => {
 	});
 });
 
+describe("extension menu preferences", () => {
+	test("shares the Files hidden-file toggle between the sidebar and central tab", async () => {
+		const lix = await openLix();
+		const preferencesStore = createMemoryPreferencesStore();
+		const atelier = createAtelier({ lix, preferencesStore });
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: fakeUuid("visible-file"),
+					path: "/visible.md",
+					content: new TextEncoder().encode("# Visible\n"),
+				},
+				{
+					id: fakeUuid("hidden-file"),
+					path: "/.lix/config.json",
+					content: new TextEncoder().encode('{"hidden":true}'),
+				},
+			])
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await findFilesTreeItem("visible.md");
+			const treeContains = (path: string) =>
+				screen
+					.getAllByLabelText("Files")
+					.filter((candidate) => candidate.shadowRoot)
+					.some((host) =>
+						host.shadowRoot?.querySelector(
+							`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+						),
+					);
+			expect(treeContains(".lix/")).toBe(false);
+
+			fireEvent.pointerDown(
+				screen.getByRole("button", { name: "Files panel view menu" }),
+				{ button: 0 },
+			);
+			const sidebarToggle = await screen.findByRole("menuitemcheckbox", {
+				name: "Show hidden files",
+			});
+			expect(sidebarToggle).toHaveAttribute("aria-checked", "false");
+			expect(sidebarToggle.querySelector(".lucide-eye")).not.toBeNull();
+			fireEvent.click(sidebarToggle);
+			await waitFor(() => expect(treeContains(".lix/")).toBe(true));
+			await waitFor(async () => {
+				expect(
+					(await preferencesStore.load())?.extensions?.atelier_files
+						?.showHiddenFiles,
+				).toBe(true);
+			});
+
+			await act(async () => {
+				await atelier.views.open(FILES_EXTENSION_KIND, {
+					panel: "central",
+					newTab: true,
+				});
+			});
+			const filesTab = await waitFor(() => {
+				const tab = document.querySelector<HTMLButtonElement>(
+					'header [data-slot="central-tab-strip"] button[data-view-key="atelier_files"]',
+				);
+				if (!tab) throw new Error("central Files tab not found");
+				return tab;
+			});
+			fireEvent.contextMenu(filesTab);
+			const tabToggle = await screen.findByRole("menuitemcheckbox", {
+				name: "Show hidden files",
+			});
+			expect(tabToggle).toHaveAttribute("aria-checked", "true");
+			expect(tabToggle.querySelector(".lucide-eye")).not.toBeNull();
+			expect(tabToggle.querySelector(".lucide-check")).not.toBeNull();
+			fireEvent.click(tabToggle);
+			await waitFor(() => expect(treeContains(".lix/")).toBe(false));
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+});
+
 describe("open file lifecycle", () => {
 	test("opens documents as central tabs beside the sidebar Files view", async () => {
 		const lix = await openLix();
@@ -1390,139 +1481,6 @@ describe("agent turn review navigation", () => {
 				expect(JSON.parse(openedReviewIds[0]!)[1]).toEqual(["session-b-range"]);
 			});
 		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("does not reveal a captured range after the active Lix branch changes", async () => {
-		const lix = await openLix();
-		const onEvent = vi.fn();
-		const sessionStateStore = createMemorySessionStateStore();
-		const mainBranchId = await lix.activeBranchId();
-		let releaseBranchCheck: () => void = () => undefined;
-		let markBranchCheckStarted: () => void = () => undefined;
-		let markBranchCheckFinished: () => void = () => undefined;
-		const branchCheckGate = new Promise<void>((resolve) => {
-			releaseBranchCheck = resolve;
-		});
-		const branchCheckStarted = new Promise<void>((resolve) => {
-			markBranchCheckStarted = resolve;
-		});
-		const branchCheckFinished = new Promise<void>((resolve) => {
-			markBranchCheckFinished = resolve;
-		});
-		let gateNextBranchCheck = false;
-		const originalActiveBranchId = lix.activeBranchId.bind(lix);
-		const originalObserve = lix.observe.bind(lix);
-		let rangeObserverStarted = false;
-		const activeBranchSpy = vi
-			.spyOn(lix, "activeBranchId")
-			.mockImplementation(async () => {
-				const shouldGate = gateNextBranchCheck;
-				if (shouldGate) {
-					gateNextBranchCheck = false;
-					markBranchCheckStarted();
-					await branchCheckGate;
-				}
-				try {
-					return await originalActiveBranchId();
-				} finally {
-					if (shouldGate) markBranchCheckFinished();
-				}
-			});
-		const observeSpy = vi
-			.spyOn(lix, "observe")
-			.mockImplementation((sql, params) => {
-				const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
-				if (normalizedSql.includes("lix_key_value_by_branch")) {
-					rangeObserverStarted = true;
-				}
-				return originalObserve(sql, params);
-			});
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			await qb(lix)
-				.insertInto("lix_file")
-				.values({
-					id: fakeUuid("branch-race-file"),
-					path: "/branch-race.md",
-					content: new TextEncoder().encode("# Before\n"),
-				})
-				.execute();
-			const beforeCommitId = await activeCommitId(lix);
-			await qb(lix)
-				.updateTable("lix_file")
-				.set({ content: new TextEncoder().encode("# After\n") })
-				.where("id", "=", fakeUuid("branch-race-file"))
-				.execute();
-			const afterCommitId = await activeCommitId(lix);
-			const draftBranch = await lix.createBranch({ name: "Draft" });
-			const atelier = createAtelier({
-				lix,
-				onEvent,
-				sessionStateStore,
-				branchSession: {
-					getSnapshot: () => mainBranchId,
-					subscribe: () => () => undefined,
-				},
-			});
-
-			await act(async () => {
-				utils = render(
-					<LixProvider lix={lix}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} onEvent={onEvent} />
-						</Suspense>
-					</LixProvider>,
-				);
-			});
-			await findFilesTreeItem("branch-race.md");
-			await waitFor(
-				() => {
-					expect(rangeObserverStarted).toBe(true);
-				},
-				{ timeout: ASYNC_UI_TIMEOUT },
-			);
-
-			gateNextBranchCheck = true;
-			await act(async () => {
-				await appendAgentTurnCommitRange(
-					lix,
-					{
-						id: "branch-race-range",
-						sourceId: "mcp",
-						beforeCommitId,
-						afterCommitId,
-						startedAt: 1,
-						completedAt: 2,
-					},
-					{ branchId: mainBranchId },
-				);
-			});
-			await branchCheckStarted;
-			await lix.switchBranch({ branchId: draftBranch.id });
-			releaseBranchCheck();
-			await branchCheckFinished;
-
-			expect(
-				onEvent.mock.calls.some(
-					([event]) =>
-						event.type === "document_viewed" &&
-						event.filePath === "/branch-race.md",
-				),
-			).toBe(false);
-			expect(
-				sessionStateStore
-					.getSnapshot()
-					?.panels.central.views.some(
-						(view) => view.state?.fileId === fakeUuid("branch-race-file"),
-					),
-			).toBe(false);
-		} finally {
-			releaseBranchCheck();
-			observeSpy.mockRestore();
-			activeBranchSpy.mockRestore();
 			await act(async () => utils?.unmount());
 			await lix.close();
 		}

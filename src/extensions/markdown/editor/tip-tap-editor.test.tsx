@@ -1,7 +1,6 @@
 import React, { Suspense, StrictMode } from "react";
 import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
-import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 import {
 	render,
 	waitFor,
@@ -48,13 +47,11 @@ async function renderEditorForMarkdownFile({
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -215,7 +212,6 @@ test("renders initial document content", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
@@ -232,11 +228,10 @@ test("renders initial document content", async () => {
 		.execute();
 
 	await qb(lix)
-		.insertInto("lix_key_value_by_branch")
+		.insertInto("lix_key_value")
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1066,13 +1061,11 @@ test("persists state changes on edit (paragraph append)", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1129,7 +1122,6 @@ test("renders content under React.StrictMode", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
@@ -1146,11 +1138,10 @@ test("renders content under React.StrictMode", async () => {
 		.execute();
 
 	await qb(lix)
-		.insertInto("lix_key_value_by_branch")
+		.insertInto("lix_key_value")
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1179,13 +1170,11 @@ test("shows the command hint only while focused on an empty document", async () 
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1316,13 +1305,11 @@ test("uses heading 1 as the requested empty document default", async () => {
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1385,13 +1372,11 @@ test("clicking the surface focuses the editor even when content exists", async (
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 			{
 				key: "atelier_active_file_id",
 				value: fileId,
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			},
@@ -1439,7 +1424,6 @@ test("updates editor when switching to a branch with different external state", 
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
@@ -1457,11 +1441,10 @@ test("updates editor when switching to a branch with different external state", 
 		.execute();
 
 	await qb(lix)
-		.insertInto("lix_key_value_by_branch")
+		.insertInto("lix_key_value")
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1469,12 +1452,13 @@ test("updates editor when switching to a branch with different external state", 
 
 	const branchB = await lix.createBranch({ name: "Draft" });
 
-	await qb(lix)
-		.updateTable("lix_file_by_branch")
+	const branchBLix = await lix.openAnotherSession({ branchId: branchB.id });
+	await qb(branchBLix)
+		.updateTable("lix_file")
 		.set({ content: new TextEncoder().encode("Hello B") })
 		.where("id", "=", fileId)
-		.where("lixcol_branch_id", "=", branchB.id)
 		.execute();
+	await branchBLix.close();
 
 	// Initial render in base branch
 	await act(async () => {
@@ -1506,7 +1490,6 @@ test("updates editor when file.content is updated externally (simulate updateFil
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
@@ -1523,11 +1506,10 @@ test("updates editor when file.content is updated externally (simulate updateFil
 		.execute();
 
 	await qb(lix)
-		.insertInto("lix_key_value_by_branch")
+		.insertInto("lix_key_value")
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})
@@ -1674,7 +1656,6 @@ test("does not retain another file's markdown while switching file ids", async (
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
@@ -2044,7 +2025,6 @@ test("preserves main content when switching to a new branch and back", async () 
 			{
 				key: "lix_deterministic_mode",
 				value: { enabled: true },
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 			},
 		],
@@ -2062,11 +2042,10 @@ test("preserves main content when switching to a new branch and back", async () 
 
 	// Activate file globally
 	await qb(lix)
-		.insertInto("lix_key_value_by_branch")
+		.insertInto("lix_key_value")
 		.values({
 			key: "atelier_active_file_id",
 			value: fileId,
-			lixcol_branch_id: GLOBAL_BRANCH_ID,
 			lixcol_global: true,
 			lixcol_untracked: true,
 		})

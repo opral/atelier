@@ -47,6 +47,61 @@ export type AtelierExtensionState = {
 	readonly [key: string]: unknown;
 };
 
+export type AtelierJsonValue =
+	| null
+	| boolean
+	| number
+	| string
+	| readonly AtelierJsonValue[]
+	| { readonly [key: string]: AtelierJsonValue };
+
+/** Extension-scoped preferences. Atelier namespaces keys by extension id. */
+export type AtelierExtensionPreferences = {
+	readonly get: (key: string) => AtelierJsonValue | undefined;
+	readonly set: (key: string, value: AtelierJsonValue) => void;
+	readonly delete: (key: string) => void;
+};
+
+type AtelierExtensionMenuItemBase = {
+	/** Locally unique within this extension's menu. */
+	readonly key: string;
+	/** Optional shell-rendered leading icon. */
+	readonly icon?: ComponentType<{
+		className?: string;
+		"aria-hidden"?: boolean;
+	}>;
+	readonly disabled?: boolean;
+};
+
+export type AtelierExtensionCheckboxMenuItem = AtelierExtensionMenuItemBase & {
+	readonly kind: "checkbox";
+	readonly label: string;
+	readonly checked: boolean;
+	readonly onSelect: () => void;
+};
+
+export type AtelierExtensionActionMenuItem = AtelierExtensionMenuItemBase & {
+	readonly kind: "action";
+	readonly label: string;
+	readonly onSelect: () => void;
+};
+
+export type AtelierExtensionSeparatorMenuItem = Pick<
+	AtelierExtensionMenuItemBase,
+	"key"
+> & {
+	readonly kind: "separator";
+};
+
+export type AtelierExtensionMenuItem =
+	| AtelierExtensionCheckboxMenuItem
+	| AtelierExtensionActionMenuItem
+	| AtelierExtensionSeparatorMenuItem;
+
+export type AtelierExtensionMenuItems = (context: {
+	readonly preferences: AtelierExtensionPreferences;
+}) => readonly AtelierExtensionMenuItem[];
+
 /** One host-contributed, not-yet-imported filesystem entry. */
 export type AtelierWatchedEntry = {
 	/** Workspace-absolute path, e.g. "/notes/todo.md" or "/notes/". */
@@ -198,6 +253,17 @@ export type AtelierExtensionRuntime = {
 		readonly activeFilePath: string | null;
 	};
 	readonly views: AtelierViewsApi;
+	/**
+	 * Read another extension's current preference without taking ownership of
+	 * its default or mutation behavior. This lets host surfaces mirror a
+	 * bundled extension while that extension remains the sole writer.
+	 */
+	readonly preferences: {
+		readonly get: (
+			extensionId: string,
+			key: string,
+		) => AtelierJsonValue | undefined;
+	};
 	/** Canonical Atelier iconography, shared by views, floats, and lists. */
 	readonly icons: {
 		/** Icon URL for a workspace file path (resolved by extension). */
@@ -214,6 +280,8 @@ export type AtelierExtensionView = {
 	readonly panel: AtelierPanelSide;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
+	/** Preferences shared by every instance of this extension. */
+	readonly preferences: AtelierExtensionPreferences;
 	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;
 };
 
@@ -227,6 +295,8 @@ export type AtelierMountedExtension = {
 
 export type ExtensionRuntimeEntry = {
 	readonly icon: ComponentType<{ className?: string }>;
+	/** Dynamic, shell-rendered menu contributions for this extension. */
+	readonly menuItems?: AtelierExtensionMenuItems;
 	readonly mount: (args: {
 		atelier: AtelierExtensionRuntime;
 		view: AtelierExtensionView;

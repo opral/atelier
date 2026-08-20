@@ -44,6 +44,7 @@ export function useExtensionViewRuntime({
 					panel: panelSide,
 					isActive,
 					isFocused,
+					preferences: host.preferencesFor(instance.kind),
 					registerNewFileDraftHandler: (handler: () => void) =>
 						host.registerNewFileDraftHandler({
 							panelSide,

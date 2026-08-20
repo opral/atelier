@@ -34,6 +34,8 @@ const EMPTY_FILES: readonly DiffFloatFile[] = [];
 
 type ExternalWriteReviewControlsProps = {
 	readonly isActive: boolean;
+	/** Keep review navigation visible while preventing repository mutations. */
+	readonly readOnly?: boolean;
 	/** Which diff-mode flow the float commits: agent turn, working changes, or a historical checkpoint. */
 	readonly mode?: DiffFloatMode;
 	readonly navigation?: ExternalWriteReviewNavigation;
@@ -75,6 +77,7 @@ const PRIMARY_VERBS: Record<
  */
 export function ExternalWriteReviewControls({
 	isActive,
+	readOnly = false,
 	mode = "agent-turn",
 	navigation,
 	files,
@@ -132,7 +135,7 @@ export function ExternalWriteReviewControls({
 	const hasSelection = !hasScopeChip || selectedFiles.length > 0;
 
 	const runPrimary = useCallback(async () => {
-		if (!onPrimary || isCommitting || !hasSelection) return;
+		if (readOnly || !onPrimary || isCommitting || !hasSelection) return;
 		setCommitError(null);
 		setIsCommitting(true);
 		try {
@@ -146,7 +149,7 @@ export function ExternalWriteReviewControls({
 		} finally {
 			setIsCommitting(false);
 		}
-	}, [hasSelection, isCommitting, onPrimary, selectionIds]);
+	}, [hasSelection, isCommitting, onPrimary, readOnly, selectionIds]);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -352,8 +355,9 @@ export function ExternalWriteReviewControls({
 						type="button"
 						className="external-write-review-button external-write-review-button-reject"
 						onClick={() => void onUndo(selectionIds)}
-						disabled={isCommitting || !hasSelection}
+						disabled={readOnly || isCommitting || !hasSelection}
 						data-attr="diff-undo"
+						title={readOnly ? "Edit access is required" : undefined}
 					>
 						<RotateCcw aria-hidden="true" />
 						<span>Undo</span>
@@ -364,10 +368,14 @@ export function ExternalWriteReviewControls({
 						type="button"
 						className="external-write-review-button external-write-review-button-accept"
 						onClick={() => void runPrimary()}
-						disabled={isCommitting || !hasSelection}
+						disabled={readOnly || isCommitting || !hasSelection}
 						aria-label={isCommitting ? verb.busyLabel : verb.label}
 						data-attr="diff-primary"
-						title={commitError ?? undefined}
+						title={
+							readOnly
+								? "Sign in with edit access to create a checkpoint"
+								: (commitError ?? undefined)
+						}
 					>
 						{isCommitting ? (
 							<LoaderCircle aria-hidden="true" className="animate-spin" />

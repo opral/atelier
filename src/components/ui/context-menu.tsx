@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
+import { CheckIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,35 @@ function ContextMenuItem({
 	);
 }
 
+function ContextMenuCheckboxItem({
+	className,
+	children,
+	checked,
+	...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.CheckboxItem>) {
+	return (
+		<ContextMenuPrimitive.CheckboxItem
+			data-slot="context-menu-checkbox-item"
+			checked={checked}
+			className={cn(
+				"focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)] relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+				className,
+			)}
+			{...props}
+		>
+			{children}
+			<span className="ml-auto flex size-4 shrink-0 items-center justify-center">
+				<ContextMenuPrimitive.ItemIndicator>
+					<CheckIcon
+						className="size-3.5 text-[var(--color-icon-brand)]"
+						strokeWidth={2.6}
+					/>
+				</ContextMenuPrimitive.ItemIndicator>
+			</span>
+		</ContextMenuPrimitive.CheckboxItem>
+	);
+}
+
 function ContextMenuSeparator({
 	className,
 	...props
@@ -58,7 +88,10 @@ function ContextMenuSeparator({
 	return (
 		<ContextMenuPrimitive.Separator
 			data-slot="context-menu-separator"
-			className={cn("bg-[var(--color-border-panel)] -mx-1 my-1 h-px", className)}
+			className={cn(
+				"bg-[var(--color-border-panel)] -mx-1 my-1 h-px",
+				className,
+			)}
 			{...props}
 		/>
 	);
@@ -69,5 +102,6 @@ export {
 	ContextMenuTrigger,
 	ContextMenuContent,
 	ContextMenuItem,
+	ContextMenuCheckboxItem,
 	ContextMenuSeparator,
 };
