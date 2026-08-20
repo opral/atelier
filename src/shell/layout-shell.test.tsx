@@ -82,6 +82,97 @@ describe("syncPanelGroupLayout", () => {
 	});
 });
 
+describe("extension menu preferences", () => {
+	test("shares the Files hidden-file toggle between the sidebar and central tab", async () => {
+		const lix = await openLix();
+		const preferencesStore = createMemoryPreferencesStore();
+		const atelier = createAtelier({ lix, preferencesStore });
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: fakeUuid("visible-file"),
+					path: "/visible.md",
+					content: new TextEncoder().encode("# Visible\n"),
+				},
+				{
+					id: fakeUuid("hidden-file"),
+					path: "/.lix/config.json",
+					content: new TextEncoder().encode('{"hidden":true}'),
+				},
+			])
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await findFilesTreeItem("visible.md");
+			const treeContains = (path: string) =>
+				screen
+					.getAllByLabelText("Files")
+					.filter((candidate) => candidate.shadowRoot)
+					.some((host) =>
+						host.shadowRoot?.querySelector(
+							`[data-type='item'][data-item-path='${CSS.escape(path)}']`,
+						),
+					);
+			expect(treeContains(".lix/")).toBe(false);
+
+			fireEvent.pointerDown(
+				screen.getByRole("button", { name: "Files panel view menu" }),
+				{ button: 0 },
+			);
+			const sidebarToggle = await screen.findByRole("menuitemcheckbox", {
+				name: "Show hidden files",
+			});
+			expect(sidebarToggle).toHaveAttribute("aria-checked", "false");
+			expect(sidebarToggle.querySelector(".lucide-eye")).not.toBeNull();
+			fireEvent.click(sidebarToggle);
+			await waitFor(() => expect(treeContains(".lix/")).toBe(true));
+			await waitFor(async () => {
+				expect(
+					(await preferencesStore.load())?.extensions?.atelier_files
+						?.showHiddenFiles,
+				).toBe(true);
+			});
+
+			await act(async () => {
+				await atelier.views.open(FILES_EXTENSION_KIND, {
+					panel: "central",
+					newTab: true,
+				});
+			});
+			const filesTab = await waitFor(() => {
+				const tab = document.querySelector<HTMLButtonElement>(
+					'header [data-slot="central-tab-strip"] button[data-view-key="atelier_files"]',
+				);
+				if (!tab) throw new Error("central Files tab not found");
+				return tab;
+			});
+			fireEvent.contextMenu(filesTab);
+			const tabToggle = await screen.findByRole("menuitemcheckbox", {
+				name: "Show hidden files",
+			});
+			expect(tabToggle).toHaveAttribute("aria-checked", "true");
+			expect(tabToggle.querySelector(".lucide-eye")).not.toBeNull();
+			expect(tabToggle.querySelector(".lucide-check")).not.toBeNull();
+			fireEvent.click(tabToggle);
+			await waitFor(() => expect(treeContains(".lix/")).toBe(false));
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+});
+
 describe("open file lifecycle", () => {
 	test("opens documents as central tabs beside the sidebar Files view", async () => {
 		const lix = await openLix();

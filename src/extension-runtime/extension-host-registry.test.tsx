@@ -43,6 +43,7 @@ describe("ExtensionHostRegistryProvider", () => {
 			panel: "central",
 			isActive: true,
 			isFocused: true,
+			preferences: { get: () => undefined, set: () => {}, delete: () => {} },
 			registerNewFileDraftHandler: () => () => {},
 		};
 		const atelier = createExtensionHostContext({} as Lix).atelier;
@@ -107,6 +108,7 @@ describe("ExtensionHostRegistryProvider", () => {
 			panel: "central",
 			isActive: true,
 			isFocused: true,
+			preferences: { get: () => undefined, set: () => {}, delete: () => {} },
 			registerNewFileDraftHandler: () => () => {},
 		};
 		const atelier = createExtensionHostContext({} as Lix).atelier;
