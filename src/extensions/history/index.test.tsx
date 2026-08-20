@@ -1,17 +1,11 @@
 import { Suspense } from "react";
-import {
-	act,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-	within,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
+import { publishCheckpointFiles } from "@/lib/checkpoint-file-store";
 import { HistoryView } from ".";
 
 function atelierStub(overrides?: {
@@ -195,6 +189,10 @@ describe("HistoryView", () => {
 			],
 		);
 		const checkpoint = await lix.createCheckpoint();
+		publishCheckpointFiles(lix, checkpoint.commitId, [
+			{ id: fakeUuid("history-file-one"), path: "/docs/one.txt" },
+			{ id: fakeUuid("history-file-two"), path: "/two.txt" },
+		]);
 		const openCheckpointFile = vi.fn();
 		const viewCheckpoint = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
@@ -254,7 +252,7 @@ describe("HistoryView", () => {
 		await lix.close();
 	});
 
-	test("keeps the history timeline visible while a new checkpoint file list loads", async () => {
+	test("switches checkpoint file lists without another history query", async () => {
 		const lix = await openLix();
 		const fileId = fakeUuid("history-switch-file");
 		await lix.execute(
@@ -267,6 +265,22 @@ describe("HistoryView", () => {
 			fileId,
 		]);
 		const newerCheckpoint = await lix.createCheckpoint();
+		publishCheckpointFiles(lix, olderCheckpoint.commitId, [
+			{ id: fileId, path: "/switch.txt" },
+		]);
+		publishCheckpointFiles(lix, newerCheckpoint.commitId, [
+			{ id: fileId, path: "/switch.txt" },
+		]);
+		const originalExecute = lix.execute.bind(lix);
+		let historyReads = 0;
+		vi.spyOn(lix, "execute").mockImplementation(
+			async (...args: Parameters<typeof lix.execute>) => {
+				if (String(args[0]).includes("lix_history('lix_file'")) {
+					historyReads += 1;
+				}
+				return originalExecute(...args);
+			},
+		);
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -288,28 +302,6 @@ describe("HistoryView", () => {
 			await screen.findByRole("list", { name: "Files at this checkpoint" }),
 		).toBeVisible();
 
-		let releaseFileListQuery!: () => void;
-		const fileListQueryGate = new Promise<void>((resolve) => {
-			releaseFileListQuery = resolve;
-		});
-		const originalExecute = lix.execute.bind(lix);
-		let delayedFileListQuery = false;
-		vi.spyOn(lix, "execute").mockImplementation(
-			async (...args: Parameters<typeof lix.execute>) => {
-				const statement = String(args[0]).toLowerCase();
-				const parameters = args[1] as readonly unknown[] | undefined;
-				if (
-					!delayedFileListQuery &&
-					statement.includes("lix_history('lix_file'") &&
-					parameters?.includes(newerCheckpoint.commitId)
-				) {
-					delayedFileListQuery = true;
-					await fileListQueryGate;
-				}
-				return originalExecute(...args);
-			},
-		);
-
 		await act(async () => {
 			view?.rerender(
 				<LixProvider lix={lix}>
@@ -323,19 +315,14 @@ describe("HistoryView", () => {
 				</LixProvider>,
 			);
 		});
-		await waitFor(() => expect(delayedFileListQuery).toBe(true));
 		expect(
 			screen.getByRole("region", { name: "Checkpoint history" }),
 		).toBeVisible();
 		expect(screen.queryByTestId("history-root-loading")).toBeNull();
 		expect(
-			document.querySelector("[data-attr='history-checkpoint-files-loading']"),
-		).not.toBeNull();
-
-		await act(async () => releaseFileListQuery());
-		expect(
-			await screen.findByRole("list", { name: "Files at this checkpoint" }),
+			screen.getByRole("list", { name: "Files at this checkpoint" }),
 		).toBeVisible();
+		expect(historyReads).toBe(0);
 
 		await act(async () => view?.unmount());
 		await lix.close();

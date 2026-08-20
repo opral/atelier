@@ -33,6 +33,7 @@ import {
 	createMemorySessionStateStore,
 } from "../state-adapters";
 import { fakeUuid } from "@/test-utils/fake-uuid";
+import type { AtelierEvent } from "@/extension-api";
 
 const ASYNC_UI_TIMEOUT = 10_000;
 
@@ -970,7 +971,22 @@ describe("agent turn review navigation", () => {
 	test("opens a checkpoint file without collapsing the checkpoint", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
-		const atelier = createAtelier({ lix, sessionStateStore });
+		const routeEchoes: Promise<unknown>[] = [];
+		let atelier!: ReturnType<typeof createAtelier>;
+		const onEvent = (event: AtelierEvent) => {
+			if (
+				event.type === "central_view_activated" &&
+				event.filePath &&
+				typeof event.state?.afterCommitId === "string"
+			) {
+				routeEchoes.push(atelier.documents.open(event.filePath));
+			}
+		};
+		atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			onEvent,
+		});
 		let utils: ReturnType<typeof render> | undefined;
 		try {
 			await qb(lix)
@@ -999,7 +1015,7 @@ describe("agent turn review navigation", () => {
 				utils = render(
 					<LixProvider lix={lix}>
 						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} />
+							<V2LayoutShell instance={atelier} onEvent={onEvent} />
 						</Suspense>
 					</LixProvider>,
 				);
@@ -1018,6 +1034,7 @@ describe("agent turn review navigation", () => {
 				name: /Latest checkpoint/,
 			});
 			expect(latestCheckpoint).toBeEnabled();
+			const execute = vi.spyOn(lix, "execute");
 			await act(async () => {
 				fireEvent.click(latestCheckpoint);
 			});
@@ -1049,6 +1066,10 @@ describe("agent turn review navigation", () => {
 				},
 				{ timeout: ASYNC_UI_TIMEOUT },
 			);
+			await waitFor(() => expect(routeEchoes).toHaveLength(1));
+			await act(async () => {
+				await Promise.all(routeEchoes);
+			});
 
 			await act(async () => {
 				fireEvent.click(fileButtons[1]!);
@@ -1071,6 +1092,16 @@ describe("agent turn review navigation", () => {
 			expect(
 				within(checkpointList).getAllByRole("listitem")[0],
 			).toHaveAttribute("aria-current", "true");
+			const checkpointFileReads = execute.mock.calls
+				.map(([statement]) => String(statement))
+				.filter(
+					(statement) =>
+						statement.includes("lix_history('lix_file") &&
+						!statement.toLowerCase().includes("content"),
+				);
+			expect(checkpointFileReads).toEqual([
+				"SELECT id, path FROM lix_history('lix_file') WHERE lixcol_observed_commit_id = $1 ORDER BY path",
+			]);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

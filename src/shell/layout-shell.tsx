@@ -45,6 +45,7 @@ import {
 	revertWorkingChangesForFiles,
 } from "@/lib/lix-diff-commands";
 import { selectFileHistory } from "@/lib/lix-file-history";
+import { publishCheckpointFiles } from "@/lib/checkpoint-file-store";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectFileWorkingChanges,
@@ -1304,6 +1305,9 @@ function LayoutShellLoadedContent({
 	const openHistoricalCheckpointFileRef = useRef<
 		((path: string) => void) | null
 	>(null);
+	// Covers the commit gap between placing a historical document and the panel
+	// ref observing its revision state. Hosts may echo the route synchronously.
+	const historicalOpenPathRef = useRef<string | null>(null);
 	const closeHistoricalReviewViews = useCallback((commitId: string) => {
 		for (const view of panelStatesRef.current.central.views) {
 			if (
@@ -1329,6 +1333,7 @@ function LayoutShellLoadedContent({
 	const exitDiffReview = useCallback(
 		(options?: { readonly restoreLiveDocument?: boolean }) => {
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
+			historicalOpenPathRef.current = null;
 			setWorkingChangesReviewOpen(false);
 			setWorkingChangeReviewRange(null);
 			setAgentTurnReviewDismissed(true);
@@ -1351,6 +1356,7 @@ function LayoutShellLoadedContent({
 		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
 		setWorkingChangeReviewRange(null);
 		setAgentTurnReviewDismissed(false);
+		historicalOpenPathRef.current = null;
 		setHistoricalReview(null);
 	}, [activeBranchId]);
 	const resolveDiffReviewRef = useRef<
@@ -2320,6 +2326,16 @@ function LayoutShellLoadedContent({
 				throw new Error(`Invalid repository file path: ${filePath}`);
 			}
 			const state = withoutDocumentIdentity(options.state);
+			const activeView = activeEntryFromPanel(panelStatesRef.current.central);
+			if (
+				!options.newTab &&
+				!hasHistoricalEditorRevisionState(state) &&
+				(historicalOpenPathRef.current === normalizedPath ||
+					(documentPathFromView(activeView) === normalizedPath &&
+						hasHistoricalEditorRevisionState(activeView?.state)))
+			) {
+				return normalizedPath;
+			}
 			const historicalCommitIds = [
 				typeof state?.sourceCommitId === "string" ? state.sourceCommitId : null,
 				typeof state?.afterCommitId === "string" ? state.afterCommitId : null,
@@ -2428,26 +2444,24 @@ function LayoutShellLoadedContent({
 
 	const openHistoricalCheckpointFile = useCallback(
 		(path: string) => {
-			const commitId = historicalReview?.commitId;
-			if (!commitId) return;
-			void resolveAndOpenDocument(path, {
+			if (!historicalReview) return;
+			const file = historicalReview.files.find(
+				(candidate) => candidate.path === path,
+			);
+			if (!file) return;
+			historicalOpenPathRef.current = file.path;
+			openResolvedFileView({
+				panel: "central",
+				fileId: file.id,
+				filePath: file.path,
 				state: historicalRevisionStateForPath(
-					path,
-					commitId,
+					file.path,
+					historicalReview.commitId,
 					historicalReview.previousCommitId,
 				),
-			}).catch((error: unknown) => {
-				console.warn(
-					"[historical-review] failed to open a checkpoint file",
-					error,
-				);
 			});
 		},
-		[
-			historicalReview?.commitId,
-			historicalRevisionStateForPath,
-			resolveAndOpenDocument,
-		],
+		[historicalReview, historicalRevisionStateForPath, openResolvedFileView],
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
@@ -2472,6 +2486,7 @@ function LayoutShellLoadedContent({
 				path: String(row.get("path")),
 			}));
 			if (files.length === 0) return;
+			publishCheckpointFiles(lix, commitId, files);
 			setWorkingChangesReviewOpen(false);
 			setHistoricalReview((current) => {
 				if (current && current.commitId !== commitId) {
@@ -2501,9 +2516,14 @@ function LayoutShellLoadedContent({
 				}
 				return { commitId, previousCommitId, createdAt, files };
 			});
-			await resolveAndOpenDocument(files[0]!.path, {
+			const firstFile = files[0]!;
+			historicalOpenPathRef.current = firstFile.path;
+			openResolvedFileView({
+				panel: "central",
+				fileId: firstFile.id,
+				filePath: firstFile.path,
 				state: historicalRevisionStateForPath(
-					files[0]!.path,
+					firstFile.path,
 					commitId,
 					previousCommitId,
 				),
@@ -2518,7 +2538,7 @@ function LayoutShellLoadedContent({
 			closeHistoricalReviewViews,
 			historicalRevisionStateForPath,
 			lix,
-			resolveAndOpenDocument,
+			openResolvedFileView,
 		],
 	);
 
