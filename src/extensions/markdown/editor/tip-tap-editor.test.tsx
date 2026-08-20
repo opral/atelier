@@ -117,24 +117,6 @@ async function writeMarkdownFileWithOrigin(
 	);
 }
 
-async function readMarkdownFileOrigin(
-	lix: Lix,
-	fileId: string,
-): Promise<unknown> {
-	const file = await qb(lix)
-		.selectFrom("lix_file")
-		.select("lixcol_change_id as change_id")
-		.where("id", "=", fileId)
-		.executeTakeFirstOrThrow();
-	const change = await qb(lix)
-		.selectFrom("lix_change")
-		.select("origin_key")
-		.where("id", "=", file.change_id)
-		.where("file_id", "=", fileId)
-		.executeTakeFirstOrThrow();
-	return change.origin_key;
-}
-
 async function decodeFileMarkdown(lix: Lix, fileId: string): Promise<string> {
 	const row = await qb(lix)
 		.selectFrom("lix_file")
@@ -1565,7 +1547,7 @@ test("ignores same-origin stale markdown autosave echoes", async () => {
 	expect(editorNode).not.toHaveTextContent("Stale saved copy");
 });
 
-test("ignores clean same-origin markdown updates", async () => {
+test("applies clean markdown updates without resolving writer origin", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-clean-update";
 	const fileId = fakeUuid("file_same_origin_clean_update");
 	const { lix } = await renderEditorForMarkdownFile({
@@ -1580,26 +1562,26 @@ test("ignores clean same-origin markdown updates", async () => {
 		"Same-origin replacement\n",
 		originKey,
 	);
-	expect(await readMarkdownFileOrigin(lix, fileId)).toBe(originKey);
 	await settleMarkdownObserver();
 
 	const editorNode = screen.getByTestId("tiptap-editor");
-	expect(editorNode).toHaveTextContent("Initial");
-	expect(editorNode).not.toHaveTextContent("Same-origin replacement");
+	expect(editorNode).toHaveTextContent("Same-origin replacement");
 });
 
-test("same-origin echo matching current markdown marks editor clean", async () => {
+test("a successful local persist marks the editor clean before its observer echo", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-clean";
 	const fileId = fakeUuid("file_same_origin_clean");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
 		originKey,
+		persistDebounceMs: 0,
 	});
 
 	await setEditorText(editor, "Local current");
-	await writeMarkdownFileWithOrigin(lix, fileId, "Local current\n", originKey);
-	await settleMarkdownObserver();
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe("Local current\n");
+	});
 	await writeMarkdownFileWithOrigin(
 		lix,
 		fileId,
@@ -1635,7 +1617,7 @@ test("applies different-origin markdown update when editor is clean", async () =
 	});
 });
 
-test("delivers external markdown revisions through exact origin point reads", async () => {
+test("delivers external markdown revisions without origin reads", async () => {
 	const fileId = fakeUuid("file_external_single_delivery");
 	const { lix } = await renderEditorForMarkdownFile({
 		fileId,
@@ -1676,13 +1658,7 @@ test("delivers external markdown revisions through exact origin point reads", as
 			}),
 		);
 	}
-	expect(originPointReads).toHaveLength(10);
-	for (const [statement] of originPointReads) {
-		expect(String(statement)).toMatch(
-			/\bwhere\b[\s\S]*\b(id|"id")\b\s*=\s*\$1/i,
-		);
-		expect(String(statement)).toMatch(/\b(file_id|"file_id")\b\s*=\s*\$2/i);
-	}
+	expect(originPointReads).toHaveLength(0);
 	expect(p90Ms).toBeLessThan(2_000);
 });
 

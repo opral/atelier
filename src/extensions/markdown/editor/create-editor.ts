@@ -77,6 +77,17 @@ export function acknowledgeMarkdownEditorPersistence(
 	baseline.acknowledgedRevision = baseline.documentRevision;
 }
 
+/**
+ * Returns the latest Markdown durably accepted by the file compare-and-swap.
+ * External delivery uses this as its clean baseline so it does not have to
+ * wait for a second observer round trip to rediscover a successful local save.
+ */
+export function markdownEditorLastAcknowledgedMarkdown(
+	editor: Editor,
+): string | undefined {
+	return persistenceBaselines.get(editor)?.lastAcknowledgedMarkdown;
+}
+
 export const createMarkdownEditorOriginKey = (): string => {
 	if (
 		typeof crypto !== "undefined" &&

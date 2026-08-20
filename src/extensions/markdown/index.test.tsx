@@ -146,13 +146,7 @@ describe("MarkdownView", () => {
 				/\bjoin\s+"?lix_change"?/i.test(String(statement)),
 			),
 		).toBe(false);
-		await waitFor(() => expect(originPointReads()).toHaveLength(1));
-		expect(String(originPointReads()[0]?.[0])).toMatch(
-			/\bwhere\b[\s\S]*\b(id|"id")\b\s*=\s*\$1/i,
-		);
-		expect(String(originPointReads()[0]?.[0])).toMatch(
-			/\b(file_id|"file_id")\b\s*=\s*\$2/i,
-		);
+		expect(originPointReads()).toHaveLength(0);
 
 		await lix.execute(
 			"UPDATE lix_file SET content = $1 WHERE id = $2",
@@ -166,7 +160,7 @@ describe("MarkdownView", () => {
 		);
 		expect(liveDeliveryReads()).toBe(2);
 		expect(liveDeliveryObservers()).toBe(1);
-		await waitFor(() => expect(originPointReads()).toHaveLength(2));
+		expect(originPointReads()).toHaveLength(0);
 
 		await act(async () => utils?.unmount());
 		await lix.close();
