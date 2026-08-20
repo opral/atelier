@@ -242,6 +242,140 @@ test("persists cell edits to lix_file with the CSV editor origin", async () => {
 	}
 });
 
+test("retries a transient CSV write without another edit", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		const fileId = fakeUuid("file_csv_retry");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/retry.csv",
+				content: new TextEncoder().encode("name,value\nalpha,1\n"),
+			})
+			.execute();
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		expect(await screen.findByText("alpha")).toBeInTheDocument();
+
+		const originalExecute = lix.execute.bind(lix);
+		let rejected = false;
+		const executeSpy = vi
+			.spyOn(lix, "execute")
+			.mockImplementation(async (statement, params, options) => {
+				if (!rejected && String(statement).startsWith("UPDATE lix_file")) {
+					rejected = true;
+					throw new Error("transient write failure");
+				}
+				return originalExecute(statement, params, options);
+			});
+
+		await act(async () => {
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{ location: [1, 0], value: { kind: "text", data: "2" } },
+			]);
+		});
+		expect(await screen.findByText(/transient write failure/i)).toBeVisible();
+
+		await waitFor(
+			async () => {
+				const row = await qb(lix)
+					.selectFrom("lix_file")
+					.select("content")
+					.where("id", "=", fileId)
+					.executeTakeFirst();
+				expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
+					"name,value\nalpha,2\n",
+				);
+			},
+			{ timeout: 4000 },
+		);
+		executeSpy.mockRestore();
+	} finally {
+		if (utils) utils.unmount();
+		await lix.close();
+	}
+}, 6000);
+
+test("drains an already serialized CSV edit after unmount", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		const fileId = fakeUuid("file_csv_unmount_drain");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/unmount.csv",
+				content: new TextEncoder().encode("name,value\nalpha,1\n"),
+			})
+			.execute();
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		expect(await screen.findByText("alpha")).toBeInTheDocument();
+
+		const originalExecute = lix.execute.bind(lix);
+		let releaseFirstWrite: (() => void) | undefined;
+		const firstWriteGate = new Promise<void>((resolve) => {
+			releaseFirstWrite = resolve;
+		});
+		let gated = false;
+		const executeSpy = vi
+			.spyOn(lix, "execute")
+			.mockImplementation(async (statement, params, options) => {
+				if (!gated && String(statement).startsWith("UPDATE lix_file")) {
+					gated = true;
+					await firstWriteGate;
+				}
+				return originalExecute(statement, params, options);
+			});
+
+		await act(async () => {
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{ location: [1, 0], value: { kind: "text", data: "2" } },
+			]);
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{ location: [1, 0], value: { kind: "text", data: "3" } },
+			]);
+		});
+		utils?.unmount();
+		utils = undefined;
+		releaseFirstWrite?.();
+
+		await vi.waitFor(async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirst();
+			expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
+				"name,value\nalpha,3\n",
+			);
+		});
+		executeSpy.mockRestore();
+	} finally {
+		if (utils) utils.unmount();
+		await lix.close();
+	}
+});
+
 test("deletes a row via the context menu", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;

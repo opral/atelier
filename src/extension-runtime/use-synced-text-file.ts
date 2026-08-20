@@ -37,6 +37,7 @@ export function useSyncedTextFile({
 	const queuedTextRef = useRef<string | null>(null);
 	const reviewingRef = useRef(reviewing);
 	const wasReviewingRef = useRef(false);
+	const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [saveError, setSaveError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -92,6 +93,21 @@ export function useSyncedTextFile({
 					setSaveError(
 						error instanceof Error ? error.message : "Could not save file",
 					);
+					// Keep a transient storage failure from leaving an editor ahead of
+					// the durable file forever. A newer edit can still retry immediately.
+					if (retryTimerRef.current === null) {
+						retryTimerRef.current = setTimeout(() => {
+							retryTimerRef.current = null;
+							if (
+								queuedTextRef.current === null &&
+								localTextRef.current !== lastCleanTextRef.current
+							) {
+								queuedTextRef.current = localTextRef.current;
+							}
+							void flushPersistence();
+						}, 2000);
+					}
+					break;
 				}
 			}
 		} finally {
@@ -102,12 +118,12 @@ export function useSyncedTextFile({
 
 	const persist = useCallback(
 		(nextText: string) => {
-			if (reviewing || readOnly) return;
+			if (reviewingRef.current || readOnly) return;
 			localTextRef.current = nextText;
 			queuedTextRef.current = nextText;
 			void flushPersistence();
 		},
-		[flushPersistence, readOnly, reviewing],
+		[flushPersistence, readOnly],
 	);
 
 	useEffect(() => {
@@ -153,7 +169,8 @@ export function useSyncedTextFile({
 		return () => {
 			closed = true;
 			events.close();
-			queuedTextRef.current = null;
+			// Do not discard an already serialized edit while its preceding write
+			// is in flight. The detached flush drains it after the view closes.
 		};
 	}, [fileId, lix]);
 

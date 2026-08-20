@@ -33,11 +33,7 @@ import {
 	type Rectangle,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import {
-	useLix,
-	useQueryTakeFirst,
-	useResolvedActiveBranchId,
-} from "@/lib/lix-react";
+import { useQueryTakeFirst, useResolvedActiveBranchId } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	type HistoricalFileSnapshot,
@@ -53,6 +49,7 @@ import type {
 	ExternalWriteReviewNavigation,
 } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
+import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
@@ -356,7 +353,6 @@ function EditableCsvView({
 	readonly readOnly: boolean;
 	readonly isActiveView?: boolean;
 }) {
-	const lix = useLix();
 	const fileId = fileRow.id;
 	const fileText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
@@ -368,151 +364,21 @@ function EditableCsvView({
 		: null;
 	const isReviewing = Boolean(review);
 	const isReadOnly = isReviewing || readOnly;
-	const [documentText, setDocumentText] = useState(reviewText ?? fileText);
-	const localTextRef = useRef(documentText);
-	const lastCleanTextRef = useRef(fileText);
-	const persistenceRunningRef = useRef(false);
-	const queuedTextRef = useRef<string | null>(null);
-	const reviewingRef = useRef(isReviewing);
-	const wasReviewingRef = useRef(false);
-	const retryTimerRef = useRef<number | null>(null);
-	const [saveError, setSaveError] = useState<string | null>(null);
-
 	const originKey = useMemo(() => createCsvEditorOriginKey(), []);
-	useEffect(() => {
-		reviewingRef.current = isReviewing;
-		if (isReviewing && reviewText !== null) {
-			queuedTextRef.current = null;
-			localTextRef.current = reviewText;
-			setDocumentText(reviewText);
-		}
-		if (!isReviewing && wasReviewingRef.current) {
-			void qb(lix)
-				.selectFrom("lix_file")
-				.select("content")
-				.where("id", "=", fileId)
-				.executeTakeFirst()
-				.then((row) => {
-					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.content);
-					lastCleanTextRef.current = nextText;
-					localTextRef.current = nextText;
-					setDocumentText(nextText);
-				})
-				.catch((error) => {
-					if (!reviewingRef.current) {
-						setSaveError(
-							error instanceof Error
-								? error.message
-								: "Could not reload file after review",
-						);
-					}
-				});
-		}
-		wasReviewingRef.current = isReviewing;
-	}, [fileId, isReviewing, lix, reviewText]);
-
-	const flushPersistence = useCallback(async () => {
-		if (persistenceRunningRef.current || reviewingRef.current) return;
-		persistenceRunningRef.current = true;
-		try {
-			while (queuedTextRef.current !== null && !reviewingRef.current) {
-				const nextText = queuedTextRef.current;
-				queuedTextRef.current = null;
-				if (nextText === lastCleanTextRef.current) continue;
-				try {
-					await lix.execute(
-						"UPDATE lix_file SET content = $1 WHERE id = $2",
-						[new TextEncoder().encode(nextText), fileId],
-						{ originKey },
-					);
-					lastCleanTextRef.current = nextText;
-					setSaveError(null);
-				} catch (error) {
-					setSaveError(
-						error instanceof Error ? error.message : "Could not save file",
-					);
-					// Retry later so one transient write failure does not leave
-					// the grid permanently ahead of the stored file.
-					if (retryTimerRef.current === null) {
-						retryTimerRef.current = window.setTimeout(() => {
-							retryTimerRef.current = null;
-							if (
-								queuedTextRef.current === null &&
-								localTextRef.current !== lastCleanTextRef.current
-							) {
-								queuedTextRef.current = localTextRef.current;
-							}
-							void flushPersistence();
-						}, 2000);
-					}
-					break;
-				}
-			}
-		} finally {
-			persistenceRunningRef.current = false;
-			if (queuedTextRef.current !== null) void flushPersistence();
-		}
-	}, [fileId, lix, originKey]);
-
-	const persistUserEdit = useCallback(
-		(nextText: string) => {
-			if (reviewingRef.current || readOnly) return;
-			localTextRef.current = nextText;
-			queuedTextRef.current = nextText;
-			void flushPersistence();
-		},
-		[flushPersistence, readOnly],
-	);
-
-	useEffect(() => {
-		const events = lix.observe(`SELECT content FROM lix_file WHERE id = $1`, [
-			fileId,
-		]);
-		let closed = false;
-		const reconcile = (data: unknown) => {
-			if (closed) return;
-			const nextText = decodeFileDataToText(data);
-			if (nextText === localTextRef.current) {
-				lastCleanTextRef.current = nextText;
-				return;
-			}
-			if (reviewingRef.current) return;
-			// MVP conflict policy: a queued or running local edit wins.
-			if (
-				persistenceRunningRef.current ||
-				queuedTextRef.current !== null ||
-				localTextRef.current !== lastCleanTextRef.current
-			)
-				return;
-			lastCleanTextRef.current = nextText;
-			localTextRef.current = nextText;
-			setDocumentText(nextText);
-		};
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (!event || closed) continue;
-					const row = event.result.rows[0];
-					if (row) reconcile(row.get("content"));
-				}
-			} catch (error) {
-				if (!closed)
-					setSaveError(
-						error instanceof Error ? error.message : "Could not observe file",
-					);
-			}
-		})();
-		return () => {
-			closed = true;
-			events.close();
-			// The queue is intentionally NOT cleared here: an in-flight flush
-			// loop keeps draining it after unmount so the user's last edit
-			// (already serialized) still reaches lix when the view closes
-			// mid-write.
-		};
-	}, [fileId, lix]);
+	const {
+		text: syncedText,
+		saveError,
+		persist,
+	} = useSyncedTextFile({
+		fileId,
+		initialText: fileText,
+		reviewText,
+		reviewing: isReviewing,
+		readOnly,
+		originKey,
+	});
+	const [documentText, setDocumentText] = useState(syncedText);
+	useEffect(() => setDocumentText(syncedText), [syncedText]);
 
 	const csvDocument = useMemo(
 		() => parseCsvDocument(documentText),
@@ -526,7 +392,7 @@ function EditableCsvView({
 
 	const applyDocumentEdit = useCallback(
 		(mutate: (current: CsvDocument) => CsvDocument) => {
-			if (reviewingRef.current || readOnly) return;
+			if (isReadOnly) return;
 			const next = mutate(documentRef.current);
 			if (next === documentRef.current) return;
 			// The ref updates synchronously so rapid consecutive grid edits
@@ -534,9 +400,9 @@ function EditableCsvView({
 			documentRef.current = next;
 			const nextText = serializeCsvDocument(next);
 			setDocumentText(nextText);
-			persistUserEdit(nextText);
+			persist(nextText);
 		},
-		[persistUserEdit, readOnly],
+		[isReadOnly, persist],
 	);
 
 	const handleCellsEdited = useCallback(
