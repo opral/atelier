@@ -12,6 +12,7 @@ import {
 	createLixBranchSession,
 	type AtelierBranchSession,
 } from "@/state-adapters";
+import { isRecoverableLixSessionError } from "@/lib/lix-session-error";
 
 const LixContext = createContext<Lix | null>(null);
 
@@ -58,6 +59,8 @@ type QueryCacheEntry<TRow> = {
 	execute: () => Promise<TRow[]>;
 	latestMutationSequence: number | undefined;
 	observationOwner: symbol | undefined;
+	/** Last successful rows. Kept when a gone protocol session must not kill the shell. */
+	lastRows: TRow[] | undefined;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
@@ -100,6 +103,7 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
 	latestMutationSequence: undefined,
 	observationOwner: undefined,
+	lastRows: DISABLED_QUERY_ROWS,
 };
 const DISABLED_OBSERVE_QUERY = { sql: "", params: [] } as const;
 
@@ -249,6 +253,11 @@ export function useQuery<TRow>(
 	}
 
 	if (snapshot.status === "error") {
+		// A gone protocol session is the SDK's to reopen (GET /lix/v1 with no
+		// Lix-Session-Id). Throwing here unmounted the whole Atelier shell.
+		if (isRecoverableLixSessionError(snapshot.error)) {
+			return entry.lastRows ?? [];
+		}
 		throw snapshot.error instanceof Error
 			? snapshot.error
 			: new Error(String(snapshot.error));
@@ -294,6 +303,7 @@ function getQueryCacheEntry<TRow>(
 		execute: () => builder.execute(),
 		latestMutationSequence: undefined,
 		observationOwner: undefined,
+		lastRows: undefined,
 	};
 	entry.promise = entry.execute().then(
 		(rows) => {
@@ -301,6 +311,13 @@ function getQueryCacheEntry<TRow>(
 			return rows;
 		},
 		(error: unknown) => {
+			if (isRecoverableLixSessionError(error)) {
+				// Resolve (do not reject) so `use()` cannot hit the error boundary.
+				// The SDK owns the recover-once re-handshake; Atelier must not remount.
+				const rows = entry.lastRows ?? [];
+				setQueryRows(entry, rows);
+				return rows;
+			}
 			setQueryError(entry, error);
 			if (!isPermanentQueryError(error)) {
 				queryCache.delete(cacheKey);
@@ -332,6 +349,7 @@ function subscribeToQueryEntry<TRow>(
 }
 
 function isPermanentQueryError(error: unknown): boolean {
+	if (isRecoverableLixSessionError(error)) return false;
 	if (!(error instanceof Error) || !("status" in error)) return false;
 	const status = (error as Error & { status?: unknown }).status;
 	return (
@@ -344,6 +362,7 @@ function isPermanentQueryError(error: unknown): boolean {
 }
 
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
+	entry.lastRows = rows;
 	if (
 		entry.snapshot.status === "success" &&
 		rowsEqual(entry.snapshot.rows, rows)
@@ -357,6 +376,10 @@ function setQueryError<TRow>(
 	entry: QueryCacheEntry<TRow>,
 	error: unknown,
 ): void {
+	if (isRecoverableLixSessionError(error)) {
+		setQueryRows(entry, entry.lastRows ?? []);
+		return;
+	}
 	setQuerySnapshot(entry, { status: "error", error });
 }
 

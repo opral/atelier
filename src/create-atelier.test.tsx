@@ -47,6 +47,103 @@ describe("Atelier instance file controller", () => {
 		}
 	});
 
+	test("opens working changes from the checkpoint pill", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			defaultOpenPanels: ["left"],
+		});
+		let rendered: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("working-file"),
+					path: "/working.md",
+					content: new TextEncoder().encode("# Before\n"),
+				})
+				.execute();
+			await lix.createCheckpoint();
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.where("id", "=", fakeUuid("working-file"))
+				.execute();
+
+			await act(async () => {
+				rendered = render(<Atelier instance={atelier} />);
+			});
+			const pill = await screen.findByRole("button", {
+				name: "1 change since checkpoint. Open changes review",
+			});
+			await act(async () => {
+				fireEvent.click(pill);
+			});
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(screen.queryByText("Unable to render Atelier")).toBeNull();
+		} finally {
+			await act(async () => rendered?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("opens a read-only working-changes review from the checkpoint pill", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({
+			lix,
+			readOnly: true,
+			sessionStateStore,
+			defaultOpenPanels: ["left"],
+		});
+		let rendered: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("readonly-working-file"),
+					path: "/readonly-working.md",
+					content: new TextEncoder().encode("# Before\n"),
+				})
+				.execute();
+			await lix.createCheckpoint();
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.where("id", "=", fakeUuid("readonly-working-file"))
+				.execute();
+
+			await act(async () => {
+				rendered = render(<Atelier instance={atelier} />);
+			});
+			const pill = await screen.findByRole("button", {
+				name: "1 change since checkpoint. Open changes review",
+			});
+			await act(async () => {
+				fireEvent.click(pill);
+			});
+			expect(
+				await screen.findByRole("region", { name: "Checkpoint history" }),
+			).toBeVisible();
+			expect(
+				await screen.findByRole("button", { name: "Working changes" }),
+			).toBeEnabled();
+			expect(
+				await screen.findByRole("button", { name: "Exit review" }),
+			).toBeVisible();
+			expect(screen.queryByRole("button", { name: /^Checkpoint$/ })).toBeNull();
+			expect(screen.queryByRole("button", { name: /^Keep$/ })).toBeNull();
+			expect(screen.queryByText("Unable to render Atelier")).toBeNull();
+		} finally {
+			await act(async () => rendered?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("keeps panels collapsed when the host does not open them by default", async () => {
 		const lix = await openLix();
 		await qb(lix)

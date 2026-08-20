@@ -980,6 +980,69 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("opens a removed file when working changes contains only deletions", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		const fileId = fakeUuid("removed-working-change");
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fileId,
+					path: "/removed-working-change.md",
+					content: new TextEncoder().encode("# Removed\n"),
+				})
+				.execute();
+			await lix.createCheckpoint();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+
+			await act(async () => {
+				await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			const workingChanges = await screen.findByRole("button", {
+				name: "Working changes",
+			});
+			await waitFor(() => expect(workingChanges).toBeEnabled());
+			fireEvent.click(workingChanges);
+
+			const workingFiles = await screen.findByRole("list", {
+				name: "Files in working changes",
+			});
+			expect(within(workingFiles).getByRole("button")).toHaveTextContent(
+				"removed-working-change.md",
+			);
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(fileId);
+				expect(activeView?.state?.beforeCommitId).toEqual(expect.any(String));
+				expect(activeView?.state?.afterCommitId).toEqual(expect.any(String));
+			});
+			expect(
+				await screen.findByTestId("markdown-review-editor"),
+			).toHaveTextContent("Removed");
+			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("opens the new range instead of an older non-active pending review", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();

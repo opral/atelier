@@ -46,7 +46,10 @@ import {
 } from "@/lib/lix-diff-commands";
 import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb } from "@/lib/lix-kysely";
-import { selectFileWorkingChanges } from "@/queries";
+import {
+	selectFileWorkingChanges,
+	selectReviewableFileWorkingChanges,
+} from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -1225,6 +1228,14 @@ function LayoutShellLoadedContent({
 	const [workingChangeReviewFiles, setWorkingChangeReviewFiles] = useState<
 		readonly LixFileForOpen[]
 	>(EMPTY_LIX_FILES_FOR_OPEN);
+	const [workingChangeReviewRange, setWorkingChangeReviewRange] = useState<{
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+		readonly removedFileIds: ReadonlySet<string>;
+	} | null>(null);
+	const openWorkingChangeFileRef = useRef<((path: string) => void) | null>(
+		null,
+	);
 	// ESC leaves an agent-turn review without resolving it; the pending changes
 	// stay reachable through the "N changes since checkpoint" pill. A new agent
 	// turn re-opens diff mode.
@@ -1272,6 +1283,7 @@ function LayoutShellLoadedContent({
 		(options?: { readonly restoreLiveDocument?: boolean }) => {
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
 			setWorkingChangesReviewOpen(false);
+			setWorkingChangeReviewRange(null);
 			setAgentTurnReviewDismissed(true);
 			setHistoricalReview((current) => {
 				if (current) {
@@ -1290,6 +1302,7 @@ function LayoutShellLoadedContent({
 	useEffect(() => {
 		setWorkingChangesReviewOpen(false);
 		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
+		setWorkingChangeReviewRange(null);
 		setAgentTurnReviewDismissed(false);
 		setHistoricalReview(null);
 	}, [activeBranchId]);
@@ -2037,16 +2050,6 @@ function LayoutShellLoadedContent({
 		[openResolvedFileView],
 	);
 	reopenLiveDocumentRef.current = openAutoRevealedFile;
-	const openWorkingChangeFile = useCallback(
-		(path: string) => {
-			const file = workingChangeReviewFiles.find(
-				(candidate) => candidate.path === path,
-			);
-			if (!file) return;
-			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
-		},
-		[openAutoRevealedFile, workingChangeReviewFiles],
-	);
 	const pendingReviewFilesKey = JSON.stringify([
 		agentTurnRangeValues,
 		privateResolvedReviewIds,
@@ -2141,6 +2144,10 @@ function LayoutShellLoadedContent({
 				openHistoricalCheckpointFileRef.current?.(file.path);
 				return;
 			}
+			if (workingChangesReviewOpen) {
+				openWorkingChangeFileRef.current?.(file.path);
+				return;
+			}
 			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
 		};
 		return {
@@ -2155,6 +2162,7 @@ function LayoutShellLoadedContent({
 		historicalCommitId,
 		openAutoRevealedFile,
 		pendingReviewFiles,
+		workingChangesReviewOpen,
 	]);
 
 	// Leaving the past ends diff mode: when the user navigates to a live
@@ -2317,6 +2325,58 @@ function LayoutShellLoadedContent({
 		},
 		[extensionMap],
 	);
+	const openWorkingChangeFileAtRange = useCallback(
+		(
+			file: LixFileForOpen,
+			range: {
+				readonly beforeCommitId: string;
+				readonly afterCommitId: string;
+				readonly removedFileIds: ReadonlySet<string>;
+			},
+		) => {
+			if (!range.removedFileIds.has(file.id)) {
+				openAutoRevealedFile({ fileId: file.id, filePath: file.path });
+				return;
+			}
+			void resolveAndOpenDocument(file.path, {
+				state: historicalRevisionStateForPath(
+					file.path,
+					range.afterCommitId,
+					range.beforeCommitId,
+				),
+			}).catch((error: unknown) => {
+				console.warn(
+					"[working-changes] failed to open removed file review",
+					error,
+				);
+			});
+		},
+		[
+			historicalRevisionStateForPath,
+			openAutoRevealedFile,
+			resolveAndOpenDocument,
+		],
+	);
+	const openWorkingChangeFile = useCallback(
+		(path: string) => {
+			const file = workingChangeReviewFiles.find(
+				(candidate) => candidate.path === path,
+			);
+			if (!file) return;
+			if (workingChangeReviewRange) {
+				openWorkingChangeFileAtRange(file, workingChangeReviewRange);
+				return;
+			}
+			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
+		},
+		[
+			openAutoRevealedFile,
+			openWorkingChangeFileAtRange,
+			workingChangeReviewFiles,
+			workingChangeReviewRange,
+		],
+	);
+	openWorkingChangeFileRef.current = openWorkingChangeFile;
 
 	const openHistoricalCheckpointFile = useCallback(
 		(path: string) => {
@@ -3215,16 +3275,23 @@ function LayoutShellLoadedContent({
 		},
 		[centralBehavior, emitEvent, extensionMap, handleAddView, setPanelState],
 	);
+	const revealHistory = useCallback(() => {
+		handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
+			panel: "left",
+		});
+	}, [handleOpenExtensionView]);
 	const handleOpenWorkingChangesReview = useCallback(() => {
+		// Read-only / anonymous must never look like a clickable no-op. History
+		// is always reachable even when the review query finds no files.
+		if (isHostReadOnly) {
+			revealHistory();
+		}
 		void (async () => {
 			const currentWorkingChanges =
-				await selectFileWorkingChanges(lix).execute();
-			const changedFileIds = new Set(
-				currentWorkingChanges.map((change) => change.id),
-			);
-			const checkpointFiles = currentFileRows
+				await selectReviewableFileWorkingChanges(lix);
+			const checkpointFiles = currentWorkingChanges
 				.filter((file) => {
-					if (!changedFileIds.has(String(file.id))) return false;
+					if (!file.path) return false;
 					const handler = findFileHandlerExtension(
 						extensionMap.values(),
 						String(file.path),
@@ -3239,8 +3306,38 @@ function LayoutShellLoadedContent({
 				}))
 				.sort((left, right) => left.path.localeCompare(right.path));
 			let firstChangedFile = checkpointFiles[0];
+			const removedFileIds = new Set(
+				currentWorkingChanges
+					.filter((change) => change.diff_type === "removed")
+					.map((change) => change.id),
+			);
+			let reviewRange: {
+				readonly beforeCommitId: string;
+				readonly afterCommitId: string;
+				readonly removedFileIds: ReadonlySet<string>;
+			} | null = null;
+			if (removedFileIds.size > 0) {
+				const [checkpoint, headResult] = await Promise.all([
+					qb(lix)
+						.selectFrom("lix_checkpoint")
+						.select("commit_id")
+						.orderBy("lixcol_created_at", "desc")
+						.limit(1)
+						.executeTakeFirst(),
+					lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
+				]);
+				const headCommitId = headResult.rows[0]?.get("commit_id");
+				if (checkpoint && typeof headCommitId === "string") {
+					reviewRange = {
+						beforeCommitId: checkpoint.commit_id,
+						afterCommitId: headCommitId,
+						removedFileIds,
+					};
+				}
+			}
 			if (firstChangedFile) {
 				setWorkingChangeReviewFiles(checkpointFiles);
+				setWorkingChangeReviewRange(reviewRange);
 			}
 			if (
 				!firstChangedFile &&
@@ -3266,7 +3363,10 @@ function LayoutShellLoadedContent({
 					};
 				}
 			}
-			if (!firstChangedFile) return;
+			if (!firstChangedFile) {
+				if (!isHostReadOnly) revealHistory();
+				return;
+			}
 			if (historicalReview) {
 				// Working changes and a historical checkpoint are two targets of
 				// the same diff mode. Returning to "now" must first release the
@@ -3285,12 +3385,17 @@ function LayoutShellLoadedContent({
 						view.instance === panelStatesRef.current.central.activeInstance,
 				) ?? null;
 			if (!activeCentralView || !isDocumentView(activeCentralView)) {
-				openAutoRevealedFile({
-					fileId: firstChangedFile.id,
-					filePath: firstChangedFile.path,
-				});
+				if (reviewRange) {
+					openWorkingChangeFileAtRange(firstChangedFile, reviewRange);
+				} else {
+					openAutoRevealedFile({
+						fileId: firstChangedFile.id,
+						filePath: firstChangedFile.path,
+					});
+				}
 			}
 		})().catch((error: unknown) => {
+			if (!isHostReadOnly) revealHistory();
 			console.warn("[checkpoint] failed to open working changes review", error);
 		});
 	}, [
@@ -3299,9 +3404,12 @@ function LayoutShellLoadedContent({
 		exitDiffReview,
 		extensionMap,
 		historicalReview,
+		isHostReadOnly,
 		lix,
 		openAutoRevealedFile,
+		openWorkingChangeFileAtRange,
 		privateResolvedReviewIds,
+		revealHistory,
 	]);
 
 	const atelierDocumentsActionsRef =
@@ -3840,9 +3948,10 @@ function LayoutShellLoadedContent({
 						</Panel>
 					</Group>
 				</main>
-				{isReviewMode && !isHostReadOnly ? (
+				{isReviewMode ? (
 					<ExternalWriteReviewControls
 						isActive
+						readOnly={isHostReadOnly}
 						mode={
 							historicalReview
 								? "historical"
@@ -3853,11 +3962,11 @@ function LayoutShellLoadedContent({
 						navigation={reviewNavigation}
 						files={pendingReviewFiles}
 						onUndo={
-							historicalReview
+							isHostReadOnly || historicalReview
 								? undefined
 								: (selectedFileIds) => void handleUndoReviews(selectedFileIds)
 						}
-						onPrimary={handleDiffPrimary}
+						onPrimary={isHostReadOnly ? undefined : handleDiffPrimary}
 						onExit={exitDiffReview}
 					/>
 				) : null}

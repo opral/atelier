@@ -7,6 +7,7 @@ import {
 	selectFileWorkingChanges,
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
+	selectReviewableFileWorkingChanges,
 	selectWorkingChangeCount,
 	selectWorkingChanges,
 } from "@/queries";
@@ -180,6 +181,33 @@ describe("checkpoint queries", () => {
 
 		await lix.createCheckpoint();
 		expect(await selectFileWorkingChanges(lix).execute()).toEqual([]);
+
+		await lix.close();
+	});
+
+	test("returns files removed since the latest checkpoint", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("removed-review-file");
+
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/drafts/removed.md",
+				content: new TextEncoder().encode("remove me"),
+			})
+			.execute();
+		await lix.createCheckpoint();
+		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+
+		expect(await selectReviewableFileWorkingChanges(lix)).toEqual([
+			{
+				id: fileId,
+				path: "/drafts/removed.md",
+				previous_path: "/drafts/removed.md",
+				diff_type: "removed",
+			},
+		]);
 
 		await lix.close();
 	});

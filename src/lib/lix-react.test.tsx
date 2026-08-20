@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { AtelierErrorBoundary } from "../atelier-error-boundary";
 import { LixProvider, useQuery } from "./lix-react";
+import { createLixProtocolSessionGoneError } from "./lix-session-error";
 import type { Lix, ObserveEvent } from "@lix-js/sdk";
 
 afterEach(() => {
@@ -633,6 +634,81 @@ test("useQuery retains a permanent observed query error across remounts", async 
 	await screen.findByTestId("permanent-query-error");
 	expect(execute).toHaveBeenCalledTimes(1);
 	second.unmount();
+});
+
+test("useQuery keeps last rows when a protocol session is gone instead of crashing", async () => {
+	const error = createLixProtocolSessionGoneError();
+	const stream = createObserveStream();
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
+	const lix = { observe: vi.fn(() => stream) } as unknown as Lix;
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM session_gone_query_error",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="session-gone-query-value">{rows[0]?.value}</div>;
+	}
+
+	let view!: ReturnType<typeof render>;
+	await act(async () => {
+		view = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
+	});
+	expect(await screen.findByTestId("session-gone-query-value")).toHaveTextContent(
+		"initial",
+	);
+	await act(async () => stream.fail(error));
+	expect(screen.getByTestId("session-gone-query-value")).toHaveTextContent(
+		"initial",
+	);
+	expect(screen.queryByTestId("session-gone-query-error")).not.toBeInTheDocument();
+	// Atelier must not remount or restart observe. The SDK reopens the session.
+	expect(lix.observe).toHaveBeenCalledTimes(1);
+	expect(execute).toHaveBeenCalledTimes(1);
+	view.unmount();
+});
+
+test("useQuery does not throw when the initial read hits a gone protocol session", async () => {
+	const error = createLixProtocolSessionGoneError();
+	const execute = vi.fn().mockRejectedValue(error);
+	const lix = {
+		observe: vi.fn(() => ({
+			next: () => new Promise<ObserveEvent | undefined>(() => {}),
+			close: vi.fn(),
+		})),
+	} as unknown as Lix;
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM session_gone_initial_error",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return (
+			<div data-testid="session-gone-initial-value">{rows.length}</div>
+		);
+	}
+
+	let view!: ReturnType<typeof render>;
+	await act(async () => {
+		view = renderWithErrorBoundary(
+			lix,
+			<Probe />,
+			"session-gone-initial-error",
+		);
+	});
+	expect(await screen.findByTestId("session-gone-initial-value")).toHaveTextContent(
+		"0",
+	);
+	expect(
+		screen.queryByTestId("session-gone-initial-error"),
+	).not.toBeInTheDocument();
+	view.unmount();
 });
 
 test("useQuery retries a rate-limited observed query after remount", async () => {
