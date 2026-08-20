@@ -1,5 +1,4 @@
 import type { JsonValue, Lix } from "@lix-js/sdk";
-import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {
@@ -35,10 +34,6 @@ export type FileWorkingChangeRow = {
 export type CheckpointRow = {
 	commit_id: string;
 	created_at: string;
-};
-
-export type CheckpointWithFileCountRow = CheckpointRow & {
-	file_count: number;
 };
 
 /**
@@ -159,27 +154,4 @@ export function selectCheckpoints(lix: Lix) {
 
 export function selectLatestCheckpoint(lix: Lix) {
 	return selectCheckpoints(lix).limit(1);
-}
-
-/**
- * Files represented by the net changes stored in one checkpoint commit.
- */
-export function selectCheckpointsWithFileCounts(lix: Lix) {
-	return qb(lix)
-		.selectFrom("lix_checkpoint")
-		.leftJoin(
-			selectFileHistory(lix)
-				.selectAll("lix_file_history")
-				.as("lix_file_history"),
-			"lix_file_history.lixcol_observed_commit_id",
-			"lix_checkpoint.commit_id",
-		)
-		.select([
-			"lix_checkpoint.commit_id",
-			"lix_checkpoint.lixcol_created_at as created_at",
-			sql<number>`count(distinct lix_file_history.id)`.as("file_count"),
-		])
-		.groupBy(["lix_checkpoint.commit_id", "created_at"])
-		.orderBy("created_at", "desc")
-		.$castTo<CheckpointWithFileCountRow>();
 }

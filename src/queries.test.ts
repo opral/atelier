@@ -4,7 +4,6 @@ import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectCheckpoints,
-	selectCheckpointsWithFileCounts,
 	selectFileWorkingChanges,
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
@@ -159,7 +158,7 @@ describe("checkpoint queries", () => {
 		await lix.close();
 	});
 
-	test("returns composed working files and checkpoint file counts", async () => {
+	test("returns composed working files and clears them at a checkpoint", async () => {
 		const lix = await openLix();
 
 		await lix.execute(
@@ -179,15 +178,8 @@ describe("checkpoint queries", () => {
 			},
 		]);
 
-		const checkpoint = await lix.createCheckpoint();
+		await lix.createCheckpoint();
 		expect(await selectFileWorkingChanges(lix).execute()).toEqual([]);
-		expect(await selectCheckpointsWithFileCounts(lix).execute()).toEqual([
-			expect.objectContaining({
-				commit_id: checkpoint.commitId,
-				file_count: 1,
-			}),
-			expect.objectContaining({ file_count: 0 }),
-		]);
 
 		await lix.close();
 	});
