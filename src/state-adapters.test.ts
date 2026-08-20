@@ -44,11 +44,17 @@ test("memory preferences coerce and persist changes", async () => {
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
 		review: { autoAcceptAgentChanges: true },
+		extensions: {
+			atelier_files: { showHiddenFiles: true },
+		},
 	});
 	expect(await store.load()).toEqual({
 		version: 1,
 		layout: { sizes: { left: 25, central: 50, right: 25 } },
 		review: { autoAcceptAgentChanges: true },
+		extensions: {
+			atelier_files: { showHiddenFiles: true },
+		},
 	});
 });
 

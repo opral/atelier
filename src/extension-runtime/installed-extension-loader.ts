@@ -15,6 +15,7 @@ const MANIFEST_SUFFIX = "/manifest.json";
 
 type ExtensionModuleContract = {
 	mount: ExtensionDefinition["mount"];
+	menuItems?: ExtensionDefinition["menuItems"];
 };
 
 export type InstalledExtensionCandidate = {
@@ -85,8 +86,16 @@ async function importExtensionModule(
 				"Extension module must default-export an object with a mount function.",
 			);
 		}
+		if (
+			contract.menuItems !== undefined &&
+			typeof contract.menuItems !== "function"
+		) {
+			throw new Error(
+				"Extension module menuItems must be a function when provided.",
+			);
+		}
 		const unknownFields = Object.keys(contract).filter(
-			(key) => key !== "mount",
+			(key) => key !== "mount" && key !== "menuItems",
 		);
 		if (unknownFields.length > 0) {
 			throw new Error(
@@ -148,6 +157,7 @@ export async function loadInstalledExtensionsFromRows(
 					icon: Puzzle,
 					fileExtensions: manifest.fileExtensions,
 					multiInstance: manifest.multiInstance,
+					menuItems: module.menuItems,
 					mount: module.mount,
 				},
 			});

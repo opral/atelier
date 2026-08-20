@@ -137,11 +137,12 @@ function preferLixEntry(
 
 function normalizeAndDedupeEntries(
 	entries: readonly FilesystemEntryRow[],
+	options: { readonly showHiddenFiles?: boolean },
 ): FilesystemEntryRow[] {
 	const entriesByPath = new Map<string, FilesystemEntryRow>();
 	for (const entry of entries) {
 		const path = normalizeEntryPath(entry);
-		if (hasDotPrefixedSegment(path)) continue;
+		if (!options.showHiddenFiles && hasDotPrefixedSegment(path)) continue;
 		const normalizedEntry = {
 			...entry,
 			path,
@@ -163,8 +164,9 @@ function normalizeAndDedupeEntries(
  */
 export function buildFilesystemTree(
 	entries: readonly FilesystemEntryRow[],
+	options: { readonly showHiddenFiles?: boolean } = {},
 ): FilesystemTreeNode[] {
-	const normalizedEntries = normalizeAndDedupeEntries(entries);
+	const normalizedEntries = normalizeAndDedupeEntries(entries, options);
 	const directories = new Map<string, FilesystemTreeDirectory>();
 	const roots: FilesystemTreeNode[] = [];
 

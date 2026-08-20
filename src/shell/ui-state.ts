@@ -1,4 +1,5 @@
 import type { PanelSide, PanelState } from "../extension-runtime/types";
+import type { AtelierJsonValue } from "../extension-api";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 
 /**
@@ -48,6 +49,10 @@ export type AtelierUserPreferencesV1 = {
 	readonly review?: {
 		readonly autoAcceptAgentChanges: boolean;
 	};
+	/** JSON preferences, namespaced by extension id and then local key. */
+	readonly extensions?: Readonly<
+		Record<string, Readonly<Record<string, AtelierJsonValue>>>
+	>;
 };
 
 /**
@@ -206,6 +211,7 @@ export function coerceAtelierUserPreferences(
 		candidate.layout && typeof candidate.layout === "object"
 			? (candidate.layout as Record<string, unknown>)
 			: {};
+	const extensions = coerceExtensionPreferences(candidate.extensions);
 	return {
 		version: 1,
 		layout: {
@@ -221,7 +227,78 @@ export function coerceAtelierUserPreferences(
 				(candidate.review as Record<string, unknown>).autoAcceptAgentChanges ===
 					true,
 		},
+		...(Object.keys(extensions).length > 0 ? { extensions } : {}),
 	};
+}
+
+function coerceExtensionPreferences(
+	raw: unknown,
+): Record<string, Record<string, AtelierJsonValue>> {
+	if (!isPlainRecord(raw)) return {};
+	const result: Record<string, Record<string, AtelierJsonValue>> = {};
+	for (const [extensionId, namespace] of Object.entries(raw)) {
+		if (!extensionId || !isPlainRecord(namespace)) continue;
+		const values: Record<string, AtelierJsonValue> = {};
+		for (const [key, value] of Object.entries(namespace)) {
+			if (!key) continue;
+			const json = coerceJsonValue(value, new Set<object>());
+			if (json !== undefined) values[key] = json;
+		}
+		if (Object.keys(values).length > 0) result[extensionId] = values;
+	}
+	return result;
+}
+
+function coerceJsonValue(
+	value: unknown,
+	seen: Set<object>,
+): AtelierJsonValue | undefined {
+	if (
+		value === null ||
+		typeof value === "string" ||
+		typeof value === "boolean"
+	) {
+		return value;
+	}
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? value : undefined;
+	}
+	if (typeof value !== "object" || seen.has(value)) return undefined;
+	seen.add(value);
+	if (Array.isArray(value)) {
+		const result: AtelierJsonValue[] = [];
+		for (const entry of value) {
+			const json = coerceJsonValue(entry, seen);
+			if (json === undefined) {
+				seen.delete(value);
+				return undefined;
+			}
+			result.push(json);
+		}
+		seen.delete(value);
+		return result;
+	}
+	if (!isPlainRecord(value)) {
+		seen.delete(value);
+		return undefined;
+	}
+	const result: Record<string, AtelierJsonValue> = {};
+	for (const [key, entry] of Object.entries(value)) {
+		const json = coerceJsonValue(entry, seen);
+		if (json === undefined) {
+			seen.delete(value);
+			return undefined;
+		}
+		result[key] = json;
+	}
+	seen.delete(value);
+	return result;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
 }
 
 export function normalizeLayoutSizes(

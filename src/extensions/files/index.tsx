@@ -8,7 +8,7 @@ import {
 	type ButtonHTMLAttributes,
 	type ReactNode,
 } from "react";
-import { ChevronDown, Files, FileUp, Plus } from "lucide-react";
+import { ChevronDown, Eye, Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import fileCsvIconUrl from "./assets/file-csv.svg";
@@ -92,6 +92,7 @@ type FilesViewContext = {
 	readonly isActiveView?: boolean;
 	/** Hides every file mutation affordance for read-only hosts. */
 	readonly readOnly?: boolean;
+	readonly showHiddenFiles?: boolean;
 	/**
 	 * Host data source for un-imported "watched" entries. Resubscribed whenever
 	 * the expanded directory set changes (the root "/" is always included).
@@ -236,8 +237,11 @@ function FilesViewContent({
 		[entries, watchedEntries],
 	);
 	const nodes = useMemo(
-		() => buildFilesystemTree(mergedEntries),
-		[mergedEntries],
+		() =>
+			buildFilesystemTree(mergedEntries, {
+				showHiddenFiles: context?.showHiddenFiles,
+			}),
+		[context?.showHiddenFiles, mergedEntries],
 	);
 	const agentReviewPaths = usePendingExternalWriteReviewPaths(
 		lix,
@@ -1473,6 +1477,19 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Browse and pin project documents.",
 	icon: Files,
+	menuItems: ({ preferences }) => {
+		const showHiddenFiles = preferences.get("showHiddenFiles") === true;
+		return [
+			{
+				key: "showHiddenFiles",
+				kind: "checkbox",
+				icon: Eye,
+				label: "Show hidden files",
+				checked: showHiddenFiles,
+				onSelect: () => preferences.set("showHiddenFiles", !showHiddenFiles),
+			},
+		];
+	},
 	component: ({ atelier, view }) => (
 		<LixProvider lix={atelier.lix}>
 			<FilesView
@@ -1500,6 +1517,7 @@ export const extension = createReactExtensionDefinition({
 					viewInstance: view.instanceId,
 					isActiveView: view.isActive,
 					readOnly: atelier.readOnly,
+					showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
 					watchEntries: atelier.filesView?.watchEntries,
 					resolveFileForInteraction:
 						atelier.filesView?.resolveFileForInteraction,

@@ -6,6 +6,7 @@ import { hostExtensionDefinition } from "./host-extension";
 describe("hostExtensionDefinition", () => {
 	test("combines a host manifest with its already-loaded entry", () => {
 		const mount = vi.fn();
+		const menuItems = vi.fn(() => []);
 		const registration: AtelierExtensionRegistration = {
 			manifest: {
 				apiVersion: 1,
@@ -14,7 +15,7 @@ describe("hostExtensionDefinition", () => {
 				description: "Run a terminal.",
 				multiInstance: true,
 			},
-			entry: { icon: Terminal, mount },
+			entry: { icon: Terminal, menuItems, mount },
 		};
 
 		expect(hostExtensionDefinition(registration)).toMatchObject({
@@ -23,6 +24,7 @@ describe("hostExtensionDefinition", () => {
 			description: "Run a terminal.",
 			icon: Terminal,
 			multiInstance: true,
+			menuItems,
 			mount,
 		});
 	});
