@@ -135,14 +135,12 @@ describe("parseJsonValue and refineJsonColumns", () => {
 });
 
 describe("groupBaseTables", () => {
-	test("lists each table exactly once with its variant surfaces", () => {
+	test("lists each table exactly once with current and history surfaces", () => {
 		const bases = groupBaseTables([
 			"lix_file",
-			"lix_file_by_branch",
 			"lix_file_history",
 			"lix_change",
 			"lix_file_working_change",
-			"lix_file_working_change_by_branch",
 		]);
 		expect(bases.map((base) => base.name)).toEqual([
 			"lix_change",
@@ -151,7 +149,6 @@ describe("groupBaseTables", () => {
 		]);
 		expect(bases.find((base) => base.name === "lix_file")?.surfaces).toEqual([
 			"current",
-			"_by_branch",
 			"_history",
 		]);
 		expect(bases.find((base) => base.name === "lix_change")?.surfaces).toEqual([
@@ -161,9 +158,6 @@ describe("groupBaseTables", () => {
 
 	test("surfaceTableName maps surfaces to table names", () => {
 		expect(surfaceTableName("lix_file", "current")).toBe("lix_file");
-		expect(surfaceTableName("lix_file", "_by_branch")).toBe(
-			"lix_file_by_branch",
-		);
 		expect(surfaceTableName("lix_file", "_history")).toBe("lix_file_history");
 	});
 });
@@ -253,7 +247,7 @@ describe("SqlExplorerView", () => {
 		expect(historyEntries.length).toBeGreaterThan(0);
 	});
 
-	test("clicking a table opens the read-only datagrid with surfaces", async () => {
+	test("clicking a table opens the read-only datagrid without by-branch surfaces", async () => {
 		render(
 			<SqlExplorerView
 				lix={lix}
@@ -269,8 +263,11 @@ describe("SqlExplorerView", () => {
 		fireEvent.click(tableButton);
 
 		await screen.findByText("/notes/hello.md");
-		const surfaceTabs = screen.getAllByRole("tab");
-		expect(surfaceTabs.map((tab) => tab.textContent)).toContain("current");
+		expect(
+			Array.from(
+				document.querySelectorAll("[data-attr='sql-table-surface']"),
+			).map((surface) => surface.textContent),
+		).not.toContain("_by_branch");
 		expect(
 			document.querySelector("[data-attr='sql-grid-row-range']"),
 		).toHaveTextContent(/1–1 of 1 row/);

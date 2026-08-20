@@ -1,5 +1,6 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
+import { withLixBranchSession } from "@/lib/lix-branch-session";
 import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 
 export const AGENT_TURN_COMMIT_RANGE_KEY =
@@ -52,14 +53,23 @@ export async function readAgentTurnCommitRanges(
 	lix: Lix,
 	branchId?: string,
 ): Promise<readonly AgentTurnCommitRange[]> {
-	const resolvedBranchId = branchId ?? (await lix.activeBranchId());
+	const read = async (branchLix: Lix) => {
+		const values = await readAgentTurnCommitRangeValues(branchLix);
+		return agentTurnCommitRangesFromValues(values);
+	};
+	const targetBranchId = branchId ?? (await lix.activeBranchId());
+	return withLixBranchSession(lix, targetBranchId, read);
+}
+
+export async function readAgentTurnCommitRangeValues(
+	lix: Lix,
+): Promise<readonly unknown[]> {
 	const rows = await qb(lix)
-		.selectFrom("lix_key_value_by_branch")
+		.selectFrom("lix_key_value")
 		.select("value")
 		.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
-		.where("lixcol_branch_id", "=", resolvedBranchId)
 		.execute();
-	return agentTurnCommitRangesFromValues(rows.map((row) => row.value));
+	return rows.map((row) => row.value);
 }
 
 export async function appendAgentTurnCommitRange(
@@ -68,18 +78,22 @@ export async function appendAgentTurnCommitRange(
 	options?: { readonly branchId?: string },
 ): Promise<void> {
 	const value = serializeAgentTurnCommitRange(range);
-	const branchId = options?.branchId ?? (await lix.activeBranchId());
-	await qb(lix)
-		.insertInto("lix_key_value_by_branch")
-		.values({
-			key: agentTurnCommitRangeKey(range.id),
-			value,
-			lixcol_branch_id: branchId,
-			lixcol_global: branchId === GLOBAL_BRANCH_ID,
-			lixcol_untracked: true,
-		})
-		.onConflict((oc) => oc.columns(["key", "lixcol_branch_id"]).doNothing())
-		.execute();
+	const write = async (branchLix: Lix, global: boolean) => {
+		await qb(branchLix)
+			.insertInto("lix_key_value")
+			.values({
+				key: agentTurnCommitRangeKey(range.id),
+				value,
+				lixcol_global: global,
+				lixcol_untracked: true,
+			})
+			.onConflict((oc) => oc.column("key").doNothing())
+			.execute();
+	};
+	const targetBranchId = options?.branchId ?? (await lix.activeBranchId());
+	await withLixBranchSession(lix, targetBranchId, (branchLix) =>
+		write(branchLix, targetBranchId === GLOBAL_BRANCH_ID),
+	);
 }
 
 function agentTurnCommitRangeKey(rangeId: string): string {
