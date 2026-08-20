@@ -70,7 +70,6 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 					fileId,
 					markdown: value,
 					expectedMarkdown,
-					createIfMissing: false,
 				});
 				expect(didPersist).toBe(true);
 				expectedMarkdown = value;
@@ -106,8 +105,8 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 		}
 		expect(latencies).toHaveLength(100);
 		expect(renderedValues.size).toBe(111);
-		expect(result.clientExecuteCalls).toBe(200);
-		expect(result.totalSqlExecutions).toBe(300);
+		expect(result.clientExecuteCalls).toBe(100);
+		expect(result.totalSqlExecutions).toBe(200);
 	} finally {
 		view?.unmount();
 		await lix.close();

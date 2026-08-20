@@ -219,7 +219,6 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			fileId: fileId!,
 			markdown,
 			expectedMarkdown: persistenceBaseline.expectedFileMarkdown,
-			createIfMissing: false,
 			originKey,
 		});
 		if (!didPersist) return;
