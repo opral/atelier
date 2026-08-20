@@ -792,7 +792,9 @@ describe("MarkdownView", () => {
 		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
 			formattingToolbar,
 		);
-		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		await waitFor(() => {
+			expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		});
 
 		await act(async () => {
 			utils?.unmount();

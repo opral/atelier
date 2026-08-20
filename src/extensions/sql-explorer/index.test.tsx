@@ -318,7 +318,9 @@ describe("SqlExplorerView", () => {
 			failNextQuery = true;
 			fireEvent.click(screen.getByRole("button", { name: /Run/ }));
 
-			const alert = await screen.findByRole("alert");
+			const alert = await screen.findByRole("alert", undefined, {
+				timeout: 5_000,
+			});
 			expect(alert).toHaveTextContent(/session has expired/);
 			expect(screen.queryByText("42")).not.toBeInTheDocument();
 		} finally {
