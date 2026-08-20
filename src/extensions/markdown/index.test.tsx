@@ -809,7 +809,7 @@ describe("MarkdownView", () => {
 		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
 	});
 
-	test("renders historical deleted-file diffs without review controls", async () => {
+	test("renders historical deleted-file raw snapshots without review controls", async () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
 		await qb(lix)
@@ -860,7 +860,10 @@ describe("MarkdownView", () => {
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
-		expect(screen.getByTestId("markdown-review-editor")).toBeInTheDocument();
+		const reviewEditor = screen.getByTestId("markdown-review-editor");
+		expect(reviewEditor).toHaveTextContent("Before");
+		expect(reviewEditor).toHaveTextContent("After");
+		expect(screen.queryByText("Loading review…")).toBeNull();
 
 		await act(async () => {
 			utils?.unmount();

@@ -5,7 +5,6 @@ import type { Editor } from "@tiptap/core";
 import { Check, FileText, Loader2 } from "lucide-react";
 import {
 	useLix,
-	useQuery,
 	useQueryTakeFirst,
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
@@ -36,11 +35,7 @@ import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
-import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
-import {
-	historicalMarkdownNodeBlocks,
-	type HistoricalMarkdownNodeRow,
-} from "./review/markdown-node-history";
+import type { MarkdownReviewDiff } from "./review-diff";
 import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
@@ -299,13 +294,6 @@ function MarkdownLiveViewLoaded({
 				afterMarkdown: decodeFileDataToText(reviewData.afterData),
 			}
 		: null;
-	const reviewBlocks = useMarkdownBlocksAtCommitsWithoutSuspense(
-		effectiveFileRow?.id ?? "",
-		review?.beforeCommitId,
-		review?.afterCommitId,
-		reviewDiff?.beforeMarkdown,
-		reviewDiff?.afterMarkdown,
-	);
 	const [liveEditorState, setLiveEditorState] = useState<{
 		readonly fileId: string;
 		readonly editor: Editor;
@@ -373,8 +361,6 @@ function MarkdownLiveViewLoaded({
 								reviewId={review.reviewId}
 								beforeCommitId={review.beforeCommitId}
 								afterCommitId={review.afterCommitId}
-								beforeBlocks={reviewBlocks?.beforeBlocks}
-								afterBlocks={reviewBlocks?.afterBlocks}
 								openWorkspaceFile={openWorkspaceFile}
 								isActive={isActiveView && isPanelFocused}
 								onAccept={onAcceptReviewDiff}
@@ -443,8 +429,6 @@ function MarkdownLiveReviewController({
 	reviewId,
 	beforeCommitId,
 	afterCommitId,
-	beforeBlocks,
-	afterBlocks,
 	isActive,
 	openWorkspaceFile,
 	onAccept,
@@ -465,11 +449,6 @@ function MarkdownLiveReviewController({
 	if (reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown) {
 		return null;
 	}
-	const enrichedReviewDiff = enrichMarkdownReviewDiff(
-		reviewDiff,
-		beforeBlocks,
-		afterBlocks,
-	);
 	const completeReview = createCompleteMarkdownReview({
 		fileId,
 		review,
@@ -484,7 +463,7 @@ function MarkdownLiveReviewController({
 			<MarkdownReviewEditor
 				key={`${reviewId}:${beforeCommitId}:${afterCommitId}:accepted`}
 				externalEditor={editor}
-				reviewDiff={enrichedReviewDiff}
+				reviewDiff={reviewDiff}
 				sourceFilePath={sourceFilePath}
 				afterCommitId={afterCommitId}
 				openWorkspaceFile={openWorkspaceFile}
@@ -497,7 +476,7 @@ function MarkdownLiveReviewController({
 		<MarkdownReviewEditor
 			key={`${reviewId}:${beforeCommitId}:${afterCommitId}`}
 			externalEditor={editor}
-			reviewDiff={enrichedReviewDiff}
+			reviewDiff={reviewDiff}
 			sourceFilePath={sourceFilePath}
 			afterCommitId={afterCommitId}
 			openWorkspaceFile={openWorkspaceFile}
@@ -583,20 +562,18 @@ function MarkdownHistoricalViewLoaded({
 					<FormattingToolbar disabled />
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						{reviewDiff && review ? (
-							<Suspense fallback={<MarkdownReviewOverlayFallback />}>
-								<MarkdownReviewOverlayWithBlockHistory
-									fileId={effectiveFileRow.id}
-									sourceFilePath={effectiveFileRow.path}
-									review={review}
-									reviewDiff={reviewDiff}
-									reviewId={review.reviewId}
-									beforeCommitId={review.beforeCommitId}
-									afterCommitId={review.afterCommitId}
-									openWorkspaceFile={openWorkspaceFile}
-									isActive={isActiveView && isPanelFocused}
-									controls="none"
-								/>
-							</Suspense>
+							<MarkdownReviewOverlay
+								fileId={effectiveFileRow.id}
+								sourceFilePath={effectiveFileRow.path}
+								review={review}
+								reviewDiff={reviewDiff}
+								reviewId={review.reviewId}
+								beforeCommitId={review.beforeCommitId}
+								afterCommitId={review.afterCommitId}
+								openWorkspaceFile={openWorkspaceFile}
+								isActive={isActiveView && isPanelFocused}
+								controls="none"
+							/>
 						) : (
 							<MarkdownReviewOverlayFallback />
 						)}
@@ -716,8 +693,6 @@ type MarkdownReviewOverlayProps = {
 	readonly reviewId: string;
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
-	readonly beforeBlocks?: MarkdownBlockSnapshot[];
-	readonly afterBlocks?: MarkdownBlockSnapshot[];
 	readonly isActive: boolean;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly controls?: "review" | "none";
@@ -745,8 +720,6 @@ function MarkdownReviewOverlay({
 	reviewId,
 	beforeCommitId,
 	afterCommitId,
-	beforeBlocks,
-	afterBlocks,
 	isActive,
 	openWorkspaceFile,
 	controls = "review",
@@ -754,11 +727,6 @@ function MarkdownReviewOverlay({
 	onReject,
 	onResolve,
 }: MarkdownReviewOverlayProps) {
-	const enrichedReviewDiff = enrichMarkdownReviewDiff(
-		reviewDiff,
-		beforeBlocks,
-		afterBlocks,
-	);
 	const completeReview = createCompleteMarkdownReview({
 		fileId,
 		review,
@@ -774,7 +742,7 @@ function MarkdownReviewOverlay({
 			<div className="markdown-review-surface">
 				<MarkdownReviewEditor
 					key={`${reviewId}:${beforeCommitId}:${afterCommitId}`}
-					reviewDiff={enrichedReviewDiff}
+					reviewDiff={reviewDiff}
 					sourceFilePath={sourceFilePath}
 					afterCommitId={afterCommitId}
 					openWorkspaceFile={openWorkspaceFile}
@@ -827,46 +795,6 @@ function createCompleteMarkdownReview({
 	};
 }
 
-function MarkdownReviewOverlayWithBlockHistory(
-	props: Omit<MarkdownReviewOverlayProps, "beforeBlocks" | "afterBlocks">,
-) {
-	const { beforeBlocks, afterBlocks } = useMarkdownBlocksAtCommits(
-		props.fileId,
-		props.beforeCommitId,
-		props.afterCommitId,
-		props.reviewDiff.beforeMarkdown,
-		props.reviewDiff.afterMarkdown,
-	);
-	return (
-		<MarkdownReviewOverlay
-			{...props}
-			beforeBlocks={beforeBlocks}
-			afterBlocks={afterBlocks}
-		/>
-	);
-}
-
-function enrichMarkdownReviewDiff(
-	reviewDiff: MarkdownReviewDiff,
-	beforeBlocks: MarkdownBlockSnapshot[] | undefined,
-	afterBlocks: MarkdownBlockSnapshot[] | undefined,
-): MarkdownReviewDiff {
-	const beforeSnapshotsAvailable =
-		beforeBlocks !== undefined &&
-		(beforeBlocks.length > 0 || reviewDiff.beforeMarkdown.trim().length === 0);
-	const afterSnapshotsAvailable =
-		afterBlocks !== undefined &&
-		(afterBlocks.length > 0 || reviewDiff.afterMarkdown.trim().length === 0);
-	if (!beforeSnapshotsAvailable || !afterSnapshotsAvailable) {
-		return reviewDiff;
-	}
-	return {
-		...reviewDiff,
-		beforeBlocks: beforeBlocks ?? [],
-		afterBlocks: afterBlocks ?? [],
-	};
-}
-
 function MarkdownReviewOverlayFallback() {
 	return (
 		<div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
@@ -876,151 +804,6 @@ function MarkdownReviewOverlayFallback() {
 			</div>
 		</div>
 	);
-}
-
-function useMarkdownBlocksAtCommits(
-	fileId: string,
-	beforeCommitId: string | undefined,
-	afterCommitId: string | undefined,
-	beforeMarkdown: string,
-	afterMarkdown: string,
-): {
-	readonly beforeBlocks: MarkdownBlockSnapshot[] | undefined;
-	readonly afterBlocks: MarkdownBlockSnapshot[] | undefined;
-} {
-	const rows = useQuery<HistoricalMarkdownNodeRow>(
-		(lix) =>
-			beforeCommitId && afterCommitId
-				? historicalMarkdownBlocksQuery(lix, {
-						beforeCommitId,
-						afterCommitId,
-						fileId,
-					})
-				: emptyMarkdownBlocksQuery(),
-		{ subscribe: false },
-	);
-	if (!beforeCommitId || !afterCommitId) {
-		return { beforeBlocks: undefined, afterBlocks: undefined };
-	}
-	return {
-		beforeBlocks: historicalMarkdownNodeBlocks(
-			rows,
-			beforeCommitId,
-			beforeMarkdown,
-		),
-		afterBlocks: historicalMarkdownNodeBlocks(
-			rows,
-			afterCommitId,
-			afterMarkdown,
-		),
-	};
-}
-
-type ResolvedMarkdownBlocks = {
-	readonly key: string;
-	readonly beforeBlocks: MarkdownBlockSnapshot[] | undefined;
-	readonly afterBlocks: MarkdownBlockSnapshot[] | undefined;
-};
-
-/**
- * Loads optional entity identity hints without suspending the visible editor.
- * Raw before/after snapshots remain authoritative if this query fails.
- */
-function useMarkdownBlocksAtCommitsWithoutSuspense(
-	fileId: string,
-	beforeCommitId: string | undefined,
-	afterCommitId: string | undefined,
-	beforeMarkdown: string | undefined,
-	afterMarkdown: string | undefined,
-): ResolvedMarkdownBlocks | null {
-	const lix = useLix();
-	const key =
-		fileId && beforeCommitId && afterCommitId
-			? JSON.stringify([fileId, beforeCommitId, afterCommitId])
-			: null;
-	const [resolved, setResolved] = useState<ResolvedMarkdownBlocks | null>(null);
-
-	useEffect(() => {
-		if (
-			!key ||
-			!beforeCommitId ||
-			!afterCommitId ||
-			beforeMarkdown === undefined ||
-			afterMarkdown === undefined
-		)
-			return;
-		let cancelled = false;
-		void historicalMarkdownBlocksQuery(lix, {
-			fileId,
-			beforeCommitId,
-			afterCommitId,
-		})
-			.execute()
-			.then((rows) => {
-				if (cancelled) return;
-				setResolved({
-					key,
-					beforeBlocks: historicalMarkdownNodeBlocks(
-						rows,
-						beforeCommitId,
-						beforeMarkdown,
-					),
-					afterBlocks: historicalMarkdownNodeBlocks(
-						rows,
-						afterCommitId,
-						afterMarkdown,
-					),
-				});
-			})
-			.catch((error: unknown) => {
-				if (cancelled) return;
-				console.warn(
-					"[markdown-review] entity identity hints could not be loaded; using raw snapshots",
-					error,
-				);
-				setResolved({
-					key,
-					beforeBlocks: undefined,
-					afterBlocks: undefined,
-				});
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		afterCommitId,
-		afterMarkdown,
-		beforeCommitId,
-		beforeMarkdown,
-		fileId,
-		key,
-		lix,
-	]);
-
-	if (!key || resolved?.key !== key) return null;
-	return resolved;
-}
-
-function historicalMarkdownBlocksQuery(
-	_lix: ReturnType<typeof useLix>,
-	_args: {
-		readonly beforeCommitId: string;
-		readonly afterCommitId: string;
-		readonly fileId: string;
-	},
-) {
-	// Stable block identities are an optional enhancement. A workspace can open
-	// Markdown without registering the plugin's typed entity surfaces, so review
-	// must not depend on markdown_node_history being present. The authoritative
-	// file snapshots still produce the complete text diff.
-	return emptyMarkdownBlocksQuery();
-}
-
-function emptyMarkdownBlocksQuery() {
-	return {
-		compile: () => ({ sql: "SELECT 1 WHERE 0", parameters: [] }),
-		execute: async () => [] as HistoricalMarkdownNodeRow[],
-	};
 }
 
 function buildHistoricalMarkdownFile(args: {
