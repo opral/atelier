@@ -10,6 +10,7 @@ import type {
 import { normalizeFileExtensions } from "./file-handlers";
 import type { ExtensionManifest } from "./extension-manifest";
 import type { AtelierExtensionMenuItems } from "../extension-api";
+import { LixProvider } from "../lib/lix-react";
 
 type ReactRenderer = (args: {
 	atelier: ExtensionRuntime;
@@ -59,7 +60,9 @@ export function createReactExtensionDefinition(args: {
 								</div>
 							}
 						>
-							{args.component(next)}
+							<LixProvider lix={next.atelier.lix}>
+								{args.component(next)}
+							</LixProvider>
 						</Suspense>
 					</AtelierErrorBoundary>,
 				);

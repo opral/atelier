@@ -22,7 +22,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
+import { useLix, useQuery } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
@@ -1491,41 +1491,38 @@ export const extension = createReactExtensionDefinition({
 		];
 	},
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<FilesView
-				context={{
-					openFile: ({ panel: _panel, fileId: _fileId, filePath, focus }) =>
-						atelier.documents.open(filePath, {
-							...(focus !== undefined ? { focus } : {}),
-						}),
-					closeFileViews: ({ filePath }) => {
-						if (filePath) {
-							void atelier.documents.close(filePath);
-							return;
-						}
-						void atelier.documents.closeActive();
-					},
-					activeFileId: atelier.documents.activeFileId,
-					activeFilePath: atelier.documents.activeFilePath,
-					activeBranchId: atelier.branches.activeId,
-					resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-					reviewRangeSessionId: atelier.reviews.rangeSessionId,
-					reviewWorkingChanges: true,
-					reviewModeActive: atelier.reviews.active,
-					isPanelFocused: view.isFocused,
-					panelSide: view.panel,
-					viewInstance: view.instanceId,
-					isActiveView: view.isActive,
-					readOnly: atelier.readOnly,
-					showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
-					watchEntries: atelier.filesView?.watchEntries,
-					resolveFileForInteraction:
-						atelier.filesView?.resolveFileForInteraction,
-					registerNewFileDraftHandler: ({ handler }) =>
-						view.registerNewFileDraftHandler(handler),
-				}}
-			/>
-		</LixProvider>
+		<FilesView
+			context={{
+				openFile: ({ panel: _panel, fileId: _fileId, filePath, focus }) =>
+					atelier.documents.open(filePath, {
+						...(focus !== undefined ? { focus } : {}),
+					}),
+				closeFileViews: ({ filePath }) => {
+					if (filePath) {
+						void atelier.documents.close(filePath);
+						return;
+					}
+					void atelier.documents.closeActive();
+				},
+				activeFileId: atelier.documents.activeFileId,
+				activeFilePath: atelier.documents.activeFilePath,
+				activeBranchId: atelier.branches.activeId,
+				resolvedReviewIds: atelier.reviews.resolvedReviewIds,
+				reviewRangeSessionId: atelier.reviews.rangeSessionId,
+				reviewWorkingChanges: true,
+				reviewModeActive: atelier.reviews.active,
+				isPanelFocused: view.isFocused,
+				panelSide: view.panel,
+				viewInstance: view.instanceId,
+				isActiveView: view.isActive,
+				readOnly: atelier.readOnly,
+				showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
+				watchEntries: atelier.filesView?.watchEntries,
+				resolveFileForInteraction: atelier.filesView?.resolveFileForInteraction,
+				registerNewFileDraftHandler: ({ handler }) =>
+					view.registerNewFileDraftHandler(handler),
+			}}
+		/>
 	),
 });
 

@@ -5,7 +5,7 @@ import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
 } from "@/lib/decode-file-data";
-import { LixProvider, useQuery, useQueryTakeFirst } from "@/lib/lix-react";
+import { useQuery, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -411,12 +411,10 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display self-contained HTML artifacts.",
 	icon: FileCode2,
-	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<HtmlView
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-			/>
-		</LixProvider>
+	component: ({ view }) => (
+		<HtmlView
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+		/>
 	),
 });

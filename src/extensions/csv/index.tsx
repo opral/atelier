@@ -34,7 +34,6 @@ import {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {
-	LixProvider,
 	useLix,
 	useQueryTakeFirst,
 	useResolvedActiveBranchId,
@@ -1676,51 +1675,49 @@ export const extension = createReactExtensionDefinition({
 	description: "Display and edit CSV files as a table.",
 	icon: Table2,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<CsvView
-				fileId={view.state.fileId as string}
-				activeBranchId={atelier.branches.activeId}
-				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
-				reviewRangeSessionId={atelier.reviews.rangeSessionId}
-				filePath={view.state.filePath as string | undefined}
-				readOnly={atelier.readOnly}
-				beforeCommitId={
-					typeof view.state.beforeCommitId === "string"
-						? view.state.beforeCommitId
-						: null
-				}
-				afterCommitId={
-					typeof view.state.afterCommitId === "string"
-						? view.state.afterCommitId
-						: null
-				}
-				beforeFileId={
-					typeof view.state.beforeFileId === "string"
-						? view.state.beforeFileId
-						: null
-				}
-				afterFileId={
-					typeof view.state.afterFileId === "string"
-						? view.state.afterFileId
-						: null
-				}
-				{...(atelier.readOnly
-					? {}
-					: {
-							onAcceptReview: atelier.reviews.accept,
-							onRejectReview: atelier.reviews.reject,
-							autoAcceptReviews:
-								atelier.reviews.mode === "working-changes" ||
-								atelier.reviews.autoAccept,
-							reviewEnabled: atelier.reviews.isOpen,
-							reviewMode: atelier.reviews.mode,
-							reviewNavigation: atelier.reviews.navigation,
-							onExitReview: atelier.reviews.exit,
-						})}
-				registerExternalWriteReview={atelier.reviews.register}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-			/>
-		</LixProvider>
+		<CsvView
+			fileId={view.state.fileId as string}
+			activeBranchId={atelier.branches.activeId}
+			resolvedReviewIds={atelier.reviews.resolvedReviewIds}
+			reviewRangeSessionId={atelier.reviews.rangeSessionId}
+			filePath={view.state.filePath as string | undefined}
+			readOnly={atelier.readOnly}
+			beforeCommitId={
+				typeof view.state.beforeCommitId === "string"
+					? view.state.beforeCommitId
+					: null
+			}
+			afterCommitId={
+				typeof view.state.afterCommitId === "string"
+					? view.state.afterCommitId
+					: null
+			}
+			beforeFileId={
+				typeof view.state.beforeFileId === "string"
+					? view.state.beforeFileId
+					: null
+			}
+			afterFileId={
+				typeof view.state.afterFileId === "string"
+					? view.state.afterFileId
+					: null
+			}
+			{...(atelier.readOnly
+				? {}
+				: {
+						onAcceptReview: atelier.reviews.accept,
+						onRejectReview: atelier.reviews.reject,
+						autoAcceptReviews:
+							atelier.reviews.mode === "working-changes" ||
+							atelier.reviews.autoAccept,
+						reviewEnabled: atelier.reviews.isOpen,
+						reviewMode: atelier.reviews.mode,
+						reviewNavigation: atelier.reviews.navigation,
+						onExitReview: atelier.reviews.exit,
+					})}
+			registerExternalWriteReview={atelier.reviews.register}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+		/>
 	),
 });

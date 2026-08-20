@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { Check, FileText, Loader2 } from "lucide-react";
 import {
-	LixProvider,
 	useLix,
 	useQuery,
 	useQueryTakeFirst,
@@ -1149,66 +1148,63 @@ export const extension = createReactExtensionDefinition({
 	description: "Display file contents.",
 	icon: FileText,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<MarkdownView
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				readOnly={atelier.readOnly}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-				focusOnLoad={Boolean(view.state.focusOnLoad)}
-				defaultBlock={
-					view.state.defaultBlock === "heading1" ? "heading1" : undefined
-				}
-				activeBranchId={atelier.branches.activeId}
-				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
-				reviewRangeSessionId={atelier.reviews.rangeSessionId}
-				beforeCommitId={
-					typeof view.state.beforeCommitId === "string"
-						? view.state.beforeCommitId
-						: null
-				}
-				afterCommitId={
-					typeof view.state.afterCommitId === "string"
-						? view.state.afterCommitId
-						: null
-				}
-				beforeFileId={
-					typeof view.state.beforeFileId === "string"
-						? view.state.beforeFileId
-						: null
-				}
-				afterFileId={
-					typeof view.state.afterFileId === "string"
-						? view.state.afterFileId
-						: null
-				}
-				registerExternalWriteReview={atelier.reviews.register}
-				onAcceptReviewDiff={atelier.reviews.accept}
-				onRejectReviewDiff={atelier.reviews.reject}
-				onResolveReviewDiff={atelier.reviews.resolve}
-				autoAcceptReviews={
-					atelier.reviews.mode === "working-changes" ||
-					atelier.reviews.autoAccept
-				}
-				reviewEnabled={atelier.reviews.isOpen}
-				reviewMode={atelier.reviews.mode}
-				reviewNavigation={atelier.reviews.navigation}
-				onExitReview={atelier.reviews.exit}
-				openWorkspaceFile={(args) =>
-					atelier.documents.open(args.filePath, {
-						...(args.state ? { state: args.state } : {}),
-						...(args.focus !== undefined ? { focus: args.focus } : {}),
-					})
-				}
-				onDocumentModified={(filePath) =>
-					atelier.events.emit({
-						type: "document_modified",
-						filePath,
-						modifiedBy: "user",
-					})
-				}
-			/>
-		</LixProvider>
+		<MarkdownView
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			readOnly={atelier.readOnly}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+			focusOnLoad={Boolean(view.state.focusOnLoad)}
+			defaultBlock={
+				view.state.defaultBlock === "heading1" ? "heading1" : undefined
+			}
+			activeBranchId={atelier.branches.activeId}
+			resolvedReviewIds={atelier.reviews.resolvedReviewIds}
+			reviewRangeSessionId={atelier.reviews.rangeSessionId}
+			beforeCommitId={
+				typeof view.state.beforeCommitId === "string"
+					? view.state.beforeCommitId
+					: null
+			}
+			afterCommitId={
+				typeof view.state.afterCommitId === "string"
+					? view.state.afterCommitId
+					: null
+			}
+			beforeFileId={
+				typeof view.state.beforeFileId === "string"
+					? view.state.beforeFileId
+					: null
+			}
+			afterFileId={
+				typeof view.state.afterFileId === "string"
+					? view.state.afterFileId
+					: null
+			}
+			registerExternalWriteReview={atelier.reviews.register}
+			onAcceptReviewDiff={atelier.reviews.accept}
+			onRejectReviewDiff={atelier.reviews.reject}
+			onResolveReviewDiff={atelier.reviews.resolve}
+			autoAcceptReviews={
+				atelier.reviews.mode === "working-changes" || atelier.reviews.autoAccept
+			}
+			reviewEnabled={atelier.reviews.isOpen}
+			reviewMode={atelier.reviews.mode}
+			reviewNavigation={atelier.reviews.navigation}
+			onExitReview={atelier.reviews.exit}
+			openWorkspaceFile={(args) =>
+				atelier.documents.open(args.filePath, {
+					...(args.state ? { state: args.state } : {}),
+					...(args.focus !== undefined ? { focus: args.focus } : {}),
+				})
+			}
+			onDocumentModified={(filePath) =>
+				atelier.events.emit({
+					type: "document_modified",
+					filePath,
+					modifiedBy: "user",
+				})
+			}
+		/>
 	),
 });

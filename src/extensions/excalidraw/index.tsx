@@ -16,7 +16,7 @@ import {
 } from "@/extension-runtime/editor-revision-state";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
@@ -422,16 +422,14 @@ export const extension = createReactExtensionDefinition({
 	description: "Draw and edit Excalidraw scenes.",
 	icon: PenTool,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<ExcalidrawView
-				atelier={atelier}
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-				beforeCommitId={view.state.beforeCommitId as string | null | undefined}
-				afterCommitId={view.state.afterCommitId as string | null | undefined}
-			/>
-		</LixProvider>
+		<ExcalidrawView
+			atelier={atelier}
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+			beforeCommitId={view.state.beforeCommitId as string | null | undefined}
+			afterCommitId={view.state.afterCommitId as string | null | undefined}
+		/>
 	),
 });

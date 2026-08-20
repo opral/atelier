@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Film, VideoOff } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
-import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -185,12 +185,10 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Play MP4, MOV, and WebM videos.",
 	icon: Film,
-	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<VideoView
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-			/>
-		</LixProvider>
+	component: ({ view }) => (
+		<VideoView
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+		/>
 	),
 });

@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
-import { LixProvider, useQuery } from "@/lib/lix-react";
+import { useQuery } from "@/lib/lix-react";
 import { selectFileHistory } from "@/lib/lix-file-history";
 import {
 	selectCheckpoints,
@@ -379,9 +379,5 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Browse repository checkpoints.",
 	icon: History,
-	component: ({ atelier }) => (
-		<LixProvider lix={atelier.lix}>
-			<HistoryView atelier={atelier} />
-		</LixProvider>
-	),
+	component: ({ atelier }) => <HistoryView atelier={atelier} />,
 });

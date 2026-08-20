@@ -14,7 +14,7 @@ import {
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
@@ -503,16 +503,14 @@ export const extension = createReactExtensionDefinition({
 	description: "Edit text and source files.",
 	icon: FileCode2,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<TextView
-				atelier={atelier}
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-				beforeCommitId={view.state.beforeCommitId as string | null | undefined}
-				afterCommitId={view.state.afterCommitId as string | null | undefined}
-			/>
-		</LixProvider>
+		<TextView
+			atelier={atelier}
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+			beforeCommitId={view.state.beforeCommitId as string | null | undefined}
+			afterCommitId={view.state.afterCommitId as string | null | undefined}
+		/>
 	),
 });

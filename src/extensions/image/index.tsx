@@ -23,7 +23,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
@@ -413,12 +413,10 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display SVG, PNG, and JPEG images.",
 	icon: ImageIcon,
-	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<ImageView
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-			/>
-		</LixProvider>
+	component: ({ view }) => (
+		<ImageView
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+		/>
 	),
 });
