@@ -63,7 +63,6 @@ export type MarkdownFileDelivery = {
 	readonly id: string;
 	readonly content: unknown;
 	readonly path: string;
-	readonly change_id: string | null;
 };
 
 export function selectMarkdownFileDelivery(
@@ -73,12 +72,7 @@ export function selectMarkdownFileDelivery(
 ) {
 	return qb(lix)
 		.selectFrom("lix_file as file")
-		.select([
-			"file.id as id",
-			"file.content as content",
-			"file.path as path",
-			"file.lixcol_change_id as change_id",
-		])
+		.select(["file.id as id", "file.content as content", "file.path as path"])
 		.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
 		.where("file.id", "=", fileId);
 }
@@ -86,7 +80,6 @@ export function selectMarkdownFileDelivery(
 type MarkdownExternalSyncState = {
 	readonly editor: Editor;
 	readonly initialObservedMarkdown: string;
-	lastCleanPersistedMarkdown: string;
 	pendingExternalMarkdown: string | null;
 	sawInitialSnapshot: boolean;
 };
@@ -109,7 +102,6 @@ export function hydrateMarkdownEditorAuthoritativeMarkdown(
 	setEditorMarkdown(editor, markdown, defaultBlock);
 	const syncState = markdownExternalSyncStates.get(editor);
 	if (!syncState) return;
-	syncState.lastCleanPersistedMarkdown = normalizePersistedMarkdown(markdown);
 	syncState.pendingExternalMarkdown = null;
 	syncState.sawInitialSnapshot = true;
 }
@@ -546,7 +538,6 @@ function TipTapEditorLoadedContent({
 		return {
 			editor,
 			initialObservedMarkdown: normalizePersistedMarkdown(initialMarkdown),
-			lastCleanPersistedMarkdown: buildNormalizedMarkdownFromEditor(editor),
 			pendingExternalMarkdown: null,
 			sawInitialSnapshot: false,
 		};
@@ -585,10 +576,8 @@ function TipTapEditorLoadedContent({
 		const syncState = externalSyncState;
 		if (!syncState || syncState.editor !== editor) return;
 		const lastAcknowledgedMarkdown =
-			markdownEditorLastAcknowledgedMarkdown(editor);
-		if (lastAcknowledgedMarkdown !== undefined) {
-			syncState.lastCleanPersistedMarkdown = lastAcknowledgedMarkdown;
-		}
+			markdownEditorLastAcknowledgedMarkdown(editor) ??
+			syncState.initialObservedMarkdown;
 		const sourceMarkdown = decodeMarkdownData(sourceFile.content);
 		const nextMarkdown = normalizePersistedMarkdown(sourceMarkdown);
 		const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
@@ -603,22 +592,19 @@ function TipTapEditorLoadedContent({
 		}
 		if (currentMarkdown === nextMarkdown) {
 			acknowledgeMarkdownEditorPersistence(editor, sourceMarkdown);
-			syncState.lastCleanPersistedMarkdown = nextMarkdown;
 			syncState.pendingExternalMarkdown = null;
 			return;
 		}
 		if (readOnly) {
 			setEditorMarkdown(editor, sourceMarkdown, defaultBlock);
-			syncState.lastCleanPersistedMarkdown = nextMarkdown;
 			syncState.pendingExternalMarkdown = null;
 			return;
 		}
-		if (currentMarkdown !== syncState.lastCleanPersistedMarkdown) {
+		if (currentMarkdown !== lastAcknowledgedMarkdown) {
 			syncState.pendingExternalMarkdown = sourceMarkdown;
 			return;
 		}
 		setEditorMarkdown(editor, sourceMarkdown, defaultBlock);
-		syncState.lastCleanPersistedMarkdown = nextMarkdown;
 		syncState.pendingExternalMarkdown = null;
 	}, [
 		editor,
@@ -641,17 +627,17 @@ function TipTapEditorLoadedContent({
 			const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
 			if (currentMarkdown === normalizedPendingMarkdown) {
 				acknowledgeMarkdownEditorPersistence(editor, pendingMarkdown);
-				externalSyncState.lastCleanPersistedMarkdown =
-					normalizedPendingMarkdown;
 				externalSyncState.pendingExternalMarkdown = null;
 				return;
 			}
-			if (currentMarkdown !== externalSyncState.lastCleanPersistedMarkdown) {
+			const lastAcknowledgedMarkdown =
+				markdownEditorLastAcknowledgedMarkdown(editor) ??
+				externalSyncState.initialObservedMarkdown;
+			if (currentMarkdown !== lastAcknowledgedMarkdown) {
 				return;
 			}
 			externalSyncState.pendingExternalMarkdown = null;
 			setEditorMarkdown(editor, pendingMarkdown, defaultBlock);
-			externalSyncState.lastCleanPersistedMarkdown = normalizedPendingMarkdown;
 		};
 		editor.on("update", applyPendingExternalMarkdown);
 		return () => {

@@ -136,10 +136,9 @@ describe("MarkdownView", () => {
 		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
 			"Initial delivery",
 		);
-		// One subscribed query owns the row. It executes once for Suspense and
-		// once when the SDK's initial observer snapshot is verified against a
-		// direct read; the previous split owners executed this delivery three times.
-		await waitFor(() => expect(liveDeliveryReads()).toBe(2));
+		// One subscribed query owns the row. It executes once for Suspense, then
+		// consumes the SDK's authoritative observer snapshots directly.
+		await waitFor(() => expect(liveDeliveryReads()).toBe(1));
 		expect(liveDeliveryObservers()).toBe(1);
 		expect(
 			observe.mock.calls.some(([statement]) =>
@@ -158,7 +157,7 @@ describe("MarkdownView", () => {
 				"Later delivery",
 			),
 		);
-		expect(liveDeliveryReads()).toBe(2);
+		expect(liveDeliveryReads()).toBe(1);
 		expect(liveDeliveryObservers()).toBe(1);
 		expect(originPointReads()).toHaveLength(0);
 

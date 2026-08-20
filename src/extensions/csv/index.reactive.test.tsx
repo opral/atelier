@@ -149,7 +149,7 @@ test("updates when CSV file data changes in Lix", async () => {
 			"data-cell-data",
 			"https://example.com",
 		);
-		await waitFor(() => expect(fileReadCount()).toBeGreaterThan(1));
+		await waitFor(() => expect(fileReadCount()).toBe(1));
 		const readsBeforeUpdate = fileReadCount();
 
 		await act(async () => {

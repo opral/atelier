@@ -55,7 +55,7 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 	try {
 		await waitFor(() => {
 			expect(renderedValues.has(initialMarkdown)).toBe(true);
-			expect(execute.mock.calls.length).toBeGreaterThanOrEqual(2);
+			expect(execute.mock.calls.length).toBeGreaterThanOrEqual(1);
 		});
 
 		let expectedMarkdown = initialMarkdown;

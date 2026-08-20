@@ -71,7 +71,7 @@ function eventWithValue(
 	};
 }
 
-test("useQuery re-reads the initial observe snapshot to protect resubscriptions", async () => {
+test("useQuery accepts the initial observe snapshot as authoritative", async () => {
 	let resolveFirstObserve:
 		| ((event: ObserveEvent | undefined) => void)
 		| undefined;
@@ -88,10 +88,7 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 	const lix = {
 		observe: vi.fn(() => ({ next, close })),
 	} as unknown as Lix;
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValue([{ value: "fresh-direct-read" }]);
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
 	function Probe() {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -125,7 +122,7 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 			columns: ["value"],
 			rows: [
 				{
-					toObject: () => ({ value: "stale-observe-payload" }),
+					toObject: () => ({ value: "authoritative-observe-snapshot" }),
 				},
 			] as unknown as ObserveEvent["result"]["rows"],
 			rowsAffected: 0,
@@ -134,9 +131,11 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 	});
 
 	await waitFor(() => {
-		expect(screen.getByTestId("value")).toHaveTextContent("fresh-direct-read");
+		expect(screen.getByTestId("value")).toHaveTextContent(
+			"authoritative-observe-snapshot",
+		);
 	});
-	expect(execute).toHaveBeenCalledTimes(2);
+	expect(execute).toHaveBeenCalledTimes(1);
 });
 
 test("useQuery publishes observed rows to every consumer of the cached query", async () => {
@@ -144,10 +143,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	const lix = {
 		observe: vi.fn(() => stream),
 	} as unknown as Lix;
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValue([{ value: "initial-authoritative" }]);
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
 	function Probe({ id }: { readonly id: string }) {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -185,12 +181,12 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
-	await act(async () => stream.emit(eventWithValue(0, 0, "stale-initial")));
+	await act(async () => stream.emit(eventWithValue(0, 0, "initial-observed")));
 	await waitFor(() => {
 		expect(screen.getByTestId("first-value")).toHaveTextContent(
-			"initial-authoritative",
+			"initial-observed",
 		);
-		expect(execute).toHaveBeenCalledTimes(2);
+		expect(execute).toHaveBeenCalledTimes(1);
 	});
 
 	await act(async () => {
@@ -213,22 +209,114 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 			"shared-fresh",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(2);
+	expect(execute).toHaveBeenCalledTimes(1);
 
 	view?.unmount();
 	expect(stream.close).toHaveBeenCalledTimes(1);
 });
 
-test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
+test("stopped observers cannot overwrite a restarted cache entry with queued events", async () => {
+	const firstStream = createObserveStream();
+	const restartedStream = createObserveStream();
+	const lix = {
+		observe: vi
+			.fn()
+			.mockReturnValueOnce(firstStream)
+			.mockReturnValueOnce(restartedStream),
+	} as unknown as Lix;
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM stopped_observer_restart",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="restart-value">{rows[0]?.value}</div>;
+	}
+	const renderProbe = () =>
+		render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe />
+				</Suspense>
+			</LixProvider>,
+		);
+
+	let first: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		first = renderProbe();
+	});
+	expect(await screen.findByTestId("restart-value")).toHaveTextContent(
+		"initial",
+	);
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(1));
+	await act(async () =>
+		firstStream.emit(eventWithValue(0, 10, "first-authoritative")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"first-authoritative",
+		),
+	);
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(2));
+	await act(async () =>
+		firstStream.emit(eventWithValue(1, 11, "first-observed")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"first-observed",
+		),
+	);
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(3));
+	await act(async () => first?.unmount());
+	expect(firstStream.close).toHaveBeenCalledTimes(1);
+
+	let restarted: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		restarted = renderProbe();
+	});
+	expect(await screen.findByTestId("restart-value")).toHaveTextContent(
+		"first-observed",
+	);
+	await waitFor(() => expect(restartedStream.next).toHaveBeenCalledTimes(1));
+	await act(async () =>
+		restartedStream.emit(eventWithValue(0, 1, "restart-authoritative")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"restart-authoritative",
+		),
+	);
+	await waitFor(() => expect(restartedStream.next).toHaveBeenCalledTimes(2));
+	await act(async () =>
+		restartedStream.emit(eventWithValue(1, 2, "restart-observed")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"restart-observed",
+		),
+	);
+
+	// Resolving the old observer's already-queued next() after close must not
+	// overwrite the active observer, even with a numerically newer mutation id.
+	await act(async () =>
+		firstStream.emit(eventWithValue(2, 100, "queued-old-observer")),
+	);
+	expect(screen.getByTestId("restart-value")).toHaveTextContent(
+		"restart-observed",
+	);
+	await act(async () => restarted?.unmount());
+});
+
+test("useQuery accepts an authoritative non-advancing reconnect snapshot", async () => {
 	const stream = createObserveStream();
 	const lix = {
 		observe: vi.fn(() => stream),
 	} as unknown as Lix;
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValueOnce([{ value: "initial-authoritative" }])
-		.mockResolvedValue([{ value: "fresh-direct-read" }]);
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
 	function Probe() {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -254,7 +342,9 @@ test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
 		"initial",
 	);
 
-	await act(async () => stream.emit(eventWithValue(0, 10, "stale-initial")));
+	await act(async () =>
+		stream.emit(eventWithValue(0, 10, "initial-authoritative")),
+	);
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent(
 			"initial-authoritative",
@@ -266,16 +356,18 @@ test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent("observed");
 	});
-	expect(execute).toHaveBeenCalledTimes(2);
+	expect(execute).toHaveBeenCalledTimes(1);
 
 	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(3));
-	await act(async () => stream.emit(eventWithValue(2, 11, "stale-reconnect")));
+	await act(async () =>
+		stream.emit(eventWithValue(2, 11, "reconnect-authoritative")),
+	);
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent(
-			"fresh-direct-read",
+			"reconnect-authoritative",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(3);
+	expect(execute).toHaveBeenCalledTimes(1);
 });
 
 test("useQuery can treat advancing observer results as invalidations", async () => {

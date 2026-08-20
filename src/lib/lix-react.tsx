@@ -57,7 +57,6 @@ type QueryCacheEntry<TRow> = {
 	snapshot: QueryCacheSnapshot<TRow>;
 	listeners: Set<() => void>;
 	execute: () => Promise<TRow[]>;
-	latestMutationSequence: number | undefined;
 	startObservation: (() => () => void) | undefined;
 	stopObservation: (() => void) | undefined;
 	/** Last successful rows. Kept when a gone protocol session must not kill the shell. */
@@ -98,7 +97,6 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	snapshot: { status: "success", rows: DISABLED_QUERY_ROWS },
 	listeners: new Set(),
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
-	latestMutationSequence: undefined,
 	startObservation: undefined,
 	stopObservation: undefined,
 	lastRows: DISABLED_QUERY_ROWS,
@@ -231,7 +229,6 @@ function getQueryCacheEntry<TRow>(
 		snapshot: { status: "pending" },
 		listeners: new Set(),
 		execute: () => builder.execute(),
-		latestMutationSequence: undefined,
 		startObservation: undefined,
 		stopObservation: undefined,
 		lastRows: undefined,
@@ -268,7 +265,6 @@ function observeQueryEntry<TRow>(
 	reuseObservedResult: boolean,
 ): () => void {
 	let closed = false;
-	let previousMutationSequence: number | undefined;
 	const events = lix.observe(sql, [...parameters] as SqlParam[]);
 
 	void (async () => {
@@ -276,33 +272,10 @@ function observeQueryEntry<TRow>(
 			while (true) {
 				const event = await events.next();
 				if (closed || event === undefined) break;
-				const advancesObservation =
-					previousMutationSequence !== undefined &&
-					event.mutationSequence > previousMutationSequence;
-				previousMutationSequence = event.mutationSequence;
-
-				// SDK 0.8.x can return a stale first snapshot, and a remote
-				// reconnect can renumber another initial snapshot. Keep the direct
-				// read for those cases, then reuse advancing mutation results.
-				if (!advancesObservation) {
-					const nextRows = await entry.execute();
-					if (closed) break;
-					entry.latestMutationSequence = event.mutationSequence;
-					setQueryRows(entry, nextRows);
-					continue;
-				}
-
-				if (
-					entry.latestMutationSequence !== undefined &&
-					event.mutationSequence <= entry.latestMutationSequence
-				) {
-					continue;
-				}
 				const nextRows = reuseObservedResult
 					? queryResultToRows<TRow>(event.result)
 					: await entry.execute();
 				if (closed) break;
-				entry.latestMutationSequence = event.mutationSequence;
 				setQueryRows(entry, nextRows);
 			}
 		} catch (error) {

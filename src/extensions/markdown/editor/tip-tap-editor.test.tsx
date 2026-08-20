@@ -1598,9 +1598,10 @@ test("a successful local persist marks the editor clean before its observer echo
 
 test("applies different-origin markdown update when editor is clean", async () => {
 	const fileId = fakeUuid("file_external_clean");
-	const { lix } = await renderEditorForMarkdownFile({
+	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
+		persistDebounceMs: 0,
 	});
 
 	await writeMarkdownFileWithOrigin(
@@ -1613,6 +1614,13 @@ test("applies different-origin markdown update when editor is clean", async () =
 	await waitFor(() => {
 		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
 			"External clean update",
+		);
+	});
+
+	await setEditorText(editor, "Local after external");
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			"Local after external\n",
 		);
 	});
 });
