@@ -64,7 +64,6 @@ export type MarkdownFileDelivery = {
 	readonly content: unknown;
 	readonly path: string;
 	readonly change_id: string | null;
-	readonly origin_key: unknown;
 };
 
 export function selectMarkdownFileDelivery(
@@ -80,10 +79,7 @@ export function selectMarkdownFileDelivery(
 			"file.path as path",
 			"file.lixcol_change_id as change_id",
 		])
-		.select(() => [
-			sql<string>`${activeBranchId}`.as("active_branch_id"),
-			sql<null>`NULL`.as("origin_key"),
-		])
+		.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
 		.where("file.id", "=", fileId);
 }
 
