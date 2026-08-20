@@ -90,10 +90,16 @@ describe("MarkdownView", () => {
 			const sql = String(statement);
 			return (
 				/\bfrom\s+"?lix_file"?\s+as\s+"?file"?/i.test(sql) &&
-				/\bleft\s+join\s+"?lix_change"?\s+as\s+"?change"?/i.test(sql) &&
 				/\bfile\.?"?content"?/i.test(sql)
 			);
 		};
+		const originPointReads = () =>
+			execute.mock.calls.filter(([statement]) => {
+				const sql = String(statement);
+				return (
+					/\bfrom\s+"?lix_change"?/i.test(sql) && /\borigin_key\b/i.test(sql)
+				);
+			});
 		const liveDeliveryReads = () =>
 			execute.mock.calls.filter(([statement]) =>
 				isLiveDeliveryStatement(statement),
@@ -135,6 +141,18 @@ describe("MarkdownView", () => {
 		// direct read; the previous split owners executed this delivery three times.
 		await waitFor(() => expect(liveDeliveryReads()).toBe(2));
 		expect(liveDeliveryObservers()).toBe(1);
+		expect(
+			observe.mock.calls.some(([statement]) =>
+				/\bjoin\s+"?lix_change"?/i.test(String(statement)),
+			),
+		).toBe(false);
+		await waitFor(() => expect(originPointReads()).toHaveLength(1));
+		expect(String(originPointReads()[0]?.[0])).toMatch(
+			/\bwhere\b[\s\S]*\b(id|"id")\b\s*=\s*\$1/i,
+		);
+		expect(String(originPointReads()[0]?.[0])).toMatch(
+			/\b(file_id|"file_id")\b\s*=\s*\$2/i,
+		);
 
 		await lix.execute(
 			"UPDATE lix_file SET content = $1 WHERE id = $2",
@@ -148,6 +166,7 @@ describe("MarkdownView", () => {
 		);
 		expect(liveDeliveryReads()).toBe(2);
 		expect(liveDeliveryObservers()).toBe(1);
+		await waitFor(() => expect(originPointReads()).toHaveLength(2));
 
 		await act(async () => utils?.unmount());
 		await lix.close();

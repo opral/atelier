@@ -1635,7 +1635,7 @@ test("applies different-origin markdown update when editor is clean", async () =
 	});
 });
 
-test("delivers external markdown revisions without origin point reads", async () => {
+test("delivers external markdown revisions through exact origin point reads", async () => {
 	const fileId = fakeUuid("file_external_single_delivery");
 	const { lix } = await renderEditorForMarkdownFile({
 		fileId,
@@ -1672,11 +1672,17 @@ test("delivers external markdown revisions without origin point reads", async ()
 			JSON.stringify({
 				deliveries: latencies.length,
 				p90Ms,
-				originPointReads: 0,
+				originPointReads: originPointReads.length,
 			}),
 		);
 	}
-	expect(originPointReads).toHaveLength(0);
+	expect(originPointReads).toHaveLength(10);
+	for (const [statement] of originPointReads) {
+		expect(String(statement)).toMatch(
+			/\bwhere\b[\s\S]*\b(id|"id")\b\s*=\s*\$1/i,
+		);
+		expect(String(statement)).toMatch(/\b(file_id|"file_id")\b\s*=\s*\$2/i);
+	}
 	expect(p90Ms).toBeLessThan(2_000);
 });
 

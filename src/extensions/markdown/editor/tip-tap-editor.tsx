@@ -66,6 +66,14 @@ export type MarkdownFileDelivery = {
 	readonly origin_key: unknown;
 };
 
+type MarkdownFileRow = Omit<MarkdownFileDelivery, "origin_key">;
+
+type ResolvedMarkdownFile = {
+	readonly fileId: string;
+	readonly changeId: string | null;
+	readonly delivery: MarkdownFileDelivery;
+};
+
 export function selectMarkdownFileDelivery(
 	lix: Parameters<typeof qb>[0],
 	activeBranchId: string,
@@ -73,17 +81,11 @@ export function selectMarkdownFileDelivery(
 ) {
 	return qb(lix)
 		.selectFrom("lix_file as file")
-		.leftJoin("lix_change as change", (join) =>
-			join
-				.onRef("change.id", "=", "file.lixcol_change_id")
-				.onRef("change.file_id", "=", "file.id"),
-		)
 		.select([
 			"file.id as id",
 			"file.content as content",
 			"file.path as path",
 			"file.lixcol_change_id as change_id",
-			"change.origin_key as origin_key",
 		])
 		.select(() => [sql<string>`${activeBranchId}`.as("active_branch_id")])
 		.where("file.id", "=", fileId);
@@ -217,10 +219,14 @@ function TipTapEditorFileContent({
 	readonly activeBranchId: string;
 	readonly activeFileId: string;
 }) {
-	const sourceFile = useQueryTakeFirst<MarkdownFileDelivery>(
+	const sourceFile = useQueryTakeFirst<MarkdownFileRow>(
 		(lix) => selectMarkdownFileDelivery(lix, activeBranchId, activeFileId),
 		{ evictOnUnmount: true },
 	);
+	const sourceFileWithOrigin = useMarkdownFileOrigin(sourceFile, activeFileId);
+	if (sourceFile && !sourceFileWithOrigin) {
+		return <TipTapEditorLoadingState className={props.className} />;
+	}
 
 	return (
 		<TipTapEditorSourceBoundary
@@ -228,9 +234,106 @@ function TipTapEditorFileContent({
 			{...props}
 			activeFileId={activeFileId}
 			activeBranchId={activeBranchId}
-			sourceFile={sourceFile}
+			sourceFile={sourceFileWithOrigin}
 		/>
 	);
+}
+
+/**
+ * Resolves writer identity through Lix's exact change-id route after the hot
+ * file observer has delivered its point-addressed row. Keeping this lookup
+ * out of the observed query avoids rescanning the complete changelog on every
+ * remote edit while retaining same-origin autosave protection.
+ */
+function useMarkdownFileOrigin(
+	sourceFile: MarkdownFileRow | undefined,
+	fileId: string,
+): MarkdownFileDelivery | undefined {
+	const lix = useLix();
+	const [resolvedSourceFile, setResolvedSourceFile] = useState<
+		ResolvedMarkdownFile | undefined
+	>();
+	const resolvedOriginRef = useRef<{
+		readonly fileId: string;
+		readonly changeId: string | null;
+		readonly originKey: unknown;
+	} | null>(null);
+	const lookupGenerationRef = useRef(0);
+	const [lookupError, setLookupError] = useState<{
+		readonly fileId: string;
+		readonly changeId: string | null;
+		readonly error: unknown;
+	} | null>(null);
+	const changeId = sourceFile?.change_id ?? null;
+
+	useEffect(() => {
+		const generation = ++lookupGenerationRef.current;
+		if (!sourceFile) return;
+		let closed = false;
+		const isCurrent = () =>
+			!closed && lookupGenerationRef.current === generation;
+		const cachedOrigin = resolvedOriginRef.current;
+		if (cachedOrigin?.fileId === fileId && cachedOrigin.changeId === changeId) {
+			setResolvedSourceFile({
+				fileId,
+				changeId,
+				delivery: { ...sourceFile, origin_key: cachedOrigin.originKey },
+			});
+			setLookupError(null);
+			return;
+		}
+		if (!changeId) {
+			resolvedOriginRef.current = { fileId, changeId: null, originKey: null };
+			setResolvedSourceFile({
+				fileId,
+				changeId: null,
+				delivery: { ...sourceFile, origin_key: null },
+			});
+			setLookupError(null);
+			return;
+		}
+		void (async () => {
+			try {
+				const change = await qb(lix)
+					.selectFrom("lix_change")
+					.select("origin_key")
+					.where("id", "=", changeId)
+					.where("file_id", "=", fileId)
+					.executeTakeFirst();
+				if (!isCurrent()) return;
+				const resolvedOrigin = {
+					fileId,
+					changeId,
+					originKey: change?.origin_key ?? null,
+				};
+				resolvedOriginRef.current = resolvedOrigin;
+				setResolvedSourceFile({
+					fileId,
+					changeId,
+					delivery: {
+						...sourceFile,
+						origin_key: resolvedOrigin.originKey,
+					},
+				});
+				setLookupError(null);
+			} catch (error) {
+				if (isCurrent()) setLookupError({ fileId, changeId, error });
+			}
+		})();
+		return () => {
+			closed = true;
+		};
+	}, [changeId, fileId, lix, sourceFile]);
+
+	if (lookupError?.fileId === fileId && lookupError.changeId === changeId) {
+		throw lookupError.error;
+	}
+	if (!resolvedSourceFile || resolvedSourceFile.fileId !== fileId) {
+		return undefined;
+	}
+	// Keep the previous revision mounted while the next exact origin lookup is
+	// in flight. The generation fence prevents a late response from replacing it.
+	return resolvedSourceFile.delivery;
 }
 
 function TipTapEditorSourceBoundary({

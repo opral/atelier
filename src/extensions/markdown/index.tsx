@@ -21,7 +21,6 @@ import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
 	selectMarkdownFileDelivery,
 	TipTapEditor,
-	type MarkdownFileDelivery,
 } from "@/extensions/markdown/editor/tip-tap-editor";
 import { EditorContent } from "@tiptap/react";
 import { createEditor } from "@/extensions/markdown/editor/create-editor";
@@ -197,7 +196,7 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		editorRevision.afterCommitId === null;
 
 	const ownsLiveFileDelivery = editorRevisionMode(editorRevision) === "editor";
-	const fileRow = useQueryTakeFirst<MarkdownFileDelivery>(
+	const fileRow = useQueryTakeFirst<MarkdownFileRow>(
 		(lix) =>
 			selectMarkdownFileDelivery(lix, props.activeBranchId ?? "", fileId),
 		{
