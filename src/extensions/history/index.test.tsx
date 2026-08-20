@@ -290,7 +290,7 @@ describe("HistoryView", () => {
 				const parameters = args[1] as readonly unknown[] | undefined;
 				if (
 					!delayedFileListQuery &&
-					statement.includes("lix_file_history") &&
+					statement.includes("lix_history('lix_file'") &&
 					parameters?.includes(newerCheckpoint.commitId)
 				) {
 					delayedFileListQuery = true;

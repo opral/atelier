@@ -17,7 +17,7 @@ import {
 } from "./timing";
 
 /** Variant surfaces of a base table, switched in the toolbar. */
-export const TABLE_SURFACES = ["current", "_history"] as const;
+export const TABLE_SURFACES = ["current", "history"] as const;
 export type TableSurface = (typeof TABLE_SURFACES)[number];
 
 export type TableFilter = {
@@ -66,7 +66,9 @@ export function surfaceTableName(
 	baseTable: string,
 	surface: TableSurface,
 ): string {
-	return surface === "current" ? baseTable : `${baseTable}${surface}`;
+	return surface === "current"
+		? baseTable
+		: `lix_history('${baseTable.replaceAll("'", "''")}')`;
 }
 
 /**

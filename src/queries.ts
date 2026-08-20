@@ -83,7 +83,7 @@ export function selectFilesystemEntries(lix: Lix) {
  */
 export function selectWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_diff")
+		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
 		.select([
 			"diff_id",
 			"row_pk",
@@ -100,7 +100,7 @@ export function selectWorkingChanges(lix: Lix) {
 
 export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_diff")
+		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
 		.select((eb) => eb.fn.countAll<number>().as("change_count"))
 		.$castTo<WorkingChangeCountRow>();
 }
@@ -108,14 +108,13 @@ export function selectWorkingChangeCount(lix: Lix) {
 /**
  * Net logical files changed between the latest checkpoint and active head.
  *
- * Derived from `lix_working_diff` instead of `lix_file_working_change`:
- * the engine's composed surface currently returns no rows unless the working
- * range also touches a directory descriptor (upstream bug in
- * filesystem_working_change.rs).
+ * Derived from the heterogeneous `lix_working_diff()` envelope. Files removed
+ * since the checkpoint are not reported; no consumer acts on removed files
+ * today.
  */
 export function selectFileWorkingChanges(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_working_diff")
+		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
 		.innerJoin("lix_file", (join) =>
 			join.on(
 				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_working_diff.row_pk ->> 0 end)`,
@@ -214,16 +213,14 @@ export function selectCheckpointsWithFileCounts(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_checkpoint")
 		.leftJoin(
-			selectFileHistory(lix)
-				.selectAll("lix_file_history")
-				.as("lix_file_history"),
-			"lix_file_history.lixcol_observed_commit_id",
+			selectFileHistory(lix).selectAll("file_history").as("file_history"),
+			"file_history.lixcol_observed_commit_id",
 			"lix_checkpoint.commit_id",
 		)
 		.select([
 			"lix_checkpoint.commit_id",
 			"lix_checkpoint.lixcol_created_at as created_at",
-			sql<number>`count(distinct lix_file_history.id)`.as("file_count"),
+			sql<number>`count(distinct file_history.id)`.as("file_count"),
 		])
 		.groupBy(["lix_checkpoint.commit_id", "created_at"])
 		.orderBy("created_at", "desc")
