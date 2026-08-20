@@ -3951,6 +3951,7 @@ function LayoutShellLoadedContent({
 				{isReviewMode ? (
 					<ExternalWriteReviewControls
 						isActive
+						readOnly={isHostReadOnly}
 						mode={
 							historicalReview
 								? "historical"

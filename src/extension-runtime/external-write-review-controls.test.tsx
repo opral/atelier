@@ -180,6 +180,36 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByText("1 of 1")).toBeVisible();
 	});
 
+	test("read-only review keeps the float visible but disables mutations", () => {
+		const primary = vi.fn();
+		const undo = vi.fn();
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				readOnly
+				mode="working-changes"
+				navigation={NAVIGATION}
+				files={FILES}
+				onUndo={undo}
+				onPrimary={primary}
+			/>,
+		);
+
+		const checkpoint = screen.getByRole("button", { name: "Checkpoint" });
+		expect(checkpoint).toBeVisible();
+		expect(checkpoint).toBeDisabled();
+		expect(checkpoint).toHaveAttribute(
+			"title",
+			"Sign in with edit access to create a checkpoint",
+		);
+		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+
+		fireEvent.click(checkpoint);
+		fireEvent.keyDown(window, { key: "Enter", metaKey: true });
+		expect(primary).not.toHaveBeenCalled();
+		expect(undo).not.toHaveBeenCalled();
+	});
+
 	test("ESC closes an open list before exiting; ⌘⏎ fires the verb on the selection", async () => {
 		const primary = vi.fn(async () => {});
 		const exit = vi.fn();
