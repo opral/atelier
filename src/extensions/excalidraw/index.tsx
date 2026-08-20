@@ -1,12 +1,4 @@
-import {
-	lazy,
-	Suspense,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { PenTool, TriangleAlert } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
@@ -14,6 +6,7 @@ import {
 	editorRevisionMode,
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
+import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
@@ -105,7 +98,6 @@ function EditableExcalidrawView({
 }: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: ExcalidrawFileRow;
 }) {
-	const lix = useLix();
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.excalidraw`;
 	const fileText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
@@ -123,14 +115,6 @@ function EditableExcalidrawView({
 		? decodeFileDataToText(reviewData.afterData)
 		: null;
 	const isReviewing = Boolean(review);
-	const [documentText, setDocumentText] = useState(reviewText ?? fileText);
-	const localTextRef = useRef(documentText);
-	const lastCleanTextRef = useRef(fileText);
-	const persistenceRunningRef = useRef(false);
-	const queuedTextRef = useRef<string | null>(null);
-	const reviewingRef = useRef(isReviewing);
-	const wasReviewingRef = useRef(false);
-	const [saveError, setSaveError] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (!review) return;
@@ -138,122 +122,18 @@ function EditableExcalidrawView({
 	}, [atelier.reviews, review]);
 
 	const originKey = useMemo(() => createExcalidrawOriginKey(), []);
-	useEffect(() => {
-		reviewingRef.current = isReviewing;
-		if (isReviewing && reviewText !== null) {
-			queuedTextRef.current = null;
-			localTextRef.current = reviewText;
-			setDocumentText(reviewText);
-		}
-		if (!isReviewing && wasReviewingRef.current) {
-			void qb(lix)
-				.selectFrom("lix_file")
-				.select("content")
-				.where("id", "=", fileId)
-				.executeTakeFirst()
-				.then((row) => {
-					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.content);
-					lastCleanTextRef.current = nextText;
-					localTextRef.current = nextText;
-					setDocumentText(nextText);
-				})
-				.catch((error) => {
-					if (!reviewingRef.current) {
-						setSaveError(
-							error instanceof Error
-								? error.message
-								: "Could not reload file after review",
-						);
-					}
-				});
-		}
-		wasReviewingRef.current = isReviewing;
-	}, [fileId, isReviewing, lix, reviewText]);
-
-	const flushPersistence = useCallback(async () => {
-		if (persistenceRunningRef.current || reviewingRef.current) return;
-		persistenceRunningRef.current = true;
-		try {
-			while (queuedTextRef.current !== null && !reviewingRef.current) {
-				const nextText = queuedTextRef.current;
-				queuedTextRef.current = null;
-				if (nextText === lastCleanTextRef.current) continue;
-				try {
-					await lix.execute(
-						"UPDATE lix_file SET content = $1 WHERE id = $2",
-						[new TextEncoder().encode(nextText), fileId],
-						{ originKey },
-					);
-					lastCleanTextRef.current = nextText;
-					setSaveError(null);
-				} catch (error) {
-					setSaveError(
-						error instanceof Error ? error.message : "Could not save file",
-					);
-				}
-			}
-		} finally {
-			persistenceRunningRef.current = false;
-			if (queuedTextRef.current !== null) void flushPersistence();
-		}
-	}, [fileId, lix, originKey]);
-
-	const persistUserEdit = useCallback(
-		(nextText: string) => {
-			if (reviewingRef.current || atelier.readOnly) return;
-			localTextRef.current = nextText;
-			queuedTextRef.current = nextText;
-			void flushPersistence();
-		},
-		[atelier.readOnly, flushPersistence],
-	);
-
-	useEffect(() => {
-		const events = lix.observe(`SELECT content FROM lix_file WHERE id = $1`, [
-			fileId,
-		]);
-		let closed = false;
-		const reconcile = (data: unknown) => {
-			if (closed) return;
-			const nextText = decodeFileDataToText(data);
-			if (nextText === localTextRef.current) {
-				lastCleanTextRef.current = nextText;
-				return;
-			}
-			if (reviewingRef.current) return;
-			// MVP conflict policy: a queued or running local edit wins.
-			if (
-				persistenceRunningRef.current ||
-				queuedTextRef.current !== null ||
-				localTextRef.current !== lastCleanTextRef.current
-			)
-				return;
-			lastCleanTextRef.current = nextText;
-			localTextRef.current = nextText;
-			setDocumentText(nextText);
-		};
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (!event || closed) continue;
-					const row = event.result.rows[0];
-					if (row) reconcile(row.get("content"));
-				}
-			} catch (error) {
-				if (!closed)
-					setSaveError(
-						error instanceof Error ? error.message : "Could not observe file",
-					);
-			}
-		})();
-		return () => {
-			closed = true;
-			events.close();
-			queuedTextRef.current = null;
-		};
-	}, [fileId, lix]);
+	const {
+		text: documentText,
+		saveError,
+		persist: persistUserEdit,
+	} = useSyncedTextFile({
+		fileId,
+		initialText: fileText,
+		reviewText,
+		reviewing: isReviewing,
+		readOnly: atelier.readOnly,
+		originKey,
+	});
 
 	const parsed = useMemo(
 		() => parseExcalidrawScene(documentText),
