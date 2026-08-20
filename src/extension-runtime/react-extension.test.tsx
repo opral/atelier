@@ -58,6 +58,7 @@ describe("createReactExtensionDefinition", () => {
 		expect(
 			element.querySelector("[data-atelier-extension-suspended]"),
 		).not.toBeNull();
+		expect(element).toHaveTextContent("Loading Async view…");
 
 		resolve("Ready");
 		await act(async () => pendingValue);
