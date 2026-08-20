@@ -140,40 +140,9 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 });
 
 test("useQuery publishes observed rows to every consumer of the cached query", async () => {
-	let resolveFirstObserve:
-		| ((event: ObserveEvent | undefined) => void)
-		| undefined;
-	let resolveSecondObserve:
-		| ((event: ObserveEvent | undefined) => void)
-		| undefined;
-	const firstNext = vi
-		.fn()
-		.mockImplementationOnce(
-			() =>
-				new Promise<ObserveEvent | undefined>((resolve) => {
-					resolveFirstObserve = resolve;
-				}),
-		)
-		.mockImplementationOnce(
-			() =>
-				new Promise<ObserveEvent | undefined>((resolve) => {
-					resolveSecondObserve = resolve;
-				}),
-		)
-		.mockImplementation(() => new Promise<ObserveEvent | undefined>(() => {}));
-	const firstClose = vi.fn();
-	const secondClose = vi.fn();
+	const stream = createObserveStream();
 	const lix = {
-		observe: vi
-			.fn()
-			.mockImplementationOnce(() => ({
-				next: firstNext,
-				close: firstClose,
-			}))
-			.mockImplementation(() => ({
-				next: () => new Promise<ObserveEvent | undefined>(() => {}),
-				close: secondClose,
-			})),
+		observe: vi.fn(() => stream),
 	} as unknown as Lix;
 	const execute = vi
 		.fn()
@@ -190,14 +159,21 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 		}));
 		return <div data-testid={id}>{rows[0]?.value}</div>;
 	}
+	function Consumers({ showFirst }: { readonly showFirst: boolean }) {
+		return (
+			<>
+				{showFirst ? <Probe key="first" id="first-value" /> : null}
+				<Probe key="second" id="second-value" />
+			</>
+		);
+	}
 
 	let view: ReturnType<typeof render> | undefined;
 	await act(async () => {
 		view = render(
 			<LixProvider lix={lix}>
 				<Suspense fallback={<div data-testid="shared-loading" />}>
-					<Probe id="first-value" />
-					<Probe id="second-value" />
+					<Consumers showFirst />
 				</Suspense>
 			</LixProvider>,
 		);
@@ -206,46 +182,33 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(await screen.findByTestId("first-value")).toHaveTextContent("initial");
 	expect(screen.getByTestId("second-value")).toHaveTextContent("initial");
 	expect(execute).toHaveBeenCalledTimes(1);
+	expect(lix.observe).toHaveBeenCalledTimes(1);
 
-	resolveFirstObserve?.({
-		sequence: 0,
-		mutationSequence: 0,
-		result: {
-			columns: ["value"],
-			rows: [
-				{
-					toObject: () => ({ value: "stale-initial" }),
-				},
-			] as unknown as ObserveEvent["result"]["rows"],
-			rowsAffected: 0,
-			notices: [],
-		},
-	});
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
+	await act(async () => stream.emit(eventWithValue(0, 0, "stale-initial")));
 	await waitFor(() => {
 		expect(screen.getByTestId("first-value")).toHaveTextContent(
 			"initial-authoritative",
 		);
 		expect(execute).toHaveBeenCalledTimes(2);
-		expect(resolveSecondObserve).toBeTypeOf("function");
 	});
 
-	resolveSecondObserve?.({
-		sequence: 1,
-		mutationSequence: 1,
-		result: {
-			columns: ["value"],
-			rows: [
-				{
-					toObject: () => ({ value: "shared-fresh" }),
-				},
-			] as unknown as ObserveEvent["result"]["rows"],
-			rowsAffected: 0,
-			notices: [],
-		},
+	await act(async () => {
+		view?.rerender(
+			<LixProvider lix={lix}>
+				<Suspense fallback={<div data-testid="shared-loading" />}>
+					<Consumers showFirst={false} />
+				</Suspense>
+			</LixProvider>,
+		);
 	});
+	expect(screen.queryByTestId("first-value")).toBeNull();
+	expect(stream.close).not.toHaveBeenCalled();
+	expect(lix.observe).toHaveBeenCalledTimes(1);
 
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(2));
+	await act(async () => stream.emit(eventWithValue(1, 1, "shared-fresh")));
 	await waitFor(() => {
-		expect(screen.getByTestId("first-value")).toHaveTextContent("shared-fresh");
 		expect(screen.getByTestId("second-value")).toHaveTextContent(
 			"shared-fresh",
 		);
@@ -253,8 +216,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(execute).toHaveBeenCalledTimes(2);
 
 	view?.unmount();
-	expect(firstClose).toHaveBeenCalledTimes(1);
-	expect(secondClose).toHaveBeenCalledTimes(1);
+	expect(stream.close).toHaveBeenCalledTimes(1);
 });
 
 test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
@@ -377,94 +339,6 @@ test("useQuery can treat advancing observer results as invalidations", async () 
 	await waitFor(() => {
 		expect(screen.getByTestId("invalidated-value")).toHaveTextContent(
 			"synced-file",
-		);
-	});
-	expect(execute).toHaveBeenCalledTimes(3);
-});
-
-test("useQuery orders mounted observers and resumes after owner failover", async () => {
-	const firstStream = createObserveStream();
-	const secondStream = createObserveStream();
-	const lix = {
-		observe: vi
-			.fn()
-			.mockImplementationOnce(() => firstStream)
-			.mockImplementationOnce(() => secondStream),
-	} as unknown as Lix;
-	let directValue = "initial";
-	const execute = vi.fn(async () => [{ value: directValue }]);
-
-	function Probe({ id }: { readonly id: string }) {
-		const rows = useQuery<{ value: string }>(() => ({
-			compile: () => ({
-				sql: "SELECT value FROM ordered_observe_cache",
-				parameters: [],
-			}),
-			execute,
-		}));
-		return <div data-testid={id}>{rows[0]?.value}</div>;
-	}
-
-	let view: ReturnType<typeof render> | undefined;
-	await act(async () => {
-		view = render(
-			<LixProvider lix={lix}>
-				<Suspense fallback={null}>
-					<Probe id="ordered-first" key="first" />
-					<Probe id="ordered-second" key="second" />
-				</Suspense>
-			</LixProvider>,
-		);
-	});
-	expect(await screen.findByTestId("ordered-first")).toHaveTextContent(
-		"initial",
-	);
-
-	await act(async () => firstStream.emit(eventWithValue(0, 0, "initial")));
-	await act(async () => secondStream.emit(eventWithValue(0, 0, "initial")));
-	await waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
-
-	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(2));
-	await act(async () => firstStream.emit(eventWithValue(1, 10, "newer")));
-	await waitFor(() => {
-		expect(screen.getByTestId("ordered-first")).toHaveTextContent("newer");
-		expect(screen.getByTestId("ordered-second")).toHaveTextContent("newer");
-	});
-
-	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(2));
-	await act(async () => secondStream.emit(eventWithValue(1, 9, "older")));
-	expect(screen.getByTestId("ordered-first")).toHaveTextContent("newer");
-	expect(screen.getByTestId("ordered-second")).toHaveTextContent("newer");
-	expect(execute).toHaveBeenCalledTimes(2);
-
-	directValue = "failover-authoritative";
-	await act(async () => {
-		view?.rerender(
-			<LixProvider lix={lix}>
-				<Suspense fallback={null}>
-					<Probe id="ordered-second" key="second" />
-				</Suspense>
-			</LixProvider>,
-		);
-	});
-	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(3));
-	await act(async () =>
-		secondStream.emit(eventWithValue(2, 1, "stale-failover")),
-	);
-	await waitFor(() => {
-		expect(screen.getByTestId("ordered-second")).toHaveTextContent(
-			"failover-authoritative",
-		);
-	});
-	expect(execute).toHaveBeenCalledTimes(3);
-
-	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(4));
-	await act(async () =>
-		secondStream.emit(eventWithValue(3, 2, "after-failover")),
-	);
-	await waitFor(() => {
-		expect(screen.getByTestId("ordered-second")).toHaveTextContent(
-			"after-failover",
 		);
 	});
 	expect(execute).toHaveBeenCalledTimes(3);
@@ -657,14 +531,16 @@ test("useQuery keeps last rows when a protocol session is gone instead of crashi
 	await act(async () => {
 		view = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
 	});
-	expect(await screen.findByTestId("session-gone-query-value")).toHaveTextContent(
-		"initial",
-	);
+	expect(
+		await screen.findByTestId("session-gone-query-value"),
+	).toHaveTextContent("initial");
 	await act(async () => stream.fail(error));
 	expect(screen.getByTestId("session-gone-query-value")).toHaveTextContent(
 		"initial",
 	);
-	expect(screen.queryByTestId("session-gone-query-error")).not.toBeInTheDocument();
+	expect(
+		screen.queryByTestId("session-gone-query-error"),
+	).not.toBeInTheDocument();
 	// Atelier must not remount or restart observe. The SDK reopens the session.
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 	expect(execute).toHaveBeenCalledTimes(1);
@@ -689,9 +565,7 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 			}),
 			execute,
 		}));
-		return (
-			<div data-testid="session-gone-initial-value">{rows.length}</div>
-		);
+		return <div data-testid="session-gone-initial-value">{rows.length}</div>;
 	}
 
 	let view!: ReturnType<typeof render>;
@@ -702,9 +576,9 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 			"session-gone-initial-error",
 		);
 	});
-	expect(await screen.findByTestId("session-gone-initial-value")).toHaveTextContent(
-		"0",
-	);
+	expect(
+		await screen.findByTestId("session-gone-initial-value"),
+	).toHaveTextContent("0");
 	expect(
 		screen.queryByTestId("session-gone-initial-error"),
 	).not.toBeInTheDocument();

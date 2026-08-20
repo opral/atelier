@@ -58,16 +58,13 @@ type QueryCacheEntry<TRow> = {
 	listeners: Set<() => void>;
 	execute: () => Promise<TRow[]>;
 	latestMutationSequence: number | undefined;
-	observationOwner: symbol | undefined;
+	startObservation: (() => () => void) | undefined;
+	stopObservation: (() => void) | undefined;
 	/** Last successful rows. Kept when a gone protocol session must not kill the shell. */
 	lastRows: TRow[] | undefined;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
-const observeQueryCache = new Map<
-	string,
-	{ sql: string; params: ReadonlyArray<unknown> }
->();
 const evictingQueryUsers = new Map<string, number>();
 const lixInstanceIds = new WeakMap<object, number>();
 const lixBranchSessions = new WeakMap<object, AtelierBranchSession>();
@@ -102,10 +99,10 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	listeners: new Set(),
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
 	latestMutationSequence: undefined,
-	observationOwner: undefined,
+	startObservation: undefined,
+	stopObservation: undefined,
 	lastRows: DISABLED_QUERY_ROWS,
 };
-const DISABLED_OBSERVE_QUERY = { sql: "", params: [] } as const;
 
 export function useQuery<TRow>(
 	query: QueryFactory<TRow>,
@@ -126,15 +123,20 @@ export function useQuery<TRow>(
 				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
 				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
 			: "disabled";
-	const observeQuery =
-		enabled && compiled
-			? getObserveQuery(cacheKey, compiled)
-			: DISABLED_OBSERVE_QUERY;
-
 	const entry =
 		enabled && builder
 			? getQueryCacheEntry(cacheKey, builder)
 			: (DISABLED_QUERY_ENTRY as QueryCacheEntry<TRow>);
+	if (enabled && subscribe && compiled) {
+		entry.startObservation = () =>
+			observeQueryEntry(
+				entry,
+				lix,
+				compiled.sql,
+				compiled.parameters,
+				reuseObservedResult,
+			);
+	}
 	const subscribeToSnapshot = useCallback(
 		(listener: () => void) => {
 			if (!enabled || !subscribe) return () => {};
@@ -148,77 +150,6 @@ export function useQuery<TRow>(
 		getSnapshot,
 		getSnapshot,
 	);
-
-	useEffect(() => {
-		if (!enabled || !subscribe) return;
-		let closed = false;
-		let previousMutationSequence: number | undefined;
-		const observationId = Symbol();
-		// Every hook keeps its observer warm for failover, but only one observer
-		// may publish into the shared cache entry at a time.
-		if (entry.observationOwner === undefined) {
-			entry.observationOwner = observationId;
-		}
-		const events = lix.observe(observeQuery.sql, [
-			...observeQuery.params,
-		] as SqlParam[]);
-
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (closed || event === undefined) break;
-					const advancesObservation =
-						previousMutationSequence !== undefined &&
-						event.mutationSequence > previousMutationSequence;
-					previousMutationSequence = event.mutationSequence;
-					let claimedObservation = false;
-					if (entry.observationOwner === undefined) {
-						entry.observationOwner = observationId;
-						claimedObservation = true;
-					}
-					if (entry.observationOwner !== observationId) continue;
-
-					// SDK 0.8.x can return a stale first snapshot, and a remote
-					// reconnect can renumber another initial snapshot. Keep the direct
-					// read for those cases, then reuse advancing mutation results.
-					if (claimedObservation || !advancesObservation) {
-						const nextRows = await entry.execute();
-						if (closed) break;
-						entry.latestMutationSequence = event.mutationSequence;
-						setQueryRows(entry, nextRows);
-						continue;
-					}
-
-					// An observer taking ownership can have older events queued. Never let
-					// one of them overwrite the latest mutation already in the cache.
-					if (
-						entry.latestMutationSequence !== undefined &&
-						event.mutationSequence <= entry.latestMutationSequence
-					) {
-						continue;
-					}
-					const nextRows = reuseObservedResult
-						? queryResultToRows<TRow>(event.result)
-						: await entry.execute();
-					if (closed) break;
-					entry.latestMutationSequence = event.mutationSequence;
-					setQueryRows(entry, nextRows);
-				}
-			} catch (error) {
-				if (closed) return;
-				setQueryError(entry, error);
-			}
-		})();
-
-		return () => {
-			closed = true;
-			if (entry.observationOwner === observationId) {
-				entry.observationOwner = undefined;
-			}
-			events.close();
-		};
-	}, [enabled, entry, subscribe, lix, observeQuery, reuseObservedResult]);
 
 	useEffect(() => {
 		// A non-subscribed query is a snapshot for the current mounted
@@ -243,7 +174,6 @@ export function useQuery<TRow>(
 				if (entry.listeners.size > 0) return;
 				if (queryCache.get(cacheKey) !== entry) return;
 				queryCache.delete(cacheKey);
-				observeQueryCache.delete(cacheKey);
 			});
 		};
 	}, [cacheKey, enabled, entry, evictOnUnmount, subscribe]);
@@ -302,7 +232,8 @@ function getQueryCacheEntry<TRow>(
 		listeners: new Set(),
 		execute: () => builder.execute(),
 		latestMutationSequence: undefined,
-		observationOwner: undefined,
+		startObservation: undefined,
+		stopObservation: undefined,
 		lastRows: undefined,
 	};
 	entry.promise = entry.execute().then(
@@ -329,14 +260,78 @@ function getQueryCacheEntry<TRow>(
 	return entry;
 }
 
+function observeQueryEntry<TRow>(
+	entry: QueryCacheEntry<TRow>,
+	lix: Lix,
+	sql: string,
+	parameters: ReadonlyArray<unknown>,
+	reuseObservedResult: boolean,
+): () => void {
+	let closed = false;
+	let previousMutationSequence: number | undefined;
+	const events = lix.observe(sql, [...parameters] as SqlParam[]);
+
+	void (async () => {
+		try {
+			while (true) {
+				const event = await events.next();
+				if (closed || event === undefined) break;
+				const advancesObservation =
+					previousMutationSequence !== undefined &&
+					event.mutationSequence > previousMutationSequence;
+				previousMutationSequence = event.mutationSequence;
+
+				// SDK 0.8.x can return a stale first snapshot, and a remote
+				// reconnect can renumber another initial snapshot. Keep the direct
+				// read for those cases, then reuse advancing mutation results.
+				if (!advancesObservation) {
+					const nextRows = await entry.execute();
+					if (closed) break;
+					entry.latestMutationSequence = event.mutationSequence;
+					setQueryRows(entry, nextRows);
+					continue;
+				}
+
+				if (
+					entry.latestMutationSequence !== undefined &&
+					event.mutationSequence <= entry.latestMutationSequence
+				) {
+					continue;
+				}
+				const nextRows = reuseObservedResult
+					? queryResultToRows<TRow>(event.result)
+					: await entry.execute();
+				if (closed) break;
+				entry.latestMutationSequence = event.mutationSequence;
+				setQueryRows(entry, nextRows);
+			}
+		} catch (error) {
+			if (closed) return;
+			setQueryError(entry, error);
+		}
+	})();
+
+	return () => {
+		closed = true;
+		events.close();
+	};
+}
+
 function subscribeToQueryEntry<TRow>(
 	cacheKey: string,
 	entry: QueryCacheEntry<TRow>,
 	listener: () => void,
 ): () => void {
 	entry.listeners.add(listener);
+	if (entry.listeners.size === 1) {
+		entry.stopObservation = entry.startObservation?.();
+	}
 	return () => {
 		entry.listeners.delete(listener);
+		if (entry.listeners.size === 0) {
+			entry.stopObservation?.();
+			entry.stopObservation = undefined;
+		}
 		if (
 			entry.snapshot.status === "error" &&
 			!isPermanentQueryError(entry.snapshot.error) &&
@@ -410,23 +405,4 @@ function getLixBranchSession(lix: Lix): AtelierBranchSession {
 	const session = createLixBranchSession(lix);
 	lixBranchSessions.set(lix, session);
 	return session;
-}
-
-function getObserveQuery(
-	cacheKey: string,
-	compiled: {
-		sql: string;
-		parameters: ReadonlyArray<unknown>;
-	},
-): { sql: string; params: ReadonlyArray<unknown> } {
-	const cached = observeQueryCache.get(cacheKey);
-	if (cached) {
-		return cached;
-	}
-	const next = {
-		sql: compiled.sql,
-		params: [...compiled.parameters],
-	};
-	observeQueryCache.set(cacheKey, next);
-	return next;
 }
