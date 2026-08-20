@@ -2,8 +2,6 @@ packages:
   - .
   - fixtures/consumer
   - preview/web
-  - vendor/lix/packages/js-sdk
-  - "!vendor/lix/packages/**/dist"
 
 allowBuilds:
   "@parcel/watcher": true

@@ -31,7 +31,8 @@
 	"scripts": {
 		"dev": "pnpm --dir preview/web dev",
 		"build": "vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs",
-		"build:lix": "pnpm -C vendor/lix/packages/js-sdk run build",
+		"build:lix": "pnpm -C vendor/lix/packages/js-sdk run build && npm --prefix vendor/lix/packages/storage-opfs ci && npm --prefix vendor/lix/packages/storage-opfs run build",
+		"prebuild:preview": "git submodule update --init --recursive && pnpm run build:lix",
 		"build:preview": "pnpm --dir preview/web build && node scripts/compress-preview-wasm.mjs",
 		"deploy:preview": "wrangler versions upload",
 		"typecheck": "tsc -p . --pretty false",
@@ -96,7 +97,7 @@
 		"yaml": "^2.8.2"
 	},
 	"devDependencies": {
-		"@lix-js/sdk": "workspace:*",
+		"@lix-js/sdk": "link:vendor/lix/packages/js-sdk",
 		"@tailwindcss/vite": "^4.3.2",
 		"@testing-library/jest-dom": "^6.6.3",
 		"@testing-library/react": "^16.3.2",
