@@ -12,16 +12,11 @@ allowBuilds:
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
-  - "@lix-js/sdk-darwin-arm64@0.12.2"
-  - "@lix-js/sdk-darwin-arm64@0.12.3"
-  - "@lix-js/sdk-linux-arm64@0.12.2"
-  - "@lix-js/sdk-linux-arm64@0.12.3"
-  - "@lix-js/sdk-linux-x64@0.12.2"
-  - "@lix-js/sdk-linux-x64@0.12.3"
-  - "@lix-js/sdk-win32-x64@0.12.2"
-  - "@lix-js/sdk-win32-x64@0.12.3"
-  - "@lix-js/sdk@0.12.2"
-  - "@lix-js/sdk@0.12.3"
+  - "@lix-js/sdk-darwin-arm64"
+  - "@lix-js/sdk-linux-arm64"
+  - "@lix-js/sdk-linux-x64"
+  - "@lix-js/sdk-win32-x64"
+  - "@lix-js/sdk"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
@@ -38,3 +33,5 @@ peerDependencyRules:
   allowedVersions:
     "@glideapps/glide-data-grid>react": ^19.0.0
     "@glideapps/glide-data-grid>react-dom": ^19.0.0
+    # Lix main carries the next SDK APIs before its package version is released.
+    "@opral/atelier>@lix-js/sdk": 0.12.3

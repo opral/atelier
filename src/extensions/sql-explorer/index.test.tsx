@@ -310,13 +310,15 @@ describe("SqlExplorerView", () => {
 				/>,
 			);
 
-			fireEvent.click(screen.getByRole("button", { name: /Run/ }));
+			const runButton = screen.getByRole("button", { name: /Run/ });
+			fireEvent.click(runButton);
 			await screen.findByText("42");
+			await waitFor(() => expect(runButton).toBeEnabled());
 
 			const editor = screen.getByRole("textbox", { name: "SQL query" });
 			fireEvent.change(editor, { target: { value: "SELECT 43 AS answer;" } });
 			failNextQuery = true;
-			fireEvent.click(screen.getByRole("button", { name: /Run/ }));
+			fireEvent.click(runButton);
 
 			const alert = await screen.findByRole("alert", undefined, {
 				timeout: 5_000,

@@ -11,8 +11,8 @@
 		"typecheck": "tsc -p tsconfig.json --pretty false"
 	},
 	"dependencies": {
-		"@lix-js/sdk": "0.12.2",
-		"@lix-js/storage-opfs": "0.12.2",
+		"@lix-js/sdk": "link:../../vendor/lix/packages/js-sdk",
+		"@lix-js/storage-opfs": "link:../../vendor/lix/packages/storage-opfs",
 		"@opral/atelier": "workspace:*"
 	},
 	"devDependencies": {
