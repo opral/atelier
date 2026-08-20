@@ -470,18 +470,28 @@ export async function getAgentTurnExternalWriteReview(
 	ranges: readonly AgentTurnCommitRange[],
 	resolvedReviewIds: ReadonlySet<string> = new Set(),
 ): Promise<ExternalWriteReview | null> {
-	const relevantRanges: AgentTurnCommitRange[] = [];
 	const resolvedRangeIds = resolvedAgentTurnRangeIds(fileId, resolvedReviewIds);
-	for (const range of ranges) {
-		if (resolvedRangeIds.has(range.id)) continue;
-		if (range.beforeCommitId === range.afterCommitId) continue;
-		const data = await getRangeFileData(lix, fileId, range);
-		if (!data) continue;
-		if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
-			continue;
-		}
-		relevantRanges.push(range);
-	}
+	const candidateRanges = ranges.filter(
+		(range) =>
+			!resolvedRangeIds.has(range.id) &&
+			range.beforeCommitId !== range.afterCommitId,
+	);
+	const snapshots = await getFileHistorySnapshotsAtCommits(
+		lix,
+		[fileId],
+		uniqueStrings(
+			candidateRanges.flatMap((range) => [
+				range.beforeCommitId,
+				range.afterCommitId,
+			]),
+		),
+	);
+	const relevantRanges = relevantAgentTurnRanges(
+		fileId,
+		candidateRanges,
+		resolvedReviewIds,
+		snapshots,
+	);
 	if (relevantRanges.length === 0) return null;
 	const orderedRanges = await orderAgentTurnRangesByCommitAncestry(
 		lix,
@@ -490,10 +500,14 @@ export async function getAgentTurnExternalWriteReview(
 	const firstRange = orderedRanges[0];
 	const lastRange = orderedRanges[orderedRanges.length - 1];
 	if (!firstRange || !lastRange) return null;
-	const data = await getRangeFileData(lix, fileId, {
-		beforeCommitId: firstRange.beforeCommitId,
-		afterCommitId: lastRange.afterCommitId,
-	});
+	const data = getRangeFileDataFromSnapshots(
+		fileId,
+		{
+			beforeCommitId: firstRange.beforeCommitId,
+			afterCommitId: lastRange.afterCommitId,
+		},
+		snapshots,
+	);
 	if (!data) return null;
 	if (data.beforeExists && fileBytesEqual(data.beforeData, data.afterData)) {
 		return null;

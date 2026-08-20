@@ -10,6 +10,7 @@ import type { ExternalWriteReview } from "@/extension-runtime/external-write-rev
 import {
 	getExternalWriteReview,
 	getExternalWriteReviewData,
+	getAgentTurnExternalWriteReview,
 	getPendingExternalWriteReviewPaths,
 	getWorkingChangeExternalWriteReview,
 	useExternalWriteReview,
@@ -69,6 +70,68 @@ describe("getWorkingChangeExternalWriteReview", () => {
 });
 
 describe("getExternalWriteReview", () => {
+	test("reads each snapshot once for one agent turn range", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("single-range-query-count");
+			const path = "/docs/single-range-query-count.md";
+			await writeFile(lix, fileId, path, "before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, fileId, path, "after");
+			const afterCommitId = await activeCommitId(lix);
+			const execute = vi.spyOn(lix, "execute");
+
+			const review = await getAgentTurnExternalWriteReview(lix, fileId, path, [
+				agentRange({
+					id: "single-range",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			]);
+
+			expect(review?.agentTurnRangeIds).toEqual(["single-range"]);
+			expect(historyReadCount(execute)).toBe(2);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("reuses the shared snapshot between contiguous agent turn ranges", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("contiguous-range-query-count");
+			const path = "/docs/contiguous-range-query-count.md";
+			await writeFile(lix, fileId, path, "before");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, fileId, path, "middle");
+			const middleCommitId = await activeCommitId(lix);
+			await writeFile(lix, fileId, path, "after");
+			const afterCommitId = await activeCommitId(lix);
+			const execute = vi.spyOn(lix, "execute");
+
+			const review = await getAgentTurnExternalWriteReview(lix, fileId, path, [
+				agentRange({
+					id: "earlier-range",
+					beforeCommitId,
+					afterCommitId: middleCommitId,
+				}),
+				agentRange({
+					id: "later-range",
+					beforeCommitId: middleCommitId,
+					afterCommitId,
+				}),
+			]);
+
+			expect(review?.agentTurnRangeIds).toEqual([
+				"earlier-range",
+				"later-range",
+			]);
+			expect(historyReadCount(execute)).toBe(3);
+		} finally {
+			await lix.close();
+		}
+	});
+
 	test("returns no review when no agent turn range exists", async () => {
 		const lix = await openLix();
 		try {
@@ -1033,6 +1096,12 @@ async function activeCommitId(lix: Lix): Promise<string> {
 		throw new Error("Missing active commit id");
 	}
 	return commitId;
+}
+
+function historyReadCount(execute: ReturnType<typeof vi.spyOn>): number {
+	return execute.mock.calls.filter(([statement]: unknown[]) =>
+		String(statement).includes("lix_history('lix_file'"),
+	).length;
 }
 
 function agentRange(
