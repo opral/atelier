@@ -17,7 +17,7 @@ import {
 } from "./timing";
 
 /** Variant surfaces of a base table, switched in the toolbar. */
-export const TABLE_SURFACES = ["current", "_by_branch", "_history"] as const;
+export const TABLE_SURFACES = ["current", "_history"] as const;
 export type TableSurface = (typeof TABLE_SURFACES)[number];
 
 export type TableFilter = {

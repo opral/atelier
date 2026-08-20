@@ -10,16 +10,8 @@ type OpenLixKeyValueEntry = {
 	key: string;
 	value: SqlParam;
 	lixcol_untracked?: boolean;
-} & (
-	| {
-			lixcol_branch_id: string;
-			lixcol_global: boolean;
-	  }
-	| {
-			lixcol_branch_id?: undefined;
-			lixcol_global?: boolean;
-	  }
-);
+	lixcol_global?: boolean;
+};
 
 type OpenTestLixOptions = SdkOpenLixOptions & {
 	keyValues?: ReadonlyArray<OpenLixKeyValueEntry>;
@@ -54,27 +46,14 @@ async function seedKeyValues(
 		if (!entry || typeof entry.key !== "string") {
 			continue;
 		}
-		if (typeof entry.lixcol_branch_id === "string") {
-			if (typeof entry.lixcol_global !== "boolean") {
-				throw new TypeError(
-					"branch-scoped keyValues entries require lixcol_global",
-				);
-			}
-			await lix.execute(
-				"INSERT INTO lix_key_value_by_branch (key, value, lixcol_branch_id, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4, $5)",
-				[
-					entry.key,
-					entry.value,
-					entry.lixcol_branch_id,
-					entry.lixcol_global,
-					entry.lixcol_untracked ?? true,
-				],
-			);
-			continue;
-		}
 		await lix.execute(
-			"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, true, true)",
-			[entry.key, entry.value],
+			"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4)",
+			[
+				entry.key,
+				entry.value,
+				entry.lixcol_global ?? true,
+				entry.lixcol_untracked ?? true,
+			],
 		);
 	}
 }

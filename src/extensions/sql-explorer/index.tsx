@@ -178,7 +178,7 @@ export function groupBaseTables(
 	const names = new Set(tableNames);
 	const bases: SchemaBaseTable[] = [];
 	for (const name of [...names].sort()) {
-		if (/_by_branch$|_history$/.test(name)) continue;
+		if (/_history$/.test(name)) continue;
 		const surfaces = TABLE_SURFACES.filter((surface) =>
 			names.has(surfaceTableName(name, surface)),
 		);

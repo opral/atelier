@@ -6,7 +6,6 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { MarkdownView } from "./index";
 import { qb } from "@/lib/lix-kysely";
-import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 
 describe("MarkdownView", () => {
@@ -28,11 +27,10 @@ describe("MarkdownView", () => {
 			.execute();
 
 		await qb(lix)
-			.insertInto("lix_key_value_by_branch")
+			.insertInto("lix_key_value")
 			.values({
 				key: "atelier_active_file_id",
 				value: fakeUuid("file_1"),
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			})
@@ -61,7 +59,7 @@ describe("MarkdownView", () => {
 
 		await waitFor(async () => {
 			const rows = await qb(lix)
-				.selectFrom("lix_key_value_by_branch")
+				.selectFrom("lix_key_value")
 				.where("key", "=", "atelier_active_file_id")
 				.select(["value"])
 				.execute();
@@ -562,11 +560,10 @@ describe("MarkdownView", () => {
 			})
 			.execute();
 		await qb(lix)
-			.insertInto("lix_key_value_by_branch")
+			.insertInto("lix_key_value")
 			.values({
 				key: "atelier_active_file_id",
 				value: "existing_markdown",
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			})
@@ -596,7 +593,7 @@ describe("MarkdownView", () => {
 		});
 
 		const record = await qb(lix)
-			.selectFrom("lix_key_value_by_branch")
+			.selectFrom("lix_key_value")
 			.select(["value"])
 			.where("key", "=", "atelier_active_file_id")
 			.executeTakeFirst();
@@ -629,11 +626,10 @@ describe("MarkdownView", () => {
 
 		// Persist a stale active file id pointing to alpha
 		await qb(lix)
-			.insertInto("lix_key_value_by_branch")
+			.insertInto("lix_key_value")
 			.values({
 				key: "atelier_active_file_id",
 				value: fakeUuid("file_alpha"),
-				lixcol_branch_id: GLOBAL_BRANCH_ID,
 				lixcol_global: true,
 				lixcol_untracked: true,
 			})
@@ -659,7 +655,7 @@ describe("MarkdownView", () => {
 
 		await waitFor(async () => {
 			const record = await qb(lix)
-				.selectFrom("lix_key_value_by_branch")
+				.selectFrom("lix_key_value")
 				.select(["value"])
 				.where("key", "=", "atelier_active_file_id")
 				.executeTakeFirst();
