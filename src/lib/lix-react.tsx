@@ -59,8 +59,6 @@ type QueryCacheEntry<TRow> = {
 	execute: () => Promise<TRow[]>;
 	startObservation: (() => () => void) | undefined;
 	stopObservation: (() => void) | undefined;
-	/** Last successful rows. Kept when a gone protocol session must not kill the shell. */
-	lastRows: TRow[] | undefined;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
@@ -99,7 +97,6 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
 	startObservation: undefined,
 	stopObservation: undefined,
-	lastRows: DISABLED_QUERY_ROWS,
 };
 
 export function useQuery<TRow>(
@@ -181,11 +178,6 @@ export function useQuery<TRow>(
 	}
 
 	if (snapshot.status === "error") {
-		// A gone protocol session is the SDK's to reopen (GET /lix/v1 with no
-		// Lix-Session-Id). Throwing here unmounted the whole Atelier shell.
-		if (isRecoverableLixSessionError(snapshot.error)) {
-			return entry.lastRows ?? [];
-		}
 		throw snapshot.error instanceof Error
 			? snapshot.error
 			: new Error(String(snapshot.error));
@@ -231,7 +223,6 @@ function getQueryCacheEntry<TRow>(
 		execute: () => builder.execute(),
 		startObservation: undefined,
 		stopObservation: undefined,
-		lastRows: undefined,
 	};
 	entry.promise = entry.execute().then(
 		(rows) => {
@@ -242,7 +233,8 @@ function getQueryCacheEntry<TRow>(
 			if (isRecoverableLixSessionError(error)) {
 				// Resolve (do not reject) so `use()` cannot hit the error boundary.
 				// The SDK owns the recover-once re-handshake; Atelier must not remount.
-				const rows = entry.lastRows ?? [];
+				const rows =
+					entry.snapshot.status === "success" ? entry.snapshot.rows : [];
 				setQueryRows(entry, rows);
 				return rows;
 			}
@@ -330,7 +322,6 @@ function isPermanentQueryError(error: unknown): boolean {
 }
 
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
-	entry.lastRows = rows;
 	if (
 		entry.snapshot.status === "success" &&
 		rowsEqual(entry.snapshot.rows, rows)
@@ -345,7 +336,10 @@ function setQueryError<TRow>(
 	error: unknown,
 ): void {
 	if (isRecoverableLixSessionError(error)) {
-		setQueryRows(entry, entry.lastRows ?? []);
+		setQueryRows(
+			entry,
+			entry.snapshot.status === "success" ? entry.snapshot.rows : [],
+		);
 		return;
 	}
 	setQuerySnapshot(entry, { status: "error", error });
