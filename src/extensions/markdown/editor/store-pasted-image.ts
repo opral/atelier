@@ -1,5 +1,9 @@
 import type { Lix } from "@lix-js/sdk";
 import { relativeMarkdownAssetSrc } from "./markdown-asset";
+import {
+	createWorkspaceFileId,
+	isWorkspacePathCollision,
+} from "./workspace-file-storage";
 
 const IMAGE_EXTENSION_BY_MIME_TYPE = new Map<string, string>([
 	["image/png", "png"],
@@ -78,7 +82,7 @@ export async function storePastedMarkdownImage({
 	for (let attempt = 1; attempt <= MAX_FILENAME_ATTEMPTS; attempt += 1) {
 		const suffix = attempt === 1 ? "" : `-${attempt}`;
 		const fileName = `${suggestedStem}${suffix}.${extension}`;
-		const fileId = pastedImageFileId();
+		const fileId = createWorkspaceFileId();
 		const workspacePath = `${ROOT_ASSETS_FILE_PATH}/${fileName}`;
 		const markdownSrc = relativeMarkdownAssetSrc({
 			sourceFilePath,
@@ -163,26 +167,6 @@ async function assertAssetsDirectoryAvailable(
 	}
 }
 
-function pastedImageFileId(): string {
-	if (
-		typeof crypto !== "undefined" &&
-		typeof crypto.randomUUID === "function"
-	) {
-		return crypto.randomUUID();
-	}
-	// Lix requires canonical UUID file ids, so the fallback must keep the shape.
-	const bytes = new Uint8Array(16);
-	for (let index = 0; index < bytes.length; index += 1) {
-		bytes[index] = Math.floor(Math.random() * 256);
-	}
-	bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-	const hex = [...bytes]
-		.map((byte) => byte.toString(16).padStart(2, "0"))
-		.join("");
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 export type PastedMediaKind = "image" | "video";
 
 export function pastedMediaKind(mimeType: string): PastedMediaKind {
@@ -235,18 +219,4 @@ export function pastedImageAlt(
 		return kind === "video" ? "Pasted video" : "Pasted image";
 	}
 	return readable;
-}
-
-function isWorkspacePathCollision(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false;
-	const candidate = error as {
-		readonly code?: unknown;
-		readonly name?: unknown;
-		readonly message?: unknown;
-	};
-	return [candidate.code, candidate.name, candidate.message].some((value) =>
-		String(value ?? "")
-			.toUpperCase()
-			.includes("LIX_ERROR_UNIQUE"),
-	);
 }
