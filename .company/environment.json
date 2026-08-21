@@ -2,7 +2,7 @@
 	"$schema": "https://api.thecompany.company/schemas/v1/environment.json",
 	"scripts": {
 		"install": {
-			"command": "set -eux\nsudo apt-get update\nsudo apt-get install -y build-essential mold npm\nsudo npm install --global n\nsudo n \"$(cat .node-version)\"\nhash -r\nsudo npm install --global \"$(node -p \"require('./package.json').packageManager\")\"\ngit submodule update --init --recursive\npnpm install --frozen-lockfile\npnpm run build:lix",
+			"command": "set -eux\nsudo apt-get update\nsudo apt-get install -y build-essential clang libclang-dev mold npm\nsudo npm install --global n\nsudo n \"$(cat .node-version)\"\nhash -r\nsudo npm install --global \"$(node -p \"require('./package.json').packageManager\")\"\ngit submodule update --init --recursive\npnpm install --frozen-lockfile\npnpm run build:lix",
 			"timeout": 1800
 		},
 		"prepare": {
