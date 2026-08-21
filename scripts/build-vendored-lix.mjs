@@ -19,6 +19,13 @@ const rustupHome = join(cacheRoot, "rustup");
 const toolsRoot = join(cacheRoot, "tools");
 const cargoBin = join(cargoHome, "bin");
 const toolsBin = join(toolsRoot, "bin");
+const buildArguments = process.argv.slice(2);
+if (buildArguments.some((argument) => argument !== "--browser-only")) {
+	throw new Error(
+		`Unsupported vendored Lix build mode: ${buildArguments.join(" ")}`,
+	);
+}
+const browserOnly = buildArguments.includes("--browser-only");
 
 await requireDirectory(
 	sdkRoot,
@@ -80,7 +87,13 @@ if (commandOutput("wasm-bindgen", ["--version"], env) !== expectedWasmBindgen) {
 }
 
 run("npm", ["ci"], env, sdkRoot);
-run("npm", ["run", "build"], env, sdkRoot);
+if (browserOnly) {
+	for (const script of ["clean", "build:wasm", "build:ts", "build:plugins"]) {
+		run("npm", ["run", script], env, sdkRoot);
+	}
+} else {
+	run("npm", ["run", "build"], env, sdkRoot);
+}
 run("npm", ["ci"], env, opfsRoot);
 run("npm", ["run", "build"], env, opfsRoot);
 
