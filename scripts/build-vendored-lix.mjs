@@ -47,7 +47,7 @@ await mkdir(cacheRoot, { recursive: true });
 let env = {
 	...process.env,
 	...(browserOnly && process.env.CARGO_BUILD_JOBS === undefined
-		? { CARGO_BUILD_JOBS: "2" }
+		? { CARGO_BUILD_JOBS: "1" }
 		: {}),
 	...(browserOnly && process.env.CARGO_PROFILE_RELEASE_OPT_LEVEL === undefined
 		? { CARGO_PROFILE_RELEASE_OPT_LEVEL: "1" }
