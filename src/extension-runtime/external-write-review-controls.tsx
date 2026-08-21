@@ -283,6 +283,24 @@ export function ExternalWriteReviewControls({
 				</div>
 			) : null}
 			<div className="external-write-review-scope">
+				{onExit ? (
+					<>
+						<button
+							type="button"
+							className="external-write-review-button-exit"
+							onClick={onExit}
+							aria-label="Exit"
+							data-attr="diff-exit"
+						>
+							<kbd>Esc</kbd>
+							<span>Exit</span>
+						</button>
+						<span
+							aria-hidden="true"
+							className="external-write-review-exit-divider"
+						/>
+					</>
+				) : null}
 				{navigation ? (
 					<div
 						className="external-write-review-navigation"

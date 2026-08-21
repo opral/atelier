@@ -32,22 +32,15 @@ export function StatusBar({
 export function CheckpointStatusBar({
 	readOnly = false,
 	autoAcceptAgentChanges = false,
-	isReviewing = false,
-	exitLabel = "Exit review",
 	onAutoAcceptAgentChangesChange,
 	onOpenWorkingChanges,
 	onOpenHistory,
-	onExitReview,
 }: {
 	readonly readOnly?: boolean;
 	readonly autoAcceptAgentChanges?: boolean;
-	readonly isReviewing?: boolean;
-	/** "Exit review" normally; "Back to now" while viewing a checkpoint. */
-	readonly exitLabel?: string;
 	readonly onAutoAcceptAgentChangesChange?: (enabled: boolean) => void;
 	readonly onOpenWorkingChanges?: () => void;
 	readonly onOpenHistory?: () => void;
-	readonly onExitReview?: () => void;
 }): JSX.Element {
 	const workingChangeCount = useQuery((queryLix) =>
 		selectWorkingChangeCount(queryLix),
@@ -81,23 +74,7 @@ export function CheckpointStatusBar({
 
 	return (
 		<StatusBar
-			left={
-				isReviewing ? (
-					<button
-						type="button"
-						aria-label={exitLabel}
-						onClick={onExitReview}
-						className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-					>
-						<span>{exitLabel}</span>
-						<kbd className="rounded bg-[var(--color-bg-control)] px-1 font-sans text-[10px] font-semibold uppercase text-[var(--color-text-quaternary)]">
-							Esc
-						</kbd>
-					</button>
-				) : (
-					historyStatus
-				)
-			}
+			left={historyStatus}
 			right={
 				readOnly ? undefined : (
 					<div className="flex items-center gap-2">
