@@ -10,6 +10,8 @@
 		"json",
 		"jsonc",
 		"js",
+		"mjs",
+		"cjs",
 		"jsx",
 		"ts",
 		"tsx",
