@@ -14,6 +14,10 @@ import { fakeUuid } from "@/test-utils/fake-uuid";
 import { V2LayoutShell } from "./layout-shell";
 import { createAtelier } from "../atelier-instance";
 import { createMemorySessionStateStore } from "../state-adapters";
+import {
+	CSV_EXTENSION_KIND,
+	fileExtensionInstanceForKind,
+} from "../extension-runtime/extension-instance-helpers";
 import type {
 	AtelierEvent,
 	AtelierExtensionRegistration,
@@ -211,6 +215,68 @@ describe("central tabs with a pinned home", () => {
 			expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
 			// Still one content tab: the label followed the location.
 			expect(centralTabLabels()).toEqual(["«home»", "two.md"]);
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("observed file renames update the tab and notify host routing", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			expect(centralTabLabels()).toEqual(["«home»", "one.md"]);
+
+			await act(async () => {
+				await qb(shell.lix)
+					.updateTable("lix_file")
+					.set({ path: "/renamed.md" })
+					.where("id", "=", fakeUuid("one"))
+					.execute();
+			});
+
+			await waitFor(() => {
+				expect(centralTabLabels()).toEqual(["«home»", "renamed.md"]);
+			});
+			await waitFor(() => {
+				expect(
+					shell.events
+						.filter((event) => event.type === "central_view_activated")
+						.at(-1),
+				).toMatchObject({
+					filePath: "/renamed.md",
+				});
+			});
+			expect(
+				shell.sessionStateStore.getSnapshot()?.panels.central.views[1]?.state,
+			).toMatchObject({
+				fileId: fakeUuid("one"),
+				filePath: "/renamed.md",
+				atelier: { label: "renamed.md" },
+			});
+
+			await act(async () => {
+				await qb(shell.lix)
+					.updateTable("lix_file")
+					.set({ path: "/renamed.csv" })
+					.where("id", "=", fakeUuid("one"))
+					.execute();
+			});
+			await waitFor(() => {
+				expect(centralTabLabels()).toEqual(["«home»", "renamed.csv"]);
+				const central = shell.sessionStateStore.getSnapshot()?.panels.central;
+				const instance = fileExtensionInstanceForKind(
+					CSV_EXTENSION_KIND,
+					fakeUuid("one"),
+				);
+				expect(central?.views[1]).toMatchObject({
+					kind: CSV_EXTENSION_KIND,
+					instance,
+					state: { filePath: "/renamed.csv" },
+				});
+				expect(central?.activeInstance).toBe(instance);
+			});
 		} finally {
 			await shell.cleanup();
 		}
