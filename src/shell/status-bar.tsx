@@ -53,6 +53,11 @@ export function CheckpointStatusBar({
 		selectWorkingChangeCount(queryLix),
 	);
 	const changeCount = workingChangeCount[0]?.change_count ?? 0;
+	const fileCount = workingChangeCount[0]?.file_count ?? 0;
+	const workingCountLabel =
+		fileCount > 0
+			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
+			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
 
 	const historyStatus =
 		changeCount === 0 ? (
@@ -68,9 +73,7 @@ export function CheckpointStatusBar({
 			</Suspense>
 		) : (
 			<CheckpointStatus
-				statusLabel={`${changeCount} ${
-					changeCount === 1 ? "change" : "changes"
-				} since checkpoint`}
+				statusLabel={`${workingCountLabel} since checkpoint`}
 				hasWorkingChanges
 				onActivate={onOpenWorkingChanges}
 			/>

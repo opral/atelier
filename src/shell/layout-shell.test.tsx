@@ -678,7 +678,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(
 					screen.getByRole("button", {
-						name: "1 change since checkpoint. Open changes review",
+						name: "1 file changed since checkpoint. Open changes review",
 					}),
 				).toBeVisible();
 			});
@@ -703,7 +703,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				fireEvent.click(
 					screen.getByRole("button", {
-						name: "1 change since checkpoint. Open changes review",
+						name: "1 file changed since checkpoint. Open changes review",
 					}),
 				);
 			});
@@ -743,12 +743,12 @@ describe("agent turn review navigation", () => {
 			});
 			expect(
 				screen.getByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			).toBeVisible();
 			fireEvent.click(
 				screen.getByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			);
 			expect(
@@ -787,7 +787,7 @@ describe("agent turn review navigation", () => {
 			});
 			fireEvent.click(
 				screen.getByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			);
 			expect(
