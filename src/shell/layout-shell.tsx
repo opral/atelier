@@ -1359,7 +1359,7 @@ function LayoutShellLoadedContent({
 		}
 	}, []);
 	// The live document the historical view replaced (tabs navigate in place);
-	// restored on "Back to now" so exiting never strands an empty tab.
+	// restored on exit so leaving review never strands an empty tab.
 	const preHistoricalDocumentRef = useRef<{
 		readonly fileId: string;
 		readonly filePath: string;
@@ -2523,7 +2523,7 @@ function LayoutShellLoadedContent({
 				}
 				if (!current) {
 					// Entering the past: remember the live document this view will
-					// replace so "Back to now" can bring it back.
+					// replace so Exit can bring it back.
 					const activeView = panelStatesRef.current.central.views.find(
 						(view) =>
 							view.instance === panelStatesRef.current.central.activeInstance,
@@ -4074,11 +4074,8 @@ function LayoutShellLoadedContent({
 				<CheckpointStatusBar
 					readOnly={isHostReadOnly}
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
-					isReviewing={isReviewMode}
-					exitLabel={historicalReview ? "Back to now" : "Exit review"}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
 					onOpenWorkingChanges={handleOpenWorkingChangesReview}
-					onExitReview={exitDiffReview}
 					onOpenHistory={() =>
 						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
 							panel: "left",

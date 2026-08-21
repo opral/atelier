@@ -185,32 +185,4 @@ describe("CheckpointStatusBar", () => {
 		await act(async () => view?.unmount());
 		await lix.close();
 	});
-
-	test("replaces workspace status with an exit review action", async () => {
-		const lix = await openLix();
-		const exitReview = vi.fn();
-		let view: ReturnType<typeof render> | undefined;
-		await act(async () => {
-			view = render(
-				<LixProvider lix={lix}>
-					<Suspense fallback={null}>
-						<CheckpointStatusBar isReviewing onExitReview={exitReview} />
-					</Suspense>
-				</LixProvider>,
-			);
-		});
-
-		const exitButton = await screen.findByRole("button", {
-			name: "Exit review",
-		});
-		expect(exitButton).toHaveTextContent("Exit review");
-		expect(exitButton).toHaveTextContent("Esc");
-		expect(screen.queryByText("Latest checkpoint")).toBeNull();
-
-		fireEvent.click(exitButton);
-		expect(exitReview).toHaveBeenCalledOnce();
-
-		await act(async () => view?.unmount());
-		await lix.close();
-	});
 });
