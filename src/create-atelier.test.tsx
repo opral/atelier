@@ -76,7 +76,7 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open changes review",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
@@ -121,7 +121,7 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open changes review",
 			});
 			await act(async () => {
 				fireEvent.click(pill);

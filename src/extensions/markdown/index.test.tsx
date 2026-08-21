@@ -887,6 +887,46 @@ describe("MarkdownView", () => {
 			utils?.unmount();
 		});
 	});
+
+	test("shows normal not found after restore removes the requested file", async () => {
+		const lix = await openLix();
+		const restoreTarget = await activeCommitId(lix);
+		const fileId = fakeUuid("file_removed_by_restore");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/restored-away.md",
+				content: new TextEncoder().encode("# Later state"),
+			})
+			.execute();
+
+		await lix.execute("SELECT lix_restore($1)", [restoreTarget]);
+		const workingDiff = await lix.execute(
+			"SELECT diff_id FROM lix_working_diff()",
+		);
+		expect(workingDiff.rows).toHaveLength(0);
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView fileId={fileId} filePath="/restored-away.md" />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			expect(await screen.findByText(/file not found/i)).toBeInTheDocument();
+			expect(screen.queryByText(/unable to render atelier/i)).toBeNull();
+			expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
 });
 
 async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
