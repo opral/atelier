@@ -39,15 +39,21 @@ const wasmBindgenVersion = requiredMatch(
 await mkdir(cacheRoot, { recursive: true });
 let env = {
 	...process.env,
-	CARGO_HOME: cargoHome,
 	CARGO_UNSTABLE_BINDEPS: "true",
-	PATH: `${toolsBin}${delimiter}${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
-	RUSTUP_HOME: rustupHome,
+	PATH: `${toolsBin}${delimiter}${process.env.PATH ?? ""}`,
 	RUSTUP_TOOLCHAIN: channel,
 };
 
 if (!commandSucceeds("rustup", ["run", channel, "cargo", "--version"], env)) {
-	await provisionRustup(channel, env);
+	env = {
+		...env,
+		CARGO_HOME: cargoHome,
+		PATH: `${toolsBin}${delimiter}${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
+		RUSTUP_HOME: rustupHome,
+	};
+	if (!commandSucceeds("rustup", ["run", channel, "cargo", "--version"], env)) {
+		await provisionRustup(channel, env);
+	}
 }
 for (const target of ["wasm32-unknown-unknown", "wasm32-wasip2"]) {
 	if (!rustTargetInstalled(target, channel, env)) {
