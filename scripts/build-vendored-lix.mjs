@@ -46,6 +46,9 @@ const wasmBindgenVersion = requiredMatch(
 await mkdir(cacheRoot, { recursive: true });
 let env = {
 	...process.env,
+	...(browserOnly && process.env.CARGO_BUILD_JOBS === undefined
+		? { CARGO_BUILD_JOBS: "2" }
+		: {}),
 	CARGO_UNSTABLE_BINDEPS: "true",
 	PATH: `${toolsBin}${delimiter}${process.env.PATH ?? ""}`,
 	RUSTUP_TOOLCHAIN: channel,
