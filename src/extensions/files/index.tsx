@@ -160,9 +160,15 @@ function FilesViewWithWorkingChanges({
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
 }) {
-	const workingChanges = useQuery((queryLix) => selectWorkingChanges(queryLix));
-	const fileWorkingChanges = useQuery((queryLix) =>
-		selectFileWorkingChanges(queryLix),
+	const reviewWorkingChanges =
+		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
+	const workingChanges = useQuery(
+		(queryLix) => selectWorkingChanges(queryLix),
+		{ enabled: reviewWorkingChanges },
+	);
+	const fileWorkingChanges = useQuery(
+		(queryLix) => selectFileWorkingChanges(queryLix),
+		{ enabled: reviewWorkingChanges },
 	);
 	return (
 		<FilesViewContent
@@ -1500,7 +1506,7 @@ export const extension = createReactExtensionDefinition({
 					activeBranchId: atelier.branches.activeId,
 					resolvedReviewIds: atelier.reviews.resolvedReviewIds,
 					reviewRangeSessionId: atelier.reviews.rangeSessionId,
-					reviewWorkingChanges: true,
+					reviewWorkingChanges: atelier.reviews.mode === "working-changes",
 					reviewModeActive: atelier.reviews.active,
 					isPanelFocused: view.isFocused,
 					panelSide: view.panel,
