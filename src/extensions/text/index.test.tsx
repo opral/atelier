@@ -26,6 +26,8 @@ describe("text extension routing", () => {
 		"/src/session.py",
 		"/config/settings.JSON",
 		"/src/app.tsx",
+		"/src/module.mjs",
+		"/src/config.cjs",
 		"/.env",
 	])("handles %s", (path) => {
 		expect(findFileHandlerExtension([extension], path)).toBe(extension);
