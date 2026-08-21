@@ -1094,13 +1094,9 @@ describe("agent turn review navigation", () => {
 			).toHaveAttribute("aria-current", "true");
 			const checkpointFileReads = execute.mock.calls
 				.map(([statement]) => String(statement))
-				.filter(
-					(statement) =>
-						statement.includes("lix_history('lix_file") &&
-						!statement.toLowerCase().includes("content"),
-				);
+				.filter((statement) => statement.includes("FROM lix_diff($1, $2)"));
 			expect(checkpointFileReads).toEqual([
-				"SELECT id, path FROM lix_history('lix_file') WHERE lixcol_observed_commit_id = $1 ORDER BY path",
+				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
 		} finally {
 			await act(async () => utils?.unmount());

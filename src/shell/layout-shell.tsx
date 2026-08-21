@@ -679,6 +679,43 @@ async function selectHistoricalLixFileForOpen(
 		: null;
 }
 
+async function selectCheckpointFiles(
+	lix: Lix,
+	previousCommitId: string,
+	commitId: string,
+): Promise<LixFileForOpen[]> {
+	const changed = await lix.execute(
+		`SELECT DISTINCT coalesce(
+			file_id,
+			case
+				when schema_key = 'lix_file_descriptor' then row_pk ->> 0
+			end
+		) AS file_id
+		FROM lix_diff($1, $2)
+		WHERE file_id IS NOT NULL OR schema_key = 'lix_file_descriptor'`,
+		[previousCommitId, commitId],
+	);
+	const fileIds = changed.rows
+		.map((row) => row.get("file_id"))
+		.filter((fileId): fileId is string => typeof fileId === "string");
+	const files = await Promise.all(
+		[...new Set(fileIds)].map(async (fileId) => {
+			const row = await selectFileHistory(lix, commitId)
+				.select(["id", "path"])
+				.where("id", "=", fileId)
+				.orderBy("lixcol_depth", "asc")
+				.limit(1)
+				.executeTakeFirst();
+			return row && typeof row.path === "string"
+				? { id: row.id as string, path: row.path }
+				: null;
+		}),
+	);
+	return files
+		.filter((file): file is LixFileForOpen => file !== null)
+		.sort((left, right) => left.path.localeCompare(right.path));
+}
+
 export async function resolveLixFileForOpen({
 	lix,
 	filePath,
@@ -2477,14 +2514,11 @@ function LayoutShellLoadedContent({
 			readonly previousCommitId: string;
 			readonly createdAt: string;
 		}) => {
-			const result = await lix.execute(
-				"SELECT id, path FROM lix_history('lix_file') WHERE lixcol_observed_commit_id = $1 ORDER BY path",
-				[commitId],
+			const files = await selectCheckpointFiles(
+				lix,
+				previousCommitId,
+				commitId,
 			);
-			const files = result.rows.map((row) => ({
-				id: String(row.get("id")),
-				path: String(row.get("path")),
-			}));
 			if (files.length === 0) return;
 			publishCheckpointFiles(lix, commitId, files);
 			setWorkingChangesReviewOpen(false);
