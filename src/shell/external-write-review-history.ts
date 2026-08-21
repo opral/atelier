@@ -15,6 +15,7 @@ import type {
 } from "@/extension-runtime/external-write-review";
 import {
 	AGENT_TURN_COMMIT_RANGE_KEY,
+	AGENT_TURN_COMMIT_RANGE_KEY_UPPER_BOUND,
 	agentTurnCommitRangesFromValues,
 	agentTurnReviewId,
 	agentTurnReviewRangeIds,
@@ -226,8 +227,11 @@ export function useAgentTurnCommitRanges(
 			closeSession = closeCurrentSession;
 			try {
 				const events = session.lix.observe(
-					"SELECT value FROM lix_key_value WHERE key LIKE $1",
-					[`${AGENT_TURN_COMMIT_RANGE_KEY}%`],
+					"SELECT value FROM lix_key_value WHERE lixcol_file_id IS NULL AND key >= $1 AND key < $2",
+					[
+						AGENT_TURN_COMMIT_RANGE_KEY,
+						AGENT_TURN_COMMIT_RANGE_KEY_UPPER_BOUND,
+					],
 				);
 				let observationOpen = true;
 				const closeCurrentObservation = () => {

@@ -5,6 +5,10 @@ import { GLOBAL_BRANCH_ID } from "@/lib/global-branch-id";
 
 export const AGENT_TURN_COMMIT_RANGE_KEY =
 	"atelier_agent_turn_commit_range" as const;
+// Exclusive ASCII upper bound for every key beginning with the prefix above
+// (the final `e` advances to `f`).
+export const AGENT_TURN_COMMIT_RANGE_KEY_UPPER_BOUND =
+	"atelier_agent_turn_commit_rangf" as const;
 const AGENT_TURN_COMMIT_RANGE_KEY_PREFIX =
 	`${AGENT_TURN_COMMIT_RANGE_KEY}:` as const;
 
@@ -67,7 +71,12 @@ export async function readAgentTurnCommitRangeValues(
 	const rows = await qb(lix)
 		.selectFrom("lix_key_value")
 		.select("value")
-		.where("key", "like", `${AGENT_TURN_COMMIT_RANGE_KEY}%`)
+		// Keep this as a bounded primary-key interval. Lix can push the range
+		// into the row index when the null file scope is explicit; LIKE would
+		// otherwise scan every key-value row in the repository.
+		.where("lixcol_file_id", "is", null)
+		.where("key", ">=", AGENT_TURN_COMMIT_RANGE_KEY)
+		.where("key", "<", AGENT_TURN_COMMIT_RANGE_KEY_UPPER_BOUND)
 		.execute();
 	return rows.map((row) => row.value);
 }
