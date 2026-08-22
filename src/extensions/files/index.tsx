@@ -1,7 +1,9 @@
 import {
 	forwardRef,
+	Suspense,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -104,7 +106,7 @@ type FilesViewContext = {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
-		readonly handler: () => void;
+		readonly handler: () => Promise<void> | void;
 	}) => () => void;
 };
 
@@ -140,11 +142,115 @@ const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
  * <FilesView />
  */
 export function FilesView({ context }: FilesViewProps) {
+	const childDraftHandlerRef = useRef<(() => Promise<void> | void) | null>(
+		null,
+	);
+	const pendingDraftRequestsRef = useRef<
+		Array<{
+			readonly resolve: () => void;
+			readonly reject: (error: unknown) => void;
+		}>
+	>([]);
+	const requestNewFileDraft = useCallback((): Promise<void> => {
+		const handler = childDraftHandlerRef.current;
+		if (handler) return Promise.resolve(handler());
+		return new Promise<void>((resolve, reject) => {
+			pendingDraftRequestsRef.current.push({ resolve, reject });
+		});
+	}, []);
+	const bindChildDraftHandler = useCallback(
+		(registration: {
+			readonly handler: () => Promise<void> | void;
+		}): (() => void) => {
+			const handler = registration.handler;
+			childDraftHandlerRef.current = handler;
+			const pending = pendingDraftRequestsRef.current.splice(0);
+			for (const request of pending) {
+				void Promise.resolve()
+					.then(handler)
+					.then(request.resolve, request.reject);
+			}
+			return () => {
+				if (childDraftHandlerRef.current === handler) {
+					childDraftHandlerRef.current = null;
+				}
+			};
+		},
+		[],
+	);
+	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
+	const panelSide = context?.panelSide;
+	const viewInstance = context?.viewInstance;
+	const isActiveView = context?.isActiveView === true;
+	useLayoutEffect(() => {
+		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) return;
+		return registerNewFileDraftHandler({
+			panelSide,
+			viewInstance,
+			isActiveView,
+			handler: requestNewFileDraft,
+		});
+	}, [
+		isActiveView,
+		panelSide,
+		registerNewFileDraftHandler,
+		requestNewFileDraft,
+		viewInstance,
+	]);
+	useEffect(() => {
+		return () => {
+			for (const request of pendingDraftRequestsRef.current.splice(0)) {
+				request.reject(
+					new Error(
+						"Files view unmounted before the new-file draft could start.",
+					),
+				);
+			}
+		};
+	}, []);
+	const childContext = useMemo(
+		() =>
+			context?.registerNewFileDraftHandler
+				? { ...context, registerNewFileDraftHandler: bindChildDraftHandler }
+				: context,
+		[bindChildDraftHandler, context],
+	);
+	return (
+		<Suspense
+			fallback={
+				<div
+					role="status"
+					className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
+					data-atelier-extension-suspended=""
+				>
+					Loading Files…
+				</div>
+			}
+		>
+			<FilesViewLoaded context={childContext} />
+		</Suspense>
+	);
+}
+
+function FilesViewLoaded({ context }: FilesViewProps) {
 	const lix = useLix();
 	const directories = useQuery<FilesystemEntryRow>(
 		(queryLix) => selectFilesystemDirectories(queryLix),
 		{ reuseObservedResult: false },
 	);
+	return (
+		<FilesViewWithFiles context={context} lix={lix} directories={directories} />
+	);
+}
+
+function FilesViewWithFiles({
+	context,
+	lix,
+	directories,
+}: FilesViewProps & {
+	readonly lix: Lix;
+	readonly directories: FilesystemEntryRow[];
+}) {
 	const files = useQuery<FilesystemEntryRow>(
 		(queryLix) => selectFilesystemFiles(queryLix),
 		{ reuseObservedResult: false },
@@ -171,6 +277,26 @@ function FilesViewWithWorkingChanges({
 	readonly entries: FilesystemEntryRow[];
 }) {
 	const workingChanges = useQuery((queryLix) => selectWorkingChanges(queryLix));
+	return (
+		<FilesViewWithFileWorkingChanges
+			context={context}
+			lix={lix}
+			entries={entries}
+			workingChanges={workingChanges}
+		/>
+	);
+}
+
+function FilesViewWithFileWorkingChanges({
+	context,
+	lix,
+	entries,
+	workingChanges,
+}: FilesViewProps & {
+	readonly lix: Lix;
+	readonly entries: FilesystemEntryRow[];
+	readonly workingChanges: WorkingChangeRow[];
+}) {
 	const fileWorkingChanges = useQuery((queryLix) =>
 		selectFileWorkingChanges(queryLix),
 	);
@@ -291,6 +417,12 @@ function FilesViewContent({
 	const [createRequest, setCreateRequest] =
 		useState<FileTreeCreateRequest | null>(null);
 	const nextCreateRequestIdRef = useRef(0);
+	const createReadyDeferredsRef = useRef(
+		new Map<
+			number,
+			{ readonly resolve: () => void; readonly reject: (error: Error) => void }
+		>(),
+	);
 	const [selectionOverride, setSelectionOverride] =
 		useState<FilesSelectionOverride | null>(null);
 	const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -450,7 +582,7 @@ function FilesViewContent({
 			kind: "file" | "directory",
 			fileType: FileTreeFileType = "generic",
 			directoryOverride?: string,
-		) => {
+		): number | undefined => {
 			if (createRequest) return;
 			const baseDirectory = directoryOverride ?? resolveCreateDirectory();
 			const directoryPath = ensureDirectoryPath(baseDirectory);
@@ -467,15 +599,17 @@ function FilesViewContent({
 				kind,
 				fileType,
 			);
+			const requestId = nextCreateRequestIdRef.current;
 			setCreateRequest({
 				directoryPath,
 				fileType: kind === "file" ? fileType : undefined,
-				id: nextCreateRequestIdRef.current,
+				id: requestId,
 				initialInputValue,
 				initialSelectionStart: initialInputValue === undefined ? undefined : 0,
 				initialValue: initialValueForCreateRequest(kind, fileType),
 				kind,
 			});
+			return requestId;
 		},
 		[createRequest, resolveCreateDirectory, setLocalSelection],
 	);
@@ -495,8 +629,38 @@ function FilesViewContent({
 	const handleNewExcalidraw = useCallback(() => {
 		startCreateRequest("file", "excalidraw");
 	}, [startCreateRequest]);
+	const requestNewMarkdownDraft = useCallback((): Promise<void> => {
+		const requestId = startCreateRequest("file", "markdown");
+		if (requestId === undefined) return Promise.resolve();
+		return new Promise<void>((resolve, reject) => {
+			createReadyDeferredsRef.current.set(requestId, { resolve, reject });
+		});
+	}, [startCreateRequest]);
+	const handleCreateReady = useCallback((request: FileTreeCreateRequest) => {
+		const deferred = createReadyDeferredsRef.current.get(request.id);
+		if (!deferred) return;
+		createReadyDeferredsRef.current.delete(request.id);
+		deferred.resolve();
+	}, []);
+	useEffect(() => {
+		return () => {
+			for (const deferred of createReadyDeferredsRef.current.values()) {
+				deferred.reject(
+					new Error(
+						"Files view unmounted before the new-file draft was ready.",
+					),
+				);
+			}
+			createReadyDeferredsRef.current.clear();
+		};
+	}, []);
 
 	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
+		const deferred = createReadyDeferredsRef.current.get(request.id);
+		createReadyDeferredsRef.current.delete(request.id);
+		deferred?.reject(
+			new Error("New-file draft was canceled before it became ready."),
+		);
 		setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 		setSelectionOverride(null);
 	}, []);
@@ -766,13 +930,13 @@ function FilesViewContent({
 			isActiveView,
 			// The host-level document command keeps its established Markdown
 			// behavior. The visible New-file action remains extension-agnostic.
-			handler: handleNewMarkdown,
+			handler: requestNewMarkdownDraft,
 		});
 	}, [
-		handleNewMarkdown,
 		isActiveView,
 		panelSide,
 		registerNewFileDraftHandler,
+		requestNewMarkdownDraft,
 		viewInstance,
 	]);
 
@@ -1116,6 +1280,7 @@ function FilesViewContent({
 			createRequest={createRequest}
 			onCreateCancel={handleCreateCancel}
 			onCreateCommit={handleCreateCommit}
+			onCreateReady={handleCreateReady}
 			{...(readOnly
 				? {}
 				: {

@@ -146,7 +146,9 @@ export interface ExtensionView {
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly preferences: AtelierExtensionPreferences;
-	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;
+	readonly registerNewFileDraftHandler: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 }
 
 export interface ExtensionHostContext {
@@ -158,7 +160,7 @@ export interface ExtensionHostContext {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
-		readonly handler: () => void;
+		readonly handler: () => Promise<void> | void;
 	}) => () => void;
 }
 

@@ -95,6 +95,7 @@ export type FileTreeProps = {
 		value: string,
 	) => Promise<void> | void;
 	readonly onCreateCancel?: (request: FileTreeCreateRequest) => void;
+	readonly onCreateReady?: (request: FileTreeCreateRequest) => void;
 	readonly onCreateAtDirectory?: (
 		directoryPath: string,
 		kind: "file" | "directory",
@@ -342,6 +343,7 @@ export function FileTree({
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
+	onCreateReady,
 	onCreateAtDirectory,
 	onRenameCommit,
 	onMoveItem,
@@ -416,6 +418,7 @@ export function FileTree({
 	const modelRef = useRef<PierreFileTreeModel | null>(null);
 	const treeContainerRef = useRef<HTMLDivElement | null>(null);
 	const startedCreateRequestIdRef = useRef<number | null>(null);
+	const readyCreateRequestIdRef = useRef<number | null>(null);
 	const suppressSelectionOpenRef = useRef(false);
 	const suppressSelectionOpenForClickRef = useRef(false);
 	const handleSelectionChangeRef = useRef(
@@ -828,22 +831,54 @@ export function FileTree({
 	useEffect(() => {
 		if (!createRequest) {
 			startedCreateRequestIdRef.current = null;
+			readyCreateRequestIdRef.current = null;
 			return;
 		}
 		if (!treeInput.createPlaceholderTreePath) return;
-		if (startedCreateRequestIdRef.current === createRequest.id) return;
 		const item = model.getItem(treeInput.createPlaceholderTreePath);
 		if (!item) return;
+		const currentInput = model
+			.getFileTreeContainer()
+			?.shadowRoot?.querySelector("[data-item-rename-input]");
+		if (
+			startedCreateRequestIdRef.current === createRequest.id &&
+			readyCreateRequestIdRef.current === createRequest.id &&
+			currentInput instanceof HTMLInputElement
+		) {
+			return;
+		}
+		let reportedReady = false;
 		startedCreateRequestIdRef.current = createRequest.id;
-		model.focusPath(treeInput.createPlaceholderTreePath);
-		model.startRenaming(treeInput.createPlaceholderTreePath, {
-			removeIfCanceled: true,
-		});
-		return prepareInitialCreateInput(model, createRequest);
+		readyCreateRequestIdRef.current = null;
+		if (!(currentInput instanceof HTMLInputElement)) {
+			model.focusPath(treeInput.createPlaceholderTreePath);
+			model.startRenaming(treeInput.createPlaceholderTreePath, {
+				removeIfCanceled: true,
+			});
+		}
+		const disposeInitialInput = prepareInitialCreateInput(
+			model,
+			createRequest,
+			(request) => {
+				reportedReady = true;
+				readyCreateRequestIdRef.current = request.id;
+				onCreateReady?.(request);
+			},
+		);
+		return () => {
+			disposeInitialInput();
+			if (
+				!reportedReady &&
+				startedCreateRequestIdRef.current === createRequest.id
+			) {
+				startedCreateRequestIdRef.current = null;
+			}
+		};
 	}, [
 		createRequest,
 		createRequest?.id,
 		model,
+		onCreateReady,
 		treeInput.createPlaceholderTreePath,
 		treePathsKey,
 	]);
@@ -1200,20 +1235,21 @@ function canDeleteTreeItem(info: TreePathInfo): boolean {
 function prepareInitialCreateInput(
 	model: PierreFileTreeModel,
 	request: FileTreeCreateRequest,
-): (() => void) | undefined {
-	if (request.initialInputValue === undefined) return undefined;
+	onCreateReady: FileTreeProps["onCreateReady"],
+): () => void {
 	const inputValue = request.initialInputValue;
 	const selectionStart = Math.max(
 		0,
 		Math.min(
-			request.initialSelectionStart ?? inputValue.length,
-			inputValue.length,
+			request.initialSelectionStart ?? inputValue?.length ?? 0,
+			inputValue?.length ?? 0,
 		),
 	);
 	let disposed = false;
 	let handled = false;
 	let observer: MutationObserver | null = null;
 	let retryTimer: number | null = null;
+	let readyFrame: number | null = null;
 	const applyInitialValue = () => {
 		if (disposed || handled) return;
 		const shadowRoot = model.getFileTreeContainer()?.shadowRoot;
@@ -1229,13 +1265,29 @@ function prepareInitialCreateInput(
 		}
 		handled = true;
 		observer?.disconnect();
-		setNativeRenameInputValue(input, inputValue);
-		input.setSelectionRange(selectionStart, selectionStart);
+		if (inputValue !== undefined) {
+			setNativeRenameInputValue(input, inputValue);
+			input.setSelectionRange(selectionStart, selectionStart);
+		}
+		readyFrame = window.requestAnimationFrame(() => {
+			readyFrame = null;
+			if (disposed) return;
+			const currentInput = model
+				.getFileTreeContainer()
+				?.shadowRoot?.querySelector("[data-item-rename-input]");
+			if (currentInput !== input) {
+				handled = false;
+				applyInitialValue();
+				return;
+			}
+			onCreateReady?.(request);
+		});
 	};
 	retryTimer = window.setTimeout(applyInitialValue, 0);
 	return () => {
 		disposed = true;
 		if (retryTimer !== null) window.clearTimeout(retryTimer);
+		if (readyFrame !== null) window.cancelAnimationFrame(readyFrame);
 		observer?.disconnect();
 	};
 }

@@ -152,7 +152,7 @@ type NewFileDraftHandlerRegistration = {
 	readonly panelSide: PanelSide;
 	readonly viewInstance: string;
 	readonly isActiveView: boolean;
-	readonly handler: () => void;
+	readonly handler: () => Promise<void> | void;
 };
 
 const sanitizeExtensionInstanceForPersistence = (
@@ -3233,20 +3233,31 @@ function LayoutShellLoadedContent({
 
 	const handleRequestNewFile = useCallback(async () => {
 		if (isHostReadOnly) return null;
-		const visibleDraftHandlers = [
-			...newFileDraftHandlersRef.current.values(),
-		].filter((registration) => {
-			if (registration.panelSide === "left") return !isLeftCollapsed;
-			if (registration.panelSide === "right") return !isRightCollapsed;
-			return true;
-		});
-		const filesViewHandler = selectNewFileDraftHandler(
-			visibleDraftHandlers,
-			focusedPanel,
-		);
+		const selectVisibleDraftHandler = () => {
+			const visibleDraftHandlers = [...newFileDraftHandlersRef.current.values()]
+				.filter((registration) => {
+					if (registration.panelSide === "left") return !isLeftCollapsed;
+					if (registration.panelSide === "right") return !isRightCollapsed;
+					return true;
+				})
+				.map((registration) => {
+					const activeInstance =
+						registration.panelSide === "left"
+							? leftPanel.activeInstance
+							: registration.panelSide === "right"
+								? rightPanel.activeInstance
+								: centralPanel.activeInstance;
+					return {
+						...registration,
+						isActiveView: registration.viewInstance === activeInstance,
+					};
+				});
+			return selectNewFileDraftHandler(visibleDraftHandlers, focusedPanel);
+		};
+		const filesViewHandler = selectVisibleDraftHandler();
 		if (filesViewHandler) {
 			focusPanel(filesViewHandler.panelSide);
-			filesViewHandler.handler();
+			await filesViewHandler.handler();
 			return null;
 		}
 		return handleCreateNewFile();
@@ -3257,6 +3268,9 @@ function LayoutShellLoadedContent({
 		isHostReadOnly,
 		isLeftCollapsed,
 		isRightCollapsed,
+		leftPanel,
+		centralPanel,
+		rightPanel,
 	]);
 
 	const activeCentralFileId =

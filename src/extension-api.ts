@@ -282,7 +282,9 @@ export type AtelierExtensionView = {
 	readonly isFocused: boolean;
 	/** Preferences shared by every instance of this extension. */
 	readonly preferences: AtelierExtensionPreferences;
-	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;
+	readonly registerNewFileDraftHandler: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 };
 
 export type AtelierMountedExtension = {
