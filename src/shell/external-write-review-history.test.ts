@@ -70,7 +70,7 @@ describe("getWorkingChangeExternalWriteReview", () => {
 });
 
 describe("getExternalWriteReview", () => {
-	test("reads each snapshot once for one agent turn range", async () => {
+	test("reads both range snapshots in one history statement", async () => {
 		const lix = await openLix();
 		try {
 			const fileId = fakeUuid("single-range-query-count");
@@ -90,13 +90,13 @@ describe("getExternalWriteReview", () => {
 			]);
 
 			expect(review?.agentTurnRangeIds).toEqual(["single-range"]);
-			expect(historyReadCount(execute)).toBe(2);
+			expect(historyReadCount(execute)).toBe(1);
 		} finally {
 			await lix.close();
 		}
 	});
 
-	test("reuses the shared snapshot between contiguous agent turn ranges", async () => {
+	test("reads contiguous range snapshots in one history statement", async () => {
 		const lix = await openLix();
 		try {
 			const fileId = fakeUuid("contiguous-range-query-count");
@@ -126,7 +126,7 @@ describe("getExternalWriteReview", () => {
 				"earlier-range",
 				"later-range",
 			]);
-			expect(historyReadCount(execute)).toBe(3);
+			expect(historyReadCount(execute)).toBe(1);
 		} finally {
 			await lix.close();
 		}
@@ -647,6 +647,51 @@ describe("getExternalWriteReview", () => {
 				"/docs/added.md",
 				"/docs/duplicate.md",
 			]);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("reads two files across 50 ranges in one bounded history statement", async () => {
+		const lix = await openLix();
+		try {
+			const files = [
+				{ fileId: fakeUuid("bounded-history-a"), path: "/docs/a.md" },
+				{ fileId: fakeUuid("bounded-history-b"), path: "/docs/b.md" },
+			] as const;
+			await Promise.all(
+				files.map((file) => writeFile(lix, file.fileId, file.path, "before")),
+			);
+			const ranges: AgentTurnCommitRange[] = [];
+			let beforeCommitId = await activeCommitId(lix);
+			for (let index = 0; index < 50; index += 1) {
+				await Promise.all(
+					files.map((file) =>
+						writeFile(lix, file.fileId, file.path, `after ${index}`),
+					),
+				);
+				const afterCommitId = await activeCommitId(lix);
+				ranges.push({
+					...agentRange({
+						id: `bounded-history-${index}`,
+						beforeCommitId,
+						afterCommitId,
+					}),
+					startedAt: index * 2,
+					completedAt: index * 2 + 1,
+				});
+				beforeCommitId = afterCommitId;
+			}
+			const execute = vi.spyOn(lix, "execute");
+
+			const pendingPaths = await getPendingExternalWriteReviewPaths(
+				lix,
+				files,
+				ranges,
+			);
+
+			expect([...pendingPaths].sort()).toEqual(["/docs/a.md", "/docs/b.md"]);
+			expect(historyReadCount(execute)).toBe(1);
 		} finally {
 			await lix.close();
 		}

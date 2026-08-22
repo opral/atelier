@@ -44,14 +44,30 @@ function workingDiffSelection(fileIds: readonly string[]) {
 export async function createCheckpointForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
-): Promise<number> {
-	if (fileIds.length === 0) return 0;
-	return executeSelectedDiffs(
-		lix,
-		"lix_create_checkpoint",
-		workingDiffSelection(fileIds),
-		fileIds,
+): Promise<{ readonly commitId: string; readonly diffCount: number } | null> {
+	if (fileIds.length === 0) return null;
+	const result = await lix.execute(
+		`INSERT INTO lix_create_checkpoint (diff_id)
+		 SELECT diff_id ${workingDiffSelection(fileIds)}
+		 RETURNING commit_id`,
+		[...fileIds],
 	);
+	if (result.rowsAffected === 0) return null;
+	const returnedCommitIds = result.rows
+		.map((row) => row.get("commit_id"))
+		.filter(isString);
+	const commitIds = new Set(returnedCommitIds);
+	if (commitIds.size !== 1 || returnedCommitIds.length !== result.rows.length) {
+		throw new Error("Partial checkpoint did not return one commit ID.");
+	}
+	return {
+		commitId: [...commitIds][0]!,
+		diffCount: result.rowsAffected,
+	};
+}
+
+function isString(value: unknown): value is string {
+	return typeof value === "string";
 }
 
 export async function revertWorkingChangesForFiles(

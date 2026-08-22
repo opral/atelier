@@ -873,6 +873,241 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
+	test("creates a checkpoint without waiting for file history", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const reviewStatusStore = createMemoryReviewStatusStore();
+		const atelier = createAtelier({
+			lix,
+			reviewStatusStore,
+			sessionStateStore,
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		let editingLix:
+			| Awaited<ReturnType<typeof lix.openAnotherSession>>
+			| undefined;
+		let releaseHistoryReads: (() => void) | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("checkpoint-with-blocked-history"),
+					path: "/checkpoint-with-blocked-history.md",
+					content: new TextEncoder().encode("# Before\n"),
+				})
+				.execute();
+			await lix.createCheckpoint();
+			const beforeCommitId = await activeCommitId(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.where("id", "=", fakeUuid("checkpoint-with-blocked-history"))
+				.execute();
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(lix, {
+				id: "checkpoint-with-blocked-history",
+				sourceId: "codex",
+				beforeCommitId,
+				afterCommitId,
+				startedAt: 1,
+				completedAt: 2,
+			});
+			editingLix = await lix.openAnotherSession({
+				branchId: await lix.activeBranchId(),
+			});
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
+			fireEvent.click(screen.getByRole("button", { name: "Exit review" }));
+			await waitFor(() => {
+				expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();
+			});
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "1 change since checkpoint. Open changes review",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+
+			const historyReadsReleased = new Promise<void>((resolve) => {
+				releaseHistoryReads = resolve;
+			});
+			const callOrder: string[] = [];
+			const originalExecute = lix.execute.bind(lix);
+			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
+				if (String(statement).includes("lix_history('lix_file'")) {
+					callOrder.push("history");
+					await historyReadsReleased;
+				}
+				return originalExecute(statement, params);
+			});
+			const originalCreateCheckpoint = lix.createCheckpoint.bind(lix);
+			const createCheckpoint = vi.spyOn(lix, "createCheckpoint");
+			createCheckpoint.mockImplementationOnce(async (...args) => {
+				callOrder.push("checkpoint");
+				return originalCreateCheckpoint(...args);
+			});
+
+			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			await waitFor(() => expect(createCheckpoint).toHaveBeenCalledOnce());
+			expect(callOrder[0]).toBe("checkpoint");
+			await waitFor(() => expect(callOrder).toContain("history"));
+			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
+			await qb(editingLix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# Edited afterward\n") })
+				.where("id", "=", fakeUuid("checkpoint-with-blocked-history"))
+				.execute();
+			releaseHistoryReads();
+			releaseHistoryReads = undefined;
+			await waitFor(async () => {
+				const branchId = await lix.activeBranchId();
+				expect(
+					await reviewStatusStore.loadResolvedReviewIds(branchId),
+				).toHaveLength(1);
+			});
+		} finally {
+			releaseHistoryReads?.();
+			await act(async () => utils?.unmount());
+			await editingLix?.close();
+			await lix.close();
+		}
+	});
+
+	test("anchors partial review retirement to the returned checkpoint commit", async () => {
+		const lix = await openLix();
+		const reviewStatusStore = createMemoryReviewStatusStore();
+		const atelier = createAtelier({ lix, reviewStatusStore });
+		let utils: ReturnType<typeof render> | undefined;
+		let releaseHistoryReads: (() => void) | undefined;
+		try {
+			const selectedFileId = fakeUuid("partial-checkpoint-selected");
+			const remainingFileId = fakeUuid("partial-checkpoint-remaining");
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: selectedFileId,
+						path: "/partial-selected.md",
+						content: new TextEncoder().encode("# Selected before\n"),
+					},
+					{
+						id: remainingFileId,
+						path: "/partial-remaining.md",
+						content: new TextEncoder().encode("# Remaining before\n"),
+					},
+				])
+				.execute();
+			await lix.createCheckpoint();
+			const beforeCommitId = await activeCommitId(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.where("id", "in", [selectedFileId, remainingFileId])
+				.execute();
+			const afterCommitId = await activeCommitId(lix);
+			await appendAgentTurnCommitRange(lix, {
+				id: "partial-checkpoint-range",
+				sourceId: "codex",
+				beforeCommitId,
+				afterCommitId,
+				startedAt: 1,
+				completedAt: 2,
+			});
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
+			fireEvent.click(screen.getByRole("button", { name: "Exit review" }));
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "2 changes since checkpoint. Open changes review",
+				}),
+			);
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "Working set: 2 of 2 files",
+				}),
+			);
+			const workingSet = screen.getByRole("group", {
+				name: "Files in the working set",
+			});
+			fireEvent.click(
+				within(workingSet).getByRole("checkbox", {
+					name: "partial-remaining.md",
+				}),
+			);
+			expect(
+				screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+			).toBeVisible();
+
+			const historyReadsReleased = new Promise<void>((resolve) => {
+				releaseHistoryReads = resolve;
+			});
+			const callOrder: string[] = [];
+			let returnedCheckpointCommitId: string | undefined;
+			const historyParameterSets: Array<readonly unknown[]> = [];
+			const originalExecute = lix.execute.bind(lix);
+			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
+				const sqlText = String(statement);
+				if (sqlText.includes("INSERT INTO lix_create_checkpoint")) {
+					callOrder.push("checkpoint");
+					const result = await originalExecute(statement, params);
+					const commitId = result.rows[0]?.get("commit_id");
+					if (typeof commitId === "string") {
+						returnedCheckpointCommitId = commitId;
+					}
+					return result;
+				}
+				if (sqlText.includes("lix_history('lix_file'")) {
+					callOrder.push("history");
+					historyParameterSets.push(params ?? []);
+					await historyReadsReleased;
+				}
+				return originalExecute(statement, params);
+			});
+
+			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			await waitFor(() => expect(callOrder).toContain("history"));
+			expect(callOrder[0]).toBe("checkpoint");
+			expect(returnedCheckpointCommitId).toEqual(expect.any(String));
+			releaseHistoryReads();
+			releaseHistoryReads = undefined;
+			await waitFor(async () => {
+				const branchId = await lix.activeBranchId();
+				expect(
+					await reviewStatusStore.loadResolvedReviewIds(branchId),
+				).toHaveLength(1);
+			});
+			expect(
+				historyParameterSets.some((parameters) =>
+					parameters.includes(returnedCheckpointCommitId),
+				),
+			).toBe(true);
+		} finally {
+			releaseHistoryReads?.();
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("lists changed files and opens the first one when working changes starts without an active document", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();

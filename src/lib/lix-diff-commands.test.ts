@@ -43,7 +43,9 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, firstId, "/first.md", "first");
 			await writeFile(lix, secondId, "/second.md", "second");
 
-			expect(await createCheckpointForFiles(lix, [firstId])).toBeGreaterThan(0);
+			const checkpoint = await createCheckpointForFiles(lix, [firstId]);
+			expect(checkpoint?.diffCount).toBeGreaterThan(0);
+			expect(checkpoint?.commitId).toEqual(expect.any(String));
 			expect(await selectFileWorkingChanges(lix).execute()).toEqual([
 				expect.objectContaining({ id: secondId }),
 			]);
