@@ -1041,10 +1041,7 @@ describe("agent turn review navigation", () => {
 			const execute = vi
 				.spyOn(lix, "execute")
 				.mockImplementation(async (statement, params) => {
-					const isCheckpointSnapshotRead =
-						String(statement).includes("lix_history('lix_file'") &&
-						String(statement).includes("lixcol_source_changes");
-					if (isCheckpointSnapshotRead) {
+					if (String(statement).includes("lix_history('lix_file'")) {
 						activeCheckpointFileReads += 1;
 						maxActiveCheckpointFileReads = Math.max(
 							maxActiveCheckpointFileReads,
@@ -1052,23 +1049,20 @@ describe("agent turn review navigation", () => {
 						);
 						await new Promise((resolve) => setTimeout(resolve, 5));
 						try {
-							if (delayCheckpointStateOnce) {
-								delayCheckpointStateOnce = false;
-								return originalExecute(
-									`SELECT
-										CAST(NULL AS TEXT) AS id,
-										CAST(NULL AS TEXT) AS path,
-										CAST(NULL AS TEXT) AS lixcol_source_changes,
-										CAST(NULL AS INTEGER) AS lixcol_depth,
-										CAST(NULL AS BOOLEAN) AS lixcol_is_deleted
-									WHERE FALSE`,
-									[],
-								);
-							}
 							return await originalExecute(statement, params);
 						} finally {
 							activeCheckpointFileReads -= 1;
 						}
+					}
+					if (
+						delayCheckpointStateOnce &&
+						String(statement).includes("FROM lix_diff($1, $2)")
+					) {
+						delayCheckpointStateOnce = false;
+						return originalExecute(
+							"SELECT CAST(NULL AS TEXT) AS file_id WHERE FALSE",
+							[],
+						);
 					}
 					return originalExecute(statement, params);
 				});
@@ -1131,19 +1125,11 @@ describe("agent turn review navigation", () => {
 			).toHaveAttribute("aria-current", "true");
 			const checkpointFileReads = execute.mock.calls
 				.map(([statement]) => String(statement))
-				.filter(
-					(statement) =>
-						statement.includes("lix_history('lix_file'") &&
-						statement.includes("lixcol_source_changes"),
-				);
+				.filter((statement) => statement.includes("FROM lix_diff($1, $2)"));
 			expect(checkpointFileReads).toEqual([
-				expect.stringContaining("lix_history('lix_file'"),
-				expect.stringContaining("lix_history('lix_file'"),
-				expect.stringContaining("lix_history('lix_file'"),
+				expect.stringContaining("FROM lix_diff($1, $2)"),
+				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
-			for (const statement of checkpointFileReads) {
-				expect(statement).toContain("where lixcol_depth =");
-			}
 			expect(maxActiveCheckpointFileReads).toBe(1);
 		} finally {
 			await act(async () => utils?.unmount());

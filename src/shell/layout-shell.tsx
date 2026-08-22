@@ -705,74 +705,40 @@ async function selectCheckpointFilesOnce(
 	previousCommitId: string,
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
-	// Read the two file snapshots directly instead of routing checkpoint UI
-	// through lix_diff point replay. Sparse sync replicas can hydrate these
-	// boundaries independently, and lixcol_source_changes gives us the stable
-	// logical file revision to compare across their physical commit aliases.
-	const current = await selectCheckpointFileSnapshot(lix, commitId);
-	if (current.size === 0) return [];
-	const previous = await selectCheckpointFileSnapshot(lix, previousCommitId);
-	return [...current.values()]
-		.filter((file) => {
-			const prior = previous.get(file.id);
-			return (
-				!prior ||
-				prior.path !== file.path ||
-				prior.sourceChanges !== file.sourceChanges
-			);
-		})
-		.map(({ id, path }) => ({ id, path }))
-		.sort((left, right) => left.path.localeCompare(right.path));
-}
-
-type CheckpointFileSnapshot = LixFileForOpen & {
-	readonly sourceChanges: string;
-};
-
-async function selectCheckpointFileSnapshot(
-	lix: Lix,
-	commitId: string,
-): Promise<Map<string, CheckpointFileSnapshot>> {
-	const rows = await selectFileHistory(lix, commitId)
-		.select([
-			"id",
-			"path",
-			"lixcol_source_changes",
-			"lixcol_depth",
-			"lixcol_is_deleted",
-		])
-		.where("lixcol_depth", "=", 0)
-		.orderBy("lixcol_depth", "asc")
-		.execute();
-	const files = new Map<string, CheckpointFileSnapshot>();
-	for (const row of rows) {
-		if (
-			typeof row.id !== "string" ||
-			typeof row.path !== "string" ||
-			files.has(row.id)
-		) {
-			continue;
-		}
-		if (row.lixcol_is_deleted) continue;
-		files.set(row.id, {
-			id: row.id,
-			path: row.path,
-			sourceChanges: checkpointSourceChangesKey(row.lixcol_source_changes),
-		});
+	const changed = await lix.execute(
+		`SELECT DISTINCT coalesce(
+			file_id,
+			case
+				when schema_key = 'lix_file_descriptor' then row_pk ->> 0
+			end
+		) AS file_id
+		FROM lix_diff($1, $2)
+		WHERE file_id IS NOT NULL OR schema_key = 'lix_file_descriptor'`,
+		[previousCommitId, commitId],
+	);
+	const fileIds = changed.rows
+		.map((row) => row.get("file_id"))
+		.filter((fileId): fileId is string => typeof fileId === "string");
+	const files: Array<LixFileForOpen | null> = [];
+	// Demand-hydrated history reads share one repository engine. Resolve them in
+	// order so one read can finish importing its sparse boundary before the next
+	// read asks the same engine for another boundary.
+	for (const fileId of new Set(fileIds)) {
+		const row = await selectFileHistory(lix, commitId)
+			.select(["id", "path"])
+			.where("id", "=", fileId)
+			.orderBy("lixcol_depth", "asc")
+			.limit(1)
+			.executeTakeFirst();
+		files.push(
+			row && typeof row.path === "string"
+				? { id: row.id as string, path: row.path }
+				: null,
+		);
 	}
-	return files;
-}
-
-function checkpointSourceChangesKey(value: unknown): string {
-	if (!Array.isArray(value)) return JSON.stringify(value);
-	return value
-		.map((change) =>
-			change && typeof change === "object" && "id" in change
-				? String(change.id)
-				: JSON.stringify(change),
-		)
-		.sort()
-		.join("\n");
+	return files
+		.filter((file): file is LixFileForOpen => file !== null)
+		.sort((left, right) => left.path.localeCompare(right.path));
 }
 
 export async function resolveLixFileForOpen({
