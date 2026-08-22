@@ -684,6 +684,27 @@ async function selectCheckpointFiles(
 	previousCommitId: string,
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
+	for (let attempt = 0; attempt < 25; attempt += 1) {
+		const files = await selectCheckpointFilesOnce(
+			lix,
+			previousCommitId,
+			commitId,
+		);
+		if (files.length > 0 || attempt === 24) return files;
+		// A warm sync replica can observe the global checkpoint row one pull
+		// before the branch's sparse state boundary. Keep the click pending until
+		// that already-in-flight boundary becomes queryable instead of treating
+		// the transient empty diff as a permanently empty checkpoint.
+		await new Promise((resolve) => setTimeout(resolve, 200));
+	}
+	return [];
+}
+
+async function selectCheckpointFilesOnce(
+	lix: Lix,
+	previousCommitId: string,
+	commitId: string,
+): Promise<LixFileForOpen[]> {
 	const changed = await lix.execute(
 		`SELECT DISTINCT coalesce(
 			file_id,

@@ -1034,7 +1034,23 @@ describe("agent turn review navigation", () => {
 				name: /Latest checkpoint/,
 			});
 			expect(latestCheckpoint).toBeEnabled();
-			const execute = vi.spyOn(lix, "execute");
+			const originalExecute = lix.execute.bind(lix);
+			let delayCheckpointStateOnce = true;
+			const execute = vi
+				.spyOn(lix, "execute")
+				.mockImplementation(async (statement, params) => {
+					if (
+						delayCheckpointStateOnce &&
+						String(statement).includes("FROM lix_diff($1, $2)")
+					) {
+						delayCheckpointStateOnce = false;
+						return originalExecute(
+							"SELECT CAST(NULL AS TEXT) AS file_id WHERE FALSE",
+							[],
+						);
+					}
+					return originalExecute(statement, params);
+				});
 			await act(async () => {
 				fireEvent.click(latestCheckpoint);
 			});
@@ -1096,6 +1112,7 @@ describe("agent turn review navigation", () => {
 				.map(([statement]) => String(statement))
 				.filter((statement) => statement.includes("FROM lix_diff($1, $2)"));
 			expect(checkpointFileReads).toEqual([
+				expect.stringContaining("FROM lix_diff($1, $2)"),
 				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
 		} finally {
