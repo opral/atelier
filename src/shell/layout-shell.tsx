@@ -719,19 +719,23 @@ async function selectCheckpointFilesOnce(
 	const fileIds = changed.rows
 		.map((row) => row.get("file_id"))
 		.filter((fileId): fileId is string => typeof fileId === "string");
-	const files = await Promise.all(
-		[...new Set(fileIds)].map(async (fileId) => {
-			const row = await selectFileHistory(lix, commitId)
-				.select(["id", "path"])
-				.where("id", "=", fileId)
-				.orderBy("lixcol_depth", "asc")
-				.limit(1)
-				.executeTakeFirst();
-			return row && typeof row.path === "string"
+	const files: Array<LixFileForOpen | null> = [];
+	// Demand-hydrated history reads share one repository engine. Resolve them in
+	// order so one read can finish importing its sparse boundary before the next
+	// read asks the same engine for another boundary.
+	for (const fileId of new Set(fileIds)) {
+		const row = await selectFileHistory(lix, commitId)
+			.select(["id", "path"])
+			.where("id", "=", fileId)
+			.orderBy("lixcol_depth", "asc")
+			.limit(1)
+			.executeTakeFirst();
+		files.push(
+			row && typeof row.path === "string"
 				? { id: row.id as string, path: row.path }
-				: null;
-		}),
-	);
+				: null,
+		);
+	}
 	return files
 		.filter((file): file is LixFileForOpen => file !== null)
 		.sort((left, right) => left.path.localeCompare(right.path));

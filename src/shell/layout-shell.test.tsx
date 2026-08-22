@@ -1036,9 +1036,24 @@ describe("agent turn review navigation", () => {
 			expect(latestCheckpoint).toBeEnabled();
 			const originalExecute = lix.execute.bind(lix);
 			let delayCheckpointStateOnce = true;
+			let activeCheckpointFileReads = 0;
+			let maxActiveCheckpointFileReads = 0;
 			const execute = vi
 				.spyOn(lix, "execute")
 				.mockImplementation(async (statement, params) => {
+					if (String(statement).includes("lix_history('lix_file'")) {
+						activeCheckpointFileReads += 1;
+						maxActiveCheckpointFileReads = Math.max(
+							maxActiveCheckpointFileReads,
+							activeCheckpointFileReads,
+						);
+						await new Promise((resolve) => setTimeout(resolve, 5));
+						try {
+							return await originalExecute(statement, params);
+						} finally {
+							activeCheckpointFileReads -= 1;
+						}
+					}
 					if (
 						delayCheckpointStateOnce &&
 						String(statement).includes("FROM lix_diff($1, $2)")
@@ -1115,6 +1130,7 @@ describe("agent turn review navigation", () => {
 				expect.stringContaining("FROM lix_diff($1, $2)"),
 				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
+			expect(maxActiveCheckpointFileReads).toBe(1);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
