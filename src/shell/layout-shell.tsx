@@ -741,6 +741,7 @@ async function selectCheckpointFileSnapshot(
 			"lixcol_depth",
 			"lixcol_is_deleted",
 		])
+		.where("lixcol_depth", "=", 0)
 		.orderBy("lixcol_depth", "asc")
 		.execute();
 	const files = new Map<string, CheckpointFileSnapshot>();

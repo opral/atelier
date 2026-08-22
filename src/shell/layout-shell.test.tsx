@@ -1141,6 +1141,9 @@ describe("agent turn review navigation", () => {
 				expect.stringContaining("lix_history('lix_file'"),
 				expect.stringContaining("lix_history('lix_file'"),
 			]);
+			for (const statement of checkpointFileReads) {
+				expect(statement).toContain("where lixcol_depth =");
+			}
 			expect(maxActiveCheckpointFileReads).toBe(1);
 		} finally {
 			await act(async () => utils?.unmount());
