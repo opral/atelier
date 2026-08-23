@@ -255,15 +255,11 @@ function FilesViewWithFiles({
 		(queryLix) => selectFilesystemFiles(queryLix),
 		{ reuseObservedResult: false },
 	);
-	const entries = useMemo(
-		() => [...directories, ...files],
-		[directories, files],
-	);
 	return (
 		<FilesViewWithWorkingChanges
 			context={context}
 			lix={lix}
-			entries={entries}
+			entries={[...directories, ...files]}
 		/>
 	);
 }

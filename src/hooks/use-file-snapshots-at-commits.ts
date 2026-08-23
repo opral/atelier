@@ -1,3 +1,4 @@
+import { createElement, type ReactNode } from "react";
 import { useQueryTakeFirst } from "@/lib/lix-react";
 import { selectFileHistory } from "@/lib/lix-file-history";
 
@@ -18,49 +19,93 @@ type HistoricalFileSnapshotRow = {
  * comparison. Historical snapshots are immutable, so neither query keeps a
  * live observer open.
  */
-export function useFileSnapshotsAtCommits(
-	fileId: string,
-	beforeCommitId: string | null,
-	afterCommitId: string | null,
-	beforeFileId: string | null = null,
-	afterFileId: string | null = null,
+type FileSnapshotsAtCommitsProps = {
+	readonly fileId: string;
+	readonly beforeCommitId: string | null;
+	readonly afterCommitId: string | null;
+	readonly beforeFileId?: string | null;
+	readonly afterFileId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
+	readonly children: (snapshots: {
+		readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+		readonly afterSnapshot: HistoricalFileSnapshot | undefined;
+	}) => ReactNode;
+};
+
+/**
+ * Suspense boundary adapter for the two independent historical reads.
+ * Each query owns a component boundary so resolving one read cannot change the
+ * hook sequence of the component that starts the other.
+ */
+export function FileSnapshotsAtCommits({
+	fileId,
+	beforeCommitId,
+	afterCommitId,
+	beforeFileId = null,
+	afterFileId = null,
 	beforeExists = true,
 	afterExists = true,
-): {
-	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
-	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
-} {
-	const beforeId = beforeFileId ?? fileId;
-	const afterId = afterFileId ?? fileId;
-	const beforeRow = useQueryTakeFirst<HistoricalFileSnapshotRow>(
-		(lix) =>
-			selectFileHistory(lix, beforeCommitId ?? "")
-				.select(["id", "path", "content", "lixcol_depth"])
-				.where("id", "=", beforeId)
-				.orderBy("lixcol_depth", "asc")
-				.limit(1),
-		{
-			subscribe: false,
-			enabled: fileId.length > 0 && beforeCommitId !== null && beforeExists,
-		},
+	children,
+}: FileSnapshotsAtCommitsProps) {
+	const beforeSnapshot = useFileSnapshotAtCommit(
+		fileId,
+		beforeCommitId,
+		beforeFileId,
+		beforeExists,
 	);
-	const afterRow = useQueryTakeFirst<HistoricalFileSnapshotRow>(
-		(lix) =>
-			selectFileHistory(lix, afterCommitId ?? "")
-				.select(["id", "path", "content", "lixcol_depth"])
-				.where("id", "=", afterId)
-				.orderBy("lixcol_depth", "asc")
-				.limit(1),
-		{
-			subscribe: false,
-			enabled: fileId.length > 0 && afterCommitId !== null && afterExists,
-		},
-	);
+	return createElement(AfterFileSnapshotAtCommit, {
+		fileId,
+		afterCommitId,
+		afterFileId,
+		afterExists,
+		beforeSnapshot,
+		children,
+	});
+}
 
-	return {
-		beforeSnapshot: beforeRow ? visibleSnapshot(beforeRow) : undefined,
-		afterSnapshot: afterRow ? visibleSnapshot(afterRow) : undefined,
-	};
+function AfterFileSnapshotAtCommit({
+	fileId,
+	afterCommitId,
+	afterFileId,
+	afterExists,
+	beforeSnapshot,
+	children,
+}: Pick<
+	FileSnapshotsAtCommitsProps,
+	"fileId" | "afterCommitId" | "afterFileId" | "afterExists" | "children"
+> & {
+	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+}) {
+	const afterSnapshot = useFileSnapshotAtCommit(
+		fileId,
+		afterCommitId,
+		afterFileId ?? null,
+		afterExists ?? true,
+	);
+	return children({ beforeSnapshot, afterSnapshot });
+}
+
+function useFileSnapshotAtCommit(
+	fileId: string,
+	commitId: string | null,
+	explicitFileId: string | null,
+	exists: boolean,
+): HistoricalFileSnapshot | undefined {
+	const snapshotFileId = explicitFileId ?? fileId;
+	const row = useQueryTakeFirst<HistoricalFileSnapshotRow>(
+		(lix) =>
+			selectFileHistory(lix, commitId ?? "")
+				.select(["id", "path", "content", "lixcol_depth"])
+				.where("id", "=", snapshotFileId)
+				.orderBy("lixcol_depth", "asc")
+				.limit(1),
+		{
+			subscribe: false,
+			enabled: fileId.length > 0 && commitId !== null && exists,
+		},
+	);
+	return row ? visibleSnapshot(row) : undefined;
 }
 
 function visibleSnapshot(

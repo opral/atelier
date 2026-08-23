@@ -9,8 +9,8 @@ import {
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
 import {
+	FileSnapshotsAtCommits,
 	type HistoricalFileSnapshot,
-	useFileSnapshotsAtCommits,
 } from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import {
@@ -515,12 +515,8 @@ function MarkdownLiveReviewController({
 
 function MarkdownHistoricalViewLoaded({
 	fileId,
-	filePath,
-	fileRow,
-	isActiveView,
-	isPanelFocused,
 	editorRevision,
-	openWorkspaceFile,
+	...props
 }: {
 	readonly fileId: string;
 	readonly filePath: string | undefined;
@@ -530,16 +526,51 @@ function MarkdownHistoricalViewLoaded({
 	readonly editorRevision: EditorRevisionState;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
-	const revisionMode = editorRevisionMode(editorRevision);
-	const { beforeSnapshot, afterSnapshot } = useFileSnapshotsAtCommits(
-		fileId,
-		editorRevision.beforeCommitId,
-		editorRevision.afterCommitId,
-		editorRevision.beforeFileId,
-		editorRevision.afterFileId,
-		editorRevision.beforeExists,
-		editorRevision.afterExists,
+	return (
+		<FileSnapshotsAtCommits
+			fileId={fileId}
+			beforeCommitId={editorRevision.beforeCommitId}
+			afterCommitId={editorRevision.afterCommitId}
+			beforeFileId={editorRevision.beforeFileId}
+			afterFileId={editorRevision.afterFileId}
+			beforeExists={editorRevision.beforeExists}
+			afterExists={editorRevision.afterExists}
+		>
+			{({ beforeSnapshot, afterSnapshot }) => (
+				<MarkdownHistoricalViewResolved
+					{...props}
+					fileId={fileId}
+					editorRevision={editorRevision}
+					beforeSnapshot={beforeSnapshot}
+					afterSnapshot={afterSnapshot}
+				/>
+			)}
+		</FileSnapshotsAtCommits>
 	);
+}
+
+function MarkdownHistoricalViewResolved({
+	fileId,
+	filePath,
+	fileRow,
+	isActiveView,
+	isPanelFocused,
+	editorRevision,
+	openWorkspaceFile,
+	beforeSnapshot,
+	afterSnapshot,
+}: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
+	readonly fileRow: MarkdownFileRow | undefined;
+	readonly isActiveView: boolean;
+	readonly isPanelFocused: boolean;
+	readonly editorRevision: EditorRevisionState;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
+}) {
+	const revisionMode = editorRevisionMode(editorRevision);
 	const historicalFile = useMemo(
 		() =>
 			buildHistoricalMarkdownFile({

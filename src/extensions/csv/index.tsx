@@ -36,8 +36,8 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { useQueryTakeFirst, useResolvedActiveBranchId } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
+	FileSnapshotsAtCommits,
 	type HistoricalFileSnapshot,
-	useFileSnapshotsAtCommits,
 } from "@/hooks/use-file-snapshots-at-commits";
 import {
 	decodeFileDataToBytes,
@@ -526,8 +526,6 @@ function EditableCsvView({
 
 function CsvHistoricalViewData({
 	fileId,
-	filePath,
-	fileRow,
 	editorRevision,
 	...props
 }: Omit<CsvViewProps, "fileId"> & {
@@ -535,15 +533,44 @@ function CsvHistoricalViewData({
 	readonly fileRow?: CsvFileRow | undefined;
 	readonly editorRevision: EditorRevisionState;
 }) {
-	const { beforeSnapshot, afterSnapshot } = useFileSnapshotsAtCommits(
-		fileId,
-		editorRevision.beforeCommitId,
-		editorRevision.afterCommitId,
-		editorRevision.beforeFileId,
-		editorRevision.afterFileId,
-		editorRevision.beforeExists,
-		editorRevision.afterExists,
+	return (
+		<FileSnapshotsAtCommits
+			fileId={fileId}
+			beforeCommitId={editorRevision.beforeCommitId}
+			afterCommitId={editorRevision.afterCommitId}
+			beforeFileId={editorRevision.beforeFileId}
+			afterFileId={editorRevision.afterFileId}
+			beforeExists={editorRevision.beforeExists}
+			afterExists={editorRevision.afterExists}
+		>
+			{({ beforeSnapshot, afterSnapshot }) => (
+				<CsvHistoricalViewResolved
+					{...props}
+					fileId={fileId}
+					editorRevision={editorRevision}
+					beforeSnapshot={beforeSnapshot}
+					afterSnapshot={afterSnapshot}
+				/>
+			)}
+		</FileSnapshotsAtCommits>
 	);
+}
+
+function CsvHistoricalViewResolved({
+	fileId,
+	filePath,
+	fileRow,
+	editorRevision,
+	beforeSnapshot,
+	afterSnapshot,
+	...props
+}: Omit<CsvViewProps, "fileId"> & {
+	readonly fileId: string;
+	readonly fileRow?: CsvFileRow | undefined;
+	readonly editorRevision: EditorRevisionState;
+	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
+}) {
 	const historicalFile = useMemo(
 		() =>
 			buildHistoricalCsvFile({

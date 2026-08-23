@@ -1242,7 +1242,35 @@ function AgentTurnReviewAutoReveal({
 	return null;
 }
 
-function LayoutShellLoadedContent({
+function LayoutShellLoadedContent(props: LayoutShellLoadedContentProps) {
+	const currentFileRows = useQuery<{ id: string; path: string }>((queryLix) =>
+		qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
+	);
+	return (
+		<LayoutShellWithInstalledExtensions
+			{...props}
+			currentFileRows={currentFileRows}
+		/>
+	);
+}
+
+function LayoutShellWithInstalledExtensions(
+	props: LayoutShellLoadedContentProps & {
+		readonly currentFileRows: readonly { id: string; path: string }[];
+	},
+) {
+	const installedExtensionRows = useQuery<InstalledExtensionFileRow>(
+		installedExtensionFilesQuery,
+	);
+	return (
+		<LayoutShellLoadedContentResolved
+			{...props}
+			installedExtensionRows={installedExtensionRows}
+		/>
+	);
+}
+
+function LayoutShellLoadedContentResolved({
 	atelierInstance,
 	lix,
 	uiStateKV,
@@ -1258,16 +1286,18 @@ function LayoutShellLoadedContent({
 	topBarProps,
 	defaultOpenPanels,
 	onEvent,
-}: LayoutShellLoadedContentProps) {
+	currentFileRows,
+	installedExtensionRows,
+}: LayoutShellLoadedContentProps & {
+	readonly currentFileRows: readonly { id: string; path: string }[];
+	readonly installedExtensionRows: readonly InstalledExtensionFileRow[];
+}) {
 	const effectiveAtelierInstance = atelierInstance;
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
 		},
 		[onEvent],
-	);
-	const currentFileRows = useQuery<{ id: string; path: string }>((queryLix) =>
-		qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
 	const preferencesFor = useCallback(
@@ -1303,9 +1333,6 @@ function LayoutShellLoadedContent({
 			}
 		}
 	}, [currentFileIds]);
-	const installedExtensionRows = useQuery<InstalledExtensionFileRow>(
-		installedExtensionFilesQuery,
-	);
 	const [installedExtensionLoad, setInstalledExtensionLoad] = useState<{
 		readonly rows: readonly InstalledExtensionFileRow[];
 		readonly status: "loading" | "ready" | "error";

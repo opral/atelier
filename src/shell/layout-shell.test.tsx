@@ -1077,13 +1077,9 @@ describe("agent turn review navigation", () => {
 				);
 			});
 			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-			fireEvent.click(screen.getByRole("button", { name: "Exit review" }));
-			await waitFor(() => {
-				expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();
-			});
 			fireEvent.click(
 				await screen.findByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			);
 			expect(
@@ -1177,12 +1173,14 @@ describe("agent turn review navigation", () => {
 				);
 			});
 			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-			fireEvent.click(screen.getByRole("button", { name: "Exit review" }));
 			fireEvent.click(
 				await screen.findByRole("button", {
-					name: "2 changes since checkpoint. Open changes review",
+					name: "2 files changed since checkpoint. Open changes review",
 				}),
 			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
 			fireEvent.click(
 				await screen.findByRole("button", {
 					name: "Working set: 2 of 2 files",
@@ -1197,7 +1195,9 @@ describe("agent turn review navigation", () => {
 				}),
 			);
 			expect(
-				screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+				await screen.findByRole("button", {
+					name: "Working set: 1 of 2 files",
+				}),
 			).toBeVisible();
 
 			const execute = vi.spyOn(lix, "execute");
@@ -1560,9 +1560,7 @@ describe("agent turn review navigation", () => {
 					name: /Latest checkpoint/,
 				}),
 			);
-			expect(
-				await screen.findByRole("button", { name: "Back to now" }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Exit" })).toBeVisible();
 			await waitFor(() => {
 				const central = sessionStateStore.getSnapshot()!.panels.central;
 				const activeView = central.views.find(
