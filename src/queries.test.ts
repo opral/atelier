@@ -135,14 +135,14 @@ describe("checkpoint queries", () => {
 			}),
 		]);
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 1 },
+			{ change_count: 1, file_count: 0 },
 		]);
 
 		const checkpoint = await lix.createCheckpoint();
 
 		expect(await selectWorkingChanges(lix).execute()).toEqual([]);
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 0 },
+			{ change_count: 0, file_count: 0 },
 		]);
 		const checkpoints = await selectCheckpoints(lix).execute();
 		expect(checkpoints).toHaveLength(2);
@@ -177,6 +177,9 @@ describe("checkpoint queries", () => {
 				previous_path: null,
 				diff_type: "added",
 			},
+		]);
+		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+			{ change_count: 3, file_count: 1 },
 		]);
 
 		await lix.createCheckpoint();

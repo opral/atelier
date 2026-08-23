@@ -835,7 +835,7 @@ describe("agent turn review navigation", () => {
 			await waitFor(() => {
 				expect(
 					screen.getByRole("button", {
-						name: "1 change since checkpoint. Open changes review",
+						name: "1 file changed since checkpoint. Open changes review",
 					}),
 				).toBeVisible();
 			});
@@ -864,7 +864,7 @@ describe("agent turn review navigation", () => {
 			await act(async () => {
 				fireEvent.click(
 					screen.getByRole("button", {
-						name: "1 change since checkpoint. Open changes review",
+						name: "1 file changed since checkpoint. Open changes review",
 					}),
 				);
 			});
@@ -904,12 +904,12 @@ describe("agent turn review navigation", () => {
 			});
 			expect(
 				screen.getByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			).toBeVisible();
 			fireEvent.click(
 				screen.getByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			);
 			expect(
@@ -948,7 +948,7 @@ describe("agent turn review navigation", () => {
 			});
 			fireEvent.click(
 				screen.getByRole("button", {
-					name: "1 change since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open changes review",
 				}),
 			);
 			expect(
@@ -968,9 +968,7 @@ describe("agent turn review navigation", () => {
 					name: /Latest checkpoint/,
 				}),
 			);
-			expect(
-				await screen.findByRole("button", { name: "Back to now" }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Exit" })).toBeVisible();
 			await waitFor(() => {
 				expect(
 					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
@@ -1001,7 +999,7 @@ describe("agent turn review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
-			expect(screen.queryByRole("button", { name: "Back to now" })).toBeNull();
+			expect(screen.getByRole("button", { name: "Exit" })).toBeVisible();
 			await waitFor(() => {
 				const activeView =
 					sessionStateStore.getSnapshot()?.panels.central.views[0];
@@ -1423,7 +1421,7 @@ describe("agent turn review navigation", () => {
 			expect(
 				await screen.findByRole(
 					"button",
-					{ name: "Back to now" },
+					{ name: "Exit" },
 					{ timeout: ASYNC_UI_TIMEOUT },
 				),
 			).toBeVisible();
@@ -1470,7 +1468,7 @@ describe("agent turn review navigation", () => {
 			expect(
 				screen.getByRole("list", { name: "Files at this checkpoint" }),
 			).toBeVisible();
-			expect(screen.getByRole("button", { name: "Back to now" })).toBeVisible();
+			expect(screen.getByRole("button", { name: "Exit" })).toBeVisible();
 			expect(
 				within(checkpointList).getAllByRole("listitem")[0],
 			).toHaveAttribute("aria-current", "true");

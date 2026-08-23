@@ -43,6 +43,11 @@ function WorkingChangesRow({
 		selectWorkingChangeCount(queryLix),
 	);
 	const changeCount = workingChangeCount[0]?.change_count ?? 0;
+	const fileCount = workingChangeCount[0]?.file_count ?? 0;
+	const workingCountLabel =
+		fileCount > 0
+			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
+			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
 	const openWorkingChanges = atelier.reviews.openWorkingChanges;
 	const isViewing =
 		atelier.reviews.active === true &&
@@ -84,7 +89,7 @@ function WorkingChangesRow({
 					<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
 						{changeCount === 0
 							? "now · nothing new"
-							: `now · ${changeCount} ${changeCount === 1 ? "change" : "changes"}`}
+							: `now · ${workingCountLabel}`}
 					</span>
 				</span>
 			</button>

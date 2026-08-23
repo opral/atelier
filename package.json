@@ -31,8 +31,8 @@
 	"scripts": {
 		"dev": "pnpm --dir preview/web dev",
 		"build": "vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs",
-		"build:lix": "pnpm -C vendor/lix/packages/js-sdk run build && npm --prefix vendor/lix/packages/storage-opfs ci && npm --prefix vendor/lix/packages/storage-opfs run build",
-		"prebuild:preview": "git submodule update --init --recursive && pnpm run build:lix",
+		"build:lix": "node scripts/build-vendored-lix.mjs",
+		"prebuild:preview": "git submodule update --init --recursive && pnpm run build:lix --browser-only",
 		"build:preview": "pnpm --dir preview/web build && node scripts/compress-preview-wasm.mjs",
 		"deploy:preview": "wrangler versions upload",
 		"typecheck": "tsc -p . --pretty false",

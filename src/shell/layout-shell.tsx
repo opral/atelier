@@ -459,12 +459,20 @@ const reconcileAndNormalizePanel = (
 const reconcilePanelsWithEnvironment = ({
 	panels,
 	currentFileIds,
+	currentFilePathsById,
+	resolveCurrentFileView,
 	extensionMap,
 	preserveUnknownExtensionKinds,
 	centralBehavior,
 }: {
 	readonly panels: Record<PanelSide, PanelState>;
 	readonly currentFileIds: ReadonlySet<string>;
+	readonly currentFilePathsById: ReadonlyMap<string, string>;
+	readonly resolveCurrentFileView: (args: {
+		readonly view: ExtensionInstance;
+		readonly fileId: string;
+		readonly filePath: string;
+	}) => Pick<ExtensionInstance, "instance" | "kind">;
 	readonly extensionMap: Map<ExtensionKind, ExtensionDefinition>;
 	readonly preserveUnknownExtensionKinds: boolean;
 	readonly centralBehavior: CentralSlotBehavior;
@@ -472,6 +480,8 @@ const reconcilePanelsWithEnvironment = ({
 	const currentPanels = reconcileCurrentFileViews({
 		panels: sanitizePanels(panels, centralBehavior),
 		currentFileIds,
+		currentFilePathsById,
+		resolveCurrentFileView,
 	});
 	const options = {
 		preserveUnknownKinds: preserveUnknownExtensionKinds,
@@ -1276,6 +1286,11 @@ function LayoutShellLoadedContent({
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
 	);
+	const currentFilePathsById = useMemo(
+		() =>
+			new Map(currentFileRows.map((row) => [String(row.id), String(row.path)])),
+		[currentFileRows],
+	);
 	const openingFileIdsRef = useRef(new Set<string>());
 	const getCurrentFileIdsForReconciliation = useCallback(
 		() => new Set([...currentFileIds, ...openingFileIdsRef.current]),
@@ -1319,6 +1334,28 @@ function LayoutShellLoadedContent({
 			centralKinds,
 		});
 	}, [centralPanelOptions, extensionMap]);
+	const resolveCurrentFileView = useCallback(
+		({
+			view,
+			fileId,
+			filePath,
+		}: {
+			readonly view: ExtensionInstance;
+			readonly fileId: string;
+			readonly filePath: string;
+		}) => {
+			if (preserveUnknownExtensionKinds) {
+				return { kind: view.kind, instance: view.instance };
+			}
+			const kind =
+				findFileHandlerExtension(extensionMap.values(), filePath)?.kind ??
+				FILE_EXTENSION_KIND;
+			return kind === view.kind
+				? { kind: view.kind, instance: view.instance }
+				: { kind, instance: fileExtensionInstanceForKind(kind, fileId) };
+		},
+		[extensionMap, preserveUnknownExtensionKinds],
+	);
 	// Side placement respects manifest declarations; the default is the side
 	// panels only (document editors are central-only regardless).
 	const canPlaceKindInSidePanel = useCallback(
@@ -1349,6 +1386,8 @@ function LayoutShellLoadedContent({
 			const panels = reconcilePanelsWithEnvironment({
 				panels: state.panels,
 				currentFileIds: getCurrentFileIdsForReconciliation(),
+				currentFilePathsById,
+				resolveCurrentFileView,
 				extensionMap,
 				preserveUnknownExtensionKinds,
 				centralBehavior,
@@ -1376,7 +1415,9 @@ function LayoutShellLoadedContent({
 			centralBehavior,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
+			currentFilePathsById,
 			preserveUnknownExtensionKinds,
+			resolveCurrentFileView,
 		],
 	);
 	const effectiveWorkspaceTransition = useMemo(
@@ -1523,7 +1564,7 @@ function LayoutShellLoadedContent({
 		}
 	}, []);
 	// The live document the historical view replaced (tabs navigate in place);
-	// restored on "Back to now" so exiting never strands an empty tab.
+	// restored on exit so leaving review never strands an empty tab.
 	const preHistoricalDocumentRef = useRef<{
 		readonly fileId: string;
 		readonly filePath: string;
@@ -2010,6 +2051,8 @@ function LayoutShellLoadedContent({
 			const currentPanel = reconcileCurrentFileViewPanel(
 				panel,
 				getCurrentFileIdsForReconciliation(),
+				currentFilePathsById,
+				resolveCurrentFileView,
 			);
 			return reconcileAndNormalizePanel(
 				side,
@@ -2023,7 +2066,9 @@ function LayoutShellLoadedContent({
 			centralBehavior,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
+			currentFilePathsById,
 			preserveUnknownExtensionKinds,
+			resolveCurrentFileView,
 		],
 	);
 
@@ -2737,7 +2782,7 @@ function LayoutShellLoadedContent({
 				}
 				if (!current) {
 					// Entering the past: remember the live document this view will
-					// replace so "Back to now" can bring it back.
+					// replace so Exit can bring it back.
 					const activeView = panelStatesRef.current.central.views.find(
 						(view) =>
 							view.instance === panelStatesRef.current.central.activeInstance,
@@ -3149,14 +3194,15 @@ function LayoutShellLoadedContent({
 		}
 		const statePath =
 			typeof entry.state?.path === "string" ? entry.state.path : "";
-		const signature = `${entry.kind}::${entry.instance}::${statePath}`;
+		const filePath = documentPathFromView(entry) ?? "";
+		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}`;
 		if (lastActivatedCentralViewRef.current === signature) return;
 		lastActivatedCentralViewRef.current = signature;
 		emitEvent({
 			type: "central_view_activated",
 			viewKind: entry.kind,
 			instanceId: entry.instance,
-			filePath: documentPathFromView(entry),
+			filePath: filePath || null,
 			...(entry.state ? { state: entry.state } : {}),
 		});
 	}, [activeCentralEntry, emitEvent]);
@@ -4326,11 +4372,8 @@ function LayoutShellLoadedContent({
 				<CheckpointStatusBar
 					readOnly={isHostReadOnly}
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
-					isReviewing={isReviewMode}
-					exitLabel={historicalReview ? "Back to now" : "Exit review"}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
 					onOpenWorkingChanges={handleOpenWorkingChangesReview}
-					onExitReview={exitDiffReview}
 					onOpenHistory={() =>
 						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
 							panel: "left",

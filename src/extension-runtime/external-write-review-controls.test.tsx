@@ -210,6 +210,30 @@ describe("ExternalWriteReviewControls", () => {
 		expect(undo).not.toHaveBeenCalled();
 	});
 
+	test("puts the Esc Exit control at the far left of the float", () => {
+		const exit = vi.fn();
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={NAVIGATION}
+				files={FILES}
+				onExit={exit}
+			/>,
+		);
+
+		const exitButton = screen.getByRole("button", { name: "Exit" });
+		expect(exitButton).toHaveTextContent("Esc");
+		expect(exitButton).toHaveTextContent("Exit");
+		expect(exitButton.querySelector("svg")).toBeNull();
+		expect(
+			exitButton.closest(".external-write-review-scope")?.firstElementChild,
+		).toBe(exitButton);
+
+		fireEvent.click(exitButton);
+		expect(exit).toHaveBeenCalledOnce();
+	});
+
 	test("ESC closes an open list before exiting; ⌘⏎ fires the verb on the selection", async () => {
 		const primary = vi.fn(async () => {});
 		const exit = vi.fn();

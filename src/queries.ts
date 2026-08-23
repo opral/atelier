@@ -22,7 +22,10 @@ export type WorkingChangeRow = {
 };
 
 export type WorkingChangeCountRow = {
+	/** Low-level schema-row diffs. */
 	change_count: number;
+	/** Distinct logical files represented by those diffs. */
+	file_count: number;
 };
 
 export type FileWorkingChangeRow = {
@@ -107,7 +110,15 @@ export function selectWorkingChanges(lix: Lix) {
 export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
 		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
-		.select((eb) => eb.fn.countAll<number>().as("change_count"))
+		.select((eb) => [
+			eb.fn.countAll<number>().as("change_count"),
+			sql<number>`count(distinct case
+				when lix_working_diff.file_id is not null then lix_working_diff.file_id
+				when lix_working_diff.schema_key = 'lix_file_descriptor'
+					then lix_working_diff.row_pk ->> 0
+				else null
+			end)`.as("file_count"),
+		])
 		.$castTo<WorkingChangeCountRow>();
 }
 

@@ -76,7 +76,7 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open changes review",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
@@ -121,7 +121,7 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open changes review",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
@@ -132,9 +132,7 @@ describe("Atelier instance file controller", () => {
 			expect(
 				await screen.findByRole("button", { name: "Working changes" }),
 			).toBeEnabled();
-			expect(
-				await screen.findByRole("button", { name: "Exit review" }),
-			).toBeVisible();
+			expect(await screen.findByRole("button", { name: "Exit" })).toBeVisible();
 			expect(screen.queryByRole("button", { name: /^Checkpoint$/ })).toBeNull();
 			expect(screen.queryByRole("button", { name: /^Keep$/ })).toBeNull();
 			expect(screen.queryByText("Unable to render Atelier")).toBeNull();

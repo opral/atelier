@@ -53,6 +53,47 @@ describe("file creation path helpers", () => {
 });
 
 describe("FilesView", () => {
+	test("loads working changes only while their review is open", async () => {
+		const lix = await openLix();
+		await insertFile(
+			lix,
+			fakeUuid("lazy-working-change"),
+			"/changed.md",
+			"draft",
+		);
+		const execute = vi.spyOn(lix, "execute");
+		const observe = vi.spyOn(lix, "observe");
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix);
+		});
+		await screen.findByLabelText("Files");
+		expect(workingDiffSqlCalls(execute.mock.calls)).toEqual([]);
+		expect(workingDiffSqlCalls(observe.mock.calls)).toEqual([]);
+
+		await act(async () => {
+			view?.rerender(
+				<FilesViewFixture
+					lix={lix}
+					context={{
+						reviewModeActive: true,
+						reviewWorkingChanges: true,
+					}}
+				/>,
+			);
+		});
+		await waitFor(() => {
+			expect([
+				...workingDiffSqlCalls(execute.mock.calls),
+				...workingDiffSqlCalls(observe.mock.calls),
+			]).not.toEqual([]);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("renders the Lix-backed file tree", async () => {
 		const lix = await openLix();
 		await qb(lix)
@@ -1239,6 +1280,15 @@ function FilesViewFixture({
 
 function renderFilesView(lix: Lix, context?: TestFilesViewContext) {
 	return render(<FilesViewFixture lix={lix} context={context} />);
+}
+
+function workingDiffSqlCalls(calls: readonly unknown[][]): string[] {
+	return calls
+		.map(([sql]) => sql)
+		.filter(
+			(sql): sql is string =>
+				typeof sql === "string" && sql.includes("working_diff"),
+		);
 }
 
 type WatchedEntryStub = {
