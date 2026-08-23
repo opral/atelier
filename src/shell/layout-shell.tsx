@@ -1339,6 +1339,8 @@ function LayoutShellLoadedContent({
 	const [workingChangeReviewFiles, setWorkingChangeReviewFiles] = useState<
 		readonly LixFileForOpen[]
 	>(EMPTY_LIX_FILES_FOR_OPEN);
+	const [workingChangeAgentTurnReviews, setWorkingChangeAgentTurnReviews] =
+		useState<readonly ExternalWriteReview[]>([]);
 	const [workingChangeReviewRange, setWorkingChangeReviewRange] = useState<{
 		readonly beforeCommitId: string;
 		readonly afterCommitId: string;
@@ -1352,6 +1354,7 @@ function LayoutShellLoadedContent({
 	// turn re-opens diff mode.
 	const [agentTurnReviewDismissed, setAgentTurnReviewDismissed] =
 		useState(false);
+	const agentTurnReviewDismissedRef = useRef(false);
 	// Diff mode pointed at the past: a checkpoint clicked in History. Read-only;
 	// the float's only verb is Restore.
 	const [historicalReview, setHistoricalReview] = useState<{
@@ -1399,6 +1402,8 @@ function LayoutShellLoadedContent({
 			historicalOpenPathRef.current = null;
 			setWorkingChangesReviewOpen(false);
 			setWorkingChangeReviewRange(null);
+			setWorkingChangeAgentTurnReviews([]);
+			agentTurnReviewDismissedRef.current = true;
 			setAgentTurnReviewDismissed(true);
 			setHistoricalReview((current) => {
 				if (current) {
@@ -1418,6 +1423,8 @@ function LayoutShellLoadedContent({
 		setWorkingChangesReviewOpen(false);
 		setWorkingChangeReviewFiles(EMPTY_LIX_FILES_FOR_OPEN);
 		setWorkingChangeReviewRange(null);
+		setWorkingChangeAgentTurnReviews([]);
+		agentTurnReviewDismissedRef.current = false;
 		setAgentTurnReviewDismissed(false);
 		historicalOpenPathRef.current = null;
 		setHistoricalReview(null);
@@ -1592,75 +1599,73 @@ function LayoutShellLoadedContent({
 		[agentTurnRanges, currentFileRows, lix],
 	);
 	const retireAcceptedAgentTurnReviews = useCallback(
-		async (
-			files: readonly ExternalWriteReviewFile[],
-			checkpointCommitId: string,
-		) => {
-			try {
-				const pendingReviews = await getPendingExternalWriteReviews(
-					lix,
-					files,
-					agentTurnRanges,
-					resolvedReviewIdsRef.current,
-					{ currentCommitId: checkpointCommitId },
-				);
-				for (const review of pendingReviews) {
-					try {
-						await runDiffReviewResolution(review, "accepted", async () => {
-							await persistReviewResolution(review, "accepted");
-						});
-					} catch (error) {
-						console.warn(
-							"[checkpoint] failed to retire an accepted review marker",
-							error,
-						);
-					}
+		async (reviews: readonly ExternalWriteReview[]) => {
+			for (const review of reviews) {
+				try {
+					await runDiffReviewResolution(review, "accepted", async () => {
+						await persistReviewResolution(review, "accepted");
+					});
+				} catch (error) {
+					console.warn(
+						"[checkpoint] failed to retire an accepted review marker",
+						error,
+					);
 				}
-			} catch (error) {
-				console.warn(
-					"[checkpoint] failed to collect accepted review markers",
-					error,
-				);
 			}
 		},
-		[agentTurnRanges, lix, persistReviewResolution, runDiffReviewResolution],
+		[persistReviewResolution, runDiffReviewResolution],
 	);
 
 	const handleCreateCheckpoint = useCallback(
 		async (selectedFileIds: readonly string[]) => {
 			const selected = new Set(selectedFileIds);
 			if (selected.size === 0) return;
-			const selectedReviewFiles = workingChangeReviewFiles
-				.filter((file) => selected.has(file.id))
-				.map((file) => ({ fileId: file.id, path: file.path }));
 			const selectedEveryWorkingFile = workingChangeReviewFiles.every((file) =>
 				selected.has(file.id),
 			);
+			const selectedAgentTurnReviews = workingChangeAgentTurnReviews.filter(
+				(review) => selected.has(review.fileId),
+			);
+			// The durable checkpoint may publish reactive state before this async
+			// handler resumes. Retire the old agent-turn review lifecycle first so
+			// that publication cannot start fresh history reads.
+			const wasAgentTurnReviewDismissed = agentTurnReviewDismissedRef.current;
+			agentTurnReviewDismissedRef.current = true;
+			setAgentTurnReviewDismissed(true);
 
-			let checkpointCommitId: string;
-			if (selectedEveryWorkingFile) {
-				const checkpoint = await lix.createCheckpoint();
-				checkpointCommitId = checkpoint.commitId;
-			} else {
-				const checkpoint = await createCheckpointForFiles(lix, selectedFileIds);
-				if (!checkpoint) {
-					throw new Error("The selected files have no working changes.");
-				}
-				checkpointCommitId = checkpoint.commitId;
+			let checkpoint: { readonly commitId: string } | null;
+			try {
+				checkpoint = selectedEveryWorkingFile
+					? await lix.createCheckpoint()
+					: await createCheckpointForFiles(lix, selectedFileIds);
+			} catch (error) {
+				agentTurnReviewDismissedRef.current = wasAgentTurnReviewDismissed;
+				setAgentTurnReviewDismissed(wasAgentTurnReviewDismissed);
+				throw error;
+			}
+			if (!checkpoint) {
+				agentTurnReviewDismissedRef.current = wasAgentTurnReviewDismissed;
+				setAgentTurnReviewDismissed(wasAgentTurnReviewDismissed);
+				throw new Error("The selected files have no working changes.");
 			}
 			const remainingFiles = workingChangeReviewFiles.filter(
 				(file) => !selected.has(file.id),
 			);
 			setWorkingChangesReviewOpen(remainingFiles.length > 0);
 			setWorkingChangeReviewFiles(remainingFiles);
-			// Review retirement is private housekeeping over historical snapshots.
-			// A durable checkpoint must neither query nor wait for file history.
-			void retireAcceptedAgentTurnReviews(
-				selectedReviewFiles,
-				checkpointCommitId,
+			setWorkingChangeAgentTurnReviews((reviews) =>
+				reviews.filter((review) => !selected.has(review.fileId)),
 			);
+			// These reviews were resolved while the working-changes view opened.
+			// Checkpoint creation consumes that review state without querying history.
+			void retireAcceptedAgentTurnReviews(selectedAgentTurnReviews);
 		},
-		[lix, retireAcceptedAgentTurnReviews, workingChangeReviewFiles],
+		[
+			lix,
+			retireAcceptedAgentTurnReviews,
+			workingChangeAgentTurnReviews,
+			workingChangeReviewFiles,
+		],
 	);
 
 	// Keep: accept pending reviews for the ticked files (every file unless the
@@ -1730,6 +1735,7 @@ function LayoutShellLoadedContent({
 	// with ESC.
 	const agentTurnRangeKey = agentTurnRanges.map((range) => range.id).join("\n");
 	useEffect(() => {
+		agentTurnReviewDismissedRef.current = false;
 		setAgentTurnReviewDismissed(false);
 	}, [agentTurnRangeKey]);
 
@@ -2198,7 +2204,11 @@ function LayoutShellLoadedContent({
 	} | null>(null);
 	useEffect(() => {
 		let cancelled = false;
-		if (currentFileRows.length === 0 || agentTurnRanges.length === 0) {
+		if (
+			agentTurnReviewDismissedRef.current ||
+			currentFileRows.length === 0 ||
+			agentTurnRanges.length === 0
+		) {
 			setPendingReviewFileLoad({ key: pendingReviewFilesKey, files: [] });
 			return;
 		}
@@ -2236,6 +2246,7 @@ function LayoutShellLoadedContent({
 		};
 	}, [
 		agentTurnRanges,
+		agentTurnReviewDismissed,
 		currentFileRows,
 		lix,
 		pendingReviewFilesKey,
@@ -2468,7 +2479,10 @@ function LayoutShellLoadedContent({
 						afterCommitId: commitId,
 						sourceCommitId: commitId,
 					}
-				: { afterCommitId: commitId, sourceCommitId: commitId };
+				: {
+						afterCommitId: commitId,
+						sourceCommitId: commitId,
+					};
 		},
 		[extensionMap],
 	);
@@ -3467,6 +3481,15 @@ function LayoutShellLoadedContent({
 					path: String(file.path),
 				}))
 				.sort((left, right) => left.path.localeCompare(right.path));
+			const checkpointAgentTurnReviews = await getPendingExternalWriteReviews(
+				lix,
+				checkpointFiles.map((file) => ({
+					fileId: file.id,
+					path: file.path,
+				})),
+				agentTurnRanges,
+				new Set(privateResolvedReviewIds),
+			);
 			let firstChangedFile = checkpointFiles[0];
 			const removedFileIds = new Set(
 				currentWorkingChanges
@@ -3499,6 +3522,7 @@ function LayoutShellLoadedContent({
 			}
 			if (firstChangedFile) {
 				setWorkingChangeReviewFiles(checkpointFiles);
+				setWorkingChangeAgentTurnReviews(checkpointAgentTurnReviews);
 				setWorkingChangeReviewRange(reviewRange);
 			}
 			if (

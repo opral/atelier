@@ -56,20 +56,23 @@ function PdfViewContent({
 	initialPage,
 }: PdfViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<PdfFileRow>((lix) => {
-		if (sourceCommitId) {
-			return selectFileHistory(lix, sourceCommitId)
+	const fileRow = useQueryTakeFirst<PdfFileRow>(
+		(lix) => {
+			if (sourceCommitId) {
+				return selectFileHistory(lix, sourceCommitId)
+					.select(["id", "path", "content"])
+					.where("id", "=", fileId)
+					.orderBy("lixcol_depth", "asc")
+					.limit(1);
+			}
+			return qb(lix)
+				.selectFrom("lix_file")
 				.select(["id", "path", "content"])
 				.where("id", "=", fileId)
-				.orderBy("lixcol_depth", "asc")
 				.limit(1);
-		}
-		return qb(lix)
-			.selectFrom("lix_file")
-			.select(["id", "path", "content"])
-			.where("id", "=", fileId)
-			.limit(1);
-	});
+		},
+		{ subscribe: !sourceCommitId },
+	);
 
 	if (!fileRow) {
 		return (

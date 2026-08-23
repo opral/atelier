@@ -67,6 +67,38 @@ describe("getWorkingChangeExternalWriteReview", () => {
 			await lix.close();
 		}
 	});
+
+	test("reviews a file deleted after the latest checkpoint", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("deleted-working-file");
+			const path = "/deleted-working.md";
+			await writeFile(lix, fileId, path, "before deletion");
+			const checkpoint = await lix.createCheckpoint();
+			await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+			const headCommitId = await activeCommitId(lix);
+
+			const review = await getWorkingChangeExternalWriteReview(
+				lix,
+				fileId,
+				path,
+			);
+
+			expect(review).toEqual(
+				expect.objectContaining({
+					fileId,
+					path,
+					beforeCommitId: checkpoint.commitId,
+					afterCommitId: headCommitId,
+				}),
+			);
+			const data = await getExternalWriteReviewData(lix, review!);
+			expect(decoder.decode(data?.beforeData)).toBe("before deletion");
+			expect(data?.afterData).toEqual(new Uint8Array());
+		} finally {
+			await lix.close();
+		}
+	});
 });
 
 describe("getExternalWriteReview", () => {
@@ -281,6 +313,64 @@ describe("getExternalWriteReview", () => {
 
 			expect(review?.agentTurnRangeIds).toEqual(["range-created"]);
 			await expectReviewData(lix, review, "", "created during turn");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("keeps a review for a file deleted during an agent turn", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("deleted-agent-file");
+			const path = "/docs/deleted.md";
+			await writeFile(lix, fileId, path, "before deletion");
+			const beforeCommitId = await activeCommitId(lix);
+			await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+			const afterCommitId = await activeCommitId(lix);
+
+			const review = await getAgentTurnExternalWriteReview(lix, fileId, path, [
+				agentRange({
+					id: "deleted-agent-range",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			]);
+
+			expect(review).toEqual(
+				expect.objectContaining({
+					fileId,
+					path,
+					agentTurnRangeIds: ["deleted-agent-range"],
+				}),
+			);
+			const data = await getExternalWriteReviewData(lix, review!);
+			expect(decoder.decode(data?.beforeData)).toBe("before deletion");
+			expect(data?.afterData).toEqual(new Uint8Array());
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("does not confuse a deleted file with an existing empty file", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("empty-then-deleted-agent-file");
+			const path = "/docs/empty-then-deleted.md";
+			await writeFile(lix, fileId, path, "before empty");
+			const beforeCommitId = await activeCommitId(lix);
+			await writeFile(lix, fileId, path, "");
+			const afterCommitId = await activeCommitId(lix);
+			await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+
+			const review = await getAgentTurnExternalWriteReview(lix, fileId, path, [
+				agentRange({
+					id: "empty-then-deleted-agent-range",
+					beforeCommitId,
+					afterCommitId,
+				}),
+			]);
+
+			expect(review).toBeNull();
 		} finally {
 			await lix.close();
 		}
@@ -692,6 +782,23 @@ describe("getExternalWriteReview", () => {
 
 			expect([...pendingPaths].sort()).toEqual(["/docs/a.md", "/docs/b.md"]);
 			expect(historyReadCount(execute)).toBe(1);
+			const historyStatement = execute.mock.calls
+				.map(([statement]) => String(statement))
+				.find((statement) => statement.includes("lix_history('lix_file'"));
+			expect(historyStatement).toBeDefined();
+			const expectedSnapshotBranches = 2 * 51;
+			expect(historyStatement?.match(/lix_history\('lix_file'/gi)).toHaveLength(
+				expectedSnapshotBranches,
+			);
+			expect(historyStatement?.match(/where id =/gi)).toHaveLength(
+				expectedSnapshotBranches,
+			);
+			expect(
+				historyStatement?.match(/order by lixcol_depth asc/gi),
+			).toHaveLength(expectedSnapshotBranches);
+			expect(historyStatement?.match(/limit 1/gi)).toHaveLength(
+				expectedSnapshotBranches,
+			);
 		} finally {
 			await lix.close();
 		}

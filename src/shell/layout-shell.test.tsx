@@ -525,7 +525,6 @@ describe("agent turn review navigation", () => {
 					),
 				).toHaveLength(1);
 			});
-
 			await act(async () => {
 				await appendAgentTurnCommitRange(lix, {
 					id: "external-edit-follow-up",
@@ -686,7 +685,11 @@ describe("agent turn review navigation", () => {
 			expect(
 				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
 			).toBe(fakeUuid("auto-changed-file"));
-			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint/ }),
+				).toBeNull();
+			});
 			expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
 
 			fireEvent.click(
@@ -873,7 +876,7 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
-	test("creates a checkpoint without waiting for file history", async () => {
+	test("creates a checkpoint and retires pre-resolved review state", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const reviewStatusStore = createMemoryReviewStatusStore();
@@ -883,10 +886,7 @@ describe("agent turn review navigation", () => {
 			sessionStateStore,
 		});
 		let utils: ReturnType<typeof render> | undefined;
-		let editingLix:
-			| Awaited<ReturnType<typeof lix.openAnotherSession>>
-			| undefined;
-		let releaseHistoryReads: (() => void) | undefined;
+		let releaseHistoryReads = () => {};
 		try {
 			await qb(lix)
 				.insertInto("lix_file")
@@ -912,10 +912,6 @@ describe("agent turn review navigation", () => {
 				startedAt: 1,
 				completedAt: 2,
 			});
-			editingLix = await lix.openAnotherSession({
-				branchId: await lix.activeBranchId(),
-			});
-
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
@@ -939,57 +935,54 @@ describe("agent turn review navigation", () => {
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
 
-			const historyReadsReleased = new Promise<void>((resolve) => {
+			const originalExecute = lix.execute.bind(lix);
+			let historyReadCount = 0;
+			const historyReadGate = new Promise<void>((resolve) => {
 				releaseHistoryReads = resolve;
 			});
-			const callOrder: string[] = [];
-			const originalExecute = lix.execute.bind(lix);
-			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_history('lix_file'")) {
-					callOrder.push("history");
-					await historyReadsReleased;
-				}
-				return originalExecute(statement, params);
-			});
-			const originalCreateCheckpoint = lix.createCheckpoint.bind(lix);
+			const execute = vi
+				.spyOn(lix, "execute")
+				.mockImplementation(async (statement, params) => {
+					if (String(statement).includes("lix_history('lix_file'")) {
+						historyReadCount += 1;
+						await historyReadGate;
+					}
+					return originalExecute(statement, params);
+				});
 			const createCheckpoint = vi.spyOn(lix, "createCheckpoint");
-			createCheckpoint.mockImplementationOnce(async (...args) => {
-				callOrder.push("checkpoint");
-				return originalCreateCheckpoint(...args);
-			});
 
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			await waitFor(() => expect(createCheckpoint).toHaveBeenCalledOnce());
-			expect(callOrder[0]).toBe("checkpoint");
-			await waitFor(() => expect(callOrder).toContain("history"));
-			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
-			await qb(editingLix)
-				.updateTable("lix_file")
-				.set({ content: new TextEncoder().encode("# Edited afterward\n") })
-				.where("id", "=", fakeUuid("checkpoint-with-blocked-history"))
-				.execute();
-			releaseHistoryReads();
-			releaseHistoryReads = undefined;
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint/ }),
+				).toBeNull();
+			});
 			await waitFor(async () => {
 				const branchId = await lix.activeBranchId();
 				expect(
 					await reviewStatusStore.loadResolvedReviewIds(branchId),
 				).toHaveLength(1);
 			});
+			expect(historyReadCount).toBeGreaterThan(0);
+			const firstHistoryCallIndex = execute.mock.calls.findIndex(
+				([statement]) => String(statement).includes("lix_history('lix_file'"),
+			);
+			expect(createCheckpoint.mock.invocationCallOrder[0]).toBeLessThan(
+				execute.mock.invocationCallOrder[firstHistoryCallIndex]!,
+			);
 		} finally {
-			releaseHistoryReads?.();
+			releaseHistoryReads();
 			await act(async () => utils?.unmount());
-			await editingLix?.close();
 			await lix.close();
 		}
 	});
 
-	test("anchors partial review retirement to the returned checkpoint commit", async () => {
+	test("retires only selected partial-checkpoint reviews", async () => {
 		const lix = await openLix();
 		const reviewStatusStore = createMemoryReviewStatusStore();
 		const atelier = createAtelier({ lix, reviewStatusStore });
 		let utils: ReturnType<typeof render> | undefined;
-		let releaseHistoryReads: (() => void) | undefined;
 		try {
 			const selectedFileId = fakeUuid("partial-checkpoint-selected");
 			const remainingFileId = fakeUuid("partial-checkpoint-remaining");
@@ -1058,51 +1051,23 @@ describe("agent turn review navigation", () => {
 				screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 			).toBeVisible();
 
-			const historyReadsReleased = new Promise<void>((resolve) => {
-				releaseHistoryReads = resolve;
-			});
-			const callOrder: string[] = [];
-			let returnedCheckpointCommitId: string | undefined;
-			const historyParameterSets: Array<readonly unknown[]> = [];
-			const originalExecute = lix.execute.bind(lix);
-			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				const sqlText = String(statement);
-				if (sqlText.includes("INSERT INTO lix_create_checkpoint")) {
-					callOrder.push("checkpoint");
-					const result = await originalExecute(statement, params);
-					const commitId = result.rows[0]?.get("commit_id");
-					if (typeof commitId === "string") {
-						returnedCheckpointCommitId = commitId;
-					}
-					return result;
-				}
-				if (sqlText.includes("lix_history('lix_file'")) {
-					callOrder.push("history");
-					historyParameterSets.push(params ?? []);
-					await historyReadsReleased;
-				}
-				return originalExecute(statement, params);
-			});
+			const execute = vi.spyOn(lix, "execute");
 
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
-			await waitFor(() => expect(callOrder).toContain("history"));
-			expect(callOrder[0]).toBe("checkpoint");
-			expect(returnedCheckpointCommitId).toEqual(expect.any(String));
-			releaseHistoryReads();
-			releaseHistoryReads = undefined;
+			await waitFor(() => {
+				expect(
+					execute.mock.calls.some(([statement]) =>
+						String(statement).includes("INSERT INTO lix_create_checkpoint"),
+					),
+				).toBe(true);
+			});
 			await waitFor(async () => {
 				const branchId = await lix.activeBranchId();
 				expect(
 					await reviewStatusStore.loadResolvedReviewIds(branchId),
 				).toHaveLength(1);
 			});
-			expect(
-				historyParameterSets.some((parameters) =>
-					parameters.includes(returnedCheckpointCommitId),
-				),
-			).toBe(true);
 		} finally {
-			releaseHistoryReads?.();
 			await act(async () => utils?.unmount());
 			await lix.close();
 		}

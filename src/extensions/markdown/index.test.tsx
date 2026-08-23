@@ -965,6 +965,71 @@ describe("MarkdownView", () => {
 		await lix.close();
 	});
 
+	test("selects one visible row when the file skipped the previous checkpoint", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("checkpoint_visible_snapshot");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/checkpoint-visible.md",
+				content: new TextEncoder().encode("# Before"),
+			})
+			.execute();
+		await lix.createCheckpoint();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("checkpoint_visible_unrelated"),
+				path: "/checkpoint-unrelated.md",
+				content: new TextEncoder().encode("unrelated"),
+			})
+			.execute();
+		const beforeCommitId = (await lix.createCheckpoint()).commitId;
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# After") })
+			.where("id", "=", fileId)
+			.execute();
+		const afterCommitId = (await lix.createCheckpoint()).commitId;
+		const execute = vi.spyOn(lix, "execute");
+		let utils: ReturnType<typeof render> | undefined;
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId={fileId}
+							filePath="/checkpoint-visible.md"
+							beforeCommitId={beforeCommitId}
+							afterCommitId={afterCommitId}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const reviewEditor = await screen.findByTestId("markdown-review-editor");
+		expect(reviewEditor).toHaveTextContent("Before");
+		expect(reviewEditor).toHaveTextContent("After");
+		const historyCalls = execute.mock.calls.filter(([statement]) =>
+			String(statement).includes("lix_history('lix_file'"),
+		);
+		expect(historyCalls).toHaveLength(2);
+		expect(
+			historyCalls.every(
+				([statement, parameters]) =>
+					["where id =", "order by lixcol_depth asc", "limit"].every((clause) =>
+						String(statement).includes(clause),
+					) && (parameters ?? []).includes(1),
+			),
+		).toBe(true);
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
 	test("shows a not found message when the file is missing", async () => {
 		const lix = await openLix();
 
