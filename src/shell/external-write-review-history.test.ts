@@ -1,4 +1,10 @@
-import { createElement, Suspense, useEffect, type ComponentType } from "react";
+import {
+	createElement,
+	StrictMode,
+	Suspense,
+	useEffect,
+	type ComponentType,
+} from "react";
 import { act, render, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
@@ -15,6 +21,7 @@ import {
 	getWorkingChangeExternalWriteReview,
 	useExternalWriteReview,
 	useExternalWriteReviewData,
+	useAgentTurnCommitRanges,
 } from "./external-write-review-history";
 import {
 	appendAgentTurnCommitRange,
@@ -26,6 +33,166 @@ import {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+
+test("agent turn range consumers share one branch observer", async () => {
+	const next = vi.fn(() => new Promise<undefined>(() => {}));
+	const closeObservation = vi.fn();
+	const closeSession = vi.fn().mockResolvedValue(undefined);
+	const branchLix = {
+		observe: vi.fn(() => ({ next, close: closeObservation })),
+		close: closeSession,
+	};
+	const openAnotherSession = vi.fn().mockResolvedValue(branchLix);
+	const lix = { openAnotherSession } as unknown as Lix;
+
+	function Consumer() {
+		useAgentTurnCommitRanges("branch-1");
+		return null;
+	}
+	function Consumers({ first }: { readonly first: boolean }) {
+		return createElement(
+			"div",
+			null,
+			first ? createElement(Consumer) : null,
+			createElement(Consumer),
+		);
+	}
+
+	const rendered = render(
+		createElement(LixProvider, {
+			lix,
+			children: createElement(Consumers, { first: true }),
+		}),
+	);
+	await waitFor(() => expect(openAnotherSession).toHaveBeenCalledTimes(1));
+	expect(branchLix.observe).toHaveBeenCalledTimes(1);
+
+	rendered.rerender(
+		createElement(LixProvider, {
+			lix,
+			children: createElement(Consumers, { first: false }),
+		}),
+	);
+	await Promise.resolve();
+	expect(closeObservation).not.toHaveBeenCalled();
+	expect(closeSession).not.toHaveBeenCalled();
+
+	rendered.unmount();
+	await waitFor(() => expect(closeObservation).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(closeSession).toHaveBeenCalledTimes(1));
+});
+
+test("agent turn range observer survives the StrictMode effect reconnect", async () => {
+	const next = vi.fn(() => new Promise<undefined>(() => {}));
+	const closeObservation = vi.fn();
+	const closeSession = vi.fn().mockResolvedValue(undefined);
+	const branchLix = {
+		observe: vi.fn(() => ({ next, close: closeObservation })),
+		close: closeSession,
+	};
+	const openAnotherSession = vi.fn().mockResolvedValue(branchLix);
+	const lix = { openAnotherSession } as unknown as Lix;
+
+	function Consumer() {
+		useAgentTurnCommitRanges("branch-strict");
+		return null;
+	}
+
+	const rendered = render(
+		createElement(
+			StrictMode,
+			null,
+			createElement(LixProvider, {
+				lix,
+				// oxlint-disable-next-line react/no-children-prop
+				children: createElement(Consumer),
+			}),
+		),
+	);
+	await waitFor(() => expect(openAnotherSession).toHaveBeenCalledTimes(1));
+	expect(branchLix.observe).toHaveBeenCalledTimes(1);
+	expect(closeObservation).not.toHaveBeenCalled();
+
+	rendered.unmount();
+	await waitFor(() => expect(closeObservation).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(closeSession).toHaveBeenCalledTimes(1));
+});
+
+test("agent turn range observer restarts after an unexpected end", async () => {
+	const firstNext = vi.fn().mockResolvedValue(undefined);
+	const liveNext = vi.fn(() => new Promise<undefined>(() => {}));
+	const closeFirst = vi.fn();
+	const closeLive = vi.fn();
+	const closeSession = vi.fn().mockResolvedValue(undefined);
+	const branchLix = {
+		observe: vi
+			.fn()
+			.mockReturnValueOnce({ next: firstNext, close: closeFirst })
+			.mockReturnValueOnce({ next: liveNext, close: closeLive }),
+		close: closeSession,
+	};
+	const openAnotherSession = vi.fn().mockResolvedValue(branchLix);
+	const lix = { openAnotherSession } as unknown as Lix;
+
+	function Consumer() {
+		useAgentTurnCommitRanges("branch-restart");
+		return null;
+	}
+
+	const rendered = render(
+		createElement(LixProvider, {
+			lix,
+			// oxlint-disable-next-line react/no-children-prop
+			children: createElement(Consumer),
+		}),
+	);
+	await waitFor(() => expect(openAnotherSession).toHaveBeenCalledTimes(2), {
+		timeout: 1_000,
+	});
+	expect(branchLix.observe).toHaveBeenCalledTimes(2);
+	expect(closeFirst).toHaveBeenCalledTimes(1);
+
+	rendered.unmount();
+	await waitFor(() => expect(closeLive).toHaveBeenCalledTimes(1));
+});
+
+test("agent turn range observer recovers when opening its branch session fails", async () => {
+	const next = vi.fn(() => new Promise<undefined>(() => {}));
+	const closeObservation = vi.fn();
+	const closeSession = vi.fn().mockResolvedValue(undefined);
+	const branchLix = {
+		observe: vi.fn(() => ({ next, close: closeObservation })),
+		close: closeSession,
+	};
+	const openAnotherSession = vi
+		.fn()
+		.mockRejectedValueOnce(new Error("temporary open failure"))
+		.mockResolvedValue(branchLix);
+	const lix = { openAnotherSession } as unknown as Lix;
+	const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+	function Consumer() {
+		useAgentTurnCommitRanges("branch-open-retry");
+		return null;
+	}
+
+	const rendered = render(
+		createElement(LixProvider, {
+			lix,
+			// oxlint-disable-next-line react/no-children-prop
+			children: createElement(Consumer),
+		}),
+	);
+	await waitFor(() => expect(openAnotherSession).toHaveBeenCalledTimes(2), {
+		timeout: 1_000,
+	});
+	expect(branchLix.observe).toHaveBeenCalledTimes(1);
+
+	rendered.unmount();
+	await waitFor(() => expect(closeObservation).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(closeSession).toHaveBeenCalledTimes(1));
+	warn.mockRestore();
+});
 
 describe("getWorkingChangeExternalWriteReview", () => {
 	test("reviews the file from the latest checkpoint to the active head", async () => {

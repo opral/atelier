@@ -2,6 +2,7 @@ import clsx from "clsx";
 import {
 	forwardRef,
 	useCallback,
+	useEffect,
 	useId,
 	useLayoutEffect,
 	useMemo,
@@ -111,6 +112,7 @@ export function PanelV2({
 	showTabBar = side === "central",
 	tabBarExtraContent,
 	customTabStrip,
+	contentVisible = true,
 }: PanelV2Props) {
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
@@ -135,6 +137,22 @@ export function PanelV2({
 
 	const hasViews = panel.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
+	const [mountedInstances, setMountedInstances] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	useEffect(() => {
+		if (
+			!contentVisible ||
+			!activeInstance ||
+			mountedInstances.has(activeInstance)
+		) {
+			return;
+		}
+		setMountedInstances((current) => {
+			if (current.has(activeInstance)) return current;
+			return new Set([...current, activeInstance]);
+		});
+	}, [activeInstance, contentVisible, mountedInstances]);
 	const availableViews = useMemo(
 		() => availableExtensionsForPanel(visibleExtensions, panel, side),
 		[panel, side, visibleExtensions],
@@ -453,11 +471,17 @@ export function PanelV2({
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
 						{panel.views.map((entry) => {
+							const isActive = activeInstance === entry.instance;
+							if (
+								!(contentVisible && isActive) &&
+								!mountedInstances.has(entry.instance)
+							) {
+								return null;
+							}
 							const view = resolveViewDefinition(entry.kind);
 							if (!view) return null;
 							const context = viewContexts.get(entry.instance);
 							if (!context) return null;
-							const isActive = activeInstance === entry.instance;
 							return (
 								<div
 									key={entry.instance}
@@ -515,6 +539,8 @@ export type PanelV2Props = {
 	readonly tabBarExtraContent?: ReactNode;
 	/** Host-rendered strip replacing the built-in tab row entirely. */
 	readonly customTabStrip?: ReactNode;
+	/** Defers a panel's first extension mount until its content is visible. */
+	readonly contentVisible?: boolean;
 };
 
 // Reference rows are regular-weight with muted icons; only the active row is

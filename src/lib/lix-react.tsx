@@ -59,6 +59,7 @@ type QueryCacheEntry<TRow> = {
 	execute: () => Promise<TRow[]>;
 	startObservation: (() => () => void) | undefined;
 	stopObservation: (() => void) | undefined;
+	releaseGeneration: number;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
@@ -97,7 +98,17 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
 	startObservation: undefined,
 	stopObservation: undefined,
+	releaseGeneration: 0,
 };
+
+export type QueryResult<TRow> =
+	| { readonly status: "pending"; readonly rows: readonly [] }
+	| { readonly status: "success"; readonly rows: readonly TRow[] }
+	| {
+			readonly status: "error";
+			readonly rows: readonly [];
+			readonly error: unknown;
+	  };
 
 export function useQuery<TRow>(
 	query: QueryFactory<TRow>,
@@ -186,6 +197,63 @@ export function useQuery<TRow>(
 	return snapshot.status === "success" ? snapshot.rows : use(entry.promise);
 }
 
+/**
+ * A commit-driven query for progressive UI.
+ *
+ * Unlike {@link useQuery}, this hook never suspends and never starts remote work
+ * during render. Live queries use the observer's authoritative first frame as
+ * their initial rows, avoiding the execute-then-observe duplicate scan.
+ */
+export function useQueryResult<TRow>(
+	query: QueryFactory<TRow>,
+	options: UseQueryOptions = {},
+): QueryResult<TRow> {
+	const lix = useLix();
+	const {
+		subscribe = true,
+		enabled = true,
+		reuseObservedResult = true,
+	} = options;
+	const builder = enabled ? query(lix) : undefined;
+	const compiled = builder?.compile();
+	const cacheKey =
+		enabled && compiled
+			? `${getLixInstanceId(lix)}:committed-${subscribe ? "sub" : "once"}:` +
+				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
+				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
+			: "disabled";
+	const entry =
+		enabled && builder && compiled
+			? getCommittedQueryCacheEntry({
+					cacheKey,
+					builder,
+					lix,
+					sql: compiled.sql,
+					parameters: compiled.parameters,
+					subscribe,
+					reuseObservedResult,
+				})
+			: (DISABLED_QUERY_ENTRY as QueryCacheEntry<TRow>);
+	const subscribeToSnapshot = useCallback(
+		(listener: () => void) => {
+			if (!enabled) return () => {};
+			return subscribeToQueryEntry(cacheKey, entry, listener);
+		},
+		[cacheKey, enabled, entry],
+	);
+	const getSnapshot = useCallback(() => entry.snapshot, [entry]);
+	const snapshot = useSyncExternalStore(
+		subscribeToSnapshot,
+		getSnapshot,
+		getSnapshot,
+	);
+	if (snapshot.status === "success") return snapshot;
+	if (snapshot.status === "error") {
+		return { status: "error", rows: [], error: snapshot.error };
+	}
+	return { status: "pending", rows: [] };
+}
+
 export const useQueryTakeFirst = <TResult,>(
 	query: QueryFactory<TResult>,
 	options: UseQueryOptions = {},
@@ -223,7 +291,9 @@ function getQueryCacheEntry<TRow>(
 		execute: () => builder.execute(),
 		startObservation: undefined,
 		stopObservation: undefined,
+		releaseGeneration: 0,
 	};
+	markQueryActivity("execute");
 	entry.promise = entry.execute().then(
 		(rows) => {
 			setQueryRows(entry, rows);
@@ -249,6 +319,61 @@ function getQueryCacheEntry<TRow>(
 	return entry;
 }
 
+function getCommittedQueryCacheEntry<TRow>(args: {
+	readonly cacheKey: string;
+	readonly builder: QueryLike<TRow>;
+	readonly lix: Lix;
+	readonly sql: string;
+	readonly parameters: ReadonlyArray<unknown>;
+	readonly subscribe: boolean;
+	readonly reuseObservedResult: boolean;
+}): QueryCacheEntry<TRow> {
+	const cached = queryCache.get(args.cacheKey) as
+		| QueryCacheEntry<TRow>
+		| undefined;
+	if (cached) {
+		cached.execute = () => args.builder.execute();
+		return cached;
+	}
+	const entry: QueryCacheEntry<TRow> = {
+		promise: Promise.resolve([]),
+		snapshot: { status: "pending" },
+		listeners: new Set(),
+		execute: () => args.builder.execute(),
+		startObservation: undefined,
+		stopObservation: undefined,
+		releaseGeneration: 0,
+	};
+	entry.startObservation = args.subscribe
+		? () =>
+				observeQueryEntry(
+					entry,
+					args.lix,
+					args.sql,
+					args.parameters,
+					args.reuseObservedResult,
+				)
+		: () => executeQueryEntryOnce(entry);
+	queryCache.set(args.cacheKey, entry);
+	return entry;
+}
+
+function executeQueryEntryOnce<TRow>(entry: QueryCacheEntry<TRow>): () => void {
+	let closed = false;
+	markQueryActivity("execute");
+	void entry.execute().then(
+		(rows) => {
+			if (!closed) setQueryRows(entry, rows);
+		},
+		(error: unknown) => {
+			if (!closed) setQueryError(entry, error);
+		},
+	);
+	return () => {
+		closed = true;
+	};
+}
+
 function observeQueryEntry<TRow>(
 	entry: QueryCacheEntry<TRow>,
 	lix: Lix,
@@ -257,6 +382,7 @@ function observeQueryEntry<TRow>(
 	reuseObservedResult: boolean,
 ): () => void {
 	let closed = false;
+	markQueryActivity("observe");
 	const events = lix.observe(sql, [...parameters] as SqlParam[]);
 
 	void (async () => {
@@ -266,7 +392,10 @@ function observeQueryEntry<TRow>(
 				if (closed || event === undefined) break;
 				const nextRows = reuseObservedResult
 					? queryResultToRows<TRow>(event.result)
-					: await entry.execute();
+					: await (async () => {
+							markQueryActivity("execute");
+							return entry.execute();
+						})();
 				if (closed) break;
 				setQueryRows(entry, nextRows);
 			}
@@ -282,29 +411,44 @@ function observeQueryEntry<TRow>(
 	};
 }
 
+function markQueryActivity(kind: "execute" | "observe"): void {
+	if (typeof performance === "undefined") return;
+	const name = `atelier:query:${kind}`;
+	if (performance.getEntriesByName(name).length >= 128) return;
+	performance.mark(name);
+}
+
 function subscribeToQueryEntry<TRow>(
 	cacheKey: string,
 	entry: QueryCacheEntry<TRow>,
 	listener: () => void,
 ): () => void {
+	entry.releaseGeneration += 1;
 	entry.listeners.add(listener);
-	if (entry.listeners.size === 1) {
+	if (entry.listeners.size === 1 && entry.stopObservation === undefined) {
 		entry.stopObservation = entry.startObservation?.();
 	}
 	return () => {
 		entry.listeners.delete(listener);
-		if (entry.listeners.size === 0) {
+		if (entry.listeners.size !== 0) return;
+		const releaseGeneration = ++entry.releaseGeneration;
+		queueMicrotask(() => {
+			if (
+				entry.listeners.size !== 0 ||
+				entry.releaseGeneration !== releaseGeneration
+			) {
+				return;
+			}
 			entry.stopObservation?.();
 			entry.stopObservation = undefined;
-		}
-		if (
-			entry.snapshot.status === "error" &&
-			!isPermanentQueryError(entry.snapshot.error) &&
-			entry.listeners.size === 0 &&
-			queryCache.get(cacheKey) === entry
-		) {
-			queryCache.delete(cacheKey);
-		}
+			if (
+				entry.snapshot.status === "error" &&
+				!isPermanentQueryError(entry.snapshot.error) &&
+				queryCache.get(cacheKey) === entry
+			) {
+				queryCache.delete(cacheKey);
+			}
+		});
 	};
 }
 

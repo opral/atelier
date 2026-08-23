@@ -1,6 +1,5 @@
 import {
 	forwardRef,
-	Suspense,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -24,7 +23,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useLix, useQuery } from "@/lib/lix-react";
+import { useLix, useQueryResult } from "@/lib/lix-react";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
@@ -215,102 +214,55 @@ export function FilesView({ context }: FilesViewProps) {
 				: context,
 		[bindChildDraftHandler, context],
 	);
-	return (
-		<Suspense
-			fallback={
-				<div
-					role="status"
-					className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
-					data-atelier-extension-suspended=""
-				>
-					Loading Files…
-				</div>
-			}
-		>
-			<FilesViewLoaded context={childContext} />
-		</Suspense>
-	);
+	return <FilesViewLoaded context={childContext} />;
 }
 
 function FilesViewLoaded({ context }: FilesViewProps) {
 	const lix = useLix();
-	const directories = useQuery<FilesystemEntryRow>(
+	const directories = useQueryResult<FilesystemEntryRow>(
 		(queryLix) => selectFilesystemDirectories(queryLix),
 		{ reuseObservedResult: false },
 	);
-	return (
-		<FilesViewWithFiles context={context} lix={lix} directories={directories} />
-	);
-}
-
-function FilesViewWithFiles({
-	context,
-	lix,
-	directories,
-}: FilesViewProps & {
-	readonly lix: Lix;
-	readonly directories: FilesystemEntryRow[];
-}) {
-	const files = useQuery<FilesystemEntryRow>(
+	const files = useQueryResult<FilesystemEntryRow>(
 		(queryLix) => selectFilesystemFiles(queryLix),
 		{ reuseObservedResult: false },
 	);
-	return (
-		<FilesViewWithWorkingChanges
-			context={context}
-			lix={lix}
-			entries={[...directories, ...files]}
-		/>
-	);
-}
-
-function FilesViewWithWorkingChanges({
-	context,
-	lix,
-	entries,
-}: FilesViewProps & {
-	readonly lix: Lix;
-	readonly entries: FilesystemEntryRow[];
-}) {
 	const reviewWorkingChanges =
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
-	const workingChanges = useQuery(
+	const workingChanges = useQueryResult(
 		(queryLix) => selectWorkingChanges(queryLix),
 		{ enabled: reviewWorkingChanges },
 	);
-	return (
-		<FilesViewWithFileWorkingChanges
-			context={context}
-			lix={lix}
-			entries={entries}
-			workingChanges={workingChanges}
-		/>
-	);
-}
-
-function FilesViewWithFileWorkingChanges({
-	context,
-	lix,
-	entries,
-	workingChanges,
-}: FilesViewProps & {
-	readonly lix: Lix;
-	readonly entries: FilesystemEntryRow[];
-	readonly workingChanges: WorkingChangeRow[];
-}) {
-	const reviewWorkingChanges =
-		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
-	const fileWorkingChanges = useQuery(
+	const fileWorkingChanges = useQueryResult(
 		(queryLix) => selectFileWorkingChanges(queryLix),
 		{ enabled: reviewWorkingChanges },
 	);
+	for (const result of [
+		directories,
+		files,
+		workingChanges,
+		fileWorkingChanges,
+	]) {
+		if (result.status === "error") throw result.error;
+	}
+	if (directories.status === "pending" || files.status === "pending") {
+		return (
+			<div
+				role="status"
+				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
+				data-atelier-extension-suspended=""
+			>
+				Loading Files…
+			</div>
+		);
+	}
 	return (
 		<FilesViewContent
 			context={context}
 			lix={lix}
-			entries={entries}
-			workingChanges={workingChanges}
-			fileWorkingChanges={fileWorkingChanges}
+			entries={[...directories.rows, ...files.rows]}
+			workingChanges={workingChanges.rows as WorkingChangeRow[]}
+			fileWorkingChanges={fileWorkingChanges.rows as FileWorkingChangeRow[]}
 		/>
 	);
 }
@@ -379,6 +331,7 @@ function FilesViewContent({
 		context?.activeBranchId ?? "",
 		context?.resolvedReviewIds ?? [],
 		context?.reviewRangeSessionId,
+		context?.reviewModeActive === true && context.reviewWorkingChanges !== true,
 	);
 	const workingChangePaths = useMemo(() => {
 		return new Set(
@@ -1541,6 +1494,7 @@ function usePendingExternalWriteReviewPaths(
 	activeBranchId: string,
 	resolvedReviewIds: readonly string[],
 	reviewRangeSessionId?: string,
+	enabled = true,
 ): ReadonlySet<string> {
 	const reviewableFiles = useMemo(
 		() => collectReviewableTreeFiles(nodes),
@@ -1549,6 +1503,7 @@ function usePendingExternalWriteReviewPaths(
 	const { rangeValues, ranges } = useAgentTurnCommitRanges(
 		activeBranchId,
 		reviewRangeSessionId,
+		enabled,
 	);
 	const reviewableFilesKey = useMemo(
 		() =>
@@ -1562,7 +1517,8 @@ function usePendingExternalWriteReviewPaths(
 		[...resolvedReviewIds].sort(),
 		reviewableFilesKey,
 	]);
-	const shouldResolve = reviewableFiles.length > 0 && ranges.length > 0;
+	const shouldResolve =
+		enabled && reviewableFiles.length > 0 && ranges.length > 0;
 	const [resolved, setResolved] = useState<ResolvedPendingReviewPaths | null>(
 		null,
 	);

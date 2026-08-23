@@ -1087,19 +1087,15 @@ describe("agent turn review navigation", () => {
 			).toBeVisible();
 
 			const originalExecute = lix.execute.bind(lix);
-			let historyReadCount = 0;
 			const historyReadGate = new Promise<void>((resolve) => {
 				releaseHistoryReads = resolve;
 			});
-			const _execute = vi
-				.spyOn(lix, "execute")
-				.mockImplementation(async (statement, params) => {
-					if (String(statement).includes("lix_history('lix_file'")) {
-						historyReadCount += 1;
-						await historyReadGate;
-					}
-					return originalExecute(statement, params);
-				});
+			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
+				if (String(statement).includes("lix_history('lix_file'")) {
+					await historyReadGate;
+				}
+				return originalExecute(statement, params);
+			});
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			await waitFor(() => {
 				expect(
@@ -1112,9 +1108,8 @@ describe("agent turn review navigation", () => {
 					await reviewStatusStore.loadResolvedReviewIds(branchId),
 				).toHaveLength(1);
 			});
-			expect(historyReadCount).toBeGreaterThan(0);
-			// History consumers may already be reactive while the action runs, but a
-			// blocked history read is not an input to checkpoint creation.
+			// Zero eager history reads is ideal. If another mounted consumer does issue
+			// one, the gate above proves it still is not an input to checkpoint creation.
 			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
 		} finally {
 			releaseHistoryReads();

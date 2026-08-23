@@ -1,8 +1,8 @@
-import { Suspense, type ReactNode } from "react";
+import { StrictMode, Suspense, type ReactNode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { AtelierErrorBoundary } from "../atelier-error-boundary";
-import { LixProvider, useQuery } from "./lix-react";
+import { LixProvider, useQuery, useQueryResult } from "./lix-react";
 import { createLixProtocolSessionGoneError } from "./lix-session-error";
 import type { Lix, ObserveEvent } from "@lix-js/sdk";
 
@@ -138,6 +138,105 @@ test("useQuery accepts the initial observe snapshot as authoritative", async () 
 	expect(execute).toHaveBeenCalledTimes(1);
 });
 
+test("useQueryResult starts after commit and uses one observer snapshot as initial data", async () => {
+	const stream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => stream),
+	} as unknown as Lix;
+	const execute = vi.fn().mockResolvedValue([{ value: "duplicate" }]);
+
+	function Probe() {
+		const result = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM committed_observer_boot",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return (
+			<div data-testid="committed-value">
+				{result.status === "pending" ? "pending" : result.rows[0]?.value}
+			</div>
+		);
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Probe />
+		</LixProvider>,
+	);
+	expect(screen.getByTestId("committed-value")).toHaveTextContent("pending");
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
+	expect(execute).not.toHaveBeenCalled();
+
+	await act(async () => stream.emit(eventWithValue(0, 0, "first-frame")));
+	await waitFor(() =>
+		expect(screen.getByTestId("committed-value")).toHaveTextContent(
+			"first-frame",
+		),
+	);
+	expect(execute).not.toHaveBeenCalled();
+});
+
+test("useQueryResult starts independent startup observers without a waterfall", async () => {
+	const first = createObserveStream();
+	const second = createObserveStream();
+	const lix = {
+		observe: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second),
+	} as unknown as Lix;
+	const execute = vi.fn();
+
+	function Probe() {
+		const one = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({ sql: "SELECT value FROM startup_one", parameters: [] }),
+			execute,
+		}));
+		const two = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({ sql: "SELECT value FROM startup_two", parameters: [] }),
+			execute,
+		}));
+		return <div>{`${one.status}:${two.status}`}</div>;
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Probe />
+		</LixProvider>,
+	);
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(2));
+	expect(first.next).toHaveBeenCalledTimes(1);
+	expect(second.next).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
+});
+
+test("useQueryResult keeps one observer across the StrictMode effect reconnect", async () => {
+	const stream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => stream),
+	} as unknown as Lix;
+
+	function Probe() {
+		useQueryResult<{ value: string }>(() => ({
+			compile: () => ({ sql: "SELECT value FROM strict_boot", parameters: [] }),
+			execute: vi.fn(),
+		}));
+		return null;
+	}
+
+	const rendered = render(
+		<StrictMode>
+			<LixProvider lix={lix}>
+				<Probe />
+			</LixProvider>
+		</StrictMode>,
+	);
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
+	expect(stream.close).not.toHaveBeenCalled();
+
+	rendered.unmount();
+	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
+});
+
 test("useQuery publishes observed rows to every consumer of the cached query", async () => {
 	const stream = createObserveStream();
 	const lix = {
@@ -212,7 +311,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(execute).toHaveBeenCalledTimes(1);
 
 	view?.unmount();
-	expect(stream.close).toHaveBeenCalledTimes(1);
+	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
 });
 
 test("stopped observers cannot overwrite a restarted cache entry with queued events", async () => {
@@ -508,7 +607,7 @@ test("useQuery starts a query when it becomes enabled", async () => {
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	view.unmount();
-	expect(close).toHaveBeenCalledTimes(1);
+	await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
 });
 
 test("useQuery retains a permanent initial query error across remounts", async () => {

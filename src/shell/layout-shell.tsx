@@ -26,7 +26,7 @@ import {
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
-import { useLix, useQuery } from "@/lib/lix-react";
+import { useLix, useQueryResult } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
@@ -460,6 +460,7 @@ const reconcilePanelsWithEnvironment = ({
 	panels,
 	currentFileIds,
 	currentFilePathsById,
+	preserveUnknownFiles,
 	resolveCurrentFileView,
 	extensionMap,
 	preserveUnknownExtensionKinds,
@@ -468,6 +469,7 @@ const reconcilePanelsWithEnvironment = ({
 	readonly panels: Record<PanelSide, PanelState>;
 	readonly currentFileIds: ReadonlySet<string>;
 	readonly currentFilePathsById: ReadonlyMap<string, string>;
+	readonly preserveUnknownFiles: boolean;
 	readonly resolveCurrentFileView: (args: {
 		readonly view: ExtensionInstance;
 		readonly fileId: string;
@@ -477,12 +479,15 @@ const reconcilePanelsWithEnvironment = ({
 	readonly preserveUnknownExtensionKinds: boolean;
 	readonly centralBehavior: CentralSlotBehavior;
 }): Record<PanelSide, PanelState> => {
-	const currentPanels = reconcileCurrentFileViews({
-		panels: sanitizePanels(panels, centralBehavior),
-		currentFileIds,
-		currentFilePathsById,
-		resolveCurrentFileView,
-	});
+	const sanitizedPanels = sanitizePanels(panels, centralBehavior);
+	const currentPanels = preserveUnknownFiles
+		? sanitizedPanels
+		: reconcileCurrentFileViews({
+				panels: sanitizedPanels,
+				currentFileIds,
+				currentFilePathsById,
+				resolveCurrentFileView,
+			});
 	const options = {
 		preserveUnknownKinds: preserveUnknownExtensionKinds,
 	};
@@ -1243,29 +1248,21 @@ function AgentTurnReviewAutoReveal({
 }
 
 function LayoutShellLoadedContent(props: LayoutShellLoadedContentProps) {
-	const currentFileRows = useQuery<{ id: string; path: string }>((queryLix) =>
-		qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
+	const currentFiles = useQueryResult<{ id: string; path: string }>(
+		(queryLix) => qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
 	);
-	return (
-		<LayoutShellWithInstalledExtensions
-			{...props}
-			currentFileRows={currentFileRows}
-		/>
-	);
-}
-
-function LayoutShellWithInstalledExtensions(
-	props: LayoutShellLoadedContentProps & {
-		readonly currentFileRows: readonly { id: string; path: string }[];
-	},
-) {
-	const installedExtensionRows = useQuery<InstalledExtensionFileRow>(
+	const installedExtensions = useQueryResult<InstalledExtensionFileRow>(
 		installedExtensionFilesQuery,
 	);
+	if (currentFiles.status === "error") throw currentFiles.error;
+	if (installedExtensions.status === "error") throw installedExtensions.error;
 	return (
 		<LayoutShellLoadedContentResolved
 			{...props}
-			installedExtensionRows={installedExtensionRows}
+			currentFileRows={currentFiles.rows}
+			currentFilesReady={currentFiles.status === "success"}
+			installedExtensionRows={installedExtensions.rows}
+			installedExtensionsReady={installedExtensions.status === "success"}
 		/>
 	);
 }
@@ -1287,10 +1284,14 @@ function LayoutShellLoadedContentResolved({
 	defaultOpenPanels,
 	onEvent,
 	currentFileRows,
+	currentFilesReady,
 	installedExtensionRows,
+	installedExtensionsReady,
 }: LayoutShellLoadedContentProps & {
 	readonly currentFileRows: readonly { id: string; path: string }[];
+	readonly currentFilesReady: boolean;
 	readonly installedExtensionRows: readonly InstalledExtensionFileRow[];
+	readonly installedExtensionsReady: boolean;
 }) {
 	const effectiveAtelierInstance = atelierInstance;
 	const emitEvent = useCallback(
@@ -1300,6 +1301,7 @@ function LayoutShellLoadedContentResolved({
 		[onEvent],
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
+	const backgroundReviewWorkEnabled = useAfterInitialIdle();
 	const preferencesFor = useCallback(
 		(extensionId: string): AtelierExtensionPreferences => ({
 			get: (key) => extensionPreferences?.[extensionId]?.[key],
@@ -1311,7 +1313,11 @@ function LayoutShellLoadedContentResolved({
 	const isHostReadOnly = Boolean(configuration.readOnly);
 	const reviewRangeSessionId = configuration.reviewRangeSessionId;
 	const { rangeValues: agentTurnRangeValues, ranges: agentTurnRanges } =
-		useAgentTurnCommitRanges(activeBranchId, reviewRangeSessionId);
+		useAgentTurnCommitRanges(
+			activeBranchId,
+			reviewRangeSessionId,
+			backgroundReviewWorkEnabled,
+		);
 	const currentFileIds = useMemo(
 		() => new Set(currentFileRows.map((row) => String(row.id))),
 		[currentFileRows],
@@ -1342,7 +1348,7 @@ function LayoutShellLoadedContentResolved({
 			? installedExtensionLoad.status
 			: "loading";
 	const preserveUnknownExtensionKinds =
-		installedExtensionLoadStatus !== "ready";
+		!installedExtensionsReady || installedExtensionLoadStatus !== "ready";
 	const installedExtensionsByManifestRef = useRef(
 		new Map<string, ExtensionDefinition>(),
 	);
@@ -1414,6 +1420,7 @@ function LayoutShellLoadedContentResolved({
 				panels: state.panels,
 				currentFileIds: getCurrentFileIdsForReconciliation(),
 				currentFilePathsById,
+				preserveUnknownFiles: !currentFilesReady,
 				resolveCurrentFileView,
 				extensionMap,
 				preserveUnknownExtensionKinds,
@@ -1443,6 +1450,7 @@ function LayoutShellLoadedContentResolved({
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
 			currentFilePathsById,
+			currentFilesReady,
 			preserveUnknownExtensionKinds,
 			resolveCurrentFileView,
 		],
@@ -1458,6 +1466,27 @@ function LayoutShellLoadedContentResolved({
 	const focusedPanel = effectiveWorkspace.focusedPanel;
 	const isLeftCollapsed = panelSizes.left <= MIN_VISIBLE_PANEL_SIZE;
 	const isRightCollapsed = panelSizes.right <= MIN_VISIBLE_PANEL_SIZE;
+	const [sidePanelRevealIntent, setSidePanelRevealIntent] = useState({
+		left: false,
+		right: false,
+	});
+	useEffect(() => {
+		if (
+			(!sidePanelRevealIntent.left || isLeftCollapsed) &&
+			(!sidePanelRevealIntent.right || isRightCollapsed)
+		) {
+			return;
+		}
+		setSidePanelRevealIntent((current) => ({
+			left: current.left && isLeftCollapsed,
+			right: current.right && isRightCollapsed,
+		}));
+	}, [
+		isLeftCollapsed,
+		isRightCollapsed,
+		sidePanelRevealIntent.left,
+		sidePanelRevealIntent.right,
+	]);
 	const [workspaceUiIntent, setWorkspaceUiIntent] = useState<{
 		collapseSide: Exclude<PanelSide, "central"> | null;
 		focusCentral: boolean;
@@ -1976,6 +2005,7 @@ function LayoutShellLoadedContentResolved({
 	}, [viewHostRegistry, activeInstances]);
 
 	useEffect(() => {
+		if (!installedExtensionsReady) return;
 		let cancelled = false;
 		void loadInstalledExtensionsFromRows(installedExtensionRows)
 			.then((candidates) => {
@@ -2008,7 +2038,11 @@ function LayoutShellLoadedContentResolved({
 		return () => {
 			cancelled = true;
 		};
-	}, [installedExtensionRows, replaceInstalledExtensions]);
+	}, [
+		installedExtensionRows,
+		installedExtensionsReady,
+		replaceInstalledExtensions,
+	]);
 
 	const updateUiState = useCallback(
 		(reducer: (current: AtelierUiState) => AtelierUiState) => {
@@ -2075,12 +2109,14 @@ function LayoutShellLoadedContentResolved({
 
 	const reconcilePanelForUpdate = useCallback(
 		(side: PanelSide, panel: PanelState): PanelState => {
-			const currentPanel = reconcileCurrentFileViewPanel(
-				panel,
-				getCurrentFileIdsForReconciliation(),
-				currentFilePathsById,
-				resolveCurrentFileView,
-			);
+			const currentPanel = currentFilesReady
+				? reconcileCurrentFileViewPanel(
+						panel,
+						getCurrentFileIdsForReconciliation(),
+						currentFilePathsById,
+						resolveCurrentFileView,
+					)
+				: panel;
 			return reconcileAndNormalizePanel(
 				side,
 				currentPanel,
@@ -2091,6 +2127,7 @@ function LayoutShellLoadedContentResolved({
 		},
 		[
 			centralBehavior,
+			currentFilesReady,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
 			currentFilePathsById,
@@ -2144,7 +2181,10 @@ function LayoutShellLoadedContentResolved({
 			const panelRef =
 				side === "left" ? leftPanelRef.current : rightPanelRef.current;
 			const isCollapsed = side === "left" ? isLeftCollapsed : isRightCollapsed;
-			if (!panelRef || !isCollapsed) return;
+			if (!isCollapsed) return;
+			setSidePanelRevealIntent((current) =>
+				current[side] ? current : { ...current, [side]: true },
+			);
 			const initialSize = side === "left" ? panelSizes.left : panelSizes.right;
 			const lastSize =
 				side === "left"
@@ -2162,7 +2202,7 @@ function LayoutShellLoadedContentResolved({
 				targetSize = Math.max(targetSize, MIN_UNCOLLAPSED_RIGHT_SIZE);
 			}
 			updateSidePanelSize(side, targetSize);
-			panelRef.resize(`${targetSize}%`);
+			panelRef?.resize(`${targetSize}%`);
 		},
 		[
 			isLeftCollapsed,
@@ -4163,6 +4203,7 @@ function LayoutShellLoadedContentResolved({
 			updateSidePanelSize("left", target);
 			panel.resize(`${target}%`);
 		} else {
+			setSidePanelRevealIntent((current) => ({ ...current, left: false }));
 			updateSidePanelSize("left", 0);
 			panel.collapse();
 		}
@@ -4184,6 +4225,7 @@ function LayoutShellLoadedContentResolved({
 			updateSidePanelSize("right", target);
 			panel.resize(`${target}%`);
 		} else {
+			setSidePanelRevealIntent((current) => ({ ...current, right: false }));
 			updateSidePanelSize("right", 0);
 			panel.collapse();
 		}
@@ -4231,7 +4273,7 @@ function LayoutShellLoadedContentResolved({
 				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
-				{autoAcceptAgentChanges ? null : (
+				{autoAcceptAgentChanges || !backgroundReviewWorkEnabled ? null : (
 					<Suspense fallback={null}>
 						<AgentTurnReviewAutoReveal
 							lix={lix}
@@ -4283,6 +4325,7 @@ function LayoutShellLoadedContentResolved({
 								title="Navigator"
 								panel={leftPanel}
 								isFocused={!isLeftCollapsed && focusedPanel === "left"}
+								contentVisible={!isLeftCollapsed || sidePanelRevealIntent.left}
 								onFocusPanel={focusPanel}
 								onSelectView={handleSelectLeftView}
 								onAddView={addViewOnLeft}
@@ -4360,6 +4403,9 @@ function LayoutShellLoadedContentResolved({
 								title="Secondary"
 								panel={rightPanel}
 								isFocused={!isRightCollapsed && focusedPanel === "right"}
+								contentVisible={
+									!isRightCollapsed || sidePanelRevealIntent.right
+								}
 								onFocusPanel={focusPanel}
 								onSelectView={handleSelectRightView}
 								onAddView={addViewOnRight}
@@ -4422,4 +4468,31 @@ function LayoutShellLoadedContentResolved({
 			</DragOverlay>
 		</DndContext>
 	);
+}
+
+function useAfterInitialIdle(): boolean {
+	const [ready, setReady] = useState(false);
+	useEffect(() => {
+		let idleCallback = 0;
+		let timeout = 0;
+		let secondFrame = 0;
+		const firstFrame = requestAnimationFrame(() => {
+			secondFrame = requestAnimationFrame(() => {
+				if (typeof requestIdleCallback === "function") {
+					idleCallback = requestIdleCallback(() => setReady(true), {
+						timeout: 1_500,
+					});
+				} else {
+					timeout = window.setTimeout(() => setReady(true), 0);
+				}
+			});
+		});
+		return () => {
+			cancelAnimationFrame(firstFrame);
+			cancelAnimationFrame(secondFrame);
+			if (idleCallback) cancelIdleCallback(idleCallback);
+			if (timeout) window.clearTimeout(timeout);
+		};
+	}, []);
+	return ready;
 }

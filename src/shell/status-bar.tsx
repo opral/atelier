@@ -1,6 +1,6 @@
-import { Suspense, type JSX, type ReactNode } from "react";
+import { type JSX, type ReactNode } from "react";
 import { Flag } from "lucide-react";
-import { useQuery } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { selectLatestCheckpoint, selectWorkingChangeCount } from "@/queries";
 
 // Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
@@ -42,28 +42,21 @@ export function CheckpointStatusBar({
 	readonly onOpenWorkingChanges?: () => void;
 	readonly onOpenHistory?: () => void;
 }): JSX.Element {
-	const workingChangeCount = useQuery((queryLix) =>
+	const workingChangeCount = useQueryResult((queryLix) =>
 		selectWorkingChangeCount(queryLix),
 	);
-	const changeCount = workingChangeCount[0]?.change_count ?? 0;
-	const fileCount = workingChangeCount[0]?.file_count ?? 0;
+	if (workingChangeCount.status === "error") throw workingChangeCount.error;
+	const workingRow = workingChangeCount.rows[0];
+	const changeCount = workingRow?.change_count ?? 0;
+	const fileCount = workingRow?.file_count ?? 0;
 	const workingCountLabel =
 		fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
 
 	const historyStatus =
-		changeCount === 0 ? (
-			<Suspense
-				fallback={
-					<CheckpointStatus
-						statusLabel={LATEST_CHECKPOINT_TITLE}
-						onActivate={onOpenHistory}
-					/>
-				}
-			>
-				<CleanCheckpointStatus onOpenHistory={onOpenHistory} />
-			</Suspense>
+		workingChangeCount.status === "pending" ? null : changeCount === 0 ? (
+			<CleanCheckpointStatus onOpenHistory={onOpenHistory} />
 		) : (
 			<CheckpointStatus
 				statusLabel={`${workingCountLabel} since checkpoint`}
@@ -138,11 +131,14 @@ function CleanCheckpointStatus({
 }: {
 	readonly onOpenHistory?: () => void;
 }): JSX.Element {
-	const checkpoints = useQuery((lix) => selectLatestCheckpoint(lix));
-	const latestCheckpoint = checkpoints[0];
+	const checkpoints = useQueryResult((lix) => selectLatestCheckpoint(lix));
+	if (checkpoints.status === "error") throw checkpoints.error;
+	const latestCheckpoint = checkpoints.rows[0];
 	const statusLabel = latestCheckpoint
 		? LATEST_CHECKPOINT_TITLE
-		: "No checkpoints";
+		: checkpoints.status === "pending"
+			? LATEST_CHECKPOINT_TITLE
+			: "No checkpoints";
 
 	return (
 		<CheckpointStatus statusLabel={statusLabel} onActivate={onOpenHistory} />

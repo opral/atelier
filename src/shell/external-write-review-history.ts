@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import type { Lix } from "@lix-js/sdk";
 import { useLix, useQuery } from "@/lib/lix-react";
 import {
@@ -226,6 +232,7 @@ export async function getPendingExternalWriteReviews(
 export function useAgentTurnCommitRanges(
 	activeBranchId: string,
 	reviewRangeSessionId?: string,
+	enabled = true,
 ): {
 	readonly rangeValues: readonly unknown[];
 	readonly ranges: readonly AgentTurnCommitRange[];
@@ -238,84 +245,19 @@ export function useAgentTurnCommitRanges(
 		};
 	} | null>(null);
 	const lix = useLix();
-	const [observedRanges, setObservedRanges] = useState<{
-		readonly branchId: string;
-		readonly values: readonly unknown[];
-	}>({ branchId: "", values: [] });
-
-	useEffect(() => {
-		if (activeBranchId.length === 0) return;
-		let cancelled = false;
-		let closeObservation: (() => void) | undefined;
-		let closeSession: (() => Promise<void>) | undefined;
-		void (async () => {
-			const session = await openLixBranchSession(lix, activeBranchId);
-			if (cancelled) {
-				if (session.owned) await session.lix.close();
-				return;
-			}
-			let sessionOpen = session.owned;
-			const closeCurrentSession = async () => {
-				if (!sessionOpen) return;
-				sessionOpen = false;
-				await session.lix.close();
-			};
-			closeSession = closeCurrentSession;
-			try {
-				const events = session.lix.observe(
-					"SELECT value FROM lix_key_value WHERE lixcol_file_id IS NULL AND key >= $1 AND key < $2",
-					[
-						AGENT_TURN_COMMIT_RANGE_KEY,
-						AGENT_TURN_COMMIT_RANGE_KEY_UPPER_BOUND,
-					],
-				);
-				let observationOpen = true;
-				const closeCurrentObservation = () => {
-					if (!observationOpen) return;
-					observationOpen = false;
-					events.close();
-				};
-				closeObservation = closeCurrentObservation;
-				try {
-					let receivedSnapshot = false;
-					for (;;) {
-						if (cancelled) break;
-						const event = await events.next();
-						if (cancelled || event === undefined) break;
-						// The first observation snapshot can lag a just-opened SDK session.
-						// Pin it with one direct read, then consume advancing snapshots.
-						const values = receivedSnapshot
-							? event.result.rows.map((row) => row.get("value"))
-							: await readAgentTurnCommitRangeValues(session.lix);
-						receivedSnapshot = true;
-						if (!cancelled) {
-							setObservedRanges({ branchId: activeBranchId, values });
-						}
-					}
-				} finally {
-					closeCurrentObservation();
-					closeObservation = undefined;
-				}
-			} finally {
-				await closeCurrentSession();
-				closeSession = undefined;
-			}
-		})().catch((error: unknown) => {
-			if (cancelled) return;
-			console.warn("[agent-turn-review] failed to observe ranges", error);
-			setObservedRanges({ branchId: activeBranchId, values: [] });
-		});
-		return () => {
-			cancelled = true;
-			closeObservation?.();
-			void closeSession?.();
-		};
-	}, [activeBranchId, lix]);
+	const store =
+		enabled && activeBranchId.length > 0
+			? getAgentTurnRangeStore(lix, activeBranchId)
+			: DISABLED_AGENT_TURN_RANGE_STORE;
+	const observedRanges = useSyncExternalStore(
+		store.subscribe,
+		store.getSnapshot,
+		store.getSnapshot,
+	);
 
 	// The branch key prevents the previous session's cache from being rendered
 	// while a replacement observation is opening.
-	const storedRangeValues =
-		observedRanges.branchId === activeBranchId ? observedRanges.values : [];
+	const storedRangeValues = observedRanges.values;
 	const storedRanges = agentTurnCommitRangesFromValues(storedRangeValues);
 	const ranges =
 		reviewRangeSessionId === undefined
@@ -336,6 +278,180 @@ export function useAgentTurnCommitRanges(
 	return resultRef.current.value;
 }
 
+type AgentTurnRangeStoreSnapshot = {
+	readonly values: readonly unknown[];
+};
+
+type AgentTurnRangeStore = {
+	readonly subscribe: (listener: () => void) => () => void;
+	readonly getSnapshot: () => AgentTurnRangeStoreSnapshot;
+};
+
+const EMPTY_AGENT_TURN_RANGE_SNAPSHOT: AgentTurnRangeStoreSnapshot = {
+	values: [],
+};
+const DISABLED_AGENT_TURN_RANGE_STORE: AgentTurnRangeStore = {
+	subscribe: () => () => {},
+	getSnapshot: () => EMPTY_AGENT_TURN_RANGE_SNAPSHOT,
+};
+const agentTurnRangeStores = new WeakMap<
+	Lix,
+	Map<string, AgentTurnRangeStore>
+>();
+
+function getAgentTurnRangeStore(
+	lix: Lix,
+	branchId: string,
+): AgentTurnRangeStore {
+	let byBranch = agentTurnRangeStores.get(lix);
+	if (!byBranch) {
+		byBranch = new Map();
+		agentTurnRangeStores.set(lix, byBranch);
+	}
+	const cached = byBranch.get(branchId);
+	if (cached) return cached;
+
+	let snapshot = EMPTY_AGENT_TURN_RANGE_SNAPSHOT;
+	const listeners = new Set<() => void>();
+	let generation = 0;
+	let releaseGeneration = 0;
+	let running = false;
+	let restartTimer: ReturnType<typeof setTimeout> | undefined;
+	let restartDelayMs = 250;
+	let stopCurrent: (() => void) | undefined;
+	const publish = (values: readonly unknown[]) => {
+		snapshot = { values };
+		for (const listener of listeners) listener();
+	};
+	const start = () => {
+		if (running) return;
+		if (restartTimer !== undefined) {
+			clearTimeout(restartTimer);
+			restartTimer = undefined;
+		}
+		running = true;
+		const activeGeneration = ++generation;
+		let cancelled = false;
+		let closeObservation: (() => void) | undefined;
+		let closeSession: (() => Promise<void>) | undefined;
+		const closeObservationSafely = () => {
+			try {
+				closeObservation?.();
+			} catch (error) {
+				console.warn("[agent-turn-review] failed to close observation", error);
+			}
+		};
+		const closeSessionSafely = async () => {
+			try {
+				await closeSession?.();
+			} catch (error) {
+				console.warn("[agent-turn-review] failed to close session", error);
+			}
+		};
+		const scheduleRestart = () => {
+			if (cancelled || listeners.size === 0 || restartTimer !== undefined)
+				return;
+			const delay = restartDelayMs;
+			restartDelayMs = Math.min(restartDelayMs * 2, 4_000);
+			restartTimer = setTimeout(() => {
+				restartTimer = undefined;
+				if (listeners.size > 0 && !running) start();
+			}, delay);
+		};
+		stopCurrent = () => {
+			if (cancelled) return;
+			cancelled = true;
+			running = false;
+			if (restartTimer !== undefined) {
+				clearTimeout(restartTimer);
+				restartTimer = undefined;
+			}
+			closeObservationSafely();
+			void closeSessionSafely();
+		};
+		void (async () => {
+			try {
+				const session = await openLixBranchSession(lix, branchId);
+				let sessionOpen = session.owned;
+				closeSession = async () => {
+					if (!sessionOpen) return;
+					sessionOpen = false;
+					await session.lix.close();
+				};
+				if (cancelled || activeGeneration !== generation) return;
+				const events = session.lix.observe(
+					"SELECT value FROM lix_key_value WHERE lixcol_file_id IS NULL AND key >= $1 AND key < $2",
+					[
+						AGENT_TURN_COMMIT_RANGE_KEY,
+						AGENT_TURN_COMMIT_RANGE_KEY_UPPER_BOUND,
+					],
+				);
+				let observationOpen = true;
+				closeObservation = () => {
+					if (!observationOpen) return;
+					observationOpen = false;
+					events.close();
+				};
+				let receivedSnapshot = false;
+				for (;;) {
+					const event = await events.next();
+					if (
+						cancelled ||
+						activeGeneration !== generation ||
+						event === undefined
+					) {
+						break;
+					}
+					const values = receivedSnapshot
+						? event.result.rows.map((row) => row.get("value"))
+						: await readAgentTurnCommitRangeValues(session.lix);
+					receivedSnapshot = true;
+					restartDelayMs = 250;
+					if (!cancelled && activeGeneration === generation) publish(values);
+				}
+			} catch (error) {
+				if (!cancelled && activeGeneration === generation) {
+					console.warn("[agent-turn-review] failed to observe ranges", error);
+				}
+			} finally {
+				closeObservationSafely();
+				await closeSessionSafely();
+				if (activeGeneration === generation) {
+					running = false;
+					stopCurrent = undefined;
+					scheduleRestart();
+				}
+			}
+		})();
+	};
+	const store: AgentTurnRangeStore = {
+		subscribe: (listener) => {
+			releaseGeneration += 1;
+			listeners.add(listener);
+			if (!running) start();
+			return () => {
+				listeners.delete(listener);
+				if (listeners.size !== 0) return;
+				const pendingRelease = ++releaseGeneration;
+				queueMicrotask(() => {
+					if (listeners.size !== 0 || releaseGeneration !== pendingRelease) {
+						return;
+					}
+					if (restartTimer !== undefined) {
+						clearTimeout(restartTimer);
+						restartTimer = undefined;
+					}
+					stopCurrent?.();
+					stopCurrent = undefined;
+				});
+			};
+		},
+		getSnapshot: () => snapshot,
+	};
+	byBranch.set(branchId, store);
+	return store;
+}
+
 export function useExternalWriteReview(args: {
 	readonly fileId?: string | null;
 	readonly path?: string | null;
@@ -350,6 +466,7 @@ export function useExternalWriteReview(args: {
 	const { rangeValues, ranges } = useAgentTurnCommitRanges(
 		args.activeBranchId,
 		args.reviewRangeSessionId,
+		args.enabled !== false && reviewMode === "agent-turn",
 	);
 	const workingChanges = useQuery(
 		(queryLix) => selectWorkingChanges(queryLix),
