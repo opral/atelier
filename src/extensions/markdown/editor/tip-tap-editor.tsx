@@ -21,6 +21,7 @@ import {
 	acknowledgeMarkdownEditorPersistence,
 	createEditor,
 	createMarkdownEditorOriginKey,
+	flushMarkdownEditorPersistence,
 	markdownEditorLastAcknowledgedMarkdown,
 } from "./create-editor";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
@@ -57,6 +58,9 @@ type TipTapEditorProps = {
 	originKey?: string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
+	registerPendingWriteHandler?: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 };
 
 export type MarkdownFileDelivery = {
@@ -136,6 +140,7 @@ export function TipTapEditor({
 	originKey,
 	openWorkspaceFile,
 	onPersist,
+	registerPendingWriteHandler,
 }: TipTapEditorProps) {
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
 	if (!resolvedActiveBranchId) {
@@ -158,6 +163,7 @@ export function TipTapEditor({
 			originKey={originKey}
 			openWorkspaceFile={openWorkspaceFile}
 			onPersist={onPersist}
+			registerPendingWriteHandler={registerPendingWriteHandler}
 		/>
 	);
 }
@@ -256,6 +262,7 @@ function TipTapEditorLoadedContent({
 	originKey,
 	openWorkspaceFile,
 	onPersist,
+	registerPendingWriteHandler,
 	hasInitialFile,
 	initialMarkdown,
 	sourceFilePath,
@@ -289,6 +296,12 @@ function TipTapEditorLoadedContent({
 	}, [canOpenWorkspaceFile]);
 	const readOnlyRef = useRef(readOnly);
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
+	useEffect(() => {
+		if (!editor || !registerPendingWriteHandler) return;
+		return registerPendingWriteHandler(() =>
+			flushMarkdownEditorPersistence(editor),
+		);
+	}, [editor, registerPendingWriteHandler]);
 	const [imagePasteStatus, setImagePasteStatus] =
 		useState<MarkdownImagePasteStatus | null>(null);
 	const notifyImagePasteStatus = useEffectEvent(

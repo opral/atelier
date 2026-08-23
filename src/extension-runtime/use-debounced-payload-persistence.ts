@@ -27,6 +27,8 @@ export function useDebouncedPayloadPersistence<TPayload>({
 	readonly capture: (payload: TPayload) => void;
 	readonly resetBaseline: (serialized: string) => void;
 	readonly isCurrent: (serialized: string) => boolean;
+	readonly flush: () => void;
+	readonly hasPending: () => boolean;
 } {
 	const currentSerializedRef = useRef(initialSerialized);
 	const baselineReadyRef = useRef(false);
@@ -90,6 +92,7 @@ export function useDebouncedPayloadPersistence<TPayload>({
 		(serialized: string) => serialized === currentSerializedRef.current,
 		[],
 	);
+	const hasPending = useCallback(() => timerRef.current !== null, []);
 
 	useEffect(
 		() => () => {
@@ -98,5 +101,24 @@ export function useDebouncedPayloadPersistence<TPayload>({
 		[flushPending],
 	);
 
-	return { capture, resetBaseline, isCurrent };
+	return {
+		capture,
+		resetBaseline,
+		isCurrent,
+		flush: flushPending,
+		hasPending,
+	};
+}
+
+/** Drains both a debounced serializer and the async writer it feeds. */
+export async function drainDebouncedPayloadPersistence(args: {
+	readonly flushDebounce: () => void;
+	readonly hasPendingDebounce: () => boolean;
+	readonly flushPersistence: () => Promise<void>;
+}): Promise<void> {
+	for (;;) {
+		args.flushDebounce();
+		await args.flushPersistence();
+		if (!args.hasPendingDebounce()) return;
+	}
 }

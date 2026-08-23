@@ -12,8 +12,12 @@ import { qb } from "@/lib/lix-kysely";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
+	createCheckpointAfterPendingWrites,
+	flushPendingWriteHandlers,
+	flushRetryablePendingWriteHandlers,
 	resolveLixFileForOpen,
 	selectCheckpointFiles,
+	startRetryablePendingWriteHandler,
 	syncPanelGroupLayout,
 	V2LayoutShell,
 } from "./layout-shell";
@@ -35,8 +39,160 @@ import {
 } from "../state-adapters";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { AtelierEvent } from "@/extension-api";
+import { selectFileWorkingChanges } from "@/queries";
 
 const ASYNC_UI_TIMEOUT = 10_000;
+
+test("pending editor writes form a barrier before checkpoint preparation", async () => {
+	let releaseWrite!: () => void;
+	const writeGate = new Promise<void>((resolve) => {
+		releaseWrite = resolve;
+	});
+	const handler = vi.fn(() => writeGate);
+	let barrierCompleted = false;
+	const barrier = flushPendingWriteHandlers([
+		{
+			panelSide: "central",
+			viewInstance: "markdown-1",
+			handler,
+		},
+	]).then(() => {
+		barrierCompleted = true;
+	});
+
+	await waitFor(() => expect(handler).toHaveBeenCalledOnce());
+	expect(barrierCompleted).toBe(false);
+	releaseWrite();
+	await barrier;
+	expect(barrierCompleted).toBe(true);
+});
+
+test("a retired editor write is retried until it flushes successfully", async () => {
+	const registration = {
+		panelSide: "central" as const,
+		viewInstance: "markdown-retired",
+		handler: vi
+			.fn<() => Promise<void>>()
+			.mockRejectedValueOnce(new Error("transient write failure"))
+			.mockResolvedValueOnce(),
+	};
+	const retired = {
+		registrations: new Set([registration]),
+		inFlight: new Map<typeof registration, Promise<void>>(),
+	};
+
+	await expect(
+		startRetryablePendingWriteHandler(retired, registration),
+	).rejects.toThrow("transient write failure");
+	expect(retired.registrations.has(registration)).toBe(true);
+	await flushRetryablePendingWriteHandlers(retired);
+
+	expect(registration.handler).toHaveBeenCalledTimes(2);
+	expect(retired.registrations.has(registration)).toBe(false);
+});
+
+test("checkpoint creation waits for editor persistence and includes its write", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("checkpoint-persistence-barrier");
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/checkpoint-persistence-barrier.md",
+				content: new TextEncoder().encode("before"),
+			})
+			.execute();
+		await lix.createCheckpoint();
+
+		let releaseWrite!: () => void;
+		const writeGate = new Promise<void>((resolve) => {
+			releaseWrite = resolve;
+		});
+		const execute = vi.spyOn(lix, "execute");
+		const checkpoint = createCheckpointAfterPendingWrites({
+			lix,
+			selectedFileIds: [fileId],
+			flushPendingWrites: async () => {
+				await writeGate;
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ content: new TextEncoder().encode("after") })
+					.where("id", "=", fileId)
+					.execute();
+			},
+		});
+
+		await Promise.resolve();
+		expect(
+			execute.mock.calls.some(([statement]) =>
+				String(statement).includes("INSERT INTO lix_create_checkpoint"),
+			),
+		).toBe(false);
+		releaseWrite();
+		expect(await checkpoint).toEqual(
+			expect.objectContaining({ commitId: expect.any(String) }),
+		);
+		expect(
+			execute.mock.calls.filter(([statement]) =>
+				String(statement).includes("INSERT INTO lix_create_checkpoint"),
+			),
+		).toHaveLength(1);
+		const remaining = await lix.execute(
+			"SELECT count(*) AS count FROM lix_working_diff()",
+		);
+		expect(Number(remaining.rows[0]?.get("count") ?? -1)).toBe(0);
+	} finally {
+		await lix.close();
+	}
+});
+
+test("checkpoint creation leaves a later unselected file edit working", async () => {
+	const lix = await openLix();
+	const selectedFileId = fakeUuid("checkpoint-frozen-selected");
+	const laterFileId = fakeUuid("checkpoint-frozen-later");
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: selectedFileId,
+					path: "/checkpoint-frozen-selected.md",
+					content: new TextEncoder().encode("selected before"),
+				},
+				{
+					id: laterFileId,
+					path: "/checkpoint-frozen-later.md",
+					content: new TextEncoder().encode("later before"),
+				},
+			])
+			.execute();
+		await lix.createCheckpoint();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("selected after") })
+			.where("id", "=", selectedFileId)
+			.execute();
+
+		await createCheckpointAfterPendingWrites({
+			lix,
+			selectedFileIds: [selectedFileId],
+			flushPendingWrites: async () => {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ content: new TextEncoder().encode("later after") })
+					.where("id", "=", laterFileId)
+					.execute();
+			},
+		});
+
+		expect(await selectFileWorkingChanges(lix).execute()).toEqual([
+			expect.objectContaining({ id: laterFileId }),
+		]);
+	} finally {
+		await lix.close();
+	}
+});
 
 describe("resolveLixFileForOpen", () => {
 	test("resolves normalized paths from Lix", async () => {
@@ -865,7 +1021,7 @@ describe("agent turn review navigation", () => {
 			).toBeVisible();
 			expect(
 				execute.mock.calls.some(([statement]) =>
-					String(statement).includes("lix_working_diff"),
+					String(statement).includes("lix_history('lix_file'"),
 				),
 			).toBe(false);
 			await waitFor(() => {
@@ -941,7 +1097,7 @@ describe("agent turn review navigation", () => {
 			const historyReadGate = new Promise<void>((resolve) => {
 				releaseHistoryReads = resolve;
 			});
-			const execute = vi
+			const _execute = vi
 				.spyOn(lix, "execute")
 				.mockImplementation(async (statement, params) => {
 					if (String(statement).includes("lix_history('lix_file'")) {
@@ -950,10 +1106,7 @@ describe("agent turn review navigation", () => {
 					}
 					return originalExecute(statement, params);
 				});
-			const createCheckpoint = vi.spyOn(lix, "createCheckpoint");
-
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
-			await waitFor(() => expect(createCheckpoint).toHaveBeenCalledOnce());
 			await waitFor(() => {
 				expect(
 					screen.queryByRole("button", { name: /^Checkpoint/ }),
@@ -966,12 +1119,9 @@ describe("agent turn review navigation", () => {
 				).toHaveLength(1);
 			});
 			expect(historyReadCount).toBeGreaterThan(0);
-			const firstHistoryCallIndex = execute.mock.calls.findIndex(
-				([statement]) => String(statement).includes("lix_history('lix_file'"),
-			);
-			expect(createCheckpoint.mock.invocationCallOrder[0]).toBeLessThan(
-				execute.mock.invocationCallOrder[firstHistoryCallIndex]!,
-			);
+			// History consumers may already be reactive while the action runs, but a
+			// blocked history read is not an input to checkpoint creation.
+			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
 		} finally {
 			releaseHistoryReads();
 			await act(async () => utils?.unmount());

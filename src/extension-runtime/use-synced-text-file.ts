@@ -28,12 +28,15 @@ export function useSyncedTextFile({
 	readonly text: string;
 	readonly saveError: string | null;
 	readonly persist: (text: string) => void;
+	readonly flush: () => Promise<void>;
 } {
 	const lix = useLix();
 	const [text, setText] = useState(reviewText ?? initialText);
 	const localTextRef = useRef(text);
 	const lastCleanTextRef = useRef(initialText);
 	const persistenceRunningRef = useRef(false);
+	const persistencePromiseRef = useRef<Promise<void> | null>(null);
+	const lastPersistenceErrorRef = useRef<unknown>(null);
 	const queuedTextRef = useRef<string | null>(null);
 	const reviewingRef = useRef(reviewing);
 	const wasReviewingRef = useRef(false);
@@ -73,23 +76,31 @@ export function useSyncedTextFile({
 		wasReviewingRef.current = reviewing;
 	}, [fileId, lix, reviewText, reviewing]);
 
-	const flushPersistence = useCallback(async () => {
-		if (persistenceRunningRef.current || reviewingRef.current) return;
+	const flushPersistence = useCallback((): Promise<void> => {
+		if (persistencePromiseRef.current) return persistencePromiseRef.current;
+		if (reviewingRef.current) return Promise.resolve();
 		persistenceRunningRef.current = true;
-		try {
+		const persistence = (async () => {
 			while (queuedTextRef.current !== null && !reviewingRef.current) {
 				const nextText = queuedTextRef.current;
 				queuedTextRef.current = null;
 				if (nextText === lastCleanTextRef.current) continue;
 				try {
-					await lix.execute(
+					const result = await lix.execute(
 						"UPDATE lix_file SET content = $1 WHERE id = $2",
 						[new TextEncoder().encode(nextText), fileId],
 						{ originKey },
 					);
+					if (result.rowsAffected === 0) {
+						throw new Error(
+							"Could not save because the file no longer exists.",
+						);
+					}
 					lastCleanTextRef.current = nextText;
+					lastPersistenceErrorRef.current = null;
 					setSaveError(null);
 				} catch (error) {
+					lastPersistenceErrorRef.current = error;
 					setSaveError(
 						error instanceof Error ? error.message : "Could not save file",
 					);
@@ -110,11 +121,47 @@ export function useSyncedTextFile({
 					break;
 				}
 			}
-		} finally {
+		})();
+		persistencePromiseRef.current = persistence;
+		void persistence.finally(() => {
+			if (persistencePromiseRef.current === persistence) {
+				persistencePromiseRef.current = null;
+			}
 			persistenceRunningRef.current = false;
 			if (queuedTextRef.current !== null) void flushPersistence();
-		}
+		});
+		return persistence;
 	}, [fileId, lix, originKey]);
+
+	const flush = useCallback(async () => {
+		if (retryTimerRef.current !== null) {
+			clearTimeout(retryTimerRef.current);
+			retryTimerRef.current = null;
+		}
+		if (reviewingRef.current) return;
+		if (
+			queuedTextRef.current === null &&
+			localTextRef.current !== lastCleanTextRef.current
+		) {
+			queuedTextRef.current = localTextRef.current;
+		}
+		for (;;) {
+			await flushPersistence();
+			if (
+				persistencePromiseRef.current !== null ||
+				queuedTextRef.current !== null
+			) {
+				continue;
+			}
+			if (localTextRef.current !== lastCleanTextRef.current) {
+				const error = lastPersistenceErrorRef.current;
+				throw error instanceof Error
+					? error
+					: new Error("Could not flush pending editor changes.");
+			}
+			return;
+		}
+	}, [flushPersistence]);
 
 	const persist = useCallback(
 		(nextText: string) => {
@@ -174,5 +221,5 @@ export function useSyncedTextFile({
 		};
 	}, [fileId, lix]);
 
-	return { text, saveError, persist };
+	return { text, saveError, persist, flush };
 }

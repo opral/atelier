@@ -16,6 +16,7 @@ const view: ExtensionView = {
 	isFocused: true,
 	preferences: { get: () => undefined, set: () => {}, delete: () => {} },
 	registerNewFileDraftHandler: () => () => {},
+	registerPendingWriteHandler: () => () => {},
 };
 
 describe("createReactExtensionDefinition", () => {

@@ -149,6 +149,9 @@ export interface ExtensionView {
 	readonly registerNewFileDraftHandler: (
 		handler: () => Promise<void> | void,
 	) => () => void;
+	readonly registerPendingWriteHandler: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 }
 
 export interface ExtensionHostContext {
@@ -160,6 +163,11 @@ export interface ExtensionHostContext {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
+		readonly handler: () => Promise<void> | void;
+	}) => () => void;
+	readonly registerPendingWriteHandler: (registration: {
+		readonly panelSide: PanelSide;
+		readonly viewInstance: string;
 		readonly handler: () => Promise<void> | void;
 	}) => () => void;
 }

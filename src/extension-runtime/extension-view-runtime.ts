@@ -52,6 +52,12 @@ export function useExtensionViewRuntime({
 							isActiveView: isActive,
 							handler,
 						}),
+					registerPendingWriteHandler: (handler: () => Promise<void> | void) =>
+						host.registerPendingWriteHandler({
+							panelSide,
+							viewInstance: instance.instance,
+							handler,
+						}),
 				},
 			};
 		},

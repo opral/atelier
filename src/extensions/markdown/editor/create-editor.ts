@@ -61,6 +61,12 @@ type MarkdownPersistenceBaseline = {
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
+const persistenceFlushes = new WeakMap<Editor, () => Promise<void>>();
+
+/** Drains the editor's debounce and any in-flight serialized write. */
+export function flushMarkdownEditorPersistence(editor: Editor): Promise<void> {
+	return persistenceFlushes.get(editor)?.() ?? Promise.resolve();
+}
 
 /**
  * Advances an editor's compare-and-swap baseline after authoritative file data
@@ -258,6 +264,24 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		})();
 		return persistPromise;
 	};
+	const flushPersistence = (): Promise<void> => {
+		if (persistStateTimer) {
+			clearTimeout(persistStateTimer);
+			persistStateTimer = null;
+		}
+		const editor = currentEditor ?? editorInstance;
+		if (!editor) return Promise.resolve();
+		return runPersist(editor).then(() => {
+			if (
+				persistenceBaseline.acknowledgedRevision !==
+				persistenceBaseline.documentRevision
+			) {
+				throw new Error(
+					"Could not flush Markdown changes because the file changed concurrently.",
+				);
+			}
+		});
+	};
 	const placeholderConfig: any = {
 		placeholder: ({ node }: { node: any }) => {
 			if (node.childCount !== 0) return "";
@@ -331,6 +355,10 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			if (!transaction.docChanged) return;
 			persistenceBaseline.documentRevision += 1;
 			if (!fileId || !persistState) return;
+			// An edit that arrives during an in-flight write belongs to the same
+			// serialized drain. In particular, an explicit checkpoint flush must not
+			// resolve while this newer revision is still waiting on its debounce.
+			if (persistRunning) persistQueued = true;
 			const scheduleRun = () => {
 				if (destroyed) return;
 				if (persistDebounceMsResolved <= 0) {
@@ -440,6 +468,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		},
 	});
 	persistenceBaselines.set(editorInstance, persistenceBaseline);
+	persistenceFlushes.set(editorInstance, flushPersistence);
 	const editorDom = editorInstance.view.dom;
 	editorDom.addEventListener("click", handleExternalLinkClick, {
 		capture: true,

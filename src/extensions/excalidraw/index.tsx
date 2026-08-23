@@ -32,6 +32,9 @@ type ExcalidrawFileRow = {
 
 type ExcalidrawViewProps = {
 	readonly atelier: ExtensionRuntime;
+	readonly registerPendingWriteHandler?: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 	readonly fileId: string;
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
@@ -92,6 +95,7 @@ function ExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 
 function EditableExcalidrawView({
 	atelier,
+	registerPendingWriteHandler,
 	fileId,
 	filePath,
 	fileRow,
@@ -126,6 +130,7 @@ function EditableExcalidrawView({
 		text: documentText,
 		saveError,
 		persist: persistUserEdit,
+		flush: flushScenePersistence,
 	} = useSyncedTextFile({
 		fileId,
 		initialText: fileText,
@@ -154,6 +159,8 @@ function EditableExcalidrawView({
 					sceneJson={documentText}
 					readOnly={isReviewing || atelier.readOnly}
 					onSceneChange={persistUserEdit}
+					flushScenePersistence={flushScenePersistence}
+					registerPendingWriteHandler={registerPendingWriteHandler}
 				/>
 			</Suspense>
 			{saveError ? (
@@ -304,6 +311,7 @@ export const extension = createReactExtensionDefinition({
 	component: ({ atelier, view }) => (
 		<ExcalidrawView
 			atelier={atelier}
+			registerPendingWriteHandler={view.registerPendingWriteHandler}
 			fileId={view.state.fileId as string}
 			filePath={view.state.filePath as string | undefined}
 			isActiveView={view.isActive}

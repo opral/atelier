@@ -100,6 +100,9 @@ type MarkdownViewProps = {
 	readonly onExitReview?: () => void;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly onDocumentModified?: (filePath: string) => void;
+	readonly registerPendingWriteHandler?: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 };
 
 type MarkdownFileRow = {
@@ -150,6 +153,7 @@ export function MarkdownView({
 	onExitReview,
 	openWorkspaceFile,
 	onDocumentModified,
+	registerPendingWriteHandler,
 }: MarkdownViewProps) {
 	assertFileId(fileId);
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
@@ -184,6 +188,7 @@ export function MarkdownView({
 				onExitReview={onExitReview}
 				openWorkspaceFile={openWorkspaceFile}
 				onDocumentModified={onDocumentModified}
+				registerPendingWriteHandler={registerPendingWriteHandler}
 			/>
 		</Suspense>
 	);
@@ -278,6 +283,7 @@ function MarkdownLiveViewLoaded({
 	onExitReview,
 	openWorkspaceFile,
 	onDocumentModified,
+	registerPendingWriteHandler,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
@@ -359,6 +365,7 @@ function MarkdownLiveViewLoaded({
 								const resolvedPath = persistedPath ?? effectiveFileRow.path;
 								onDocumentModified?.(resolvedPath);
 							}}
+							registerPendingWriteHandler={registerPendingWriteHandler}
 						/>
 						{!readOnly && review && reviewDiff && liveEditor ? (
 							<MarkdownLiveReviewController
@@ -1001,6 +1008,7 @@ export const extension = createReactExtensionDefinition({
 					modifiedBy: "user",
 				})
 			}
+			registerPendingWriteHandler={view.registerPendingWriteHandler}
 		/>
 	),
 });

@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
-import { useDebouncedPayloadPersistence } from "./use-debounced-payload-persistence";
+import {
+	drainDebouncedPayloadPersistence,
+	useDebouncedPayloadPersistence,
+} from "./use-debounced-payload-persistence";
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -49,6 +52,37 @@ test("an external reset cancels pending persistence and requires a new baseline"
 
 	expect(result.current.isCurrent("normalized external document")).toBe(true);
 	expect(onPersist).not.toHaveBeenCalled();
+});
+
+test("async drain includes a payload captured during its first inner write", async () => {
+	let pendingDebounce = true;
+	let releaseFirstWrite!: () => void;
+	const firstWrite = new Promise<void>((resolve) => {
+		releaseFirstWrite = resolve;
+	});
+	const flushDebounce = vi.fn(() => {
+		pendingDebounce = false;
+	});
+	const flushPersistence = vi
+		.fn<() => Promise<void>>()
+		.mockReturnValueOnce(firstWrite)
+		.mockResolvedValueOnce();
+
+	const drain = drainDebouncedPayloadPersistence({
+		flushDebounce,
+		hasPendingDebounce: () => pendingDebounce,
+		flushPersistence,
+	});
+	expect(flushPersistence).toHaveBeenCalledOnce();
+
+	// A second canvas event arrives while the first serialized text write is
+	// still in flight and arms the outer debounce again.
+	pendingDebounce = true;
+	releaseFirstWrite();
+	await drain;
+
+	expect(flushDebounce).toHaveBeenCalledTimes(2);
+	expect(flushPersistence).toHaveBeenCalledTimes(2);
 });
 
 function renderPersistence(onPersist: (serialized: string) => void) {

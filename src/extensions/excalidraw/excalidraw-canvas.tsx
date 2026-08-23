@@ -12,7 +12,10 @@ import type {
 } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState } from "@excalidraw/excalidraw/types";
-import { useDebouncedPayloadPersistence } from "@/extension-runtime/use-debounced-payload-persistence";
+import {
+	drainDebouncedPayloadPersistence,
+	useDebouncedPayloadPersistence,
+} from "@/extension-runtime/use-debounced-payload-persistence";
 import "@excalidraw/excalidraw/index.css";
 import { parseExcalidrawScene } from "./scene";
 
@@ -27,6 +30,10 @@ export type ExcalidrawCanvasProps = {
 	 * settle. Never called while `readOnly` is true.
 	 */
 	readonly onSceneChange?: (serialized: string) => void;
+	readonly flushScenePersistence?: () => Promise<void>;
+	readonly registerPendingWriteHandler?: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 };
 
 /**
@@ -37,6 +44,8 @@ export default function ExcalidrawCanvas({
 	sceneJson,
 	readOnly,
 	onSceneChange,
+	flushScenePersistence,
+	registerPendingWriteHandler,
 }: ExcalidrawCanvasProps) {
 	const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
 	type ScenePayload = {
@@ -44,7 +53,7 @@ export default function ExcalidrawCanvas({
 		readonly appState: AppState;
 		readonly files: BinaryFiles;
 	};
-	const { capture, isCurrent, resetBaseline } =
+	const { capture, isCurrent, resetBaseline, flush, hasPending } =
 		useDebouncedPayloadPersistence<ScenePayload>({
 			initialSerialized: sceneJson,
 			serialize: ({ elements, appState, files }) =>
@@ -58,6 +67,16 @@ export default function ExcalidrawCanvas({
 			debounceMs: PERSIST_DEBOUNCE_MS,
 			disabled: readOnly,
 		});
+	useEffect(() => {
+		if (!registerPendingWriteHandler) return;
+		return registerPendingWriteHandler(() =>
+			drainDebouncedPayloadPersistence({
+				flushDebounce: flush,
+				hasPendingDebounce: hasPending,
+				flushPersistence: flushScenePersistence ?? (() => Promise.resolve()),
+			}),
+		);
+	}, [flush, flushScenePersistence, hasPending, registerPendingWriteHandler]);
 
 	const initialData = useMemo<ExcalidrawInitialDataState>(() => {
 		const parsed = parseExcalidrawScene(sceneJson);

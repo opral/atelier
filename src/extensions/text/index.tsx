@@ -35,6 +35,9 @@ type TextFileRow = {
 
 export type TextViewProps = {
 	readonly atelier: ExtensionRuntime;
+	readonly registerPendingWriteHandler?: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 	readonly fileId: string;
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
@@ -95,6 +98,7 @@ function TextViewContent({ fileId, ...props }: TextViewProps) {
 
 function EditableTextView({
 	atelier,
+	registerPendingWriteHandler,
 	fileId,
 	filePath,
 	fileRow,
@@ -136,6 +140,7 @@ function EditableTextView({
 		text: editorText,
 		saveError,
 		persist: persistUserEdit,
+		flush: flushPendingWrite,
 	} = useSyncedTextFile({
 		fileId,
 		initialText: fileText,
@@ -144,6 +149,10 @@ function EditableTextView({
 		readOnly: atelier.readOnly,
 		originKey,
 	});
+	useEffect(() => {
+		if (!registerPendingWriteHandler) return;
+		return registerPendingWriteHandler(flushPendingWrite);
+	}, [flushPendingWrite, registerPendingWriteHandler]);
 
 	return (
 		<div className="atelier-text-view" data-testid="text-editor-view">
@@ -392,6 +401,7 @@ export const extension = createReactExtensionDefinition({
 	component: ({ atelier, view }) => (
 		<TextView
 			atelier={atelier}
+			registerPendingWriteHandler={view.registerPendingWriteHandler}
 			fileId={view.state.fileId as string}
 			filePath={view.state.filePath as string | undefined}
 			isActiveView={view.isActive}
