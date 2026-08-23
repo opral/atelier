@@ -75,6 +75,8 @@ type MarkdownViewProps = {
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
 	readonly afterFileId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -135,6 +137,8 @@ export function MarkdownView({
 	afterCommitId,
 	beforeFileId,
 	afterFileId,
+	beforeExists,
+	afterExists,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
@@ -167,6 +171,8 @@ export function MarkdownView({
 				afterCommitId={afterCommitId}
 				beforeFileId={beforeFileId}
 				afterFileId={afterFileId}
+				beforeExists={beforeExists}
+				afterExists={afterExists}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReviewDiff={onAcceptReviewDiff}
 				onRejectReviewDiff={onRejectReviewDiff}
@@ -190,6 +196,8 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		afterCommitId: props.afterCommitId,
 		beforeFileId: props.beforeFileId,
 		afterFileId: props.afterFileId,
+		beforeExists: props.beforeExists,
+		afterExists: props.afterExists,
 	});
 	const comparesAgainstCurrentFile =
 		editorRevision.beforeCommitId !== null &&
@@ -227,6 +235,8 @@ function MarkdownViewLoaded(
 		afterCommitId,
 		beforeFileId: props.beforeFileId,
 		afterFileId: props.afterFileId,
+		beforeExists: props.beforeExists,
+		afterExists: props.afterExists,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
 
@@ -513,6 +523,8 @@ function MarkdownHistoricalViewLoaded({
 		editorRevision.afterCommitId,
 		editorRevision.beforeFileId,
 		editorRevision.afterFileId,
+		editorRevision.beforeExists,
+		editorRevision.afterExists,
 	);
 	const historicalFile = useMemo(
 		() =>
@@ -958,6 +970,8 @@ export const extension = createReactExtensionDefinition({
 					? view.state.beforeFileId
 					: null
 			}
+			beforeExists={view.state.beforeExists !== false}
+			afterExists={view.state.afterExists !== false}
 			afterFileId={
 				typeof view.state.afterFileId === "string"
 					? view.state.afterFileId

@@ -95,6 +95,8 @@ type CsvViewProps = {
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
 	readonly afterFileId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
@@ -190,6 +192,8 @@ export function CsvView({
 	afterCommitId,
 	beforeFileId,
 	afterFileId,
+	beforeExists,
+	afterExists,
 	registerExternalWriteReview,
 	onAcceptReview,
 	onRejectReview,
@@ -217,6 +221,8 @@ export function CsvView({
 				afterCommitId={afterCommitId}
 				beforeFileId={beforeFileId}
 				afterFileId={afterFileId}
+				beforeExists={beforeExists}
+				afterExists={afterExists}
 				registerExternalWriteReview={registerExternalWriteReview}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
@@ -251,6 +257,8 @@ function CsvViewData({
 	afterCommitId,
 	beforeFileId,
 	afterFileId,
+	beforeExists,
+	afterExists,
 	registerExternalWriteReview,
 	...props
 }: CsvViewProps & {
@@ -261,6 +269,8 @@ function CsvViewData({
 		afterCommitId,
 		beforeFileId,
 		afterFileId,
+		beforeExists,
+		afterExists,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
 
@@ -515,6 +525,8 @@ function CsvHistoricalViewData({
 		editorRevision.afterCommitId,
 		editorRevision.beforeFileId,
 		editorRevision.afterFileId,
+		editorRevision.beforeExists,
+		editorRevision.afterExists,
 	);
 	const historicalFile = useMemo(
 		() =>
@@ -1563,6 +1575,8 @@ export const extension = createReactExtensionDefinition({
 					? view.state.beforeFileId
 					: null
 			}
+			beforeExists={view.state.beforeExists !== false}
+			afterExists={view.state.afterExists !== false}
 			afterFileId={
 				typeof view.state.afterFileId === "string"
 					? view.state.afterFileId

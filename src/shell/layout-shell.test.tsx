@@ -13,6 +13,7 @@ import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
 	resolveLixFileForOpen,
+	selectCheckpointFiles,
 	syncPanelGroupLayout,
 	V2LayoutShell,
 } from "./layout-shell";
@@ -1331,6 +1332,114 @@ describe("agent turn review navigation", () => {
 				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
 			expect(maxActiveCheckpointFileReads).toBe(1);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("does not query the absent before endpoint for a file added at a checkpoint", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("checkpoint-added-baseline"),
+					path: "/baseline.md",
+					content: new TextEncoder().encode("# Baseline\n"),
+				})
+				.execute();
+			const previous = await lix.createCheckpoint();
+			const addedFileId = fakeUuid("checkpoint-added-file");
+			await qb(lix)
+				.deleteFrom("lix_file")
+				.where("id", "=", fakeUuid("checkpoint-added-baseline"))
+				.execute();
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: addedFileId,
+					path: "/added.md",
+					content: new TextEncoder().encode("# Added\n"),
+				})
+				.execute();
+			const latest = await lix.createCheckpoint();
+			expect(
+				await selectCheckpointFiles(lix, previous.commitId, latest.commitId),
+			).toEqual([
+				{
+					id: addedFileId,
+					path: "/added.md",
+					checkpointChangeKind: "added",
+				},
+				{
+					id: fakeUuid("checkpoint-added-baseline"),
+					path: "/baseline.md",
+					checkpointChangeKind: "removed",
+				},
+			]);
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+			});
+			const originalExecute = lix.execute.bind(lix);
+			const historyCalls: unknown[][] = [];
+			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
+				if (String(statement).includes("lix_history('lix_file'")) {
+					historyCalls.push([...(params ?? [])]);
+				}
+				return originalExecute(statement, params);
+			});
+
+			const checkpointList = await screen.findByRole("list", {
+				name: "Checkpoints",
+			});
+			fireEvent.click(
+				within(checkpointList).getByRole("button", {
+					name: /Latest checkpoint/,
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: "Back to now" }),
+			).toBeVisible();
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()!.panels.central;
+				const activeView = central.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state).toMatchObject({
+					fileId: addedFileId,
+					beforeCommitId: previous.commitId,
+					afterCommitId: latest.commitId,
+					beforeExists: false,
+					afterExists: true,
+				});
+			});
+			expect(
+				historyCalls.some(
+					(params) =>
+						params.includes(previous.commitId) && params.includes(addedFileId),
+				),
+			).toBe(false);
+			expect(
+				historyCalls.some(
+					(params) =>
+						params.includes(latest.commitId) && params.includes(addedFileId),
+				),
+			).toBe(true);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

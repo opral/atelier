@@ -587,6 +587,7 @@ function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
+	readonly checkpointChangeKind?: "added" | "modified" | "removed";
 };
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
@@ -680,7 +681,7 @@ async function selectHistoricalLixFileForOpen(
 		: null;
 }
 
-async function selectCheckpointFiles(
+export async function selectCheckpointFiles(
 	lix: Lix,
 	previousCommitId: string,
 	commitId: string,
@@ -707,25 +708,48 @@ async function selectCheckpointFilesOnce(
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
 	const changed = await lix.execute(
-		`SELECT DISTINCT coalesce(
+		`SELECT coalesce(
 			file_id,
 			case
 				when schema_key = 'lix_file_descriptor' then row_pk ->> 0
 			end
-		) AS file_id
+		) AS file_id,
+		case
+			when max(case when schema_key = 'lix_file_descriptor' and diff_type = 'added' then 1 else 0 end) = 1 then 'added'
+			when max(case when schema_key = 'lix_file_descriptor' and diff_type = 'removed' then 1 else 0 end) = 1 then 'removed'
+			else 'modified'
+		end AS diff_type
 		FROM lix_diff($1, $2)
-		WHERE file_id IS NOT NULL OR schema_key = 'lix_file_descriptor'`,
+		WHERE file_id IS NOT NULL OR schema_key = 'lix_file_descriptor'
+		GROUP BY coalesce(
+			file_id,
+			case
+				when schema_key = 'lix_file_descriptor' then row_pk ->> 0
+			end
+		)`,
 		[previousCommitId, commitId],
 	);
-	const fileIds = changed.rows
-		.map((row) => row.get("file_id"))
-		.filter((fileId): fileId is string => typeof fileId === "string");
+	const fileChanges: Array<{
+		readonly fileId: string;
+		readonly diffType: "added" | "modified" | "removed";
+	}> = changed.rows.flatMap((row) => {
+		const fileId = row.get("file_id");
+		const diffType = row.get("diff_type");
+		return typeof fileId === "string" &&
+			(diffType === "added" ||
+				diffType === "modified" ||
+				diffType === "removed")
+			? [{ fileId, diffType }]
+			: [];
+	});
 	const files: Array<LixFileForOpen | null> = [];
 	// Demand-hydrated history reads share one repository engine. Resolve them in
 	// order so one read can finish importing its sparse boundary before the next
 	// read asks the same engine for another boundary.
-	for (const fileId of new Set(fileIds)) {
-		const row = await selectFileHistory(lix, commitId)
+	for (const { fileId, diffType } of fileChanges) {
+		const endpointCommitId =
+			diffType === "removed" ? previousCommitId : commitId;
+		const row = await selectFileHistory(lix, endpointCommitId)
 			.select(["id", "path"])
 			.where("id", "=", fileId)
 			.orderBy("lixcol_depth", "asc")
@@ -733,7 +757,11 @@ async function selectCheckpointFilesOnce(
 			.executeTakeFirst();
 		files.push(
 			row && typeof row.path === "string"
-				? { id: row.id as string, path: row.path }
+				? {
+						id: row.id as string,
+						path: row.path,
+						checkpointChangeKind: diffType,
+					}
 				: null,
 		);
 	}
@@ -2430,10 +2458,16 @@ function LayoutShellLoadedContent({
 			) {
 				return normalizedPath;
 			}
+			const beforeExists = state?.beforeExists !== false;
+			const afterExists = state?.afterExists !== false;
 			const historicalCommitIds = [
 				typeof state?.sourceCommitId === "string" ? state.sourceCommitId : null,
-				typeof state?.afterCommitId === "string" ? state.afterCommitId : null,
-				typeof state?.beforeCommitId === "string" ? state.beforeCommitId : null,
+				afterExists && typeof state?.afterCommitId === "string"
+					? state.afterCommitId
+					: null,
+				beforeExists && typeof state?.beforeCommitId === "string"
+					? state.beforeCommitId
+					: null,
 			].filter((commitId): commitId is string => Boolean(commitId));
 			for (const commitId of historicalCommitIds) {
 				const historicalFile = await selectHistoricalLixFileForOpen(
@@ -2471,17 +2505,23 @@ function LayoutShellLoadedContent({
 			path: string,
 			commitId: string,
 			previousCommitId: string,
+			changeKind: "added" | "modified" | "removed" = "modified",
 		): ExtensionState => {
 			const handler = findFileHandlerExtension(extensionMap.values(), path);
+			const beforeExists = changeKind !== "added";
+			const afterExists = changeKind !== "removed";
+			const sourceCommitId = afterExists ? commitId : previousCommitId;
 			return handler?.kind === FILE_EXTENSION_KIND
 				? {
 						beforeCommitId: previousCommitId,
 						afterCommitId: commitId,
-						sourceCommitId: commitId,
+						beforeExists,
+						afterExists,
+						sourceCommitId,
 					}
 				: {
-						afterCommitId: commitId,
-						sourceCommitId: commitId,
+						afterCommitId: sourceCommitId,
+						sourceCommitId,
 					};
 		},
 		[extensionMap],
@@ -2504,6 +2544,7 @@ function LayoutShellLoadedContent({
 					file.path,
 					range.afterCommitId,
 					range.beforeCommitId,
+					"removed",
 				),
 			}).catch((error: unknown) => {
 				console.warn(
@@ -2555,6 +2596,7 @@ function LayoutShellLoadedContent({
 					file.path,
 					historicalReview.commitId,
 					historicalReview.previousCommitId,
+					file.checkpointChangeKind,
 				),
 			});
 		},
@@ -2620,6 +2662,7 @@ function LayoutShellLoadedContent({
 					firstFile.path,
 					commitId,
 					previousCommitId,
+					firstFile.checkpointChangeKind,
 				),
 			});
 			setHistoricalReview((current) =>

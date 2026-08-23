@@ -24,6 +24,8 @@ export function useFileSnapshotsAtCommits(
 	afterCommitId: string | null,
 	beforeFileId: string | null = null,
 	afterFileId: string | null = null,
+	beforeExists = true,
+	afterExists = true,
 ): {
 	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
 	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
@@ -39,7 +41,7 @@ export function useFileSnapshotsAtCommits(
 				.limit(1),
 		{
 			subscribe: false,
-			enabled: fileId.length > 0 && beforeCommitId !== null,
+			enabled: fileId.length > 0 && beforeCommitId !== null && beforeExists,
 		},
 	);
 	const afterRow = useQueryTakeFirst<HistoricalFileSnapshotRow>(
@@ -51,7 +53,7 @@ export function useFileSnapshotsAtCommits(
 				.limit(1),
 		{
 			subscribe: false,
-			enabled: fileId.length > 0 && afterCommitId !== null,
+			enabled: fileId.length > 0 && afterCommitId !== null && afterExists,
 		},
 	);
 

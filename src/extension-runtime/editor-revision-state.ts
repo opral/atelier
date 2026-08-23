@@ -5,6 +5,8 @@ export type EditorRevisionState = {
 	readonly afterCommitId: string | null;
 	readonly beforeFileId: string | null;
 	readonly afterFileId: string | null;
+	readonly beforeExists: boolean;
+	readonly afterExists: boolean;
 };
 
 export type EditorRevisionMode = "editor" | "snapshot" | "diff";
@@ -19,6 +21,8 @@ export const EDITOR_REVISION_STATE_KEYS = [
 	"afterCommitId",
 	"beforeFileId",
 	"afterFileId",
+	"beforeExists",
+	"afterExists",
 	"sourceCommitId",
 ] as const;
 
@@ -30,6 +34,8 @@ export function normalizeEditorRevisionState(
 				readonly afterCommitId?: unknown;
 				readonly beforeFileId?: unknown;
 				readonly afterFileId?: unknown;
+				readonly beforeExists?: unknown;
+				readonly afterExists?: unknown;
 		  }
 		| null
 		| undefined,
@@ -39,6 +45,8 @@ export function normalizeEditorRevisionState(
 		afterCommitId: normalizeCommitId(state?.afterCommitId),
 		beforeFileId: normalizeCommitId(state?.beforeFileId),
 		afterFileId: normalizeCommitId(state?.afterFileId),
+		beforeExists: state?.beforeExists !== false,
+		afterExists: state?.afterExists !== false,
 	};
 }
 
