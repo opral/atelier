@@ -48,6 +48,7 @@ type TipTapEditorProps = {
 	filePath?: string | null;
 	className?: string;
 	onReady?: (editor: Editor) => void;
+	onDispose?: (editor: Editor) => void;
 	persistDebounceMs?: number;
 	focusOnLoad?: boolean;
 	defaultBlock?: EmptyMarkdownDefaultBlock;
@@ -130,6 +131,7 @@ export function TipTapEditor({
 	filePath,
 	className,
 	onReady,
+	onDispose,
 	persistDebounceMs,
 	focusOnLoad,
 	defaultBlock,
@@ -153,6 +155,7 @@ export function TipTapEditor({
 			filePath={filePath}
 			className={className}
 			onReady={onReady}
+			onDispose={onDispose}
 			persistDebounceMs={persistDebounceMs}
 			focusOnLoad={focusOnLoad}
 			defaultBlock={defaultBlock}
@@ -252,6 +255,7 @@ function TipTapEditorLoadedContent({
 	activeBranchId,
 	className,
 	onReady,
+	onDispose,
 	persistDebounceMs,
 	focusOnLoad,
 	defaultBlock,
@@ -283,6 +287,9 @@ function TipTapEditorLoadedContent({
 	);
 	const notifyReady = useEffectEvent((readyEditor: Editor) => {
 		onReady?.(readyEditor);
+	});
+	const notifyDispose = useEffectEvent((disposedEditor: Editor) => {
+		onDispose?.(disposedEditor);
 	});
 	const hasAutoFocusedRef = useRef(false);
 	const onPersistRef = useRef(onPersist);
@@ -338,7 +345,13 @@ function TipTapEditorLoadedContent({
 			onPersist: (args) => onPersistRef.current?.(args),
 		});
 		setEditorInstance(nextEditor);
-		return () => nextEditor.destroy();
+		return () => {
+			// Revoke the mounted lease before TipTap nulls its schema and view. Parent
+			// consumers may survive a transient file-row unmount and must never retain
+			// that torn-down imperative resource under the same file id.
+			notifyDispose(nextEditor);
+			nextEditor.destroy();
+		};
 	}, [
 		lix,
 		activeFileId,

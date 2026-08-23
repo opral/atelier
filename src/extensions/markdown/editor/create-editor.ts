@@ -207,6 +207,10 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	let persistQueued = false;
 	let persistPromise: Promise<void> | null = null;
 	let destroyed = false;
+	let destroyedPersistenceSnapshot: {
+		readonly revision: number;
+		readonly markdown: string;
+	} | null = null;
 	let editorInstance: Editor | null = null;
 	let currentEditor: Editor | null = null;
 	let cleanupExternalLinkClick: (() => void) | null = null;
@@ -225,8 +229,21 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		// Review projections deliberately contain both sides of a suggestion.
 		// They are presentation state, never valid file content. This guard keeps
 		// an accidental mode transition or destroy flush from serializing them.
-		if (containsMarkdownReviewProjection(editor)) return;
-		const markdown = buildNormalizedMarkdownFromEditor(editor);
+		let markdown: string;
+		if (destroyed) {
+			if (
+				!destroyedPersistenceSnapshot ||
+				destroyedPersistenceSnapshot.revision !== revision
+			) {
+				throw new Error(
+					"Could not persist Markdown after its editor was destroyed without a captured payload.",
+				);
+			}
+			markdown = destroyedPersistenceSnapshot.markdown;
+		} else {
+			if (containsMarkdownReviewProjection(editor)) return;
+			markdown = buildNormalizedMarkdownFromEditor(editor);
+		}
 		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) {
 			persistenceBaseline.acknowledgedRevision = revision;
 			return;
@@ -256,7 +273,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				do {
 					persistQueued = false;
 					await persistOnce(editor);
-				} while (persistQueued && !destroyed);
+				} while (persistQueued);
 			} finally {
 				persistRunning = false;
 				persistPromise = null;
@@ -384,13 +401,29 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 			const editorToPersist = currentEditor ?? editorInstance;
 			if (editorToPersist && fileId && persistState && shouldPersist()) {
+				// TipTap emits destroy while its schema and view are still live, then
+				// nulls both immediately afterward. Capture the final durable payload at
+				// that boundary so an in-flight continuation or retired-handler retry
+				// never needs to interrogate a torn-down editor.
+				if (
+					persistenceBaseline.documentRevision !==
+						persistenceBaseline.acknowledgedRevision &&
+					!containsMarkdownReviewProjection(editorToPersist)
+				) {
+					destroyedPersistenceSnapshot = {
+						revision: persistenceBaseline.documentRevision,
+						markdown: buildNormalizedMarkdownFromEditor(editorToPersist),
+					};
+				}
+				destroyed = true;
+				currentEditor = null;
 				if (persistRunning) {
 					persistQueued = true;
 				}
-				void runPersist(editorToPersist).finally(() => {
-					destroyed = true;
-					currentEditor = null;
-				});
+				// The registered/retired flush observes the original promise and owns
+				// retry/reporting. This background attempt must not become an unhandled
+				// rejection when compare-and-swap correctly refuses a stale payload.
+				void runPersist(editorToPersist).catch(() => {});
 			} else {
 				destroyed = true;
 				currentEditor = null;

@@ -1388,6 +1388,76 @@ test("explicit flush includes an edit made during an in-flight write", async () 
 	await lix.close();
 });
 
+test("destroyed editor retries use the captured payload, not TipTap", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("destroyed_editor_captured_payload");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/destroyed-editor-captured-payload.md",
+			content: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	let releaseFirstWrite!: () => void;
+	const firstWriteGate = new Promise<void>((resolve) => {
+		releaseFirstWrite = resolve;
+	});
+	let firstWriteStarted!: () => void;
+	const firstWriteStart = new Promise<void>((resolve) => {
+		firstWriteStarted = resolve;
+	});
+	let intercepted = false;
+	const gatedLix = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute") {
+				return async (...args: Parameters<typeof lix.execute>) => {
+					const [statement] = args;
+					if (
+						!intercepted &&
+						typeof statement === "string" &&
+						statement.startsWith(
+							"UPDATE lix_file SET content = $1 WHERE id = $2",
+						)
+					) {
+						intercepted = true;
+						firstWriteStarted();
+						await firstWriteGate;
+					}
+					return await target.execute(...args);
+				};
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+
+	const editor = createEditor({
+		lix: gatedLix,
+		fileId,
+		initialMarkdown: "Start",
+		persistDebounceMs: 0,
+	});
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	editor.commands.insertContent(" First");
+	await firstWriteStart;
+	editor.commands.insertContent(" Second");
+	editor.destroy();
+	// A retired persistence handler must be independent of all TipTap APIs.
+	editor.getJSON = () => {
+		throw new Error("destroyed TipTap was accessed");
+	};
+	const flush = flushMarkdownEditorPersistence(editor);
+	releaseFirstWrite();
+	await flush;
+
+	expect(await readMarkdown(lix, fileId)).toBe(
+		ensureTrailingNewline("Start First Second"),
+	);
+	await lix.close();
+});
+
 test("destroy flushes pending autosave without recreating a deleted file", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("destroy_cancel_pending_autosave");

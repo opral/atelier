@@ -95,6 +95,19 @@ export function MarkdownReviewEditor({
 	const [ownedEditor, setOwnedEditor] = useState<Editor | null>(null);
 	const editor = externalEditor ?? ownedEditor;
 	const completionSucceeded = useRef(false);
+	const reviewDocumentRef = useRef(reviewDocument.doc);
+	const openWorkspaceFileRef = useRef(openWorkspaceFile);
+	const canOpenWorkspaceFile = openWorkspaceFile !== undefined;
+	const stableOpenWorkspaceFile = useMemo<
+		MarkdownWorkspaceFileOpener | undefined
+	>(() => {
+		if (!canOpenWorkspaceFile) return undefined;
+		return (args) => openWorkspaceFileRef.current?.(args);
+	}, [canOpenWorkspaceFile]);
+	useLayoutEffect(() => {
+		reviewDocumentRef.current = reviewDocument.doc;
+		openWorkspaceFileRef.current = openWorkspaceFile;
+	}, [openWorkspaceFile, reviewDocument.doc]);
 
 	useEffect(() => {
 		if (
@@ -121,11 +134,11 @@ export function MarkdownReviewEditor({
 		if (externalEditor) return;
 		const nextEditor = createEditor({
 			lix,
-			initialContent: reviewDocument.doc,
+			initialContent: reviewDocumentRef.current,
 			additionalExtensions: MarkdownReviewExtensions,
 			sourceFilePath,
 			sourceCommitId: afterCommitId,
-			openWorkspaceFile,
+			openWorkspaceFile: stableOpenWorkspaceFile,
 			editable: false,
 			persistState: false,
 		});
@@ -135,9 +148,8 @@ export function MarkdownReviewEditor({
 		afterCommitId,
 		externalEditor,
 		lix,
-		openWorkspaceFile,
-		reviewDocument.doc,
 		sourceFilePath,
+		stableOpenWorkspaceFile,
 	]);
 
 	useLayoutEffect(() => {
@@ -150,14 +162,14 @@ export function MarkdownReviewEditor({
 	}, [externalEditor]);
 
 	useLayoutEffect(() => {
-		if (!editor) return;
+		if (!editor || editor.isDestroyed) return;
 		setReviewEditorDocument(editor, displayDocument);
 	}, [displayDocument, editor]);
 
 	const [activeChangeElement, setActiveChangeElement] =
 		useState<HTMLElement | null>(null);
 	useEffect(() => {
-		if (!editor) return;
+		if (!editor || editor.isDestroyed) return;
 		const changedElements = Array.from(
 			editor.view.dom.querySelectorAll<HTMLElement>("[data-review-change-id]"),
 		);
@@ -179,7 +191,7 @@ export function MarkdownReviewEditor({
 	}, [activeChangeId, displayDocument, editor, reviewEnabled]);
 
 	useEffect(() => {
-		if (!editor || !reviewEnabled) return;
+		if (!editor || editor.isDestroyed || !reviewEnabled) return;
 		const handleReviewClick = (event: MouseEvent) => {
 			if (!(event.target instanceof Element)) return;
 			const changed = event.target.closest<HTMLElement>(
@@ -367,6 +379,11 @@ function setReviewEditorDocument(
 	editor: Editor,
 	document: Parameters<Editor["schema"]["nodeFromJSON"]>[0],
 ): void {
+	// Resource effects can replace an owned editor in the same React commit in
+	// which document effects still hold the previous render's reference. TipTap
+	// deliberately nulls its schema and view when an editor is destroyed, so a
+	// stale reference is not a usable editor and must never be mutated.
+	if (editor.isDestroyed) return;
 	const nextDocument = editor.schema.nodeFromJSON(document);
 	if (editor.state.doc.eq(nextDocument)) return;
 	editor

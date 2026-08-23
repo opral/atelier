@@ -990,6 +990,50 @@ test("reopens a file from fresh data instead of the prior query cache", async ()
 	);
 });
 
+test("revokes the mounted editor lease before destroying TipTap", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("editor_lease_dispose");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/editor-lease-dispose.md",
+			content: new TextEncoder().encode("Lease"),
+		})
+		.execute();
+
+	let readyEditor: Editor | null = null;
+	let disposedEditor: Editor | null = null;
+	let wasDestroyedWhenDisposed: boolean | null = null;
+	let view: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		view = render(
+			<Suspense>
+				<Providers lix={lix}>
+					<TipTapEditor
+						fileId={fileId}
+						onReady={(editor) => {
+							readyEditor = editor;
+						}}
+						onDispose={(editor) => {
+							disposedEditor = editor;
+							wasDestroyedWhenDisposed = editor.isDestroyed;
+						}}
+					/>
+				</Providers>
+			</Suspense>,
+		);
+	});
+	await screen.findByTestId("tiptap-editor");
+	await waitFor(() => expect(readyEditor).not.toBeNull());
+
+	await act(async () => view?.unmount());
+	expect(disposedEditor).toBe(readyEditor);
+	expect(wasDestroyedWhenDisposed).toBe(false);
+	expect(readyEditor!.isDestroyed).toBe(true);
+	await lix.close();
+});
+
 test("does not recreate the editor when the workspace opener identity changes", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("file_stable_workspace_opener");

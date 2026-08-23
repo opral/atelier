@@ -314,7 +314,9 @@ function MarkdownLiveViewLoaded({
 		readonly editor: Editor;
 	} | null>(null);
 	const liveEditor =
-		liveEditorState && liveEditorState.fileId === effectiveFileRow?.id
+		liveEditorState &&
+		liveEditorState.fileId === effectiveFileRow?.id &&
+		!liveEditorState.editor.isDestroyed
 			? liveEditorState.editor
 			: null;
 	const [finishingReview, setFinishingReview] = useState<{
@@ -359,6 +361,11 @@ function MarkdownLiveViewLoaded({
 							additionalExtensions={MarkdownReviewExtensions}
 							onReady={(editor) => {
 								setLiveEditorState({ fileId: effectiveFileRow.id, editor });
+							}}
+							onDispose={(editor) => {
+								setLiveEditorState((current) =>
+									current?.editor === editor ? null : current,
+								);
 							}}
 							openWorkspaceFile={openWorkspaceFile}
 							onPersist={({ filePath: persistedPath }) => {
