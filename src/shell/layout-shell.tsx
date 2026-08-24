@@ -811,25 +811,28 @@ export async function selectCheckpointFiles(
 	});
 	if (fileChanges.length === 0) return [];
 
-	const history = await selectFileHistorySnapshotsAtCommits(
-		lix,
-		fileChanges.map(({ fileId, diffType }) => ({
-			fileId,
-			commitId: diffType === "removed" ? previousCommitId : commitId,
-		})),
-		{ includeContent: false },
-	);
 	const pathsByFileId = new Map<string, string>();
-	for (const row of history) {
-		if (typeof row.path === "string" && !pathsByFileId.has(row.id)) {
-			pathsByFileId.set(row.id, row.path);
+	const visibleFileIds = fileChanges
+		.filter(({ diffType }) => diffType !== "removed")
+		.map(({ fileId }) => fileId);
+	if (visibleFileIds.length > 0) {
+		const visibleFiles = await qb(lix)
+			.selectFrom("lix_file")
+			.select(["id", "path"])
+			.where("id", "in", visibleFileIds)
+			.execute();
+		for (const row of visibleFiles) {
+			if (typeof row.path === "string") pathsByFileId.set(row.id, row.path);
 		}
 	}
 	return fileChanges
-		.flatMap(({ fileId, diffType }): LixFileForOpen[] => {
-			const path = pathsByFileId.get(fileId);
-			return path ? [{ id: fileId, path, checkpointChangeKind: diffType }] : [];
-		})
+		.map(
+			({ fileId, diffType }): LixFileForOpen => ({
+				id: fileId,
+				path: pathsByFileId.get(fileId) ?? `/${fileId}`,
+				checkpointChangeKind: diffType,
+			}),
+		)
 		.sort((left, right) => left.path.localeCompare(right.path));
 }
 
@@ -1581,6 +1584,7 @@ function LayoutShellLoadedContentResolved({
 	// Covers the commit gap between placing a historical document and the panel
 	// ref observing its revision state. Hosts may echo the route synchronously.
 	const historicalOpenPathRef = useRef<string | null>(null);
+	const historicalRequestRef = useRef(0);
 	const closeHistoricalReviewViews = useCallback((commitId: string) => {
 		for (const view of panelStatesRef.current.central.views) {
 			if (
@@ -1606,6 +1610,7 @@ function LayoutShellLoadedContentResolved({
 	const exitDiffReview = useCallback(
 		(options?: { readonly restoreLiveDocument?: boolean }) => {
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
+			historicalRequestRef.current += 1;
 			historicalOpenPathRef.current = null;
 			setWorkingChangesReviewOpen(false);
 			setWorkingChangeReviewRange(null);
@@ -1633,6 +1638,7 @@ function LayoutShellLoadedContentResolved({
 		setWorkingChangeAgentTurnReviews([]);
 		agentTurnReviewDismissedRef.current = false;
 		setAgentTurnReviewDismissed(false);
+		historicalRequestRef.current += 1;
 		historicalOpenPathRef.current = null;
 		setHistoricalReview(null);
 	}, [activeBranchId]);
@@ -2781,25 +2787,61 @@ function LayoutShellLoadedContentResolved({
 				(candidate) => candidate.path === path,
 			);
 			if (!file) return;
-			historicalOpenPathRef.current = file.path;
-			openResolvedFileView({
-				panel: "central",
-				fileId: file.id,
-				filePath: file.path,
-				state: historicalRevisionStateForPath(
-					file.path,
-					historicalReview.commitId,
-					historicalReview.previousCommitId,
-					file.checkpointChangeKind,
-				),
+			const requestId = ++historicalRequestRef.current;
+			void (async () => {
+				const snapshotCommitId =
+					file.checkpointChangeKind === "removed"
+						? historicalReview.previousCommitId
+						: historicalReview.commitId;
+				const [snapshot] = await selectFileHistorySnapshotsAtCommits(
+					lix,
+					[{ fileId: file.id, commitId: snapshotCommitId }],
+					{ includeContent: false },
+				);
+				if (historicalRequestRef.current !== requestId) return;
+				if (!snapshot?.path) return;
+				const historicalPath = snapshot.path;
+				historicalOpenPathRef.current = historicalPath;
+				openResolvedFileView({
+					panel: "central",
+					fileId: file.id,
+					filePath: historicalPath,
+					state: historicalRevisionStateForPath(
+						historicalPath,
+						historicalReview.commitId,
+						historicalReview.previousCommitId,
+						file.checkpointChangeKind,
+					),
+				});
+				setHistoricalReview((current) =>
+					current && current.commitId === historicalReview.commitId
+						? {
+								...current,
+								opened: true,
+								files: current.files.map((candidate) =>
+									candidate.id === file.id
+										? { ...candidate, path: historicalPath }
+										: candidate,
+								),
+							}
+						: current,
+				);
+			})().catch((error: unknown) => {
+				console.warn("[checkpoint] failed to open historical file", error);
 			});
 		},
-		[historicalReview, historicalRevisionStateForPath, openResolvedFileView],
+		[
+			historicalReview,
+			historicalRevisionStateForPath,
+			lix,
+			openResolvedFileView,
+		],
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
-	// One click on a History checkpoint opens diff mode pointed at the past.
-	// It never restores anything by itself.
+	// Selecting a checkpoint reveals its changed files without eagerly reading
+	// either file snapshot. Historical content is immutable and potentially
+	// cold; load it only when the user chooses a file from the disclosure.
 	const handleViewCheckpoint = useCallback(
 		async ({
 			commitId,
@@ -2810,11 +2852,13 @@ function LayoutShellLoadedContentResolved({
 			readonly previousCommitId: string;
 			readonly createdAt: string;
 		}) => {
+			const requestId = ++historicalRequestRef.current;
 			const files = await selectCheckpointFiles(
 				lix,
 				previousCommitId,
 				commitId,
 			);
+			if (historicalRequestRef.current !== requestId) return;
 			if (files.length === 0) return;
 			setWorkingChangesReviewOpen(false);
 			setHistoricalReview((current) => {
@@ -2845,31 +2889,8 @@ function LayoutShellLoadedContentResolved({
 				}
 				return { commitId, previousCommitId, createdAt, files };
 			});
-			const firstFile = files[0]!;
-			historicalOpenPathRef.current = firstFile.path;
-			openResolvedFileView({
-				panel: "central",
-				fileId: firstFile.id,
-				filePath: firstFile.path,
-				state: historicalRevisionStateForPath(
-					firstFile.path,
-					commitId,
-					previousCommitId,
-					firstFile.checkpointChangeKind,
-				),
-			});
-			setHistoricalReview((current) =>
-				current && current.commitId === commitId
-					? { ...current, opened: true }
-					: current,
-			);
 		},
-		[
-			closeHistoricalReviewViews,
-			historicalRevisionStateForPath,
-			lix,
-			openResolvedFileView,
-		],
+		[closeHistoricalReviewViews, lix],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
