@@ -308,24 +308,14 @@ function getAgentTurnRangeStore(
 
 	let snapshot = EMPTY_AGENT_TURN_RANGE_SNAPSHOT;
 	const listeners = new Set<() => void>();
-	let generation = 0;
 	let releaseGeneration = 0;
-	let running = false;
-	let restartTimer: ReturnType<typeof setTimeout> | undefined;
-	let restartDelayMs = 250;
-	let stopCurrent: (() => void) | undefined;
+	let current: { readonly stop: () => void } | undefined;
 	const publish = (values: readonly unknown[]) => {
 		snapshot = { values };
 		for (const listener of listeners) listener();
 	};
 	const start = () => {
-		if (running) return;
-		if (restartTimer !== undefined) {
-			clearTimeout(restartTimer);
-			restartTimer = undefined;
-		}
-		running = true;
-		const activeGeneration = ++generation;
+		if (current) return;
 		let cancelled = false;
 		let closeObservation: (() => void) | undefined;
 		let closeSession: (() => Promise<void>) | undefined;
@@ -343,27 +333,15 @@ function getAgentTurnRangeStore(
 				console.warn("[agent-turn-review] failed to close session", error);
 			}
 		};
-		const scheduleRestart = () => {
-			if (cancelled || listeners.size === 0 || restartTimer !== undefined)
-				return;
-			const delay = restartDelayMs;
-			restartDelayMs = Math.min(restartDelayMs * 2, 4_000);
-			restartTimer = setTimeout(() => {
-				restartTimer = undefined;
-				if (listeners.size > 0 && !running) start();
-			}, delay);
+		const lifecycle = {
+			stop: () => {
+				if (cancelled) return;
+				cancelled = true;
+				closeObservationSafely();
+				void closeSessionSafely();
+			},
 		};
-		stopCurrent = () => {
-			if (cancelled) return;
-			cancelled = true;
-			running = false;
-			if (restartTimer !== undefined) {
-				clearTimeout(restartTimer);
-				restartTimer = undefined;
-			}
-			closeObservationSafely();
-			void closeSessionSafely();
-		};
+		current = lifecycle;
 		void (async () => {
 			try {
 				const session = await openLixBranchSession(lix, branchId);
@@ -373,7 +351,7 @@ function getAgentTurnRangeStore(
 					sessionOpen = false;
 					await session.lix.close();
 				};
-				if (cancelled || activeGeneration !== generation) return;
+				if (cancelled) return;
 				const events = session.lix.observe(
 					"SELECT value FROM lix_key_value WHERE lixcol_file_id IS NULL AND key >= $1 AND key < $2",
 					[
@@ -387,35 +365,21 @@ function getAgentTurnRangeStore(
 					observationOpen = false;
 					events.close();
 				};
-				let receivedSnapshot = false;
 				for (;;) {
 					const event = await events.next();
-					if (
-						cancelled ||
-						activeGeneration !== generation ||
-						event === undefined
-					) {
+					if (cancelled || event === undefined) {
 						break;
 					}
-					const values = receivedSnapshot
-						? event.result.rows.map((row) => row.get("value"))
-						: await readAgentTurnCommitRangeValues(session.lix);
-					receivedSnapshot = true;
-					restartDelayMs = 250;
-					if (!cancelled && activeGeneration === generation) publish(values);
+					publish(event.result.rows.map((row) => row.get("value")));
 				}
 			} catch (error) {
-				if (!cancelled && activeGeneration === generation) {
+				if (!cancelled) {
 					console.warn("[agent-turn-review] failed to observe ranges", error);
 				}
 			} finally {
 				closeObservationSafely();
 				await closeSessionSafely();
-				if (activeGeneration === generation) {
-					running = false;
-					stopCurrent = undefined;
-					scheduleRestart();
-				}
+				if (current === lifecycle) current = undefined;
 			}
 		})();
 	};
@@ -423,7 +387,7 @@ function getAgentTurnRangeStore(
 		subscribe: (listener) => {
 			releaseGeneration += 1;
 			listeners.add(listener);
-			if (!running) start();
+			start();
 			return () => {
 				listeners.delete(listener);
 				if (listeners.size !== 0) return;
@@ -432,12 +396,8 @@ function getAgentTurnRangeStore(
 					if (listeners.size !== 0 || releaseGeneration !== pendingRelease) {
 						return;
 					}
-					if (restartTimer !== undefined) {
-						clearTimeout(restartTimer);
-						restartTimer = undefined;
-					}
-					stopCurrent?.();
-					stopCurrent = undefined;
+					current?.stop();
+					current = undefined;
 				});
 			};
 		},
