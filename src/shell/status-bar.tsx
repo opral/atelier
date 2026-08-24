@@ -1,7 +1,7 @@
 import { type JSX, type ReactNode } from "react";
 import { Flag } from "lucide-react";
 import { useQueryResult } from "@/lib/lix-react";
-import { selectLatestCheckpoint, selectWorkingChangeCount } from "@/queries";
+import { selectWorkingChangeCount } from "@/queries";
 
 // Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
 // the status bar can consume the real title without changing its presentation.
@@ -56,7 +56,10 @@ export function CheckpointStatusBar({
 
 	const historyStatus =
 		workingChangeCount.status === "pending" ? null : changeCount === 0 ? (
-			<CleanCheckpointStatus onOpenHistory={onOpenHistory} />
+			<CheckpointStatus
+				statusLabel={LATEST_CHECKPOINT_TITLE}
+				onActivate={onOpenHistory}
+			/>
 		) : (
 			<CheckpointStatus
 				statusLabel={`${workingCountLabel} since checkpoint`}
@@ -123,25 +126,6 @@ function AutoAcceptToggle({
 				/>
 			</span>
 		</label>
-	);
-}
-
-function CleanCheckpointStatus({
-	onOpenHistory,
-}: {
-	readonly onOpenHistory?: () => void;
-}): JSX.Element {
-	const checkpoints = useQueryResult((lix) => selectLatestCheckpoint(lix));
-	if (checkpoints.status === "error") throw checkpoints.error;
-	const latestCheckpoint = checkpoints.rows[0];
-	const statusLabel = latestCheckpoint
-		? LATEST_CHECKPOINT_TITLE
-		: checkpoints.status === "pending"
-			? LATEST_CHECKPOINT_TITLE
-			: "No checkpoints";
-
-	return (
-		<CheckpointStatus statusLabel={statusLabel} onActivate={onOpenHistory} />
 	);
 }
 
