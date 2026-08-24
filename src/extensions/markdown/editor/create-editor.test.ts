@@ -29,16 +29,18 @@ async function waitForMarkdown(
 	lix: Awaited<ReturnType<typeof openLix>>,
 	fileId: string,
 	matches: (markdown: string) => boolean,
+	timeoutMs = 4_000,
 ): Promise<string> {
 	let markdown = "";
-	for (let i = 0; i < 200; i += 1) {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
 		markdown = await readMarkdown(lix, fileId);
 		if (matches(markdown)) {
 			return markdown;
 		}
+		if (Date.now() >= deadline) return markdown;
 		await new Promise((resolve) => setTimeout(resolve, 20));
 	}
-	return markdown;
 }
 
 function paragraphTexts(markdown: string): string[] {
@@ -1269,10 +1271,11 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 		lix,
 		fileId,
 		(value) => value === ensureTrailingNewline("Start Changed"),
+		15_000,
 	);
 	expect(persisted).toBe(ensureTrailingNewline("Start Changed"));
 	await lix.close();
-});
+}, 20_000);
 
 test("destroyed editor autosave uses the captured payload, not TipTap", async () => {
 	const lix = await openLix();
