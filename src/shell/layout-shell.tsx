@@ -45,6 +45,7 @@ import {
 	revertWorkingChangesForFiles,
 } from "@/lib/lix-diff-commands";
 import { selectFileHistory } from "@/lib/lix-file-history";
+import { selectFileHistorySnapshotsAtCommits } from "@/lib/lix-file-history-snapshots";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectFileWorkingChanges,
@@ -810,40 +811,18 @@ export async function selectCheckpointFiles(
 	});
 	if (fileChanges.length === 0) return [];
 
-	const endpointGroups = new Map<string, string[]>();
-	for (const { fileId, diffType } of fileChanges) {
-		const endpointCommitId =
-			diffType === "removed" ? previousCommitId : commitId;
-		const ids = endpointGroups.get(endpointCommitId) ?? [];
-		ids.push(fileId);
-		endpointGroups.set(endpointCommitId, ids);
-	}
-	const historyParams: string[] = [];
-	const historyArms = [...endpointGroups].map(([endpointCommitId, fileIds]) => {
-		historyParams.push(endpointCommitId);
-		const endpointPlaceholder = `$${historyParams.length}`;
-		const idPlaceholders = fileIds.map((fileId) => {
-			historyParams.push(fileId);
-			return `$${historyParams.length}`;
-		});
-		return `SELECT id, path, lixcol_depth
-			FROM lix_history('lix_file', ${endpointPlaceholder})
-			WHERE id IN (${idPlaceholders.join(", ")})`;
-	});
-	const history = await lix.execute(
-		`${historyArms.join(" UNION ALL ")} ORDER BY lixcol_depth ASC`,
-		historyParams,
+	const history = await selectFileHistorySnapshotsAtCommits(
+		lix,
+		fileChanges.map(({ fileId, diffType }) => ({
+			fileId,
+			commitId: diffType === "removed" ? previousCommitId : commitId,
+		})),
+		{ includeContent: false },
 	);
 	const pathsByFileId = new Map<string, string>();
-	for (const row of history.rows) {
-		const id = row.get("id");
-		const path = row.get("path");
-		if (
-			typeof id === "string" &&
-			typeof path === "string" &&
-			!pathsByFileId.has(id)
-		) {
-			pathsByFileId.set(id, path);
+	for (const row of history) {
+		if (typeof row.path === "string" && !pathsByFileId.has(row.id)) {
+			pathsByFileId.set(row.id, row.path);
 		}
 	}
 	return fileChanges

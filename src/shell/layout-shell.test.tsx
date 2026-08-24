@@ -1381,10 +1381,12 @@ describe("agent turn review navigation", () => {
 			const originalExecute = lix.execute.bind(lix);
 			let activeCheckpointFileReads = 0;
 			let maxActiveCheckpointFileReads = 0;
+			const checkpointHistoryStatements: string[] = [];
 			const execute = vi
 				.spyOn(lix, "execute")
 				.mockImplementation(async (statement, params) => {
 					if (String(statement).includes("lix_history('lix_file'")) {
+						checkpointHistoryStatements.push(String(statement));
 						activeCheckpointFileReads += 1;
 						maxActiveCheckpointFileReads = Math.max(
 							maxActiveCheckpointFileReads,
@@ -1463,6 +1465,11 @@ describe("agent turn review navigation", () => {
 				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
 			expect(maxActiveCheckpointFileReads).toBe(1);
+			const batchedCheckpointHistory = checkpointHistoryStatements.filter(
+				(statement) => statement.includes(" UNION ALL "),
+			);
+			expect(batchedCheckpointHistory).toHaveLength(1);
+			expect(batchedCheckpointHistory[0]?.match(/LIMIT 1/g)).toHaveLength(2);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -1567,6 +1574,9 @@ describe("agent turn review navigation", () => {
 				statement.includes(" UNION ALL "),
 			);
 			expect(batchedHistoryCalls).toHaveLength(1);
+			expect(batchedHistoryCalls[0]?.statement.match(/LIMIT 1/g)).toHaveLength(
+				2,
+			);
 			expect(batchedHistoryCalls[0]?.params).toEqual(
 				expect.arrayContaining([
 					previous.commitId,

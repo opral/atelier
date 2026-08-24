@@ -12,7 +12,8 @@ import {
 	withLixBranchSession,
 } from "@/lib/lix-branch-session";
 import { selectFileHistory } from "@/lib/lix-file-history";
-import { qb, sql } from "@/lib/lix-kysely";
+import { selectFileHistorySnapshotsAtCommits } from "@/lib/lix-file-history-snapshots";
+import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { selectWorkingChanges } from "@/queries";
 import type {
@@ -33,12 +34,6 @@ import {
 type FileHistoryRow = {
 	readonly content: unknown;
 	readonly path: string | null;
-};
-
-type BatchedFileHistoryRow = FileHistoryRow & {
-	readonly id: string;
-	readonly commit_id: string;
-	readonly depth: number;
 };
 
 type CurrentFileRow = {
@@ -864,46 +859,19 @@ async function getFileHistorySnapshotsAtCommits(
 	const requests = fileIds.flatMap((fileId) =>
 		commitIds.map((commitId) => ({ fileId, commitId })),
 	);
-	// Each exact snapshot branch binds its file ID and the commit ID twice
-	// (history anchor plus projected key). Keeping every branch as a one-file,
-	// one-anchor ordered LIMIT lets Lix stop at its bounded history frontier.
-	for (const requestBatch of chunkValues(
-		requests,
-		Math.floor(HISTORY_QUERY_MAX_PARAMETERS / 3),
-	)) {
-		const historySnapshots = sql.join(
-			requestBatch.map(
-				({ fileId, commitId }) => sql`
-						SELECT
-							file_history.id,
-							file_history.path,
-							file_history.content,
-							${commitId} AS commit_id,
-							file_history.lixcol_depth AS depth
-						FROM (
-							SELECT id, path, content, lixcol_depth
-							FROM lix_history('lix_file', ${commitId})
-							WHERE id = ${fileId}
-							ORDER BY lixcol_depth ASC
-							LIMIT 1
-						) AS file_history
-					`,
-			),
-			sql` UNION ALL `,
-		);
-		const result = await historySnapshots.execute(qb(lix));
-		for (const row of result.rows as BatchedFileHistoryRow[]) {
-			const fileSnapshots = snapshots.get(row.id) ?? new Map();
-			const existing = fileSnapshots.get(row.commit_id);
-			if (!existing || row.depth < existing.depth) {
-				fileSnapshots.set(row.commit_id, {
-					content: row.content,
-					depth: row.depth,
-					exists: row.path !== null,
-				});
-			}
-			snapshots.set(row.id, fileSnapshots);
+	for (const row of await selectFileHistorySnapshotsAtCommits(lix, requests, {
+		includeContent: true,
+	})) {
+		const fileSnapshots = snapshots.get(row.id) ?? new Map();
+		const existing = fileSnapshots.get(row.commitId);
+		if (!existing || row.depth < existing.depth) {
+			fileSnapshots.set(row.commitId, {
+				content: row.content,
+				depth: row.depth,
+				exists: row.path !== null,
+			});
 		}
+		snapshots.set(row.id, fileSnapshots);
 	}
 	return snapshots;
 }

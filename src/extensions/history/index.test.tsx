@@ -272,7 +272,8 @@ describe("HistoryView", () => {
 			fileId,
 		]);
 		const newerCheckpoint = await lix.createCheckpoint();
-		const historicalFiles = [{ id: fileId, path: "/switch.txt" }];
+		const olderHistoricalFiles = [{ id: fileId, path: "/older-switch.txt" }];
+		const newerHistoricalFiles = [{ id: fileId, path: "/newer-switch.txt" }];
 		const originalExecute = lix.execute.bind(lix);
 		let historyReads = 0;
 		vi.spyOn(lix, "execute").mockImplementation(
@@ -291,7 +292,7 @@ describe("HistoryView", () => {
 						<HistoryView
 							atelier={atelierStub({
 								historicalCommitId: olderCheckpoint.commitId,
-								historicalFiles,
+								historicalFiles: olderHistoricalFiles,
 							})}
 						/>
 					</Suspense>
@@ -304,6 +305,7 @@ describe("HistoryView", () => {
 		expect(
 			await screen.findByRole("list", { name: "Files at this checkpoint" }),
 		).toBeVisible();
+		expect(screen.getByText("older-switch.txt")).toBeVisible();
 
 		await act(async () => {
 			view?.rerender(
@@ -312,7 +314,7 @@ describe("HistoryView", () => {
 						<HistoryView
 							atelier={atelierStub({
 								historicalCommitId: newerCheckpoint.commitId,
-								historicalFiles,
+								historicalFiles: newerHistoricalFiles,
 							})}
 						/>
 					</Suspense>
@@ -326,6 +328,8 @@ describe("HistoryView", () => {
 		expect(
 			screen.getByRole("list", { name: "Files at this checkpoint" }),
 		).toBeVisible();
+		expect(screen.getByText("newer-switch.txt")).toBeVisible();
+		expect(screen.queryByText("older-switch.txt")).toBeNull();
 		expect(historyReads).toBe(0);
 
 		await act(async () => view?.unmount());
