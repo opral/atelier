@@ -159,17 +159,12 @@ export function selectFileWorkingChanges(lix: Lix) {
 export async function selectReviewableFileWorkingChanges(
 	lix: Lix,
 ): Promise<FileWorkingChangeRow[]> {
-	const [currentFiles, workingChanges, latestCheckpoint] = await Promise.all([
-		selectFileWorkingChanges(lix).execute(),
-		selectWorkingChanges(lix).execute(),
-		selectLatestCheckpoint(lix).executeTakeFirst(),
-	]);
-	if (!latestCheckpoint) return currentFiles;
-
-	const currentIds = new Set(currentFiles.map((file) => file.id));
-	const removedIds = new Set<string>();
+	const workingChanges = await selectWorkingChanges(lix).execute();
+	const changesByFileId = new Map<
+		string,
+		{ descriptorAdded: boolean; removed: boolean }
+	>();
 	for (const change of workingChanges) {
-		if (change.diff_type !== "removed") continue;
 		const descriptorFileId =
 			change.schema_key === "lix_file_descriptor" &&
 			Array.isArray(change.row_pk) &&
@@ -177,9 +172,43 @@ export async function selectReviewableFileWorkingChanges(
 				? change.row_pk[0]
 				: null;
 		const fileId = change.file_id ?? descriptorFileId;
-		if (fileId && !currentIds.has(fileId)) removedIds.add(fileId);
+		if (!fileId) continue;
+		const aggregate = changesByFileId.get(fileId) ?? {
+			descriptorAdded: false,
+			removed: false,
+		};
+		aggregate.descriptorAdded ||=
+			change.schema_key === "lix_file_descriptor" &&
+			change.diff_type === "added";
+		aggregate.removed ||= change.diff_type === "removed";
+		changesByFileId.set(fileId, aggregate);
 	}
+	if (changesByFileId.size === 0) return [];
+
+	const visibleRows = await qb(lix)
+		.selectFrom("lix_file")
+		.select(["id", "path"])
+		.where("id", "in", [...changesByFileId.keys()])
+		.execute();
+	const currentFiles: FileWorkingChangeRow[] = visibleRows.map((file) => ({
+		id: String(file.id),
+		path: String(file.path),
+		previous_path: null,
+		diff_type: changesByFileId.get(String(file.id))?.descriptorAdded
+			? "added"
+			: "modified",
+	}));
+	const currentIds = new Set(currentFiles.map((file) => file.id));
+	const removedIds = new Set(
+		[...changesByFileId]
+			.filter(
+				([fileId, aggregate]) => aggregate.removed && !currentIds.has(fileId),
+			)
+			.map(([fileId]) => fileId),
+	);
 	if (removedIds.size === 0) return currentFiles;
+	const latestCheckpoint = await selectLatestCheckpoint(lix).executeTakeFirst();
+	if (!latestCheckpoint) return currentFiles;
 
 	const historicalRows = await selectFileHistory(
 		lix,

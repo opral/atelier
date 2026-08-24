@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
@@ -181,6 +181,20 @@ describe("checkpoint queries", () => {
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
 			{ change_count: 3, file_count: 1 },
 		]);
+		const execute = vi.spyOn(lix, "execute");
+		expect(await selectReviewableFileWorkingChanges(lix)).toEqual([
+			{
+				id: fakeUuid("review-file"),
+				path: "/drafts/review.md",
+				previous_path: null,
+				diff_type: "added",
+			},
+		]);
+		expect(
+			execute.mock.calls.some(([statement]) =>
+				String(statement).includes('FROM "lix_checkpoint"'),
+			),
+		).toBe(false);
 
 		await lix.createCheckpoint();
 		expect(await selectFileWorkingChanges(lix).execute()).toEqual([]);
@@ -202,6 +216,7 @@ describe("checkpoint queries", () => {
 			.execute();
 		await lix.createCheckpoint();
 		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+		const execute = vi.spyOn(lix, "execute");
 
 		expect(await selectReviewableFileWorkingChanges(lix)).toEqual([
 			{
@@ -211,6 +226,11 @@ describe("checkpoint queries", () => {
 				diff_type: "removed",
 			},
 		]);
+		expect(
+			execute.mock.calls.filter(([statement]) =>
+				String(statement).includes("lix_working_diff()"),
+			),
+		).toHaveLength(1);
 
 		await lix.close();
 	});

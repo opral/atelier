@@ -97,9 +97,18 @@ export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
 	readonly reviewStatusStore: AtelierReviewStatusStore;
 };
 
+export type AtelierLiveDiffRangeStore = {
+	readonly getSnapshot: () => readonly string[];
+	readonly subscribe: (listener: () => void) => () => void;
+	readonly add: (rangeId: string) => void;
+	readonly resolve: (rangeId: string) => void;
+	readonly waitForPending: () => Promise<void>;
+};
+
 // Symbol.for keeps an existing instance readable across development module reloads.
 const CONFIGURATION = Symbol.for("@opral/atelier/configuration");
 const DOCUMENTS_RUNTIME = Symbol.for("@opral/atelier/documents-runtime");
+const LIVE_DIFF_RANGES = Symbol.for("@opral/atelier/live-diff-ranges");
 
 type AtelierDocumentsCommand =
 	| {
@@ -180,6 +189,7 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
+	const liveDiffRangeIds = createLiveDiffRangeStore();
 	const usesDefaultBranchSession = options.branchSession === undefined;
 	const branchSession =
 		options.branchSession ?? createLixBranchSession(options.lix);
@@ -206,13 +216,23 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 								},
 							}
 						: diffOptions;
-				return openDiff(
-					options.lix,
-					scopedDiffOptions,
-					usesDefaultBranchSession
-						? await options.lix.activeBranchId()
-						: await resolveBranchSessionId(branchSession),
-				);
+				// Record the user's live intent before the repository observer can
+				// publish the appended range. This distinguishes it from ranges that
+				// were already persisted when a tab opened.
+				const rangeId = diffId(scopedDiffOptions);
+				liveDiffRangeIds.add(rangeId);
+				try {
+					return await openDiff(
+						options.lix,
+						scopedDiffOptions,
+						usesDefaultBranchSession
+							? await options.lix.activeBranchId()
+							: await resolveBranchSessionId(branchSession),
+					);
+				} catch (error) {
+					liveDiffRangeIds.resolve(rangeId);
+					throw error;
+				}
 			},
 		},
 		documents: {
@@ -311,7 +331,51 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		value: documentsRuntime,
 		writable: false,
 	});
+	Object.defineProperty(instance, LIVE_DIFF_RANGES, {
+		configurable: false,
+		enumerable: false,
+		value: liveDiffRangeIds,
+		writable: false,
+	});
 	return instance;
+}
+
+function createLiveDiffRangeStore(): AtelierLiveDiffRangeStore {
+	let snapshot: readonly string[] = [];
+	const listeners = new Set<() => void>();
+	const pending = new Map<
+		string,
+		{ readonly promise: Promise<void>; readonly resolve: () => void }
+	>();
+	return {
+		getSnapshot: () => snapshot,
+		subscribe: (listener) => {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		add: (rangeId) => {
+			if (snapshot.includes(rangeId)) return;
+			let resolve = () => {};
+			const promise = new Promise<void>((done) => {
+				resolve = done;
+			});
+			pending.set(rangeId, { promise, resolve });
+			snapshot = [...snapshot, rangeId];
+			for (const listener of listeners) listener();
+		},
+		resolve: (rangeId) => {
+			pending.get(rangeId)?.resolve();
+			pending.delete(rangeId);
+			if (snapshot.includes(rangeId)) {
+				snapshot = snapshot.filter((candidate) => candidate !== rangeId);
+				for (const listener of listeners) listener();
+			}
+		},
+		waitForPending: async function waitForPending(): Promise<void> {
+			await Promise.all([...pending.values()].map(({ promise }) => promise));
+			if (pending.size > 0) await waitForPending();
+		},
+	};
 }
 
 function queuePreferenceSaves(
@@ -370,6 +434,33 @@ export function getAtelierConfiguration(
 		throw new TypeError("Atelier requires an instance from createAtelier().");
 	}
 	return configuration;
+}
+
+/** @internal Distinguishes live diff.open() calls from persisted ranges. */
+export function getAtelierLiveDiffRangeStore(
+	instance: AtelierInstance,
+): AtelierLiveDiffRangeStore {
+	const store = (instance as unknown as Record<symbol, unknown>)[
+		LIVE_DIFF_RANGES
+	];
+	if (!isAtelierLiveDiffRangeStore(store)) {
+		throw new TypeError("Atelier requires an instance from createAtelier().");
+	}
+	return store;
+}
+
+function isAtelierLiveDiffRangeStore(
+	value: unknown,
+): value is AtelierLiveDiffRangeStore {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"getSnapshot" in value &&
+		"subscribe" in value &&
+		"add" in value &&
+		"resolve" in value &&
+		"waitForPending" in value
+	);
 }
 
 function isAtelierConfiguration(value: unknown): value is AtelierConfiguration {

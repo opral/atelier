@@ -231,12 +231,14 @@ export function useAgentTurnCommitRanges(
 ): {
 	readonly rangeValues: readonly unknown[];
 	readonly ranges: readonly AgentTurnCommitRange[];
+	readonly ready: boolean;
 } {
 	const resultRef = useRef<{
 		readonly key: string;
 		readonly value: {
 			readonly rangeValues: readonly unknown[];
 			readonly ranges: readonly AgentTurnCommitRange[];
+			readonly ready: boolean;
 		};
 	} | null>(null);
 	const lix = useLix();
@@ -265,16 +267,21 @@ export function useAgentTurnCommitRanges(
 	const key = JSON.stringify([
 		activeBranchId,
 		reviewRangeSessionId ?? null,
+		observedRanges.ready,
 		rangeValues,
 	]);
 	if (resultRef.current?.key !== key) {
-		resultRef.current = { key, value: { rangeValues, ranges } };
+		resultRef.current = {
+			key,
+			value: { rangeValues, ranges, ready: observedRanges.ready },
+		};
 	}
 	return resultRef.current.value;
 }
 
 type AgentTurnRangeStoreSnapshot = {
 	readonly values: readonly unknown[];
+	readonly ready: boolean;
 };
 
 type AgentTurnRangeStore = {
@@ -284,6 +291,7 @@ type AgentTurnRangeStore = {
 
 const EMPTY_AGENT_TURN_RANGE_SNAPSHOT: AgentTurnRangeStoreSnapshot = {
 	values: [],
+	ready: false,
 };
 const DISABLED_AGENT_TURN_RANGE_STORE: AgentTurnRangeStore = {
 	subscribe: () => () => {},
@@ -311,7 +319,7 @@ function getAgentTurnRangeStore(
 	let releaseGeneration = 0;
 	let current: { readonly stop: () => void } | undefined;
 	const publish = (values: readonly unknown[]) => {
-		snapshot = { values };
+		snapshot = { values, ready: true };
 		for (const listener of listeners) listener();
 	};
 	const start = () => {

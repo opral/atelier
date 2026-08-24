@@ -589,7 +589,124 @@ async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 	});
 }
 
+async function waitForBackgroundReviewStartup(): Promise<void> {
+	await waitFor(() => {
+		expect(
+			document.querySelector("[data-agent-turn-ranges-ready='true']"),
+		).not.toBeNull();
+	});
+}
+
 describe("agent turn review navigation", () => {
+	test("keeps persisted agent ranges cold when a repository opens", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			const fileId = fakeUuid("persisted-agent-range-file");
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fileId,
+					path: "/persisted-agent-range.md",
+					content: new TextEncoder().encode("# Before\n"),
+				})
+				.execute();
+			let beforeCommitId = await activeCommitId(lix);
+			for (let index = 0; index < 50; index += 1) {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({ content: new TextEncoder().encode(`# After ${index}\n`) })
+					.where("id", "=", fileId)
+					.execute();
+				const afterCommitId = await activeCommitId(lix);
+				await appendAgentTurnCommitRange(lix, {
+					id: `persisted-agent-range-${index}`,
+					sourceId: "codex",
+					beforeCommitId,
+					afterCommitId,
+					startedAt: index * 2,
+					completedAt: index * 2 + 1,
+				});
+				beforeCommitId = afterCommitId;
+			}
+			const execute = vi.spyOn(lix, "execute");
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await waitForBackgroundReviewStartup();
+			expect(
+				execute.mock.calls.filter(([statement]) =>
+					String(statement).includes("AS range_index"),
+				),
+			).toHaveLength(0);
+
+			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([]);
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+			expect(
+				execute.mock.calls.some(([statement]) =>
+					String(statement).includes("lix_history('lix_file'"),
+				),
+			).toBe(false);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("closes review intent after consuming a no-op live range", async () => {
+		const lix = await openLix();
+		const atelier = createAtelier({ lix });
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			const commitId = await activeCommitId(lix);
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await waitForBackgroundReviewStartup();
+			const execute = vi.spyOn(lix, "execute");
+			await act(async () => {
+				await appendAgentTurnCommitRange(lix, {
+					id: "live-no-op-range",
+					sourceId: "codex",
+					beforeCommitId: commitId,
+					afterCommitId: commitId,
+					startedAt: 1,
+					completedAt: 2,
+				});
+			});
+
+			await waitFor(() => {
+				expect(
+					execute.mock.calls.some(([statement]) =>
+						String(statement).includes("AS range_index"),
+					),
+				).toBe(true);
+				expect(
+					document.querySelector("[data-agent-turn-review-open='true']"),
+				).toBeNull();
+			});
+			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("auto-opens external reviews exactly once without reopening an active-file range", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
@@ -825,12 +942,21 @@ describe("agent turn review navigation", () => {
 				).toBe(fakeUuid("auto-changed-file"));
 			});
 
+			const beforeAgentCommitId = await activeCommitId(lix);
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.where("id", "=", fakeUuid("auto-changed-file"))
 					.execute();
+			});
+			const afterAgentCommitId = await activeCommitId(lix);
+			await act(async () => {
+				await atelier.diff.open({
+					beforeCommitId: beforeAgentCommitId,
+					afterCommitId: afterAgentCommitId,
+					source: { id: "codex", turnId: "auto-accepted" },
+				});
 			});
 			await waitFor(() => {
 				expect(
@@ -1047,7 +1173,6 @@ describe("agent turn review navigation", () => {
 			sessionStateStore,
 		});
 		let utils: ReturnType<typeof render> | undefined;
-		let releaseHistoryReads = () => {};
 		try {
 			await qb(lix)
 				.insertInto("lix_file")
@@ -1065,14 +1190,6 @@ describe("agent turn review navigation", () => {
 				.where("id", "=", fakeUuid("checkpoint-with-blocked-history"))
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
-			await appendAgentTurnCommitRange(lix, {
-				id: "checkpoint-with-blocked-history",
-				sourceId: "codex",
-				beforeCommitId,
-				afterCommitId,
-				startedAt: 1,
-				completedAt: 2,
-			});
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
@@ -1081,6 +1198,17 @@ describe("agent turn review navigation", () => {
 						</Suspense>
 					</LixProvider>,
 				);
+			});
+			await waitForBackgroundReviewStartup();
+			await act(async () => {
+				await appendAgentTurnCommitRange(lix, {
+					id: "checkpoint-with-blocked-history",
+					sourceId: "codex",
+					beforeCommitId,
+					afterCommitId,
+					startedAt: 1,
+					completedAt: 2,
+				});
 			});
 			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			fireEvent.click(
@@ -1091,17 +1219,6 @@ describe("agent turn review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
-
-			const originalExecute = lix.execute.bind(lix);
-			const historyReadGate = new Promise<void>((resolve) => {
-				releaseHistoryReads = resolve;
-			});
-			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_history('lix_file'")) {
-					await historyReadGate;
-				}
-				return originalExecute(statement, params);
-			});
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			await waitFor(() => {
 				expect(
@@ -1114,9 +1231,85 @@ describe("agent turn review navigation", () => {
 					await reviewStatusStore.loadResolvedReviewIds(branchId),
 				).toHaveLength(1);
 			});
-			// Zero eager history reads is ideal. If another mounted consumer does issue
-			// one, the gate above proves it still is not an input to checkpoint creation.
 			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("checkpoints an added active file without reading its absent history", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({ lix, sessionStateStore });
+		const fileId = fakeUuid("checkpoint-added-active-file");
+		let utils: ReturnType<typeof render> | undefined;
+		let releaseHistoryReads = () => {};
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("checkpoint-added-baseline"),
+					path: "/baseline.md",
+					content: new TextEncoder().encode("# Baseline\n"),
+				})
+				.execute();
+			await lix.createCheckpoint();
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fileId,
+					path: "/added-active.md",
+					content: new TextEncoder().encode("# Added\n"),
+				})
+				.execute();
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			fireEvent.click(await findFilesTreeItem("added-active.md"));
+			await waitFor(() => {
+				expect(
+					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+						?.fileId,
+				).toBe(fileId);
+			});
+
+			const originalExecute = lix.execute.bind(lix);
+			const historyReadGate = new Promise<void>((resolve) => {
+				releaseHistoryReads = resolve;
+			});
+			let blockedHistoryReadCount = 0;
+			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
+				if (String(statement).includes("lix_history('lix_file'")) {
+					blockedHistoryReadCount += 1;
+					await historyReadGate;
+				}
+				return originalExecute(statement, params);
+			});
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "1 file changed since checkpoint. Open changes review",
+				}),
+			);
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			expect(blockedHistoryReadCount).toBe(0);
+
+			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint/ }),
+				).toBeNull();
+			});
+			expect(blockedHistoryReadCount).toBe(0);
 		} finally {
 			releaseHistoryReads();
 			await act(async () => utils?.unmount());
@@ -1129,6 +1322,7 @@ describe("agent turn review navigation", () => {
 		const reviewStatusStore = createMemoryReviewStatusStore();
 		const atelier = createAtelier({ lix, reviewStatusStore });
 		let utils: ReturnType<typeof render> | undefined;
+		let releaseRangeDiscovery = () => {};
 		try {
 			const selectedFileId = fakeUuid("partial-checkpoint-selected");
 			const remainingFileId = fakeUuid("partial-checkpoint-remaining");
@@ -1155,15 +1349,6 @@ describe("agent turn review navigation", () => {
 				.where("id", "in", [selectedFileId, remainingFileId])
 				.execute();
 			const afterCommitId = await activeCommitId(lix);
-			await appendAgentTurnCommitRange(lix, {
-				id: "partial-checkpoint-range",
-				sourceId: "codex",
-				beforeCommitId,
-				afterCommitId,
-				startedAt: 1,
-				completedAt: 2,
-			});
-
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
@@ -1173,12 +1358,34 @@ describe("agent turn review navigation", () => {
 					</LixProvider>,
 				);
 			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
+			await waitForBackgroundReviewStartup();
+			const originalExecute = lix.execute.bind(lix);
+			const rangeDiscoveryGate = new Promise<void>((resolve) => {
+				releaseRangeDiscovery = resolve;
+			});
+			let blockedRangeDiscoveryCount = 0;
+			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
+				if (String(statement).includes("AS range_index")) {
+					blockedRangeDiscoveryCount += 1;
+					await rangeDiscoveryGate;
+				}
+				return originalExecute(statement, params);
+			});
+			await act(async () => {
+				await atelier.diff.open({
+					beforeCommitId,
+					afterCommitId,
+					source: { id: "codex", turnId: "partial-checkpoint" },
+				});
+			});
+			await waitFor(() => expect(blockedRangeDiscoveryCount).toBe(1));
 			fireEvent.click(
 				await screen.findByRole("button", {
 					name: "2 files changed since checkpoint. Open changes review",
 				}),
 			);
+			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
+			releaseRangeDiscovery();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
@@ -1218,6 +1425,7 @@ describe("agent turn review navigation", () => {
 				).toHaveLength(1);
 			});
 		} finally {
+			releaseRangeDiscovery();
 			await act(async () => utils?.unmount());
 			await lix.close();
 		}
@@ -1945,6 +2153,7 @@ describe("agent turn review navigation", () => {
 					</LixProvider>,
 				);
 			});
+			await waitForBackgroundReviewStartup();
 
 			await act(async () => {
 				await qb(lix)
@@ -2054,6 +2263,7 @@ describe("agent turn review navigation", () => {
 					</LixProvider>,
 				);
 			});
+			await waitForBackgroundReviewStartup();
 
 			await act(async () => {
 				await qb(lix)
@@ -2404,6 +2614,11 @@ describe("agent turn review navigation", () => {
 					expect(
 						await reviewStatusStore.loadResolvedReviewIds(branchId!),
 					).toHaveLength(1);
+				});
+				await waitFor(() => {
+					expect(
+						document.querySelector("[data-agent-turn-review-open='true']"),
+					).toBeNull();
 				});
 			} finally {
 				await act(async () => utils?.unmount());
