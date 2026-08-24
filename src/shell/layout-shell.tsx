@@ -45,7 +45,6 @@ import {
 	revertWorkingChangesForFiles,
 } from "@/lib/lix-diff-commands";
 import { selectFileHistory } from "@/lib/lix-file-history";
-import { publishCheckpointFiles } from "@/lib/checkpoint-file-store";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectFileWorkingChanges,
@@ -774,27 +773,6 @@ export async function selectCheckpointFiles(
 	previousCommitId: string,
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
-	for (let attempt = 0; attempt < 25; attempt += 1) {
-		const files = await selectCheckpointFilesOnce(
-			lix,
-			previousCommitId,
-			commitId,
-		);
-		if (files.length > 0 || attempt === 24) return files;
-		// A warm sync replica can observe the global checkpoint row one pull
-		// before the branch's sparse state boundary. Keep the click pending until
-		// that already-in-flight boundary becomes queryable instead of treating
-		// the transient empty diff as a permanently empty checkpoint.
-		await new Promise((resolve) => setTimeout(resolve, 200));
-	}
-	return [];
-}
-
-async function selectCheckpointFilesOnce(
-	lix: Lix,
-	previousCommitId: string,
-	commitId: string,
-): Promise<LixFileForOpen[]> {
 	const changed = await lix.execute(
 		`SELECT coalesce(
 			file_id,
@@ -830,31 +808,49 @@ async function selectCheckpointFilesOnce(
 			? [{ fileId, diffType }]
 			: [];
 	});
-	const files: Array<LixFileForOpen | null> = [];
-	// Demand-hydrated history reads share one repository engine. Resolve them in
-	// order so one read can finish importing its sparse boundary before the next
-	// read asks the same engine for another boundary.
+	if (fileChanges.length === 0) return [];
+
+	const endpointGroups = new Map<string, string[]>();
 	for (const { fileId, diffType } of fileChanges) {
 		const endpointCommitId =
 			diffType === "removed" ? previousCommitId : commitId;
-		const row = await selectFileHistory(lix, endpointCommitId)
-			.select(["id", "path"])
-			.where("id", "=", fileId)
-			.orderBy("lixcol_depth", "asc")
-			.limit(1)
-			.executeTakeFirst();
-		files.push(
-			row && typeof row.path === "string"
-				? {
-						id: row.id as string,
-						path: row.path,
-						checkpointChangeKind: diffType,
-					}
-				: null,
-		);
+		const ids = endpointGroups.get(endpointCommitId) ?? [];
+		ids.push(fileId);
+		endpointGroups.set(endpointCommitId, ids);
 	}
-	return files
-		.filter((file): file is LixFileForOpen => file !== null)
+	const historyParams: string[] = [];
+	const historyArms = [...endpointGroups].map(([endpointCommitId, fileIds]) => {
+		historyParams.push(endpointCommitId);
+		const endpointPlaceholder = `$${historyParams.length}`;
+		const idPlaceholders = fileIds.map((fileId) => {
+			historyParams.push(fileId);
+			return `$${historyParams.length}`;
+		});
+		return `SELECT id, path, lixcol_depth
+			FROM lix_history('lix_file', ${endpointPlaceholder})
+			WHERE id IN (${idPlaceholders.join(", ")})`;
+	});
+	const history = await lix.execute(
+		`${historyArms.join(" UNION ALL ")} ORDER BY lixcol_depth ASC`,
+		historyParams,
+	);
+	const pathsByFileId = new Map<string, string>();
+	for (const row of history.rows) {
+		const id = row.get("id");
+		const path = row.get("path");
+		if (
+			typeof id === "string" &&
+			typeof path === "string" &&
+			!pathsByFileId.has(id)
+		) {
+			pathsByFileId.set(id, path);
+		}
+	}
+	return fileChanges
+		.flatMap(({ fileId, diffType }): LixFileForOpen[] => {
+			const path = pathsByFileId.get(fileId);
+			return path ? [{ id: fileId, path, checkpointChangeKind: diffType }] : [];
+		})
 		.sort((left, right) => left.path.localeCompare(right.path));
 }
 
@@ -2841,7 +2837,6 @@ function LayoutShellLoadedContentResolved({
 				commitId,
 			);
 			if (files.length === 0) return;
-			publishCheckpointFiles(lix, commitId, files);
 			setWorkingChangesReviewOpen(false);
 			setHistoricalReview((current) => {
 				if (current && current.commitId !== commitId) {
@@ -4128,6 +4123,9 @@ function LayoutShellLoadedContentResolved({
 				openWorkingChangeFile,
 				viewCheckpoint: handleViewCheckpoint,
 				openCheckpointFile: openHistoricalCheckpointFile,
+				...(historicalReview
+					? { historicalFiles: historicalReview.files }
+					: {}),
 				...(historicalCommitId ? { historicalCommitId } : {}),
 				...(reviewRangeSessionId !== undefined
 					? { rangeSessionId: reviewRangeSessionId }
@@ -4154,6 +4152,7 @@ function LayoutShellLoadedContentResolved({
 			handleViewCheckpoint,
 			workingChangeReviewFiles,
 			historicalCommitId,
+			historicalReview,
 			openHistoricalCheckpointFile,
 			handleAcceptExternalWriteReview,
 			handleResolveExternalWriteReview,

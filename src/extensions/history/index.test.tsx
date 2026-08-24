@@ -5,11 +5,14 @@ import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
-import { publishCheckpointFiles } from "@/lib/checkpoint-file-store";
 import { HistoryView } from ".";
 
 function atelierStub(overrides?: {
 	readonly historicalCommitId?: string;
+	readonly historicalFiles?: readonly {
+		readonly id: string;
+		readonly path: string;
+	}[];
 	readonly viewCheckpoint?: (args: {
 		readonly commitId: string;
 		readonly previousCommitId: string;
@@ -41,6 +44,9 @@ function atelierStub(overrides?: {
 				: {}),
 			...(overrides?.historicalCommitId
 				? { historicalCommitId: overrides.historicalCommitId }
+				: {}),
+			...(overrides?.historicalFiles
+				? { historicalFiles: overrides.historicalFiles }
 				: {}),
 		},
 	} as unknown as ExtensionRuntime;
@@ -189,10 +195,10 @@ describe("HistoryView", () => {
 			],
 		);
 		const checkpoint = await lix.createCheckpoint();
-		publishCheckpointFiles(lix, checkpoint.commitId, [
+		const historicalFiles = [
 			{ id: fakeUuid("history-file-one"), path: "/docs/one.txt" },
 			{ id: fakeUuid("history-file-two"), path: "/two.txt" },
-		]);
+		];
 		const openCheckpointFile = vi.fn();
 		const viewCheckpoint = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
@@ -203,6 +209,7 @@ describe("HistoryView", () => {
 						<HistoryView
 							atelier={atelierStub({
 								historicalCommitId: checkpoint.commitId,
+								historicalFiles,
 								openCheckpointFile,
 								viewCheckpoint,
 							})}
@@ -265,12 +272,7 @@ describe("HistoryView", () => {
 			fileId,
 		]);
 		const newerCheckpoint = await lix.createCheckpoint();
-		publishCheckpointFiles(lix, olderCheckpoint.commitId, [
-			{ id: fileId, path: "/switch.txt" },
-		]);
-		publishCheckpointFiles(lix, newerCheckpoint.commitId, [
-			{ id: fileId, path: "/switch.txt" },
-		]);
+		const historicalFiles = [{ id: fileId, path: "/switch.txt" }];
 		const originalExecute = lix.execute.bind(lix);
 		let historyReads = 0;
 		vi.spyOn(lix, "execute").mockImplementation(
@@ -289,6 +291,7 @@ describe("HistoryView", () => {
 						<HistoryView
 							atelier={atelierStub({
 								historicalCommitId: olderCheckpoint.commitId,
+								historicalFiles,
 							})}
 						/>
 					</Suspense>
@@ -309,6 +312,7 @@ describe("HistoryView", () => {
 						<HistoryView
 							atelier={atelierStub({
 								historicalCommitId: newerCheckpoint.commitId,
+								historicalFiles,
 							})}
 						/>
 					</Suspense>

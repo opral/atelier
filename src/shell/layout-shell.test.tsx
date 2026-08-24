@@ -1379,7 +1379,6 @@ describe("agent turn review navigation", () => {
 			});
 			expect(latestCheckpoint).toBeEnabled();
 			const originalExecute = lix.execute.bind(lix);
-			let delayCheckpointStateOnce = true;
 			let activeCheckpointFileReads = 0;
 			let maxActiveCheckpointFileReads = 0;
 			const execute = vi
@@ -1397,16 +1396,6 @@ describe("agent turn review navigation", () => {
 						} finally {
 							activeCheckpointFileReads -= 1;
 						}
-					}
-					if (
-						delayCheckpointStateOnce &&
-						String(statement).includes("FROM lix_diff($1, $2)")
-					) {
-						delayCheckpointStateOnce = false;
-						return originalExecute(
-							"SELECT CAST(NULL AS TEXT) AS file_id WHERE FALSE",
-							[],
-						);
 					}
 					return originalExecute(statement, params);
 				});
@@ -1471,7 +1460,6 @@ describe("agent turn review navigation", () => {
 				.map(([statement]) => String(statement))
 				.filter((statement) => statement.includes("FROM lix_diff($1, $2)"));
 			expect(checkpointFileReads).toEqual([
-				expect.stringContaining("FROM lix_diff($1, $2)"),
 				expect.stringContaining("FROM lix_diff($1, $2)"),
 			]);
 			expect(maxActiveCheckpointFileReads).toBe(1);
@@ -1539,10 +1527,16 @@ describe("agent turn review navigation", () => {
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
 			});
 			const originalExecute = lix.execute.bind(lix);
-			const historyCalls: unknown[][] = [];
+			const historyCalls: Array<{
+				readonly statement: string;
+				readonly params: unknown[];
+			}> = [];
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
 				if (String(statement).includes("lix_history('lix_file'")) {
-					historyCalls.push([...(params ?? [])]);
+					historyCalls.push({
+						statement: String(statement),
+						params: [...(params ?? [])],
+					});
 				}
 				return originalExecute(statement, params);
 			});
@@ -1569,18 +1563,17 @@ describe("agent turn review navigation", () => {
 					afterExists: true,
 				});
 			});
-			expect(
-				historyCalls.some(
-					(params) =>
-						params.includes(previous.commitId) && params.includes(addedFileId),
-				),
-			).toBe(false);
-			expect(
-				historyCalls.some(
-					(params) =>
-						params.includes(latest.commitId) && params.includes(addedFileId),
-				),
-			).toBe(true);
+			const batchedHistoryCalls = historyCalls.filter(({ statement }) =>
+				statement.includes(" UNION ALL "),
+			);
+			expect(batchedHistoryCalls).toHaveLength(1);
+			expect(batchedHistoryCalls[0]?.params).toEqual(
+				expect.arrayContaining([
+					previous.commitId,
+					latest.commitId,
+					addedFileId,
+				]),
+			);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

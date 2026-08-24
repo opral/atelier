@@ -122,6 +122,11 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 		}) => Promise<void>;
 		/** Open one file in the checkpoint-to-checkpoint comparison being viewed. */
 		readonly openCheckpointFile?: (path: string) => void;
+		/** Files in the checkpoint-to-checkpoint comparison being viewed. */
+		readonly historicalFiles?: readonly {
+			readonly id: string;
+			readonly path: string;
+		}[];
 		/** Set while diff mode is pointed at a checkpoint. */
 		readonly historicalCommitId?: string;
 		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;

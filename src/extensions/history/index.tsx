@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
-import { useLix, useQuery } from "@/lib/lix-react";
-import { readCheckpointFiles } from "@/lib/checkpoint-file-store";
+import { useQuery } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectWorkingChangeCount,
@@ -301,8 +300,10 @@ function CheckpointFileList({
 	readonly atelier: ExtensionRuntime;
 	readonly commitId: string;
 }) {
-	const lix = useLix();
-	const files = readCheckpointFiles(lix, commitId);
+	const files =
+		atelier.reviews.historicalCommitId === commitId
+			? (atelier.reviews.historicalFiles ?? [])
+			: [];
 	const openCheckpointFile = atelier.reviews.openCheckpointFile;
 
 	if (files.length === 0) return null;
