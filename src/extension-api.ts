@@ -285,10 +285,6 @@ export type AtelierExtensionView = {
 	readonly registerNewFileDraftHandler: (
 		handler: () => Promise<void> | void,
 	) => () => void;
-	/** Flushes edits owned by this mounted view before a workspace checkpoint. */
-	readonly registerPendingWriteHandler: (
-		handler: () => Promise<void> | void,
-	) => () => void;
 };
 
 export type AtelierMountedExtension = {

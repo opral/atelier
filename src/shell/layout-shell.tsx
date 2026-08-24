@@ -154,79 +154,6 @@ type NewFileDraftHandlerRegistration = {
 	readonly handler: () => Promise<void> | void;
 };
 
-export type PendingWriteHandlerRegistration = {
-	readonly panelSide: PanelSide;
-	readonly viewInstance: string;
-	readonly handler: () => Promise<void> | void;
-};
-
-/** @internal */
-export async function flushPendingWriteHandlers(
-	registrations: Iterable<PendingWriteHandlerRegistration>,
-): Promise<void> {
-	await Promise.all(
-		[...registrations].map((registration) => registration.handler()),
-	);
-}
-
-export type RetryablePendingWriteHandlers = {
-	readonly registrations: Set<PendingWriteHandlerRegistration>;
-	readonly inFlight: Map<PendingWriteHandlerRegistration, Promise<void>>;
-};
-
-/** @internal */
-export function startRetryablePendingWriteHandler(
-	state: RetryablePendingWriteHandlers,
-	registration: PendingWriteHandlerRegistration,
-): Promise<void> {
-	const existing = state.inFlight.get(registration);
-	if (existing) return existing;
-	const pending = Promise.resolve().then(() => registration.handler());
-	state.inFlight.set(registration, pending);
-	pending.then(
-		() => {
-			if (state.inFlight.get(registration) !== pending) return;
-			state.inFlight.delete(registration);
-			state.registrations.delete(registration);
-		},
-		() => {
-			if (state.inFlight.get(registration) === pending) {
-				state.inFlight.delete(registration);
-			}
-		},
-	);
-	return pending;
-}
-
-/** @internal */
-export async function flushRetryablePendingWriteHandlers(
-	state: RetryablePendingWriteHandlers,
-): Promise<void> {
-	const registrations = [...state.registrations];
-	const results = await Promise.allSettled(
-		registrations.map((registration) =>
-			startRetryablePendingWriteHandler(state, registration),
-		),
-	);
-	const failure = results.find(
-		(result): result is PromiseRejectedResult => result.status === "rejected",
-	);
-	if (failure) throw failure.reason;
-}
-
-/** @internal */
-export async function createCheckpointAfterPendingWrites(args: {
-	readonly lix: Lix;
-	readonly selectedFileIds: readonly string[];
-	readonly flushPendingWrites: () => Promise<void>;
-}): Promise<{ readonly commitId: string } | null> {
-	await args.flushPendingWrites();
-	// The review owns a frozen file selection. Applying exactly those diffs
-	// avoids both a history-dependent re-scan and sweeping a later, unreviewed
-	// working write into a global checkpoint.
-	return await createCheckpointForFiles(args.lix, args.selectedFileIds);
-}
-
 const sanitizeExtensionInstanceForPersistence = (
 	view: ExtensionInstance,
 ): ExtensionInstance => {
@@ -1505,40 +1432,6 @@ function LayoutShellLoadedContentResolved({
 	const newFileDraftHandlersRef = useRef(
 		new Map<string, NewFileDraftHandlerRegistration>(),
 	);
-	const pendingWriteHandlersRef = useRef(
-		new Map<string, PendingWriteHandlerRegistration>(),
-	);
-	const retiredPendingWritesRef = useRef<RetryablePendingWriteHandlers>({
-		registrations: new Set(),
-		inFlight: new Map(),
-	});
-	const registerPendingWriteHandler = useCallback(
-		(registration: PendingWriteHandlerRegistration) => {
-			const key = `${registration.panelSide}:${registration.viewInstance}`;
-			pendingWriteHandlersRef.current.set(key, registration);
-			return () => {
-				if (pendingWriteHandlersRef.current.get(key) !== registration) return;
-				pendingWriteHandlersRef.current.delete(key);
-				// React cleanup cannot await an editor's final write. Retain that drain
-				// in the host so a checkpoint racing view teardown still waits for it.
-				retiredPendingWritesRef.current.registrations.add(registration);
-				void startRetryablePendingWriteHandler(
-					retiredPendingWritesRef.current,
-					registration,
-				);
-			};
-		},
-		[],
-	);
-	const flushPendingWrites = useCallback(async () => {
-		for (;;) {
-			await Promise.all([
-				flushPendingWriteHandlers(pendingWriteHandlersRef.current.values()),
-				flushRetryablePendingWriteHandlers(retiredPendingWritesRef.current),
-			]);
-			if (retiredPendingWritesRef.current.registrations.size === 0) return;
-		}
-	}, []);
 	const lastNonZeroSizesRef = useRef({
 		left:
 			panelSizes.left > MIN_VISIBLE_PANEL_SIZE
@@ -1885,11 +1778,7 @@ function LayoutShellLoadedContentResolved({
 
 			let checkpoint: { readonly commitId: string } | null;
 			try {
-				checkpoint = await createCheckpointAfterPendingWrites({
-					lix,
-					selectedFileIds,
-					flushPendingWrites,
-				});
+				checkpoint = await createCheckpointForFiles(lix, selectedFileIds);
 			} catch (error) {
 				publishAgentTurnReviewDismissed(wasAgentTurnReviewDismissed);
 				throw error;
@@ -1905,12 +1794,7 @@ function LayoutShellLoadedContentResolved({
 			// review opened. Checkpoint creation never discovers reviews via history.
 			void retireAcceptedAgentTurnReviews(selectedAgentTurnReviews);
 		},
-		[
-			flushPendingWrites,
-			lix,
-			publishAgentTurnReviewDismissed,
-			retireAcceptedAgentTurnReviews,
-		],
+		[lix, publishAgentTurnReviewDismissed, retireAcceptedAgentTurnReviews],
 	);
 
 	// Keep: accept pending reviews for the ticked files (every file unless the
@@ -3893,9 +3777,6 @@ function LayoutShellLoadedContentResolved({
 		}
 		workingReviewOpeningRef.current = true;
 		void (async () => {
-			// Working-diff discovery must include editor-memory edits. The actual
-			// checkpoint action drains again at its own write boundary.
-			await flushPendingWrites();
 			const currentWorkingChanges =
 				await selectReviewableFileWorkingChanges(lix);
 			const checkpointFiles = currentWorkingChanges
@@ -4017,7 +3898,6 @@ function LayoutShellLoadedContentResolved({
 		openAutoRevealedFile,
 		openWorkingChangeFileAtRange,
 		revealHistory,
-		flushPendingWrites,
 	]);
 
 	const atelierDocumentsActionsRef =
@@ -4340,14 +4220,8 @@ function LayoutShellLoadedContentResolved({
 			atelier: extensionRuntime,
 			preferencesFor,
 			registerNewFileDraftHandler,
-			registerPendingWriteHandler,
 		}),
-		[
-			extensionRuntime,
-			preferencesFor,
-			registerNewFileDraftHandler,
-			registerPendingWriteHandler,
-		],
+		[extensionRuntime, preferencesFor, registerNewFileDraftHandler],
 	);
 
 	const toggleLeftSidebar = useCallback(() => {

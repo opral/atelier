@@ -100,9 +100,6 @@ type CsvViewProps = {
 	readonly registerExternalWriteReview?: (
 		review: ExternalWriteReview,
 	) => () => void;
-	readonly registerPendingWriteHandler?: (
-		handler: () => Promise<void> | void,
-	) => () => void;
 	readonly onAcceptReview?: (args: {
 		readonly fileId: string;
 		readonly reviewId: string;
@@ -198,7 +195,6 @@ export function CsvView({
 	beforeExists,
 	afterExists,
 	registerExternalWriteReview,
-	registerPendingWriteHandler,
 	onAcceptReview,
 	onRejectReview,
 	autoAcceptReviews,
@@ -228,7 +224,6 @@ export function CsvView({
 				beforeExists={beforeExists}
 				afterExists={afterExists}
 				registerExternalWriteReview={registerExternalWriteReview}
-				registerPendingWriteHandler={registerPendingWriteHandler}
 				onAcceptReview={onAcceptReview}
 				onRejectReview={onRejectReview}
 				autoAcceptReviews={autoAcceptReviews}
@@ -303,7 +298,6 @@ function CsvViewData({
 function CsvLiveViewData({
 	fileRow,
 	registerExternalWriteReview,
-	registerPendingWriteHandler,
 	activeBranchId = "",
 	resolvedReviewIds,
 	reviewRangeSessionId,
@@ -346,7 +340,6 @@ function CsvLiveViewData({
 				review={externalWriteReview}
 				readOnly={readOnly}
 				isActiveView={isActiveView}
-				registerPendingWriteHandler={registerPendingWriteHandler}
 			/>
 		</>
 	);
@@ -364,15 +357,11 @@ function EditableCsvView({
 	review,
 	readOnly,
 	isActiveView = true,
-	registerPendingWriteHandler,
 }: {
 	readonly fileRow: CsvFileRow;
 	readonly review: ExternalWriteReview | null;
 	readonly readOnly: boolean;
 	readonly isActiveView?: boolean;
-	readonly registerPendingWriteHandler?: (
-		handler: () => Promise<void> | void,
-	) => () => void;
 }) {
 	const fileId = fileRow.id;
 	const fileText = useMemo(
@@ -390,7 +379,6 @@ function EditableCsvView({
 		text: syncedText,
 		saveError,
 		persist,
-		flush: flushPendingWrite,
 	} = useSyncedTextFile({
 		fileId,
 		initialText: fileText,
@@ -399,10 +387,6 @@ function EditableCsvView({
 		readOnly,
 		originKey,
 	});
-	useEffect(() => {
-		if (!registerPendingWriteHandler) return;
-		return registerPendingWriteHandler(flushPendingWrite);
-	}, [flushPendingWrite, registerPendingWriteHandler]);
 	const [documentText, setDocumentText] = useState(syncedText);
 	useEffect(() => setDocumentText(syncedText), [syncedText]);
 
@@ -1639,7 +1623,6 @@ export const extension = createReactExtensionDefinition({
 						onExitReview: atelier.reviews.exit,
 					})}
 			registerExternalWriteReview={atelier.reviews.register}
-			registerPendingWriteHandler={view.registerPendingWriteHandler}
 			isActiveView={view.isActive}
 			isPanelFocused={view.isFocused}
 		/>

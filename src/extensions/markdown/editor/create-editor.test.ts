@@ -1,12 +1,13 @@
 import { test, expect, vi } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { createEditor, flushMarkdownEditorPersistence } from "./create-editor";
+import { createEditor } from "./create-editor";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import { handlePaste } from "./handle-paste";
 import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpointForFiles } from "@/lib/lix-diff-commands";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ensureTrailingNewline = (value: string) =>
@@ -30,7 +31,7 @@ async function waitForMarkdown(
 	matches: (markdown: string) => boolean,
 ): Promise<string> {
 	let markdown = "";
-	for (let i = 0; i < 40; i += 1) {
+	for (let i = 0; i < 200; i += 1) {
 		markdown = await readMarkdown(lix, fileId);
 		if (matches(markdown)) {
 			return markdown;
@@ -1222,23 +1223,26 @@ test("destroy flushes pending autosave for an existing file", async () => {
 	editor.commands.setTextSelection(editor.state.doc.content.size);
 	editor.commands.insertContent(" Changed");
 	editor.destroy();
-	await flushMarkdownEditorPersistence(editor);
 
-	const markdown = await readMarkdown(lix, fileId);
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === ensureTrailingNewline("Start Changed"),
+	);
 	expect(markdown).toBe(ensureTrailingNewline("Start Changed"));
 
 	await lix.close();
 });
 
-test("explicit flush drains a pending debounce before checkpointing", async () => {
+test("checkpoint ignores an editor-memory edit until autosave reaches Lix", async () => {
 	const lix = await openLix();
-	const fileId = fakeUuid("checkpoint_flush_pending_autosave");
+	const fileId = fakeUuid("checkpoint_ignores_editor_memory");
 
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
 			id: fileId,
-			path: "/checkpoint-flush-pending-autosave.md",
+			path: "/checkpoint-ignores-editor-memory.md",
 			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
@@ -1248,147 +1252,29 @@ test("explicit flush drains a pending debounce before checkpointing", async () =
 		fileId,
 		persistDebounceMs: 60_000,
 	});
-	await new Promise((resolve) => setTimeout(resolve, 0));
+	await lix.createCheckpoint();
 	editor.commands.setTextSelection(editor.state.doc.content.size);
 	editor.commands.insertContent(" Changed");
 
 	expect(await readMarkdown(lix, fileId)).toBe("Start");
-	await flushMarkdownEditorPersistence(editor);
-	expect(await readMarkdown(lix, fileId)).toBe(
-		ensureTrailingNewline("Start Changed"),
+	const workingDiffBeforeCheckpoint = await lix.execute(
+		"SELECT count(*) AS count FROM lix_working_diff()",
 	);
+	expect(Number(workingDiffBeforeCheckpoint.rows[0]?.get("count"))).toBe(0);
+	expect(await createCheckpointForFiles(lix, [fileId])).toBeNull();
+	expect(await readMarkdown(lix, fileId)).toBe("Start");
 
 	editor.destroy();
-	await lix.close();
-});
-
-test("explicit flush rejects a concurrent file update", async () => {
-	const lix = await openLix();
-	const fileId = fakeUuid("checkpoint_flush_compare_and_swap");
-	const initialMarkdown = "Initial\n";
-	const externalMarkdown = "External wins\n";
-	await qb(lix)
-		.insertInto("lix_file")
-		.values({
-			id: fileId,
-			path: "/checkpoint-flush-compare-and-swap.md",
-			content: new TextEncoder().encode(initialMarkdown),
-		})
-		.execute();
-
-	let interleavedExternalWrite = false;
-	const interleavedLix = new Proxy(lix, {
-		get(target, property) {
-			if (property === "execute") {
-				return async (...args: Parameters<typeof lix.execute>) => {
-					const [statement] = args;
-					if (
-						!interleavedExternalWrite &&
-						typeof statement === "string" &&
-						statement.startsWith(
-							"UPDATE lix_file SET content = $1 WHERE id = $2",
-						)
-					) {
-						interleavedExternalWrite = true;
-						await target.execute(
-							"UPDATE lix_file SET content = $1 WHERE id = $2",
-							[new TextEncoder().encode(externalMarkdown), fileId],
-							{ originKey: "external-writer" },
-						);
-					}
-					return await target.execute(...args);
-				};
-			}
-			const value = Reflect.get(target, property, target);
-			return typeof value === "function" ? value.bind(target) : value;
-		},
-	});
-	const editor = createEditor({
-		lix: interleavedLix,
+	const persisted = await waitForMarkdown(
+		lix,
 		fileId,
-		initialMarkdown,
-		persistDebounceMs: 60_000,
-	});
-	await new Promise((resolve) => setTimeout(resolve, 0));
-	editor.commands.setTextSelection(editor.state.doc.content.size);
-	editor.commands.insertContent(" Local edit");
-
-	await expect(flushMarkdownEditorPersistence(editor)).rejects.toThrow(
-		"file changed concurrently",
+		(value) => value === ensureTrailingNewline("Start Changed"),
 	);
-	expect(interleavedExternalWrite).toBe(true);
-	expect(await readMarkdown(lix, fileId)).toBe(externalMarkdown);
-	editor.destroy();
+	expect(persisted).toBe(ensureTrailingNewline("Start Changed"));
 	await lix.close();
 });
 
-test("explicit flush includes an edit made during an in-flight write", async () => {
-	const lix = await openLix();
-	const fileId = fakeUuid("checkpoint_flush_inflight_edit");
-	await qb(lix)
-		.insertInto("lix_file")
-		.values({
-			id: fileId,
-			path: "/checkpoint-flush-inflight.md",
-			content: new TextEncoder().encode("Start"),
-		})
-		.execute();
-
-	let releaseFirstWrite!: () => void;
-	const firstWriteGate = new Promise<void>((resolve) => {
-		releaseFirstWrite = resolve;
-	});
-	let firstWriteStarted!: () => void;
-	const firstWriteStart = new Promise<void>((resolve) => {
-		firstWriteStarted = resolve;
-	});
-	let intercepted = false;
-	const gatedLix = new Proxy(lix, {
-		get(target, property) {
-			if (property === "execute") {
-				return async (...args: Parameters<typeof lix.execute>) => {
-					const [statement] = args;
-					if (
-						!intercepted &&
-						typeof statement === "string" &&
-						statement.startsWith(
-							"UPDATE lix_file SET content = $1 WHERE id = $2",
-						)
-					) {
-						intercepted = true;
-						firstWriteStarted();
-						await firstWriteGate;
-					}
-					return await target.execute(...args);
-				};
-			}
-			const value = Reflect.get(target, property, target);
-			return typeof value === "function" ? value.bind(target) : value;
-		},
-	});
-
-	const editor = createEditor({
-		lix: gatedLix,
-		fileId,
-		initialMarkdown: "Start",
-		persistDebounceMs: 0,
-	});
-	editor.commands.setTextSelection(editor.state.doc.content.size);
-	editor.commands.insertContent(" First");
-	await firstWriteStart;
-	editor.commands.insertContent(" Second");
-	const flush = flushMarkdownEditorPersistence(editor);
-	releaseFirstWrite();
-	await flush;
-
-	expect(await readMarkdown(lix, fileId)).toBe(
-		ensureTrailingNewline("Start First Second"),
-	);
-	editor.destroy();
-	await lix.close();
-});
-
-test("destroyed editor retries use the captured payload, not TipTap", async () => {
+test("destroyed editor autosave uses the captured payload, not TipTap", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("destroyed_editor_captured_payload");
 	await qb(lix)
@@ -1444,57 +1330,59 @@ test("destroyed editor retries use the captured payload, not TipTap", async () =
 	await firstWriteStart;
 	editor.commands.insertContent(" Second");
 	editor.destroy();
-	// A retired persistence handler must be independent of all TipTap APIs.
+	// The editor-owned autosave must not access TipTap after teardown.
 	editor.getJSON = () => {
 		throw new Error("destroyed TipTap was accessed");
 	};
-	const flush = flushMarkdownEditorPersistence(editor);
 	releaseFirstWrite();
-	await flush;
 
-	expect(await readMarkdown(lix, fileId)).toBe(
-		ensureTrailingNewline("Start First Second"),
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === ensureTrailingNewline("Start First Second"),
 	);
+	expect(markdown).toBe(ensureTrailingNewline("Start First Second"));
 	await lix.close();
 });
 
-test("a failed post-destroy write retries the captured payload", async () => {
+test("destroyed editor retries one transient autosave failure", async () => {
 	const lix = await openLix();
-	const fileId = fakeUuid("destroyed_editor_retry_payload");
+	const fileId = fakeUuid("destroyed_editor_transient_retry");
 	await qb(lix)
 		.insertInto("lix_file")
 		.values({
 			id: fileId,
-			path: "/destroyed-editor-retry-payload.md",
+			path: "/destroyed-editor-transient-retry.md",
 			content: new TextEncoder().encode("Start"),
 		})
 		.execute();
 
-	let releaseRejectedWrite!: () => void;
-	const rejectedWriteGate = new Promise<void>((resolve) => {
-		releaseRejectedWrite = resolve;
+	let releaseFailedWrite!: () => void;
+	const failedWriteGate = new Promise<void>((resolve) => {
+		releaseFailedWrite = resolve;
 	});
-	let rejectedWriteStarted!: () => void;
-	const rejectedWriteStart = new Promise<void>((resolve) => {
-		rejectedWriteStarted = resolve;
+	let failedWriteStarted!: () => void;
+	const failedWriteStart = new Promise<void>((resolve) => {
+		failedWriteStarted = resolve;
 	});
-	let rejectNextWrite = true;
-	const retryingLix = new Proxy(lix, {
+	let updateAttempts = 0;
+	const transientlyFailingLix = new Proxy(lix, {
 		get(target, property) {
 			if (property === "execute") {
 				return async (...args: Parameters<typeof lix.execute>) => {
 					const [statement] = args;
 					if (
-						rejectNextWrite &&
 						typeof statement === "string" &&
 						statement.startsWith(
 							"UPDATE lix_file SET content = $1 WHERE id = $2",
 						)
 					) {
-						rejectNextWrite = false;
-						rejectedWriteStarted();
-						await rejectedWriteGate;
-						throw new Error("transient storage failure");
+						updateAttempts += 1;
+						if (updateAttempts === 1) {
+							failedWriteStarted();
+							await failedWriteGate;
+							throw new Error("transient storage failure");
+						}
 					}
 					return await target.execute(...args);
 				};
@@ -1505,26 +1393,24 @@ test("a failed post-destroy write retries the captured payload", async () => {
 	});
 
 	const editor = createEditor({
-		lix: retryingLix,
+		lix: transientlyFailingLix,
 		fileId,
 		initialMarkdown: "Start",
 		persistDebounceMs: 0,
 	});
 	editor.commands.setTextSelection(editor.state.doc.content.size);
 	editor.commands.insertContent(" Changed");
-	await rejectedWriteStart;
+	await failedWriteStart;
 	editor.destroy();
-	editor.getJSON = () => {
-		throw new Error("destroyed TipTap was accessed");
-	};
-	const firstFlush = flushMarkdownEditorPersistence(editor);
-	releaseRejectedWrite();
-	await expect(firstFlush).rejects.toThrow("transient storage failure");
+	releaseFailedWrite();
 
-	await flushMarkdownEditorPersistence(editor);
-	expect(await readMarkdown(lix, fileId)).toBe(
-		ensureTrailingNewline("Start Changed"),
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === ensureTrailingNewline("Start Changed"),
 	);
+	expect(markdown).toBe(ensureTrailingNewline("Start Changed"));
+	expect(updateAttempts).toBe(2);
 	await lix.close();
 });
 

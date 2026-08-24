@@ -55,6 +55,5 @@ export function createExtensionHostContext(
 			},
 		}),
 		registerNewFileDraftHandler: () => () => {},
-		registerPendingWriteHandler: () => () => {},
 	};
 }

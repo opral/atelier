@@ -61,12 +61,6 @@ type MarkdownPersistenceBaseline = {
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
-const persistenceFlushes = new WeakMap<Editor, () => Promise<void>>();
-
-/** Drains the editor's debounce and any in-flight serialized write. */
-export function flushMarkdownEditorPersistence(editor: Editor): Promise<void> {
-	return persistenceFlushes.get(editor)?.() ?? Promise.resolve();
-}
 
 /**
  * Advances an editor's compare-and-swap baseline after authoritative file data
@@ -281,24 +275,6 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		})();
 		return persistPromise;
 	};
-	const flushPersistence = (): Promise<void> => {
-		if (persistStateTimer) {
-			clearTimeout(persistStateTimer);
-			persistStateTimer = null;
-		}
-		const editor = currentEditor ?? editorInstance;
-		if (!editor) return Promise.resolve();
-		return runPersist(editor).then(() => {
-			if (
-				persistenceBaseline.acknowledgedRevision !==
-				persistenceBaseline.documentRevision
-			) {
-				throw new Error(
-					"Could not flush Markdown changes because the file changed concurrently.",
-				);
-			}
-		});
-	};
 	const placeholderConfig: any = {
 		placeholder: ({ node }: { node: any }) => {
 			if (node.childCount !== 0) return "";
@@ -373,20 +349,19 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			persistenceBaseline.documentRevision += 1;
 			if (!fileId || !persistState) return;
 			// An edit that arrives during an in-flight write belongs to the same
-			// serialized drain. In particular, an explicit checkpoint flush must not
-			// resolve while this newer revision is still waiting on its debounce.
+			// serialized autosave drain.
 			if (persistRunning) persistQueued = true;
 			const scheduleRun = () => {
 				if (destroyed) return;
 				if (persistDebounceMsResolved <= 0) {
-					void runPersist(editor);
+					void runPersist(editor).catch(() => {});
 					return;
 				}
 				if (persistStateTimer) clearTimeout(persistStateTimer);
 				persistStateTimer = setTimeout(() => {
 					persistStateTimer = null;
 					if (destroyed || !shouldPersist()) return;
-					void runPersist(editor);
+					void runPersist(editor).catch(() => {});
 				}, persistDebounceMsResolved);
 			};
 			scheduleRun();
@@ -402,9 +377,8 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			const editorToPersist = currentEditor ?? editorInstance;
 			if (editorToPersist && fileId && persistState && shouldPersist()) {
 				// TipTap emits destroy while its schema and view are still live, then
-				// nulls both immediately afterward. Capture the final durable payload at
-				// that boundary so an in-flight continuation or retired-handler retry
-				// never needs to interrogate a torn-down editor.
+				// nulls both immediately afterward. Capture the final payload so the
+				// editor-owned autosave never interrogates a torn-down editor.
 				if (
 					persistenceBaseline.documentRevision !==
 						persistenceBaseline.acknowledgedRevision &&
@@ -420,10 +394,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				if (persistRunning) {
 					persistQueued = true;
 				}
-				// The registered/retired flush observes the original promise and owns
-				// retry/reporting. This background attempt must not become an unhandled
-				// rejection when compare-and-swap correctly refuses a stale payload.
-				void runPersist(editorToPersist).catch(() => {});
+				// The editor owns its final autosave. Retry one transient failure without
+				// involving checkpoint or review orchestration.
+				void runPersist(editorToPersist).catch(() => {
+					void runPersist(editorToPersist).catch(() => {});
+				});
 			} else {
 				destroyed = true;
 				currentEditor = null;
@@ -501,7 +476,6 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		},
 	});
 	persistenceBaselines.set(editorInstance, persistenceBaseline);
-	persistenceFlushes.set(editorInstance, flushPersistence);
 	const editorDom = editorInstance.view.dom;
 	editorDom.addEventListener("click", handleExternalLinkClick, {
 		capture: true,
