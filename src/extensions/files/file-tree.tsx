@@ -307,21 +307,23 @@ const FILE_TREE_UNSAFE_CSS = `
 		outline-color: transparent;
 	}
 
+	/* In-place editing: the row's pill already marks the spot, so the input
+	   stays quiet — a hairline on the panel ground with a whisper of depth,
+	   no accent ring. */
 	[data-item-rename-input] {
 		height: calc(var(--trees-row-height) - 6px);
-		border: 1px solid var(--color-border-selection-current);
+		border: 1px solid var(--color-border-panel);
 		border-radius: 6px;
 		background: var(--color-bg-panel);
-		box-shadow:
-			0 0 0 2px var(--color-bg-selection-current),
-			inset 0 1px 0 rgba(255, 255, 255, 0.72);
+		box-shadow: 0 1px 2px rgba(28, 25, 23, 0.06);
 		color: var(--color-text-primary);
-		caret-color: var(--color-icon-selection-current);
-		padding-inline: 5px;
+		caret-color: var(--color-text-primary);
+		padding-inline: 6px;
+		outline: none;
 	}
 
 	[data-item-rename-input]::selection {
-		background: var(--color-border-selection-current);
+		background: var(--color-bg-selection-current);
 		color: var(--color-text-primary);
 	}
 `;
