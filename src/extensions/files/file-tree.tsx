@@ -233,6 +233,16 @@ const FILE_TREE_UNSAFE_CSS = `
 		background: currentColor;
 	}
 
+	/* Tiny marks lose perceived chroma: the dots take the diff palette's
+	   brighter border tone so they read as the same hue as the labels. */
+	[data-item-git-status='added'] > [data-item-section='git'] > span {
+		background: var(--color-border-diff-added);
+	}
+
+	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
+		background: var(--color-border-diff-removed);
+	}
+
 	[data-item-git-status='recreated'] {
 		--trees-item-git-status-color: var(--trees-git-renamed-color);
 	}
@@ -1488,8 +1498,8 @@ function treeHostStyle(
 		"--trees-font-family-override": "inherit",
 		"--trees-font-size-override": isSpacious ? "15px" : "13px",
 		"--trees-git-modified-color-override": "var(--color-icon-brand)",
-		"--trees-git-added-color-override": "var(--color-text-status-success)",
-		"--trees-git-deleted-color-override": "var(--color-text-status-danger)",
+		"--trees-git-added-color-override": "var(--color-text-diff-added)",
+		"--trees-git-deleted-color-override": "var(--color-text-diff-removed)",
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",

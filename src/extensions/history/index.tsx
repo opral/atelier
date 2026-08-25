@@ -389,12 +389,16 @@ function CheckpointFileList({
 	);
 }
 
-/** Green = added, red = removed, brand orange = modified. */
+/**
+ * The diff palette's border tones: green = added, red = removed, brand
+ * orange = modified. Dots use the brighter border companion of the diff
+ * text colors — tiny marks lose perceived chroma.
+ */
 function changeKindDotClass(
 	changeKind: "added" | "modified" | "removed",
 ): string {
-	if (changeKind === "added") return "bg-[var(--color-text-status-success)]";
-	if (changeKind === "removed") return "bg-[var(--color-text-status-danger)]";
+	if (changeKind === "added") return "bg-[var(--color-border-diff-added)]";
+	if (changeKind === "removed") return "bg-[var(--color-border-diff-removed)]";
 	return "bg-[var(--color-icon-brand)]";
 }
 
