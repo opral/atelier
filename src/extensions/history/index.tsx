@@ -3,7 +3,7 @@ import { History } from "lucide-react";
 import type { AtelierDiffSession } from "@/extension-api";
 import { DiffGlyph } from "@/components/diff-glyph";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
-import { useQuery } from "@/lib/lix-react";
+import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCommitParent,
@@ -44,17 +44,23 @@ function WorkingChangesRow({
 }) {
 	// lix_diff takes its base as a parameter: resolve the latest checkpoint
 	// first (root fallback when none exists), then count the file diffs.
-	const latestCheckpoint = useQuery((queryLix) =>
+	// Both reads stay non-suspending: creating a checkpoint re-parameterizes
+	// the count query with the new checkpoint id, and a suspending read would
+	// blank the whole History panel (checkpoints included) while the fresh
+	// span resolves — on cold replicas, for seconds.
+	const latestCheckpoint = useQueryResult((queryLix) =>
 		selectLatestCheckpoint(queryLix),
 	);
-	const workingChangeCount = useQuery((queryLix) =>
-		selectWorkingChangeCount(
-			queryLix,
-			latestCheckpoint[0]?.commit_id ?? null,
-		),
+	const workingChangeCount = useQueryResult(
+		(queryLix) =>
+			selectWorkingChangeCount(
+				queryLix,
+				latestCheckpoint.rows[0]?.commit_id ?? null,
+			),
+		{ enabled: latestCheckpoint.status === "success" },
 	);
-	const changeCount = workingChangeCount[0]?.change_count ?? 0;
-	const fileCount = workingChangeCount[0]?.file_count ?? 0;
+	const changeCount = workingChangeCount.rows[0]?.change_count ?? 0;
+	const fileCount = workingChangeCount.rows[0]?.file_count ?? 0;
 	const workingCountLabel =
 		fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
