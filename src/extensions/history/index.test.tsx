@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
@@ -345,7 +345,10 @@ describe("HistoryView", () => {
 			screen.getByRole("list", { name: "Files at this checkpoint" }),
 		).toBeVisible();
 		expect(screen.getByText("newer-switch.txt")).toBeVisible();
-		expect(screen.queryByText("older-switch.txt")).toBeNull();
+		// The outgoing list stays mounted while its disclosure folds away.
+		await waitFor(() => {
+			expect(screen.queryByText("older-switch.txt")).toBeNull();
+		});
 		expect(historyReads).toBe(0);
 
 		await act(async () => view?.unmount());

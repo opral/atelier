@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
+import type { AtelierDiffSession } from "@/extension-api";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { useQuery } from "@/lib/lix-react";
 import {
@@ -110,7 +111,16 @@ function WorkingChangeFileList({
 	readonly atelier: ExtensionRuntime;
 }) {
 	const session = atelier.diff.session;
-	const files = session && "working" in session.target ? session.files : [];
+	const sessionFiles =
+		session && "working" in session.target ? session.files : null;
+	// Exiting review nulls the session immediately, but the disclosure above
+	// still animates closed for 200ms — keep the last list rendered so the
+	// collapse has content to fold away instead of snapping shut.
+	const lastFilesRef = useRef<AtelierDiffSession["files"]>([]);
+	if (sessionFiles && sessionFiles.length > 0) {
+		lastFilesRef.current = sessionFiles;
+	}
+	const files = sessionFiles ?? lastFilesRef.current;
 	const openWorkingChangeFile = atelier.diff.openFile;
 	if (files.length === 0) return null;
 
@@ -315,12 +325,19 @@ function CheckpointFileList({
 	readonly commitId: string;
 }) {
 	const session = atelier.diff.session;
-	const files =
+	const sessionFiles =
 		session !== null &&
 		"commitId" in session.target &&
 		session.target.commitId === commitId
 			? session.files
-			: [];
+			: null;
+	// Same collapse-animation retention as the working-changes list: the
+	// session is gone the moment review exits, the fold-away is not.
+	const lastFilesRef = useRef<AtelierDiffSession["files"]>([]);
+	if (sessionFiles && sessionFiles.length > 0) {
+		lastFilesRef.current = sessionFiles;
+	}
+	const files = sessionFiles ?? lastFilesRef.current;
 	const openCheckpointFile = atelier.diff.openFile;
 
 	if (files.length === 0) return null;
