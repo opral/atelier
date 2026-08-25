@@ -19,6 +19,36 @@ describe("coerceAtelierUiState", () => {
 		expect(state.layout?.sizes).toEqual({ left: 0, central: 100, right: 0 });
 	});
 
+	test("drops a duplicated instance id, keeping the first panel's view", () => {
+		const persistedState: AtelierUiState = {
+			focusedPanel: "central",
+			panels: {
+				left: {
+					views: [{ instance: "atelier_history-1", kind: "atelier_history" }],
+					activeInstance: "atelier_history-1",
+				},
+				central: { views: [], activeInstance: null },
+				right: {
+					views: [{ instance: "atelier_history-1", kind: "atelier_history" }],
+					activeInstance: "atelier_history-1",
+				},
+			},
+			layout: DEFAULT_ATELIER_UI_STATE.layout,
+		};
+
+		const coerced = coerceAtelierUiState(persistedState);
+
+		expect(coerced.panels.left.views.map((view) => view.instance)).toEqual([
+			"atelier_history-1",
+		]);
+		// The right panel loses the duplicate and falls back to its History
+		// default under a fresh id.
+		expect(coerced.panels.right.views.map((view) => view.instance)).toEqual([
+			"history-default",
+		]);
+		expect(coerced.panels.right.activeInstance).toBe("history-default");
+	});
+
 	test("seeds History into a right panel persisted with no views", () => {
 		const persistedState: AtelierUiState = {
 			focusedPanel: "central",

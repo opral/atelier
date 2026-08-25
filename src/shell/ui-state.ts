@@ -179,21 +179,47 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 		? candidate.focusedPanel
 		: DEFAULT_ATELIER_UI_STATE.focusedPanel;
 
+	// One instance id must appear in one panel: duplicates (from the old
+	// per-load id counter) render as a single view, leaving the other panel's
+	// host empty. First occurrence wins, panel order left → central → right.
+	const seenInstances = new Set<string>();
+	const dedupePanel = (panel: PanelState): PanelState => {
+		const views = panel.views.filter((view) => {
+			if (seenInstances.has(view.instance)) return false;
+			seenInstances.add(view.instance);
+			return true;
+		});
+		if (views.length === panel.views.length) return panel;
+		return {
+			views,
+			activeInstance: views.some(
+				(view) => view.instance === panel.activeInstance,
+			)
+				? panel.activeInstance
+				: (views[0]?.instance ?? null),
+		};
+	};
 	return {
 		focusedPanel,
 		panels: {
-			left: coercePanelState(
-				panelsCandidate.left,
-				DEFAULT_ATELIER_UI_STATE.panels.left,
+			left: dedupePanel(
+				coercePanelState(
+					panelsCandidate.left,
+					DEFAULT_ATELIER_UI_STATE.panels.left,
+				),
 			),
-			central: coercePanelState(
-				panelsCandidate.central,
-				DEFAULT_ATELIER_UI_STATE.panels.central,
+			central: dedupePanel(
+				coercePanelState(
+					panelsCandidate.central,
+					DEFAULT_ATELIER_UI_STATE.panels.central,
+				),
 			),
 			right: withDefaultRightView(
-				coercePanelState(
-					panelsCandidate.right,
-					DEFAULT_ATELIER_UI_STATE.panels.right,
+				dedupePanel(
+					coercePanelState(
+						panelsCandidate.right,
+						DEFAULT_ATELIER_UI_STATE.panels.right,
+					),
 				),
 			),
 		},
