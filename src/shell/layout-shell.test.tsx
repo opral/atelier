@@ -1886,7 +1886,17 @@ describe("canonical UI state", () => {
 			await waitFor(async () => {
 				const state = sessionStateStore.getSnapshot();
 				expect(state?.focusedPanel).toBe("left");
-				expect(state?.panels).toEqual(initialState.panels);
+				// The empty right panel gains its History default at coerce time;
+				// everything else persists exactly as it was.
+				expect(state?.panels).toEqual({
+					...initialState.panels,
+					right: {
+						views: [
+							{ instance: "history-default", kind: "atelier_history" },
+						],
+						activeInstance: "history-default",
+					},
+				});
 				expect((await preferencesStore.load())?.layout.sizes).toEqual(
 					initialState.layout.sizes,
 				);

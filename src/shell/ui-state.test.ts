@@ -19,6 +19,47 @@ describe("coerceAtelierUiState", () => {
 		expect(state.layout?.sizes).toEqual({ left: 0, central: 100, right: 0 });
 	});
 
+	test("seeds History into a right panel persisted with no views", () => {
+		const persistedState: AtelierUiState = {
+			focusedPanel: "central",
+			panels: {
+				left: DEFAULT_ATELIER_UI_STATE.panels.left,
+				central: { views: [], activeInstance: null },
+				right: { views: [], activeInstance: null },
+			},
+			layout: DEFAULT_ATELIER_UI_STATE.layout,
+		};
+
+		const coerced = coerceAtelierUiState(persistedState);
+
+		expect(coerced.panels.right.views.map((view) => view.kind)).toEqual([
+			"atelier_history",
+		]);
+		expect(coerced.panels.right.activeInstance).toBe("history-default");
+	});
+
+	test("keeps a right panel that already holds views", () => {
+		const persistedState: AtelierUiState = {
+			focusedPanel: "central",
+			panels: {
+				left: DEFAULT_ATELIER_UI_STATE.panels.left,
+				central: { views: [], activeInstance: null },
+				right: {
+					views: [{ instance: "sql-right", kind: "sql_explorer" }],
+					activeInstance: "sql-right",
+				},
+			},
+			layout: DEFAULT_ATELIER_UI_STATE.layout,
+		};
+
+		const coerced = coerceAtelierUiState(persistedState);
+
+		expect(coerced.panels.right.views.map((view) => view.kind)).toEqual([
+			"sql_explorer",
+		]);
+		expect(coerced.panels.right.activeInstance).toBe("sql-right");
+	});
+
 	test("preserves persisted left panel views without adding History", () => {
 		const persistedState: AtelierUiState = {
 			focusedPanel: "left",

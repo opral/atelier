@@ -1,6 +1,9 @@
 import type { PanelSide, PanelState } from "../extension-runtime/types";
 import type { AtelierJsonValue } from "../extension-api";
-import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
+import {
+	FILES_EXTENSION_KIND,
+	HISTORY_EXTENSION_KIND,
+} from "../extension-runtime/extension-instance-helpers";
 
 /**
  * Complete in-memory layout snapshot. Hosts split this into per-tab shell
@@ -69,6 +72,18 @@ const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 	right: 0,
 };
 
+// The right sidebar defaults to History: opening it should show the
+// repository's timeline, not an empty placeholder asking for a view.
+const DEFAULT_RIGHT_PANEL_STATE: PanelState = {
+	views: [{ instance: "history-default", kind: HISTORY_EXTENSION_KIND }],
+	activeInstance: "history-default",
+};
+
+/** Seeds the History default into a right panel persisted with no views. */
+function withDefaultRightView(panel: PanelState): PanelState {
+	return panel.views.length === 0 ? DEFAULT_RIGHT_PANEL_STATE : panel;
+}
+
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	focusedPanel: "central",
 	panels: {
@@ -77,7 +92,7 @@ export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 			activeInstance: "files-default",
 		},
 		central: { views: [], activeInstance: null },
-		right: { views: [], activeInstance: null },
+		right: DEFAULT_RIGHT_PANEL_STATE,
 	},
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
 };
@@ -175,9 +190,11 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 				panelsCandidate.central,
 				DEFAULT_ATELIER_UI_STATE.panels.central,
 			),
-			right: coercePanelState(
-				panelsCandidate.right,
-				DEFAULT_ATELIER_UI_STATE.panels.right,
+			right: withDefaultRightView(
+				coercePanelState(
+					panelsCandidate.right,
+					DEFAULT_ATELIER_UI_STATE.panels.right,
+				),
 			),
 		},
 		layout: {
