@@ -1302,12 +1302,10 @@ function FilesViewContent({
 				</div>
 			)}
 			{context?.panelSide !== "central" ? (
-				// -ml-1.5 cancels the rows' 6px pill inset: icons sit on the panel
-				// edge while hover fills bleed into the equally-colored gutter.
 				<div
 					data-testid="files-view-tree-scroll"
 					data-attr="file-tree"
-					className="ph-mask -ml-1.5 min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
+					className="ph-mask min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
 				>
 					{fileTree}
 				</div>
@@ -1346,15 +1344,14 @@ const CompactNewButton = forwardRef<
 	ref,
 ) {
 	return (
-		// Reads as one more tree row: same height, icon slot, type, and hover
-		// fill as the items below it — including their geometry (6px pill inset,
-		// shifted left so the icon sits on the panel edge). No trailing chevron —
-		// the FILES section label above already carries a caret, and two stacked
-		// carets read as noise.
+		// Reads as one more tree row: same height, padding, icon slot, type,
+		// and hover fill as the items below it. No trailing chevron — the FILES
+		// section label above already carries a caret, and two stacked carets
+		// read as noise.
 		<button
 			ref={ref}
 			type="button"
-			className="-ml-1.5 mb-px flex h-7 w-[calc(100%+6px)] select-none items-center gap-2 rounded-[7px] px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-[7px] px-2.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 			data-attr="file-new"
 			disabled={disabled}
 			title={title}
