@@ -1572,33 +1572,6 @@ function LayoutShellLoadedContentResolved({
 		[lix, retireAcceptedReviews],
 	);
 
-	// Keep: accept pending reviews for the ticked files (every file unless the
-	// user unticked some in the float's ▾ list).
-	const keepReviews = useCallback(
-		async (reviews: readonly ExternalWriteReview[]) => {
-			for (const review of reviews) {
-				await runDiffReviewResolution(review, "accepted", async () => {
-					await persistReviewResolution(review, "accepted");
-				});
-			}
-		},
-		[persistReviewResolution, runDiffReviewResolution],
-	);
-	const handleKeepReviews = useCallback(
-		async (selectedFileIds: readonly string[]) => {
-			const selected = new Set(selectedFileIds);
-			const session = diffReviewRef.current;
-			if (session?.kind !== "working") return;
-			await keepReviews(
-				session.externalWriteReviews.filter((review) =>
-					selected.has(review.fileId),
-				),
-			);
-		},
-		[keepReviews],
-	);
-
-
 	const handleRestoreCheckpoint = useCallback(
 		async (selectedFileIds: readonly string[]) => {
 			if (!historicalReview?.range || selectedFileIds.length === 0) return;
@@ -2187,9 +2160,7 @@ function LayoutShellLoadedContentResolved({
 			: "Viewing checkpoint"
 		: workingChangesReviewOpen
 			? `Reviewing changes since checkpoint${reviewFileCountLabel}`
-			: isReviewMode
-				? `Reviewing this turn${reviewFileCountLabel}`
-				: null;
+			: null;
 
 	// The float's orange verb, scoped by its ▾ checklist: every changed file
 	// unless the user unticked some.
@@ -2199,19 +2170,9 @@ function LayoutShellLoadedContentResolved({
 				await handleRestoreCheckpoint(selectedFileIds);
 				return;
 			}
-			if (workingChangesReviewOpen) {
-				await handleCreateCheckpoint(selectedFileIds);
-				return;
-			}
-			await handleKeepReviews(selectedFileIds);
+			await handleCreateCheckpoint(selectedFileIds);
 		},
-		[
-			handleCreateCheckpoint,
-			handleKeepReviews,
-			handleRestoreCheckpoint,
-			historicalReview,
-			workingChangesReviewOpen,
-		],
+		[handleCreateCheckpoint, handleRestoreCheckpoint, historicalReview],
 	);
 
 	const resolveAndOpenFile = useCallback(
@@ -4132,13 +4093,7 @@ function LayoutShellLoadedContentResolved({
 					<ExternalWriteReviewControls
 						isActive
 						readOnly={isHostReadOnly}
-						mode={
-							historicalReview
-								? "historical"
-								: workingChangesReviewOpen
-									? "working-changes"
-									: "agent-turn"
-						}
+						mode={historicalReview ? "historical" : "working-changes"}
 						navigation={reviewNavigation}
 						files={pendingReviewFiles}
 						onUndo={

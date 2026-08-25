@@ -3,7 +3,7 @@ import type { Lix } from "@lix-js/sdk";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
-import { getWorkingChangeExternalWriteReview } from "@/shell/external-write-review-history";
+import { getFileDataAtCommit } from "@/shell/external-write-review-history";
 import {
 	applyDeveloperWorkflowScenario,
 	simulateMarkdownAgentWorkflow,
@@ -46,7 +46,7 @@ describe("developer workflow scenarios", () => {
 	});
 });
 
-test("simulates a real completed agent turn that opens an external-write review", async () => {
+test("simulates a completed agent turn spanning a reviewable commit range", async () => {
 	lix = await openLix();
 	await qb(lix)
 		.insertInto("lix_file")
@@ -68,16 +68,23 @@ test("simulates a real completed agent turn that opens an external-write review"
 		.select("content")
 		.where("id", "=", fakeUuid("devtools-readme"))
 		.executeTakeFirstOrThrow();
-	const review = await getWorkingChangeExternalWriteReview(
+	const beforeData = await getFileDataAtCommit(
 		lix,
 		fakeUuid("devtools-readme"),
-		"/README.md",
+		result.beforeCommitId,
+	);
+	const afterData = await getFileDataAtCommit(
+		lix,
+		fakeUuid("devtools-readme"),
+		result.afterCommitId,
 	);
 
 	expect(decoder.decode(file.content)).toContain("agent-reviewed-copy");
 	expect(result.beforeCommitId).not.toBe(result.afterCommitId);
-	expect(review).toMatchObject({
-		fileId: fakeUuid("devtools-readme"),
-		afterCommitId: result.afterCommitId,
-	});
+	expect(decoder.decode(beforeData ?? undefined)).toContain(
+		"# Original heading",
+	);
+	expect(decoder.decode(afterData ?? undefined)).toContain(
+		"agent-reviewed-copy",
+	);
 });

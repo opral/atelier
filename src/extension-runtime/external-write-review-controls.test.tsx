@@ -22,7 +22,7 @@ describe("ExternalWriteReviewControls", () => {
 		render(
 			<ExternalWriteReviewControls
 				isActive
-				mode="agent-turn"
+				mode="working-changes"
 				navigation={NAVIGATION}
 				files={FILES}
 				onUndo={undo}
@@ -34,7 +34,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(
 			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
 		).toBeVisible();
-		fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
 		await waitFor(() =>
 			expect(primary).toHaveBeenCalledWith(["file-tiktok", "file-launch"]),
 		);
@@ -48,7 +48,7 @@ describe("ExternalWriteReviewControls", () => {
 		render(
 			<ExternalWriteReviewControls
 				isActive
-				mode="agent-turn"
+				mode="working-changes"
 				navigation={NAVIGATION}
 				files={FILES}
 				onUndo={undo}
@@ -73,7 +73,7 @@ describe("ExternalWriteReviewControls", () => {
 			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		).toBeVisible();
 		expect(screen.getByText("1 file")).toBeVisible();
-		expect(screen.getByRole("button", { name: "Keep" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeVisible();
 		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
 			"aria-checked",
 			"mixed",
@@ -82,7 +82,7 @@ describe("ExternalWriteReviewControls", () => {
 		// Both verbs apply to the selection.
 		fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 		expect(undo).toHaveBeenCalledWith(["file-tiktok"]);
-		fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
 		await waitFor(() => expect(primary).toHaveBeenCalledWith(["file-tiktok"]));
 		// Committing closes the list and resets the working set.
 		expect(screen.queryByRole("checkbox")).toBeNull();
@@ -95,7 +95,7 @@ describe("ExternalWriteReviewControls", () => {
 		render(
 			<ExternalWriteReviewControls
 				isActive
-				mode="agent-turn"
+				mode="working-changes"
 				navigation={NAVIGATION}
 				files={FILES}
 				onUndo={vi.fn()}
@@ -119,7 +119,7 @@ describe("ExternalWriteReviewControls", () => {
 		render(
 			<ExternalWriteReviewControls
 				isActive
-				mode="agent-turn"
+				mode="working-changes"
 				navigation={NAVIGATION}
 				files={FILES}
 				onUndo={vi.fn()}
@@ -133,7 +133,7 @@ describe("ExternalWriteReviewControls", () => {
 		const allFiles = () => screen.getByRole("checkbox", { name: "All files" });
 		fireEvent.click(allFiles());
 		expect(allFiles()).toHaveAttribute("aria-checked", "false");
-		expect(screen.getByRole("button", { name: "Keep" })).toBeDisabled();
+		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
 
 		// From partial, the master row ticks everything back on.
@@ -141,7 +141,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
 		fireEvent.click(allFiles());
 		expect(allFiles()).toHaveAttribute("aria-checked", "true");
-		expect(screen.getByRole("button", { name: "Keep" })).toBeEnabled();
+		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeEnabled();
 	});
 
 	test("historical: the read-only past has no Undo", () => {
@@ -240,7 +240,7 @@ describe("ExternalWriteReviewControls", () => {
 		render(
 			<ExternalWriteReviewControls
 				isActive
-				mode="agent-turn"
+				mode="working-changes"
 				navigation={NAVIGATION}
 				files={FILES}
 				onPrimary={primary}

@@ -2,101 +2,48 @@ import { describe, expect, test } from "vitest";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
-import {
-	getExternalWriteReviewData,
-	getWorkingChangeExternalWriteReview,
-} from "./external-write-review-history";
+import { getFileDataAtCommit } from "./external-write-review-history";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-describe("getWorkingChangeExternalWriteReview", () => {
-	test("reviews the file from the latest checkpoint to the active head", async () => {
+describe("getFileDataAtCommit", () => {
+	test("returns the file's bytes at the requested commit", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(
-				lix,
-				fakeUuid("checkpoint-file"),
-				"/checkpoint.md",
-				"before",
-			);
+			const fileId = fakeUuid("history-file");
+			await writeFile(lix, fileId, "/history.md", "before");
 			const checkpoint = await lix.createCheckpoint();
-			await writeFile(
-				lix,
-				fakeUuid("checkpoint-file"),
-				"/checkpoint.md",
-				"after",
-			);
+			await writeFile(lix, fileId, "/history.md", "after");
 			const headCommitId = await activeCommitId(lix);
 
-			const review = await getWorkingChangeExternalWriteReview(
-				lix,
-				fakeUuid("checkpoint-file"),
-				"/checkpoint.md",
-			);
-			expect(review).toEqual(
-				expect.objectContaining({
-					fileId: fakeUuid("checkpoint-file"),
-					path: "/checkpoint.md",
-					beforeCommitId: checkpoint.commitId,
-					afterCommitId: headCommitId,
-				}),
-			);
-			if (!review) throw new Error("Expected a checkpoint working review");
-			const data = await getExternalWriteReviewData(lix, review);
-			expect(decoder.decode(data?.beforeData)).toBe("before");
-			expect(decoder.decode(data?.afterData)).toBe("after");
-		} finally {
-			await lix.close();
-		}
-	});
-
-	test("reviews a file deleted after the latest checkpoint", async () => {
-		const lix = await openLix();
-		try {
-			const fileId = fakeUuid("deleted-working-file");
-			const path = "/deleted-working.md";
-			await writeFile(lix, fileId, path, "before deletion");
-			const checkpoint = await lix.createCheckpoint();
-			await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
-			const headCommitId = await activeCommitId(lix);
-
-			const review = await getWorkingChangeExternalWriteReview(
+			const beforeData = await getFileDataAtCommit(
 				lix,
 				fileId,
-				path,
+				checkpoint.commitId,
 			);
-
-			expect(review).toEqual(
-				expect.objectContaining({
-					fileId,
-					path,
-					beforeCommitId: checkpoint.commitId,
-					afterCommitId: headCommitId,
-				}),
-			);
-			const data = await getExternalWriteReviewData(lix, review!);
-			expect(decoder.decode(data?.beforeData)).toBe("before deletion");
-			expect(data?.afterData).toEqual(new Uint8Array());
+			expect(decoder.decode(beforeData ?? undefined)).toBe("before");
+			const afterData = await getFileDataAtCommit(lix, fileId, headCommitId);
+			expect(decoder.decode(afterData ?? undefined)).toBe("after");
 		} finally {
 			await lix.close();
 		}
 	});
 
-	test("returns no review for a file unchanged since the checkpoint", async () => {
+	test("returns null for a file absent at the commit", async () => {
 		const lix = await openLix();
 		try {
-			await writeFile(lix, fakeUuid("stable-file"), "/stable.md", "same");
-			await writeFile(lix, fakeUuid("moving-file"), "/moving.md", "v1");
-			await lix.createCheckpoint();
-			await writeFile(lix, fakeUuid("moving-file"), "/moving.md", "v2");
+			await writeFile(lix, fakeUuid("baseline-file"), "/baseline.md", "base");
+			const checkpoint = await lix.createCheckpoint();
+			const addedFileId = fakeUuid("added-later-file");
+			await writeFile(lix, addedFileId, "/added-later.md", "new");
 
-			const review = await getWorkingChangeExternalWriteReview(
+			const data = await getFileDataAtCommit(
 				lix,
-				fakeUuid("stable-file"),
-				"/stable.md",
+				addedFileId,
+				checkpoint.commitId,
 			);
-			expect(review).toBeNull();
+			expect(data).toBeNull();
 		} finally {
 			await lix.close();
 		}
