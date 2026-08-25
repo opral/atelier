@@ -390,7 +390,15 @@ export function PanelV2({
 			ref={setPanelElementRef}
 			aria-label={ariaLabel}
 			onClickCapture={() => onFocusPanel(side)}
-			className={clsx("flex h-full w-full flex-col", hostTextClass)}
+			// The right sidebar sits against the central island: a little left
+			// padding keeps its content from touching the island's edge. The left
+			// sidebar stays unpadded — its content column aligns with the top
+			// bar's mark instead.
+			className={clsx(
+				"flex h-full w-full flex-col",
+				side === "right" && "pl-2",
+				hostTextClass,
+			)}
 		>
 			{sideSectionPicker}
 			{/* Central tabs remain the only document tab strip. Side panels use the
