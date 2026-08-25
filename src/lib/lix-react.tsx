@@ -419,25 +419,43 @@ function observeQueryEntry<TRow>(
 ): () => void {
 	let closed = false;
 	markQueryActivity("observe");
-	const events = lix.observe(sql, [...parameters] as SqlParam[]);
+	let events = lix.observe(sql, [...parameters] as SqlParam[]);
 
 	void (async () => {
-		try {
-			while (true) {
-				const event = await events.next();
-				if (closed || event === undefined) break;
-				const nextRows = reuseObservedResult
-					? queryResultToRows<TRow>(event.result)
-					: await (async () => {
-							markQueryActivity("execute");
-							return entry.execute();
-						})();
-				if (closed) break;
-				setQueryRows(entry, nextRows);
+		let expiredRetries = 0;
+		for (;;) {
+			try {
+				while (true) {
+					const event = await events.next();
+					if (closed || event === undefined) return;
+					const nextRows = reuseObservedResult
+						? queryResultToRows<TRow>(event.result)
+						: await (async () => {
+								markQueryActivity("execute");
+								return entry.execute();
+							})();
+					if (closed) return;
+					expiredRetries = 0;
+					setQueryRows(entry, nextRows);
+				}
+			} catch (error) {
+				if (closed) return;
+				expiredRetries += 1;
+				if (
+					expiredRetries > EXPIRED_READ_RETRY_LIMIT ||
+					!isExpiredReadError(error)
+				) {
+					setQueryError(entry, error);
+					return;
+				}
+				events.close();
+				await new Promise((resolve) =>
+					setTimeout(resolve, expiredRetries * 50),
+				);
+				if (closed) return;
+				markQueryActivity("observe");
+				events = lix.observe(sql, [...parameters] as SqlParam[]);
 			}
-		} catch (error) {
-			if (closed) return;
-			setQueryError(entry, error);
 		}
 	})();
 
