@@ -1340,8 +1340,10 @@ function buildReviewGitStatusEntries(
 		}
 		entries.push({ path: treePath, status });
 	}
+	const statusedTreePaths = new Set(entries.map((entry) => entry.path));
 	for (const appPath of reviewPaths ?? []) {
 		const treePath = appPathToTreePath(appPath, false);
+		if (statusedTreePaths.has(treePath)) continue;
 		const info = treeInput.pathInfoByTreePath.get(treePath);
 		if (!info || info.kind !== "file" || info.createRequestId != null) {
 			continue;
@@ -1451,6 +1453,8 @@ function treeHostStyle(
 		"--trees-font-family-override": "inherit",
 		"--trees-font-size-override": isSpacious ? "15px" : "13px",
 		"--trees-git-modified-color-override": "var(--color-icon-brand)",
+		"--trees-git-added-color-override": "var(--color-text-status-success)",
+		"--trees-git-deleted-color-override": "var(--color-text-status-danger)",
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",

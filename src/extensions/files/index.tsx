@@ -75,8 +75,12 @@ type FilesViewContext = {
 	readonly activeFileId?: string | null;
 	readonly activeFilePath?: string | null;
 	readonly activeBranchId?: string;
-	readonly resolvedReviewIds?: readonly string[];
 	readonly reviewWorkingChanges?: boolean;
+	/** The open diff session's files; change kinds color the tree's dots. */
+	readonly sessionFiles?: readonly {
+		readonly path: string;
+		readonly changeKind: "added" | "modified" | "removed";
+	}[];
 	readonly reviewModeActive?: boolean;
 	readonly isPanelFocused?: boolean;
 	readonly panelSide?: PanelSide;
@@ -310,6 +314,18 @@ function FilesViewContent({
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true
 			? workingChangePaths
 			: EMPTY_REVIEW_PATHS;
+	// Session change kinds color the indicators: added green, modified orange.
+	// (Removed files have no live tree row to mark.)
+	const sessionFiles = context?.sessionFiles;
+	const reviewStatuses = useMemo(() => {
+		const statuses = new Map<string, "added" | "modified">();
+		if (context?.reviewModeActive !== true) return statuses;
+		for (const file of sessionFiles ?? []) {
+			if (file.changeKind === "removed") continue;
+			statuses.set(file.path, file.changeKind === "added" ? "added" : "modified");
+		}
+		return statuses;
+	}, [context?.reviewModeActive, sessionFiles]);
 	const creatingRef = useRef(false);
 	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
@@ -1172,6 +1188,7 @@ function FilesViewContent({
 			variant={context?.panelSide === "central" ? "spacious" : "compact"}
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
+			reviewStatuses={reviewStatuses}
 			onSelectItem={handleSelectItem}
 			onClearSelection={handleClearSelection}
 			selectedPath={selectedPath ?? undefined}
@@ -1486,10 +1503,11 @@ export const extension = createReactExtensionDefinition({
 				activeFileId: atelier.documents.activeFileId,
 				activeFilePath: atelier.documents.activeFilePath,
 				activeBranchId: atelier.branches.activeId,
-						reviewWorkingChanges:
+				reviewWorkingChanges:
 					atelier.diff.session !== null &&
 					"working" in atelier.diff.session.target,
 				reviewModeActive: atelier.diff.session !== null,
+				sessionFiles: atelier.diff.session?.files,
 				isPanelFocused: view.isFocused,
 				panelSide: view.panel,
 				viewInstance: view.instanceId,

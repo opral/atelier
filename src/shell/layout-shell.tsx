@@ -787,6 +787,37 @@ export async function selectCheckpointFiles(
 		.sort((left, right) => left.path.localeCompare(right.path));
 }
 
+/**
+ * Every file present at a commit, as "added": the file list for diffing a
+ * commit against the repository's beginning (a base-less initial checkpoint).
+ */
+export async function selectFilesAtCommit(
+	lix: Lix,
+	commitId: string,
+): Promise<LixFileForOpen[]> {
+	const rows = (await selectFileHistory(lix, commitId)
+		.select(["id", "path", "lixcol_depth"])
+		.orderBy("id", "asc")
+		.orderBy("lixcol_depth", "asc")
+		.execute()) as Array<{
+		readonly id: string;
+		readonly path: string | null;
+	}>;
+	const seen = new Set<string>();
+	const files: LixFileForOpen[] = [];
+	for (const row of rows) {
+		if (seen.has(row.id)) continue;
+		seen.add(row.id);
+		if (typeof row.path !== "string") continue;
+		files.push({
+			id: row.id,
+			path: row.path,
+			checkpointChangeKind: "added",
+		});
+	}
+	return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
 export async function resolveLixFileForOpen({
 	lix,
 	filePath,
@@ -2431,17 +2462,16 @@ function LayoutShellLoadedContentResolved({
 			createdAt,
 		}: {
 			readonly commitId: string;
-			readonly previousCommitId: string;
+			/** Null diffs against the repository's beginning. */
+			readonly previousCommitId: string | null;
 			readonly createdAt?: string;
 		}) => {
 			const requestId = ++historicalRequestRef.current;
-			const files = await selectCheckpointFiles(
-				lix,
-				previousCommitId,
-				commitId,
-			);
+			const files =
+				previousCommitId === null
+					? await selectFilesAtCommit(lix, commitId)
+					: await selectCheckpointFiles(lix, previousCommitId, commitId);
 			if (historicalRequestRef.current !== requestId) return;
-			if (files.length === 0) return;
 			setDiffReview((current) => {
 				const previous = current?.kind === "historical" ? current : null;
 				if (previous?.range && previous.range.afterCommitId !== commitId) {
@@ -2472,7 +2502,9 @@ function LayoutShellLoadedContentResolved({
 				return {
 					kind: "historical",
 					range: {
-						beforeCommitId: previousCommitId,
+						// "" is the beginning-of-repository sentinel: no removed
+						// files can exist against an empty base, so nothing reads it.
+						beforeCommitId: previousCommitId ?? "",
 						afterCommitId: commitId,
 						removedFileIds: EMPTY_FILE_ID_SET,
 					},
@@ -3641,7 +3673,9 @@ function LayoutShellLoadedContentResolved({
 		});
 		if (historicalReview?.range) {
 			return {
-				base: { commitId: historicalReview.range.beforeCommitId },
+				base: historicalReview.range.beforeCommitId
+					? { commitId: historicalReview.range.beforeCommitId }
+					: null,
 				target: { commitId: historicalReview.range.afterCommitId },
 				files: historicalReview.files.map(toDiffFile),
 				activePath: activeDiffPath,
@@ -3704,9 +3738,9 @@ function LayoutShellLoadedContentResolved({
 				);
 				return;
 			}
-			const base = options.base;
-			if (!base || !("commitId" in base)) {
-				throw new Error("A commit diff session requires a base commit id.");
+			const base = options.base ?? null;
+			if (base !== null && !("commitId" in base)) {
+				throw new Error("A commit diff session's base must be a commit id.");
 			}
 			let createdAt: string | undefined;
 			try {
@@ -3721,7 +3755,7 @@ function LayoutShellLoadedContentResolved({
 			}
 			await handleViewCheckpoint({
 				commitId: options.target.commitId,
-				previousCommitId: base.commitId,
+				previousCommitId: base?.commitId ?? null,
 				...(createdAt ? { createdAt } : {}),
 			});
 		},

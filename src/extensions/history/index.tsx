@@ -5,6 +5,7 @@ import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { useQuery } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
+	selectCommitParent,
 	selectWorkingChangeCount,
 	type CheckpointRow,
 } from "@/queries";
@@ -147,6 +148,7 @@ function WorkingChangeFileList({
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}
 						</span>
+						<ChangeKindDot changeKind={file.changeKind} />
 					</button>
 				</li>
 			))}
@@ -156,6 +158,17 @@ function WorkingChangeFileList({
 
 function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 	const checkpoints = useQuery((lix) => selectCheckpoints(lix));
+	// The oldest checkpoint has no older checkpoint to diff against; its base
+	// is its commit's first parent (the repository's beginning).
+	const oldestCommitId = checkpoints.at(-1)?.commit_id ?? null;
+	const oldestParent = useQuery((lix) =>
+		selectCommitParent(lix, oldestCommitId ?? ""),
+	);
+	// Null means the repository's beginning: the genesis checkpoint has no
+	// parent commit, and its diff base is the empty repository.
+	const oldestParentId: string | null = oldestCommitId
+		? (oldestParent[0]?.parent_id ?? null)
+		: null;
 
 	return (
 		<ol aria-label="Checkpoints" className="space-y-0">
@@ -164,7 +177,10 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 					key={checkpoint.commit_id}
 					atelier={atelier}
 					checkpoint={checkpoint}
-					previousCommitId={checkpoints[index + 1]?.commit_id}
+					previousCommitId={
+						checkpoints[index + 1]?.commit_id ??
+						(index === checkpoints.length - 1 ? oldestParentId : undefined)
+					}
 					index={index}
 					count={checkpoints.length}
 				/>
@@ -182,7 +198,8 @@ function CheckpointItem({
 }: {
 	readonly atelier: ExtensionRuntime;
 	readonly checkpoint: CheckpointRow;
-	readonly previousCommitId: string | undefined;
+	/** Undefined disables the row; null diffs from the repository's beginning. */
+	readonly previousCommitId: string | null | undefined;
 	readonly index: number;
 	readonly count: number;
 }) {
@@ -210,16 +227,16 @@ function CheckpointItem({
 		>
 			<button
 				type="button"
-				disabled={!previousCommitId}
+				disabled={previousCommitId === undefined}
 				onClick={() => {
-					if (!previousCommitId) return;
+					if (previousCommitId === undefined) return;
 					// Pressing the viewed checkpoint again leaves review mode.
 					if (isViewing) {
 						atelier.diff.exit();
 						return;
 					}
 					void atelier.diff.open({
-						base: { commitId: previousCommitId },
+						base: previousCommitId ? { commitId: previousCommitId } : null,
 						target: { commitId: checkpoint.commit_id },
 					});
 				}}
@@ -364,10 +381,39 @@ function CheckpointFileList({
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}
 						</span>
+						<ChangeKindDot changeKind={file.changeKind} />
 					</button>
 				</li>
 			))}
 		</ul>
+	);
+}
+
+/** Green = added, red = removed, brand orange = modified. */
+function changeKindDotClass(
+	changeKind: "added" | "modified" | "removed",
+): string {
+	if (changeKind === "added") return "bg-[var(--color-text-status-success)]";
+	if (changeKind === "removed") return "bg-[var(--color-text-status-danger)]";
+	return "bg-[var(--color-icon-brand)]";
+}
+
+function ChangeKindDot({
+	changeKind,
+}: {
+	readonly changeKind: "added" | "modified" | "removed";
+}) {
+	return (
+		<span
+			title={
+				changeKind === "added"
+					? "Added"
+					: changeKind === "removed"
+						? "Removed"
+						: "Modified"
+			}
+			className={`ml-auto size-1.5 shrink-0 rounded-full ${changeKindDotClass(changeKind)}`}
+		/>
 	);
 }
 

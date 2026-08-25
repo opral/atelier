@@ -248,6 +248,17 @@ export function selectCheckpoints(lix: Lix) {
 		.$castTo<CheckpointRow>();
 }
 
+/** First parent of a commit — the base for diffing the oldest checkpoint. */
+export function selectCommitParent(lix: Lix, commitId: string) {
+	return qb(lix)
+		.selectFrom("lix_commit_edge")
+		.select("parent_id")
+		.where("child_id", "=", commitId)
+		.where("parent_order", "=", 0)
+		.limit(1)
+		.$castTo<{ parent_id: string }>();
+}
+
 export function selectLatestCheckpoint(lix: Lix) {
 	return selectCheckpoints(lix).limit(1);
 }
