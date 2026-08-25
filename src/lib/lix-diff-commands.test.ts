@@ -54,6 +54,45 @@ describe("Lix SQL diff commands", () => {
 		}
 	});
 
+	test("sweeps the selected file's new directories into the checkpoint", async () => {
+		const lix = await openLix();
+		try {
+			const insideId = fakeUuid("dir-sweep-inside");
+			const outsideId = fakeUuid("dir-sweep-outside");
+			await writeFile(lix, insideId, "/docs/handbook/inside.md", "inside");
+			await writeFile(lix, outsideId, "/notes/outside.md", "outside");
+
+			const checkpoint = await createCheckpointForFiles(lix, [insideId]);
+			expect(checkpoint?.commitId).toEqual(expect.any(String));
+
+			// /docs and /docs/handbook were committed with their file; /notes
+			// still has a changed file, so its descriptor stays working.
+			const remainingDirs = await lix.execute(
+				`SELECT row_pk ->> 0 AS dir_id FROM lix_working_diff()
+				 WHERE schema_key = 'lix_directory_descriptor'`,
+			);
+			const remainingDirPaths = await Promise.all(
+				remainingDirs.rows.map(async (row) => {
+					const result = await lix.execute(
+						"SELECT path FROM lix_directory WHERE id = $1",
+						[row.get("dir_id")],
+					);
+					return result.rows[0]?.get("path");
+				}),
+			);
+			expect(remainingDirPaths.sort()).toEqual(["/notes"]);
+
+			// Checkpointing the remaining file clears the working diff entirely.
+			await createCheckpointForFiles(lix, [outsideId]);
+			const finalDiff = await lix.execute(
+				"SELECT count(*) AS n FROM lix_working_diff()",
+			);
+			expect(Number(finalDiff.rows[0]?.get("n"))).toBe(0);
+		} finally {
+			await lix.close();
+		}
+	});
+
 	test("reverts only the selected working file", async () => {
 		const lix = await openLix();
 		try {
