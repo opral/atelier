@@ -101,13 +101,13 @@ function EditableExcalidrawView({
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
-	// The shell owns review detection: this file is under review when the
-	// working diff session marks it pending and it is the revealed file.
+	// The shell owns review detection: this file is under review whenever the
+	// working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
 	const diffSession = atelier.diff.session;
 	const isReviewing = Boolean(
 		diffSession &&
 			"working" in diffSession.target &&
-			diffSession.activePath === resolvedPath &&
 			diffSession.files.some(
 				(file) => file.id === fileId && file.review?.status === "pending",
 			),

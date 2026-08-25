@@ -253,18 +253,16 @@ function CsvLiveViewData({
 	readonly fileId?: string;
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
-	// The shell owns review detection: this file is under review when the
-	// working diff session marks it pending and it is the revealed file.
+	// The shell owns review detection: this file is under review whenever the
+	// working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
 	const session = diffSession ?? null;
 	const sessionFile =
 		fileRow && session && "working" in session.target
 			? session.files.find((file) => file.id === fileRow.id)
 			: undefined;
 	const isReviewing = Boolean(
-		fileRow &&
-			session &&
-			sessionFile?.review?.status === "pending" &&
-			session.activePath === fileRow.path,
+		fileRow && session && sessionFile?.review?.status === "pending",
 	);
 	// An added file has no base to fetch: its history is absent, so its before
 	// side is empty by definition.

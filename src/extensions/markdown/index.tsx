@@ -242,8 +242,9 @@ function MarkdownLiveViewLoaded({
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
-	// The shell owns review detection: this document is under review when the
-	// working diff session marks it pending and it is the revealed file.
+	// The shell owns review detection: this document is under review whenever
+	// the working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
 	const session = diffSession ?? null;
 	const sessionFile =
 		fileRow && session && "working" in session.target
@@ -251,10 +252,7 @@ function MarkdownLiveViewLoaded({
 			: undefined;
 	const sessionReview = sessionFile?.review;
 	const reviewing = Boolean(
-		fileRow &&
-			session &&
-			sessionReview?.status === "pending" &&
-			session.activePath === fileRow.path,
+		fileRow && session && sessionReview?.status === "pending",
 	);
 	// An added file has no base to fetch: its history is absent, so its before
 	// side is empty by definition.

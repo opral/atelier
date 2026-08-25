@@ -32,7 +32,10 @@ import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import { fileIconUrl } from "@/file-icons";
-import { hasHistoricalEditorRevisionState } from "@/extension-runtime/editor-revision-state";
+import {
+	EDITOR_REVISION_STATE_KEYS,
+	hasHistoricalEditorRevisionState,
+} from "@/extension-runtime/editor-revision-state";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
@@ -629,6 +632,14 @@ type DiffReviewState = {
 	readonly opened?: boolean;
 };
 
+/** A live file tab a historical review converted in place. */
+type PreHistoricalDocument = {
+	readonly instance: string;
+	readonly fileId: string;
+	readonly filePath: string;
+	readonly wasActive: boolean;
+};
+
 // Stable identity: the icon resolver is pure, so every runtime rebuild can
 // share one object.
 const ATELIER_RUNTIME_ICONS = { fileUrl: fileIconUrl } as const;
@@ -936,6 +947,10 @@ function LayoutShellStateLoader(
 			const next = coerceAtelierUiState(
 				typeof update === "function" ? update(current) : update,
 			);
+			// Advance the ref immediately: the layout effect only catches up
+			// after a render, so consecutive same-task updates would otherwise
+			// all read the same stale base and silently drop each other.
+			uiStateRef.current = next;
 			configuration.sessionStateStore.setSnapshot(
 				coerceAtelierSessionUiState(next),
 			);
@@ -1344,44 +1359,65 @@ function LayoutShellLoadedContentResolved({
 	// ref observing its revision state. Hosts may echo the route synchronously.
 	const historicalOpenPathRef = useRef<string | null>(null);
 	const historicalRequestRef = useRef(0);
-	const closeHistoricalReviewViews = useCallback((commitId: string) => {
-		for (const view of panelStatesRef.current.central.views) {
-			if (
-				view.state?.afterCommitId === commitId ||
-				view.state?.beforeCommitId === commitId
-			) {
-				handleCloseViewRef.current?.({
-					panel: "central",
-					instance: view.instance,
-				});
+	const closeHistoricalReviewViews = useCallback(
+		(commitId: string, skipInstances?: ReadonlySet<string>) => {
+			for (const view of panelStatesRef.current.central.views) {
+				if (skipInstances?.has(view.instance)) continue;
+				if (
+					view.state?.afterCommitId === commitId ||
+					view.state?.beforeCommitId === commitId
+				) {
+					handleCloseViewRef.current?.({
+						panel: "central",
+						instance: view.instance,
+					});
+				}
 			}
-		}
-	}, []);
-	// The live document the historical view replaced (tabs navigate in place);
-	// restored on exit so leaving review never strands an empty tab.
-	const preHistoricalDocumentRef = useRef<{
-		readonly fileId: string;
-		readonly filePath: string;
-	} | null>(null);
-	const reopenLiveDocumentRef = useRef<
-		((file: { fileId: string; filePath: string }) => void) | null
+		},
+		[],
+	);
+	// The live documents the historical review converted in place (every open
+	// file tab switches into the review's span); restored on exit so leaving
+	// review returns each tab to its live document.
+	const preHistoricalDocumentsRef = useRef<
+		readonly PreHistoricalDocument[]
+	>([]);
+	const restoreLiveDocumentsRef = useRef<
+		| ((
+				documents: readonly PreHistoricalDocument[],
+				options: { readonly focusActive: boolean },
+		  ) => void)
+		| null
 	>(null);
 	const exitDiffReview = useCallback(
 		(options?: { readonly restoreLiveDocument?: boolean }) => {
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
 			historicalRequestRef.current += 1;
 			historicalOpenPathRef.current = null;
-			setDiffReview((current) => {
-				if (current?.kind === "historical" && current.range) {
-					closeHistoricalReviewViews(current.range.afterCommitId);
-					const previousDocument = preHistoricalDocumentRef.current;
-					preHistoricalDocumentRef.current = null;
-					if (restoreLiveDocument && previousDocument) {
-						reopenLiveDocumentRef.current?.(previousDocument);
-					}
+			// State updaters must stay pure: read the current review through the
+			// ref and run the close/restore side effects here, outside React's
+			// updater pass, or their queued panel updates can be dropped.
+			const current = diffReviewRef.current;
+			if (current?.kind === "historical" && current.range) {
+				const remembered = preHistoricalDocumentsRef.current;
+				preHistoricalDocumentsRef.current = [];
+				const openInstances = new Set(
+					panelStatesRef.current.central.views.map((view) => view.instance),
+				);
+				const surviving = remembered.filter((doc) =>
+					openInstances.has(doc.instance),
+				);
+				closeHistoricalReviewViews(
+					current.range.afterCommitId,
+					new Set(surviving.map((doc) => doc.instance)),
+				);
+				if (remembered.length > 0) {
+					restoreLiveDocumentsRef.current?.(remembered, {
+						focusActive: restoreLiveDocument,
+					});
 				}
-				return null;
-			});
+			}
+			setDiffReview(null);
 		},
 		[closeHistoricalReviewViews],
 	);
@@ -2035,7 +2071,80 @@ function LayoutShellLoadedContentResolved({
 		},
 		[openResolvedFileView],
 	);
-	reopenLiveDocumentRef.current = openAutoRevealedFile;
+	const restoreLiveDocuments = useCallback(
+		(
+			documents: readonly PreHistoricalDocument[],
+			options: { readonly focusActive: boolean },
+		) => {
+			// A converted tab the review later navigated in place (its instance
+			// was replaced by a review-opened view) has no surviving tab to
+			// restore into; an explicit Exit reopens its live document instead.
+			// A silent exit (the user already navigated somewhere live) leaves
+			// those documents alone.
+			const openInstances = new Set(
+				panelStatesRef.current.central.views.map((view) => view.instance),
+			);
+			const surviving = documents.filter((doc) =>
+				openInstances.has(doc.instance),
+			);
+			if (options.focusActive) {
+				for (const doc of documents) {
+					if (openInstances.has(doc.instance)) continue;
+					openResolvedFileView({
+						panel: "central",
+						fileId: doc.fileId,
+						filePath: doc.filePath,
+						focus: doc.wasActive,
+						newTab: true,
+					});
+				}
+			}
+			if (surviving.length === 0) return;
+			const byInstance = new Map(
+				surviving.map((doc) => [doc.instance, doc] as const),
+			);
+			updateWorkspace((current) => {
+				const central = current.panels.central;
+				const views = central.views.map((view) => {
+					const doc = byInstance.get(view.instance);
+					if (!doc) return view;
+					const state = view.state ? { ...view.state } : {};
+					for (const key of EDITOR_REVISION_STATE_KEYS) {
+						delete state[key];
+					}
+					return {
+						...view,
+						state: {
+							...state,
+							...buildFileExtensionProps({
+								fileId: doc.fileId,
+								filePath: doc.filePath,
+							}),
+						},
+					};
+				});
+				const activeDocument = options.focusActive
+					? documents.find(
+							(doc) => doc.wasActive && byInstance.has(doc.instance),
+						)
+					: undefined;
+				return {
+					panels: {
+						...current.panels,
+						central: {
+							views,
+							activeInstance: activeDocument
+								? activeDocument.instance
+								: central.activeInstance,
+						},
+					},
+					focusedPanel: activeDocument ? "central" : current.focusedPanel,
+				};
+			});
+		},
+		[openResolvedFileView, updateWorkspace],
+	);
+	restoreLiveDocumentsRef.current = restoreLiveDocuments;
 	const navigationActiveView = centralPanel.views.find(
 		(view) => view.instance === centralPanel.activeInstance,
 	);
@@ -2270,6 +2379,112 @@ function LayoutShellLoadedContentResolved({
 		},
 		[extensionMap],
 	);
+	// Diff mode covers every surface: entering a historical review converts all
+	// open live file tabs to the review's span in place — each tab keeps its
+	// position and identity but renders the historical diff. Retargeting to
+	// another checkpoint re-points the already-converted tabs.
+	const convertOpenFileTabsToHistorical = useCallback(
+		async (
+			range: {
+				readonly commitId: string;
+				readonly previousCommitId: string | null;
+			},
+			files: readonly LixFileForOpen[],
+			convertedInstances: ReadonlySet<string>,
+		): Promise<number> => {
+			const central = panelStatesRef.current.central;
+			const changeKinds = new Map(
+				files.map((file) => [
+					file.id,
+					file.checkpointChangeKind ?? ("modified" as const),
+				]),
+			);
+			const candidates = central.views.flatMap((view) => {
+				const fileId = activeFileIdFromExtensionInstance(view);
+				const filePath = documentPathFromView(view);
+				if (!fileId || !filePath) return [];
+				if (
+					hasHistoricalEditorRevisionState(view.state) &&
+					!convertedInstances.has(view.instance)
+				) {
+					return [];
+				}
+				return [{ instance: view.instance, fileId, filePath }];
+			});
+			if (candidates.length === 0) return 0;
+			// A file untouched by the span still time-travels. Against the
+			// repository's beginning nothing pre-exists, so its base is empty.
+			const fallbackKind =
+				range.previousCommitId === null
+					? ("added" as const)
+					: ("modified" as const);
+			// Renames and deletions resolve to the path each file had at the
+			// relevant side of the span.
+			const snapshots = await selectFileHistorySnapshotsAtCommits(
+				lix,
+				candidates.map(({ fileId }) => ({
+					fileId,
+					commitId:
+						changeKinds.get(fileId) === "removed" && range.previousCommitId
+							? range.previousCommitId
+							: range.commitId,
+				})),
+				{ includeContent: false },
+			);
+			const snapshotPaths = new Map(
+				snapshots.flatMap((snapshot) =>
+					snapshot.path ? [[snapshot.id, snapshot.path] as const] : [],
+				),
+			);
+			const conversions = new Map(
+				candidates.map((candidate) => {
+					const changeKind =
+						changeKinds.get(candidate.fileId) ?? fallbackKind;
+					const historicalPath =
+						snapshotPaths.get(candidate.fileId) ?? candidate.filePath;
+					return [
+						candidate.instance,
+						{
+							...buildFileExtensionProps({
+								fileId: candidate.fileId,
+								filePath: historicalPath,
+							}),
+							...historicalRevisionStateForPath(
+								historicalPath,
+								range.commitId,
+								range.previousCommitId ?? "",
+								changeKind,
+							),
+						},
+					] as const;
+				}),
+			);
+			updateWorkspace((current) => {
+				const currentCentral = current.panels.central;
+				const views = currentCentral.views.map((view) => {
+					const nextState = conversions.get(view.instance);
+					if (!nextState) return view;
+					const state = view.state ? { ...view.state } : {};
+					for (const key of EDITOR_REVISION_STATE_KEYS) {
+						delete state[key];
+					}
+					return { ...view, state: { ...state, ...nextState } };
+				});
+				return {
+					panels: {
+						...current.panels,
+						central: {
+							views,
+							activeInstance: currentCentral.activeInstance,
+						},
+					},
+					focusedPanel: current.focusedPanel,
+				};
+			});
+			return candidates.length;
+		},
+		[historicalRevisionStateForPath, lix, updateWorkspace],
+	);
 	const openWorkingChangeFileAtRange = useCallback(
 		(
 			file: LixFileForOpen,
@@ -2425,34 +2640,53 @@ function LayoutShellLoadedContentResolved({
 					? await selectFilesAtCommit(lix, commitId)
 					: await selectCheckpointFiles(lix, previousCommitId, commitId);
 			if (historicalRequestRef.current !== requestId) return;
-			setDiffReview((current) => {
-				const previous = current?.kind === "historical" ? current : null;
-				if (previous?.range && previous.range.afterCommitId !== commitId) {
-					closeHistoricalReviewViews(previous.range.afterCommitId);
-				}
-				if (!previous) {
-					// Entering the past: remember the live document this view will
-					// replace so Exit can bring it back.
-					const activeView = panelStatesRef.current.central.views.find(
-						(view) =>
-							view.instance === panelStatesRef.current.central.activeInstance,
-					);
-					const activeFileId = activeView
-						? activeFileIdFromExtensionInstance(activeView)
-						: null;
-					const activePath = activeView
-						? documentPathFromView(activeView)
-						: null;
-					// A view already pointed at history has no live doc to restore.
-					const isLiveView = !hasHistoricalEditorRevisionState(
-						activeView?.state,
-					);
-					preHistoricalDocumentRef.current =
-						activeFileId && activePath && isLiveView
-							? { fileId: activeFileId, filePath: activePath }
-							: null;
-				}
-				return {
+			if (diffReviewRef.current?.kind !== "historical") {
+				// Entering the past: remember every live file tab this review
+				// converts so Exit can bring each one back in place.
+				const central = panelStatesRef.current.central;
+				preHistoricalDocumentsRef.current = central.views.flatMap((view) => {
+					const fileId = activeFileIdFromExtensionInstance(view);
+					const filePath = documentPathFromView(view);
+					if (
+						!fileId ||
+						!filePath ||
+						hasHistoricalEditorRevisionState(view.state)
+					) {
+						return [];
+					}
+					return [
+						{
+							instance: view.instance,
+							fileId,
+							filePath,
+							wasActive: view.instance === central.activeInstance,
+						},
+					];
+				});
+			}
+			const convertedInstances = new Set(
+				preHistoricalDocumentsRef.current.map((doc) => doc.instance),
+			);
+			const convertedCount = await convertOpenFileTabsToHistorical(
+				{ commitId, previousCommitId },
+				files,
+				convertedInstances,
+			);
+			if (historicalRequestRef.current !== requestId) return;
+			const previous =
+				diffReviewRef.current?.kind === "historical"
+					? diffReviewRef.current
+					: null;
+			if (previous?.range && previous.range.afterCommitId !== commitId) {
+				// Converted tabs were re-pointed at the new span above; sweep
+				// only the views the old review opened on its own. This runs
+				// outside the state updater so its panel updates stick.
+				closeHistoricalReviewViews(
+					previous.range.afterCommitId,
+					convertedInstances,
+				);
+			}
+			setDiffReview({
 					kind: "historical",
 					range: {
 						// "" is the beginning-of-repository sentinel: no removed
@@ -2464,11 +2698,13 @@ function LayoutShellLoadedContentResolved({
 					files,
 					diffFileId: null,
 					externalWriteReviews: EMPTY_EXTERNAL_WRITE_REVIEWS,
+					// Converted tabs are already showing the span, so the
+					// live-navigation exit guard arms immediately.
+					...(convertedCount > 0 ? { opened: true } : {}),
 					...(createdAt !== undefined ? { createdAt } : {}),
-				};
 			});
 		},
-		[closeHistoricalReviewViews, lix],
+		[closeHistoricalReviewViews, convertOpenFileTabsToHistorical, lix],
 	);
 
 	const getExternalWriteReviewForFile = useCallback(
