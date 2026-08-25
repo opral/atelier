@@ -47,11 +47,14 @@ function WorkingChangesRow({
 		fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
-	const openWorkingChanges = () =>
-		void atelier.diff.open({ target: { working: true } });
 	const isViewing =
 		atelier.diff.session !== null &&
 		"working" in atelier.diff.session.target;
+	// Pressing the active entry again leaves review mode — the row toggles.
+	const toggleWorkingChanges = () =>
+		isViewing
+			? atelier.diff.exit()
+			: void atelier.diff.open({ target: { working: true } });
 
 	return (
 		<div
@@ -65,8 +68,9 @@ function WorkingChangesRow({
 			<button
 				type="button"
 				aria-label="Working changes"
-				disabled={changeCount === 0 || !openWorkingChanges}
-				onClick={openWorkingChanges}
+				disabled={changeCount === 0}
+				onClick={toggleWorkingChanges}
+				onMouseDown={(event) => event.preventDefault()}
 				data-attr="history-working-changes"
 				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left ${
 					changeCount === 0
@@ -122,6 +126,7 @@ function WorkingChangeFileList({
 							openWorkingChangeFile?.(file.path);
 						}}
 						data-attr="history-open-working-change-file"
+						onMouseDown={(event) => event.preventDefault()}
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
 						<img
@@ -196,14 +201,19 @@ function CheckpointItem({
 			<button
 				type="button"
 				disabled={!previousCommitId}
-				onClick={() =>
-					previousCommitId
-						? void atelier.diff.open({
-								base: { commitId: previousCommitId },
-								target: { commitId: checkpoint.commit_id },
-							})
-						: undefined
-				}
+				onClick={() => {
+					if (!previousCommitId) return;
+					// Pressing the viewed checkpoint again leaves review mode.
+					if (isViewing) {
+						atelier.diff.exit();
+						return;
+					}
+					void atelier.diff.open({
+						base: { commitId: previousCommitId },
+						target: { commitId: checkpoint.commit_id },
+					});
+				}}
+				onMouseDown={(event) => event.preventDefault()}
 				data-attr="history-view-checkpoint"
 				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
@@ -326,6 +336,7 @@ function CheckpointFileList({
 							openCheckpointFile?.(file.path);
 						}}
 						data-attr="history-open-checkpoint-file"
+						onMouseDown={(event) => event.preventDefault()}
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
 						<img

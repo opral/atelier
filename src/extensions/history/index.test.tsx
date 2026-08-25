@@ -184,6 +184,7 @@ describe("HistoryView", () => {
 			screen.queryByRole("list", { name: "Files at this checkpoint" }),
 		).toBeNull();
 
+		// A checkpoint that is not being viewed opens on click.
 		fireEvent.click(
 			within(checkpointItems[0]!).getByRole("button", {
 				name: /Latest checkpoint/,
@@ -261,15 +262,14 @@ describe("HistoryView", () => {
 		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
 		expect(checkpointDisclosures[0]).toHaveAttribute("data-state", "open");
 
+		// The viewed checkpoint toggles: pressing it again leaves review mode
+		// instead of re-opening the same session.
 		fireEvent.click(
 			within(checkpointItems[0]!).getByRole("button", {
 				name: /Latest checkpoint/,
 			}),
 		);
-		expect(open).toHaveBeenCalledWith({
-			base: { commitId: expect.any(String) },
-			target: { commitId: checkpoint.commitId },
-		});
+		expect(open).not.toHaveBeenCalled();
 
 		await act(async () => view?.unmount());
 		await lix.close();

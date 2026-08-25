@@ -147,6 +147,7 @@ function CheckpointStatus({
 			type="button"
 			aria-label={`${statusLabel}. ${actionLabel}`}
 			onClick={onActivate}
+			onMouseDown={(event) => event.preventDefault()}
 			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 		>
 			{hasWorkingChanges ? null : (
