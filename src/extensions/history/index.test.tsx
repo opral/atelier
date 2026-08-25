@@ -13,41 +13,59 @@ function atelierStub(overrides?: {
 		readonly id: string;
 		readonly path: string;
 	}[];
-	readonly viewCheckpoint?: (args: {
-		readonly commitId: string;
-		readonly previousCommitId: string;
-		readonly createdAt: string;
+	readonly open?: (options: {
+		readonly base?: { readonly commitId: string } | null;
+		readonly target:
+			| { readonly commitId: string }
+			| { readonly working: true };
+		readonly reveal?: boolean;
 	}) => Promise<void>;
-	readonly openCheckpointFile?: (path: string) => void;
-	readonly openWorkingChanges?: () => void;
+	readonly openFile?: (path: string) => void;
 	readonly workingChangeFiles?: readonly {
 		readonly id: string;
 		readonly path: string;
 	}[];
-	readonly openWorkingChangeFile?: (path: string) => void;
 	readonly workingChangesActive?: boolean;
 }): ExtensionRuntime {
+	const session = overrides?.workingChangesActive
+		? {
+				base: null,
+				target: { working: true as const },
+				files: (overrides?.workingChangeFiles ?? []).map((file) => ({
+					...file,
+					changeKind: "modified" as const,
+				})),
+				activePath: null,
+				capabilities: { checkpoint: true, undo: true, restore: false },
+			}
+		: overrides?.historicalCommitId
+			? {
+					base: null,
+					target: { commitId: overrides.historicalCommitId },
+					files: (overrides?.historicalFiles ?? []).map((file) => ({
+						...file,
+						changeKind: "modified" as const,
+					})),
+					activePath: null,
+					capabilities: { checkpoint: false, undo: false, restore: true },
+				}
+			: null;
 	return {
 		icons: {
 			fileUrl: () =>
 				"data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=",
 		},
+		diff: {
+			session,
+			open: overrides?.open ?? (async () => {}),
+			openFile: overrides?.openFile ?? (() => {}),
+			exit: () => {},
+			accept: async () => {},
+			reject: async () => {},
+			autoAccept: false,
+		},
 		reviews: {
 			resolvedReviewIds: [],
-			viewCheckpoint: overrides?.viewCheckpoint ?? (async () => {}),
-			openCheckpointFile: overrides?.openCheckpointFile ?? (() => {}),
-			openWorkingChanges: overrides?.openWorkingChanges ?? (() => {}),
-			workingChangeFiles: overrides?.workingChangeFiles ?? [],
-			openWorkingChangeFile: overrides?.openWorkingChangeFile ?? (() => {}),
-			...(overrides?.workingChangesActive
-				? { active: true, mode: "working-changes" as const }
-				: {}),
-			...(overrides?.historicalCommitId
-				? { historicalCommitId: overrides.historicalCommitId }
-				: {}),
-			...(overrides?.historicalFiles
-				? { historicalFiles: overrides.historicalFiles }
-				: {}),
 		},
 	} as unknown as ExtensionRuntime;
 }
@@ -70,7 +88,7 @@ describe("HistoryView", () => {
 		await lix.execute("UPDATE lix_file SET content = $1", [
 			new TextEncoder().encode("after"),
 		]);
-		const openWorkingChangeFile = vi.fn();
+		const openFile = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -83,7 +101,7 @@ describe("HistoryView", () => {
 									{ id: fakeUuid("working-file-one"), path: "/docs/one.md" },
 									{ id: fakeUuid("working-file-two"), path: "/two.md" },
 								],
-								openWorkingChangeFile,
+								openFile,
 							})}
 						/>
 					</Suspense>
@@ -100,7 +118,7 @@ describe("HistoryView", () => {
 			"two.md",
 		]);
 		fireEvent.click(fileButtons[1]!);
-		expect(openWorkingChangeFile).toHaveBeenCalledWith("/two.md");
+		expect(openFile).toHaveBeenCalledWith("/two.md");
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -130,13 +148,13 @@ describe("HistoryView", () => {
 				return originalExecute(...args);
 			},
 		);
-		const viewCheckpoint = vi.fn(async () => {});
+		const open = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<HistoryView atelier={atelierStub({ viewCheckpoint })} />
+						<HistoryView atelier={atelierStub({ open })} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -171,10 +189,9 @@ describe("HistoryView", () => {
 				name: /Latest checkpoint/,
 			}),
 		);
-		expect(viewCheckpoint).toHaveBeenCalledWith({
-			commitId: checkpoint.commitId,
-			previousCommitId: expect.any(String),
-			createdAt: expect.any(String),
+		expect(open).toHaveBeenCalledWith({
+			base: { commitId: expect.any(String) },
+			target: { commitId: checkpoint.commitId },
 		});
 
 		await act(async () => view?.unmount());
@@ -199,8 +216,8 @@ describe("HistoryView", () => {
 			{ id: fakeUuid("history-file-one"), path: "/docs/one.txt" },
 			{ id: fakeUuid("history-file-two"), path: "/two.txt" },
 		];
-		const openCheckpointFile = vi.fn();
-		const viewCheckpoint = vi.fn(async () => {});
+		const openFile = vi.fn();
+		const open = vi.fn(async () => {});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = render(
@@ -210,8 +227,8 @@ describe("HistoryView", () => {
 							atelier={atelierStub({
 								historicalCommitId: checkpoint.commitId,
 								historicalFiles,
-								openCheckpointFile,
-								viewCheckpoint,
+								openFile,
+								open,
 							})}
 						/>
 					</Suspense>
@@ -239,8 +256,8 @@ describe("HistoryView", () => {
 			"two.txt",
 		]);
 		fireEvent.click(fileButtons[1]!);
-		expect(openCheckpointFile).toHaveBeenCalledWith("/two.txt");
-		expect(viewCheckpoint).not.toHaveBeenCalled();
+		expect(openFile).toHaveBeenCalledWith("/two.txt");
+		expect(open).not.toHaveBeenCalled();
 		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
 		expect(checkpointDisclosures[0]).toHaveAttribute("data-state", "open");
 
@@ -249,10 +266,9 @@ describe("HistoryView", () => {
 				name: /Latest checkpoint/,
 			}),
 		);
-		expect(viewCheckpoint).toHaveBeenCalledWith({
-			commitId: checkpoint.commitId,
-			previousCommitId: expect.any(String),
-			createdAt: expect.any(String),
+		expect(open).toHaveBeenCalledWith({
+			base: { commitId: expect.any(String) },
+			target: { commitId: checkpoint.commitId },
 		});
 
 		await act(async () => view?.unmount());

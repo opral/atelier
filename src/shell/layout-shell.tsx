@@ -118,6 +118,10 @@ import type {
 } from "../create-atelier";
 import { hostExtensionDefinition } from "../extension-runtime/host-extension";
 import type {
+	AtelierDiffApi,
+	AtelierDiffFile,
+	AtelierDiffRef,
+	AtelierDiffSession,
 	AtelierDocumentOpenOptions,
 	AtelierEvent,
 	AtelierExtensionPreferences,
@@ -1353,7 +1357,7 @@ function LayoutShellLoadedContentResolved({
 	const [historicalReview, setHistoricalReview] = useState<{
 		readonly commitId: string;
 		readonly previousCommitId: string;
-		readonly createdAt: string;
+		readonly createdAt?: string;
 		readonly files: readonly LixFileForOpen[];
 		/** True once the first snapshot view finished opening. */
 		readonly opened?: boolean;
@@ -1619,9 +1623,7 @@ function LayoutShellLoadedContentResolved({
 		},
 		[keepReviews],
 	);
-	const handleKeepAllReviews = useCallback(async () => {
-		await keepReviews(workingReviewRef.current?.externalWriteReviews ?? []);
-	}, [keepReviews]);
+
 
 	const handleRestoreCheckpoint = useCallback(
 		async (selectedFileIds: readonly string[]) => {
@@ -2206,9 +2208,11 @@ function LayoutShellLoadedContentResolved({
 				}`
 			: "";
 	const reviewTitle = historicalReview
-		? `Viewing checkpoint · ${formatCheckpointRelativeTime(
-				historicalReview.createdAt,
-			)}`
+		? historicalReview.createdAt
+			? `Viewing checkpoint · ${formatCheckpointRelativeTime(
+					historicalReview.createdAt,
+				)}`
+			: "Viewing checkpoint"
 		: workingChangesReviewOpen
 			? `Reviewing changes since checkpoint${reviewFileCountLabel}`
 			: isReviewMode
@@ -2494,7 +2498,7 @@ function LayoutShellLoadedContentResolved({
 		}: {
 			readonly commitId: string;
 			readonly previousCommitId: string;
-			readonly createdAt: string;
+			readonly createdAt?: string;
 		}) => {
 			const requestId = ++historicalRequestRef.current;
 			const files = await selectCheckpointFiles(
@@ -2756,10 +2760,7 @@ function LayoutShellLoadedContentResolved({
 			workingChangesReviewOpen,
 		],
 	);
-	const handleUndoAllReviews = useCallback(async () => {
-		if (!workingChangesReviewOpen) return;
-		await handleUndoReviews(workingChangeReviewFiles.map((file) => file.id));
-	}, [handleUndoReviews, workingChangeReviewFiles, workingChangesReviewOpen]);
+
 
 	const handleCloseView = useCallback(
 		({
@@ -3332,7 +3333,9 @@ function LayoutShellLoadedContentResolved({
 			panel: "left",
 		});
 	}, [handleOpenExtensionView]);
-	const handleOpenWorkingChangesReview = useCallback(() => {
+	const handleOpenWorkingChangesReview = useCallback((
+		openOptions?: { readonly reveal?: boolean },
+	) => {
 		// Read-only / anonymous must never look like a clickable no-op. History
 		// is always reachable even when the review query finds no files.
 		if (isHostReadOnly) {
@@ -3416,7 +3419,8 @@ function LayoutShellLoadedContentResolved({
 						view.instance === panelStatesRef.current.central.activeInstance,
 				) ?? null;
 			const revealFirstFile =
-				!activeCentralView || !isDocumentView(activeCentralView);
+				openOptions?.reveal ??
+				(!activeCentralView || !isDocumentView(activeCentralView));
 			setWorkingReview({
 				files: checkpointFiles,
 				range: reviewRange,
@@ -3674,6 +3678,131 @@ function LayoutShellLoadedContentResolved({
 		visibleExtensions,
 	]);
 
+	const activeDiffPath =
+		pendingReviewFiles[activeReviewFileIndex]?.path ?? null;
+	const diffSession = useMemo((): AtelierDiffSession | null => {
+		const toDiffFile = (file: LixFileForOpen): AtelierDiffFile => ({
+			id: file.id,
+			path: file.path,
+			changeKind: file.checkpointChangeKind ?? "modified",
+		});
+		if (historicalReview) {
+			return {
+				base: { commitId: historicalReview.previousCommitId },
+				target: { commitId: historicalReview.commitId },
+				files: historicalReview.files.map(toDiffFile),
+				activePath: activeDiffPath,
+				...(historicalReview.createdAt
+					? { createdAt: historicalReview.createdAt }
+					: {}),
+				capabilities: { checkpoint: false, undo: false, restore: true },
+			};
+		}
+		if (workingChangesReviewOpen) {
+			return {
+				base: workingChangeReviewRange
+					? { commitId: workingChangeReviewRange.beforeCommitId }
+					: null,
+				target: { working: true },
+				files: workingChangeReviewFiles.map(toDiffFile),
+				activePath: activeDiffPath,
+				capabilities: { checkpoint: true, undo: true, restore: false },
+			};
+		}
+		return null;
+	}, [
+		activeDiffPath,
+		historicalReview,
+		workingChangeReviewFiles,
+		workingChangeReviewRange,
+		workingChangesReviewOpen,
+	]);
+	const openDiffSession = useCallback(
+		async (options: {
+			readonly base?: AtelierDiffRef | null;
+			readonly target: AtelierDiffRef;
+			readonly reveal?: boolean;
+		}) => {
+			if ("working" in options.target) {
+				handleOpenWorkingChangesReview(
+					options.reveal === undefined ? undefined : { reveal: options.reveal },
+				);
+				return;
+			}
+			const base = options.base;
+			if (!base || !("commitId" in base)) {
+				throw new Error("A commit diff session requires a base commit id.");
+			}
+			let createdAt: string | undefined;
+			try {
+				const result = await lix.execute(
+					"SELECT lixcol_created_at AS created_at FROM lix_checkpoint WHERE commit_id = $1 LIMIT 1",
+					[options.target.commitId],
+				);
+				const value = result.rows[0]?.get("created_at");
+				if (typeof value === "string") createdAt = value;
+			} catch {
+				// The checkpoint title falls back to a generic label.
+			}
+			await handleViewCheckpoint({
+				commitId: options.target.commitId,
+				previousCommitId: base.commitId,
+				...(createdAt ? { createdAt } : {}),
+			});
+		},
+		[handleOpenWorkingChangesReview, handleViewCheckpoint, lix],
+	);
+	const openDiffSessionFile = useCallback(
+		(path: string) => {
+			if (historicalReview) {
+				openHistoricalCheckpointFileRef.current?.(path);
+				return;
+			}
+			openWorkingChangeFileRef.current?.(path);
+		},
+		[historicalReview],
+	);
+	const resolveDiffSessionFile = useCallback(
+		async (path: string, outcome: "accepted" | "rejected") => {
+			const review = [...openDiffReviewByFileIdRef.current.values()].find(
+				(candidate) => candidate.path === path,
+			);
+			if (!review) {
+				throw new Error(`No pending review for ${path}`);
+			}
+			const args = {
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				review,
+			};
+			if (outcome === "accepted") {
+				await handleAcceptExternalWriteReview(args);
+			} else {
+				await handleRejectExternalWriteReview(args);
+			}
+		},
+		[handleAcceptExternalWriteReview, handleRejectExternalWriteReview],
+	);
+	const diffApi = useMemo(
+		(): AtelierDiffApi => ({
+			session: diffSession,
+			open: openDiffSession,
+			openFile: openDiffSessionFile,
+			exit: exitDiffReview,
+			accept: (path: string) => resolveDiffSessionFile(path, "accepted"),
+			reject: (path: string) => resolveDiffSessionFile(path, "rejected"),
+			autoAccept: autoAcceptAgentChanges,
+		}),
+		[
+			autoAcceptAgentChanges,
+			diffSession,
+			exitDiffReview,
+			openDiffSession,
+			openDiffSessionFile,
+			resolveDiffSessionFile,
+		],
+	);
+
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
@@ -3696,6 +3825,7 @@ function LayoutShellLoadedContentResolved({
 			branches: {
 				activeId: activeBranchId,
 			},
+			diff: diffApi,
 			reviews: {
 				resolvedReviewIds: privateResolvedReviewIds,
 				autoAccept: autoAcceptAgentChanges,
@@ -3703,24 +3833,8 @@ function LayoutShellLoadedContentResolved({
 					workingChangesReviewOpen &&
 					workingChangeDiffFileId !== null &&
 					workingChangeDiffFileId === activeCentralFileId,
-				active: isReviewMode,
 				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
-				createCheckpoint: () =>
-					handleCreateCheckpoint(
-						workingChangeReviewFiles.map((file) => file.id),
-					),
-				keepAll: handleKeepAllReviews,
-				undoAll: handleUndoAllReviews,
 				exit: exitDiffReview,
-				openWorkingChanges: handleOpenWorkingChangesReview,
-				workingChangeFiles: workingChangeReviewFiles,
-				openWorkingChangeFile,
-				viewCheckpoint: handleViewCheckpoint,
-				openCheckpointFile: openHistoricalCheckpointFile,
-				...(historicalReview
-					? { historicalFiles: historicalReview.files }
-					: {}),
-				...(historicalCommitId ? { historicalCommitId } : {}),
 				resolve: handleResolveExternalWriteReview,
 				accept: handleAcceptExternalWriteReview,
 				reject: handleRejectExternalWriteReview,
@@ -3733,10 +3847,8 @@ function LayoutShellLoadedContentResolved({
 			emitEvent,
 			activeBranchId,
 			autoAcceptAgentChanges,
+			diffApi,
 			exitDiffReview,
-			handleCreateCheckpoint,
-			handleKeepAllReviews,
-			handleUndoAllReviews,
 			handleOpenWorkingChangesReview,
 			openWorkingChangeFile,
 			handleViewCheckpoint,

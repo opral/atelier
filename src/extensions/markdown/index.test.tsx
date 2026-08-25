@@ -108,9 +108,17 @@ describe("MarkdownView", () => {
 				isLiveDeliveryStatement(statement),
 			).length;
 		const atelier = {
+			diff: {
+				session: null,
+				open: async () => {},
+				openFile: () => {},
+				exit: () => {},
+				accept: async () => {},
+				reject: async () => {},
+				autoAccept: false,
+			},
 			reviews: {
-				active: false,
-				workingChangeFiles: [],
+				resolvedReviewIds: [],
 			},
 			icons: { fileUrl: () => "" },
 		} as unknown as ExtensionRuntime;

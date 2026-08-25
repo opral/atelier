@@ -1007,8 +1007,8 @@ export const extension = createReactExtensionDefinition({
 			onRejectReviewDiff={atelier.reviews.reject}
 			onResolveReviewDiff={atelier.reviews.resolve}
 			autoAcceptReviews={
-				(atelier.reviews.active === true &&
-					atelier.reviews.historicalCommitId === undefined) ||
+				(atelier.diff.session !== null &&
+					"working" in atelier.diff.session.target) ||
 				atelier.reviews.autoAccept
 			}
 			reviewEnabled={atelier.reviews.isOpen}

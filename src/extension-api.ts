@@ -238,6 +238,54 @@ export type AtelierEvent =
 			outcome: "accepted" | "rejected" | "abandoned";
 	  };
 
+/** A diffable state: a specific commit, or the mutable working state. */
+export type AtelierDiffRef =
+	| { readonly commitId: string }
+	| { readonly working: true };
+
+export type AtelierDiffFile = {
+	readonly id: string;
+	readonly path: string;
+	readonly changeKind: "added" | "modified" | "removed";
+};
+
+export type AtelierDiffSession = {
+	/** The older side; null means the repository's beginning. */
+	readonly base: AtelierDiffRef | null;
+	readonly target: AtelierDiffRef;
+	readonly files: readonly AtelierDiffFile[];
+	readonly activePath: string | null;
+	/** When the target commit was created; drives the "Viewing checkpoint" title. */
+	readonly createdAt?: string;
+	/** Derived from the refs — a mutable target reviews, an immutable one restores. */
+	readonly capabilities: {
+		readonly checkpoint: boolean;
+		readonly undo: boolean;
+		readonly restore: boolean;
+	};
+};
+
+/**
+ * The one diff surface: every review is a session between two refs.
+ * Working changes review = open({ target: { working: true } });
+ * checkpoint view = open({ base: previous, target: commit }).
+ */
+export type AtelierDiffApi = {
+	readonly session: AtelierDiffSession | null;
+	readonly open: (options: {
+		/** Defaults to the latest checkpoint for a working target. */
+		readonly base?: AtelierDiffRef | null;
+		readonly target: AtelierDiffRef;
+		/** Reveal the first changed file (default: only when no document is active). */
+		readonly reveal?: boolean;
+	}) => Promise<void>;
+	readonly openFile: (path: string) => void;
+	readonly exit: () => void;
+	readonly accept: (path: string) => Promise<void>;
+	readonly reject: (path: string) => Promise<void>;
+	readonly autoAccept: boolean;
+};
+
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
 	/**
@@ -272,11 +320,8 @@ export type AtelierExtensionRuntime = {
 	readonly branches: {
 		readonly activeId: string;
 	};
-	/** Review affordances the shell exposes to host surfaces. */
-	readonly reviews?: {
-		/** Open the working-changes review (now vs last checkpoint). */
-		readonly openWorkingChanges?: () => void;
-	};
+	/** The unified diff surface. */
+	readonly diff?: AtelierDiffApi;
 };
 
 export type AtelierExtensionView = {

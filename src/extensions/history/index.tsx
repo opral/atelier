@@ -47,10 +47,11 @@ function WorkingChangesRow({
 		fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
-	const openWorkingChanges = atelier.reviews.openWorkingChanges;
+	const openWorkingChanges = () =>
+		void atelier.diff.open({ target: { working: true } });
 	const isViewing =
-		atelier.reviews.active === true &&
-		atelier.reviews.historicalCommitId === undefined;
+		atelier.diff.session !== null &&
+		"working" in atelier.diff.session.target;
 
 	return (
 		<div
@@ -104,8 +105,9 @@ function WorkingChangeFileList({
 }: {
 	readonly atelier: ExtensionRuntime;
 }) {
-	const files = atelier.reviews.workingChangeFiles ?? [];
-	const openWorkingChangeFile = atelier.reviews.openWorkingChangeFile;
+	const session = atelier.diff.session;
+	const files = session && "working" in session.target ? session.files : [];
+	const openWorkingChangeFile = atelier.diff.openFile;
 	if (files.length === 0) return null;
 
 	return (
@@ -176,8 +178,11 @@ function CheckpointItem({
 			: index === 0
 				? "Latest checkpoint"
 				: "Checkpoint";
-	const isViewing = atelier.reviews.historicalCommitId === checkpoint.commit_id;
-	const viewCheckpoint = atelier.reviews.viewCheckpoint;
+	const session = atelier.diff.session;
+	const isViewing =
+		session !== null &&
+		"commitId" in session.target &&
+		session.target.commitId === checkpoint.commit_id;
 
 	return (
 		<li
@@ -190,13 +195,12 @@ function CheckpointItem({
 		>
 			<button
 				type="button"
-				disabled={!viewCheckpoint || !previousCommitId}
+				disabled={!previousCommitId}
 				onClick={() =>
 					previousCommitId
-						? void viewCheckpoint?.({
-								commitId: checkpoint.commit_id,
-								previousCommitId,
-								createdAt: checkpoint.created_at,
+						? void atelier.diff.open({
+								base: { commitId: previousCommitId },
+								target: { commitId: checkpoint.commit_id },
 							})
 						: undefined
 				}
@@ -300,11 +304,14 @@ function CheckpointFileList({
 	readonly atelier: ExtensionRuntime;
 	readonly commitId: string;
 }) {
+	const session = atelier.diff.session;
 	const files =
-		atelier.reviews.historicalCommitId === commitId
-			? (atelier.reviews.historicalFiles ?? [])
+		session !== null &&
+		"commitId" in session.target &&
+		session.target.commitId === commitId
+			? session.files
 			: [];
-	const openCheckpointFile = atelier.reviews.openCheckpointFile;
+	const openCheckpointFile = atelier.diff.openFile;
 
 	if (files.length === 0) return null;
 	return (

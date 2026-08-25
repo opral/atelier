@@ -275,6 +275,15 @@ async function createRuntime(
 		branches: {
 			activeId: activeBranchId,
 		},
+		diff: {
+			session: null,
+			open: async () => {},
+			openFile: () => {},
+			exit: () => {},
+			accept: async () => {},
+			reject: async () => {},
+			autoAccept: false,
+		},
 		reviews: {
 			resolvedReviewIds: [],
 			resolve: vi.fn(async () => {}),

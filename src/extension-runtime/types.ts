@@ -7,6 +7,7 @@ import type {
 import type {
 	AtelierExtensionMenuItems,
 	AtelierExtensionPreferences,
+	AtelierDiffApi,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierFilesViewOptions,
@@ -89,44 +90,16 @@ export interface MountedExtension {
 }
 
 export type ExtensionRuntime = AtelierExtensionRuntime & {
+	/** The unified diff surface (always present inside the shell). */
+	readonly diff: AtelierDiffApi;
 	/** Host-configured data source for un-imported "watched" file entries. */
 	readonly filesView?: AtelierFilesViewOptions;
 	readonly reviews: {
 		readonly resolvedReviewIds: readonly string[];
 		readonly autoAccept?: boolean;
 		readonly isOpen?: boolean;
-		readonly active?: boolean;
 		readonly navigation?: ExternalWriteReviewNavigation;
-		readonly createCheckpoint?: () => Promise<void>;
-		/** Accept every pending review across the workspace. */
-		readonly keepAll?: () => Promise<void>;
-		/** Walk every pending change back across the workspace. */
-		readonly undoAll?: () => Promise<void>;
 		readonly exit?: () => void;
-		/** Open the working-changes review (now vs last checkpoint). */
-		readonly openWorkingChanges?: () => void;
-		/** Supported files in the active working-changes review. */
-		readonly workingChangeFiles?: readonly {
-			readonly id: string;
-			readonly path: string;
-		}[];
-		/** Open one file in the active working-changes review. */
-		readonly openWorkingChangeFile?: (path: string) => void;
-		/** Open a read-only diff from the preceding checkpoint to this checkpoint. */
-		readonly viewCheckpoint?: (args: {
-			readonly commitId: string;
-			readonly previousCommitId: string;
-			readonly createdAt: string;
-		}) => Promise<void>;
-		/** Open one file in the checkpoint-to-checkpoint comparison being viewed. */
-		readonly openCheckpointFile?: (path: string) => void;
-		/** Files in the checkpoint-to-checkpoint comparison being viewed. */
-		readonly historicalFiles?: readonly {
-			readonly id: string;
-			readonly path: string;
-		}[];
-		/** Set while diff mode is pointed at a checkpoint. */
-		readonly historicalCommitId?: string;
 		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
 		readonly accept: (args: {
 			readonly fileId: string;

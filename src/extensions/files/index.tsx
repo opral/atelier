@@ -1523,9 +1523,9 @@ export const extension = createReactExtensionDefinition({
 				activeBranchId: atelier.branches.activeId,
 				resolvedReviewIds: atelier.reviews.resolvedReviewIds,
 				reviewWorkingChanges:
-					atelier.reviews.active === true &&
-					atelier.reviews.historicalCommitId === undefined,
-				reviewModeActive: atelier.reviews.active,
+					atelier.diff.session !== null &&
+					"working" in atelier.diff.session.target,
+				reviewModeActive: atelier.diff.session !== null,
 				isPanelFocused: view.isFocused,
 				panelSide: view.panel,
 				viewInstance: view.instanceId,
