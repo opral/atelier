@@ -7,6 +7,7 @@ import {
 } from "react";
 import { LixProvider } from "@/lib/lix-react";
 import { V2LayoutShell } from "@/shell/layout-shell";
+import { TopBar } from "@/shell/top-bar";
 import {
 	AtelierErrorBoundary,
 	type AtelierErrorFallback,
@@ -165,4 +166,49 @@ function AtelierContent({ instance, slots, topBarProps }: AtelierProps) {
 
 function AtelierLoadingPlaceholder() {
 	return <div className="h-full w-full bg-[var(--color-bg-app)]" />;
+}
+
+export type AtelierSkeletonProps = {
+	/** Same host slots as Atelier so the chrome matches the loaded state. */
+	readonly slots?: Pick<
+		AtelierSlots,
+		"navbarBrand" | "navbarRepository" | "navbarStart" | "navbarEnd"
+	>;
+	/** Props forwarded to Atelier's semantic top-bar header. */
+	readonly topBarProps?: AtelierTopBarProps;
+	/** Centered in the empty content panel (e.g. a delayed loading label). */
+	readonly children?: ReactNode;
+};
+
+/**
+ * The Atelier chrome without an instance: the real top bar plus an empty
+ * content panel. Hosts render this while an instance is opening so
+ * navigation into a workspace keeps a stable layout instead of flashing
+ * a bespoke loading screen.
+ */
+export function AtelierSkeleton({
+	slots,
+	topBarProps,
+	children,
+}: AtelierSkeletonProps) {
+	return (
+		<div className="atelier-root h-full w-full overflow-hidden">
+			<div className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]">
+				<TopBar
+					isLeftSidebarVisible={false}
+					isRightSidebarVisible={false}
+					navbarBrand={slots?.navbarBrand}
+					navbarRepository={slots?.navbarRepository}
+					navbarStart={slots?.navbarStart}
+					navbarEnd={slots?.navbarEnd}
+					rootProps={topBarProps}
+				/>
+				<main className="flex min-h-0 flex-1 overflow-hidden px-2 pb-2">
+					<div className="grid min-h-0 flex-1 place-content-center overflow-hidden rounded-[10px] bg-[var(--color-bg-panel)] p-6 text-center text-[var(--color-text-tertiary)]">
+						{children}
+					</div>
+				</main>
+			</div>
+		</div>
+	);
 }

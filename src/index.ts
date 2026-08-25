@@ -1,4 +1,4 @@
-export { Atelier } from "./create-atelier";
+export { Atelier, AtelierSkeleton } from "./create-atelier";
 export { createAtelier } from "./atelier-instance";
 export {
 	coerceAtelierSessionUiState,
@@ -39,6 +39,7 @@ export type {
 	AtelierErrorFallbackContext,
 	AtelierPanelSide,
 	AtelierProps,
+	AtelierSkeletonProps,
 	AtelierSlots,
 	AtelierTabStripContext,
 	AtelierTabStripTab,

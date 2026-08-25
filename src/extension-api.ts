@@ -272,6 +272,11 @@ export type AtelierExtensionRuntime = {
 	readonly branches: {
 		readonly activeId: string;
 	};
+	/** Review affordances the shell exposes to host surfaces. */
+	readonly reviews?: {
+		/** Open the working-changes review (now vs last checkpoint). */
+		readonly openWorkingChanges?: () => void;
+	};
 };
 
 export type AtelierExtensionView = {
