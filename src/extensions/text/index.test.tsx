@@ -282,14 +282,8 @@ async function createRuntime(
 			exit: () => {},
 			accept: async () => {},
 			reject: async () => {},
+			resolve: async () => {},
 			autoAccept: false,
-		},
-		reviews: {
-			resolvedReviewIds: [],
-			resolve: vi.fn(async () => {}),
-			accept: vi.fn(async () => {}),
-			reject: vi.fn(async () => {}),
-			register: vi.fn(() => () => {}),
 		},
 	};
 }

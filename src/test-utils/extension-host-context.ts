@@ -44,14 +44,8 @@ export function createExtensionHostContext(
 				exit: () => {},
 				accept: async () => {},
 				reject: async () => {},
-				autoAccept: false,
-			},
-			reviews: {
-				resolvedReviewIds: [],
 				resolve: async () => {},
-				accept: async () => {},
-				reject: async () => {},
-				register: () => () => {},
+				autoAccept: false,
 			},
 		},
 		preferencesFor: (extensionId) => ({

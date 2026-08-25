@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
-import { useLix, useQuery } from "@/lib/lix-react";
+import { useLix } from "@/lib/lix-react";
 import { selectFileHistory } from "@/lib/lix-file-history";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
-import { selectWorkingChanges } from "@/queries";
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
@@ -13,11 +12,6 @@ import type {
 type FileHistoryRow = {
 	readonly content: unknown;
 	readonly path: string | null;
-};
-
-type ResolvedExternalWriteReview = {
-	readonly key: string;
-	readonly review: ExternalWriteReview | null;
 };
 
 type ResolvedExternalWriteReviewData = {
@@ -53,93 +47,48 @@ export function externalWriteReviewId(
 	]);
 }
 
-/**
- * The pending review for one open document: the file's state now versus the
- * latest checkpoint. Null when the file is unchanged since that checkpoint.
- */
-export function useExternalWriteReview(args: {
-	readonly fileId?: string | null;
-	readonly path?: string | null;
-	readonly activeBranchId: string;
-	readonly resolvedReviewIds?: readonly string[];
-	readonly enabled?: boolean;
-}): ExternalWriteReview | null {
-	const lix = useLix();
-	const reviewEnabled = args.enabled === true;
-	const workingChanges = useQuery(
-		(queryLix) => selectWorkingChanges(queryLix),
-		{ enabled: reviewEnabled },
-	);
-	const fileWorkingChangesKey = JSON.stringify(
-		workingChanges
-			.filter((change) => change.file_id === args.fileId)
-			.map((change) => [
-				change.schema_key,
-				change.row_pk,
-				change.diff_type,
-				change.before_change_id,
-				change.after_change_id,
-			]),
-	);
-	const resolvedReviewKey = JSON.stringify(
-		[...(args.resolvedReviewIds ?? [])].sort(),
-	);
-	const resolvedReviewIdSet = useMemo(
-		() => new Set<string>(JSON.parse(resolvedReviewKey)),
-		[resolvedReviewKey],
-	);
-	const reviewKey =
-		reviewEnabled && args.fileId && args.path
-			? JSON.stringify([
-					args.activeBranchId,
-					args.fileId,
-					args.path,
-					fileWorkingChangesKey,
-					resolvedReviewKey,
-				])
-			: null;
-	const [resolvedReview, setResolvedReview] =
-		useState<ResolvedExternalWriteReview | null>(null);
 
+/**
+ * The file's bytes at one commit, for diff rendering against live content.
+ * Null while loading or when the file did not exist at that commit.
+ */
+export type FileDataAtCommit =
+	| { readonly loading: true }
+	| { readonly loading: false; readonly data: Uint8Array | null };
+
+export function useFileDataAtCommit(
+	fileId: string | null | undefined,
+	commitId: string | null | undefined,
+): FileDataAtCommit {
+	const lix = useLix();
+	const key = fileId && commitId ? `${fileId}\u0000${commitId}` : null;
+	const [resolved, setResolved] = useState<{
+		readonly key: string;
+		readonly data: Uint8Array | null;
+	} | null>(null);
 	useEffect(() => {
+		if (!key || !fileId || !commitId) return;
 		let cancelled = false;
-		if (!reviewKey || !args.fileId || !args.path) return;
-		const loadReview =
-			fileWorkingChangesKey === "[]"
-				? Promise.resolve(null)
-				: getWorkingChangeExternalWriteReview(lix, args.fileId, args.path);
-		void loadReview
-			.then((nextReview) => {
-				if (!cancelled) {
-					setResolvedReview({
-						key: reviewKey,
-						review:
-							nextReview && !resolvedReviewIdSet.has(nextReview.reviewId)
-								? nextReview
-								: null,
-					});
-				}
+		void getFileDataAtCommit(lix, fileId, commitId)
+			.then((data) => {
+				if (!cancelled) setResolved({ key, data });
 			})
 			.catch((error: unknown) => {
-				if (!cancelled) {
-					console.warn("[external-write-review] failed to load review", error);
-					setResolvedReview({ key: reviewKey, review: null });
-				}
+				if (cancelled) return;
+				console.warn(
+					"[external-write-review] failed to load file data at commit",
+					error,
+				);
+				setResolved({ key, data: null });
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		lix,
-		args.activeBranchId,
-		args.fileId,
-		args.path,
-		fileWorkingChangesKey,
-		resolvedReviewIdSet,
-		reviewKey,
-	]);
-
-	return resolvedReview?.key === reviewKey ? resolvedReview.review : null;
+	}, [lix, fileId, commitId, key]);
+	if (!key) return { loading: false, data: null };
+	return resolved?.key === key
+		? { loading: false, data: resolved.data }
+		: { loading: true };
 }
 
 export function useExternalWriteReviewData(

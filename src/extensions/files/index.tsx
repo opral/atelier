@@ -36,7 +36,6 @@ import {
 	buildFilesystemTree,
 	isWatchedEntryId,
 	watchedEntryRows,
-	type FilesystemTreeNode,
 	type FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
 import type {
@@ -1521,8 +1520,7 @@ export const extension = createReactExtensionDefinition({
 				activeFileId: atelier.documents.activeFileId,
 				activeFilePath: atelier.documents.activeFilePath,
 				activeBranchId: atelier.branches.activeId,
-				resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-				reviewWorkingChanges:
+						reviewWorkingChanges:
 					atelier.diff.session !== null &&
 					"working" in atelier.diff.session.target,
 				reviewModeActive: atelier.diff.session !== null,

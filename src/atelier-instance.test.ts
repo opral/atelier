@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
-import { openLix } from "@/test-utils/node-lix-sdk";
 import type { AtelierPreferencesStore } from "./state-adapters";
 
 const mocks = vi.hoisted(() => ({

@@ -33,7 +33,7 @@ import {
 	type Rectangle,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import { useQueryTakeFirst, useResolvedActiveBranchId } from "@/lib/lix-react";
+import { useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	FileSnapshotsAtCommits,
@@ -43,12 +43,11 @@ import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
 } from "@/lib/decode-file-data";
+import type { AtelierDiffSession } from "@/extension-api";
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
-	ExternalWriteReviewNavigation,
 } from "@/extension-runtime/external-write-review";
-import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import {
 	editorRevisionMode,
@@ -57,8 +56,7 @@ import {
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
 import {
-	useExternalWriteReview,
-	useExternalWriteReviewData,
+	useFileDataAtCommit,
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
@@ -84,8 +82,7 @@ import "./style.css";
 
 type CsvViewProps = {
 	readonly fileId: string;
-	readonly activeBranchId?: string;
-	readonly resolvedReviewIds?: readonly string[];
+	readonly diffSession?: AtelierDiffSession | null;
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
@@ -96,23 +93,6 @@ type CsvViewProps = {
 	readonly afterFileId?: string | null;
 	readonly beforeExists?: boolean;
 	readonly afterExists?: boolean;
-	readonly registerExternalWriteReview?: (
-		review: ExternalWriteReview,
-	) => () => void;
-	readonly onAcceptReview?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onRejectReview?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly autoAcceptReviews?: boolean;
-	readonly reviewEnabled?: boolean;
-	readonly reviewNavigation?: ExternalWriteReviewNavigation;
-	readonly onExitReview?: () => void;
 };
 
 const COLUMN_MIN_WIDTH = 112;
@@ -179,8 +159,7 @@ const EMPTY_FILE_DATA = new Uint8Array();
 
 export function CsvView({
 	fileId,
-	activeBranchId,
-	resolvedReviewIds,
+	diffSession,
 	filePath,
 	isActiveView = true,
 	isPanelFocused = true,
@@ -191,23 +170,13 @@ export function CsvView({
 	afterFileId,
 	beforeExists,
 	afterExists,
-	registerExternalWriteReview,
-	onAcceptReview,
-	onRejectReview,
-	autoAcceptReviews,
-	reviewEnabled,
-	reviewNavigation,
-	onExitReview,
 }: CsvViewProps) {
 	assertFileId(fileId);
-	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
-	if (!resolvedActiveBranchId) return <CsvLoadingSpinner />;
 	return (
 		<Suspense fallback={<CsvLoadingSpinner />}>
 			<CsvViewContent
 				fileId={fileId}
-				activeBranchId={resolvedActiveBranchId}
-				resolvedReviewIds={resolvedReviewIds}
+				diffSession={diffSession}
 				filePath={filePath}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
@@ -218,13 +187,6 @@ export function CsvView({
 				afterFileId={afterFileId}
 				beforeExists={beforeExists}
 				afterExists={afterExists}
-				registerExternalWriteReview={registerExternalWriteReview}
-				onAcceptReview={onAcceptReview}
-				onRejectReview={onRejectReview}
-				autoAcceptReviews={autoAcceptReviews}
-				reviewEnabled={reviewEnabled}
-				reviewNavigation={reviewNavigation}
-				onExitReview={onExitReview}
 			/>
 		</Suspense>
 	);
@@ -253,7 +215,6 @@ function CsvViewData({
 	afterFileId,
 	beforeExists,
 	afterExists,
-	registerExternalWriteReview,
 	...props
 }: CsvViewProps & {
 	readonly fileRow?: CsvFileRow | undefined;
@@ -280,34 +241,34 @@ function CsvViewData({
 		);
 	}
 
-	return (
-		<CsvLiveViewData
-			fileRow={fileRow}
-			registerExternalWriteReview={registerExternalWriteReview}
-			{...props}
-		/>
-	);
+	return <CsvLiveViewData fileId={fileId} fileRow={fileRow} {...props} />;
 }
 
 function CsvLiveViewData({
 	fileRow,
-	registerExternalWriteReview,
-	activeBranchId = "",
-	resolvedReviewIds,
+	diffSession,
 	readOnly = false,
 	isActiveView = true,
-	autoAcceptReviews,
-	reviewEnabled = false,
 }: Omit<CsvViewProps, "fileId"> & {
+	readonly fileId?: string;
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
-	const externalWriteReview = useExternalWriteReview({
-		fileId: fileRow?.id,
-		path: fileRow?.path,
-		activeBranchId,
-		resolvedReviewIds,
-			enabled: reviewEnabled,
-	});
+	// The shell owns review detection: this file is under review when the
+	// working diff session marks it pending and it is the revealed file.
+	const session = diffSession ?? null;
+	const isReviewing = Boolean(
+		fileRow &&
+			session &&
+			"working" in session.target &&
+			session.activePath === fileRow.path &&
+			session.files.some(
+				(file) => file.id === fileRow.id && file.review?.status === "pending",
+			),
+	);
+	const reviewBaseCommitId =
+		isReviewing && session?.base && "commitId" in session.base
+			? session.base.commitId
+			: null;
 
 	if (!fileRow) {
 		return (
@@ -318,19 +279,14 @@ function CsvLiveViewData({
 	}
 
 	return (
-		<>
-			<ExternalWriteReviewRegistration
-				review={externalWriteReview}
-				register={registerExternalWriteReview}
-			/>
-			<EditableCsvView
-				key={fileRow.id}
-				fileRow={fileRow}
-				review={externalWriteReview}
-				readOnly={readOnly}
-				isActiveView={isActiveView}
-			/>
-		</>
+		<EditableCsvView
+			key={fileRow.id}
+			fileRow={fileRow}
+			reviewing={isReviewing}
+			reviewBaseCommitId={reviewBaseCommitId}
+			readOnly={readOnly}
+			isActiveView={isActiveView}
+		/>
 	);
 }
 
@@ -343,12 +299,14 @@ function CsvLiveViewData({
  */
 function EditableCsvView({
 	fileRow,
-	review,
+	reviewing = false,
+	reviewBaseCommitId = null,
 	readOnly,
 	isActiveView = true,
 }: {
 	readonly fileRow: CsvFileRow;
-	readonly review: ExternalWriteReview | null;
+	readonly reviewing?: boolean;
+	readonly reviewBaseCommitId?: string | null;
 	readonly readOnly: boolean;
 	readonly isActiveView?: boolean;
 }) {
@@ -357,11 +315,21 @@ function EditableCsvView({
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
-	const reviewData = useExternalWriteReviewData(review);
-	const reviewText = reviewData
-		? decodeFileDataToText(reviewData.afterData)
-		: null;
-	const isReviewing = Boolean(review);
+	// The review's after side is the live document; only the base needs a read.
+	const reviewBase = useFileDataAtCommit(
+		reviewing ? fileId : null,
+		reviewBaseCommitId,
+	);
+	const reviewData: ExternalWriteReviewData | null =
+		reviewing && !reviewBase.loading
+			? {
+					beforeData: reviewBase.data ?? new Uint8Array(),
+					afterData: fileRow.content instanceof Uint8Array
+						? fileRow.content
+						: new TextEncoder().encode(fileText),
+				}
+			: null;
+	const isReviewing = reviewing;
 	const isReadOnly = isReviewing || readOnly;
 	const originKey = useMemo(() => createCsvEditorOriginKey(), []);
 	const {
@@ -371,7 +339,7 @@ function EditableCsvView({
 	} = useSyncedTextFile({
 		fileId,
 		initialText: fileText,
-		reviewText,
+		reviewText: null,
 		reviewing: isReviewing,
 		readOnly,
 		originKey,
@@ -491,7 +459,7 @@ function EditableCsvView({
 			editing={editing}
 			onCreateTable={isReadOnly ? undefined : handleCreateTable}
 			saveError={saveError}
-			externalWriteReview={review}
+			reviewData={reviewData}
 			isActiveView={isActiveView}
 		/>
 	);
@@ -568,8 +536,7 @@ function CsvHistoricalViewResolved({
 	return (
 		<CsvViewLoaded
 			fileRow={historicalFile.fileRow}
-			externalWriteReview={historicalFile.review}
-			reviewDataOverride={historicalFile.reviewData}
+			reviewData={historicalFile.reviewData ?? null}
 			isActiveView={props.isActiveView}
 		/>
 	);
@@ -581,8 +548,7 @@ function CsvViewLoaded({
 	editing,
 	onCreateTable,
 	saveError = null,
-	externalWriteReview,
-	reviewDataOverride,
+	reviewData = null,
 	isActiveView = true,
 }: {
 	readonly fileRow: CsvFileRow;
@@ -590,8 +556,7 @@ function CsvViewLoaded({
 	readonly editing?: CsvTableEditing;
 	readonly onCreateTable?: () => void;
 	readonly saveError?: string | null;
-	readonly externalWriteReview: ExternalWriteReview | null;
-	readonly reviewDataOverride?: ExternalWriteReviewData;
+	readonly reviewData?: ExternalWriteReviewData | null;
 	readonly isActiveView?: boolean;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
@@ -625,28 +590,17 @@ function CsvViewLoaded({
 						<span>Save failed: {saveError}</span>
 					</div>
 				) : null}
-				{externalWriteReview ? (
-					<CsvReviewOverlay
-						review={externalWriteReview}
-						reviewDataOverride={reviewDataOverride}
-					/>
-				) : null}
+				{reviewData ? <CsvReviewOverlay reviewData={reviewData} /> : null}
 			</div>
 		</div>
 	);
 }
 
 function CsvReviewOverlay({
-	review,
-	reviewDataOverride,
+	reviewData,
 }: {
-	readonly review: ExternalWriteReview;
-	readonly reviewDataOverride?: ExternalWriteReviewData;
+	readonly reviewData: ExternalWriteReviewData;
 }) {
-	const externalReviewData = useExternalWriteReviewData(
-		reviewDataOverride ? null : review,
-	);
-	const reviewData = reviewDataOverride ?? externalReviewData;
 	const diffHtml = useMemo(
 		() => (reviewData ? renderCsvReviewDiffHtml(reviewData) : null),
 		[reviewData],
@@ -1570,8 +1524,7 @@ export const extension = createReactExtensionDefinition({
 	component: ({ atelier, view }) => (
 		<CsvView
 			fileId={view.state.fileId as string}
-			activeBranchId={atelier.branches.activeId}
-			resolvedReviewIds={atelier.reviews.resolvedReviewIds}
+			diffSession={atelier.diff.session}
 			filePath={view.state.filePath as string | undefined}
 			readOnly={atelier.readOnly}
 			beforeCommitId={
@@ -1596,20 +1549,6 @@ export const extension = createReactExtensionDefinition({
 					? view.state.afterFileId
 					: null
 			}
-			{...(atelier.readOnly
-				? {}
-				: {
-						onAcceptReview: atelier.reviews.accept,
-						onRejectReview: atelier.reviews.reject,
-						autoAcceptReviews:
-							(atelier.diff.session !== null &&
-								"working" in atelier.diff.session.target) ||
-							atelier.reviews.autoAccept,
-						reviewEnabled: atelier.reviews.isOpen,
-						reviewNavigation: atelier.reviews.navigation,
-						onExitReview: atelier.reviews.exit,
-					})}
-			registerExternalWriteReview={atelier.reviews.register}
 			isActiveView={view.isActive}
 			isPanelFocused={view.isFocused}
 		/>

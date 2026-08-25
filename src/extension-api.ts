@@ -247,6 +247,11 @@ export type AtelierDiffFile = {
 	readonly id: string;
 	readonly path: string;
 	readonly changeKind: "added" | "modified" | "removed";
+	/** Present when the session reviews external writes (mutable target). */
+	readonly review?: {
+		readonly id: string;
+		readonly status: "pending" | "resolved";
+	};
 };
 
 export type AtelierDiffSession = {
@@ -283,6 +288,8 @@ export type AtelierDiffApi = {
 	readonly exit: () => void;
 	readonly accept: (path: string) => Promise<void>;
 	readonly reject: (path: string) => Promise<void>;
+	/** Accept with authored content: writes the bytes, then resolves. */
+	readonly resolve: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAccept: boolean;
 };
 

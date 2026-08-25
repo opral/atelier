@@ -7,7 +7,6 @@ import {
 	useRef,
 	useState,
 	useSyncExternalStore,
-	type RefObject,
 } from "react";
 import {
 	Group,
@@ -107,7 +106,10 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
-import { getFileDataAtCommit } from "./external-write-review-history";
+import {
+	externalWriteReviewId,
+	getFileDataAtCommit,
+} from "./external-write-review-history";
 import type {
 	AtelierEmptyPanelSlot,
 	AtelierPanelSide,
@@ -1115,7 +1117,6 @@ function LayoutShellLoadedContentResolved({
 		[onEvent],
 	);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
-	const backgroundReviewWorkEnabled = useAfterInitialIdle();
 	const preferencesFor = useCallback(
 		(extensionId: string): AtelierExtensionPreferences => ({
 			get: (key) => extensionPreferences?.[extensionId]?.[key],
@@ -1335,10 +1336,6 @@ function LayoutShellLoadedContentResolved({
 		useState<readonly string[]>(resolvedReviewIds);
 	const resolvedReviewIdsRef = useRef(new Set<string>(resolvedReviewIds));
 	const openedReviewIdsRef = useRef(new Set<string>());
-	const openDiffReviewByFileIdRef = useRef(
-		new Map<string, ExternalWriteReview>(),
-	);
-	const [openExternalReviewCount, setOpenExternalReviewCount] = useState(0);
 	const [workingReview, setWorkingReview] =
 		useState<WorkingReviewSession | null>(null);
 	const workingReviewRef = useRef(workingReview);
@@ -1348,7 +1345,6 @@ function LayoutShellLoadedContentResolved({
 	const workingChangeReviewFiles =
 		workingReview?.files ?? EMPTY_LIX_FILES_FOR_OPEN;
 	const workingChangeReviewRange = workingReview?.range ?? null;
-	const workingChangeDiffFileId = workingReview?.diffFileId ?? null;
 	const openWorkingChangeFileRef = useRef<((path: string) => void) | null>(
 		null,
 	);
@@ -1477,37 +1473,6 @@ function LayoutShellLoadedContentResolved({
 			setPrivateResolvedReviewIds([...resolvedReviewIdsRef.current]);
 		},
 		[activeBranchId, reviewStatusStore],
-	);
-	const registerExternalWriteReview = useCallback(
-		(review: ExternalWriteReview) => {
-			if (resolvedReviewIdsRef.current.has(review.reviewId)) {
-				return () => {};
-			}
-			const existingReview = openDiffReviewByFileIdRef.current.get(
-				review.fileId,
-			);
-			if (existingReview && existingReview.reviewId !== review.reviewId) {
-				resolveDiffReviewRef.current?.(existingReview);
-			}
-			openDiffReviewByFileIdRef.current.set(review.fileId, review);
-			setOpenExternalReviewCount(openDiffReviewByFileIdRef.current.size);
-			if (!openedReviewIdsRef.current.has(review.reviewId)) {
-				openedReviewIdsRef.current.add(review.reviewId);
-				emitEvent({
-					type: "diff_opened",
-					reviewId: review.reviewId,
-					filePath: review.path,
-				});
-			}
-			return () => {
-				const current = openDiffReviewByFileIdRef.current.get(review.fileId);
-				if (current?.reviewId === review.reviewId) {
-					openDiffReviewByFileIdRef.current.delete(review.fileId);
-					setOpenExternalReviewCount(openDiffReviewByFileIdRef.current.size);
-				}
-			};
-		},
-		[emitEvent],
 	);
 
 	const emitDiffReviewResolution = useCallback(
@@ -2404,12 +2369,28 @@ function LayoutShellLoadedContentResolved({
 			resolveAndOpenDocument,
 		],
 	);
+	const emitDiffOpenedForFile = useCallback(
+		(fileId: string, path: string) => {
+			const review = workingReviewRef.current?.externalWriteReviews.find(
+				(candidate) => candidate.fileId === fileId,
+			);
+			if (!review || openedReviewIdsRef.current.has(review.reviewId)) return;
+			openedReviewIdsRef.current.add(review.reviewId);
+			emitEvent({
+				type: "diff_opened",
+				reviewId: review.reviewId,
+				filePath: path,
+			});
+		},
+		[emitEvent],
+	);
 	const openWorkingChangeFile = useCallback(
 		(path: string) => {
 			const file = workingChangeReviewFiles.find(
 				(candidate) => candidate.path === path,
 			);
 			if (!file) return;
+			emitDiffOpenedForFile(file.id, file.path);
 			setWorkingReview((current) =>
 				current ? { ...current, diffFileId: file.id } : null,
 			);
@@ -2421,6 +2402,7 @@ function LayoutShellLoadedContentResolved({
 		},
 		[
 			openAutoRevealedFile,
+			emitDiffOpenedForFile,
 			openWorkingChangeFileAtRange,
 			workingChangeReviewFiles,
 			workingChangeReviewRange,
@@ -2554,8 +2536,10 @@ function LayoutShellLoadedContentResolved({
 			if (review?.fileId === fileId && review.reviewId === reviewId) {
 				return review;
 			}
-			const openReview = openDiffReviewByFileIdRef.current.get(fileId);
-			return openReview?.reviewId === reviewId ? openReview : null;
+			const sessionReview = workingReviewRef.current?.externalWriteReviews.find(
+				(candidate) => candidate.fileId === fileId,
+			);
+			return sessionReview?.reviewId === reviewId ? sessionReview : null;
 		},
 		[],
 	);
@@ -3401,13 +3385,22 @@ function LayoutShellLoadedContentResolved({
 				// snapshot view and restore the live document that it replaced.
 				exitDiffReview();
 			}
-			const checkpointFileIds = new Set(checkpointFiles.map((file) => file.id));
-			const reviewsByFileId = new Map<string, ExternalWriteReview>();
-			for (const review of openDiffReviewByFileIdRef.current.values()) {
-				if (checkpointFileIds.has(review.fileId)) {
-					reviewsByFileId.set(review.fileId, review);
-				}
-			}
+			// Reviews are shell-synthesized: one per changed file over the
+			// checkpoint-to-head window. Their ids are deterministic, so
+			// persisted resolutions keep matching across reopens.
+			const sessionReviews: ExternalWriteReview[] = reviewRange
+				? checkpointFiles.map((file) => ({
+						fileId: file.id,
+						path: file.path,
+						reviewId: externalWriteReviewId(
+							file.id,
+							reviewRange.beforeCommitId,
+							reviewRange.afterCommitId,
+						),
+						beforeCommitId: reviewRange.beforeCommitId,
+						afterCommitId: reviewRange.afterCommitId,
+					}))
+				: [];
 			// Opening the workspace-level review must not navigate away from the
 			// user's active document or sidebar views. The review navigator remains
 			// available when they explicitly want to step through changed files.
@@ -3425,7 +3418,7 @@ function LayoutShellLoadedContentResolved({
 				files: checkpointFiles,
 				range: reviewRange,
 				diffFileId: revealFirstFile ? firstChangedFile.id : null,
-				externalWriteReviews: [...reviewsByFileId.values()],
+				externalWriteReviews: sessionReviews,
 			});
 			if (revealFirstFile) {
 				if (reviewRange) {
@@ -3699,12 +3692,34 @@ function LayoutShellLoadedContentResolved({
 			};
 		}
 		if (workingChangesReviewOpen) {
+			const reviewsByFileId = new Map(
+				(workingReviewRef.current?.externalWriteReviews ?? []).map(
+					(review) => [review.fileId, review],
+				),
+			);
 			return {
 				base: workingChangeReviewRange
 					? { commitId: workingChangeReviewRange.beforeCommitId }
 					: null,
 				target: { working: true },
-				files: workingChangeReviewFiles.map(toDiffFile),
+				files: workingChangeReviewFiles.map((file) => {
+					const review = reviewsByFileId.get(file.id);
+					return {
+						...toDiffFile(file),
+						...(review
+							? {
+									review: {
+										id: review.reviewId,
+										status: privateResolvedReviewIds.includes(
+											review.reviewId,
+										)
+											? ("resolved" as const)
+											: ("pending" as const),
+									},
+								}
+							: {}),
+					};
+				}),
 				activePath: activeDiffPath,
 				capabilities: { checkpoint: true, undo: true, restore: false },
 			};
@@ -3713,6 +3728,7 @@ function LayoutShellLoadedContentResolved({
 	}, [
 		activeDiffPath,
 		historicalReview,
+		privateResolvedReviewIds,
 		workingChangeReviewFiles,
 		workingChangeReviewRange,
 		workingChangesReviewOpen,
@@ -3764,7 +3780,7 @@ function LayoutShellLoadedContentResolved({
 	);
 	const resolveDiffSessionFile = useCallback(
 		async (path: string, outcome: "accepted" | "rejected") => {
-			const review = [...openDiffReviewByFileIdRef.current.values()].find(
+			const review = workingReviewRef.current?.externalWriteReviews.find(
 				(candidate) => candidate.path === path,
 			);
 			if (!review) {
@@ -3783,6 +3799,23 @@ function LayoutShellLoadedContentResolved({
 		},
 		[handleAcceptExternalWriteReview, handleRejectExternalWriteReview],
 	);
+	const resolveDiffSessionFileWithData = useCallback(
+		async (path: string, data: Uint8Array) => {
+			const review = workingReviewRef.current?.externalWriteReviews.find(
+				(candidate) => candidate.path === path,
+			);
+			if (!review) {
+				throw new Error(`No pending review for ${path}`);
+			}
+			await handleResolveExternalWriteReview({
+				fileId: review.fileId,
+				reviewId: review.reviewId,
+				review,
+				data,
+			});
+		},
+		[handleResolveExternalWriteReview],
+	);
 	const diffApi = useMemo(
 		(): AtelierDiffApi => ({
 			session: diffSession,
@@ -3791,6 +3824,7 @@ function LayoutShellLoadedContentResolved({
 			exit: exitDiffReview,
 			accept: (path: string) => resolveDiffSessionFile(path, "accepted"),
 			reject: (path: string) => resolveDiffSessionFile(path, "rejected"),
+			resolve: resolveDiffSessionFileWithData,
 			autoAccept: autoAcceptAgentChanges,
 		}),
 		[
@@ -3800,6 +3834,7 @@ function LayoutShellLoadedContentResolved({
 			openDiffSession,
 			openDiffSessionFile,
 			resolveDiffSessionFile,
+			resolveDiffSessionFileWithData,
 		],
 	);
 
@@ -3826,51 +3861,19 @@ function LayoutShellLoadedContentResolved({
 				activeId: activeBranchId,
 			},
 			diff: diffApi,
-			reviews: {
-				resolvedReviewIds: privateResolvedReviewIds,
-				autoAccept: autoAcceptAgentChanges,
-				isOpen:
-					workingChangesReviewOpen &&
-					workingChangeDiffFileId !== null &&
-					workingChangeDiffFileId === activeCentralFileId,
-				...(reviewNavigation ? { navigation: reviewNavigation } : {}),
-				exit: exitDiffReview,
-				resolve: handleResolveExternalWriteReview,
-				accept: handleAcceptExternalWriteReview,
-				reject: handleRejectExternalWriteReview,
-				register: registerExternalWriteReview,
-			},
 		}),
 		[
 			configuration.filesView,
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
-			autoAcceptAgentChanges,
 			diffApi,
-			exitDiffReview,
-			handleOpenWorkingChangesReview,
-			openWorkingChangeFile,
-			handleViewCheckpoint,
-			workingChangeReviewFiles,
-			workingChangeDiffFileId,
-			historicalCommitId,
-			historicalReview,
-			openHistoricalCheckpointFile,
-			handleAcceptExternalWriteReview,
-			handleResolveExternalWriteReview,
-			handleRejectExternalWriteReview,
-			isReviewMode,
 			effectiveAtelierInstance.documents,
 			effectiveAtelierInstance.views,
 			preferencesFor,
 			activeCentralFileId,
 			activeDocumentPath,
 			lix,
-			privateResolvedReviewIds,
-			reviewNavigation,
-			registerExternalWriteReview,
-			workingChangesReviewOpen,
 		],
 	);
 
@@ -4151,29 +4154,3 @@ function LayoutShellLoadedContentResolved({
 	);
 }
 
-function useAfterInitialIdle(): boolean {
-	const [ready, setReady] = useState(false);
-	useEffect(() => {
-		let idleCallback = 0;
-		let timeout = 0;
-		let secondFrame = 0;
-		const firstFrame = requestAnimationFrame(() => {
-			secondFrame = requestAnimationFrame(() => {
-				if (typeof requestIdleCallback === "function") {
-					idleCallback = requestIdleCallback(() => setReady(true), {
-						timeout: 1_500,
-					});
-				} else {
-					timeout = window.setTimeout(() => setReady(true), 0);
-				}
-			});
-		});
-		return () => {
-			cancelAnimationFrame(firstFrame);
-			cancelAnimationFrame(secondFrame);
-			if (idleCallback) cancelIdleCallback(idleCallback);
-			if (timeout) window.clearTimeout(timeout);
-		};
-	}, []);
-	return ready;
-}

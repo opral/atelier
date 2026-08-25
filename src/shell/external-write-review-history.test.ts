@@ -1,16 +1,10 @@
-import { createElement, Suspense } from "react";
-import { act, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
-import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
-	externalWriteReviewId,
 	getExternalWriteReviewData,
 	getWorkingChangeExternalWriteReview,
-	useExternalWriteReview,
 } from "./external-write-review-history";
 
 const encoder = new TextEncoder();
@@ -103,75 +97,6 @@ describe("getWorkingChangeExternalWriteReview", () => {
 				"/stable.md",
 			);
 			expect(review).toBeNull();
-		} finally {
-			await lix.close();
-		}
-	});
-});
-
-describe("useExternalWriteReview", () => {
-	test("surfaces the working-changes review and honors resolved ids", { timeout: 30_000 }, async () => {
-		const lix = await openLix();
-		try {
-			const fileId = fakeUuid("hook-file");
-			await writeFile(lix, fileId, "/hook.md", "before");
-			const checkpoint = await lix.createCheckpoint();
-			await writeFile(lix, fileId, "/hook.md", "after");
-			const headCommitId = await activeCommitId(lix);
-			const activeBranchId = await lix.activeBranchId();
-
-			let latest: ExternalWriteReview | null = null;
-			function Probe(props: { readonly resolvedReviewIds: string[] }) {
-				latest = useExternalWriteReview({
-					fileId,
-					path: "/hook.md",
-					activeBranchId,
-					resolvedReviewIds: props.resolvedReviewIds,
-					enabled: true,
-				});
-				return null;
-			}
-			const tree = (resolvedReviewIds: string[]) =>
-				createElement(LixProvider, {
-					lix,
-					children: createElement(Suspense, {
-						fallback: null,
-						children: createElement(Probe, { resolvedReviewIds }),
-					}),
-				});
-			let view!: ReturnType<typeof render>;
-			await act(async () => {
-				view = render(tree([]));
-			});
-			await waitFor(
-				() => {
-					expect(latest).toEqual(
-						expect.objectContaining({
-							fileId,
-							path: "/hook.md",
-							beforeCommitId: checkpoint.commitId,
-							afterCommitId: headCommitId,
-						}),
-					);
-				},
-				{ timeout: 10_000 },
-			);
-
-			const resolvedId = externalWriteReviewId(
-				fileId,
-				checkpoint.commitId,
-				headCommitId,
-			);
-			await act(async () => {
-				view.rerender(tree([resolvedId]));
-			});
-			await waitFor(
-				() => {
-					expect(latest).toBeNull();
-				},
-				{ timeout: 10_000 },
-			);
-			view.unmount();
 		} finally {
 			await lix.close();
 		}

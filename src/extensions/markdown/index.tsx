@@ -43,20 +43,15 @@ import {
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
-	ExternalWriteReviewNavigation,
-	ResolveExternalWriteReviewArgs,
 } from "@/extension-runtime/external-write-review";
-import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
+import type { AtelierDiffSession } from "@/extension-api";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import {
-	useExternalWriteReview,
-	useExternalWriteReviewData,
-} from "@/shell/external-write-review-history";
+import { useFileDataAtCommit } from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
 import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/markdown-asset";
 
@@ -69,33 +64,17 @@ type MarkdownViewProps = {
 	readonly focusOnLoad?: boolean;
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly activeBranchId?: string;
-	readonly resolvedReviewIds?: readonly string[];
+	readonly diffSession?: AtelierDiffSession | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
 	readonly afterFileId?: string | null;
 	readonly beforeExists?: boolean;
 	readonly afterExists?: boolean;
-	readonly registerExternalWriteReview?: (
-		review: ExternalWriteReview,
-	) => () => void;
-	readonly onAcceptReviewDiff?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onRejectReviewDiff?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onResolveReviewDiff?: (
-		args: ResolveExternalWriteReviewArgs,
-	) => Promise<void>;
+	readonly onDiffAccept?: (path: string) => Promise<void>;
+	readonly onDiffReject?: (path: string) => Promise<void>;
+	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAcceptReviews?: boolean;
-	readonly reviewEnabled?: boolean;
-	readonly reviewNavigation?: ExternalWriteReviewNavigation;
-	readonly onExitReview?: () => void;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly onDocumentModified?: (filePath: string) => void;
 };
@@ -129,21 +108,18 @@ export function MarkdownView({
 	focusOnLoad = false,
 	defaultBlock,
 	activeBranchId,
-	resolvedReviewIds,
+	diffSession,
 	beforeCommitId,
 	afterCommitId,
 	beforeFileId,
 	afterFileId,
 	beforeExists,
 	afterExists,
-	registerExternalWriteReview,
-	onAcceptReviewDiff,
-	onRejectReviewDiff,
-	onResolveReviewDiff,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 	autoAcceptReviews,
-	reviewEnabled,
-	reviewNavigation,
-	onExitReview,
+
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps) {
@@ -161,21 +137,18 @@ export function MarkdownView({
 				focusOnLoad={focusOnLoad}
 				defaultBlock={defaultBlock}
 				activeBranchId={resolvedActiveBranchId}
-				resolvedReviewIds={resolvedReviewIds}
+				diffSession={diffSession}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
 				beforeFileId={beforeFileId}
 				afterFileId={afterFileId}
 				beforeExists={beforeExists}
 				afterExists={afterExists}
-				registerExternalWriteReview={registerExternalWriteReview}
-				onAcceptReviewDiff={onAcceptReviewDiff}
-				onRejectReviewDiff={onRejectReviewDiff}
-				onResolveReviewDiff={onResolveReviewDiff}
+				onDiffAccept={onDiffAccept}
+				onDiffReject={onDiffReject}
+				onDiffResolve={onDiffResolve}
 				autoAcceptReviews={autoAcceptReviews}
-				reviewEnabled={reviewEnabled}
-				reviewNavigation={reviewNavigation}
-				onExitReview={onExitReview}
+
 				openWorkspaceFile={openWorkspaceFile}
 				onDocumentModified={onDocumentModified}
 			/>
@@ -259,39 +232,59 @@ function MarkdownLiveViewLoaded({
 	focusOnLoad = false,
 	defaultBlock,
 	activeBranchId = "",
-	resolvedReviewIds,
-	registerExternalWriteReview,
-	onAcceptReviewDiff,
-	onRejectReviewDiff,
-	onResolveReviewDiff,
+	diffSession,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 	autoAcceptReviews,
-	reviewEnabled = false,
-	reviewNavigation,
-	onExitReview,
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
-	const externalWriteReview = useExternalWriteReview({
-		fileId: fileRow?.id,
-		path: fileRow?.path,
-		activeBranchId,
-		resolvedReviewIds,
-			enabled: reviewEnabled,
-	});
-	const externalWriteReviewData =
-		useExternalWriteReviewData(externalWriteReview);
+	// The shell owns review detection: this document is under review when the
+	// working diff session marks it pending and it is the revealed file.
+	const session = diffSession ?? null;
+	const sessionReview =
+		fileRow && session && "working" in session.target
+			? session.files.find((file) => file.id === fileRow.id)?.review
+			: undefined;
+	const reviewing = Boolean(
+		fileRow &&
+			session &&
+			sessionReview?.status === "pending" &&
+			session.activePath === fileRow.path,
+	);
+	const reviewBaseCommitId =
+		reviewing && session?.base && "commitId" in session.base
+			? session.base.commitId
+			: null;
+	const reviewBase = useFileDataAtCommit(
+		reviewing ? fileRow?.id : null,
+		reviewBaseCommitId,
+	);
 	const effectiveFileRow = fileRow;
-	const review = externalWriteReview;
+	const review: ExternalWriteReview | null =
+		reviewing && fileRow && sessionReview
+			? {
+					fileId: fileRow.id,
+					path: fileRow.path,
+					reviewId: sessionReview.id,
+					beforeCommitId: reviewBaseCommitId ?? "",
+					afterCommitId: "",
+				}
+			: null;
 	const isReviewing = review !== null;
-	const reviewData: ExternalWriteReviewData | null = externalWriteReviewData;
-	const reviewDiff: MarkdownReviewDiff | null = reviewData
-		? {
-				beforeMarkdown: decodeFileDataToText(reviewData.beforeData),
-				afterMarkdown: decodeFileDataToText(reviewData.afterData),
-			}
-		: null;
+	// The review's after side is the live document; only the base is fetched.
+	const reviewDiff: MarkdownReviewDiff | null =
+		review && fileRow && !reviewBase.loading
+			? {
+					beforeMarkdown: reviewBase.data
+						? decodeFileDataToText(reviewBase.data)
+						: "",
+					afterMarkdown: decodeFileDataToText(fileRow.content),
+				}
+			: null;
 	const [liveEditorState, setLiveEditorState] = useState<{
 		readonly fileId: string;
 		readonly editor: Editor;
@@ -368,12 +361,10 @@ function MarkdownLiveViewLoaded({
 								afterCommitId={review.afterCommitId}
 								openWorkspaceFile={openWorkspaceFile}
 								isActive={isActiveView && isPanelFocused}
-								onAccept={onAcceptReviewDiff}
-								onReject={onRejectReviewDiff}
-								onResolve={onResolveReviewDiff}
+								onDiffAccept={onDiffAccept}
+								onDiffReject={onDiffReject}
+								onDiffResolve={onDiffResolve}
 								autoAccept={autoAcceptReviews}
-								navigation={reviewNavigation}
-								onExit={onExitReview}
 								onCompletionStart={() => {
 									setFinishingReview({
 										fileId: effectiveFileRow.id,
@@ -414,31 +405,21 @@ function MarkdownLiveViewLoaded({
 		);
 	}
 
-	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<ExternalWriteReviewRegistration
-				review={externalWriteReview ?? finishingReview?.review ?? null}
-				register={registerExternalWriteReview}
-			/>
-			{content}
-		</div>
-	);
+	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
 }
 
 function MarkdownLiveReviewController({
-	fileId,
 	sourceFilePath,
 	editor,
-	review,
 	reviewDiff,
 	reviewId,
 	beforeCommitId,
 	afterCommitId,
 	isActive,
 	openWorkspaceFile,
-	onAccept,
-	onReject,
-	onResolve,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 	onCompletionStart,
 	onCompletionSuccess,
 	onCompletionFailure,
@@ -455,13 +436,11 @@ function MarkdownLiveReviewController({
 		return null;
 	}
 	const completeReview = createCompleteMarkdownReview({
-		fileId,
-		review,
+		path: sourceFilePath,
 		reviewDiff,
-		reviewId,
-		onAccept,
-		onReject,
-		onResolve,
+		onDiffAccept,
+		onDiffReject,
+		onDiffResolve,
 	});
 	if (autoAccept) {
 		return (
@@ -734,26 +713,14 @@ type MarkdownReviewOverlayProps = {
 	readonly isActive: boolean;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly controls?: "review" | "none";
-	readonly onAccept?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onReject?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onResolve?: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
+	readonly onDiffAccept?: (path: string) => Promise<void>;
+	readonly onDiffReject?: (path: string) => Promise<void>;
+	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAccept?: boolean;
-	readonly navigation?: ExternalWriteReviewNavigation;
-	readonly onExit?: () => void;
 };
 
 function MarkdownReviewOverlay({
-	fileId,
 	sourceFilePath,
-	review,
 	reviewDiff,
 	reviewId,
 	beforeCommitId,
@@ -761,18 +728,16 @@ function MarkdownReviewOverlay({
 	isActive,
 	openWorkspaceFile,
 	controls = "review",
-	onAccept,
-	onReject,
-	onResolve,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 }: MarkdownReviewOverlayProps) {
 	const completeReview = createCompleteMarkdownReview({
-		fileId,
-		review,
+		path: sourceFilePath,
 		reviewDiff,
-		reviewId,
-		onAccept,
-		onReject,
-		onResolve,
+		onDiffAccept,
+		onDiffReject,
+		onDiffResolve,
 	});
 
 	return (
@@ -794,39 +759,26 @@ function MarkdownReviewOverlay({
 }
 
 function createCompleteMarkdownReview({
-	fileId,
-	review,
+	path,
 	reviewDiff,
-	reviewId,
-	onAccept,
-	onReject,
-	onResolve,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 }: Pick<
 	MarkdownReviewOverlayProps,
-	| "fileId"
-	| "review"
-	| "reviewDiff"
-	| "reviewId"
-	| "onAccept"
-	| "onReject"
-	| "onResolve"
->): (markdown: string) => Promise<void> {
+	"reviewDiff" | "onDiffAccept" | "onDiffReject" | "onDiffResolve"
+> & { readonly path: string }): (markdown: string) => Promise<void> {
 	return async (markdown: string) => {
-		if (onResolve) {
-			await onResolve({
-				fileId,
-				reviewId,
-				review,
-				data: new TextEncoder().encode(markdown),
-			});
+		if (onDiffResolve) {
+			await onDiffResolve(path, new TextEncoder().encode(markdown));
 			return;
 		}
 		if (markdown === reviewDiff.afterMarkdown) {
-			await onAccept?.({ fileId, reviewId, review });
+			await onDiffAccept?.(path);
 			return;
 		}
 		if (markdown === reviewDiff.beforeMarkdown) {
-			await onReject?.({ fileId, reviewId, review });
+			await onDiffReject?.(path);
 			return;
 		}
 		throw new Error("Mixed review decisions require a review resolver.");
@@ -979,7 +931,7 @@ export const extension = createReactExtensionDefinition({
 				view.state.defaultBlock === "heading1" ? "heading1" : undefined
 			}
 			activeBranchId={atelier.branches.activeId}
-			resolvedReviewIds={atelier.reviews.resolvedReviewIds}
+			diffSession={atelier.diff.session}
 			beforeCommitId={
 				typeof view.state.beforeCommitId === "string"
 					? view.state.beforeCommitId
@@ -1002,18 +954,14 @@ export const extension = createReactExtensionDefinition({
 					? view.state.afterFileId
 					: null
 			}
-			registerExternalWriteReview={atelier.reviews.register}
-			onAcceptReviewDiff={atelier.reviews.accept}
-			onRejectReviewDiff={atelier.reviews.reject}
-			onResolveReviewDiff={atelier.reviews.resolve}
+			onDiffAccept={atelier.diff.accept}
+			onDiffReject={atelier.diff.reject}
+			onDiffResolve={atelier.diff.resolve}
 			autoAcceptReviews={
 				(atelier.diff.session !== null &&
 					"working" in atelier.diff.session.target) ||
-				atelier.reviews.autoAccept
+				atelier.diff.autoAccept
 			}
-			reviewEnabled={atelier.reviews.isOpen}
-			reviewNavigation={atelier.reviews.navigation}
-			onExitReview={atelier.reviews.exit}
 			openWorkspaceFile={(args) =>
 				atelier.documents.open(args.filePath, {
 					...(args.state ? { state: args.state } : {}),

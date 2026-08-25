@@ -117,9 +117,6 @@ describe("MarkdownView", () => {
 				reject: async () => {},
 				autoAccept: false,
 			},
-			reviews: {
-				resolvedReviewIds: [],
-			},
 			icons: { fileUrl: () => "" },
 		} as unknown as ExtensionRuntime;
 
@@ -779,36 +776,54 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
-		await lix.createCheckpoint();
+		const checkpoint = await lix.createCheckpoint();
 
 		let utils: ReturnType<typeof render> | undefined;
-		const renderReviewMarkdown = (
-			resolvedReviewIds: readonly string[] = [],
-		) => (
+		const renderReviewMarkdown = (reviewing: boolean) => (
 			<LixProvider lix={lix}>
 				<Suspense fallback={null}>
 					<MarkdownView
 						fileId={fakeUuid("file_review_startup")}
 						filePath="/review-startup.md"
 						activeBranchId={activeBranchId}
-						resolvedReviewIds={resolvedReviewIds}
-						reviewEnabled
+						diffSession={
+							reviewing
+								? {
+										base: { commitId: checkpoint.commitId },
+										target: { working: true },
+										files: [
+											{
+												id: fakeUuid("file_review_startup"),
+												path: "/review-startup.md",
+												changeKind: "modified",
+												review: { id: "review-startup", status: "pending" },
+											},
+										],
+										activePath: "/review-startup.md",
+										capabilities: {
+											checkpoint: true,
+											undo: true,
+											restore: false,
+										},
+									}
+								: null
+						}
 						isActiveView
 						isPanelFocused
-						onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
+						onDiffResolve={async (_path, data) => {
 							await qb(lix)
 								.updateTable("lix_file")
 								.set({ content: data })
-								.where("id", "=", fileId)
+								.where("id", "=", fakeUuid("file_review_startup"))
 								.execute();
-							utils?.rerender(renderReviewMarkdown([reviewId]));
+							utils?.rerender(renderReviewMarkdown(false));
 						}}
 					/>
 				</Suspense>
 			</LixProvider>
 		);
 		await act(async () => {
-			utils = render(renderReviewMarkdown());
+			utils = render(renderReviewMarkdown(false));
 		});
 
 		const liveEditor = await screen.findByTestId("tiptap-editor");
@@ -842,6 +857,7 @@ describe("MarkdownView", () => {
 				.set({ content: new TextEncoder().encode("# After") })
 				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
+			utils?.rerender(renderReviewMarkdown(true));
 		});
 
 		expect(

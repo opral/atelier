@@ -18,8 +18,6 @@ import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
-	useExternalWriteReview,
-	useExternalWriteReviewData,
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
@@ -108,24 +106,19 @@ function EditableTextView({
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
-	const review = useExternalWriteReview({
-		fileId,
-		path: resolvedPath,
-		activeBranchId: atelier.branches.activeId,
-		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-		enabled: atelier.reviews.isOpen,
-	});
-	const reviewData = useExternalWriteReviewData(review);
-	const reviewText = reviewData
-		? decodeFileDataToText(reviewData.afterData)
-		: null;
-	const isReviewing = Boolean(review);
+	// The shell owns review detection: this file is under review when the
+	// working diff session marks it pending and it is the revealed file.
+	const diffSession = atelier.diff.session;
+	const isReviewing = Boolean(
+		diffSession &&
+			"working" in diffSession.target &&
+			diffSession.activePath === resolvedPath &&
+			diffSession.files.some(
+				(file) => file.id === fileId && file.review?.status === "pending",
+			),
+	);
 	const isReadOnly = isReviewing || atelier.readOnly;
 
-	useEffect(() => {
-		if (!review) return;
-		return atelier.reviews.register(review);
-	}, [atelier.reviews, review]);
 
 	const originKey = useMemo(() => createTextEditorOriginKey(), []);
 	const {
@@ -135,7 +128,7 @@ function EditableTextView({
 	} = useSyncedTextFile({
 		fileId,
 		initialText: fileText,
-		reviewText,
+		reviewText: null,
 		reviewing: isReviewing,
 		readOnly: atelier.readOnly,
 		originKey,

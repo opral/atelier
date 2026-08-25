@@ -1,10 +1,5 @@
 import type { ComponentType } from "react";
 import type {
-	ExternalWriteReview,
-	ExternalWriteReviewNavigation,
-	ResolveExternalWriteReviewArgs,
-} from "./external-write-review";
-import type {
 	AtelierExtensionMenuItems,
 	AtelierExtensionPreferences,
 	AtelierDiffApi,
@@ -94,25 +89,6 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 	readonly diff: AtelierDiffApi;
 	/** Host-configured data source for un-imported "watched" file entries. */
 	readonly filesView?: AtelierFilesViewOptions;
-	readonly reviews: {
-		readonly resolvedReviewIds: readonly string[];
-		readonly autoAccept?: boolean;
-		readonly isOpen?: boolean;
-		readonly navigation?: ExternalWriteReviewNavigation;
-		readonly exit?: () => void;
-		readonly resolve: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
-		readonly accept: (args: {
-			readonly fileId: string;
-			readonly reviewId: string;
-			readonly review?: ExternalWriteReview;
-		}) => Promise<void>;
-		readonly reject: (args: {
-			readonly fileId: string;
-			readonly reviewId: string;
-			readonly review?: ExternalWriteReview;
-		}) => Promise<void>;
-		readonly register: (review: ExternalWriteReview) => () => void;
-	};
 };
 
 export interface ExtensionView {

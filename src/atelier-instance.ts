@@ -159,7 +159,6 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
-	const usesDefaultBranchSession = options.branchSession === undefined;
 	const branchSession =
 		options.branchSession ?? createLixBranchSession(options.lix);
 	const sessionStateStore =

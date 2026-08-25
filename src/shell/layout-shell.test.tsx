@@ -1,4 +1,4 @@
-import { StrictMode, Suspense } from "react";
+import { Suspense } from "react";
 import { describe, expect, test, vi } from "vitest";
 import {
 	act,
@@ -1886,15 +1886,3 @@ describe("canonical UI state", () => {
 	});
 });
 
-async function activeCommitId(
-	lix: Awaited<ReturnType<typeof openLix>>,
-): Promise<string> {
-	const result = await lix.execute(
-		"SELECT lix_active_branch_commit_id() AS commit_id",
-	);
-	const commitId = result.rows[0]?.get("commit_id");
-	if (typeof commitId !== "string") {
-		throw new Error("Missing active commit id");
-	}
-	return commitId;
-}
