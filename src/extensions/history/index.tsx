@@ -430,7 +430,6 @@ function ChangeKindDot({
 	return (
 		<DiffGlyph
 			kind={moved && changeKind === "modified" ? "moved" : changeKind}
-			size={12}
 			className="ml-auto shrink-0"
 		/>
 	);
