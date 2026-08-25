@@ -216,6 +216,21 @@ const FILE_TREE_UNSAFE_CSS = `
 		background: currentColor;
 	}
 
+	/* Added and deleted match: a dot in the status color instead of the
+	   letter, while the label keeps the status color (green / red). */
+	[data-item-git-status='added'] > [data-item-section='git'],
+	[data-item-git-status='deleted'] > [data-item-section='git'] {
+		font-size: 0;
+	}
+
+	[data-item-git-status='added'] > [data-item-section='git'] > span,
+	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
+		width: 6px;
+		height: 6px;
+		border-radius: 999px;
+		background: currentColor;
+	}
+
 	[data-item-git-status='recreated'] {
 		--trees-item-git-status-color: var(--trees-git-renamed-color);
 	}

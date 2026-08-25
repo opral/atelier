@@ -24,6 +24,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLix, useQueryResult } from "@/lib/lix-react";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
@@ -76,6 +77,13 @@ type FilesViewContext = {
 	readonly activeFilePath?: string | null;
 	readonly activeBranchId?: string;
 	readonly reviewWorkingChanges?: boolean;
+	/**
+	 * Set while a historical session is open: the tree renders the filesystem
+	 * as of this commit (read-only) instead of the live workspace.
+	 */
+	readonly historicalCommitId?: string;
+	/** Opens a changed file through the diff session (review-aware). */
+	readonly openDiffFile?: (path: string) => void;
 	/** The open diff session's files; change kinds color the tree's dots. */
 	readonly sessionFiles?: readonly {
 		readonly path: string;
@@ -209,13 +217,29 @@ export function FilesView({ context }: FilesViewProps) {
 
 function FilesViewLoaded({ context }: FilesViewProps) {
 	const lix = useLix();
+	const historicalCommitId = context?.historicalCommitId;
 	const directories = useQueryResult<FilesystemEntryRow>(
 		(queryLix) => selectFilesystemDirectories(queryLix),
-		{ reuseObservedResult: false },
+		{ reuseObservedResult: false, enabled: !historicalCommitId },
 	);
 	const files = useQueryResult<FilesystemEntryRow>(
 		(queryLix) => selectFilesystemFiles(queryLix),
-		{ reuseObservedResult: false },
+		{ reuseObservedResult: false, enabled: !historicalCommitId },
+	);
+	// Time travel: a historical session renders the filesystem as of its
+	// target commit — every file that existed then, with parents synthesized
+	// from the paths (empty directories are not part of a checkpoint's state).
+	const historicalFileRows = useQueryResult<{
+		readonly id: string;
+		readonly path: string | null;
+		readonly lixcol_depth: number;
+	}>(
+		(queryLix) =>
+			selectFileHistory(queryLix, historicalCommitId)
+				.select(["id", "path", "lixcol_depth"])
+				.orderBy("id", "asc")
+				.orderBy("lixcol_depth", "asc") as never,
+		{ enabled: Boolean(historicalCommitId) },
 	);
 	const reviewWorkingChanges =
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
@@ -223,10 +247,24 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		(queryLix) => selectFileWorkingChanges(queryLix),
 		{ enabled: reviewWorkingChanges },
 	);
-	for (const result of [directories, files, fileWorkingChanges]) {
+	const historicalEntries = useMemo(() => {
+		if (!historicalCommitId || historicalFileRows.status !== "success") {
+			return null;
+		}
+		return historicalFilesystemEntries(historicalFileRows.rows);
+	}, [historicalCommitId, historicalFileRows]);
+	for (const result of [
+		directories,
+		files,
+		historicalFileRows,
+		fileWorkingChanges,
+	]) {
 		if (result.status === "error") throw result.error;
 	}
-	if (directories.status === "pending" || files.status === "pending") {
+	const livePending =
+		!historicalCommitId &&
+		(directories.status === "pending" || files.status === "pending");
+	if (livePending || (historicalCommitId && historicalEntries === null)) {
 		return (
 			<div
 				role="status"
@@ -241,10 +279,60 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		<FilesViewContent
 			context={context}
 			lix={lix}
-			entries={[...directories.rows, ...files.rows]}
+			entries={
+				historicalEntries ?? [
+					...(directories.status === "success" ? directories.rows : []),
+					...(files.status === "success" ? files.rows : []),
+				]
+			}
 			fileWorkingChanges={fileWorkingChanges.rows as FileWorkingChangeRow[]}
 		/>
 	);
+}
+
+/**
+ * Files at a commit (shallowest history row per id) plus synthesized parent
+ * directories, shaped for the tree builder.
+ */
+function historicalFilesystemEntries(
+	rows: readonly {
+		readonly id: string;
+		readonly path: string | null;
+		readonly lixcol_depth: number;
+	}[],
+): FilesystemEntryRow[] {
+	const seen = new Set<string>();
+	const entries: FilesystemEntryRow[] = [];
+	const directoryPaths = new Set<string>();
+	for (const row of rows) {
+		if (seen.has(row.id)) continue;
+		seen.add(row.id);
+		if (typeof row.path !== "string") continue;
+		entries.push({
+			id: row.id,
+			parent_id: null,
+			path: row.path,
+			display_name: row.path.split("/").filter(Boolean).at(-1) ?? row.path,
+			kind: "file",
+		});
+		const segments = row.path.split("/").filter(Boolean);
+		segments.pop();
+		let prefix = "";
+		for (const segment of segments) {
+			prefix = `${prefix}/${segment}`;
+			directoryPaths.add(prefix);
+		}
+	}
+	for (const path of directoryPaths) {
+		entries.push({
+			id: `historical:${path}`,
+			parent_id: null,
+			path,
+			display_name: path.split("/").filter(Boolean).at(-1) ?? path,
+			kind: "directory",
+		});
+	}
+	return entries;
 }
 
 function FilesViewContent({
@@ -891,6 +979,16 @@ function FilesViewContent({
 				kind: "file",
 				source: "lix",
 			});
+			// In a historical session, a changed file opens as its snapshot diff;
+			// an unchanged file's live document matches the checkpoint anyway.
+			if (
+				context?.historicalCommitId &&
+				context.sessionFiles?.some((file) => file.path === path) &&
+				context.openDiffFile
+			) {
+				context.openDiffFile(path);
+				return;
+			}
 			void context?.openFile?.({
 				panel: "central",
 				fileId,
@@ -1507,12 +1605,21 @@ export const extension = createReactExtensionDefinition({
 					atelier.diff.session !== null &&
 					"working" in atelier.diff.session.target,
 				reviewModeActive: atelier.diff.session !== null,
+				...(atelier.diff.session !== null &&
+				"commitId" in atelier.diff.session.target
+					? { historicalCommitId: atelier.diff.session.target.commitId }
+					: {}),
 				sessionFiles: atelier.diff.session?.files,
+				openDiffFile: atelier.diff.openFile,
 				isPanelFocused: view.isFocused,
 				panelSide: view.panel,
 				viewInstance: view.instanceId,
 				isActiveView: view.isActive,
-				readOnly: atelier.readOnly,
+				// The past is immutable: historical sessions hide mutations.
+				readOnly:
+					atelier.readOnly ||
+					(atelier.diff.session !== null &&
+						"commitId" in atelier.diff.session.target),
 				showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
 				watchEntries: atelier.filesView?.watchEntries,
 				resolveFileForInteraction: atelier.filesView?.resolveFileForInteraction,
