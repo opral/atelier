@@ -930,7 +930,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("lists changed files and opens the first one when working changes starts without an active document", async () => {
+	test("enters review mode without revealing a file; files open on explicit selection", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const atelier = createAtelier({ lix, sessionStateStore });
@@ -982,15 +982,16 @@ describe("diff review navigation", () => {
 			await waitFor(() => expect(workingChanges).toBeEnabled());
 			fireEvent.click(workingChanges);
 
-			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()?.panels.central;
-				const activeView = central?.views.find(
-					(view) => view.instance === central.activeInstance,
-				);
-				expect(activeView?.state?.fileId).toBe(
-					fakeUuid("empty-state-working-change-a"),
-				);
-			});
+			// Review mode opens in place: the float appears and the central
+			// panel keeps whatever it showed before — no file is auto-revealed.
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint/ }),
+			).toBeVisible();
+			const centralAfterOpen = sessionStateStore.getSnapshot()?.panels.central;
+			const activeAfterOpen = centralAfterOpen?.views.find(
+				(view) => view.instance === centralAfterOpen.activeInstance,
+			);
+			expect(activeAfterOpen?.state?.fileId).toBeUndefined();
 			const workingFiles = await screen.findByRole("list", {
 				name: "Files in working changes",
 			});
@@ -999,6 +1000,9 @@ describe("diff review navigation", () => {
 				"a-empty-state-working-change.md",
 				"z-empty-state-working-change.md",
 			]);
+			await act(async () => {
+				fireEvent.click(workingFileButtons[1]!);
+			});
 			expect(
 				await screen.findByTestId(
 					"tiptap-editor",
@@ -1006,9 +1010,6 @@ describe("diff review navigation", () => {
 					{ timeout: ASYNC_UI_TIMEOUT },
 				),
 			).toHaveTextContent("After");
-			await act(async () => {
-				fireEvent.click(workingFileButtons[1]!);
-			});
 			await waitFor(() => {
 				const central = sessionStateStore.getSnapshot()?.panels.central;
 				const activeView = central?.views.find(
@@ -1593,9 +1594,13 @@ describe("diff review navigation", () => {
 			const workingFiles = await screen.findByRole("list", {
 				name: "Files in working changes",
 			});
-			expect(within(workingFiles).getByRole("button")).toHaveTextContent(
-				"removed-working-change.md",
-			);
+			const removedFileButton = within(workingFiles).getByRole("button");
+			expect(removedFileButton).toHaveTextContent("removed-working-change.md");
+			// No auto-reveal: the removed file opens from history only when the
+			// user selects it.
+			await act(async () => {
+				fireEvent.click(removedFileButton);
+			});
 			await waitFor(() => {
 				const central = sessionStateStore.getSnapshot()?.panels.central;
 				const activeView = central?.views.find(

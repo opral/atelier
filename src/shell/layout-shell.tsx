@@ -3368,19 +3368,11 @@ function LayoutShellLoadedContentResolved({
 						afterCommitId: reviewRange.afterCommitId,
 					}))
 				: [];
-			// Opening the workspace-level review must not navigate away from the
-			// user's active document or sidebar views. The review navigator remains
-			// available when they explicitly want to step through changed files.
-			// With no active document, reveal the first changed file so diff mode
-			// never opens over the central empty state.
-			const activeCentralView =
-				panelStatesRef.current.central.views.find(
-					(view) =>
-						view.instance === panelStatesRef.current.central.activeInstance,
-				) ?? null;
-			const revealFirstFile =
-				openOptions?.reveal ??
-				(!activeCentralView || !isDocumentView(activeCentralView));
+			// Opening the workspace-level review never navigates on its own: the
+			// user's active view stays put and the review float's stepper is how
+			// they walk through changed files. Hosts that want the first file
+			// shown pass reveal: true explicitly.
+			const revealFirstFile = openOptions?.reveal ?? false;
 			setDiffReview({
 				kind: "working",
 				range: reviewRange,

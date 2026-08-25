@@ -281,7 +281,7 @@ export type AtelierDiffApi = {
 		/** Defaults to the latest checkpoint for a working target. */
 		readonly base?: AtelierDiffRef | null;
 		readonly target: AtelierDiffRef;
-		/** Reveal the first changed file (default: only when no document is active). */
+		/** Reveal the first changed file (default: false — the session opens without navigating). */
 		readonly reveal?: boolean;
 	}) => Promise<void>;
 	readonly openFile: (path: string) => void;
