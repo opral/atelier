@@ -13,6 +13,7 @@ import {
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
+import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
@@ -163,10 +164,12 @@ function HistoricalTextView({
 }) {
 	const lix = useLix();
 	const [snapshotText, setSnapshotText] = useState<string | null>(null);
+	const [absentAtCommit, setAbsentAtCommit] = useState(false);
 	const [loadError, setLoadError] = useState(false);
 	useEffect(() => {
 		let cancelled = false;
 		setSnapshotText(null);
+		setAbsentAtCommit(false);
 		setLoadError(false);
 		if (!commitId) {
 			setSnapshotText(decodeFileDataToText(fileRow.content));
@@ -174,9 +177,11 @@ function HistoricalTextView({
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
 			.then((data) => {
-				if (!cancelled) {
-					setSnapshotText(data ? decodeFileDataToText(data) : "");
-				}
+				if (cancelled) return;
+				// No data at the commit means the file does not exist there yet;
+				// the absence is temporal, not an empty document.
+				if (data) setSnapshotText(decodeFileDataToText(data));
+				else setAbsentAtCommit(true);
 			})
 			.catch(() => {
 				if (!cancelled) setLoadError(true);
@@ -194,6 +199,14 @@ function HistoricalTextView({
 			>
 				Could not load this file revision.
 			</div>
+		);
+	}
+	if (absentAtCommit) {
+		return (
+			<CheckpointAbsentFile
+				filePath={fileRow.path || filePath}
+				commitId={commitId}
+			/>
 		);
 	}
 	if (snapshotText === null) return <TextLoadingState />;

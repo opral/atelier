@@ -49,6 +49,7 @@ import type {
 	ExternalWriteReviewData,
 } from "@/extension-runtime/external-write-review";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
+import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
@@ -530,10 +531,14 @@ function CsvHistoricalViewResolved({
 	);
 
 	if (!historicalFile?.fileRow) {
+		// No version at either side of the span: the absence is temporal.
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
-				File not found in the workspace.
-			</div>
+			<CheckpointAbsentFile
+				filePath={filePath}
+				commitId={
+					editorRevision.afterCommitId ?? editorRevision.beforeCommitId
+				}
+			/>
 		);
 	}
 

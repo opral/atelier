@@ -13,6 +13,7 @@ import {
 	type HistoricalFileSnapshot,
 } from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
+import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import {
 	EditorProvider,
 	useEditorCtx,
@@ -560,10 +561,14 @@ function MarkdownHistoricalViewResolved({
 
 	let content: ReactNode;
 	if (!effectiveFileRow) {
+		// No version at either side of the span: the absence is temporal.
 		content = (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
-				File not found in the workspace.
-			</div>
+			<CheckpointAbsentFile
+				filePath={filePath}
+				commitId={
+					editorRevision.afterCommitId ?? editorRevision.beforeCommitId
+				}
+			/>
 		);
 	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {
 		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
