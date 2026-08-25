@@ -2,10 +2,8 @@ export type ExternalWriteReview = {
 	readonly fileId: string;
 	readonly path: string;
 	readonly reviewId: string;
-	readonly mode?: "agent-turn" | "working-changes";
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
-	readonly agentTurnRangeIds: readonly string[];
 };
 
 export type ExternalWriteReviewData = {

@@ -9,7 +9,6 @@ import type {
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
 } from "./extension-api";
-import { appendAgentTurnCommitRange } from "./shell/agent-turn-review-range";
 import {
 	createLixBranchSession,
 	createMemoryPreferencesStore,
@@ -23,24 +22,6 @@ import {
 
 export type { AtelierPanelSide } from "./extension-api";
 export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
-
-export type AtelierDiffSource = {
-	/** Host-defined identifier such as "codex" or "claude". */
-	readonly id: string;
-	readonly sessionId?: string;
-	readonly turnId?: string;
-};
-
-export type AtelierDiffOpenOptions = {
-	readonly beforeCommitId: string;
-	readonly afterCommitId: string;
-	readonly source: AtelierDiffSource;
-};
-
-export type AtelierDiffApi = {
-	/** Creates a pending review and reveals its first changed document. */
-	open(options: AtelierDiffOpenOptions): Promise<void>;
-};
 
 /**
  * The central island is browser-style tabs — the one UX primitive. `home`
@@ -72,7 +53,6 @@ export type AtelierOptions = {
 	/** Private, account-scoped review acknowledgement state. */
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
 	/** Only expose review ranges tagged with this account or session id. */
-	readonly reviewRangeSessionId?: string;
 	/**
 	 * Host data source for un-imported "watched" entries in the bundled Files
 	 * view (e.g. disk files surfaced by filesystem watchers).
@@ -85,7 +65,6 @@ export type AtelierOptions = {
 export type AtelierInstance = {
 	/** The host-owned Lix backing this Atelier workspace. */
 	readonly lix: Lix;
-	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
 	readonly views: AtelierViewsApi;
 };
@@ -97,18 +76,9 @@ export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
 	readonly reviewStatusStore: AtelierReviewStatusStore;
 };
 
-export type AtelierLiveDiffRangeStore = {
-	readonly getSnapshot: () => readonly string[];
-	readonly subscribe: (listener: () => void) => () => void;
-	readonly add: (rangeId: string) => void;
-	readonly resolve: (rangeId: string) => void;
-	readonly waitForPending: () => Promise<void>;
-};
-
 // Symbol.for keeps an existing instance readable across development module reloads.
 const CONFIGURATION = Symbol.for("@opral/atelier/configuration");
 const DOCUMENTS_RUNTIME = Symbol.for("@opral/atelier/documents-runtime");
-const LIVE_DIFF_RANGES = Symbol.for("@opral/atelier/live-diff-ranges");
 
 type AtelierDocumentsCommand =
 	| {
@@ -189,7 +159,6 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
-	const liveDiffRangeIds = createLiveDiffRangeStore();
 	const usesDefaultBranchSession = options.branchSession === undefined;
 	const branchSession =
 		options.branchSession ?? createLixBranchSession(options.lix);
@@ -202,39 +171,6 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		options.reviewStatusStore ?? createMemoryReviewStatusStore();
 	const instance: AtelierInstance = {
 		lix: options.lix,
-		diff: {
-			open: async (diffOptions) => {
-				if (diffOptions.beforeCommitId === diffOptions.afterCommitId) return;
-				const scopedDiffOptions =
-					options.reviewRangeSessionId !== undefined &&
-					diffOptions.source.sessionId === undefined
-						? {
-								...diffOptions,
-								source: {
-									...diffOptions.source,
-									sessionId: options.reviewRangeSessionId,
-								},
-							}
-						: diffOptions;
-				// Record the user's live intent before the repository observer can
-				// publish the appended range. This distinguishes it from ranges that
-				// were already persisted when a tab opened.
-				const rangeId = diffId(scopedDiffOptions);
-				liveDiffRangeIds.add(rangeId);
-				try {
-					return await openDiff(
-						options.lix,
-						scopedDiffOptions,
-						usesDefaultBranchSession
-							? await options.lix.activeBranchId()
-							: await resolveBranchSessionId(branchSession),
-					);
-				} catch (error) {
-					liveDiffRangeIds.resolve(rangeId);
-					throw error;
-				}
-			},
-		},
 		documents: {
 			open: (path, openOptions) => {
 				if (typeof path !== "string" || path.trim().length === 0) {
@@ -309,9 +245,6 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 			? { defaultOpenPanels: [...options.defaultOpenPanels] }
 			: {}),
 		...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
-		...(options.reviewRangeSessionId !== undefined
-			? { reviewRangeSessionId: options.reviewRangeSessionId }
-			: {}),
 		...(options.filesView !== undefined
 			? { filesView: options.filesView }
 			: {}),
@@ -331,51 +264,7 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		value: documentsRuntime,
 		writable: false,
 	});
-	Object.defineProperty(instance, LIVE_DIFF_RANGES, {
-		configurable: false,
-		enumerable: false,
-		value: liveDiffRangeIds,
-		writable: false,
-	});
 	return instance;
-}
-
-function createLiveDiffRangeStore(): AtelierLiveDiffRangeStore {
-	let snapshot: readonly string[] = [];
-	const listeners = new Set<() => void>();
-	const pending = new Map<
-		string,
-		{ readonly promise: Promise<void>; readonly resolve: () => void }
-	>();
-	return {
-		getSnapshot: () => snapshot,
-		subscribe: (listener) => {
-			listeners.add(listener);
-			return () => listeners.delete(listener);
-		},
-		add: (rangeId) => {
-			if (snapshot.includes(rangeId)) return;
-			let resolve = () => {};
-			const promise = new Promise<void>((done) => {
-				resolve = done;
-			});
-			pending.set(rangeId, { promise, resolve });
-			snapshot = [...snapshot, rangeId];
-			for (const listener of listeners) listener();
-		},
-		resolve: (rangeId) => {
-			pending.get(rangeId)?.resolve();
-			pending.delete(rangeId);
-			if (snapshot.includes(rangeId)) {
-				snapshot = snapshot.filter((candidate) => candidate !== rangeId);
-				for (const listener of listeners) listener();
-			}
-		},
-		waitForPending: async function waitForPending(): Promise<void> {
-			await Promise.all([...pending.values()].map(({ promise }) => promise));
-			if (pending.size > 0) await waitForPending();
-		},
-	};
 }
 
 function queuePreferenceSaves(
@@ -434,33 +323,6 @@ export function getAtelierConfiguration(
 		throw new TypeError("Atelier requires an instance from createAtelier().");
 	}
 	return configuration;
-}
-
-/** @internal Distinguishes live diff.open() calls from persisted ranges. */
-export function getAtelierLiveDiffRangeStore(
-	instance: AtelierInstance,
-): AtelierLiveDiffRangeStore {
-	const store = (instance as unknown as Record<symbol, unknown>)[
-		LIVE_DIFF_RANGES
-	];
-	if (!isAtelierLiveDiffRangeStore(store)) {
-		throw new TypeError("Atelier requires an instance from createAtelier().");
-	}
-	return store;
-}
-
-function isAtelierLiveDiffRangeStore(
-	value: unknown,
-): value is AtelierLiveDiffRangeStore {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"getSnapshot" in value &&
-		"subscribe" in value &&
-		"add" in value &&
-		"resolve" in value &&
-		"waitForPending" in value
-	);
 }
 
 function isAtelierConfiguration(value: unknown): value is AtelierConfiguration {
@@ -649,56 +511,5 @@ function atelierDocumentsStatesEqual(
 	return left.openPaths.every((path, index) => path === right.openPaths[index]);
 }
 
-async function openDiff(
-	lix: Lix,
-	options: AtelierDiffOpenOptions,
-	branchId: string,
-): Promise<void> {
-	if (options.beforeCommitId === options.afterCommitId) return;
 
-	const openedAt = Date.now();
-	await appendAgentTurnCommitRange(
-		lix,
-		{
-			id: diffId(options),
-			sourceId: options.source.id,
-			beforeCommitId: options.beforeCommitId,
-			afterCommitId: options.afterCommitId,
-			...(options.source.sessionId !== undefined
-				? { sessionId: options.source.sessionId }
-				: {}),
-			...(options.source.turnId !== undefined
-				? { turnId: options.source.turnId }
-				: {}),
-			startedAt: openedAt,
-			completedAt: openedAt,
-		},
-		{ branchId },
-	);
-}
 
-function resolveBranchSessionId(
-	branchSession: AtelierBranchSession,
-): Promise<string> {
-	const current = branchSession.getSnapshot();
-	if (current) return Promise.resolve(current);
-	return new Promise((resolve) => {
-		const unsubscribe = branchSession.subscribe(() => {
-			const branchId = branchSession.getSnapshot();
-			if (!branchId) return;
-			unsubscribe();
-			resolve(branchId);
-		});
-	});
-}
-
-function diffId(options: AtelierDiffOpenOptions): string {
-	return JSON.stringify([
-		"atelier-diff",
-		options.source.id,
-		options.source.sessionId ?? null,
-		options.source.turnId ?? null,
-		options.beforeCommitId,
-		options.afterCommitId,
-	]);
-}

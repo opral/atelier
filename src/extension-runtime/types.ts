@@ -93,11 +93,9 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 	readonly filesView?: AtelierFilesViewOptions;
 	readonly reviews: {
 		readonly resolvedReviewIds: readonly string[];
-		readonly rangeSessionId?: string;
 		readonly autoAccept?: boolean;
 		readonly isOpen?: boolean;
 		readonly active?: boolean;
-		readonly mode?: "agent-turn" | "working-changes";
 		readonly navigation?: ExternalWriteReviewNavigation;
 		readonly createCheckpoint?: () => Promise<void>;
 		/** Accept every pending review across the workspace. */

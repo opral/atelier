@@ -6,7 +6,6 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { MarkdownView } from "./index";
 import { qb } from "@/lib/lix-kysely";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import { HistoryView } from "@/extensions/history";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 
@@ -761,7 +760,7 @@ describe("MarkdownView", () => {
 		});
 	});
 
-	test("shows review controls for a file already mounted before the range is persisted", async () => {
+	test("shows review controls for a file already mounted before the external write lands", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
 		await qb(lix)
@@ -772,6 +771,7 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
+		await lix.createCheckpoint();
 
 		let utils: ReturnType<typeof render> | undefined;
 		const renderReviewMarkdown = (
@@ -784,6 +784,7 @@ describe("MarkdownView", () => {
 						filePath="/review-startup.md"
 						activeBranchId={activeBranchId}
 						resolvedReviewIds={resolvedReviewIds}
+						reviewEnabled
 						isActiveView
 						isPanelFocused
 						onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
@@ -827,26 +828,12 @@ describe("MarkdownView", () => {
 			);
 		});
 		editorObserver.observe(editorSurface, { childList: true, subtree: true });
-		const beforeCommitId = await activeCommitId(lix);
-
 		await act(async () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After") })
 				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
-		});
-		const afterCommitId = await activeCommitId(lix);
-
-		await act(async () => {
-			await appendAgentTurnCommitRange(lix, {
-				id: "range-review-startup",
-				sourceId: "codex",
-				beforeCommitId,
-				afterCommitId,
-				startedAt: 1,
-				completedAt: 2,
-			});
 		});
 
 		expect(

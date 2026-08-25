@@ -50,7 +50,7 @@ function WorkingChangesRow({
 	const openWorkingChanges = atelier.reviews.openWorkingChanges;
 	const isViewing =
 		atelier.reviews.active === true &&
-		atelier.reviews.mode === "working-changes";
+		atelier.reviews.historicalCommitId === undefined;
 
 	return (
 		<div

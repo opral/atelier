@@ -1,6 +1,5 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 
 export type DeveloperWorkflowScenario =
 	| "inline-edit"
@@ -20,8 +19,8 @@ const decoder = new TextDecoder();
 let workflowSequence = 0;
 
 /**
- * Runs the same completed-turn sequence a host agent integration must use:
- * snapshot before, write the file, snapshot after, then record the turn range.
+ * Performs an external agent-style write: snapshot before, write the file,
+ * snapshot after. The shell's working-changes detection surfaces the review.
  */
 export async function simulateMarkdownAgentWorkflow(
 	lix: Lix,
@@ -54,7 +53,6 @@ export async function simulateMarkdownAgentWorkflow(
 		throw new Error("The selected workflow did not change the active file.");
 	}
 
-	const startedAt = Date.now();
 	const beforeCommitId = await activeCommitId(lix);
 	const rangeId = developerWorkflowId();
 	const writeResult = await lix.execute(
@@ -72,20 +70,6 @@ export async function simulateMarkdownAgentWorkflow(
 		throw new Error("The simulated agent write did not create a new commit.");
 	}
 
-	await appendAgentTurnCommitRange(
-		lix,
-		{
-			id: rangeId,
-			sourceId: "codex",
-			beforeCommitId,
-			afterCommitId,
-			sessionId: "atelier-developer-tools",
-			turnId: rangeId,
-			startedAt,
-			completedAt: Date.now(),
-		},
-		{ branchId: args.branchId },
-	);
 	return {
 		fileId: file.id,
 		filePath: file.path,

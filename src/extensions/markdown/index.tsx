@@ -70,7 +70,6 @@ type MarkdownViewProps = {
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
-	readonly reviewRangeSessionId?: string;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
@@ -95,7 +94,6 @@ type MarkdownViewProps = {
 	) => Promise<void>;
 	readonly autoAcceptReviews?: boolean;
 	readonly reviewEnabled?: boolean;
-	readonly reviewMode?: "agent-turn" | "working-changes";
 	readonly reviewNavigation?: ExternalWriteReviewNavigation;
 	readonly onExitReview?: () => void;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
@@ -132,7 +130,6 @@ export function MarkdownView({
 	defaultBlock,
 	activeBranchId,
 	resolvedReviewIds,
-	reviewRangeSessionId,
 	beforeCommitId,
 	afterCommitId,
 	beforeFileId,
@@ -145,7 +142,6 @@ export function MarkdownView({
 	onResolveReviewDiff,
 	autoAcceptReviews,
 	reviewEnabled,
-	reviewMode,
 	reviewNavigation,
 	onExitReview,
 	openWorkspaceFile,
@@ -166,7 +162,6 @@ export function MarkdownView({
 				defaultBlock={defaultBlock}
 				activeBranchId={resolvedActiveBranchId}
 				resolvedReviewIds={resolvedReviewIds}
-				reviewRangeSessionId={reviewRangeSessionId}
 				beforeCommitId={beforeCommitId}
 				afterCommitId={afterCommitId}
 				beforeFileId={beforeFileId}
@@ -179,7 +174,6 @@ export function MarkdownView({
 				onResolveReviewDiff={onResolveReviewDiff}
 				autoAcceptReviews={autoAcceptReviews}
 				reviewEnabled={reviewEnabled}
-				reviewMode={reviewMode}
 				reviewNavigation={reviewNavigation}
 				onExitReview={onExitReview}
 				openWorkspaceFile={openWorkspaceFile}
@@ -266,14 +260,12 @@ function MarkdownLiveViewLoaded({
 	defaultBlock,
 	activeBranchId = "",
 	resolvedReviewIds,
-	reviewRangeSessionId,
 	registerExternalWriteReview,
 	onAcceptReviewDiff,
 	onRejectReviewDiff,
 	onResolveReviewDiff,
 	autoAcceptReviews,
-	reviewEnabled = true,
-	reviewMode,
+	reviewEnabled = false,
 	reviewNavigation,
 	onExitReview,
 	openWorkspaceFile,
@@ -286,10 +278,7 @@ function MarkdownLiveViewLoaded({
 		path: fileRow?.path,
 		activeBranchId,
 		resolvedReviewIds,
-		reviewRangeSessionId,
-		enabled: reviewEnabled,
-		reviewMode:
-			reviewMode ?? (autoAcceptReviews ? "working-changes" : "agent-turn"),
+			enabled: reviewEnabled,
 	});
 	const externalWriteReviewData =
 		useExternalWriteReviewData(externalWriteReview);
@@ -917,7 +906,6 @@ function buildHistoricalMarkdownFile(args: {
 			}),
 			beforeCommitId: args.revision.beforeCommitId ?? "",
 			afterCommitId: args.revision.afterCommitId ?? "",
-			agentTurnRangeIds: [],
 		},
 		reviewData: {
 			beforeData,
@@ -992,7 +980,6 @@ export const extension = createReactExtensionDefinition({
 			}
 			activeBranchId={atelier.branches.activeId}
 			resolvedReviewIds={atelier.reviews.resolvedReviewIds}
-			reviewRangeSessionId={atelier.reviews.rangeSessionId}
 			beforeCommitId={
 				typeof view.state.beforeCommitId === "string"
 					? view.state.beforeCommitId
@@ -1020,10 +1007,11 @@ export const extension = createReactExtensionDefinition({
 			onRejectReviewDiff={atelier.reviews.reject}
 			onResolveReviewDiff={atelier.reviews.resolve}
 			autoAcceptReviews={
-				atelier.reviews.mode === "working-changes" || atelier.reviews.autoAccept
+				(atelier.reviews.active === true &&
+					atelier.reviews.historicalCommitId === undefined) ||
+				atelier.reviews.autoAccept
 			}
 			reviewEnabled={atelier.reviews.isOpen}
-			reviewMode={atelier.reviews.mode}
 			reviewNavigation={atelier.reviews.navigation}
 			onExitReview={atelier.reviews.exit}
 			openWorkspaceFile={(args) =>

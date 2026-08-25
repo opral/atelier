@@ -13,9 +13,6 @@ export { useDebouncedPayloadPersistence } from "./extension-runtime/use-debounce
 export type { DebouncedPayloadPersistenceOptions } from "./extension-runtime/use-debounced-payload-persistence";
 export type {
 	AtelierCentralPanelOptions,
-	AtelierDiffApi,
-	AtelierDiffOpenOptions,
-	AtelierDiffSource,
 	AtelierInstance,
 	AtelierOptions,
 	AtelierSidePanel,
@@ -79,5 +76,3 @@ export type {
 	DeveloperWorkflowScenario,
 	SimulatedAgentWorkflow,
 } from "./dev-tools/simulate-agent-workflow";
-export { appendAgentTurnCommitRange as recordAgentTurnCommitRange } from "./shell/agent-turn-review-range";
-export type { AgentTurnCommitRange } from "./shell/agent-turn-review-range";

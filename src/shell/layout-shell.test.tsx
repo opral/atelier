@@ -25,10 +25,6 @@ import {
 import { DEFAULT_ATELIER_UI_STATE } from "./ui-state";
 import { createAtelier } from "../atelier-instance";
 import {
-	appendAgentTurnCommitRange,
-	readAgentTurnCommitRanges,
-} from "./agent-turn-review-range";
-import {
 	createMemoryPreferencesStore,
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
@@ -433,305 +429,7 @@ async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 	});
 }
 
-async function waitForBackgroundReviewStartup(): Promise<void> {
-	await waitFor(() => {
-		expect(
-			document.querySelector("[data-agent-turn-ranges-ready='true']"),
-		).not.toBeNull();
-	});
-}
-
-describe("agent turn review navigation", () => {
-	test("keeps persisted agent ranges cold when a repository opens", async () => {
-		const lix = await openLix();
-		const sessionStateStore = createMemorySessionStateStore();
-		const atelier = createAtelier({ lix, sessionStateStore });
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			const fileId = fakeUuid("persisted-agent-range-file");
-			await qb(lix)
-				.insertInto("lix_file")
-				.values({
-					id: fileId,
-					path: "/persisted-agent-range.md",
-					content: new TextEncoder().encode("# Before\n"),
-				})
-				.execute();
-			let beforeCommitId = await activeCommitId(lix);
-			for (let index = 0; index < 50; index += 1) {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode(`# After ${index}\n`) })
-					.where("id", "=", fileId)
-					.execute();
-				const afterCommitId = await activeCommitId(lix);
-				await appendAgentTurnCommitRange(lix, {
-					id: `persisted-agent-range-${index}`,
-					sourceId: "codex",
-					beforeCommitId,
-					afterCommitId,
-					startedAt: index * 2,
-					completedAt: index * 2 + 1,
-				});
-				beforeCommitId = afterCommitId;
-			}
-			const execute = vi.spyOn(lix, "execute");
-
-			await act(async () => {
-				utils = render(
-					<LixProvider lix={lix}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} />
-						</Suspense>
-					</LixProvider>,
-				);
-			});
-			await waitForBackgroundReviewStartup();
-			expect(
-				execute.mock.calls.filter(([statement]) =>
-					String(statement).includes("AS range_index"),
-				),
-			).toHaveLength(0);
-
-			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([]);
-			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
-			expect(
-				execute.mock.calls.some(([statement]) =>
-					String(statement).includes("lix_history('lix_file'"),
-				),
-			).toBe(false);
-		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("closes review intent after consuming a no-op live range", async () => {
-		const lix = await openLix();
-		const atelier = createAtelier({ lix });
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			const commitId = await activeCommitId(lix);
-			await act(async () => {
-				utils = render(
-					<LixProvider lix={lix}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} />
-						</Suspense>
-					</LixProvider>,
-				);
-			});
-			await waitForBackgroundReviewStartup();
-			const execute = vi.spyOn(lix, "execute");
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "live-no-op-range",
-					sourceId: "codex",
-					beforeCommitId: commitId,
-					afterCommitId: commitId,
-					startedAt: 1,
-					completedAt: 2,
-				});
-			});
-
-			await waitFor(() => {
-				expect(
-					execute.mock.calls.some(([statement]) =>
-						String(statement).includes("AS range_index"),
-					),
-				).toBe(true);
-				expect(
-					document.querySelector("[data-agent-turn-review-open='true']"),
-				).toBeNull();
-			});
-			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
-		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("auto-opens external reviews exactly once without reopening an active-file range", async () => {
-		const lix = await openLix();
-		const onEvent = vi.fn();
-		const sessionStateStore = createMemorySessionStateStore();
-		const atelier = createAtelier({
-			lix,
-			onEvent,
-			sessionStateStore,
-		});
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			await qb(lix)
-				.insertInto("lix_file")
-				.values([
-					{
-						id: fakeUuid("stable-file"),
-						path: "/stable.md",
-						content: new TextEncoder().encode("# Stable\n"),
-					},
-					{
-						id: fakeUuid("changed-file"),
-						path: "/changed.md",
-						content: new TextEncoder().encode("# Before\n"),
-					},
-					{
-						id: fakeUuid("later-file"),
-						path: "/later.md",
-						content: new TextEncoder().encode("# Later before\n"),
-					},
-				])
-				.execute();
-			const beforeCommitId = await activeCommitId(lix);
-
-			await act(async () => {
-				utils = render(
-					<StrictMode>
-						<LixProvider lix={lix}>
-							<Suspense fallback={null}>
-								<V2LayoutShell instance={atelier} onEvent={onEvent} />
-							</Suspense>
-						</LixProvider>
-					</StrictMode>,
-				);
-			});
-			fireEvent.click(await findFilesTreeItem("stable.md"));
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
-					}),
-				]);
-			});
-
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode("# After\n") })
-					.where("id", "=", fakeUuid("changed-file"))
-					.execute();
-			});
-			const afterCommitId = await activeCommitId(lix);
-
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "external-edit",
-					sourceId: "mcp",
-					beforeCommitId,
-					afterCommitId,
-					startedAt: 1,
-					completedAt: 2,
-				});
-			});
-
-			await waitFor(() => {
-				expect(
-					sessionStateStore
-						.getSnapshot()
-						?.panels.central.views.some(
-							(view) => view.state?.fileId === fakeUuid("changed-file"),
-						),
-				).toBe(true);
-			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-			await waitFor(() => {
-				expect(
-					onEvent.mock.calls.filter(
-						([event]) =>
-							event.type === "document_viewed" &&
-							event.filePath === "/changed.md",
-					),
-				).toHaveLength(1);
-			});
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "external-edit-follow-up",
-					sourceId: "mcp",
-					beforeCommitId,
-					afterCommitId,
-					startedAt: 3,
-					completedAt: 4,
-				});
-			});
-			await waitFor(async () => {
-				expect(await readAgentTurnCommitRanges(lix)).toHaveLength(2);
-			});
-			await waitFor(() => {
-				expect(
-					onEvent.mock.calls
-						.flatMap(([event]) =>
-							event.type === "diff_opened" ? [event.reviewId] : [],
-						)
-						.some((reviewId) =>
-							JSON.parse(reviewId)[1].includes("external-edit-follow-up"),
-						),
-				).toBe(true);
-			});
-			fireEvent.click(await findFilesTreeItem("stable.md"));
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
-					}),
-				]);
-			});
-
-			const beforeLaterCommitId = await activeCommitId(lix);
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode("# Later after\n") })
-					.where("id", "=", fakeUuid("later-file"))
-					.execute();
-			});
-			const afterLaterCommitId = await activeCommitId(lix);
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "later-range",
-					sourceId: "mcp",
-					beforeCommitId: beforeLaterCommitId,
-					afterCommitId: afterLaterCommitId,
-					startedAt: 5,
-					completedAt: 6,
-				});
-			});
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("later-file") }),
-					}),
-				]);
-			});
-			await waitFor(() => {
-				expect(
-					onEvent.mock.calls
-						.flatMap(([event]) =>
-							event.type === "diff_opened" ? [event.reviewId] : [],
-						)
-						.some((reviewId) =>
-							JSON.parse(reviewId)[1].includes("later-range"),
-						),
-				).toBe(true);
-			});
-			expect(
-				onEvent.mock.calls.filter(
-					([event]) =>
-						event.type === "document_viewed" &&
-						event.filePath === "/changed.md",
-				),
-			).toHaveLength(1);
-			expect(
-				onEvent.mock.calls.filter(
-					([event]) =>
-						event.type === "document_viewed" && event.filePath === "/later.md",
-				),
-			).toHaveLength(1);
-		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
+describe("diff review navigation", () => {
 	test("opens checkpoint working changes without requiring agent-turn metadata", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
@@ -786,21 +484,12 @@ describe("agent turn review navigation", () => {
 				).toBe(fakeUuid("auto-changed-file"));
 			});
 
-			const beforeAgentCommitId = await activeCommitId(lix);
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.where("id", "=", fakeUuid("auto-changed-file"))
 					.execute();
-			});
-			const afterAgentCommitId = await activeCommitId(lix);
-			await act(async () => {
-				await atelier.diff.open({
-					beforeCommitId: beforeAgentCommitId,
-					afterCommitId: afterAgentCommitId,
-					source: { id: "codex", turnId: "auto-accepted" },
-				});
 			});
 			await waitFor(() => {
 				expect(
@@ -1007,7 +696,7 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
-	test("creates a checkpoint and retires pre-resolved review state", async () => {
+	test("creates a checkpoint from the working-changes review", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const reviewStatusStore = createMemoryReviewStatusStore();
@@ -1027,13 +716,11 @@ describe("agent turn review navigation", () => {
 				})
 				.execute();
 			await lix.createCheckpoint();
-			const beforeCommitId = await activeCommitId(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "=", fakeUuid("checkpoint-with-blocked-history"))
 				.execute();
-			const afterCommitId = await activeCommitId(lix);
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
@@ -1043,18 +730,6 @@ describe("agent turn review navigation", () => {
 					</LixProvider>,
 				);
 			});
-			await waitForBackgroundReviewStartup();
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "checkpoint-with-blocked-history",
-					sourceId: "codex",
-					beforeCommitId,
-					afterCommitId,
-					startedAt: 1,
-					completedAt: 2,
-				});
-			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
 			fireEvent.click(
 				await screen.findByRole("button", {
 					name: "1 file changed since checkpoint. Open changes review",
@@ -1063,19 +738,20 @@ describe("agent turn review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
+			const execute = vi.spyOn(lix, "execute");
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			await waitFor(() => {
+				expect(
+					execute.mock.calls.some(([statement]) =>
+						String(statement).includes("INSERT INTO lix_create_checkpoint"),
+					),
+				).toBe(true);
+			});
 			await waitFor(() => {
 				expect(
 					screen.queryByRole("button", { name: /^Checkpoint/ }),
 				).toBeNull();
 			});
-			await waitFor(async () => {
-				const branchId = await lix.activeBranchId();
-				expect(
-					await reviewStatusStore.loadResolvedReviewIds(branchId),
-				).toHaveLength(1);
-			});
-			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -1161,12 +837,11 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
-	test("retires only selected partial-checkpoint reviews", async () => {
+	test("checkpoints only the selected working-set files", async () => {
 		const lix = await openLix();
 		const reviewStatusStore = createMemoryReviewStatusStore();
 		const atelier = createAtelier({ lix, reviewStatusStore });
 		let utils: ReturnType<typeof render> | undefined;
-		let releaseRangeDiscovery = () => {};
 		try {
 			const selectedFileId = fakeUuid("partial-checkpoint-selected");
 			const remainingFileId = fakeUuid("partial-checkpoint-remaining");
@@ -1186,13 +861,11 @@ describe("agent turn review navigation", () => {
 				])
 				.execute();
 			await lix.createCheckpoint();
-			const beforeCommitId = await activeCommitId(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "in", [selectedFileId, remainingFileId])
 				.execute();
-			const afterCommitId = await activeCommitId(lix);
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
@@ -1202,34 +875,11 @@ describe("agent turn review navigation", () => {
 					</LixProvider>,
 				);
 			});
-			await waitForBackgroundReviewStartup();
-			const originalExecute = lix.execute.bind(lix);
-			const rangeDiscoveryGate = new Promise<void>((resolve) => {
-				releaseRangeDiscovery = resolve;
-			});
-			let blockedRangeDiscoveryCount = 0;
-			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("AS range_index")) {
-					blockedRangeDiscoveryCount += 1;
-					await rangeDiscoveryGate;
-				}
-				return originalExecute(statement, params);
-			});
-			await act(async () => {
-				await atelier.diff.open({
-					beforeCommitId,
-					afterCommitId,
-					source: { id: "codex", turnId: "partial-checkpoint" },
-				});
-			});
-			await waitFor(() => expect(blockedRangeDiscoveryCount).toBe(1));
 			fireEvent.click(
 				await screen.findByRole("button", {
 					name: "2 files changed since checkpoint. Open changes review",
 				}),
 			);
-			expect(screen.queryByRole("button", { name: /^Checkpoint/ })).toBeNull();
-			releaseRangeDiscovery();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
@@ -1262,14 +912,7 @@ describe("agent turn review navigation", () => {
 					),
 				).toBe(true);
 			});
-			await waitFor(async () => {
-				const branchId = await lix.activeBranchId();
-				expect(
-					await reviewStatusStore.loadResolvedReviewIds(branchId),
-				).toHaveLength(1);
-			});
 		} finally {
-			releaseRangeDiscovery();
 			await act(async () => utils?.unmount());
 			await lix.close();
 		}
@@ -1960,144 +1603,21 @@ describe("agent turn review navigation", () => {
 		}
 	});
 
-	test("opens the new range instead of an older non-active pending review", async () => {
+	test("Undo removes a newly added empty Markdown file from the review", async () => {
 		const lix = await openLix();
-		const onEvent = vi.fn();
-		const sessionStateStore = createMemorySessionStateStore();
-		const atelier = createAtelier({ lix, onEvent, sessionStateStore });
+		const reviewStatusStore = createMemoryReviewStatusStore();
+		const atelier = createAtelier({ lix, reviewStatusStore });
 		let utils: ReturnType<typeof render> | undefined;
 		try {
 			await qb(lix)
 				.insertInto("lix_file")
-				.values([
-					{
-						id: fakeUuid("older-file"),
-						path: "/a-older.md",
-						content: new TextEncoder().encode("# Older before\n"),
-					},
-					{
-						id: fakeUuid("stable-file"),
-						path: "/middle.md",
-						content: new TextEncoder().encode("# Stable\n"),
-					},
-					{
-						id: fakeUuid("newer-file"),
-						path: "/z-newer.md",
-						content: new TextEncoder().encode("# Newer before\n"),
-					},
-				])
+				.values({
+					id: fakeUuid("seed-file"),
+					path: "/seed.md",
+					content: new TextEncoder().encode("# Seed\n"),
+				})
 				.execute();
-			const beforeOlder = await activeCommitId(lix);
-			await act(async () => {
-				utils = render(
-					<LixProvider lix={lix}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} onEvent={onEvent} />
-						</Suspense>
-					</LixProvider>,
-				);
-			});
-			await waitForBackgroundReviewStartup();
-
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode("# Older after\n") })
-					.where("id", "=", fakeUuid("older-file"))
-					.execute();
-			});
-			const afterOlder = await activeCommitId(lix);
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "older-range",
-					sourceId: "mcp",
-					beforeCommitId: beforeOlder,
-					afterCommitId: afterOlder,
-					startedAt: 1,
-					completedAt: 2,
-				});
-			});
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("older-file") }),
-					}),
-				]);
-			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-
-			fireEvent.click(await findFilesTreeItem("middle.md"));
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("stable-file") }),
-					}),
-				]);
-			});
-
-			const beforeNewer = await activeCommitId(lix);
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode("# Newer after\n") })
-					.where("id", "=", fakeUuid("newer-file"))
-					.execute();
-			});
-			const afterNewer = await activeCommitId(lix);
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "newer-range",
-					sourceId: "mcp",
-					beforeCommitId: beforeNewer,
-					afterCommitId: afterNewer,
-					startedAt: 3,
-					completedAt: 4,
-				});
-			});
-
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({ fileId: fakeUuid("newer-file") }),
-					}),
-				]);
-			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-			expect(
-				onEvent.mock.calls.filter(
-					([event]) =>
-						event.type === "document_viewed" &&
-						event.filePath === "/z-newer.md",
-				),
-			).toHaveLength(1);
-		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("defers later and no-op ranges until the active review resolves", async () => {
-		const lix = await openLix();
-		const sessionStateStore = createMemorySessionStateStore();
-		const atelier = createAtelier({ lix, sessionStateStore });
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			await qb(lix)
-				.insertInto("lix_file")
-				.values([
-					{
-						id: fakeUuid("active-review-file"),
-						path: "/active.md",
-						content: new TextEncoder().encode("# Active before\n"),
-					},
-					{
-						id: fakeUuid("queued-review-file"),
-						path: "/queued.md",
-						content: new TextEncoder().encode("# Queued before\n"),
-					},
-				])
-				.execute();
-			const beforeActive = await activeCommitId(lix);
+			await lix.createCheckpoint();
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>
@@ -2107,369 +1627,44 @@ describe("agent turn review navigation", () => {
 					</LixProvider>,
 				);
 			});
-			await waitForBackgroundReviewStartup();
-
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode("# Active after\n") })
-					.where("id", "=", fakeUuid("active-review-file"))
-					.execute();
-			});
-			const afterActive = await activeCommitId(lix);
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "active-range",
-					sourceId: "mcp",
-					beforeCommitId: beforeActive,
-					afterCommitId: afterActive,
-					startedAt: 1,
-					completedAt: 2,
-				});
-			});
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({
-							fileId: fakeUuid("active-review-file"),
-						}),
-					}),
-				]);
-			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-
-			const beforeQueued = await activeCommitId(lix);
-			await act(async () => {
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ content: new TextEncoder().encode("# Queued after\n") })
-					.where("id", "=", fakeUuid("queued-review-file"))
-					.execute();
-			});
-			const afterQueued = await activeCommitId(lix);
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "no-op-range",
-					sourceId: "mcp",
-					beforeCommitId: beforeQueued,
-					afterCommitId: beforeQueued,
-					startedAt: 3,
-					completedAt: 4,
-				});
-				await appendAgentTurnCommitRange(lix, {
-					id: "queued-range",
-					sourceId: "mcp",
-					beforeCommitId: beforeQueued,
-					afterCommitId: afterQueued,
-					startedAt: 5,
-					completedAt: 6,
-				});
-			});
-			const queuedFile = await findFilesTreeItem("queued.md");
-			await waitFor(() => {
-				expect(queuedFile).toHaveAttribute("data-item-git-status", "modified");
-			});
-			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-				expect.objectContaining({
-					state: expect.objectContaining({
-						fileId: fakeUuid("active-review-file"),
-					}),
-				}),
-			]);
-
-			// S2: Keep accepts every pending review — the active one and the
-			// deferred queued one — so review mode ends instead of advancing.
-			const keepActiveReview = await screen.findByRole("button", {
-				name: "Keep",
-			});
-			await act(async () => {
-				fireEvent.click(keepActiveReview);
-			});
-			await waitFor(() => {
-				expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();
-			});
-			expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-				expect.objectContaining({
-					state: expect.objectContaining({
-						fileId: fakeUuid("active-review-file"),
-					}),
-				}),
-			]);
-		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("hides ranges from a different configured review session", async () => {
-		const lix = await openLix();
-		const onEvent = vi.fn();
-		const sessionStateStore = createMemorySessionStateStore();
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			await qb(lix)
-				.insertInto("lix_file")
-				.values([
-					{
-						id: fakeUuid("session-stable-file"),
-						path: "/session-stable.md",
-						content: new TextEncoder().encode("# Session stable\n"),
-					},
-					{
-						id: fakeUuid("session-review-file"),
-						path: "/session-review.md",
-						content: new TextEncoder().encode("# Session before\n"),
-					},
-				])
-				.execute();
-			const beforeCommitId = await activeCommitId(lix);
-			await qb(lix)
-				.updateTable("lix_file")
-				.set({ content: new TextEncoder().encode("# Session after\n") })
-				.where("id", "=", fakeUuid("session-review-file"))
-				.execute();
-			const afterCommitId = await activeCommitId(lix);
-			await appendAgentTurnCommitRange(lix, {
-				id: "session-a-range",
-				sourceId: "mcp",
-				sessionId: "session-a",
-				beforeCommitId,
-				afterCommitId,
-				startedAt: 1,
-				completedAt: 2,
-			});
-			const atelier = createAtelier({
-				lix,
-				onEvent,
-				sessionStateStore,
-				reviewRangeSessionId: "session-b",
-			});
-			await act(async () => {
-				utils = render(
-					<LixProvider lix={lix}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} onEvent={onEvent} />
-						</Suspense>
-					</LixProvider>,
-				);
-			});
-
-			fireEvent.click(await findFilesTreeItem("session-review.md"));
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({
-							fileId: fakeUuid("session-review-file"),
-						}),
-					}),
-				]);
-			});
-			await act(async () => {
-				await Promise.resolve();
-			});
-			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
-
-			fireEvent.click(await findFilesTreeItem("session-stable.md"));
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({
-							fileId: fakeUuid("session-stable-file"),
-						}),
-					}),
-				]);
-			});
-			await act(async () => {
-				await appendAgentTurnCommitRange(lix, {
-					id: "session-b-range",
-					sourceId: "mcp",
-					sessionId: "session-b",
-					beforeCommitId,
-					afterCommitId,
-					startedAt: 3,
-					completedAt: 4,
-				});
-			});
-
-			await waitFor(() => {
-				expect(sessionStateStore.getSnapshot()?.panels.central.views).toEqual([
-					expect.objectContaining({
-						state: expect.objectContaining({
-							fileId: fakeUuid("session-review-file"),
-						}),
-					}),
-				]);
-			});
-			expect(await screen.findByRole("button", { name: "Keep" })).toBeVisible();
-			await waitFor(() => {
-				const openedReviewIds = onEvent.mock.calls.flatMap(([event]) =>
-					event.type === "diff_opened" ? [event.reviewId] : [],
-				);
-				expect(openedReviewIds).toHaveLength(1);
-				expect(JSON.parse(openedReviewIds[0]!)[1]).toEqual(["session-b-range"]);
-			});
-		} finally {
-			await act(async () => utils?.unmount());
-			await lix.close();
-		}
-	});
-
-	test("diff.open immediately reviews a newly added file exactly once", async () => {
-		const lix = await openLix();
-		const onEvent = vi.fn();
-		const atelier = createAtelier({ lix, onEvent });
-		let utils: ReturnType<typeof render> | undefined;
-		try {
-			const beforeCommitId = await activeCommitId(lix);
-			await act(async () => {
-				utils = render(
-					<LixProvider lix={lix}>
-						<Suspense fallback={null}>
-							<V2LayoutShell instance={atelier} onEvent={onEvent} />
-						</Suspense>
-					</LixProvider>,
-				);
-			});
 
 			await act(async () => {
 				await qb(lix)
 					.insertInto("lix_file")
 					.values({
-						id: fakeUuid("agent-created-file"),
-						path: "/agent-created.md",
-						content: new TextEncoder().encode("# Created by agent\n"),
+						id: fakeUuid("empty-agent-created-file"),
+						path: "/empty-agent-created.md",
+						content: new Uint8Array(),
 					})
 					.execute();
 			});
-			const afterCommitId = await activeCommitId(lix);
 
-			await act(async () => {
-				await atelier.diff.open({
-					beforeCommitId,
-					afterCommitId,
-					source: { id: "codex" },
-				});
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "1 file changed since checkpoint. Open changes review",
+				}),
+			);
+			const undoButton = await screen.findByRole("button", {
+				name: /^Undo/,
 			});
+			fireEvent.click(undoButton);
 
-			expect(await screen.findByRole("button", { name: "Undo" })).toBeVisible();
-			expect(
-				onEvent.mock.calls.filter(
-					([event]) =>
-						event.type === "document_viewed" &&
-						event.filePath === "/agent-created.md",
-				),
-			).toHaveLength(1);
-
-			// S2: Undo walks the whole working set back in one press.
-			await act(async () => {
-				fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-			});
 			await waitFor(async () => {
 				const file = await qb(lix)
 					.selectFrom("lix_file")
 					.select("id")
-					.where("id", "=", fakeUuid("agent-created-file"))
+					.where("id", "=", fakeUuid("empty-agent-created-file"))
 					.executeTakeFirst();
 				expect(file).toBeUndefined();
+			});
+			await waitFor(() => {
+				expect(screen.queryByRole("button", { name: /^Undo/ })).toBeNull();
 			});
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
 		}
 	});
-
-	test.each([
-		{
-			name: "Keep wins if Undo is clicked while resolution is pending",
-			action: "Keep",
-			competingAction: "Undo",
-			shouldExist: true,
-		},
-		{
-			name: "Undo removes the file",
-			action: "Undo",
-			competingAction: undefined,
-			shouldExist: false,
-		},
-	] as const)(
-		"$name when resolving a newly added empty Markdown file",
-		async ({ action, competingAction, shouldExist }) => {
-			const lix = await openLix();
-			const reviewStatusStore = createMemoryReviewStatusStore();
-			const atelier = createAtelier({ lix, reviewStatusStore });
-			let utils: ReturnType<typeof render> | undefined;
-			try {
-				const beforeCommitId = await activeCommitId(lix);
-				await act(async () => {
-					utils = render(
-						<LixProvider lix={lix}>
-							<Suspense fallback={null}>
-								<V2LayoutShell instance={atelier} />
-							</Suspense>
-						</LixProvider>,
-					);
-				});
-
-				await act(async () => {
-					await qb(lix)
-						.insertInto("lix_file")
-						.values({
-							id: fakeUuid("empty-agent-created-file"),
-							path: "/empty-agent-created.md",
-							content: new Uint8Array(),
-						})
-						.execute();
-				});
-				const afterCommitId = await activeCommitId(lix);
-
-				await act(async () => {
-					await atelier.diff.open({
-						beforeCommitId,
-						afterCommitId,
-						source: { id: "codex" },
-					});
-				});
-
-				const actionButton = await screen.findByRole("button", {
-					name: new RegExp(`^${action}`),
-				});
-				const competingActionButton = competingAction
-					? screen.getByRole("button", {
-							name: new RegExp(`^${competingAction}`),
-						})
-					: null;
-				fireEvent.click(actionButton);
-				if (competingActionButton) fireEvent.click(competingActionButton);
-
-				await waitFor(async () => {
-					const file = await qb(lix)
-						.selectFrom("lix_file")
-						.select("id")
-						.where("id", "=", fakeUuid("empty-agent-created-file"))
-						.executeTakeFirst();
-					expect(Boolean(file)).toBe(shouldExist);
-					expect(
-						screen.queryByRole("button", { name: new RegExp(`^${action}`) }),
-					).toBeNull();
-				});
-				await waitFor(async () => {
-					const branchId = await lix.activeBranchId();
-					expect(branchId).not.toBeNull();
-					expect(
-						await reviewStatusStore.loadResolvedReviewIds(branchId!),
-					).toHaveLength(1);
-				});
-				await waitFor(() => {
-					expect(
-						document.querySelector("[data-agent-turn-review-open='true']"),
-					).toBeNull();
-				});
-			} finally {
-				await act(async () => utils?.unmount());
-				await lix.close();
-			}
-		},
-	);
 });
 
 describe("installed extension lifecycle", () => {

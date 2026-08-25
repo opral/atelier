@@ -62,11 +62,6 @@ import type {
 	WorkingChangeRow,
 } from "@/queries";
 import type { Lix } from "@lix-js/sdk";
-import {
-	getPendingExternalWriteReviewPaths,
-	type ExternalWriteReviewFile,
-	useAgentTurnCommitRanges,
-} from "@/shell/external-write-review-history";
 
 type FilesViewContext = {
 	readonly openFile?: (args: {
@@ -84,7 +79,6 @@ type FilesViewContext = {
 	readonly activeFilePath?: string | null;
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
-	readonly reviewRangeSessionId?: string;
 	readonly reviewWorkingChanges?: boolean;
 	readonly reviewModeActive?: boolean;
 	readonly isPanelFocused?: boolean;
@@ -124,11 +118,6 @@ type FilesSelectionOverride = {
 	/** The active selection this local choice was made against. */
 	readonly activeSelectionKey: string | null;
 	readonly selection: FilesSelection | null;
-};
-
-type ResolvedPendingReviewPaths = {
-	readonly key: string;
-	readonly paths: ReadonlySet<string>;
 };
 
 const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
@@ -325,14 +314,6 @@ function FilesViewContent({
 			}),
 		[context?.showHiddenFiles, mergedEntries],
 	);
-	const agentReviewPaths = usePendingExternalWriteReviewPaths(
-		lix,
-		nodes,
-		context?.activeBranchId ?? "",
-		context?.resolvedReviewIds ?? [],
-		context?.reviewRangeSessionId,
-		context?.reviewModeActive === true && context.reviewWorkingChanges !== true,
-	);
 	const workingChangePaths = useMemo(() => {
 		return new Set(
 			fileWorkingChanges.flatMap((change) =>
@@ -341,10 +322,8 @@ function FilesViewContent({
 		);
 	}, [fileWorkingChanges]);
 	const pendingReviewPaths =
-		context?.reviewModeActive === true
-			? context.reviewWorkingChanges === true
-				? workingChangePaths
-				: agentReviewPaths
+		context?.reviewModeActive === true && context.reviewWorkingChanges === true
+			? workingChangePaths
 			: EMPTY_REVIEW_PATHS;
 	const reviewChangeCounts = useMemo(() => {
 		const countsByFileId = new Map<string, number>();
@@ -1488,96 +1467,6 @@ function NewMenuItem({
 	);
 }
 
-function usePendingExternalWriteReviewPaths(
-	lix: Lix,
-	nodes: readonly FilesystemTreeNode[],
-	activeBranchId: string,
-	resolvedReviewIds: readonly string[],
-	reviewRangeSessionId?: string,
-	enabled = true,
-): ReadonlySet<string> {
-	const reviewableFiles = useMemo(
-		() => collectReviewableTreeFiles(nodes),
-		[nodes],
-	);
-	const { rangeValues, ranges } = useAgentTurnCommitRanges(
-		activeBranchId,
-		reviewRangeSessionId,
-		enabled,
-	);
-	const reviewableFilesKey = useMemo(
-		() =>
-			JSON.stringify(reviewableFiles.map(({ fileId, path }) => [fileId, path])),
-		[reviewableFiles],
-	);
-	const reviewKey = JSON.stringify([
-		activeBranchId,
-		reviewRangeSessionId ?? null,
-		rangeValues,
-		[...resolvedReviewIds].sort(),
-		reviewableFilesKey,
-	]);
-	const shouldResolve =
-		enabled && reviewableFiles.length > 0 && ranges.length > 0;
-	const [resolved, setResolved] = useState<ResolvedPendingReviewPaths | null>(
-		null,
-	);
-
-	useEffect(() => {
-		if (!shouldResolve) return;
-		let cancelled = false;
-		void getPendingExternalWriteReviewPaths(
-			lix,
-			reviewableFiles,
-			ranges,
-			new Set(resolvedReviewIds),
-		)
-			.then((paths) => {
-				if (!cancelled) setResolved({ key: reviewKey, paths });
-			})
-			.catch((error: unknown) => {
-				if (cancelled) return;
-				console.warn("Failed to resolve pending file reviews", error);
-				setResolved({ key: reviewKey, paths: EMPTY_REVIEW_PATHS });
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		lix,
-		ranges,
-		resolvedReviewIds,
-		reviewableFiles,
-		reviewKey,
-		shouldResolve,
-	]);
-
-	if (!shouldResolve || resolved?.key !== reviewKey) {
-		return EMPTY_REVIEW_PATHS;
-	}
-	return resolved.paths;
-}
-
-function collectReviewableTreeFiles(
-	nodes: readonly FilesystemTreeNode[],
-): ExternalWriteReviewFile[] {
-	const files: ExternalWriteReviewFile[] = [];
-	const visit = (node: FilesystemTreeNode) => {
-		if (node.type === "file") {
-			if (node.source !== "watched") {
-				files.push({ fileId: node.id, path: node.path });
-			}
-			return;
-		}
-		for (const child of node.children) {
-			visit(child);
-		}
-	};
-	for (const node of nodes) {
-		visit(node);
-	}
-	return files;
-}
 
 function sameStringArray(
 	left: readonly string[],
@@ -1633,8 +1522,9 @@ export const extension = createReactExtensionDefinition({
 				activeFilePath: atelier.documents.activeFilePath,
 				activeBranchId: atelier.branches.activeId,
 				resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-				reviewRangeSessionId: atelier.reviews.rangeSessionId,
-				reviewWorkingChanges: atelier.reviews.mode === "working-changes",
+				reviewWorkingChanges:
+					atelier.reviews.active === true &&
+					atelier.reviews.historicalCommitId === undefined,
 				reviewModeActive: atelier.reviews.active,
 				isPanelFocused: view.isFocused,
 				panelSide: view.panel,

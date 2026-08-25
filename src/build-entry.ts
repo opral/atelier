@@ -12,16 +12,11 @@ export {
 	createMemoryPreferencesStore,
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
-	recordAgentTurnCommitRange,
 	simulateMarkdownAgentWorkflow,
 } from "./index";
 export type {
-	AgentTurnCommitRange,
 	AtelierBuiltinExtensionId,
 	AtelierBranchSession,
-	AtelierDiffApi,
-	AtelierDiffOpenOptions,
-	AtelierDiffSource,
 	AtelierDocumentsApi,
 	AtelierDocumentOpenOptions,
 	AtelierInstance,

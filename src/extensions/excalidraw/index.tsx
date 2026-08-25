@@ -108,11 +108,7 @@ function EditableExcalidrawView({
 		path: resolvedPath,
 		activeBranchId: atelier.branches.activeId,
 		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-		reviewRangeSessionId: atelier.reviews.rangeSessionId,
 		enabled: atelier.reviews.isOpen,
-		reviewMode:
-			atelier.reviews.mode ??
-			(atelier.reviews.autoAccept ? "working-changes" : "agent-turn"),
 	});
 	const reviewData = useExternalWriteReviewData(review);
 	const reviewText = reviewData

@@ -86,7 +86,6 @@ type CsvViewProps = {
 	readonly fileId: string;
 	readonly activeBranchId?: string;
 	readonly resolvedReviewIds?: readonly string[];
-	readonly reviewRangeSessionId?: string;
 	readonly filePath?: string;
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
@@ -112,7 +111,6 @@ type CsvViewProps = {
 	}) => Promise<void>;
 	readonly autoAcceptReviews?: boolean;
 	readonly reviewEnabled?: boolean;
-	readonly reviewMode?: "agent-turn" | "working-changes";
 	readonly reviewNavigation?: ExternalWriteReviewNavigation;
 	readonly onExitReview?: () => void;
 };
@@ -183,7 +181,6 @@ export function CsvView({
 	fileId,
 	activeBranchId,
 	resolvedReviewIds,
-	reviewRangeSessionId,
 	filePath,
 	isActiveView = true,
 	isPanelFocused = true,
@@ -199,7 +196,6 @@ export function CsvView({
 	onRejectReview,
 	autoAcceptReviews,
 	reviewEnabled,
-	reviewMode,
 	reviewNavigation,
 	onExitReview,
 }: CsvViewProps) {
@@ -212,7 +208,6 @@ export function CsvView({
 				fileId={fileId}
 				activeBranchId={resolvedActiveBranchId}
 				resolvedReviewIds={resolvedReviewIds}
-				reviewRangeSessionId={reviewRangeSessionId}
 				filePath={filePath}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
@@ -228,7 +223,6 @@ export function CsvView({
 				onRejectReview={onRejectReview}
 				autoAcceptReviews={autoAcceptReviews}
 				reviewEnabled={reviewEnabled}
-				reviewMode={reviewMode}
 				reviewNavigation={reviewNavigation}
 				onExitReview={onExitReview}
 			/>
@@ -300,12 +294,10 @@ function CsvLiveViewData({
 	registerExternalWriteReview,
 	activeBranchId = "",
 	resolvedReviewIds,
-	reviewRangeSessionId,
 	readOnly = false,
 	isActiveView = true,
 	autoAcceptReviews,
-	reviewEnabled = true,
-	reviewMode,
+	reviewEnabled = false,
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileRow?: CsvFileRow | undefined;
 }) {
@@ -314,10 +306,7 @@ function CsvLiveViewData({
 		path: fileRow?.path,
 		activeBranchId,
 		resolvedReviewIds,
-		reviewRangeSessionId,
-		enabled: reviewEnabled,
-		reviewMode:
-			reviewMode ?? (autoAcceptReviews ? "working-changes" : "agent-turn"),
+			enabled: reviewEnabled,
 	});
 
 	if (!fileRow) {
@@ -1546,7 +1535,6 @@ function buildHistoricalCsvFile(args: {
 			}),
 			beforeCommitId: args.revision.beforeCommitId ?? "",
 			afterCommitId: args.revision.afterCommitId ?? "",
-			agentTurnRangeIds: [],
 		},
 		reviewData: {
 			beforeData,
@@ -1584,7 +1572,6 @@ export const extension = createReactExtensionDefinition({
 			fileId={view.state.fileId as string}
 			activeBranchId={atelier.branches.activeId}
 			resolvedReviewIds={atelier.reviews.resolvedReviewIds}
-			reviewRangeSessionId={atelier.reviews.rangeSessionId}
 			filePath={view.state.filePath as string | undefined}
 			readOnly={atelier.readOnly}
 			beforeCommitId={
@@ -1615,10 +1602,10 @@ export const extension = createReactExtensionDefinition({
 						onAcceptReview: atelier.reviews.accept,
 						onRejectReview: atelier.reviews.reject,
 						autoAcceptReviews:
-							atelier.reviews.mode === "working-changes" ||
+							(atelier.reviews.active === true &&
+								atelier.reviews.historicalCommitId === undefined) ||
 							atelier.reviews.autoAccept,
 						reviewEnabled: atelier.reviews.isOpen,
-						reviewMode: atelier.reviews.mode,
 						reviewNavigation: atelier.reviews.navigation,
 						onExitReview: atelier.reviews.exit,
 					})}

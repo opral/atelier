@@ -9,7 +9,6 @@ const review = (reviewId: string): ExternalWriteReview => ({
 	reviewId,
 	beforeCommitId: "before",
 	afterCommitId: "after",
-	agentTurnRangeIds: [],
 });
 
 describe("ExternalWriteReviewRegistration", () => {

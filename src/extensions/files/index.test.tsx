@@ -12,7 +12,6 @@ import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { Lix } from "@lix-js/sdk";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import {
 	deriveCsvPathFromStem,
 	deriveGenericFilePath,
@@ -1197,17 +1196,8 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
 		await insertFile(lix, fakeUuid("review-file"), "/review.md", "before");
-		const beforeCommitId = await activeCommitId(lix);
+		await lix.createCheckpoint();
 		await insertFile(lix, fakeUuid("review-file"), "/review.md", "after");
-		const afterCommitId = await activeCommitId(lix);
-		await appendAgentTurnCommitRange(lix, {
-			id: "files-review-range",
-			sourceId: "codex",
-			beforeCommitId,
-			afterCommitId,
-			startedAt: 1,
-			completedAt: 2,
-		});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, { activeBranchId });
@@ -1222,7 +1212,11 @@ describe("FilesView", () => {
 			view?.rerender(
 				<FilesViewFixture
 					lix={lix}
-					context={{ activeBranchId, reviewModeActive: true }}
+					context={{
+						activeBranchId,
+						reviewModeActive: true,
+						reviewWorkingChanges: true,
+					}}
 				/>,
 			);
 		});
@@ -1235,16 +1229,7 @@ describe("FilesView", () => {
 
 		await act(async () => {
 			view?.rerender(
-				<FilesViewFixture
-					lix={lix}
-					context={{
-						activeBranchId,
-						reviewModeActive: true,
-						resolvedReviewIds: [
-							`${fakeUuid("review-file")}:files-review-range`,
-						],
-					}}
-				/>,
+				<FilesViewFixture lix={lix} context={{ activeBranchId }} />,
 			);
 		});
 		await waitFor(() => {
