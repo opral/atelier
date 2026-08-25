@@ -609,6 +609,9 @@ function SidebarSectionPicker({
 					type="button"
 					aria-label={`${activeLabel} panel view menu`}
 					data-attr="panel-section-picker"
+					// Mouse clicks never take focus, so a later keypress cannot
+					// paint the keyboard focus ring on a pointer interaction.
+					onMouseDown={(event) => event.preventDefault()}
 					// Caption, not chrome: no fill, no border. It darkens on hover and
 					// while open, which is the whole affordance. px-1.5 puts the label
 					// text on the sidebar's content column — the same x as the tree
@@ -628,6 +631,10 @@ function SidebarSectionPicker({
 				// the sidebar's content ambiguity in place.
 				align="start"
 				sideOffset={2}
+				// Closing does not hand focus back to the trigger: the restore is
+				// programmatic and would paint the keyboard focus ring after any
+				// pointer-driven open/close. Tabbing to the trigger still rings.
+				onCloseAutoFocus={(event) => event.preventDefault()}
 				className="w-[212px] rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg"
 			>
 				{/* Open views and openable views read as one list: the picker answers

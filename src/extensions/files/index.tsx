@@ -1461,6 +1461,7 @@ const CompactNewButton = forwardRef<
 			type="button"
 			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-[7px] px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 			data-attr="file-new"
+			onMouseDown={(event) => event.preventDefault()}
 			disabled={disabled}
 			title={title}
 			{...props}
