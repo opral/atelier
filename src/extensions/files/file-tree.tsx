@@ -215,7 +215,21 @@ const FILE_TREE_UNSAFE_CSS = `
 	   plus = added, minus = deleted, plain = modified. 10px: the knockout
 	   legibility floor, sized down for the compact tree rows (the history
 	   panel runs the full 12px). The knockout is the panel ground layered
-	   over the status color with gradients. */
+	   over the status color with gradients. The glyph overlays the idle
+	   action lane so it hugs the row edge like the history listings; the
+	   hover swaps it for the row's … trigger. */
+	[data-type='item'] > [data-item-section='git'] {
+		position: absolute;
+		right: 7px;
+		top: 50%;
+		transform: translateY(-50%);
+	}
+
+	[data-type='item']:hover > [data-item-section='git'],
+	[data-type='item']:focus-within > [data-item-section='git'] {
+		opacity: 0;
+	}
+
 	[data-item-git-status='modified'] > [data-item-section='git'] > span {
 		width: 10px;
 		height: 10px;

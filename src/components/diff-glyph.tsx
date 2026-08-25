@@ -10,9 +10,9 @@
  *   moved    dot + chevron   slate blue
  *   conflict split dot       purple (reserved — no producer until merges)
  *
- * Internal detail needs ≥10px to stay crisp — 10px is the one size every
- * surface uses; below that (the 7px status bar dot) callers keep a plain
- * color dot and let these views carry the types.
+ * Internal detail needs ≥10px to stay crisp. Listings run 12px; the compact
+ * file tree runs the 10px floor; below that (the 7px status bar dot)
+ * callers keep a plain color dot and let these views carry the types.
  */
 
 export type DiffGlyphKind =
@@ -40,7 +40,7 @@ const GLYPH_TITLE: Record<DiffGlyphKind, string> = {
 
 export function DiffGlyph({
 	kind,
-	size = 10,
+	size = 12,
 	dimmed = false,
 	className,
 }: {
