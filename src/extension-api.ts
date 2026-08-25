@@ -247,6 +247,8 @@ export type AtelierDiffFile = {
 	readonly id: string;
 	readonly path: string;
 	readonly changeKind: "added" | "modified" | "removed";
+	/** Set when a modified file's side paths differ: a move/rename. */
+	readonly movedFromPath?: string;
 	/** Present when the session reviews external writes (mutable target). */
 	readonly review?: {
 		readonly id: string;

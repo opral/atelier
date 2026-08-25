@@ -602,6 +602,8 @@ type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
 	readonly checkpointChangeKind?: "added" | "modified" | "removed";
+	/** Set when a modified file's side paths differ: a move/rename. */
+	readonly movedFromPath?: string;
 };
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
@@ -740,7 +742,8 @@ export async function selectCheckpointFiles(
 ): Promise<LixFileForOpen[]> {
 	const result = await lix.execute(
 		`SELECT row_pk ->> 0 AS id, diff_type,
-		        coalesce(to_path, from_path) AS path
+		        coalesce(to_path, from_path) AS path,
+		        from_path, to_path
 		 FROM lix_diff('lix_file', $1, $2)
 		 ORDER BY coalesce(to_path, from_path)`,
 		[previousCommitId, commitId],
@@ -749,13 +752,26 @@ export async function selectCheckpointFiles(
 		const id = row.get("id");
 		const path = row.get("path");
 		const diffType = row.get("diff_type");
-		return typeof id === "string" &&
-			typeof path === "string" &&
-			(diffType === "added" ||
-				diffType === "modified" ||
-				diffType === "removed")
-			? [{ id, path, checkpointChangeKind: diffType }]
-			: [];
+		if (
+			typeof id !== "string" ||
+			typeof path !== "string" ||
+			(diffType !== "added" && diffType !== "modified" && diffType !== "removed")
+		) {
+			return [];
+		}
+		const movedFromPath = movedFromSidePaths(
+			diffType,
+			row.get("from_path"),
+			row.get("to_path"),
+		);
+		return [
+			{
+				id,
+				path,
+				checkpointChangeKind: diffType,
+				...(movedFromPath ? { movedFromPath } : {}),
+			},
+		];
 	});
 }
 
@@ -782,6 +798,20 @@ export async function selectFilesAtCommit(
 	});
 }
 
+
+/** A modified row whose side paths differ is a move/rename (display only). */
+function movedFromSidePaths(
+	diffType: "added" | "modified" | "removed",
+	fromPath: unknown,
+	toPath: unknown,
+): string | undefined {
+	return diffType === "modified" &&
+		typeof fromPath === "string" &&
+		typeof toPath === "string" &&
+		fromPath !== toPath
+		? fromPath
+		: undefined;
+}
 
 export async function resolveLixFileForOpen({
 	lix,
@@ -3553,13 +3583,19 @@ function LayoutShellLoadedContentResolved({
 						handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
 					);
 				})
-				.map(
-					(file): LixFileForOpen => ({
+				.map((file): LixFileForOpen => {
+					const movedFromPath = movedFromSidePaths(
+						file.diff_type,
+						file.from_path,
+						file.to_path,
+					);
+					return {
 						id: file.id,
 						path: file.path,
 						checkpointChangeKind: file.diff_type,
-					}),
-				);
+						...(movedFromPath ? { movedFromPath } : {}),
+					};
+				});
 			const firstChangedFile = checkpointFiles[0];
 			const removedFileIds: ReadonlySet<string> = new Set(
 				workingDiffs
@@ -3868,6 +3904,7 @@ function LayoutShellLoadedContentResolved({
 			id: file.id,
 			path: file.path,
 			changeKind: file.checkpointChangeKind ?? "modified",
+			...(file.movedFromPath ? { movedFromPath: file.movedFromPath } : {}),
 		});
 		if (historicalReview?.range) {
 			return {

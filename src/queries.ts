@@ -25,6 +25,9 @@ export type FileDiffRow = {
 	/** Resolved for the side that has one: to for added/modified, from for removed. */
 	path: string;
 	row_count: number;
+	/** Side paths: a modified row whose sides differ is a move/rename. */
+	from_path: string | null;
+	to_path: string | null;
 };
 
 export type CheckpointRow = {
@@ -96,6 +99,8 @@ export function selectWorkingFileDiffs(
 			"diff_type",
 			sql<string>`coalesce(to_path, from_path)`.as("path"),
 			"row_count",
+			"from_path",
+			"to_path",
 		])
 		.orderBy(sql`coalesce(to_path, from_path)`, "asc")
 		.$castTo<FileDiffRow>();

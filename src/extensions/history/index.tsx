@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
 import type { AtelierDiffSession } from "@/extension-api";
+import { DiffGlyph } from "@/components/diff-glyph";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { useQuery } from "@/lib/lix-react";
 import {
@@ -157,7 +158,15 @@ function WorkingChangeFileList({
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}
 						</span>
-						<ChangeKindDot changeKind={file.changeKind} />
+						{file.movedFromPath ? (
+							<span className="truncate text-[var(--color-text-quaternary)]">
+								· {movedFromHint(file.movedFromPath, file.path)}
+							</span>
+						) : null}
+						<ChangeKindDot
+							changeKind={file.changeKind}
+							moved={Boolean(file.movedFromPath)}
+						/>
 					</button>
 				</li>
 			))}
@@ -390,7 +399,15 @@ function CheckpointFileList({
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}
 						</span>
-						<ChangeKindDot changeKind={file.changeKind} />
+						{file.movedFromPath ? (
+							<span className="truncate text-[var(--color-text-quaternary)]">
+								· {movedFromHint(file.movedFromPath, file.path)}
+							</span>
+						) : null}
+						<ChangeKindDot
+							changeKind={file.changeKind}
+							moved={Boolean(file.movedFromPath)}
+						/>
 					</button>
 				</li>
 			))}
@@ -399,35 +416,41 @@ function CheckpointFileList({
 }
 
 /**
- * The diff palette's border tones: green = added, red = removed, brand
- * orange = modified. Dots use the brighter border companion of the diff
- * text colors — tiny marks lose perceived chroma.
+ * Shape + color: the dot-hybrid glyphs (design 23d). Added is dot+plus,
+ * removed dot+minus, modified the plain dot, moved dot+chevron — so the
+ * types survive grayscale and color blindness.
  */
-function changeKindDotClass(
-	changeKind: "added" | "modified" | "removed",
-): string {
-	if (changeKind === "added") return "bg-[var(--color-border-diff-added)]";
-	if (changeKind === "removed") return "bg-[var(--color-border-diff-removed)]";
-	return "bg-[var(--color-icon-brand)]";
-}
-
 function ChangeKindDot({
 	changeKind,
+	moved = false,
 }: {
 	readonly changeKind: "added" | "modified" | "removed";
+	readonly moved?: boolean;
 }) {
 	return (
-		<span
-			title={
-				changeKind === "added"
-					? "Added"
-					: changeKind === "removed"
-						? "Removed"
-						: "Modified"
-			}
-			className={`ml-auto size-1.5 shrink-0 rounded-full ${changeKindDotClass(changeKind)}`}
+		<DiffGlyph
+			kind={moved && changeKind === "modified" ? "moved" : changeKind}
+			size={12}
+			className="ml-auto shrink-0"
 		/>
 	);
+}
+
+/**
+ * Where the file came from: the old directory for a cross-directory move,
+ * the old name for a rename in place.
+ */
+function movedFromHint(movedFromPath: string, path: string): string {
+	const fromSegments = movedFromPath.split("/").filter(Boolean);
+	const toSegments = path.split("/").filter(Boolean);
+	const fromName = fromSegments.pop() ?? movedFromPath;
+	toSegments.pop();
+	const fromDir = fromSegments.join("/");
+	const toDir = toSegments.join("/");
+	if (fromDir !== toDir) {
+		return fromDir.length > 0 ? `${fromDir}/` : "/";
+	}
+	return fromName;
 }
 
 function fileNameFromHistoryPath(path: string): string {

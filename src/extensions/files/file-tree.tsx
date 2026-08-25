@@ -211,15 +211,17 @@ const FILE_TREE_UNSAFE_CSS = `
 		font-size: 0;
 	}
 
+	/* Dot-hybrid glyphs (design 23d): the dot silhouette with a knockout —
+	   plus = added, minus = deleted, plain = modified. 12px so the internal
+	   detail stays crisp; the knockout is the panel ground layered over the
+	   status color with gradients. */
 	[data-item-git-status='modified'] > [data-item-section='git'] > span {
-		width: 6px;
-		height: 6px;
+		width: 12px;
+		height: 12px;
 		border-radius: 999px;
 		background: currentColor;
 	}
 
-	/* Added and deleted match: a dot in the status color instead of the
-	   letter, while the label keeps the status color (green / red). */
 	[data-item-git-status='added'] > [data-item-section='git'],
 	[data-item-git-status='deleted'] > [data-item-section='git'] {
 		font-size: 0;
@@ -227,20 +229,25 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	[data-item-git-status='added'] > [data-item-section='git'] > span,
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
-		width: 6px;
-		height: 6px;
+		width: 12px;
+		height: 12px;
 		border-radius: 999px;
-		background: currentColor;
 	}
 
-	/* Tiny marks lose perceived chroma: the dots take the diff palette's
-	   brighter border tone so they read as the same hue as the labels. */
 	[data-item-git-status='added'] > [data-item-section='git'] > span {
-		background: var(--color-border-diff-added);
+		background:
+			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
+				1.7px 4.8px no-repeat,
+			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
+				4.8px 1.7px no-repeat,
+			var(--color-border-diff-added);
 	}
 
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
-		background: var(--color-border-diff-removed);
+		background:
+			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
+				4.8px 1.7px no-repeat,
+			var(--color-border-diff-removed);
 	}
 
 	[data-item-git-status='recreated'] {

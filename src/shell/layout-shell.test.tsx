@@ -1310,7 +1310,7 @@ describe("diff review navigation", () => {
 			await act(async () => {
 				fireEvent.click(
 					within(historicalFiles).getByRole("button", {
-						name: "historical-name.md",
+						name: /^historical-name\.md/,
 					}),
 				);
 			});
@@ -1325,7 +1325,7 @@ describe("diff review navigation", () => {
 			await act(async () => {
 				fireEvent.click(
 					within(historicalFiles).getByRole("button", {
-						name: "historical-delete.md",
+						name: /^historical-delete\.md/,
 					}),
 				);
 			});
@@ -1409,7 +1409,7 @@ describe("diff review navigation", () => {
 
 			fireEvent.click(
 				within(historicalFiles).getByRole("button", {
-					name: "pending-history.md",
+					name: /^pending-history\.md/,
 				}),
 			);
 			await historyStarted;
@@ -1531,7 +1531,7 @@ describe("diff review navigation", () => {
 			});
 			await act(async () => {
 				fireEvent.click(
-					within(checkpointFiles).getByRole("button", { name: "added.md" }),
+					within(checkpointFiles).getByRole("button", { name: /^added\.md/ }),
 				);
 			});
 			await waitFor(() => {
