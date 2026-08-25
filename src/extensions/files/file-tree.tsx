@@ -1521,9 +1521,10 @@ function treeHostStyle(
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
-		// Compact rows sit on the panel edge: icons share the same x as the
-		// sidebar section label and the top bar's mark.
-		"--trees-item-padding-x-override": isSpacious ? "14px" : "0px",
+		// Compact rows keep a 6px inset inside their hover pill; the tree's
+		// wrapper shifts left by the same 6px, so icons sit on the panel edge —
+		// the same x as the sidebar section label and the top bar's mark.
+		"--trees-item-padding-x-override": isSpacious ? "14px" : "6px",
 		// Reference rows breathe 8px between the icon slot and the label; the
 		// action lane shrinks to the 12px ellipsis so labels truncate later.
 		...(isSpacious
