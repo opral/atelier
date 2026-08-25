@@ -32,14 +32,34 @@ function assignCsvRowKeys(
 		availableBeforeRows.set(signature, entries);
 	}
 	const usedKeys = new Set<string>();
-	return rows.map((row, index) => {
+	const keyed: (KeyedCsvRow | null)[] = rows.map((row) => {
 		const signature = csvRowIdentity(row);
 		const match = availableBeforeRows
 			.get(signature)
 			?.find((entry) => !usedKeys.has(entry.diffKey));
-		const diffKey = match?.diffKey ?? `${unmatchedPrefix}_row_${index}`;
+		if (!match) return null;
+		usedKeys.add(match.diffKey);
+		return { ...row, diffKey: match.diffKey };
+	});
+	// Rows without an identity match pair positionally with the leftover
+	// before-rows, in order: an edit to a row's first cell then diffs
+	// word-by-word inside its cells instead of degrading into an unrelated
+	// added row plus a removed one.
+	const leftoverBeforeRows = beforeRows.filter(
+		(row) => !usedKeys.has(row.diffKey),
+	);
+	let leftoverIndex = 0;
+	return keyed.map((row, index) => {
+		if (row) return row;
+		const fallback = leftoverBeforeRows[leftoverIndex];
+		if (fallback) {
+			leftoverIndex += 1;
+			usedKeys.add(fallback.diffKey);
+			return { ...(rows[index] as CsvRow), diffKey: fallback.diffKey };
+		}
+		const diffKey = `${unmatchedPrefix}_row_${index}`;
 		usedKeys.add(diffKey);
-		return { ...row, diffKey };
+		return { ...(rows[index] as CsvRow), diffKey };
 	});
 }
 
@@ -71,7 +91,10 @@ function renderStaticCsvTable(
 			)}" data-diff-show-when-removed="true">${cells}</tr>`;
 		})
 		.join("");
-	return `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+	// The tbody carries a diff key so html-diff can anchor removed rows back
+	// inside it; without one they fall to the document root, and the browser
+	// re-parents the orphan <tr> into stray text after the table.
+	return `<table><thead><tr>${header}</tr></thead><tbody data-diff-key="rows">${body}</tbody></table>`;
 }
 
 function csvRowIdentity(row: CsvRow): string {

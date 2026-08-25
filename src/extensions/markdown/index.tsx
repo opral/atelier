@@ -850,6 +850,17 @@ function buildHistoricalMarkdownFile(args: {
 		};
 	}
 
+	// A pinned span with no snapshot on either side means the file does not
+	// exist anywhere in the compared range — that renders as the temporal
+	// absent state, not as an empty document diff.
+	if (
+		!args.beforeSnapshot &&
+		!args.afterSnapshot &&
+		args.revision.afterCommitId !== null
+	) {
+		return null;
+	}
+
 	const beforeData = args.beforeSnapshot
 		? decodeFileDataToBytes(args.beforeSnapshot.content)
 		: EMPTY_FILE_DATA;

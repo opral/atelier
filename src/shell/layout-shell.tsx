@@ -42,6 +42,7 @@ import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { isMacPlatform } from "@/lib/platform";
 import {
 	createCheckpointForFiles,
+	restoreCheckpoint,
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
 } from "@/lib/lix-diff-commands";
@@ -1578,7 +1579,19 @@ function LayoutShellLoadedContentResolved({
 		async (selectedFileIds: readonly string[]) => {
 			if (!historicalReview?.range || selectedFileIds.length === 0) return;
 			const commitId = historicalReview.range.afterCommitId;
-			await restoreCheckpointFiles(lix, commitId, selectedFileIds);
+			// A full selection means "make the repository look like this
+			// checkpoint": the exact restore also removes files created after
+			// it, which the span's file list cannot name. A partial selection
+			// stays file-scoped.
+			const selectedSet = new Set(selectedFileIds);
+			const restoresEverything = historicalReview.files.every((file) =>
+				selectedSet.has(file.id),
+			);
+			if (restoresEverything) {
+				await restoreCheckpoint(lix, commitId);
+			} else {
+				await restoreCheckpointFiles(lix, commitId, selectedFileIds);
+			}
 			const selected = new Set(selectedFileIds);
 			const remainingFiles = historicalReview.files.filter(
 				(file) => !selected.has(file.id),

@@ -4,6 +4,7 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { selectLatestCheckpoint, selectWorkingFileDiffs } from "@/queries";
 import {
 	createCheckpointForFiles,
+	restoreCheckpoint,
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
 } from "./lix-diff-commands";
@@ -126,6 +127,28 @@ describe("Lix SQL diff commands", () => {
 				await restoreCheckpointFiles(lix, checkpoint.commitId, [fileId]),
 			).toBeGreaterThan(0);
 			expect(await readFile(lix, fileId)).toBe("checkpoint data");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("a full restore also removes files created after the checkpoint", async () => {
+		const lix = await openLix();
+		try {
+			const keptId = fakeUuid("full-restore-kept");
+			const laterId = fakeUuid("full-restore-later");
+			await writeFile(lix, keptId, "/kept.md", "checkpoint data");
+			const checkpoint = await lix.createCheckpoint();
+			await writeFile(lix, keptId, "/kept.md", "current data");
+			await writeFile(lix, laterId, "/later.md", "added afterwards");
+			await lix.createCheckpoint();
+
+			await restoreCheckpoint(lix, checkpoint.commitId);
+
+			expect(await readFile(lix, keptId)).toBe("checkpoint data");
+			// The later-added file cannot appear in the span's file list, so
+			// only the exact restore can delete it.
+			expect(await readFile(lix, laterId)).toBeNull();
 		} finally {
 			await lix.close();
 		}

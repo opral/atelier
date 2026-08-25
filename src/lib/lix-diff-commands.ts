@@ -76,6 +76,20 @@ export async function revertWorkingChangesForFiles(
 	return result.rowsAffected;
 }
 
+/**
+ * Restores the exact repository state of a checkpoint — including deleting
+ * files created after it, which a file-scoped selection over the reviewed
+ * span can never see.
+ */
+export async function restoreCheckpoint(
+	lix: Lix,
+	checkpointCommitId: string,
+): Promise<void> {
+	await lix.execute("INSERT INTO lix_restore (commit_id) VALUES ($1)", [
+		checkpointCommitId,
+	]);
+}
+
 export async function restoreCheckpointFiles(
 	lix: Lix,
 	checkpointCommitId: string,
