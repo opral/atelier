@@ -206,7 +206,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-item-git-status='modified'] > [data-item-section='git'] {
-		color: var(--color-warning-600);
+		color: var(--color-icon-brand);
 		font-size: 0;
 	}
 
@@ -250,7 +250,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-item-contains-git-change='true'] > [data-item-section='git'] {
-		color: var(--color-warning-600);
+		color: var(--color-icon-brand);
 		opacity: 0.75;
 	}
 
@@ -1517,7 +1517,7 @@ function treeHostStyle(
 		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",
 		"--trees-font-family-override": "inherit",
 		"--trees-font-size-override": isSpacious ? "15px" : "13px",
-		"--trees-git-modified-color-override": "var(--color-warning-600)",
+		"--trees-git-modified-color-override": "var(--color-icon-brand)",
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
