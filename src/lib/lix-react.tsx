@@ -274,13 +274,49 @@ function rowsEqual(a: unknown, b: unknown): boolean {
 	}
 }
 
+/**
+ * LIX_STORAGE_READ_EXPIRED means a coherent read raced a concurrent commit;
+ * the engine documents it as retryable by reopening the read against a fresh
+ * snapshot. Under two-client sync this happens routinely, so the query layer
+ * retries a bounded number of times instead of surfacing a fatal error
+ * boundary.
+ */
+const EXPIRED_READ_RETRY_LIMIT = 3;
+
+function isExpiredReadError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	const code =
+		"code" in error ? (error as Error & { code?: unknown }).code : undefined;
+	return (
+		code === "LIX_STORAGE_READ_EXPIRED" ||
+		error.message.includes("invalidated by a concurrent commit")
+	);
+}
+
+async function executeWithExpiredReadRetry<TRow>(
+	run: () => Promise<TRow[]>,
+): Promise<TRow[]> {
+	let attempt = 0;
+	for (;;) {
+		try {
+			return await run();
+		} catch (error) {
+			attempt += 1;
+			if (attempt > EXPIRED_READ_RETRY_LIMIT || !isExpiredReadError(error)) {
+				throw error;
+			}
+			await new Promise((resolve) => setTimeout(resolve, attempt * 50));
+		}
+	}
+}
+
 function getQueryCacheEntry<TRow>(
 	cacheKey: string,
 	builder: QueryLike<TRow>,
 ): QueryCacheEntry<TRow> {
 	const cached = queryCache.get(cacheKey) as QueryCacheEntry<TRow> | undefined;
 	if (cached) {
-		cached.execute = () => builder.execute();
+		cached.execute = () => executeWithExpiredReadRetry(() => builder.execute());
 		return cached;
 	}
 
@@ -288,7 +324,7 @@ function getQueryCacheEntry<TRow>(
 		promise: Promise.resolve([]),
 		snapshot: { status: "pending" },
 		listeners: new Set(),
-		execute: () => builder.execute(),
+		execute: () => executeWithExpiredReadRetry(() => builder.execute()),
 		startObservation: undefined,
 		stopObservation: undefined,
 		releaseGeneration: 0,
@@ -332,14 +368,14 @@ function getCommittedQueryCacheEntry<TRow>(args: {
 		| QueryCacheEntry<TRow>
 		| undefined;
 	if (cached) {
-		cached.execute = () => args.builder.execute();
+		cached.execute = () => executeWithExpiredReadRetry(() => args.builder.execute());
 		return cached;
 	}
 	const entry: QueryCacheEntry<TRow> = {
 		promise: Promise.resolve([]),
 		snapshot: { status: "pending" },
 		listeners: new Set(),
-		execute: () => args.builder.execute(),
+		execute: () => executeWithExpiredReadRetry(() => args.builder.execute()),
 		startObservation: undefined,
 		stopObservation: undefined,
 		releaseGeneration: 0,
