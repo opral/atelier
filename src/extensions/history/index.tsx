@@ -25,7 +25,7 @@ export function HistoryView({
 	return (
 		<section
 			aria-label="Checkpoint history"
-			className="min-h-0 flex-1 overflow-y-auto p-2"
+			className="min-h-0 flex-1 overflow-y-auto py-2"
 		>
 			<WorkingChangesRow atelier={atelier} />
 			<CheckpointList atelier={atelier} />

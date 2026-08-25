@@ -1521,9 +1521,9 @@ function treeHostStyle(
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
-		// 8px keeps compact row icons on the same x as the sidebar section
-		// label's text (the label's px-2).
-		"--trees-item-padding-x-override": isSpacious ? "14px" : "8px",
+		// Compact rows sit on the panel edge: icons share the same x as the
+		// sidebar section label and the top bar's mark.
+		"--trees-item-padding-x-override": isSpacious ? "14px" : "0px",
 		// Reference rows breathe 8px between the icon slot and the label; the
 		// action lane shrinks to the 12px ellipsis so labels truncate later.
 		...(isSpacious
