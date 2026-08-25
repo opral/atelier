@@ -30,7 +30,6 @@ import {
 	selectFileWorkingChanges,
 	selectFilesystemDirectories,
 	selectFilesystemFiles,
-	selectWorkingChanges,
 } from "@/queries";
 import {
 	buildFilesystemTree,
@@ -58,7 +57,6 @@ import { qb } from "@/lib/lix-kysely";
 import type {
 	FileWorkingChangeRow,
 	FilesystemEntryRow,
-	WorkingChangeRow,
 } from "@/queries";
 import type { Lix } from "@lix-js/sdk";
 
@@ -217,20 +215,11 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 	);
 	const reviewWorkingChanges =
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
-	const workingChanges = useQueryResult(
-		(queryLix) => selectWorkingChanges(queryLix),
-		{ enabled: reviewWorkingChanges },
-	);
 	const fileWorkingChanges = useQueryResult(
 		(queryLix) => selectFileWorkingChanges(queryLix),
 		{ enabled: reviewWorkingChanges },
 	);
-	for (const result of [
-		directories,
-		files,
-		workingChanges,
-		fileWorkingChanges,
-	]) {
+	for (const result of [directories, files, fileWorkingChanges]) {
 		if (result.status === "error") throw result.error;
 	}
 	if (directories.status === "pending" || files.status === "pending") {
@@ -249,7 +238,6 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 			context={context}
 			lix={lix}
 			entries={[...directories.rows, ...files.rows]}
-			workingChanges={workingChanges.rows as WorkingChangeRow[]}
 			fileWorkingChanges={fileWorkingChanges.rows as FileWorkingChangeRow[]}
 		/>
 	);
@@ -259,12 +247,10 @@ function FilesViewContent({
 	context,
 	lix,
 	entries,
-	workingChanges,
 	fileWorkingChanges,
 }: FilesViewProps & {
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
-	readonly workingChanges: WorkingChangeRow[];
 	readonly fileWorkingChanges: FileWorkingChangeRow[];
 }) {
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
@@ -324,25 +310,6 @@ function FilesViewContent({
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true
 			? workingChangePaths
 			: EMPTY_REVIEW_PATHS;
-	const reviewChangeCounts = useMemo(() => {
-		const countsByFileId = new Map<string, number>();
-		for (const change of workingChanges) {
-			if (!change.file_id) continue;
-			countsByFileId.set(
-				change.file_id,
-				(countsByFileId.get(change.file_id) ?? 0) + 1,
-			);
-		}
-		const countsByPath = new Map<string, number>();
-		for (const entry of entries) {
-			if (entry.kind !== "file" || !pendingReviewPaths.has(entry.path)) {
-				continue;
-			}
-			const count = countsByFileId.get(entry.id);
-			if (count) countsByPath.set(entry.path, count);
-		}
-		return countsByPath;
-	}, [entries, pendingReviewPaths, workingChanges]);
 	const creatingRef = useRef(false);
 	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
@@ -1205,7 +1172,6 @@ function FilesViewContent({
 			variant={context?.panelSide === "central" ? "spacious" : "compact"}
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
-			reviewCounts={reviewChangeCounts}
 			onSelectItem={handleSelectItem}
 			onClearSelection={handleClearSelection}
 			selectedPath={selectedPath ?? undefined}
