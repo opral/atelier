@@ -29,6 +29,7 @@ import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
 import fileNewIconUrl from "./assets/file-new.svg";
 import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
+import { diffGlyphMaskDataUri } from "@/components/diff-glyph-geometry";
 
 export type FileTreeFileType = "generic" | "markdown" | "csv" | "excalidraw";
 
@@ -88,13 +89,15 @@ export type FileTreeProps = {
 	readonly openDirectories?: ReadonlySet<string>;
 	readonly reviewPaths?: ReadonlySet<string>;
 	readonly reviewStatuses?: ReadonlyMap<string, ReviewGitStatus>;
-	readonly reviewCounts?: ReadonlyMap<string, number>;
+	/** Directories whose every file is newly added — they read green too. */
+	readonly reviewDirectoryStatuses?: ReadonlyMap<string, "added">;
 	readonly onOpenDirectoriesChange?: (paths: ReadonlySet<string>) => void;
 	readonly onCreateCommit?: (
 		request: FileTreeCreateRequest,
 		value: string,
 	) => Promise<void> | void;
 	readonly onCreateCancel?: (request: FileTreeCreateRequest) => void;
+	readonly onCreateReady?: (request: FileTreeCreateRequest) => void;
 	readonly onCreateAtDirectory?: (
 		directoryPath: string,
 		kind: "file" | "directory",
@@ -205,37 +208,59 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-item-git-status='modified'] > [data-item-section='git'] {
-		color: var(--color-warning-600);
+		color: var(--color-icon-brand);
 		font-size: 0;
+	}
+
+	/* Dot-hybrid glyphs (design 23d), rendered from the SAME SVG geometry
+	   as DiffGlyph: the shape arrives as a mask data-URI and the status
+	   color as the element background, so the knockout is genuinely
+	   transparent. 10px — the knockout floor, sized for compact rows (the
+	   listings run 12px). The glyph overlays the idle action lane so it
+	   hugs the row edge like the history listings; hover swaps it for the
+	   row's … trigger. */
+	[data-type='item'] > [data-item-section='git'] {
+		position: absolute;
+		right: 7px;
+		top: 50%;
+		transform: translateY(-50%);
+	}
+
+	[data-type='item']:hover > [data-item-section='git'],
+	[data-type='item']:focus-within > [data-item-section='git'] {
+		opacity: 0;
+	}
+
+	[data-item-git-status='added'] > [data-item-section='git'],
+	[data-item-git-status='deleted'] > [data-item-section='git'] {
+		font-size: 0;
+	}
+
+	[data-item-git-status='modified'] > [data-item-section='git'] > span,
+	[data-item-git-status='added'] > [data-item-section='git'] > span,
+	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
+		width: 10px;
+		height: 10px;
+		border-radius: 0;
+		-webkit-mask: ${diffGlyphMaskDataUri("modified")} center / 10px 10px
+			no-repeat;
+		mask: ${diffGlyphMaskDataUri("modified")} center / 10px 10px no-repeat;
 	}
 
 	[data-item-git-status='modified'] > [data-item-section='git'] > span {
-		width: 6px;
-		height: 6px;
-		border-radius: 999px;
 		background: currentColor;
 	}
 
-	[data-item-git-status='modified']
-		> [data-item-section='git']
-		> span[data-review-count] {
-		width: auto;
-		min-width: 16px;
-		height: 16px;
-		padding: 0 4px;
-		border-radius: 5px;
-		background: color-mix(in srgb, currentColor 16%, transparent);
-		font-size: 0;
-		font-weight: 750;
-		line-height: 16px;
-		text-align: center;
+	[data-item-git-status='added'] > [data-item-section='git'] > span {
+		background: var(--color-border-diff-added);
+		-webkit-mask-image: ${diffGlyphMaskDataUri("added")};
+		mask-image: ${diffGlyphMaskDataUri("added")};
 	}
 
-	[data-item-git-status='modified']
-		> [data-item-section='git']
-		> span[data-review-count]::before {
-		content: attr(data-review-count);
-		font-size: 9px;
+	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
+		background: var(--color-border-diff-removed);
+		-webkit-mask-image: ${diffGlyphMaskDataUri("removed")};
+		mask-image: ${diffGlyphMaskDataUri("removed")};
 	}
 
 	[data-item-git-status='recreated'] {
@@ -248,8 +273,11 @@ const FILE_TREE_UNSAFE_CSS = `
 		font-weight: var(--trees-font-weight-semibold);
 	}
 
-	[data-item-contains-git-change='true'] > [data-item-section='git'] {
-		color: var(--color-warning-600);
+	/* Softened contains-changes tone — unless the directory carries its own
+	   status (a fully-added folder reads solid green like its files). */
+	[data-item-contains-git-change='true']:not([data-item-git-status])
+		> [data-item-section='git'] {
+		color: var(--color-icon-brand);
 		opacity: 0.75;
 	}
 
@@ -299,21 +327,23 @@ const FILE_TREE_UNSAFE_CSS = `
 		outline-color: transparent;
 	}
 
+	/* In-place editing: the row's pill already marks the spot, so the input
+	   stays quiet — a hairline on the panel ground with a whisper of depth,
+	   no accent ring. */
 	[data-item-rename-input] {
 		height: calc(var(--trees-row-height) - 6px);
-		border: 1px solid var(--color-border-selection-current);
+		border: 1px solid var(--color-border-panel);
 		border-radius: 6px;
 		background: var(--color-bg-panel);
-		box-shadow:
-			0 0 0 2px var(--color-bg-selection-current),
-			inset 0 1px 0 rgba(255, 255, 255, 0.72);
+		box-shadow: 0 1px 2px rgba(28, 25, 23, 0.06);
 		color: var(--color-text-primary);
-		caret-color: var(--color-icon-selection-current);
-		padding-inline: 5px;
+		caret-color: var(--color-text-primary);
+		padding-inline: 6px;
+		outline: none;
 	}
 
 	[data-item-rename-input]::selection {
-		background: var(--color-border-selection-current);
+		background: var(--color-bg-selection-current);
 		color: var(--color-text-primary);
 	}
 `;
@@ -338,10 +368,11 @@ export function FileTree({
 	openDirectories,
 	reviewPaths,
 	reviewStatuses,
-	reviewCounts,
+	reviewDirectoryStatuses,
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
+	onCreateReady,
 	onCreateAtDirectory,
 	onRenameCommit,
 	onMoveItem,
@@ -379,8 +410,14 @@ export function FileTree({
 		[openDirectoryTreePaths],
 	);
 	const reviewGitStatusEntries = useMemo(
-		() => buildReviewGitStatusEntries(reviewPaths, reviewStatuses, treeInput),
-		[reviewPaths, reviewStatuses, treeInput],
+		() =>
+			buildReviewGitStatusEntries(
+				reviewPaths,
+				reviewStatuses,
+				reviewDirectoryStatuses,
+				treeInput,
+			),
+		[reviewPaths, reviewStatuses, reviewDirectoryStatuses, treeInput],
 	);
 	const reviewGitStatusKey = useMemo(
 		() =>
@@ -416,6 +453,7 @@ export function FileTree({
 	const modelRef = useRef<PierreFileTreeModel | null>(null);
 	const treeContainerRef = useRef<HTMLDivElement | null>(null);
 	const startedCreateRequestIdRef = useRef<number | null>(null);
+	const readyCreateRequestIdRef = useRef<number | null>(null);
 	const suppressSelectionOpenRef = useRef(false);
 	const suppressSelectionOpenForClickRef = useRef(false);
 	const handleSelectionChangeRef = useRef(
@@ -702,49 +740,6 @@ export function FileTree({
 		model.setGitStatus(reviewGitStatusEntries as GitStatusEntry[]);
 	}, [model, reviewGitStatusEntries, reviewGitStatusKey]);
 
-	const reviewCountKey = useMemo(
-		() =>
-			[...(reviewCounts ?? [])]
-				.sort(([left], [right]) => left.localeCompare(right))
-				.map(([path, count]) => `${path}:${count}`)
-				.join("\0"),
-		[reviewCounts],
-	);
-	useEffect(() => {
-		const container = treeContainerRef.current;
-		if (!container) return;
-		let frame = 0;
-		let shadowObserver: MutationObserver | null = null;
-		const applyCounts = () => {
-			const host = container.querySelector<HTMLElement>("[aria-label='Files']");
-			const root = host?.shadowRoot;
-			if (!root) {
-				frame = window.requestAnimationFrame(applyCounts);
-				return;
-			}
-			for (const badge of root.querySelectorAll("[data-review-count]")) {
-				badge.removeAttribute("data-review-count");
-			}
-			for (const [path, count] of reviewCounts ?? []) {
-				const treePath = appPathToTreePath(path, false);
-				const item = root.querySelector(
-					`[data-type='item'][data-item-path='${CSS.escape(treePath)}']`,
-				);
-				const badge = item?.querySelector("[data-item-section='git'] > span");
-				if (badge) badge.setAttribute("data-review-count", String(count));
-			}
-			if (!shadowObserver) {
-				shadowObserver = new MutationObserver(applyCounts);
-				shadowObserver.observe(root, { childList: true, subtree: true });
-			}
-		};
-		frame = window.requestAnimationFrame(applyCounts);
-		return () => {
-			window.cancelAnimationFrame(frame);
-			shadowObserver?.disconnect();
-		};
-	}, [reviewCountKey, reviewCounts, treePathsKey]);
-
 	const hiddenTreePathsKey = useMemo(
 		() => treeInput.hiddenTreePaths.join("\0"),
 		[treeInput.hiddenTreePaths],
@@ -828,22 +823,54 @@ export function FileTree({
 	useEffect(() => {
 		if (!createRequest) {
 			startedCreateRequestIdRef.current = null;
+			readyCreateRequestIdRef.current = null;
 			return;
 		}
 		if (!treeInput.createPlaceholderTreePath) return;
-		if (startedCreateRequestIdRef.current === createRequest.id) return;
 		const item = model.getItem(treeInput.createPlaceholderTreePath);
 		if (!item) return;
+		const currentInput = model
+			.getFileTreeContainer()
+			?.shadowRoot?.querySelector("[data-item-rename-input]");
+		if (
+			startedCreateRequestIdRef.current === createRequest.id &&
+			readyCreateRequestIdRef.current === createRequest.id &&
+			currentInput instanceof HTMLInputElement
+		) {
+			return;
+		}
+		let reportedReady = false;
 		startedCreateRequestIdRef.current = createRequest.id;
-		model.focusPath(treeInput.createPlaceholderTreePath);
-		model.startRenaming(treeInput.createPlaceholderTreePath, {
-			removeIfCanceled: true,
-		});
-		return prepareInitialCreateInput(model, createRequest);
+		readyCreateRequestIdRef.current = null;
+		if (!(currentInput instanceof HTMLInputElement)) {
+			model.focusPath(treeInput.createPlaceholderTreePath);
+			model.startRenaming(treeInput.createPlaceholderTreePath, {
+				removeIfCanceled: true,
+			});
+		}
+		const disposeInitialInput = prepareInitialCreateInput(
+			model,
+			createRequest,
+			(request) => {
+				reportedReady = true;
+				readyCreateRequestIdRef.current = request.id;
+				onCreateReady?.(request);
+			},
+		);
+		return () => {
+			disposeInitialInput();
+			if (
+				!reportedReady &&
+				startedCreateRequestIdRef.current === createRequest.id
+			) {
+				startedCreateRequestIdRef.current = null;
+			}
+		};
 	}, [
 		createRequest,
 		createRequest?.id,
 		model,
+		onCreateReady,
 		treeInput.createPlaceholderTreePath,
 		treePathsKey,
 	]);
@@ -1200,20 +1227,21 @@ function canDeleteTreeItem(info: TreePathInfo): boolean {
 function prepareInitialCreateInput(
 	model: PierreFileTreeModel,
 	request: FileTreeCreateRequest,
-): (() => void) | undefined {
-	if (request.initialInputValue === undefined) return undefined;
+	onCreateReady: FileTreeProps["onCreateReady"],
+): () => void {
 	const inputValue = request.initialInputValue;
 	const selectionStart = Math.max(
 		0,
 		Math.min(
-			request.initialSelectionStart ?? inputValue.length,
-			inputValue.length,
+			request.initialSelectionStart ?? inputValue?.length ?? 0,
+			inputValue?.length ?? 0,
 		),
 	);
 	let disposed = false;
 	let handled = false;
 	let observer: MutationObserver | null = null;
 	let retryTimer: number | null = null;
+	let readyFrame: number | null = null;
 	const applyInitialValue = () => {
 		if (disposed || handled) return;
 		const shadowRoot = model.getFileTreeContainer()?.shadowRoot;
@@ -1229,13 +1257,29 @@ function prepareInitialCreateInput(
 		}
 		handled = true;
 		observer?.disconnect();
-		setNativeRenameInputValue(input, inputValue);
-		input.setSelectionRange(selectionStart, selectionStart);
+		if (inputValue !== undefined) {
+			setNativeRenameInputValue(input, inputValue);
+			input.setSelectionRange(selectionStart, selectionStart);
+		}
+		readyFrame = window.requestAnimationFrame(() => {
+			readyFrame = null;
+			if (disposed) return;
+			const currentInput = model
+				.getFileTreeContainer()
+				?.shadowRoot?.querySelector("[data-item-rename-input]");
+			if (currentInput !== input) {
+				handled = false;
+				applyInitialValue();
+				return;
+			}
+			onCreateReady?.(request);
+		});
 	};
 	retryTimer = window.setTimeout(applyInitialValue, 0);
 	return () => {
 		disposed = true;
 		if (retryTimer !== null) window.clearTimeout(retryTimer);
+		if (readyFrame !== null) window.cancelAnimationFrame(readyFrame);
 		observer?.disconnect();
 	};
 }
@@ -1338,15 +1382,23 @@ function isDotPrefixedTreePath(treePath: string): boolean {
 function buildReviewGitStatusEntries(
 	reviewPaths: ReadonlySet<string> | undefined,
 	reviewStatuses: ReadonlyMap<string, ReviewGitStatus> | undefined,
+	reviewDirectoryStatuses: ReadonlyMap<string, "added"> | undefined,
 	treeInput: TreeInput,
 ): ReviewGitStatusEntry[] {
 	if (
 		(!reviewPaths || reviewPaths.size === 0) &&
-		(!reviewStatuses || reviewStatuses.size === 0)
+		(!reviewStatuses || reviewStatuses.size === 0) &&
+		(!reviewDirectoryStatuses || reviewDirectoryStatuses.size === 0)
 	) {
 		return [];
 	}
 	const entries: ReviewGitStatusEntry[] = [];
+	for (const [appPath, status] of reviewDirectoryStatuses ?? []) {
+		const treePath = appPathToTreePath(appPath, true);
+		const info = treeInput.pathInfoByTreePath.get(treePath);
+		if (!info || info.kind !== "directory") continue;
+		entries.push({ path: treePath, status });
+	}
 	for (const [appPath, status] of reviewStatuses ?? []) {
 		const treePath = appPathToTreePath(appPath, false);
 		const info = treeInput.pathInfoByTreePath.get(treePath);
@@ -1355,8 +1407,10 @@ function buildReviewGitStatusEntries(
 		}
 		entries.push({ path: treePath, status });
 	}
+	const statusedTreePaths = new Set(entries.map((entry) => entry.path));
 	for (const appPath of reviewPaths ?? []) {
 		const treePath = appPathToTreePath(appPath, false);
+		if (statusedTreePaths.has(treePath)) continue;
 		const info = treeInput.pathInfoByTreePath.get(treePath);
 		if (!info || info.kind !== "file" || info.createRequestId != null) {
 			continue;
@@ -1465,13 +1519,16 @@ function treeHostStyle(
 		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",
 		"--trees-font-family-override": "inherit",
 		"--trees-font-size-override": isSpacious ? "15px" : "13px",
-		"--trees-git-modified-color-override": "var(--color-warning-600)",
+		"--trees-git-modified-color-override": "var(--color-icon-brand)",
+		"--trees-git-added-color-override": "var(--color-text-diff-added)",
+		"--trees-git-deleted-color-override": "var(--color-text-diff-removed)",
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
-		// 8px keeps compact row icons on the same x as the sidebar section
-		// label's text (the label's px-2).
-		"--trees-item-padding-x-override": isSpacious ? "14px" : "8px",
+		// Compact rows keep a 6px inset inside their hover pill: the pill sits
+		// on the panel edge with its rounding visible, and the icon column's
+		// center lines up under the top bar's mark.
+		"--trees-item-padding-x-override": isSpacious ? "14px" : "6px",
 		// Reference rows breathe 8px between the icon slot and the label; the
 		// action lane shrinks to the 12px ellipsis so labels truncate later.
 		...(isSpacious

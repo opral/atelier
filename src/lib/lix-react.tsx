@@ -57,17 +57,12 @@ type QueryCacheEntry<TRow> = {
 	snapshot: QueryCacheSnapshot<TRow>;
 	listeners: Set<() => void>;
 	execute: () => Promise<TRow[]>;
-	latestMutationSequence: number | undefined;
-	observationOwner: symbol | undefined;
-	/** Last successful rows. Kept when a gone protocol session must not kill the shell. */
-	lastRows: TRow[] | undefined;
+	startObservation: (() => () => void) | undefined;
+	stopObservation: (() => void) | undefined;
+	releaseGeneration: number;
 };
 
 const queryCache = new Map<string, QueryCacheEntry<any>>();
-const observeQueryCache = new Map<
-	string,
-	{ sql: string; params: ReadonlyArray<unknown> }
->();
 const evictingQueryUsers = new Map<string, number>();
 const lixInstanceIds = new WeakMap<object, number>();
 const lixBranchSessions = new WeakMap<object, AtelierBranchSession>();
@@ -81,6 +76,8 @@ interface UseQueryOptions {
 	subscribe?: boolean;
 	enabled?: boolean;
 	evictOnUnmount?: boolean;
+	/** Treat observer events as invalidations and re-run the query. */
+	reuseObservedResult?: boolean;
 }
 
 interface QueryLike<TRow> {
@@ -99,34 +96,53 @@ const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
 	snapshot: { status: "success", rows: DISABLED_QUERY_ROWS },
 	listeners: new Set(),
 	execute: () => Promise.resolve(DISABLED_QUERY_ROWS),
-	latestMutationSequence: undefined,
-	observationOwner: undefined,
-	lastRows: DISABLED_QUERY_ROWS,
+	startObservation: undefined,
+	stopObservation: undefined,
+	releaseGeneration: 0,
 };
-const DISABLED_OBSERVE_QUERY = { sql: "", params: [] } as const;
+
+export type QueryResult<TRow> =
+	| { readonly status: "pending"; readonly rows: readonly [] }
+	| { readonly status: "success"; readonly rows: readonly TRow[] }
+	| {
+			readonly status: "error";
+			readonly rows: readonly [];
+			readonly error: unknown;
+	  };
 
 export function useQuery<TRow>(
 	query: QueryFactory<TRow>,
 	options: UseQueryOptions = {},
 ): TRow[] {
 	const lix = useLix();
-	const { subscribe = true, enabled = true, evictOnUnmount = false } = options;
+	const {
+		subscribe = true,
+		enabled = true,
+		evictOnUnmount = false,
+		reuseObservedResult = true,
+	} = options;
 	const builder = enabled ? query(lix) : undefined;
 	const compiled = builder?.compile();
 	const cacheKey =
 		enabled && compiled
 			? `${getLixInstanceId(lix)}:${subscribe ? "sub" : "once"}:` +
+				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
 				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
 			: "disabled";
-	const observeQuery =
-		enabled && compiled
-			? getObserveQuery(cacheKey, compiled)
-			: DISABLED_OBSERVE_QUERY;
-
 	const entry =
 		enabled && builder
 			? getQueryCacheEntry(cacheKey, builder)
 			: (DISABLED_QUERY_ENTRY as QueryCacheEntry<TRow>);
+	if (enabled && subscribe && compiled) {
+		entry.startObservation = () =>
+			observeQueryEntry(
+				entry,
+				lix,
+				compiled.sql,
+				compiled.parameters,
+				reuseObservedResult,
+			);
+	}
 	const subscribeToSnapshot = useCallback(
 		(listener: () => void) => {
 			if (!enabled || !subscribe) return () => {};
@@ -140,73 +156,6 @@ export function useQuery<TRow>(
 		getSnapshot,
 		getSnapshot,
 	);
-
-	useEffect(() => {
-		if (!enabled || !subscribe) return;
-		let closed = false;
-		let previousMutationSequence: number | undefined;
-		const observationId = Symbol();
-		// Every hook keeps its observer warm for failover, but only one observer
-		// may publish into the shared cache entry at a time.
-		if (entry.observationOwner === undefined) {
-			entry.observationOwner = observationId;
-		}
-		const events = lix.observe(observeQuery.sql, [
-			...observeQuery.params,
-		] as SqlParam[]);
-
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (closed || event === undefined) break;
-					const advancesObservation =
-						previousMutationSequence !== undefined &&
-						event.mutationSequence > previousMutationSequence;
-					previousMutationSequence = event.mutationSequence;
-					let claimedObservation = false;
-					if (entry.observationOwner === undefined) {
-						entry.observationOwner = observationId;
-						claimedObservation = true;
-					}
-					if (entry.observationOwner !== observationId) continue;
-
-					// SDK 0.8.x can return a stale first snapshot, and a remote
-					// reconnect can renumber another initial snapshot. Keep the direct
-					// read for those cases, then reuse advancing mutation results.
-					if (claimedObservation || !advancesObservation) {
-						const nextRows = await entry.execute();
-						if (closed) break;
-						entry.latestMutationSequence = event.mutationSequence;
-						setQueryRows(entry, nextRows);
-						continue;
-					}
-
-					// An observer taking ownership can have older events queued. Never let
-					// one of them overwrite the latest mutation already in the cache.
-					if (
-						entry.latestMutationSequence !== undefined &&
-						event.mutationSequence <= entry.latestMutationSequence
-					) {
-						continue;
-					}
-					entry.latestMutationSequence = event.mutationSequence;
-					setQueryRows(entry, queryResultToRows<TRow>(event.result));
-				}
-			} catch (error) {
-				if (closed) return;
-				setQueryError(entry, error);
-			}
-		})();
-
-		return () => {
-			closed = true;
-			if (entry.observationOwner === observationId) {
-				entry.observationOwner = undefined;
-			}
-			events.close();
-		};
-	}, [enabled, entry, subscribe, lix, observeQuery]);
 
 	useEffect(() => {
 		// A non-subscribed query is a snapshot for the current mounted
@@ -231,7 +180,6 @@ export function useQuery<TRow>(
 				if (entry.listeners.size > 0) return;
 				if (queryCache.get(cacheKey) !== entry) return;
 				queryCache.delete(cacheKey);
-				observeQueryCache.delete(cacheKey);
 			});
 		};
 	}, [cacheKey, enabled, entry, evictOnUnmount, subscribe]);
@@ -241,17 +189,69 @@ export function useQuery<TRow>(
 	}
 
 	if (snapshot.status === "error") {
-		// A gone protocol session is the SDK's to reopen (GET /lix/v1 with no
-		// Lix-Session-Id). Throwing here unmounted the whole Atelier shell.
-		if (isRecoverableLixSessionError(snapshot.error)) {
-			return entry.lastRows ?? [];
-		}
 		throw snapshot.error instanceof Error
 			? snapshot.error
 			: new Error(String(snapshot.error));
 	}
 
 	return snapshot.status === "success" ? snapshot.rows : use(entry.promise);
+}
+
+/**
+ * A commit-driven query for progressive UI.
+ *
+ * Unlike {@link useQuery}, this hook never suspends and never starts remote work
+ * during render. Live queries use the observer's authoritative first frame as
+ * their initial rows, avoiding the execute-then-observe duplicate scan.
+ */
+export function useQueryResult<TRow>(
+	query: QueryFactory<TRow>,
+	options: UseQueryOptions = {},
+): QueryResult<TRow> {
+	const lix = useLix();
+	const {
+		subscribe = true,
+		enabled = true,
+		reuseObservedResult = true,
+	} = options;
+	const builder = enabled ? query(lix) : undefined;
+	const compiled = builder?.compile();
+	const cacheKey =
+		enabled && compiled
+			? `${getLixInstanceId(lix)}:committed-${subscribe ? "sub" : "once"}:` +
+				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
+				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
+			: "disabled";
+	const entry =
+		enabled && builder && compiled
+			? getCommittedQueryCacheEntry({
+					cacheKey,
+					builder,
+					lix,
+					sql: compiled.sql,
+					parameters: compiled.parameters,
+					subscribe,
+					reuseObservedResult,
+				})
+			: (DISABLED_QUERY_ENTRY as QueryCacheEntry<TRow>);
+	const subscribeToSnapshot = useCallback(
+		(listener: () => void) => {
+			if (!enabled) return () => {};
+			return subscribeToQueryEntry(cacheKey, entry, listener);
+		},
+		[cacheKey, enabled, entry],
+	);
+	const getSnapshot = useCallback(() => entry.snapshot, [entry]);
+	const snapshot = useSyncExternalStore(
+		subscribeToSnapshot,
+		getSnapshot,
+		getSnapshot,
+	);
+	if (snapshot.status === "success") return snapshot;
+	if (snapshot.status === "error") {
+		return { status: "error", rows: [], error: snapshot.error };
+	}
+	return { status: "pending", rows: [] };
 }
 
 export const useQueryTakeFirst = <TResult,>(
@@ -289,10 +289,11 @@ function getQueryCacheEntry<TRow>(
 		snapshot: { status: "pending" },
 		listeners: new Set(),
 		execute: () => builder.execute(),
-		latestMutationSequence: undefined,
-		observationOwner: undefined,
-		lastRows: undefined,
+		startObservation: undefined,
+		stopObservation: undefined,
+		releaseGeneration: 0,
 	};
+	markQueryActivity("execute");
 	entry.promise = entry.execute().then(
 		(rows) => {
 			setQueryRows(entry, rows);
@@ -302,7 +303,8 @@ function getQueryCacheEntry<TRow>(
 			if (isRecoverableLixSessionError(error)) {
 				// Resolve (do not reject) so `use()` cannot hit the error boundary.
 				// The SDK owns the recover-once re-handshake; Atelier must not remount.
-				const rows = entry.lastRows ?? [];
+				const rows =
+					entry.snapshot.status === "success" ? entry.snapshot.rows : [];
 				setQueryRows(entry, rows);
 				return rows;
 			}
@@ -317,22 +319,136 @@ function getQueryCacheEntry<TRow>(
 	return entry;
 }
 
+function getCommittedQueryCacheEntry<TRow>(args: {
+	readonly cacheKey: string;
+	readonly builder: QueryLike<TRow>;
+	readonly lix: Lix;
+	readonly sql: string;
+	readonly parameters: ReadonlyArray<unknown>;
+	readonly subscribe: boolean;
+	readonly reuseObservedResult: boolean;
+}): QueryCacheEntry<TRow> {
+	const cached = queryCache.get(args.cacheKey) as
+		| QueryCacheEntry<TRow>
+		| undefined;
+	if (cached) {
+		cached.execute = () => args.builder.execute();
+		return cached;
+	}
+	const entry: QueryCacheEntry<TRow> = {
+		promise: Promise.resolve([]),
+		snapshot: { status: "pending" },
+		listeners: new Set(),
+		execute: () => args.builder.execute(),
+		startObservation: undefined,
+		stopObservation: undefined,
+		releaseGeneration: 0,
+	};
+	entry.startObservation = args.subscribe
+		? () =>
+				observeQueryEntry(
+					entry,
+					args.lix,
+					args.sql,
+					args.parameters,
+					args.reuseObservedResult,
+				)
+		: () => executeQueryEntryOnce(entry);
+	queryCache.set(args.cacheKey, entry);
+	return entry;
+}
+
+function executeQueryEntryOnce<TRow>(entry: QueryCacheEntry<TRow>): () => void {
+	let closed = false;
+	markQueryActivity("execute");
+	void entry.execute().then(
+		(rows) => {
+			if (!closed) setQueryRows(entry, rows);
+		},
+		(error: unknown) => {
+			if (!closed) setQueryError(entry, error);
+		},
+	);
+	return () => {
+		closed = true;
+	};
+}
+
+function observeQueryEntry<TRow>(
+	entry: QueryCacheEntry<TRow>,
+	lix: Lix,
+	sql: string,
+	parameters: ReadonlyArray<unknown>,
+	reuseObservedResult: boolean,
+): () => void {
+	let closed = false;
+	markQueryActivity("observe");
+	const events = lix.observe(sql, [...parameters] as SqlParam[]);
+
+	void (async () => {
+		try {
+			while (true) {
+				const event = await events.next();
+				if (closed || event === undefined) break;
+				const nextRows = reuseObservedResult
+					? queryResultToRows<TRow>(event.result)
+					: await (async () => {
+							markQueryActivity("execute");
+							return entry.execute();
+						})();
+				if (closed) break;
+				setQueryRows(entry, nextRows);
+			}
+		} catch (error) {
+			if (closed) return;
+			setQueryError(entry, error);
+		}
+	})();
+
+	return () => {
+		closed = true;
+		events.close();
+	};
+}
+
+function markQueryActivity(kind: "execute" | "observe"): void {
+	if (typeof performance === "undefined") return;
+	const name = `atelier:query:${kind}`;
+	if (performance.getEntriesByName(name).length >= 128) return;
+	performance.mark(name);
+}
+
 function subscribeToQueryEntry<TRow>(
 	cacheKey: string,
 	entry: QueryCacheEntry<TRow>,
 	listener: () => void,
 ): () => void {
+	entry.releaseGeneration += 1;
 	entry.listeners.add(listener);
+	if (entry.listeners.size === 1 && entry.stopObservation === undefined) {
+		entry.stopObservation = entry.startObservation?.();
+	}
 	return () => {
 		entry.listeners.delete(listener);
-		if (
-			entry.snapshot.status === "error" &&
-			!isPermanentQueryError(entry.snapshot.error) &&
-			entry.listeners.size === 0 &&
-			queryCache.get(cacheKey) === entry
-		) {
-			queryCache.delete(cacheKey);
-		}
+		if (entry.listeners.size !== 0) return;
+		const releaseGeneration = ++entry.releaseGeneration;
+		queueMicrotask(() => {
+			if (
+				entry.listeners.size !== 0 ||
+				entry.releaseGeneration !== releaseGeneration
+			) {
+				return;
+			}
+			entry.stopObservation?.();
+			entry.stopObservation = undefined;
+			if (
+				entry.snapshot.status === "error" &&
+				!isPermanentQueryError(entry.snapshot.error) &&
+				queryCache.get(cacheKey) === entry
+			) {
+				queryCache.delete(cacheKey);
+			}
+		});
 	};
 }
 
@@ -350,7 +466,6 @@ function isPermanentQueryError(error: unknown): boolean {
 }
 
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
-	entry.lastRows = rows;
 	if (
 		entry.snapshot.status === "success" &&
 		rowsEqual(entry.snapshot.rows, rows)
@@ -365,7 +480,10 @@ function setQueryError<TRow>(
 	error: unknown,
 ): void {
 	if (isRecoverableLixSessionError(error)) {
-		setQueryRows(entry, entry.lastRows ?? []);
+		setQueryRows(
+			entry,
+			entry.snapshot.status === "success" ? entry.snapshot.rows : [],
+		);
 		return;
 	}
 	setQuerySnapshot(entry, { status: "error", error });
@@ -398,23 +516,4 @@ function getLixBranchSession(lix: Lix): AtelierBranchSession {
 	const session = createLixBranchSession(lix);
 	lixBranchSessions.set(lix, session);
 	return session;
-}
-
-function getObserveQuery(
-	cacheKey: string,
-	compiled: {
-		sql: string;
-		parameters: ReadonlyArray<unknown>;
-	},
-): { sql: string; params: ReadonlyArray<unknown> } {
-	const cached = observeQueryCache.get(cacheKey);
-	if (cached) {
-		return cached;
-	}
-	const next = {
-		sql: compiled.sql,
-		params: [...compiled.parameters],
-	};
-	observeQueryCache.set(cacheKey, next);
-	return next;
 }

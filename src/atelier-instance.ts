@@ -9,7 +9,6 @@ import type {
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
 } from "./extension-api";
-import { appendAgentTurnCommitRange } from "./shell/agent-turn-review-range";
 import {
 	createLixBranchSession,
 	createMemoryPreferencesStore,
@@ -23,24 +22,6 @@ import {
 
 export type { AtelierPanelSide } from "./extension-api";
 export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
-
-export type AtelierDiffSource = {
-	/** Host-defined identifier such as "codex" or "claude". */
-	readonly id: string;
-	readonly sessionId?: string;
-	readonly turnId?: string;
-};
-
-export type AtelierDiffOpenOptions = {
-	readonly beforeCommitId: string;
-	readonly afterCommitId: string;
-	readonly source: AtelierDiffSource;
-};
-
-export type AtelierDiffApi = {
-	/** Creates a pending review and reveals its first changed document. */
-	open(options: AtelierDiffOpenOptions): Promise<void>;
-};
 
 /**
  * The central island is browser-style tabs — the one UX primitive. `home`
@@ -72,7 +53,6 @@ export type AtelierOptions = {
 	/** Private, account-scoped review acknowledgement state. */
 	readonly reviewStatusStore?: AtelierReviewStatusStore;
 	/** Only expose review ranges tagged with this account or session id. */
-	readonly reviewRangeSessionId?: string;
 	/**
 	 * Host data source for un-imported "watched" entries in the bundled Files
 	 * view (e.g. disk files surfaced by filesystem watchers).
@@ -85,7 +65,6 @@ export type AtelierOptions = {
 export type AtelierInstance = {
 	/** The host-owned Lix backing this Atelier workspace. */
 	readonly lix: Lix;
-	readonly diff: AtelierDiffApi;
 	readonly documents: AtelierDocumentsApi;
 	readonly views: AtelierViewsApi;
 };
@@ -180,7 +159,6 @@ type AtelierDocumentsRuntime = {
 /** Creates one programmatically controllable Atelier runtime for a workspace. */
 export function createAtelier(options: AtelierOptions): AtelierInstance {
 	const documentsRuntime = createAtelierDocumentsRuntime();
-	const usesDefaultBranchSession = options.branchSession === undefined;
 	const branchSession =
 		options.branchSession ?? createLixBranchSession(options.lix);
 	const sessionStateStore =
@@ -192,29 +170,6 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		options.reviewStatusStore ?? createMemoryReviewStatusStore();
 	const instance: AtelierInstance = {
 		lix: options.lix,
-		diff: {
-			open: async (diffOptions) => {
-				if (diffOptions.beforeCommitId === diffOptions.afterCommitId) return;
-				const scopedDiffOptions =
-					options.reviewRangeSessionId !== undefined &&
-					diffOptions.source.sessionId === undefined
-						? {
-								...diffOptions,
-								source: {
-									...diffOptions.source,
-									sessionId: options.reviewRangeSessionId,
-								},
-							}
-						: diffOptions;
-				return openDiff(
-					options.lix,
-					scopedDiffOptions,
-					usesDefaultBranchSession
-						? await options.lix.activeBranchId()
-						: await resolveBranchSessionId(branchSession),
-				);
-			},
-		},
 		documents: {
 			open: (path, openOptions) => {
 				if (typeof path !== "string" || path.trim().length === 0) {
@@ -289,9 +244,6 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 			? { defaultOpenPanels: [...options.defaultOpenPanels] }
 			: {}),
 		...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
-		...(options.reviewRangeSessionId !== undefined
-			? { reviewRangeSessionId: options.reviewRangeSessionId }
-			: {}),
 		...(options.filesView !== undefined
 			? { filesView: options.filesView }
 			: {}),
@@ -558,56 +510,5 @@ function atelierDocumentsStatesEqual(
 	return left.openPaths.every((path, index) => path === right.openPaths[index]);
 }
 
-async function openDiff(
-	lix: Lix,
-	options: AtelierDiffOpenOptions,
-	branchId: string,
-): Promise<void> {
-	if (options.beforeCommitId === options.afterCommitId) return;
 
-	const openedAt = Date.now();
-	await appendAgentTurnCommitRange(
-		lix,
-		{
-			id: diffId(options),
-			sourceId: options.source.id,
-			beforeCommitId: options.beforeCommitId,
-			afterCommitId: options.afterCommitId,
-			...(options.source.sessionId !== undefined
-				? { sessionId: options.source.sessionId }
-				: {}),
-			...(options.source.turnId !== undefined
-				? { turnId: options.source.turnId }
-				: {}),
-			startedAt: openedAt,
-			completedAt: openedAt,
-		},
-		{ branchId },
-	);
-}
 
-function resolveBranchSessionId(
-	branchSession: AtelierBranchSession,
-): Promise<string> {
-	const current = branchSession.getSnapshot();
-	if (current) return Promise.resolve(current);
-	return new Promise((resolve) => {
-		const unsubscribe = branchSession.subscribe(() => {
-			const branchId = branchSession.getSnapshot();
-			if (!branchId) return;
-			unsubscribe();
-			resolve(branchId);
-		});
-	});
-}
-
-function diffId(options: AtelierDiffOpenOptions): string {
-	return JSON.stringify([
-		"atelier-diff",
-		options.source.id,
-		options.source.sessionId ?? null,
-		options.source.turnId ?? null,
-		options.beforeCommitId,
-		options.afterCommitId,
-	]);
-}

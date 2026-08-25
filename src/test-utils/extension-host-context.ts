@@ -37,12 +37,15 @@ export function createExtensionHostContext(
 			branches: {
 				activeId: "main",
 			},
-			reviews: {
-				resolvedReviewIds: [],
-				resolve: async () => {},
+			diff: {
+				session: null,
+				open: async () => {},
+				openFile: () => {},
+				exit: () => {},
 				accept: async () => {},
 				reject: async () => {},
-				register: () => () => {},
+				resolve: async () => {},
+				autoAccept: false,
 			},
 		},
 		preferencesFor: (extensionId) => ({

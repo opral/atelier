@@ -1,6 +1,5 @@
 import {
 	Suspense,
-	useCallback,
 	useEffect,
 	useLayoutEffect,
 	useMemo,
@@ -13,13 +12,13 @@ import {
 	editorRevisionMode,
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
+import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
+import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
-	useExternalWriteReview,
-	useExternalWriteReviewData,
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
@@ -103,160 +102,38 @@ function EditableTextView({
 }: Omit<TextViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: TextFileRow;
 }) {
-	const lix = useLix();
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
 	const fileText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
-	const review = useExternalWriteReview({
-		fileId,
-		path: resolvedPath,
-		activeBranchId: atelier.branches.activeId,
-		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-		reviewRangeSessionId: atelier.reviews.rangeSessionId,
-		enabled: atelier.reviews.isOpen,
-		reviewMode:
-			atelier.reviews.mode ??
-			(atelier.reviews.autoAccept ? "working-changes" : "agent-turn"),
-	});
-	const reviewData = useExternalWriteReviewData(review);
-	const reviewText = reviewData
-		? decodeFileDataToText(reviewData.afterData)
-		: null;
-	const isReviewing = Boolean(review);
+	// The shell owns review detection: this file is under review whenever the
+	// working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
+	const diffSession = atelier.diff.session;
+	const isReviewing = Boolean(
+		diffSession &&
+			"working" in diffSession.target &&
+			diffSession.files.some(
+				(file) => file.id === fileId && file.review?.status === "pending",
+			),
+	);
 	const isReadOnly = isReviewing || atelier.readOnly;
-	const [editorText, setEditorText] = useState(reviewText ?? fileText);
-	const localTextRef = useRef(editorText);
-	const lastCleanTextRef = useRef(fileText);
-	const persistenceRunningRef = useRef(false);
-	const queuedTextRef = useRef<string | null>(null);
-	const reviewingRef = useRef(isReviewing);
-	const wasReviewingRef = useRef(false);
-	const [saveError, setSaveError] = useState<string | null>(null);
 
-	useEffect(() => {
-		if (!review) return;
-		return atelier.reviews.register(review);
-	}, [atelier.reviews, review]);
 
 	const originKey = useMemo(() => createTextEditorOriginKey(), []);
-	useEffect(() => {
-		reviewingRef.current = isReviewing;
-		if (isReviewing && reviewText !== null) {
-			queuedTextRef.current = null;
-			localTextRef.current = reviewText;
-			setEditorText(reviewText);
-		}
-		if (!isReviewing && wasReviewingRef.current) {
-			void qb(lix)
-				.selectFrom("lix_file")
-				.select("content")
-				.where("id", "=", fileId)
-				.executeTakeFirst()
-				.then((row) => {
-					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.content);
-					lastCleanTextRef.current = nextText;
-					localTextRef.current = nextText;
-					setEditorText(nextText);
-				})
-				.catch((error) => {
-					if (!reviewingRef.current) {
-						setSaveError(
-							error instanceof Error
-								? error.message
-								: "Could not reload file after review",
-						);
-					}
-				});
-		}
-		wasReviewingRef.current = isReviewing;
-	}, [fileId, isReviewing, lix, reviewText]);
-
-	const flushPersistence = useCallback(async () => {
-		if (persistenceRunningRef.current || reviewingRef.current) return;
-		persistenceRunningRef.current = true;
-		try {
-			while (queuedTextRef.current !== null && !reviewingRef.current) {
-				const nextText = queuedTextRef.current;
-				queuedTextRef.current = null;
-				if (nextText === lastCleanTextRef.current) continue;
-				try {
-					await lix.execute(
-						"UPDATE lix_file SET content = $1 WHERE id = $2",
-						[new TextEncoder().encode(nextText), fileId],
-						{ originKey },
-					);
-					lastCleanTextRef.current = nextText;
-					setSaveError(null);
-				} catch (error) {
-					setSaveError(
-						error instanceof Error ? error.message : "Could not save file",
-					);
-				}
-			}
-		} finally {
-			persistenceRunningRef.current = false;
-			if (queuedTextRef.current !== null) void flushPersistence();
-		}
-	}, [fileId, lix, originKey]);
-
-	const persistUserEdit = useCallback(
-		(nextText: string) => {
-			if (isReadOnly) return;
-			localTextRef.current = nextText;
-			queuedTextRef.current = nextText;
-			void flushPersistence();
-		},
-		[flushPersistence, isReadOnly],
-	);
-
-	useEffect(() => {
-		const events = lix.observe("SELECT content FROM lix_file WHERE id = $1", [
-			fileId,
-		]);
-		let closed = false;
-		const reconcile = (data: unknown) => {
-			if (closed) return;
-			const nextText = decodeFileDataToText(data);
-			if (nextText === localTextRef.current) {
-				lastCleanTextRef.current = nextText;
-				return;
-			}
-			if (reviewingRef.current) return;
-			// MVP conflict policy: a queued or running local edit wins.
-			if (
-				persistenceRunningRef.current ||
-				queuedTextRef.current !== null ||
-				localTextRef.current !== lastCleanTextRef.current
-			)
-				return;
-			lastCleanTextRef.current = nextText;
-			localTextRef.current = nextText;
-			setEditorText(nextText);
-		};
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (!event || closed) continue;
-					const row = event.result.rows[0];
-					if (row) reconcile(row.get("content"));
-				}
-			} catch (error) {
-				if (!closed)
-					setSaveError(
-						error instanceof Error ? error.message : "Could not observe file",
-					);
-			}
-		})();
-		return () => {
-			closed = true;
-			events.close();
-			queuedTextRef.current = null;
-		};
-	}, [fileId, lix]);
+	const {
+		text: editorText,
+		saveError,
+		persist: persistUserEdit,
+	} = useSyncedTextFile({
+		fileId,
+		initialText: fileText,
+		reviewText: null,
+		reviewing: isReviewing,
+		readOnly: atelier.readOnly,
+		originKey,
+	});
 
 	return (
 		<div className="atelier-text-view" data-testid="text-editor-view">
@@ -287,10 +164,13 @@ function HistoricalTextView({
 }) {
 	const lix = useLix();
 	const [snapshotText, setSnapshotText] = useState<string | null>(null);
+	const [absentAtCommit, setAbsentAtCommit] = useState(false);
 	const [loadError, setLoadError] = useState(false);
 	useEffect(() => {
 		let cancelled = false;
-		setSnapshotText(null);
+		// The previous snapshot stays visible while the next commit loads, so
+		// retargeting between checkpoints never flashes the loading state.
+		setAbsentAtCommit(false);
 		setLoadError(false);
 		if (!commitId) {
 			setSnapshotText(decodeFileDataToText(fileRow.content));
@@ -298,9 +178,11 @@ function HistoricalTextView({
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
 			.then((data) => {
-				if (!cancelled) {
-					setSnapshotText(data ? decodeFileDataToText(data) : "");
-				}
+				if (cancelled) return;
+				// No data at the commit means the file does not exist there yet;
+				// the absence is temporal, not an empty document.
+				if (data) setSnapshotText(decodeFileDataToText(data));
+				else setAbsentAtCommit(true);
 			})
 			.catch(() => {
 				if (!cancelled) setLoadError(true);
@@ -318,6 +200,14 @@ function HistoricalTextView({
 			>
 				Could not load this file revision.
 			</div>
+		);
+	}
+	if (absentAtCommit) {
+		return (
+			<CheckpointAbsentFile
+				filePath={fileRow.path || filePath}
+				commitId={commitId}
+			/>
 		);
 	}
 	if (snapshotText === null) return <TextLoadingState />;
@@ -503,16 +393,14 @@ export const extension = createReactExtensionDefinition({
 	description: "Edit text and source files.",
 	icon: FileCode2,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<TextView
-				atelier={atelier}
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-				beforeCommitId={view.state.beforeCommitId as string | null | undefined}
-				afterCommitId={view.state.afterCommitId as string | null | undefined}
-			/>
-		</LixProvider>
+		<TextView
+			atelier={atelier}
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+			beforeCommitId={view.state.beforeCommitId as string | null | undefined}
+			afterCommitId={view.state.afterCommitId as string | null | undefined}
+		/>
 	),
 });

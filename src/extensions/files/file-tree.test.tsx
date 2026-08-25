@@ -235,11 +235,13 @@ describe("FileTree", () => {
 			kind: "file" as const,
 		};
 		const handleCreateCommit = vi.fn();
+		const handleCreateReady = vi.fn();
 		const { container } = render(
 			<FileTree
 				nodes={mockTree}
 				createRequest={createRequest}
 				onCreateCommit={handleCreateCommit}
+				onCreateReady={handleCreateReady}
 			/>,
 		);
 
@@ -251,6 +253,8 @@ describe("FileTree", () => {
 			expect(renameInput.selectionEnd).toBe(0);
 			return renameInput;
 		});
+		expect(handleCreateReady).toHaveBeenCalledOnce();
+		expect(handleCreateReady).toHaveBeenCalledWith(createRequest);
 		fireEvent.input(input, { target: { value: "budget.csv" } });
 		fireEvent.keyDown(input, { key: "Enter" });
 
@@ -971,7 +975,7 @@ describe("FileTree", () => {
 			getTreeHost(container).style.getPropertyValue(
 				"--trees-git-modified-color-override",
 			),
-		).toBe("var(--color-warning-600)");
+		).toBe("var(--color-icon-brand)");
 		const reviewRow = getTreeItem(container, "docs/review.md");
 		const reviewDot = reviewRow.querySelector("[data-item-section='git']");
 		const actionLane = reviewRow.querySelector("[data-item-section='action']");

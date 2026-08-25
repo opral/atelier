@@ -217,6 +217,11 @@ describe("Atelier instance file controller", () => {
 			expect(
 				await screen.findByRole("heading", { name: "Queued" }),
 			).toBeVisible();
+			await waitFor(() => {
+				expect(
+					rendered?.container.querySelector("file-tree-container"),
+				).toBeTruthy();
+			});
 			await act(async () => atelier.documents.startNew());
 			const container = rendered?.container;
 			if (!container) throw new Error("Atelier test container is unavailable");

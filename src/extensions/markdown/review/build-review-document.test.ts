@@ -15,6 +15,41 @@ import { MarkdownReviewExtensions } from "./review-extension";
 const markdownDoc = (markdown: string) =>
 	astToTiptapDoc(parseMarkdown(markdown));
 
+test("an added file diffs without a phantom deleted blank line", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "",
+		afterMarkdown: "# Onboarding\n\nWelcome! Read the handbook.\n",
+	});
+
+	const removedNodes = (review.doc.content ?? []).filter(
+		(node: any) => reviewStatus(node) === "removed",
+	);
+	expect(removedNodes).toHaveLength(0);
+	const addedNodes = (review.doc.content ?? []).filter(
+		(node: any) => reviewStatus(node) === "added",
+	);
+	expect(addedNodes.length).toBeGreaterThan(0);
+	expect(documentText(review.doc)).toContain("Onboarding");
+	expect(documentText(review.doc)).toContain("Read the handbook.");
+});
+
+test("a deleted file diffs without a phantom added blank line", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "# Gone\n\nThis file was removed.\n",
+		afterMarkdown: "",
+	});
+
+	const addedNodes = (review.doc.content ?? []).filter(
+		(node: any) => reviewStatus(node) === "added",
+	);
+	expect(addedNodes).toHaveLength(0);
+	const removedNodes = (review.doc.content ?? []).filter(
+		(node: any) => reviewStatus(node) === "removed",
+	);
+	expect(removedNodes.length).toBeGreaterThan(0);
+	expect(documentText(review.doc)).toContain("Gone");
+});
+
 test("builds one inline replacement and projects exactly to both snapshots", () => {
 	const before =
 		"Our first three videos should target a general audience with a hook.\n";

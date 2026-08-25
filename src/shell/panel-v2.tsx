@@ -2,6 +2,7 @@ import clsx from "clsx";
 import {
 	forwardRef,
 	useCallback,
+	useEffect,
 	useId,
 	useLayoutEffect,
 	useMemo,
@@ -111,6 +112,7 @@ export function PanelV2({
 	showTabBar = side === "central",
 	tabBarExtraContent,
 	customTabStrip,
+	contentVisible = true,
 }: PanelV2Props) {
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
@@ -135,6 +137,22 @@ export function PanelV2({
 
 	const hasViews = panel.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
+	const [mountedInstances, setMountedInstances] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	useEffect(() => {
+		if (
+			!contentVisible ||
+			!activeInstance ||
+			mountedInstances.has(activeInstance)
+		) {
+			return;
+		}
+		setMountedInstances((current) => {
+			if (current.has(activeInstance)) return current;
+			return new Set([...current, activeInstance]);
+		});
+	}, [activeInstance, contentVisible, mountedInstances]);
 	const availableViews = useMemo(
 		() => availableExtensionsForPanel(visibleExtensions, panel, side),
 		[panel, side, visibleExtensions],
@@ -453,11 +471,17 @@ export function PanelV2({
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
 						{panel.views.map((entry) => {
+							const isActive = activeInstance === entry.instance;
+							if (
+								!(contentVisible && isActive) &&
+								!mountedInstances.has(entry.instance)
+							) {
+								return null;
+							}
 							const view = resolveViewDefinition(entry.kind);
 							if (!view) return null;
 							const context = viewContexts.get(entry.instance);
 							if (!context) return null;
-							const isActive = activeInstance === entry.instance;
 							return (
 								<div
 									key={entry.instance}
@@ -515,6 +539,8 @@ export type PanelV2Props = {
 	readonly tabBarExtraContent?: ReactNode;
 	/** Host-rendered strip replacing the built-in tab row entirely. */
 	readonly customTabStrip?: ReactNode;
+	/** Defers a panel's first extension mount until its content is visible. */
+	readonly contentVisible?: boolean;
 };
 
 // Reference rows are regular-weight with muted icons; only the active row is
@@ -583,10 +609,14 @@ function SidebarSectionPicker({
 					type="button"
 					aria-label={`${activeLabel} panel view menu`}
 					data-attr="panel-section-picker"
+					// Mouse clicks never take focus, so a later keypress cannot
+					// paint the keyboard focus ring on a pointer interaction.
+					onMouseDown={(event) => event.preventDefault()}
 					// Caption, not chrome: no fill, no border. It darkens on hover and
-					// while open, which is the whole affordance. px-2 puts the label
-					// text exactly over the tree rows' icon column below it.
-					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-neutral-600)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
+					// while open, which is the whole affordance. px-1.5 puts the label
+					// text on the sidebar's content column — the same x as the tree
+					// rows' icons, whose centers sit under the top bar's mark.
+					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-neutral-600)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
 				>
 					<span>{activeLabel}</span>
 					<ChevronDown
@@ -601,6 +631,10 @@ function SidebarSectionPicker({
 				// the sidebar's content ambiguity in place.
 				align="start"
 				sideOffset={2}
+				// Closing does not hand focus back to the trigger: the restore is
+				// programmatic and would paint the keyboard focus ring after any
+				// pointer-driven open/close. Tabbing to the trigger still rings.
+				onCloseAutoFocus={(event) => event.preventDefault()}
 				className="w-[212px] rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg"
 			>
 				{/* Open views and openable views read as one list: the picker answers

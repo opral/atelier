@@ -21,6 +21,7 @@ interface SidePanelProps {
 	readonly isFocused: boolean;
 	readonly onFocusPanel: (side: PanelSide) => void;
 	readonly emptyState?: ReactNode;
+	readonly contentVisible?: boolean;
 }
 
 /**
@@ -41,6 +42,7 @@ export function SidePanel({
 	isFocused,
 	onFocusPanel,
 	emptyState: emptyStateOverride,
+	contentVisible = true,
 }: SidePanelProps) {
 	return (
 		<PanelV2
@@ -56,6 +58,7 @@ export function SidePanel({
 			viewContext={viewContext}
 			emptyStatePlaceholder={emptyStateOverride}
 			showTabBar={false}
+			contentVisible={contentVisible}
 		/>
 	);
 }

@@ -4,14 +4,18 @@ import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
 import {
 	selectCheckpoints,
-	selectCheckpointsWithFileCounts,
-	selectFileWorkingChanges,
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
-	selectReviewableFileWorkingChanges,
 	selectWorkingChangeCount,
-	selectWorkingChanges,
+	selectWorkingFileDiffs,
 } from "@/queries";
+
+async function latestCheckpointId(
+	lix: Awaited<ReturnType<typeof openLix>>,
+): Promise<string | null> {
+	const row = await selectLatestCheckpoint(lix).executeTakeFirst();
+	return row?.commit_id ?? null;
+}
 
 function isUserPath(path: string): boolean {
 	return !path.startsWith("/.lix/");
@@ -127,24 +131,23 @@ describe("checkpoint queries", () => {
 			"checkpoint-query-test",
 		]);
 
-		expect(await selectWorkingChanges(lix).execute()).toEqual([
-			expect.objectContaining({
-				row_pk: ["checkpoint-query-test"],
-				schema_key: "lix_key_value",
-				diff_type: "added",
-				before_change_id: null,
-			}),
-		]);
-		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 1, file_count: 0 },
-		]);
+		// Metadata-only changes do not count: the file-tier diff sees only
+		// file changes, never the workspace's own key-value writes.
+		expect(
+			await selectWorkingChangeCount(
+				lix,
+				await latestCheckpointId(lix),
+			).execute(),
+		).toEqual([{ change_count: 0, file_count: 0 }]);
 
 		const checkpoint = await lix.createCheckpoint();
 
-		expect(await selectWorkingChanges(lix).execute()).toEqual([]);
-		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 0, file_count: 0 },
-		]);
+		expect(
+			await selectWorkingChangeCount(
+				lix,
+				await latestCheckpointId(lix),
+			).execute(),
+		).toEqual([{ change_count: 0, file_count: 0 }]);
 		const checkpoints = await selectCheckpoints(lix).execute();
 		expect(checkpoints).toHaveLength(2);
 		expect(checkpoints[0]).toEqual(
@@ -160,7 +163,7 @@ describe("checkpoint queries", () => {
 		await lix.close();
 	});
 
-	test("returns composed working files and checkpoint file counts", async () => {
+	test("returns composed working files and clears them at a checkpoint", async () => {
 		const lix = await openLix();
 
 		await lix.execute(
@@ -171,27 +174,27 @@ describe("checkpoint queries", () => {
 				new TextEncoder().encode("draft"),
 			],
 		);
-		expect(await selectFileWorkingChanges(lix).execute()).toEqual([
-			{
+		const checkpointId = await latestCheckpointId(lix);
+		expect(await selectWorkingFileDiffs(lix, checkpointId).execute()).toEqual([
+			expect.objectContaining({
 				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
-				previous_path: null,
 				diff_type: "added",
-			},
-		]);
-		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 3, file_count: 1 },
-		]);
-
-		const checkpoint = await lix.createCheckpoint();
-		expect(await selectFileWorkingChanges(lix).execute()).toEqual([]);
-		expect(await selectCheckpointsWithFileCounts(lix).execute()).toEqual([
-			expect.objectContaining({
-				commit_id: checkpoint.commitId,
-				file_count: 1,
 			}),
-			expect.objectContaining({ file_count: 0 }),
 		]);
+		// The file's descriptor and content rows count; the workspace's own
+		// key-value write does not.
+		expect(
+			await selectWorkingChangeCount(lix, checkpointId).execute(),
+		).toEqual([{ change_count: 2, file_count: 1 }]);
+
+		await lix.createCheckpoint();
+		expect(
+			await selectWorkingFileDiffs(
+				lix,
+				await latestCheckpointId(lix),
+			).execute(),
+		).toEqual([]);
 
 		await lix.close();
 	});
@@ -211,13 +214,18 @@ describe("checkpoint queries", () => {
 		await lix.createCheckpoint();
 		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
 
-		expect(await selectReviewableFileWorkingChanges(lix)).toEqual([
-			{
+		// Removed files keep their pre-deletion path from the diff's base side.
+		expect(
+			await selectWorkingFileDiffs(
+				lix,
+				await latestCheckpointId(lix),
+			).execute(),
+		).toEqual([
+			expect.objectContaining({
 				id: fileId,
 				path: "/drafts/removed.md",
-				previous_path: "/drafts/removed.md",
 				diff_type: "removed",
-			},
+			}),
 		]);
 
 		await lix.close();

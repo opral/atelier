@@ -10,6 +10,7 @@ import type {
 import { normalizeFileExtensions } from "./file-handlers";
 import type { ExtensionManifest } from "./extension-manifest";
 import type { AtelierExtensionMenuItems } from "../extension-api";
+import { LixProvider } from "../lib/lix-react";
 
 type ReactRenderer = (args: {
 	atelier: ExtensionRuntime;
@@ -51,13 +52,17 @@ export function createReactExtensionDefinition(args: {
 						<Suspense
 							fallback={
 								<div
-									aria-hidden="true"
-									className="min-h-0 flex-1"
+									role="status"
+									className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
 									data-atelier-extension-suspended=""
-								/>
+								>
+									Loading {args.manifest.name}…
+								</div>
 							}
 						>
-							{args.component(next)}
+							<LixProvider lix={next.atelier.lix}>
+								{args.component(next)}
+							</LixProvider>
 						</Suspense>
 					</AtelierErrorBoundary>,
 				);

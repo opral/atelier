@@ -117,24 +117,6 @@ async function writeMarkdownFileWithOrigin(
 	);
 }
 
-async function readMarkdownFileOrigin(
-	lix: Lix,
-	fileId: string,
-): Promise<unknown> {
-	const file = await qb(lix)
-		.selectFrom("lix_file")
-		.select("lixcol_change_id as change_id")
-		.where("id", "=", fileId)
-		.executeTakeFirstOrThrow();
-	const change = await qb(lix)
-		.selectFrom("lix_change")
-		.select("origin_key")
-		.where("id", "=", file.change_id)
-		.where("file_id", "=", fileId)
-		.executeTakeFirstOrThrow();
-	return change.origin_key;
-}
-
 async function decodeFileMarkdown(lix: Lix, fileId: string): Promise<string> {
 	const row = await qb(lix)
 		.selectFrom("lix_file")
@@ -1008,6 +990,50 @@ test("reopens a file from fresh data instead of the prior query cache", async ()
 	);
 });
 
+test("revokes the mounted editor lease before destroying TipTap", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("editor_lease_dispose");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/editor-lease-dispose.md",
+			content: new TextEncoder().encode("Lease"),
+		})
+		.execute();
+
+	let readyEditor: Editor | null = null;
+	let disposedEditor: Editor | null = null;
+	let wasDestroyedWhenDisposed: boolean | null = null;
+	let view: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		view = render(
+			<Suspense>
+				<Providers lix={lix}>
+					<TipTapEditor
+						fileId={fileId}
+						onReady={(editor) => {
+							readyEditor = editor;
+						}}
+						onDispose={(editor) => {
+							disposedEditor = editor;
+							wasDestroyedWhenDisposed = editor.isDestroyed;
+						}}
+					/>
+				</Providers>
+			</Suspense>,
+		);
+	});
+	await screen.findByTestId("tiptap-editor");
+	await waitFor(() => expect(readyEditor).not.toBeNull());
+
+	await act(async () => view?.unmount());
+	expect(disposedEditor).toBe(readyEditor);
+	expect(wasDestroyedWhenDisposed).toBe(false);
+	expect(readyEditor!.isDestroyed).toBe(true);
+	await lix.close();
+});
+
 test("does not recreate the editor when the workspace opener identity changes", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("file_stable_workspace_opener");
@@ -1565,7 +1591,7 @@ test("ignores same-origin stale markdown autosave echoes", async () => {
 	expect(editorNode).not.toHaveTextContent("Stale saved copy");
 });
 
-test("ignores clean same-origin markdown updates", async () => {
+test("applies clean markdown updates without resolving writer origin", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-clean-update";
 	const fileId = fakeUuid("file_same_origin_clean_update");
 	const { lix } = await renderEditorForMarkdownFile({
@@ -1580,26 +1606,26 @@ test("ignores clean same-origin markdown updates", async () => {
 		"Same-origin replacement\n",
 		originKey,
 	);
-	expect(await readMarkdownFileOrigin(lix, fileId)).toBe(originKey);
 	await settleMarkdownObserver();
 
 	const editorNode = screen.getByTestId("tiptap-editor");
-	expect(editorNode).toHaveTextContent("Initial");
-	expect(editorNode).not.toHaveTextContent("Same-origin replacement");
+	expect(editorNode).toHaveTextContent("Same-origin replacement");
 });
 
-test("same-origin echo matching current markdown marks editor clean", async () => {
+test("a successful local persist marks the editor clean before its observer echo", async () => {
 	const originKey = "atelier.markdown-editor:same-origin-clean";
 	const fileId = fakeUuid("file_same_origin_clean");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
 		originKey,
+		persistDebounceMs: 0,
 	});
 
 	await setEditorText(editor, "Local current");
-	await writeMarkdownFileWithOrigin(lix, fileId, "Local current\n", originKey);
-	await settleMarkdownObserver();
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe("Local current\n");
+	});
 	await writeMarkdownFileWithOrigin(
 		lix,
 		fileId,
@@ -1616,9 +1642,10 @@ test("same-origin echo matching current markdown marks editor clean", async () =
 
 test("applies different-origin markdown update when editor is clean", async () => {
 	const fileId = fakeUuid("file_external_clean");
-	const { lix } = await renderEditorForMarkdownFile({
+	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
+		persistDebounceMs: 0,
 	});
 
 	await writeMarkdownFileWithOrigin(
@@ -1633,6 +1660,58 @@ test("applies different-origin markdown update when editor is clean", async () =
 			"External clean update",
 		);
 	});
+
+	await setEditorText(editor, "Local after external");
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			"Local after external\n",
+		);
+	});
+});
+
+test("delivers external markdown revisions without origin reads", async () => {
+	const fileId = fakeUuid("file_external_single_delivery");
+	const { lix } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+	});
+	const execute = vi.spyOn(lix, "execute");
+	const latencies: number[] = [];
+
+	for (let index = 0; index < 10; index += 1) {
+		const markdown = `External revision ${index}\n`;
+		const start = performance.now();
+		await writeMarkdownFileWithOrigin(
+			lix,
+			fileId,
+			markdown,
+			`external-origin-${index}`,
+		);
+		await waitFor(() => {
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+				`External revision ${index}`,
+			);
+		});
+		latencies.push(performance.now() - start);
+	}
+
+	const originPointReads = execute.mock.calls.filter(([statement]) =>
+		/\bfrom\s+"?lix_change"?\b/i.test(String(statement)),
+	);
+	const sorted = [...latencies].sort((left, right) => left - right);
+	const p90Ms = sorted[Math.ceil(sorted.length * 0.9) - 1] ?? 0;
+	if (process.env.ATELIER_BENCH_REPORT === "1") {
+		console.log(
+			"MARKDOWN_EXTERNAL_DELIVERY_BENCH",
+			JSON.stringify({
+				deliveries: latencies.length,
+				p90Ms,
+				originPointReads: originPointReads.length,
+			}),
+		);
+	}
+	expect(originPointReads).toHaveLength(0);
+	expect(p90Ms).toBeLessThan(2_000);
 });
 
 test("keeps the loaded markdown when the observed file is deleted", async () => {

@@ -1,6 +1,6 @@
-import { Suspense, type JSX, type ReactNode } from "react";
+import { type JSX, type ReactNode } from "react";
 import { Flag } from "lucide-react";
-import { useQuery } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { selectLatestCheckpoint, selectWorkingChangeCount } from "@/queries";
 
 // Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
@@ -42,28 +42,35 @@ export function CheckpointStatusBar({
 	readonly onOpenWorkingChanges?: () => void;
 	readonly onOpenHistory?: () => void;
 }): JSX.Element {
-	const workingChangeCount = useQuery((queryLix) =>
-		selectWorkingChangeCount(queryLix),
+	// lix_diff needs its base as a parameter, so the latest checkpoint id is
+	// its own observed query; a repository without one diffs from the root.
+	const latestCheckpoint = useQueryResult((queryLix) =>
+		selectLatestCheckpoint(queryLix),
 	);
-	const changeCount = workingChangeCount[0]?.change_count ?? 0;
-	const fileCount = workingChangeCount[0]?.file_count ?? 0;
+	const workingChangeCount = useQueryResult(
+		(queryLix) =>
+			selectWorkingChangeCount(
+				queryLix,
+				latestCheckpoint.rows[0]?.commit_id ?? null,
+			),
+		{ enabled: latestCheckpoint.status === "success" },
+	);
+	if (latestCheckpoint.status === "error") throw latestCheckpoint.error;
+	if (workingChangeCount.status === "error") throw workingChangeCount.error;
+	const workingRow = workingChangeCount.rows[0];
+	const changeCount = workingRow?.change_count ?? 0;
+	const fileCount = workingRow?.file_count ?? 0;
 	const workingCountLabel =
 		fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
 
 	const historyStatus =
-		changeCount === 0 ? (
-			<Suspense
-				fallback={
-					<CheckpointStatus
-						statusLabel={LATEST_CHECKPOINT_TITLE}
-						onActivate={onOpenHistory}
-					/>
-				}
-			>
-				<CleanCheckpointStatus onOpenHistory={onOpenHistory} />
-			</Suspense>
+		workingChangeCount.status === "pending" ? null : changeCount === 0 ? (
+			<CheckpointStatus
+				statusLabel={LATEST_CHECKPOINT_TITLE}
+				onActivate={onOpenHistory}
+			/>
 		) : (
 			<CheckpointStatus
 				statusLabel={`${workingCountLabel} since checkpoint`}
@@ -133,22 +140,6 @@ function AutoAcceptToggle({
 	);
 }
 
-function CleanCheckpointStatus({
-	onOpenHistory,
-}: {
-	readonly onOpenHistory?: () => void;
-}): JSX.Element {
-	const checkpoints = useQuery((lix) => selectLatestCheckpoint(lix));
-	const latestCheckpoint = checkpoints[0];
-	const statusLabel = latestCheckpoint
-		? LATEST_CHECKPOINT_TITLE
-		: "No checkpoints";
-
-	return (
-		<CheckpointStatus statusLabel={statusLabel} onActivate={onOpenHistory} />
-	);
-}
-
 function CheckpointStatus({
 	statusLabel,
 	hasWorkingChanges = false,
@@ -167,6 +158,7 @@ function CheckpointStatus({
 			type="button"
 			aria-label={`${statusLabel}. ${actionLabel}`}
 			onClick={onActivate}
+			onMouseDown={(event) => event.preventDefault()}
 			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 		>
 			{hasWorkingChanges ? null : (

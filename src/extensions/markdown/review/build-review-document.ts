@@ -58,8 +58,14 @@ export function buildMarkdownReviewDocument(
 ): MarkdownReviewDocument {
 	const beforeDoc = markdownToDoc(reviewDiff.beforeMarkdown);
 	const afterDoc = markdownToDoc(reviewDiff.afterMarkdown);
-	const beforeNodes = beforeDoc.content ?? [];
-	const afterNodes = afterDoc.content ?? [];
+	// An empty side contributes no blocks. Parsing "" yields one empty
+	// paragraph, which would otherwise render as a phantom deleted blank line
+	// when a file's before side does not exist (an added file) or its after
+	// side is gone (a deleted one).
+	const beforeNodes =
+		reviewDiff.beforeMarkdown.trim() === "" ? [] : (beforeDoc.content ?? []);
+	const afterNodes =
+		reviewDiff.afterMarkdown.trim() === "" ? [] : (afterDoc.content ?? []);
 	const beforeSegments = rawNodeSegments(
 		reviewDiff.beforeMarkdown,
 		beforeNodes.length,
@@ -192,7 +198,17 @@ export function projectMarkdownReviewDocument(
 	doc: JSONContent,
 	side: "before" | "after",
 ): JSONContent {
-	return projectNode(doc, side) ?? { type: "doc", content: [] };
+	const projected = projectNode(doc, side) ?? { type: "doc", content: [] };
+	// An empty side carries no blocks in the review document (no phantom
+	// deleted/added blank line), but a projected document is an editor
+	// document: normalize to the canonical empty doc — one empty paragraph.
+	if (projected.type === "doc" && (projected.content ?? []).length === 0) {
+		return {
+			type: "doc",
+			content: [{ type: "paragraph", attrs: { data: {} } }],
+		};
+	}
+	return projected;
 }
 
 /** Collapses decided groups while leaving pending groups marked for review. */

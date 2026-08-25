@@ -1,12 +1,4 @@
-import {
-	lazy,
-	Suspense,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { PenTool, TriangleAlert } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
@@ -14,14 +6,14 @@ import {
 	editorRevisionMode,
 	normalizeEditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
+import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
+import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
-import { LixProvider, useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
-	useExternalWriteReview,
-	useExternalWriteReviewData,
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
@@ -105,155 +97,37 @@ function EditableExcalidrawView({
 }: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: ExcalidrawFileRow;
 }) {
-	const lix = useLix();
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.excalidraw`;
 	const fileText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
-	const review = useExternalWriteReview({
-		fileId,
-		path: resolvedPath,
-		activeBranchId: atelier.branches.activeId,
-		resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-		reviewRangeSessionId: atelier.reviews.rangeSessionId,
-	});
-	const reviewData = useExternalWriteReviewData(review);
-	const reviewText = reviewData
-		? decodeFileDataToText(reviewData.afterData)
-		: null;
-	const isReviewing = Boolean(review);
-	const [documentText, setDocumentText] = useState(reviewText ?? fileText);
-	const localTextRef = useRef(documentText);
-	const lastCleanTextRef = useRef(fileText);
-	const persistenceRunningRef = useRef(false);
-	const queuedTextRef = useRef<string | null>(null);
-	const reviewingRef = useRef(isReviewing);
-	const wasReviewingRef = useRef(false);
-	const [saveError, setSaveError] = useState<string | null>(null);
-
-	useEffect(() => {
-		if (!review) return;
-		return atelier.reviews.register(review);
-	}, [atelier.reviews, review]);
-
-	const originKey = useMemo(() => createExcalidrawOriginKey(), []);
-	useEffect(() => {
-		reviewingRef.current = isReviewing;
-		if (isReviewing && reviewText !== null) {
-			queuedTextRef.current = null;
-			localTextRef.current = reviewText;
-			setDocumentText(reviewText);
-		}
-		if (!isReviewing && wasReviewingRef.current) {
-			void qb(lix)
-				.selectFrom("lix_file")
-				.select("content")
-				.where("id", "=", fileId)
-				.executeTakeFirst()
-				.then((row) => {
-					if (!row || reviewingRef.current) return;
-					const nextText = decodeFileDataToText(row.content);
-					lastCleanTextRef.current = nextText;
-					localTextRef.current = nextText;
-					setDocumentText(nextText);
-				})
-				.catch((error) => {
-					if (!reviewingRef.current) {
-						setSaveError(
-							error instanceof Error
-								? error.message
-								: "Could not reload file after review",
-						);
-					}
-				});
-		}
-		wasReviewingRef.current = isReviewing;
-	}, [fileId, isReviewing, lix, reviewText]);
-
-	const flushPersistence = useCallback(async () => {
-		if (persistenceRunningRef.current || reviewingRef.current) return;
-		persistenceRunningRef.current = true;
-		try {
-			while (queuedTextRef.current !== null && !reviewingRef.current) {
-				const nextText = queuedTextRef.current;
-				queuedTextRef.current = null;
-				if (nextText === lastCleanTextRef.current) continue;
-				try {
-					await lix.execute(
-						"UPDATE lix_file SET content = $1 WHERE id = $2",
-						[new TextEncoder().encode(nextText), fileId],
-						{ originKey },
-					);
-					lastCleanTextRef.current = nextText;
-					setSaveError(null);
-				} catch (error) {
-					setSaveError(
-						error instanceof Error ? error.message : "Could not save file",
-					);
-				}
-			}
-		} finally {
-			persistenceRunningRef.current = false;
-			if (queuedTextRef.current !== null) void flushPersistence();
-		}
-	}, [fileId, lix, originKey]);
-
-	const persistUserEdit = useCallback(
-		(nextText: string) => {
-			if (reviewingRef.current || atelier.readOnly) return;
-			localTextRef.current = nextText;
-			queuedTextRef.current = nextText;
-			void flushPersistence();
-		},
-		[atelier.readOnly, flushPersistence],
+	// The shell owns review detection: this file is under review whenever the
+	// working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
+	const diffSession = atelier.diff.session;
+	const isReviewing = Boolean(
+		diffSession &&
+			"working" in diffSession.target &&
+			diffSession.files.some(
+				(file) => file.id === fileId && file.review?.status === "pending",
+			),
 	);
 
-	useEffect(() => {
-		const events = lix.observe(`SELECT content FROM lix_file WHERE id = $1`, [
-			fileId,
-		]);
-		let closed = false;
-		const reconcile = (data: unknown) => {
-			if (closed) return;
-			const nextText = decodeFileDataToText(data);
-			if (nextText === localTextRef.current) {
-				lastCleanTextRef.current = nextText;
-				return;
-			}
-			if (reviewingRef.current) return;
-			// MVP conflict policy: a queued or running local edit wins.
-			if (
-				persistenceRunningRef.current ||
-				queuedTextRef.current !== null ||
-				localTextRef.current !== lastCleanTextRef.current
-			)
-				return;
-			lastCleanTextRef.current = nextText;
-			localTextRef.current = nextText;
-			setDocumentText(nextText);
-		};
-		void (async () => {
-			try {
-				while (!closed) {
-					const event = await events.next();
-					if (!event || closed) continue;
-					const row = event.result.rows[0];
-					if (row) reconcile(row.get("content"));
-				}
-			} catch (error) {
-				if (!closed)
-					setSaveError(
-						error instanceof Error ? error.message : "Could not observe file",
-					);
-			}
-		})();
-		return () => {
-			closed = true;
-			events.close();
-			queuedTextRef.current = null;
-		};
-	}, [fileId, lix]);
+
+	const originKey = useMemo(() => createExcalidrawOriginKey(), []);
+	const {
+		text: documentText,
+		saveError,
+		persist: persistUserEdit,
+	} = useSyncedTextFile({
+		fileId,
+		initialText: fileText,
+		reviewText: null,
+		reviewing: isReviewing,
+		readOnly: atelier.readOnly,
+		originKey,
+	});
 
 	const parsed = useMemo(
 		() => parseExcalidrawScene(documentText),
@@ -297,10 +171,13 @@ function HistoricalExcalidrawView({
 }) {
 	const lix = useLix();
 	const [snapshotText, setSnapshotText] = useState<string | null>(null);
+	const [absentAtCommit, setAbsentAtCommit] = useState(false);
 	const [loadError, setLoadError] = useState(false);
 	useEffect(() => {
 		let cancelled = false;
-		setSnapshotText(null);
+		// The previous snapshot stays visible while the next commit loads, so
+		// retargeting between checkpoints never flashes the loading state.
+		setAbsentAtCommit(false);
 		setLoadError(false);
 		if (!commitId) {
 			setSnapshotText(decodeFileDataToText(fileRow.content));
@@ -308,9 +185,11 @@ function HistoricalExcalidrawView({
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
 			.then((data) => {
-				if (!cancelled) {
-					setSnapshotText(data ? decodeFileDataToText(data) : "");
-				}
+				if (cancelled) return;
+				// No data at the commit means the file does not exist there yet;
+				// the absence is temporal, not an empty document.
+				if (data) setSnapshotText(decodeFileDataToText(data));
+				else setAbsentAtCommit(true);
 			})
 			.catch(() => {
 				if (!cancelled) setLoadError(true);
@@ -328,6 +207,14 @@ function HistoricalExcalidrawView({
 			>
 				Could not load this file revision.
 			</div>
+		);
+	}
+	if (absentAtCommit) {
+		return (
+			<CheckpointAbsentFile
+				filePath={fileRow.path || filePath}
+				commitId={commitId}
+			/>
 		);
 	}
 	if (snapshotText === null) return <ExcalidrawLoadingState />;
@@ -422,16 +309,14 @@ export const extension = createReactExtensionDefinition({
 	description: "Draw and edit Excalidraw scenes.",
 	icon: PenTool,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<ExcalidrawView
-				atelier={atelier}
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-				beforeCommitId={view.state.beforeCommitId as string | null | undefined}
-				afterCommitId={view.state.afterCommitId as string | null | undefined}
-			/>
-		</LixProvider>
+		<ExcalidrawView
+			atelier={atelier}
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+			beforeCommitId={view.state.beforeCommitId as string | null | undefined}
+			afterCommitId={view.state.afterCommitId as string | null | undefined}
+		/>
 	),
 });

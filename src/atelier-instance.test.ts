@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
-import { openLix } from "@/test-utils/node-lix-sdk";
 import type { AtelierPreferencesStore } from "./state-adapters";
 
 const mocks = vi.hoisted(() => ({
@@ -44,9 +43,8 @@ describe("createAtelier", () => {
 		});
 
 		expect(atelier.lix).toBe(lix);
-		expect(atelier.diff.open).toEqual(expect.any(Function));
 		expect(atelier.documents.open).toEqual(expect.any(Function));
-		expect(Object.keys(atelier)).toEqual(["lix", "diff", "documents", "views"]);
+		expect(Object.keys(atelier)).toEqual(["lix", "documents", "views"]);
 		expect(getAtelierConfiguration(atelier)).toEqual(
 			expect.objectContaining({
 				extensions: [],
@@ -92,152 +90,6 @@ describe("createAtelier", () => {
 		await Promise.all([first, second]);
 
 		expect(savedWidths).toEqual([25, 30]);
-	});
-
-	test("opens an agent diff without exposing the internal review range", async () => {
-		const lix = {} as Lix;
-		const atelier = createAtelier({ lix, branchSession });
-
-		await atelier.diff.open({
-			beforeCommitId: "commit-before",
-			afterCommitId: "commit-after",
-			source: {
-				id: "claude",
-				sessionId: "session-1",
-				turnId: "turn-2",
-			},
-		});
-
-		expect(mocks.appendAgentTurnCommitRange).toHaveBeenCalledWith(
-			lix,
-			{
-				id: JSON.stringify([
-					"atelier-diff",
-					"claude",
-					"session-1",
-					"turn-2",
-					"commit-before",
-					"commit-after",
-				]),
-				sourceId: "claude",
-				beforeCommitId: "commit-before",
-				afterCommitId: "commit-after",
-				sessionId: "session-1",
-				turnId: "turn-2",
-				startedAt: 1_234,
-				completedAt: 1_234,
-			},
-			{ branchId: "main" },
-		);
-	});
-
-	test("scopes diff ranges to a Lix branch switched outside Atelier", async () => {
-		const lix = await openLix();
-		try {
-			const atelier = createAtelier({ lix });
-			const configuration = getAtelierConfiguration(atelier);
-			const unsubscribe = configuration.branchSession.subscribe(
-				() => undefined,
-			);
-			try {
-				const draft = await lix.createBranch({ name: "draft" });
-				await lix.switchBranch({ branchId: draft.id });
-
-				await atelier.diff.open({
-					beforeCommitId: "commit-before",
-					afterCommitId: "commit-after",
-					source: { id: "codex" },
-				});
-
-				expect(mocks.appendAgentTurnCommitRange).toHaveBeenCalledWith(
-					lix,
-					expect.any(Object),
-					{ branchId: draft.id },
-				);
-				await vi.waitFor(() => {
-					expect(configuration.branchSession.getSnapshot()).toBe(draft.id);
-				});
-			} finally {
-				unsubscribe();
-			}
-		} finally {
-			await lix.close();
-		}
-	});
-
-	test("omits unavailable source metadata", async () => {
-		const atelier = createAtelier({
-			lix: {} as Lix,
-			branchSession,
-		});
-
-		await atelier.diff.open({
-			beforeCommitId: "commit-before",
-			afterCommitId: "commit-after",
-			source: { id: "codex" },
-		});
-
-		const persistedRange = mocks.appendAgentTurnCommitRange.mock.calls[0]?.[1];
-		expect(persistedRange).not.toHaveProperty("sessionId");
-		expect(persistedRange).not.toHaveProperty("turnId");
-	});
-
-	test("defaults diff ranges to the configured review session", async () => {
-		const atelier = createAtelier({
-			lix: {} as Lix,
-			branchSession,
-			reviewRangeSessionId: "account-1",
-		});
-
-		await atelier.diff.open({
-			beforeCommitId: "commit-before",
-			afterCommitId: "commit-after",
-			source: { id: "codex" },
-		});
-
-		expect(mocks.appendAgentTurnCommitRange.mock.calls[0]?.[1]).toEqual(
-			expect.objectContaining({
-				sessionId: "account-1",
-				id: JSON.stringify([
-					"atelier-diff",
-					"codex",
-					"account-1",
-					null,
-					"commit-before",
-					"commit-after",
-				]),
-			}),
-		);
-	});
-
-	test("keeps an explicit diff session over the configured default", async () => {
-		const atelier = createAtelier({
-			lix: {} as Lix,
-			branchSession,
-			reviewRangeSessionId: "account-1",
-		});
-
-		await atelier.diff.open({
-			beforeCommitId: "commit-before",
-			afterCommitId: "commit-after",
-			source: { id: "codex", sessionId: "explicit-session" },
-		});
-
-		expect(mocks.appendAgentTurnCommitRange.mock.calls[0]?.[1]?.sessionId).toBe(
-			"explicit-session",
-		);
-	});
-
-	test("does not open an empty commit range", async () => {
-		const atelier = createAtelier({ lix: {} as Lix });
-
-		await atelier.diff.open({
-			beforeCommitId: "same-commit",
-			afterCommitId: "same-commit",
-			source: { id: "claude" },
-		});
-
-		expect(mocks.appendAgentTurnCommitRange).not.toHaveBeenCalled();
 	});
 
 	test("queues document commands until the shell binds and preserves their order", async () => {

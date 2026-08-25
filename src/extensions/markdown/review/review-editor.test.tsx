@@ -132,6 +132,45 @@ test("keeps the same Tiptap editor mounted after a partial decision", async () =
 	await act(async () => view?.unmount());
 });
 
+test("does not access an owned editor after replacing its commit-scoped resource", async () => {
+	lix = await openLix();
+	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+	let view: ReturnType<typeof render> | undefined;
+	const renderReview = (afterCommitId: string) => (
+		<LixProvider lix={lix!}>
+			<MarkdownReviewEditor
+				reviewDiff={{
+					beforeMarkdown: "Before.\n",
+					afterMarkdown: "After.\n",
+				}}
+				sourceFilePath="/review.md"
+				afterCommitId={afterCommitId}
+				reviewEnabled
+			/>
+		</LixProvider>
+	);
+
+	try {
+		await act(async () => {
+			view = render(renderReview("commit-a"));
+		});
+		await screen.findByRole("group", { name: "Review change 1 of 1" });
+		const firstEditor = view!.container.querySelector(".ProseMirror");
+		expect(firstEditor).not.toBeNull();
+
+		await act(async () => view!.rerender(renderReview("commit-b")));
+		await waitFor(() => {
+			const replacement = view!.container.querySelector(".ProseMirror");
+			expect(replacement).not.toBe(firstEditor);
+			expect(replacement?.isConnected).toBe(true);
+		});
+		expect(consoleError).not.toHaveBeenCalled();
+	} finally {
+		await act(async () => view?.unmount());
+		consoleError.mockRestore();
+	}
+});
+
 test("keeps all unresolved changes without overriding earlier decisions", async () => {
 	lix = await openLix();
 	const onComplete = vi.fn(async () => {});
@@ -276,6 +315,43 @@ test("restores an external editor when review projection unmounts", async () => 
 	await act(async () => view?.unmount());
 	expect(editor.getText()).toBe("Authoritative");
 	editor.destroy();
+});
+
+test("does not consume an expired external editor lease", async () => {
+	lix = await openLix();
+	const editor = createEditor({
+		lix,
+		initialMarkdown: "# Authoritative",
+		additionalExtensions: MarkdownReviewExtensions,
+		persistState: false,
+	});
+	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+	let view: ReturnType<typeof render> | undefined;
+	const renderReview = (afterMarkdown: string) => (
+		<LixProvider lix={lix!}>
+			<MarkdownReviewEditor
+				externalEditor={editor}
+				reviewDiff={{
+					beforeMarkdown: "# Authoritative",
+					afterMarkdown,
+				}}
+				sourceFilePath="/review.md"
+				reviewEnabled
+			/>
+		</LixProvider>
+	);
+
+	try {
+		await act(async () => {
+			view = render(renderReview("# Projected"));
+		});
+		editor.destroy();
+		await act(async () => view!.rerender(renderReview("# New projection")));
+		expect(consoleError).not.toHaveBeenCalled();
+	} finally {
+		await act(async () => view?.unmount());
+		consoleError.mockRestore();
+	}
 });
 
 test("applies semantic identity hints that arrive before review starts", async () => {

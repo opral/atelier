@@ -1,10 +1,13 @@
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
+import type { AtelierDiffSession } from "@/extension-api";
+import { DiffGlyph } from "@/components/diff-glyph";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
-import { LixProvider, useQuery } from "@/lib/lix-react";
-import { selectFileHistory } from "@/lib/lix-file-history";
+import { useQuery } from "@/lib/lix-react";
 import {
-	selectCheckpointsWithFileCounts,
+	selectCheckpoints,
+	selectCommitParent,
+	selectLatestCheckpoint,
 	selectWorkingChangeCount,
 	type CheckpointRow,
 } from "@/queries";
@@ -39,8 +42,16 @@ function WorkingChangesRow({
 }: {
 	readonly atelier: ExtensionRuntime;
 }) {
+	// lix_diff takes its base as a parameter: resolve the latest checkpoint
+	// first (root fallback when none exists), then count the file diffs.
+	const latestCheckpoint = useQuery((queryLix) =>
+		selectLatestCheckpoint(queryLix),
+	);
 	const workingChangeCount = useQuery((queryLix) =>
-		selectWorkingChangeCount(queryLix),
+		selectWorkingChangeCount(
+			queryLix,
+			latestCheckpoint[0]?.commit_id ?? null,
+		),
 	);
 	const changeCount = workingChangeCount[0]?.change_count ?? 0;
 	const fileCount = workingChangeCount[0]?.file_count ?? 0;
@@ -48,10 +59,14 @@ function WorkingChangesRow({
 		fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
-	const openWorkingChanges = atelier.reviews.openWorkingChanges;
 	const isViewing =
-		atelier.reviews.active === true &&
-		atelier.reviews.mode === "working-changes";
+		atelier.diff.session !== null &&
+		"working" in atelier.diff.session.target;
+	// Pressing the active entry again leaves review mode — the row toggles.
+	const toggleWorkingChanges = () =>
+		isViewing
+			? atelier.diff.exit()
+			: void atelier.diff.open({ target: { working: true } });
 
 	return (
 		<div
@@ -65,8 +80,9 @@ function WorkingChangesRow({
 			<button
 				type="button"
 				aria-label="Working changes"
-				disabled={changeCount === 0 || !openWorkingChanges}
-				onClick={openWorkingChanges}
+				disabled={fileCount === 0}
+				onClick={toggleWorkingChanges}
+				onMouseDown={(event) => event.preventDefault()}
 				data-attr="history-working-changes"
 				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left ${
 					changeCount === 0
@@ -105,8 +121,18 @@ function WorkingChangeFileList({
 }: {
 	readonly atelier: ExtensionRuntime;
 }) {
-	const files = atelier.reviews.workingChangeFiles ?? [];
-	const openWorkingChangeFile = atelier.reviews.openWorkingChangeFile;
+	const session = atelier.diff.session;
+	const sessionFiles =
+		session && "working" in session.target ? session.files : null;
+	// Exiting review nulls the session immediately, but the disclosure above
+	// still animates closed for 200ms — keep the last list rendered so the
+	// collapse has content to fold away instead of snapping shut.
+	const lastFilesRef = useRef<AtelierDiffSession["files"]>([]);
+	if (sessionFiles && sessionFiles.length > 0) {
+		lastFilesRef.current = sessionFiles;
+	}
+	const files = sessionFiles ?? lastFilesRef.current;
+	const openWorkingChangeFile = atelier.diff.openFile;
 	if (files.length === 0) return null;
 
 	return (
@@ -121,6 +147,7 @@ function WorkingChangeFileList({
 							openWorkingChangeFile?.(file.path);
 						}}
 						data-attr="history-open-working-change-file"
+						onMouseDown={(event) => event.preventDefault()}
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
 						<img
@@ -131,6 +158,15 @@ function WorkingChangeFileList({
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}
 						</span>
+						{file.movedFromPath ? (
+							<span className="truncate text-[var(--color-text-quaternary)]">
+								· {movedFromHint(file.movedFromPath, file.path)}
+							</span>
+						) : null}
+						<ChangeKindDot
+							changeKind={file.changeKind}
+							moved={Boolean(file.movedFromPath)}
+						/>
 					</button>
 				</li>
 			))}
@@ -139,7 +175,18 @@ function WorkingChangeFileList({
 }
 
 function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
-	const checkpoints = useQuery((lix) => selectCheckpointsWithFileCounts(lix));
+	const checkpoints = useQuery((lix) => selectCheckpoints(lix));
+	// The oldest checkpoint has no older checkpoint to diff against; its base
+	// is its commit's first parent (the repository's beginning).
+	const oldestCommitId = checkpoints.at(-1)?.commit_id ?? null;
+	const oldestParent = useQuery((lix) =>
+		selectCommitParent(lix, oldestCommitId ?? ""),
+	);
+	// Null means the repository's beginning: the genesis checkpoint has no
+	// parent commit, and its diff base is the empty repository.
+	const oldestParentId: string | null = oldestCommitId
+		? (oldestParent[0]?.parent_id ?? null)
+		: null;
 
 	return (
 		<ol aria-label="Checkpoints" className="space-y-0">
@@ -148,8 +195,10 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 					key={checkpoint.commit_id}
 					atelier={atelier}
 					checkpoint={checkpoint}
-					previousCommitId={checkpoints[index + 1]?.commit_id}
-					fileCount={checkpoint.file_count}
+					previousCommitId={
+						checkpoints[index + 1]?.commit_id ??
+						(index === checkpoints.length - 1 ? oldestParentId : undefined)
+					}
 					index={index}
 					count={checkpoints.length}
 				/>
@@ -162,14 +211,13 @@ function CheckpointItem({
 	atelier,
 	checkpoint,
 	previousCommitId,
-	fileCount,
 	index,
 	count,
 }: {
 	readonly atelier: ExtensionRuntime;
 	readonly checkpoint: CheckpointRow;
-	readonly previousCommitId: string | undefined;
-	readonly fileCount: number;
+	/** Undefined disables the row; null diffs from the repository's beginning. */
+	readonly previousCommitId: string | null | undefined;
 	readonly index: number;
 	readonly count: number;
 }) {
@@ -180,8 +228,11 @@ function CheckpointItem({
 			: index === 0
 				? "Latest checkpoint"
 				: "Checkpoint";
-	const isViewing = atelier.reviews.historicalCommitId === checkpoint.commit_id;
-	const viewCheckpoint = atelier.reviews.viewCheckpoint;
+	const session = atelier.diff.session;
+	const isViewing =
+		session !== null &&
+		"commitId" in session.target &&
+		session.target.commitId === checkpoint.commit_id;
 
 	return (
 		<li
@@ -194,16 +245,20 @@ function CheckpointItem({
 		>
 			<button
 				type="button"
-				disabled={!viewCheckpoint || !previousCommitId || fileCount === 0}
-				onClick={() =>
-					previousCommitId
-						? void viewCheckpoint?.({
-								commitId: checkpoint.commit_id,
-								previousCommitId,
-								createdAt: checkpoint.created_at,
-							})
-						: undefined
-				}
+				disabled={previousCommitId === undefined}
+				onClick={() => {
+					if (previousCommitId === undefined) return;
+					// Pressing the viewed checkpoint again leaves review mode.
+					if (isViewing) {
+						atelier.diff.exit();
+						return;
+					}
+					void atelier.diff.open({
+						base: previousCommitId ? { commitId: previousCommitId } : null,
+						target: { commitId: checkpoint.commit_id },
+					});
+				}}
+				onMouseDown={(event) => event.preventDefault()}
 				data-attr="history-view-checkpoint"
 				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
@@ -229,28 +284,11 @@ function CheckpointItem({
 						>
 							{formatCheckpointRelativeTime(checkpoint.created_at)}
 						</time>
-						<span aria-hidden="true"> · </span>
-						<span>
-							{fileCount} {fileCount === 1 ? "file" : "files"}
-						</span>
 					</span>
 				</span>
 			</button>
 			<AnimatedHistoryDisclosure open={isViewing}>
-				<Suspense
-					fallback={
-						<div
-							aria-hidden="true"
-							data-attr="history-checkpoint-files-loading"
-							className="h-8"
-						/>
-					}
-				>
-					<CheckpointFileList
-						atelier={atelier}
-						commitId={checkpoint.commit_id}
-					/>
-				</Suspense>
+				<CheckpointFileList atelier={atelier} commitId={checkpoint.commit_id} />
 			</AnimatedHistoryDisclosure>
 		</li>
 	);
@@ -321,16 +359,21 @@ function CheckpointFileList({
 	readonly atelier: ExtensionRuntime;
 	readonly commitId: string;
 }) {
-	const files = useQuery(
-		(lix) =>
-			selectFileHistory(lix)
-				.select(["id", "path"])
-				.where("lixcol_observed_commit_id", "=", commitId)
-				.orderBy("path", "asc")
-				.$castTo<{ id: string; path: string }>(),
-		{ subscribe: false },
-	);
-	const openCheckpointFile = atelier.reviews.openCheckpointFile;
+	const session = atelier.diff.session;
+	const sessionFiles =
+		session !== null &&
+		"commitId" in session.target &&
+		session.target.commitId === commitId
+			? session.files
+			: null;
+	// Same collapse-animation retention as the working-changes list: the
+	// session is gone the moment review exits, the fold-away is not.
+	const lastFilesRef = useRef<AtelierDiffSession["files"]>([]);
+	if (sessionFiles && sessionFiles.length > 0) {
+		lastFilesRef.current = sessionFiles;
+	}
+	const files = sessionFiles ?? lastFilesRef.current;
+	const openCheckpointFile = atelier.diff.openFile;
 
 	if (files.length === 0) return null;
 	return (
@@ -345,6 +388,7 @@ function CheckpointFileList({
 							openCheckpointFile?.(file.path);
 						}}
 						data-attr="history-open-checkpoint-file"
+						onMouseDown={(event) => event.preventDefault()}
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
 						<img
@@ -355,11 +399,57 @@ function CheckpointFileList({
 						<span className="truncate">
 							{fileNameFromHistoryPath(file.path)}
 						</span>
+						{file.movedFromPath ? (
+							<span className="truncate text-[var(--color-text-quaternary)]">
+								· {movedFromHint(file.movedFromPath, file.path)}
+							</span>
+						) : null}
+						<ChangeKindDot
+							changeKind={file.changeKind}
+							moved={Boolean(file.movedFromPath)}
+						/>
 					</button>
 				</li>
 			))}
 		</ul>
 	);
+}
+
+/**
+ * Shape + color: the dot-hybrid glyphs (design 23d). Added is dot+plus,
+ * removed dot+minus, modified the plain dot, moved dot+chevron — so the
+ * types survive grayscale and color blindness.
+ */
+function ChangeKindDot({
+	changeKind,
+	moved = false,
+}: {
+	readonly changeKind: "added" | "modified" | "removed";
+	readonly moved?: boolean;
+}) {
+	return (
+		<DiffGlyph
+			kind={moved && changeKind === "modified" ? "moved" : changeKind}
+			className="ml-auto shrink-0"
+		/>
+	);
+}
+
+/**
+ * Where the file came from: the old directory for a cross-directory move,
+ * the old name for a rename in place.
+ */
+function movedFromHint(movedFromPath: string, path: string): string {
+	const fromSegments = movedFromPath.split("/").filter(Boolean);
+	const toSegments = path.split("/").filter(Boolean);
+	const fromName = fromSegments.pop() ?? movedFromPath;
+	toSegments.pop();
+	const fromDir = fromSegments.join("/");
+	const toDir = toSegments.join("/");
+	if (fromDir !== toDir) {
+		return fromDir.length > 0 ? `${fromDir}/` : "/";
+	}
+	return fromName;
 }
 
 function fileNameFromHistoryPath(path: string): string {
@@ -391,9 +481,5 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Browse repository checkpoints.",
 	icon: History,
-	component: ({ atelier }) => (
-		<LixProvider lix={atelier.lix}>
-			<HistoryView atelier={atelier} />
-		</LixProvider>
-	),
+	component: ({ atelier }) => <HistoryView atelier={atelier} />,
 });

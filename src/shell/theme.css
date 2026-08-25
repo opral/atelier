@@ -101,6 +101,9 @@
 	);
 	--color-text-diff-removed: var(--color-error-800);
 	--color-border-diff-removed: var(--color-error-700);
+	/* Diff glyphs beyond the add/edit/remove triad (design 23d). */
+	--color-icon-diff-moved: rgb(68, 112, 157);
+	--color-icon-diff-conflict: rgb(125, 78, 158);
 	--color-bg-diff-modified: color-mix(
 		in srgb,
 		var(--color-warning-400) 11%,

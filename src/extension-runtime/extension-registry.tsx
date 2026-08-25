@@ -132,8 +132,13 @@ export function useExtensionRegistry(): ExtensionRegistryValue {
 }
 
 let extensionCounter = 0;
+// A per-load random prefix keeps generated ids unique across page loads:
+// a plain counter restarts at 1 and collides with ids persisted by earlier
+// sessions, and two views sharing one instance id render as one (the other
+// panel's host stays empty).
+const instanceIdPrefix = Math.random().toString(36).slice(2, 8);
 
 export function createExtensionInstanceId(kind: ExtensionKind): string {
 	extensionCounter += 1;
-	return `${kind}-${extensionCounter}`;
+	return `${kind}-${instanceIdPrefix}-${extensionCounter}`;
 }

@@ -1,4 +1,4 @@
-export { Atelier } from "./create-atelier";
+export { Atelier, AtelierSkeleton } from "./create-atelier";
 export { createAtelier } from "./atelier-instance";
 export {
 	coerceAtelierSessionUiState,
@@ -13,9 +13,6 @@ export { useDebouncedPayloadPersistence } from "./extension-runtime/use-debounce
 export type { DebouncedPayloadPersistenceOptions } from "./extension-runtime/use-debounced-payload-persistence";
 export type {
 	AtelierCentralPanelOptions,
-	AtelierDiffApi,
-	AtelierDiffOpenOptions,
-	AtelierDiffSource,
 	AtelierInstance,
 	AtelierOptions,
 	AtelierSidePanel,
@@ -39,6 +36,7 @@ export type {
 	AtelierErrorFallbackContext,
 	AtelierPanelSide,
 	AtelierProps,
+	AtelierSkeletonProps,
 	AtelierSlots,
 	AtelierTabStripContext,
 	AtelierTabStripTab,
@@ -59,6 +57,10 @@ export type {
 	AtelierExtensionSeparatorMenuItem,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
+	AtelierDiffApi,
+	AtelierDiffFile,
+	AtelierDiffRef,
+	AtelierDiffSession,
 	AtelierExtensionView,
 	AtelierFilesViewOptions,
 	AtelierJsonValue,
@@ -78,5 +80,3 @@ export type {
 	DeveloperWorkflowScenario,
 	SimulatedAgentWorkflow,
 } from "./dev-tools/simulate-agent-workflow";
-export { appendAgentTurnCommitRange as recordAgentTurnCommitRange } from "./shell/agent-turn-review-range";
-export type { AgentTurnCommitRange } from "./shell/agent-turn-review-range";

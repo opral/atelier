@@ -1,8 +1,8 @@
-import { Suspense, type ReactNode } from "react";
+import { StrictMode, Suspense, type ReactNode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { AtelierErrorBoundary } from "../atelier-error-boundary";
-import { LixProvider, useQuery } from "./lix-react";
+import { LixProvider, useQuery, useQueryResult } from "./lix-react";
 import { createLixProtocolSessionGoneError } from "./lix-session-error";
 import type { Lix, ObserveEvent } from "@lix-js/sdk";
 
@@ -71,7 +71,7 @@ function eventWithValue(
 	};
 }
 
-test("useQuery re-reads the initial observe snapshot to protect resubscriptions", async () => {
+test("useQuery accepts the initial observe snapshot as authoritative", async () => {
 	let resolveFirstObserve:
 		| ((event: ObserveEvent | undefined) => void)
 		| undefined;
@@ -88,10 +88,7 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 	const lix = {
 		observe: vi.fn(() => ({ next, close })),
 	} as unknown as Lix;
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValue([{ value: "fresh-direct-read" }]);
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
 	function Probe() {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -125,7 +122,7 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 			columns: ["value"],
 			rows: [
 				{
-					toObject: () => ({ value: "stale-observe-payload" }),
+					toObject: () => ({ value: "authoritative-observe-snapshot" }),
 				},
 			] as unknown as ObserveEvent["result"]["rows"],
 			rowsAffected: 0,
@@ -134,51 +131,118 @@ test("useQuery re-reads the initial observe snapshot to protect resubscriptions"
 	});
 
 	await waitFor(() => {
-		expect(screen.getByTestId("value")).toHaveTextContent("fresh-direct-read");
+		expect(screen.getByTestId("value")).toHaveTextContent(
+			"authoritative-observe-snapshot",
+		);
 	});
-	expect(execute).toHaveBeenCalledTimes(2);
+	expect(execute).toHaveBeenCalledTimes(1);
+});
+
+test("useQueryResult starts after commit and uses one observer snapshot as initial data", async () => {
+	const stream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => stream),
+	} as unknown as Lix;
+	const execute = vi.fn().mockResolvedValue([{ value: "duplicate" }]);
+
+	function Probe() {
+		const result = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM committed_observer_boot",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return (
+			<div data-testid="committed-value">
+				{result.status === "pending" ? "pending" : result.rows[0]?.value}
+			</div>
+		);
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Probe />
+		</LixProvider>,
+	);
+	expect(screen.getByTestId("committed-value")).toHaveTextContent("pending");
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
+	expect(execute).not.toHaveBeenCalled();
+
+	await act(async () => stream.emit(eventWithValue(0, 0, "first-frame")));
+	await waitFor(() =>
+		expect(screen.getByTestId("committed-value")).toHaveTextContent(
+			"first-frame",
+		),
+	);
+	expect(execute).not.toHaveBeenCalled();
+});
+
+test("useQueryResult starts independent startup observers without a waterfall", async () => {
+	const first = createObserveStream();
+	const second = createObserveStream();
+	const lix = {
+		observe: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second),
+	} as unknown as Lix;
+	const execute = vi.fn();
+
+	function Probe() {
+		const one = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({ sql: "SELECT value FROM startup_one", parameters: [] }),
+			execute,
+		}));
+		const two = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({ sql: "SELECT value FROM startup_two", parameters: [] }),
+			execute,
+		}));
+		return <div>{`${one.status}:${two.status}`}</div>;
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Probe />
+		</LixProvider>,
+	);
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(2));
+	expect(first.next).toHaveBeenCalledTimes(1);
+	expect(second.next).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
+});
+
+test("useQueryResult keeps one observer across the StrictMode effect reconnect", async () => {
+	const stream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => stream),
+	} as unknown as Lix;
+
+	function Probe() {
+		useQueryResult<{ value: string }>(() => ({
+			compile: () => ({ sql: "SELECT value FROM strict_boot", parameters: [] }),
+			execute: vi.fn(),
+		}));
+		return null;
+	}
+
+	const rendered = render(
+		<StrictMode>
+			<LixProvider lix={lix}>
+				<Probe />
+			</LixProvider>
+		</StrictMode>,
+	);
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
+	expect(stream.close).not.toHaveBeenCalled();
+
+	rendered.unmount();
+	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
 });
 
 test("useQuery publishes observed rows to every consumer of the cached query", async () => {
-	let resolveFirstObserve:
-		| ((event: ObserveEvent | undefined) => void)
-		| undefined;
-	let resolveSecondObserve:
-		| ((event: ObserveEvent | undefined) => void)
-		| undefined;
-	const firstNext = vi
-		.fn()
-		.mockImplementationOnce(
-			() =>
-				new Promise<ObserveEvent | undefined>((resolve) => {
-					resolveFirstObserve = resolve;
-				}),
-		)
-		.mockImplementationOnce(
-			() =>
-				new Promise<ObserveEvent | undefined>((resolve) => {
-					resolveSecondObserve = resolve;
-				}),
-		)
-		.mockImplementation(() => new Promise<ObserveEvent | undefined>(() => {}));
-	const firstClose = vi.fn();
-	const secondClose = vi.fn();
+	const stream = createObserveStream();
 	const lix = {
-		observe: vi
-			.fn()
-			.mockImplementationOnce(() => ({
-				next: firstNext,
-				close: firstClose,
-			}))
-			.mockImplementation(() => ({
-				next: () => new Promise<ObserveEvent | undefined>(() => {}),
-				close: secondClose,
-			})),
+		observe: vi.fn(() => stream),
 	} as unknown as Lix;
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValue([{ value: "initial-authoritative" }]);
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
 	function Probe({ id }: { readonly id: string }) {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -190,14 +254,21 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 		}));
 		return <div data-testid={id}>{rows[0]?.value}</div>;
 	}
+	function Consumers({ showFirst }: { readonly showFirst: boolean }) {
+		return (
+			<>
+				{showFirst ? <Probe key="first" id="first-value" /> : null}
+				<Probe key="second" id="second-value" />
+			</>
+		);
+	}
 
 	let view: ReturnType<typeof render> | undefined;
 	await act(async () => {
 		view = render(
 			<LixProvider lix={lix}>
 				<Suspense fallback={<div data-testid="shared-loading" />}>
-					<Probe id="first-value" />
-					<Probe id="second-value" />
+					<Consumers showFirst />
 				</Suspense>
 			</LixProvider>,
 		);
@@ -206,67 +277,145 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(await screen.findByTestId("first-value")).toHaveTextContent("initial");
 	expect(screen.getByTestId("second-value")).toHaveTextContent("initial");
 	expect(execute).toHaveBeenCalledTimes(1);
+	expect(lix.observe).toHaveBeenCalledTimes(1);
 
-	resolveFirstObserve?.({
-		sequence: 0,
-		mutationSequence: 0,
-		result: {
-			columns: ["value"],
-			rows: [
-				{
-					toObject: () => ({ value: "stale-initial" }),
-				},
-			] as unknown as ObserveEvent["result"]["rows"],
-			rowsAffected: 0,
-			notices: [],
-		},
-	});
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
+	await act(async () => stream.emit(eventWithValue(0, 0, "initial-observed")));
 	await waitFor(() => {
 		expect(screen.getByTestId("first-value")).toHaveTextContent(
-			"initial-authoritative",
+			"initial-observed",
 		);
-		expect(execute).toHaveBeenCalledTimes(2);
-		expect(resolveSecondObserve).toBeTypeOf("function");
+		expect(execute).toHaveBeenCalledTimes(1);
 	});
 
-	resolveSecondObserve?.({
-		sequence: 1,
-		mutationSequence: 1,
-		result: {
-			columns: ["value"],
-			rows: [
-				{
-					toObject: () => ({ value: "shared-fresh" }),
-				},
-			] as unknown as ObserveEvent["result"]["rows"],
-			rowsAffected: 0,
-			notices: [],
-		},
+	await act(async () => {
+		view?.rerender(
+			<LixProvider lix={lix}>
+				<Suspense fallback={<div data-testid="shared-loading" />}>
+					<Consumers showFirst={false} />
+				</Suspense>
+			</LixProvider>,
+		);
 	});
+	expect(screen.queryByTestId("first-value")).toBeNull();
+	expect(stream.close).not.toHaveBeenCalled();
+	expect(lix.observe).toHaveBeenCalledTimes(1);
 
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(2));
+	await act(async () => stream.emit(eventWithValue(1, 1, "shared-fresh")));
 	await waitFor(() => {
-		expect(screen.getByTestId("first-value")).toHaveTextContent("shared-fresh");
 		expect(screen.getByTestId("second-value")).toHaveTextContent(
 			"shared-fresh",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(2);
+	expect(execute).toHaveBeenCalledTimes(1);
 
 	view?.unmount();
-	expect(firstClose).toHaveBeenCalledTimes(1);
-	expect(secondClose).toHaveBeenCalledTimes(1);
+	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
 });
 
-test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
+test("stopped observers cannot overwrite a restarted cache entry with queued events", async () => {
+	const firstStream = createObserveStream();
+	const restartedStream = createObserveStream();
+	const lix = {
+		observe: vi
+			.fn()
+			.mockReturnValueOnce(firstStream)
+			.mockReturnValueOnce(restartedStream),
+	} as unknown as Lix;
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
+
+	function Probe() {
+		const rows = useQuery<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM stopped_observer_restart",
+				parameters: [],
+			}),
+			execute,
+		}));
+		return <div data-testid="restart-value">{rows[0]?.value}</div>;
+	}
+	const renderProbe = () =>
+		render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<Probe />
+				</Suspense>
+			</LixProvider>,
+		);
+
+	let first: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		first = renderProbe();
+	});
+	expect(await screen.findByTestId("restart-value")).toHaveTextContent(
+		"initial",
+	);
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(1));
+	await act(async () =>
+		firstStream.emit(eventWithValue(0, 10, "first-authoritative")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"first-authoritative",
+		),
+	);
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(2));
+	await act(async () =>
+		firstStream.emit(eventWithValue(1, 11, "first-observed")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"first-observed",
+		),
+	);
+	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(3));
+	await act(async () => first?.unmount());
+	expect(firstStream.close).toHaveBeenCalledTimes(1);
+
+	let restarted: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		restarted = renderProbe();
+	});
+	expect(await screen.findByTestId("restart-value")).toHaveTextContent(
+		"first-observed",
+	);
+	await waitFor(() => expect(restartedStream.next).toHaveBeenCalledTimes(1));
+	await act(async () =>
+		restartedStream.emit(eventWithValue(0, 1, "restart-authoritative")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"restart-authoritative",
+		),
+	);
+	await waitFor(() => expect(restartedStream.next).toHaveBeenCalledTimes(2));
+	await act(async () =>
+		restartedStream.emit(eventWithValue(1, 2, "restart-observed")),
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("restart-value")).toHaveTextContent(
+			"restart-observed",
+		),
+	);
+
+	// Resolving the old observer's already-queued next() after close must not
+	// overwrite the active observer, even with a numerically newer mutation id.
+	await act(async () =>
+		firstStream.emit(eventWithValue(2, 100, "queued-old-observer")),
+	);
+	expect(screen.getByTestId("restart-value")).toHaveTextContent(
+		"restart-observed",
+	);
+	await act(async () => restarted?.unmount());
+});
+
+test("useQuery accepts an authoritative non-advancing reconnect snapshot", async () => {
 	const stream = createObserveStream();
 	const lix = {
 		observe: vi.fn(() => stream),
 	} as unknown as Lix;
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValueOnce([{ value: "initial-authoritative" }])
-		.mockResolvedValue([{ value: "fresh-direct-read" }]);
+	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
 	function Probe() {
 		const rows = useQuery<{ value: string }>(() => ({
@@ -292,7 +441,9 @@ test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
 		"initial",
 	);
 
-	await act(async () => stream.emit(eventWithValue(0, 10, "stale-initial")));
+	await act(async () =>
+		stream.emit(eventWithValue(0, 10, "initial-authoritative")),
+	);
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent(
 			"initial-authoritative",
@@ -304,101 +455,81 @@ test("useQuery re-reads a non-advancing reconnect snapshot", async () => {
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent("observed");
 	});
-	expect(execute).toHaveBeenCalledTimes(2);
+	expect(execute).toHaveBeenCalledTimes(1);
 
 	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(3));
-	await act(async () => stream.emit(eventWithValue(2, 11, "stale-reconnect")));
+	await act(async () =>
+		stream.emit(eventWithValue(2, 11, "reconnect-authoritative")),
+	);
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent(
-			"fresh-direct-read",
+			"reconnect-authoritative",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(3);
+	expect(execute).toHaveBeenCalledTimes(1);
 });
 
-test("useQuery orders mounted observers and resumes after owner failover", async () => {
-	const firstStream = createObserveStream();
-	const secondStream = createObserveStream();
+test("useQuery can treat advancing observer results as invalidations", async () => {
+	const stream = createObserveStream();
 	const lix = {
-		observe: vi
-			.fn()
-			.mockImplementationOnce(() => firstStream)
-			.mockImplementationOnce(() => secondStream),
+		observe: vi.fn(() => stream),
 	} as unknown as Lix;
-	let directValue = "initial";
-	const execute = vi.fn(async () => [{ value: directValue }]);
+	const execute = vi
+		.fn()
+		.mockResolvedValueOnce([{ value: "initial-file" }])
+		.mockResolvedValueOnce([{ value: "initial-authoritative" }])
+		.mockResolvedValue([{ value: "synced-file" }]);
 
-	function Probe({ id }: { readonly id: string }) {
-		const rows = useQuery<{ value: string }>(() => ({
-			compile: () => ({
-				sql: "SELECT value FROM ordered_observe_cache",
-				parameters: [],
+	function Probe() {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM filesystem_union",
+					parameters: [],
+				}),
+				execute,
 			}),
-			execute,
-		}));
-		return <div data-testid={id}>{rows[0]?.value}</div>;
+			{ reuseObservedResult: false },
+		);
+		return <div data-testid="invalidated-value">{rows[0]?.value}</div>;
 	}
 
-	let view: ReturnType<typeof render> | undefined;
 	await act(async () => {
-		view = render(
+		render(
 			<LixProvider lix={lix}>
 				<Suspense fallback={null}>
-					<Probe id="ordered-first" key="first" />
-					<Probe id="ordered-second" key="second" />
+					<Probe />
 				</Suspense>
 			</LixProvider>,
 		);
 	});
-	expect(await screen.findByTestId("ordered-first")).toHaveTextContent(
-		"initial",
+	expect(await screen.findByTestId("invalidated-value")).toHaveTextContent(
+		"initial-file",
 	);
 
-	await act(async () => firstStream.emit(eventWithValue(0, 0, "initial")));
-	await act(async () => secondStream.emit(eventWithValue(0, 0, "initial")));
-	await waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
-
-	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(2));
-	await act(async () => firstStream.emit(eventWithValue(1, 10, "newer")));
+	await act(async () => stream.emit(eventWithValue(0, 0, "stale-initial")));
 	await waitFor(() => {
-		expect(screen.getByTestId("ordered-first")).toHaveTextContent("newer");
-		expect(screen.getByTestId("ordered-second")).toHaveTextContent("newer");
-	});
-
-	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(2));
-	await act(async () => secondStream.emit(eventWithValue(1, 9, "older")));
-	expect(screen.getByTestId("ordered-first")).toHaveTextContent("newer");
-	expect(screen.getByTestId("ordered-second")).toHaveTextContent("newer");
-	expect(execute).toHaveBeenCalledTimes(2);
-
-	directValue = "failover-authoritative";
-	await act(async () => {
-		view?.rerender(
-			<LixProvider lix={lix}>
-				<Suspense fallback={null}>
-					<Probe id="ordered-second" key="second" />
-				</Suspense>
-			</LixProvider>,
+		expect(screen.getByTestId("invalidated-value")).toHaveTextContent(
+			"initial-authoritative",
 		);
 	});
-	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(3));
-	await act(async () =>
-		secondStream.emit(eventWithValue(2, 1, "stale-failover")),
-	);
-	await waitFor(() => {
-		expect(screen.getByTestId("ordered-second")).toHaveTextContent(
-			"failover-authoritative",
-		);
-	});
-	expect(execute).toHaveBeenCalledTimes(3);
 
-	await waitFor(() => expect(secondStream.next).toHaveBeenCalledTimes(4));
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(2));
 	await act(async () =>
-		secondStream.emit(eventWithValue(3, 2, "after-failover")),
+		stream.emit({
+			sequence: 1,
+			mutationSequence: 1,
+			result: {
+				columns: ["value"],
+				rows: [],
+				rowsAffected: 0,
+				notices: [],
+			},
+		}),
 	);
 	await waitFor(() => {
-		expect(screen.getByTestId("ordered-second")).toHaveTextContent(
-			"after-failover",
+		expect(screen.getByTestId("invalidated-value")).toHaveTextContent(
+			"synced-file",
 		);
 	});
 	expect(execute).toHaveBeenCalledTimes(3);
@@ -476,7 +607,7 @@ test("useQuery starts a query when it becomes enabled", async () => {
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	view.unmount();
-	expect(close).toHaveBeenCalledTimes(1);
+	await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
 });
 
 test("useQuery retains a permanent initial query error across remounts", async () => {
@@ -591,14 +722,16 @@ test("useQuery keeps last rows when a protocol session is gone instead of crashi
 	await act(async () => {
 		view = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
 	});
-	expect(await screen.findByTestId("session-gone-query-value")).toHaveTextContent(
-		"initial",
-	);
+	expect(
+		await screen.findByTestId("session-gone-query-value"),
+	).toHaveTextContent("initial");
 	await act(async () => stream.fail(error));
 	expect(screen.getByTestId("session-gone-query-value")).toHaveTextContent(
 		"initial",
 	);
-	expect(screen.queryByTestId("session-gone-query-error")).not.toBeInTheDocument();
+	expect(
+		screen.queryByTestId("session-gone-query-error"),
+	).not.toBeInTheDocument();
 	// Atelier must not remount or restart observe. The SDK reopens the session.
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 	expect(execute).toHaveBeenCalledTimes(1);
@@ -623,9 +756,7 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 			}),
 			execute,
 		}));
-		return (
-			<div data-testid="session-gone-initial-value">{rows.length}</div>
-		);
+		return <div data-testid="session-gone-initial-value">{rows.length}</div>;
 	}
 
 	let view!: ReturnType<typeof render>;
@@ -636,9 +767,9 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 			"session-gone-initial-error",
 		);
 	});
-	expect(await screen.findByTestId("session-gone-initial-value")).toHaveTextContent(
-		"0",
-	);
+	expect(
+		await screen.findByTestId("session-gone-initial-value"),
+	).toHaveTextContent("0");
 	expect(
 		screen.queryByTestId("session-gone-initial-error"),
 	).not.toBeInTheDocument();

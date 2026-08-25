@@ -7,6 +7,7 @@ import { handlePaste } from "./handle-paste";
 import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpointForFiles } from "@/lib/lix-diff-commands";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ensureTrailingNewline = (value: string) =>
@@ -28,16 +29,18 @@ async function waitForMarkdown(
 	lix: Awaited<ReturnType<typeof openLix>>,
 	fileId: string,
 	matches: (markdown: string) => boolean,
+	timeoutMs = 4_000,
 ): Promise<string> {
 	let markdown = "";
-	for (let i = 0; i < 40; i += 1) {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
 		markdown = await readMarkdown(lix, fileId);
 		if (matches(markdown)) {
 			return markdown;
 		}
+		if (Date.now() >= deadline) return markdown;
 		await new Promise((resolve) => setTimeout(resolve, 20));
 	}
-	return markdown;
 }
 
 function paragraphTexts(markdown: string): string[] {
@@ -920,7 +923,8 @@ test("stale in-flight autosave cannot overwrite a concurrent external write", as
 		initialMarkdown,
 		persistDebounceMs: 0,
 	});
-	editor.commands.insertContentAt(editor.state.doc.content.size, " Local edit");
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	editor.commands.insertContent(" Local edit");
 
 	const persisted = await waitForMarkdown(
 		lix,
@@ -1199,7 +1203,7 @@ test("delete removes the middle paragraph from persisted markdown", async () => 
 	editor.destroy();
 });
 
-test("destroy flushes pending autosave for an existing file", async () => {
+test("scheduled autosave persists its captured payload after destroy", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("destroy_flush_pending_autosave");
 
@@ -1212,27 +1216,289 @@ test("destroy flushes pending autosave for an existing file", async () => {
 		})
 		.execute();
 
-	const editor: Editor = await createEditorFromFile({
-		lix,
-		fileId,
-		persistDebounceMs: 50,
+	let didPersist!: () => void;
+	const persisted = new Promise<void>((resolve) => {
+		didPersist = resolve;
 	});
+	let shouldPersist = true;
+	vi.useFakeTimers();
+	try {
+		const editor = createEditor({
+			lix,
+			fileId,
+			initialMarkdown: "Start",
+			persistDebounceMs: 50,
+			shouldPersist: () => shouldPersist,
+			onPersist: didPersist,
+		});
+		editor.commands.setTextSelection(editor.state.doc.content.size);
+		editor.commands.insertContent(" Changed");
+		editor.destroy();
+		// A new view may reuse the callback's mutable ref. The captured edit was
+		// authorized by the old view and must not be vetoed retroactively.
+		shouldPersist = false;
+		Object.defineProperty(editor, "state", {
+			configurable: true,
+			get: () => {
+				throw new Error("destroyed TipTap state was accessed");
+			},
+		});
+		editor.getJSON = () => {
+			throw new Error("destroyed TipTap getJSON was accessed");
+		};
 
-	editor.commands.setTextSelection(editor.state.doc.content.size);
-	editor.commands.insertContent(" Changed");
-	editor.destroy();
-
-	const markdown = await waitForMarkdown(
-		lix,
-		fileId,
-		(value) => value === ensureTrailingNewline("Start Changed"),
+		await vi.advanceTimersByTimeAsync(50);
+		await persisted;
+	} finally {
+		vi.useRealTimers();
+	}
+	expect(await readMarkdown(lix, fileId)).toBe(
+		ensureTrailingNewline("Start Changed"),
 	);
-	expect(markdown).toBe(ensureTrailingNewline("Start Changed"));
 
 	await lix.close();
 });
 
-test("destroy flushes pending autosave without recreating a deleted file", async () => {
+test("an edit made while persistence is disabled is never queued", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("disabled_persistence_not_queued");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/disabled-persistence-not-queued.md",
+			content: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	const onPersist = vi.fn();
+	vi.useFakeTimers();
+	try {
+		const editor = createEditor({
+			lix,
+			fileId,
+			initialMarkdown: "Start",
+			persistDebounceMs: 50,
+			shouldPersist: () => false,
+			onPersist,
+		});
+		editor.commands.setTextSelection(editor.state.doc.content.size);
+		editor.commands.insertContent(" Changed");
+		editor.destroy();
+		await vi.advanceTimersByTimeAsync(50);
+	} finally {
+		vi.useRealTimers();
+	}
+
+	expect(onPersist).not.toHaveBeenCalled();
+	expect(await readMarkdown(lix, fileId)).toBe("Start");
+	await lix.close();
+});
+
+test("checkpoint ignores an editor-memory edit until autosave reaches Lix", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("checkpoint_ignores_editor_memory");
+
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/checkpoint-ignores-editor-memory.md",
+			content: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	const editor = await createEditorFromFile({
+		lix,
+		fileId,
+		persistDebounceMs: 60_000,
+	});
+	const checkpoint = await lix.createCheckpoint();
+	vi.useFakeTimers();
+	try {
+		editor.commands.setTextSelection(editor.state.doc.content.size);
+		editor.commands.insertContent(" Changed");
+
+		expect(await readMarkdown(lix, fileId)).toBe("Start");
+		const workingDiffBeforeCheckpoint = await lix.execute(
+			"SELECT count(*) AS count FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
+			[checkpoint.commitId],
+		);
+		expect(Number(workingDiffBeforeCheckpoint.rows[0]?.get("count"))).toBe(0);
+		expect(await createCheckpointForFiles(lix, [fileId])).toBeNull();
+		expect(await readMarkdown(lix, fileId)).toBe("Start");
+
+		editor.destroy();
+		await vi.advanceTimersByTimeAsync(60_000);
+	} finally {
+		vi.useRealTimers();
+	}
+	const persisted = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === ensureTrailingNewline("Start Changed"),
+		15_000,
+	);
+	expect(persisted).toBe(ensureTrailingNewline("Start Changed"));
+	await lix.close();
+}, 20_000);
+
+test("queued autosave drains its captured payload after destroy", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("destroyed_editor_captured_payload");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/destroyed-editor-captured-payload.md",
+			content: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	let releaseFirstWrite!: () => void;
+	const firstWriteGate = new Promise<void>((resolve) => {
+		releaseFirstWrite = resolve;
+	});
+	let firstWriteStarted!: () => void;
+	const firstWriteStart = new Promise<void>((resolve) => {
+		firstWriteStarted = resolve;
+	});
+	let updateAttempts = 0;
+	let firstTargetWriteFinished = false;
+	const gatedLix = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute") {
+				return async (...args: Parameters<typeof lix.execute>) => {
+					const [statement] = args;
+					if (
+						typeof statement === "string" &&
+						statement.startsWith(
+							"UPDATE lix_file SET content = $1 WHERE id = $2",
+						)
+					) {
+						updateAttempts += 1;
+						if (updateAttempts === 1) {
+							firstWriteStarted();
+							await firstWriteGate;
+							const result = await target.execute(...args);
+							firstTargetWriteFinished = true;
+							return result;
+						}
+						expect(firstTargetWriteFinished).toBe(true);
+					}
+					return await target.execute(...args);
+				};
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+
+	const editor = createEditor({
+		lix: gatedLix,
+		fileId,
+		initialMarkdown: "Start",
+		persistDebounceMs: 0,
+	});
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	editor.commands.insertContent(" First");
+	await firstWriteStart;
+	editor.commands.insertContent(" Second");
+	editor.destroy();
+	// The persistence drain must use the payload captured before teardown.
+	Object.defineProperty(editor, "state", {
+		configurable: true,
+		get: () => {
+			throw new Error("destroyed TipTap state was accessed");
+		},
+	});
+	editor.getJSON = () => {
+		throw new Error("destroyed TipTap getJSON was accessed");
+	};
+	releaseFirstWrite();
+
+	const markdown = await waitForMarkdown(
+		lix,
+		fileId,
+		(value) => value === ensureTrailingNewline("Start First Second"),
+	);
+	expect(markdown).toBe(ensureTrailingNewline("Start First Second"));
+	expect(updateAttempts).toBe(2);
+	await lix.close();
+});
+
+test("destroy does not retry a failed in-flight autosave", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("destroyed_editor_transient_retry");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/destroyed-editor-transient-retry.md",
+			content: new TextEncoder().encode("Start"),
+		})
+		.execute();
+
+	let releaseFailedWrite!: () => void;
+	const failedWriteGate = new Promise<void>((resolve) => {
+		releaseFailedWrite = resolve;
+	});
+	let failedWriteStarted!: () => void;
+	const failedWriteStart = new Promise<void>((resolve) => {
+		failedWriteStarted = resolve;
+	});
+	let failedWriteRejected!: () => void;
+	const failedWriteRejection = new Promise<void>((resolve) => {
+		failedWriteRejected = resolve;
+	});
+	let updateAttempts = 0;
+	const transientlyFailingLix = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute") {
+				return async (...args: Parameters<typeof lix.execute>) => {
+					const [statement] = args;
+					if (
+						typeof statement === "string" &&
+						statement.startsWith(
+							"UPDATE lix_file SET content = $1 WHERE id = $2",
+						)
+					) {
+						updateAttempts += 1;
+						if (updateAttempts === 1) {
+							failedWriteStarted();
+							await failedWriteGate;
+							failedWriteRejected();
+							throw new Error("transient storage failure");
+						}
+					}
+					return await target.execute(...args);
+				};
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+
+	const editor = createEditor({
+		lix: transientlyFailingLix,
+		fileId,
+		initialMarkdown: "Start",
+		persistDebounceMs: 0,
+	});
+	editor.commands.setTextSelection(editor.state.doc.content.size);
+	editor.commands.insertContent(" Changed");
+	await failedWriteStart;
+	editor.destroy();
+	releaseFailedWrite();
+
+	await failedWriteRejection;
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(await readMarkdown(lix, fileId)).toBe("Start");
+	expect(updateAttempts).toBe(1);
+	await lix.close();
+});
+
+test("scheduled autosave after destroy does not recreate a deleted file", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("destroy_cancel_pending_autosave");
 
@@ -1245,18 +1511,45 @@ test("destroy flushes pending autosave without recreating a deleted file", async
 		})
 		.execute();
 
-	const editor: Editor = await createEditorFromFile({
-		lix,
-		fileId,
-		persistDebounceMs: 50,
+	let updateAttempts = 0;
+	const countingLix = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute") {
+				return async (...args: Parameters<typeof lix.execute>) => {
+					const [statement] = args;
+					if (
+						typeof statement === "string" &&
+						statement.startsWith(
+							"UPDATE lix_file SET content = $1 WHERE id = $2",
+						)
+					) {
+						updateAttempts += 1;
+					}
+					return await target.execute(...args);
+				};
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
 	});
+	vi.useFakeTimers();
+	try {
+		const editor = createEditor({
+			lix: countingLix,
+			fileId,
+			initialMarkdown: "Start",
+			persistDebounceMs: 50,
+		});
+		editor.commands.setTextSelection(editor.state.doc.content.size);
+		editor.commands.insertContent(" Changed");
+		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+		editor.destroy();
 
-	editor.commands.setTextSelection(editor.state.doc.content.size);
-	editor.commands.insertContent(" Changed");
-	await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
-	editor.destroy();
-
-	await new Promise((resolve) => setTimeout(resolve, 80));
+		await vi.advanceTimersByTimeAsync(50);
+	} finally {
+		vi.useRealTimers();
+	}
+	expect(updateAttempts).toBe(1);
 	const row = await qb(lix)
 		.selectFrom("lix_file")
 		.select(["id", "path"])

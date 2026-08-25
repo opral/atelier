@@ -238,6 +238,63 @@ export type AtelierEvent =
 			outcome: "accepted" | "rejected" | "abandoned";
 	  };
 
+/** A diffable state: a specific commit, or the mutable working state. */
+export type AtelierDiffRef =
+	| { readonly commitId: string }
+	| { readonly working: true };
+
+export type AtelierDiffFile = {
+	readonly id: string;
+	readonly path: string;
+	readonly changeKind: "added" | "modified" | "removed";
+	/** Set when a modified file's side paths differ: a move/rename. */
+	readonly movedFromPath?: string;
+	/** Present when the session reviews external writes (mutable target). */
+	readonly review?: {
+		readonly id: string;
+		readonly status: "pending" | "resolved";
+	};
+};
+
+export type AtelierDiffSession = {
+	/** The older side; null means the repository's beginning. */
+	readonly base: AtelierDiffRef | null;
+	readonly target: AtelierDiffRef;
+	readonly files: readonly AtelierDiffFile[];
+	readonly activePath: string | null;
+	/** When the target commit was created; drives the "Viewing checkpoint" title. */
+	readonly createdAt?: string;
+	/** Derived from the refs — a mutable target reviews, an immutable one restores. */
+	readonly capabilities: {
+		readonly checkpoint: boolean;
+		readonly undo: boolean;
+		readonly restore: boolean;
+	};
+};
+
+/**
+ * The one diff surface: every review is a session between two refs.
+ * Working changes review = open({ target: { working: true } });
+ * checkpoint view = open({ base: previous, target: commit }).
+ */
+export type AtelierDiffApi = {
+	readonly session: AtelierDiffSession | null;
+	readonly open: (options: {
+		/** Defaults to the latest checkpoint for a working target. */
+		readonly base?: AtelierDiffRef | null;
+		readonly target: AtelierDiffRef;
+		/** Reveal the first changed file (default: false — the session opens without navigating). */
+		readonly reveal?: boolean;
+	}) => Promise<void>;
+	readonly openFile: (path: string) => void;
+	readonly exit: () => void;
+	readonly accept: (path: string) => Promise<void>;
+	readonly reject: (path: string) => Promise<void>;
+	/** Accept with authored content: writes the bytes, then resolves. */
+	readonly resolve: (path: string, data: Uint8Array) => Promise<void>;
+	readonly autoAccept: boolean;
+};
+
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
 	/**
@@ -272,6 +329,8 @@ export type AtelierExtensionRuntime = {
 	readonly branches: {
 		readonly activeId: string;
 	};
+	/** The unified diff surface. */
+	readonly diff?: AtelierDiffApi;
 };
 
 export type AtelierExtensionView = {
@@ -282,7 +341,9 @@ export type AtelierExtensionView = {
 	readonly isFocused: boolean;
 	/** Preferences shared by every instance of this extension. */
 	readonly preferences: AtelierExtensionPreferences;
-	readonly registerNewFileDraftHandler: (handler: () => void) => () => void;
+	readonly registerNewFileDraftHandler: (
+		handler: () => Promise<void> | void,
+	) => () => void;
 };
 
 export type AtelierMountedExtension = {

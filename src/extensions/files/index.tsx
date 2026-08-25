@@ -2,6 +2,7 @@ import {
 	forwardRef,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -22,19 +23,20 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LixProvider, useLix, useQuery } from "@/lib/lix-react";
+import { useLix, useQueryResult } from "@/lib/lix-react";
+import { selectFileHistory } from "@/lib/lix-file-history";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
-	selectFileWorkingChanges,
-	selectFilesystemEntries,
-	selectWorkingChanges,
+	selectLatestCheckpoint,
+	selectWorkingFileDiffs,
+	selectFilesystemDirectories,
+	selectFilesystemFiles,
 } from "@/queries";
 import {
 	buildFilesystemTree,
 	isWatchedEntryId,
 	watchedEntryRows,
-	type FilesystemTreeNode,
 	type FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
 import type {
@@ -55,16 +57,10 @@ import { parseExtensionManifest } from "../../extension-runtime/extension-manife
 import manifestJson from "./manifest.json";
 import { qb } from "@/lib/lix-kysely";
 import type {
-	FileWorkingChangeRow,
+	FileDiffRow,
 	FilesystemEntryRow,
-	WorkingChangeRow,
 } from "@/queries";
 import type { Lix } from "@lix-js/sdk";
-import {
-	getPendingExternalWriteReviewPaths,
-	type ExternalWriteReviewFile,
-	useAgentTurnCommitRanges,
-} from "@/shell/external-write-review-history";
 
 type FilesViewContext = {
 	readonly openFile?: (args: {
@@ -81,9 +77,19 @@ type FilesViewContext = {
 	readonly activeFileId?: string | null;
 	readonly activeFilePath?: string | null;
 	readonly activeBranchId?: string;
-	readonly resolvedReviewIds?: readonly string[];
-	readonly reviewRangeSessionId?: string;
 	readonly reviewWorkingChanges?: boolean;
+	/**
+	 * Set while a historical session is open: the tree renders the filesystem
+	 * as of this commit (read-only) instead of the live workspace.
+	 */
+	readonly historicalCommitId?: string;
+	/** Opens a changed file through the diff session (review-aware). */
+	readonly openDiffFile?: (path: string) => void;
+	/** The open diff session's files; change kinds color the tree's dots. */
+	readonly sessionFiles?: readonly {
+		readonly path: string;
+		readonly changeKind: "added" | "modified" | "removed";
+	}[];
 	readonly reviewModeActive?: boolean;
 	readonly isPanelFocused?: boolean;
 	readonly panelSide?: PanelSide;
@@ -103,7 +109,7 @@ type FilesViewContext = {
 		readonly panelSide: PanelSide;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
-		readonly handler: () => void;
+		readonly handler: () => Promise<void> | void;
 	}) => () => void;
 };
 
@@ -124,11 +130,6 @@ type FilesSelectionOverride = {
 	readonly selection: FilesSelection | null;
 };
 
-type ResolvedPendingReviewPaths = {
-	readonly key: string;
-	readonly paths: ReadonlySet<string>;
-};
-
 const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
 
 /**
@@ -139,59 +140,222 @@ const EMPTY_REVIEW_PATHS: ReadonlySet<string> = new Set();
  * <FilesView />
  */
 export function FilesView({ context }: FilesViewProps) {
-	const lix = useLix();
-	const entries = useQuery<FilesystemEntryRow>((queryLix) =>
-		selectFilesystemEntries(queryLix),
+	const childDraftHandlerRef = useRef<(() => Promise<void> | void) | null>(
+		null,
 	);
-	return (
-		<FilesViewWithWorkingChanges
-			context={context}
-			lix={lix}
-			entries={entries}
-		/>
+	const pendingDraftRequestsRef = useRef<
+		Array<{
+			readonly resolve: () => void;
+			readonly reject: (error: unknown) => void;
+		}>
+	>([]);
+	const requestNewFileDraft = useCallback((): Promise<void> => {
+		const handler = childDraftHandlerRef.current;
+		if (handler) return Promise.resolve(handler());
+		return new Promise<void>((resolve, reject) => {
+			pendingDraftRequestsRef.current.push({ resolve, reject });
+		});
+	}, []);
+	const bindChildDraftHandler = useCallback(
+		(registration: {
+			readonly handler: () => Promise<void> | void;
+		}): (() => void) => {
+			const handler = registration.handler;
+			childDraftHandlerRef.current = handler;
+			const pending = pendingDraftRequestsRef.current.splice(0);
+			for (const request of pending) {
+				void Promise.resolve()
+					.then(handler)
+					.then(request.resolve, request.reject);
+			}
+			return () => {
+				if (childDraftHandlerRef.current === handler) {
+					childDraftHandlerRef.current = null;
+				}
+			};
+		},
+		[],
 	);
+	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
+	const panelSide = context?.panelSide;
+	const viewInstance = context?.viewInstance;
+	const isActiveView = context?.isActiveView === true;
+	useLayoutEffect(() => {
+		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) return;
+		return registerNewFileDraftHandler({
+			panelSide,
+			viewInstance,
+			isActiveView,
+			handler: requestNewFileDraft,
+		});
+	}, [
+		isActiveView,
+		panelSide,
+		registerNewFileDraftHandler,
+		requestNewFileDraft,
+		viewInstance,
+	]);
+	useEffect(() => {
+		return () => {
+			for (const request of pendingDraftRequestsRef.current.splice(0)) {
+				request.reject(
+					new Error(
+						"Files view unmounted before the new-file draft could start.",
+					),
+				);
+			}
+		};
+	}, []);
+	const childContext = useMemo(
+		() =>
+			context?.registerNewFileDraftHandler
+				? { ...context, registerNewFileDraftHandler: bindChildDraftHandler }
+				: context,
+		[bindChildDraftHandler, context],
+	);
+	return <FilesViewLoaded context={childContext} />;
 }
 
-function FilesViewWithWorkingChanges({
-	context,
-	lix,
-	entries,
-}: FilesViewProps & {
-	readonly lix: Lix;
-	readonly entries: FilesystemEntryRow[];
-}) {
+function FilesViewLoaded({ context }: FilesViewProps) {
+	const lix = useLix();
+	const historicalCommitId = context?.historicalCommitId;
+	const directories = useQueryResult<FilesystemEntryRow>(
+		(queryLix) => selectFilesystemDirectories(queryLix),
+		{ reuseObservedResult: false, enabled: !historicalCommitId },
+	);
+	const files = useQueryResult<FilesystemEntryRow>(
+		(queryLix) => selectFilesystemFiles(queryLix),
+		{ reuseObservedResult: false, enabled: !historicalCommitId },
+	);
+	// Time travel: a historical session renders the filesystem as of its
+	// target commit — every file that existed then, with parents synthesized
+	// from the paths (empty directories are not part of a checkpoint's state).
+	const historicalFileRows = useQueryResult<{
+		readonly id: string;
+		readonly path: string | null;
+		readonly lixcol_depth: number;
+	}>(
+		(queryLix) =>
+			selectFileHistory(queryLix, historicalCommitId)
+				.select(["id", "path", "lixcol_depth"])
+				.orderBy("id", "asc")
+				.orderBy("lixcol_depth", "asc") as never,
+		{ enabled: Boolean(historicalCommitId) },
+	);
 	const reviewWorkingChanges =
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
-	const workingChanges = useQuery(
-		(queryLix) => selectWorkingChanges(queryLix),
+	// Two-step: lix_diff takes its base as a parameter, so the latest
+	// checkpoint id is its own observed query (root fallback when none).
+	const latestCheckpoint = useQueryResult(
+		(queryLix) => selectLatestCheckpoint(queryLix),
 		{ enabled: reviewWorkingChanges },
 	);
-	const fileWorkingChanges = useQuery(
-		(queryLix) => selectFileWorkingChanges(queryLix),
-		{ enabled: reviewWorkingChanges },
+	const fileWorkingChanges = useQueryResult(
+		(queryLix) =>
+			selectWorkingFileDiffs(
+				queryLix,
+				latestCheckpoint.rows[0]?.commit_id ?? null,
+			),
+		{ enabled: reviewWorkingChanges && latestCheckpoint.status === "success" },
 	);
+	const historicalEntries = useMemo(() => {
+		if (!historicalCommitId || historicalFileRows.status !== "success") {
+			return null;
+		}
+		return historicalFilesystemEntries(historicalFileRows.rows);
+	}, [historicalCommitId, historicalFileRows]);
+	for (const result of [
+		directories,
+		files,
+		historicalFileRows,
+		latestCheckpoint,
+		fileWorkingChanges,
+	]) {
+		if (result.status === "error") throw result.error;
+	}
+	const livePending =
+		!historicalCommitId &&
+		(directories.status === "pending" || files.status === "pending");
+	if (livePending || (historicalCommitId && historicalEntries === null)) {
+		return (
+			<div
+				role="status"
+				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
+				data-atelier-extension-suspended=""
+			>
+				Loading Files…
+			</div>
+		);
+	}
 	return (
 		<FilesViewContent
 			context={context}
 			lix={lix}
-			entries={entries}
-			workingChanges={workingChanges}
-			fileWorkingChanges={fileWorkingChanges}
+			entries={
+				historicalEntries ?? [
+					...(directories.status === "success" ? directories.rows : []),
+					...(files.status === "success" ? files.rows : []),
+				]
+			}
+			fileWorkingChanges={fileWorkingChanges.rows as FileDiffRow[]}
 		/>
 	);
+}
+
+/**
+ * Files at a commit (shallowest history row per id) plus synthesized parent
+ * directories, shaped for the tree builder.
+ */
+function historicalFilesystemEntries(
+	rows: readonly {
+		readonly id: string;
+		readonly path: string | null;
+		readonly lixcol_depth: number;
+	}[],
+): FilesystemEntryRow[] {
+	const seen = new Set<string>();
+	const entries: FilesystemEntryRow[] = [];
+	const directoryPaths = new Set<string>();
+	for (const row of rows) {
+		if (seen.has(row.id)) continue;
+		seen.add(row.id);
+		if (typeof row.path !== "string") continue;
+		entries.push({
+			id: row.id,
+			parent_id: null,
+			path: row.path,
+			display_name: row.path.split("/").filter(Boolean).at(-1) ?? row.path,
+			kind: "file",
+		});
+		const segments = row.path.split("/").filter(Boolean);
+		segments.pop();
+		let prefix = "";
+		for (const segment of segments) {
+			prefix = `${prefix}/${segment}`;
+			directoryPaths.add(prefix);
+		}
+	}
+	for (const path of directoryPaths) {
+		entries.push({
+			id: `historical:${path}`,
+			parent_id: null,
+			path,
+			display_name: path.split("/").filter(Boolean).at(-1) ?? path,
+			kind: "directory",
+		});
+	}
+	return entries;
 }
 
 function FilesViewContent({
 	context,
 	lix,
 	entries,
-	workingChanges,
 	fileWorkingChanges,
 }: FilesViewProps & {
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
-	readonly workingChanges: WorkingChangeRow[];
-	readonly fileWorkingChanges: FileWorkingChangeRow[];
+	readonly fileWorkingChanges: FileDiffRow[];
 }) {
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),
@@ -239,13 +403,6 @@ function FilesViewContent({
 			}),
 		[context?.showHiddenFiles, mergedEntries],
 	);
-	const agentReviewPaths = usePendingExternalWriteReviewPaths(
-		lix,
-		nodes,
-		context?.activeBranchId ?? "",
-		context?.resolvedReviewIds ?? [],
-		context?.reviewRangeSessionId,
-	);
 	const workingChangePaths = useMemo(() => {
 		return new Set(
 			fileWorkingChanges.flatMap((change) =>
@@ -254,30 +411,47 @@ function FilesViewContent({
 		);
 	}, [fileWorkingChanges]);
 	const pendingReviewPaths =
-		context?.reviewModeActive === true
-			? context.reviewWorkingChanges === true
-				? workingChangePaths
-				: agentReviewPaths
+		context?.reviewModeActive === true && context.reviewWorkingChanges === true
+			? workingChangePaths
 			: EMPTY_REVIEW_PATHS;
-	const reviewChangeCounts = useMemo(() => {
-		const countsByFileId = new Map<string, number>();
-		for (const change of workingChanges) {
-			if (!change.file_id) continue;
-			countsByFileId.set(
-				change.file_id,
-				(countsByFileId.get(change.file_id) ?? 0) + 1,
-			);
+	// Session change kinds color the indicators: added green, modified orange.
+	// (Removed files have no live tree row to mark.)
+	const sessionFiles = context?.sessionFiles;
+	const reviewStatuses = useMemo(() => {
+		const statuses = new Map<string, "added" | "modified">();
+		if (context?.reviewModeActive !== true) return statuses;
+		for (const file of sessionFiles ?? []) {
+			if (file.changeKind === "removed") continue;
+			statuses.set(file.path, file.changeKind === "added" ? "added" : "modified");
 		}
-		const countsByPath = new Map<string, number>();
-		for (const entry of entries) {
-			if (entry.kind !== "file" || !pendingReviewPaths.has(entry.path)) {
-				continue;
+		return statuses;
+	}, [context?.reviewModeActive, sessionFiles]);
+	// A directory whose every file is newly added is itself new: it reads
+	// green like its contents. Anything mixed keeps the contains-changes tone.
+	const reviewDirectoryStatuses = useMemo(() => {
+		const directoryStatuses = new Map<string, "added">();
+		if (reviewStatuses.size === 0) return directoryStatuses;
+		for (const entry of mergedEntries) {
+			if (entry.kind !== "directory") continue;
+			const prefix = entry.path.endsWith("/") ? entry.path : `${entry.path}/`;
+			let fileCount = 0;
+			let allAdded = true;
+			for (const candidate of mergedEntries) {
+				if (candidate.kind !== "file" || !candidate.path.startsWith(prefix)) {
+					continue;
+				}
+				fileCount += 1;
+				if (reviewStatuses.get(candidate.path) !== "added") {
+					allAdded = false;
+					break;
+				}
 			}
-			const count = countsByFileId.get(entry.id);
-			if (count) countsByPath.set(entry.path, count);
+			if (fileCount > 0 && allAdded) {
+				directoryStatuses.set(entry.path, "added");
+			}
 		}
-		return countsByPath;
-	}, [entries, pendingReviewPaths, workingChanges]);
+		return directoryStatuses;
+	}, [mergedEntries, reviewStatuses]);
 	const creatingRef = useRef(false);
 	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
@@ -287,6 +461,12 @@ function FilesViewContent({
 	const [createRequest, setCreateRequest] =
 		useState<FileTreeCreateRequest | null>(null);
 	const nextCreateRequestIdRef = useRef(0);
+	const createReadyDeferredsRef = useRef(
+		new Map<
+			number,
+			{ readonly resolve: () => void; readonly reject: (error: Error) => void }
+		>(),
+	);
 	const [selectionOverride, setSelectionOverride] =
 		useState<FilesSelectionOverride | null>(null);
 	const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -446,7 +626,7 @@ function FilesViewContent({
 			kind: "file" | "directory",
 			fileType: FileTreeFileType = "generic",
 			directoryOverride?: string,
-		) => {
+		): number | undefined => {
 			if (createRequest) return;
 			const baseDirectory = directoryOverride ?? resolveCreateDirectory();
 			const directoryPath = ensureDirectoryPath(baseDirectory);
@@ -463,15 +643,17 @@ function FilesViewContent({
 				kind,
 				fileType,
 			);
+			const requestId = nextCreateRequestIdRef.current;
 			setCreateRequest({
 				directoryPath,
 				fileType: kind === "file" ? fileType : undefined,
-				id: nextCreateRequestIdRef.current,
+				id: requestId,
 				initialInputValue,
 				initialSelectionStart: initialInputValue === undefined ? undefined : 0,
 				initialValue: initialValueForCreateRequest(kind, fileType),
 				kind,
 			});
+			return requestId;
 		},
 		[createRequest, resolveCreateDirectory, setLocalSelection],
 	);
@@ -491,8 +673,38 @@ function FilesViewContent({
 	const handleNewExcalidraw = useCallback(() => {
 		startCreateRequest("file", "excalidraw");
 	}, [startCreateRequest]);
+	const requestNewMarkdownDraft = useCallback((): Promise<void> => {
+		const requestId = startCreateRequest("file", "markdown");
+		if (requestId === undefined) return Promise.resolve();
+		return new Promise<void>((resolve, reject) => {
+			createReadyDeferredsRef.current.set(requestId, { resolve, reject });
+		});
+	}, [startCreateRequest]);
+	const handleCreateReady = useCallback((request: FileTreeCreateRequest) => {
+		const deferred = createReadyDeferredsRef.current.get(request.id);
+		if (!deferred) return;
+		createReadyDeferredsRef.current.delete(request.id);
+		deferred.resolve();
+	}, []);
+	useEffect(() => {
+		return () => {
+			for (const deferred of createReadyDeferredsRef.current.values()) {
+				deferred.reject(
+					new Error(
+						"Files view unmounted before the new-file draft was ready.",
+					),
+				);
+			}
+			createReadyDeferredsRef.current.clear();
+		};
+	}, []);
 
 	const handleCreateCancel = useCallback((request: FileTreeCreateRequest) => {
+		const deferred = createReadyDeferredsRef.current.get(request.id);
+		createReadyDeferredsRef.current.delete(request.id);
+		deferred?.reject(
+			new Error("New-file draft was canceled before it became ready."),
+		);
 		setCreateRequest((prev) => (prev?.id === request.id ? null : prev));
 		setSelectionOverride(null);
 	}, []);
@@ -762,13 +974,13 @@ function FilesViewContent({
 			isActiveView,
 			// The host-level document command keeps its established Markdown
 			// behavior. The visible New-file action remains extension-agnostic.
-			handler: handleNewMarkdown,
+			handler: requestNewMarkdownDraft,
 		});
 	}, [
-		handleNewMarkdown,
 		isActiveView,
 		panelSide,
 		registerNewFileDraftHandler,
+		requestNewMarkdownDraft,
 		viewInstance,
 	]);
 
@@ -805,6 +1017,16 @@ function FilesViewContent({
 				kind: "file",
 				source: "lix",
 			});
+			// In a historical session, a changed file opens as its snapshot diff;
+			// an unchanged file's live document matches the checkpoint anyway.
+			if (
+				context?.historicalCommitId &&
+				context.sessionFiles?.some((file) => file.path === path) &&
+				context.openDiffFile
+			) {
+				context.openDiffFile(path);
+				return;
+			}
 			void context?.openFile?.({
 				panel: "central",
 				fileId,
@@ -1102,7 +1324,8 @@ function FilesViewContent({
 			variant={context?.panelSide === "central" ? "spacious" : "compact"}
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
-			reviewCounts={reviewChangeCounts}
+			reviewStatuses={reviewStatuses}
+			reviewDirectoryStatuses={reviewDirectoryStatuses}
 			onSelectItem={handleSelectItem}
 			onClearSelection={handleClearSelection}
 			selectedPath={selectedPath ?? undefined}
@@ -1112,6 +1335,7 @@ function FilesViewContent({
 			createRequest={createRequest}
 			onCreateCancel={handleCreateCancel}
 			onCreateCommit={handleCreateCommit}
+			onCreateReady={handleCreateReady}
 			{...(readOnly
 				? {}
 				: {
@@ -1240,15 +1464,16 @@ const CompactNewButton = forwardRef<
 	ref,
 ) {
 	return (
-		// Reads as one more tree row: same height, padding, icon slot, type, and
-		// hover fill as the items below it. No trailing chevron — the FILES
+		// Reads as one more tree row: same height, padding, icon slot, type,
+		// and hover fill as the items below it. No trailing chevron — the FILES
 		// section label above already carries a caret, and two stacked carets
 		// read as noise.
 		<button
 			ref={ref}
 			type="button"
-			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-[7px] px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 			data-attr="file-new"
+			onMouseDown={(event) => event.preventDefault()}
 			disabled={disabled}
 			title={title}
 			{...props}
@@ -1362,93 +1587,6 @@ function NewMenuItem({
 	);
 }
 
-function usePendingExternalWriteReviewPaths(
-	lix: Lix,
-	nodes: readonly FilesystemTreeNode[],
-	activeBranchId: string,
-	resolvedReviewIds: readonly string[],
-	reviewRangeSessionId?: string,
-): ReadonlySet<string> {
-	const reviewableFiles = useMemo(
-		() => collectReviewableTreeFiles(nodes),
-		[nodes],
-	);
-	const { rangeValues, ranges } = useAgentTurnCommitRanges(
-		activeBranchId,
-		reviewRangeSessionId,
-	);
-	const reviewableFilesKey = useMemo(
-		() =>
-			JSON.stringify(reviewableFiles.map(({ fileId, path }) => [fileId, path])),
-		[reviewableFiles],
-	);
-	const reviewKey = JSON.stringify([
-		activeBranchId,
-		reviewRangeSessionId ?? null,
-		rangeValues,
-		[...resolvedReviewIds].sort(),
-		reviewableFilesKey,
-	]);
-	const shouldResolve = reviewableFiles.length > 0 && ranges.length > 0;
-	const [resolved, setResolved] = useState<ResolvedPendingReviewPaths | null>(
-		null,
-	);
-
-	useEffect(() => {
-		if (!shouldResolve) return;
-		let cancelled = false;
-		void getPendingExternalWriteReviewPaths(
-			lix,
-			reviewableFiles,
-			ranges,
-			new Set(resolvedReviewIds),
-		)
-			.then((paths) => {
-				if (!cancelled) setResolved({ key: reviewKey, paths });
-			})
-			.catch((error: unknown) => {
-				if (cancelled) return;
-				console.warn("Failed to resolve pending file reviews", error);
-				setResolved({ key: reviewKey, paths: EMPTY_REVIEW_PATHS });
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		lix,
-		ranges,
-		resolvedReviewIds,
-		reviewableFiles,
-		reviewKey,
-		shouldResolve,
-	]);
-
-	if (!shouldResolve || resolved?.key !== reviewKey) {
-		return EMPTY_REVIEW_PATHS;
-	}
-	return resolved.paths;
-}
-
-function collectReviewableTreeFiles(
-	nodes: readonly FilesystemTreeNode[],
-): ExternalWriteReviewFile[] {
-	const files: ExternalWriteReviewFile[] = [];
-	const visit = (node: FilesystemTreeNode) => {
-		if (node.type === "file") {
-			if (node.source !== "watched") {
-				files.push({ fileId: node.id, path: node.path });
-			}
-			return;
-		}
-		for (const child of node.children) {
-			visit(child);
-		}
-	};
-	for (const node of nodes) {
-		visit(node);
-	}
-	return files;
-}
 
 function sameStringArray(
 	left: readonly string[],
@@ -1487,41 +1625,48 @@ export const extension = createReactExtensionDefinition({
 		];
 	},
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<FilesView
-				context={{
-					openFile: ({ panel: _panel, fileId: _fileId, filePath, focus }) =>
-						atelier.documents.open(filePath, {
-							...(focus !== undefined ? { focus } : {}),
-						}),
-					closeFileViews: ({ filePath }) => {
-						if (filePath) {
-							void atelier.documents.close(filePath);
-							return;
-						}
-						void atelier.documents.closeActive();
-					},
-					activeFileId: atelier.documents.activeFileId,
-					activeFilePath: atelier.documents.activeFilePath,
-					activeBranchId: atelier.branches.activeId,
-					resolvedReviewIds: atelier.reviews.resolvedReviewIds,
-					reviewRangeSessionId: atelier.reviews.rangeSessionId,
-					reviewWorkingChanges: atelier.reviews.mode === "working-changes",
-					reviewModeActive: atelier.reviews.active,
-					isPanelFocused: view.isFocused,
-					panelSide: view.panel,
-					viewInstance: view.instanceId,
-					isActiveView: view.isActive,
-					readOnly: atelier.readOnly,
-					showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
-					watchEntries: atelier.filesView?.watchEntries,
-					resolveFileForInteraction:
-						atelier.filesView?.resolveFileForInteraction,
-					registerNewFileDraftHandler: ({ handler }) =>
-						view.registerNewFileDraftHandler(handler),
-				}}
-			/>
-		</LixProvider>
+		<FilesView
+			context={{
+				openFile: ({ panel: _panel, fileId: _fileId, filePath, focus }) =>
+					atelier.documents.open(filePath, {
+						...(focus !== undefined ? { focus } : {}),
+					}),
+				closeFileViews: ({ filePath }) => {
+					if (filePath) {
+						void atelier.documents.close(filePath);
+						return;
+					}
+					void atelier.documents.closeActive();
+				},
+				activeFileId: atelier.documents.activeFileId,
+				activeFilePath: atelier.documents.activeFilePath,
+				activeBranchId: atelier.branches.activeId,
+				reviewWorkingChanges:
+					atelier.diff.session !== null &&
+					"working" in atelier.diff.session.target,
+				reviewModeActive: atelier.diff.session !== null,
+				...(atelier.diff.session !== null &&
+				"commitId" in atelier.diff.session.target
+					? { historicalCommitId: atelier.diff.session.target.commitId }
+					: {}),
+				sessionFiles: atelier.diff.session?.files,
+				openDiffFile: atelier.diff.openFile,
+				isPanelFocused: view.isFocused,
+				panelSide: view.panel,
+				viewInstance: view.instanceId,
+				isActiveView: view.isActive,
+				// The past is immutable: historical sessions hide mutations.
+				readOnly:
+					atelier.readOnly ||
+					(atelier.diff.session !== null &&
+						"commitId" in atelier.diff.session.target),
+				showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
+				watchEntries: atelier.filesView?.watchEntries,
+				resolveFileForInteraction: atelier.filesView?.resolveFileForInteraction,
+				registerNewFileDraftHandler: ({ handler }) =>
+					view.registerNewFileDraftHandler(handler),
+			}}
+		/>
 	),
 });
 

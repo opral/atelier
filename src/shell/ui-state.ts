@@ -1,6 +1,9 @@
 import type { PanelSide, PanelState } from "../extension-runtime/types";
 import type { AtelierJsonValue } from "../extension-api";
-import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
+import {
+	FILES_EXTENSION_KIND,
+	HISTORY_EXTENSION_KIND,
+} from "../extension-runtime/extension-instance-helpers";
 
 /**
  * Complete in-memory layout snapshot. Hosts split this into per-tab shell
@@ -69,6 +72,18 @@ const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 	right: 0,
 };
 
+// The right sidebar defaults to History: opening it should show the
+// repository's timeline, not an empty placeholder asking for a view.
+const DEFAULT_RIGHT_PANEL_STATE: PanelState = {
+	views: [{ instance: "history-default", kind: HISTORY_EXTENSION_KIND }],
+	activeInstance: "history-default",
+};
+
+/** Seeds the History default into a right panel persisted with no views. */
+function withDefaultRightView(panel: PanelState): PanelState {
+	return panel.views.length === 0 ? DEFAULT_RIGHT_PANEL_STATE : panel;
+}
+
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	focusedPanel: "central",
 	panels: {
@@ -77,7 +92,7 @@ export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 			activeInstance: "files-default",
 		},
 		central: { views: [], activeInstance: null },
-		right: { views: [], activeInstance: null },
+		right: DEFAULT_RIGHT_PANEL_STATE,
 	},
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
 };
@@ -164,20 +179,48 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 		? candidate.focusedPanel
 		: DEFAULT_ATELIER_UI_STATE.focusedPanel;
 
+	// One instance id must appear in one panel: duplicates (from the old
+	// per-load id counter) render as a single view, leaving the other panel's
+	// host empty. First occurrence wins, panel order left → central → right.
+	const seenInstances = new Set<string>();
+	const dedupePanel = (panel: PanelState): PanelState => {
+		const views = panel.views.filter((view) => {
+			if (seenInstances.has(view.instance)) return false;
+			seenInstances.add(view.instance);
+			return true;
+		});
+		if (views.length === panel.views.length) return panel;
+		return {
+			views,
+			activeInstance: views.some(
+				(view) => view.instance === panel.activeInstance,
+			)
+				? panel.activeInstance
+				: (views[0]?.instance ?? null),
+		};
+	};
 	return {
 		focusedPanel,
 		panels: {
-			left: coercePanelState(
-				panelsCandidate.left,
-				DEFAULT_ATELIER_UI_STATE.panels.left,
+			left: dedupePanel(
+				coercePanelState(
+					panelsCandidate.left,
+					DEFAULT_ATELIER_UI_STATE.panels.left,
+				),
 			),
-			central: coercePanelState(
-				panelsCandidate.central,
-				DEFAULT_ATELIER_UI_STATE.panels.central,
+			central: dedupePanel(
+				coercePanelState(
+					panelsCandidate.central,
+					DEFAULT_ATELIER_UI_STATE.panels.central,
+				),
 			),
-			right: coercePanelState(
-				panelsCandidate.right,
-				DEFAULT_ATELIER_UI_STATE.panels.right,
+			right: withDefaultRightView(
+				dedupePanel(
+					coercePanelState(
+						panelsCandidate.right,
+						DEFAULT_ATELIER_UI_STATE.panels.right,
+					),
+				),
 			),
 		},
 		layout: {

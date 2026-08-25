@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { selectFileWorkingChanges } from "@/queries";
+import { selectLatestCheckpoint, selectWorkingFileDiffs } from "@/queries";
 import {
 	createCheckpointForFiles,
+	restoreCheckpoint,
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
 } from "./lix-diff-commands";
@@ -25,6 +26,11 @@ async function writeFile(
 	);
 }
 
+async function workingFileDiffs(lix: Awaited<ReturnType<typeof openLix>>) {
+	const checkpoint = await selectLatestCheckpoint(lix).executeTakeFirst();
+	return selectWorkingFileDiffs(lix, checkpoint?.commit_id ?? null).execute();
+}
+
 async function readFile(lix: Awaited<ReturnType<typeof openLix>>, id: string) {
 	const result = await lix.execute(
 		"SELECT content FROM lix_file WHERE id = $1",
@@ -43,10 +49,46 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, firstId, "/first.md", "first");
 			await writeFile(lix, secondId, "/second.md", "second");
 
-			expect(await createCheckpointForFiles(lix, [firstId])).toBeGreaterThan(0);
-			expect(await selectFileWorkingChanges(lix).execute()).toEqual([
+			const checkpoint = await createCheckpointForFiles(lix, [firstId]);
+			expect(checkpoint?.diffCount).toBeGreaterThan(0);
+			expect(checkpoint?.commitId).toEqual(expect.any(String));
+			expect(await workingFileDiffs(lix)).toEqual([
 				expect.objectContaining({ id: secondId }),
 			]);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("sweeps the selected file's new directories into the checkpoint", async () => {
+		const lix = await openLix();
+		try {
+			const insideId = fakeUuid("dir-sweep-inside");
+			const outsideId = fakeUuid("dir-sweep-outside");
+			await writeFile(lix, insideId, "/docs/handbook/inside.md", "inside");
+			await writeFile(lix, outsideId, "/notes/outside.md", "outside");
+
+			const checkpoint = await createCheckpointForFiles(lix, [insideId]);
+			expect(checkpoint?.commitId).toEqual(expect.any(String));
+
+			// /docs and /docs/handbook were committed with their file by the
+			// engine's dependency closure; /notes still has a changed file, so
+			// its descriptor stays working.
+			const checkpointId = (await selectLatestCheckpoint(lix).executeTakeFirst())
+				?.commit_id;
+			const remainingDirs = await lix.execute(
+				`SELECT coalesce(to_path, from_path) AS path
+				 FROM lix_diff('lix_directory', $1, lix_active_branch_commit_id())`,
+				[checkpointId ?? ""],
+			);
+			const remainingDirPaths = remainingDirs.rows
+				.map((row) => row.get("path"))
+				.sort();
+			expect(remainingDirPaths).toEqual(["/notes"]);
+
+			// Checkpointing the remaining file clears the working file diff.
+			await createCheckpointForFiles(lix, [outsideId]);
+			expect(await workingFileDiffs(lix)).toEqual([]);
 		} finally {
 			await lix.close();
 		}
@@ -85,6 +127,28 @@ describe("Lix SQL diff commands", () => {
 				await restoreCheckpointFiles(lix, checkpoint.commitId, [fileId]),
 			).toBeGreaterThan(0);
 			expect(await readFile(lix, fileId)).toBe("checkpoint data");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("a full restore also removes files created after the checkpoint", async () => {
+		const lix = await openLix();
+		try {
+			const keptId = fakeUuid("full-restore-kept");
+			const laterId = fakeUuid("full-restore-later");
+			await writeFile(lix, keptId, "/kept.md", "checkpoint data");
+			const checkpoint = await lix.createCheckpoint();
+			await writeFile(lix, keptId, "/kept.md", "current data");
+			await writeFile(lix, laterId, "/later.md", "added afterwards");
+			await lix.createCheckpoint();
+
+			await restoreCheckpoint(lix, checkpoint.commitId);
+
+			expect(await readFile(lix, keptId)).toBe("checkpoint data");
+			// The later-added file cannot appear in the span's file list, so
+			// only the exact restore can delete it.
+			expect(await readFile(lix, laterId)).toBeNull();
 		} finally {
 			await lix.close();
 		}

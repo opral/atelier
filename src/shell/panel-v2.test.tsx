@@ -207,6 +207,50 @@ describe("PanelV2", () => {
 		expect(input).toBeInTheDocument();
 	});
 
+	test("defers persisted panel views until the panel becomes visible and active", async () => {
+		const mount = vi.fn(searchViewOverride.mount);
+		const lazyView: ExtensionDefinition = { ...searchViewOverride, mount };
+		const panel: PanelState = {
+			views: [
+				{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND },
+				{ instance: "search-2", kind: TEST_SEARCH_EXTENSION_KIND },
+			],
+			activeInstance: "search-1",
+		};
+		const rendered = renderWithinProvider(
+			<PanelV2
+				side="left"
+				panel={panel}
+				contentVisible={false}
+				isFocused={false}
+				onFocusPanel={vi.fn()}
+				onSelectView={vi.fn()}
+				onRemoveView={vi.fn()}
+				viewContext={createViewContext()}
+				viewOverrides={[lazyView]}
+			/>,
+		);
+		expect(mount).not.toHaveBeenCalled();
+
+		rendered.rerender(
+			<ExtensionHostRegistryProvider>
+				<PanelV2
+					side="left"
+					panel={panel}
+					contentVisible
+					isFocused={false}
+					onFocusPanel={vi.fn()}
+					onSelectView={vi.fn()}
+					onRemoveView={vi.fn()}
+					viewContext={createViewContext()}
+					viewOverrides={[lazyView]}
+				/>
+			</ExtensionHostRegistryProvider>,
+		);
+		await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
+		expect(screen.getAllByPlaceholderText("Search project...")).toHaveLength(1);
+	});
+
 	test("registers the panel container as a droppable target", () => {
 		const droppableMock = vi.mocked(useDroppable);
 		droppableMock.mockClear();

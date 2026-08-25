@@ -3,8 +3,7 @@ import type { Lix } from "@lix-js/sdk";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
-import { getExternalWriteReview } from "@/shell/external-write-review-history";
-import { readAgentTurnCommitRanges } from "@/shell/agent-turn-review-range";
+import { getFileDataAtCommit } from "@/shell/external-write-review-history";
 import {
 	applyDeveloperWorkflowScenario,
 	simulateMarkdownAgentWorkflow,
@@ -47,7 +46,7 @@ describe("developer workflow scenarios", () => {
 	});
 });
 
-test("simulates a real completed agent turn that opens an external-write review", async () => {
+test("simulates a completed agent turn spanning a reviewable commit range", async () => {
 	lix = await openLix();
 	await qb(lix)
 		.insertInto("lix_file")
@@ -57,6 +56,7 @@ test("simulates a real completed agent turn that opens an external-write review"
 			content: encoder.encode("# Original heading\n\nStable paragraph.\n"),
 		})
 		.execute();
+	await lix.createCheckpoint();
 
 	const result = await simulateMarkdownAgentWorkflow(lix, {
 		branchId: await lix.activeBranchId(),
@@ -68,24 +68,23 @@ test("simulates a real completed agent turn that opens an external-write review"
 		.select("content")
 		.where("id", "=", fakeUuid("devtools-readme"))
 		.executeTakeFirstOrThrow();
-	const ranges = await readAgentTurnCommitRanges(lix);
-	const review = await getExternalWriteReview(
+	const beforeData = await getFileDataAtCommit(
 		lix,
 		fakeUuid("devtools-readme"),
-		"/README.md",
+		result.beforeCommitId,
+	);
+	const afterData = await getFileDataAtCommit(
+		lix,
+		fakeUuid("devtools-readme"),
+		result.afterCommitId,
 	);
 
 	expect(decoder.decode(file.content)).toContain("agent-reviewed-copy");
 	expect(result.beforeCommitId).not.toBe(result.afterCommitId);
-	expect(ranges.at(-1)).toMatchObject({
-		id: result.rangeId,
-		sourceId: "codex",
-		beforeCommitId: result.beforeCommitId,
-		afterCommitId: result.afterCommitId,
-	});
-	expect(review).toMatchObject({
-		fileId: fakeUuid("devtools-readme"),
-		beforeCommitId: result.beforeCommitId,
-		afterCommitId: result.afterCommitId,
-	});
+	expect(decoder.decode(beforeData ?? undefined)).toContain(
+		"# Original heading",
+	);
+	expect(decoder.decode(afterData ?? undefined)).toContain(
+		"agent-reviewed-copy",
+	);
 });

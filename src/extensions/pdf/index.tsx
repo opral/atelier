@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, FileWarning } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
-import { LixProvider, useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { selectFileHistory } from "@/lib/lix-file-history";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
@@ -56,20 +56,23 @@ function PdfViewContent({
 	initialPage,
 }: PdfViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<PdfFileRow>((lix) => {
-		if (sourceCommitId) {
-			return selectFileHistory(lix, sourceCommitId)
+	const fileRow = useQueryTakeFirst<PdfFileRow>(
+		(lix) => {
+			if (sourceCommitId) {
+				return selectFileHistory(lix, sourceCommitId)
+					.select(["id", "path", "content"])
+					.where("id", "=", fileId)
+					.orderBy("lixcol_depth", "asc")
+					.limit(1);
+			}
+			return qb(lix)
+				.selectFrom("lix_file")
 				.select(["id", "path", "content"])
 				.where("id", "=", fileId)
-				.orderBy("lixcol_depth", "asc")
 				.limit(1);
-		}
-		return qb(lix)
-			.selectFrom("lix_file")
-			.select(["id", "path", "content"])
-			.where("id", "=", fileId)
-			.limit(1);
-	});
+		},
+		{ subscribe: !sourceCommitId },
+	);
 
 	if (!fileRow) {
 		return (
@@ -254,20 +257,18 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display PDF documents.",
 	icon: FileText,
-	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<PdfView
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				sourceCommitId={
-					typeof view.state.sourceCommitId === "string"
-						? view.state.sourceCommitId
-						: undefined
-				}
-				initialPage={
-					typeof view.state.page === "number" ? view.state.page : undefined
-				}
-			/>
-		</LixProvider>
+	component: ({ view }) => (
+		<PdfView
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			sourceCommitId={
+				typeof view.state.sourceCommitId === "string"
+					? view.state.sourceCommitId
+					: undefined
+			}
+			initialPage={
+				typeof view.state.page === "number" ? view.state.page : undefined
+			}
+		/>
 	),
 });

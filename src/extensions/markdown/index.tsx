@@ -4,24 +4,24 @@ import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { Check, FileText, Loader2 } from "lucide-react";
 import {
-	LixProvider,
 	useLix,
-	useQuery,
 	useQueryTakeFirst,
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
-import { qb } from "@/lib/lix-kysely";
 import {
+	FileSnapshotsAtCommits,
 	type HistoricalFileSnapshot,
-	useFileSnapshotsAtCommits,
 } from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
+import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
+import { useDeferredRevisionProps } from "@/extension-runtime/use-deferred-revision-props";
 import {
 	EditorProvider,
 	useEditorCtx,
 } from "@/extensions/markdown/editor/editor-context";
 import {
 	hydrateMarkdownEditorAuthoritativeMarkdown,
+	selectMarkdownFileDelivery,
 	TipTapEditor,
 } from "@/extensions/markdown/editor/tip-tap-editor";
 import { EditorContent } from "@tiptap/react";
@@ -37,11 +37,7 @@ import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
-import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "./review-diff";
-import {
-	historicalMarkdownNodeBlocks,
-	type HistoricalMarkdownNodeRow,
-} from "./review/markdown-node-history";
+import type { MarkdownReviewDiff } from "./review-diff";
 import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
@@ -49,20 +45,15 @@ import {
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
-	ExternalWriteReviewNavigation,
-	ResolveExternalWriteReviewArgs,
 } from "@/extension-runtime/external-write-review";
-import { ExternalWriteReviewRegistration } from "@/extension-runtime/external-write-review-registration";
+import type { AtelierDiffSession } from "@/extension-api";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import {
-	useExternalWriteReview,
-	useExternalWriteReviewData,
-} from "@/shell/external-write-review-history";
+import { useFileDataAtCommit } from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
 import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/markdown-asset";
 
@@ -75,33 +66,17 @@ type MarkdownViewProps = {
 	readonly focusOnLoad?: boolean;
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly activeBranchId?: string;
-	readonly resolvedReviewIds?: readonly string[];
-	readonly reviewRangeSessionId?: string;
+	readonly diffSession?: AtelierDiffSession | null;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
 	readonly beforeFileId?: string | null;
 	readonly afterFileId?: string | null;
-	readonly registerExternalWriteReview?: (
-		review: ExternalWriteReview,
-	) => () => void;
-	readonly onAcceptReviewDiff?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onRejectReviewDiff?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onResolveReviewDiff?: (
-		args: ResolveExternalWriteReviewArgs,
-	) => Promise<void>;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
+	readonly onDiffAccept?: (path: string) => Promise<void>;
+	readonly onDiffReject?: (path: string) => Promise<void>;
+	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAcceptReviews?: boolean;
-	readonly reviewEnabled?: boolean;
-	readonly reviewMode?: "agent-turn" | "working-changes";
-	readonly reviewNavigation?: ExternalWriteReviewNavigation;
-	readonly onExitReview?: () => void;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly onDocumentModified?: (filePath: string) => void;
 };
@@ -135,26 +110,33 @@ export function MarkdownView({
 	focusOnLoad = false,
 	defaultBlock,
 	activeBranchId,
-	resolvedReviewIds,
-	reviewRangeSessionId,
+	diffSession,
 	beforeCommitId,
 	afterCommitId,
 	beforeFileId,
 	afterFileId,
-	registerExternalWriteReview,
-	onAcceptReviewDiff,
-	onRejectReviewDiff,
-	onResolveReviewDiff,
+	beforeExists,
+	afterExists,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 	autoAcceptReviews,
-	reviewEnabled,
-	reviewMode,
-	reviewNavigation,
-	onExitReview,
+
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps) {
 	assertFileId(fileId);
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
+	// Deferred so revision switches keep the previous document mounted while
+	// the next revision's reads suspend, instead of flashing the fallback.
+	const revision = useDeferredRevisionProps({
+		beforeCommitId,
+		afterCommitId,
+		beforeFileId,
+		afterFileId,
+		beforeExists,
+		afterExists,
+	});
 	if (!resolvedActiveBranchId) return <MarkdownLoadingSpinner />;
 	return (
 		<Suspense fallback={<MarkdownLoadingSpinner />}>
@@ -167,21 +149,18 @@ export function MarkdownView({
 				focusOnLoad={focusOnLoad}
 				defaultBlock={defaultBlock}
 				activeBranchId={resolvedActiveBranchId}
-				resolvedReviewIds={resolvedReviewIds}
-				reviewRangeSessionId={reviewRangeSessionId}
-				beforeCommitId={beforeCommitId}
-				afterCommitId={afterCommitId}
-				beforeFileId={beforeFileId}
-				afterFileId={afterFileId}
-				registerExternalWriteReview={registerExternalWriteReview}
-				onAcceptReviewDiff={onAcceptReviewDiff}
-				onRejectReviewDiff={onRejectReviewDiff}
-				onResolveReviewDiff={onResolveReviewDiff}
+				diffSession={diffSession}
+				beforeCommitId={revision.beforeCommitId}
+				afterCommitId={revision.afterCommitId}
+				beforeFileId={revision.beforeFileId}
+				afterFileId={revision.afterFileId}
+				beforeExists={revision.beforeExists}
+				afterExists={revision.afterExists}
+				onDiffAccept={onDiffAccept}
+				onDiffReject={onDiffReject}
+				onDiffResolve={onDiffResolve}
 				autoAcceptReviews={autoAcceptReviews}
-				reviewEnabled={reviewEnabled}
-				reviewMode={reviewMode}
-				reviewNavigation={reviewNavigation}
-				onExitReview={onExitReview}
+
 				openWorkspaceFile={openWorkspaceFile}
 				onDocumentModified={onDocumentModified}
 			/>
@@ -196,19 +175,20 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		afterCommitId: props.afterCommitId,
 		beforeFileId: props.beforeFileId,
 		afterFileId: props.afterFileId,
+		beforeExists: props.beforeExists,
+		afterExists: props.afterExists,
 	});
 	const comparesAgainstCurrentFile =
 		editorRevision.beforeCommitId !== null &&
 		editorRevision.afterCommitId === null;
 
+	const ownsLiveFileDelivery = editorRevisionMode(editorRevision) === "editor";
 	const fileRow = useQueryTakeFirst<MarkdownFileRow>(
 		(lix) =>
-			qb(lix)
-				.selectFrom("lix_file")
-				.select(["id", "path", "content"])
-				.where("id", "=", fileId)
-				.limit(1),
-		{ subscribe: comparesAgainstCurrentFile },
+			selectMarkdownFileDelivery(lix, props.activeBranchId ?? "", fileId),
+		{
+			subscribe: ownsLiveFileDelivery || comparesAgainstCurrentFile,
+		},
 	);
 
 	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
@@ -234,6 +214,8 @@ function MarkdownViewLoaded(
 		afterCommitId,
 		beforeFileId: props.beforeFileId,
 		afterFileId: props.afterFileId,
+		beforeExists: props.beforeExists,
+		afterExists: props.afterExists,
 	});
 	const revisionMode = editorRevisionMode(editorRevision);
 
@@ -262,57 +244,71 @@ function MarkdownLiveViewLoaded({
 	focusOnLoad = false,
 	defaultBlock,
 	activeBranchId = "",
-	resolvedReviewIds,
-	reviewRangeSessionId,
-	registerExternalWriteReview,
-	onAcceptReviewDiff,
-	onRejectReviewDiff,
-	onResolveReviewDiff,
+	diffSession,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 	autoAcceptReviews,
-	reviewEnabled = true,
-	reviewMode,
-	reviewNavigation,
-	onExitReview,
 	openWorkspaceFile,
 	onDocumentModified,
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
-	const externalWriteReview = useExternalWriteReview({
-		fileId: fileRow?.id,
-		path: fileRow?.path,
-		activeBranchId,
-		resolvedReviewIds,
-		reviewRangeSessionId,
-		enabled: reviewEnabled,
-		reviewMode:
-			reviewMode ?? (autoAcceptReviews ? "working-changes" : "agent-turn"),
-	});
-	const externalWriteReviewData =
-		useExternalWriteReviewData(externalWriteReview);
-	const effectiveFileRow = fileRow;
-	const review = externalWriteReview;
-	const isReviewing = review !== null;
-	const reviewData: ExternalWriteReviewData | null = externalWriteReviewData;
-	const reviewDiff: MarkdownReviewDiff | null = reviewData
-		? {
-				beforeMarkdown: decodeFileDataToText(reviewData.beforeData),
-				afterMarkdown: decodeFileDataToText(reviewData.afterData),
-			}
-		: null;
-	const reviewBlocks = useMarkdownBlocksAtCommitsWithoutSuspense(
-		effectiveFileRow?.id ?? "",
-		review?.beforeCommitId,
-		review?.afterCommitId,
-		reviewDiff?.beforeMarkdown,
-		reviewDiff?.afterMarkdown,
+	// The shell owns review detection: this document is under review whenever
+	// the working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
+	const session = diffSession ?? null;
+	const sessionFile =
+		fileRow && session && "working" in session.target
+			? session.files.find((file) => file.id === fileRow.id)
+			: undefined;
+	const sessionReview = sessionFile?.review;
+	const reviewing = Boolean(
+		fileRow && session && sessionReview?.status === "pending",
 	);
+	// An added file has no base to fetch: its history is absent, so its before
+	// side is empty by definition.
+	const reviewBaseCommitId =
+		reviewing &&
+		sessionFile?.changeKind !== "added" &&
+		session?.base &&
+		"commitId" in session.base
+			? session.base.commitId
+			: null;
+	const reviewBase = useFileDataAtCommit(
+		reviewBaseCommitId ? fileRow?.id : null,
+		reviewBaseCommitId,
+	);
+	const effectiveFileRow = fileRow;
+	const review: ExternalWriteReview | null =
+		reviewing && fileRow && sessionReview
+			? {
+					fileId: fileRow.id,
+					path: fileRow.path,
+					reviewId: sessionReview.id,
+					beforeCommitId: reviewBaseCommitId ?? "",
+					afterCommitId: "",
+				}
+			: null;
+	const isReviewing = review !== null;
+	// The review's after side is the live document; only the base is fetched.
+	const reviewDiff: MarkdownReviewDiff | null =
+		review && fileRow && !reviewBase.loading
+			? {
+					beforeMarkdown: reviewBase.data
+						? decodeFileDataToText(reviewBase.data)
+						: "",
+					afterMarkdown: decodeFileDataToText(fileRow.content),
+				}
+			: null;
 	const [liveEditorState, setLiveEditorState] = useState<{
 		readonly fileId: string;
 		readonly editor: Editor;
 	} | null>(null);
 	const liveEditor =
-		liveEditorState && liveEditorState.fileId === effectiveFileRow?.id
+		liveEditorState &&
+		liveEditorState.fileId === effectiveFileRow?.id &&
+		!liveEditorState.editor.isDestroyed
 			? liveEditorState.editor
 			: null;
 	const [finishingReview, setFinishingReview] = useState<{
@@ -358,6 +354,11 @@ function MarkdownLiveViewLoaded({
 							onReady={(editor) => {
 								setLiveEditorState({ fileId: effectiveFileRow.id, editor });
 							}}
+							onDispose={(editor) => {
+								setLiveEditorState((current) =>
+									current?.editor === editor ? null : current,
+								);
+							}}
 							openWorkspaceFile={openWorkspaceFile}
 							onPersist={({ filePath: persistedPath }) => {
 								const resolvedPath = persistedPath ?? effectiveFileRow.path;
@@ -374,16 +375,12 @@ function MarkdownLiveViewLoaded({
 								reviewId={review.reviewId}
 								beforeCommitId={review.beforeCommitId}
 								afterCommitId={review.afterCommitId}
-								beforeBlocks={reviewBlocks?.beforeBlocks}
-								afterBlocks={reviewBlocks?.afterBlocks}
 								openWorkspaceFile={openWorkspaceFile}
 								isActive={isActiveView && isPanelFocused}
-								onAccept={onAcceptReviewDiff}
-								onReject={onRejectReviewDiff}
-								onResolve={onResolveReviewDiff}
+								onDiffAccept={onDiffAccept}
+								onDiffReject={onDiffReject}
+								onDiffResolve={onDiffResolve}
 								autoAccept={autoAcceptReviews}
-								navigation={reviewNavigation}
-								onExit={onExitReview}
 								onCompletionStart={() => {
 									setFinishingReview({
 										fileId: effectiveFileRow.id,
@@ -424,33 +421,21 @@ function MarkdownLiveViewLoaded({
 		);
 	}
 
-	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<ExternalWriteReviewRegistration
-				review={externalWriteReview ?? finishingReview?.review ?? null}
-				register={registerExternalWriteReview}
-			/>
-			{content}
-		</div>
-	);
+	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
 }
 
 function MarkdownLiveReviewController({
-	fileId,
 	sourceFilePath,
 	editor,
-	review,
 	reviewDiff,
 	reviewId,
 	beforeCommitId,
 	afterCommitId,
-	beforeBlocks,
-	afterBlocks,
 	isActive,
 	openWorkspaceFile,
-	onAccept,
-	onReject,
-	onResolve,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 	onCompletionStart,
 	onCompletionSuccess,
 	onCompletionFailure,
@@ -466,26 +451,19 @@ function MarkdownLiveReviewController({
 	if (reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown) {
 		return null;
 	}
-	const enrichedReviewDiff = enrichMarkdownReviewDiff(
-		reviewDiff,
-		beforeBlocks,
-		afterBlocks,
-	);
 	const completeReview = createCompleteMarkdownReview({
-		fileId,
-		review,
+		path: sourceFilePath,
 		reviewDiff,
-		reviewId,
-		onAccept,
-		onReject,
-		onResolve,
+		onDiffAccept,
+		onDiffReject,
+		onDiffResolve,
 	});
 	if (autoAccept) {
 		return (
 			<MarkdownReviewEditor
 				key={`${reviewId}:${beforeCommitId}:${afterCommitId}:accepted`}
 				externalEditor={editor}
-				reviewDiff={enrichedReviewDiff}
+				reviewDiff={reviewDiff}
 				sourceFilePath={sourceFilePath}
 				afterCommitId={afterCommitId}
 				openWorkspaceFile={openWorkspaceFile}
@@ -498,7 +476,7 @@ function MarkdownLiveReviewController({
 		<MarkdownReviewEditor
 			key={`${reviewId}:${beforeCommitId}:${afterCommitId}`}
 			externalEditor={editor}
-			reviewDiff={enrichedReviewDiff}
+			reviewDiff={reviewDiff}
 			sourceFilePath={sourceFilePath}
 			afterCommitId={afterCommitId}
 			openWorkspaceFile={openWorkspaceFile}
@@ -514,12 +492,8 @@ function MarkdownLiveReviewController({
 
 function MarkdownHistoricalViewLoaded({
 	fileId,
-	filePath,
-	fileRow,
-	isActiveView,
-	isPanelFocused,
 	editorRevision,
-	openWorkspaceFile,
+	...props
 }: {
 	readonly fileId: string;
 	readonly filePath: string | undefined;
@@ -529,14 +503,51 @@ function MarkdownHistoricalViewLoaded({
 	readonly editorRevision: EditorRevisionState;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
-	const revisionMode = editorRevisionMode(editorRevision);
-	const { beforeSnapshot, afterSnapshot } = useFileSnapshotsAtCommits(
-		fileId,
-		editorRevision.beforeCommitId,
-		editorRevision.afterCommitId,
-		editorRevision.beforeFileId,
-		editorRevision.afterFileId,
+	return (
+		<FileSnapshotsAtCommits
+			fileId={fileId}
+			beforeCommitId={editorRevision.beforeCommitId}
+			afterCommitId={editorRevision.afterCommitId}
+			beforeFileId={editorRevision.beforeFileId}
+			afterFileId={editorRevision.afterFileId}
+			beforeExists={editorRevision.beforeExists}
+			afterExists={editorRevision.afterExists}
+		>
+			{({ beforeSnapshot, afterSnapshot }) => (
+				<MarkdownHistoricalViewResolved
+					{...props}
+					fileId={fileId}
+					editorRevision={editorRevision}
+					beforeSnapshot={beforeSnapshot}
+					afterSnapshot={afterSnapshot}
+				/>
+			)}
+		</FileSnapshotsAtCommits>
 	);
+}
+
+function MarkdownHistoricalViewResolved({
+	fileId,
+	filePath,
+	fileRow,
+	isActiveView,
+	isPanelFocused,
+	editorRevision,
+	openWorkspaceFile,
+	beforeSnapshot,
+	afterSnapshot,
+}: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
+	readonly fileRow: MarkdownFileRow | undefined;
+	readonly isActiveView: boolean;
+	readonly isPanelFocused: boolean;
+	readonly editorRevision: EditorRevisionState;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
+	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
+}) {
+	const revisionMode = editorRevisionMode(editorRevision);
 	const historicalFile = useMemo(
 		() =>
 			buildHistoricalMarkdownFile({
@@ -561,10 +572,14 @@ function MarkdownHistoricalViewLoaded({
 
 	let content: ReactNode;
 	if (!effectiveFileRow) {
+		// No version at either side of the span: the absence is temporal.
 		content = (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
-				File not found in the workspace.
-			</div>
+			<CheckpointAbsentFile
+				filePath={filePath}
+				commitId={
+					editorRevision.afterCommitId ?? editorRevision.beforeCommitId
+				}
+			/>
 		);
 	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {
 		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
@@ -584,20 +599,18 @@ function MarkdownHistoricalViewLoaded({
 					<FormattingToolbar disabled />
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						{reviewDiff && review ? (
-							<Suspense fallback={<MarkdownReviewOverlayFallback />}>
-								<MarkdownReviewOverlayWithBlockHistory
-									fileId={effectiveFileRow.id}
-									sourceFilePath={effectiveFileRow.path}
-									review={review}
-									reviewDiff={reviewDiff}
-									reviewId={review.reviewId}
-									beforeCommitId={review.beforeCommitId}
-									afterCommitId={review.afterCommitId}
-									openWorkspaceFile={openWorkspaceFile}
-									isActive={isActiveView && isPanelFocused}
-									controls="none"
-								/>
-							</Suspense>
+							<MarkdownReviewOverlay
+								fileId={effectiveFileRow.id}
+								sourceFilePath={effectiveFileRow.path}
+								review={review}
+								reviewDiff={reviewDiff}
+								reviewId={review.reviewId}
+								beforeCommitId={review.beforeCommitId}
+								afterCommitId={review.afterCommitId}
+								openWorkspaceFile={openWorkspaceFile}
+								isActive={isActiveView && isPanelFocused}
+								controls="none"
+							/>
 						) : (
 							<MarkdownReviewOverlayFallback />
 						)}
@@ -717,57 +730,34 @@ type MarkdownReviewOverlayProps = {
 	readonly reviewId: string;
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
-	readonly beforeBlocks?: MarkdownBlockSnapshot[];
-	readonly afterBlocks?: MarkdownBlockSnapshot[];
 	readonly isActive: boolean;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly controls?: "review" | "none";
-	readonly onAccept?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onReject?: (args: {
-		readonly fileId: string;
-		readonly reviewId: string;
-		readonly review?: ExternalWriteReview;
-	}) => Promise<void>;
-	readonly onResolve?: (args: ResolveExternalWriteReviewArgs) => Promise<void>;
+	readonly onDiffAccept?: (path: string) => Promise<void>;
+	readonly onDiffReject?: (path: string) => Promise<void>;
+	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAccept?: boolean;
-	readonly navigation?: ExternalWriteReviewNavigation;
-	readonly onExit?: () => void;
 };
 
 function MarkdownReviewOverlay({
-	fileId,
 	sourceFilePath,
-	review,
 	reviewDiff,
 	reviewId,
 	beforeCommitId,
 	afterCommitId,
-	beforeBlocks,
-	afterBlocks,
 	isActive,
 	openWorkspaceFile,
 	controls = "review",
-	onAccept,
-	onReject,
-	onResolve,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 }: MarkdownReviewOverlayProps) {
-	const enrichedReviewDiff = enrichMarkdownReviewDiff(
-		reviewDiff,
-		beforeBlocks,
-		afterBlocks,
-	);
 	const completeReview = createCompleteMarkdownReview({
-		fileId,
-		review,
+		path: sourceFilePath,
 		reviewDiff,
-		reviewId,
-		onAccept,
-		onReject,
-		onResolve,
+		onDiffAccept,
+		onDiffReject,
+		onDiffResolve,
 	});
 
 	return (
@@ -775,7 +765,7 @@ function MarkdownReviewOverlay({
 			<div className="markdown-review-surface">
 				<MarkdownReviewEditor
 					key={`${reviewId}:${beforeCommitId}:${afterCommitId}`}
-					reviewDiff={enrichedReviewDiff}
+					reviewDiff={reviewDiff}
 					sourceFilePath={sourceFilePath}
 					afterCommitId={afterCommitId}
 					openWorkspaceFile={openWorkspaceFile}
@@ -789,82 +779,29 @@ function MarkdownReviewOverlay({
 }
 
 function createCompleteMarkdownReview({
-	fileId,
-	review,
+	path,
 	reviewDiff,
-	reviewId,
-	onAccept,
-	onReject,
-	onResolve,
+	onDiffAccept,
+	onDiffReject,
+	onDiffResolve,
 }: Pick<
 	MarkdownReviewOverlayProps,
-	| "fileId"
-	| "review"
-	| "reviewDiff"
-	| "reviewId"
-	| "onAccept"
-	| "onReject"
-	| "onResolve"
->): (markdown: string) => Promise<void> {
+	"reviewDiff" | "onDiffAccept" | "onDiffReject" | "onDiffResolve"
+> & { readonly path: string }): (markdown: string) => Promise<void> {
 	return async (markdown: string) => {
-		if (onResolve) {
-			await onResolve({
-				fileId,
-				reviewId,
-				review,
-				data: new TextEncoder().encode(markdown),
-			});
+		if (onDiffResolve) {
+			await onDiffResolve(path, new TextEncoder().encode(markdown));
 			return;
 		}
 		if (markdown === reviewDiff.afterMarkdown) {
-			await onAccept?.({ fileId, reviewId, review });
+			await onDiffAccept?.(path);
 			return;
 		}
 		if (markdown === reviewDiff.beforeMarkdown) {
-			await onReject?.({ fileId, reviewId, review });
+			await onDiffReject?.(path);
 			return;
 		}
 		throw new Error("Mixed review decisions require a review resolver.");
-	};
-}
-
-function MarkdownReviewOverlayWithBlockHistory(
-	props: Omit<MarkdownReviewOverlayProps, "beforeBlocks" | "afterBlocks">,
-) {
-	const { beforeBlocks, afterBlocks } = useMarkdownBlocksAtCommits(
-		props.fileId,
-		props.beforeCommitId,
-		props.afterCommitId,
-		props.reviewDiff.beforeMarkdown,
-		props.reviewDiff.afterMarkdown,
-	);
-	return (
-		<MarkdownReviewOverlay
-			{...props}
-			beforeBlocks={beforeBlocks}
-			afterBlocks={afterBlocks}
-		/>
-	);
-}
-
-function enrichMarkdownReviewDiff(
-	reviewDiff: MarkdownReviewDiff,
-	beforeBlocks: MarkdownBlockSnapshot[] | undefined,
-	afterBlocks: MarkdownBlockSnapshot[] | undefined,
-): MarkdownReviewDiff {
-	const beforeSnapshotsAvailable =
-		beforeBlocks !== undefined &&
-		(beforeBlocks.length > 0 || reviewDiff.beforeMarkdown.trim().length === 0);
-	const afterSnapshotsAvailable =
-		afterBlocks !== undefined &&
-		(afterBlocks.length > 0 || reviewDiff.afterMarkdown.trim().length === 0);
-	if (!beforeSnapshotsAvailable || !afterSnapshotsAvailable) {
-		return reviewDiff;
-	}
-	return {
-		...reviewDiff,
-		beforeBlocks: beforeBlocks ?? [],
-		afterBlocks: afterBlocks ?? [],
 	};
 }
 
@@ -877,151 +814,6 @@ function MarkdownReviewOverlayFallback() {
 			</div>
 		</div>
 	);
-}
-
-function useMarkdownBlocksAtCommits(
-	fileId: string,
-	beforeCommitId: string | undefined,
-	afterCommitId: string | undefined,
-	beforeMarkdown: string,
-	afterMarkdown: string,
-): {
-	readonly beforeBlocks: MarkdownBlockSnapshot[] | undefined;
-	readonly afterBlocks: MarkdownBlockSnapshot[] | undefined;
-} {
-	const rows = useQuery<HistoricalMarkdownNodeRow>(
-		(lix) =>
-			beforeCommitId && afterCommitId
-				? historicalMarkdownBlocksQuery(lix, {
-						beforeCommitId,
-						afterCommitId,
-						fileId,
-					})
-				: emptyMarkdownBlocksQuery(),
-		{ subscribe: false },
-	);
-	if (!beforeCommitId || !afterCommitId) {
-		return { beforeBlocks: undefined, afterBlocks: undefined };
-	}
-	return {
-		beforeBlocks: historicalMarkdownNodeBlocks(
-			rows,
-			beforeCommitId,
-			beforeMarkdown,
-		),
-		afterBlocks: historicalMarkdownNodeBlocks(
-			rows,
-			afterCommitId,
-			afterMarkdown,
-		),
-	};
-}
-
-type ResolvedMarkdownBlocks = {
-	readonly key: string;
-	readonly beforeBlocks: MarkdownBlockSnapshot[] | undefined;
-	readonly afterBlocks: MarkdownBlockSnapshot[] | undefined;
-};
-
-/**
- * Loads optional entity identity hints without suspending the visible editor.
- * Raw before/after snapshots remain authoritative if this query fails.
- */
-function useMarkdownBlocksAtCommitsWithoutSuspense(
-	fileId: string,
-	beforeCommitId: string | undefined,
-	afterCommitId: string | undefined,
-	beforeMarkdown: string | undefined,
-	afterMarkdown: string | undefined,
-): ResolvedMarkdownBlocks | null {
-	const lix = useLix();
-	const key =
-		fileId && beforeCommitId && afterCommitId
-			? JSON.stringify([fileId, beforeCommitId, afterCommitId])
-			: null;
-	const [resolved, setResolved] = useState<ResolvedMarkdownBlocks | null>(null);
-
-	useEffect(() => {
-		if (
-			!key ||
-			!beforeCommitId ||
-			!afterCommitId ||
-			beforeMarkdown === undefined ||
-			afterMarkdown === undefined
-		)
-			return;
-		let cancelled = false;
-		void historicalMarkdownBlocksQuery(lix, {
-			fileId,
-			beforeCommitId,
-			afterCommitId,
-		})
-			.execute()
-			.then((rows) => {
-				if (cancelled) return;
-				setResolved({
-					key,
-					beforeBlocks: historicalMarkdownNodeBlocks(
-						rows,
-						beforeCommitId,
-						beforeMarkdown,
-					),
-					afterBlocks: historicalMarkdownNodeBlocks(
-						rows,
-						afterCommitId,
-						afterMarkdown,
-					),
-				});
-			})
-			.catch((error: unknown) => {
-				if (cancelled) return;
-				console.warn(
-					"[markdown-review] entity identity hints could not be loaded; using raw snapshots",
-					error,
-				);
-				setResolved({
-					key,
-					beforeBlocks: undefined,
-					afterBlocks: undefined,
-				});
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		afterCommitId,
-		afterMarkdown,
-		beforeCommitId,
-		beforeMarkdown,
-		fileId,
-		key,
-		lix,
-	]);
-
-	if (!key || resolved?.key !== key) return null;
-	return resolved;
-}
-
-function historicalMarkdownBlocksQuery(
-	_lix: ReturnType<typeof useLix>,
-	_args: {
-		readonly beforeCommitId: string;
-		readonly afterCommitId: string;
-		readonly fileId: string;
-	},
-) {
-	// Stable block identities are an optional enhancement. A workspace can open
-	// Markdown without registering the plugin's typed entity surfaces, so review
-	// must not depend on markdown_node_history being present. The authoritative
-	// file snapshots still produce the complete text diff.
-	return emptyMarkdownBlocksQuery();
-}
-
-function emptyMarkdownBlocksQuery() {
-	return {
-		compile: () => ({ sql: "SELECT 1 WHERE 0", parameters: [] }),
-		execute: async () => [] as HistoricalMarkdownNodeRow[],
-	};
 }
 
 function buildHistoricalMarkdownFile(args: {
@@ -1058,6 +850,17 @@ function buildHistoricalMarkdownFile(args: {
 		};
 	}
 
+	// A pinned span with no snapshot on either side means the file does not
+	// exist anywhere in the compared range — that renders as the temporal
+	// absent state, not as an empty document diff.
+	if (
+		!args.beforeSnapshot &&
+		!args.afterSnapshot &&
+		args.revision.afterCommitId !== null
+	) {
+		return null;
+	}
+
 	const beforeData = args.beforeSnapshot
 		? decodeFileDataToBytes(args.beforeSnapshot.content)
 		: EMPTY_FILE_DATA;
@@ -1086,7 +889,6 @@ function buildHistoricalMarkdownFile(args: {
 			}),
 			beforeCommitId: args.revision.beforeCommitId ?? "",
 			afterCommitId: args.revision.afterCommitId ?? "",
-			agentTurnRangeIds: [],
 		},
 		reviewData: {
 			beforeData,
@@ -1149,66 +951,61 @@ export const extension = createReactExtensionDefinition({
 	description: "Display file contents.",
 	icon: FileText,
 	component: ({ atelier, view }) => (
-		<LixProvider lix={atelier.lix}>
-			<MarkdownView
-				fileId={view.state.fileId as string}
-				filePath={view.state.filePath as string | undefined}
-				readOnly={atelier.readOnly}
-				isActiveView={view.isActive}
-				isPanelFocused={view.isFocused}
-				focusOnLoad={Boolean(view.state.focusOnLoad)}
-				defaultBlock={
-					view.state.defaultBlock === "heading1" ? "heading1" : undefined
-				}
-				activeBranchId={atelier.branches.activeId}
-				resolvedReviewIds={atelier.reviews.resolvedReviewIds}
-				reviewRangeSessionId={atelier.reviews.rangeSessionId}
-				beforeCommitId={
-					typeof view.state.beforeCommitId === "string"
-						? view.state.beforeCommitId
-						: null
-				}
-				afterCommitId={
-					typeof view.state.afterCommitId === "string"
-						? view.state.afterCommitId
-						: null
-				}
-				beforeFileId={
-					typeof view.state.beforeFileId === "string"
-						? view.state.beforeFileId
-						: null
-				}
-				afterFileId={
-					typeof view.state.afterFileId === "string"
-						? view.state.afterFileId
-						: null
-				}
-				registerExternalWriteReview={atelier.reviews.register}
-				onAcceptReviewDiff={atelier.reviews.accept}
-				onRejectReviewDiff={atelier.reviews.reject}
-				onResolveReviewDiff={atelier.reviews.resolve}
-				autoAcceptReviews={
-					atelier.reviews.mode === "working-changes" ||
-					atelier.reviews.autoAccept
-				}
-				reviewEnabled={atelier.reviews.isOpen}
-				reviewMode={atelier.reviews.mode}
-				reviewNavigation={atelier.reviews.navigation}
-				onExitReview={atelier.reviews.exit}
-				openWorkspaceFile={(args) =>
-					atelier.documents.open(args.filePath, {
-						...(args.state ? { state: args.state } : {}),
-						...(args.focus !== undefined ? { focus: args.focus } : {}),
-					})
-				}
-				onDocumentModified={(filePath) =>
-					atelier.events.emit({
-						type: "document_modified",
-						filePath,
-						modifiedBy: "user",
-					})
-				}
-			/>
-		</LixProvider>
+		<MarkdownView
+			fileId={view.state.fileId as string}
+			filePath={view.state.filePath as string | undefined}
+			readOnly={atelier.readOnly}
+			isActiveView={view.isActive}
+			isPanelFocused={view.isFocused}
+			focusOnLoad={Boolean(view.state.focusOnLoad)}
+			defaultBlock={
+				view.state.defaultBlock === "heading1" ? "heading1" : undefined
+			}
+			activeBranchId={atelier.branches.activeId}
+			diffSession={atelier.diff.session}
+			beforeCommitId={
+				typeof view.state.beforeCommitId === "string"
+					? view.state.beforeCommitId
+					: null
+			}
+			afterCommitId={
+				typeof view.state.afterCommitId === "string"
+					? view.state.afterCommitId
+					: null
+			}
+			beforeFileId={
+				typeof view.state.beforeFileId === "string"
+					? view.state.beforeFileId
+					: null
+			}
+			beforeExists={view.state.beforeExists !== false}
+			afterExists={view.state.afterExists !== false}
+			afterFileId={
+				typeof view.state.afterFileId === "string"
+					? view.state.afterFileId
+					: null
+			}
+			onDiffAccept={atelier.diff.accept}
+			onDiffReject={atelier.diff.reject}
+			onDiffResolve={atelier.diff.resolve}
+			autoAcceptReviews={
+				(atelier.diff.session !== null &&
+					"working" in atelier.diff.session.target) ||
+				atelier.diff.autoAccept
+			}
+			openWorkspaceFile={(args) =>
+				atelier.documents.open(args.filePath, {
+					...(args.state ? { state: args.state } : {}),
+					...(args.focus !== undefined ? { focus: args.focus } : {}),
+				})
+			}
+			onDocumentModified={(filePath) =>
+				atelier.events.emit({
+					type: "document_modified",
+					filePath,
+					modifiedBy: "user",
+				})
+			}
+		/>
 	),
 });

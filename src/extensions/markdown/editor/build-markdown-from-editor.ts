@@ -59,6 +59,16 @@ export function buildMarkdownFromEditor(editor: any): string {
 	});
 }
 
+export function buildMarkdownFromTiptapDoc(doc: any): string {
+	return serializeTiptapDocToMarkdown(doc.toJSON(), {
+		assignTopLevelIds: true,
+	});
+}
+
 export function buildNormalizedMarkdownFromEditor(editor: any): string {
 	return normalizePersistedMarkdown(buildMarkdownFromEditor(editor));
+}
+
+export function buildNormalizedMarkdownFromTiptapDoc(doc: any): string {
+	return normalizePersistedMarkdown(buildMarkdownFromTiptapDoc(doc));
 }

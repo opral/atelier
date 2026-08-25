@@ -12,7 +12,6 @@ import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { Lix } from "@lix-js/sdk";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
 import {
 	deriveCsvPathFromStem,
 	deriveGenericFilePath,
@@ -125,6 +124,25 @@ describe("FilesView", () => {
 			newRow?.querySelector('[data-attr="file-new-icon"]'),
 		).toBeInTheDocument();
 		expect(newRow?.querySelector("svg")).toBeNull();
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("renders a file inserted after the tree starts observing", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix);
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		await act(async () => {
+			await insertReadme(lix);
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("README.md")).toBeVisible();
+		});
+
 		await act(async () => view?.unmount());
 		await lix.close();
 	});
@@ -1178,17 +1196,8 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
 		await insertFile(lix, fakeUuid("review-file"), "/review.md", "before");
-		const beforeCommitId = await activeCommitId(lix);
+		await lix.createCheckpoint();
 		await insertFile(lix, fakeUuid("review-file"), "/review.md", "after");
-		const afterCommitId = await activeCommitId(lix);
-		await appendAgentTurnCommitRange(lix, {
-			id: "files-review-range",
-			sourceId: "codex",
-			beforeCommitId,
-			afterCommitId,
-			startedAt: 1,
-			completedAt: 2,
-		});
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
 			view = renderFilesView(lix, { activeBranchId });
@@ -1203,7 +1212,11 @@ describe("FilesView", () => {
 			view?.rerender(
 				<FilesViewFixture
 					lix={lix}
-					context={{ activeBranchId, reviewModeActive: true }}
+					context={{
+						activeBranchId,
+						reviewModeActive: true,
+						reviewWorkingChanges: true,
+					}}
 				/>,
 			);
 		});
@@ -1216,16 +1229,7 @@ describe("FilesView", () => {
 
 		await act(async () => {
 			view?.rerender(
-				<FilesViewFixture
-					lix={lix}
-					context={{
-						activeBranchId,
-						reviewModeActive: true,
-						resolvedReviewIds: [
-							`${fakeUuid("review-file")}:files-review-range`,
-						],
-					}}
-				/>,
+				<FilesViewFixture lix={lix} context={{ activeBranchId }} />,
 			);
 		});
 		await waitFor(() => {
@@ -1268,7 +1272,7 @@ function workingDiffSqlCalls(calls: readonly unknown[][]): string[] {
 		.map(([sql]) => sql)
 		.filter(
 			(sql): sql is string =>
-				typeof sql === "string" && sql.includes("working_diff"),
+				typeof sql === "string" && sql.includes("lix_diff('lix_file'"),
 		);
 }
 
@@ -1466,16 +1470,6 @@ async function insertFile(
 		.execute();
 }
 
-async function activeCommitId(lix: Lix): Promise<string> {
-	const result = await lix.execute(
-		"SELECT lix_active_branch_commit_id() AS commit_id",
-	);
-	const commitId = result.rows[0]?.get("commit_id");
-	if (typeof commitId !== "string") {
-		throw new Error("Missing active commit id");
-	}
-	return commitId;
-}
 
 async function selectFileById(lix: Lix, id: string) {
 	return qb(lix)

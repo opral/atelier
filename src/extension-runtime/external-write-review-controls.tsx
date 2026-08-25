@@ -23,7 +23,7 @@ import { fileIconUrl } from "@/file-icons";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
 
-export type DiffFloatMode = "agent-turn" | "working-changes" | "historical";
+export type DiffFloatMode = "working-changes" | "historical";
 
 export type DiffFloatFile = {
 	readonly id: string;
@@ -36,8 +36,8 @@ type ExternalWriteReviewControlsProps = {
 	readonly isActive: boolean;
 	/** Keep review navigation visible while preventing repository mutations. */
 	readonly readOnly?: boolean;
-	/** Which diff-mode flow the float commits: agent turn, working changes, or a historical checkpoint. */
-	readonly mode?: DiffFloatMode;
+	/** Which diff-mode flow the float commits: working changes or a historical checkpoint. */
+	readonly mode: DiffFloatMode;
 	readonly navigation?: ExternalWriteReviewNavigation;
 	/** Every changed file in this diff — the scope chip's checklist, all ticked by default. */
 	readonly files?: readonly DiffFloatFile[];
@@ -48,7 +48,7 @@ type ExternalWriteReviewControlsProps = {
 	readonly onUndo?: (
 		selectedFileIds: readonly string[],
 	) => void | Promise<void>;
-	/** The orange verb: Keep / Checkpoint / Restore, applied to the selection (⌘⏎). */
+	/** The orange verb: Checkpoint / Restore, applied to the selection (⌘⏎). */
 	readonly onPrimary?: (
 		selectedFileIds: readonly string[],
 	) => void | Promise<void>;
@@ -59,7 +59,6 @@ const PRIMARY_VERBS: Record<
 	DiffFloatMode,
 	{ label: string; busyLabel: string }
 > = {
-	"agent-turn": { label: "Keep", busyLabel: "Keeping…" },
 	"working-changes": { label: "Checkpoint", busyLabel: "Checkpointing…" },
 	historical: { label: "Restore", busyLabel: "Restoring…" },
 };
@@ -78,7 +77,7 @@ const PRIMARY_VERBS: Record<
 export function ExternalWriteReviewControls({
 	isActive,
 	readOnly = false,
-	mode = "agent-turn",
+	mode,
 	navigation,
 	files,
 	onUndo,

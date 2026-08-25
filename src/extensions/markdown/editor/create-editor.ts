@@ -1,6 +1,7 @@
 import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
@@ -19,6 +20,7 @@ import { TableNavigationExtension } from "./extensions/table-navigation";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
 	buildNormalizedMarkdownFromEditor,
+	buildNormalizedMarkdownFromTiptapDoc,
 	normalizePersistedMarkdown,
 	serializeTiptapDocToMarkdown,
 } from "./build-markdown-from-editor";
@@ -75,6 +77,17 @@ export function acknowledgeMarkdownEditorPersistence(
 	baseline.lastAcknowledgedMarkdown = normalizePersistedMarkdown(markdown);
 	baseline.expectedFileMarkdown = markdown;
 	baseline.acknowledgedRevision = baseline.documentRevision;
+}
+
+/**
+ * Returns the latest Markdown durably accepted by the file compare-and-swap.
+ * External delivery uses this as its clean baseline so it does not have to
+ * wait for a second observer round trip to rediscover a successful local save.
+ */
+export function markdownEditorLastAcknowledgedMarkdown(
+	editor: Editor,
+): string | undefined {
+	return persistenceBaselines.get(editor)?.lastAcknowledgedMarkdown;
 }
 
 export const createMarkdownEditorOriginKey = (): string => {
@@ -186,10 +199,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	const ast = contentAst ?? (parseMarkdown(initialMarkdown ?? "") as any);
 
 	let persistStateTimer: any = null;
-	let persistRunning = false;
-	let persistQueued = false;
 	let persistPromise: Promise<void> | null = null;
 	let destroyed = false;
+	let pendingPersistenceSnapshot: {
+		readonly revision: number;
+		readonly doc: ProseMirrorNode;
+	} | null = null;
 	let editorInstance: Editor | null = null;
 	let currentEditor: Editor | null = null;
 	let cleanupExternalLinkClick: (() => void) | null = null;
@@ -201,48 +216,60 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		acknowledgedRevision: 0,
 	};
 	const persistDebounceMsResolved = persistDebounceMs ?? 0;
-	const persistOnce = async (editor: Editor) => {
-		if (!shouldPersist()) return;
-		const revision = persistenceBaseline.documentRevision;
-		if (revision === persistenceBaseline.acknowledgedRevision) return;
-		// Review projections deliberately contain both sides of a suggestion.
-		// They are presentation state, never valid file content. This guard keeps
-		// an accidental mode transition or destroy flush from serializing them.
-		if (containsMarkdownReviewProjection(editor)) return;
-		const markdown = buildNormalizedMarkdownFromEditor(editor);
+	const persistOnce = async (): Promise<number | undefined> => {
+		const snapshot = pendingPersistenceSnapshot;
+		if (!snapshot) return undefined;
+		const { revision, doc } = snapshot;
+		if (containsMarkdownReviewProjection(doc)) return revision;
+		const markdown = buildNormalizedMarkdownFromTiptapDoc(doc);
+		if (revision === persistenceBaseline.acknowledgedRevision) {
+			pendingPersistenceSnapshot = null;
+			return revision;
+		}
 		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) {
 			persistenceBaseline.acknowledgedRevision = revision;
-			return;
+			if (pendingPersistenceSnapshot?.revision === revision) {
+				pendingPersistenceSnapshot = null;
+			}
+			return revision;
 		}
 		const didPersist = await upsertMarkdownFile({
 			lix,
 			fileId: fileId!,
 			markdown,
 			expectedMarkdown: persistenceBaseline.expectedFileMarkdown,
-			createIfMissing: false,
 			originKey,
 		});
-		if (!didPersist) return;
+		if (!didPersist) return revision;
 		persistenceBaseline.lastAcknowledgedMarkdown = markdown;
 		persistenceBaseline.expectedFileMarkdown = markdown;
 		persistenceBaseline.acknowledgedRevision = revision;
-		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
-	};
-	const runPersist = (editor: Editor): Promise<void> => {
-		if (!fileId || !persistState || !shouldPersist()) return Promise.resolve();
-		if (persistRunning) {
-			persistQueued = true;
-			return persistPromise ?? Promise.resolve();
+		if (pendingPersistenceSnapshot?.revision === revision) {
+			pendingPersistenceSnapshot = null;
 		}
-		persistRunning = true;
+		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
+		return revision;
+	};
+	const runPersist = (): Promise<void> => {
+		if (!fileId || !persistState) return Promise.resolve();
+		if (persistPromise) return persistPromise;
 		persistPromise = (async () => {
 			try {
-				do {
-					persistQueued = false;
-					await persistOnce(editor);
-				} while (persistQueued && !destroyed);
+				while (true) {
+					const attemptedRevision = await persistOnce();
+					if (
+						attemptedRevision === undefined ||
+						pendingPersistenceSnapshot === null ||
+						pendingPersistenceSnapshot.revision === attemptedRevision
+					) {
+						break;
+					}
+				}
+				if (!pendingPersistenceSnapshot && persistStateTimer) {
+					clearTimeout(persistStateTimer);
+					persistStateTimer = null;
+				}
 			} finally {
-				persistRunning = false;
 				persistPromise = null;
 			}
 		})();
@@ -320,43 +347,31 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			if (onUpdate?.({ editor }) === false) return;
 			if (!transaction.docChanged) return;
 			persistenceBaseline.documentRevision += 1;
-			if (!fileId || !persistState) return;
-			const scheduleRun = () => {
-				if (destroyed) return;
-				if (persistDebounceMsResolved <= 0) {
-					void runPersist(editor);
-					return;
-				}
-				if (persistStateTimer) clearTimeout(persistStateTimer);
-				persistStateTimer = setTimeout(() => {
-					persistStateTimer = null;
-					if (destroyed || !shouldPersist()) return;
-					void runPersist(editor);
-				}, persistDebounceMsResolved);
+			if (!fileId || !persistState || !shouldPersist()) return;
+			// Capture the payload while TipTap is alive. The persistence owner can
+			// then finish independently if the view is destroyed before its debounce
+			// or an in-flight write completes.
+			pendingPersistenceSnapshot = {
+				revision: persistenceBaseline.documentRevision,
+				doc: transaction.doc,
 			};
-			scheduleRun();
+			if (persistDebounceMsResolved <= 0) {
+				void runPersist().catch(() => {});
+				return;
+			}
+			if (persistStateTimer) clearTimeout(persistStateTimer);
+			persistStateTimer = setTimeout(() => {
+				persistStateTimer = null;
+				void runPersist().catch(() => {});
+			}, persistDebounceMsResolved);
 		},
 		onDestroy: () => {
 			cleanupExternalLinkClick?.();
 			cleanupExternalLinkClick = null;
-			persistQueued = false;
-			if (persistStateTimer) {
-				clearTimeout(persistStateTimer);
-				persistStateTimer = null;
-			}
-			const editorToPersist = currentEditor ?? editorInstance;
-			if (editorToPersist && fileId && persistState && shouldPersist()) {
-				if (persistRunning) {
-					persistQueued = true;
-				}
-				void runPersist(editorToPersist).finally(() => {
-					destroyed = true;
-					currentEditor = null;
-				});
-			} else {
-				destroyed = true;
-				currentEditor = null;
-			}
+			destroyed = true;
+			currentEditor = null;
+			// Destruction only releases TipTap. A debounce or serialized drain already
+			// owned by persistence may finish its payload captured in onUpdate.
 		},
 		editorProps: {
 			clipboardTextSerializer: (slice: any) => markdownClipboardText(slice),
@@ -452,9 +467,9 @@ function isUndoKeyboardEvent(event: KeyboardEvent): boolean {
 	);
 }
 
-function containsMarkdownReviewProjection(editor: Editor): boolean {
+function containsMarkdownReviewProjection(doc: ProseMirrorNode): boolean {
 	let found = false;
-	editor.state.doc.descendants((node) => {
+	doc.descendants((node) => {
 		if (found) return false;
 		if (node.marks.some((mark) => mark.type.name === "markdownReviewDiff")) {
 			found = true;

@@ -6,7 +6,8 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { MarkdownView } from "./index";
 import { qb } from "@/lib/lix-kysely";
-import { appendAgentTurnCommitRange } from "@/shell/agent-turn-review-range";
+import { HistoryView } from "@/extensions/history";
+import type { ExtensionRuntime } from "@/extension-runtime/types";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -69,6 +70,103 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils?.unmount();
 		});
+	});
+
+	test("shares one live file delivery with TipTap while History is open", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_history_startup_delivery");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/history-startup.md",
+				content: new TextEncoder().encode("# Initial delivery"),
+			})
+			.execute();
+		const execute = vi.spyOn(lix, "execute");
+		const observe = vi.spyOn(lix, "observe");
+		const isLiveDeliveryStatement = (statement: unknown) => {
+			const sql = String(statement);
+			return (
+				/\bfrom\s+"?lix_file"?\s+as\s+"?file"?/i.test(sql) &&
+				/\bfile\.?"?content"?/i.test(sql)
+			);
+		};
+		const originPointReads = () =>
+			execute.mock.calls.filter(([statement]) => {
+				const sql = String(statement);
+				return (
+					/\bfrom\s+"?lix_change"?/i.test(sql) && /\borigin_key\b/i.test(sql)
+				);
+			});
+		const liveDeliveryReads = () =>
+			execute.mock.calls.filter(([statement]) =>
+				isLiveDeliveryStatement(statement),
+			).length;
+		const liveDeliveryObservers = () =>
+			observe.mock.calls.filter(([statement]) =>
+				isLiveDeliveryStatement(statement),
+			).length;
+		const atelier = {
+			diff: {
+				session: null,
+				open: async () => {},
+				openFile: () => {},
+				exit: () => {},
+				accept: async () => {},
+				reject: async () => {},
+				autoAccept: false,
+			},
+			icons: { fileUrl: () => "" },
+		} as unknown as ExtensionRuntime;
+
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<div>
+							<HistoryView atelier={atelier} />
+							<MarkdownView fileId={fileId} filePath="/history-startup.md" />
+						</div>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		expect(
+			await screen.findByRole("region", { name: "Checkpoint history" }),
+		).toBeVisible();
+		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
+			"Initial delivery",
+		);
+		// One subscribed query owns the row. It executes once for Suspense, then
+		// consumes the SDK's authoritative observer snapshots directly.
+		await waitFor(() => expect(liveDeliveryReads()).toBe(1));
+		expect(liveDeliveryObservers()).toBe(1);
+		expect(
+			observe.mock.calls.some(([statement]) =>
+				/\bjoin\s+"?lix_change"?/i.test(String(statement)),
+			),
+		).toBe(false);
+		expect(originPointReads()).toHaveLength(0);
+
+		await lix.execute(
+			"UPDATE lix_file SET content = $1 WHERE id = $2",
+			[new TextEncoder().encode("# Later delivery"), fileId],
+			{ originKey: "external-history-startup-test" },
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+				"Later delivery",
+			),
+		);
+		expect(liveDeliveryReads()).toBe(1);
+		expect(liveDeliveryObservers()).toBe(1);
+		expect(originPointReads()).toHaveLength(0);
+
+		await act(async () => utils?.unmount());
+		await lix.close();
 	});
 
 	test("keeps the formatting toolbar visible but disabled in host read-only mode", async () => {
@@ -667,7 +765,7 @@ describe("MarkdownView", () => {
 		});
 	});
 
-	test("shows review controls for a file already mounted before the range is persisted", async () => {
+	test("shows review controls for a file already mounted before the external write lands", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
 		await qb(lix)
@@ -678,34 +776,54 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
+		const checkpoint = await lix.createCheckpoint();
 
 		let utils: ReturnType<typeof render> | undefined;
-		const renderReviewMarkdown = (
-			resolvedReviewIds: readonly string[] = [],
-		) => (
+		const renderReviewMarkdown = (reviewing: boolean) => (
 			<LixProvider lix={lix}>
 				<Suspense fallback={null}>
 					<MarkdownView
 						fileId={fakeUuid("file_review_startup")}
 						filePath="/review-startup.md"
 						activeBranchId={activeBranchId}
-						resolvedReviewIds={resolvedReviewIds}
+						diffSession={
+							reviewing
+								? {
+										base: { commitId: checkpoint.commitId },
+										target: { working: true },
+										files: [
+											{
+												id: fakeUuid("file_review_startup"),
+												path: "/review-startup.md",
+												changeKind: "modified",
+												review: { id: "review-startup", status: "pending" },
+											},
+										],
+										activePath: "/review-startup.md",
+										capabilities: {
+											checkpoint: true,
+											undo: true,
+											restore: false,
+										},
+									}
+								: null
+						}
 						isActiveView
 						isPanelFocused
-						onResolveReviewDiff={async ({ fileId, reviewId, data }) => {
+						onDiffResolve={async (_path, data) => {
 							await qb(lix)
 								.updateTable("lix_file")
 								.set({ content: data })
-								.where("id", "=", fileId)
+								.where("id", "=", fakeUuid("file_review_startup"))
 								.execute();
-							utils?.rerender(renderReviewMarkdown([reviewId]));
+							utils?.rerender(renderReviewMarkdown(false));
 						}}
 					/>
 				</Suspense>
 			</LixProvider>
 		);
 		await act(async () => {
-			utils = render(renderReviewMarkdown());
+			utils = render(renderReviewMarkdown(false));
 		});
 
 		const liveEditor = await screen.findByTestId("tiptap-editor");
@@ -733,26 +851,13 @@ describe("MarkdownView", () => {
 			);
 		});
 		editorObserver.observe(editorSurface, { childList: true, subtree: true });
-		const beforeCommitId = await activeCommitId(lix);
-
 		await act(async () => {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After") })
 				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
-		});
-		const afterCommitId = await activeCommitId(lix);
-
-		await act(async () => {
-			await appendAgentTurnCommitRange(lix, {
-				id: "range-review-startup",
-				sourceId: "codex",
-				beforeCommitId,
-				afterCommitId,
-				startedAt: 1,
-				completedAt: 2,
-			});
+			utils?.rerender(renderReviewMarkdown(true));
 		});
 
 		expect(
@@ -794,7 +899,9 @@ describe("MarkdownView", () => {
 		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
 			formattingToolbar,
 		);
-		expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		await waitFor(() => {
+			expect(formattingToolbar).toHaveAttribute("data-disabled", "false");
+		});
 
 		await act(async () => {
 			utils?.unmount();
@@ -807,7 +914,7 @@ describe("MarkdownView", () => {
 		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
 	});
 
-	test("renders historical deleted-file diffs without review controls", async () => {
+	test("renders historical deleted-file raw snapshots without review controls", async () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
 		await qb(lix)
@@ -858,11 +965,79 @@ describe("MarkdownView", () => {
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
-		expect(screen.getByTestId("markdown-review-editor")).toBeInTheDocument();
+		const reviewEditor = screen.getByTestId("markdown-review-editor");
+		expect(reviewEditor).toHaveTextContent("Before");
+		expect(reviewEditor).toHaveTextContent("After");
+		expect(screen.queryByText("Loading review…")).toBeNull();
 
 		await act(async () => {
 			utils?.unmount();
 		});
+		await lix.close();
+	});
+
+	test("selects one visible row when the file skipped the previous checkpoint", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("checkpoint_visible_snapshot");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/checkpoint-visible.md",
+				content: new TextEncoder().encode("# Before"),
+			})
+			.execute();
+		await lix.createCheckpoint();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("checkpoint_visible_unrelated"),
+				path: "/checkpoint-unrelated.md",
+				content: new TextEncoder().encode("unrelated"),
+			})
+			.execute();
+		const beforeCommitId = (await lix.createCheckpoint()).commitId;
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# After") })
+			.where("id", "=", fileId)
+			.execute();
+		const afterCommitId = (await lix.createCheckpoint()).commitId;
+		const execute = vi.spyOn(lix, "execute");
+		let utils: ReturnType<typeof render> | undefined;
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId={fileId}
+							filePath="/checkpoint-visible.md"
+							beforeCommitId={beforeCommitId}
+							afterCommitId={afterCommitId}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const reviewEditor = await screen.findByTestId("markdown-review-editor");
+		expect(reviewEditor).toHaveTextContent("Before");
+		expect(reviewEditor).toHaveTextContent("After");
+		const historyCalls = execute.mock.calls.filter(([statement]) =>
+			String(statement).includes("lix_history('lix_file'"),
+		);
+		expect(historyCalls).toHaveLength(2);
+		expect(
+			historyCalls.every(
+				([statement, parameters]) =>
+					["where id =", "order by lixcol_depth asc", "limit"].every((clause) =>
+						String(statement).includes(clause),
+					) && (parameters ?? []).includes(1),
+			),
+		).toBe(true);
+
+		await act(async () => utils?.unmount());
 		await lix.close();
 	});
 
@@ -901,9 +1076,12 @@ describe("MarkdownView", () => {
 			})
 			.execute();
 
-		await lix.execute("SELECT lix_restore($1)", [restoreTarget]);
+		await lix.execute("INSERT INTO lix_restore (commit_id) VALUES ($1)", [
+			restoreTarget,
+		]);
 		const workingDiff = await lix.execute(
-			"SELECT diff_id FROM lix_working_diff()",
+			"SELECT row_pk FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
+			[restoreTarget],
 		);
 		expect(workingDiff.rows).toHaveLength(0);
 
