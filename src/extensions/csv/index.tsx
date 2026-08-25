@@ -256,17 +256,23 @@ function CsvLiveViewData({
 	// The shell owns review detection: this file is under review when the
 	// working diff session marks it pending and it is the revealed file.
 	const session = diffSession ?? null;
+	const sessionFile =
+		fileRow && session && "working" in session.target
+			? session.files.find((file) => file.id === fileRow.id)
+			: undefined;
 	const isReviewing = Boolean(
 		fileRow &&
 			session &&
-			"working" in session.target &&
-			session.activePath === fileRow.path &&
-			session.files.some(
-				(file) => file.id === fileRow.id && file.review?.status === "pending",
-			),
+			sessionFile?.review?.status === "pending" &&
+			session.activePath === fileRow.path,
 	);
+	// An added file has no base to fetch: its history is absent, so its before
+	// side is empty by definition.
 	const reviewBaseCommitId =
-		isReviewing && session?.base && "commitId" in session.base
+		isReviewing &&
+		sessionFile?.changeKind !== "added" &&
+		session?.base &&
+		"commitId" in session.base
 			? session.base.commitId
 			: null;
 
@@ -317,7 +323,7 @@ function EditableCsvView({
 	);
 	// The review's after side is the live document; only the base needs a read.
 	const reviewBase = useFileDataAtCommit(
-		reviewing ? fileId : null,
+		reviewBaseCommitId ? fileId : null,
 		reviewBaseCommitId,
 	);
 	const reviewData: ExternalWriteReviewData | null =

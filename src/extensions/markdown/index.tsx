@@ -245,22 +245,28 @@ function MarkdownLiveViewLoaded({
 	// The shell owns review detection: this document is under review when the
 	// working diff session marks it pending and it is the revealed file.
 	const session = diffSession ?? null;
-	const sessionReview =
+	const sessionFile =
 		fileRow && session && "working" in session.target
-			? session.files.find((file) => file.id === fileRow.id)?.review
+			? session.files.find((file) => file.id === fileRow.id)
 			: undefined;
+	const sessionReview = sessionFile?.review;
 	const reviewing = Boolean(
 		fileRow &&
 			session &&
 			sessionReview?.status === "pending" &&
 			session.activePath === fileRow.path,
 	);
+	// An added file has no base to fetch: its history is absent, so its before
+	// side is empty by definition.
 	const reviewBaseCommitId =
-		reviewing && session?.base && "commitId" in session.base
+		reviewing &&
+		sessionFile?.changeKind !== "added" &&
+		session?.base &&
+		"commitId" in session.base
 			? session.base.commitId
 			: null;
 	const reviewBase = useFileDataAtCommit(
-		reviewing ? fileRow?.id : null,
+		reviewBaseCommitId ? fileRow?.id : null,
 		reviewBaseCommitId,
 	);
 	const effectiveFileRow = fileRow;

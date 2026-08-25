@@ -602,21 +602,37 @@ type LixFileForOpen = {
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
 
-type WorkingReviewSession = {
-	readonly files: readonly LixFileForOpen[];
+/**
+ * The one diff-mode state: a review of the span between two commits, aimed at
+ * either the mutable working state or an immutable historical commit.
+ */
+type DiffReviewState = {
+	readonly kind: "working" | "historical";
+	/**
+	 * The compared span. Working reviews cover latest-checkpoint-to-head at
+	 * open time (null when the repository has no checkpoint yet); historical
+	 * reviews always cover previous-commit-to-target-commit.
+	 */
 	readonly range: {
 		readonly beforeCommitId: string;
 		readonly afterCommitId: string;
 		readonly removedFileIds: ReadonlySet<string>;
 	} | null;
+	readonly files: readonly LixFileForOpen[];
+	/** The file diff mode revealed; null keeps the user's own document. */
 	readonly diffFileId: string | null;
+	/** Shell-synthesized per-file reviews (working reviews only). */
 	readonly externalWriteReviews: readonly ExternalWriteReview[];
+	/** When the target commit was created (historical float title). */
+	readonly createdAt?: string;
+	/** True once the first snapshot view finished opening (historical). */
+	readonly opened?: boolean;
 };
 
-function removeFilesFromWorkingReview(
-	session: WorkingReviewSession,
+function removeFilesFromDiffReview(
+	session: DiffReviewState,
 	fileIds: ReadonlySet<string>,
-): WorkingReviewSession | null {
+): DiffReviewState | null {
 	const files = session.files.filter((file) => !fileIds.has(file.id));
 	if (files.length === 0) return null;
 	return {
@@ -635,6 +651,8 @@ function removeFilesFromWorkingReview(
 // Stable identity: the icon resolver is pure, so every runtime rebuild can
 // share one object.
 const ATELIER_RUNTIME_ICONS = { fileUrl: fileIconUrl } as const;
+const EMPTY_FILE_ID_SET: ReadonlySet<string> = new Set();
+const EMPTY_EXTERNAL_WRITE_REVIEWS: readonly ExternalWriteReview[] = [];
 const WORKING_CHANGE_REVIEW_KINDS = new Set<ExtensionKind>([
 	FILE_EXTENSION_KIND,
 	"atelier_text",
@@ -1336,11 +1354,14 @@ function LayoutShellLoadedContentResolved({
 		useState<readonly string[]>(resolvedReviewIds);
 	const resolvedReviewIdsRef = useRef(new Set<string>(resolvedReviewIds));
 	const openedReviewIdsRef = useRef(new Set<string>());
-	const [workingReview, setWorkingReview] =
-		useState<WorkingReviewSession | null>(null);
-	const workingReviewRef = useRef(workingReview);
-	workingReviewRef.current = workingReview;
+	const [diffReview, setDiffReview] = useState<DiffReviewState | null>(null);
+	const diffReviewRef = useRef(diffReview);
+	diffReviewRef.current = diffReview;
 	const workingReviewOpeningRef = useRef(false);
+	// Both diff-mode targets are views over the same state: "working" reviews
+	// the mutable head, "historical" a read-only checkpoint (verb: Restore).
+	const workingReview = diffReview?.kind === "working" ? diffReview : null;
+	const historicalReview = diffReview?.kind === "historical" ? diffReview : null;
 	const workingChangesReviewOpen = workingReview !== null;
 	const workingChangeReviewFiles =
 		workingReview?.files ?? EMPTY_LIX_FILES_FOR_OPEN;
@@ -1348,16 +1369,6 @@ function LayoutShellLoadedContentResolved({
 	const openWorkingChangeFileRef = useRef<((path: string) => void) | null>(
 		null,
 	);
-	// Diff mode pointed at the past: a checkpoint clicked in History. Read-only;
-	// the float's only verb is Restore.
-	const [historicalReview, setHistoricalReview] = useState<{
-		readonly commitId: string;
-		readonly previousCommitId: string;
-		readonly createdAt?: string;
-		readonly files: readonly LixFileForOpen[];
-		/** True once the first snapshot view finished opening. */
-		readonly opened?: boolean;
-	} | null>(null);
 	const handleCloseViewRef = useRef<
 		((args: { panel?: PanelSide; instance?: string }) => void) | null
 	>(null);
@@ -1395,10 +1406,9 @@ function LayoutShellLoadedContentResolved({
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
 			historicalRequestRef.current += 1;
 			historicalOpenPathRef.current = null;
-			setWorkingReview(null);
-			setHistoricalReview((current) => {
-				if (current) {
-					closeHistoricalReviewViews(current.commitId);
+			setDiffReview((current) => {
+				if (current?.kind === "historical" && current.range) {
+					closeHistoricalReviewViews(current.range.afterCommitId);
 					const previousDocument = preHistoricalDocumentRef.current;
 					preHistoricalDocumentRef.current = null;
 					if (restoreLiveDocument && previousDocument) {
@@ -1411,10 +1421,9 @@ function LayoutShellLoadedContentResolved({
 		[closeHistoricalReviewViews],
 	);
 	useEffect(() => {
-		setWorkingReview(null);
 		historicalRequestRef.current += 1;
 		historicalOpenPathRef.current = null;
-		setHistoricalReview(null);
+		setDiffReview(null);
 	}, [activeBranchId]);
 	const resolveDiffReviewRef = useRef<
 		((review: ExternalWriteReview) => boolean) | null
@@ -1544,8 +1553,8 @@ function LayoutShellLoadedContentResolved({
 		async (selectedFileIds: readonly string[]) => {
 			const selected = new Set(selectedFileIds);
 			if (selected.size === 0) return;
-			const session = workingReviewRef.current;
-			if (!session) return;
+			const session = diffReviewRef.current;
+			if (session?.kind !== "working") return;
 			const selectedReviews = session.externalWriteReviews.filter(
 				(review) => selected.has(review.fileId),
 			);
@@ -1553,8 +1562,8 @@ function LayoutShellLoadedContentResolved({
 			if (!checkpoint) {
 				throw new Error("The selected files have no working changes.");
 			}
-			setWorkingReview((current) =>
-				current ? removeFilesFromWorkingReview(current, selected) : null,
+			setDiffReview((current) =>
+				current ? removeFilesFromDiffReview(current, selected) : null,
 			);
 			// Consume only the reviews that were already known when the workspace
 			// review opened. Checkpoint creation never discovers reviews via history.
@@ -1578,8 +1587,8 @@ function LayoutShellLoadedContentResolved({
 	const handleKeepReviews = useCallback(
 		async (selectedFileIds: readonly string[]) => {
 			const selected = new Set(selectedFileIds);
-			const session = workingReviewRef.current;
-			if (!session) return;
+			const session = diffReviewRef.current;
+			if (session?.kind !== "working") return;
 			await keepReviews(
 				session.externalWriteReviews.filter((review) =>
 					selected.has(review.fileId),
@@ -1592,12 +1601,9 @@ function LayoutShellLoadedContentResolved({
 
 	const handleRestoreCheckpoint = useCallback(
 		async (selectedFileIds: readonly string[]) => {
-			if (!historicalReview || selectedFileIds.length === 0) return;
-			await restoreCheckpointFiles(
-				lix,
-				historicalReview.commitId,
-				selectedFileIds,
-			);
+			if (!historicalReview?.range || selectedFileIds.length === 0) return;
+			const commitId = historicalReview.range.afterCommitId;
+			await restoreCheckpointFiles(lix, commitId, selectedFileIds);
 			const selected = new Set(selectedFileIds);
 			const remainingFiles = historicalReview.files.filter(
 				(file) => !selected.has(file.id),
@@ -1606,8 +1612,9 @@ function LayoutShellLoadedContentResolved({
 				exitDiffReview();
 				return;
 			}
-			setHistoricalReview((current) =>
-				current?.commitId === historicalReview.commitId
+			setDiffReview((current) =>
+				current?.kind === "historical" &&
+				current.range?.afterCommitId === commitId
 					? { ...current, files: remainingFiles }
 					: current,
 			);
@@ -2114,7 +2121,7 @@ function LayoutShellLoadedContentResolved({
 				file.path === navigationActivePath,
 		),
 	);
-	const historicalCommitId = historicalReview?.commitId ?? null;
+	const historicalCommitId = historicalReview?.range?.afterCommitId ?? null;
 	const reviewNavigation = useMemo(() => {
 		const activeFile = pendingReviewFiles[activeReviewFileIndex];
 		if (!activeFile) return undefined;
@@ -2371,7 +2378,7 @@ function LayoutShellLoadedContentResolved({
 	);
 	const emitDiffOpenedForFile = useCallback(
 		(fileId: string, path: string) => {
-			const review = workingReviewRef.current?.externalWriteReviews.find(
+			const review = diffReviewRef.current?.externalWriteReviews.find(
 				(candidate) => candidate.fileId === fileId,
 			);
 			if (!review || openedReviewIdsRef.current.has(review.reviewId)) return;
@@ -2391,7 +2398,7 @@ function LayoutShellLoadedContentResolved({
 			);
 			if (!file) return;
 			emitDiffOpenedForFile(file.id, file.path);
-			setWorkingReview((current) =>
+			setDiffReview((current) =>
 				current ? { ...current, diffFileId: file.id } : null,
 			);
 			if (workingChangeReviewRange) {
@@ -2412,7 +2419,8 @@ function LayoutShellLoadedContentResolved({
 
 	const openHistoricalCheckpointFile = useCallback(
 		(path: string) => {
-			if (!historicalReview) return;
+			if (!historicalReview?.range) return;
+			const historicalRange = historicalReview.range;
 			const file = historicalReview.files.find(
 				(candidate) => candidate.path === path,
 			);
@@ -2421,8 +2429,8 @@ function LayoutShellLoadedContentResolved({
 			void (async () => {
 				const snapshotCommitId =
 					file.checkpointChangeKind === "removed"
-						? historicalReview.previousCommitId
-						: historicalReview.commitId;
+						? historicalRange.beforeCommitId
+						: historicalRange.afterCommitId;
 				const [snapshot] = await selectFileHistorySnapshotsAtCommits(
 					lix,
 					[{ fileId: file.id, commitId: snapshotCommitId }],
@@ -2438,13 +2446,14 @@ function LayoutShellLoadedContentResolved({
 					filePath: historicalPath,
 					state: historicalRevisionStateForPath(
 						historicalPath,
-						historicalReview.commitId,
-						historicalReview.previousCommitId,
+						historicalRange.afterCommitId,
+						historicalRange.beforeCommitId,
 						file.checkpointChangeKind,
 					),
 				});
-				setHistoricalReview((current) =>
-					current && current.commitId === historicalReview.commitId
+				setDiffReview((current) =>
+					current?.kind === "historical" &&
+					current.range?.afterCommitId === historicalRange.afterCommitId
 						? {
 								...current,
 								opened: true,
@@ -2490,12 +2499,12 @@ function LayoutShellLoadedContentResolved({
 			);
 			if (historicalRequestRef.current !== requestId) return;
 			if (files.length === 0) return;
-			setWorkingReview(null);
-			setHistoricalReview((current) => {
-				if (current && current.commitId !== commitId) {
-					closeHistoricalReviewViews(current.commitId);
+			setDiffReview((current) => {
+				const previous = current?.kind === "historical" ? current : null;
+				if (previous?.range && previous.range.afterCommitId !== commitId) {
+					closeHistoricalReviewViews(previous.range.afterCommitId);
 				}
-				if (!current) {
+				if (!previous) {
 					// Entering the past: remember the live document this view will
 					// replace so Exit can bring it back.
 					const activeView = panelStatesRef.current.central.views.find(
@@ -2517,7 +2526,18 @@ function LayoutShellLoadedContentResolved({
 							? { fileId: activeFileId, filePath: activePath }
 							: null;
 				}
-				return { commitId, previousCommitId, createdAt, files };
+				return {
+					kind: "historical",
+					range: {
+						beforeCommitId: previousCommitId,
+						afterCommitId: commitId,
+						removedFileIds: EMPTY_FILE_ID_SET,
+					},
+					files,
+					diffFileId: null,
+					externalWriteReviews: EMPTY_EXTERNAL_WRITE_REVIEWS,
+					...(createdAt !== undefined ? { createdAt } : {}),
+				};
 			});
 		},
 		[closeHistoricalReviewViews, lix],
@@ -2536,7 +2556,7 @@ function LayoutShellLoadedContentResolved({
 			if (review?.fileId === fileId && review.reviewId === reviewId) {
 				return review;
 			}
-			const sessionReview = workingReviewRef.current?.externalWriteReviews.find(
+			const sessionReview = diffReviewRef.current?.externalWriteReviews.find(
 				(candidate) => candidate.fileId === fileId,
 			);
 			return sessionReview?.reviewId === reviewId ? sessionReview : null;
@@ -2715,14 +2735,14 @@ function LayoutShellLoadedContentResolved({
 		async (selectedFileIds: readonly string[]) => {
 			if (!workingChangesReviewOpen || selectedFileIds.length === 0) return;
 			const selected = new Set(selectedFileIds);
-			const session = workingReviewRef.current;
-			if (!session) return;
+			const session = diffReviewRef.current;
+			if (session?.kind !== "working") return;
 			const selectedReviews = session.externalWriteReviews.filter(
 				(review) => selected.has(review.fileId),
 			);
 			await revertWorkingChangesForFiles(lix, selectedFileIds);
-			setWorkingReview((current) =>
-				current ? removeFilesFromWorkingReview(current, selected) : null,
+			setDiffReview((current) =>
+				current ? removeFilesFromDiffReview(current, selected) : null,
 			);
 			for (const review of selectedReviews) {
 				try {
@@ -3340,10 +3360,13 @@ function LayoutShellLoadedContentResolved({
 						handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
 					);
 				})
-				.map((file) => ({
-					id: String(file.id),
-					path: String(file.path),
-				}))
+				.map(
+					(file): LixFileForOpen => ({
+						id: String(file.id),
+						path: String(file.path),
+						checkpointChangeKind: file.diff_type,
+					}),
+				)
 				.sort((left, right) => left.path.localeCompare(right.path));
 			const firstChangedFile = checkpointFiles[0];
 			const removedFileIds = new Set(
@@ -3351,29 +3374,30 @@ function LayoutShellLoadedContentResolved({
 					.filter((change) => change.diff_type === "removed")
 					.map((change) => change.id),
 			);
+			// The review window is always checkpoint-to-head: reviews, diff
+			// rendering, and removed-file snapshots all hang off this range. A
+			// repository without a checkpoint has no "before" to diff against.
 			let reviewRange: {
 				readonly beforeCommitId: string;
 				readonly afterCommitId: string;
 				readonly removedFileIds: ReadonlySet<string>;
 			} | null = null;
-			if (removedFileIds.size > 0) {
-				const [checkpoint, headResult] = await Promise.all([
-					qb(lix)
-						.selectFrom("lix_checkpoint")
-						.select("commit_id")
-						.orderBy("lixcol_created_at", "desc")
-						.limit(1)
-						.executeTakeFirst(),
-					lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
-				]);
-				const headCommitId = headResult.rows[0]?.get("commit_id");
-				if (checkpoint && typeof headCommitId === "string") {
-					reviewRange = {
-						beforeCommitId: checkpoint.commit_id,
-						afterCommitId: headCommitId,
-						removedFileIds,
-					};
-				}
+			const [checkpoint, headResult] = await Promise.all([
+				qb(lix)
+					.selectFrom("lix_checkpoint")
+					.select("commit_id")
+					.orderBy("lixcol_created_at", "desc")
+					.limit(1)
+					.executeTakeFirst(),
+				lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
+			]);
+			const headCommitId = headResult.rows[0]?.get("commit_id");
+			if (checkpoint && typeof headCommitId === "string") {
+				reviewRange = {
+					beforeCommitId: checkpoint.commit_id,
+					afterCommitId: headCommitId,
+					removedFileIds,
+				};
 			}
 			if (!firstChangedFile) {
 				if (!isHostReadOnly) revealHistory();
@@ -3414,9 +3438,10 @@ function LayoutShellLoadedContentResolved({
 			const revealFirstFile =
 				openOptions?.reveal ??
 				(!activeCentralView || !isDocumentView(activeCentralView));
-			setWorkingReview({
-				files: checkpointFiles,
+			setDiffReview({
+				kind: "working",
 				range: reviewRange,
+				files: checkpointFiles,
 				diffFileId: revealFirstFile ? firstChangedFile.id : null,
 				externalWriteReviews: sessionReviews,
 			});
@@ -3679,10 +3704,10 @@ function LayoutShellLoadedContentResolved({
 			path: file.path,
 			changeKind: file.checkpointChangeKind ?? "modified",
 		});
-		if (historicalReview) {
+		if (historicalReview?.range) {
 			return {
-				base: { commitId: historicalReview.previousCommitId },
-				target: { commitId: historicalReview.commitId },
+				base: { commitId: historicalReview.range.beforeCommitId },
+				target: { commitId: historicalReview.range.afterCommitId },
 				files: historicalReview.files.map(toDiffFile),
 				activePath: activeDiffPath,
 				...(historicalReview.createdAt
@@ -3691,18 +3716,19 @@ function LayoutShellLoadedContentResolved({
 				capabilities: { checkpoint: false, undo: false, restore: true },
 			};
 		}
-		if (workingChangesReviewOpen) {
+		if (workingReview) {
 			const reviewsByFileId = new Map(
-				(workingReviewRef.current?.externalWriteReviews ?? []).map(
-					(review) => [review.fileId, review],
-				),
+				workingReview.externalWriteReviews.map((review) => [
+					review.fileId,
+					review,
+				]),
 			);
 			return {
-				base: workingChangeReviewRange
-					? { commitId: workingChangeReviewRange.beforeCommitId }
+				base: workingReview.range
+					? { commitId: workingReview.range.beforeCommitId }
 					: null,
 				target: { working: true },
-				files: workingChangeReviewFiles.map((file) => {
+				files: workingReview.files.map((file) => {
 					const review = reviewsByFileId.get(file.id);
 					return {
 						...toDiffFile(file),
@@ -3729,9 +3755,7 @@ function LayoutShellLoadedContentResolved({
 		activeDiffPath,
 		historicalReview,
 		privateResolvedReviewIds,
-		workingChangeReviewFiles,
-		workingChangeReviewRange,
-		workingChangesReviewOpen,
+		workingReview,
 	]);
 	const openDiffSession = useCallback(
 		async (options: {
@@ -3780,7 +3804,7 @@ function LayoutShellLoadedContentResolved({
 	);
 	const resolveDiffSessionFile = useCallback(
 		async (path: string, outcome: "accepted" | "rejected") => {
-			const review = workingReviewRef.current?.externalWriteReviews.find(
+			const review = diffReviewRef.current?.externalWriteReviews.find(
 				(candidate) => candidate.path === path,
 			);
 			if (!review) {
@@ -3801,7 +3825,7 @@ function LayoutShellLoadedContentResolved({
 	);
 	const resolveDiffSessionFileWithData = useCallback(
 		async (path: string, data: Uint8Array) => {
-			const review = workingReviewRef.current?.externalWriteReviews.find(
+			const review = diffReviewRef.current?.externalWriteReviews.find(
 				(candidate) => candidate.path === path,
 			);
 			if (!review) {
