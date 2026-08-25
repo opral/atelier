@@ -212,12 +212,13 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	/* Dot-hybrid glyphs (design 23d): the dot silhouette with a knockout —
-	   plus = added, minus = deleted, plain = modified. 12px so the internal
-	   detail stays crisp; the knockout is the panel ground layered over the
-	   status color with gradients. */
+	   plus = added, minus = deleted, plain = modified. 10px: the knockout
+	   legibility floor, sized down for the compact tree rows (the history
+	   panel runs the full 12px). The knockout is the panel ground layered
+	   over the status color with gradients. */
 	[data-item-git-status='modified'] > [data-item-section='git'] > span {
-		width: 12px;
-		height: 12px;
+		width: 10px;
+		height: 10px;
 		border-radius: 999px;
 		background: currentColor;
 	}
@@ -229,24 +230,24 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	[data-item-git-status='added'] > [data-item-section='git'] > span,
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
-		width: 12px;
-		height: 12px;
+		width: 10px;
+		height: 10px;
 		border-radius: 999px;
 	}
 
 	[data-item-git-status='added'] > [data-item-section='git'] > span {
 		background:
 			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
-				1.7px 4.8px no-repeat,
+				1.5px 4px no-repeat,
 			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
-				4.8px 1.7px no-repeat,
+				4px 1.5px no-repeat,
 			var(--color-border-diff-added);
 	}
 
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
 		background:
 			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
-				4.8px 1.7px no-repeat,
+				4px 1.5px no-repeat,
 			var(--color-border-diff-removed);
 	}
 
