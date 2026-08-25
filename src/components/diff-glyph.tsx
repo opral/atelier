@@ -15,6 +15,13 @@
  * callers keep a plain color dot and let these views carry the types.
  */
 
+import {
+	DIFF_GLYPH_KNOCKOUT_PATHS,
+	DIFF_GLYPH_RADIUS,
+	DIFF_GLYPH_STROKE,
+	DIFF_GLYPH_VIEWBOX,
+} from "./diff-glyph-geometry";
+
 export type DiffGlyphKind =
 	| "added"
 	| "modified"
@@ -59,7 +66,7 @@ export function DiffGlyph({
 			aria-label={GLYPH_TITLE[kind]}
 			className={`inline-flex ${className ?? ""}`}
 		>
-		<svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true">
+		<svg width={size} height={size} viewBox={DIFF_GLYPH_VIEWBOX} aria-hidden="true">
 			{kind === "conflict" ? (
 				<>
 					<path d="M6 1a5 5 0 0 0 0 10Z" fill={fill} />
@@ -73,29 +80,13 @@ export function DiffGlyph({
 					/>
 				</>
 			) : (
-				<circle cx="6" cy="6" r="5" fill={fill} />
+				<circle cx="6" cy="6" r={DIFF_GLYPH_RADIUS} fill={fill} />
 			)}
-			{kind === "added" ? (
+			{kind === "added" || kind === "removed" || kind === "moved" ? (
 				<path
-					d="M6 3.6v4.8M3.6 6h4.8"
+					d={DIFF_GLYPH_KNOCKOUT_PATHS[kind]}
 					stroke={knockout}
-					strokeWidth="1.7"
-					strokeLinecap="round"
-				/>
-			) : null}
-			{kind === "removed" ? (
-				<path
-					d="M3.6 6h4.8"
-					stroke={knockout}
-					strokeWidth="1.7"
-					strokeLinecap="round"
-				/>
-			) : null}
-			{kind === "moved" ? (
-				<path
-					d="M4.8 3.6 7.2 6 4.8 8.4"
-					stroke={knockout}
-					strokeWidth="1.7"
+					strokeWidth={DIFF_GLYPH_STROKE}
 					fill="none"
 					strokeLinecap="round"
 					strokeLinejoin="round"

@@ -29,6 +29,7 @@ import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
 import fileNewIconUrl from "./assets/file-new.svg";
 import { FILE_ICON_GROUPS, fileGenericIconUrl } from "./file-icons";
+import { diffGlyphMaskDataUri } from "@/components/diff-glyph-geometry";
 
 export type FileTreeFileType = "generic" | "markdown" | "csv" | "excalidraw";
 
@@ -211,13 +212,13 @@ const FILE_TREE_UNSAFE_CSS = `
 		font-size: 0;
 	}
 
-	/* Dot-hybrid glyphs (design 23d): the dot silhouette with a knockout —
-	   plus = added, minus = deleted, plain = modified. 10px: the knockout
-	   legibility floor, sized down for the compact tree rows (the history
-	   panel runs the full 12px). The knockout is the panel ground layered
-	   over the status color with gradients. The glyph overlays the idle
-	   action lane so it hugs the row edge like the history listings; the
-	   hover swaps it for the row's … trigger. */
+	/* Dot-hybrid glyphs (design 23d), rendered from the SAME SVG geometry
+	   as DiffGlyph: the shape arrives as a mask data-URI and the status
+	   color as the element background, so the knockout is genuinely
+	   transparent. 10px — the knockout floor, sized for compact rows (the
+	   listings run 12px). The glyph overlays the idle action lane so it
+	   hugs the row edge like the history listings; hover swaps it for the
+	   row's … trigger. */
 	[data-type='item'] > [data-item-section='git'] {
 		position: absolute;
 		right: 7px;
@@ -230,39 +231,36 @@ const FILE_TREE_UNSAFE_CSS = `
 		opacity: 0;
 	}
 
-	[data-item-git-status='modified'] > [data-item-section='git'] > span {
-		width: 10px;
-		height: 10px;
-		border-radius: 999px;
-		background: currentColor;
-	}
-
 	[data-item-git-status='added'] > [data-item-section='git'],
 	[data-item-git-status='deleted'] > [data-item-section='git'] {
 		font-size: 0;
 	}
 
+	[data-item-git-status='modified'] > [data-item-section='git'] > span,
 	[data-item-git-status='added'] > [data-item-section='git'] > span,
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
 		width: 10px;
 		height: 10px;
-		border-radius: 999px;
+		border-radius: 0;
+		-webkit-mask: ${diffGlyphMaskDataUri("modified")} center / 10px 10px
+			no-repeat;
+		mask: ${diffGlyphMaskDataUri("modified")} center / 10px 10px no-repeat;
+	}
+
+	[data-item-git-status='modified'] > [data-item-section='git'] > span {
+		background: currentColor;
 	}
 
 	[data-item-git-status='added'] > [data-item-section='git'] > span {
-		background:
-			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
-				1.5px 4px no-repeat,
-			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
-				4px 1.5px no-repeat,
-			var(--color-border-diff-added);
+		background: var(--color-border-diff-added);
+		-webkit-mask-image: ${diffGlyphMaskDataUri("added")};
+		mask-image: ${diffGlyphMaskDataUri("added")};
 	}
 
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
-		background:
-			linear-gradient(var(--color-bg-panel), var(--color-bg-panel)) center /
-				4px 1.5px no-repeat,
-			var(--color-border-diff-removed);
+		background: var(--color-border-diff-removed);
+		-webkit-mask-image: ${diffGlyphMaskDataUri("removed")};
+		mask-image: ${diffGlyphMaskDataUri("removed")};
 	}
 
 	[data-item-git-status='recreated'] {
