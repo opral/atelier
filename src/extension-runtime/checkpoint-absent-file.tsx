@@ -49,13 +49,15 @@ export function CheckpointAbsentFile({
 				/>
 			</svg>
 			<div className="text-sm font-medium text-[var(--color-text-primary)]">
-				{fileName ? `${fileName} doesn’t exist yet` : "Doesn’t exist yet"}
+				{fileName
+					? `${fileName} did not exist at this point in time`
+					: "This file did not exist at this point in time"}
 			</div>
-			<div className="max-w-95 text-[13px] leading-snug text-[var(--color-text-secondary)]">
-				{checkpoint
-					? `at the checkpoint from ${formatCheckpointCreatedAt(checkpoint.created_at)}.`
-					: "at the point in history you’re viewing."}
-			</div>
+			{checkpoint ? (
+				<div className="max-w-95 text-[13px] leading-snug text-[var(--color-text-secondary)]">
+					{`Checkpoint from ${formatCheckpointCreatedAt(checkpoint.created_at)}.`}
+				</div>
+			) : null}
 		</div>
 	);
 }
