@@ -2,6 +2,7 @@ import "./index.css";
 
 export {
 	Atelier,
+	AtelierSkeleton,
 	ATELIER_BUILTIN_EXTENSION_IDS,
 	AtelierDeveloperTools,
 	applyDeveloperWorkflowScenario,
@@ -16,6 +17,7 @@ export {
 } from "./index";
 export type {
 	AtelierBuiltinExtensionId,
+	AtelierSkeletonProps,
 	AtelierBranchSession,
 	AtelierDocumentsApi,
 	AtelierDocumentOpenOptions,
