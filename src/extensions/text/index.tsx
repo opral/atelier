@@ -168,7 +168,8 @@ function HistoricalTextView({
 	const [loadError, setLoadError] = useState(false);
 	useEffect(() => {
 		let cancelled = false;
-		setSnapshotText(null);
+		// The previous snapshot stays visible while the next commit loads, so
+		// retargeting between checkpoints never flashes the loading state.
 		setAbsentAtCommit(false);
 		setLoadError(false);
 		if (!commitId) {

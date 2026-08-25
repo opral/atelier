@@ -50,6 +50,7 @@ import type {
 } from "@/extension-runtime/external-write-review";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
+import { useDeferredRevisionProps } from "@/extension-runtime/use-deferred-revision-props";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
@@ -173,6 +174,16 @@ export function CsvView({
 	afterExists,
 }: CsvViewProps) {
 	assertFileId(fileId);
+	// Deferred so revision switches keep the previous table mounted while the
+	// next revision's reads suspend, instead of flashing the fallback.
+	const revision = useDeferredRevisionProps({
+		beforeCommitId,
+		afterCommitId,
+		beforeFileId,
+		afterFileId,
+		beforeExists,
+		afterExists,
+	});
 	return (
 		<Suspense fallback={<CsvLoadingSpinner />}>
 			<CsvViewContent
@@ -182,12 +193,12 @@ export function CsvView({
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
 				readOnly={readOnly}
-				beforeCommitId={beforeCommitId}
-				afterCommitId={afterCommitId}
-				beforeFileId={beforeFileId}
-				afterFileId={afterFileId}
-				beforeExists={beforeExists}
-				afterExists={afterExists}
+				beforeCommitId={revision.beforeCommitId}
+				afterCommitId={revision.afterCommitId}
+				beforeFileId={revision.beforeFileId}
+				afterFileId={revision.afterFileId}
+				beforeExists={revision.beforeExists}
+				afterExists={revision.afterExists}
 			/>
 		</Suspense>
 	);

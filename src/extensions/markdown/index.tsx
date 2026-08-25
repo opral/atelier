@@ -14,6 +14,7 @@ import {
 } from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
+import { useDeferredRevisionProps } from "@/extension-runtime/use-deferred-revision-props";
 import {
 	EditorProvider,
 	useEditorCtx,
@@ -126,6 +127,16 @@ export function MarkdownView({
 }: MarkdownViewProps) {
 	assertFileId(fileId);
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
+	// Deferred so revision switches keep the previous document mounted while
+	// the next revision's reads suspend, instead of flashing the fallback.
+	const revision = useDeferredRevisionProps({
+		beforeCommitId,
+		afterCommitId,
+		beforeFileId,
+		afterFileId,
+		beforeExists,
+		afterExists,
+	});
 	if (!resolvedActiveBranchId) return <MarkdownLoadingSpinner />;
 	return (
 		<Suspense fallback={<MarkdownLoadingSpinner />}>
@@ -139,12 +150,12 @@ export function MarkdownView({
 				defaultBlock={defaultBlock}
 				activeBranchId={resolvedActiveBranchId}
 				diffSession={diffSession}
-				beforeCommitId={beforeCommitId}
-				afterCommitId={afterCommitId}
-				beforeFileId={beforeFileId}
-				afterFileId={afterFileId}
-				beforeExists={beforeExists}
-				afterExists={afterExists}
+				beforeCommitId={revision.beforeCommitId}
+				afterCommitId={revision.afterCommitId}
+				beforeFileId={revision.beforeFileId}
+				afterFileId={revision.afterFileId}
+				beforeExists={revision.beforeExists}
+				afterExists={revision.afterExists}
 				onDiffAccept={onDiffAccept}
 				onDiffReject={onDiffReject}
 				onDiffResolve={onDiffResolve}
