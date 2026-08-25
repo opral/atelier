@@ -610,10 +610,10 @@ function SidebarSectionPicker({
 					aria-label={`${activeLabel} panel view menu`}
 					data-attr="panel-section-picker"
 					// Caption, not chrome: no fill, no border. It darkens on hover and
-					// while open, which is the whole affordance. px-2.5 puts the label
-					// text on the sidebar's shared content column — the same x as the
-					// tree rows' icons and the top bar's mark.
-					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-neutral-600)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
+					// while open, which is the whole affordance. px-1.5 puts the label
+					// text on the sidebar's content column — the same x as the tree
+					// rows' icons, whose centers sit under the top bar's mark.
+					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-neutral-600)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
 				>
 					<span>{activeLabel}</span>
 					<ChevronDown
