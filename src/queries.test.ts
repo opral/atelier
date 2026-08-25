@@ -134,8 +134,10 @@ describe("checkpoint queries", () => {
 				before_change_id: null,
 			}),
 		]);
+		// Metadata-only changes do not count: the workspace's own key-value
+		// writes must not read as pending file changes.
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 1, file_count: 0 },
+			{ change_count: 0, file_count: 0 },
 		]);
 
 		const checkpoint = await lix.createCheckpoint();
@@ -178,8 +180,10 @@ describe("checkpoint queries", () => {
 				diff_type: "added",
 			},
 		]);
+		// The file's descriptor and content rows count; the workspace's own
+		// key-value write does not.
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 3, file_count: 1 },
+			{ change_count: 2, file_count: 1 },
 		]);
 		const execute = vi.spyOn(lix, "execute");
 		expect(await selectReviewableFileWorkingChanges(lix)).toEqual([

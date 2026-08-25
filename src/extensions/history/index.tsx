@@ -70,7 +70,7 @@ function WorkingChangesRow({
 			<button
 				type="button"
 				aria-label="Working changes"
-				disabled={changeCount === 0}
+				disabled={fileCount === 0}
 				onClick={toggleWorkingChanges}
 				onMouseDown={(event) => event.preventDefault()}
 				data-attr="history-working-changes"

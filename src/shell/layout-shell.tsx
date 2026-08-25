@@ -3375,7 +3375,8 @@ function LayoutShellLoadedContentResolved({
 				};
 			}
 			if (!firstChangedFile) {
-				if (!isHostReadOnly) revealHistory();
+				// Nothing reviewable: opening review mode is a quiet no-op rather
+				// than a surprise navigation to the History panel.
 				return;
 			}
 			if (historicalReview) {

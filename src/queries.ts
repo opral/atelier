@@ -108,10 +108,17 @@ export function selectWorkingChanges(lix: Lix) {
 }
 
 export function selectWorkingChangeCount(lix: Lix) {
+	// Only file-scoped changes count: the working diff also carries metadata
+	// rows (key-value state the workspace itself writes), and surfacing those
+	// as "changes" leaves a phantom count after checkpointing every file.
 	return qb(lix)
 		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
-		.select((eb) => [
-			eb.fn.countAll<number>().as("change_count"),
+		.select(() => [
+			sql<number>`count(case
+				when lix_working_diff.file_id is not null then 1
+				when lix_working_diff.schema_key = 'lix_file_descriptor' then 1
+				else null
+			end)`.as("change_count"),
 			sql<number>`count(distinct case
 				when lix_working_diff.file_id is not null then lix_working_diff.file_id
 				when lix_working_diff.schema_key = 'lix_file_descriptor'

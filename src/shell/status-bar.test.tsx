@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
 import { CheckpointStatusBar } from "./status-bar";
 
 describe("CheckpointStatusBar", () => {
@@ -56,8 +57,8 @@ describe("CheckpointStatusBar", () => {
 	test("shows working changes and controls the auto-accept preference", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
-			["checkpoint-status-test", "working"],
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fakeUuid("checkpoint-status-test"), "/checkpoint-status-test.md", new TextEncoder().encode("# Working\n")],
 		);
 		const openHistory = vi.fn();
 		const openWorkingChanges = vi.fn();
@@ -79,9 +80,9 @@ describe("CheckpointStatusBar", () => {
 		});
 
 		const historyButton = await screen.findByRole("button", {
-			name: "1 change since checkpoint. Open changes review",
+			name: "1 file changed since checkpoint. Open changes review",
 		});
-		expect(historyButton).toHaveTextContent("1 change since checkpoint");
+		expect(historyButton).toHaveTextContent("1 file changed since checkpoint");
 		expect(historyButton.querySelector(".lucide-flag")).toBeNull();
 		fireEvent.click(historyButton);
 		expect(openWorkingChanges).toHaveBeenCalledOnce();
@@ -101,8 +102,8 @@ describe("CheckpointStatusBar", () => {
 	test("keeps the working-changes pill clickable in read-only workspaces", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
-			["checkpoint-status-readonly", "working"],
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fakeUuid("checkpoint-status-readonly"), "/checkpoint-status-readonly.md", new TextEncoder().encode("# Working\n")],
 		);
 		const openWorkingChanges = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
@@ -120,7 +121,7 @@ describe("CheckpointStatusBar", () => {
 		});
 
 		const historyButton = await screen.findByRole("button", {
-			name: "1 change since checkpoint. Open changes review",
+			name: "1 file changed since checkpoint. Open changes review",
 		});
 		fireEvent.click(historyButton);
 		expect(openWorkingChanges).toHaveBeenCalledOnce();
@@ -135,8 +136,8 @@ describe("CheckpointStatusBar", () => {
 	test("does not render a dead working-changes button without an activate handler", async () => {
 		const lix = await openLix();
 		await lix.execute(
-			"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
-			["checkpoint-status-readonly-plain", "working"],
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fakeUuid("checkpoint-status-readonly-plain"), "/checkpoint-status-readonly-plain.md", new TextEncoder().encode("# Working\n")],
 		);
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -149,10 +150,10 @@ describe("CheckpointStatusBar", () => {
 			);
 		});
 
-		expect(await screen.findByText("1 change since checkpoint")).toBeVisible();
+		expect(await screen.findByText("1 file changed since checkpoint")).toBeVisible();
 		expect(
 			screen.queryByRole("button", {
-				name: "1 change since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open changes review",
 			}),
 		).toBeNull();
 
