@@ -912,6 +912,18 @@ describe("diff review navigation", () => {
 					),
 				).toBe(true);
 			});
+			// The verb concludes the session even with unticked files remaining.
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint/ }),
+				).toBeNull();
+			});
+			// The unticked file's changes survive for the next review.
+			expect(
+				await screen.findByRole("button", {
+					name: "1 file changed since checkpoint. Open changes review",
+				}),
+			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

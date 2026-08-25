@@ -629,25 +629,6 @@ type DiffReviewState = {
 	readonly opened?: boolean;
 };
 
-function removeFilesFromDiffReview(
-	session: DiffReviewState,
-	fileIds: ReadonlySet<string>,
-): DiffReviewState | null {
-	const files = session.files.filter((file) => !fileIds.has(file.id));
-	if (files.length === 0) return null;
-	return {
-		...session,
-		files,
-		diffFileId:
-			session.diffFileId && fileIds.has(session.diffFileId)
-				? null
-				: session.diffFileId,
-		externalWriteReviews: session.externalWriteReviews.filter(
-			(review) => !fileIds.has(review.fileId),
-		),
-	};
-}
-
 // Stable identity: the icon resolver is pure, so every runtime rebuild can
 // share one object.
 const ATELIER_RUNTIME_ICONS = { fileUrl: fileIconUrl } as const;
@@ -1562,14 +1543,15 @@ function LayoutShellLoadedContentResolved({
 			if (!checkpoint) {
 				throw new Error("The selected files have no working changes.");
 			}
-			setDiffReview((current) =>
-				current ? removeFilesFromDiffReview(current, selected) : null,
-			);
+			// The verb ends the session: checkpointing the selection is the
+			// review's conclusion, even when unticked files keep their changes
+			// (reopening shows them again).
+			exitDiffReview();
 			// Consume only the reviews that were already known when the workspace
 			// review opened. Checkpoint creation never discovers reviews via history.
 			void retireAcceptedReviews(selectedReviews);
 		},
-		[lix, retireAcceptedReviews],
+		[exitDiffReview, lix, retireAcceptedReviews],
 	);
 
 	const handleRestoreCheckpoint = useCallback(
@@ -2702,9 +2684,8 @@ function LayoutShellLoadedContentResolved({
 				(review) => selected.has(review.fileId),
 			);
 			await revertWorkingChangesForFiles(lix, selectedFileIds);
-			setDiffReview((current) =>
-				current ? removeFilesFromDiffReview(current, selected) : null,
-			);
+			// Same conclusion semantics as Checkpoint: the verb ends the session.
+			exitDiffReview();
 			for (const review of selectedReviews) {
 				try {
 					await runDiffReviewResolution(review, "rejected", async () => {
@@ -2719,6 +2700,7 @@ function LayoutShellLoadedContentResolved({
 			}
 		},
 		[
+			exitDiffReview,
 			lix,
 			persistReviewResolution,
 			runDiffReviewResolution,
