@@ -88,6 +88,8 @@ export type FileTreeProps = {
 	readonly openDirectories?: ReadonlySet<string>;
 	readonly reviewPaths?: ReadonlySet<string>;
 	readonly reviewStatuses?: ReadonlyMap<string, ReviewGitStatus>;
+	/** Directories whose every file is newly added — they read green too. */
+	readonly reviewDirectoryStatuses?: ReadonlyMap<string, "added">;
 	readonly onOpenDirectoriesChange?: (paths: ReadonlySet<string>) => void;
 	readonly onCreateCommit?: (
 		request: FileTreeCreateRequest,
@@ -241,7 +243,10 @@ const FILE_TREE_UNSAFE_CSS = `
 		font-weight: var(--trees-font-weight-semibold);
 	}
 
-	[data-item-contains-git-change='true'] > [data-item-section='git'] {
+	/* Softened contains-changes tone — unless the directory carries its own
+	   status (a fully-added folder reads solid green like its files). */
+	[data-item-contains-git-change='true']:not([data-item-git-status])
+		> [data-item-section='git'] {
 		color: var(--color-icon-brand);
 		opacity: 0.75;
 	}
@@ -331,6 +336,7 @@ export function FileTree({
 	openDirectories,
 	reviewPaths,
 	reviewStatuses,
+	reviewDirectoryStatuses,
 	onOpenDirectoriesChange,
 	onCreateCommit,
 	onCreateCancel,
@@ -372,8 +378,14 @@ export function FileTree({
 		[openDirectoryTreePaths],
 	);
 	const reviewGitStatusEntries = useMemo(
-		() => buildReviewGitStatusEntries(reviewPaths, reviewStatuses, treeInput),
-		[reviewPaths, reviewStatuses, treeInput],
+		() =>
+			buildReviewGitStatusEntries(
+				reviewPaths,
+				reviewStatuses,
+				reviewDirectoryStatuses,
+				treeInput,
+			),
+		[reviewPaths, reviewStatuses, reviewDirectoryStatuses, treeInput],
 	);
 	const reviewGitStatusKey = useMemo(
 		() =>
@@ -1338,15 +1350,23 @@ function isDotPrefixedTreePath(treePath: string): boolean {
 function buildReviewGitStatusEntries(
 	reviewPaths: ReadonlySet<string> | undefined,
 	reviewStatuses: ReadonlyMap<string, ReviewGitStatus> | undefined,
+	reviewDirectoryStatuses: ReadonlyMap<string, "added"> | undefined,
 	treeInput: TreeInput,
 ): ReviewGitStatusEntry[] {
 	if (
 		(!reviewPaths || reviewPaths.size === 0) &&
-		(!reviewStatuses || reviewStatuses.size === 0)
+		(!reviewStatuses || reviewStatuses.size === 0) &&
+		(!reviewDirectoryStatuses || reviewDirectoryStatuses.size === 0)
 	) {
 		return [];
 	}
 	const entries: ReviewGitStatusEntry[] = [];
+	for (const [appPath, status] of reviewDirectoryStatuses ?? []) {
+		const treePath = appPathToTreePath(appPath, true);
+		const info = treeInput.pathInfoByTreePath.get(treePath);
+		if (!info || info.kind !== "directory") continue;
+		entries.push({ path: treePath, status });
+	}
 	for (const [appPath, status] of reviewStatuses ?? []) {
 		const treePath = appPathToTreePath(appPath, false);
 		const info = treeInput.pathInfoByTreePath.get(treePath);

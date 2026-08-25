@@ -414,6 +414,32 @@ function FilesViewContent({
 		}
 		return statuses;
 	}, [context?.reviewModeActive, sessionFiles]);
+	// A directory whose every file is newly added is itself new: it reads
+	// green like its contents. Anything mixed keeps the contains-changes tone.
+	const reviewDirectoryStatuses = useMemo(() => {
+		const directoryStatuses = new Map<string, "added">();
+		if (reviewStatuses.size === 0) return directoryStatuses;
+		for (const entry of mergedEntries) {
+			if (entry.kind !== "directory") continue;
+			const prefix = entry.path.endsWith("/") ? entry.path : `${entry.path}/`;
+			let fileCount = 0;
+			let allAdded = true;
+			for (const candidate of mergedEntries) {
+				if (candidate.kind !== "file" || !candidate.path.startsWith(prefix)) {
+					continue;
+				}
+				fileCount += 1;
+				if (reviewStatuses.get(candidate.path) !== "added") {
+					allAdded = false;
+					break;
+				}
+			}
+			if (fileCount > 0 && allAdded) {
+				directoryStatuses.set(entry.path, "added");
+			}
+		}
+		return directoryStatuses;
+	}, [mergedEntries, reviewStatuses]);
 	const creatingRef = useRef(false);
 	const movingRef = useRef(false);
 	const [pendingPaths, setPendingPaths] = useState<string[]>([]);
@@ -1287,6 +1313,7 @@ function FilesViewContent({
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
 			reviewStatuses={reviewStatuses}
+			reviewDirectoryStatuses={reviewDirectoryStatuses}
 			onSelectItem={handleSelectItem}
 			onClearSelection={handleClearSelection}
 			selectedPath={selectedPath ?? undefined}
