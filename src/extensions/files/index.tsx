@@ -28,7 +28,8 @@ import { selectFileHistory } from "@/lib/lix-file-history";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
-	selectFileWorkingChanges,
+	selectLatestCheckpoint,
+	selectWorkingFileDiffs,
 	selectFilesystemDirectories,
 	selectFilesystemFiles,
 } from "@/queries";
@@ -56,7 +57,7 @@ import { parseExtensionManifest } from "../../extension-runtime/extension-manife
 import manifestJson from "./manifest.json";
 import { qb } from "@/lib/lix-kysely";
 import type {
-	FileWorkingChangeRow,
+	FileDiffRow,
 	FilesystemEntryRow,
 } from "@/queries";
 import type { Lix } from "@lix-js/sdk";
@@ -243,9 +244,19 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 	);
 	const reviewWorkingChanges =
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
-	const fileWorkingChanges = useQueryResult(
-		(queryLix) => selectFileWorkingChanges(queryLix),
+	// Two-step: lix_diff takes its base as a parameter, so the latest
+	// checkpoint id is its own observed query (root fallback when none).
+	const latestCheckpoint = useQueryResult(
+		(queryLix) => selectLatestCheckpoint(queryLix),
 		{ enabled: reviewWorkingChanges },
+	);
+	const fileWorkingChanges = useQueryResult(
+		(queryLix) =>
+			selectWorkingFileDiffs(
+				queryLix,
+				latestCheckpoint.rows[0]?.commit_id ?? null,
+			),
+		{ enabled: reviewWorkingChanges && latestCheckpoint.status === "success" },
 	);
 	const historicalEntries = useMemo(() => {
 		if (!historicalCommitId || historicalFileRows.status !== "success") {
@@ -257,6 +268,7 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		directories,
 		files,
 		historicalFileRows,
+		latestCheckpoint,
 		fileWorkingChanges,
 	]) {
 		if (result.status === "error") throw result.error;
@@ -285,7 +297,7 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 					...(files.status === "success" ? files.rows : []),
 				]
 			}
-			fileWorkingChanges={fileWorkingChanges.rows as FileWorkingChangeRow[]}
+			fileWorkingChanges={fileWorkingChanges.rows as FileDiffRow[]}
 		/>
 	);
 }
@@ -343,7 +355,7 @@ function FilesViewContent({
 }: FilesViewProps & {
 	readonly lix: Lix;
 	readonly entries: FilesystemEntryRow[];
-	readonly fileWorkingChanges: FileWorkingChangeRow[];
+	readonly fileWorkingChanges: FileDiffRow[];
 }) {
 	const [openDirectoryPaths, setOpenDirectoryPaths] = useState(
 		() => new Set<string>(),

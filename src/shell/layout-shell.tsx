@@ -45,7 +45,7 @@ import {
 import { selectFileHistory } from "@/lib/lix-file-history";
 import { selectFileHistorySnapshotsAtCommits } from "@/lib/lix-file-history-snapshots";
 import { qb } from "@/lib/lix-kysely";
-import { selectReviewableFileWorkingChanges } from "@/queries";
+import { selectLatestCheckpoint, selectWorkingFileDiffs } from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -720,103 +720,56 @@ async function selectHistoricalLixFileForOpen(
 		: null;
 }
 
+/** Files changed between two commits, from the relation-scoped diff. */
 export async function selectCheckpointFiles(
 	lix: Lix,
 	previousCommitId: string,
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
-	const changed = await lix.execute(
-		`SELECT coalesce(
-			file_id,
-			case
-				when schema_key = 'lix_file_descriptor' then row_pk ->> 0
-			end
-		) AS file_id,
-		case
-			when max(case when schema_key = 'lix_file_descriptor' and diff_type = 'added' then 1 else 0 end) = 1 then 'added'
-			when max(case when schema_key = 'lix_file_descriptor' and diff_type = 'removed' then 1 else 0 end) = 1 then 'removed'
-			else 'modified'
-		end AS diff_type
-		FROM lix_diff($1, $2)
-		WHERE file_id IS NOT NULL OR schema_key = 'lix_file_descriptor'
-		GROUP BY coalesce(
-			file_id,
-			case
-				when schema_key = 'lix_file_descriptor' then row_pk ->> 0
-			end
-		)`,
+	const result = await lix.execute(
+		`SELECT row_pk ->> 0 AS id, diff_type,
+		        coalesce(to_path, from_path) AS path
+		 FROM lix_diff('lix_file', $1, $2)
+		 ORDER BY coalesce(to_path, from_path)`,
 		[previousCommitId, commitId],
 	);
-	const fileChanges: Array<{
-		readonly fileId: string;
-		readonly diffType: "added" | "modified" | "removed";
-	}> = changed.rows.flatMap((row) => {
-		const fileId = row.get("file_id");
+	return result.rows.flatMap((row): LixFileForOpen[] => {
+		const id = row.get("id");
+		const path = row.get("path");
 		const diffType = row.get("diff_type");
-		return typeof fileId === "string" &&
+		return typeof id === "string" &&
+			typeof path === "string" &&
 			(diffType === "added" ||
 				diffType === "modified" ||
 				diffType === "removed")
-			? [{ fileId, diffType }]
+			? [{ id, path, checkpointChangeKind: diffType }]
 			: [];
 	});
-	if (fileChanges.length === 0) return [];
-
-	const pathsByFileId = new Map<string, string>();
-	const visibleFileIds = fileChanges
-		.filter(({ diffType }) => diffType !== "removed")
-		.map(({ fileId }) => fileId);
-	if (visibleFileIds.length > 0) {
-		const visibleFiles = await qb(lix)
-			.selectFrom("lix_file")
-			.select(["id", "path"])
-			.where("id", "in", visibleFileIds)
-			.execute();
-		for (const row of visibleFiles) {
-			if (typeof row.path === "string") pathsByFileId.set(row.id, row.path);
-		}
-	}
-	return fileChanges
-		.map(
-			({ fileId, diffType }): LixFileForOpen => ({
-				id: fileId,
-				path: pathsByFileId.get(fileId) ?? `/${fileId}`,
-				checkpointChangeKind: diffType,
-			}),
-		)
-		.sort((left, right) => left.path.localeCompare(right.path));
 }
 
 /**
- * Every file present at a commit, as "added": the file list for diffing a
- * commit against the repository's beginning (a base-less initial checkpoint).
+ * Every file present at a commit: the empty-root diff, where the full state
+ * appears as added rows.
  */
 export async function selectFilesAtCommit(
 	lix: Lix,
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
-	const rows = (await selectFileHistory(lix, commitId)
-		.select(["id", "path", "lixcol_depth"])
-		.orderBy("id", "asc")
-		.orderBy("lixcol_depth", "asc")
-		.execute()) as Array<{
-		readonly id: string;
-		readonly path: string | null;
-	}>;
-	const seen = new Set<string>();
-	const files: LixFileForOpen[] = [];
-	for (const row of rows) {
-		if (seen.has(row.id)) continue;
-		seen.add(row.id);
-		if (typeof row.path !== "string") continue;
-		files.push({
-			id: row.id,
-			path: row.path,
-			checkpointChangeKind: "added",
-		});
-	}
-	return files.sort((left, right) => left.path.localeCompare(right.path));
+	const result = await lix.execute(
+		`SELECT row_pk ->> 0 AS id, to_path AS path
+		 FROM lix_diff('lix_file', lix_root_commit_id(), $1)
+		 ORDER BY to_path`,
+		[commitId],
+	);
+	return result.rows.flatMap((row): LixFileForOpen[] => {
+		const id = row.get("id");
+		const path = row.get("path");
+		return typeof id === "string" && typeof path === "string"
+			? [{ id, path, checkpointChangeKind: "added" }]
+			: [];
+	});
 }
+
 
 export async function resolveLixFileForOpen({
 	lix,
@@ -3322,14 +3275,30 @@ function LayoutShellLoadedContentResolved({
 		}
 		workingReviewOpeningRef.current = true;
 		void (async () => {
-			const currentWorkingChanges =
-				await selectReviewableFileWorkingChanges(lix);
-			const checkpointFiles = currentWorkingChanges
+			// The review window is always base-to-head, where the base is the
+			// latest checkpoint or the repository's empty root: one lix_diff
+			// call yields the changed files with side-resolved paths — removed
+			// files keep their pre-deletion path from the base side.
+			const [checkpoint, headResult, rootResult] = await Promise.all([
+				selectLatestCheckpoint(lix).executeTakeFirst(),
+				lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
+				lix.execute("SELECT lix_root_commit_id() AS commit_id"),
+			]);
+			const headCommitId = headResult.rows[0]?.get("commit_id");
+			const rootCommitId = rootResult.rows[0]?.get("commit_id");
+			if (typeof headCommitId !== "string" || typeof rootCommitId !== "string") {
+				return;
+			}
+			const beforeCommitId = checkpoint?.commit_id ?? rootCommitId;
+			const workingDiffs = await selectWorkingFileDiffs(
+				lix,
+				checkpoint?.commit_id ?? null,
+			).execute();
+			const checkpointFiles = workingDiffs
 				.filter((file) => {
-					if (!file.path) return false;
 					const handler = findFileHandlerExtension(
 						extensionMap.values(),
-						String(file.path),
+						file.path,
 					);
 					return Boolean(
 						handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
@@ -3337,43 +3306,22 @@ function LayoutShellLoadedContentResolved({
 				})
 				.map(
 					(file): LixFileForOpen => ({
-						id: String(file.id),
-						path: String(file.path),
+						id: file.id,
+						path: file.path,
 						checkpointChangeKind: file.diff_type,
 					}),
-				)
-				.sort((left, right) => left.path.localeCompare(right.path));
+				);
 			const firstChangedFile = checkpointFiles[0];
-			const removedFileIds = new Set(
-				currentWorkingChanges
+			const removedFileIds: ReadonlySet<string> = new Set(
+				workingDiffs
 					.filter((change) => change.diff_type === "removed")
 					.map((change) => change.id),
 			);
-			// The review window is always checkpoint-to-head: reviews, diff
-			// rendering, and removed-file snapshots all hang off this range. A
-			// repository without a checkpoint has no "before" to diff against.
-			let reviewRange: {
-				readonly beforeCommitId: string;
-				readonly afterCommitId: string;
-				readonly removedFileIds: ReadonlySet<string>;
-			} | null = null;
-			const [checkpoint, headResult] = await Promise.all([
-				qb(lix)
-					.selectFrom("lix_checkpoint")
-					.select("commit_id")
-					.orderBy("lixcol_created_at", "desc")
-					.limit(1)
-					.executeTakeFirst(),
-				lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
-			]);
-			const headCommitId = headResult.rows[0]?.get("commit_id");
-			if (checkpoint && typeof headCommitId === "string") {
-				reviewRange = {
-					beforeCommitId: checkpoint.commit_id,
-					afterCommitId: headCommitId,
-					removedFileIds,
-				};
-			}
+			const reviewRange = {
+				beforeCommitId,
+				afterCommitId: headCommitId,
+				removedFileIds,
+			};
 			if (!firstChangedFile) {
 				// Nothing reviewable: opening review mode is a quiet no-op rather
 				// than a surprise navigation to the History panel.

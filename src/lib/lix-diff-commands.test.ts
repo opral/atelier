@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { selectFileWorkingChanges } from "@/queries";
+import { selectLatestCheckpoint, selectWorkingFileDiffs } from "@/queries";
 import {
 	createCheckpointForFiles,
 	restoreCheckpointFiles,
@@ -25,6 +25,11 @@ async function writeFile(
 	);
 }
 
+async function workingFileDiffs(lix: Awaited<ReturnType<typeof openLix>>) {
+	const checkpoint = await selectLatestCheckpoint(lix).executeTakeFirst();
+	return selectWorkingFileDiffs(lix, checkpoint?.commit_id ?? null).execute();
+}
+
 async function readFile(lix: Awaited<ReturnType<typeof openLix>>, id: string) {
 	const result = await lix.execute(
 		"SELECT content FROM lix_file WHERE id = $1",
@@ -46,7 +51,7 @@ describe("Lix SQL diff commands", () => {
 			const checkpoint = await createCheckpointForFiles(lix, [firstId]);
 			expect(checkpoint?.diffCount).toBeGreaterThan(0);
 			expect(checkpoint?.commitId).toEqual(expect.any(String));
-			expect(await selectFileWorkingChanges(lix).execute()).toEqual([
+			expect(await workingFileDiffs(lix)).toEqual([
 				expect.objectContaining({ id: secondId }),
 			]);
 		} finally {
@@ -65,29 +70,24 @@ describe("Lix SQL diff commands", () => {
 			const checkpoint = await createCheckpointForFiles(lix, [insideId]);
 			expect(checkpoint?.commitId).toEqual(expect.any(String));
 
-			// /docs and /docs/handbook were committed with their file; /notes
-			// still has a changed file, so its descriptor stays working.
+			// /docs and /docs/handbook were committed with their file by the
+			// engine's dependency closure; /notes still has a changed file, so
+			// its descriptor stays working.
+			const checkpointId = (await selectLatestCheckpoint(lix).executeTakeFirst())
+				?.commit_id;
 			const remainingDirs = await lix.execute(
-				`SELECT row_pk ->> 0 AS dir_id FROM lix_working_diff()
-				 WHERE schema_key = 'lix_directory_descriptor'`,
+				`SELECT coalesce(to_path, from_path) AS path
+				 FROM lix_diff('lix_directory', $1, lix_active_branch_commit_id())`,
+				[checkpointId ?? ""],
 			);
-			const remainingDirPaths = await Promise.all(
-				remainingDirs.rows.map(async (row) => {
-					const result = await lix.execute(
-						"SELECT path FROM lix_directory WHERE id = $1",
-						[row.get("dir_id")],
-					);
-					return result.rows[0]?.get("path");
-				}),
-			);
-			expect(remainingDirPaths.sort()).toEqual(["/notes"]);
+			const remainingDirPaths = remainingDirs.rows
+				.map((row) => row.get("path"))
+				.sort();
+			expect(remainingDirPaths).toEqual(["/notes"]);
 
-			// Checkpointing the remaining file clears the working diff entirely.
+			// Checkpointing the remaining file clears the working file diff.
 			await createCheckpointForFiles(lix, [outsideId]);
-			const finalDiff = await lix.execute(
-				"SELECT count(*) AS n FROM lix_working_diff()",
-			);
-			expect(Number(finalDiff.rows[0]?.get("n"))).toBe(0);
+			expect(await workingFileDiffs(lix)).toEqual([]);
 		} finally {
 			await lix.close();
 		}

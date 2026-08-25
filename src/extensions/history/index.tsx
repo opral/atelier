@@ -6,6 +6,7 @@ import { useQuery } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCommitParent,
+	selectLatestCheckpoint,
 	selectWorkingChangeCount,
 	type CheckpointRow,
 } from "@/queries";
@@ -40,8 +41,16 @@ function WorkingChangesRow({
 }: {
 	readonly atelier: ExtensionRuntime;
 }) {
+	// lix_diff takes its base as a parameter: resolve the latest checkpoint
+	// first (root fallback when none exists), then count the file diffs.
+	const latestCheckpoint = useQuery((queryLix) =>
+		selectLatestCheckpoint(queryLix),
+	);
 	const workingChangeCount = useQuery((queryLix) =>
-		selectWorkingChangeCount(queryLix),
+		selectWorkingChangeCount(
+			queryLix,
+			latestCheckpoint[0]?.commit_id ?? null,
+		),
 	);
 	const changeCount = workingChangeCount[0]?.change_count ?? 0;
 	const fileCount = workingChangeCount[0]?.file_count ?? 0;

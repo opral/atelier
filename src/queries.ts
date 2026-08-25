@@ -1,5 +1,4 @@
-import type { JsonValue, Lix } from "@lix-js/sdk";
-import { selectFileHistory } from "@/lib/lix-file-history";
+import type { Lix } from "@lix-js/sdk";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type FilesystemEntryRow = {
@@ -11,28 +10,21 @@ export type FilesystemEntryRow = {
 	source?: "lix" | "watched";
 };
 
-export type WorkingChangeRow = {
-	diff_id: string;
-	row_pk: JsonValue;
-	schema_key: string;
-	file_id: string | null;
-	diff_type: "added" | "modified" | "removed";
-	before_change_id: string | null;
-	after_change_id: string | null;
-};
-
 export type WorkingChangeCountRow = {
-	/** Low-level schema-row diffs. */
+	/** Changed atoms across the file tier (sum of per-file row_count). */
 	change_count: number;
-	/** Distinct logical files represented by those diffs. */
+	/** Changed logical files. */
 	file_count: number;
 };
 
-export type FileWorkingChangeRow = {
+/** One changed file from lix_diff('lix_file', …). */
+export type FileDiffRow = {
+	/** The file id, extracted from the diff row's primary key. */
 	id: string;
-	path: string | null;
-	previous_path: string | null;
 	diff_type: "added" | "modified" | "removed";
+	/** Resolved for the side that has one: to for added/modified, from for removed. */
+	path: string;
+	row_count: number;
 };
 
 export type CheckpointRow = {
@@ -88,165 +80,49 @@ export function selectFilesystemFiles(lix: Lix) {
 }
 
 /**
- * Net tracked changes between the latest checkpoint and the active branch head.
+ * The working file diff: lix_diff('lix_file', <base>, head) where <base> is
+ * the latest checkpoint, or the repository's empty root when no checkpoint
+ * exists yet. One row per changed file, path resolved for the side that has
+ * one — removed files keep their pre-deletion path from the base side.
  */
-export function selectWorkingChanges(lix: Lix) {
+export function selectWorkingFileDiffs(
+	lix: Lix,
+	checkpointCommitId: string | null,
+) {
 	return qb(lix)
-		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
+		.selectFrom(workingFileDiffTable(checkpointCommitId).as("lix_diff"))
 		.select([
-			"diff_id",
-			"row_pk",
-			"schema_key",
-			"file_id",
+			sql<string>`row_pk ->> 0`.as("id"),
 			"diff_type",
-			"before_change_id",
-			"after_change_id",
+			sql<string>`coalesce(to_path, from_path)`.as("path"),
+			"row_count",
 		])
-		.orderBy("schema_key", "asc")
-		.orderBy("row_pk", "asc")
-		.$castTo<WorkingChangeRow>();
+		.orderBy(sql`coalesce(to_path, from_path)`, "asc")
+		.$castTo<FileDiffRow>();
 }
 
-export function selectWorkingChangeCount(lix: Lix) {
-	// Only file-scoped changes count: the working diff also carries metadata
-	// rows (key-value state the workspace itself writes), and surfacing those
-	// as "changes" leaves a phantom count after checkpointing every file.
+export function selectWorkingChangeCount(
+	lix: Lix,
+	checkpointCommitId: string | null,
+) {
 	return qb(lix)
-		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
-		.select(() => [
-			sql<number>`count(case
-				when lix_working_diff.file_id is not null then 1
-				when lix_working_diff.schema_key = 'lix_file_descriptor' then 1
-				else null
-			end)`.as("change_count"),
-			sql<number>`count(distinct case
-				when lix_working_diff.file_id is not null then lix_working_diff.file_id
-				when lix_working_diff.schema_key = 'lix_file_descriptor'
-					then lix_working_diff.row_pk ->> 0
-				else null
-			end)`.as("file_count"),
+		.selectFrom(workingFileDiffTable(checkpointCommitId).as("lix_diff"))
+		.select((eb) => [
+			sql<number>`coalesce(sum(row_count), 0)`.as("change_count"),
+			eb.fn.countAll<number>().as("file_count"),
 		])
 		.$castTo<WorkingChangeCountRow>();
 }
 
-/**
- * Net logical files changed between the latest checkpoint and active head.
- *
- * Derived from the heterogeneous `lix_working_diff()` envelope. Files removed
- * since the checkpoint are not reported; no consumer acts on removed files
- * today.
- */
-export function selectFileWorkingChanges(lix: Lix) {
-	return qb(lix)
-		.selectFrom(sql<any>`lix_working_diff()`.as("lix_working_diff"))
-		.innerJoin("lix_file", (join) =>
-			join.on(
-				sql`lix_file.id = coalesce(lix_working_diff.file_id, case when lix_working_diff.schema_key = 'lix_file_descriptor' then lix_working_diff.row_pk ->> 0 end)`,
-			),
-		)
-		.select([
-			"lix_file.id",
-			"lix_file.path",
-			sql<string | null>`null`.as("previous_path"),
-			// File descriptor rows carry the file id in row_pk, not file_id.
-			sql<string>`case when max(case when lix_working_diff.schema_key = 'lix_file_descriptor' and lix_working_diff.diff_type = 'added' then 1 else 0 end) = 1 then 'added' else 'modified' end`.as(
-				"diff_type",
-			),
-		])
-		.groupBy(["lix_file.id", "lix_file.path"])
-		.orderBy("lix_file.path", "asc")
-		.$castTo<FileWorkingChangeRow>();
+function workingFileDiffTable(checkpointCommitId: string | null) {
+	// lix_diff arguments accept literals, parameters, and the two zero-arg
+	// commit accessors — not subqueries, so the checkpoint id is a parameter
+	// the caller resolves (or the empty root when none exists).
+	return checkpointCommitId === null
+		? sql<any>`lix_diff('lix_file', lix_root_commit_id(), lix_active_branch_commit_id())`
+		: sql<any>`lix_diff('lix_file', ${checkpointCommitId}, lix_active_branch_commit_id())`;
 }
 
-/**
- * Working files that can be reviewed, including files deleted after the
- * latest checkpoint. Deleted files are reconstructed from that checkpoint
- * because they no longer have a row in the current `lix_file` view.
- */
-export async function selectReviewableFileWorkingChanges(
-	lix: Lix,
-): Promise<FileWorkingChangeRow[]> {
-	const workingChanges = await selectWorkingChanges(lix).execute();
-	const changesByFileId = new Map<
-		string,
-		{ descriptorAdded: boolean; removed: boolean }
-	>();
-	for (const change of workingChanges) {
-		const descriptorFileId =
-			change.schema_key === "lix_file_descriptor" &&
-			Array.isArray(change.row_pk) &&
-			typeof change.row_pk[0] === "string"
-				? change.row_pk[0]
-				: null;
-		const fileId = change.file_id ?? descriptorFileId;
-		if (!fileId) continue;
-		const aggregate = changesByFileId.get(fileId) ?? {
-			descriptorAdded: false,
-			removed: false,
-		};
-		aggregate.descriptorAdded ||=
-			change.schema_key === "lix_file_descriptor" &&
-			change.diff_type === "added";
-		aggregate.removed ||= change.diff_type === "removed";
-		changesByFileId.set(fileId, aggregate);
-	}
-	if (changesByFileId.size === 0) return [];
-
-	const visibleRows = await qb(lix)
-		.selectFrom("lix_file")
-		.select(["id", "path"])
-		.where("id", "in", [...changesByFileId.keys()])
-		.execute();
-	const currentFiles: FileWorkingChangeRow[] = visibleRows.map((file) => ({
-		id: String(file.id),
-		path: String(file.path),
-		previous_path: null,
-		diff_type: changesByFileId.get(String(file.id))?.descriptorAdded
-			? "added"
-			: "modified",
-	}));
-	const currentIds = new Set(currentFiles.map((file) => file.id));
-	const removedIds = new Set(
-		[...changesByFileId]
-			.filter(
-				([fileId, aggregate]) => aggregate.removed && !currentIds.has(fileId),
-			)
-			.map(([fileId]) => fileId),
-	);
-	if (removedIds.size === 0) return currentFiles;
-	const latestCheckpoint = await selectLatestCheckpoint(lix).executeTakeFirst();
-	if (!latestCheckpoint) return currentFiles;
-
-	const historicalRows = await selectFileHistory(
-		lix,
-		latestCheckpoint.commit_id,
-	)
-		.select(["id", "path", "lixcol_depth"])
-		.where("id", "in", [...removedIds])
-		.orderBy("lixcol_depth", "asc")
-		.execute();
-	const removedFiles: FileWorkingChangeRow[] = [];
-	const resolvedIds = new Set<string>();
-	for (const row of historicalRows) {
-		if (resolvedIds.has(row.id)) continue;
-		resolvedIds.add(row.id);
-		if (typeof row.path !== "string") continue;
-		removedFiles.push({
-			id: row.id,
-			path: row.path,
-			previous_path: row.path,
-			diff_type: "removed",
-		});
-	}
-
-	return [...currentFiles, ...removedFiles].sort((left, right) =>
-		(left.path ?? "").localeCompare(right.path ?? ""),
-	);
-}
-
-/**
- * Checkpoints reachable from the active branch, newest first.
- */
 export function selectCheckpoints(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_checkpoint")
@@ -255,15 +131,14 @@ export function selectCheckpoints(lix: Lix) {
 		.$castTo<CheckpointRow>();
 }
 
-/** First parent of a commit — the base for diffing the oldest checkpoint. */
+/** First parent of a commit — position 0 of its ordered parent list. */
 export function selectCommitParent(lix: Lix, commitId: string) {
 	return qb(lix)
-		.selectFrom("lix_commit_edge")
-		.select("parent_id")
-		.where("child_id", "=", commitId)
-		.where("parent_order", "=", 0)
+		.selectFrom("lix_commit")
+		.select(sql<string | null>`parent_commit_ids ->> 0`.as("parent_id"))
+		.where("id", "=", commitId)
 		.limit(1)
-		.$castTo<{ parent_id: string }>();
+		.$castTo<{ parent_id: string | null }>();
 }
 
 export function selectLatestCheckpoint(lix: Lix) {

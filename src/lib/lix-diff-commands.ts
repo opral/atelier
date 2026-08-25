@@ -1,44 +1,35 @@
 import type { Lix } from "@lix-js/sdk";
 
-type DiffCommand = "lix_apply" | "lix_create_checkpoint" | "lix_revert";
+/**
+ * Diff commands over the relation-scoped selection currency: every command
+ * consumes (relation, row_pk) rows selected from lix_diff. Selecting a file
+ * selects its underlying tracked content, and the engine computes the
+ * dependency closure (ancestor directory descriptors ride along with partial
+ * checkpoints).
+ */
 
-function fileIdPredicate(fileIds: readonly string[], firstParameter: number) {
-	const parameters = fileIds
-		.map((_, index) => `$${firstParameter + index}`)
-		.join(", ");
-	return `coalesce(
-		file_id,
-		case
-			when schema_key = 'lix_file_descriptor'
-			then row_pk ->> 0
-		end
-	) in (${parameters})`;
-}
-
-async function executeSelectedDiffs(
+/** The working span: latest checkpoint (or the empty root) to the head. */
+async function workingRange(
 	lix: Lix,
-	command: DiffCommand,
-	fromAndWhere: string,
-	parameters: readonly string[],
-): Promise<number> {
-	const countResult = await lix.execute(
-		`SELECT count(*) AS diff_count ${fromAndWhere}`,
-		[...parameters],
+): Promise<{ beforeCommitId: string; headCommitId: string }> {
+	const result = await lix.execute(
+		`SELECT coalesce(
+			(SELECT commit_id FROM lix_checkpoint
+			 ORDER BY lixcol_created_at DESC LIMIT 1),
+			lix_root_commit_id()
+		) AS before_commit_id,
+		lix_active_branch_commit_id() AS head_commit_id`,
 	);
-	const diffCount = Number(countResult.rows[0]?.get("diff_count") ?? 0);
-	if (diffCount === 0) return 0;
-
-	await lix.execute(
-		`INSERT INTO ${command} (diff_id)
-		 SELECT diff_id ${fromAndWhere}`,
-		[...parameters],
-	);
-	return diffCount;
+	const beforeCommitId = result.rows[0]?.get("before_commit_id");
+	const headCommitId = result.rows[0]?.get("head_commit_id");
+	if (typeof beforeCommitId !== "string" || typeof headCommitId !== "string") {
+		throw new Error("The active Lix branch has no resolvable diff range.");
+	}
+	return { beforeCommitId, headCommitId };
 }
 
-function workingDiffSelection(fileIds: readonly string[]) {
-	return `FROM lix_working_diff()
-		WHERE ${fileIdPredicate(fileIds, 1)}`;
+function fileIdParameters(fileIds: readonly string[], firstParameter: number) {
+	return fileIds.map((_, index) => `$${firstParameter + index}`).join(", ");
 }
 
 export async function createCheckpointForFiles(
@@ -46,22 +37,14 @@ export async function createCheckpointForFiles(
 	fileIds: readonly string[],
 ): Promise<{ readonly commitId: string; readonly diffCount: number } | null> {
 	if (fileIds.length === 0) return null;
-	// Directories ride along: a folder created for a selected file (or one
-	// holding no changed files at all, which no later file checkpoint would
-	// ever sweep) is part of this checkpoint. Without this, partial
-	// checkpoints strand lix_directory_descriptor rows in the working diff.
-	const directoryIds = await selectCheckpointDirectoryIds(lix, fileIds);
-	const directoryPredicate = directoryIds.length
-		? ` OR (schema_key = 'lix_directory_descriptor' AND row_pk ->> 0 IN (${directoryIds
-				.map((_, index) => `$${fileIds.length + 1 + index}`)
-				.join(", ")}))`
-		: "";
+	const { beforeCommitId, headCommitId } = await workingRange(lix);
 	const result = await lix.execute(
-		`INSERT INTO lix_create_checkpoint (diff_id)
-		 SELECT diff_id FROM lix_working_diff()
-		 WHERE ${fileIdPredicate(fileIds, 1)}${directoryPredicate}
+		`INSERT INTO lix_create_checkpoint (relation, row_pk)
+		 SELECT 'lix_file', row_pk
+		 FROM lix_diff('lix_file', $1, $2)
+		 WHERE row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})
 		 RETURNING commit_id`,
-		[...fileIds, ...directoryIds],
+		[beforeCommitId, headCommitId, ...fileIds],
 	);
 	if (result.rowsAffected === 0) return null;
 	const returnedCommitIds = result.rows
@@ -77,84 +60,20 @@ export async function createCheckpointForFiles(
 	};
 }
 
-function isString(value: unknown): value is string {
-	return typeof value === "string";
-}
-
-/**
- * Changed directories this checkpoint should include: ancestors of the
- * selected files, plus changed directories containing no changed file at
- * all (nothing else would ever sweep those).
- */
-async function selectCheckpointDirectoryIds(
-	lix: Lix,
-	fileIds: readonly string[],
-): Promise<string[]> {
-	const changedDirRows = await lix.execute(
-		`SELECT DISTINCT row_pk ->> 0 AS dir_id FROM lix_working_diff()
-		 WHERE schema_key = 'lix_directory_descriptor'`,
-	);
-	const changedDirIds = changedDirRows.rows
-		.map((row) => row.get("dir_id"))
-		.filter(isString);
-	if (changedDirIds.length === 0) return [];
-
-	const [directories, selectedFiles, changedFiles] = await Promise.all([
-		lix.execute(`SELECT id, path FROM lix_directory`),
-		lix.execute(
-			`SELECT path FROM lix_file WHERE id IN (${fileIds
-				.map((_, index) => `$${index + 1}`)
-				.join(", ")})`,
-			[...fileIds],
-		),
-		lix.execute(
-			`SELECT f.path AS path FROM lix_file f WHERE f.id IN (
-				SELECT DISTINCT coalesce(
-					file_id,
-					case when schema_key = 'lix_file_descriptor' then row_pk ->> 0 end
-				) FROM lix_working_diff()
-			)`,
-		),
-	]);
-	const directoryPaths = new Map<string, string>();
-	for (const row of directories.rows) {
-		const id = row.get("id");
-		const path = row.get("path");
-		if (isString(id) && isString(path)) directoryPaths.set(id, path);
-	}
-	const selectedPaths = selectedFiles.rows
-		.map((row) => row.get("path"))
-		.filter(isString);
-	const changedPaths = changedFiles.rows
-		.map((row) => row.get("path"))
-		.filter(isString);
-
-	const isAncestorOf = (directoryPath: string, filePath: string) =>
-		filePath.startsWith(
-			directoryPath === "/" ? "/" : `${directoryPath}/`,
-		);
-	return changedDirIds.filter((dirId) => {
-		const directoryPath = directoryPaths.get(dirId);
-		// A deleted directory has no live path; leave its rows for a full sweep.
-		if (directoryPath === undefined) return false;
-		if (selectedPaths.some((path) => isAncestorOf(directoryPath, path))) {
-			return true;
-		}
-		return !changedPaths.some((path) => isAncestorOf(directoryPath, path));
-	});
-}
-
 export async function revertWorkingChangesForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
-	return executeSelectedDiffs(
-		lix,
-		"lix_revert",
-		workingDiffSelection(fileIds),
-		fileIds,
+	const { beforeCommitId, headCommitId } = await workingRange(lix);
+	const result = await lix.execute(
+		`INSERT INTO lix_revert (relation, row_pk)
+		 SELECT 'lix_file', row_pk
+		 FROM lix_diff('lix_file', $1, $2)
+		 WHERE row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
+		[beforeCommitId, headCommitId, ...fileIds],
 	);
+	return result.rowsAffected;
 }
 
 export async function restoreCheckpointFiles(
@@ -172,11 +91,18 @@ export async function restoreCheckpointFiles(
 	}
 	if (headCommitId === checkpointCommitId) return 0;
 
-	return executeSelectedDiffs(
-		lix,
-		"lix_apply",
-		`FROM lix_diff($1, $2)
-		 WHERE ${fileIdPredicate(fileIds, 3)}`,
+	// Applying the head→checkpoint diff for the selected files restores their
+	// checkpoint state without touching anything else.
+	const result = await lix.execute(
+		`INSERT INTO lix_apply (relation, row_pk)
+		 SELECT 'lix_file', row_pk
+		 FROM lix_diff('lix_file', $1, $2)
+		 WHERE row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
 		[headCommitId, checkpointCommitId, ...fileIds],
 	);
+	return result.rowsAffected;
+}
+
+function isString(value: unknown): value is string {
+	return typeof value === "string";
 }

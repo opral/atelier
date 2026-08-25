@@ -1076,9 +1076,12 @@ describe("MarkdownView", () => {
 			})
 			.execute();
 
-		await lix.execute("SELECT lix_restore($1)", [restoreTarget]);
+		await lix.execute("INSERT INTO lix_restore (commit_id) VALUES ($1)", [
+			restoreTarget,
+		]);
 		const workingDiff = await lix.execute(
-			"SELECT diff_id FROM lix_working_diff()",
+			"SELECT row_pk FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
+			[restoreTarget],
 		);
 		expect(workingDiff.rows).toHaveLength(0);
 

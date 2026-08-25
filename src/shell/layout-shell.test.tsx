@@ -1186,9 +1186,11 @@ describe("diff review navigation", () => {
 			).toHaveAttribute("aria-current", "true");
 			const checkpointFileReads = execute.mock.calls
 				.map(([statement]) => String(statement))
-				.filter((statement) => statement.includes("FROM lix_diff($1, $2)"));
+				.filter((statement) =>
+					statement.includes("FROM lix_diff('lix_file', $1, $2)"),
+				);
 			expect(checkpointFileReads).toEqual([
-				expect.stringContaining("FROM lix_diff($1, $2)"),
+				expect.stringContaining("FROM lix_diff('lix_file', $1, $2)"),
 			]);
 			expect(maxActiveCheckpointFileReads).toBe(1);
 			expect(checkpointHistoryStatements.length).toBeGreaterThan(0);
@@ -1295,15 +1297,20 @@ describe("diff review navigation", () => {
 			const historicalFiles = await screen.findByRole("list", {
 				name: "Files at this checkpoint",
 			});
+			// The relation-scoped diff resolves paths as of the checkpoint: a
+			// later rename or deletion no longer leaks the live name or a raw
+			// file-id placeholder into the historical list.
 			expect(
-				within(historicalFiles).getByText("current-name.csv"),
+				within(historicalFiles).getByText("historical-name.md"),
 			).toBeVisible();
-			expect(within(historicalFiles).getByText(deletedId)).toBeVisible();
+			expect(
+				within(historicalFiles).getByText("historical-delete.md"),
+			).toBeVisible();
 
 			await act(async () => {
 				fireEvent.click(
 					within(historicalFiles).getByRole("button", {
-						name: "current-name.csv",
+						name: "historical-name.md",
 					}),
 				);
 			});
@@ -1317,7 +1324,9 @@ describe("diff review navigation", () => {
 
 			await act(async () => {
 				fireEvent.click(
-					within(historicalFiles).getByRole("button", { name: deletedId }),
+					within(historicalFiles).getByRole("button", {
+						name: "historical-delete.md",
+					}),
 				);
 			});
 			await waitFor(() => {
@@ -1472,7 +1481,9 @@ describe("diff review navigation", () => {
 					},
 					{
 						id: fakeUuid("checkpoint-added-baseline"),
-						path: `/${fakeUuid("checkpoint-added-baseline")}`,
+						// The relation-scoped diff resolves the removed file's path
+						// from the base side instead of a raw file-id placeholder.
+						path: "/baseline.md",
 						checkpointChangeKind: "removed",
 					},
 				]),

@@ -1,7 +1,7 @@
 import { type JSX, type ReactNode } from "react";
 import { Flag } from "lucide-react";
 import { useQueryResult } from "@/lib/lix-react";
-import { selectWorkingChangeCount } from "@/queries";
+import { selectLatestCheckpoint, selectWorkingChangeCount } from "@/queries";
 
 // Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
 // the status bar can consume the real title without changing its presentation.
@@ -42,9 +42,20 @@ export function CheckpointStatusBar({
 	readonly onOpenWorkingChanges?: () => void;
 	readonly onOpenHistory?: () => void;
 }): JSX.Element {
-	const workingChangeCount = useQueryResult((queryLix) =>
-		selectWorkingChangeCount(queryLix),
+	// lix_diff needs its base as a parameter, so the latest checkpoint id is
+	// its own observed query; a repository without one diffs from the root.
+	const latestCheckpoint = useQueryResult((queryLix) =>
+		selectLatestCheckpoint(queryLix),
 	);
+	const workingChangeCount = useQueryResult(
+		(queryLix) =>
+			selectWorkingChangeCount(
+				queryLix,
+				latestCheckpoint.rows[0]?.commit_id ?? null,
+			),
+		{ enabled: latestCheckpoint.status === "success" },
+	);
+	if (latestCheckpoint.status === "error") throw latestCheckpoint.error;
 	if (workingChangeCount.status === "error") throw workingChangeCount.error;
 	const workingRow = workingChangeCount.rows[0];
 	const changeCount = workingRow?.change_count ?? 0;

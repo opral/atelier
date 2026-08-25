@@ -1313,7 +1313,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 		fileId,
 		persistDebounceMs: 60_000,
 	});
-	await lix.createCheckpoint();
+	const checkpoint = await lix.createCheckpoint();
 	vi.useFakeTimers();
 	try {
 		editor.commands.setTextSelection(editor.state.doc.content.size);
@@ -1321,7 +1321,8 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 
 		expect(await readMarkdown(lix, fileId)).toBe("Start");
 		const workingDiffBeforeCheckpoint = await lix.execute(
-			"SELECT count(*) AS count FROM lix_working_diff()",
+			"SELECT count(*) AS count FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
+			[checkpoint.commitId],
 		);
 		expect(Number(workingDiffBeforeCheckpoint.rows[0]?.get("count"))).toBe(0);
 		expect(await createCheckpointForFiles(lix, [fileId])).toBeNull();
