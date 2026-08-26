@@ -408,6 +408,12 @@ function FilesViewContent({
 		}
 		return statuses;
 	}, [context?.reviewModeActive, sessionFiles]);
+	// Review focus (dim-the-unchanged): the create affordances recede with
+	// the rest of the untouched chrome while a review marks rows.
+	const reviewFocusDim =
+		reviewStatuses.size > 0 || pendingReviewPaths.size > 0
+			? "opacity-[0.35] transition-opacity hover:opacity-100"
+			: undefined;
 	// A directory whose every file is newly added is itself new: it reads
 	// green like its contents. Anything mixed keeps the contains-changes tone.
 	const reviewDirectoryStatuses = useMemo(() => {
@@ -1350,7 +1356,7 @@ function FilesViewContent({
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						{readOnly ? null : (
-							<div className="flex shrink-0 justify-end pb-6">
+							<div className={`flex shrink-0 justify-end pb-6${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}>
 								{createRequest ? (
 									<WideNewButton disabled />
 								) : (
@@ -1378,19 +1384,21 @@ function FilesViewContent({
 			) : null}
 			{/* Compact New row for side-panel use. */}
 			{context?.panelSide !== "central" && !readOnly ? (
-				createRequest ? (
-					<CompactNewButton disabled />
-				) : (
-					<UnifiedNewMenu
-						onNewCsv={handleNewCsv}
-						onNewExcalidraw={handleNewExcalidraw}
-						onNewFile={handleNewFile}
-						onNewFolder={handleCreateDirectory}
-						onNewMarkdown={handleNewMarkdown}
-					>
-						<CompactNewButton />
-					</UnifiedNewMenu>
-				)
+				<div className={reviewFocusDim}>
+					{createRequest ? (
+						<CompactNewButton disabled />
+					) : (
+						<UnifiedNewMenu
+							onNewCsv={handleNewCsv}
+							onNewExcalidraw={handleNewExcalidraw}
+							onNewFile={handleNewFile}
+							onNewFolder={handleCreateDirectory}
+							onNewMarkdown={handleNewMarkdown}
+						>
+							<CompactNewButton />
+						</UnifiedNewMenu>
+					)}
+				</div>
 			) : null}
 			{isDraggingOver && (
 				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">

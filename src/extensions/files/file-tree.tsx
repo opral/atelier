@@ -288,6 +288,24 @@ const FILE_TREE_UNSAFE_CSS = `
 		opacity: 0.48;
 	}
 
+	/* Review focus: while a review session is open the unchanged rows
+	   recede, so the action-colored changes are the only thing at full
+	   contrast. Hover restores a row for navigation. */
+	:host([data-review-focus])
+		[data-type='item']:not([data-item-git-status]):not(
+			[data-item-contains-git-change]
+		) {
+		opacity: 0.35;
+		transition: opacity 0.15s ease;
+	}
+
+	:host([data-review-focus])
+		[data-type='item']:not([data-item-git-status]):not(
+			[data-item-contains-git-change]
+		):hover {
+		opacity: 1;
+	}
+
 	[data-type='item'][data-hidden-entry='true'][data-item-selected='true'] {
 		opacity: 0.62;
 	}
@@ -380,6 +398,12 @@ export function FileTree({
 		() => new Set<string>(),
 	);
 	const [suppressItemFocusRing, setSuppressItemFocusRing] = useState(false);
+	// Review focus engages only when the open review actually marks rows;
+	// with nothing to spotlight there is nothing to dim against.
+	const reviewFocusActive =
+		(reviewStatuses?.size ?? 0) > 0 ||
+		(reviewDirectoryStatuses?.size ?? 0) > 0 ||
+		(reviewPaths?.size ?? 0) > 0;
 	const resolvedOpenDirectories = openDirectories ?? internalOpenDirectories;
 	const treeInput = useMemo(
 		() => buildTreeInput(nodes, createRequest),
@@ -915,6 +939,7 @@ export function FileTree({
 				data-suppress-item-focus-ring={
 					suppressItemFocusRing ? "true" : undefined
 				}
+				data-review-focus={reviewFocusActive ? "true" : undefined}
 				model={model}
 				onClick={(event) => handleTreeClick(event.nativeEvent)}
 				onClickCapture={handleTreeClickCapture}
