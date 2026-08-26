@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { Check, FileText, Loader2 } from "lucide-react";
@@ -26,6 +26,7 @@ import {
 } from "@/extensions/markdown/editor/tip-tap-editor";
 import { EditorContent } from "@tiptap/react";
 import { createEditor } from "@/extensions/markdown/editor/create-editor";
+import { useTitleDrivenFileRename } from "@/extensions/markdown/editor/use-title-driven-rename";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
 import { MarkdownReviewEditor } from "./review/review-editor";
 import { MarkdownFilePreview } from "./review/markdown-diff-preview";
@@ -322,6 +323,34 @@ function MarkdownLiveViewLoaded({
 	const reviewLocked =
 		isReviewing || finishingReview?.fileId === effectiveFileRow?.id;
 	const editorReadOnly = readOnly || reviewLocked;
+	const lix = useLix();
+	// The editor recreates when its source path prop changes, which would drop
+	// the caret on every title-driven rename. Only a directory change (a real
+	// move, where relative asset resolution shifts) refreshes the prop; plain
+	// renames keep the mounted editor.
+	const editorPathRef = useRef<{ fileId?: string; path?: string }>({});
+	const parentDirOf = (path?: string) =>
+		path?.slice(0, path.lastIndexOf("/") + 1);
+	if (
+		editorPathRef.current.fileId !== effectiveFileRow?.id ||
+		parentDirOf(editorPathRef.current.path) !==
+			parentDirOf(effectiveFileRow?.path)
+	) {
+		editorPathRef.current = {
+			fileId: effectiveFileRow?.id,
+			path: effectiveFileRow?.path,
+		};
+	}
+	const editorSourcePath = editorPathRef.current.path;
+	useTitleDrivenFileRename({
+		lix,
+		fileId: effectiveFileRow?.id,
+		filePath: effectiveFileRow?.path,
+		editor: liveEditor,
+		enabled:
+			!editorReadOnly &&
+			Boolean(effectiveFileRow && isMarkdownFilePath(effectiveFileRow.path)),
+	});
 
 	let content: ReactNode;
 
@@ -347,7 +376,7 @@ function MarkdownLiveViewLoaded({
 							className="h-full"
 							fileId={effectiveFileRow.id}
 							activeBranchId={activeBranchId}
-							filePath={effectiveFileRow.path}
+							filePath={editorSourcePath ?? effectiveFileRow.path}
 							isActiveView={isActiveView}
 							focusOnLoad={focusOnLoad}
 							defaultBlock={defaultBlock}
