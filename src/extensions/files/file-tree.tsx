@@ -201,12 +201,10 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	${FILE_TYPE_ICON_CSS}
 
-	[data-item-git-status='modified'] > [data-item-section='icon']
-		> :where(:not([data-icon-name='file-tree-icon-chevron'])),
-	[data-item-git-status='modified'] > [data-item-section='content'] {
-		color: inherit;
-	}
-
+	/* The label carries the action color across the board — the library
+	   tints [data-item-section='content'] with the status color, and
+	   modified shares the glyph's brand orange (see the git-modified
+	   override), so a changed file reads without hunting for its dot. */
 	[data-item-git-status='modified'] > [data-item-section='git'] {
 		color: var(--color-icon-brand);
 		font-size: 0;
