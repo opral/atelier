@@ -28,7 +28,6 @@ import { selectFileHistory } from "@/lib/lix-file-history";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
-	selectLatestCheckpoint,
 	selectWorkingFileDiffs,
 	selectFilesystemDirectories,
 	selectFilesystemFiles,
@@ -56,10 +55,7 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
 import { qb } from "@/lib/lix-kysely";
-import type {
-	FileDiffRow,
-	FilesystemEntryRow,
-} from "@/queries";
+import type { FileDiffRow, FilesystemEntryRow } from "@/queries";
 import type { Lix } from "@lix-js/sdk";
 
 type FilesViewContext = {
@@ -244,19 +240,9 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 	);
 	const reviewWorkingChanges =
 		context?.reviewModeActive === true && context.reviewWorkingChanges === true;
-	// Two-step: lix_diff takes its base as a parameter, so the latest
-	// checkpoint id is its own observed query (root fallback when none).
-	const latestCheckpoint = useQueryResult(
-		(queryLix) => selectLatestCheckpoint(queryLix),
-		{ enabled: reviewWorkingChanges },
-	);
 	const fileWorkingChanges = useQueryResult(
-		(queryLix) =>
-			selectWorkingFileDiffs(
-				queryLix,
-				latestCheckpoint.rows[0]?.commit_id ?? null,
-			),
-		{ enabled: reviewWorkingChanges && latestCheckpoint.status === "success" },
+		(queryLix) => selectWorkingFileDiffs(queryLix),
+		{ enabled: reviewWorkingChanges },
 	);
 	const historicalEntries = useMemo(() => {
 		if (!historicalCommitId || historicalFileRows.status !== "success") {
@@ -268,7 +254,6 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		directories,
 		files,
 		historicalFileRows,
-		latestCheckpoint,
 		fileWorkingChanges,
 	]) {
 		if (result.status === "error") throw result.error;
@@ -422,7 +407,10 @@ function FilesViewContent({
 		if (context?.reviewModeActive !== true) return statuses;
 		for (const file of sessionFiles ?? []) {
 			if (file.changeKind === "removed") continue;
-			statuses.set(file.path, file.changeKind === "added" ? "added" : "modified");
+			statuses.set(
+				file.path,
+				file.changeKind === "added" ? "added" : "modified",
+			);
 		}
 		return statuses;
 	}, [context?.reviewModeActive, sessionFiles]);
@@ -1586,7 +1574,6 @@ function NewMenuItem({
 		</DropdownMenuItem>
 	);
 }
-
 
 function sameStringArray(
 	left: readonly string[],

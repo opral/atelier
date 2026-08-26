@@ -13,12 +13,8 @@ async function workingRange(
 	lix: Lix,
 ): Promise<{ beforeCommitId: string; headCommitId: string }> {
 	const result = await lix.execute(
-		`SELECT coalesce(
-			(SELECT commit_id FROM lix_checkpoint
-			 ORDER BY lixcol_created_at DESC LIMIT 1),
-			lix_root_commit_id()
-		) AS before_commit_id,
-		lix_active_branch_commit_id() AS head_commit_id`,
+		`SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
+		        lix_active_branch_commit_id() AS head_commit_id`,
 	);
 	const beforeCommitId = result.rows[0]?.get("before_commit_id");
 	const headCommitId = result.rows[0]?.get("head_commit_id");
@@ -47,15 +43,14 @@ export async function createCheckpointForFiles(
 		[beforeCommitId, headCommitId, ...fileIds],
 	);
 	if (result.rowsAffected === 0) return null;
-	const returnedCommitIds = result.rows
-		.map((row) => row.get("commit_id"))
-		.filter(isString);
-	const commitIds = new Set(returnedCommitIds);
-	if (commitIds.size !== 1 || returnedCommitIds.length !== result.rows.length) {
+	// A command that creates a commit returns exactly one row; rowsAffected
+	// still reports the number of selected identities.
+	const commitId = result.rows[0]?.get("commit_id");
+	if (result.rows.length !== 1 || !isString(commitId)) {
 		throw new Error("Partial checkpoint did not return one commit ID.");
 	}
 	return {
-		commitId: [...commitIds][0]!,
+		commitId,
 		diffCount: result.rowsAffected,
 	};
 }

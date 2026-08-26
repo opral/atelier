@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { selectLatestCheckpoint, selectWorkingFileDiffs } from "@/queries";
+import { selectWorkingFileDiffs } from "@/queries";
 import {
 	createCheckpointForFiles,
 	restoreCheckpoint,
@@ -27,8 +27,7 @@ async function writeFile(
 }
 
 async function workingFileDiffs(lix: Awaited<ReturnType<typeof openLix>>) {
-	const checkpoint = await selectLatestCheckpoint(lix).executeTakeFirst();
-	return selectWorkingFileDiffs(lix, checkpoint?.commit_id ?? null).execute();
+	return selectWorkingFileDiffs(lix).execute();
 }
 
 async function readFile(lix: Awaited<ReturnType<typeof openLix>>, id: string) {
@@ -74,12 +73,9 @@ describe("Lix SQL diff commands", () => {
 			// /docs and /docs/handbook were committed with their file by the
 			// engine's dependency closure; /notes still has a changed file, so
 			// its descriptor stays working.
-			const checkpointId = (await selectLatestCheckpoint(lix).executeTakeFirst())
-				?.commit_id;
 			const remainingDirs = await lix.execute(
 				`SELECT coalesce(to_path, from_path) AS path
-				 FROM lix_diff('lix_directory', $1, lix_active_branch_commit_id())`,
-				[checkpointId ?? ""],
+				 FROM lix_diff('lix_directory', lix_latest_checkpoint_commit_id(), lix_active_branch_commit_id())`,
 			);
 			const remainingDirPaths = remainingDirs.rows
 				.map((row) => row.get("path"))

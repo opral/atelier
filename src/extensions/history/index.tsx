@@ -7,7 +7,6 @@ import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCommitParent,
-	selectLatestCheckpoint,
 	selectWorkingChangeCount,
 	type CheckpointRow,
 } from "@/queries";
@@ -42,22 +41,11 @@ function WorkingChangesRow({
 }: {
 	readonly atelier: ExtensionRuntime;
 }) {
-	// lix_diff takes its base as a parameter: resolve the latest checkpoint
-	// first (root fallback when none exists), then count the file diffs.
-	// Both reads stay non-suspending: creating a checkpoint re-parameterizes
-	// the count query with the new checkpoint id, and a suspending read would
-	// blank the whole History panel (checkpoints included) while the fresh
-	// span resolves — on cold replicas, for seconds.
-	const latestCheckpoint = useQueryResult((queryLix) =>
-		selectLatestCheckpoint(queryLix),
-	);
-	const workingChangeCount = useQueryResult(
-		(queryLix) =>
-			selectWorkingChangeCount(
-				queryLix,
-				latestCheckpoint.rows[0]?.commit_id ?? null,
-			),
-		{ enabled: latestCheckpoint.status === "success" },
+	// Non-suspending: creating a checkpoint refires this query for the fresh
+	// span, and a suspending read would blank the whole History panel
+	// (checkpoints included) while it resolves — on cold replicas, for seconds.
+	const workingChangeCount = useQueryResult((queryLix) =>
+		selectWorkingChangeCount(queryLix),
 	);
 	const changeCount = workingChangeCount.rows[0]?.change_count ?? 0;
 	const fileCount = workingChangeCount.rows[0]?.file_count ?? 0;
@@ -66,8 +54,7 @@ function WorkingChangesRow({
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
 	const isViewing =
-		atelier.diff.session !== null &&
-		"working" in atelier.diff.session.target;
+		atelier.diff.session !== null && "working" in atelier.diff.session.target;
 	// Pressing the active entry again leaves review mode — the row toggles.
 	const toggleWorkingChanges = () =>
 		isViewing

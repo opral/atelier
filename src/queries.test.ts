@@ -10,13 +10,6 @@ import {
 	selectWorkingFileDiffs,
 } from "@/queries";
 
-async function latestCheckpointId(
-	lix: Awaited<ReturnType<typeof openLix>>,
-): Promise<string | null> {
-	const row = await selectLatestCheckpoint(lix).executeTakeFirst();
-	return row?.commit_id ?? null;
-}
-
 function isUserPath(path: string): boolean {
 	return !path.startsWith("/.lix/");
 }
@@ -133,21 +126,15 @@ describe("checkpoint queries", () => {
 
 		// Metadata-only changes do not count: the file-tier diff sees only
 		// file changes, never the workspace's own key-value writes.
-		expect(
-			await selectWorkingChangeCount(
-				lix,
-				await latestCheckpointId(lix),
-			).execute(),
-		).toEqual([{ change_count: 0, file_count: 0 }]);
+		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+			{ change_count: 0, file_count: 0 },
+		]);
 
 		const checkpoint = await lix.createCheckpoint();
 
-		expect(
-			await selectWorkingChangeCount(
-				lix,
-				await latestCheckpointId(lix),
-			).execute(),
-		).toEqual([{ change_count: 0, file_count: 0 }]);
+		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+			{ change_count: 0, file_count: 0 },
+		]);
 		const checkpoints = await selectCheckpoints(lix).execute();
 		expect(checkpoints).toHaveLength(2);
 		expect(checkpoints[0]).toEqual(
@@ -174,8 +161,7 @@ describe("checkpoint queries", () => {
 				new TextEncoder().encode("draft"),
 			],
 		);
-		const checkpointId = await latestCheckpointId(lix);
-		expect(await selectWorkingFileDiffs(lix, checkpointId).execute()).toEqual([
+		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([
 			expect.objectContaining({
 				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
@@ -184,17 +170,12 @@ describe("checkpoint queries", () => {
 		]);
 		// The file's descriptor and content rows count; the workspace's own
 		// key-value write does not.
-		expect(
-			await selectWorkingChangeCount(lix, checkpointId).execute(),
-		).toEqual([{ change_count: 2, file_count: 1 }]);
+		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+			{ change_count: 2, file_count: 1 },
+		]);
 
 		await lix.createCheckpoint();
-		expect(
-			await selectWorkingFileDiffs(
-				lix,
-				await latestCheckpointId(lix),
-			).execute(),
-		).toEqual([]);
+		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([]);
 
 		await lix.close();
 	});
@@ -215,12 +196,7 @@ describe("checkpoint queries", () => {
 		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
 
 		// Removed files keep their pre-deletion path from the diff's base side.
-		expect(
-			await selectWorkingFileDiffs(
-				lix,
-				await latestCheckpointId(lix),
-			).execute(),
-		).toEqual([
+		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([
 			expect.objectContaining({
 				id: fileId,
 				path: "/drafts/removed.md",

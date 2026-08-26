@@ -49,7 +49,7 @@ import {
 import { selectFileHistory } from "@/lib/lix-file-history";
 import { selectFileHistorySnapshotsAtCommits } from "@/lib/lix-file-history-snapshots";
 import { qb } from "@/lib/lix-kysely";
-import { selectLatestCheckpoint, selectWorkingFileDiffs } from "@/queries";
+import { selectWorkingFileDiffs } from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -755,7 +755,9 @@ export async function selectCheckpointFiles(
 		if (
 			typeof id !== "string" ||
 			typeof path !== "string" ||
-			(diffType !== "added" && diffType !== "modified" && diffType !== "removed")
+			(diffType !== "added" &&
+				diffType !== "modified" &&
+				diffType !== "removed")
 		) {
 			return [];
 		}
@@ -797,7 +799,6 @@ export async function selectFilesAtCommit(
 			: [];
 	});
 }
-
 
 /** A modified row whose side paths differ is a move/rename (display only). */
 function movedFromSidePaths(
@@ -1372,7 +1373,8 @@ function LayoutShellLoadedContentResolved({
 	// Both diff-mode targets are views over the same state: "working" reviews
 	// the mutable head, "historical" a read-only checkpoint (verb: Restore).
 	const workingReview = diffReview?.kind === "working" ? diffReview : null;
-	const historicalReview = diffReview?.kind === "historical" ? diffReview : null;
+	const historicalReview =
+		diffReview?.kind === "historical" ? diffReview : null;
 	const workingChangesReviewOpen = workingReview !== null;
 	const workingChangeReviewFiles =
 		workingReview?.files ?? EMPTY_LIX_FILES_FOR_OPEN;
@@ -1410,9 +1412,9 @@ function LayoutShellLoadedContentResolved({
 	// The live documents the historical review converted in place (every open
 	// file tab switches into the review's span); restored on exit so leaving
 	// review returns each tab to its live document.
-	const preHistoricalDocumentsRef = useRef<
-		readonly PreHistoricalDocument[]
-	>([]);
+	const preHistoricalDocumentsRef = useRef<readonly PreHistoricalDocument[]>(
+		[],
+	);
 	const restoreLiveDocumentsRef = useRef<
 		| ((
 				documents: readonly PreHistoricalDocument[],
@@ -1587,8 +1589,8 @@ function LayoutShellLoadedContentResolved({
 			if (selected.size === 0) return;
 			const session = diffReviewRef.current;
 			if (session?.kind !== "working") return;
-			const selectedReviews = session.externalWriteReviews.filter(
-				(review) => selected.has(review.fileId),
+			const selectedReviews = session.externalWriteReviews.filter((review) =>
+				selected.has(review.fileId),
 			);
 			const checkpoint = await createCheckpointForFiles(lix, selectedFileIds);
 			if (!checkpoint) {
@@ -2481,8 +2483,7 @@ function LayoutShellLoadedContentResolved({
 			);
 			const conversions = new Map(
 				candidates.map((candidate) => {
-					const changeKind =
-						changeKinds.get(candidate.fileId) ?? fallbackKind;
+					const changeKind = changeKinds.get(candidate.fileId) ?? fallbackKind;
 					const historicalPath =
 						snapshotPaths.get(candidate.fileId) ?? candidate.filePath;
 					return [
@@ -2730,21 +2731,21 @@ function LayoutShellLoadedContentResolved({
 				);
 			}
 			setDiffReview({
-					kind: "historical",
-					range: {
-						// "" is the beginning-of-repository sentinel: no removed
-						// files can exist against an empty base, so nothing reads it.
-						beforeCommitId: previousCommitId ?? "",
-						afterCommitId: commitId,
-						removedFileIds: EMPTY_FILE_ID_SET,
-					},
-					files,
-					diffFileId: null,
-					externalWriteReviews: EMPTY_EXTERNAL_WRITE_REVIEWS,
-					// Converted tabs are already showing the span, so the
-					// live-navigation exit guard arms immediately.
-					...(convertedCount > 0 ? { opened: true } : {}),
-					...(createdAt !== undefined ? { createdAt } : {}),
+				kind: "historical",
+				range: {
+					// "" is the beginning-of-repository sentinel: no removed
+					// files can exist against an empty base, so nothing reads it.
+					beforeCommitId: previousCommitId ?? "",
+					afterCommitId: commitId,
+					removedFileIds: EMPTY_FILE_ID_SET,
+				},
+				files,
+				diffFileId: null,
+				externalWriteReviews: EMPTY_EXTERNAL_WRITE_REVIEWS,
+				// Converted tabs are already showing the span, so the
+				// live-navigation exit guard arms immediately.
+				...(convertedCount > 0 ? { opened: true } : {}),
+				...(createdAt !== undefined ? { createdAt } : {}),
 			});
 		},
 		[closeHistoricalReviewViews, convertOpenFileTabsToHistorical, lix],
@@ -2944,8 +2945,8 @@ function LayoutShellLoadedContentResolved({
 			const selected = new Set(selectedFileIds);
 			const session = diffReviewRef.current;
 			if (session?.kind !== "working") return;
-			const selectedReviews = session.externalWriteReviews.filter(
-				(review) => selected.has(review.fileId),
+			const selectedReviews = session.externalWriteReviews.filter((review) =>
+				selected.has(review.fileId),
 			);
 			await revertWorkingChangesForFiles(lix, selectedFileIds);
 			// Same conclusion semantics as Checkpoint: the verb ends the session.
@@ -2971,7 +2972,6 @@ function LayoutShellLoadedContentResolved({
 			workingChangesReviewOpen,
 		],
 	);
-
 
 	const handleCloseView = useCallback(
 		({
@@ -3544,139 +3544,139 @@ function LayoutShellLoadedContentResolved({
 			panel: "left",
 		});
 	}, [handleOpenExtensionView]);
-	const handleOpenWorkingChangesReview = useCallback((
-		openOptions?: { readonly reveal?: boolean },
-	) => {
-		// Read-only / anonymous must never look like a clickable no-op. History
-		// is always reachable even when the review query finds no files.
-		if (isHostReadOnly) {
-			revealHistory();
-		}
-		workingReviewOpeningRef.current = true;
-		void (async () => {
-			// The review window is always base-to-head, where the base is the
-			// latest checkpoint or the repository's empty root: one lix_diff
-			// call yields the changed files with side-resolved paths — removed
-			// files keep their pre-deletion path from the base side.
-			const [checkpoint, headResult, rootResult] = await Promise.all([
-				selectLatestCheckpoint(lix).executeTakeFirst(),
-				lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"),
-				lix.execute("SELECT lix_root_commit_id() AS commit_id"),
-			]);
-			const headCommitId = headResult.rows[0]?.get("commit_id");
-			const rootCommitId = rootResult.rows[0]?.get("commit_id");
-			if (typeof headCommitId !== "string" || typeof rootCommitId !== "string") {
-				return;
+	const handleOpenWorkingChangesReview = useCallback(
+		(openOptions?: { readonly reveal?: boolean }) => {
+			// Read-only / anonymous must never look like a clickable no-op. History
+			// is always reachable even when the review query finds no files.
+			if (isHostReadOnly) {
+				revealHistory();
 			}
-			const beforeCommitId = checkpoint?.commit_id ?? rootCommitId;
-			const workingDiffs = await selectWorkingFileDiffs(
-				lix,
-				checkpoint?.commit_id ?? null,
-			).execute();
-			const checkpointFiles = workingDiffs
-				.filter((file) => {
-					const handler = findFileHandlerExtension(
-						extensionMap.values(),
-						file.path,
-					);
-					return Boolean(
-						handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
+			workingReviewOpeningRef.current = true;
+			void (async () => {
+				// The review window is always base-to-head, where the base is the
+				// latest checkpoint or the repository's empty root — exactly what
+				// lix_latest_checkpoint_commit_id() resolves. One lix_diff call
+				// yields the changed files with side-resolved paths — removed
+				// files keep their pre-deletion path from the base side.
+				const rangeResult = await lix.execute(
+					`SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
+				        lix_active_branch_commit_id() AS after_commit_id`,
+				);
+				const beforeCommitId = rangeResult.rows[0]?.get("before_commit_id");
+				const headCommitId = rangeResult.rows[0]?.get("after_commit_id");
+				if (
+					typeof beforeCommitId !== "string" ||
+					typeof headCommitId !== "string"
+				) {
+					return;
+				}
+				const workingDiffs = await selectWorkingFileDiffs(lix).execute();
+				const checkpointFiles = workingDiffs
+					.filter((file) => {
+						const handler = findFileHandlerExtension(
+							extensionMap.values(),
+							file.path,
+						);
+						return Boolean(
+							handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
+						);
+					})
+					.map((file): LixFileForOpen => {
+						const movedFromPath = movedFromSidePaths(
+							file.diff_type,
+							file.from_path,
+							file.to_path,
+						);
+						return {
+							id: file.id,
+							path: file.path,
+							checkpointChangeKind: file.diff_type,
+							...(movedFromPath ? { movedFromPath } : {}),
+						};
+					});
+				const firstChangedFile = checkpointFiles[0];
+				const removedFileIds: ReadonlySet<string> = new Set(
+					workingDiffs
+						.filter((change) => change.diff_type === "removed")
+						.map((change) => change.id),
+				);
+				const reviewRange = {
+					beforeCommitId,
+					afterCommitId: headCommitId,
+					removedFileIds,
+				};
+				if (!firstChangedFile) {
+					// Nothing reviewable: opening review mode is a quiet no-op rather
+					// than a surprise navigation to the History panel.
+					return;
+				}
+				if (historicalReview) {
+					// Working changes and a historical checkpoint are two targets of
+					// the same diff mode. Returning to "now" must first release the
+					// snapshot view and restore the live document that it replaced.
+					exitDiffReview();
+				}
+				// Reviews are shell-synthesized: one per changed file over the
+				// checkpoint-to-head window. Their ids are deterministic, so
+				// persisted resolutions keep matching across reopens.
+				const sessionReviews: ExternalWriteReview[] = reviewRange
+					? checkpointFiles.map((file) => ({
+							fileId: file.id,
+							path: file.path,
+							reviewId: externalWriteReviewId(
+								file.id,
+								reviewRange.beforeCommitId,
+								reviewRange.afterCommitId,
+							),
+							beforeCommitId: reviewRange.beforeCommitId,
+							afterCommitId: reviewRange.afterCommitId,
+						}))
+					: [];
+				// Opening the workspace-level review never navigates on its own: the
+				// user's active view stays put and the review float's stepper is how
+				// they walk through changed files. Hosts that want the first file
+				// shown pass reveal: true explicitly.
+				const revealFirstFile = openOptions?.reveal ?? false;
+				setDiffReview({
+					kind: "working",
+					range: reviewRange,
+					files: checkpointFiles,
+					diffFileId: revealFirstFile ? firstChangedFile.id : null,
+					externalWriteReviews: sessionReviews,
+				});
+				if (revealFirstFile) {
+					if (reviewRange) {
+						openWorkingChangeFileAtRange(firstChangedFile, reviewRange);
+					} else {
+						openAutoRevealedFile({
+							fileId: firstChangedFile.id,
+							filePath: firstChangedFile.path,
+						});
+					}
+				}
+			})()
+				.catch((error: unknown) => {
+					if (!isHostReadOnly) revealHistory();
+					console.warn(
+						"[checkpoint] failed to open working changes review",
+						error,
 					);
 				})
-				.map((file): LixFileForOpen => {
-					const movedFromPath = movedFromSidePaths(
-						file.diff_type,
-						file.from_path,
-						file.to_path,
-					);
-					return {
-						id: file.id,
-						path: file.path,
-						checkpointChangeKind: file.diff_type,
-						...(movedFromPath ? { movedFromPath } : {}),
-					};
+				.finally(() => {
+					workingReviewOpeningRef.current = false;
 				});
-			const firstChangedFile = checkpointFiles[0];
-			const removedFileIds: ReadonlySet<string> = new Set(
-				workingDiffs
-					.filter((change) => change.diff_type === "removed")
-					.map((change) => change.id),
-			);
-			const reviewRange = {
-				beforeCommitId,
-				afterCommitId: headCommitId,
-				removedFileIds,
-			};
-			if (!firstChangedFile) {
-				// Nothing reviewable: opening review mode is a quiet no-op rather
-				// than a surprise navigation to the History panel.
-				return;
-			}
-			if (historicalReview) {
-				// Working changes and a historical checkpoint are two targets of
-				// the same diff mode. Returning to "now" must first release the
-				// snapshot view and restore the live document that it replaced.
-				exitDiffReview();
-			}
-			// Reviews are shell-synthesized: one per changed file over the
-			// checkpoint-to-head window. Their ids are deterministic, so
-			// persisted resolutions keep matching across reopens.
-			const sessionReviews: ExternalWriteReview[] = reviewRange
-				? checkpointFiles.map((file) => ({
-						fileId: file.id,
-						path: file.path,
-						reviewId: externalWriteReviewId(
-							file.id,
-							reviewRange.beforeCommitId,
-							reviewRange.afterCommitId,
-						),
-						beforeCommitId: reviewRange.beforeCommitId,
-						afterCommitId: reviewRange.afterCommitId,
-					}))
-				: [];
-			// Opening the workspace-level review never navigates on its own: the
-			// user's active view stays put and the review float's stepper is how
-			// they walk through changed files. Hosts that want the first file
-			// shown pass reveal: true explicitly.
-			const revealFirstFile = openOptions?.reveal ?? false;
-			setDiffReview({
-				kind: "working",
-				range: reviewRange,
-				files: checkpointFiles,
-				diffFileId: revealFirstFile ? firstChangedFile.id : null,
-				externalWriteReviews: sessionReviews,
-			});
-			if (revealFirstFile) {
-				if (reviewRange) {
-					openWorkingChangeFileAtRange(firstChangedFile, reviewRange);
-				} else {
-					openAutoRevealedFile({
-						fileId: firstChangedFile.id,
-						filePath: firstChangedFile.path,
-					});
-				}
-			}
-		})()
-			.catch((error: unknown) => {
-				if (!isHostReadOnly) revealHistory();
-				console.warn(
-					"[checkpoint] failed to open working changes review",
-					error,
-				);
-			})
-			.finally(() => {
-				workingReviewOpeningRef.current = false;
-			});
-	}, [
-		exitDiffReview,
-		extensionMap,
-		historicalReview,
-		isHostReadOnly,
-		lix,
-		openAutoRevealedFile,
-		openWorkingChangeFileAtRange,
-		revealHistory,
-	]);
+		},
+		[
+			exitDiffReview,
+			extensionMap,
+			historicalReview,
+			isHostReadOnly,
+			lix,
+			openAutoRevealedFile,
+			openWorkingChangeFileAtRange,
+			revealHistory,
+		],
+	);
 
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);
@@ -3940,9 +3940,7 @@ function LayoutShellLoadedContentResolved({
 							? {
 									review: {
 										id: review.reviewId,
-										status: privateResolvedReviewIds.includes(
-											review.reviewId,
-										)
+										status: privateResolvedReviewIds.includes(review.reviewId)
 											? ("resolved" as const)
 											: ("pending" as const),
 									},
@@ -4381,4 +4379,3 @@ function LayoutShellLoadedContentResolved({
 		</DndContext>
 	);
 }
-
