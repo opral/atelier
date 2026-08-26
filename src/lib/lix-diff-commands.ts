@@ -36,9 +36,9 @@ export async function createCheckpointForFiles(
 	const { beforeCommitId, headCommitId } = await workingRange(lix);
 	const result = await lix.execute(
 		`INSERT INTO lix_create_checkpoint (relation, row_pk)
-		 SELECT 'lix_file', row_pk
+		 SELECT 'lix_file', lixcol_row_pk
 		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})
+		 WHERE lixcol_row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})
 		 RETURNING commit_id`,
 		[beforeCommitId, headCommitId, ...fileIds],
 	);
@@ -63,9 +63,9 @@ export async function revertWorkingChangesForFiles(
 	const { beforeCommitId, headCommitId } = await workingRange(lix);
 	const result = await lix.execute(
 		`INSERT INTO lix_revert (relation, row_pk)
-		 SELECT 'lix_file', row_pk
+		 SELECT 'lix_file', lixcol_row_pk
 		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
+		 WHERE lixcol_row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
 		[beforeCommitId, headCommitId, ...fileIds],
 	);
 	return result.rowsAffected;
@@ -104,9 +104,9 @@ export async function restoreCheckpointFiles(
 	// checkpoint state without touching anything else.
 	const result = await lix.execute(
 		`INSERT INTO lix_apply (relation, row_pk)
-		 SELECT 'lix_file', row_pk
+		 SELECT 'lix_file', lixcol_row_pk
 		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
+		 WHERE lixcol_row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
 		[headCommitId, checkpointCommitId, ...fileIds],
 	);
 	return result.rowsAffected;

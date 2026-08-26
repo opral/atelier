@@ -1025,15 +1025,13 @@ describe("MarkdownView", () => {
 		expect(reviewEditor).toHaveTextContent("Before");
 		expect(reviewEditor).toHaveTextContent("After");
 		const historyCalls = execute.mock.calls.filter(([statement]) =>
-			String(statement).includes("lix_history('lix_file'"),
+			String(statement).includes("lix_state_at('lix_file'"),
 		);
 		expect(historyCalls).toHaveLength(2);
+		// Each side's snapshot read stays bounded to the one requested file.
 		expect(
-			historyCalls.every(
-				([statement, parameters]) =>
-					["where id =", "order by lixcol_depth asc", "limit"].every((clause) =>
-						String(statement).includes(clause),
-					) && (parameters ?? []).includes(1),
+			historyCalls.every(([statement]) =>
+				String(statement).includes("where id ="),
 			),
 		).toBe(true);
 
@@ -1080,7 +1078,7 @@ describe("MarkdownView", () => {
 			restoreTarget,
 		]);
 		const workingDiff = await lix.execute(
-			"SELECT row_pk FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
+			"SELECT lixcol_row_pk FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
 			[restoreTarget],
 		);
 		expect(workingDiff.rows).toHaveLength(0);

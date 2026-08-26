@@ -92,10 +92,10 @@ export function selectWorkingFileDiffs(lix: Lix) {
 	return qb(lix)
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
 		.select([
-			sql<string>`row_pk ->> 0`.as("id"),
-			"diff_type",
+			sql<string>`lixcol_row_pk ->> 0`.as("id"),
+			"lixcol_diff_type as diff_type",
 			sql<string>`coalesce(to_path, from_path)`.as("path"),
-			"row_count",
+			"lixcol_row_count as row_count",
 			"from_path",
 			"to_path",
 		])
@@ -107,7 +107,7 @@ export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
 		.select((eb) => [
-			sql<number>`coalesce(sum(row_count), 0)`.as("change_count"),
+			sql<number>`coalesce(sum(lixcol_row_count), 0)`.as("change_count"),
 			eb.fn.countAll<number>().as("file_count"),
 		])
 		.$castTo<WorkingChangeCountRow>();
@@ -117,6 +117,46 @@ function workingFileDiffTable() {
 	// lix_latest_checkpoint_commit_id() resolves the branch's latest checkpoint
 	// inside the statement, falling back to the empty root when none exists.
 	return sql<any>`lix_diff('lix_file', lix_latest_checkpoint_commit_id(), lix_active_branch_commit_id())`;
+}
+
+/**
+ * Point-in-time file state: lix_state_at returns the complete tracked file
+ * rows as of one commit, with the live relation's columns. An entity absent
+ * at that commit contributes no row, and pk `=` / `IN` predicates bound the
+ * historical read to the requested entities.
+ */
+export function selectFilesStateAt(lix: Lix, commitId: string) {
+	return qb(lix).selectFrom(
+		sql<any>`lix_state_at('lix_file', ${commitId})`.as("lix_state_at"),
+	);
+}
+
+/**
+ * Resolves the path each file had at its requested commit — rename-aware, and
+ * absent files simply have no entry. Requests are grouped per commit so a
+ * whole tab set resolves in one bounded read per distinct commit.
+ */
+export async function selectFilePathsAtCommits(
+	lix: Lix,
+	requests: readonly { readonly fileId: string; readonly commitId: string }[],
+): Promise<Map<string, string>> {
+	const byCommit = new Map<string, string[]>();
+	for (const { fileId, commitId } of requests) {
+		const ids = byCommit.get(commitId) ?? [];
+		ids.push(fileId);
+		byCommit.set(commitId, ids);
+	}
+	const paths = new Map<string, string>();
+	for (const [commitId, fileIds] of byCommit) {
+		const rows = (await selectFilesStateAt(lix, commitId)
+			.select(["id", "path"])
+			.where("id", "in", fileIds)
+			.execute()) as ReadonlyArray<{ id: string; path: string | null }>;
+		for (const row of rows) {
+			if (typeof row.path === "string") paths.set(row.id, row.path);
+		}
+	}
+	return paths;
 }
 
 export function selectCheckpoints(lix: Lix) {

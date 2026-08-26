@@ -46,10 +46,12 @@ import {
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
 } from "@/lib/lix-diff-commands";
-import { selectFileHistory } from "@/lib/lix-file-history";
-import { selectFileHistorySnapshotsAtCommits } from "@/lib/lix-file-history-snapshots";
 import { qb } from "@/lib/lix-kysely";
-import { selectWorkingFileDiffs } from "@/queries";
+import {
+	selectFilePathsAtCommits,
+	selectFilesStateAt,
+	selectWorkingFileDiffs,
+} from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -723,11 +725,9 @@ async function selectHistoricalLixFileForOpen(
 	filePath: string,
 	commitId: string,
 ): Promise<LixFileForOpen | null> {
-	const row = await selectFileHistory(lix, commitId)
+	const row = await selectFilesStateAt(lix, commitId)
 		.select(["id", "path"])
 		.where("path", "=", filePath)
-		.orderBy("lixcol_depth", "asc")
-		.limit(1)
 		.executeTakeFirst();
 	return row && typeof row.path === "string"
 		? { id: row.id as string, path: row.path }
@@ -741,7 +741,7 @@ export async function selectCheckpointFiles(
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
 	const result = await lix.execute(
-		`SELECT row_pk ->> 0 AS id, diff_type,
+		`SELECT lixcol_row_pk ->> 0 AS id, lixcol_diff_type AS diff_type,
 		        coalesce(to_path, from_path) AS path,
 		        from_path, to_path
 		 FROM lix_diff('lix_file', $1, $2)
@@ -777,18 +777,13 @@ export async function selectCheckpointFiles(
 	});
 }
 
-/**
- * Every file present at a commit: the empty-root diff, where the full state
- * appears as added rows.
- */
+/** Every file present at a commit, read as pinned point-in-time state. */
 export async function selectFilesAtCommit(
 	lix: Lix,
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
 	const result = await lix.execute(
-		`SELECT row_pk ->> 0 AS id, to_path AS path
-		 FROM lix_diff('lix_file', lix_root_commit_id(), $1)
-		 ORDER BY to_path`,
+		`SELECT id, path FROM lix_state_at('lix_file', $1) ORDER BY path`,
 		[commitId],
 	);
 	return result.rows.flatMap((row): LixFileForOpen[] => {
@@ -2465,7 +2460,7 @@ function LayoutShellLoadedContentResolved({
 					: ("modified" as const);
 			// Renames and deletions resolve to the path each file had at the
 			// relevant side of the span.
-			const snapshots = await selectFileHistorySnapshotsAtCommits(
+			const snapshotPaths = await selectFilePathsAtCommits(
 				lix,
 				candidates.map(({ fileId }) => ({
 					fileId,
@@ -2474,12 +2469,6 @@ function LayoutShellLoadedContentResolved({
 							? range.previousCommitId
 							: range.commitId,
 				})),
-				{ includeContent: false },
-			);
-			const snapshotPaths = new Map(
-				snapshots.flatMap((snapshot) =>
-					snapshot.path ? [[snapshot.id, snapshot.path] as const] : [],
-				),
 			);
 			const conversions = new Map(
 				candidates.map((candidate) => {
@@ -2617,14 +2606,12 @@ function LayoutShellLoadedContentResolved({
 					file.checkpointChangeKind === "removed"
 						? historicalRange.beforeCommitId
 						: historicalRange.afterCommitId;
-				const [snapshot] = await selectFileHistorySnapshotsAtCommits(
-					lix,
-					[{ fileId: file.id, commitId: snapshotCommitId }],
-					{ includeContent: false },
-				);
+				const snapshotPaths = await selectFilePathsAtCommits(lix, [
+					{ fileId: file.id, commitId: snapshotCommitId },
+				]);
 				if (historicalRequestRef.current !== requestId) return;
-				if (!snapshot?.path) return;
-				const historicalPath = snapshot.path;
+				const historicalPath = snapshotPaths.get(file.id);
+				if (!historicalPath) return;
 				historicalOpenPathRef.current = historicalPath;
 				openResolvedFileView({
 					panel: "central",

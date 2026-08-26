@@ -1,6 +1,6 @@
 import type { Lix } from "@lix-js/sdk";
 import { qb } from "@/lib/lix-kysely";
-import { selectFileHistory } from "@/lib/lix-file-history";
+import { selectFilesStateAt } from "@/queries";
 import type { ExtensionState } from "@/extension-runtime/types";
 import { VIDEO_FILE_EXTENSIONS } from "@/extensions/video/video-player";
 
@@ -89,11 +89,9 @@ export async function loadMarkdownAsset({
 	if (!workspacePath) return null;
 
 	const file = sourceCommitId
-		? await selectFileHistory(lix, sourceCommitId)
+		? await selectFilesStateAt(lix, sourceCommitId)
 				.select(["id", "content", "path"])
 				.where("path", "=", workspacePath)
-				.orderBy("lixcol_depth", "asc")
-				.limit(1)
 				.executeTakeFirst()
 		: await qb(lix)
 				.selectFrom("lix_file")

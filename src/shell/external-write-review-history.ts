@@ -1,12 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Lix } from "@lix-js/sdk";
 import { useLix } from "@/lib/lix-react";
-import { selectFileHistory } from "@/lib/lix-file-history";
+import { selectFilesStateAt } from "@/queries";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
-type FileHistoryRow = {
-	readonly content: unknown;
-	readonly path: string | null;
-};
 
 /**
  * Stable identity for one file's pending review of the commit span it covers.
@@ -72,28 +68,11 @@ export async function getFileDataAtCommit(
 	fileId: string,
 	commitId: string,
 ): Promise<Uint8Array | null> {
-	const snapshot = await getFileHistorySnapshotAtCommit(lix, fileId, commitId);
-	if (!snapshot || snapshot.path === null) return null;
-	return decodeFileDataToBytes(snapshot.content);
-}
-
-function fileHistorySnapshotQuery(lix: Lix, fileId: string, commitId: string) {
-	return selectFileHistory(lix, commitId)
-		.select(["path", "content"])
+	// Zero rows means the file did not exist at the commit.
+	const row = (await selectFilesStateAt(lix, commitId)
+		.select(["content"])
 		.where("id", "=", fileId)
-		.orderBy("lixcol_depth", "asc")
-		.limit(1);
-}
-
-async function getFileHistorySnapshotAtCommit(
-	lix: Lix,
-	fileId: string,
-	commitId: string,
-): Promise<FileHistoryRow | null> {
-	const row = (await fileHistorySnapshotQuery(
-		lix,
-		fileId,
-		commitId,
-	).executeTakeFirst()) as FileHistoryRow | undefined;
-	return row ?? null;
+		.executeTakeFirst()) as { content: unknown } | undefined;
+	if (row === undefined) return null;
+	return decodeFileDataToBytes(row.content);
 }

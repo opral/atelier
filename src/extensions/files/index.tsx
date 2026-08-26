@@ -24,10 +24,10 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLix, useQueryResult } from "@/lib/lix-react";
-import { selectFileHistory } from "@/lib/lix-file-history";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
+	selectFilesStateAt,
 	selectWorkingFileDiffs,
 	selectFilesystemDirectories,
 	selectFilesystemFiles,
@@ -229,13 +229,11 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 	const historicalFileRows = useQueryResult<{
 		readonly id: string;
 		readonly path: string | null;
-		readonly lixcol_depth: number;
 	}>(
 		(queryLix) =>
-			selectFileHistory(queryLix, historicalCommitId)
-				.select(["id", "path", "lixcol_depth"])
-				.orderBy("id", "asc")
-				.orderBy("lixcol_depth", "asc") as never,
+			selectFilesStateAt(queryLix, historicalCommitId ?? "")
+				.select(["id", "path"])
+				.orderBy("path", "asc") as never,
 		{ enabled: Boolean(historicalCommitId) },
 	);
 	const reviewWorkingChanges =
@@ -295,15 +293,11 @@ function historicalFilesystemEntries(
 	rows: readonly {
 		readonly id: string;
 		readonly path: string | null;
-		readonly lixcol_depth: number;
 	}[],
 ): FilesystemEntryRow[] {
-	const seen = new Set<string>();
 	const entries: FilesystemEntryRow[] = [];
 	const directoryPaths = new Set<string>();
 	for (const row of rows) {
-		if (seen.has(row.id)) continue;
-		seen.add(row.id);
 		if (typeof row.path !== "string") continue;
 		entries.push({
 			id: row.id,

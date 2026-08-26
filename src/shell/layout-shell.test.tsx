@@ -684,7 +684,7 @@ describe("diff review navigation", () => {
 			).toBeVisible();
 			expect(
 				execute.mock.calls.some(([statement]) =>
-					String(statement).includes("lix_history('lix_file'"),
+					String(statement).includes("lix_state_at('lix_file'"),
 				),
 			).toBe(false);
 			await waitFor(() => {
@@ -807,7 +807,7 @@ describe("diff review navigation", () => {
 			});
 			let blockedHistoryReadCount = 0;
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_history('lix_file'")) {
+				if (String(statement).includes("lix_state_at('lix_file'")) {
 					blockedHistoryReadCount += 1;
 					await historyReadGate;
 				}
@@ -1099,7 +1099,7 @@ describe("diff review navigation", () => {
 			const execute = vi
 				.spyOn(lix, "execute")
 				.mockImplementation(async (statement, params) => {
-					if (String(statement).includes("lix_history('lix_file'")) {
+					if (String(statement).includes("lix_state_at('lix_file'")) {
 						checkpointHistoryStatements.push(String(statement));
 						activeCheckpointFileReads += 1;
 						maxActiveCheckpointFileReads = Math.max(
@@ -1226,7 +1226,7 @@ describe("diff review navigation", () => {
 			expect(selected).toHaveLength(files.length);
 			expect(
 				execute.mock.calls.filter(([statement]) =>
-					String(statement).includes("lix_history('lix_file'"),
+					String(statement).includes("lix_state_at('lix_file'"),
 				),
 			).toEqual([]);
 		} finally {
@@ -1400,7 +1400,7 @@ describe("diff review navigation", () => {
 				markHistoryStarted = resolve;
 			});
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_history('lix_file'")) {
+				if (String(statement).includes("lix_state_at('lix_file'")) {
 					markHistoryStarted();
 					await historyBlocked;
 				}
@@ -1508,7 +1508,7 @@ describe("diff review navigation", () => {
 				readonly params: unknown[];
 			}> = [];
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_history('lix_file'")) {
+				if (String(statement).includes("lix_state_at('lix_file'")) {
 					historyCalls.push({
 						statement: String(statement),
 						params: [...(params ?? [])],

@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from "react";
 import { useQueryTakeFirst } from "@/lib/lix-react";
-import { selectFileHistory } from "@/lib/lix-file-history";
+import { selectFilesStateAt } from "@/queries";
 
 export type HistoricalFileSnapshot = {
 	readonly id: string;
@@ -93,26 +93,18 @@ function useFileSnapshotAtCommit(
 	exists: boolean,
 ): HistoricalFileSnapshot | undefined {
 	const snapshotFileId = explicitFileId ?? fileId;
+	// lix_state_at: a file absent at the commit produces no row, so absence
+	// needs no null-interpretation — zero rows already means "did not exist".
 	const row = useQueryTakeFirst<HistoricalFileSnapshotRow>(
 		(lix) =>
-			selectFileHistory(lix, commitId ?? "")
-				.select(["id", "path", "content", "lixcol_depth"])
-				.where("id", "=", snapshotFileId)
-				.orderBy("lixcol_depth", "asc")
-				.limit(1),
+			selectFilesStateAt(lix, commitId ?? "")
+				.select(["id", "path", "content"])
+				.where("id", "=", snapshotFileId),
 		{
 			subscribe: false,
 			enabled: fileId.length > 0 && commitId !== null && exists,
 		},
 	);
-	return row ? visibleSnapshot(row) : undefined;
-}
-
-function visibleSnapshot(
-	row: HistoricalFileSnapshotRow,
-): HistoricalFileSnapshot | undefined {
-	if (typeof row.path !== "string" || row.content === null) {
-		return undefined;
-	}
+	if (!row || typeof row.path !== "string") return undefined;
 	return { id: row.id, path: row.path, content: row.content };
 }
