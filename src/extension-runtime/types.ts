@@ -5,6 +5,7 @@ import type {
 	AtelierDiffApi,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
+	AtelierFilePreviewProps,
 	AtelierFilesViewOptions,
 } from "../extension-api";
 
@@ -71,6 +72,11 @@ export interface ExtensionDefinition {
 	readonly hidden?: boolean;
 	/** Dynamic menu items rendered by Atelier on every view surface. */
 	readonly menuItems?: AtelierExtensionMenuItems;
+	/**
+	 * Quick Look: renders this file type (or its change) flush; the host owns
+	 * the frame. See [`AtelierFilePreviewProps`] for the contract.
+	 */
+	readonly filePreview?: ComponentType<AtelierFilePreviewProps>;
 	readonly mount: (args: {
 		atelier: ExtensionRuntime;
 		view: ExtensionView;

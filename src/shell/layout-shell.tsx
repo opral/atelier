@@ -4029,6 +4029,64 @@ function LayoutShellLoadedContentResolved({
 		},
 		[handleResolveExternalWriteReview],
 	);
+	// The review float animates out through a short "closing" presence: the
+	// exit keeps it mounted (with its last-rendered content frozen) until
+	// its transition finishes, mirroring the entry animation. The presence
+	// flip happens during render — an effect would commit one frame after
+	// the exit, unmounting the float for that frame and killing the
+	// transition (a remounted element has no painted opacity-1 state to
+	// animate from).
+	const [reviewFloatClosing, setReviewFloatClosing] = useState(false);
+	const lastReviewFloatRef = useRef<{
+		historical: boolean;
+		navigation: typeof reviewNavigation;
+		files: typeof pendingReviewFiles;
+	} | null>(null);
+	const wasReviewModeRef = useRef(isReviewMode);
+	// Freeze only meaningful content: session teardown can empty the file
+	// list a render before the mode flag flips, and that degraded state must
+	// never reach the float — neither while it is still open nor during the
+	// exit fade.
+	const liveReviewFloatContent = {
+		historical: Boolean(historicalReview),
+		navigation: reviewNavigation,
+		files: pendingReviewFiles,
+	};
+	if (isReviewMode && pendingReviewFiles.length > 0) {
+		lastReviewFloatRef.current = liveReviewFloatContent;
+	}
+	const reviewFloatContent =
+		isReviewMode && pendingReviewFiles.length > 0
+			? liveReviewFloatContent
+			: (lastReviewFloatRef.current ?? liveReviewFloatContent);
+	if (wasReviewModeRef.current !== isReviewMode) {
+		wasReviewModeRef.current = isReviewMode;
+		setReviewFloatClosing(!isReviewMode);
+	}
+	// Transitions can be suppressed (reduced motion, hidden ancestors); a
+	// bounded fallback keeps the closing state from sticking.
+	useEffect(() => {
+		if (!reviewFloatClosing) return;
+		const timer = window.setTimeout(() => setReviewFloatClosing(false), 300);
+		return () => window.clearTimeout(timer);
+	}, [reviewFloatClosing]);
+	// Hosts mirror review presentation (dimmed chrome) off this signal; the
+	// session object itself stays internal to the runtime surface. The memo's
+	// identity churns with unrelated renders, so emit only on real
+	// transitions of the fields the event carries.
+	const lastDiffSessionSignal = useRef<string | null>(null);
+	useEffect(() => {
+		const signal = diffSession
+			? `active:${diffSession.files.length}`
+			: "inactive";
+		if (lastDiffSessionSignal.current === signal) return;
+		lastDiffSessionSignal.current = signal;
+		emitEvent({
+			type: "diff_session_changed",
+			active: diffSession !== null,
+			changedFileCount: diffSession?.files.length ?? 0,
+		});
+	}, [diffSession, emitEvent]);
 	const diffApi = useMemo(
 		(): AtelierDiffApi => ({
 			session: diffSession,
@@ -4317,15 +4375,22 @@ function LayoutShellLoadedContentResolved({
 						</Panel>
 					</Group>
 				</main>
-				{isReviewMode ? (
+				{isReviewMode || reviewFloatClosing ? (
 					<ExternalWriteReviewControls
-						isActive
+						isActive={isReviewMode}
+						presence={isReviewMode ? "open" : "closing"}
+						onExited={() => setReviewFloatClosing(false)}
 						readOnly={isHostReadOnly}
-						mode={historicalReview ? "historical" : "working-changes"}
-						navigation={reviewNavigation}
-						files={pendingReviewFiles}
+						mode={
+							reviewFloatContent.historical ? "historical" : "working-changes"
+						}
+						navigation={reviewFloatContent.navigation}
+						files={reviewFloatContent.files}
 						onUndo={
-							isHostReadOnly || historicalReview
+							// Handlers stay wired through the closing fade so the
+							// buttons do not vanish mid-animation; the closing float
+							// is pointer-inert and its key handling is detached.
+							isHostReadOnly || reviewFloatContent.historical
 								? undefined
 								: (selectedFileIds) => void handleUndoReviews(selectedFileIds)
 						}

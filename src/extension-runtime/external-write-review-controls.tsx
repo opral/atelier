@@ -34,6 +34,12 @@ const EMPTY_FILES: readonly DiffFloatFile[] = [];
 
 type ExternalWriteReviewControlsProps = {
 	readonly isActive: boolean;
+	/**
+	 * "closing" keeps the float mounted through its exit transition; the
+	 * host removes it when `onExited` fires.
+	 */
+	readonly presence?: "open" | "closing";
+	readonly onExited?: () => void;
 	/** Keep review navigation visible while preventing repository mutations. */
 	readonly readOnly?: boolean;
 	/** Which diff-mode flow the float commits: working changes or a historical checkpoint. */
@@ -83,6 +89,8 @@ export function ExternalWriteReviewControls({
 	onUndo,
 	onPrimary,
 	onExit,
+	presence = "open",
+	onExited,
 }: ExternalWriteReviewControlsProps) {
 	const [isCommitting, setIsCommitting] = useState(false);
 	const [commitError, setCommitError] = useState<string | null>(null);
@@ -215,6 +223,16 @@ export function ExternalWriteReviewControls({
 		<div
 			ref={rootRef}
 			className="external-write-review-actions"
+			data-presence={presence}
+			onTransitionEnd={(event) => {
+				if (
+					presence === "closing" &&
+					event.target === rootRef.current &&
+					event.propertyName === "opacity"
+				) {
+					onExited?.();
+				}
+			}}
 			role="group"
 			aria-label="Diff review actions"
 			data-diff-float-mode={mode}

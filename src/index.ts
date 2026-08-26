@@ -71,6 +71,14 @@ export type {
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
 } from "./extension-api";
+export { AtelierFilePreview } from "./file-preview";
+export {
+	deleteWorkspaceEntry,
+	renameWorkspaceEntry,
+	WorkspacePathTakenError,
+} from "./lib/workspace-file-ops";
+export type { WorkspaceEntryRef } from "./lib/workspace-file-ops";
+export type { AtelierFilePreviewProps } from "./extension-api";
 export { AtelierDeveloperTools } from "./dev-tools/developer-tools-menu";
 export {
 	applyDeveloperWorkflowScenario,

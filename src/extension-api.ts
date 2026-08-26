@@ -185,6 +185,32 @@ export type AtelierDocumentsApi = {
 };
 
 /** Product-domain events emitted for hosts that own analytics or auditing. */
+/**
+ * Quick Look-style file preview: the extension that owns a file type renders
+ * it, the host owns the frame. The contract is chromeless — a preview
+ * renders flush with no outer padding, margins, toolbars, or internal
+ * scrolling, so hosts control spacing and clipping. Previews load their own
+ * content from the given identity; a live target stays live.
+ *
+ * One shape covers every read surface:
+ * - neither `targetCommitId` nor `diff` — the live document;
+ * - `targetCommitId` alone — the document as of that commit;
+ * - `diff` alone — the change from its base to the live document;
+ * - both — the change between two commits.
+ */
+export type AtelierFilePreviewProps = {
+	readonly lix: Lix;
+	readonly fileId: string;
+	readonly filePath: string;
+	/** Render the document as of this commit; absent — the live document. */
+	readonly targetCommitId?: string | null;
+	/**
+	 * Render the change from this base to the target (or live) state. A null
+	 * base means the file was added — the before side is empty by definition.
+	 */
+	readonly diff?: { readonly baseCommitId: string | null } | null;
+};
+
 export type AtelierEvent =
 	| {
 			type: "document_open_attempted";
@@ -225,6 +251,16 @@ export type AtelierEvent =
 			/** Set when the active view is a document editor. */
 			filePath: string | null;
 			state?: AtelierExtensionState;
+	  }
+	| {
+			/**
+			 * A diff session opened, changed shape, or exited. Hosts use this
+			 * to enter and leave review presentation (e.g. dimming chrome
+			 * outside the changes) without reaching into shell state.
+			 */
+			type: "diff_session_changed";
+			active: boolean;
+			changedFileCount: number;
 	  }
 	| {
 			type: "diff_opened";

@@ -55,6 +55,10 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
 import { qb } from "@/lib/lix-kysely";
+import {
+	deleteWorkspaceEntry,
+	renameWorkspaceEntry,
+} from "@/lib/workspace-file-ops";
 import type { FileDiffRow, FilesystemEntryRow } from "@/queries";
 import type { Lix } from "@lix-js/sdk";
 
@@ -412,7 +416,7 @@ function FilesViewContent({
 	// the rest of the untouched chrome while a review marks rows.
 	const reviewFocusDim =
 		reviewStatuses.size > 0 || pendingReviewPaths.size > 0
-			? "opacity-[0.35] transition-opacity hover:opacity-100"
+			? "opacity-[0.35] hover:opacity-100"
 			: undefined;
 	// A directory whose every file is newly added is itself new: it reads
 	// green like its contents. Anything mixed keeps the contains-changes tone.
@@ -839,11 +843,11 @@ function FilesViewContent({
 			movingRef.current = true;
 			try {
 				if (request.kind === "directory") {
-					await qb(lix)
-						.updateTable("lix_directory")
-						.set({ path: normalizeFilePath(destinationPath) } as any)
-						.where("path", "=", normalizeFilePath(sourcePath))
-						.execute();
+					await renameWorkspaceEntry(
+						lix,
+						{ kind: "directory", path: normalizeFilePath(sourcePath) },
+						normalizeFilePath(destinationPath),
+					);
 					setOpenDirectoryPaths((prev) =>
 						remapDirectoryPathSet(prev, sourcePath, destinationPath),
 					);
@@ -878,11 +882,11 @@ function FilesViewContent({
 				}
 
 				const resolvedFileId = request.id;
-				await qb(lix)
-					.updateTable("lix_file")
-					.set({ path: destinationPath } as any)
-					.where("path", "=", sourcePath)
-					.execute();
+				await renameWorkspaceEntry(
+					lix,
+					{ kind: "file", path: sourcePath },
+					destinationPath,
+				);
 				setPendingPaths((prev) =>
 					appendUniquePath(
 						remapFilePaths(prev, sourcePath, destinationPath),
@@ -1082,10 +1086,10 @@ function FilesViewContent({
 			try {
 				if (request.kind === "file") {
 					if (!request.id) return;
-					await qb(lix)
-						.deleteFrom("lix_file")
-						.where("id", "=", request.id)
-						.execute();
+					await deleteWorkspaceEntry(lix, {
+						kind: "file",
+						id: request.id,
+					});
 					setPendingPaths((prev) =>
 						prev.filter((path) => path !== normalizedPath),
 					);
@@ -1096,10 +1100,10 @@ function FilesViewContent({
 						filePath: normalizeFilePath(normalizedPath),
 					});
 				} else {
-					await qb(lix)
-						.deleteFrom("lix_directory")
-						.where("path", "=", normalizeFilePath(normalizedPath))
-						.execute();
+					await deleteWorkspaceEntry(lix, {
+						kind: "directory",
+						path: normalizeFilePath(normalizedPath),
+					});
 					setPendingDirectoryPaths((prev) =>
 						prev.filter((path) => path !== normalizedPath),
 					);
@@ -1357,7 +1361,7 @@ function FilesViewContent({
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						{readOnly ? null : (
 							<div
-								className={`flex shrink-0 justify-end pb-6${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
+								className={`flex shrink-0 justify-end pb-6 transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
 							>
 								{createRequest ? (
 									<WideNewButton disabled />
@@ -1386,7 +1390,7 @@ function FilesViewContent({
 			) : null}
 			{/* Compact New row for side-panel use. */}
 			{context?.panelSide !== "central" && !readOnly ? (
-				<div className={reviewFocusDim}>
+				<div className={`transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}>
 					{createRequest ? (
 						<CompactNewButton disabled />
 					) : (
@@ -1600,6 +1604,9 @@ export const extension = createReactExtensionDefinition({
 		"bundled:atelier_files/manifest.json",
 		JSON.stringify(manifestJson),
 	),
+	// The extension is named File Explorer; the panel keeps its short
+	// working label.
+	label: "Files",
 	description: "Browse and pin project documents.",
 	icon: Files,
 	menuItems: ({ preferences }) => {

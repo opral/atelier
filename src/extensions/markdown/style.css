@@ -2322,3 +2322,20 @@
 	font-weight: 500;
 	line-height: 1.35;
 }
+
+/* Embedded host preview (e.g. the repository home's README): the host owns
+   spacing and scrolling, so the document renders flush — no editor gutters,
+   no viewport-filling minimums, no inner scroll container. */
+.markdown-view.markdown-embedded-preview .tiptap-container {
+	height: auto;
+	overflow-y: visible;
+}
+
+.markdown-view.markdown-embedded-preview .tiptap {
+	min-height: 0;
+}
+
+.markdown-view.markdown-embedded-preview .ProseMirror {
+	min-height: 0;
+	padding: 0;
+}

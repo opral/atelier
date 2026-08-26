@@ -1,7 +1,11 @@
 {
 	"apiVersion": 1,
 	"id": "atelier_files",
-	"name": "Files",
+	"name": "File Explorer",
 	"entry": "./index.js",
-	"placement": ["left", "right", "central"]
+	"placement": [
+		"left",
+		"right",
+		"central"
+	]
 }
