@@ -1,5 +1,12 @@
 import { Suspense } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
@@ -15,9 +22,7 @@ function atelierStub(overrides?: {
 	}[];
 	readonly open?: (options: {
 		readonly base?: { readonly commitId: string } | null;
-		readonly target:
-			| { readonly commitId: string }
-			| { readonly working: true };
+		readonly target: { readonly commitId: string } | { readonly working: true };
 		readonly reveal?: boolean;
 	}) => Promise<void>;
 	readonly openFile?: (path: string) => void;

@@ -1907,9 +1907,7 @@ describe("canonical UI state", () => {
 				expect(state?.panels).toEqual({
 					...initialState.panels,
 					right: {
-						views: [
-							{ instance: "history-default", kind: "atelier_history" },
-						],
+						views: [{ instance: "history-default", kind: "atelier_history" }],
 						activeInstance: "history-default",
 					},
 				});
@@ -1923,4 +1921,3 @@ describe("canonical UI state", () => {
 		}
 	});
 });
-

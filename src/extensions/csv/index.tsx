@@ -57,9 +57,7 @@ import {
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import {
-	useFileDataAtCommit,
-} from "@/shell/external-write-review-history";
+import { useFileDataAtCommit } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
@@ -340,9 +338,10 @@ function EditableCsvView({
 		reviewing && !reviewBase.loading
 			? {
 					beforeData: reviewBase.data ?? new Uint8Array(),
-					afterData: fileRow.content instanceof Uint8Array
-						? fileRow.content
-						: new TextEncoder().encode(fileText),
+					afterData:
+						fileRow.content instanceof Uint8Array
+							? fileRow.content
+							: new TextEncoder().encode(fileText),
 				}
 			: null;
 	const isReviewing = reviewing;
@@ -546,9 +545,7 @@ function CsvHistoricalViewResolved({
 		return (
 			<CheckpointAbsentFile
 				filePath={filePath}
-				commitId={
-					editorRevision.afterCommitId ?? editorRevision.beforeCommitId
-				}
+				commitId={editorRevision.afterCommitId ?? editorRevision.beforeCommitId}
 			/>
 		);
 	}

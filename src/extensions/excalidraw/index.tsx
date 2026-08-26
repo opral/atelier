@@ -12,9 +12,7 @@ import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
-import {
-	getFileDataAtCommit,
-} from "@/shell/external-write-review-history";
+import { getFileDataAtCommit } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import { parseExcalidrawScene } from "./scene";
@@ -108,12 +106,11 @@ function EditableExcalidrawView({
 	const diffSession = atelier.diff.session;
 	const isReviewing = Boolean(
 		diffSession &&
-			"working" in diffSession.target &&
-			diffSession.files.some(
-				(file) => file.id === fileId && file.review?.status === "pending",
-			),
+		"working" in diffSession.target &&
+		diffSession.files.some(
+			(file) => file.id === fileId && file.review?.status === "pending",
+		),
 	);
-
 
 	const originKey = useMemo(() => createExcalidrawOriginKey(), []);
 	const {

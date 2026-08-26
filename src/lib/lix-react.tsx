@@ -368,7 +368,8 @@ function getCommittedQueryCacheEntry<TRow>(args: {
 		| QueryCacheEntry<TRow>
 		| undefined;
 	if (cached) {
-		cached.execute = () => executeWithExpiredReadRetry(() => args.builder.execute());
+		cached.execute = () =>
+			executeWithExpiredReadRetry(() => args.builder.execute());
 		return cached;
 	}
 	const entry: QueryCacheEntry<TRow> = {

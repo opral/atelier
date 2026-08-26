@@ -66,33 +66,38 @@ export function DiffGlyph({
 			aria-label={GLYPH_TITLE[kind]}
 			className={`inline-flex ${className ?? ""}`}
 		>
-		<svg width={size} height={size} viewBox={DIFF_GLYPH_VIEWBOX} aria-hidden="true">
-			{kind === "conflict" ? (
-				<>
-					<path d="M6 1a5 5 0 0 0 0 10Z" fill={fill} />
-					<circle
-						cx="6"
-						cy="6"
-						r="4.2"
+			<svg
+				width={size}
+				height={size}
+				viewBox={DIFF_GLYPH_VIEWBOX}
+				aria-hidden="true"
+			>
+				{kind === "conflict" ? (
+					<>
+						<path d="M6 1a5 5 0 0 0 0 10Z" fill={fill} />
+						<circle
+							cx="6"
+							cy="6"
+							r="4.2"
+							fill="none"
+							stroke={fill}
+							strokeWidth="1.6"
+						/>
+					</>
+				) : (
+					<circle cx="6" cy="6" r={DIFF_GLYPH_RADIUS} fill={fill} />
+				)}
+				{kind === "added" || kind === "removed" || kind === "moved" ? (
+					<path
+						d={DIFF_GLYPH_KNOCKOUT_PATHS[kind]}
+						stroke={knockout}
+						strokeWidth={DIFF_GLYPH_STROKE}
 						fill="none"
-						stroke={fill}
-						strokeWidth="1.6"
+						strokeLinecap="round"
+						strokeLinejoin="round"
 					/>
-				</>
-			) : (
-				<circle cx="6" cy="6" r={DIFF_GLYPH_RADIUS} fill={fill} />
-			)}
-			{kind === "added" || kind === "removed" || kind === "moved" ? (
-				<path
-					d={DIFF_GLYPH_KNOCKOUT_PATHS[kind]}
-					stroke={knockout}
-					strokeWidth={DIFF_GLYPH_STROKE}
-					fill="none"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				/>
-			) : null}
-		</svg>
+				) : null}
+			</svg>
 		</span>
 	);
 }

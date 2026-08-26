@@ -58,7 +58,11 @@ describe("CheckpointStatusBar", () => {
 		const lix = await openLix();
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
-			[fakeUuid("checkpoint-status-test"), "/checkpoint-status-test.md", new TextEncoder().encode("# Working\n")],
+			[
+				fakeUuid("checkpoint-status-test"),
+				"/checkpoint-status-test.md",
+				new TextEncoder().encode("# Working\n"),
+			],
 		);
 		const openHistory = vi.fn();
 		const openWorkingChanges = vi.fn();
@@ -103,7 +107,11 @@ describe("CheckpointStatusBar", () => {
 		const lix = await openLix();
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
-			[fakeUuid("checkpoint-status-readonly"), "/checkpoint-status-readonly.md", new TextEncoder().encode("# Working\n")],
+			[
+				fakeUuid("checkpoint-status-readonly"),
+				"/checkpoint-status-readonly.md",
+				new TextEncoder().encode("# Working\n"),
+			],
 		);
 		const openWorkingChanges = vi.fn();
 		let view: ReturnType<typeof render> | undefined;
@@ -137,7 +145,11 @@ describe("CheckpointStatusBar", () => {
 		const lix = await openLix();
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
-			[fakeUuid("checkpoint-status-readonly-plain"), "/checkpoint-status-readonly-plain.md", new TextEncoder().encode("# Working\n")],
+			[
+				fakeUuid("checkpoint-status-readonly-plain"),
+				"/checkpoint-status-readonly-plain.md",
+				new TextEncoder().encode("# Working\n"),
+			],
 		);
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {
@@ -150,7 +162,9 @@ describe("CheckpointStatusBar", () => {
 			);
 		});
 
-		expect(await screen.findByText("1 file changed since checkpoint")).toBeVisible();
+		expect(
+			await screen.findByText("1 file changed since checkpoint"),
+		).toBeVisible();
 		expect(
 			screen.queryByRole("button", {
 				name: "1 file changed since checkpoint. Open changes review",

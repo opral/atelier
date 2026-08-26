@@ -17,9 +17,7 @@ import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
-import {
-	getFileDataAtCommit,
-} from "@/shell/external-write-review-history";
+import { getFileDataAtCommit } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import { createTextEditor, type TextEditorController } from "./editor";
@@ -113,13 +111,12 @@ function EditableTextView({
 	const diffSession = atelier.diff.session;
 	const isReviewing = Boolean(
 		diffSession &&
-			"working" in diffSession.target &&
-			diffSession.files.some(
-				(file) => file.id === fileId && file.review?.status === "pending",
-			),
+		"working" in diffSession.target &&
+		diffSession.files.some(
+			(file) => file.id === fileId && file.review?.status === "pending",
+		),
 	);
 	const isReadOnly = isReviewing || atelier.readOnly;
-
 
 	const originKey = useMemo(() => createTextEditorOriginKey(), []);
 	const {

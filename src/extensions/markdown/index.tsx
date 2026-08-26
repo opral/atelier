@@ -160,7 +160,6 @@ export function MarkdownView({
 				onDiffReject={onDiffReject}
 				onDiffResolve={onDiffResolve}
 				autoAcceptReviews={autoAcceptReviews}
-
 				openWorkspaceFile={openWorkspaceFile}
 				onDocumentModified={onDocumentModified}
 			/>
@@ -576,9 +575,7 @@ function MarkdownHistoricalViewResolved({
 		content = (
 			<CheckpointAbsentFile
 				filePath={filePath}
-				commitId={
-					editorRevision.afterCommitId ?? editorRevision.beforeCommitId
-				}
+				commitId={editorRevision.afterCommitId ?? editorRevision.beforeCommitId}
 			/>
 		);
 	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {

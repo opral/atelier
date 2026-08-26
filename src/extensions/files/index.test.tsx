@@ -1470,7 +1470,6 @@ async function insertFile(
 		.execute();
 }
 
-
 async function selectFileById(lix: Lix, id: string) {
 	return qb(lix)
 		.selectFrom("lix_file")

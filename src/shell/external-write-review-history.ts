@@ -97,4 +97,3 @@ async function getFileHistorySnapshotAtCommit(
 	).executeTakeFirst()) as FileHistoryRow | undefined;
 	return row ?? null;
 }
-

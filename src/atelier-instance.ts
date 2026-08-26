@@ -509,6 +509,3 @@ function atelierDocumentsStatesEqual(
 	if (left.openPaths.length !== right.openPaths.length) return false;
 	return left.openPaths.every((path, index) => path === right.openPaths[index]);
 }
-
-
-
