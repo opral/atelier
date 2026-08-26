@@ -111,9 +111,9 @@ test("useQuery accepts the initial observe snapshot as authoritative", async () 
 		);
 	});
 
-	await expect(screen.findByTestId("value")).resolves.toHaveTextContent(
-		"initial",
-	);
+	expect(await screen.findByTestId("value")).toHaveTextContent("");
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
+	expect(execute).not.toHaveBeenCalled();
 
 	resolveFirstObserve?.({
 		sequence: 1,
@@ -135,7 +135,35 @@ test("useQuery accepts the initial observe snapshot as authoritative", async () 
 			"authoritative-observe-snapshot",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
+});
+
+test("useQuery does not start subscribed work for a render that never commits", () => {
+	const execute = vi.fn();
+	const lix = { observe: vi.fn() } as unknown as Lix;
+	const neverCommits = new Promise<never>(() => {});
+
+	function Probe(): ReactNode {
+		useQuery(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM abandoned_render",
+				parameters: [],
+			}),
+			execute,
+		}));
+		throw neverCommits;
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Suspense fallback={<div data-testid="abandoned-render" />}>
+				<Probe />
+			</Suspense>
+		</LixProvider>,
+	);
+	expect(screen.getByTestId("abandoned-render")).toBeInTheDocument();
+	expect(lix.observe).not.toHaveBeenCalled();
+	expect(execute).not.toHaveBeenCalled();
 });
 
 test("useQueryResult starts after commit and uses one observer snapshot as initial data", async () => {
@@ -176,6 +204,48 @@ test("useQueryResult starts after commit and uses one observer snapshot as initi
 		),
 	);
 	expect(execute).not.toHaveBeenCalled();
+});
+
+test("useQueryResult preserves the last rows when a later observation fails", async () => {
+	const stream = createObserveStream();
+	const lix = { observe: vi.fn(() => stream) } as unknown as Lix;
+	const error = Object.assign(new Error("missing column"), {
+		code: "LIX_COLUMN_NOT_FOUND",
+	});
+
+	function Probe() {
+		const result = useQueryResult<{ value: string }>(() => ({
+			compile: () => ({
+				sql: "SELECT value FROM retained_rows_after_error",
+				parameters: [],
+			}),
+			execute: vi.fn(),
+		}));
+		return (
+			<div data-testid="retained-error-value">
+				{`${result.status}:${result.rows[0]?.value ?? "none"}`}
+			</div>
+		);
+	}
+
+	render(
+		<LixProvider lix={lix}>
+			<Probe />
+		</LixProvider>,
+	);
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
+	await act(async () => stream.emit(eventWithValue(0, 0, "last-good")));
+	await waitFor(() =>
+		expect(screen.getByTestId("retained-error-value")).toHaveTextContent(
+			"success:last-good",
+		),
+	);
+	await act(async () => stream.fail(error));
+	await waitFor(() =>
+		expect(screen.getByTestId("retained-error-value")).toHaveTextContent(
+			"error:last-good",
+		),
+	);
 });
 
 test("useQueryResult starts independent startup observers without a waterfall", async () => {
@@ -274,9 +344,9 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 		);
 	});
 
-	expect(await screen.findByTestId("first-value")).toHaveTextContent("initial");
-	expect(screen.getByTestId("second-value")).toHaveTextContent("initial");
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(await screen.findByTestId("first-value")).toHaveTextContent("");
+	expect(screen.getByTestId("second-value")).toHaveTextContent("");
+	expect(execute).not.toHaveBeenCalled();
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
@@ -285,7 +355,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 		expect(screen.getByTestId("first-value")).toHaveTextContent(
 			"initial-observed",
 		);
-		expect(execute).toHaveBeenCalledTimes(1);
+		expect(execute).not.toHaveBeenCalled();
 	});
 
 	await act(async () => {
@@ -308,7 +378,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 			"shared-fresh",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
 
 	view?.unmount();
 	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
@@ -348,9 +418,8 @@ test("stopped observers cannot overwrite a restarted cache entry with queued eve
 	await act(async () => {
 		first = renderProbe();
 	});
-	expect(await screen.findByTestId("restart-value")).toHaveTextContent(
-		"initial",
-	);
+	expect(await screen.findByTestId("restart-value")).toHaveTextContent("");
+	expect(execute).not.toHaveBeenCalled();
 	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(1));
 	await act(async () =>
 		firstStream.emit(eventWithValue(0, 10, "first-authoritative")),
@@ -437,9 +506,8 @@ test("useQuery accepts an authoritative non-advancing reconnect snapshot", async
 			</LixProvider>,
 		);
 	});
-	expect(await screen.findByTestId("reconnect-value")).toHaveTextContent(
-		"initial",
-	);
+	expect(await screen.findByTestId("reconnect-value")).toHaveTextContent("");
+	expect(execute).not.toHaveBeenCalled();
 
 	await act(async () =>
 		stream.emit(eventWithValue(0, 10, "initial-authoritative")),
@@ -455,7 +523,7 @@ test("useQuery accepts an authoritative non-advancing reconnect snapshot", async
 	await waitFor(() => {
 		expect(screen.getByTestId("reconnect-value")).toHaveTextContent("observed");
 	});
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
 
 	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(3));
 	await act(async () =>
@@ -466,7 +534,7 @@ test("useQuery accepts an authoritative non-advancing reconnect snapshot", async
 			"reconnect-authoritative",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
 });
 
 test("useQuery can treat advancing observer results as invalidations", async () => {
@@ -476,7 +544,6 @@ test("useQuery can treat advancing observer results as invalidations", async () 
 	} as unknown as Lix;
 	const execute = vi
 		.fn()
-		.mockResolvedValueOnce([{ value: "initial-file" }])
 		.mockResolvedValueOnce([{ value: "initial-authoritative" }])
 		.mockResolvedValue([{ value: "synced-file" }]);
 
@@ -503,9 +570,8 @@ test("useQuery can treat advancing observer results as invalidations", async () 
 			</LixProvider>,
 		);
 	});
-	expect(await screen.findByTestId("invalidated-value")).toHaveTextContent(
-		"initial-file",
-	);
+	expect(await screen.findByTestId("invalidated-value")).toHaveTextContent("");
+	expect(execute).not.toHaveBeenCalled();
 
 	await act(async () => stream.emit(eventWithValue(0, 0, "stale-initial")));
 	await waitFor(() => {
@@ -532,7 +598,7 @@ test("useQuery can treat advancing observer results as invalidations", async () 
 			"synced-file",
 		);
 	});
-	expect(execute).toHaveBeenCalledTimes(3);
+	expect(execute).toHaveBeenCalledTimes(2);
 });
 
 test("useQuery skips disabled queries without suspending or subscribing", () => {
@@ -562,12 +628,9 @@ test("useQuery skips disabled queries without suspending or subscribing", () => 
 
 test("useQuery starts a query when it becomes enabled", async () => {
 	const execute = vi.fn(async () => [{ value: "ready" }]);
-	const close = vi.fn();
+	const stream = createObserveStream();
 	const lix = {
-		observe: vi.fn(() => ({
-			next: () => new Promise<ObserveEvent | undefined>(() => {}),
-			close,
-		})),
+		observe: vi.fn(() => stream),
 	} as unknown as Lix;
 
 	function Probe({ enabled }: { readonly enabled: boolean }) {
@@ -600,21 +663,23 @@ test("useQuery starts a query when it becomes enabled", async () => {
 		);
 	});
 
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
+	expect(execute).not.toHaveBeenCalled();
+	await act(async () => stream.emit(eventWithValue(0, 0, "ready")));
 	await waitFor(() => {
 		expect(screen.getByTestId("enabled-value")).toHaveTextContent("ready");
 	});
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	view.unmount();
-	await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
 });
 
-test("useQuery retains a permanent initial query error across remounts", async () => {
+test("useQuery retains an initial query error across remounts without HTTP classification", async () => {
 	const error = Object.assign(new Error("missing column"), {
 		name: "LixError",
 		code: "LIX_COLUMN_NOT_FOUND",
-		status: 404,
 	});
 	let rejectExecute!: (error: unknown) => void;
 	const execute = vi.fn(
@@ -659,11 +724,10 @@ test("useQuery retains a permanent initial query error across remounts", async (
 	second.unmount();
 });
 
-test("useQuery retains a permanent observed query error across remounts", async () => {
+test("useQuery retains an observed query error across remounts without retrying", async () => {
 	const error = Object.assign(new Error("missing column"), {
 		name: "LixError",
 		code: "LIX_COLUMN_NOT_FOUND",
-		status: 404,
 	});
 	const stream = createObserveStream();
 	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
@@ -688,6 +752,8 @@ test("useQuery retains a permanent observed query error across remounts", async 
 		first = renderProbe();
 	});
 	await screen.findByTestId("permanent-query-value");
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
+	expect(execute).not.toHaveBeenCalled();
 	await act(async () => stream.fail(error));
 	await screen.findByTestId("permanent-query-error");
 	first.unmount();
@@ -697,7 +763,8 @@ test("useQuery retains a permanent observed query error across remounts", async 
 		second = renderProbe();
 	});
 	await screen.findByTestId("permanent-query-error");
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(lix.observe).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
 	second.unmount();
 });
 
@@ -722,6 +789,8 @@ test("useQuery keeps last rows when a protocol session is gone instead of crashi
 	await act(async () => {
 		view = renderWithErrorBoundary(lix, <Probe />, "session-gone-query-error");
 	});
+	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(1));
+	await act(async () => stream.emit(eventWithValue(0, 0, "initial")));
 	expect(
 		await screen.findByTestId("session-gone-query-value"),
 	).toHaveTextContent("initial");
@@ -734,7 +803,7 @@ test("useQuery keeps last rows when a protocol session is gone instead of crashi
 	).not.toBeInTheDocument();
 	// Atelier must not remount or restart observe. The SDK reopens the session.
 	expect(lix.observe).toHaveBeenCalledTimes(1);
-	expect(execute).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
 	view.unmount();
 });
 
@@ -749,13 +818,16 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 	} as unknown as Lix;
 
 	function Probe() {
-		const rows = useQuery<{ value: string }>(() => ({
-			compile: () => ({
-				sql: "SELECT value FROM session_gone_initial_error",
-				parameters: [],
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM session_gone_initial_error",
+					parameters: [],
+				}),
+				execute,
 			}),
-			execute,
-		}));
+			{ subscribe: false },
+		);
 		return <div data-testid="session-gone-initial-value">{rows.length}</div>;
 	}
 
@@ -776,7 +848,7 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 	view.unmount();
 });
 
-test("useQuery retries a rate-limited observed query after remount", async () => {
+test("useQuery retries a surfaced observer error only with an explicit retry key", async () => {
 	const error = Object.assign(new Error("rate limited"), {
 		name: "LixError",
 		code: "LIX_REMOTE_REQUEST_FAILED",
@@ -784,10 +856,7 @@ test("useQuery retries a rate-limited observed query after remount", async () =>
 	});
 	const firstStream = createObserveStream();
 	const secondStream = createObserveStream();
-	const execute = vi
-		.fn()
-		.mockResolvedValueOnce([{ value: "initial" }])
-		.mockResolvedValue([{ value: "recovered" }]);
+	const execute = vi.fn();
 	const lix = {
 		observe: vi
 			.fn()
@@ -795,14 +864,17 @@ test("useQuery retries a rate-limited observed query after remount", async () =>
 			.mockReturnValue(secondStream),
 	} as unknown as Lix;
 
-	function Probe() {
-		const rows = useQuery<{ value: string }>(() => ({
-			compile: () => ({
-				sql: "SELECT value FROM retryable_query_error",
-				parameters: [],
+	function Probe({ retryKey = 0 }: { readonly retryKey?: number }) {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM retryable_query_error",
+					parameters: [],
+				}),
+				execute,
 			}),
-			execute,
-		}));
+			{ retryKey },
+		);
 		return <div data-testid="retryable-query-value">{rows[0]?.value}</div>;
 	}
 
@@ -819,11 +891,102 @@ test("useQuery retries a rate-limited observed query after remount", async () =>
 	await act(async () => {
 		second = renderWithErrorBoundary(lix, <Probe />, "retryable-query-error");
 	});
+	await screen.findByTestId("retryable-query-error");
+	expect(lix.observe).toHaveBeenCalledTimes(1);
+	second.unmount();
+
+	let retried!: ReturnType<typeof render>;
+	await act(async () => {
+		retried = renderWithErrorBoundary(
+			lix,
+			<Probe retryKey={1} />,
+			"retryable-query-error",
+		);
+	});
+	expect(await screen.findByTestId("retryable-query-value")).toHaveTextContent(
+		"",
+	);
+	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(2));
+	await act(async () => secondStream.emit(eventWithValue(0, 0, "recovered")));
 	expect(await screen.findByTestId("retryable-query-value")).toHaveTextContent(
 		"recovered",
 	);
-	expect(execute).toHaveBeenCalledTimes(2);
-	second.unmount();
+	expect(execute).not.toHaveBeenCalled();
+	retried.unmount();
+});
+
+test("an abandoned retry render does not discard the retained error", async () => {
+	const error = Object.assign(new Error("invalid query"), {
+		name: "LixError",
+		code: "LIX_SQL_ERROR",
+	});
+	const firstStream = createObserveStream();
+	const lix = {
+		observe: vi.fn(() => firstStream),
+	} as unknown as Lix;
+	const execute = vi.fn();
+	const neverCommits = new Promise<never>(() => {});
+
+	function Probe({ retryKey = 0 }: { readonly retryKey?: number }) {
+		const rows = useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM abandoned_retry",
+					parameters: [],
+				}),
+				execute,
+			}),
+			{ retryKey },
+		);
+		return <div data-testid="abandoned-retry-value">{rows.length}</div>;
+	}
+
+	function AbandonedRetry(): ReactNode {
+		useQuery<{ value: string }>(
+			() => ({
+				compile: () => ({
+					sql: "SELECT value FROM abandoned_retry",
+					parameters: [],
+				}),
+				execute,
+			}),
+			{ retryKey: 1 },
+		);
+		throw neverCommits;
+	}
+
+	let first!: ReturnType<typeof render>;
+	await act(async () => {
+		first = renderWithErrorBoundary(lix, <Probe />, "abandoned-retry-error");
+	});
+	await screen.findByTestId("abandoned-retry-value");
+	await act(async () => firstStream.fail(error));
+	await screen.findByTestId("abandoned-retry-error");
+	first.unmount();
+
+	const abandoned = render(
+		<LixProvider lix={lix}>
+			<Suspense fallback={<div data-testid="abandoned-retry" />}>
+				<AbandonedRetry />
+			</Suspense>
+		</LixProvider>,
+	);
+	expect(screen.getByTestId("abandoned-retry")).toBeInTheDocument();
+	expect(lix.observe).toHaveBeenCalledTimes(1);
+	abandoned.unmount();
+
+	let remounted!: ReturnType<typeof render>;
+	await act(async () => {
+		remounted = renderWithErrorBoundary(
+			lix,
+			<Probe />,
+			"abandoned-retry-error",
+		);
+	});
+	await screen.findByTestId("abandoned-retry-error");
+	expect(lix.observe).toHaveBeenCalledTimes(1);
+	expect(execute).not.toHaveBeenCalled();
+	remounted.unmount();
 });
 
 test("useQuery can evict component-scoped results on unmount", async () => {
@@ -843,7 +1006,7 @@ test("useQuery can evict component-scoped results on unmount", async () => {
 				compile: () => ({ sql: "SELECT component_scoped", parameters: [] }),
 				execute,
 			}),
-			{ evictOnUnmount: true },
+			{ subscribe: false, evictOnUnmount: true },
 		);
 		return <div data-testid="scoped-value">{rows[0]?.value}</div>;
 	}

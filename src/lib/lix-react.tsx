@@ -50,9 +50,16 @@ export function useResolvedActiveBranchId(activeBranchId?: string): string {
 type QueryCacheSnapshot<TRow> =
 	| { readonly status: "pending" }
 	| { readonly status: "success"; readonly rows: TRow[] }
-	| { readonly status: "error"; readonly error: unknown };
+	| {
+			readonly status: "error";
+			readonly rows: readonly TRow[];
+			readonly error: unknown;
+	  };
 
 type QueryCacheEntry<TRow> = {
+	cache: QueryCache;
+	cacheKey: string;
+	cacheKeyBase: string;
 	promise: Promise<TRow[]>;
 	snapshot: QueryCacheSnapshot<TRow>;
 	listeners: Set<() => void>;
@@ -62,22 +69,29 @@ type QueryCacheEntry<TRow> = {
 	releaseGeneration: number;
 };
 
-const queryCache = new Map<string, QueryCacheEntry<any>>();
-const evictingQueryUsers = new Map<string, number>();
-const lixInstanceIds = new WeakMap<object, number>();
+type QueryCache = Map<string, QueryCacheEntry<any>>;
+
+const queryCaches = new WeakMap<object, QueryCache>();
+const disabledQueryCache: QueryCache = new Map();
+const MAX_INACTIVE_QUERY_ENTRIES = 128;
+const evictingQueryUsers = new Map<QueryCacheEntry<any>, number>();
 const lixBranchSessions = new WeakMap<object, AtelierBranchSession>();
 const EXPLICIT_BRANCH_SESSION: AtelierBranchSession = {
 	getSnapshot: () => null,
 	subscribe: () => () => {},
 };
-let nextLixInstanceId = 1;
 
-interface UseQueryOptions {
+export interface UseQueryOptions {
 	subscribe?: boolean;
 	enabled?: boolean;
 	evictOnUnmount?: boolean;
 	/** Treat observer events as invalidations and re-run the query. */
 	reuseObservedResult?: boolean;
+	/**
+	 * Changes the query identity to explicitly retry a retained failure.
+	 * Increment this value only in response to an intentional refresh/retry.
+	 */
+	retryKey?: string | number;
 }
 
 interface QueryLike<TRow> {
@@ -92,6 +106,9 @@ type QueryFactory<TRow> = (lix: Lix) => QueryLike<TRow>;
 
 const DISABLED_QUERY_ROWS: never[] = [];
 const DISABLED_QUERY_ENTRY: QueryCacheEntry<never> = {
+	cache: disabledQueryCache,
+	cacheKey: "disabled",
+	cacheKeyBase: "disabled",
 	promise: Promise.resolve(DISABLED_QUERY_ROWS),
 	snapshot: { status: "success", rows: DISABLED_QUERY_ROWS },
 	listeners: new Set(),
@@ -106,10 +123,17 @@ export type QueryResult<TRow> =
 	| { readonly status: "success"; readonly rows: readonly TRow[] }
 	| {
 			readonly status: "error";
-			readonly rows: readonly [];
+			readonly rows: readonly TRow[];
 			readonly error: unknown;
 	  };
 
+/**
+ * Reads a query snapshot and keeps subscribed queries current.
+ *
+ * Subscribed queries are commit-driven: the first render returns an empty
+ * snapshot, then the observer's first frame supplies the authoritative rows.
+ * Non-subscribed queries retain their Suspense-based one-shot behavior.
+ */
 export function useQuery<TRow>(
 	query: QueryFactory<TRow>,
 	options: UseQueryOptions = {},
@@ -120,29 +144,34 @@ export function useQuery<TRow>(
 		enabled = true,
 		evictOnUnmount = false,
 		reuseObservedResult = true,
+		retryKey = 0,
 	} = options;
 	const builder = enabled ? query(lix) : undefined;
 	const compiled = builder?.compile();
-	const cacheKey =
+	const queryCache = getLixQueryCache(lix);
+	const cacheKeyBase =
 		enabled && compiled
-			? `${getLixInstanceId(lix)}:${subscribe ? "sub" : "once"}:` +
+			? `${subscribe ? "sub" : "once"}:` +
 				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
 				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
 			: "disabled";
+	const cacheKey = `${cacheKeyBase}:retry:${retryKey}`;
 	const entry =
-		enabled && builder
-			? getQueryCacheEntry(cacheKey, builder)
+		enabled && builder && compiled
+			? subscribe
+				? getCommittedQueryCacheEntry({
+						queryCache,
+						cacheKey,
+						cacheKeyBase,
+						builder,
+						lix,
+						sql: compiled.sql,
+						parameters: compiled.parameters,
+						subscribe: true,
+						reuseObservedResult,
+					})
+				: getQueryCacheEntry(queryCache, cacheKey, cacheKeyBase, builder)
 			: (DISABLED_QUERY_ENTRY as QueryCacheEntry<TRow>);
-	if (enabled && subscribe && compiled) {
-		entry.startObservation = () =>
-			observeQueryEntry(
-				entry,
-				lix,
-				compiled.sql,
-				compiled.parameters,
-				reuseObservedResult,
-			);
-	}
 	const subscribeToSnapshot = useCallback(
 		(listener: () => void) => {
 			if (!enabled || !subscribe) return () => {};
@@ -162,27 +191,28 @@ export function useQuery<TRow>(
 		// lifecycle, not a process-wide snapshot. Keeping it after the last
 		// consumer unmounts would let a later view remount from stale rows.
 		if (!enabled || (subscribe && !evictOnUnmount)) return;
-		evictingQueryUsers.set(
-			cacheKey,
-			(evictingQueryUsers.get(cacheKey) ?? 0) + 1,
-		);
+		evictingQueryUsers.set(entry, (evictingQueryUsers.get(entry) ?? 0) + 1);
 		return () => {
-			const remaining = (evictingQueryUsers.get(cacheKey) ?? 1) - 1;
+			const remaining = (evictingQueryUsers.get(entry) ?? 1) - 1;
 			if (remaining > 0) {
-				evictingQueryUsers.set(cacheKey, remaining);
+				evictingQueryUsers.set(entry, remaining);
 				return;
 			}
-			evictingQueryUsers.delete(cacheKey);
+			evictingQueryUsers.delete(entry);
 			queueMicrotask(() => {
 				// Strict Mode reconnects effects immediately. Only evict when the
 				// component stayed unmounted through that reconnect window.
-				if (evictingQueryUsers.has(cacheKey)) return;
+				if (evictingQueryUsers.has(entry)) return;
 				if (entry.listeners.size > 0) return;
 				if (queryCache.get(cacheKey) !== entry) return;
+				if (entry.snapshot.status === "error") {
+					pruneInactiveQueryEntries(queryCache);
+					return;
+				}
 				queryCache.delete(cacheKey);
 			});
 		};
-	}, [cacheKey, enabled, entry, evictOnUnmount, subscribe]);
+	}, [cacheKey, enabled, entry, evictOnUnmount, queryCache, subscribe]);
 
 	if (!enabled) {
 		return DISABLED_QUERY_ROWS;
@@ -194,15 +224,18 @@ export function useQuery<TRow>(
 			: new Error(String(snapshot.error));
 	}
 
-	return snapshot.status === "success" ? snapshot.rows : use(entry.promise);
+	if (snapshot.status === "success") return snapshot.rows;
+	// A live query starts from useSyncExternalStore's post-commit subscription.
+	// Suspending here would prevent that subscription from ever committing.
+	return subscribe ? (DISABLED_QUERY_ROWS as TRow[]) : use(entry.promise);
 }
 
 /**
  * A commit-driven query for progressive UI.
  *
- * Unlike {@link useQuery}, this hook never suspends and never starts remote work
- * during render. Live queries use the observer's authoritative first frame as
- * their initial rows, avoiding the execute-then-observe duplicate scan.
+ * This hook never suspends, including for non-subscribed queries. Live queries
+ * use the observer's authoritative first frame as their initial rows, avoiding
+ * the execute-then-observe duplicate scan.
  */
 export function useQueryResult<TRow>(
 	query: QueryFactory<TRow>,
@@ -212,20 +245,26 @@ export function useQueryResult<TRow>(
 	const {
 		subscribe = true,
 		enabled = true,
+		evictOnUnmount = false,
 		reuseObservedResult = true,
+		retryKey = 0,
 	} = options;
 	const builder = enabled ? query(lix) : undefined;
 	const compiled = builder?.compile();
-	const cacheKey =
+	const queryCache = getLixQueryCache(lix);
+	const cacheKeyBase =
 		enabled && compiled
-			? `${getLixInstanceId(lix)}:committed-${subscribe ? "sub" : "once"}:` +
+			? `committed-${subscribe ? "sub" : "once"}:` +
 				`${reuseObservedResult ? "observe-rows" : "invalidate"}:` +
 				`${compiled.sql}:${JSON.stringify(compiled.parameters)}`
 			: "disabled";
+	const cacheKey = `${cacheKeyBase}:retry:${retryKey}`;
 	const entry =
 		enabled && builder && compiled
 			? getCommittedQueryCacheEntry({
+					queryCache,
 					cacheKey,
+					cacheKeyBase,
 					builder,
 					lix,
 					sql: compiled.sql,
@@ -247,9 +286,31 @@ export function useQueryResult<TRow>(
 		getSnapshot,
 		getSnapshot,
 	);
+	useEffect(() => {
+		if (!enabled || !evictOnUnmount) return;
+		evictingQueryUsers.set(entry, (evictingQueryUsers.get(entry) ?? 0) + 1);
+		return () => {
+			const remaining = (evictingQueryUsers.get(entry) ?? 1) - 1;
+			if (remaining > 0) {
+				evictingQueryUsers.set(entry, remaining);
+				return;
+			}
+			evictingQueryUsers.delete(entry);
+			queueMicrotask(() => {
+				if (evictingQueryUsers.has(entry)) return;
+				if (entry.listeners.size > 0) return;
+				if (queryCache.get(cacheKey) !== entry) return;
+				if (entry.snapshot.status === "error") {
+					pruneInactiveQueryEntries(queryCache);
+					return;
+				}
+				queryCache.delete(cacheKey);
+			});
+		};
+	}, [cacheKey, enabled, entry, evictOnUnmount, queryCache]);
 	if (snapshot.status === "success") return snapshot;
 	if (snapshot.status === "error") {
-		return { status: "error", rows: [], error: snapshot.error };
+		return snapshot;
 	}
 	return { status: "pending", rows: [] };
 }
@@ -311,16 +372,21 @@ async function executeWithExpiredReadRetry<TRow>(
 }
 
 function getQueryCacheEntry<TRow>(
+	queryCache: QueryCache,
 	cacheKey: string,
+	cacheKeyBase: string,
 	builder: QueryLike<TRow>,
 ): QueryCacheEntry<TRow> {
 	const cached = queryCache.get(cacheKey) as QueryCacheEntry<TRow> | undefined;
 	if (cached) {
 		cached.execute = () => executeWithExpiredReadRetry(() => builder.execute());
+		touchQueryCacheEntry(queryCache, cacheKey, cached);
 		return cached;
 	}
-
 	const entry: QueryCacheEntry<TRow> = {
+		cache: queryCache,
+		cacheKey,
+		cacheKeyBase,
 		promise: Promise.resolve([]),
 		snapshot: { status: "pending" },
 		listeners: new Set(),
@@ -345,18 +411,17 @@ function getQueryCacheEntry<TRow>(
 				return rows;
 			}
 			setQueryError(entry, error);
-			if (!isPermanentQueryError(error)) {
-				queryCache.delete(cacheKey);
-			}
 			throw error;
 		},
 	);
-	queryCache.set(cacheKey, entry);
+	cacheQueryEntry(queryCache, cacheKey, entry);
 	return entry;
 }
 
 function getCommittedQueryCacheEntry<TRow>(args: {
+	readonly queryCache: QueryCache;
 	readonly cacheKey: string;
+	readonly cacheKeyBase: string;
 	readonly builder: QueryLike<TRow>;
 	readonly lix: Lix;
 	readonly sql: string;
@@ -364,15 +429,19 @@ function getCommittedQueryCacheEntry<TRow>(args: {
 	readonly subscribe: boolean;
 	readonly reuseObservedResult: boolean;
 }): QueryCacheEntry<TRow> {
-	const cached = queryCache.get(args.cacheKey) as
+	const cached = args.queryCache.get(args.cacheKey) as
 		| QueryCacheEntry<TRow>
 		| undefined;
 	if (cached) {
 		cached.execute = () =>
 			executeWithExpiredReadRetry(() => args.builder.execute());
+		touchQueryCacheEntry(args.queryCache, args.cacheKey, cached);
 		return cached;
 	}
 	const entry: QueryCacheEntry<TRow> = {
+		cache: args.queryCache,
+		cacheKey: args.cacheKey,
+		cacheKeyBase: args.cacheKeyBase,
 		promise: Promise.resolve([]),
 		snapshot: { status: "pending" },
 		listeners: new Set(),
@@ -391,7 +460,7 @@ function getCommittedQueryCacheEntry<TRow>(args: {
 					args.reuseObservedResult,
 				)
 		: () => executeQueryEntryOnce(entry);
-	queryCache.set(args.cacheKey, entry);
+	cacheQueryEntry(args.queryCache, args.cacheKey, entry);
 	return entry;
 }
 
@@ -481,6 +550,14 @@ function subscribeToQueryEntry<TRow>(
 	entry.releaseGeneration += 1;
 	entry.listeners.add(listener);
 	if (entry.listeners.size === 1 && entry.stopObservation === undefined) {
+		// Retry supersession is a committed side effect. Doing this while creating
+		// an entry during render lets an abandoned render erase the retained error
+		// that the mounted retry key still owns.
+		removeSupersededRetryEntries(
+			entry.cache,
+			entry.cacheKeyBase,
+			entry.cacheKey,
+		);
 		entry.stopObservation = entry.startObservation?.();
 	}
 	return () => {
@@ -496,28 +573,10 @@ function subscribeToQueryEntry<TRow>(
 			}
 			entry.stopObservation?.();
 			entry.stopObservation = undefined;
-			if (
-				entry.snapshot.status === "error" &&
-				!isPermanentQueryError(entry.snapshot.error) &&
-				queryCache.get(cacheKey) === entry
-			) {
-				queryCache.delete(cacheKey);
-			}
+			removeReleasedSupersededRetryEntry(entry);
+			pruneInactiveQueryEntries(entry.cache);
 		});
 	};
-}
-
-function isPermanentQueryError(error: unknown): boolean {
-	if (isRecoverableLixSessionError(error)) return false;
-	if (!(error instanceof Error) || !("status" in error)) return false;
-	const status = (error as Error & { status?: unknown }).status;
-	return (
-		typeof status === "number" &&
-		status >= 400 &&
-		status < 500 &&
-		status !== 408 &&
-		status !== 429
-	);
 }
 
 function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
@@ -528,6 +587,7 @@ function setQueryRows<TRow>(entry: QueryCacheEntry<TRow>, rows: TRow[]): void {
 		return;
 	}
 	setQuerySnapshot(entry, { status: "success", rows });
+	pruneInactiveQueryEntries(entry.cache);
 }
 
 function setQueryError<TRow>(
@@ -541,7 +601,88 @@ function setQueryError<TRow>(
 		);
 		return;
 	}
-	setQuerySnapshot(entry, { status: "error", error });
+	setQuerySnapshot(entry, {
+		status: "error",
+		rows: entry.snapshot.status === "success" ? entry.snapshot.rows : [],
+		error,
+	});
+	pruneInactiveQueryEntries(entry.cache);
+}
+
+function cacheQueryEntry<TRow>(
+	queryCache: QueryCache,
+	cacheKey: string,
+	entry: QueryCacheEntry<TRow>,
+): void {
+	queryCache.set(cacheKey, entry);
+	pruneInactiveQueryEntries(queryCache);
+}
+
+function touchQueryCacheEntry<TRow>(
+	queryCache: QueryCache,
+	cacheKey: string,
+	entry: QueryCacheEntry<TRow>,
+): void {
+	queryCache.delete(cacheKey);
+	queryCache.set(cacheKey, entry);
+}
+
+function removeSupersededRetryEntries(
+	queryCache: QueryCache,
+	cacheKeyBase: string,
+	currentCacheKey: string,
+): void {
+	const prefix = `${cacheKeyBase}:retry:`;
+	for (const [cacheKey, entry] of queryCache) {
+		if (
+			cacheKey !== currentCacheKey &&
+			cacheKey.startsWith(prefix) &&
+			entry.listeners.size === 0 &&
+			entry.stopObservation === undefined
+		) {
+			queryCache.delete(cacheKey);
+		}
+	}
+}
+
+function removeReleasedSupersededRetryEntry<TRow>(
+	entry: QueryCacheEntry<TRow>,
+): void {
+	if (entry.listeners.size !== 0 || entry.stopObservation !== undefined) return;
+	const prefix = `${entry.cacheKeyBase}:retry:`;
+	for (const cacheKey of entry.cache.keys()) {
+		if (cacheKey !== entry.cacheKey && cacheKey.startsWith(prefix)) {
+			if (entry.cache.get(entry.cacheKey) === entry) {
+				entry.cache.delete(entry.cacheKey);
+			}
+			return;
+		}
+	}
+}
+
+/**
+ * Keep every inactive state bounded, including abandoned pending renders and
+ * retained error tombstones. Errors still survive ordinary remounts and are
+ * only retried explicitly; the oldest inactive identities are eventually
+ * evicted under broad query churn.
+ */
+function pruneInactiveQueryEntries(queryCache: QueryCache): void {
+	let inactiveCount = 0;
+	for (const entry of queryCache.values()) {
+		if (entry.listeners.size === 0 && entry.stopObservation === undefined) {
+			inactiveCount += 1;
+		}
+	}
+	if (inactiveCount <= MAX_INACTIVE_QUERY_ENTRIES) return;
+
+	for (const [cacheKey, entry] of queryCache) {
+		if (inactiveCount <= MAX_INACTIVE_QUERY_ENTRIES) return;
+		if (entry.listeners.size !== 0 || entry.stopObservation !== undefined) {
+			continue;
+		}
+		queryCache.delete(cacheKey);
+		inactiveCount -= 1;
+	}
 }
 
 function setQuerySnapshot<TRow>(
@@ -554,15 +695,13 @@ function setQuerySnapshot<TRow>(
 	}
 }
 
-function getLixInstanceId(lix: Lix): number {
+function getLixQueryCache(lix: Lix): QueryCache {
 	const asObject = lix as object;
-	const cached = lixInstanceIds.get(asObject);
-	if (cached !== undefined) {
-		return cached;
-	}
-	const next = nextLixInstanceId++;
-	lixInstanceIds.set(asObject, next);
-	return next;
+	const cached = queryCaches.get(asObject);
+	if (cached) return cached;
+	const cache: QueryCache = new Map();
+	queryCaches.set(asObject, cache);
+	return cache;
 }
 
 function getLixBranchSession(lix: Lix): AtelierBranchSession {

@@ -14,7 +14,7 @@ import { qb, sql } from "@/lib/lix-kysely";
 import { useEditorCtx } from "./editor-context";
 import {
 	useLix,
-	useQueryTakeFirst,
+	useQueryResult,
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
 import {
@@ -206,10 +206,15 @@ function TipTapEditorFileContent({
 	readonly activeBranchId: string;
 	readonly activeFileId: string;
 }) {
-	const sourceFile = useQueryTakeFirst<MarkdownFileDelivery>(
+	const sourceFileResult = useQueryResult<MarkdownFileDelivery>(
 		(lix) => selectMarkdownFileDelivery(lix, activeBranchId, activeFileId),
 		{ evictOnUnmount: true },
 	);
+	if (sourceFileResult.status === "pending") {
+		return <TipTapEditorLoadingState className={props.className} />;
+	}
+	if (sourceFileResult.status === "error") throw sourceFileResult.error;
+	const sourceFile = sourceFileResult.rows[0];
 
 	return (
 		<TipTapEditorSourceBoundary
