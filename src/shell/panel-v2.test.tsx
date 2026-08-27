@@ -205,6 +205,10 @@ describe("PanelV2", () => {
 
 		const input = await screen.findByPlaceholderText("Search project...");
 		expect(input).toBeInTheDocument();
+		expect(screen.getByTestId("atelier-view:search-1")).toHaveAttribute(
+			"data-active",
+			"true",
+		);
 	});
 
 	test("defers persisted panel views until the panel becomes visible and active", async () => {

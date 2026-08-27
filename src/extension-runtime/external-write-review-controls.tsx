@@ -274,6 +274,8 @@ export function ExternalWriteReviewControls({
 								key={file.id}
 								type="button"
 								role="checkbox"
+								data-testid={`diff-scope-file:${file.id}`}
+								data-file-id={file.id}
 								aria-checked={ticked}
 								data-attr="diff-scope-file"
 								data-ticked={ticked ? "true" : undefined}

@@ -1357,6 +1357,7 @@ function ViewRenderer({
 	return (
 		<div
 			ref={containerRef}
+			data-testid={`atelier-view:${instance.instance}`}
 			data-view-instance={instance.instance}
 			data-view-key={instance.kind}
 			data-panel-side={side}
