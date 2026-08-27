@@ -7,26 +7,8 @@ import type { Lix } from "@lix-js/sdk";
  * checkpoints).
  */
 
-/** The working span: latest checkpoint (or the empty root) to the head. */
-async function workingRange(
-	lix: Lix,
-): Promise<{ beforeCommitId: string; headCommitId: string }> {
-	const result = await lix.execute(
-		`SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
-		        lix_active_branch_commit_id() AS head_commit_id`,
-	);
-	const beforeCommitId = result.rows[0]?.before_commit_id;
-	const headCommitId = result.rows[0]?.head_commit_id;
-	if (typeof beforeCommitId !== "string" || typeof headCommitId !== "string") {
-		throw new Error("The active Lix branch has no resolvable diff range.");
-	}
-	return { beforeCommitId, headCommitId };
-}
-
-function fileRowRefs(fileIds: readonly string[], firstParameter: number) {
-	return fileIds
-		.map((_, index) => `lix_row_ref('lix_file', $${firstParameter + index})`)
-		.join(", ");
+function fileIdParameters(fileIds: readonly string[], firstParameter: number) {
+	return fileIds.map((_, index) => `$${firstParameter + index}`).join(", ");
 }
 
 /** Creates a full checkpoint through the canonical SQL surface. */
@@ -50,7 +32,11 @@ export async function createCheckpointForFiles(
 	if (fileIds.length === 0) return null;
 	const result = await lix.execute(
 		`SELECT commit_id
-		 FROM lix_create_checkpoint(ARRAY[${fileRowRefs(fileIds, 1)}])`,
+		 FROM lix_create_checkpoint(ARRAY(
+		   SELECT row_ref
+		   FROM lix_diff('lix_file')
+		   WHERE id IN (${fileIdParameters(fileIds, 1)})
+		 ))`,
 		[...fileIds],
 	);
 	if (result.rows.length === 0) return null;
@@ -66,13 +52,12 @@ export async function revertWorkingChangesForFiles(
 	fileIds: readonly string[],
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
-	const { beforeCommitId, headCommitId } = await workingRange(lix);
 	const result = await lix.execute(
 		`INSERT INTO lix_revert (row_ref)
 		 SELECT row_ref
-		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE row_ref IN (${fileRowRefs(fileIds, 3)})`,
-		[beforeCommitId, headCommitId, ...fileIds],
+		 FROM lix_diff('lix_file')
+		 WHERE id IN (${fileIdParameters(fileIds, 1)})`,
+		[...fileIds],
 	);
 	return result.rowsAffected;
 }
@@ -112,7 +97,7 @@ export async function restoreCheckpointFiles(
 		`INSERT INTO lix_apply (row_ref)
 		 SELECT row_ref
 		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE row_ref IN (${fileRowRefs(fileIds, 3)})`,
+		 WHERE id IN (${fileIdParameters(fileIds, 3)})`,
 		[headCommitId, checkpointCommitId, ...fileIds],
 	);
 	return result.rowsAffected;
