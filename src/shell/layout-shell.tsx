@@ -741,7 +741,7 @@ export async function selectCheckpointFiles(
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
 	const result = await lix.execute(
-		`SELECT lixcol_row_pk ->> 0 AS id, lixcol_diff_type AS diff_type,
+		`SELECT lixcol_row_pk ->> 0 AS id, diff_type,
 		        coalesce(to_path, from_path) AS path,
 		        from_path, to_path
 		 FROM lix_diff('lix_file', $1, $2)
@@ -749,9 +749,9 @@ export async function selectCheckpointFiles(
 		[previousCommitId, commitId],
 	);
 	return result.rows.flatMap((row): LixFileForOpen[] => {
-		const id = row.get("id");
-		const path = row.get("path");
-		const diffType = row.get("diff_type");
+		const id = row.id;
+		const path = row.path;
+		const diffType = row.diff_type;
 		if (
 			typeof id !== "string" ||
 			typeof path !== "string" ||
@@ -763,8 +763,8 @@ export async function selectCheckpointFiles(
 		}
 		const movedFromPath = movedFromSidePaths(
 			diffType,
-			row.get("from_path"),
-			row.get("to_path"),
+			row.from_path,
+			row.to_path,
 		);
 		return [
 			{
@@ -787,8 +787,8 @@ export async function selectFilesAtCommit(
 		[commitId],
 	);
 	return result.rows.flatMap((row): LixFileForOpen[] => {
-		const id = row.get("id");
-		const path = row.get("path");
+		const id = row.id;
+		const path = row.path;
 		return typeof id === "string" && typeof path === "string"
 			? [{ id, path, checkpointChangeKind: "added" }]
 			: [];
@@ -3549,8 +3549,8 @@ function LayoutShellLoadedContentResolved({
 					`SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
 				        lix_active_branch_commit_id() AS after_commit_id`,
 				);
-				const beforeCommitId = rangeResult.rows[0]?.get("before_commit_id");
-				const headCommitId = rangeResult.rows[0]?.get("after_commit_id");
+				const beforeCommitId = rangeResult.rows[0]?.before_commit_id;
+				const headCommitId = rangeResult.rows[0]?.after_commit_id;
 				if (
 					typeof beforeCommitId !== "string" ||
 					typeof headCommitId !== "string"
@@ -3968,7 +3968,7 @@ function LayoutShellLoadedContentResolved({
 					"SELECT lixcol_created_at AS created_at FROM lix_checkpoint WHERE commit_id = $1 LIMIT 1",
 					[options.target.commitId],
 				);
-				const value = result.rows[0]?.get("created_at");
+				const value = result.rows[0]?.created_at;
 				if (typeof value === "string") createdAt = value;
 			} catch {
 				// The checkpoint title falls back to a generic label.

@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy } from "lucide-react";
+import type { ResultColumn } from "@lix-js/sdk";
 
 export type GridColumnSpec = {
 	readonly name: string;
@@ -32,28 +33,27 @@ export function formatByteSize(byteLength: number): string {
 	return `${kb >= 100 ? Math.round(kb) : kb.toFixed(1)} KB`;
 }
 
-/** Infers column type badges for arbitrary query results from row values. */
+/** Maps Lix result metadata to the compact type badges used by the grid. */
 export function inferResultColumns(
-	columns: readonly string[],
-	rows: ReadonlyArray<Record<string, unknown>>,
+	columns: readonly ResultColumn[],
 ): GridColumnSpec[] {
-	return columns.map((name) => {
-		let type = "";
-		for (const row of rows) {
-			const value = row[name];
-			if (value === null || value === undefined) continue;
-			if (typeof value === "string") type = "text";
-			else if (typeof value === "number") {
-				type = Number.isInteger(value) && type !== "float" ? "int" : "float";
-				continue;
-			} else if (typeof value === "boolean") type = "bool";
-			else if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
-				type = "blob";
-			} else if (typeof value === "object") type = "json";
-			break;
-		}
-		return { name, type };
-	});
+	return columns.map((column) => ({
+		name: column.name,
+		type:
+			column.type === "boolean"
+				? "bool"
+				: column.type === "integer"
+					? "int"
+					: column.type === "real"
+						? "float"
+						: column.type === "jsonb"
+							? "json"
+							: column.type === "timestamptz"
+								? "time"
+								: column.type === "null"
+									? ""
+									: column.type,
+	}));
 }
 
 /**

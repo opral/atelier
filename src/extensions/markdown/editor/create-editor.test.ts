@@ -1324,7 +1324,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 			"SELECT count(*) AS count FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
 			[checkpoint.commitId],
 		);
-		expect(Number(workingDiffBeforeCheckpoint.rows[0]?.get("count"))).toBe(0);
+		expect(Number(workingDiffBeforeCheckpoint.rows[0]?.count)).toBe(0);
 		expect(await createCheckpointForFiles(lix, [fileId])).toBeNull();
 		expect(await readMarkdown(lix, fileId)).toBe("Start");
 

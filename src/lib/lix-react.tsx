@@ -323,7 +323,7 @@ export const useQueryTakeFirst = <TResult,>(
 };
 
 function queryResultToRows<TRow>(result: ExecuteResult): TRow[] {
-	return result.rows.map((row) => row.toObject() as TRow);
+	return result.rows as TRow[];
 }
 
 function rowsEqual(a: unknown, b: unknown): boolean {

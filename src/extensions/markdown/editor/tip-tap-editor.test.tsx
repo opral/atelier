@@ -67,8 +67,9 @@ async function renderEditorForMarkdownFile({
 		.execute();
 
 	let editorRef: Editor | null = null;
+	let rendered: ReturnType<typeof render> | undefined;
 	await act(async () => {
-		render(
+		rendered = render(
 			<Suspense>
 				<Providers lix={lix}>
 					{withToolbar ? <FormattingToolbar /> : null}
@@ -82,7 +83,11 @@ async function renderEditorForMarkdownFile({
 			</Suspense>,
 		);
 	});
-	await screen.findByTestId("tiptap-editor");
+	await waitFor(() =>
+		expect(
+			rendered!.container.querySelector('[data-testid="tiptap-editor"]'),
+		).not.toBeNull(),
+	);
 	await waitFor(() => expect(editorRef).not.toBeNull());
 	return { lix, editor: editorRef! };
 }

@@ -35,7 +35,7 @@ async function readFile(lix: Awaited<ReturnType<typeof openLix>>, id: string) {
 		"SELECT content FROM lix_file WHERE id = $1",
 		[id],
 	);
-	const data = result.rows[0]?.get("content");
+	const data = result.rows[0]?.content;
 	return data instanceof Uint8Array ? decoder.decode(data) : null;
 }
 
@@ -78,7 +78,7 @@ describe("Lix SQL diff commands", () => {
 				 FROM lix_diff('lix_directory', lix_latest_checkpoint_commit_id(), lix_active_branch_commit_id())`,
 			);
 			const remainingDirPaths = remainingDirs.rows
-				.map((row) => row.get("path"))
+				.map((row) => row.path)
 				.sort();
 			expect(remainingDirPaths).toEqual(["/notes"]);
 

@@ -149,7 +149,7 @@ test("updates when CSV file data changes in Lix", async () => {
 			"data-cell-data",
 			"https://example.com",
 		);
-		await waitFor(() => expect(fileReadCount()).toBe(1));
+		await waitFor(() => expect(fileReadCount()).toBe(0));
 		const readsBeforeUpdate = fileReadCount();
 
 		await act(async () => {
@@ -831,5 +831,5 @@ async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
 	const result = await lix.execute(
 		"SELECT lix_active_branch_commit_id() AS commit_id",
 	);
-	return result.rows[0]?.get("commit_id") as string;
+	return result.rows[0]?.commit_id as string;
 }

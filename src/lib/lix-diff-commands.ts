@@ -16,8 +16,8 @@ async function workingRange(
 		`SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
 		        lix_active_branch_commit_id() AS head_commit_id`,
 	);
-	const beforeCommitId = result.rows[0]?.get("before_commit_id");
-	const headCommitId = result.rows[0]?.get("head_commit_id");
+	const beforeCommitId = result.rows[0]?.before_commit_id;
+	const headCommitId = result.rows[0]?.head_commit_id;
 	if (typeof beforeCommitId !== "string" || typeof headCommitId !== "string") {
 		throw new Error("The active Lix branch has no resolvable diff range.");
 	}
@@ -45,7 +45,7 @@ export async function createCheckpointForFiles(
 	if (result.rowsAffected === 0) return null;
 	// A command that creates a commit returns exactly one row; rowsAffected
 	// still reports the number of selected identities.
-	const commitId = result.rows[0]?.get("commit_id");
+	const commitId = result.rows[0]?.commit_id;
 	if (result.rows.length !== 1 || !isString(commitId)) {
 		throw new Error("Partial checkpoint did not return one commit ID.");
 	}
@@ -94,7 +94,7 @@ export async function restoreCheckpointFiles(
 	const headResult = await lix.execute(
 		"SELECT lix_active_branch_commit_id() AS commit_id",
 	);
-	const headCommitId = headResult.rows[0]?.get("commit_id");
+	const headCommitId = headResult.rows[0]?.commit_id;
 	if (typeof headCommitId !== "string") {
 		throw new Error("The active Lix branch has no head commit.");
 	}

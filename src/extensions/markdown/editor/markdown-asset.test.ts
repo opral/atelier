@@ -424,5 +424,5 @@ async function activeCommitId(
 	const result = await lix.execute(
 		"SELECT lix_active_branch_commit_id() AS commit_id",
 	);
-	return result.rows[0]?.get("commit_id") as string;
+	return result.rows[0]?.commit_id as string;
 }

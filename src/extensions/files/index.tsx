@@ -1356,7 +1356,9 @@ function FilesViewContent({
 				>
 					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
 						{readOnly ? null : (
-							<div className={`flex shrink-0 justify-end pb-6${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}>
+							<div
+								className={`flex shrink-0 justify-end pb-6${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
+							>
 								{createRequest ? (
 									<WideNewButton disabled />
 								) : (

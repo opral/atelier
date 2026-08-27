@@ -156,9 +156,9 @@ export function TableView({
 				const clientDurationMs = performance.now() - clientStartedAt;
 				setError(null);
 				setData({
-					rows: result.rows.map((row) => row.toObject()),
+					rows: result.rows,
 					totalRows: Number(
-						countResult.rows[0]?.toObject().row_count ?? result.rows.length,
+						countResult.rows[0]?.row_count ?? result.rows.length,
 					),
 					clientDurationMs,
 					serverTimings: serverTimingsSince(executeCount),

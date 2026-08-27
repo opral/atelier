@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/core";
 import { Check, FileText, Loader2 } from "lucide-react";
 import {
 	useLix,
+	useQueryResult,
 	useQueryTakeFirst,
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
@@ -182,15 +183,23 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		editorRevision.afterCommitId === null;
 
 	const ownsLiveFileDelivery = editorRevisionMode(editorRevision) === "editor";
-	const fileRow = useQueryTakeFirst<MarkdownFileRow>(
+	const fileResult = useQueryResult<MarkdownFileRow>(
 		(lix) =>
 			selectMarkdownFileDelivery(lix, props.activeBranchId ?? "", fileId),
 		{
 			subscribe: ownsLiveFileDelivery || comparesAgainstCurrentFile,
 		},
 	);
+	if (fileResult.status === "pending") return <MarkdownLoadingSpinner />;
+	if (fileResult.status === "error") throw fileResult.error;
 
-	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
+	return (
+		<MarkdownViewLoaded
+			fileId={fileId}
+			fileRow={fileResult.rows[0]}
+			{...props}
+		/>
+	);
 }
 
 function MarkdownViewLoaded(

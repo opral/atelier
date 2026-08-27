@@ -158,7 +158,7 @@ async function assertAssetsDirectoryAvailable(
 		[assetsDirectoryFilePath],
 	);
 	const caseOnlyDirectory = directories.rows.some(
-		(row) => row.get("path") !== assetsDirectoryFilePath,
+		(row) => row.path !== assetsDirectoryFilePath,
 	);
 	if (caseOnlyDirectory) {
 		throw new PastedMarkdownImageError(

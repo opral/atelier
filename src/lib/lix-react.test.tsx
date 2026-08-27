@@ -59,12 +59,8 @@ function eventWithValue(
 		sequence,
 		mutationSequence,
 		result: {
-			columns: ["value"],
-			rows: [
-				{
-					toObject: () => ({ value }),
-				},
-			] as unknown as ObserveEvent["result"]["rows"],
+			columns: [{ name: "value", type: "text" }],
+			rows: [{ value }],
 			rowsAffected: 0,
 			notices: [],
 		},
@@ -119,12 +115,8 @@ test("useQuery accepts the initial observe snapshot as authoritative", async () 
 		sequence: 1,
 		mutationSequence: 1,
 		result: {
-			columns: ["value"],
-			rows: [
-				{
-					toObject: () => ({ value: "authoritative-observe-snapshot" }),
-				},
-			] as unknown as ObserveEvent["result"]["rows"],
+			columns: [{ name: "value", type: "text" }],
+			rows: [{ value: "authoritative-observe-snapshot" }],
 			rowsAffected: 0,
 			notices: [],
 		},
@@ -586,7 +578,7 @@ test("useQuery can treat advancing observer results as invalidations", async () 
 			sequence: 1,
 			mutationSequence: 1,
 			result: {
-				columns: ["value"],
+				columns: [{ name: "value", type: "text" }],
 				rows: [],
 				rowsAffected: 0,
 				notices: [],

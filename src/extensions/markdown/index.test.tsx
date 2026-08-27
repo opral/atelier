@@ -140,9 +140,9 @@ describe("MarkdownView", () => {
 		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
 			"Initial delivery",
 		);
-		// One subscribed query owns the row. It executes once for Suspense, then
-		// consumes the SDK's authoritative observer snapshots directly.
-		await waitFor(() => expect(liveDeliveryReads()).toBe(1));
+		// One subscribed query owns the row and consumes the SDK's authoritative
+		// observer snapshot without a separate execute read.
+		await waitFor(() => expect(liveDeliveryReads()).toBe(0));
 		expect(liveDeliveryObservers()).toBe(1);
 		expect(
 			observe.mock.calls.some(([statement]) =>
@@ -161,7 +161,7 @@ describe("MarkdownView", () => {
 				"Later delivery",
 			),
 		);
-		expect(liveDeliveryReads()).toBe(1);
+		expect(liveDeliveryReads()).toBe(0);
 		expect(liveDeliveryObservers()).toBe(1);
 		expect(originPointReads()).toHaveLength(0);
 
@@ -1109,5 +1109,5 @@ async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
 	const result = await lix.execute(
 		"SELECT lix_active_branch_commit_id() AS commit_id",
 	);
-	return result.rows[0]?.get("commit_id") as string;
+	return result.rows[0]?.commit_id as string;
 }

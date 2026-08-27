@@ -199,7 +199,7 @@ async function loadSchema(lix: Lix): Promise<Schema> {
 	]);
 	const tables = new Map<string, SchemaColumn[]>();
 	for (const row of result.rows) {
-		const record = row.toObject();
+		const record = row;
 		const tableName = String(record.table_name);
 		const columns = tables.get(tableName) ?? [];
 		columns.push({
@@ -210,7 +210,7 @@ async function loadSchema(lix: Lix): Promise<Schema> {
 	}
 	const historyRelations = new Set<string>();
 	for (const row of historyResult.rows) {
-		const record = row.toObject();
+		const record = row;
 		const tableName = String(record.table_name);
 		historyRelations.add(tableName);
 		const surfaceName = surfaceTableName(tableName, "history");
@@ -413,9 +413,9 @@ function QueryView({
 			const result = await lix.execute(sqlText);
 			if (runId !== runIdRef.current) return;
 			const clientDurationMs = performance.now() - clientStartedAt;
-			const rows = result.rows.map((row) => row.toObject());
+			const rows = result.rows;
 			setRun({
-				columns: inferResultColumns(result.columns, rows),
+				columns: inferResultColumns(result.columns),
 				rows,
 				rowsAffected: result.rowsAffected,
 				hasResultColumns: result.columns.length > 0,
