@@ -9,6 +9,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
@@ -460,7 +461,7 @@ describe("diff review navigation", () => {
 					},
 				])
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 
 			await act(async () => {
 				utils = render(
@@ -715,7 +716,7 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Before\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
@@ -743,7 +744,7 @@ describe("diff review navigation", () => {
 			await waitFor(() => {
 				expect(
 					execute.mock.calls.some(([statement]) =>
-						String(statement).includes("INSERT INTO lix_create_checkpoint"),
+						String(statement).includes("FROM lix_create_checkpoint("),
 					),
 				).toBe(true);
 			});
@@ -774,7 +775,7 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Baseline\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.insertInto("lix_file")
 				.values({
@@ -860,7 +861,7 @@ describe("diff review navigation", () => {
 					},
 				])
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
@@ -908,7 +909,7 @@ describe("diff review navigation", () => {
 			await waitFor(() => {
 				expect(
 					execute.mock.calls.some(([statement]) =>
-						String(statement).includes("INSERT INTO lix_create_checkpoint"),
+						String(statement).includes("FROM lix_create_checkpoint("),
 					),
 				).toBe(true);
 			});
@@ -951,7 +952,7 @@ describe("diff review navigation", () => {
 					},
 				])
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 
 			await act(async () => {
 				utils = render(
@@ -1062,12 +1063,12 @@ describe("diff review navigation", () => {
 					},
 				])
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 
 			await act(async () => {
 				utils = render(
@@ -1209,12 +1210,12 @@ describe("diff review navigation", () => {
 				content: new TextEncoder().encode(`# Before ${index}\n`),
 			}));
 			await qb(lix).insertInto("lix_file").values(files).execute();
-			const previous = await lix.createCheckpoint();
+			const previous = await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.execute();
-			const latest = await lix.createCheckpoint();
+			const latest = await createCheckpoint(lix);
 			const execute = vi.spyOn(lix, "execute");
 
 			const selected = await selectCheckpointFiles(
@@ -1257,12 +1258,12 @@ describe("diff review navigation", () => {
 					},
 				])
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# At checkpoint\n") })
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ path: "/current-name.csv" })
@@ -1357,13 +1358,13 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Before\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "=", fileId)
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 
 			await act(async () => {
 				utils = render(
@@ -1452,7 +1453,7 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Baseline\n"),
 				})
 				.execute();
-			const previous = await lix.createCheckpoint();
+			const previous = await createCheckpoint(lix);
 			const addedFileId = fakeUuid("checkpoint-added-file");
 			await qb(lix)
 				.deleteFrom("lix_file")
@@ -1466,7 +1467,7 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Added\n"),
 				})
 				.execute();
-			const latest = await lix.createCheckpoint();
+			const latest = await createCheckpoint(lix);
 			const selectedCheckpointFiles = await selectCheckpointFiles(
 				lix,
 				previous.commitId,
@@ -1579,7 +1580,7 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Removed\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 
 			await act(async () => {
 				utils = render(
@@ -1645,7 +1646,7 @@ describe("diff review navigation", () => {
 					content: new TextEncoder().encode("# Seed\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await act(async () => {
 				utils = render(
 					<LixProvider lix={lix}>

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { getFileDataAtCommit } from "./external-write-review-history";
 
 const encoder = new TextEncoder();
@@ -13,7 +14,7 @@ describe("getFileDataAtCommit", () => {
 		try {
 			const fileId = fakeUuid("history-file");
 			await writeFile(lix, fileId, "/history.md", "before");
-			const checkpoint = await lix.createCheckpoint();
+			const checkpoint = await createCheckpoint(lix);
 			await writeFile(lix, fileId, "/history.md", "after");
 			const headCommitId = await activeCommitId(lix);
 
@@ -34,7 +35,7 @@ describe("getFileDataAtCommit", () => {
 		const lix = await openLix();
 		try {
 			await writeFile(lix, fakeUuid("baseline-file"), "/baseline.md", "base");
-			const checkpoint = await lix.createCheckpoint();
+			const checkpoint = await createCheckpoint(lix);
 			const addedFileId = fakeUuid("added-later-file");
 			await writeFile(lix, addedFileId, "/added-later.md", "new");
 

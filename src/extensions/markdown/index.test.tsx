@@ -6,6 +6,7 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { MarkdownView } from "./index";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { HistoryView } from "@/extensions/history";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 
@@ -779,7 +780,7 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
-		const checkpoint = await lix.createCheckpoint();
+		const checkpoint = await createCheckpoint(lix);
 
 		let utils: ReturnType<typeof render> | undefined;
 		const renderReviewMarkdown = (reviewing: boolean) => (
@@ -990,7 +991,7 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("# Before"),
 			})
 			.execute();
-		await lix.createCheckpoint();
+		await createCheckpoint(lix);
 		await qb(lix)
 			.insertInto("lix_file")
 			.values({
@@ -999,13 +1000,13 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("unrelated"),
 			})
 			.execute();
-		const beforeCommitId = (await lix.createCheckpoint()).commitId;
+		const beforeCommitId = (await createCheckpoint(lix)).commitId;
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ content: new TextEncoder().encode("# After") })
 			.where("id", "=", fileId)
 			.execute();
-		const afterCommitId = (await lix.createCheckpoint()).commitId;
+		const afterCommitId = (await createCheckpoint(lix)).commitId;
 		const execute = vi.spyOn(lix, "execute");
 		let utils: ReturnType<typeof render> | undefined;
 
@@ -1081,7 +1082,7 @@ describe("MarkdownView", () => {
 			restoreTarget,
 		]);
 		const workingDiff = await lix.execute(
-			"SELECT lixcol_row_pk FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
+			"SELECT row_ref FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
 			[restoreTarget],
 		);
 		expect(workingDiff.rows).toHaveLength(0);

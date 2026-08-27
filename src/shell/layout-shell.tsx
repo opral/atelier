@@ -741,7 +741,7 @@ export async function selectCheckpointFiles(
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
 	const result = await lix.execute(
-		`SELECT lixcol_row_pk ->> 0 AS id, diff_type,
+		`SELECT id, diff_type,
 		        coalesce(to_path, from_path) AS path,
 		        from_path, to_path
 		 FROM lix_diff('lix_file', $1, $2)

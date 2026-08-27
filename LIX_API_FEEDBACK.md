@@ -13,9 +13,10 @@ The command sinks reject an `INSERT … SELECT` whose selection is empty with
 normal idempotent outcome: a selected file can be unchanged in the requested
 range, or reactive state can refresh between rendering and clicking.
 
-Atelier currently runs a matching `SELECT count(*)` before every
-`lix_apply`, `lix_revert`, and `lix_create_checkpoint` command. This adds a
-round trip and leaves a race between the preflight and the command.
+Atelier previously ran a matching `SELECT count(*)` before every selection
+command. This added a round trip and left a race between the preflight and the
+command. The current integration passes `lix_row_ref` values directly and
+relies on the command result for an empty selection.
 
 Suggestion: treat an empty command selection as a successful zero-row
 operation, consistent with ordinary SQL DML.

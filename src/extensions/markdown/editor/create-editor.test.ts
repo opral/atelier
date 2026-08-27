@@ -7,7 +7,10 @@ import { handlePaste } from "./handle-paste";
 import { buildNormalizedMarkdownFromEditor } from "./build-markdown-from-editor";
 import { Editor } from "@tiptap/core";
 import { qb } from "@/lib/lix-kysely";
-import { createCheckpointForFiles } from "@/lib/lix-diff-commands";
+import {
+	createCheckpoint,
+	createCheckpointForFiles,
+} from "@/lib/lix-diff-commands";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 
 const ensureTrailingNewline = (value: string) =>
@@ -1313,7 +1316,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 		fileId,
 		persistDebounceMs: 60_000,
 	});
-	const checkpoint = await lix.createCheckpoint();
+	const checkpoint = await createCheckpoint(lix);
 	vi.useFakeTimers();
 	try {
 		editor.commands.setTextSelection(editor.state.doc.content.size);

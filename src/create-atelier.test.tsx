@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createAtelier } from "./atelier-instance";
@@ -65,7 +66,7 @@ describe("Atelier instance file controller", () => {
 					content: new TextEncoder().encode("# Before\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
@@ -110,7 +111,7 @@ describe("Atelier instance file controller", () => {
 					content: new TextEncoder().encode("# Before\n"),
 				})
 				.execute();
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: new TextEncoder().encode("# After\n") })
