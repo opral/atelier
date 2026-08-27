@@ -3,6 +3,7 @@ import type { Lix } from "@lix-js/sdk";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { getFileDataAtCommit } from "@/shell/external-write-review-history";
 import {
 	applyDeveloperWorkflowScenario,
@@ -56,7 +57,7 @@ test("simulates a completed agent turn spanning a reviewable commit range", asyn
 			content: encoder.encode("# Original heading\n\nStable paragraph.\n"),
 		})
 		.execute();
-	await lix.createCheckpoint();
+	await createCheckpoint(lix);
 
 	const result = await simulateMarkdownAgentWorkflow(lix, {
 		branchId: await lix.activeBranchId(),

@@ -17,9 +17,9 @@ export type WorkingChangeCountRow = {
 	file_count: number;
 };
 
-/** One changed file from lix_diff('lix_file', …). */
+/** One changed file from lix_diff('lix_file'). */
 export type FileDiffRow = {
-	/** The file id, extracted from the diff row's primary key. */
+	/** The file relation's typed primary key, projected by lix_diff. */
 	id: string;
 	diff_type: "added" | "modified" | "removed";
 	/** Resolved for the side that has one: to for added/modified, from for removed. */
@@ -83,16 +83,15 @@ export function selectFilesystemFiles(lix: Lix) {
 }
 
 /**
- * The working file diff: lix_diff('lix_file', <base>, head) where <base> is
- * the latest checkpoint, or the repository's empty root when no checkpoint
- * exists yet. One row per changed file, path resolved for the side that has
- * one — removed files keep their pre-deletion path from the base side.
+ * The working file diff defaults to latest checkpoint → active branch head.
+ * One row per changed file, path resolved for the side that has one — removed
+ * files keep their pre-deletion path from the base side.
  */
 export function selectWorkingFileDiffs(lix: Lix) {
 	return qb(lix)
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
 		.select([
-			sql<string>`lixcol_row_pk ->> 0`.as("id"),
+			"id",
 			"diff_type",
 			sql<string>`coalesce(to_path, from_path)`.as("path"),
 			"row_count",
@@ -114,9 +113,7 @@ export function selectWorkingChangeCount(lix: Lix) {
 }
 
 function workingFileDiffTable() {
-	// lix_latest_checkpoint_commit_id() resolves the branch's latest checkpoint
-	// inside the statement, falling back to the empty root when none exists.
-	return sql<any>`lix_diff('lix_file', lix_latest_checkpoint_commit_id(), lix_active_branch_commit_id())`;
+	return sql<any>`lix_diff('lix_file')`;
 }
 
 /**

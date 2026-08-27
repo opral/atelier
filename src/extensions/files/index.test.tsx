@@ -9,6 +9,7 @@ import {
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { Lix } from "@lix-js/sdk";
@@ -1196,7 +1197,7 @@ describe("FilesView", () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
 		await insertFile(lix, fakeUuid("review-file"), "/review.md", "before");
-		await lix.createCheckpoint();
+		await createCheckpoint(lix);
 		await insertFile(lix, fakeUuid("review-file"), "/review.md", "after");
 		let view: ReturnType<typeof render> | undefined;
 		await act(async () => {

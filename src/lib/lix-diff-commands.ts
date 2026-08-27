@@ -1,8 +1,7 @@
 import type { Lix } from "@lix-js/sdk";
 
 /**
- * Diff commands over the relation-scoped selection currency: every command
- * consumes (relation, row_pk) rows selected from lix_diff. Selecting a file
+ * Diff commands use lix_row_ref as their selection currency. Selecting a file
  * selects its underlying tracked content, and the engine computes the
  * dependency closure (ancestor directory descriptors ride along with partial
  * checkpoints).
@@ -24,35 +23,42 @@ async function workingRange(
 	return { beforeCommitId, headCommitId };
 }
 
-function fileIdParameters(fileIds: readonly string[], firstParameter: number) {
-	return fileIds.map((_, index) => `$${firstParameter + index}`).join(", ");
+function fileRowRefs(fileIds: readonly string[], firstParameter: number) {
+	return fileIds
+		.map((_, index) => `lix_row_ref('lix_file', $${firstParameter + index})`)
+		.join(", ");
+}
+
+/** Creates a full checkpoint through the canonical SQL surface. */
+export async function createCheckpoint(
+	lix: Lix,
+): Promise<{ readonly commitId: string }> {
+	const result = await lix.execute(
+		"SELECT commit_id FROM lix_create_checkpoint()",
+	);
+	const commitId = result.rows[0]?.commit_id;
+	if (result.rows.length !== 1 || !isString(commitId)) {
+		throw new Error("Checkpoint creation did not return one commit ID.");
+	}
+	return { commitId };
 }
 
 export async function createCheckpointForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
-): Promise<{ readonly commitId: string; readonly diffCount: number } | null> {
+): Promise<{ readonly commitId: string } | null> {
 	if (fileIds.length === 0) return null;
-	const { beforeCommitId, headCommitId } = await workingRange(lix);
 	const result = await lix.execute(
-		`INSERT INTO lix_create_checkpoint (relation, row_pk)
-		 SELECT 'lix_file', lixcol_row_pk
-		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE lixcol_row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})
-		 RETURNING commit_id`,
-		[beforeCommitId, headCommitId, ...fileIds],
+		`SELECT commit_id
+		 FROM lix_create_checkpoint(ARRAY[${fileRowRefs(fileIds, 1)}])`,
+		[...fileIds],
 	);
-	if (result.rowsAffected === 0) return null;
-	// A command that creates a commit returns exactly one row; rowsAffected
-	// still reports the number of selected identities.
+	if (result.rows.length === 0) return null;
 	const commitId = result.rows[0]?.commit_id;
 	if (result.rows.length !== 1 || !isString(commitId)) {
 		throw new Error("Partial checkpoint did not return one commit ID.");
 	}
-	return {
-		commitId,
-		diffCount: result.rowsAffected,
-	};
+	return { commitId };
 }
 
 export async function revertWorkingChangesForFiles(
@@ -62,10 +68,10 @@ export async function revertWorkingChangesForFiles(
 	if (fileIds.length === 0) return 0;
 	const { beforeCommitId, headCommitId } = await workingRange(lix);
 	const result = await lix.execute(
-		`INSERT INTO lix_revert (relation, row_pk)
-		 SELECT 'lix_file', lixcol_row_pk
+		`INSERT INTO lix_revert (row_ref)
+		 SELECT row_ref
 		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE lixcol_row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
+		 WHERE row_ref IN (${fileRowRefs(fileIds, 3)})`,
 		[beforeCommitId, headCommitId, ...fileIds],
 	);
 	return result.rowsAffected;
@@ -103,10 +109,10 @@ export async function restoreCheckpointFiles(
 	// Applying the head→checkpoint diff for the selected files restores their
 	// checkpoint state without touching anything else.
 	const result = await lix.execute(
-		`INSERT INTO lix_apply (relation, row_pk)
-		 SELECT 'lix_file', lixcol_row_pk
+		`INSERT INTO lix_apply (row_ref)
+		 SELECT row_ref
 		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE lixcol_row_pk ->> 0 IN (${fileIdParameters(fileIds, 3)})`,
+		 WHERE row_ref IN (${fileRowRefs(fileIds, 3)})`,
 		[headCommitId, checkpointCommitId, ...fileIds],
 	);
 	return result.rowsAffected;

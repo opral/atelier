@@ -10,6 +10,7 @@ import {
 import { describe, expect, test, vi } from "vitest";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { HistoryView } from ".";
@@ -89,7 +90,7 @@ describe("HistoryView", () => {
 				new TextEncoder().encode("before two"),
 			],
 		);
-		await lix.createCheckpoint();
+		await createCheckpoint(lix);
 		await lix.execute("UPDATE lix_file SET content = $1", [
 			new TextEncoder().encode("after"),
 		]);
@@ -142,7 +143,7 @@ describe("HistoryView", () => {
 				new TextEncoder().encode("two"),
 			],
 		);
-		const checkpoint = await lix.createCheckpoint();
+		const checkpoint = await createCheckpoint(lix);
 		const originalExecute = lix.execute.bind(lix);
 		let coldHistoryReads = 0;
 		vi.spyOn(lix, "execute").mockImplementation(
@@ -218,7 +219,7 @@ describe("HistoryView", () => {
 				new TextEncoder().encode("two"),
 			],
 		);
-		const checkpoint = await lix.createCheckpoint();
+		const checkpoint = await createCheckpoint(lix);
 		const historicalFiles = [
 			{ id: fakeUuid("history-file-one"), path: "/docs/one.txt" },
 			{ id: fakeUuid("history-file-two"), path: "/two.txt" },
@@ -289,12 +290,12 @@ describe("HistoryView", () => {
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
 			[fileId, "/switch.txt", new TextEncoder().encode("older")],
 		);
-		const olderCheckpoint = await lix.createCheckpoint();
+		const olderCheckpoint = await createCheckpoint(lix);
 		await lix.execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
 			new TextEncoder().encode("newer"),
 			fileId,
 		]);
-		const newerCheckpoint = await lix.createCheckpoint();
+		const newerCheckpoint = await createCheckpoint(lix);
 		const olderHistoricalFiles = [{ id: fileId, path: "/older-switch.txt" }];
 		const newerHistoricalFiles = [{ id: fileId, path: "/newer-switch.txt" }];
 		const originalExecute = lix.execute.bind(lix);

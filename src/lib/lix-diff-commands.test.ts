@@ -3,6 +3,7 @@ import { fakeUuid } from "@/test-utils/fake-uuid";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { selectWorkingFileDiffs } from "@/queries";
 import {
+	createCheckpoint,
 	createCheckpointForFiles,
 	restoreCheckpoint,
 	restoreCheckpointFiles,
@@ -49,7 +50,6 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, secondId, "/second.md", "second");
 
 			const checkpoint = await createCheckpointForFiles(lix, [firstId]);
-			expect(checkpoint?.diffCount).toBeGreaterThan(0);
 			expect(checkpoint?.commitId).toEqual(expect.any(String));
 			expect(await workingFileDiffs(lix)).toEqual([
 				expect.objectContaining({ id: secondId }),
@@ -75,7 +75,7 @@ describe("Lix SQL diff commands", () => {
 			// its descriptor stays working.
 			const remainingDirs = await lix.execute(
 				`SELECT coalesce(to_path, from_path) AS path
-				 FROM lix_diff('lix_directory', lix_latest_checkpoint_commit_id(), lix_active_branch_commit_id())`,
+				 FROM lix_diff('lix_directory')`,
 			);
 			const remainingDirPaths = remainingDirs.rows
 				.map((row) => row.path)
@@ -97,7 +97,7 @@ describe("Lix SQL diff commands", () => {
 			const secondId = fakeUuid("revert-second");
 			await writeFile(lix, firstId, "/first.md", "before first");
 			await writeFile(lix, secondId, "/second.md", "before second");
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 			await writeFile(lix, firstId, "/first.md", "after first");
 			await writeFile(lix, secondId, "/second.md", "after second");
 
@@ -116,7 +116,7 @@ describe("Lix SQL diff commands", () => {
 		try {
 			const fileId = fakeUuid("restore-checkpoint");
 			await writeFile(lix, fileId, "/restore.md", "checkpoint data");
-			const checkpoint = await lix.createCheckpoint();
+			const checkpoint = await createCheckpoint(lix);
 			await writeFile(lix, fileId, "/restore.md", "current data");
 
 			expect(
@@ -134,10 +134,10 @@ describe("Lix SQL diff commands", () => {
 			const keptId = fakeUuid("full-restore-kept");
 			const laterId = fakeUuid("full-restore-later");
 			await writeFile(lix, keptId, "/kept.md", "checkpoint data");
-			const checkpoint = await lix.createCheckpoint();
+			const checkpoint = await createCheckpoint(lix);
 			await writeFile(lix, keptId, "/kept.md", "current data");
 			await writeFile(lix, laterId, "/later.md", "added afterwards");
-			await lix.createCheckpoint();
+			await createCheckpoint(lix);
 
 			await restoreCheckpoint(lix, checkpoint.commitId);
 

@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import {
 	selectCheckpoints,
 	selectFilesystemEntries,
@@ -130,7 +131,7 @@ describe("checkpoint queries", () => {
 			{ change_count: 0, file_count: 0 },
 		]);
 
-		const checkpoint = await lix.createCheckpoint();
+		const checkpoint = await createCheckpoint(lix);
 
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
 			{ change_count: 0, file_count: 0 },
@@ -174,7 +175,7 @@ describe("checkpoint queries", () => {
 			{ change_count: 2, file_count: 1 },
 		]);
 
-		await lix.createCheckpoint();
+		await createCheckpoint(lix);
 		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([]);
 
 		await lix.close();
@@ -192,7 +193,7 @@ describe("checkpoint queries", () => {
 				content: new TextEncoder().encode("remove me"),
 			})
 			.execute();
-		await lix.createCheckpoint();
+		await createCheckpoint(lix);
 		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
 
 		// Removed files keep their pre-deletion path from the diff's base side.
