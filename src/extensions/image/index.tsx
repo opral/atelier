@@ -23,7 +23,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
@@ -88,13 +88,16 @@ function ImageView({ fileId, filePath }: ImageViewProps) {
 
 function ImageViewContent({ fileId, filePath }: ImageViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<ImageFileRow>((lix) =>
+	const fileResult = useQueryResult<ImageFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
+	if (fileResult.status === "pending") return <ImageLoadingState />;
+	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (

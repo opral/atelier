@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, FileWarning } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
-import { useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { selectFilesStateAt } from "@/queries";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
@@ -56,7 +56,7 @@ function PdfViewContent({
 	initialPage,
 }: PdfViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<PdfFileRow>(
+	const fileResult = useQueryResult<PdfFileRow>(
 		(lix) => {
 			if (sourceCommitId) {
 				return selectFilesStateAt(lix, sourceCommitId)
@@ -71,6 +71,9 @@ function PdfViewContent({
 		},
 		{ subscribe: !sourceCommitId },
 	);
+	if (fileResult.status === "pending") return <PdfLoadingState />;
+	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (

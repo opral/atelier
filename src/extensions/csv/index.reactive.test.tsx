@@ -100,10 +100,20 @@ vi.mock("@glideapps/glide-data-grid", () => ({
 test("updates when CSV file data changes in Lix", async () => {
 	const lix = await openLix();
 	const executeSpy = vi.spyOn(lix, "execute");
+	const observeSpy = vi.spyOn(lix, "observe");
 	const fileReadCount = () =>
 		executeSpy.mock.calls.filter(([statement]) => {
 			const normalized = String(statement).toLowerCase();
 			return normalized.includes("select") && normalized.includes("lix_file");
+		}).length;
+	const fileObserverCount = () =>
+		observeSpy.mock.calls.filter(([statement]) => {
+			const normalized = String(statement).toLowerCase();
+			return (
+				normalized.includes("select") &&
+				normalized.includes("lix_file") &&
+				normalized.includes("path")
+			);
 		}).length;
 	let utils: ReturnType<typeof render> | undefined;
 	try {
@@ -149,8 +159,10 @@ test("updates when CSV file data changes in Lix", async () => {
 			"data-cell-data",
 			"https://example.com",
 		);
-		await waitFor(() => expect(fileReadCount()).toBe(1));
+		expect(fileReadCount()).toBe(0);
+		expect(fileObserverCount()).toBe(1);
 		const readsBeforeUpdate = fileReadCount();
+		const observersBeforeUpdate = fileObserverCount();
 
 		await act(async () => {
 			await qb(lix)
@@ -166,6 +178,7 @@ test("updates when CSV file data changes in Lix", async () => {
 			expect(screen.getByText("person")).toBeInTheDocument();
 		});
 		expect(fileReadCount()).toBe(readsBeforeUpdate);
+		expect(fileObserverCount()).toBe(observersBeforeUpdate);
 	} finally {
 		if (utils) {
 			const rendered = utils;
@@ -174,6 +187,7 @@ test("updates when CSV file data changes in Lix", async () => {
 			});
 		}
 		executeSpy.mockRestore();
+		observeSpy.mockRestore();
 		await lix.close();
 	}
 });

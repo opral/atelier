@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Film, VideoOff } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
-import { useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -39,13 +39,16 @@ export function VideoView({ fileId, filePath }: VideoViewProps) {
 
 function VideoViewContent({ fileId, filePath }: VideoViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<VideoFileRow>((lix) =>
+	const fileResult = useQueryResult<VideoFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
+	if (fileResult.status === "pending") return <VideoLoadingState />;
+	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (

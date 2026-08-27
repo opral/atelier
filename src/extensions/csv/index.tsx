@@ -33,7 +33,7 @@ import {
 	type Rectangle,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import { useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	FileSnapshotsAtCommits,
@@ -205,13 +205,16 @@ export function CsvView({
 function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 	assertFileId(fileId);
 
-	const fileRow = useQueryTakeFirst<CsvFileRow>((lix) =>
+	const fileResult = useQueryResult<CsvFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
+	if (fileResult.status === "pending") return <CsvLoadingSpinner />;
+	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 	return <CsvViewData fileId={fileId} fileRow={fileRow} {...props} />;
 }
 
