@@ -6,6 +6,34 @@ Atelier is a workspace UI — editor, files, and diffs — that mounts into any 
 
 Atelier is the workspace engine inside any host. The included web preview demonstrates a browser app backed by Lix.
 
+Atelier is two things at once:
+
+1. **The embeddable workspace shell** — mount `<Atelier />` and get the full editor, files, history, and review surface.
+2. **A library of workspace components for building Lix applications** — the same extensions that power the shell are composable on their own. Building a Lix app and want to render Markdown, preview a file, or show a change? The extension that owns the file type does the rendering; your app owns the frame.
+
+The second story is the direction: plug-and-play workspace UI, batteries included, powered by extensions.
+
+### File previews (Quick Look)
+
+Any surface in a host app can render a file — live, at a commit, or as a change — through the extension that owns its file type:
+
+```tsx
+import { AtelierFilePreview } from "@opral/atelier";
+
+// The live document.
+<AtelierFilePreview lix={lix} fileId={id} filePath="/README.md" />
+
+// The document as of a commit.
+<AtelierFilePreview lix={lix} fileId={id} filePath="/README.md"
+	targetCommitId={commitId} />
+
+// The change since a base — the same presentation the review surface shows.
+<AtelierFilePreview lix={lix} fileId={id} filePath="/README.md"
+	diff={{ baseCommitId }} />
+```
+
+Previews are chromeless by contract: no outer padding, no toolbars, no internal scrolling — the host owns the frame. Extensions opt in by setting `filePreview` on their definition; file-type resolution rides the same registry that routes opening files.
+
 ## Why "Atelier"?
 
 **Atelier** (French, _[atəlje]_) is an artist's workshop — the private studio where an artist and their assistants make the work. Not the gallery where it's shown, not the storage where it's kept: the room where the work actually happens.

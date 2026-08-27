@@ -19,21 +19,26 @@ type ReactRenderer = (args: {
 
 export function createReactExtensionDefinition(args: {
 	manifest: ExtensionManifest;
+	/** Display label for panels and menus; defaults to the manifest name. */
+	label?: string;
 	description: string;
 	icon: LucideIcon;
 	menuItems?: AtelierExtensionMenuItems;
 	component: ReactRenderer;
+	/** Quick Look renderer for this extension's file types. */
+	filePreview?: ExtensionDefinition["filePreview"];
 }): ExtensionDefinition {
 	const ROOT_SLOT = Symbol.for("atelier.reactRoot");
 
 	return {
 		kind: args.manifest.id,
-		label: args.manifest.name,
+		label: args.label ?? args.manifest.name,
 		description: args.description,
 		icon: args.icon,
 		fileExtensions: normalizeFileExtensions(args.manifest.fileExtensions),
 		...(args.manifest.placement ? { placement: args.manifest.placement } : {}),
 		...(args.menuItems ? { menuItems: args.menuItems } : {}),
+		...(args.filePreview ? { filePreview: args.filePreview } : {}),
 		mount: ({ atelier, view, element }) => {
 			let root = (element as unknown as Record<symbol, Root | undefined>)[
 				ROOT_SLOT

@@ -10,6 +10,26 @@
 		align-items: flex-start;
 		gap: 0.55rem;
 		transform: translateX(-50%);
+		/* Entering and leaving review fade symmetrically with the page's
+		   review-focus dimming (150ms): a keyframe covers the mount, the
+		   transition covers the presence-managed exit. */
+		animation: external-write-review-float-in 0.15s ease;
+		transition:
+			opacity 0.15s ease,
+			transform 0.15s ease;
+	}
+
+	.external-write-review-actions[data-presence="closing"] {
+		opacity: 0;
+		transform: translateX(-50%) translateY(0.5rem);
+		pointer-events: none;
+	}
+
+	@keyframes external-write-review-float-in {
+		from {
+			opacity: 0;
+			transform: translateX(-50%) translateY(0.5rem);
+		}
 	}
 
 	.external-write-review-scope {

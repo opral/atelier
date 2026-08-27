@@ -13,7 +13,11 @@ export {
 	createMemoryPreferencesStore,
 	createMemoryReviewStatusStore,
 	createMemorySessionStateStore,
+	deleteWorkspaceEntry,
+	renameWorkspaceEntry,
 	simulateMarkdownAgentWorkflow,
+	AtelierFilePreview,
+	WorkspacePathTakenError,
 } from "./index";
 export type {
 	AtelierBuiltinExtensionId,
@@ -33,6 +37,8 @@ export type {
 	AtelierSidePanel,
 	AtelierSlots,
 	AtelierUserPreferencesV1,
+	AtelierFilePreviewProps,
 	DeveloperWorkflowScenario,
 	SimulatedAgentWorkflow,
+	WorkspaceEntryRef,
 } from "./index";

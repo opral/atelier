@@ -290,13 +290,17 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	/* Review focus: while a review session is open the unchanged rows
 	   recede, so the action-colored changes are the only thing at full
-	   contrast. Hover restores a row for navigation. */
+	   contrast. Hover restores a row for navigation. The transition lives
+	   on every row so entering and leaving the mode fade symmetrically. */
+	[data-type='item'] {
+		transition: opacity 0.15s ease;
+	}
+
 	:host([data-review-focus])
 		[data-type='item']:not([data-item-git-status]):not(
 			[data-item-contains-git-change]
 		) {
 		opacity: 0.35;
-		transition: opacity 0.15s ease;
 	}
 
 	:host([data-review-focus])
