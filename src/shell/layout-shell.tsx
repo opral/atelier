@@ -650,11 +650,6 @@ type PreHistoricalDocument = {
 const ATELIER_RUNTIME_ICONS = { fileUrl: fileIconUrl } as const;
 const EMPTY_FILE_ID_SET: ReadonlySet<string> = new Set();
 const EMPTY_EXTERNAL_WRITE_REVIEWS: readonly ExternalWriteReview[] = [];
-const WORKING_CHANGE_REVIEW_KINDS = new Set<ExtensionKind>([
-	FILE_EXTENSION_KIND,
-	"atelier_text",
-	"atelier_csv",
-]);
 
 function activeDocumentCompletion(
 	path: string,
@@ -3558,29 +3553,24 @@ function LayoutShellLoadedContentResolved({
 					return;
 				}
 				const workingDiffs = await selectWorkingFileDiffs(lix).execute();
-				const checkpointFiles = workingDiffs
-					.filter((file) => {
-						const handler = findFileHandlerExtension(
-							extensionMap.values(),
-							file.path,
-						);
-						return Boolean(
-							handler && WORKING_CHANGE_REVIEW_KINDS.has(handler.kind),
-						);
-					})
-					.map((file): LixFileForOpen => {
-						const movedFromPath = movedFromSidePaths(
-							file.diff_type,
-							file.from_path,
-							file.to_path,
-						);
-						return {
-							id: file.id,
-							path: file.path,
-							checkpointChangeKind: file.diff_type,
-							...(movedFromPath ? { movedFromPath } : {}),
-						};
-					});
+				// Every changed file joins the review — kinds without a content
+				// diff (drawings, images, pdfs) still review, checkpoint, and
+				// revert at file granularity. Filtering them out strands their
+				// changes outside every checkpoint: the status bar counts raw
+				// diffs and would report them as changed forever.
+				const checkpointFiles = workingDiffs.map((file): LixFileForOpen => {
+					const movedFromPath = movedFromSidePaths(
+						file.diff_type,
+						file.from_path,
+						file.to_path,
+					);
+					return {
+						id: file.id,
+						path: file.path,
+						checkpointChangeKind: file.diff_type,
+						...(movedFromPath ? { movedFromPath } : {}),
+					};
+				});
 				const firstChangedFile = checkpointFiles[0];
 				const removedFileIds: ReadonlySet<string> = new Set(
 					workingDiffs
