@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
@@ -137,12 +137,15 @@ describe("MarkdownView", () => {
 		expect(
 			await screen.findByRole("region", { name: "Checkpoint history" }),
 		).toBeVisible();
+		await within(
+			screen.getByRole("list", { name: "Checkpoints" }),
+		).findAllByRole("listitem");
 		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
 			"Initial delivery",
 		);
-		// One subscribed query owns the row. It executes once for Suspense, then
-		// consumes the SDK's authoritative observer snapshots directly.
-		await waitFor(() => expect(liveDeliveryReads()).toBe(1));
+		// One subscribed query owns the row and consumes the SDK's authoritative
+		// observer snapshots without a duplicate point read.
+		expect(liveDeliveryReads()).toBe(0);
 		expect(liveDeliveryObservers()).toBe(1);
 		expect(
 			observe.mock.calls.some(([statement]) =>
@@ -161,7 +164,7 @@ describe("MarkdownView", () => {
 				"Later delivery",
 			),
 		);
-		expect(liveDeliveryReads()).toBe(1);
+		expect(liveDeliveryReads()).toBe(0);
 		expect(liveDeliveryObservers()).toBe(1);
 		expect(originPointReads()).toHaveLength(0);
 

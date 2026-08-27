@@ -175,7 +175,8 @@ describe("HistoryView", () => {
 		const checkpointList = await screen.findByRole("list", {
 			name: "Checkpoints",
 		});
-		const checkpointItems = within(checkpointList).getAllByRole("listitem");
+		const checkpointItems =
+			await within(checkpointList).findAllByRole("listitem");
 		expect(checkpointItems).toHaveLength(2);
 		expect(within(checkpointList).getByText("Latest checkpoint")).toBeVisible();
 		expect(
@@ -245,7 +246,8 @@ describe("HistoryView", () => {
 		const checkpointList = await screen.findByRole("list", {
 			name: "Checkpoints",
 		});
-		const checkpointItems = within(checkpointList).getAllByRole("listitem");
+		const checkpointItems =
+			await within(checkpointList).findAllByRole("listitem");
 		expect(checkpointItems[0]).toHaveAttribute("aria-current", "true");
 		const checkpointDisclosures = checkpointList.querySelectorAll(
 			"[data-attr='history-disclosure']",

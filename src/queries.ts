@@ -93,9 +93,9 @@ export function selectWorkingFileDiffs(lix: Lix) {
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
 		.select([
 			sql<string>`lixcol_row_pk ->> 0`.as("id"),
-			"lixcol_diff_type as diff_type",
+			"diff_type",
 			sql<string>`coalesce(to_path, from_path)`.as("path"),
-			"lixcol_row_count as row_count",
+			"row_count",
 			"from_path",
 			"to_path",
 		])
@@ -107,7 +107,7 @@ export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
 		.select((eb) => [
-			sql<number>`coalesce(sum(lixcol_row_count), 0)`.as("change_count"),
+			sql<number>`coalesce(sum(row_count), 0)`.as("change_count"),
 			eb.fn.countAll<number>().as("file_count"),
 		])
 		.$castTo<WorkingChangeCountRow>();
