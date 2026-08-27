@@ -30,8 +30,13 @@ export function HistoryView({
 			aria-label="Checkpoint history"
 			className="min-h-0 flex-1 overflow-y-auto p-2"
 		>
-			<WorkingChangesRow atelier={atelier} />
-			<CheckpointList atelier={atelier} />
+			{/* In a narrow sidebar the cap never binds and the list spans the
+			    panel; in a wide panel (full-screen History) the column centers
+			    at a readable measure instead of stretching across the width. */}
+			<div className="mx-auto w-full max-w-[30rem]">
+				<WorkingChangesRow atelier={atelier} />
+				<CheckpointList atelier={atelier} />
+			</div>
 		</section>
 	);
 }
