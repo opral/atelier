@@ -67,7 +67,7 @@ describe("ExternalWriteReviewControls", () => {
 		}
 		expect(checkboxes[0]).toHaveAccessibleName("All files");
 
-		fireEvent.click(screen.getByRole("checkbox", { name: /launch-post/ }));
+		fireEvent.click(screen.getByTestId("diff-scope-file:file-launch"));
 		// The chip counts the selection; the verb labels stay put.
 		expect(
 			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
@@ -106,7 +106,7 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
 		);
-		fireEvent.click(screen.getByRole("checkbox", { name: /launch-post/ }));
+		fireEvent.click(screen.getByTestId("diff-scope-file:file-launch"));
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(screen.queryByRole("checkbox")).toBeNull();
 		expect(
@@ -137,7 +137,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
 
 		// From partial, the master row ticks everything back on.
-		fireEvent.click(screen.getByRole("checkbox", { name: /TikTok/ }));
+		fireEvent.click(screen.getByTestId("diff-scope-file:file-tiktok"));
 		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
 		fireEvent.click(allFiles());
 		expect(allFiles()).toHaveAttribute("aria-checked", "true");
@@ -251,7 +251,7 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
 		);
-		fireEvent.click(screen.getByRole("checkbox", { name: /launch-post/ }));
+		fireEvent.click(screen.getByTestId("diff-scope-file:file-launch"));
 
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(exit).not.toHaveBeenCalled();
