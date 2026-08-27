@@ -557,7 +557,7 @@ function VideoDurationSuffix({
 					"SELECT content FROM lix_file WHERE path = $1 LIMIT 1",
 					[path],
 				);
-				const data = result.rows[0]?.get("content");
+				const data = result.rows[0]?.content;
 				if (disposed || data === undefined || data === null) return;
 				const bytes = decodeFileDataToBytes(data);
 				if (bytes.byteLength === 0) return;

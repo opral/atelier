@@ -162,7 +162,7 @@ export function useSyncedTextFile({
 					const event = await events.next();
 					if (!event || closed) continue;
 					const row = event.result.rows[0];
-					if (row) reconcile(row.get("content"));
+					if (row) reconcile(row.content);
 				}
 			} catch (error) {
 				if (!closed)

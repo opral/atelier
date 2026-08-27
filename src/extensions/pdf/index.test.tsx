@@ -166,7 +166,7 @@ describe("PdfPreview", () => {
 		const result = await lix.execute(
 			"SELECT lix_active_branch_commit_id() AS commit_id",
 		);
-		const sourceCommitId = result.rows[0]?.get("commit_id") as string;
+		const sourceCommitId = result.rows[0]?.commit_id as string;
 		await qb(lix)
 			.updateTable("lix_file")
 			.set({ content: new TextEncoder().encode("%PDF-1.7 current") })

@@ -29,16 +29,6 @@ class LixConnection implements DatabaseConnection {
 			compiledQuery.sql,
 			compiledQuery.parameters,
 		);
-		const columnNames =
-			raw.columns.length > 0
-				? raw.columns
-				: columnNamesFromQueryNode(compiledQuery.query);
-		const decodedRows = decodeRows(raw.rows, columnNames ?? raw.columns);
-		const rows =
-			columnNames &&
-			decodedRows.every((row) => row.length === columnNames.length)
-				? decodedRows.map((row) => rowToObject(row, columnNames))
-				: decodedRows;
 
 		const kind =
 			compiledQuery.query && typeof compiledQuery.query === "object"
@@ -46,7 +36,7 @@ class LixConnection implements DatabaseConnection {
 				: undefined;
 
 		return {
-			rows: rows as R[],
+			rows: raw.rows as R[],
 			numAffectedRows:
 				kind === "SelectQueryNode"
 					? undefined
@@ -207,98 +197,10 @@ function createLixKysely(lix: Lix): Kysely<LixDatabaseSchema> {
 
 export const qb = (lix: Lix) => createLixKysely(lix);
 
-function decodeRows(
-	rows: ExecuteResult["rows"],
-	columns: string[],
-): unknown[][] {
-	return rows.map((row) => columns.map((column) => row.get(column)));
-}
-
 function extractIntegerValue(value: unknown): bigint | undefined {
 	if (typeof value === "number" && Number.isInteger(value))
 		return BigInt(value);
 	if (typeof value === "bigint") return value;
 	if (typeof value === "string" && /^-?\d+$/.test(value)) return BigInt(value);
 	return undefined;
-}
-
-function rowToObject(
-	row: unknown[],
-	columns: string[],
-): Record<string, unknown> {
-	const out: Record<string, unknown> = {};
-	for (let index = 0; index < columns.length; index += 1) {
-		const column = columns[index];
-		if (column) out[column] = row[index];
-	}
-	return out;
-}
-
-function columnNamesFromQueryNode(queryNode: unknown): string[] | undefined {
-	if (!queryNode || typeof queryNode !== "object") return undefined;
-	const query = queryNode as Record<string, unknown>;
-	const kind = typeof query.kind === "string" ? query.kind : "";
-	if (kind === "SelectQueryNode") {
-		const selections = selectSelectionNodes(query);
-		return selections.length > 0
-			? selections.map(selectionNameFromNode)
-			: undefined;
-	}
-	if (
-		kind === "InsertQueryNode" ||
-		kind === "UpdateQueryNode" ||
-		kind === "DeleteQueryNode"
-	) {
-		const returning = query.returning;
-		if (returning && typeof returning === "object") {
-			const selections = selectSelectionNodes(
-				returning as Record<string, unknown>,
-			);
-			return selections.length > 0
-				? selections.map(selectionNameFromNode)
-				: undefined;
-		}
-	}
-	return undefined;
-}
-
-function selectSelectionNodes(
-	node: Record<string, unknown>,
-): Record<string, unknown>[] {
-	return Array.isArray(node.selections)
-		? node.selections.filter(
-				(selection): selection is Record<string, unknown> =>
-					Boolean(selection) && typeof selection === "object",
-			)
-		: [];
-}
-
-function selectionNameFromNode(selectionNode: Record<string, unknown>): string {
-	const selection = selectionNode.selection;
-	if (!selection || typeof selection !== "object") return "column";
-	return (
-		identifierNameFromSelection(selection as Record<string, unknown>) ??
-		"column"
-	);
-}
-
-function identifierNameFromSelection(
-	node: Record<string, unknown>,
-): string | undefined {
-	const kind = typeof node.kind === "string" ? node.kind : "";
-	if (kind === "AliasNode") return identifierName(node.alias);
-	if (kind === "ReferenceNode") {
-		const column = node.column;
-		if (!column || typeof column !== "object") return undefined;
-		return identifierName((column as Record<string, unknown>).column);
-	}
-	if (kind === "ColumnNode") return identifierName(node.column);
-	if (kind === "IdentifierNode") return identifierName(node);
-	return undefined;
-}
-
-function identifierName(node: unknown): string | undefined {
-	if (!node || typeof node !== "object") return undefined;
-	const name = (node as Record<string, unknown>).name;
-	return typeof name === "string" ? name : undefined;
 }
