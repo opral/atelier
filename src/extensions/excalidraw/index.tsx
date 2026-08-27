@@ -10,7 +10,7 @@ import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
-import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { useLix, useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { getFileDataAtCommit } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -49,13 +49,16 @@ function ExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 	assertFileId(fileId);
 	// Subscribed (unlike the text view) so a reopened view never mounts from
 	// a stale cached row: the canvas seeds itself from this snapshot.
-	const fileRow = useQueryTakeFirst<ExcalidrawFileRow>((lix) =>
+	const fileResult = useQueryResult<ExcalidrawFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
+	if (fileResult.status === "pending") return <ExcalidrawLoadingState />;
+	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (

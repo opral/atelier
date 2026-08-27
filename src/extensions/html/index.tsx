@@ -5,7 +5,7 @@ import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
 } from "@/lib/decode-file-data";
-import { useQuery, useQueryTakeFirst } from "@/lib/lix-react";
+import { useQuery, useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -57,13 +57,16 @@ function HtmlView({ fileId, filePath }: HtmlViewProps) {
 
 function HtmlViewContent({ fileId, filePath }: HtmlViewProps) {
 	assertFileId(fileId);
-	const fileRow = useQueryTakeFirst<HtmlFileRow>((lix) =>
+	const fileResult = useQueryResult<HtmlFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
 			.select(["id", "path", "content"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
+	if (fileResult.status === "pending") return <HtmlLoadingState />;
+	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (

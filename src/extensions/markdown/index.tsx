@@ -6,7 +6,6 @@ import { Check, FileText, Loader2 } from "lucide-react";
 import {
 	useLix,
 	useQueryResult,
-	useQueryTakeFirst,
 	useResolvedActiveBranchId,
 } from "@/lib/lix-react";
 import {
@@ -192,14 +191,9 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 	);
 	if (fileResult.status === "pending") return <MarkdownLoadingSpinner />;
 	if (fileResult.status === "error") throw fileResult.error;
+	const fileRow = fileResult.rows[0];
 
-	return (
-		<MarkdownViewLoaded
-			fileId={fileId}
-			fileRow={fileResult.rows[0]}
-			{...props}
-		/>
-	);
+	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
 }
 
 function MarkdownViewLoaded(
