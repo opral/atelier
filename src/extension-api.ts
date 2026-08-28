@@ -28,6 +28,7 @@ export type ExtensionManifest = {
 export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	files: "atelier_files",
 	history: "atelier_history",
+	debug: "atelier_debug",
 	markdown: "atelier_file",
 	csv: "atelier_csv",
 	image: "atelier_image",
@@ -333,6 +334,23 @@ export type AtelierDiffApi = {
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
+	/**
+	 * Optional host bridge for comparing the workspace replica with its remote.
+	 * The host owns the returned handle and its lifecycle. Keeping this lazy
+	 * avoids opening a remote connection for workspaces that never use Debug.
+	 */
+	readonly debug?: {
+		readonly remoteLix?: () => Promise<Lix>;
+		/** Base name used for manual local snapshot downloads. */
+		readonly snapshotName?: string;
+		/** Downloads the canonical server-side snapshot when a server is present. */
+		readonly remoteSnapshot?: () => Promise<Blob>;
+		/** Builds a portable archive for a completed local/remote comparison. */
+		readonly createReproduction?: (input: {
+			readonly query: string;
+			readonly diffCsv: string;
+		}) => Promise<Blob>;
+	};
 	/**
 	 * Whether this extension view must render without mutation affordances.
 	 * True for a host-level read-only workspace and for historical revisions.
