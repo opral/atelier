@@ -55,11 +55,10 @@ describe("compareQueryOutcomes", () => {
 });
 
 describe("Debug extension", () => {
-	test("can run locally without contacting a configured remote target", async () => {
+	test("the single run action executes both targets and renders one local result table", async () => {
 		const localLix = queryLix([{ path: "/local.md" }], "path");
-		const getRemoteLix = vi.fn(async () =>
-			queryLix([{ path: "/remote.md" }], "path"),
-		);
+		const remoteLix = queryLix([{ path: "/remote.md" }], "path");
+		const getRemoteLix = vi.fn(async () => remoteLix);
 		render(
 			<DebugView
 				localLix={localLix}
@@ -70,12 +69,17 @@ describe("Debug extension", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Run locally" }));
+		fireEvent.click(screen.getByRole("button", { name: "Run" }));
 
 		expect(await screen.findByText("/local.md")).toBeInTheDocument();
 		expect(localLix.execute).toHaveBeenCalledOnce();
-		expect(getRemoteLix).not.toHaveBeenCalled();
-		expect(screen.queryByLabelText("Remote results")).not.toBeInTheDocument();
+		expect(remoteLix.execute).toHaveBeenCalledOnce();
+		expect(getRemoteLix).toHaveBeenCalledOnce();
+		expect(screen.getAllByLabelText("Query results")).toHaveLength(1);
+		expect(screen.queryByText("/remote.md")).not.toBeInTheDocument();
+		expect(
+			screen.getByText(/Completed locally in .* remote in .*/i),
+		).toBeVisible();
 	});
 
 	test("shows remote snapshot download only when the host provides it", () => {
@@ -118,7 +122,7 @@ describe("Debug extension", () => {
 		).toBeEnabled();
 		expect(screen.queryByLabelText("Remote results")).not.toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("button", { name: "Run locally" }));
+		fireEvent.click(screen.getByRole("button", { name: "Run" }));
 
 		expect(await screen.findByText("/local-only.md")).toBeInTheDocument();
 		expect(localLix.execute).toHaveBeenCalledOnce();
@@ -145,10 +149,10 @@ describe("Debug extension", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: /Run on both/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Run" }));
 
 		expect(await screen.findByText("/local.md")).toBeInTheDocument();
-		expect(await screen.findByText("/remote.md")).toBeInTheDocument();
+		expect(screen.queryByText("/remote.md")).not.toBeInTheDocument();
 		expect(getRemoteLix).toHaveBeenCalledOnce();
 		expect(screen.getByText("1 difference")).toBeInTheDocument();
 		expect(
@@ -169,7 +173,7 @@ describe("Debug extension", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: /Run on both/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Run" }));
 		await waitFor(() =>
 			expect(screen.getByText("Results match")).toBeVisible(),
 		);
