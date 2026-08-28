@@ -4103,6 +4103,9 @@ function LayoutShellLoadedContentResolved({
 		() => ({
 			lix,
 			readOnly: configuration.readOnly ?? false,
+			...(configuration.debug !== undefined
+				? { debug: configuration.debug }
+				: {}),
 			...(configuration.filesView !== undefined
 				? { filesView: configuration.filesView }
 				: {}),
@@ -4124,6 +4127,7 @@ function LayoutShellLoadedContentResolved({
 			diff: diffApi,
 		}),
 		[
+			configuration.debug,
 			configuration.filesView,
 			configuration.readOnly,
 			emitEvent,

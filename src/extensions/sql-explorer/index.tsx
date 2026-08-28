@@ -720,7 +720,7 @@ function Sidebar({
 	);
 }
 
-function SqlEditor({
+export function SqlEditor({
 	query,
 	onQueryChange,
 	onRun,

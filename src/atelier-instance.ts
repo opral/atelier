@@ -4,6 +4,7 @@ import type {
 	AtelierDocumentsApi,
 	AtelierEvent,
 	AtelierExtensionRegistration,
+	AtelierExtensionRuntime,
 	AtelierFilesViewOptions,
 	AtelierPanelSide,
 	AtelierViewOpenOptions,
@@ -36,6 +37,8 @@ export type AtelierCentralPanelOptions = {
 
 export type AtelierOptions = {
 	readonly lix: Lix;
+	/** Optional host bridge consumed by Atelier's bundled Debug extension. */
+	readonly debug?: AtelierExtensionRuntime["debug"];
 	/**
 	 * Presents workspace content without mutation affordances. Bundled editors
 	 * remain visible and selectable while disabling writes.
