@@ -2,7 +2,7 @@ import { Suspense, useEffect } from "react";
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
-import { Check, FileText, Loader2 } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import {
 	useLix,
 	useQueryResult,
@@ -437,9 +437,6 @@ function MarkdownLiveViewLoaded({
 								}}
 							/>
 						) : null}
-						{isActiveView && isPanelFocused && !editorReadOnly ? (
-							<MarkdownAutosaveHint />
-						) : null}
 					</div>
 					{editorReadOnly ? null : (
 						<>
@@ -651,50 +648,6 @@ function MarkdownHistoricalViewResolved({
 	}
 
 	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
-}
-
-function MarkdownAutosaveHint() {
-	const [hintKey, setHintKey] = useState(0);
-
-	useEffect(() => {
-		const handleKeyDown = (event: KeyboardEvent) => {
-			const usesPrimaryModifier = event.metaKey || event.ctrlKey;
-			if (!usesPrimaryModifier || event.altKey || event.shiftKey) return;
-			if (event.key.toLowerCase() !== "s") return;
-			event.preventDefault();
-			event.stopPropagation();
-			setHintKey((current) => current + 1);
-		};
-		window.addEventListener("keydown", handleKeyDown, { capture: true });
-		return () => {
-			window.removeEventListener("keydown", handleKeyDown, { capture: true });
-		};
-	}, []);
-
-	useEffect(() => {
-		if (hintKey === 0) return;
-		const timeoutId = window.setTimeout(() => setHintKey(0), 2400);
-		return () => window.clearTimeout(timeoutId);
-	}, [hintKey]);
-
-	if (hintKey === 0) return null;
-
-	return (
-		<div
-			key={hintKey}
-			className="markdown-autosave-hint"
-			role="status"
-			aria-live="polite"
-			aria-atomic="true"
-		>
-			<span className="markdown-autosave-hint-icon" aria-hidden="true">
-				<Check aria-hidden />
-			</span>
-			<span>
-				<strong>Auto-saved.</strong> No Cmd+S needed.
-			</span>
-		</div>
-	);
 }
 
 function MarkdownSnapshotView({
