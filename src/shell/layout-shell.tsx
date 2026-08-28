@@ -30,6 +30,7 @@ import { SidePanel } from "./side-panel";
 import { CentralPanel } from "./central-panel";
 import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
+import { AtelierAutosaveHint } from "./autosave-hint";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import { fileIconUrl } from "@/file-icons";
 import {
@@ -2272,8 +2273,8 @@ function LayoutShellLoadedContentResolved({
 			? `Reviewing changes since checkpoint${reviewFileCountLabel}`
 			: null;
 
-	// The float's orange verb, scoped by its ▾ checklist: every changed file
-	// unless the user unticked some.
+	// The float's orange verb, scoped by its ▾ checklist: the viewed file by
+	// default, or the explicit multi-file selection the user made.
 	const handleDiffPrimary = useCallback(
 		async (selectedFileIds: readonly string[]) => {
 			if (historicalReview) {
@@ -4236,6 +4237,7 @@ function LayoutShellLoadedContentResolved({
 				className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]"
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
+				<AtelierAutosaveHint />
 				<TopBar
 					activeFileName={activeFileName}
 					isReadOnly={isHostReadOnly}

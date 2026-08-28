@@ -16,7 +16,7 @@ const FILES = [
 ] as const;
 
 describe("ExternalWriteReviewControls", () => {
-	test("the chip is the working set; verbs commit every file in one press", async () => {
+	test("the chip defaults to the viewed file and scopes both verbs to it", async () => {
 		const primary = vi.fn(async () => {});
 		const undo = vi.fn();
 		render(
@@ -32,17 +32,37 @@ describe("ExternalWriteReviewControls", () => {
 
 		expect(screen.getByText("1 of 2")).toBeVisible();
 		expect(
-			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
-		await waitFor(() =>
-			expect(primary).toHaveBeenCalledWith(["file-tiktok", "file-launch"]),
-		);
+		await waitFor(() => expect(primary).toHaveBeenCalledWith(["file-tiktok"]));
 		fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-		expect(undo).toHaveBeenCalledWith(["file-tiktok", "file-launch"]);
+		expect(undo).toHaveBeenCalledWith(["file-tiktok"]);
 	});
 
-	test("unticking re-scopes the chip's count; labels never change", async () => {
+	test("uses the currently viewed file when the review opens later in the list", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "launch-post.md",
+					activeIndex: 1,
+				}}
+				files={FILES}
+				onPrimary={vi.fn()}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+		);
+		expect(screen.getByTestId("diff-scope-file:file-tiktok")).not.toBeChecked();
+		expect(screen.getByTestId("diff-scope-file:file-launch")).toBeChecked();
+	});
+
+	test("the checklist can expand or move the working set", async () => {
 		const primary = vi.fn(async () => {});
 		const undo = vi.fn();
 		render(
@@ -57,21 +77,21 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		);
 		const checkboxes = screen.getAllByRole("checkbox");
 		// "All files" master row plus one row per file.
 		expect(checkboxes).toHaveLength(3);
-		for (const checkbox of checkboxes) {
-			expect(checkbox).toBeChecked();
-		}
 		expect(checkboxes[0]).toHaveAccessibleName("All files");
+		expect(checkboxes[0]).toHaveAttribute("aria-checked", "mixed");
+		expect(screen.getByTestId("diff-scope-file:file-tiktok")).toBeChecked();
+		expect(screen.getByTestId("diff-scope-file:file-launch")).not.toBeChecked();
 
 		fireEvent.click(screen.getByTestId("diff-scope-file:file-launch"));
-		// The chip counts the selection; the verb labels stay put.
 		expect(
-			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
 		).toBeVisible();
+		fireEvent.click(screen.getByTestId("diff-scope-file:file-tiktok"));
 		expect(screen.getByText("1 file")).toBeVisible();
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeVisible();
 		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
@@ -81,13 +101,13 @@ describe("ExternalWriteReviewControls", () => {
 
 		// Both verbs apply to the selection.
 		fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-		expect(undo).toHaveBeenCalledWith(["file-tiktok"]);
+		expect(undo).toHaveBeenCalledWith(["file-launch"]);
 		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
-		await waitFor(() => expect(primary).toHaveBeenCalledWith(["file-tiktok"]));
-		// Committing closes the list and resets the working set.
+		await waitFor(() => expect(primary).toHaveBeenCalledWith(["file-launch"]));
+		// Committing closes the list and restores the viewed-file default.
 		expect(screen.queryByRole("checkbox")).toBeNull();
 		expect(
-			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		).toBeVisible();
 	});
 
@@ -104,9 +124,10 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		);
 		fireEvent.click(screen.getByTestId("diff-scope-file:file-launch"));
+		fireEvent.click(screen.getByTestId("diff-scope-file:file-tiktok"));
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(screen.queryByRole("checkbox")).toBeNull();
 		expect(
@@ -128,9 +149,12 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		);
 		const allFiles = () => screen.getByRole("checkbox", { name: "All files" });
+		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "true");
 		fireEvent.click(allFiles());
 		expect(allFiles()).toHaveAttribute("aria-checked", "false");
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
@@ -144,20 +168,26 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeEnabled();
 	});
 
-	test("historical: the read-only past has no Undo", () => {
+	test("historical: Restore defaults to the viewed file and has no Undo", async () => {
+		const restore = vi.fn(async () => {});
 		render(
 			<ExternalWriteReviewControls
 				isActive
 				mode="historical"
-				navigation={NAVIGATION}
+				navigation={{
+					...NAVIGATION,
+					fileName: "launch-post.md",
+					activeIndex: 1,
+				}}
 				files={FILES}
 				onUndo={vi.fn()}
-				onPrimary={vi.fn()}
+				onPrimary={restore}
 			/>,
 		);
 
 		expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-		expect(screen.getByRole("button", { name: "Restore" })).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+		await waitFor(() => expect(restore).toHaveBeenCalledWith(["file-launch"]));
 	});
 
 	test("one changed file: no chip and no stepper arrows", () => {
@@ -249,9 +279,8 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Working set: 2 of 2 files" }),
+			screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
 		);
-		fireEvent.click(screen.getByTestId("diff-scope-file:file-launch"));
 
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(exit).not.toHaveBeenCalled();

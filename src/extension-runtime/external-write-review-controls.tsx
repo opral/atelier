@@ -45,7 +45,7 @@ type ExternalWriteReviewControlsProps = {
 	/** Which diff-mode flow the float commits: working changes or a historical checkpoint. */
 	readonly mode: DiffFloatMode;
 	readonly navigation?: ExternalWriteReviewNavigation;
-	/** Every changed file in this diff — the scope chip's checklist, all ticked by default. */
+	/** Every changed file in this diff — the scope chip defaults to the viewed file. */
 	readonly files?: readonly DiffFloatFile[];
 	/**
 	 * Walk the selection back. Hidden in historical mode (the past is
@@ -69,11 +69,21 @@ const PRIMARY_VERBS: Record<
 	historical: { label: "Restore", busyLabel: "Restoring…" },
 };
 
+function untickedFilesExcept(
+	files: readonly DiffFloatFile[],
+	selectedFileId: string | null,
+): ReadonlySet<string> {
+	if (!selectedFileId) return new Set();
+	return new Set(
+		files.filter((file) => file.id !== selectedFileId).map((file) => file.id),
+	);
+}
+
 /**
  * Diff mode's floating action bar.
  *
  * One float, one anatomy: stepper · scope chip · actions. The chip is the
- * working set — all files by default, one press does everything (⌘⏎). Its
+ * working set — the viewed file by default, one press applies to it (⌘⏎). Its
  * checklist opens from the chip, and every action to its right applies to
  * the selection: the labels never change, the chip's count does. The scope
  * sits ahead of the verbs because it belongs to all of them. One changed
@@ -95,24 +105,33 @@ export function ExternalWriteReviewControls({
 	const [isCommitting, setIsCommitting] = useState(false);
 	const [commitError, setCommitError] = useState<string | null>(null);
 	const [isListOpen, setIsListOpen] = useState(false);
+	const listFiles = useMemo(() => files ?? EMPTY_FILES, [files]);
+	const activeFileId =
+		listFiles[navigation?.activeIndex ?? 0]?.id ?? listFiles[0]?.id ?? null;
+	const activeFileIdRef = useRef(activeFileId);
+	const listFilesRef = useRef(listFiles);
+	activeFileIdRef.current = activeFileId;
+	listFilesRef.current = listFiles;
 	const [untickedFileIds, setUntickedFileIds] = useState<ReadonlySet<string>>(
-		() => new Set(),
+		() => untickedFilesExcept(listFiles, activeFileId),
 	);
 	const listId = useId();
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const chipRef = useRef<HTMLButtonElement | null>(null);
 	const listRef = useRef<HTMLDivElement | null>(null);
 
-	const listFiles = useMemo(() => files ?? EMPTY_FILES, [files]);
 	const selectedFiles = listFiles.filter(
 		(file) => !untickedFileIds.has(file.id),
 	);
 	const hasScopeChip = listFiles.length > 1;
 
-	// A new diff (files appear or disappear) always starts back at everything.
+	// A new diff starts scoped to the file that opened it. Browsing with the
+	// stepper does not discard a working set the user has explicitly adjusted.
 	const fileSetKey = listFiles.map((file) => file.id).join("\n");
 	useEffect(() => {
-		setUntickedFileIds(new Set());
+		setUntickedFileIds(
+			untickedFilesExcept(listFilesRef.current, activeFileIdRef.current),
+		);
 	}, [fileSetKey]);
 
 	const toggleFile = useCallback((fileId: string) => {
@@ -148,7 +167,9 @@ export function ExternalWriteReviewControls({
 		try {
 			await onPrimary(selectionIds);
 			setIsListOpen(false);
-			setUntickedFileIds(new Set());
+			setUntickedFileIds(
+				untickedFilesExcept(listFiles, activeFileIdRef.current),
+			);
 		} catch (cause) {
 			setCommitError(
 				cause instanceof Error ? cause.message : "The action failed",
@@ -156,7 +177,14 @@ export function ExternalWriteReviewControls({
 		} finally {
 			setIsCommitting(false);
 		}
-	}, [hasSelection, isCommitting, onPrimary, readOnly, selectionIds]);
+	}, [
+		hasSelection,
+		isCommitting,
+		listFiles,
+		onPrimary,
+		readOnly,
+		selectionIds,
+	]);
 
 	useEffect(() => {
 		if (!isActive) return;

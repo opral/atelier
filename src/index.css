@@ -13,6 +13,70 @@
 	--atelier-panel-header-height: 40px;
 }
 
+.atelier-autosave-hint {
+	position: absolute;
+	right: 1rem;
+	bottom: 2.25rem;
+	z-index: 40;
+	display: inline-flex;
+	max-width: min(24rem, calc(100% - 2rem));
+	min-height: 2.25rem;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.625rem;
+	border: 1px solid var(--color-border-panel);
+	border-radius: 8px;
+	background: var(--color-bg-panel);
+	box-shadow: var(--shadow-md);
+	color: var(--color-text-secondary);
+	font-size: 0.75rem;
+	font-weight: 500;
+	line-height: 1rem;
+	pointer-events: none;
+	transform: translateY(0);
+	animation: atelier-autosave-hint-in 160ms ease-out;
+}
+
+.atelier-autosave-hint strong {
+	color: var(--color-text-primary);
+	font-weight: 650;
+}
+
+.atelier-autosave-hint-icon {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 1.125rem;
+	height: 1.125rem;
+	border-radius: var(--radius-full);
+	background: var(--color-success-50);
+	color: var(--color-success-700);
+}
+
+.atelier-autosave-hint-icon svg {
+	width: 0.6875rem;
+	height: 0.6875rem;
+	stroke-width: 2;
+}
+
+@keyframes atelier-autosave-hint-in {
+	from {
+		opacity: 0;
+		transform: translateY(0.35rem);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.atelier-autosave-hint {
+		animation: none;
+	}
+}
+
 .atelier-root [data-review-mode="true"]::after {
 	position: absolute;
 	z-index: 30;
