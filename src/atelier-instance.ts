@@ -239,6 +239,7 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		preferencesStore,
 		branchSession,
 		reviewStatusStore,
+		...(options.debug !== undefined ? { debug: options.debug } : {}),
 		...(options.readOnly !== undefined ? { readOnly: options.readOnly } : {}),
 		...(options.extensions !== undefined
 			? { extensions: [...options.extensions] }
