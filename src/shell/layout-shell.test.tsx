@@ -838,7 +838,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("checkpoints only the selected working-set files", async () => {
+	test("checkpoints only the viewed file by default", async () => {
 		const lix = await openLix();
 		const reviewStatusStore = createMemoryReviewStatusStore();
 		const atelier = createAtelier({ lix, reviewStatusStore });
@@ -884,19 +884,6 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
-			fireEvent.click(
-				await screen.findByRole("button", {
-					name: "Working set: 2 of 2 files",
-				}),
-			);
-			const workingSet = screen.getByRole("group", {
-				name: "Files in the working set",
-			});
-			fireEvent.click(
-				within(workingSet).getByRole("checkbox", {
-					name: "partial-remaining.md",
-				}),
-			);
 			expect(
 				await screen.findByRole("button", {
 					name: "Working set: 1 of 2 files",
