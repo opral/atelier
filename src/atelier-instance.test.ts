@@ -36,8 +36,13 @@ describe("createAtelier", () => {
 	test("creates one workspace instance with its Lix and immutable configuration", () => {
 		const lix = {} as Lix;
 		const extensions = [] as const;
+		const debug = {
+			remoteLix: vi.fn(async () => lix),
+			remoteSnapshot: vi.fn(async () => new Blob()),
+		};
 		const atelier = createAtelier({
 			lix,
+			debug,
 			extensions,
 			defaultOpenPanels: ["right"],
 		});
@@ -56,6 +61,7 @@ describe("createAtelier", () => {
 			}),
 		);
 		expect(getAtelierConfiguration(atelier).extensions).not.toBe(extensions);
+		expect(getAtelierConfiguration(atelier).debug).toBe(debug);
 	});
 
 	test("serializes preference saves at the Atelier boundary", async () => {
