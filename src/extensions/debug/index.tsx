@@ -6,7 +6,6 @@ import {
 	CheckCircle2,
 	Cloud,
 	Download,
-	HardDrive,
 	Play,
 } from "lucide-react";
 import { createReactExtensionDefinition } from "@/extension-runtime/react-extension";
@@ -35,7 +34,6 @@ type ComparisonRun = {
 	readonly query: string;
 	readonly local: QueryOutcome;
 	readonly remote: QueryOutcome | null;
-	readonly elapsedMs: number;
 	readonly diffCsv: string | null;
 	readonly differenceCount: number | null;
 };
@@ -231,7 +229,7 @@ export function DebugView({
 		useState(false);
 	const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
-	const runQuery = async (includeRemote: boolean) => {
+	const runQuery = async () => {
 		const sql = query.replace(/;\s*$/, "").trim();
 		if (sql.length === 0) return;
 		if (!isReadOnlyStatement(sql)) {
@@ -242,10 +240,9 @@ export function DebugView({
 		setIsRunning(true);
 		setError(null);
 		setDownloadError(null);
-		const startedAt = performance.now();
 		try {
 			const [local, remote] =
-				!includeRemote || remoteLix === undefined
+				remoteLix === undefined
 					? [await executeTarget(Promise.resolve(localLix), sql), null]
 					: await Promise.all([
 							executeTarget(Promise.resolve(localLix), sql),
@@ -256,7 +253,6 @@ export function DebugView({
 				query: sql,
 				local,
 				remote,
-				elapsedMs: performance.now() - startedAt,
 				diffCsv: diff?.csv ?? null,
 				differenceCount: diff?.count ?? null,
 			});
@@ -368,33 +364,25 @@ export function DebugView({
 			<SqlEditor
 				query={query}
 				onQueryChange={setQuery}
-				onRun={() => void runQuery(false)}
+				onRun={() => void runQuery()}
 			/>
 			<div className="atelier-debug-runbar">
 				<button
 					type="button"
 					className="atelier-debug-run"
-					onClick={() => void runQuery(false)}
+					onClick={() => void runQuery()}
 					disabled={isRunning}
 				>
 					<Play aria-hidden="true" />
-					{isRunning ? "Running…" : "Run locally"}
+					{isRunning ? "Running…" : "Run"}
 					<span aria-hidden="true">⌘⏎</span>
 				</button>
-				{remoteLix === undefined ? null : (
-					<button
-						type="button"
-						className="atelier-debug-run-remote"
-						onClick={() => void runQuery(true)}
-						disabled={isRunning}
-					>
-						<Cloud aria-hidden="true" />
-						Run on both
-					</button>
-				)}
 				{run === null ? null : (
 					<span className="atelier-debug-elapsed">
-						Completed in {formatDuration(run.elapsedMs)}
+						Completed locally in {formatDuration(run.local.durationMs)}
+						{run.remote === null
+							? null
+							: ` remote in ${formatDuration(run.remote.durationMs)}`}
 					</span>
 				)}
 			</div>
@@ -408,24 +396,7 @@ export function DebugView({
 					{snapshotError}
 				</div>
 			)}
-			<div
-				className={`atelier-debug-results-grid${
-					run?.remote == null ? " atelier-debug-results-grid--local" : ""
-				}`}
-			>
-				<ResultPane
-					label="Local"
-					icon={HardDrive}
-					outcome={run?.local ?? null}
-				/>
-				{run?.remote == null ? null : (
-					<ResultPane
-						label="Remote"
-						icon={Cloud}
-						outcome={run?.remote ?? null}
-					/>
-				)}
-			</div>
+			<ResultTable outcome={run?.local ?? null} />
 			{run === null ||
 			run.remote === null ||
 			run.differenceCount === null ? null : (
@@ -484,28 +455,9 @@ async function executeTarget(
 	}
 }
 
-function ResultPane({
-	label,
-	icon: Icon,
-	outcome,
-}: {
-	readonly label: string;
-	readonly icon: typeof HardDrive;
-	readonly outcome: QueryOutcome | null;
-}) {
+function ResultTable({ outcome }: { readonly outcome: QueryOutcome | null }) {
 	return (
-		<section
-			className="atelier-debug-result-pane"
-			aria-label={`${label} results`}
-		>
-			<header>
-				<Icon aria-hidden="true" />
-				<strong>{label}</strong>
-				<span />
-				{outcome === null ? null : (
-					<code>{formatDuration(outcome.durationMs)}</code>
-				)}
-			</header>
+		<section className="atelier-debug-result-pane" aria-label="Query results">
 			<div className="atelier-debug-results atelier-sql-results">
 				{outcome === null ? (
 					<div className="atelier-debug-empty">
