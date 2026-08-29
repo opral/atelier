@@ -45,7 +45,7 @@
 		"ci": "pnpm run build:lix && pnpm run build && pnpm test && pnpm --dir fixtures/consumer build"
 	},
 	"peerDependencies": {
-		"@lix-js/sdk": "^0.15.0",
+		"@lix-js/sdk": ">=0.14.0 <0.16.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0"
 	},
