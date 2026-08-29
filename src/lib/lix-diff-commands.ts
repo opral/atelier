@@ -34,7 +34,7 @@ export async function createCheckpointForFiles(
 		`SELECT commit_id
 		 FROM lix_create_checkpoint(ARRAY(
 		   SELECT row_ref
-		   FROM lix_diff('lix_file')
+		   FROM lix_working_diff('lix_file')
 		   WHERE id IN (${fileIdParameters(fileIds, 1)})
 		 ))`,
 		[...fileIds],
@@ -55,7 +55,7 @@ export async function revertWorkingChangesForFiles(
 	const result = await lix.execute(
 		`INSERT INTO lix_revert (row_ref)
 		 SELECT row_ref
-		 FROM lix_diff('lix_file')
+		 FROM lix_working_diff('lix_file')
 		 WHERE id IN (${fileIdParameters(fileIds, 1)})`,
 		[...fileIds],
 	);

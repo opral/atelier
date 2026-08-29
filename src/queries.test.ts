@@ -162,13 +162,19 @@ describe("checkpoint queries", () => {
 				new TextEncoder().encode("draft"),
 			],
 		);
-		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([
+		const workingFiles = await selectWorkingFileDiffs(lix).execute();
+		expect(workingFiles).toEqual([
 			expect.objectContaining({
 				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
 				diff_type: "added",
+				before_commit_id: expect.any(String),
+				after_commit_id: expect.any(String),
 			}),
 		]);
+		expect(workingFiles[0]?.before_commit_id).not.toBe(
+			workingFiles[0]?.after_commit_id,
+		);
 		// The file's descriptor and content rows count; the workspace's own
 		// key-value write does not.
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([

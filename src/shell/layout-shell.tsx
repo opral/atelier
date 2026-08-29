@@ -3537,23 +3537,26 @@ function LayoutShellLoadedContentResolved({
 			workingReviewOpeningRef.current = true;
 			void (async () => {
 				// The review window is always base-to-head, where the base is the
-				// latest checkpoint or the repository's empty root — exactly what
-				// lix_latest_checkpoint_commit_id() resolves. One lix_diff call
-				// yields the changed files with side-resolved paths — removed
-				// files keep their pre-deletion path from the base side.
-				const rangeResult = await lix.execute(
-					`SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
-				        lix_active_branch_commit_id() AS after_commit_id`,
-				);
-				const beforeCommitId = rangeResult.rows[0]?.before_commit_id;
-				const headCommitId = rangeResult.rows[0]?.after_commit_id;
-				if (
-					typeof beforeCommitId !== "string" ||
-					typeof headCommitId !== "string"
-				) {
-					return;
-				}
+				// latest checkpoint or the repository's empty root. The HOT-only
+				// relation pins that epoch and the changed rows in the same statement,
+				// so a concurrent sync cannot pair rows from one head with coordinates
+				// from another.
 				const workingDiffs = await selectWorkingFileDiffs(lix).execute();
+				const firstWorkingDiff = workingDiffs[0];
+				if (!firstWorkingDiff) return;
+				const beforeCommitId = firstWorkingDiff.before_commit_id;
+				const headCommitId = firstWorkingDiff.after_commit_id;
+				if (
+					workingDiffs.some(
+						(row) =>
+							row.before_commit_id !== beforeCommitId ||
+							row.after_commit_id !== headCommitId,
+					)
+				) {
+					throw new Error(
+						"working diff returned rows from multiple HOT epochs",
+					);
+				}
 				// Every changed file joins the review — kinds without a content
 				// diff (drawings, images, pdfs) still review, checkpoint, and
 				// revert at file granularity. Filtering them out strands their

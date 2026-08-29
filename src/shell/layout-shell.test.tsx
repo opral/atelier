@@ -521,6 +521,7 @@ describe("diff review navigation", () => {
 					}),
 				).toHaveAttribute("aria-checked", "false");
 			});
+			const reviewOpenExecute = vi.spyOn(lix, "execute");
 			await act(async () => {
 				fireEvent.click(
 					screen.getByRole("button", {
@@ -531,6 +532,18 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
+			expect(
+				reviewOpenExecute.mock.calls.some(([statement]) =>
+					String(statement).includes("lix_working_diff('lix_file')"),
+				),
+			).toBe(true);
+			expect(
+				reviewOpenExecute.mock.calls.some(([statement]) =>
+					String(statement).includes(
+						"lix_latest_checkpoint_commit_id() AS before_commit_id",
+					),
+				),
+			).toBe(false);
 			const reviewFloat = document.querySelector(
 				".external-write-review-actions",
 			);

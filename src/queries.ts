@@ -17,7 +17,7 @@ export type WorkingChangeCountRow = {
 	file_count: number;
 };
 
-/** One changed file from lix_diff('lix_file'). */
+/** One changed file and its atomically pinned HOT epoch. */
 export type FileDiffRow = {
 	/** The file relation's typed primary key, projected by lix_diff. */
 	id: string;
@@ -28,6 +28,8 @@ export type FileDiffRow = {
 	/** Side paths: a modified row whose sides differ is a move/rename. */
 	from_path: string | null;
 	to_path: string | null;
+	before_commit_id: string;
+	after_commit_id: string;
 };
 
 export type CheckpointRow = {
@@ -93,6 +95,8 @@ export function selectWorkingFileDiffs(lix: Lix) {
 		.select([
 			"id",
 			"diff_type",
+			"before_commit_id",
+			"after_commit_id",
 			sql<string>`coalesce(to_path, from_path)`.as("path"),
 			"row_count",
 			"from_path",
@@ -113,7 +117,7 @@ export function selectWorkingChangeCount(lix: Lix) {
 }
 
 function workingFileDiffTable() {
-	return sql<any>`lix_diff('lix_file')`;
+	return sql<any>`lix_working_diff('lix_file')`;
 }
 
 /**
