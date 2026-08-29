@@ -690,6 +690,7 @@ describe("diff review navigation", () => {
 				activeHistoryInstance,
 			);
 			const execute = vi.spyOn(lix, "execute");
+			execute.mockClear();
 			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
 			expect(
 				await screen.findByRole("button", {

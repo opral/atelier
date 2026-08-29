@@ -1273,7 +1273,8 @@ function workingDiffSqlCalls(calls: readonly unknown[][]): string[] {
 		.map(([sql]) => sql)
 		.filter(
 			(sql): sql is string =>
-				typeof sql === "string" && sql.includes("lix_diff('lix_file'"),
+				typeof sql === "string" &&
+				sql.includes("lix_working_diff('lix_file'"),
 		);
 }
 
