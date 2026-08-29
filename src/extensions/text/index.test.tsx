@@ -25,6 +25,8 @@ describe("text extension routing", () => {
 		"/notes/todo.txt",
 		"/src/session.py",
 		"/config/settings.JSON",
+		"/src/module.mjs",
+		"/src/module.cjs",
 		"/src/app.tsx",
 		"/.env",
 	])("handles %s", (path) => {

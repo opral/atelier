@@ -10,6 +10,8 @@ describe("text editor", () => {
 	test.each([
 		["/src/session.py", "Python"],
 		["/config/settings.json", "JSON"],
+		["/src/module.mjs", "JavaScript"],
+		["/src/module.cjs", "JavaScript"],
 		["/src/app.tsx", "TSX"],
 	])("matches a language for %s", (path, expectedName) => {
 		expect(languageDescriptionForPath(path)?.name).toBe(expectedName);
