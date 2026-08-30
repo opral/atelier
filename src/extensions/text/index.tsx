@@ -17,7 +17,11 @@ import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file
 import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
-import { getFileDataAtCommit } from "@/shell/external-write-review-history";
+import {
+	getFileDataAtCommit,
+	useWorkingFileData,
+	workingReviewFile,
+} from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import { createTextEditor, type TextEditorController } from "./editor";
@@ -50,6 +54,21 @@ export function TextView(props: TextViewProps) {
 
 function TextViewContent({ fileId, ...props }: TextViewProps) {
 	assertFileId(fileId);
+	const revision = normalizeEditorRevisionState(props);
+	if (editorRevisionMode(revision) !== "editor") {
+		return (
+			<HistoricalTextView
+				{...props}
+				fileRow={undefined}
+				fileId={fileId}
+				commitId={revision.afterCommitId ?? revision.beforeCommitId}
+			/>
+		);
+	}
+	return <LiveTextViewContent fileId={fileId} {...props} />;
+}
+
+function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
 	const fileRow = useQueryTakeFirst<TextFileRow>(
 		(lix) =>
 			qb(lix)
@@ -61,22 +80,13 @@ function TextViewContent({ fileId, ...props }: TextViewProps) {
 	);
 
 	if (!fileRow) {
+		if (workingReviewFile(props.atelier.diff.session, fileId)) {
+			return <TextReviewUnavailable />;
+		}
 		return (
 			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
 				File not found in the workspace.
 			</div>
-		);
-	}
-
-	const revision = normalizeEditorRevisionState(props);
-	if (editorRevisionMode(revision) !== "editor") {
-		return (
-			<HistoricalTextView
-				{...props}
-				fileRow={fileRow}
-				fileId={fileId}
-				commitId={revision.afterCommitId ?? revision.beforeCommitId}
-			/>
 		);
 	}
 
@@ -100,21 +110,62 @@ function EditableTextView({
 }: Omit<TextViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: TextFileRow;
 }) {
-	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
-	const fileText = useMemo(
-		() => decodeFileDataToText(fileRow.content),
-		[fileRow.content],
-	);
 	// The shell owns review detection: this file is under review whenever the
 	// working diff session marks it pending — diff mode covers every open
 	// surface, not just the revealed file.
 	const diffSession = atelier.diff.session;
-	const isReviewing = Boolean(
-		diffSession &&
-		"working" in diffSession.target &&
-		diffSession.files.some(
-			(file) => file.id === fileId && file.review?.status === "pending",
-		),
+	const reviewFile = workingReviewFile(diffSession, fileId);
+	const isReviewing = reviewFile?.review?.status === "pending";
+	const epoch = isReviewing ? reviewFile?.workingEpoch : undefined;
+	const reviewData = useWorkingFileData(
+		epoch ? fileId : null,
+		epoch?.beforeCommitId,
+		epoch?.afterCommitId,
+	);
+	const resolvedReviewData = reviewData.loading ? null : reviewData;
+	if (isReviewing && !resolvedReviewData) return <TextLoadingState />;
+	if (
+		isReviewing &&
+		(resolvedReviewData?.error || resolvedReviewData?.afterData === null)
+	) {
+		return <TextReviewUnavailable />;
+	}
+	const effectiveFileRow = isReviewing
+		? {
+				...fileRow,
+				path: reviewFile?.path ?? fileRow.path,
+				content: resolvedReviewData?.afterData ?? new Uint8Array(),
+			}
+		: fileRow;
+	return (
+		<EditableTextViewResolved
+			atelier={atelier}
+			fileId={fileId}
+			filePath={filePath}
+			fileRow={effectiveFileRow}
+			isActiveView={isActiveView}
+			isPanelFocused={isPanelFocused}
+			isReviewing={isReviewing}
+		/>
+	);
+}
+
+function EditableTextViewResolved({
+	atelier,
+	fileId,
+	filePath,
+	fileRow,
+	isActiveView = true,
+	isPanelFocused = true,
+	isReviewing,
+}: Omit<TextViewProps, "beforeCommitId" | "afterCommitId"> & {
+	readonly fileRow: TextFileRow;
+	readonly isReviewing: boolean;
+}) {
+	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
+	const fileText = useMemo(
+		() => decodeFileDataToText(fileRow.content),
+		[fileRow.content],
 	);
 	const isReadOnly = isReviewing || atelier.readOnly;
 
@@ -148,6 +199,17 @@ function EditableTextView({
 	);
 }
 
+function TextReviewUnavailable() {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			The working diff changed while it was being reviewed. Reopen the review.
+		</div>
+	);
+}
+
 function HistoricalTextView({
 	fileRow,
 	fileId,
@@ -156,13 +218,14 @@ function HistoricalTextView({
 	isActiveView = true,
 	isPanelFocused = true,
 }: Omit<TextViewProps, "atelier"> & {
-	readonly fileRow: TextFileRow;
+	readonly fileRow: TextFileRow | undefined;
 	readonly commitId: string | null;
 }) {
 	const lix = useLix();
 	const [snapshotText, setSnapshotText] = useState<string | null>(null);
 	const [absentAtCommit, setAbsentAtCommit] = useState(false);
 	const [loadError, setLoadError] = useState(false);
+	const liveContent = fileRow?.content;
 	useEffect(() => {
 		let cancelled = false;
 		// The previous snapshot stays visible while the next commit loads, so
@@ -170,7 +233,7 @@ function HistoricalTextView({
 		setAbsentAtCommit(false);
 		setLoadError(false);
 		if (!commitId) {
-			setSnapshotText(decodeFileDataToText(fileRow.content));
+			setSnapshotText(liveContent ? decodeFileDataToText(liveContent) : "");
 			return;
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
@@ -187,7 +250,7 @@ function HistoricalTextView({
 		return () => {
 			cancelled = true;
 		};
-	}, [commitId, fileId, fileRow.content, lix]);
+	}, [commitId, fileId, liveContent, lix]);
 
 	if (loadError) {
 		return (
@@ -202,7 +265,7 @@ function HistoricalTextView({
 	if (absentAtCommit) {
 		return (
 			<CheckpointAbsentFile
-				filePath={fileRow.path || filePath}
+				filePath={fileRow?.path || filePath}
 				commitId={commitId}
 			/>
 		);
@@ -211,7 +274,7 @@ function HistoricalTextView({
 	return (
 		<div className="atelier-text-view" data-testid="text-editor-view">
 			<TextEditorSurface
-				filePath={fileRow.path || filePath || `/${fileId}.txt`}
+				filePath={fileRow?.path || filePath || `/${fileId}.txt`}
 				text={snapshotText}
 				readOnly
 				isActive={isActiveView}

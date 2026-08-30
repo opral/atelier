@@ -39,7 +39,6 @@ import {
 } from "@/extension-runtime/editor-revision-state";
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import { ExternalWriteReviewControls } from "@/extension-runtime/external-write-review-controls";
-import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { isMacPlatform } from "@/lib/platform";
 import {
 	createCheckpointForFiles,
@@ -115,7 +114,7 @@ import {
 } from "./panel-utils";
 import {
 	externalWriteReviewId,
-	getFileDataAtCommit,
+	getWorkingFileData,
 } from "./external-write-review-history";
 import type {
 	AtelierEmptyPanelSlot,
@@ -593,20 +592,16 @@ type AtelierUiStateSetter = (
 	update: AtelierUiState | ((current: AtelierUiState) => AtelierUiState),
 ) => void;
 
-function fileBytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-	if (left.byteLength !== right.byteLength) return false;
-	for (let index = 0; index < left.byteLength; index += 1) {
-		if (left[index] !== right[index]) return false;
-	}
-	return true;
-}
-
 type LixFileForOpen = {
 	readonly id: string;
 	readonly path: string;
 	readonly checkpointChangeKind?: "added" | "modified" | "removed";
 	/** Set when a modified file's side paths differ: a move/rename. */
 	readonly movedFromPath?: string;
+	readonly workingEpoch?: {
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+	};
 };
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
@@ -1583,7 +1578,12 @@ function LayoutShellLoadedContentResolved({
 			const selectedReviews = session.externalWriteReviews.filter((review) =>
 				selected.has(review.fileId),
 			);
-			const checkpoint = await createCheckpointForFiles(lix, selectedFileIds);
+			if (!session.range) return;
+			const checkpoint = await createCheckpointForFiles(
+				lix,
+				selectedFileIds,
+				session.range,
+			);
 			if (!checkpoint) {
 				throw new Error("The selected files have no working changes.");
 			}
@@ -2757,20 +2757,16 @@ function LayoutShellLoadedContentResolved({
 
 	const isExternalWriteReviewCurrent = useCallback(
 		async (review: ExternalWriteReview): Promise<boolean> => {
-			const [current, afterData] = await Promise.all([
-				qb(lix)
-					.selectFrom("lix_file")
-					.select(["content"])
-					.where("id", "=", review.fileId)
-					.limit(1)
-					.executeTakeFirst(),
-				getFileDataAtCommit(lix, review.fileId, review.afterCommitId),
-			]);
-			return (
-				!!current &&
-				!!afterData &&
-				fileBytesEqual(decodeFileDataToBytes(current.content), afterData)
+			const result = await lix.execute(
+				`SELECT 1 AS current
+				 FROM lix_working_diff('lix_file')
+				 WHERE id = $1
+				   AND before_commit_id = $2
+				   AND after_commit_id = $3
+				 LIMIT 1`,
+				[review.fileId, review.beforeCommitId, review.afterCommitId],
 			);
+			return result.rows.length === 1;
 		},
 		[lix],
 	);
@@ -2778,8 +2774,15 @@ function LayoutShellLoadedContentResolved({
 	const deleteAddedExternalWriteReviewFile = useCallback(
 		async (review: ExternalWriteReview, afterData: Uint8Array) => {
 			const result = await lix.execute(
-				"DELETE FROM lix_file WHERE id = $1 AND content = $2",
-				[review.fileId, afterData],
+				`DELETE FROM lix_file
+				 WHERE id = $1 AND content = $2
+				   AND EXISTS (
+				     SELECT 1 FROM lix_working_diff('lix_file')
+				     WHERE id = $1
+				       AND before_commit_id = $3
+				       AND after_commit_id = $4
+				   )`,
+				[review.fileId, afterData, review.beforeCommitId, review.afterCommitId],
 				{ originKey: `atelier.review:${review.reviewId}` },
 			);
 			if (result.rowsAffected !== 1) {
@@ -2802,11 +2805,17 @@ function LayoutShellLoadedContentResolved({
 				return;
 			}
 			await runDiffReviewResolution(review, "accepted", async () => {
+				if (!(await isExternalWriteReviewCurrent(review))) {
+					throw new Error(
+						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+					);
+				}
 				await persistReviewResolution(review, "accepted");
 			});
 		},
 		[
 			getExternalWriteReviewForFile,
+			isExternalWriteReviewCurrent,
 			persistReviewResolution,
 			runDiffReviewResolution,
 		],
@@ -2822,10 +2831,18 @@ function LayoutShellLoadedContentResolved({
 			const review = getExternalWriteReviewForFile(args);
 			if (!review) return;
 			await runDiffReviewResolution(review, "accepted", async () => {
-				const [beforeData, afterData] = await Promise.all([
-					getFileDataAtCommit(lix, review.fileId, review.beforeCommitId),
-					getFileDataAtCommit(lix, review.fileId, review.afterCommitId),
-				]);
+				const workingData = await getWorkingFileData(
+					lix,
+					review.fileId,
+					review.beforeCommitId,
+					review.afterCommitId,
+				);
+				if (!workingData) {
+					throw new Error(
+						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+					);
+				}
+				const { beforeData, afterData } = workingData;
 				if (!afterData) {
 					throw new Error("The reviewed file snapshot is no longer available.");
 				}
@@ -2833,8 +2850,21 @@ function LayoutShellLoadedContentResolved({
 					await deleteAddedExternalWriteReviewFile(review, afterData);
 				} else {
 					const result = await lix.execute(
-						"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
-						[args.data, review.fileId, afterData],
+						`UPDATE lix_file SET content = $1
+						 WHERE id = $2 AND content = $3
+						   AND EXISTS (
+						     SELECT 1 FROM lix_working_diff('lix_file')
+						     WHERE id = $2
+						       AND before_commit_id = $4
+						       AND after_commit_id = $5
+						   )`,
+						[
+							args.data,
+							review.fileId,
+							afterData,
+							review.beforeCommitId,
+							review.afterCommitId,
+						],
 						{ originKey: `atelier.review:${review.reviewId}` },
 					);
 					if (result.rowsAffected !== 1) {
@@ -2871,17 +2901,19 @@ function LayoutShellLoadedContentResolved({
 						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
 					);
 				}
-				const beforeData = await getFileDataAtCommit(
+				const workingData = await getWorkingFileData(
 					lix,
 					review.fileId,
 					review.beforeCommitId,
+					review.afterCommitId,
 				);
-				if (!beforeData) {
-					const afterData = await getFileDataAtCommit(
-						lix,
-						review.fileId,
-						review.afterCommitId,
+				if (!workingData) {
+					throw new Error(
+						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
 					);
+				}
+				const { beforeData, afterData } = workingData;
+				if (!beforeData) {
 					if (!afterData) {
 						throw new Error(
 							"The reviewed file snapshot is no longer available.",
@@ -2891,17 +2923,25 @@ function LayoutShellLoadedContentResolved({
 					await persistReviewResolution(review, "rejected");
 					return;
 				}
-				const afterData = await getFileDataAtCommit(
-					lix,
-					review.fileId,
-					review.afterCommitId,
-				);
 				if (!afterData) {
 					throw new Error("The reviewed file snapshot is no longer available.");
 				}
 				const result = await lix.execute(
-					"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
-					[beforeData, review.fileId, afterData],
+					`UPDATE lix_file SET content = $1
+					 WHERE id = $2 AND content = $3
+					   AND EXISTS (
+					     SELECT 1 FROM lix_working_diff('lix_file')
+					     WHERE id = $2
+					       AND before_commit_id = $4
+					       AND after_commit_id = $5
+					   )`,
+					[
+						beforeData,
+						review.fileId,
+						afterData,
+						review.beforeCommitId,
+						review.afterCommitId,
+					],
 					{ originKey: `atelier.review:${review.reviewId}` },
 				);
 				if (result.rowsAffected !== 1) {
@@ -2931,7 +2971,8 @@ function LayoutShellLoadedContentResolved({
 			const selectedReviews = session.externalWriteReviews.filter((review) =>
 				selected.has(review.fileId),
 			);
-			await revertWorkingChangesForFiles(lix, selectedFileIds);
+			if (!session.range) return;
+			await revertWorkingChangesForFiles(lix, selectedFileIds, session.range);
 			// Same conclusion semantics as Checkpoint: the verb ends the session.
 			exitDiffReview();
 			for (const review of selectedReviews) {
@@ -3572,6 +3613,7 @@ function LayoutShellLoadedContentResolved({
 						id: file.id,
 						path: file.path,
 						checkpointChangeKind: file.diff_type,
+						workingEpoch: { beforeCommitId, afterCommitId: headCommitId },
 						...(movedFromPath ? { movedFromPath } : {}),
 					};
 				});
@@ -3649,7 +3691,6 @@ function LayoutShellLoadedContentResolved({
 		},
 		[
 			exitDiffReview,
-			extensionMap,
 			historicalReview,
 			isHostReadOnly,
 			lix,
@@ -3886,6 +3927,7 @@ function LayoutShellLoadedContentResolved({
 			path: file.path,
 			changeKind: file.checkpointChangeKind ?? "modified",
 			...(file.movedFromPath ? { movedFromPath: file.movedFromPath } : {}),
+			...(file.workingEpoch ? { workingEpoch: file.workingEpoch } : {}),
 		});
 		if (historicalReview?.range) {
 			return {
@@ -4391,7 +4433,7 @@ function LayoutShellLoadedContentResolved({
 							// is pointer-inert and its key handling is detached.
 							isHostReadOnly || reviewFloatContent.historical
 								? undefined
-								: (selectedFileIds) => void handleUndoReviews(selectedFileIds)
+								: handleUndoReviews
 						}
 						onPrimary={isHostReadOnly ? undefined : handleDiffPrimary}
 						onExit={exitDiffReview}

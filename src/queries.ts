@@ -32,6 +32,11 @@ export type FileDiffRow = {
 	after_commit_id: string;
 };
 
+export type WorkingFileDiffContentRow = {
+	from_content: unknown | null;
+	to_content: unknown | null;
+};
+
 export type CheckpointRow = {
 	commit_id: string;
 	created_at: string;
@@ -104,6 +109,22 @@ export function selectWorkingFileDiffs(lix: Lix) {
 		])
 		.orderBy(sql`coalesce(to_path, from_path)`, "asc")
 		.$castTo<FileDiffRow>();
+}
+
+/** HOT-only point read for the visible file's content at one opened epoch. */
+export function selectWorkingFileDiffContent(
+	lix: Lix,
+	fileId: string,
+	beforeCommitId: string,
+	afterCommitId: string,
+) {
+	return qb(lix)
+		.selectFrom(workingFileDiffTable().as("lix_diff"))
+		.select(["from_content", "to_content"])
+		.where("id", "=", fileId)
+		.where("before_commit_id", "=", beforeCommitId)
+		.where("after_commit_id", "=", afterCommitId)
+		.$castTo<WorkingFileDiffContentRow>();
 }
 
 export function selectWorkingChangeCount(lix: Lix) {

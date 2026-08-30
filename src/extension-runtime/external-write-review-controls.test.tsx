@@ -102,7 +102,11 @@ describe("ExternalWriteReviewControls", () => {
 		// Both verbs apply to the selection.
 		fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 		expect(undo).toHaveBeenCalledWith(["file-launch"]);
-		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
+		const checkpoint = await screen.findByRole("button", {
+			name: "Checkpoint",
+		});
+		await waitFor(() => expect(checkpoint).toBeEnabled());
+		fireEvent.click(checkpoint);
 		await waitFor(() => expect(primary).toHaveBeenCalledWith(["file-launch"]));
 		// Committing closes the list and restores the viewed-file default.
 		expect(screen.queryByRole("checkbox")).toBeNull();
@@ -238,6 +242,32 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.keyDown(window, { key: "Enter", metaKey: true });
 		expect(primary).not.toHaveBeenCalled();
 		expect(undo).not.toHaveBeenCalled();
+	});
+
+	test("surfaces a stale Undo rejection without an unhandled promise", async () => {
+		const undo = vi.fn(async () => {
+			throw new Error("The working diff changed. Reopen the review.");
+		});
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 1 }}
+				files={[FILES[0]]}
+				onUndo={undo}
+				onPrimary={vi.fn()}
+			/>,
+		);
+
+		const button = screen.getByRole("button", { name: "Undo" });
+		fireEvent.click(button);
+		await waitFor(() =>
+			expect(button).toHaveAttribute(
+				"title",
+				"The working diff changed. Reopen the review.",
+			),
+		);
+		expect(button).toBeEnabled();
 	});
 
 	test("puts the Esc Exit control at the far left of the float", () => {

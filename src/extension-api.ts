@@ -193,24 +193,40 @@ export type AtelierDocumentsApi = {
  * scrolling, so hosts control spacing and clipping. Previews load their own
  * content from the given identity; a live target stays live.
  *
- * One shape covers every read surface:
- * - neither `targetCommitId` nor `diff` — the live document;
- * - `targetCommitId` alone — the document as of that commit;
- * - `diff` alone — the change from its base to the live document;
- * - both — the change between two commits.
+ * Every diff pins both sides. A working diff carries the exact HOT epoch that
+ * certified its bytes; an immutable diff names its target commit. There is no
+ * "base commit to implicit live target" mode because that can combine rows
+ * from different repository generations.
  */
-export type AtelierFilePreviewProps = {
+type AtelierFilePreviewIdentity = {
 	readonly lix: Lix;
 	readonly fileId: string;
 	readonly filePath: string;
-	/** Render the document as of this commit; absent — the live document. */
-	readonly targetCommitId?: string | null;
-	/**
-	 * Render the change from this base to the target (or live) state. A null
-	 * base means the file was added — the before side is empty by definition.
-	 */
-	readonly diff?: { readonly baseCommitId: string | null } | null;
 };
+
+export type AtelierFilePreviewProps = AtelierFilePreviewIdentity &
+	(
+		| {
+				/** No target and no diff renders the current live document. */
+				readonly targetCommitId?: null;
+				readonly diff?: null;
+		  }
+		| {
+				/** Render an immutable target, optionally diffed from an immutable base. */
+				readonly targetCommitId: string;
+				readonly diff?: { readonly baseCommitId: string | null } | null;
+		  }
+		| {
+				readonly targetCommitId?: null;
+				/** Render both sides from one certified HOT working epoch. */
+				readonly diff: {
+					readonly workingEpoch: {
+						readonly beforeCommitId: string;
+						readonly afterCommitId: string;
+					};
+				};
+		  }
+	);
 
 export type AtelierEvent =
 	| {
@@ -286,6 +302,11 @@ export type AtelierDiffFile = {
 	readonly changeKind: "added" | "modified" | "removed";
 	/** Set when a modified file's side paths differ: a move/rename. */
 	readonly movedFromPath?: string;
+	/** Certified HOT epoch for a mutable working diff. */
+	readonly workingEpoch?: {
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+	};
 	/** Present when the session reviews external writes (mutable target). */
 	readonly review?: {
 		readonly id: string;

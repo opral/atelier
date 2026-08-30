@@ -25,6 +25,12 @@ import {
 } from "@/components/ui/tooltip";
 import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import type { AtelierDiffSession } from "@/extension-api";
+import { selectFilesStateAt } from "@/queries";
+import {
+	useWorkingFileData,
+	workingReviewFile,
+} from "@/shell/external-write-review-history";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -36,6 +42,8 @@ import "./style.css";
 type ImageViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
+	readonly sourceCommitId?: string;
+	readonly diffSession?: AtelierDiffSession | null;
 };
 
 type ImageFileRow = {
@@ -78,26 +86,58 @@ export function imageMimeTypeFromPath(filePath: string): string | undefined {
 }
 
 /** Read-only renderer for the current image stored in the Lix workspace. */
-function ImageView({ fileId, filePath }: ImageViewProps) {
+function ImageView(props: ImageViewProps) {
 	return (
 		<Suspense fallback={<ImageLoadingState />}>
-			<ImageViewContent fileId={fileId} filePath={filePath} />
+			<ImageViewContent {...props} />
 		</Suspense>
 	);
 }
 
-function ImageViewContent({ fileId, filePath }: ImageViewProps) {
+function ImageViewContent({
+	fileId,
+	filePath,
+	sourceCommitId,
+	diffSession,
+}: ImageViewProps) {
 	assertFileId(fileId);
-	const fileResult = useQueryResult<ImageFileRow>((lix) =>
-		qb(lix)
-			.selectFrom("lix_file")
-			.select(["id", "path", "content"])
-			.where("id", "=", fileId)
-			.limit(1),
+	const reviewFile = workingReviewFile(diffSession, fileId);
+	const epoch = reviewFile?.workingEpoch;
+	const reviewData = useWorkingFileData(
+		epoch ? fileId : null,
+		epoch?.beforeCommitId,
+		epoch?.afterCommitId,
+	);
+	const fileResult = useQueryResult<ImageFileRow>(
+		(lix) =>
+			sourceCommitId
+				? selectFilesStateAt(lix, sourceCommitId)
+						.select(["id", "path", "content"])
+						.where("id", "=", fileId)
+				: qb(lix)
+						.selectFrom("lix_file")
+						.select(["id", "path", "content"])
+						.where("id", "=", fileId)
+						.limit(1),
+		{ subscribe: !sourceCommitId },
 	);
 	if (fileResult.status === "pending") return <ImageLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
-	const fileRow = fileResult.rows[0];
+	const resolvedReviewData = reviewData.loading ? null : reviewData;
+	if (epoch && !resolvedReviewData) return <ImageLoadingState />;
+	if (epoch && resolvedReviewData?.error) return <ImageReviewUnavailable />;
+	const observed = fileResult.rows[0];
+	const pinnedContent =
+		resolvedReviewData?.afterData ?? resolvedReviewData?.data;
+	const fileRow = epoch
+		? pinnedContent
+			? {
+					id: fileId,
+					path: reviewFile?.path ?? observed?.path ?? filePath ?? `/${fileId}`,
+					content: pinnedContent,
+				}
+			: undefined
+		: observed;
 
 	if (!fileRow) {
 		return (
@@ -112,6 +152,17 @@ function ImageViewContent({ fileId, filePath }: ImageViewProps) {
 			data={fileRow.content}
 			filePath={fileRow.path || filePath || "image"}
 		/>
+	);
+}
+
+function ImageReviewUnavailable() {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			The working image changed while it was being reviewed. Reopen the review.
+		</div>
 	);
 }
 
@@ -416,10 +467,12 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display SVG, PNG, and JPEG images.",
 	icon: ImageIcon,
-	component: ({ view }) => (
+	component: ({ atelier, view }) => (
 		<ImageView
 			fileId={view.state.fileId as string}
 			filePath={view.state.filePath as string | undefined}
+			sourceCommitId={view.state.sourceCommitId as string | undefined}
+			diffSession={atelier.diff.session}
 		/>
 	),
 });

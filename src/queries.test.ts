@@ -8,6 +8,7 @@ import {
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
 	selectWorkingChangeCount,
+	selectWorkingFileDiffContent,
 	selectWorkingFileDiffs,
 } from "@/queries";
 
@@ -174,6 +175,17 @@ describe("checkpoint queries", () => {
 		]);
 		expect(workingFiles[0]?.before_commit_id).not.toBe(
 			workingFiles[0]?.after_commit_id,
+		);
+		const workingFile = workingFiles[0]!;
+		const content = await selectWorkingFileDiffContent(
+			lix,
+			workingFile.id,
+			workingFile.before_commit_id,
+			workingFile.after_commit_id,
+		).executeTakeFirstOrThrow();
+		expect(content.from_content).toBeNull();
+		expect(new TextDecoder().decode(content.to_content as Uint8Array)).toBe(
+			"draft",
 		);
 		// The file's descriptor and content rows count; the workspace's own
 		// key-value write does not.

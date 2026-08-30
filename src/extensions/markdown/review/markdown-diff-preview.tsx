@@ -3,6 +3,7 @@ import { decodeFileDataToText } from "@/lib/decode-file-data";
 import { useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { useFileDataAtCommit } from "@/shell/external-write-review-history";
+import { useWorkingFileData } from "@/shell/external-write-review-history";
 import { MarkdownReviewEditor } from "./review-editor";
 import "../style.css";
 
@@ -20,49 +21,154 @@ export function MarkdownFilePreview({
 	targetCommitId,
 	diff,
 }: AtelierFilePreviewProps) {
+	if (diff && "workingEpoch" in diff) {
+		return (
+			<WorkingMarkdownFilePreview
+				fileId={fileId}
+				filePath={filePath}
+				workingEpoch={diff.workingEpoch}
+			/>
+		);
+	}
+	if (targetCommitId) {
+		return (
+			<HistoricalMarkdownFilePreview
+				fileId={fileId}
+				filePath={filePath}
+				targetCommitId={targetCommitId}
+				baseCommitId={diff?.baseCommitId}
+			/>
+		);
+	}
+	// Fail closed for untyped/legacy callers. A base-to-live preview cannot be
+	// made generation-consistent because no target epoch was supplied.
+	if (diff) return <MarkdownPreviewUnavailable />;
+	return <LiveMarkdownFilePreview fileId={fileId} filePath={filePath} />;
+}
+
+function LiveMarkdownFilePreview({
+	fileId,
+	filePath,
+}: Pick<AtelierFilePreviewProps, "fileId" | "filePath">) {
 	const liveRow = useQueryTakeFirst<{ readonly content: unknown }>(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
 				.where("id", "=", fileId)
 				.select(["content"]),
-		{ subscribe: !targetCommitId },
+		{ subscribe: true },
 	);
-	const target = useFileDataAtCommit(
-		targetCommitId ? fileId : null,
-		targetCommitId ?? null,
+	if (liveRow === undefined || liveRow === null) return null;
+	return (
+		<RenderedMarkdownFilePreview
+			filePath={filePath}
+			beforeMarkdown={decodeFileDataToText(liveRow.content)}
+			afterMarkdown={decodeFileDataToText(liveRow.content)}
+			signature={`live:${contentSignature(decodeFileDataToText(liveRow.content))}`}
+		/>
 	);
+}
+
+function HistoricalMarkdownFilePreview({
+	fileId,
+	filePath,
+	targetCommitId,
+	baseCommitId,
+}: {
+	readonly fileId: string;
+	readonly filePath: string;
+	readonly targetCommitId: string;
+	readonly baseCommitId?: string | null;
+}) {
+	const target = useFileDataAtCommit(fileId, targetCommitId);
 	const before = useFileDataAtCommit(
-		diff?.baseCommitId ? fileId : null,
-		diff?.baseCommitId ?? null,
+		baseCommitId ? fileId : null,
+		baseCommitId ?? null,
 	);
-	if (before.loading || target.loading) return null;
-	let markdown: string;
-	if (targetCommitId) {
-		if (target.data === null) return null;
-		markdown = decodeFileDataToText(target.data);
-	} else {
-		if (liveRow === undefined || liveRow === null) return null;
-		markdown = decodeFileDataToText(liveRow.content);
+	if ((!target.loading && target.error) || (!before.loading && before.error)) {
+		return <MarkdownPreviewUnavailable />;
 	}
-	const beforeMarkdown = diff
-		? before.data
-			? decodeFileDataToText(before.data)
-			: ""
-		: markdown;
-	// The presentation editor snapshots its document at mount, so remount it
-	// whenever the rendered state changes — exiting a review or a live edit
-	// must not keep showing the previous document.
-	const signature = `${diff ? `diff:${diff.baseCommitId ?? "added"}` : "plain"}:${
-		targetCommitId ?? "live"
-	}:${contentSignature(beforeMarkdown)}:${contentSignature(markdown)}`;
+	if (before.loading || target.loading) return null;
+	if (target.data === null) return null;
+	const markdown = decodeFileDataToText(target.data);
+	const beforeMarkdown =
+		baseCommitId !== undefined
+			? before.data
+				? decodeFileDataToText(before.data)
+				: ""
+			: markdown;
+	return (
+		<RenderedMarkdownFilePreview
+			filePath={filePath}
+			beforeMarkdown={beforeMarkdown}
+			afterMarkdown={markdown}
+			signature={`commit:${baseCommitId ?? "plain"}:${targetCommitId}:${contentSignature(beforeMarkdown)}:${contentSignature(markdown)}`}
+		/>
+	);
+}
+
+function WorkingMarkdownFilePreview({
+	fileId,
+	filePath,
+	workingEpoch,
+}: {
+	readonly fileId: string;
+	readonly filePath: string;
+	readonly workingEpoch: {
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+	};
+}) {
+	const working = useWorkingFileData(
+		fileId,
+		workingEpoch.beforeCommitId,
+		workingEpoch.afterCommitId,
+	);
+	if (working.loading) return null;
+	if (working.error || working.afterData === null) {
+		return <MarkdownPreviewUnavailable />;
+	}
+	const beforeMarkdown = working.data ? decodeFileDataToText(working.data) : "";
+	const afterMarkdown = decodeFileDataToText(working.afterData);
+	return (
+		<RenderedMarkdownFilePreview
+			filePath={filePath}
+			beforeMarkdown={beforeMarkdown}
+			afterMarkdown={afterMarkdown}
+			signature={`working:${workingEpoch.beforeCommitId}:${workingEpoch.afterCommitId}:${contentSignature(beforeMarkdown)}:${contentSignature(afterMarkdown)}`}
+		/>
+	);
+}
+
+function RenderedMarkdownFilePreview({
+	filePath,
+	beforeMarkdown,
+	afterMarkdown,
+	signature,
+}: {
+	readonly filePath: string;
+	readonly beforeMarkdown: string;
+	readonly afterMarkdown: string;
+	readonly signature: string;
+}) {
 	return (
 		<div className="markdown-view markdown-review markdown-embedded-preview">
 			<MarkdownReviewEditor
 				key={signature}
-				reviewDiff={{ beforeMarkdown, afterMarkdown: markdown }}
+				reviewDiff={{ beforeMarkdown, afterMarkdown }}
 				sourceFilePath={filePath}
 			/>
+		</div>
+	);
+}
+
+function MarkdownPreviewUnavailable() {
+	return (
+		<div
+			role="alert"
+			className="p-3 text-sm text-[var(--color-text-secondary)]"
+		>
+			Preview unavailable. Reopen the review to load a current, certified diff.
 		</div>
 	);
 }
