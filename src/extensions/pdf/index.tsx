@@ -4,6 +4,11 @@ import { AnimatedZap } from "@/components/animated-zap";
 import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { selectFilesStateAt } from "@/queries";
+import type { AtelierDiffSession } from "@/extension-api";
+import {
+	useWorkingFileData,
+	workingReviewFile,
+} from "@/shell/external-write-review-history";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { renderPdfPreview } from "./pdf-preview";
@@ -18,6 +23,7 @@ type PdfViewProps = {
 	readonly filePath?: string;
 	readonly sourceCommitId?: string;
 	readonly initialPage?: number;
+	readonly diffSession?: AtelierDiffSession | null;
 };
 
 type PdfFileRow = {
@@ -34,6 +40,7 @@ export function PdfView({
 	filePath,
 	sourceCommitId,
 	initialPage,
+	diffSession,
 }: PdfViewProps) {
 	return (
 		<div className="atelier-pdf-view">
@@ -43,6 +50,7 @@ export function PdfView({
 					filePath={filePath}
 					sourceCommitId={sourceCommitId}
 					initialPage={initialPage}
+					diffSession={diffSession}
 				/>
 			</Suspense>
 		</div>
@@ -54,8 +62,16 @@ function PdfViewContent({
 	filePath,
 	sourceCommitId,
 	initialPage,
+	diffSession,
 }: PdfViewProps) {
 	assertFileId(fileId);
+	const reviewFile = workingReviewFile(diffSession, fileId);
+	const epoch = reviewFile?.workingEpoch;
+	const reviewData = useWorkingFileData(
+		epoch ? fileId : null,
+		epoch?.beforeCommitId,
+		epoch?.afterCommitId,
+	);
 	const fileResult = useQueryResult<PdfFileRow>(
 		(lix) => {
 			if (sourceCommitId) {
@@ -73,7 +89,21 @@ function PdfViewContent({
 	);
 	if (fileResult.status === "pending") return <PdfLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
-	const fileRow = fileResult.rows[0];
+	const resolvedReviewData = reviewData.loading ? null : reviewData;
+	if (epoch && !resolvedReviewData) return <PdfLoadingState />;
+	if (epoch && resolvedReviewData?.error) return <PdfReviewUnavailable />;
+	const observed = fileResult.rows[0];
+	const pinnedContent =
+		resolvedReviewData?.afterData ?? resolvedReviewData?.data;
+	const fileRow = epoch
+		? pinnedContent
+			? {
+					id: fileId,
+					path: reviewFile?.path ?? observed?.path ?? filePath ?? `/${fileId}`,
+					content: pinnedContent,
+				}
+			: undefined
+		: observed;
 
 	if (!fileRow) {
 		return (
@@ -89,6 +119,17 @@ function PdfViewContent({
 			filePath={fileRow.path || filePath || "document.pdf"}
 			initialPage={initialPage}
 		/>
+	);
+}
+
+function PdfReviewUnavailable() {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			The working PDF changed while it was being reviewed. Reopen the review.
+		</div>
 	);
 }
 
@@ -258,7 +299,7 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display PDF documents.",
 	icon: FileText,
-	component: ({ view }) => (
+	component: ({ atelier, view }) => (
 		<PdfView
 			fileId={view.state.fileId as string}
 			filePath={view.state.filePath as string | undefined}
@@ -270,6 +311,7 @@ export const extension = createReactExtensionDefinition({
 			initialPage={
 				typeof view.state.page === "number" ? view.state.page : undefined
 			}
+			diffSession={atelier.diff.session}
 		/>
 	),
 });

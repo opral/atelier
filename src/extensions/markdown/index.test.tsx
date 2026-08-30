@@ -9,6 +9,7 @@ import { qb } from "@/lib/lix-kysely";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { HistoryView } from "@/extensions/history";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
+import { selectWorkingFileDiffs } from "@/queries";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -728,6 +729,9 @@ describe("MarkdownView", () => {
 			})
 			.execute();
 		const checkpoint = await createCheckpoint(lix);
+		let workingEpoch:
+			| { readonly beforeCommitId: string; readonly afterCommitId: string }
+			| undefined;
 
 		let utils: ReturnType<typeof render> | undefined;
 		const renderReviewMarkdown = (reviewing: boolean) => (
@@ -747,6 +751,7 @@ describe("MarkdownView", () => {
 												id: fakeUuid("file_review_startup"),
 												path: "/review-startup.md",
 												changeKind: "modified",
+												workingEpoch,
 												review: { id: "review-startup", status: "pending" },
 											},
 										],
@@ -808,6 +813,13 @@ describe("MarkdownView", () => {
 				.set({ content: new TextEncoder().encode("# After") })
 				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
+			const workingDiff = await selectWorkingFileDiffs(lix)
+				.where("id", "=", fakeUuid("file_review_startup"))
+				.executeTakeFirstOrThrow();
+			workingEpoch = {
+				beforeCommitId: workingDiff.before_commit_id,
+				afterCommitId: workingDiff.after_commit_id,
+			};
 			utils?.rerender(renderReviewMarkdown(true));
 		});
 

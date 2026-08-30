@@ -31,6 +31,15 @@ async function workingFileDiffs(lix: Awaited<ReturnType<typeof openLix>>) {
 	return selectWorkingFileDiffs(lix).execute();
 }
 
+async function workingEpoch(lix: Awaited<ReturnType<typeof openLix>>) {
+	const row = (await workingFileDiffs(lix))[0];
+	if (!row) throw new Error("test expected a working diff epoch");
+	return {
+		beforeCommitId: row.before_commit_id,
+		afterCommitId: row.after_commit_id,
+	};
+}
+
 async function readFile(lix: Awaited<ReturnType<typeof openLix>>, id: string) {
 	const result = await lix.execute(
 		"SELECT content FROM lix_file WHERE id = $1",
@@ -49,7 +58,11 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, firstId, "/first.md", "first");
 			await writeFile(lix, secondId, "/second.md", "second");
 
-			const checkpoint = await createCheckpointForFiles(lix, [firstId]);
+			const checkpoint = await createCheckpointForFiles(
+				lix,
+				[firstId],
+				await workingEpoch(lix),
+			);
 			expect(checkpoint?.commitId).toEqual(expect.any(String));
 			expect(await workingFileDiffs(lix)).toEqual([
 				expect.objectContaining({ id: secondId }),
@@ -67,7 +80,11 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, insideId, "/docs/handbook/inside.md", "inside");
 			await writeFile(lix, outsideId, "/notes/outside.md", "outside");
 
-			const checkpoint = await createCheckpointForFiles(lix, [insideId]);
+			const checkpoint = await createCheckpointForFiles(
+				lix,
+				[insideId],
+				await workingEpoch(lix),
+			);
 			expect(checkpoint?.commitId).toEqual(expect.any(String));
 
 			// /docs and /docs/handbook were committed with their file by the
@@ -83,7 +100,7 @@ describe("Lix SQL diff commands", () => {
 			expect(remainingDirPaths).toEqual(["/notes"]);
 
 			// Checkpointing the remaining file clears the working file diff.
-			await createCheckpointForFiles(lix, [outsideId]);
+			await createCheckpointForFiles(lix, [outsideId], await workingEpoch(lix));
 			expect(await workingFileDiffs(lix)).toEqual([]);
 		} finally {
 			await lix.close();
@@ -102,10 +119,53 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, secondId, "/second.md", "after second");
 
 			expect(
-				await revertWorkingChangesForFiles(lix, [firstId]),
+				await revertWorkingChangesForFiles(
+					lix,
+					[firstId],
+					await workingEpoch(lix),
+				),
 			).toBeGreaterThan(0);
 			expect(await readFile(lix, firstId)).toBe("before first");
 			expect(await readFile(lix, secondId)).toBe("after second");
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("rejects a partial checkpoint after the reviewed working epoch changes", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("stale-partial-checkpoint");
+			await writeFile(lix, fileId, "/stale-checkpoint.md", "reviewed");
+			const reviewedEpoch = await workingEpoch(lix);
+			await writeFile(lix, fileId, "/stale-checkpoint.md", "newer");
+
+			await expect(
+				createCheckpointForFiles(lix, [fileId], reviewedEpoch),
+			).rejects.toThrow();
+			expect(await readFile(lix, fileId)).toBe("newer");
+			expect(await workingFileDiffs(lix)).toEqual([
+				expect.objectContaining({ id: fileId }),
+			]);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("rejects a revert after the reviewed working epoch changes", async () => {
+		const lix = await openLix();
+		try {
+			const fileId = fakeUuid("stale-revert");
+			await writeFile(lix, fileId, "/stale-revert.md", "before");
+			await createCheckpoint(lix);
+			await writeFile(lix, fileId, "/stale-revert.md", "reviewed");
+			const reviewedEpoch = await workingEpoch(lix);
+			await writeFile(lix, fileId, "/stale-revert.md", "newer");
+
+			await expect(
+				revertWorkingChangesForFiles(lix, [fileId], reviewedEpoch),
+			).rejects.toThrow("working diff changed");
+			expect(await readFile(lix, fileId)).toBe("newer");
 		} finally {
 			await lix.close();
 		}

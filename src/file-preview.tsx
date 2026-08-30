@@ -12,7 +12,7 @@ import { LixProvider } from "./lib/lix-react";
  * @example
  * <AtelierFilePreview lix={lix} fileId={id} filePath="/README.md" />
  * <AtelierFilePreview lix={lix} fileId={id} filePath="/README.md"
- *   diff={{ baseCommitId }} />
+ *   diff={{ workingEpoch: { beforeCommitId, afterCommitId } }} />
  */
 export function AtelierFilePreview({
 	fallback = null,

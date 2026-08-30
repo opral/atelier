@@ -7,6 +7,8 @@ import {
 } from "@/lib/decode-file-data";
 import { useQuery, useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import type { AtelierDiffSession } from "@/extension-api";
+import { workingReviewFile } from "@/shell/external-write-review-history";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -17,6 +19,8 @@ import "./style.css";
 type HtmlViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
+	readonly sourceCommitId?: string;
+	readonly diffSession?: AtelierDiffSession | null;
 };
 
 type HtmlFileRow = {
@@ -47,7 +51,24 @@ export const HTML_ARTIFACT_CSP = [
 ].join("; ");
 
 /** Read-only renderer for an HTML artifact stored in the Lix workspace. */
-function HtmlView({ fileId, filePath }: HtmlViewProps) {
+
+function HtmlView({
+	fileId,
+	filePath,
+	sourceCommitId,
+	diffSession,
+}: HtmlViewProps) {
+	if (sourceCommitId || workingReviewFile(diffSession, fileId)) {
+		return (
+			<div
+				className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+				role="status"
+			>
+				HTML previews are disabled in review mode because workspace assets
+				cannot yet be pinned to one repository epoch.
+			</div>
+		);
+	}
 	return (
 		<Suspense fallback={<HtmlLoadingState />}>
 			<HtmlViewContent fileId={fileId} filePath={filePath} />
@@ -414,10 +435,12 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display self-contained HTML artifacts.",
 	icon: FileCode2,
-	component: ({ view }) => (
+	component: ({ atelier, view }) => (
 		<HtmlView
 			fileId={view.state.fileId as string}
 			filePath={view.state.filePath as string | undefined}
+			sourceCommitId={view.state.sourceCommitId as string | undefined}
+			diffSession={atelier.diff.session}
 		/>
 	),
 });

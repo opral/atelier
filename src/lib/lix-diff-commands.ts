@@ -28,6 +28,7 @@ export async function createCheckpoint(
 export async function createCheckpointForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
+	epoch: { readonly beforeCommitId: string; readonly afterCommitId: string },
 ): Promise<{ readonly commitId: string } | null> {
 	if (fileIds.length === 0) return null;
 	const result = await lix.execute(
@@ -35,11 +36,17 @@ export async function createCheckpointForFiles(
 		 FROM lix_create_checkpoint(ARRAY(
 		   SELECT row_ref
 		   FROM lix_working_diff('lix_file')
-		   WHERE id IN (${fileIdParameters(fileIds, 1)})
+		   WHERE before_commit_id = $1
+		     AND after_commit_id = $2
+		     AND id IN (${fileIdParameters(fileIds, 3)})
 		 ))`,
-		[...fileIds],
+		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
-	if (result.rows.length === 0) return null;
+	if (result.rows.length === 0) {
+		throw new Error(
+			"The working diff changed while it was being reviewed. Reopen the review before applying this decision.",
+		);
+	}
 	const commitId = result.rows[0]?.commit_id;
 	if (result.rows.length !== 1 || !isString(commitId)) {
 		throw new Error("Partial checkpoint did not return one commit ID.");
@@ -50,15 +57,23 @@ export async function createCheckpointForFiles(
 export async function revertWorkingChangesForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
+	epoch: { readonly beforeCommitId: string; readonly afterCommitId: string },
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
 	const result = await lix.execute(
 		`INSERT INTO lix_revert (row_ref)
 		 SELECT row_ref
 		 FROM lix_working_diff('lix_file')
-		 WHERE id IN (${fileIdParameters(fileIds, 1)})`,
-		[...fileIds],
+		 WHERE before_commit_id = $1
+		   AND after_commit_id = $2
+		   AND id IN (${fileIdParameters(fileIds, 3)})`,
+		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
+	if (result.rowsAffected === 0) {
+		throw new Error(
+			"The working diff changed while it was being reviewed. Reopen the review before applying this decision.",
+		);
+	}
 	return result.rowsAffected;
 }
 

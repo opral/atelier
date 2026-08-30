@@ -48,14 +48,17 @@ import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
 } from "@/extension-runtime/external-write-review";
-import type { AtelierDiffSession } from "@/extension-api";
+import type { AtelierDiffFile, AtelierDiffSession } from "@/extension-api";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import { useFileDataAtCommit } from "@/shell/external-write-review-history";
+import {
+	useWorkingFileData,
+	workingReviewFile,
+} from "@/shell/external-write-review-history";
 import { AnimatedZap } from "@/components/animated-zap";
 import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/markdown-asset";
 
@@ -182,7 +185,46 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 	const comparesAgainstCurrentFile =
 		editorRevision.beforeCommitId !== null &&
 		editorRevision.afterCommitId === null;
+	const workingFile = workingReviewFile(props.diffSession, fileId);
+	if (
+		editorRevisionMode(editorRevision) !== "editor" &&
+		(editorRevision.afterCommitId !== null || workingFile?.workingEpoch)
+	) {
+		return (
+			<MarkdownHistoricalViewLoaded
+				fileId={fileId}
+				filePath={props.filePath}
+				fileRow={undefined}
+				isActiveView={props.isActiveView ?? true}
+				isPanelFocused={props.isPanelFocused ?? true}
+				editorRevision={editorRevision}
+				openWorkspaceFile={props.openWorkspaceFile}
+				diffSession={props.diffSession}
+			/>
+		);
+	}
+	return (
+		<MarkdownLiveDelivery
+			fileId={fileId}
+			comparesAgainstCurrentFile={comparesAgainstCurrentFile}
+			{...props}
+		/>
+	);
+}
 
+function MarkdownLiveDelivery({
+	fileId,
+	comparesAgainstCurrentFile,
+	...props
+}: MarkdownViewProps & { readonly comparesAgainstCurrentFile: boolean }) {
+	const editorRevision = normalizeEditorRevisionState({
+		beforeCommitId: props.beforeCommitId,
+		afterCommitId: props.afterCommitId,
+		beforeFileId: props.beforeFileId,
+		afterFileId: props.afterFileId,
+		beforeExists: props.beforeExists,
+		afterExists: props.afterExists,
+	});
 	const ownsLiveFileDelivery = editorRevisionMode(editorRevision) === "editor";
 	const fileResult = useQueryResult<MarkdownFileRow>(
 		(lix) =>
@@ -233,6 +275,7 @@ function MarkdownViewLoaded(
 				isPanelFocused={isPanelFocused}
 				editorRevision={editorRevision}
 				openWorkspaceFile={openWorkspaceFile}
+				diffSession={props.diffSession}
 			/>
 		);
 	}
@@ -241,6 +284,7 @@ function MarkdownViewLoaded(
 }
 
 function MarkdownLiveViewLoaded({
+	fileId,
 	fileRow,
 	readOnly = false,
 	isActiveView = true,
@@ -262,47 +306,52 @@ function MarkdownLiveViewLoaded({
 	// the working diff session marks it pending — diff mode covers every open
 	// surface, not just the revealed file.
 	const session = diffSession ?? null;
-	const sessionFile =
-		fileRow && session && "working" in session.target
-			? session.files.find((file) => file.id === fileRow.id)
-			: undefined;
+	const sessionFile = workingReviewFile(session, fileId);
 	const sessionReview = sessionFile?.review;
-	const reviewing = Boolean(
-		fileRow && session && sessionReview?.status === "pending",
-	);
+	const reviewing = sessionReview?.status === "pending";
 	// An added file has no base to fetch: its history is absent, so its before
 	// side is empty by definition.
-	const reviewBaseCommitId =
-		reviewing &&
-		sessionFile?.changeKind !== "added" &&
-		session?.base &&
-		"commitId" in session.base
-			? session.base.commitId
-			: null;
-	const reviewBase = useFileDataAtCommit(
-		reviewBaseCommitId ? fileRow?.id : null,
-		reviewBaseCommitId,
+	const workingEpoch = reviewing ? sessionFile?.workingEpoch : undefined;
+	const reviewBase = useWorkingFileData(
+		workingEpoch ? fileId : null,
+		workingEpoch?.beforeCommitId,
+		workingEpoch?.afterCommitId,
 	);
-	const effectiveFileRow = fileRow;
-	const review: ExternalWriteReview | null =
-		reviewing && fileRow && sessionReview
+	const reviewUnavailableMessage =
+		!reviewBase.loading && reviewBase.error
+			? "The working diff changed while it was being reviewed. Reopen the review."
+			: reviewing && !fileRow
+				? "This file changed or was removed after the review opened. Reopen the review."
+				: null;
+	const effectiveFileRow =
+		reviewing && fileRow && sessionFile && !reviewBase.loading
 			? {
-					fileId: fileRow.id,
-					path: fileRow.path,
+					id: fileId,
+					path: sessionFile.path,
+					content: reviewBase.afterData ?? EMPTY_FILE_DATA,
+				}
+			: fileRow;
+	const review: ExternalWriteReview | null =
+		reviewing && effectiveFileRow && sessionReview
+			? {
+					fileId,
+					path: sessionFile?.path ?? effectiveFileRow.path,
 					reviewId: sessionReview.id,
-					beforeCommitId: reviewBaseCommitId ?? "",
-					afterCommitId: "",
+					beforeCommitId: workingEpoch?.beforeCommitId ?? "",
+					afterCommitId: workingEpoch?.afterCommitId ?? "",
 				}
 			: null;
 	const isReviewing = review !== null;
-	// The review's after side is the live document; only the base is fetched.
+	// Both sides come from the certified working epoch, never from a newer live row.
 	const reviewDiff: MarkdownReviewDiff | null =
-		review && fileRow && !reviewBase.loading
+		review && effectiveFileRow && !reviewBase.loading && !reviewBase.error
 			? {
 					beforeMarkdown: reviewBase.data
 						? decodeFileDataToText(reviewBase.data)
 						: "",
-					afterMarkdown: decodeFileDataToText(fileRow.content),
+					afterMarkdown: reviewBase.afterData
+						? decodeFileDataToText(reviewBase.afterData)
+						: "",
 				}
 			: null;
 	const [liveEditorState, setLiveEditorState] = useState<{
@@ -354,7 +403,11 @@ function MarkdownLiveViewLoaded({
 
 	let content: ReactNode;
 
-	if (!effectiveFileRow) {
+	if (reviewUnavailableMessage) {
+		content = (
+			<WorkingMarkdownReviewUnavailable message={reviewUnavailableMessage} />
+		);
+	} else if (!effectiveFileRow) {
 		content = (
 			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
 				File not found in the workspace.
@@ -453,6 +506,21 @@ function MarkdownLiveViewLoaded({
 	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
 }
 
+function WorkingMarkdownReviewUnavailable({
+	message,
+}: {
+	readonly message: string;
+}) {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			{message}
+		</div>
+	);
+}
+
 function MarkdownLiveReviewController({
 	sourceFilePath,
 	editor,
@@ -522,6 +590,7 @@ function MarkdownLiveReviewController({
 function MarkdownHistoricalViewLoaded({
 	fileId,
 	editorRevision,
+	diffSession,
 	...props
 }: {
 	readonly fileId: string;
@@ -530,8 +599,23 @@ function MarkdownHistoricalViewLoaded({
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
 	readonly editorRevision: EditorRevisionState;
+	readonly diffSession?: AtelierDiffSession | null;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 }) {
+	const workingFile =
+		diffSession && "working" in diffSession.target
+			? diffSession.files.find((file) => file.id === fileId)
+			: undefined;
+	if (workingFile?.workingEpoch) {
+		return (
+			<MarkdownWorkingHistoricalView
+				{...props}
+				fileId={fileId}
+				editorRevision={editorRevision}
+				workingFile={workingFile}
+			/>
+		);
+	}
 	return (
 		<FileSnapshotsAtCommits
 			fileId={fileId}
@@ -552,6 +636,47 @@ function MarkdownHistoricalViewLoaded({
 				/>
 			)}
 		</FileSnapshotsAtCommits>
+	);
+}
+
+function MarkdownWorkingHistoricalView({
+	fileId,
+	editorRevision,
+	workingFile,
+	...props
+}: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
+	readonly fileRow: MarkdownFileRow | undefined;
+	readonly isActiveView: boolean;
+	readonly isPanelFocused: boolean;
+	readonly editorRevision: EditorRevisionState;
+	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly workingFile: AtelierDiffFile;
+}) {
+	const epoch = workingFile.workingEpoch!;
+	const before = useWorkingFileData(
+		fileId,
+		epoch.beforeCommitId,
+		epoch.afterCommitId,
+	);
+	if (!before.loading && before.error) {
+		return (
+			<WorkingMarkdownReviewUnavailable message="The working diff changed while it was being reviewed. Reopen the review." />
+		);
+	}
+	if (before.loading) return <MarkdownLoadingSpinner />;
+	const beforeSnapshot = before.data
+		? { id: fileId, path: workingFile.path, content: before.data }
+		: undefined;
+	return (
+		<MarkdownHistoricalViewResolved
+			{...props}
+			fileId={fileId}
+			editorRevision={editorRevision}
+			beforeSnapshot={beforeSnapshot}
+			afterSnapshot={undefined}
+		/>
 	);
 }
 
