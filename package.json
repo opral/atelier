@@ -46,7 +46,7 @@
 		"test:build-scripts": "node --test scripts/*.test.mjs"
 	},
 	"peerDependencies": {
-		"@lix-js/sdk": ">=0.15.0 <0.16.0",
+		"@lix-js/sdk": ">=0.14.0 <0.16.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0"
 	},
