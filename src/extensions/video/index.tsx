@@ -3,6 +3,12 @@ import { Film, VideoOff } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
 import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import type { AtelierDiffSession } from "@/extension-api";
+import { selectFilesStateAt } from "@/queries";
+import {
+	useWorkingFileData,
+	workingReviewFile,
+} from "@/shell/external-write-review-history";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -18,6 +24,8 @@ import "./style.css";
 type VideoViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
+	readonly sourceCommitId?: string;
+	readonly diffSession?: AtelierDiffSession | null;
 };
 
 type VideoFileRow = {
@@ -27,28 +35,60 @@ type VideoFileRow = {
 };
 
 /** Read-only player for the current video stored in the Lix workspace. */
-export function VideoView({ fileId, filePath }: VideoViewProps) {
+export function VideoView(props: VideoViewProps) {
 	return (
 		<div className="atelier-video-view" data-testid="video-viewer">
 			<Suspense fallback={<VideoLoadingState />}>
-				<VideoViewContent fileId={fileId} filePath={filePath} />
+				<VideoViewContent {...props} />
 			</Suspense>
 		</div>
 	);
 }
 
-function VideoViewContent({ fileId, filePath }: VideoViewProps) {
+function VideoViewContent({
+	fileId,
+	filePath,
+	sourceCommitId,
+	diffSession,
+}: VideoViewProps) {
 	assertFileId(fileId);
-	const fileResult = useQueryResult<VideoFileRow>((lix) =>
-		qb(lix)
-			.selectFrom("lix_file")
-			.select(["id", "path", "content"])
-			.where("id", "=", fileId)
-			.limit(1),
+	const reviewFile = workingReviewFile(diffSession, fileId);
+	const epoch = reviewFile?.workingEpoch;
+	const reviewData = useWorkingFileData(
+		epoch ? fileId : null,
+		epoch?.beforeCommitId,
+		epoch?.afterCommitId,
+	);
+	const fileResult = useQueryResult<VideoFileRow>(
+		(lix) =>
+			sourceCommitId
+				? selectFilesStateAt(lix, sourceCommitId)
+						.select(["id", "path", "content"])
+						.where("id", "=", fileId)
+				: qb(lix)
+						.selectFrom("lix_file")
+						.select(["id", "path", "content"])
+						.where("id", "=", fileId)
+						.limit(1),
+		{ subscribe: !sourceCommitId },
 	);
 	if (fileResult.status === "pending") return <VideoLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
-	const fileRow = fileResult.rows[0];
+	const resolvedReviewData = reviewData.loading ? null : reviewData;
+	if (epoch && !resolvedReviewData) return <VideoLoadingState />;
+	if (epoch && resolvedReviewData?.error) return <VideoReviewUnavailable />;
+	const observed = fileResult.rows[0];
+	const pinnedContent =
+		resolvedReviewData?.afterData ?? resolvedReviewData?.data;
+	const fileRow = epoch
+		? pinnedContent
+			? {
+					id: fileId,
+					path: reviewFile?.path ?? observed?.path ?? filePath ?? `/${fileId}`,
+					content: pinnedContent,
+				}
+			: undefined
+		: observed;
 
 	if (!fileRow) {
 		return (
@@ -63,6 +103,17 @@ function VideoViewContent({ fileId, filePath }: VideoViewProps) {
 			data={fileRow.content}
 			filePath={fileRow.path || filePath || "video"}
 		/>
+	);
+}
+
+function VideoReviewUnavailable() {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			The working video changed while it was being reviewed. Reopen the review.
+		</div>
 	);
 }
 
@@ -188,10 +239,12 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Play MP4, MOV, and WebM videos.",
 	icon: Film,
-	component: ({ view }) => (
+	component: ({ atelier, view }) => (
 		<VideoView
 			fileId={view.state.fileId as string}
 			filePath={view.state.filePath as string | undefined}
+			sourceCommitId={view.state.sourceCommitId as string | undefined}
+			diffSession={atelier.diff.session}
 		/>
 	),
 });

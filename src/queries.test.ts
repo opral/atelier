@@ -8,6 +8,8 @@ import {
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
 	selectWorkingChangeCount,
+	selectWorkingFileDiffContent,
+	selectWorkingFileDiffSnapshot,
 	selectWorkingFileDiffs,
 } from "@/queries";
 
@@ -162,13 +164,27 @@ describe("checkpoint queries", () => {
 				new TextEncoder().encode("draft"),
 			],
 		);
-		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingFiles = snapshot.files;
+		expect(workingFiles).toEqual([
 			expect.objectContaining({
 				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
 				diff_type: "added",
 			}),
 		]);
+		expect(snapshot.beforeCommitId).not.toBe(snapshot.afterCommitId);
+		const workingFile = workingFiles[0]!;
+		const content = await selectWorkingFileDiffContent(
+			lix,
+			workingFile.id,
+			snapshot.beforeCommitId,
+			snapshot.afterCommitId,
+		);
+		expect(content.from_content).toBeNull();
+		expect(new TextDecoder().decode(content.to_content as Uint8Array)).toBe(
+			"draft",
+		);
 		// The file's descriptor and content rows count; the workspace's own
 		// key-value write does not.
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([

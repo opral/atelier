@@ -17,7 +17,7 @@ export type WorkingChangeCountRow = {
 	file_count: number;
 };
 
-/** One changed file from lix_diff('lix_file'). */
+/** One changed file from the certified HOT working diff. */
 export type FileDiffRow = {
 	/** The file relation's typed primary key, projected by lix_diff. */
 	id: string;
@@ -28,6 +28,11 @@ export type FileDiffRow = {
 	/** Side paths: a modified row whose sides differ is a move/rename. */
 	from_path: string | null;
 	to_path: string | null;
+};
+
+export type WorkingFileDiffContentRow = {
+	from_content: unknown | null;
+	to_content: unknown | null;
 };
 
 export type CheckpointRow = {
@@ -114,6 +119,66 @@ export function selectWorkingChangeCount(lix: Lix) {
 
 function workingFileDiffTable() {
 	return sql<any>`lix_diff('lix_file')`;
+}
+
+/**
+ * Opens one coherent working-review epoch without adding a review-specific SQL
+ * surface. executeBatch pins both statements to the same repository snapshot:
+ * the first resolves the epoch and the second reads the certified HOT index.
+ */
+export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
+	readonly beforeCommitId: string;
+	readonly afterCommitId: string;
+	readonly files: readonly FileDiffRow[];
+}> {
+	const results = await lix.executeBatch([
+		{
+			sql: `SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
+			             lix_active_branch_commit_id() AS after_commit_id`,
+		},
+		{
+			sql: `SELECT id, diff_type,
+			             coalesce(to_path, from_path) AS path,
+			             row_count, from_path, to_path
+			      FROM lix_diff('lix_file')
+			      ORDER BY coalesce(to_path, from_path) ASC`,
+		},
+	]);
+	const epoch = results[0]?.rows[0];
+	if (
+		typeof epoch?.before_commit_id !== "string" ||
+		typeof epoch?.after_commit_id !== "string"
+	) {
+		throw new Error("The active Lix branch has no working-review epoch.");
+	}
+	return {
+		beforeCommitId: epoch.before_commit_id,
+		afterCommitId: epoch.after_commit_id,
+		files: (results[1]?.rows ?? []) as FileDiffRow[],
+	};
+}
+
+/** Lazily loads one selected file's immutable bytes from the review epoch. */
+export async function selectWorkingFileDiffContent(
+	lix: Lix,
+	fileId: string,
+	beforeCommitId: string,
+	afterCommitId: string,
+): Promise<WorkingFileDiffContentRow> {
+	const results = await lix.executeBatch([
+		{
+			sql: "SELECT content FROM lix_state_at('lix_file', $1) WHERE id = $2",
+			params: [beforeCommitId, fileId],
+		},
+		{
+			sql: "SELECT content FROM lix_state_at('lix_file', $1) WHERE id = $2",
+			params: [afterCommitId, fileId],
+		},
+	]);
+	return {
+		from_content: results[0]?.rows[0]?.content ?? null,
+		to_content: results[1]?.rows[0]?.content ?? null,
+	};
 }
 
 /**
