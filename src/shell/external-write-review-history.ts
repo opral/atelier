@@ -74,11 +74,7 @@ export function useFileDataAtCommit(
 		: { loading: true };
 }
 
-/**
- * HOT-only working bytes pinned to the review epoch. This deliberately does
- * not fall back to lix_state_at: a missing row means the opened review became
- * stale and must not silently combine two repository generations.
- */
+/** Working bytes loaded lazily from the immutable commits of the opened epoch. */
 export function useWorkingFileData(
 	fileId: string | null | undefined,
 	beforeCommitId: string | null | undefined,
@@ -104,12 +100,8 @@ export function useWorkingFileData(
 			beforeCommitId,
 			afterCommitId,
 		)
-			.executeTakeFirst()
 			.then((row) => {
 				if (cancelled) return;
-				if (!row) {
-					throw new Error("working diff epoch changed while loading file data");
-				}
 				setResolved({
 					key,
 					data:
@@ -125,7 +117,7 @@ export function useWorkingFileData(
 			.catch((error: unknown) => {
 				if (cancelled) return;
 				console.warn(
-					"[external-write-review] failed to load certified working file data",
+					"[external-write-review] failed to load working file snapshots",
 					error,
 				);
 				setResolved({ key, data: null, afterData: null, error: true });
@@ -169,8 +161,7 @@ export async function getWorkingFileData(
 		fileId,
 		beforeCommitId,
 		afterCommitId,
-	).executeTakeFirst();
-	if (!row) return null;
+	);
 	return {
 		beforeData:
 			row.from_content === null

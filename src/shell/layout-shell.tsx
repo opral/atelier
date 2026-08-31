@@ -50,7 +50,7 @@ import { qb } from "@/lib/lix-kysely";
 import {
 	selectFilePathsAtCommits,
 	selectFilesStateAt,
-	selectWorkingFileDiffs,
+	selectWorkingFileDiffSnapshot,
 } from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
@@ -2759,10 +2759,10 @@ function LayoutShellLoadedContentResolved({
 		async (review: ExternalWriteReview): Promise<boolean> => {
 			const result = await lix.execute(
 				`SELECT 1 AS current
-				 FROM lix_working_diff('lix_file')
+				 FROM lix_diff('lix_file')
 				 WHERE id = $1
-				   AND before_commit_id = $2
-				   AND after_commit_id = $3
+				   AND lix_latest_checkpoint_commit_id() = $2
+				   AND lix_active_branch_commit_id() = $3
 				 LIMIT 1`,
 				[review.fileId, review.beforeCommitId, review.afterCommitId],
 			);
@@ -2776,11 +2776,10 @@ function LayoutShellLoadedContentResolved({
 			const result = await lix.execute(
 				`DELETE FROM lix_file
 				 WHERE id = $1 AND content = $2
+				   AND lix_latest_checkpoint_commit_id() = $3
+				   AND lix_active_branch_commit_id() = $4
 				   AND EXISTS (
-				     SELECT 1 FROM lix_working_diff('lix_file')
-				     WHERE id = $1
-				       AND before_commit_id = $3
-				       AND after_commit_id = $4
+				     SELECT 1 FROM lix_diff('lix_file') WHERE id = $1
 				   )`,
 				[review.fileId, afterData, review.beforeCommitId, review.afterCommitId],
 				{ originKey: `atelier.review:${review.reviewId}` },
@@ -2852,11 +2851,10 @@ function LayoutShellLoadedContentResolved({
 					const result = await lix.execute(
 						`UPDATE lix_file SET content = $1
 						 WHERE id = $2 AND content = $3
+						   AND lix_latest_checkpoint_commit_id() = $4
+						   AND lix_active_branch_commit_id() = $5
 						   AND EXISTS (
-						     SELECT 1 FROM lix_working_diff('lix_file')
-						     WHERE id = $2
-						       AND before_commit_id = $4
-						       AND after_commit_id = $5
+						     SELECT 1 FROM lix_diff('lix_file') WHERE id = $2
 						   )`,
 						[
 							args.data,
@@ -2929,11 +2927,10 @@ function LayoutShellLoadedContentResolved({
 				const result = await lix.execute(
 					`UPDATE lix_file SET content = $1
 					 WHERE id = $2 AND content = $3
+					   AND lix_latest_checkpoint_commit_id() = $4
+					   AND lix_active_branch_commit_id() = $5
 					   AND EXISTS (
-					     SELECT 1 FROM lix_working_diff('lix_file')
-					     WHERE id = $2
-					       AND before_commit_id = $4
-					       AND after_commit_id = $5
+					     SELECT 1 FROM lix_diff('lix_file') WHERE id = $2
 					   )`,
 					[
 						beforeData,
@@ -3577,27 +3574,15 @@ function LayoutShellLoadedContentResolved({
 			}
 			workingReviewOpeningRef.current = true;
 			void (async () => {
-				// The review window is always base-to-head, where the base is the
-				// latest checkpoint or the repository's empty root. The HOT-only
-				// relation pins that epoch and the changed rows in the same statement,
-				// so a concurrent sync cannot pair rows from one head with coordinates
-				// from another.
-				const workingDiffs = await selectWorkingFileDiffs(lix).execute();
-				const firstWorkingDiff = workingDiffs[0];
-				if (!firstWorkingDiff) return;
-				const beforeCommitId = firstWorkingDiff.before_commit_id;
-				const headCommitId = firstWorkingDiff.after_commit_id;
-				if (
-					workingDiffs.some(
-						(row) =>
-							row.before_commit_id !== beforeCommitId ||
-							row.after_commit_id !== headCommitId,
-					)
-				) {
-					throw new Error(
-						"working diff returned rows from multiple HOT epochs",
-					);
-				}
+				// The batch pins the existing coordinate functions and the one-argument
+				// HOT diff to one repository snapshot. No review-only SQL surface is
+				// needed, and selected content remains lazy/server-first.
+				const {
+					beforeCommitId,
+					afterCommitId: headCommitId,
+					files: workingDiffs,
+				} = await selectWorkingFileDiffSnapshot(lix);
+				if (workingDiffs.length === 0) return;
 				// Every changed file joins the review — kinds without a content
 				// diff (drawings, images, pdfs) still review, checkpoint, and
 				// revert at file granularity. Filtering them out strands their

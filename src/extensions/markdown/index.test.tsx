@@ -9,7 +9,7 @@ import { qb } from "@/lib/lix-kysely";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { HistoryView } from "@/extensions/history";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
-import { selectWorkingFileDiffs } from "@/queries";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
 
 describe("MarkdownView", () => {
 	test("throws when no file id is provided", () => {
@@ -813,12 +813,15 @@ describe("MarkdownView", () => {
 				.set({ content: new TextEncoder().encode("# After") })
 				.where("id", "=", fakeUuid("file_review_startup"))
 				.execute();
-			const workingDiff = await selectWorkingFileDiffs(lix)
-				.where("id", "=", fakeUuid("file_review_startup"))
-				.executeTakeFirstOrThrow();
+			const snapshot = await selectWorkingFileDiffSnapshot(lix);
+			expect(
+				snapshot.files.some(
+					(file) => file.id === fakeUuid("file_review_startup"),
+				),
+			).toBe(true);
 			workingEpoch = {
-				beforeCommitId: workingDiff.before_commit_id,
-				afterCommitId: workingDiff.after_commit_id,
+				beforeCommitId: snapshot.beforeCommitId,
+				afterCommitId: snapshot.afterCommitId,
 			};
 			utils?.rerender(renderReviewMarkdown(true));
 		});

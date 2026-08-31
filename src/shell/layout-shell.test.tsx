@@ -521,7 +521,7 @@ describe("diff review navigation", () => {
 					}),
 				).toHaveAttribute("aria-checked", "false");
 			});
-			const reviewOpenExecute = vi.spyOn(lix, "execute");
+			const reviewOpenExecuteBatch = vi.spyOn(lix, "executeBatch");
 			await act(async () => {
 				fireEvent.click(
 					screen.getByRole("button", {
@@ -532,18 +532,24 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint/ }),
 			).toBeVisible();
-			expect(
-				reviewOpenExecute.mock.calls.some(([statement]) =>
-					String(statement).includes("lix_working_diff('lix_file')"),
-				),
-			).toBe(true);
-			expect(
-				reviewOpenExecute.mock.calls.some(([statement]) =>
-					String(statement).includes(
-						"lix_latest_checkpoint_commit_id() AS before_commit_id",
+			const reviewBatch = reviewOpenExecuteBatch.mock.calls.find(
+				([statements]) =>
+					statements.some((statement) =>
+						statement.sql.includes("FROM lix_diff('lix_file')"),
 					),
-				),
-			).toBe(false);
+			)?.[0];
+			expect(reviewBatch).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						sql: expect.stringContaining(
+							"lix_latest_checkpoint_commit_id() AS before_commit_id",
+						),
+					}),
+					expect.objectContaining({
+						sql: expect.stringContaining("FROM lix_diff('lix_file')"),
+					}),
+				]),
+			);
 			const reviewFloat = document.querySelector(
 				".external-write-review-actions",
 			);

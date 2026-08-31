@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { selectWorkingFileDiffs } from "@/queries";
+import {
+	selectWorkingFileDiffs,
+	selectWorkingFileDiffSnapshot,
+} from "@/queries";
 import {
 	createCheckpoint,
 	createCheckpointForFiles,
@@ -32,11 +35,13 @@ async function workingFileDiffs(lix: Awaited<ReturnType<typeof openLix>>) {
 }
 
 async function workingEpoch(lix: Awaited<ReturnType<typeof openLix>>) {
-	const row = (await workingFileDiffs(lix))[0];
-	if (!row) throw new Error("test expected a working diff epoch");
+	const snapshot = await selectWorkingFileDiffSnapshot(lix);
+	if (snapshot.files.length === 0) {
+		throw new Error("test expected a working diff epoch");
+	}
 	return {
-		beforeCommitId: row.before_commit_id,
-		afterCommitId: row.after_commit_id,
+		beforeCommitId: snapshot.beforeCommitId,
+		afterCommitId: snapshot.afterCommitId,
 	};
 }
 
