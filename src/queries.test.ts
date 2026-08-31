@@ -9,6 +9,7 @@ import {
 	selectLatestCheckpoint,
 	selectWorkingChangeCount,
 	selectWorkingFileDiffContent,
+	selectWorkingFileDiffSnapshot,
 	selectWorkingFileDiffs,
 } from "@/queries";
 
@@ -163,26 +164,23 @@ describe("checkpoint queries", () => {
 				new TextEncoder().encode("draft"),
 			],
 		);
-		const workingFiles = await selectWorkingFileDiffs(lix).execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingFiles = snapshot.files;
 		expect(workingFiles).toEqual([
 			expect.objectContaining({
 				id: fakeUuid("review-file"),
 				path: "/drafts/review.md",
 				diff_type: "added",
-				before_commit_id: expect.any(String),
-				after_commit_id: expect.any(String),
 			}),
 		]);
-		expect(workingFiles[0]?.before_commit_id).not.toBe(
-			workingFiles[0]?.after_commit_id,
-		);
+		expect(snapshot.beforeCommitId).not.toBe(snapshot.afterCommitId);
 		const workingFile = workingFiles[0]!;
 		const content = await selectWorkingFileDiffContent(
 			lix,
 			workingFile.id,
-			workingFile.before_commit_id,
-			workingFile.after_commit_id,
-		).executeTakeFirstOrThrow();
+			snapshot.beforeCommitId,
+			snapshot.afterCommitId,
+		);
 		expect(content.from_content).toBeNull();
 		expect(new TextDecoder().decode(content.to_content as Uint8Array)).toBe(
 			"draft",

@@ -35,9 +35,9 @@ export async function createCheckpointForFiles(
 		`SELECT commit_id
 		 FROM lix_create_checkpoint(ARRAY(
 		   SELECT row_ref
-		   FROM lix_working_diff('lix_file')
-		   WHERE before_commit_id = $1
-		     AND after_commit_id = $2
+		   FROM lix_diff('lix_file')
+		   WHERE lix_latest_checkpoint_commit_id() = $1
+		     AND lix_active_branch_commit_id() = $2
 		     AND id IN (${fileIdParameters(fileIds, 3)})
 		 ))`,
 		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
@@ -63,9 +63,9 @@ export async function revertWorkingChangesForFiles(
 	const result = await lix.execute(
 		`INSERT INTO lix_revert (row_ref)
 		 SELECT row_ref
-		 FROM lix_working_diff('lix_file')
-		 WHERE before_commit_id = $1
-		   AND after_commit_id = $2
+		 FROM lix_diff('lix_file')
+		 WHERE lix_latest_checkpoint_commit_id() = $1
+		   AND lix_active_branch_commit_id() = $2
 		   AND id IN (${fileIdParameters(fileIds, 3)})`,
 		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
