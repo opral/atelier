@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { History } from "lucide-react";
 import type { AtelierDiffSession } from "@/extension-api";
 import { DiffGlyph } from "@/components/diff-glyph";
@@ -6,6 +6,8 @@ import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
+	selectCheckpointFilePreviews,
+	selectWorkingFileDiffs,
 	selectCommitParent,
 	selectWorkingChangeCount,
 	type CheckpointRow,
@@ -25,17 +27,30 @@ export function HistoryView({
 }: {
 	readonly atelier: ExtensionRuntime;
 }) {
+	const containerRef = useRef<HTMLElement>(null);
+	const [wide, setWide] = useState(false);
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container || typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(([entry]) => {
+			if (entry) setWide(entry.contentRect.width >= 640);
+		});
+		observer.observe(container);
+		return () => observer.disconnect();
+	}, []);
+
 	return (
 		<section
+			ref={containerRef}
 			aria-label="Checkpoint history"
-			className="min-h-0 flex-1 overflow-y-auto p-2"
+			data-layout={wide ? "wide" : "compact"}
+			className="min-h-0 flex-1 overflow-y-auto px-1 py-2"
 		>
-			{/* In a narrow sidebar the cap never binds and the list spans the
-			    panel; in a wide panel (full-screen History) the column centers
-			    at a readable measure instead of stretching across the width. */}
-			<div className="mx-auto w-full max-w-[30rem]">
-				<WorkingChangesRow atelier={atelier} />
-				<CheckpointList atelier={atelier} />
+			<div
+				className={wide ? "mx-auto w-full max-w-[60rem] px-5 py-4" : "w-full"}
+			>
+				<WorkingChangesRow atelier={atelier} wide={wide} />
+				<CheckpointList atelier={atelier} wide={wide} />
 			</div>
 		</section>
 	);
@@ -43,9 +58,12 @@ export function HistoryView({
 
 function WorkingChangesRow({
 	atelier,
+	wide,
 }: {
 	readonly atelier: ExtensionRuntime;
+	readonly wide: boolean;
 }) {
+	const filesDescriptionId = useId();
 	// Non-suspending: creating a checkpoint refires this query for the fresh
 	// span, and a suspending read would blank the whole History panel
 	// (checkpoints included) while it resolves — on cold replicas, for seconds.
@@ -66,6 +84,8 @@ function WorkingChangesRow({
 			? atelier.diff.exit()
 			: void atelier.diff.open({ target: { working: true } });
 
+	if (fileCount === 0) return null;
+
 	return (
 		<div
 			aria-current={isViewing ? "true" : undefined}
@@ -78,17 +98,11 @@ function WorkingChangesRow({
 			<button
 				type="button"
 				aria-label="Working changes"
-				disabled={fileCount === 0}
+				aria-describedby={wide ? filesDescriptionId : undefined}
 				onClick={toggleWorkingChanges}
 				onMouseDown={(event) => event.preventDefault()}
 				data-attr="history-working-changes"
-				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left ${
-					changeCount === 0
-						? "opacity-55"
-						: isViewing
-							? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-							: "hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-				}`}
+				className={`flex w-full min-h-10 gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
 			>
 				<span className="flex h-5 w-4 shrink-0 items-center justify-center">
 					<span
@@ -96,20 +110,28 @@ function WorkingChangesRow({
 						className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
 					/>
 				</span>
-				<span className="min-w-0">
+				<span
+					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
+				>
 					<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
 						Working changes
 					</span>
 					<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
-						{changeCount === 0
-							? "now · nothing new"
-							: `now · ${workingCountLabel}`}
+						{`now · ${workingCountLabel}`}
 					</span>
 				</span>
+				{wide ? (
+					<WorkingFilePreview
+						atelier={atelier}
+						descriptionId={filesDescriptionId}
+					/>
+				) : null}
 			</button>
-			<AnimatedHistoryDisclosure open={isViewing}>
-				<WorkingChangeFileList atelier={atelier} />
-			</AnimatedHistoryDisclosure>
+			{!wide ? (
+				<AnimatedHistoryDisclosure open={isViewing}>
+					<WorkingChangeFileList atelier={atelier} />
+				</AnimatedHistoryDisclosure>
+			) : null}
 		</div>
 	);
 }
@@ -172,19 +194,26 @@ function WorkingChangeFileList({
 	);
 }
 
-function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
+function CheckpointList({
+	atelier,
+	wide,
+}: {
+	readonly atelier: ExtensionRuntime;
+	readonly wide: boolean;
+}) {
 	const checkpoints = useQuery((lix) => selectCheckpoints(lix));
 	// The oldest checkpoint has no older checkpoint to diff against; its base
 	// is its commit's first parent (the repository's beginning).
 	const oldestCommitId = checkpoints.at(-1)?.commit_id ?? null;
-	const oldestParent = useQuery((lix) =>
+	const oldestParent = useQueryResult((lix) =>
 		selectCommitParent(lix, oldestCommitId ?? ""),
 	);
 	// Null means the repository's beginning: the genesis checkpoint has no
 	// parent commit, and its diff base is the empty repository.
-	const oldestParentId: string | null = oldestCommitId
-		? (oldestParent[0]?.parent_id ?? null)
-		: null;
+	const oldestParentId =
+		oldestParent.status === "success"
+			? (oldestParent.rows[0]?.parent_id ?? null)
+			: undefined;
 
 	return (
 		<ol aria-label="Checkpoints" className="space-y-0">
@@ -193,6 +222,7 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 					key={checkpoint.commit_id}
 					atelier={atelier}
 					checkpoint={checkpoint}
+					wide={wide}
 					previousCommitId={
 						checkpoints[index + 1]?.commit_id ??
 						(index === checkpoints.length - 1 ? oldestParentId : undefined)
@@ -207,6 +237,7 @@ function CheckpointList({ atelier }: { readonly atelier: ExtensionRuntime }) {
 
 function CheckpointItem({
 	atelier,
+	wide,
 	checkpoint,
 	previousCommitId,
 	index,
@@ -214,11 +245,13 @@ function CheckpointItem({
 }: {
 	readonly atelier: ExtensionRuntime;
 	readonly checkpoint: CheckpointRow;
+	readonly wide: boolean;
 	/** Undefined disables the row; null diffs from the repository's beginning. */
 	readonly previousCommitId: string | null | undefined;
 	readonly index: number;
 	readonly count: number;
 }) {
+	const filesDescriptionId = useId();
 	const isInitial = index === count - 1;
 	const label =
 		count === 1 || isInitial
@@ -257,8 +290,9 @@ function CheckpointItem({
 					});
 				}}
 				onMouseDown={(event) => event.preventDefault()}
+				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 items-start gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+				className={`flex w-full min-h-10 gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${
 					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
 				}`}
 			>
@@ -271,7 +305,9 @@ function CheckpointItem({
 				>
 					<FilledFlag />
 				</span>
-				<span className="min-w-0">
+				<span
+					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
+				>
 					<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
 						{label}
 					</span>
@@ -284,11 +320,148 @@ function CheckpointItem({
 						</time>
 					</span>
 				</span>
+				{wide ? (
+					<CheckpointFilePreview
+						descriptionId={filesDescriptionId}
+						atelier={atelier}
+						commitId={checkpoint.commit_id}
+						previousCommitId={previousCommitId}
+					/>
+				) : null}
 			</button>
-			<AnimatedHistoryDisclosure open={isViewing}>
-				<CheckpointFileList atelier={atelier} commitId={checkpoint.commit_id} />
-			</AnimatedHistoryDisclosure>
+			{!wide ? (
+				<AnimatedHistoryDisclosure open={isViewing}>
+					<CheckpointFileList
+						atelier={atelier}
+						commitId={checkpoint.commit_id}
+					/>
+				</AnimatedHistoryDisclosure>
+			) : null}
 		</li>
+	);
+}
+
+function WorkingFilePreview({
+	atelier,
+	descriptionId,
+}: {
+	readonly atelier: ExtensionRuntime;
+	readonly descriptionId: string;
+}) {
+	const result = useQueryResult((lix) => selectWorkingFileDiffs(lix));
+	return (
+		<InlineFilePreview
+			atelier={atelier}
+			result={result}
+			descriptionId={descriptionId}
+		/>
+	);
+}
+
+function CheckpointFilePreview({
+	atelier,
+	descriptionId,
+	commitId,
+	previousCommitId,
+}: {
+	readonly atelier: ExtensionRuntime;
+	readonly descriptionId: string;
+	readonly commitId: string;
+	readonly previousCommitId: string | null | undefined;
+}) {
+	const previewRef = useRef<HTMLSpanElement>(null);
+	const [visible, setVisible] = useState(false);
+	useEffect(() => {
+		const element = previewRef.current;
+		if (!element) return;
+		if (typeof IntersectionObserver === "undefined") {
+			setVisible(true);
+			return;
+		}
+		// A long history should only fetch names near the visible scroll area.
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				if (!entry?.isIntersecting) return;
+				setVisible(true);
+				observer.disconnect();
+			},
+			{ rootMargin: "160px" },
+		);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	const result = useQueryResult(
+		(lix) =>
+			selectCheckpointFilePreviews(lix, commitId, previousCommitId ?? null),
+		{ subscribe: false, enabled: visible && previousCommitId !== undefined },
+	);
+	return (
+		<span
+			ref={previewRef}
+			className="ml-auto flex min-h-4 min-w-0 flex-1 justify-end pl-6"
+		>
+			<InlineFilePreview
+				atelier={atelier}
+				result={result}
+				descriptionId={descriptionId}
+			/>
+		</span>
+	);
+}
+
+function InlineFilePreview({
+	atelier,
+	descriptionId,
+	result,
+}: {
+	readonly atelier: ExtensionRuntime;
+	readonly descriptionId: string;
+	readonly result: {
+		readonly status: "pending" | "success" | "error";
+		readonly rows: readonly { readonly id: string; readonly path: string }[];
+	};
+}) {
+	if (result.status !== "success") {
+		return (
+			<span
+				id={descriptionId}
+				className="ml-auto truncate pl-4 text-[11.5px] text-[var(--color-text-tertiary)]"
+			>
+				{result.status === "error" ? "Files unavailable" : "Loading files…"}
+			</span>
+		);
+	}
+	const files = result.rows;
+	if (files.length === 0) return null;
+	const remaining = files.length - 2;
+	return (
+		<>
+			<span
+				id={descriptionId}
+				aria-hidden="true"
+				className="sr-only"
+			>{`Changed files: ${files.map((file) => file.path).join(", ")}`}</span>
+			<span
+				data-attr="history-inline-files"
+				aria-hidden="true"
+				title={files.map((file) => file.path).join("\n")}
+				className="ml-auto flex min-w-0 items-center justify-end gap-4 pl-4 text-[11.5px] text-[var(--color-text-tertiary)]"
+			>
+				{files.slice(0, 2).map((file) => (
+					<span key={file.id} className="flex min-w-0 items-center gap-1.5">
+						<img
+							src={atelier.icons.fileUrl(file.path)}
+							alt=""
+							className="h-3.5 w-3.5 shrink-0"
+						/>
+						<span className="truncate">
+							{fileNameFromHistoryPath(file.path)}
+						</span>
+					</span>
+				))}
+				{remaining > 0 ? <span className="shrink-0">+{remaining}</span> : null}
+			</span>
+		</>
 	);
 }
 

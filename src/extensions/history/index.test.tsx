@@ -7,7 +7,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
@@ -76,7 +76,198 @@ function atelierStub(overrides?: {
 	} as unknown as ExtensionRuntime;
 }
 
+// Drive container size independently of the browser viewport.
+function mockHistoryWidth() {
+	let resize: (width: number) => void = () => {};
+	vi.stubGlobal(
+		"ResizeObserver",
+		class {
+			constructor(callback: ResizeObserverCallback) {
+				resize = (width) =>
+					callback(
+						[{ contentRect: { width } } as ResizeObserverEntry],
+						this as unknown as ResizeObserver,
+					);
+			}
+			observe() {}
+			disconnect() {}
+		},
+	);
+	return (width: number) => act(() => resize(width));
+}
+
 describe("HistoryView", () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	test("shows working changes after edits and removes the row after checkpointing", async () => {
+		const lix = await openLix();
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub()} />
+			</LixProvider>,
+		);
+		await screen.findByText("Initial checkpoint");
+		expect(
+			screen.queryByRole("button", { name: "Working changes" }),
+		).toBeNull();
+		await act(async () => {
+			await lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[
+					fakeUuid("live-history"),
+					"/live.md",
+					new TextEncoder().encode("edited"),
+				],
+			);
+		});
+		expect(
+			await screen.findByRole("button", { name: "Working changes" }),
+		).toBeEnabled();
+		await act(async () => {
+			await createCheckpoint(lix);
+		});
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("button", { name: "Working changes" }),
+			).toBeNull(),
+		);
+		expect(screen.getByText("Latest checkpoint")).toBeVisible();
+		view.unmount();
+		await lix.close();
+	});
+
+	test("previews checkpoint and working files before selection only when the panel is wide", async () => {
+		const resize = mockHistoryWidth();
+		// No intersection API means render all rows (e.g. non-browser hosts).
+		vi.stubGlobal("IntersectionObserver", undefined);
+		const lix = await openLix();
+		const fileIds = ["wide-a", "wide-b", "wide-c"].map(fakeUuid);
+		for (const [index, name] of [
+			"alpha.md",
+			"beta.csv",
+			"gamma.txt",
+		].entries()) {
+			await lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[fileIds[index], `/${name}`, new TextEncoder().encode("before")],
+			);
+		}
+		const checkpoint = await createCheckpoint(lix);
+		await lix.execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+			new TextEncoder().encode("after"),
+			fileIds[2],
+		]);
+		const execute = vi.spyOn(lix, "execute");
+		const open = vi.fn(async () => {});
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ open })} />
+			</LixProvider>,
+		);
+		const latest = await screen.findByRole("button", {
+			name: /Latest checkpoint/,
+		});
+		const historyReads = () =>
+			execute.mock.calls.filter(
+				([sql]) =>
+					String(sql).includes("lix_diff('lix_file',") ||
+					String(sql).includes("lix_state_at("),
+			);
+		expect(historyReads()).toHaveLength(0);
+		expect(within(latest).queryByText("alpha.md")).toBeNull();
+		resize(900);
+		expect(await within(latest).findByText("alpha.md")).toBeVisible();
+		expect(within(latest).getByText("beta.csv")).toBeVisible();
+		expect(within(latest).getByText("+1")).toBeVisible();
+		expect(latest).not.toHaveAccessibleName(/Changed files/);
+		expect(latest).toHaveAccessibleDescription(
+			"Changed files: /alpha.md, /beta.csv, /gamma.txt",
+		);
+		const working = screen.getByRole("button", { name: "Working changes" });
+		expect(await within(working).findByText("gamma.txt")).toBeVisible();
+		expect(working).toHaveAccessibleDescription("Changed files: /gamma.txt");
+		expect(open).not.toHaveBeenCalled();
+		expect(
+			screen.queryByRole("list", { name: "Files at this checkpoint" }),
+		).toBeNull();
+		fireEvent.click(within(latest).getByText("alpha.md"));
+		expect(open).toHaveBeenCalledWith({
+			base: { commitId: expect.any(String) },
+			target: { commitId: checkpoint.commitId },
+		});
+		resize(320);
+		expect(within(latest).queryByText("alpha.md")).toBeNull();
+		expect(
+			screen.getByRole("region", { name: "Checkpoint history" }),
+		).toHaveAttribute("data-layout", "compact");
+		view.unmount();
+		await lix.close();
+	});
+
+	test("defers checkpoint preview reads until a wide row approaches the viewport", async () => {
+		const resize = mockHistoryWidth();
+		const intersections: Array<{
+			target: Element;
+			callback: IntersectionObserverCallback;
+		}> = [];
+		vi.stubGlobal(
+			"IntersectionObserver",
+			class {
+				constructor(private callback: IntersectionObserverCallback) {}
+				observe(target: Element) {
+					intersections.push({ target, callback: this.callback });
+				}
+				disconnect() {}
+			},
+		);
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[
+				fakeUuid("viewport-history"),
+				"/visible.md",
+				new TextEncoder().encode("before"),
+			],
+		);
+		await createCheckpoint(lix);
+		const execute = vi.spyOn(lix, "execute");
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub()} />
+			</LixProvider>,
+		);
+		const latest = await screen.findByRole("button", {
+			name: /Latest checkpoint/,
+		});
+		resize(660);
+		await waitFor(() => expect(intersections.length).toBe(2));
+		const historicalReads = () =>
+			execute.mock.calls.filter(
+				([sql]) =>
+					String(sql).includes("lix_diff('lix_file',") ||
+					String(sql).includes("lix_state_at("),
+			);
+		expect(historicalReads()).toHaveLength(0);
+		const observed = intersections.find(({ target }) =>
+			latest.contains(target),
+		)!;
+		act(() =>
+			observed.callback(
+				[
+					{
+						isIntersecting: true,
+						target: observed.target,
+					} as IntersectionObserverEntry,
+				],
+				{} as IntersectionObserver,
+			),
+		);
+		expect(await within(latest).findByText("visible.md")).toBeVisible();
+		expect(historicalReads()).toHaveLength(1);
+		view.unmount();
+		await lix.close();
+	});
+
 	test("lists files while working changes is active", async () => {
 		const lix = await openLix();
 		await lix.execute(
@@ -166,19 +357,16 @@ describe("HistoryView", () => {
 			);
 		});
 
-		// Working changes leads the list; sealed workspace reads as quiet "now".
-		const workingChanges = await screen.findByRole("button", {
-			name: /Working changes/,
-		});
-		expect(workingChanges).toBeDisabled();
-		expect(screen.getByText("now · nothing new")).toBeVisible();
-
 		const checkpointList = await screen.findByRole("list", {
 			name: "Checkpoints",
 		});
 		const checkpointItems =
 			await within(checkpointList).findAllByRole("listitem");
 		expect(checkpointItems).toHaveLength(2);
+		expect(
+			screen.queryByRole("button", { name: "Working changes" }),
+		).toBeNull();
+		expect(screen.queryByText("now · nothing new")).toBeNull();
 		expect(within(checkpointList).getByText("Latest checkpoint")).toBeVisible();
 		expect(
 			within(checkpointList).getByText("Initial checkpoint"),
