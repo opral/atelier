@@ -42,6 +42,17 @@ each pull request. Both deploy commands only upload immutable Worker versions;
 they never promote a version to production traffic. The build requires Node.js
 22, which is pinned in the repository's `.node-version` file.
 
+The build downloads the browser SDK and OPFS package already tested in Lix CI
+for the exact `vendor/lix` revision. Add `LIX_CI_ARTIFACT_GITHUB_TOKEN` as a
+Cloudflare **build secret**, with GitHub **Actions: read** permission for
+`opral/lix`. It must be available to both the production-branch and
+non-production-branch build triggers, not just the Worker runtime.
+
+Workers Builds defaults to artifact-only preparation: it fails clearly on a
+missing or unauthorized artifact instead of compiling Rust. Local builds retain
+a source fallback. See [vendored Lix setup](../../CONTRIBUTING.md#preparing-vendored-lix)
+for overrides, cache behavior, and artifact retention.
+
 Workers Static Assets limits individual files to 25 MiB. The production build
 therefore stores the Lix WASM files precompressed, and the Worker serves them
 with the standard `Content-Encoding: gzip` response header.
