@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { artifactMode, installBrowserArtifact } from "./lix-ci-artifacts.mjs";
 
 const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const lixRoot = join(workspaceRoot, "vendor", "lix");
@@ -32,80 +33,191 @@ await requireDirectory(
 	"Initialize the vendor/lix submodule before building the vendored SDK.",
 );
 
-const channel = requiredMatch(
-	await readFile(join(lixRoot, "rust-toolchain.toml"), "utf8"),
-	/channel\s*=\s*"([^"]+)"/,
-	"Rust channel",
+const mode = artifactMode();
+const revision = commandOutput(
+	"git",
+	["-C", lixRoot, "rev-parse", "HEAD"],
+	process.env,
 );
-const wasmBindgenVersion = requiredMatch(
-	await readFile(join(lixRoot, "Cargo.lock"), "utf8"),
-	/\[\[package\]\]\s*\nname = "wasm-bindgen"\s*\nversion = "([^"]+)"/,
-	"wasm-bindgen version",
-);
-
-await mkdir(cacheRoot, { recursive: true });
-let env = {
-	...process.env,
-	...(browserOnly && process.env.CARGO_BUILD_JOBS === undefined
-		? { CARGO_BUILD_JOBS: "1" }
-		: {}),
-	...(browserOnly && process.env.CARGO_PROFILE_RELEASE_OPT_LEVEL === undefined
-		? { CARGO_PROFILE_RELEASE_OPT_LEVEL: "1" }
-		: {}),
-	...(browserOnly &&
-	process.env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS === undefined
-		? { CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256" }
-		: {}),
-	CARGO_UNSTABLE_BINDEPS: "true",
-	PATH: `${toolsBin}${delimiter}${process.env.PATH ?? ""}`,
-	RUSTUP_TOOLCHAIN: channel,
-};
-
-if (!commandSucceeds("rustup", ["run", channel, "cargo", "--version"], env)) {
-	env = {
-		...env,
-		CARGO_HOME: cargoHome,
-		PATH: `${toolsBin}${delimiter}${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
-		RUSTUP_HOME: rustupHome,
-	};
-	if (!commandSucceeds("rustup", ["run", channel, "cargo", "--version"], env)) {
-		await provisionRustup(channel, env);
+if (!revision || !/^[a-f0-9]{40}$/.test(revision)) {
+	throw new Error("Could not resolve the vendored Lix revision.");
+}
+const dirty =
+	commandOutput(
+		"git",
+		["-C", lixRoot, "status", "--porcelain", "--untracked-files=normal"],
+		process.env,
+	) !== "";
+const sdkDist = join(sdkRoot, "dist");
+const browserMarker = join(sdkDist, ".atelier-browser-build.json");
+const nativeTarget = `${process.platform}-${process.arch}`;
+const nativeMarker = join(sdkDist, `.atelier-native-${nativeTarget}.json`);
+const browserFiles = [
+	join(sdkDist, "index.js"),
+	join(sdkDist, "index.d.ts"),
+	join(sdkDist, "wasm", "lix_js_sdk.js"),
+	join(sdkDist, "wasm", "lix_js_sdk_bg.wasm"),
+	join(sdkDist, "bundled-plugins", "plugin_markdown.lixplugin"),
+	join(sdkDist, "bundled-plugins", "plugin_csv.lixplugin"),
+	join(opfsRoot, "dist", "index.js"),
+];
+console.log(`[lix-sdk] Selected vendored Lix ${revision}.`);
+let browserReady =
+	mode !== "off" &&
+	!dirty &&
+	(await preparedMatches(browserMarker, browserFiles));
+const nativeReady =
+	mode !== "off" &&
+	!dirty &&
+	(await preparedMatches(nativeMarker, [join(sdkRoot, "lix_js_sdk.node")]));
+if (dirty && mode === "only") {
+	throw new Error(
+		"Vendored Lix has source changes; an exact-revision artifact cannot represent them. Commit the changes and build them in Lix CI, or use ATELIER_LIX_ARTIFACTS=off locally.",
+	);
+}
+if (browserReady) {
+	console.log(`[lix-sdk] REUSE browser SDK for ${revision}.`);
+} else if (mode !== "off" && !dirty) {
+	try {
+		const artifact = await installBrowserArtifact({
+			revision,
+			sdkRoot,
+			opfsStorageRoot: opfsRoot,
+		});
+		if (artifact) {
+			await writeMarker(browserMarker, {
+				...artifact,
+				source: "lix-ci-artifact",
+			});
+			browserReady = true;
+		}
+	} catch (error) {
+		if (mode === "only") throw error;
+		console.log(
+			`[lix-sdk] Artifact unavailable (${error.message}); building from source.`,
+		);
 	}
 }
-for (const target of ["wasm32-unknown-unknown", "wasm32-wasip2"]) {
-	if (!rustTargetInstalled(target, channel, env)) {
-		run("rustup", ["target", "add", target, "--toolchain", channel], env);
+if (!browserReady && mode === "only") {
+	throw new Error(
+		`A browser artifact is required for ${revision}; source compilation is disabled in Workers Builds.`,
+	);
+}
+if (!browserReady || (!browserOnly && !nativeReady)) {
+	await buildFromSource();
+}
+// Replacing dist can remove this marker while leaving the native binary intact.
+if (!browserOnly && nativeReady)
+	await writeMarker(nativeMarker, { target: nativeTarget });
+
+async function preparedMatches(markerPath, files) {
+	try {
+		const marker = JSON.parse(await readFile(markerPath, "utf8"));
+		return (
+			marker.schemaVersion === 1 &&
+			marker.sourceRevision === revision &&
+			marker.dirty === false &&
+			(await Promise.all(files.map(fileExists))).every(Boolean)
+		);
+	} catch {
+		return false;
 	}
 }
 
-const expectedWasmBindgen = `wasm-bindgen ${wasmBindgenVersion}`;
-if (commandOutput("wasm-bindgen", ["--version"], env) !== expectedWasmBindgen) {
-	await mkdir(toolsRoot, { recursive: true });
-	run(
-		"cargo",
-		[
-			"install",
-			"wasm-bindgen-cli",
-			"--version",
-			wasmBindgenVersion,
-			"--locked",
-			"--root",
-			toolsRoot,
-		],
-		env,
+async function writeMarker(path, metadata) {
+	await writeFile(
+		path,
+		`${JSON.stringify({ schemaVersion: 1, sourceRevision: revision, dirty, ...metadata }, null, 2)}\n`,
 	);
 }
 
-run("npm", ["ci"], env, sdkRoot);
-if (browserOnly) {
-	for (const script of ["clean", "build:wasm", "build:ts", "build:plugins"]) {
-		run("npm", ["run", script], env, sdkRoot);
+async function buildFromSource() {
+	const channel = requiredMatch(
+		await readFile(join(lixRoot, "rust-toolchain.toml"), "utf8"),
+		/channel\s*=\s*"([^"]+)"/,
+		"Rust channel",
+	);
+	const wasmBindgenVersion = requiredMatch(
+		await readFile(join(lixRoot, "Cargo.lock"), "utf8"),
+		/\[\[package\]\]\s*\nname = "wasm-bindgen"\s*\nversion = "([^"]+)"/,
+		"wasm-bindgen version",
+	);
+
+	await mkdir(cacheRoot, { recursive: true });
+	let env = {
+		...process.env,
+		...(browserOnly && process.env.CARGO_BUILD_JOBS === undefined
+			? { CARGO_BUILD_JOBS: "1" }
+			: {}),
+		...(browserOnly && process.env.CARGO_PROFILE_RELEASE_OPT_LEVEL === undefined
+			? { CARGO_PROFILE_RELEASE_OPT_LEVEL: "1" }
+			: {}),
+		...(browserOnly &&
+		process.env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS === undefined
+			? { CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256" }
+			: {}),
+		CARGO_UNSTABLE_BINDEPS: "true",
+		PATH: `${toolsBin}${delimiter}${process.env.PATH ?? ""}`,
+		RUSTUP_TOOLCHAIN: channel,
+	};
+
+	if (!commandSucceeds("rustup", ["run", channel, "cargo", "--version"], env)) {
+		env = {
+			...env,
+			CARGO_HOME: cargoHome,
+			PATH: `${toolsBin}${delimiter}${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
+			RUSTUP_HOME: rustupHome,
+		};
+		if (
+			!commandSucceeds("rustup", ["run", channel, "cargo", "--version"], env)
+		) {
+			await provisionRustup(channel, env);
+		}
 	}
-} else {
-	run("npm", ["run", "build"], env, sdkRoot);
+	for (const target of browserReady
+		? []
+		: ["wasm32-unknown-unknown", "wasm32-wasip2"]) {
+		if (!rustTargetInstalled(target, channel, env)) {
+			run("rustup", ["target", "add", target, "--toolchain", channel], env);
+		}
+	}
+
+	const expectedWasmBindgen = `wasm-bindgen ${wasmBindgenVersion}`;
+	if (
+		!browserReady &&
+		commandOutput("wasm-bindgen", ["--version"], env) !== expectedWasmBindgen
+	) {
+		await mkdir(toolsRoot, { recursive: true });
+		run(
+			"cargo",
+			[
+				"install",
+				"wasm-bindgen-cli",
+				"--version",
+				wasmBindgenVersion,
+				"--locked",
+				"--root",
+				toolsRoot,
+			],
+			env,
+		);
+	}
+
+	run("npm", ["ci"], env, sdkRoot);
+	if (!browserReady) {
+		// Prepare only browser outputs here. The native build below does not clean dist.
+		for (const script of ["clean", "build:wasm", "build:ts", "build:plugins"]) {
+			run("npm", ["run", script], env, sdkRoot);
+		}
+		run("npm", ["ci"], env, opfsRoot);
+		run("npm", ["run", "build"], env, opfsRoot);
+		await writeMarker(browserMarker, { source: "source-build" });
+	}
+	if (!browserOnly && !nativeReady) {
+		run("npm", ["run", "build:native"], env, sdkRoot);
+		await writeMarker(nativeMarker, { target: nativeTarget });
+	}
 }
-run("npm", ["ci"], env, opfsRoot);
-run("npm", ["run", "build"], env, opfsRoot);
 
 async function provisionRustup(rustChannel, rustEnv) {
 	if (process.platform !== "linux" || process.arch !== "x64") {
@@ -200,8 +312,7 @@ async function requireDirectory(path, message) {
 
 async function fileExists(path) {
 	try {
-		await stat(path);
-		return true;
+		return (await stat(path)).isFile();
 	} catch {
 		return false;
 	}
