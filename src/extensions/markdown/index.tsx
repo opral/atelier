@@ -818,7 +818,6 @@ function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
 
 	return (
 		<div className="markdown-view flex h-full flex-col bg-background">
-			<FormattingToolbar disabled />
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
 					<EditorContent editor={editor} className="tiptap mx-auto w-full" />

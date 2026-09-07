@@ -367,9 +367,11 @@ describe("MarkdownView", () => {
 			reviewEditor.querySelector('[data-review-active="true"]'),
 		).toBeNull();
 		expect(
-			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
-		).toHaveAttribute("aria-disabled", "true");
-		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Bold" }),
+		).not.toBeInTheDocument();
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();
