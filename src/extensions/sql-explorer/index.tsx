@@ -4,9 +4,21 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	type ReactNode,
+	type RefObject,
 } from "react";
-import { Code, Database, Play, Plus, Table } from "lucide-react";
+import {
+	ChevronDown,
+	ChevronRight,
+	Code,
+	Database,
+	FunctionSquare,
+	PanelLeft,
+	Play,
+	Plus,
+	Search,
+	Table,
+	X,
+} from "lucide-react";
 import type { Lix } from "@lix-js/sdk";
 import { createReactExtensionDefinition } from "@/extension-runtime/react-extension";
 import { parseExtensionManifest } from "@/extension-runtime/extension-manifest";
@@ -33,6 +45,15 @@ import {
 } from "./timing";
 import manifestJson from "./manifest.json";
 import "./style.css";
+import {
+	loadSchema,
+	type Schema,
+	type SchemaBaseTable,
+	type TableFunction,
+} from "./schema";
+import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
+import { functionDescription, sqlLexemes } from "./sql-completion";
+export { friendlyDataType, groupBaseTables } from "./schema";
 
 export {
 	buildTableQuery,
@@ -66,20 +87,6 @@ export type ExplorerMode =
 	| { readonly kind: "query" }
 	| { readonly kind: "table"; readonly baseTable: string };
 
-/** Maps DataFusion type names to the short badges shown in the sidebar. */
-export function friendlyDataType(dataType: string): string {
-	const normalized = dataType.replace(/\(.*\)$/, "");
-	if (/^(Large)?Utf8(View)?$/.test(normalized)) return "text";
-	if (/^(Large)?Binary(View)?$/.test(normalized)) return "blob";
-	if (normalized === "Boolean") return "bool";
-	if (/^U?Int\d+$/.test(normalized)) return "int";
-	if (/^Float\d+$/.test(normalized) || /^Decimal/.test(normalized)) {
-		return "float";
-	}
-	if (/^(Date|Time|Timestamp)/.test(normalized)) return "time";
-	return normalized.toLowerCase();
-}
-
 /**
  * Whether a statement only reads. Read-only workspaces (and historical
  * revisions) may still explore, so only the first keyword is gated — the
@@ -90,144 +97,23 @@ export function isReadOnlyStatement(sqlText: string): boolean {
 		.replace(/--[^\n]*/g, " ")
 		.replace(/\/\*[\s\S]*?\*\//g, " ");
 	const firstKeyword = withoutComments.trim().split(/[\s(;]+/, 1)[0] ?? "";
-	return /^(select|with|values|explain|show|describe|table)$/i.test(
-		firstKeyword,
+	const tokens = sqlLexemes(sqlText).filter(
+		(token) => token.kind !== "comment" && token.kind !== "string",
 	);
-}
-
-const SQL_KEYWORDS = new Set(
-	(
-		"select from where join inner left right full cross outer on as and or not " +
-		"null group by order limit offset having distinct union all insert into " +
-		"values update set delete create table drop alter with recursive case when " +
-		"then else end like ilike in is between exists cast asc desc count sum avg " +
-		"min max coalesce explain analyze show describe true false using natural"
-	).split(" "),
-);
-
-export type SqlToken = {
-	readonly text: string;
-	readonly kind: "keyword" | "string" | "number" | "comment" | "plain";
-};
-
-const SQL_TOKEN_PATTERN =
-	/(--[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^']|'')*'?)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)/g;
-
-export function tokenizeSql(text: string): SqlToken[] {
-	const tokens: SqlToken[] = [];
-	let lastIndex = 0;
-	SQL_TOKEN_PATTERN.lastIndex = 0;
-	for (const match of text.matchAll(SQL_TOKEN_PATTERN)) {
-		if (match.index > lastIndex) {
-			tokens.push({ text: text.slice(lastIndex, match.index), kind: "plain" });
-		}
-		const [matched, comment, string, number, word] = match;
-		const kind =
-			comment !== undefined
-				? "comment"
-				: string !== undefined
-					? "string"
-					: number !== undefined
-						? "number"
-						: word !== undefined && SQL_KEYWORDS.has(word.toLowerCase())
-							? "keyword"
-							: "plain";
-		tokens.push({ text: matched, kind });
-		lastIndex = match.index + matched.length;
-	}
-	if (lastIndex < text.length) {
-		tokens.push({ text: text.slice(lastIndex), kind: "plain" });
-	}
-	return tokens;
-}
-
-function highlightSql(text: string): ReactNode[] {
-	return tokenizeSql(text).map((token, index) =>
-		token.kind === "plain" ? (
-			token.text
-		) : (
-			<span key={index} className={`atelier-sql-tok-${token.kind}`}>
-				{token.text}
-			</span>
-		),
+	return (
+		/^(select|with|values|explain|show|describe|table)$/i.test(firstKeyword) &&
+		!tokens.some(
+			(token, i) =>
+				/^(lix_create_checkpoint|lix_restore)$/i.test(
+					token.kind === "identifier"
+						? token.text.slice(1, -1).replaceAll('""', '"')
+						: token.text,
+				) && tokens[i + 1]?.text === "(",
+		) &&
+		!tokens.some((token) =>
+			/^(insert|update|delete|create|drop|alter|truncate)$/i.test(token.text),
+		)
 	);
-}
-
-type SchemaColumn = {
-	readonly name: string;
-	readonly type: string;
-};
-
-/** A base table plus which variant surfaces exist for it. */
-export type SchemaBaseTable = {
-	readonly name: string;
-	readonly surfaces: readonly TableSurface[];
-};
-
-type Schema = {
-	/** Every table (including variants) with its columns. */
-	readonly tables: ReadonlyMap<string, SchemaColumn[]>;
-	/** Base tables for the sidebar — each table listed exactly once. */
-	readonly baseTables: readonly SchemaBaseTable[];
-};
-
-/** Groups variant surfaces under their base so each table lists once. */
-export function groupBaseTables(
-	tableNames: readonly string[],
-	historyRelations: readonly string[] = [],
-): SchemaBaseTable[] {
-	const names = new Set(tableNames);
-	const history = new Set(historyRelations);
-	const bases: SchemaBaseTable[] = [];
-	for (const name of [...names].sort()) {
-		const surfaces = TABLE_SURFACES.filter(
-			(surface) => surface === "current" || history.has(name),
-		);
-		bases.push({ name, surfaces });
-	}
-	return bases;
-}
-
-async function loadSchema(lix: Lix): Promise<Schema> {
-	const [result, historyResult] = await Promise.all([
-		lix.execute(
-			"SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position",
-		),
-		lix.execute(
-			"SELECT source_relation AS table_name, result_column AS column_name, data_type FROM information_schema.table_functions WHERE function_schema = 'public' AND function_name = 'lix_history' ORDER BY source_relation, ordinal_position",
-		),
-	]);
-	const tables = new Map<string, SchemaColumn[]>();
-	for (const row of result.rows) {
-		const record = row;
-		const tableName = String(record.table_name);
-		const columns = tables.get(tableName) ?? [];
-		columns.push({
-			name: String(record.column_name),
-			type: friendlyDataType(String(record.data_type)),
-		});
-		tables.set(tableName, columns);
-	}
-	const historyRelations = new Set<string>();
-	for (const row of historyResult.rows) {
-		const record = row;
-		const tableName = String(record.table_name);
-		historyRelations.add(tableName);
-		const surfaceName = surfaceTableName(tableName, "history");
-		const columns = tables.get(surfaceName) ?? [];
-		columns.push({
-			name: String(record.column_name),
-			type: friendlyDataType(String(record.data_type)),
-		});
-		tables.set(surfaceName, columns);
-	}
-	const currentTables = [...tables.keys()].filter(
-		(name) => !name.startsWith("lix_history("),
-	);
-	return {
-		tables,
-		baseTables: groupBaseTables(currentTables, [...historyRelations]),
-	};
 }
 
 export function SqlExplorerView({
@@ -252,6 +138,10 @@ export function SqlExplorerView({
 	]);
 	const [schema, setSchema] = useState<Schema | null>(null);
 	const [runNonce, setRunNonce] = useState(0);
+	const editorHandle = useRef<SqlEditorHandle | null>(null);
+	const [schemaError, setSchemaError] = useState<string | null>(null);
+	const [schemaRevision, setSchemaRevision] = useState(0);
+	const [schemaOpen, setSchemaOpen] = useState(false);
 
 	const [sidebarWidth, setSidebarWidth] = useState(
 		() => sidebarWidths.get(instanceId) ?? SIDEBAR_DEFAULT_WIDTH,
@@ -270,17 +160,21 @@ export function SqlExplorerView({
 
 	useEffect(() => {
 		let isCancelled = false;
+		setSchemaError(null);
 		loadSchema(lix)
 			.then((loaded) => {
 				if (!isCancelled) setSchema(loaded);
 			})
-			.catch(() => {
-				if (!isCancelled) setSchema({ tables: new Map(), baseTables: [] });
+			.catch((error) => {
+				if (!isCancelled)
+					setSchemaError(
+						error instanceof Error ? error.message : String(error),
+					);
 			});
 		return () => {
 			isCancelled = true;
 		};
-	}, [lix]);
+	}, [lix, schemaRevision]);
 
 	const recordQuery = useCallback((sql: string) => {
 		const normalized = sql.trim();
@@ -317,10 +211,34 @@ export function SqlExplorerView({
 	}, [schema, activeTable]);
 
 	return (
-		<div className="atelier-sql-view">
+		<div
+			className="atelier-sql-view"
+			data-schema-open={schemaOpen || undefined}
+		>
+			<button
+				type="button"
+				className="atelier-sql-schema-toggle"
+				aria-label="Browse tables and functions"
+				aria-expanded={schemaOpen}
+				onClick={() => {
+					setSchemaOpen(!schemaOpen);
+					setIsSidebarCollapsed(false);
+				}}
+			>
+				<PanelLeft size={14} /> Schema
+			</button>
 			<Sidebar
 				history={history}
 				baseTables={schema?.baseTables ?? null}
+				functions={schema?.functions ?? []}
+				error={schemaError}
+				onRefresh={() => setSchemaRevision((revision) => revision + 1)}
+				onClose={() => setSchemaOpen(false)}
+				onInsertFunction={(fn) => {
+					setMode({ kind: "query" });
+					setSchemaOpen(false);
+					editorHandle.current?.insertFunction(fn);
+				}}
 				activeQuery={activeQuery}
 				activeTable={activeTable}
 				width={sidebarWidth}
@@ -328,9 +246,22 @@ export function SqlExplorerView({
 				onNewQuery={() => {
 					setQuery("");
 					setMode({ kind: "query" });
+					setSchemaOpen(false);
+					requestAnimationFrame(() => editorHandle.current?.focus());
 				}}
-				onSelectQuery={openQuery}
-				onSelectTable={(baseTable) => setMode({ kind: "table", baseTable })}
+				onSelectQuery={(sql) => {
+					openQuery(sql);
+					setSchemaOpen(false);
+				}}
+				onReturnQuery={() => {
+					setMode({ kind: "query" });
+					setSchemaOpen(false);
+					requestAnimationFrame(() => editorHandle.current?.focus());
+				}}
+				onSelectTable={(baseTable) => {
+					setMode({ kind: "table", baseTable });
+					setSchemaOpen(false);
+				}}
 			/>
 			<SidebarResizeHandle
 				width={isSidebarCollapsed ? 0 : sidebarWidth}
@@ -349,7 +280,11 @@ export function SqlExplorerView({
 					}
 					columnsBySurface={columnsBySurface}
 				/>
-			) : (
+			) : null}
+			<div
+				className="atelier-sql-query-view"
+				style={mode.kind === "query" ? undefined : { display: "none" }}
+			>
 				<QueryView
 					lix={lix}
 					readOnly={readOnly}
@@ -357,13 +292,22 @@ export function SqlExplorerView({
 					onQueryChange={setQuery}
 					onQueryRan={recordQuery}
 					runNonce={runNonce}
+					schema={schema}
+					editorHandle={editorHandle}
+					onRefreshSchema={() => setSchemaRevision((revision) => revision + 1)}
+					onOpenSchema={() => {
+						setIsSidebarCollapsed(false);
+						setSchemaOpen(true);
+					}}
+					sidebarCollapsed={isSidebarCollapsed}
 				/>
-			)}
+			</div>
 		</div>
 	);
 }
 
 type QueryRun = {
+	readonly source: string;
 	readonly columns: readonly GridColumnSpec[];
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
 	readonly rowsAffected: number;
@@ -379,6 +323,11 @@ function QueryView({
 	onQueryChange,
 	onQueryRan,
 	runNonce,
+	schema,
+	editorHandle,
+	onRefreshSchema,
+	onOpenSchema,
+	sidebarCollapsed,
 }: {
 	readonly lix: Lix;
 	readonly readOnly: boolean;
@@ -386,6 +335,11 @@ function QueryView({
 	readonly onQueryChange: (query: string) => void;
 	readonly onQueryRan: (sql: string) => void;
 	readonly runNonce: number;
+	readonly schema: Schema | null;
+	readonly editorHandle: RefObject<SqlEditorHandle | null>;
+	readonly onRefreshSchema: () => void;
+	readonly onOpenSchema: () => void;
+	readonly sidebarCollapsed: boolean;
 }) {
 	const [run, setRun] = useState<QueryRun | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -415,6 +369,7 @@ function QueryView({
 			const clientDurationMs = performance.now() - clientStartedAt;
 			const rows = result.rows;
 			setRun({
+				source: sqlSource,
 				columns: inferResultColumns(result.columns),
 				rows,
 				rowsAffected: result.rowsAffected,
@@ -425,6 +380,7 @@ function QueryView({
 			setSort(null);
 			setPage(0);
 			onQueryRan(sqlSource.trim());
+			onRefreshSchema();
 		} catch (queryError) {
 			if (runId !== runIdRef.current) return;
 			setRun(null);
@@ -471,6 +427,8 @@ function QueryView({
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 			<SqlEditor
+				schema={schema}
+				handle={editorHandle}
 				query={query}
 				onQueryChange={onQueryChange}
 				onRun={() => void runQuery(query)}
@@ -489,6 +447,19 @@ function QueryView({
 						⌘⏎
 					</span>
 				</button>
+				{sidebarCollapsed ? (
+					<button
+						type="button"
+						className="atelier-sql-quiet-button"
+						onClick={onOpenSchema}
+					>
+						<PanelLeft size={14} /> Schema
+					</button>
+				) : null}
+				<span className="atelier-sql-results-label">
+					Results
+					{run && query !== run.source ? <span> · Previous run</span> : null}
+				</span>
 				<span className="flex-1" />
 				{isRunning ? (
 					<span className="font-mono text-[11.5px] text-[var(--color-text-tertiary)]">
@@ -559,8 +530,10 @@ function QueryView({
 }
 
 function Sidebar({
+	onReturnQuery,
 	history,
 	baseTables,
+	functions,
 	activeQuery,
 	activeTable,
 	width,
@@ -568,205 +541,214 @@ function Sidebar({
 	onNewQuery,
 	onSelectQuery,
 	onSelectTable,
+	onInsertFunction,
+	error,
+	onRefresh,
+	onClose,
 }: {
 	readonly history: readonly string[];
 	readonly baseTables: readonly SchemaBaseTable[] | null;
+	readonly functions: readonly TableFunction[];
 	readonly activeQuery: string | null;
 	readonly activeTable: string | null;
 	readonly width: number;
 	readonly collapsed: boolean;
 	readonly onNewQuery: () => void;
 	readonly onSelectQuery: (sql: string) => void;
-	readonly onSelectTable: (baseTable: string) => void;
+	readonly onSelectTable: (table: string) => void;
+	readonly onReturnQuery: () => void;
+	readonly onInsertFunction: (fn: TableFunction) => void;
+	readonly error: string | null;
+	readonly onRefresh: () => void;
+	readonly onClose: () => void;
 }) {
+	const [search, setSearch] = useState("");
+	const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
 	const [showAllQueries, setShowAllQueries] = useState(false);
+	const filter = search.trim().toLowerCase();
+	const tables = baseTables?.filter((table) =>
+		table.name.toLowerCase().includes(filter),
+	);
+	const filteredFunctions = functions.filter((candidate) =>
+		candidate.name.toLowerCase().includes(filter),
+	);
+	const fn = functions.find((candidate) => candidate.name === selectedFunction);
 	const visibleQueries = showAllQueries
 		? history
 		: history.slice(0, QUERY_HISTORY_PREVIEW_COUNT);
-	const hiddenCount = history.length - QUERY_HISTORY_PREVIEW_COUNT;
-
 	return (
 		<nav
 			aria-label="Queries and tables"
 			className="atelier-sql-sidebar"
 			style={collapsed ? { display: "none" } : { width }}
 		>
-			<div className="flex items-center justify-between py-0.5 pr-1 pb-2 pl-2.5">
-				<span className="text-[10.5px] font-bold tracking-[0.08em] text-[var(--color-text-quaternary)]">
-					QUERIES
-				</span>
+			<div className="atelier-sql-schema-heading">
+				<span>Schema</span>
 				<button
 					type="button"
+					className="atelier-sql-quiet-button"
 					aria-label="New query"
 					data-attr="sql-new-query"
 					onClick={onNewQuery}
-					className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] text-[var(--color-icon-tertiary)] hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 				>
-					<Plus aria-hidden="true" className="h-[13px] w-[13px]" />
+					<Plus size={14} /> New query
+				</button>
+				<button
+					type="button"
+					className="atelier-sql-schema-close"
+					aria-label="Close schema"
+					onClick={onClose}
+				>
+					<X size={16} />
 				</button>
 			</div>
-			{history.length === 0 ? (
-				<div className="px-2.5 pb-1 text-[11.5px] text-[var(--color-text-quaternary)]">
-					No queries yet.
+			{activeTable ? (
+				<button
+					type="button"
+					className="atelier-sql-quiet-button"
+					onClick={onReturnQuery}
+				>
+					<Code size={13} /> Back to query
+				</button>
+			) : null}
+			<label className="atelier-sql-schema-search">
+				<Search size={14} aria-hidden="true" />
+				<input
+					aria-label="Search schema"
+					placeholder="Search schema"
+					value={search}
+					onChange={(event) => setSearch(event.target.value)}
+				/>
+				{search ? (
+					<button
+						type="button"
+						aria-label="Clear schema search"
+						onClick={() => setSearch("")}
+					>
+						<X size={12} />
+					</button>
+				) : null}
+			</label>
+			{error ? (
+				<div className="atelier-sql-schema-error" role="alert">
+					Could not load schema.
+					<button type="button" title={error} onClick={onRefresh}>
+						Retry
+					</button>
 				</div>
-			) : (
-				visibleQueries.map((sql) => {
-					const isActive = activeQuery === sql;
-					return (
+			) : null}
+			{!baseTables && !error ? (
+				<p className="atelier-sql-schema-note">Loading schema…</p>
+			) : null}
+			<section className="atelier-sql-schema-section" aria-label="Tables">
+				<h3>Tables</h3>
+				{tables?.map((table) => (
+					<button
+						type="button"
+						key={table.name}
+						className="atelier-sql-schema-row"
+						aria-current={activeTable === table.name ? "true" : undefined}
+						data-attr="sql-schema-table"
+						title={table.name}
+						onClick={() => onSelectTable(table.name)}
+					>
+						<Table size={13} />
+						<span>{table.name}</span>
+					</button>
+				))}
+			</section>
+			<section
+				className="atelier-sql-schema-section"
+				aria-label="Table functions"
+			>
+				<h3>Table functions</h3>
+				{filteredFunctions.map((tableFunction) => (
+					<button
+						type="button"
+						key={tableFunction.name}
+						className="atelier-sql-schema-row"
+						aria-expanded={selectedFunction === tableFunction.name}
+						data-attr="sql-schema-function"
+						title={tableFunction.name}
+						onClick={() =>
+							setSelectedFunction(
+								selectedFunction === tableFunction.name
+									? null
+									: tableFunction.name,
+							)
+						}
+					>
+						<FunctionSquare size={13} />
+						<span>{tableFunction.name}</span>
+					</button>
+				))}
+				{fn && filteredFunctions.includes(fn) ? (
+					<div className="atelier-sql-function-detail">
+						<strong>{fn.name}</strong>
+						{fn.signature.split("|").map((signature) => (
+							<code key={signature}>
+								{fn.name}
+								{signature.trim()}
+							</code>
+						))}
+						<p>{functionDescription(fn.name)}</p>
+						<button
+							className="atelier-sql-insert"
+							type="button"
+							onClick={() => onInsertFunction(fn)}
+						>
+							Insert call
+						</button>
+					</div>
+				) : null}
+			</section>
+			{filter && tables?.length === 0 && filteredFunctions.length === 0 ? (
+				<p className="atelier-sql-schema-note">
+					No matching tables or functions.
+				</p>
+			) : null}
+			<details className="atelier-sql-recent">
+				<summary>Recent queries</summary>
+				{history.length === 0 ? (
+					<p className="atelier-sql-schema-note">No queries yet.</p>
+				) : (
+					visibleQueries.map((sql) => (
 						<button
 							key={sql}
+							className="atelier-sql-schema-row"
 							type="button"
+							aria-current={activeQuery === sql ? "true" : undefined}
 							title={sql}
 							data-attr="sql-history-query"
 							onClick={() => onSelectQuery(sql)}
-							className={`flex h-[29px] w-full shrink-0 items-center gap-2 rounded-[7px] px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
-								isActive
-									? "bg-[var(--color-bg-brand-soft)]"
-									: "hover:bg-[var(--color-bg-hover)]"
-							}`}
 						>
-							<Code
-								aria-hidden="true"
-								className={`h-3 w-3 shrink-0 ${
-									isActive
-										? "text-[var(--color-icon-brand)]"
-										: "text-[var(--color-icon-quaternary)]"
-								}`}
-							/>
-							<span
-								className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${
-									isActive
-										? "font-semibold text-[var(--color-text-primary)]"
-										: "text-[var(--color-text-secondary)]"
-								}`}
-							>
-								{sql.replace(/\s+/g, " ")}
-							</span>
+							<Code size={13} />
+							<span>{sql.replace(/\s+/g, " ")}</span>
 						</button>
-					);
-				})
-			)}
-			{hiddenCount > 0 ? (
-				<button
-					type="button"
-					data-attr="sql-history-show-more"
-					onClick={() => setShowAllQueries(!showAllQueries)}
-					className="flex h-[27px] w-full shrink-0 items-center gap-2 rounded-[7px] px-2.5 text-left hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-				>
-					<svg
-						aria-hidden="true"
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						className={`shrink-0 text-[var(--color-icon-quaternary)] ${
-							showAllQueries ? "rotate-180" : ""
-						}`}
+					))
+				)}
+				{history.length > QUERY_HISTORY_PREVIEW_COUNT ? (
+					<button
+						className="atelier-sql-quiet-button"
+						type="button"
+						onClick={() => setShowAllQueries(!showAllQueries)}
 					>
-						<path d="m6 9 6 6 6-6" />
-					</svg>
-					<span className="text-[11.5px] text-[var(--color-text-tertiary)]">
-						{showAllQueries ? "Show less" : `Show ${hiddenCount} more`}
-					</span>
-				</button>
-			) : null}
-			<div className="mx-2.5 mt-2.5 mb-3 h-px shrink-0 bg-[var(--color-border-subtle)]" />
-			<div className="px-2.5 py-0.5 pb-2 text-[10.5px] font-bold tracking-[0.08em] text-[var(--color-text-quaternary)]">
-				TABLES
-			</div>
-			{baseTables === null ? (
-				<div className="px-2.5 text-[11.5px] text-[var(--color-text-tertiary)]">
-					Loading…
-				</div>
-			) : (
-				baseTables.map((table) => {
-					const isActive = activeTable === table.name;
-					return (
-						<button
-							key={table.name}
-							type="button"
-							data-attr="sql-schema-table"
-							onClick={() => onSelectTable(table.name)}
-							className={`flex h-[29px] w-full shrink-0 items-center gap-2 rounded-[7px] px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
-								isActive
-									? "bg-[var(--color-bg-brand-soft)]"
-									: "hover:bg-[var(--color-bg-hover)]"
-							}`}
-						>
-							<Table
-								aria-hidden="true"
-								className={`h-[13px] w-[13px] shrink-0 ${
-									isActive
-										? "text-[var(--color-icon-brand)]"
-										: "text-[var(--color-icon-quaternary)]"
-								}`}
-							/>
-							<span
-								className={`min-w-0 flex-1 truncate font-mono text-[12px] ${
-									isActive
-										? "font-semibold text-[var(--color-text-primary)]"
-										: "text-[var(--color-text-secondary)]"
-								}`}
-							>
-								{table.name}
-							</span>
-						</button>
-					);
-				})
-			)}
+						{showAllQueries ? (
+							<ChevronDown size={12} />
+						) : (
+							<ChevronRight size={12} />
+						)}{" "}
+						{showAllQueries
+							? "Show less"
+							: `Show ${history.length - QUERY_HISTORY_PREVIEW_COUNT} more`}
+					</button>
+				) : null}
+			</details>
 		</nav>
 	);
 }
 
-export function SqlEditor({
-	query,
-	onQueryChange,
-	onRun,
-}: {
-	readonly query: string;
-	readonly onQueryChange: (query: string) => void;
-	readonly onRun: () => void;
-}) {
-	const highlightRef = useRef<HTMLPreElement>(null);
-	return (
-		<div className="atelier-sql-editor-shell h-36 shrink-0">
-			<pre
-				ref={highlightRef}
-				aria-hidden="true"
-				className="atelier-sql-highlight"
-			>
-				{highlightSql(query)}
-				{"\n"}
-			</pre>
-			<textarea
-				aria-label="SQL query"
-				spellCheck={false}
-				wrap="off"
-				value={query}
-				onChange={(event) => onQueryChange(event.target.value)}
-				onKeyDown={(event) => {
-					if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-						event.preventDefault();
-						onRun();
-					}
-				}}
-				onScroll={(event) => {
-					const highlight = highlightRef.current;
-					if (highlight) {
-						highlight.scrollTop = event.currentTarget.scrollTop;
-						highlight.scrollLeft = event.currentTarget.scrollLeft;
-					}
-				}}
-				data-attr="sql-query-editor"
-				className="atelier-sql-editor"
-			/>
-		</div>
-	);
-}
-
-const SIDEBAR_DEFAULT_WIDTH = 252;
+const SIDEBAR_DEFAULT_WIDTH = 264;
 const SIDEBAR_MIN_WIDTH = 150;
 const SIDEBAR_MAX_WIDTH = 480;
 /** Dragging below this width slides the sidebar closed. */

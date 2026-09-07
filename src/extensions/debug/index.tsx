@@ -11,7 +11,8 @@ import {
 import { createReactExtensionDefinition } from "@/extension-runtime/react-extension";
 import { parseExtensionManifest } from "@/extension-runtime/extension-manifest";
 import { DataGrid, inferResultColumns } from "../sql-explorer/data-grid";
-import { isReadOnlyStatement, SqlEditor } from "../sql-explorer";
+import { isReadOnlyStatement } from "../sql-explorer";
+import { SqlEditor } from "../sql-explorer/sql-editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
 

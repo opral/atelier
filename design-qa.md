@@ -323,3 +323,30 @@ No actionable P0, P1, or P2 differences remain for the Atelier-owned shell.
 ## Final result
 
 final result: passed
+
+# SQL explorer — direction 1 implementation
+
+## Reference and captures
+
+Selected reference: `/root/.codex/generated_images/01a0794c-027d-72b1-8209-6899a9affa80/exec-33cbceb7-93c1-4f2c-af82-5b2308acbccf.png`.
+Live captures: `/root/.codex/visualizations/2026/09/07/01a0794c-027d-72b1-8209-6899a9affa80/sql-explorer/implemented-completion.png`, `implemented-function.png`, `implemented-arguments.png`, and `implemented-narrow.png` in the same directory. Preview: http://127.0.0.1:4175/.
+
+Compared the selected reference and live desktop completion state together. Desktop capture is 1440 × 1024; narrow capture is 480 × 800. The generated reference is 1487 × 1058. Retained Atelier's existing typography, warm surfaces, orange accent, grid and shell. Agreed compact refinements use a 264px sidebar, 220px editor and 32px result rows. Function signatures expand on selection to keep navigation readable. Completion documentation uses CodeMirror’s viewport-aware adjacent panel instead of the reference’s taller stacked panel. The live catalog supplies current names, including lix_state_at and lix_diff; lix_working_diff in the reference is obsolete.
+
+## Interaction verification
+
+Playwright verified mixed table/function completion, relation argument suggestions, Escape dismissal, Tab snippet navigation, insertion at the current selection without execution, Ctrl+Enter execution against real Lix, filtered schema, narrow drawer open/close, and no browser page errors. Unit coverage also verifies Cmd+Enter, aliases and result columns, comments/strings, and the read-only guard for mutating table functions. Query drafts retain previous results until execution and survive table browsing.
+
+## Findings and comparison history
+
+Initial review exposed fixed-schema function alias completion, quoted mutating-function calls, and counts for standalone application relations; all were corrected and covered by regression tests. Browser iteration corrected a CodeMirror tooltip wrapper that scrolled the workspace and overrode default blue completion styling with Atelier tokens. Independent final visual review passed with no blocking issues.
+
+P3 follow-up: hide empty schema groups during filtering to reclaim a small amount of sidebar space. No further visual iteration required.
+
+## Validation
+
+Full suite: 1,100 passed, one skipped across 91 files. Typecheck and library/consumer builds pass. Lint reports 10 existing errors and 12 warnings; all 10 errors were reproduced against unchanged HEAD files. Vendored Lix native, WASM and SDK builds completed before integration verification; final native close-order update at `192d04dc5` was rebuilt and all three native regression tests passed. The full Atelier suite, builds and browser checks also passed again on this revision.
+
+## Final result
+
+final result: passed

@@ -246,14 +246,20 @@ export function DataGrid({
 					>
 						{columns.map((column) => {
 							const rawValue = row[column.name];
-							const jsonValue = parseJsonValue(rawValue);
+							const isRowRef =
+								column.type === "row_ref" && typeof rawValue === "string";
+							const jsonValue = isRowRef ? rawValue : parseJsonValue(rawValue);
 							if (jsonValue !== undefined) {
 								return (
 									<td
 										key={column.name}
 										className="h-8 border-b border-[var(--color-border-subtle)] px-3.5 text-left whitespace-nowrap"
 									>
-										<JsonCell columnName={column.name} value={jsonValue} />
+										<JsonCell
+											columnName={column.name}
+											value={jsonValue}
+											kind={isRowRef ? "row_ref" : "JSON"}
+										/>
 									</td>
 								);
 							}
@@ -294,9 +300,11 @@ const MAX_JSON_STRING_LENGTH = 200;
 function JsonCell({
 	columnName,
 	value,
+	kind = "JSON",
 }: {
 	readonly columnName: string;
-	readonly value: object;
+	readonly value: object | string;
+	readonly kind?: "JSON" | "row_ref";
 }) {
 	const [position, setPosition] = useState<{
 		left: number;
@@ -364,7 +372,7 @@ function JsonCell({
 				ref={chipRef}
 				type="button"
 				aria-expanded={isOpen}
-				data-attr="sql-json-cell"
+				data-attr={kind === "row_ref" ? "sql-row-ref-cell" : "sql-json-cell"}
 				onClick={toggle}
 				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 					isOpen
@@ -372,13 +380,13 @@ function JsonCell({
 						: "border-transparent text-[var(--color-text-quaternary)] hover:border-[var(--color-border-panel)] hover:text-[var(--color-text-secondary)]"
 				}`}
 			>
-				{Array.isArray(value) ? "[…]" : "{…}"}
+				{kind === "row_ref" ? "row_ref" : Array.isArray(value) ? "[…]" : "{…}"}
 			</button>
 			{isOpen ? (
 				<div
 					ref={popoverRef}
 					role="dialog"
-					aria-label={`${columnName} JSON`}
+					aria-label={`${columnName} ${kind}`}
 					style={{
 						position: "fixed",
 						left: position.left,
@@ -399,7 +407,11 @@ function JsonCell({
 							data-attr="sql-json-copy"
 							onClick={() => {
 								void navigator.clipboard
-									?.writeText(JSON.stringify(value, null, 2))
+									?.writeText(
+										kind === "row_ref"
+											? String(value)
+											: JSON.stringify(value, null, 2),
+									)
 									.then(() => setHasCopied(true))
 									.catch(() => undefined);
 							}}
@@ -413,7 +425,7 @@ function JsonCell({
 						style={{ maxHeight: JSON_POPOVER_MAX_HEIGHT - 60 }}
 						className="overflow-auto rounded-[8px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5 py-2.5 font-mono text-[12px] leading-[1.8] break-words whitespace-pre-wrap text-[var(--color-text-secondary)]"
 					>
-						{renderJson(value, "")}
+						{kind === "row_ref" ? String(value) : renderJson(value, "")}
 					</div>
 				</div>
 			) : null}
