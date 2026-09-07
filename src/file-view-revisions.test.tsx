@@ -8,6 +8,35 @@ import { describe, expect, test } from "vitest";
 import type { AtelierFileViewProps } from "@/file-view";
 import { FileView } from "@/file-view";
 
+test("an added file renders as a diff without disabled formatting chrome", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("added-file-preview");
+	let view: ReturnType<typeof render> | undefined;
+	try {
+		await lix.execute(
+			"INSERT INTO lix_file(id,path,content) VALUES ($1,$2,$3)",
+			[fileId, "/added.md", new TextEncoder().encode("# Added document")],
+		);
+		const epoch = await selectWorkingFileDiffSnapshot(lix);
+		view = render(
+			<FileView
+				lix={lix}
+				fileId={fileId}
+				targetCommitId={epoch.afterCommitId}
+				diff={{ baseCommitId: null }}
+			/>,
+		);
+		await view.findByRole("heading", { name: "Added document" });
+		expect(view.container.querySelector(".markdown-review")).not.toBeNull();
+		expect(
+			view.queryByRole("toolbar", { name: "Formatting toolbar" }),
+		).toBeNull();
+	} finally {
+		view?.unmount();
+		await lix.close();
+	}
+});
+
 describe("FileView revision contract", () => {
 	test("fails closed for the removed base-to-implicit-live contract", () => {
 		const legacyProps = {

@@ -747,7 +747,6 @@ function MarkdownHistoricalViewResolved({
 		content = (
 			<EditorProvider>
 				<div className="markdown-view markdown-review flex h-full flex-col bg-background">
-					<FormattingToolbar disabled />
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						{reviewDiff && review ? (
 							<MarkdownReviewOverlay

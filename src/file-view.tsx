@@ -192,6 +192,11 @@ function MountedFile(
 			? props.diff.baseCommitId
 			: null);
 	const afterCommitId = epoch?.afterCommitId ?? props.targetCommitId ?? null;
+	const beforeExists = !(
+		props.diff &&
+		"baseCommitId" in props.diff &&
+		props.diff.baseCommitId === null
+	);
 	const runtime = useMemo<ExtensionRuntime>(
 		() => ({
 			lix,
@@ -243,6 +248,7 @@ function MountedFile(
 			filePath: path,
 			beforeCommitId,
 			afterCommitId,
+			beforeExists,
 			sourceCommitId: afterCommitId,
 		};
 		const host = registry.ensureHost({
@@ -276,6 +282,7 @@ function MountedFile(
 		path,
 		beforeCommitId,
 		afterCommitId,
+		beforeExists,
 		preferences,
 	]);
 	return <div ref={element} className="flex min-h-0 flex-1 flex-col" />;

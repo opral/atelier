@@ -285,9 +285,11 @@ describe("MarkdownView", () => {
 		expect(utils!.container).not.toHaveTextContent("Head version");
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
 		expect(
-			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
-		).toHaveAttribute("aria-disabled", "true");
-		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Bold" }),
+		).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		await waitFor(() => {
