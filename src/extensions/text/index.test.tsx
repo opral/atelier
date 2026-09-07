@@ -18,6 +18,7 @@ import { LixProvider } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { TextView, extension } from "./index";
 
 describe("text extension routing", () => {
@@ -53,6 +54,44 @@ describe("text extension routing", () => {
 });
 
 describe("TextView", () => {
+	test("loads a removed file from the server-first checkpoint snapshot", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("removed-historical-text");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/removed.txt",
+				content: new TextEncoder().encode("checkpoint bytes"),
+			})
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+
+		const atelier = await createRuntime(lix);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<TextView
+							atelier={atelier}
+							fileId={fileId}
+							filePath="/removed.txt"
+							afterCommitId={checkpoint.commitId}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		expect(await screen.findByTestId("text-editor-view")).toHaveTextContent(
+			"checkpoint bytes",
+		);
+		utils?.unmount();
+		await lix.close();
+	});
+
 	test("renders the minimal toolbar with wrapping enabled", async () => {
 		const lix = await openLix();
 		await qb(lix)

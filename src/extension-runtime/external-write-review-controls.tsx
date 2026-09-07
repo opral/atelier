@@ -185,6 +185,20 @@ export function ExternalWriteReviewControls({
 		readOnly,
 		selectionIds,
 	]);
+	const runUndo = useCallback(async () => {
+		if (readOnly || !onUndo || isCommitting || !hasSelection) return;
+		setCommitError(null);
+		setIsCommitting(true);
+		try {
+			await onUndo(selectionIds);
+		} catch (cause) {
+			setCommitError(
+				cause instanceof Error ? cause.message : "The action failed",
+			);
+		} finally {
+			setIsCommitting(false);
+		}
+	}, [hasSelection, isCommitting, onUndo, readOnly, selectionIds]);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -419,10 +433,12 @@ export function ExternalWriteReviewControls({
 					<button
 						type="button"
 						className="external-write-review-button external-write-review-button-reject"
-						onClick={() => void onUndo(selectionIds)}
+						onClick={() => void runUndo()}
 						disabled={readOnly || isCommitting || !hasSelection}
 						data-attr="diff-undo"
-						title={readOnly ? "Edit access is required" : undefined}
+						title={
+							readOnly ? "Edit access is required" : (commitError ?? undefined)
+						}
 					>
 						<RotateCcw aria-hidden="true" />
 						<span>Undo</span>

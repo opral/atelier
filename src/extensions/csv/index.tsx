@@ -43,7 +43,7 @@ import {
 	decodeFileDataToBytes,
 	decodeFileDataToText,
 } from "@/lib/decode-file-data";
-import type { AtelierDiffSession } from "@/extension-api";
+import type { AtelierDiffFile, AtelierDiffSession } from "@/extension-api";
 import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
@@ -57,7 +57,10 @@ import {
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
-import { useFileDataAtCommit } from "@/shell/external-write-review-history";
+import {
+	useWorkingFileData,
+	workingReviewFile,
+} from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
@@ -204,7 +207,27 @@ export function CsvView({
 
 function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 	assertFileId(fileId);
+	const editorRevision = normalizeEditorRevisionState(props);
+	const reviewFile = workingReviewFile(props.diffSession, fileId);
+	if (
+		editorRevisionMode(editorRevision) !== "editor" &&
+		(editorRevision.afterCommitId !== null || reviewFile?.workingEpoch)
+	) {
+		return (
+			<CsvHistoricalViewData
+				fileId={fileId}
+				filePath={props.filePath}
+				fileRow={undefined}
+				editorRevision={editorRevision}
+				diffSession={props.diffSession}
+				{...props}
+			/>
+		);
+	}
+	return <CsvLiveViewContent fileId={fileId} {...props} />;
+}
 
+function CsvLiveViewContent({ fileId, ...props }: CsvViewProps) {
 	const fileResult = useQueryResult<CsvFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
@@ -215,49 +238,24 @@ function CsvViewContent({ fileId, ...props }: CsvViewProps) {
 	if (fileResult.status === "pending") return <CsvLoadingSpinner />;
 	if (fileResult.status === "error") throw fileResult.error;
 	const fileRow = fileResult.rows[0];
-	return <CsvViewData fileId={fileId} fileRow={fileRow} {...props} />;
-}
-
-function CsvViewData({
-	fileId,
-	filePath,
-	fileRow,
-	beforeCommitId,
-	afterCommitId,
-	beforeFileId,
-	afterFileId,
-	beforeExists,
-	afterExists,
-	...props
-}: CsvViewProps & {
-	readonly fileRow?: CsvFileRow | undefined;
-}) {
-	const editorRevision = normalizeEditorRevisionState({
-		beforeCommitId,
-		afterCommitId,
-		beforeFileId,
-		afterFileId,
-		beforeExists,
-		afterExists,
-	});
-	const revisionMode = editorRevisionMode(editorRevision);
-
-	if (revisionMode !== "editor") {
+	const editorRevision = normalizeEditorRevisionState(props);
+	if (editorRevisionMode(editorRevision) !== "editor") {
 		return (
 			<CsvHistoricalViewData
 				fileId={fileId}
-				filePath={filePath}
+				filePath={props.filePath}
 				fileRow={fileRow}
 				editorRevision={editorRevision}
+				diffSession={props.diffSession}
 				{...props}
 			/>
 		);
 	}
-
 	return <CsvLiveViewData fileId={fileId} fileRow={fileRow} {...props} />;
 }
 
 function CsvLiveViewData({
+	fileId,
 	fileRow,
 	diffSession,
 	readOnly = false,
@@ -270,28 +268,21 @@ function CsvLiveViewData({
 	// working diff session marks it pending — diff mode covers every open
 	// surface, not just the revealed file.
 	const session = diffSession ?? null;
-	const sessionFile =
-		fileRow && session && "working" in session.target
-			? session.files.find((file) => file.id === fileRow.id)
-			: undefined;
-	const isReviewing = Boolean(
-		fileRow && session && sessionFile?.review?.status === "pending",
-	);
+	const sessionFile = workingReviewFile(session, fileId ?? "");
+	const isReviewing = sessionFile?.review?.status === "pending";
 	// An added file has no base to fetch: its history is absent, so its before
 	// side is empty by definition.
-	const reviewBaseCommitId =
-		isReviewing &&
-		sessionFile?.changeKind !== "added" &&
-		session?.base &&
-		"commitId" in session.base
-			? session.base.commitId
-			: null;
+	const workingEpoch = isReviewing ? sessionFile?.workingEpoch : undefined;
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
-				File not found in the workspace.
-			</div>
+			<CsvWorkingReviewUnavailable
+				message={
+					isReviewing
+						? "This file changed or was removed after the review opened. Reopen the review."
+						: "File not found in the workspace."
+				}
+			/>
 		);
 	}
 
@@ -300,7 +291,8 @@ function CsvLiveViewData({
 			key={fileRow.id}
 			fileRow={fileRow}
 			reviewing={isReviewing}
-			reviewBaseCommitId={reviewBaseCommitId}
+			workingEpoch={workingEpoch}
+			reviewPath={sessionFile?.path}
 			readOnly={readOnly}
 			isActiveView={isActiveView}
 		/>
@@ -317,34 +309,46 @@ function CsvLiveViewData({
 function EditableCsvView({
 	fileRow,
 	reviewing = false,
-	reviewBaseCommitId = null,
+	workingEpoch,
+	reviewPath,
 	readOnly,
 	isActiveView = true,
 }: {
 	readonly fileRow: CsvFileRow;
 	readonly reviewing?: boolean;
-	readonly reviewBaseCommitId?: string | null;
+	readonly workingEpoch?: {
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+	};
+	readonly reviewPath?: string;
 	readonly readOnly: boolean;
 	readonly isActiveView?: boolean;
 }) {
 	const fileId = fileRow.id;
-	const fileText = useMemo(
-		() => decodeFileDataToText(fileRow.content),
-		[fileRow.content],
+	// Both sides come from the certified working epoch, never from a newer live row.
+	const reviewBase = useWorkingFileData(
+		workingEpoch ? fileId : null,
+		workingEpoch?.beforeCommitId,
+		workingEpoch?.afterCommitId,
 	);
-	// The review's after side is the live document; only the base needs a read.
-	const reviewBase = useFileDataAtCommit(
-		reviewBaseCommitId ? fileId : null,
-		reviewBaseCommitId,
-	);
-	const reviewData: ExternalWriteReviewData | null =
+	const reviewUnavailableMessage =
+		!reviewBase.loading && reviewBase.error
+			? "The working diff changed while it was being reviewed. Reopen the review."
+			: null;
+	const effectiveFileRow =
 		reviewing && !reviewBase.loading
 			? {
+					...fileRow,
+					path: reviewPath ?? fileRow.path,
+					content: reviewBase.afterData ?? EMPTY_FILE_DATA,
+				}
+			: fileRow;
+	const fileText = decodeFileDataToText(effectiveFileRow.content);
+	const reviewData: ExternalWriteReviewData | null =
+		reviewing && !reviewBase.loading && !reviewBase.error
+			? {
 					beforeData: reviewBase.data ?? new Uint8Array(),
-					afterData:
-						fileRow.content instanceof Uint8Array
-							? fileRow.content
-							: new TextEncoder().encode(fileText),
+					afterData: reviewBase.afterData ?? EMPTY_FILE_DATA,
 				}
 			: null;
 	const isReviewing = reviewing;
@@ -470,9 +474,11 @@ function EditableCsvView({
 		],
 	);
 
-	return (
+	return reviewUnavailableMessage ? (
+		<CsvWorkingReviewUnavailable message={reviewUnavailableMessage} />
+	) : (
 		<CsvViewLoaded
-			fileRow={fileRow}
+			fileRow={effectiveFileRow}
 			parsedOverride={view}
 			editing={editing}
 			onCreateTable={isReadOnly ? undefined : handleCreateTable}
@@ -483,15 +489,45 @@ function EditableCsvView({
 	);
 }
 
+function CsvWorkingReviewUnavailable({
+	message,
+}: {
+	readonly message: string;
+}) {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			{message}
+		</div>
+	);
+}
+
 function CsvHistoricalViewData({
 	fileId,
 	editorRevision,
+	diffSession,
 	...props
 }: Omit<CsvViewProps, "fileId"> & {
 	readonly fileId: string;
 	readonly fileRow?: CsvFileRow | undefined;
 	readonly editorRevision: EditorRevisionState;
 }) {
+	const workingFile =
+		diffSession && "working" in diffSession.target
+			? diffSession.files.find((file) => file.id === fileId)
+			: undefined;
+	if (workingFile?.workingEpoch) {
+		return (
+			<CsvWorkingHistoricalView
+				{...props}
+				fileId={fileId}
+				editorRevision={editorRevision}
+				workingFile={workingFile}
+			/>
+		);
+	}
 	return (
 		<FileSnapshotsAtCommits
 			fileId={fileId}
@@ -512,6 +548,43 @@ function CsvHistoricalViewData({
 				/>
 			)}
 		</FileSnapshotsAtCommits>
+	);
+}
+
+function CsvWorkingHistoricalView({
+	fileId,
+	editorRevision,
+	workingFile,
+	...props
+}: Omit<CsvViewProps, "fileId"> & {
+	readonly fileId: string;
+	readonly fileRow?: CsvFileRow | undefined;
+	readonly editorRevision: EditorRevisionState;
+	readonly workingFile: AtelierDiffFile;
+}) {
+	const epoch = workingFile.workingEpoch!;
+	const before = useWorkingFileData(
+		fileId,
+		epoch.beforeCommitId,
+		epoch.afterCommitId,
+	);
+	if (!before.loading && before.error) {
+		return (
+			<CsvWorkingReviewUnavailable message="The working diff changed while it was being reviewed. Reopen the review." />
+		);
+	}
+	if (before.loading) return <CsvLoadingSpinner />;
+	const beforeSnapshot = before.data
+		? { id: fileId, path: workingFile.path, content: before.data }
+		: undefined;
+	return (
+		<CsvHistoricalViewResolved
+			{...props}
+			fileId={fileId}
+			editorRevision={editorRevision}
+			beforeSnapshot={beforeSnapshot}
+			afterSnapshot={undefined}
+		/>
 	);
 }
 

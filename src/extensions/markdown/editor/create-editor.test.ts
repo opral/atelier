@@ -1328,7 +1328,12 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 			[checkpoint.commitId],
 		);
 		expect(Number(workingDiffBeforeCheckpoint.rows[0]?.count)).toBe(0);
-		expect(await createCheckpointForFiles(lix, [fileId])).toBeNull();
+		await expect(
+			createCheckpointForFiles(lix, [fileId], {
+				beforeCommitId: checkpoint.commitId,
+				afterCommitId: checkpoint.commitId,
+			}),
+		).rejects.toThrow();
 		expect(await readMarkdown(lix, fileId)).toBe("Start");
 
 		editor.destroy();

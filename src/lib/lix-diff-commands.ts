@@ -28,6 +28,7 @@ export async function createCheckpoint(
 export async function createCheckpointForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
+	epoch: { readonly beforeCommitId: string; readonly afterCommitId: string },
 ): Promise<{ readonly commitId: string } | null> {
 	if (fileIds.length === 0) return null;
 	const result = await lix.execute(
@@ -35,11 +36,17 @@ export async function createCheckpointForFiles(
 		 FROM lix_create_checkpoint(ARRAY(
 		   SELECT row_ref
 		   FROM lix_diff('lix_file')
-		   WHERE id IN (${fileIdParameters(fileIds, 1)})
+		   WHERE lix_latest_checkpoint_commit_id() = $1
+		     AND lix_active_branch_commit_id() = $2
+		     AND id IN (${fileIdParameters(fileIds, 3)})
 		 ))`,
-		[...fileIds],
+		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
-	if (result.rows.length === 0) return null;
+	if (result.rows.length === 0) {
+		throw new Error(
+			"The working diff changed while it was being reviewed. Reopen the review before applying this decision.",
+		);
+	}
 	const commitId = result.rows[0]?.commit_id;
 	if (result.rows.length !== 1 || !isString(commitId)) {
 		throw new Error("Partial checkpoint did not return one commit ID.");
@@ -50,16 +57,74 @@ export async function createCheckpointForFiles(
 export async function revertWorkingChangesForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
+	epoch: { readonly beforeCommitId: string; readonly afterCommitId: string },
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
 	const result = await lix.execute(
 		`INSERT INTO lix_revert (row_ref)
 		 SELECT row_ref
 		 FROM lix_diff('lix_file')
-		 WHERE id IN (${fileIdParameters(fileIds, 1)})`,
-		[...fileIds],
+		 WHERE lix_latest_checkpoint_commit_id() = $1
+		   AND lix_active_branch_commit_id() = $2
+		   AND id IN (${fileIdParameters(fileIds, 3)})`,
+		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
+	if (result.rowsAffected === 0) {
+		throw new Error(
+			"The working diff changed while it was being reviewed. Reopen the review before applying this decision.",
+		);
+	}
 	return result.rowsAffected;
+}
+
+/** Validate the reviewed epoch and write its decision in one transaction. */
+export async function writeReviewedFile(
+	lix: Lix,
+	args: {
+		readonly fileId: string;
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+		readonly expectedContent: Uint8Array;
+		/** Null deletes an added file whose changes were rejected. */
+		readonly content: Uint8Array | null;
+		readonly originKey: string;
+	},
+): Promise<void> {
+	const stale = () =>
+		new Error(
+			"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+		);
+	const transaction = await lix.beginTransaction();
+	try {
+		// These coordinate functions and the diff relation are supported in
+		// SELECT, but not in bound UPDATE/DELETE predicates. The transaction
+		// keeps this check and the conditional write on the same snapshot.
+		const current = await transaction.execute(
+			`SELECT 1 AS current FROM lix_diff('lix_file')
+			 WHERE id = $1 AND lix_latest_checkpoint_commit_id() = $2
+			   AND lix_active_branch_commit_id() = $3`,
+			[args.fileId, args.beforeCommitId, args.afterCommitId],
+		);
+		if (current.rows.length !== 1) throw stale();
+		const result =
+			args.content === null
+				? await transaction.execute(
+						"DELETE FROM lix_file WHERE id = $1 AND content = $2",
+						[args.fileId, args.expectedContent],
+						{ originKey: args.originKey },
+					)
+				: await transaction.execute(
+						"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
+						[args.content, args.fileId, args.expectedContent],
+						{ originKey: args.originKey },
+					);
+		if (result.rowsAffected !== 1) throw stale();
+		await transaction.commit();
+	} catch (error) {
+		// A failed commit may already have closed the transaction.
+		await transaction.rollback().catch(() => {});
+		throw error;
+	}
 }
 
 /**
