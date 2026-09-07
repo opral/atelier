@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest";
 import type { AtelierFileViewProps } from "@/file-view";
 import { FileView } from "@/file-view";
 
-describe("FileView", () => {
+describe("FileView revision contract", () => {
 	test("fails closed for the removed base-to-implicit-live contract", () => {
 		const legacyProps = {
 			lix: {},
