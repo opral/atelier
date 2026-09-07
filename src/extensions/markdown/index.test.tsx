@@ -174,7 +174,7 @@ describe("MarkdownView", () => {
 		await lix.close();
 	});
 
-	test("keeps the formatting toolbar visible but disabled in host read-only mode", async () => {
+	test("hides mutation controls in host read-only mode", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -208,13 +208,14 @@ describe("MarkdownView", () => {
 			);
 		});
 		expect(
-			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
-		).toHaveAttribute("aria-disabled", "true");
-		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Bold" })).not.toBeInTheDocument();
 
 		await act(async () => {
 			utils?.unmount();
 		});
+		await lix.close();
 	});
 
 	test("renders a read-only historical snapshot from afterCommitId", async () => {
