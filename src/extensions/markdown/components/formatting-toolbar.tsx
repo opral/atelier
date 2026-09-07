@@ -580,7 +580,7 @@ export function FormattingToolbar({
 												onChange={(event) => setLinkValue(event.target.value)}
 												onKeyDown={handleLinkKeyDown}
 												aria-label="Link URL"
-												placeholder="Paste a link..."
+												placeholder="https://… or ./document.md"
 												className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-[var(--color-text-primary)] outline-none placeholder:font-normal placeholder:text-[var(--color-text-tertiary)]"
 												data-attr="markdown-link-input"
 											/>

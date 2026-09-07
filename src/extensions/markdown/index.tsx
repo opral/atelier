@@ -1100,6 +1100,7 @@ export const extension = createReactExtensionDefinition({
 			}
 			openWorkspaceFile={(args) =>
 				atelier.documents.open(args.filePath, {
+					...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
 					...(args.state ? { state: args.state } : {}),
 					...(args.focus !== undefined ? { focus: args.focus } : {}),
 				})

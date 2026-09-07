@@ -30,6 +30,7 @@ import {
 } from "./markdown-asset";
 import { renderPdfPreview } from "@/extensions/pdf/pdf-preview";
 import { storePastedMarkdownImage } from "./store-pasted-image";
+import { bindDocumentLinks } from "./document-links";
 
 type CreateEditorArgs = {
 	lix: Lix;
@@ -446,10 +447,20 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	});
 	persistenceBaselines.set(editorInstance, persistenceBaseline);
 	const editorDom = editorInstance.view.dom;
+	const cleanupDocumentLinks =
+		sourceFilePath && openWorkspaceFile
+			? bindDocumentLinks(
+					editorDom,
+					sourceFilePath,
+					openWorkspaceFile,
+					sourceCommitId,
+				)
+			: undefined;
 	editorDom.addEventListener("click", handleExternalLinkClick, {
 		capture: true,
 	});
 	cleanupExternalLinkClick = () => {
+		cleanupDocumentLinks?.();
 		editorDom.removeEventListener("click", handleExternalLinkClick, {
 			capture: true,
 		});

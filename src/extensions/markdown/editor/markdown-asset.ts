@@ -8,6 +8,7 @@ export type MarkdownWorkspaceFileOpener = (args: {
 	readonly filePath: string;
 	readonly state?: ExtensionState;
 	readonly focus?: boolean;
+	readonly newTab?: boolean;
 }) => void | Promise<void>;
 
 export type LoadedMarkdownAsset = {
