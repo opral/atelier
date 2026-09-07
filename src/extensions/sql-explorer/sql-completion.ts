@@ -328,26 +328,21 @@ export function createSqlCompletion(schema: Schema | null) {
 		}
 		const surfaceColumns =
 			!qualified && schema ? selectListColumns(text, context.pos, schema) : [];
-		if (
-			!word.text &&
-			!context.explicit &&
-			preceding !== "." &&
-			!surfaceColumns.length
-		)
-			return null;
+		// A resolved SELECT list completes its source columns, not the global SQL dictionary.
+		if (surfaceColumns.length) {
+			return {
+				from: word.from,
+				options: surfaceColumns,
+				validFor: /^[\w$]*$/,
+			};
+		}
+		if (!word.text && !context.explicit && preceding !== ".") return null;
 		const columns = columnsSource(context) as CompletionResult | null;
 		const keywords = keywordsSource(context) as CompletionResult | null;
-		if (preceding === ".") return columns;
+		if (qualified || preceding === ".") return columns;
 		return {
 			from: columns?.from ?? word.from,
-			options: [
-				...surfaceColumns,
-				...(columns?.options ?? []).filter(
-					(option) =>
-						!surfaceColumns.some((column) => column.label === option.label),
-				),
-				...(keywords?.options ?? []),
-			],
+			options: [...(columns?.options ?? []), ...(keywords?.options ?? [])],
 			validFor: /^[\w$]*$/,
 		};
 	};

@@ -13,6 +13,7 @@ import type { Schema, TableFunction } from "./schema";
 const columns = [
 	{ name: "id", type: "text" },
 	{ name: "path", type: "text" },
+	{ name: "name", type: "text" },
 ];
 const history: TableFunction = {
 	name: "lix_history",
@@ -47,6 +48,9 @@ const labels = (source: string) =>
 	complete(source)?.options.map((option) => option.label);
 
 describe("catalog SQL completion", () => {
+	test("keeps keyword completion outside resolved column lists", () => {
+		expect(labels("SEL")).toContain("SELECT");
+	});
 	test("offers live tables and table functions in FROM and JOIN", () => {
 		for (const query of [
 			"SELECT * FROM lix_",
@@ -62,11 +66,12 @@ describe("catalog SQL completion", () => {
 	test.each([
 		"SELECT | FROM lix_file",
 		"SELECT pa| FROM lix_file",
+		"SELECT path, name|\nFROM lix_file\nORDER BY path\nLIMIT 100;",
 		"SELECT id, | FROM lix_file f",
 		'SELECT | FROM public."lix_file"',
 		"SELECT | FROM lix_state_at('lix_file', 'commit')",
 	])("completes unqualified surface columns: %s", (query) => {
-		expect(labels(query)).toEqual(expect.arrayContaining(["id", "path"]));
+		expect(labels(query)).toEqual(["id", "path", "name"]);
 	});
 	test("uses the function result schema and isolates statements and nested query blocks", () => {
 		expect(labels("SELECT | FROM lix_history('lix_file')")).toContain(
@@ -84,10 +89,11 @@ describe("catalog SQL completion", () => {
 			),
 		).not.toContain("lixcol_depth");
 	});
-	test("completes ordinary table alias columns", () => {
-		expect(labels("SELECT f.| FROM lix_file AS f")).toEqual(
-			expect.arrayContaining(["id", "path"]),
-		);
+	test.each([
+		"SELECT f.| FROM lix_file AS f",
+		"SELECT f.na| FROM lix_file AS f",
+	])("completes only ordinary table alias columns: %s", (query) => {
+		expect(labels(query)).toEqual(["id", "path", "name"]);
 	});
 	test("completes relation-specific result columns for a function alias", () => {
 		expect(labels("SELECT h.| FROM lix_history('lix_file') AS h")).toContain(
@@ -95,7 +101,7 @@ describe("catalog SQL completion", () => {
 		);
 		expect(
 			labels("SELECT s.| FROM lix_state_at('lix_file', 'commit') s"),
-		).toEqual(["id", "path"]);
+		).toEqual(["id", "path", "name"]);
 	});
 	test("offers valid relations only inside the first literal function argument", () => {
 		expect(labels("SELECT * FROM lix_state_at('lix_")).toEqual(["lix_file"]);
