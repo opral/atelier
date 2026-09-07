@@ -14,6 +14,7 @@ import type {
 import { AtelierErrorBoundary } from "./atelier-error-boundary";
 import { LixProvider, useQueryResult } from "./lib/lix-react";
 import { qb } from "./lib/lix-kysely";
+import { cn } from "./lib/utils";
 import { fileIconUrl } from "./file-icons";
 import {
 	createLixBranchSession,
@@ -93,7 +94,10 @@ export function FileView(props: AtelierFileViewProps) {
 	return (
 		<div
 			data-read-only={props.readOnly || undefined}
-			className={`atelier-root atelier-file-view flex min-h-0 flex-col ${props.className ?? ""}`}
+			className={cn(
+				"atelier-root atelier-file-view flex min-h-[320px] flex-col",
+				props.className,
+			)}
 		>
 			<AtelierErrorBoundary key={lixKey(props.lix)}>
 				<LixProvider lix={props.lix}>

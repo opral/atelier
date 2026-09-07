@@ -664,7 +664,7 @@ function CsvViewLoaded({
 					<span className="min-w-0 truncate">{parsed.warnings[0]}</span>
 				</div>
 			) : null}
-			<div className="relative min-h-0 flex-1 overflow-hidden">
+			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
 				{parsed.columns.length === 0 ? (
 					<CsvEmptyState
 						filePath={fileRow.path}
