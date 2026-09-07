@@ -5,6 +5,7 @@ import { qb } from "@/lib/lix-kysely";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import {
 	selectCheckpoints,
+	selectCheckpointFilePreviews,
 	selectFilesystemEntries,
 	selectLatestCheckpoint,
 	selectWorkingChangeCount,
@@ -205,6 +206,54 @@ describe("checkpoint queries", () => {
 			}),
 		]);
 
+		await lix.close();
+	});
+});
+
+describe("selectCheckpointFilePreviews", () => {
+	test("lists changed files with checkpoint paths for renamed and deleted files", async () => {
+		const lix = await openLix();
+		const ids = ["preview-rename", "preview-delete", "preview-unchanged"].map(
+			fakeUuid,
+		);
+		for (const [index, path] of [
+			"/before.md",
+			"/removed.csv",
+			"/unchanged.txt",
+		].entries()) {
+			await lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[ids[index], path, new TextEncoder().encode("before")],
+			);
+		}
+		const base = await createCheckpoint(lix);
+		await lix.execute("UPDATE lix_file SET path = $1 WHERE id = $2", [
+			"/renamed.md",
+			ids[0],
+		]);
+		await lix.execute("DELETE FROM lix_file WHERE id = $1", [ids[1]]);
+		const target = await createCheckpoint(lix);
+		await lix.execute("UPDATE lix_file SET path = $1 WHERE id = $2", [
+			"/renamed-again.md",
+			ids[0],
+		]);
+		expect(
+			await selectCheckpointFilePreviews(
+				lix,
+				target.commitId,
+				base.commitId,
+			).execute(),
+		).toEqual([
+			{ id: ids[1], path: "/removed.csv" },
+			{ id: ids[0], path: "/renamed.md" },
+		]);
+		expect(
+			await selectCheckpointFilePreviews(lix, base.commitId, null).execute(),
+		).toEqual([
+			{ id: ids[0], path: "/before.md" },
+			{ id: ids[1], path: "/removed.csv" },
+			{ id: ids[2], path: "/unchanged.txt" },
+		]);
 		await lix.close();
 	});
 });

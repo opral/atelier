@@ -128,6 +128,29 @@ export function selectFilesStateAt(lix: Lix, commitId: string) {
 	);
 }
 
+/** File-name metadata for a checkpoint, using the same base as its comparison. */
+export function selectCheckpointFilePreviews(
+	lix: Lix,
+	commitId: string,
+	previousCommitId: string | null,
+) {
+	if (previousCommitId === null) {
+		return selectFilesStateAt(lix, commitId)
+			.select(["id", "path"])
+			.orderBy("path", "asc")
+			.$castTo<{ id: string; path: string }>();
+	}
+	return qb(lix)
+		.selectFrom(
+			sql<any>`lix_diff('lix_file', ${previousCommitId}, ${commitId})`.as(
+				"diff",
+			),
+		)
+		.select(["id", sql<string>`coalesce(to_path, from_path)`.as("path")])
+		.orderBy("path", "asc")
+		.$castTo<{ id: string; path: string }>();
+}
+
 /**
  * Resolves the path each file had at its requested commit — rename-aware, and
  * absent files simply have no entry. Requests are grouped per commit so a
