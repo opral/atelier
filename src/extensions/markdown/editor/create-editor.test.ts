@@ -440,10 +440,10 @@ test("dropping an external image prevents navigation and persists it at the drop
 		fileId,
 		(value) =>
 			value ===
-			"Before\n\n![Dropped image](../../assets/dropped-image.png)\n\nAfter\n",
+			"Before\n\n![Dropped image](../../assets/dropped-image.png)\n\nAfter",
 	);
 	expect(markdown).toBe(
-		"Before\n\n![Dropped image](../../assets/dropped-image.png)\n\nAfter\n",
+		"Before\n\n![Dropped image](../../assets/dropped-image.png)\n\nAfter",
 	);
 	const storedImage = await qb(lix)
 		.selectFrom("lix_file")
@@ -568,9 +568,9 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 	const mdAfter = await waitForMarkdown(
 		lix,
 		fileId,
-		(markdown) => markdown === ensureTrailingNewline("New\n\nStart"),
+		(markdown) => markdown === "New\n\nStart",
 	);
-	expect(mdAfter).toBe(ensureTrailingNewline("New\n\nStart"));
+	expect(mdAfter).toBe("New\n\nStart");
 
 	editor.destroy();
 });
@@ -1316,6 +1316,9 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 		fileId,
 		persistDebounceMs: 60_000,
 	});
+	// TipTap emits create asynchronously; settle its baseline before replacing timers.
+	while (!editor.isInitialized)
+		await new Promise((resolve) => setTimeout(resolve, 0));
 	const checkpoint = await createCheckpoint(lix);
 	vi.useFakeTimers();
 	try {
@@ -1590,7 +1593,7 @@ test("editing a long markdown document does not truncate content below the edit 
 
 	editor.commands.setTextSelection(positionAfterText(editor, "TARGET"));
 	editor.commands.insertContent(" EXACT");
-	const expected = serializeAst(parseMarkdown(initial)).replace(
+	const expected = initial.replace(
 		"TARGET paragraph.",
 		"TARGET EXACT paragraph.",
 	);
@@ -1607,4 +1610,36 @@ test("editing a long markdown document does not truncate content below the edit 
 	expect(settledMarkdown).toBe(expected);
 
 	editor.destroy();
+});
+
+test("saving a heading edit preserves untouched Markdown source across successive saves", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("preserve_source");
+	const original =
+		"# Old\n\n| A | B |\n| --- | --- |\n| *x* | \\$2 |\n\n*Untouched*";
+	await lix.execute(
+		"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+		[fileId, "/preserve.md", new TextEncoder().encode(original)],
+	);
+	const editor = createEditor({
+		lix,
+		fileId,
+		initialMarkdown: original,
+		persistDebounceMs: 0,
+	});
+	try {
+		editor.commands.insertContentAt({ from: 1, to: 4 }, "New");
+		const first = original.replace("# Old", "# New");
+		expect(await waitForMarkdown(lix, fileId, (text) => text === first)).toBe(
+			first,
+		);
+		editor.commands.insertContentAt({ from: 1, to: 4 }, "Next");
+		const second = original.replace("# Old", "# Next");
+		expect(await waitForMarkdown(lix, fileId, (text) => text === second)).toBe(
+			second,
+		);
+	} finally {
+		editor.destroy();
+		await lix.close();
+	}
 });

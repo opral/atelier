@@ -421,7 +421,9 @@ test("keeps soft source lines structural when a mounted editor persists an edit"
 	].join("\n");
 	expect(buildNormalizedMarkdownFromEditor(editor)).toBe(expectedMarkdown);
 	await waitFor(async () => {
-		expect(await decodeFileMarkdown(lix, fileId)).toBe(expectedMarkdown);
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			expectedMarkdown.trimEnd(),
+		);
 	});
 
 	await act(async () => {
@@ -481,7 +483,7 @@ test("keeps the task caret in place when a mounted checkbox is toggled", async (
 	expect(checkbox).toBeChecked();
 	await waitFor(async () => {
 		expect(await decodeFileMarkdown(lix, fileId)).toBe(
-			"- [x] keep this caret\n\nTail stays put\n",
+			"- [x] keep this caret\n\nTail stays put",
 		);
 	});
 	expect(editor.view.dom).toHaveTextContent("Tail stays put");

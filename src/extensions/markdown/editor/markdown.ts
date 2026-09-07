@@ -19,12 +19,17 @@ export function parseMarkdown(markdown: string): AstRoot {
 
 /** Parses Markdown without discarding source positions used by review plans. */
 export function parseMarkdownSource(markdown: string): AstRoot {
+	return resolveReferences(parseMarkdownSourceRaw(markdown));
+}
+
+/** Source syntax including reference definitions, for byte-preserving edits. */
+export function parseMarkdownSourceRaw(markdown: string): AstRoot {
 	const ast = fromMarkdown(markdown, {
 		extensions: [gfm(), frontmatter(["yaml"])],
 		mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
 	});
 	restoreEmptyTaskItems(ast);
-	return resolveReferences(ast);
+	return ast;
 }
 
 /**
@@ -65,11 +70,17 @@ function restoreEmptyTaskItems(node: any, insideList = false): void {
 
 function resolveReferences(ast: any): any {
 	const definitions = new Map<string, any>();
-	for (const child of Array.isArray(ast?.children) ? ast.children : []) {
-		if (child?.type === "definition" && typeof child.identifier === "string") {
-			definitions.set(normalizeIdentifier(child.identifier), child);
+	// Definitions inside containers apply document-wide. CommonMark uses the
+	// first definition in source order, including when later labels differ in case.
+	const collect = (node: any): void => {
+		if (node?.type === "definition" && typeof node.identifier === "string") {
+			const identifier = normalizeIdentifier(node.identifier);
+			if (!definitions.has(identifier)) definitions.set(identifier, node);
 		}
-	}
+		for (const child of Array.isArray(node?.children) ? node.children : [])
+			collect(child);
+	};
+	collect(ast);
 
 	const resolve = (node: any): any => {
 		if (!node || typeof node !== "object") {

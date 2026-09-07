@@ -17,6 +17,7 @@ import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
+import { preserveMarkdownSource } from "./preserve-markdown-source";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
 	buildNormalizedMarkdownFromEditor,
@@ -75,7 +76,7 @@ export function acknowledgeMarkdownEditorPersistence(
 ): void {
 	const baseline = persistenceBaselines.get(editor);
 	if (!baseline) return;
-	baseline.lastAcknowledgedMarkdown = normalizePersistedMarkdown(markdown);
+	baseline.lastAcknowledgedMarkdown = buildNormalizedMarkdownFromEditor(editor);
 	baseline.expectedFileMarkdown = markdown;
 	baseline.acknowledgedRevision = baseline.documentRevision;
 }
@@ -89,6 +90,13 @@ export function markdownEditorLastAcknowledgedMarkdown(
 	editor: Editor,
 ): string | undefined {
 	return persistenceBaselines.get(editor)?.lastAcknowledgedMarkdown;
+}
+
+/** Exact source baseline, including untouched noncanonical formatting. */
+export function markdownEditorExpectedFileMarkdown(
+	editor: Editor,
+): string | undefined {
+	return persistenceBaselines.get(editor)?.expectedFileMarkdown;
 }
 
 export const createMarkdownEditorOriginKey = (): string => {
@@ -222,12 +230,16 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		if (!snapshot) return undefined;
 		const { revision, doc } = snapshot;
 		if (containsMarkdownReviewProjection(doc)) return revision;
-		const markdown = buildNormalizedMarkdownFromTiptapDoc(doc);
+		const normalizedMarkdown = buildNormalizedMarkdownFromTiptapDoc(doc);
+		const markdown = preserveMarkdownSource(
+			persistenceBaseline.expectedFileMarkdown,
+			normalizedMarkdown,
+		);
 		if (revision === persistenceBaseline.acknowledgedRevision) {
 			pendingPersistenceSnapshot = null;
 			return revision;
 		}
-		if (markdown === persistenceBaseline.lastAcknowledgedMarkdown) {
+		if (normalizedMarkdown === persistenceBaseline.lastAcknowledgedMarkdown) {
 			persistenceBaseline.acknowledgedRevision = revision;
 			if (pendingPersistenceSnapshot?.revision === revision) {
 				pendingPersistenceSnapshot = null;
@@ -242,7 +254,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			originKey,
 		});
 		if (!didPersist) return revision;
-		persistenceBaseline.lastAcknowledgedMarkdown = markdown;
+		persistenceBaseline.lastAcknowledgedMarkdown = normalizedMarkdown;
 		persistenceBaseline.expectedFileMarkdown = markdown;
 		persistenceBaseline.acknowledgedRevision = revision;
 		if (pendingPersistenceSnapshot?.revision === revision) {

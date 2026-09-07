@@ -15,7 +15,7 @@ export type MarkdownReviewDecision = "keep" | "undo";
 type MarkdownReviewChange = {
 	readonly id: string;
 	readonly entityId?: string;
-	readonly kind: "insert" | "delete" | "replace" | "move";
+	readonly kind: "insert" | "delete" | "replace" | "move" | "format";
 	readonly before: JSONContent | null;
 	readonly after: JSONContent | null;
 };
@@ -58,6 +58,27 @@ export function buildMarkdownReviewDocument(
 ): MarkdownReviewDocument {
 	const beforeDoc = markdownToDoc(reviewDiff.beforeMarkdown);
 	const afterDoc = markdownToDoc(reviewDiff.afterMarkdown);
+	if (
+		reviewDiff.beforeMarkdown !== reviewDiff.afterMarkdown &&
+		exactFingerprint(beforeDoc) === exactFingerprint(afterDoc)
+	) {
+		const id = "formatting";
+		return {
+			doc: cloneContent(afterDoc),
+			changes: [{ id, kind: "format", before: beforeDoc, after: afterDoc }],
+			usedSemanticBlockIds: false,
+			beforeMarkdown: reviewDiff.beforeMarkdown,
+			afterMarkdown: reviewDiff.afterMarkdown,
+			rawChunks: [
+				{
+					changeId: id,
+					beforeText: reviewDiff.beforeMarkdown,
+					afterText: reviewDiff.afterMarkdown,
+				},
+			],
+		};
+	}
+
 	// An empty side contributes no blocks. Parsing "" yields one empty
 	// paragraph, which would otherwise render as a phantom deleted blank line
 	// when a file's before side does not exist (an added file) or its after
@@ -188,9 +209,68 @@ export function buildMarkdownReviewDocument(
 		afterMarkdown: reviewDiff.afterMarkdown,
 		rawChunks: assignRawDependencies(rawChunks),
 	};
-	return rawPlanIsLossless(reviewDocument)
-		? reviewDocument
-		: wholeDocumentReview(reviewDiff, beforeDoc, afterDoc);
+	if (!rawPlanIsLossless(reviewDocument)) {
+		return wholeDocumentReview(reviewDiff, beforeDoc, afterDoc);
+	}
+	if (
+		changes.length > 1 &&
+		(!segmentsAreIndependent(beforeNodes, beforeSegments) ||
+			!segmentsAreIndependent(afterNodes, afterSegments))
+	) {
+		return groupDependentChanges(reviewDocument, beforeDoc, afterDoc);
+	}
+	return reviewDocument;
+}
+
+/** Reference definitions can live in a different block's raw source chunk. */
+function segmentsAreIndependent(
+	nodes: readonly JSONContent[],
+	segments: readonly string[] | null,
+): boolean {
+	return (
+		segments !== null &&
+		nodes.every((node, index) => {
+			const parsed = markdownToDoc(segments[index]!).content ?? [];
+			return (
+				parsed.length === 1 &&
+				comparableFingerprint(parsed[0]!) === comparableFingerprint(node)
+			);
+		})
+	);
+}
+
+/** Keep the localized display, but never expose unsafe independent decisions. */
+function groupDependentChanges(
+	review: MarkdownReviewDocument,
+	beforeDoc: JSONContent,
+	afterDoc: JSONContent,
+): MarkdownReviewDocument {
+	const id = review.changes[0]!.id;
+	const doc = cloneContent(review.doc);
+	const reassign = (node: JSONContent): void => {
+		if (readNodeReview(node)) node.attrs!.data[REVIEW_DATA_KEY].changeId = id;
+		for (const mark of node.marks ?? []) {
+			if (mark.type === REVIEW_MARK_NAME && mark.attrs)
+				mark.attrs.changeId = id;
+		}
+		for (const child of node.content ?? []) reassign(child);
+	};
+	reassign(doc);
+	return {
+		...review,
+		doc,
+		changes: [
+			{
+				id,
+				kind: "replace",
+				before: cloneContent(beforeDoc),
+				after: cloneContent(afterDoc),
+			},
+		],
+		rawChunks: review.rawChunks.map((chunk) =>
+			chunk.changeId ? { ...chunk, changeId: id } : chunk,
+		),
+	};
 }
 
 /** Projects the synthetic review document back to either original side. */
@@ -311,6 +391,18 @@ function assignRawDependencies(
 ): readonly MarkdownReviewRawChunk[] {
 	return chunks.map((chunk, index) => {
 		if (chunk.changeId || chunk.beforeText === chunk.afterText) return chunk;
+		// Segments include the whitespace following their block. If an EOF
+		// block gains/loses a separator because the next block was inserted or
+		// deleted, that separator must follow the next block's decision. An
+		// earlier unrelated edit must not own it (which can join paragraphs).
+		const nextChunk = chunks[index + 1];
+		if (
+			nextChunk?.changeId &&
+			(nextChunk.beforeText === "" || nextChunk.afterText === "") &&
+			chunk.beforeText.trimEnd() === chunk.afterText.trimEnd()
+		) {
+			return { ...chunk, changeId: nextChunk.changeId };
+		}
 		let owner: string | undefined;
 		for (let previous = index - 1; previous >= 0; previous -= 1) {
 			if (!chunks[previous]?.changeId) continue;
@@ -569,6 +661,17 @@ function alignNodesGreedily(
 			alignments.push({ beforeIndex: left++, afterIndex: right++ });
 			continue;
 		}
+		// Consume genuinely new/deleted identities before looking for a moved
+		// anchor. Otherwise a new copy preceding a far-away moved block can
+		// make every intervening unchanged block appear to move instead.
+		if (beforeIdIndexes && afterIds && !beforeIdIndexes.has(afterIds[right]!)) {
+			alignments.push({ afterIndex: right++ });
+			continue;
+		}
+		if (afterIdIndexes && beforeIds && !afterIdIndexes.has(beforeIds[left]!)) {
+			alignments.push({ beforeIndex: left++ });
+			continue;
+		}
 		const nextAfter = findMatchingNode(
 			before[left]!,
 			beforeIds?.[left],
@@ -632,10 +735,15 @@ function nodePairCost(
 	beforeId: string | undefined,
 	afterId: string | undefined,
 ): number {
-	if (comparableFingerprint(before) === comparableFingerprint(after)) return 0;
+	// Validated identities take precedence over equal content: two distinct
+	// blocks may contain the same text, including a copy of a moved block.
 	if (beforeId && afterId) {
-		return beforeId === afterId ? 0.05 : Number.POSITIVE_INFINITY;
+		if (beforeId !== afterId) return Number.POSITIVE_INFINITY;
+		return comparableFingerprint(before) === comparableFingerprint(after)
+			? 0
+			: 0.05;
 	}
+	if (comparableFingerprint(before) === comparableFingerprint(after)) return 0;
 	if (before.type !== after.type) return Number.POSITIVE_INFINITY;
 	if (canMergeInline(before, after) || canMergeContainer(before, after)) {
 		return 1.6 - 0.7 * nodeTextSimilarity(before, after);
