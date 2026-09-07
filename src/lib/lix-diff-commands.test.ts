@@ -11,6 +11,7 @@ import {
 	restoreCheckpoint,
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
+	writeReviewedFile,
 } from "./lix-diff-commands";
 
 const encoder = new TextEncoder();
@@ -210,6 +211,84 @@ describe("Lix SQL diff commands", () => {
 			// The later-added file cannot appear in the span's file list, so
 			// only the exact restore can delete it.
 			expect(await readFile(lix, laterId)).toBeNull();
+		} finally {
+			await lix.close();
+		}
+	});
+});
+
+describe("reviewed file writes", () => {
+	test.each(["update", "delete"] as const)(
+		"applies a current %s decision",
+		async (kind) => {
+			const lix = await openLix();
+			try {
+				const id = fakeUuid(`review-${kind}`);
+				await writeFile(lix, id, "/review.txt", "reviewed");
+				await writeReviewedFile(lix, {
+					fileId: id,
+					...(await workingEpoch(lix)),
+					expectedContent: encoder.encode("reviewed"),
+					content: kind === "delete" ? null : encoder.encode("resolved"),
+					originKey: "atelier.review:test",
+				});
+				expect(await readFile(lix, id)).toBe(
+					kind === "delete" ? null : "resolved",
+				);
+			} finally {
+				await lix.close();
+			}
+		},
+	);
+
+	test.each(["update", "delete"] as const)(
+		"rejects a stale %s decision without changing the file",
+		async (kind) => {
+			const lix = await openLix();
+			try {
+				const id = fakeUuid(`stale-review-${kind}`);
+				await writeFile(lix, id, "/review.txt", "reviewed");
+				const epoch = await workingEpoch(lix);
+				await writeFile(lix, id, "/review.txt", "newer");
+				await expect(
+					writeReviewedFile(lix, {
+						fileId: id,
+						...epoch,
+						expectedContent: encoder.encode("reviewed"),
+						content: kind === "delete" ? null : encoder.encode("resolved"),
+						originKey: "atelier.review:test",
+					}),
+				).rejects.toThrow("Reopen the review");
+				expect(await readFile(lix, id)).toBe("newer");
+			} finally {
+				await lix.close();
+			}
+		},
+	);
+
+	test("rolls back a content mismatch and releases the transaction", async () => {
+		const lix = await openLix();
+		try {
+			const id = fakeUuid("review-content-mismatch");
+			await writeFile(lix, id, "/review.txt", "reviewed");
+			const args = {
+				fileId: id,
+				...(await workingEpoch(lix)),
+				content: encoder.encode("resolved"),
+				originKey: "atelier.review:test",
+			};
+			await expect(
+				writeReviewedFile(lix, {
+					...args,
+					expectedContent: encoder.encode("wrong"),
+				}),
+			).rejects.toThrow("Reopen the review");
+			expect(await readFile(lix, id)).toBe("reviewed");
+			await writeReviewedFile(lix, {
+				...args,
+				expectedContent: encoder.encode("reviewed"),
+			});
+			expect(await readFile(lix, id)).toBe("resolved");
 		} finally {
 			await lix.close();
 		}

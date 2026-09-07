@@ -77,6 +77,56 @@ export async function revertWorkingChangesForFiles(
 	return result.rowsAffected;
 }
 
+/** Validate the reviewed epoch and write its decision in one transaction. */
+export async function writeReviewedFile(
+	lix: Lix,
+	args: {
+		readonly fileId: string;
+		readonly beforeCommitId: string;
+		readonly afterCommitId: string;
+		readonly expectedContent: Uint8Array;
+		/** Null deletes an added file whose changes were rejected. */
+		readonly content: Uint8Array | null;
+		readonly originKey: string;
+	},
+): Promise<void> {
+	const stale = () =>
+		new Error(
+			"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
+		);
+	const transaction = await lix.beginTransaction();
+	try {
+		// These coordinate functions and the diff relation are supported in
+		// SELECT, but not in bound UPDATE/DELETE predicates. The transaction
+		// keeps this check and the conditional write on the same snapshot.
+		const current = await transaction.execute(
+			`SELECT 1 AS current FROM lix_diff('lix_file')
+			 WHERE id = $1 AND lix_latest_checkpoint_commit_id() = $2
+			   AND lix_active_branch_commit_id() = $3`,
+			[args.fileId, args.beforeCommitId, args.afterCommitId],
+		);
+		if (current.rows.length !== 1) throw stale();
+		const result =
+			args.content === null
+				? await transaction.execute(
+						"DELETE FROM lix_file WHERE id = $1 AND content = $2",
+						[args.fileId, args.expectedContent],
+						{ originKey: args.originKey },
+					)
+				: await transaction.execute(
+						"UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
+						[args.content, args.fileId, args.expectedContent],
+						{ originKey: args.originKey },
+					);
+		if (result.rowsAffected !== 1) throw stale();
+		await transaction.commit();
+	} catch (error) {
+		// A failed commit may already have closed the transaction.
+		await transaction.rollback().catch(() => {});
+		throw error;
+	}
+}
+
 /**
  * Restores the exact repository state of a checkpoint — including deleting
  * files created after it, which a file-scoped selection over the reviewed

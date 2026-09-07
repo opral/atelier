@@ -671,7 +671,9 @@ describe("diff review navigation", () => {
 				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
 					?.afterCommitId,
 			);
-			expect(await screen.findByTestId("markdown-review-editor")).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByTestId("markdown-review-editor")).toBeVisible();
+			});
 			expect(
 				document.querySelector("[data-attr='historical-read-only-banner']"),
 			).toBeNull();

@@ -45,6 +45,7 @@ import {
 	restoreCheckpoint,
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
+	writeReviewedFile,
 } from "@/lib/lix-diff-commands";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -2773,22 +2774,12 @@ function LayoutShellLoadedContentResolved({
 
 	const deleteAddedExternalWriteReviewFile = useCallback(
 		async (review: ExternalWriteReview, afterData: Uint8Array) => {
-			const result = await lix.execute(
-				`DELETE FROM lix_file
-				 WHERE id = $1 AND content = $2
-				   AND lix_latest_checkpoint_commit_id() = $3
-				   AND lix_active_branch_commit_id() = $4
-				   AND EXISTS (
-				     SELECT 1 FROM lix_diff('lix_file') WHERE id = $1
-				   )`,
-				[review.fileId, afterData, review.beforeCommitId, review.afterCommitId],
-				{ originKey: `atelier.review:${review.reviewId}` },
-			);
-			if (result.rowsAffected !== 1) {
-				throw new Error(
-					"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
-				);
-			}
+			await writeReviewedFile(lix, {
+				...review,
+				expectedContent: afterData,
+				content: null,
+				originKey: `atelier.review:${review.reviewId}`,
+			});
 		},
 		[lix],
 	);
@@ -2848,28 +2839,12 @@ function LayoutShellLoadedContentResolved({
 				if (beforeData === null && args.data.byteLength === 0) {
 					await deleteAddedExternalWriteReviewFile(review, afterData);
 				} else {
-					const result = await lix.execute(
-						`UPDATE lix_file SET content = $1
-						 WHERE id = $2 AND content = $3
-						   AND lix_latest_checkpoint_commit_id() = $4
-						   AND lix_active_branch_commit_id() = $5
-						   AND EXISTS (
-						     SELECT 1 FROM lix_diff('lix_file') WHERE id = $2
-						   )`,
-						[
-							args.data,
-							review.fileId,
-							afterData,
-							review.beforeCommitId,
-							review.afterCommitId,
-						],
-						{ originKey: `atelier.review:${review.reviewId}` },
-					);
-					if (result.rowsAffected !== 1) {
-						throw new Error(
-							"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
-						);
-					}
+					await writeReviewedFile(lix, {
+						...review,
+						expectedContent: afterData,
+						content: args.data,
+						originKey: `atelier.review:${review.reviewId}`,
+					});
 				}
 				await persistReviewResolution(review, "resolved");
 			});
@@ -2924,28 +2899,12 @@ function LayoutShellLoadedContentResolved({
 				if (!afterData) {
 					throw new Error("The reviewed file snapshot is no longer available.");
 				}
-				const result = await lix.execute(
-					`UPDATE lix_file SET content = $1
-					 WHERE id = $2 AND content = $3
-					   AND lix_latest_checkpoint_commit_id() = $4
-					   AND lix_active_branch_commit_id() = $5
-					   AND EXISTS (
-					     SELECT 1 FROM lix_diff('lix_file') WHERE id = $2
-					   )`,
-					[
-						beforeData,
-						review.fileId,
-						afterData,
-						review.beforeCommitId,
-						review.afterCommitId,
-					],
-					{ originKey: `atelier.review:${review.reviewId}` },
-				);
-				if (result.rowsAffected !== 1) {
-					throw new Error(
-						"This file changed while it was being reviewed. Reopen the review before applying these decisions.",
-					);
-				}
+				await writeReviewedFile(lix, {
+					...review,
+					expectedContent: afterData,
+					content: beforeData,
+					originKey: `atelier.review:${review.reviewId}`,
+				});
 				await persistReviewResolution(review, "rejected");
 			});
 		},

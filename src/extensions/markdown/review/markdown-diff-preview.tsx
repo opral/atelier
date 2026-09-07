@@ -102,6 +102,7 @@ function HistoricalMarkdownFilePreview({
 			filePath={filePath}
 			beforeMarkdown={beforeMarkdown}
 			afterMarkdown={markdown}
+			afterCommitId={targetCommitId}
 			signature={`commit:${baseCommitId ?? "plain"}:${targetCommitId}:${contentSignature(beforeMarkdown)}:${contentSignature(markdown)}`}
 		/>
 	);
@@ -135,12 +136,14 @@ function WorkingMarkdownFilePreview({
 			filePath={filePath}
 			beforeMarkdown={beforeMarkdown}
 			afterMarkdown={afterMarkdown}
+			afterCommitId={workingEpoch.afterCommitId}
 			signature={`working:${workingEpoch.beforeCommitId}:${workingEpoch.afterCommitId}:${contentSignature(beforeMarkdown)}:${contentSignature(afterMarkdown)}`}
 		/>
 	);
 }
 
 function RenderedMarkdownFilePreview({
+	afterCommitId,
 	filePath,
 	beforeMarkdown,
 	afterMarkdown,
@@ -150,6 +153,7 @@ function RenderedMarkdownFilePreview({
 	readonly beforeMarkdown: string;
 	readonly afterMarkdown: string;
 	readonly signature: string;
+	readonly afterCommitId?: string;
 }) {
 	return (
 		<div className="markdown-view markdown-review markdown-embedded-preview">
@@ -157,6 +161,7 @@ function RenderedMarkdownFilePreview({
 				key={signature}
 				reviewDiff={{ beforeMarkdown, afterMarkdown }}
 				sourceFilePath={filePath}
+				afterCommitId={afterCommitId}
 			/>
 		</div>
 	);
