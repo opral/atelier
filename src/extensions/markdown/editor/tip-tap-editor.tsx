@@ -19,6 +19,7 @@ import {
 } from "@/lib/lix-react";
 import {
 	acknowledgeMarkdownEditorPersistence,
+	markdownEditorExpectedFileMarkdown,
 	createEditor,
 	createMarkdownEditorOriginKey,
 	markdownEditorLastAcknowledgedMarkdown,
@@ -597,6 +598,14 @@ function TipTapEditorLoadedContent({
 			markdownEditorLastAcknowledgedMarkdown(editor) ??
 			syncState.initialObservedMarkdown;
 		const sourceMarkdown = decodeMarkdownData(sourceFile.content);
+		// Our own source-preserving save can differ from canonical serialization.
+		// An echo of the acknowledged bytes must not reset the editor or caret.
+		if (
+			!readOnly &&
+			sourceMarkdown === markdownEditorExpectedFileMarkdown(editor)
+		)
+			return;
+
 		const nextMarkdown = normalizePersistedMarkdown(sourceMarkdown);
 		const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
 		if (!syncState.sawInitialSnapshot) {

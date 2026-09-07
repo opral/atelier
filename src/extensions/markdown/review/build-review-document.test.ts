@@ -530,3 +530,206 @@ function visit(node: any, callback: (node: any) => void): void {
 	callback(node);
 	for (const child of node.content ?? []) visit(child, callback);
 }
+
+test("formatting-only changes leave rendered content unmarked and resolve exact bytes", () => {
+	const beforeMarkdown = "## 1\\. TL;DR\r\n\r\n*Keep*";
+	const afterMarkdown = "## 1. TL;DR\n\n_Keep_\n";
+	const review = buildMarkdownReviewDocument({ beforeMarkdown, afterMarkdown });
+	expect(review.changes.map((change) => change.kind)).toEqual(["format"]);
+	expect(changeIds(review.doc)).toEqual([]);
+	for (const decision of ["keep", "undo"] as const) {
+		expect(
+			materializeMarkdownReviewDecisions(
+				review,
+				new Map([[review.changes[0]!.id, decision]]),
+			),
+		).toBe(decision === "keep" ? afterMarkdown : beforeMarkdown);
+	}
+});
+
+test("keeps EOF insertion separators independent of an earlier replacement", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "# Old\n\nStable",
+		afterMarkdown: "# New\n\nStable\n\nInserted",
+	});
+	const replacement = review.changes.find(
+		(change) => change.kind === "replace",
+	)!;
+	const insertion = review.changes.find((change) => change.kind === "insert")!;
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map([
+				[replacement.id, "undo"],
+				[insertion.id, "keep"],
+			]),
+		),
+	).toBe("# Old\n\nStable\n\nInserted");
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map([
+				[replacement.id, "keep"],
+				[insertion.id, "undo"],
+			]),
+		),
+	).toBe("# New\n\nStable");
+});
+
+test("respects semantic identities when a new block duplicates a moved block", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "Same.\n\nMiddle.\n",
+		afterMarkdown: "Same.\n\nMiddle.\n\nSame.\n",
+		beforeBlocks: [
+			{ id: "original", orderKey: "a", block: "Same." },
+			{ id: "middle", orderKey: "b", block: "Middle." },
+		],
+		afterBlocks: [
+			{ id: "copy", orderKey: "a", block: "Same." },
+			{ id: "middle", orderKey: "b", block: "Middle." },
+			{ id: "original", orderKey: "c", block: "Same." },
+		],
+	});
+	expect(
+		review.changes.map((change) => [change.kind, change.entityId]),
+	).toEqual(
+		expect.arrayContaining([
+			["move", "original"],
+			["insert", "copy"],
+		]),
+	);
+	expect(review.changes).toHaveLength(2);
+});
+
+test.each(["\n", "\r\n"])(
+	"keeps EOF deletion separators independent of an earlier replacement (%j)",
+	(newline) => {
+		const before = ["# Old", "", "Stable", "", "Deleted"].join(newline);
+		const after = ["# New", "", "Stable"].join(newline);
+		const review = buildMarkdownReviewDocument({
+			beforeMarkdown: before,
+			afterMarkdown: after,
+		});
+		const replacement = review.changes.find(
+			(change) => change.kind === "replace",
+		)!;
+		const deletion = review.changes.find((change) => change.kind === "delete")!;
+		for (const replacementDecision of ["keep", "undo"] as const) {
+			for (const deletionDecision of ["keep", "undo"] as const) {
+				const decisions = new Map([
+					[replacement.id, replacementDecision],
+					[deletion.id, deletionDecision],
+				]);
+				const expected = [
+					replacementDecision === "keep" ? "# New" : "# Old",
+					"",
+					"Stable",
+					...(deletionDecision === "undo" ? ["", "Deleted"] : []),
+				].join(newline);
+				expect(materializeMarkdownReviewDecisions(review, decisions)).toBe(
+					expected,
+				);
+				expect(markdownDoc(expected)).toEqual(
+					resolveMarkdownReviewDocumentChanges(review.doc, decisions),
+				);
+			}
+		}
+	},
+);
+
+test("respects duplicate semantic identities above the greedy alignment threshold", () => {
+	const stable = Array.from({ length: 500 }, (_, index) => ({
+		id: `stable-${index}`,
+		orderKey: `b${String(index).padStart(3, "0")}`,
+		block: `Paragraph ${index}.`,
+	}));
+	const original = { id: "original", orderKey: "a", block: "Same." };
+	const beforeBlocks = [original, ...stable];
+	const afterBlocks = [
+		{ ...original, id: "copy" },
+		...stable,
+		{ ...original, orderKey: "z" },
+	];
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: beforeBlocks.map((block) => block.block).join("\n\n"),
+		afterMarkdown: afterBlocks.map((block) => block.block).join("\n\n"),
+		beforeBlocks,
+		afterBlocks,
+	});
+	expect(
+		review.changes.map((change) => [change.kind, change.entityId]),
+	).toEqual(
+		expect.arrayContaining([
+			["move", "original"],
+			["insert", "copy"],
+		]),
+	);
+	expect(review.changes).toHaveLength(2);
+	for (const decision of ["keep", "undo"] as const) {
+		expect(
+			materializeMarkdownReviewDecisions(
+				review,
+				new Map(review.changes.map((change) => [change.id, decision])),
+			),
+		).toBe(decision === "keep" ? review.afterMarkdown : review.beforeMarkdown);
+	}
+});
+
+test.each(["[Link][target]", "![Image][target]"])(
+	"groups cross-block reference dependencies without losing localized review (%s)",
+	(reference) => {
+		const before = `${reference}\n\nOld tail.\n\n[target]: /before\n`;
+		const after = `${reference}\n\nNew tail.\n\n[target]: /after\n`;
+		const review = buildMarkdownReviewDocument({
+			beforeMarkdown: before,
+			afterMarkdown: after,
+		});
+		expect(review.changes).toHaveLength(1);
+		// The unchanged part of the tail should remain unmarked despite grouping.
+		expect(markedText(review.doc, "removed")).not.toContain("tail.");
+		for (const decision of ["keep", "undo"] as const) {
+			const decisions = new Map(
+				review.changes.map((change) => [change.id, decision]),
+			);
+			const materialized = materializeMarkdownReviewDecisions(
+				review,
+				decisions,
+			);
+			expect(materialized).toBe(decision === "keep" ? after : before);
+			expect(markdownDoc(materialized)).toEqual(
+				resolveMarkdownReviewDocumentChanges(review.doc, decisions),
+			);
+		}
+	},
+);
+
+test("keeps self-contained reference edits independently decidable", () => {
+	const before = "[Link][target]\n\n[target]: /before\n\nOld tail.\n";
+	const after = "[Link][target]\n\n[target]: /after\n\nNew tail.\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+	expect(review.changes).toHaveLength(2);
+	for (const linkDecision of ["keep", "undo"] as const) {
+		for (const tailDecision of ["keep", "undo"] as const) {
+			const decisions = new Map([
+				[review.changes[0]!.id, linkDecision],
+				[review.changes[1]!.id, tailDecision],
+			]);
+			const materialized = materializeMarkdownReviewDecisions(
+				review,
+				decisions,
+			);
+			expect(materialized).toContain(
+				linkDecision === "keep" ? "/after" : "/before",
+			);
+			expect(materialized).toContain(
+				tailDecision === "keep" ? "New tail." : "Old tail.",
+			);
+			expect(markdownDoc(materialized)).toEqual(
+				resolveMarkdownReviewDocumentChanges(review.doc, decisions),
+			);
+		}
+	}
+});

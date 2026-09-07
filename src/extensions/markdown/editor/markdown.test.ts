@@ -308,3 +308,29 @@ function collectNodes(node: any, type: string): any[] {
 	visit(node);
 	return out;
 }
+
+describe("reference definition precedence", () => {
+	test("the first definition wins for links and images", () => {
+		const ast = parseMarkdown(
+			'[link][ref] ![image][ref]\n\n[ref]: /first "first"\n[REF]: /second "second"\n',
+		);
+		expect(
+			ast.children[0].children
+				.filter((node: any) => node.url)
+				.map((node: any) => [node.url, node.title]),
+		).toEqual([
+			["/first", "first"],
+			["/first", "first"],
+		]);
+	});
+
+	test("nested definitions resolve throughout the document in source order", () => {
+		const ast = parseMarkdown(
+			"[link][ref]\n\n> [ref]: /nested\n\n[ref]: /later\n\n- ![image][ref]\n",
+		);
+		expect(ast.children[0].children[0].url).toBe("/nested");
+		expect(ast.children[2].children[0].children[0].children[0].url).toBe(
+			"/nested",
+		);
+	});
+});

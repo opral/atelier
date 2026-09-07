@@ -527,3 +527,92 @@ function individualShortcut(): "Meta+Shift+Enter" | "Control+Shift+Enter" {
 function isMacTestPlatform(): boolean {
 	return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 }
+
+test.each(["keep", "undo"] as const)(
+	"%s formatting without marking rendered content",
+	async (decision) => {
+		lix = await openLix();
+		const before = "## 1\\. TL;DR\n\n*Unchanged*";
+		const after = "## 1. TL;DR\n\n_Unchanged_\n";
+		const onComplete = vi.fn(async () => {});
+		const view = render(
+			<LixProvider lix={lix}>
+				<MarkdownReviewEditor
+					reviewDiff={{ beforeMarkdown: before, afterMarkdown: after }}
+					sourceFilePath="/format.md"
+					reviewEnabled
+					onComplete={onComplete}
+				/>
+			</LixProvider>,
+		);
+		await screen.findByText("Formatting changed");
+		expect(view.container.querySelector("[data-review-change-id]")).toBeNull();
+		fireEvent.click(screen.getByText("Show source diff"));
+		expect(screen.getByLabelText("Markdown source diff").textContent).toContain(
+			"TL;DR",
+		);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: decision === "keep" ? "Keep formatting" : "Undo formatting",
+			}),
+		);
+		await waitFor(() =>
+			expect(onComplete).toHaveBeenCalledWith(
+				decision === "keep" ? after : before,
+			),
+		);
+		view.unmount();
+	},
+);
+
+test("historical review follows changed revision props", async () => {
+	lix = await openLix();
+	const content = (beforeMarkdown: string, afterMarkdown: string) => (
+		<LixProvider lix={lix!}>
+			<MarkdownReviewEditor
+				reviewDiff={{ beforeMarkdown, afterMarkdown }}
+				sourceFilePath="/history.md"
+			/>
+		</LixProvider>
+	);
+	const view = render(content("Old alpha", "New alpha"));
+	await waitFor(() => expect(view.container).toHaveTextContent("alpha"));
+	view.rerender(content("*Beta*", "_Beta_\n"));
+	await screen.findByText("Formatting changed");
+	expect(view.container.querySelector(".ProseMirror")).toHaveTextContent(
+		"Beta",
+	);
+	expect(view.container.querySelector(".ProseMirror")).not.toHaveTextContent(
+		"alpha",
+	);
+	expect(screen.queryByRole("button", { name: "Keep formatting" })).toBeNull();
+	view.unmount();
+});
+
+test("completed formatting review does not resolve again through keyboard shortcuts", async () => {
+	lix = await openLix();
+	const onComplete = vi.fn(async () => {});
+	const view = render(
+		<LixProvider lix={lix}>
+			<MarkdownReviewEditor
+				reviewDiff={{ beforeMarkdown: "*Same*", afterMarkdown: "_Same_\n" }}
+				sourceFilePath="/format.md"
+				reviewEnabled
+				isActive
+				onComplete={onComplete}
+			/>
+		</LixProvider>,
+	);
+	await screen.findByText("Formatting changed");
+	fireEvent.click(screen.getByRole("button", { name: "Keep formatting" }));
+	await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+	const event = new KeyboardEvent("keydown", {
+		key: "Backspace",
+		bubbles: true,
+		cancelable: true,
+	});
+	await act(async () => window.dispatchEvent(event));
+	expect(onComplete).toHaveBeenCalledTimes(1);
+	expect(event.defaultPrevented).toBe(false);
+	view.unmount();
+});
