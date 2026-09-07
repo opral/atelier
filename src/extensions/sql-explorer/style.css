@@ -58,67 +58,6 @@
 		resize: vertical;
 	}
 
-	.atelier-sql-editor,
-	.atelier-sql-highlight {
-		position: absolute;
-		inset: 0;
-		margin: 0;
-		border: 0;
-		padding: 18px 24px 14px;
-		font-family: ui-monospace, "SF Mono", Menlo, monospace;
-		font-size: 12.5px;
-		line-height: 1.85;
-		white-space: pre;
-		tab-size: 4;
-	}
-
-	/* The highlight layer paints the text; the textarea above it keeps only
-	 * the caret and selection visible. Scroll positions are synced in JS. */
-	.atelier-sql-highlight {
-		overflow: hidden;
-		pointer-events: none;
-		color: var(--color-text-primary);
-	}
-
-	.atelier-sql-editor {
-		overflow: auto;
-		resize: none;
-		outline: none;
-		background: transparent;
-		color: transparent;
-		caret-color: var(--color-text-primary);
-	}
-
-	.atelier-sql-tok-keyword {
-		color: var(--color-brand-700);
-		font-weight: 600;
-	}
-
-	.atelier-sql-tok-string {
-		color: var(--color-success-700);
-	}
-
-	.atelier-sql-tok-number {
-		color: var(--color-warning-700);
-	}
-
-	.atelier-sql-tok-comment {
-		color: var(--color-text-quaternary);
-		font-style: italic;
-	}
-
-	.dark .atelier-sql-tok-keyword {
-		color: var(--color-brand-400);
-	}
-
-	.dark .atelier-sql-tok-string {
-		color: var(--color-success-400);
-	}
-
-	.dark .atelier-sql-tok-number {
-		color: var(--color-warning-400);
-	}
-
 	.atelier-sql-results table {
 		width: 100%;
 		border-collapse: collapse;
@@ -161,11 +100,6 @@
 			background: var(--color-bg-panel);
 		}
 
-		.atelier-sql-editor,
-		.atelier-sql-highlight {
-			padding: 12px 14px 10px;
-		}
-
 		.atelier-sql-runbar {
 			height: auto;
 			min-height: 40px;
@@ -205,5 +139,359 @@
 		.atelier-sql-grid-footer [data-attr="sql-grid-row-range"] {
 			white-space: nowrap;
 		}
+	}
+}
+
+@scope (.atelier-root) {
+	.atelier-sql-view {
+		position: relative;
+	}
+	.atelier-sql-query-view {
+		display: flex;
+		flex: 1;
+		min-width: 0;
+		min-height: 0;
+	}
+	.atelier-sql-sidebar {
+		padding: 12px 10px;
+	}
+	.atelier-sql-schema-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 8px 12px;
+		gap: 8px;
+	}
+	.atelier-sql-schema-heading > span,
+	.atelier-sql-schema-section h3 {
+		font-size: 10.5px;
+		font-weight: 650;
+		letter-spacing: 0.065em;
+		text-transform: uppercase;
+		color: var(--color-text-tertiary);
+	}
+	.atelier-sql-quiet-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 11.5px;
+		color: var(--color-text-secondary);
+		padding: 3px;
+		border-radius: 4px;
+	}
+	.atelier-sql-quiet-button:hover,
+	.atelier-sql-insert:hover {
+		background: var(--color-bg-hover);
+	}
+	.atelier-sql-sidebar button:focus-visible,
+	.atelier-sql-recent summary:focus-visible,
+	.atelier-sql-schema-toggle:focus-visible {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: 1px;
+	}
+	.atelier-sql-schema-search {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		min-height: 32px;
+		padding: 0 8px;
+		margin: 0 4px 6px;
+		border: 1px solid var(--color-border-panel);
+		border-radius: 6px;
+		color: var(--color-text-tertiary);
+	}
+	.atelier-sql-schema-search:focus-within {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: 1px;
+	}
+	.atelier-sql-schema-search input {
+		min-width: 0;
+		width: 100%;
+		outline: 0;
+		font-size: 12px;
+		color: var(--color-text-primary);
+		background: transparent;
+	}
+	.atelier-sql-schema-search button {
+		display: flex;
+	}
+	.atelier-sql-schema-section {
+		border-top: 1px solid var(--color-border-subtle);
+		padding-top: 14px;
+		margin-top: 12px;
+		flex-shrink: 0;
+	}
+	.atelier-sql-schema-section h3 {
+		padding: 0 8px 8px;
+	}
+	.atelier-sql-schema-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		min-height: 30px;
+		padding: 5px 8px;
+		text-align: left;
+		border-radius: 5px;
+		color: var(--color-text-secondary);
+	}
+	.atelier-sql-schema-row > svg {
+		flex-shrink: 0;
+		color: var(--color-icon-tertiary);
+	}
+	.atelier-sql-schema-row > span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font:
+			12px ui-monospace,
+			"SF Mono",
+			Menlo,
+			monospace;
+	}
+	.atelier-sql-schema-row:hover {
+		background: var(--color-bg-hover);
+	}
+	.atelier-sql-schema-row[aria-current="true"],
+	.atelier-sql-schema-row[aria-expanded="true"] {
+		background: var(--color-bg-brand-soft);
+		color: var(--color-text-primary);
+	}
+	.atelier-sql-schema-row[aria-expanded="true"] > svg {
+		color: var(--color-icon-brand);
+	}
+	.atelier-sql-function-detail {
+		margin: 8px;
+		padding-top: 10px;
+		border-top: 1px solid var(--color-border-subtle);
+		font-size: 12px;
+		color: var(--color-text-secondary);
+	}
+	.atelier-sql-function-detail strong {
+		display: block;
+		font-weight: 600;
+		margin-bottom: 6px;
+	}
+	.atelier-sql-function-detail code {
+		display: block;
+		font-size: 11px;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		margin: 4px 0;
+	}
+	.atelier-sql-function-detail p {
+		line-height: 1.6;
+		margin: 8px 0;
+	}
+	.atelier-sql-insert {
+		border: 1px solid var(--color-border-panel);
+		padding: 4px 8px;
+		border-radius: 5px;
+		font-size: 11.5px;
+	}
+	.atelier-sql-recent {
+		border-top: 1px solid var(--color-border-subtle);
+		margin-top: 16px;
+		padding-top: 12px;
+	}
+	.atelier-sql-recent summary {
+		cursor: pointer;
+		padding: 4px 8px;
+		color: var(--color-text-secondary);
+		font-size: 12px;
+	}
+	.atelier-sql-schema-note,
+	.atelier-sql-schema-error {
+		padding: 8px;
+		font-size: 12px;
+		color: var(--color-text-tertiary);
+	}
+	.atelier-sql-schema-error button {
+		margin-left: 6px;
+		text-decoration: underline;
+	}
+	.atelier-sql-editor-shell {
+		height: 220px;
+		min-height: 96px;
+		max-height: 65%;
+		flex-shrink: 0;
+		overflow: hidden;
+	}
+	.atelier-sql-codemirror {
+		height: 100%;
+	}
+	.atelier-sql-codemirror:focus-within {
+		box-shadow: inset 2px 0 var(--color-border-subtle);
+	}
+	.atelier-sql-runbar {
+		height: 40px;
+		padding: 0 16px;
+	}
+	.atelier-sql-results-label {
+		font-size: 11.5px;
+		color: var(--color-text-secondary);
+	}
+	.atelier-sql-results-label > span {
+		color: var(--color-text-tertiary);
+	}
+	.atelier-sql-schema-toggle,
+	.atelier-sql-schema-close {
+		display: none;
+	}
+	.cm-tooltip {
+		z-index: 100;
+		border: 1px solid var(--color-border-panel);
+		border-radius: 6px;
+		background: var(--color-bg-panel);
+		color: var(--color-text-primary);
+		font:
+			12px ui-monospace,
+			"SF Mono",
+			Menlo,
+			monospace;
+		box-shadow: 0 4px 12px #00000014;
+	}
+	.cm-tooltip-autocomplete > ul {
+		font:
+			12px ui-monospace,
+			"SF Mono",
+			Menlo,
+			monospace;
+		max-height: 216px;
+		min-width: 240px;
+		padding: 4px;
+	}
+	.cm-tooltip-autocomplete > ul > li {
+		padding: 6px 8px;
+		border-radius: 4px;
+	}
+	.cm-tooltip-autocomplete > ul > li[aria-selected] {
+		background: var(--color-bg-brand-soft);
+		color: var(--color-text-primary);
+	}
+	.cm-completionDetail {
+		font:
+			11px system-ui,
+			sans-serif;
+		margin-left: 18px;
+		color: var(--color-text-tertiary);
+	}
+	.cm-completionInfo {
+		padding: 10px 12px;
+		white-space: pre-line;
+		font:
+			12px/1.6 system-ui,
+			sans-serif;
+		max-width: 300px;
+	}
+	.atelier-sql-argument-hint {
+		padding: 6px 10px;
+		font:
+			11.5px/1.5 ui-monospace,
+			"SF Mono",
+			Menlo,
+			monospace;
+		max-width: min(540px, 90vw);
+		white-space: normal;
+	}
+	.atelier-sql-argument-hint strong {
+		color: var(--color-brand-700);
+	}
+	@container (max-width:559px) {
+		.atelier-sql-schema-toggle {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			position: absolute;
+			z-index: 4;
+			top: 6px;
+			left: 12px;
+			font-size: 12px;
+			color: var(--color-text-secondary);
+		}
+		.atelier-sql-query-view {
+			padding-top: 30px;
+		}
+		.atelier-sql-view[data-schema-open] > .atelier-sql-sidebar {
+			display: flex;
+			position: absolute;
+			inset: 0 auto 0 0;
+			width: min(300px, 100%) !important;
+			max-width: 100%;
+			z-index: 5;
+			background: var(--color-bg-panel);
+			box-shadow: 4px 0 16px #00000014;
+			border-right: 1px solid var(--color-border-panel);
+		}
+		.atelier-sql-schema-close {
+			display: flex;
+		}
+		.atelier-sql-editor-shell {
+			height: 190px;
+		}
+		.atelier-sql-results-label {
+			display: none;
+		}
+	}
+}
+
+@scope (.atelier-root) {
+	/* Match CodeMirror's theme specificity, including its portalled tooltip wrapper. */
+	.cm-tooltip.cm-tooltip {
+		border: 1px solid var(--color-border-panel);
+		border-radius: 6px;
+		background: var(--color-bg-panel);
+		color: var(--color-text-primary);
+		box-shadow: 0 4px 12px #00000014;
+	}
+	.atelier-sql-completion.cm-tooltip.cm-tooltip-autocomplete > ul {
+		font:
+			12px/1.6 ui-monospace,
+			"SF Mono",
+			Menlo,
+			monospace;
+		max-height: 216px;
+		min-width: 300px;
+		padding: 4px;
+	}
+	.atelier-sql-completion.cm-tooltip.cm-tooltip-autocomplete > ul > li {
+		padding: 5px 8px;
+		border-radius: 4px;
+	}
+	.atelier-sql-completion.cm-tooltip.cm-tooltip-autocomplete
+		> ul
+		> li[aria-selected] {
+		background: var(--color-bg-brand-soft);
+		color: var(--color-text-primary);
+	}
+	.atelier-sql-completion.cm-tooltip .cm-completionDetail {
+		font:
+			11px/1.6 system-ui,
+			sans-serif;
+		margin-left: 18px;
+		color: var(--color-text-tertiary);
+		float: right;
+	}
+	.atelier-sql-completion.cm-tooltip .cm-completionMatchedText {
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.atelier-sql-completion.cm-tooltip::after {
+		content: "↑↓ navigate   ·   Tab insert   ·   Esc close";
+		display: block;
+		padding: 7px 12px;
+		border-top: 1px solid var(--color-border-subtle);
+		font:
+			10.5px/1.5 system-ui,
+			sans-serif;
+		color: var(--color-text-tertiary);
+	}
+	.cm-tooltip.cm-completionInfo {
+		padding: 10px 12px;
+		white-space: pre-line;
+		font:
+			12px/1.6 system-ui,
+			sans-serif;
+		max-width: 300px;
 	}
 }

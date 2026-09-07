@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { EditorView } from "@codemirror/view";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import {
 	buildTableQuery,
@@ -11,7 +18,6 @@ import {
 	refineJsonColumns,
 	SqlExplorerView,
 	surfaceTableName,
-	tokenizeSql,
 } from "./index";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 
@@ -33,6 +39,9 @@ describe("friendlyDataType", () => {
 describe("isReadOnlyStatement", () => {
 	test.each([
 		["SELECT * FROM lix_file", true],
+		['SELECT * FROM "lix_create_checkpoint"()', false],
+		["SELECT * FROM lix_create_checkpoint()", false],
+		["SELECT 'lix_create_checkpoint()' AS example", true],
 		["  with x as (select 1) select * from x", true],
 		["-- comment\nSELECT 1", true],
 		["/* block */ EXPLAIN SELECT 1", true],
@@ -41,36 +50,6 @@ describe("isReadOnlyStatement", () => {
 		["DELETE FROM lix_file", false],
 	])("classifies %s", (sqlText, readOnly) => {
 		expect(isReadOnlyStatement(sqlText)).toBe(readOnly);
-	});
-});
-
-describe("tokenizeSql", () => {
-	test("classifies keywords, strings, numbers, and comments", () => {
-		const tokens = tokenizeSql(
-			"SELECT path FROM lix_file WHERE path LIKE '%.md' LIMIT 10 -- top files",
-		);
-		const byKind = (kind: string) =>
-			tokens.filter((token) => token.kind === kind).map((token) => token.text);
-		expect(byKind("keyword")).toEqual([
-			"SELECT",
-			"FROM",
-			"WHERE",
-			"LIKE",
-			"LIMIT",
-		]);
-		expect(byKind("string")).toEqual(["'%.md'"]);
-		expect(byKind("number")).toEqual(["10"]);
-		expect(byKind("comment")).toEqual(["-- top files"]);
-	});
-
-	test("round-trips the input text exactly", () => {
-		const text =
-			"/* block */ select count(*) from t where a = 'it''s' and b = 1.5";
-		expect(
-			tokenizeSql(text)
-				.map((token) => token.text)
-				.join(""),
-		).toBe(text);
 	});
 });
 
@@ -316,7 +295,16 @@ describe("SqlExplorerView", () => {
 			await waitFor(() => expect(runButton).toBeEnabled());
 
 			const editor = screen.getByRole("textbox", { name: "SQL query" });
-			fireEvent.change(editor, { target: { value: "SELECT 43 AS answer;" } });
+			act(() => {
+				const view = EditorView.findFromDOM(editor)!;
+				view.dispatch({
+					changes: {
+						from: 0,
+						to: view.state.doc.length,
+						insert: "SELECT 43 AS answer;",
+					},
+				});
+			});
 			failNextQuery = true;
 			fireEvent.click(runButton);
 
@@ -397,6 +385,78 @@ describe("SqlExplorerView", () => {
 				screen.queryByRole("dialog", { name: "snapshot_content JSON" }),
 			).not.toBeInTheDocument(),
 		);
+	});
+
+	test("row references retain their type through aliases and open with an exact copy", async () => {
+		const query = "SELECT lix_row_ref('lix_key_value', 'hello') AS target";
+		const result = await lix.execute(query);
+		const reference = result.rows[0]!.target;
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+		try {
+			render(
+				<SqlExplorerView
+					lix={lix}
+					readOnly={false}
+					instanceId="test-row-ref"
+					initialQuery={query}
+				/>,
+			);
+			fireEvent.click(screen.getByRole("button", { name: /Run/ }));
+			const chip = await screen.findByRole("button", {
+				name: "row_ref",
+			});
+			expect(screen.queryByText(String(reference), { exact: true })).toBeNull();
+			fireEvent.click(chip);
+			const dialog = await screen.findByRole("dialog", {
+				name: "target row_ref",
+			});
+			expect(dialog).toHaveTextContent(String(reference));
+			fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+			await waitFor(() => expect(writeText).toHaveBeenCalledWith(reference));
+			fireEvent.keyDown(document, { key: "Escape" });
+			expect(
+				screen.queryByRole("dialog", { name: "target row_ref" }),
+			).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	test("discovers table functions, filters schema and inserts at the saved cursor without running", async () => {
+		render(
+			<SqlExplorerView
+				lix={lix}
+				readOnly={false}
+				instanceId="test-function-insert"
+				initialQuery="SELECT * FROM "
+			/>,
+		);
+		const functionRow = await screen.findByRole("button", {
+			name: "lix_state_at",
+		});
+		expect(
+			screen.queryByRole("button", { name: "lix_working_diff" }),
+		).toBeNull();
+		const editor = screen.getByRole("textbox", { name: "SQL query" });
+		const view = EditorView.findFromDOM(editor)!;
+		act(() => view.dispatch({ selection: { anchor: view.state.doc.length } }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Search schema" }), {
+			target: { value: "state_at" },
+		});
+		expect(screen.queryByRole("button", { name: "lix_file" })).toBeNull();
+		fireEvent.click(functionRow);
+		fireEvent.click(screen.getByRole("button", { name: "Insert call" }));
+		expect(view.state.doc.toString()).toBe(
+			"SELECT * FROM lix_state_at('relation', 'commit_id')",
+		);
+		expect(
+			view.state.sliceDoc(
+				view.state.selection.main.from,
+				view.state.selection.main.to,
+			),
+		).toBe("relation");
+		expect(screen.getByText("Run a query to see results.")).toBeInTheDocument();
 	});
 
 	test("filter chips build a filtered table view", async () => {
