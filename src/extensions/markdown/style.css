@@ -1,4 +1,25 @@
 @scope (.atelier-root) {
+	.atelier-markdown-link-card {
+		position: fixed;
+		z-index: 100;
+		max-width: min(360px, calc(100vw - 16px));
+		padding: 12px 14px;
+		border: 1px solid var(--color-border-panel);
+		border-radius: 10px;
+		background: var(--color-bg-panel);
+		color: var(--color-text-secondary);
+		box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+		font-size: 12px;
+		line-height: 1.5;
+		pointer-events: auto;
+	}
+	.atelier-markdown-link-card strong {
+		color: var(--color-text-primary);
+	}
+	.atelier-markdown-link-path {
+		margin: 4px 0;
+		overflow-wrap: anywhere;
+	}
 	/* Markdown view scoped styles */
 
 	/* Remove focus outline */
