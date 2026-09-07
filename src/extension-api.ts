@@ -186,48 +186,6 @@ export type AtelierDocumentsApi = {
 };
 
 /** Product-domain events emitted for hosts that own analytics or auditing. */
-/**
- * Quick Look-style file preview: the extension that owns a file type renders
- * it, the host owns the frame. The contract is chromeless — a preview
- * renders flush with no outer padding, margins, toolbars, or internal
- * scrolling, so hosts control spacing and clipping. Previews load their own
- * content from the given identity; a live target stays live.
- *
- * Every diff pins both sides. A working diff carries the exact HOT epoch that
- * certified its bytes; an immutable diff names its target commit. There is no
- * "base commit to implicit live target" mode because that can combine rows
- * from different repository generations.
- */
-type AtelierFilePreviewIdentity = {
-	readonly lix: Lix;
-	readonly fileId: string;
-	readonly filePath: string;
-};
-
-export type AtelierFilePreviewProps = AtelierFilePreviewIdentity &
-	(
-		| {
-				/** No target and no diff renders the current live document. */
-				readonly targetCommitId?: null;
-				readonly diff?: null;
-		  }
-		| {
-				/** Render an immutable target, optionally diffed from an immutable base. */
-				readonly targetCommitId: string;
-				readonly diff?: { readonly baseCommitId: string | null } | null;
-		  }
-		| {
-				readonly targetCommitId?: null;
-				/** Render both sides from one certified HOT working epoch. */
-				readonly diff: {
-					readonly workingEpoch: {
-						readonly beforeCommitId: string;
-						readonly afterCommitId: string;
-					};
-				};
-		  }
-	);
-
 export type AtelierEvent =
 	| {
 			type: "document_open_attempted";

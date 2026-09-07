@@ -53,7 +53,11 @@ export function normalizeEditorRevisionState(
 export function editorRevisionMode(
 	revision: EditorRevisionState,
 ): EditorRevisionMode {
-	if (revision.beforeCommitId) return "diff";
+	if (
+		revision.beforeCommitId ||
+		(!revision.beforeExists && revision.afterCommitId)
+	)
+		return "diff";
 	if (revision.afterCommitId) return "snapshot";
 	return "editor";
 }

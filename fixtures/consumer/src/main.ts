@@ -1,14 +1,14 @@
 import type { Lix } from "@lix-js/sdk";
 import {
 	Atelier,
-	createAtelier,
-	type AtelierProps,
+	type AtelierShellProps,
+	type AtelierShellHandle,
 	type AtelierSlots,
 	type AtelierTopBarProps,
 } from "@opral/atelier";
 import { fileIconUrl } from "@opral/atelier/file-icons";
 import "@opral/atelier/style.css";
-import { createElement } from "react";
+import { createElement, createRef } from "react";
 import { createRoot } from "react-dom/client";
 
 export function mountAtelier(lix: Lix): void {
@@ -18,23 +18,17 @@ export function mountAtelier(lix: Lix): void {
 		navbarStart: null,
 		navbarEnd: null,
 	} satisfies AtelierSlots;
-	const atelier = createAtelier({ lix });
+	const ref = createRef<AtelierShellHandle>();
 	const topBarProps = {
 		"data-host-titlebar": true,
 	} satisfies AtelierTopBarProps;
-	const openDocument: (path: string) => Promise<void> = atelier.documents.open;
-	const startNewDocument: () => Promise<void> = atelier.documents.startNew;
-	const closeActiveDocument: () => Promise<void> =
-		atelier.documents.closeActive;
 	createRoot(element).render(
-		createElement(Atelier, { instance: atelier, slots, topBarProps }),
+		createElement(Atelier.Shell, { lix, ref, slots, topBarProps }),
 	);
 
-	const props: AtelierProps = { instance: atelier, slots, topBarProps };
+	const props: AtelierShellProps = { lix, slots, topBarProps };
 	void Atelier;
 	void props;
-	void openDocument;
-	void startNewDocument;
-	void closeActiveDocument;
+	void createElement(Atelier.FileView, { lix, fileId: "file", readOnly: true });
 	void fileIconUrl("/README.md");
 }

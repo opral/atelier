@@ -2284,16 +2284,16 @@
 /* Embedded host preview (e.g. the repository home's README): the host owns
    spacing and scrolling, so the document renders flush — no editor gutters,
    no viewport-filling minimums, no inner scroll container. */
-.markdown-view.markdown-embedded-preview .tiptap-container {
+.atelier-file-view .markdown-view .tiptap-container {
 	height: auto;
 	overflow-y: visible;
 }
 
-.markdown-view.markdown-embedded-preview .tiptap {
+.atelier-file-view .markdown-view .tiptap {
 	min-height: 0;
 }
 
-.markdown-view.markdown-embedded-preview .ProseMirror {
+.atelier-file-view .markdown-view .ProseMirror {
 	min-height: 0;
 	padding: 0;
 }

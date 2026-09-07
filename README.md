@@ -8,7 +8,7 @@ Atelier is the workspace engine inside any host. The included web preview demons
 
 Atelier is two things at once:
 
-1. **The embeddable workspace shell** — mount `<Atelier />` and get the full editor, files, history, and review surface.
+1. **The embeddable workspace shell** — mount `<Atelier.Shell lix={lix} />` and get the full editor, files, history, and review surface.
 2. **A library of workspace components for building Lix applications** — the same extensions that power the shell are composable on their own. Building a Lix app and want to render Markdown, preview a file, or show a change? The extension that owns the file type does the rendering; your app owns the frame.
 
 The second story is the direction: plug-and-play workspace UI, batteries included, powered by extensions.
@@ -18,21 +18,25 @@ The second story is the direction: plug-and-play workspace UI, batteries include
 Any surface in a host app can render a file — live, at a commit, or as a change — through the extension that owns its file type:
 
 ```tsx
-import { AtelierFilePreview } from "@opral/atelier";
+import { Atelier } from "@opral/atelier";
 
 // The live document.
-<AtelierFilePreview lix={lix} fileId={id} filePath="/README.md" />
+<Atelier.FileView lix={lix} fileId={id} readOnly />
 
 // The document as of a commit.
-<AtelierFilePreview lix={lix} fileId={id} filePath="/README.md"
+<Atelier.FileView lix={lix} fileId={id} filePath="/README.md"
 	targetCommitId={commitId} />
 
 // The change since a base — the same presentation the review surface shows.
-<AtelierFilePreview lix={lix} fileId={id} filePath="/README.md"
-	diff={{ baseCommitId }} />
+<Atelier.FileView lix={lix} fileId={id} filePath="/README.md"
+	targetCommitId={commitId} diff={{ baseCommitId }} />
 ```
 
-Previews are chromeless by contract: no outer padding, no toolbars, no internal scrolling — the host owns the frame. Extensions opt in by setting `filePreview` on their definition; file-type resolution rides the same registry that routes opening files.
+`FileView` mounts the same file extension as the shell, without tabs or panels.
+It discovers bundled, host-provided (`extensions`), and Lix-installed extensions
+through the same registry. No separate preview implementation is required.
+Pass `readOnly` to disable editing; omit it to edit. Use `onOpenFile` to route
+document links in your host. The host owns the supplied Lix and closes it after unmount.
 
 ## Why "Atelier"?
 
@@ -44,42 +48,36 @@ That's this component's job. Lix holds the workspace — the files, the history,
 
 ```tsx
 import { openLix } from "@lix-js/sdk";
-import { Atelier, createAtelier } from "@opral/atelier";
+import { Atelier, type AtelierShellHandle } from "@opral/atelier";
+import { createRef } from "react";
 import "@opral/atelier/style.css";
 
 // The host creates and owns the lix.
 const lix = await openLix();
-const atelier = createAtelier({
-	lix,
-});
+const shell = createRef<AtelierShellHandle>();
 
-<Atelier
-	instance={atelier}
+<Atelier.Shell
+	lix={lix}
+	ref={shell}
 	slots={{
 		navbarStart: <a href="/">Host home</a>,
-		navbarEnd: ({ currentFile }) =>
-			currentFile ? <ShareButton file={currentFile} /> : null,
+		navbarEnd: <AccountMenu />,
 	}}
 />;
 ```
 
-The instance is the programmatic workspace API and exposes its host-owned Lix:
+The mounted shell exposes document and view commands through its ref:
 
 ```ts
-atelier.lix;
-await atelier.documents.open("/notes/idea.md");
-await atelier.documents.startNew();
-await atelier.documents.closeActive();
-
-await atelier.diff.open({
-	beforeCommitId,
-	afterCommitId,
-	source: { id: "claude" },
-});
+await shell.current?.documents.open("/notes/idea.md");
+await shell.current?.documents.startNew();
+await shell.current?.documents.closeActive();
 ```
 
-Document commands issued before `<Atelier>` mounts are queued and executed in
-order once the shell is ready.
+The ref becomes available at mount. Commands issued while the shell is loading
+are queued until its runtime is ready. `Atelier.ShellSkeleton` provides the
+workspace loading frame. Configuration (state stores, branch session, extensions,
+events, and debug integration) is passed directly as shell props.
 
 Host extensions are passed as `{ manifest, entry }` registrations. The host
 manifest describes the view while `entry` supplies its already-loaded icon and
