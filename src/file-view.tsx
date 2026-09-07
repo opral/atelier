@@ -134,7 +134,10 @@ function FileViewContent(props: AtelierFileViewProps) {
 		installed.status === "success",
 	);
 	const { extensionMap } = useExtensionRegistry();
-	const path = file.rows[0]?.path ?? props.filePath;
+	const path =
+		props.targetCommitId || props.diff
+			? (props.filePath ?? file.rows[0]?.path)
+			: file.rows[0]?.path;
 	const definition = path
 		? findFileHandlerExtension(extensionMap.values(), path)
 		: undefined;

@@ -3,7 +3,7 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { selectWorkingFileDiffSnapshot } from "@/queries";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import type { AtelierFileViewProps } from "@/file-view";
 import { FileView } from "@/file-view";
