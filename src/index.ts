@@ -1,5 +1,6 @@
-export { Atelier, AtelierSkeleton } from "./create-atelier";
-export { createAtelier } from "./atelier-instance";
+export { Atelier } from "./atelier";
+export type { AtelierShellProps, AtelierShellHandle } from "./atelier";
+export type { AtelierFileViewProps } from "./file-view";
 export {
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
@@ -13,8 +14,6 @@ export { useDebouncedPayloadPersistence } from "./extension-runtime/use-debounce
 export type { DebouncedPayloadPersistenceOptions } from "./extension-runtime/use-debounced-payload-persistence";
 export type {
 	AtelierCentralPanelOptions,
-	AtelierInstance,
-	AtelierOptions,
 	AtelierSidePanel,
 } from "./atelier-instance";
 export type {
@@ -35,7 +34,6 @@ export type {
 	AtelierErrorFallback,
 	AtelierErrorFallbackContext,
 	AtelierPanelSide,
-	AtelierProps,
 	AtelierSkeletonProps,
 	AtelierSlots,
 	AtelierTabStripContext,
@@ -71,14 +69,12 @@ export type {
 	ExtensionManifest,
 	ExtensionRuntimeEntry,
 } from "./extension-api";
-export { AtelierFilePreview } from "./file-preview";
 export {
 	deleteWorkspaceEntry,
 	renameWorkspaceEntry,
 	WorkspacePathTakenError,
 } from "./lib/workspace-file-ops";
 export type { WorkspaceEntryRef } from "./lib/workspace-file-ops";
-export type { AtelierFilePreviewProps } from "./extension-api";
 export { AtelierDeveloperTools } from "./dev-tools/developer-tools-menu";
 export {
 	applyDeveloperWorkflowScenario,

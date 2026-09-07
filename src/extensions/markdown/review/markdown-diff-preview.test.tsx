@@ -5,29 +5,27 @@ import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { selectWorkingFileDiffSnapshot } from "@/queries";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import type { AtelierFilePreviewProps } from "@/extension-api";
-import { MarkdownFilePreview } from "./markdown-diff-preview";
+import type { AtelierFileViewProps } from "@/file-view";
+import { FileView } from "@/file-view";
 
-describe("MarkdownFilePreview", () => {
+describe("FileView", () => {
 	test("fails closed for the removed base-to-implicit-live contract", () => {
 		const legacyProps = {
 			lix: {},
 			fileId: "file",
 			filePath: "/file.md",
 			diff: { baseCommitId: "base" },
-		} as unknown as AtelierFilePreviewProps;
+		} as unknown as AtelierFileViewProps;
 
-		render(<MarkdownFilePreview {...legacyProps} />);
-
-		expect(screen.getByRole("alert")).toHaveTextContent(
-			/current, certified diff/i,
+		expect(() => render(<FileView {...legacyProps} />)).toThrow(
+			/explicit target commit/,
 		);
 	});
 });
 
 // The public contract must make both sides of every diff explicit.
-const workingPreview: AtelierFilePreviewProps = {
-	lix: {} as AtelierFilePreviewProps["lix"],
+const workingPreview: AtelierFileViewProps = {
+	lix: {} as AtelierFileViewProps["lix"],
 	fileId: "file",
 	filePath: "/file.md",
 	diff: {
@@ -37,8 +35,8 @@ const workingPreview: AtelierFilePreviewProps = {
 void workingPreview;
 
 // @ts-expect-error A historical base may not be paired with implicit live state.
-const implicitLiveDiff: AtelierFilePreviewProps = {
-	lix: {} as AtelierFilePreviewProps["lix"],
+const implicitLiveDiff: AtelierFileViewProps = {
+	lix: {} as AtelierFileViewProps["lix"],
 	fileId: "file",
 	filePath: "/file.md",
 	diff: { baseCommitId: "base" },
@@ -92,19 +90,19 @@ test.each(["working", "historical"] as const)(
 				encoder.encode("newer image"),
 				imageId,
 			]);
-			const target: Pick<AtelierFilePreviewProps, "targetCommitId" | "diff"> =
+			const target: Pick<AtelierFileViewProps, "targetCommitId" | "diff"> =
 				kind === "working"
 					? { diff: { workingEpoch: epoch } }
 					: { targetCommitId: epoch.afterCommitId };
 			view = render(
 				<LixProvider lix={lix}>
-					<MarkdownFilePreview
+					<FileView
 						{...({
 							lix,
 							fileId,
 							filePath: "/file.md",
 							...target,
-						} as AtelierFilePreviewProps)}
+						} as AtelierFileViewProps)}
 					/>
 				</LixProvider>,
 			);

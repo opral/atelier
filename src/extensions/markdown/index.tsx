@@ -29,7 +29,6 @@ import { createEditor } from "@/extensions/markdown/editor/create-editor";
 import { useTitleDrivenFileRename } from "@/extensions/markdown/editor/use-title-driven-rename";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
 import { MarkdownReviewEditor } from "./review/review-editor";
-import { MarkdownFilePreview } from "./review/markdown-diff-preview";
 import { MarkdownReviewExtensions } from "./review/review-extension";
 import "./style.css";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -423,7 +422,7 @@ function MarkdownLiveViewLoaded({
 						reviewLocked ? "markdown-review" : ""
 					}`}
 				>
-					<FormattingToolbar disabled={editorReadOnly} />
+					{!readOnly && <FormattingToolbar disabled={editorReadOnly} />}
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						<TipTapEditor
 							className="h-full"
@@ -1058,7 +1057,6 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display file contents.",
 	icon: FileText,
-	filePreview: MarkdownFilePreview,
 	component: ({ atelier, view }) => (
 		<MarkdownView
 			fileId={view.state.fileId as string}

@@ -72,10 +72,9 @@ import {
 } from "../extension-runtime/extension-registry";
 import {
 	installedExtensionFilesQuery,
-	loadInstalledExtensionsFromRows,
-	reconcileInstalledExtensionCandidates,
 	type InstalledExtensionFileRow,
 } from "../extension-runtime/installed-extension-loader";
+import { useInstalledExtensionRegistry } from "../extension-runtime/use-installed-extension-registry";
 import { PanelTabPreview, PanelTabStrip } from "./panel-v2";
 import {
 	buildFileExtensionProps,
@@ -1164,21 +1163,13 @@ function LayoutShellLoadedContentResolved({
 			}
 		}
 	}, [currentFileIds]);
-	const [installedExtensionLoad, setInstalledExtensionLoad] = useState<{
-		readonly rows: readonly InstalledExtensionFileRow[];
-		readonly status: "loading" | "ready" | "error";
-	}>(() => ({ rows: installedExtensionRows, status: "loading" }));
-	const installedExtensionLoadStatus =
-		installedExtensionLoad.rows === installedExtensionRows
-			? installedExtensionLoad.status
-			: "loading";
-	const preserveUnknownExtensionKinds =
-		!installedExtensionsReady || installedExtensionLoadStatus !== "ready";
-	const installedExtensionsByManifestRef = useRef(
-		new Map<string, ExtensionDefinition>(),
+	const installedExtensionLoad = useInstalledExtensionRegistry(
+		installedExtensionRows,
+		installedExtensionsReady,
 	);
-	const { extensionMap, visibleExtensions, replaceInstalledExtensions } =
-		useExtensionRegistry();
+	const preserveUnknownExtensionKinds =
+		installedExtensionLoad.status !== "ready";
+	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const centralPanelOptions = configuration.centralPanel;
 	const centralBehavior = useMemo<CentralSlotBehavior>(() => {
 		const centralKinds = new Set<ExtensionKind>();
@@ -1672,46 +1663,6 @@ function LayoutShellLoadedContentResolved({
 	useEffect(() => {
 		viewHostRegistry.pruneHosts(activeInstances);
 	}, [viewHostRegistry, activeInstances]);
-
-	useEffect(() => {
-		if (!installedExtensionsReady) return;
-		let cancelled = false;
-		void loadInstalledExtensionsFromRows(installedExtensionRows)
-			.then((candidates) => {
-				if (cancelled) return;
-				const next = reconcileInstalledExtensionCandidates(
-					installedExtensionsByManifestRef.current,
-					candidates,
-				);
-				installedExtensionsByManifestRef.current = next;
-				replaceInstalledExtensions([...next.values()]);
-				setInstalledExtensionLoad({
-					rows: installedExtensionRows,
-					// Candidate-level failures retain their last-known-good definition.
-					// Discovery still completed, so unrelated missing kinds can be pruned.
-					status: "ready",
-				});
-			})
-			.catch((error: unknown) => {
-				if (cancelled) return;
-				console.warn(
-					"[extension-loader] failed to load installed extensions",
-					error,
-				);
-				setInstalledExtensionLoad({
-					rows: installedExtensionRows,
-					status: "error",
-				});
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		installedExtensionRows,
-		installedExtensionsReady,
-		replaceInstalledExtensions,
-	]);
 
 	const updateUiState = useCallback(
 		(reducer: (current: AtelierUiState) => AtelierUiState) => {

@@ -2,13 +2,11 @@ import "./index.css";
 
 export {
 	Atelier,
-	AtelierSkeleton,
 	ATELIER_BUILTIN_EXTENSION_IDS,
 	AtelierDeveloperTools,
 	applyDeveloperWorkflowScenario,
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
-	createAtelier,
 	createLixBranchSession,
 	createMemoryPreferencesStore,
 	createMemoryReviewStatusStore,
@@ -16,7 +14,6 @@ export {
 	deleteWorkspaceEntry,
 	renameWorkspaceEntry,
 	simulateMarkdownAgentWorkflow,
-	AtelierFilePreview,
 	WorkspacePathTakenError,
 } from "./index";
 export type {
@@ -25,10 +22,9 @@ export type {
 	AtelierBranchSession,
 	AtelierDocumentsApi,
 	AtelierDocumentOpenOptions,
-	AtelierInstance,
-	AtelierOptions,
+	AtelierShellHandle,
+	AtelierShellProps,
 	AtelierPreferencesStore,
-	AtelierProps,
 	AtelierReviewOutcome,
 	AtelierReviewResolution,
 	AtelierReviewStatusStore,
@@ -37,7 +33,7 @@ export type {
 	AtelierSidePanel,
 	AtelierSlots,
 	AtelierUserPreferencesV1,
-	AtelierFilePreviewProps,
+	AtelierFileViewProps,
 	DeveloperWorkflowScenario,
 	SimulatedAgentWorkflow,
 	WorkspaceEntryRef,

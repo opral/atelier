@@ -4,7 +4,6 @@ import { OpfsStorage } from "@lix-js/storage-opfs";
 import {
 	Atelier,
 	AtelierDeveloperTools,
-	createAtelier,
 	createLixBranchSession,
 } from "@opral/atelier";
 import { useState, useSyncExternalStore } from "react";
@@ -29,27 +28,20 @@ async function start() {
 function PreviewApp({ lix }: { readonly lix: Lix }) {
 	const [currentFile, setCurrentFile] = useState<string | null>(null);
 	const [branchSession] = useState(() => createLixBranchSession(lix));
-	const [atelier] = useState(() =>
-		createAtelier({
-			lix,
-			branchSession,
-			onEvent: (event) => {
-				if (event.type === "document_viewed") {
-					setCurrentFile(event.filePath);
-				} else if (event.type === "document_closed") {
-					setCurrentFile(event.nextFilePath);
-				}
-			},
-		}),
-	);
 	const branchId = useSyncExternalStore(
 		branchSession.subscribe,
 		branchSession.getSnapshot,
 		branchSession.getSnapshot,
 	);
 	return (
-		<Atelier
-			instance={atelier}
+		<Atelier.Shell
+			lix={lix}
+			branchSession={branchSession}
+			onEvent={(event) => {
+				if (event.type === "document_viewed") setCurrentFile(event.filePath);
+				else if (event.type === "document_closed")
+					setCurrentFile(event.nextFilePath);
+			}}
 			slots={{
 				navbarBrand: <HostBrandMark />,
 				navbarRepository: <HostRepositoryPicker />,

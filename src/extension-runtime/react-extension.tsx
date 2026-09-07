@@ -25,8 +25,6 @@ export function createReactExtensionDefinition(args: {
 	icon: LucideIcon;
 	menuItems?: AtelierExtensionMenuItems;
 	component: ReactRenderer;
-	/** Quick Look renderer for this extension's file types. */
-	filePreview?: ExtensionDefinition["filePreview"];
 }): ExtensionDefinition {
 	const ROOT_SLOT = Symbol.for("atelier.reactRoot");
 
@@ -38,7 +36,6 @@ export function createReactExtensionDefinition(args: {
 		fileExtensions: normalizeFileExtensions(args.manifest.fileExtensions),
 		...(args.manifest.placement ? { placement: args.manifest.placement } : {}),
 		...(args.menuItems ? { menuItems: args.menuItems } : {}),
-		...(args.filePreview ? { filePreview: args.filePreview } : {}),
 		mount: ({ atelier, view, element }) => {
 			let root = (element as unknown as Record<symbol, Root | undefined>)[
 				ROOT_SLOT
