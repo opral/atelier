@@ -210,7 +210,9 @@ describe("MarkdownView", () => {
 		expect(
 			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
 		).not.toBeInTheDocument();
-		expect(screen.queryByRole("button", { name: "Bold" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Bold" }),
+		).not.toBeInTheDocument();
 
 		await act(async () => {
 			utils?.unmount();

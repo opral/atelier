@@ -66,6 +66,16 @@ export type AtelierFileViewProps = {
 
 const EMPTY_EXTENSIONS: readonly AtelierExtensionRegistration[] = [];
 const loading = <div role="status">Opening file…</div>;
+const lixKeys = new WeakMap<Lix, number>();
+let nextLixKey = 0;
+function lixKey(lix: Lix) {
+	let key = lixKeys.get(lix);
+	if (key === undefined) {
+		key = ++nextLixKey;
+		lixKeys.set(lix, key);
+	}
+	return key;
+}
 
 /** The same extension mount used by the workspace, without workspace chrome. */
 export function FileView(props: AtelierFileViewProps) {
@@ -85,7 +95,7 @@ export function FileView(props: AtelierFileViewProps) {
 			data-read-only={props.readOnly || undefined}
 			className={`atelier-root atelier-file-view flex min-h-0 flex-col ${props.className ?? ""}`}
 		>
-			<AtelierErrorBoundary>
+			<AtelierErrorBoundary key={lixKey(props.lix)}>
 				<LixProvider lix={props.lix}>
 					<Suspense fallback={loading}>
 						<ExtensionRegistryProvider hostExtensions={extensions}>

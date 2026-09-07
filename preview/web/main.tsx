@@ -25,13 +25,27 @@ async function start() {
 	const params = new URLSearchParams(window.location.search);
 	const filePath = params.get("file");
 	if (filePath) {
-		const result = await lix.execute("SELECT id FROM lix_file WHERE path = $1", [filePath]);
+		const result = await lix.execute(
+			"SELECT id FROM lix_file WHERE path = $1",
+			[filePath],
+		);
 		const fileId = result.rows[0]?.id;
-		if (typeof fileId !== "string") throw new Error(`File not found: ${filePath}`);
+		if (typeof fileId !== "string")
+			throw new Error(`File not found: ${filePath}`);
 		createRoot(mountElement).render(
-			<main style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px" }}>
-				<Atelier.FileView lix={lix} fileId={fileId} readOnly={params.get("edit") !== "1"}
-					onOpenFile={(path) => { window.location.search = new URLSearchParams({ file: path }).toString(); }} />
+			<main style={{ height: "100%", overflowY: "auto" }}>
+				<div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px" }}>
+					<Atelier.FileView
+						lix={lix}
+						fileId={fileId}
+						readOnly={params.get("edit") !== "1"}
+						onOpenFile={(path) => {
+							window.location.search = new URLSearchParams({
+								file: path,
+							}).toString();
+						}}
+					/>
+				</div>
 			</main>,
 		);
 		return;
