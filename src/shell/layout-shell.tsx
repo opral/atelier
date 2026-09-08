@@ -2180,15 +2180,7 @@ function LayoutShellLoadedContentResolved({
 			activeReviewFileIndex === -1
 				? null
 				: (pendingReviewFiles[activeReviewFileIndex] ?? null);
-		const openAtOffset = (offset: number) => {
-			const count = pendingReviewFiles.length;
-			// With no changed file on screen, › opens the first and ‹ the last.
-			const index =
-				activeReviewFileIndex === -1
-					? offset > 0
-						? 0
-						: count - 1
-					: (activeReviewFileIndex + offset + count) % count;
+		const openAtIndex = (index: number) => {
 			const file = pendingReviewFiles[index];
 			if (!file) return;
 			if (historicalCommitId) {
@@ -2201,6 +2193,17 @@ function LayoutShellLoadedContentResolved({
 			}
 			openAutoRevealedFile({ fileId: file.id, filePath: file.path });
 		};
+		const openAtOffset = (offset: number) => {
+			const count = pendingReviewFiles.length;
+			// With no changed file on screen, › opens the first and ‹ the last.
+			openAtIndex(
+				activeReviewFileIndex === -1
+					? offset > 0
+						? 0
+						: count - 1
+					: (activeReviewFileIndex + offset + count) % count,
+			);
+		};
 		return {
 			fileName: activeFile
 				? (fileNameFromPath(activeFile.path) ?? activeFile.path)
@@ -2209,6 +2212,7 @@ function LayoutShellLoadedContentResolved({
 			fileCount: pendingReviewFiles.length,
 			onPrevious: () => openAtOffset(-1),
 			onNext: () => openAtOffset(1),
+			onOpen: openAtIndex,
 		};
 	}, [
 		activeReviewFileIndex,

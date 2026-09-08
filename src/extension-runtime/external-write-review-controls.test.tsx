@@ -160,9 +160,9 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		expect(scopeRow("file-icp")).toBeChecked();
 		expect(scopeRow("file-leads")).toBeChecked();
-		// Unseen rows are listed below the seen ones and cannot be ticked.
-		expect(scopeRow("file-readme")).not.toBeChecked();
-		expect(scopeRow("file-readme")).toBeDisabled();
+		// Unseen rows are listed below the seen ones; they are not ticks but
+		// open the file, which is what makes it seen.
+		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 		expect(scopeRow("file-readme")).toHaveTextContent("unseen");
 		expect(scopeRow("file-icp")).toHaveTextContent("viewing");
 		const rows = screen.getAllByRole("checkbox");
@@ -170,8 +170,47 @@ describe("ExternalWriteReviewControls", () => {
 			null,
 			"file-icp",
 			"file-leads",
-			"file-readme",
 		]);
+	});
+
+	test("clicking an unseen row opens the file, which makes it seen and ticked", () => {
+		const onOpen = vi.fn();
+		const { rerender } = render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3, onOpen }}
+				files={THREE_FILES}
+				onPrimary={vi.fn()}
+			/>,
+		);
+		fireEvent.click(chip("Working set: 1 of 3 files"));
+		fireEvent.click(scopeRow("file-readme"));
+		expect(onOpen).toHaveBeenCalledWith(2);
+
+		// The host shows the file; the row moves into the seen group, ticked,
+		// and the list stays open.
+		rerender(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "README.md",
+					activeIndex: 2,
+					fileCount: 3,
+					onOpen,
+				}}
+				files={THREE_FILES}
+				onPrimary={vi.fn()}
+			/>,
+		);
+		expect(scopeRow("file-readme")).toBeChecked();
+		expect(scopeRow("file-readme")).toHaveTextContent("viewing");
+		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("Seen 2 of 3");
+		expect(
+			screen.getByRole("group", { name: "Diff review actions" }),
+		).toHaveFocus();
 	});
 
 	test("uses the currently viewed file when the review opens later in the list", () => {
@@ -190,8 +229,7 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(chip("Working set: 1 of 2 files"));
-		expect(scopeRow("file-tiktok")).not.toBeChecked();
-		expect(scopeRow("file-tiktok")).toBeDisabled();
+		expect(scopeRow("file-tiktok")).toHaveAttribute("data-state", "unseen");
 		expect(scopeRow("file-launch")).toBeChecked();
 	});
 
@@ -320,7 +358,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
 		// The unseen file is untouched either way.
-		expect(scopeRow("file-readme")).not.toBeChecked();
+		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 
 		// From partial, the master row ticks every seen file back on.
 		fireEvent.click(scopeRow("file-icp"));
@@ -528,7 +566,7 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 0 of 3 files"));
 		expect(scopeRow("file-tiktok")).not.toBeChecked();
 		expect(scopeRow("file-tiktok")).toBeEnabled();
-		expect(scopeRow("file-readme")).toBeDisabled();
+		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 	});
 
 	test("with no changed file on screen nothing is seen and the stepper names no file", () => {

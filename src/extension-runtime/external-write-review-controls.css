@@ -204,16 +204,16 @@
 		font-weight: 500;
 	}
 
-	/* Unseen rows are listed, not offered: they join the scope by being
-	   stepped to, never by a tick. */
+	/* Unseen rows cannot be ticked: clicking one opens the file, which is
+	   what makes it seen (and ticked). */
 	.external-write-review-menu > button[data-state="unseen"] {
 		color: rgb(140, 133, 124);
 		font-weight: 500;
-		cursor: default;
 	}
 
-	.external-write-review-menu > button[data-state="unseen"]:hover {
-		background: transparent;
+	.external-write-review-menu
+		> button[data-state="unseen"]:hover:not(:disabled) {
+		color: rgb(201, 194, 184);
 	}
 
 	.external-write-review-menu

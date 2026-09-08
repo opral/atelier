@@ -25,4 +25,6 @@ export type ExternalWriteReviewNavigation = {
 	readonly fileCount: number;
 	readonly onPrevious?: () => void;
 	readonly onNext?: () => void;
+	/** Open the changed file at this index (the chip's list offers unseen files). */
+	readonly onOpen?: (index: number) => void;
 };

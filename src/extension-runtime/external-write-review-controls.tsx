@@ -505,17 +505,24 @@ export function ExternalWriteReviewControls({
 						/>
 					) : null}
 					{unseenFiles.map((file) => (
+						// An unseen file cannot be ticked; opening it is what makes
+						// it seen (and ticked). The list stays open so the row is
+						// watched moving into the seen group.
 						<button
 							key={file.id}
 							type="button"
-							role="checkbox"
 							data-testid={`diff-scope-file:${file.id}`}
 							data-file-id={file.id}
-							aria-checked={false}
-							aria-disabled="true"
-							data-attr="diff-scope-file"
+							data-attr="diff-scope-open-file"
 							data-state="unseen"
-							disabled
+							title="Open this file to add it to the seen set"
+							disabled={!navigation?.onOpen}
+							onClick={() => {
+								refocusAfterStepRef.current = true;
+								navigation?.onOpen?.(
+									listFiles.findIndex((candidate) => candidate.id === file.id),
+								);
+							}}
 						>
 							<span
 								aria-hidden="true"
