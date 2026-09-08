@@ -4,18 +4,17 @@ import type { AtelierExtensionRegistration } from "../extension-api";
 import { hostExtensionDefinition } from "./host-extension";
 
 describe("hostExtensionDefinition", () => {
-	test("combines a host manifest with its already-loaded entry", () => {
-		const mount = vi.fn();
+	test("normalizes a declarative host extension", () => {
+		const Component = vi.fn(() => null);
 		const menuItems = vi.fn(() => []);
 		const registration: AtelierExtensionRegistration = {
-			manifest: {
-				apiVersion: 1,
-				id: "host_terminal",
-				name: "Terminal",
-				description: "Run a terminal.",
-				multiInstance: true,
-			},
-			entry: { icon: Terminal, menuItems, mount },
+			id: "host_terminal",
+			name: "Terminal",
+			description: "Run a terminal.",
+			multiInstance: true,
+			icon: Terminal,
+			menuItems,
+			Component,
 		};
 
 		expect(hostExtensionDefinition(registration)).toMatchObject({
@@ -25,7 +24,7 @@ describe("hostExtensionDefinition", () => {
 			icon: Terminal,
 			multiInstance: true,
 			menuItems,
-			mount,
+			Component,
 		});
 	});
 });

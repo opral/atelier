@@ -1,3 +1,7 @@
+import {
+	loadMediaFile,
+	PreparedMediaSurface,
+} from "../../extension-runtime/prepared-media";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, FileWarning } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
@@ -299,19 +303,36 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display PDF documents.",
 	icon: FileText,
-	component: ({ atelier, view }) => (
-		<PdfView
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			sourceCommitId={
-				typeof view.state.sourceCommitId === "string"
-					? view.state.sourceCommitId
-					: undefined
-			}
-			initialPage={
-				typeof view.state.page === "number" ? view.state.page : undefined
-			}
-			diffSession={atelier.diff.session}
-		/>
-	),
+	load: loadMediaFile,
+	component: ({ atelier, view, data }) => {
+		return (
+			<PreparedMediaSurface
+				key={view.instanceId}
+				readySelector='[data-pdf-state="ready"], [data-pdf-state="error"]'
+				kind="pdf"
+				data={data}
+				branchId={view.state.branchId as string | undefined}
+				commitId={
+					(view.state.sourceCommitId ??
+						view.state.afterCommitId ??
+						view.state.beforeCommitId) as string | undefined
+				}
+				allowNative={!atelier.diff.session}
+			>
+				<PdfView
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					sourceCommitId={
+						typeof view.state.sourceCommitId === "string"
+							? view.state.sourceCommitId
+							: undefined
+					}
+					initialPage={
+						typeof view.state.page === "number" ? view.state.page : undefined
+					}
+					diffSession={atelier.diff.session}
+				/>
+			</PreparedMediaSurface>
+		);
+	},
 });

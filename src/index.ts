@@ -1,7 +1,12 @@
 export { Atelier } from "./atelier";
-export type { AtelierShellProps, AtelierShellHandle } from "./atelier";
-export type { AtelierHistoryProps } from "./history";
-export type { AtelierFileViewProps } from "./file-view";
+export type { AtelierProps } from "./atelier";
+export { loadAtelier } from "./load-atelier";
+export type {
+	AtelierInitialState,
+	AtelierLocation,
+	LoadAtelierOptions,
+} from "./atelier-state";
+export type { AtelierNavigation } from "./atelier-render-context";
 export {
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
@@ -63,12 +68,10 @@ export type {
 	AtelierExtensionView,
 	AtelierFilesViewOptions,
 	AtelierJsonValue,
-	AtelierMountedExtension,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
 	AtelierWatchedEntry,
 	ExtensionManifest,
-	ExtensionRuntimeEntry,
 } from "./extension-api";
 export {
 	deleteWorkspaceEntry,
@@ -85,3 +88,5 @@ export type {
 	DeveloperWorkflowScenario,
 	SimulatedAgentWorkflow,
 } from "./dev-tools/simulate-agent-workflow";
+
+export type { AtelierHistoryProps } from "./history";

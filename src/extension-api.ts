@@ -389,27 +389,27 @@ export type AtelierExtensionView = {
 	) => () => void;
 };
 
-export type AtelierMountedExtension = {
-	update?: (args: {
-		atelier: AtelierExtensionRuntime;
-		view: AtelierExtensionView;
-	}) => void;
-	dispose?: () => void;
-};
-
-export type ExtensionRuntimeEntry = {
-	readonly icon: ComponentType<{ className?: string }>;
-	/** Dynamic, shell-rendered menu contributions for this extension. */
-	readonly menuItems?: AtelierExtensionMenuItems;
-	readonly mount: (args: {
-		atelier: AtelierExtensionRuntime;
-		view: AtelierExtensionView;
-		element: HTMLElement;
-		signal: AbortSignal;
-	}) => void | AtelierMountedExtension;
-};
-
+/** A view whose initial render works on the server and in the browser. */
 export type AtelierExtensionRegistration = {
-	readonly manifest: ExtensionManifest;
-	readonly entry: ExtensionRuntimeEntry;
+	readonly id: string;
+	readonly name?: string;
+	readonly description?: string;
+	readonly icon?: ComponentType<{ className?: string }>;
+	readonly fileExtensions?: readonly string[];
+	readonly multiInstance?: boolean;
+	readonly placement?: readonly AtelierPanelSide[];
+	readonly hidden?: boolean;
+	readonly menuItems?: AtelierExtensionMenuItems;
+	readonly load?: AtelierExtensionLoader;
+	readonly Component: ComponentType<{
+		readonly data: AtelierJsonValue;
+		readonly atelier: AtelierExtensionRuntime;
+		readonly view: AtelierExtensionView;
+	}>;
 };
+
+export type AtelierExtensionLoader = (args: {
+	readonly lix: Lix;
+	readonly location: import("./atelier-state").AtelierLocation;
+	readonly signal: AbortSignal;
+}) => Promise<AtelierJsonValue>;

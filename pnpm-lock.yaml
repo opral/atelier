@@ -147,6 +147,12 @@ importers:
       pdfjs-dist:
         specifier: 5.4.624
         version: 5.4.624
+      perfect-freehand:
+        specifier: 1.2.0
+        version: 1.2.0
+      roughjs:
+        specifier: 4.6.6
+        version: 4.6.6
       react-resizable-panels:
         specifier: ^4.12.1
         version: 4.12.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

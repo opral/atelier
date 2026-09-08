@@ -71,7 +71,14 @@ export interface ExtensionDefinition {
 	readonly hidden?: boolean;
 	/** Dynamic menu items rendered by Atelier on every view surface. */
 	readonly menuItems?: AtelierExtensionMenuItems;
-	readonly mount: (args: {
+	readonly load?: import("../extension-api").AtelierExtensionLoader;
+	readonly Component?: ComponentType<{
+		data: import("../extension-api").AtelierJsonValue;
+		atelier: ExtensionRuntime;
+		view: ExtensionView;
+	}>;
+	/** Browser-only compatibility for repository-installed imperative extensions. */
+	readonly mount?: (args: {
 		atelier: ExtensionRuntime;
 		view: ExtensionView;
 		element: HTMLElement;

@@ -1,3 +1,4 @@
+import { useAtelierRenderContext } from "../atelier-render-context";
 import {
 	useCallback,
 	useEffect,
@@ -858,6 +859,8 @@ function LayoutShellStateLoader(
 		readonly atelierInstance: AtelierInstance;
 	},
 ) {
+	const { initialState: preparedState } = useAtelierRenderContext();
+	const hasPreparedState = Boolean(preparedState);
 	const configuration = getAtelierConfiguration(props.atelierInstance);
 	const sessionSnapshot = useAtelierStoreSnapshot(
 		configuration.sessionStateStore,
@@ -883,22 +886,26 @@ function LayoutShellStateLoader(
 		() => createInitialAtelierUiState(resolvedDefaultOpenPanels),
 		[resolvedDefaultOpenPanels],
 	);
-	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
-		coerceAtelierUserPreferences(initialUiState),
+	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(
+		() =>
+			preparedState?.preferences ??
+			coerceAtelierUserPreferences(initialUiState),
 	);
 	const preferencesRef = useRef(preferences);
 	useLayoutEffect(() => {
 		preferencesRef.current = preferences;
 	}, [preferences]);
-	const [preferencesReady, setPreferencesReady] = useState(false);
+	const [preferencesReady, setPreferencesReady] = useState(
+		Boolean(preparedState),
+	);
 	const [reviewStatusLoad, setReviewStatusLoad] = useState<{
 		readonly branchId: string | null;
 		readonly resolvedReviewIds: readonly string[];
-	}>({ branchId: null, resolvedReviewIds: [] });
+	}>({ branchId: preparedState?.branchId ?? null, resolvedReviewIds: [] });
 
 	useEffect(() => {
 		let cancelled = false;
-		setPreferencesReady(false);
+		if (!hasPreparedState) setPreferencesReady(false);
 		void configuration.preferencesStore
 			.load()
 			.then((loaded) => {
@@ -915,7 +922,7 @@ function LayoutShellStateLoader(
 		return () => {
 			cancelled = true;
 		};
-	}, [configuration.preferencesStore]);
+	}, [configuration.preferencesStore, hasPreparedState]);
 
 	useEffect(() => {
 		if (sessionSnapshot) return;
@@ -927,7 +934,9 @@ function LayoutShellStateLoader(
 	useEffect(() => {
 		if (!activeBranchId) return;
 		let cancelled = false;
-		setReviewStatusLoad({ branchId: null, resolvedReviewIds: [] });
+		if (preparedState?.branchId !== activeBranchId) {
+			setReviewStatusLoad({ branchId: null, resolvedReviewIds: [] });
+		}
 		void configuration.reviewStatusStore
 			.loadResolvedReviewIds(activeBranchId)
 			.then((reviewIds) => {
@@ -950,7 +959,11 @@ function LayoutShellStateLoader(
 		return () => {
 			cancelled = true;
 		};
-	}, [activeBranchId, configuration.reviewStatusStore]);
+	}, [
+		activeBranchId,
+		configuration.reviewStatusStore,
+		preparedState?.branchId,
+	]);
 
 	const uiStateKV = useMemo<AtelierUiState>(
 		() => ({

@@ -31,69 +31,34 @@ const TabIcon = ({ className }: { className?: string }) => (
 );
 
 const homeRegistration: AtelierExtensionRegistration = {
-	manifest: {
-		apiVersion: 1,
-		id: HOME_EXTENSION_ID,
-		name: "Home",
-		placement: ["central"],
-		hidden: true,
-	},
-	entry: {
-		icon: TabIcon,
-		mount: ({ element }) => {
-			const view = document.createElement("div");
-			view.dataset.testid = "test-home-view";
-			view.textContent = "workspace home";
-			element.appendChild(view);
-		},
-	},
+	id: HOME_EXTENSION_ID,
+	name: "Home",
+	placement: ["central"],
+	hidden: true,
+	icon: TabIcon,
+	Component: () => <div data-testid="test-home-view">workspace home</div>,
 };
-
 const dirRegistration: AtelierExtensionRegistration = {
-	manifest: {
-		apiVersion: 1,
-		id: DIR_EXTENSION_ID,
-		name: "Folder",
-		placement: ["central"],
-		hidden: true,
-		multiInstance: true,
-	},
-	entry: {
-		icon: TabIcon,
-		mount: ({ element, view }) => {
-			const node = document.createElement("div");
-			node.dataset.testid = "test-dir-view";
-			node.textContent = `folder:${String(view.state.path ?? "")}`;
-			element.appendChild(node);
-			return {
-				update: ({ view: nextView }) => {
-					node.textContent = `folder:${String(nextView.state.path ?? "")}`;
-				},
-			};
-		},
-	},
+	id: DIR_EXTENSION_ID,
+	name: "Folder",
+	placement: ["central"],
+	hidden: true,
+	multiInstance: true,
+	icon: TabIcon,
+	Component: ({ view }) => (
+		<div data-testid="test-dir-view">
+			folder:{String(view.state.path ?? "")}
+		</div>
+	),
 };
-
 const SIDE_EXTENSION_ID = "test_side_tool";
-
 const sideToolExtension: AtelierExtensionRegistration = {
-	manifest: {
-		apiVersion: 1,
-		id: SIDE_EXTENSION_ID,
-		name: "Side Tool",
-		description: "A removable side-panel view.",
-		placement: ["left", "right"],
-	},
-	entry: {
-		icon: TabIcon,
-		mount: ({ element }) => {
-			const view = document.createElement("div");
-			view.dataset.testid = "test-side-tool";
-			view.textContent = "side tool";
-			element.appendChild(view);
-			return {};
-		},
-	},
+	id: SIDE_EXTENSION_ID,
+	name: "Side Tool",
+	description: "A removable side-panel view.",
+	placement: ["left", "right"],
+	icon: TabIcon,
+	Component: () => <div data-testid="test-side-tool">side tool</div>,
 };
 
 const extensions = [homeRegistration, dirRegistration, sideToolExtension];
@@ -206,13 +171,17 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.open("/one.md");
 			});
-			expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByRole("heading", { name: "One" })).toBeVisible();
+			});
 			expect(centralTabLabels()).toEqual(["«home»", "one.md"]);
 
 			await act(async () => {
 				await shell.atelier.documents.open("/two.md");
 			});
-			expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+			await waitFor(() =>
+				expect(screen.getByRole("heading", { name: "Two" })).toBeVisible(),
+			);
 			// Still one content tab: the label followed the location.
 			expect(centralTabLabels()).toEqual(["«home»", "two.md"]);
 		} finally {
@@ -378,7 +347,9 @@ describe("central tabs with a pinned home", () => {
 				await shell.atelier.documents.open("/one.md");
 			});
 			expect(centralTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
-			expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByRole("heading", { name: "One" })).toBeVisible();
+			});
 
 			// With an EARLIER tab active, a new tab still joins at the END —
 			// A | B | + with A active yields A | B | C, not A | C | B.
@@ -462,7 +433,9 @@ describe("central tabs with a pinned home", () => {
 				await shell.atelier.documents.closeActive();
 			});
 			expect(centralTabLabels()).toEqual(["«home»", "two.md"]);
-			expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+			await waitFor(() =>
+				expect(screen.getByRole("heading", { name: "Two" })).toBeVisible(),
+			);
 			const closedEvents = shell.events.filter(
 				(event) => event.type === "document_closed",
 			);

@@ -4,9 +4,8 @@ import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { selectWorkingFileDiffSnapshot } from "@/queries";
 import { render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
-import type { AtelierFileViewProps } from "@/file-view";
-import { FileView } from "@/file-view";
+import { expect, test } from "vitest";
+import { MarkdownView } from "@/extensions/markdown";
 
 test("an added file renders as a diff without disabled formatting chrome", async () => {
 	const lix = await openLix();
@@ -19,12 +18,16 @@ test("an added file renders as a diff without disabled formatting chrome", async
 		);
 		const epoch = await selectWorkingFileDiffSnapshot(lix);
 		view = render(
-			<FileView
-				lix={lix}
-				fileId={fileId}
-				targetCommitId={epoch.afterCommitId}
-				diff={{ baseCommitId: null }}
-			/>,
+			<LixProvider lix={lix}>
+				<MarkdownView
+					fileId={fileId}
+					filePath="/added.md"
+					readOnly
+					beforeCommitId={epoch.beforeCommitId}
+					afterCommitId={epoch.afterCommitId}
+					beforeExists={false}
+				/>
+			</LixProvider>,
 		);
 		await view.findByRole("heading", { name: "Added document" });
 		expect(view.container.querySelector(".markdown-review")).not.toBeNull();
@@ -36,41 +39,6 @@ test("an added file renders as a diff without disabled formatting chrome", async
 		await lix.close();
 	}
 });
-
-describe("FileView revision contract", () => {
-	test("fails closed for the removed base-to-implicit-live contract", () => {
-		const legacyProps = {
-			lix: {},
-			fileId: "file",
-			filePath: "/file.md",
-			diff: { baseCommitId: "base" },
-		} as unknown as AtelierFileViewProps;
-
-		expect(() => render(<FileView {...legacyProps} />)).toThrow(
-			/explicit target commit/,
-		);
-	});
-});
-
-// The public contract must make both sides of every diff explicit.
-const workingPreview: AtelierFileViewProps = {
-	lix: {} as AtelierFileViewProps["lix"],
-	fileId: "file",
-	filePath: "/file.md",
-	diff: {
-		workingEpoch: { beforeCommitId: "before", afterCommitId: "after" },
-	},
-};
-void workingPreview;
-
-// @ts-expect-error A historical base may not be paired with implicit live state.
-const implicitLiveDiff: AtelierFileViewProps = {
-	lix: {} as AtelierFileViewProps["lix"],
-	fileId: "file",
-	filePath: "/file.md",
-	diff: { baseCommitId: "base" },
-};
-void implicitLiveDiff;
 
 test.each(["working", "historical"] as const)(
 	"%s preview loads workspace images from the captured commit",
@@ -119,19 +87,16 @@ test.each(["working", "historical"] as const)(
 				encoder.encode("newer image"),
 				imageId,
 			]);
-			const target: Pick<AtelierFileViewProps, "targetCommitId" | "diff"> =
-				kind === "working"
-					? { diff: { workingEpoch: epoch } }
-					: { targetCommitId: epoch.afterCommitId };
 			view = render(
 				<LixProvider lix={lix}>
-					<FileView
-						{...({
-							lix,
-							fileId,
-							filePath: "/file.md",
-							...target,
-						} as AtelierFileViewProps)}
+					<MarkdownView
+						fileId={fileId}
+						filePath="/file.md"
+						readOnly
+						beforeCommitId={
+							kind === "working" ? epoch.beforeCommitId : undefined
+						}
+						afterCommitId={epoch.afterCommitId}
 					/>
 				</LixProvider>,
 			);

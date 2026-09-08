@@ -32,6 +32,8 @@ export default defineConfig({
 			".claude/**",
 			"vendor/**",
 			"scripts/**",
+			// Published consumer SSR runs separately in plain Node.
+			"fixtures/**",
 		],
 	},
 });

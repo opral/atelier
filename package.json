@@ -25,7 +25,12 @@
 			"default": "./dist/state-adapters.js"
 		},
 		"./style.css": "./dist/atelier.css",
-		"./package.json": "./package.json"
+		"./package.json": "./package.json",
+		"./markdown": {
+			"types": "./dist/types/extensions/markdown/markdown-content.d.ts",
+			"import": "./dist/markdown.js",
+			"default": "./dist/markdown.js"
+		}
 	},
 	"packageManager": "pnpm@10.34.5",
 	"scripts": {
@@ -41,8 +46,8 @@
 		"lint": "oxlint --tsconfig ./tsconfig.json --ignore-path .gitignore --ignore-pattern \"vendor/**\" --format stylish .",
 		"lint:fix": "oxlint --tsconfig ./tsconfig.json --ignore-path .gitignore --ignore-pattern \"vendor/**\" --fix .",
 		"test": "vitest run",
-		"test:consumer": "pnpm run build && pnpm --dir fixtures/consumer build",
-		"ci": "pnpm run test:build-scripts && pnpm run build:lix && pnpm run build && pnpm test && pnpm --dir fixtures/consumer build",
+		"test:consumer": "pnpm run build && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
+		"ci": "pnpm run test:build-scripts && pnpm run build:lix && pnpm run build && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
 		"test:build-scripts": "node --test scripts/*.test.mjs"
 	},
 	"peerDependencies": {
@@ -92,6 +97,8 @@
 		"micromark-extension-frontmatter": "^2.0.0",
 		"micromark-extension-gfm": "^3.0.0",
 		"papaparse": "^5.5.4",
+		"perfect-freehand": "1.2.0",
+		"roughjs": "4.6.6",
 		"pdfjs-dist": "5.4.624",
 		"react-resizable-panels": "^4.12.1",
 		"tailwind-merge": "^3.6.0",

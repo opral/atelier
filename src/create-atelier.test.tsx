@@ -77,10 +77,16 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 file changed since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open checkpoint history",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
+			});
+			const workingChanges = await screen.findByRole("button", {
+				name: "Working changes",
+			});
+			await act(async () => {
+				fireEvent.click(workingChanges);
 			});
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
@@ -122,10 +128,16 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 file changed since checkpoint. Open changes review",
+				name: "1 file changed since checkpoint. Open checkpoint history",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
+			});
+			const workingChanges = await screen.findByRole("button", {
+				name: "Working changes",
+			});
+			await act(async () => {
+				fireEvent.click(workingChanges);
 			});
 			expect(
 				await screen.findByRole("region", { name: "Checkpoint history" }),
@@ -171,9 +183,9 @@ describe("Atelier instance file controller", () => {
 			});
 			await act(async () => queuedOpen);
 
-			expect(
-				await screen.findByRole("heading", { name: "Focused" }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByRole("heading", { name: "Focused" })).toBeVisible();
+			});
 			expect(
 				screen.getByRole("button", { name: "Toggle left panel" }),
 			).toHaveAttribute("aria-pressed", "false");
@@ -215,9 +227,9 @@ describe("Atelier instance file controller", () => {
 			});
 			await act(async () => queuedOpen);
 
-			expect(
-				await screen.findByRole("heading", { name: "Queued" }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByRole("heading", { name: "Queued" })).toBeVisible();
+			});
 			await waitFor(() => {
 				expect(
 					rendered?.container.querySelector("file-tree-container"),
@@ -310,9 +322,9 @@ describe("Atelier instance file controller", () => {
 			await act(async () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
-			expect(
-				await screen.findByRole("heading", { name: "Active" }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByRole("heading", { name: "Active" })).toBeVisible();
+			});
 			await act(async () => atelier.documents.startNew());
 
 			await waitFor(async () => {
@@ -418,9 +430,9 @@ describe("Atelier instance file controller", () => {
 					.filter((path): path is string => typeof path === "string");
 				expect(documentPaths).toEqual(["/second.md"]);
 			});
-			expect(
-				await screen.findByRole("heading", { name: "Second" }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(screen.getByRole("heading", { name: "Second" })).toBeVisible();
+			});
 
 			// Closing a path with no open views resolves as a no-op.
 			await act(async () => atelier.documents.close("/missing.md"));

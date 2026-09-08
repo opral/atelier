@@ -46,7 +46,7 @@ function mountExtension(args: {
 	abortController: AbortController;
 } {
 	const abortController = new AbortController();
-	const mounted = args.view.mount({
+	const mounted = args.view.mount?.({
 		atelier: args.atelier,
 		view: args.extensionView,
 		element: args.element,

@@ -1,3 +1,4 @@
+import { Puzzle } from "lucide-react";
 import type { ExtensionDefinition } from "./types";
 import { normalizeFileExtensions } from "./file-handlers";
 import type { AtelierExtensionRegistration } from "../extension-api";
@@ -6,18 +7,17 @@ export function hostExtensionDefinition(
 	registration: AtelierExtensionRegistration,
 ): ExtensionDefinition {
 	return {
-		kind: registration.manifest.id,
-		label: registration.manifest.name,
+		kind: registration.id,
+		label: registration.name ?? registration.id,
 		description:
-			registration.manifest.description ?? registration.manifest.name,
-		icon: registration.entry.icon,
-		fileExtensions: normalizeFileExtensions(
-			registration.manifest.fileExtensions,
-		),
-		multiInstance: registration.manifest.multiInstance,
-		placement: registration.manifest.placement,
-		hidden: registration.manifest.hidden,
-		menuItems: registration.entry.menuItems,
-		mount: registration.entry.mount as ExtensionDefinition["mount"],
+			registration.description ?? registration.name ?? registration.id,
+		icon: registration.icon ?? Puzzle,
+		fileExtensions: normalizeFileExtensions(registration.fileExtensions),
+		multiInstance: registration.multiInstance,
+		placement: registration.placement,
+		hidden: registration.hidden,
+		menuItems: registration.menuItems,
+		load: registration.load,
+		Component: registration.Component as ExtensionDefinition["Component"],
 	};
 }

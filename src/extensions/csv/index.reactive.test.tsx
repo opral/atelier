@@ -1,6 +1,6 @@
 import type { CellClickedEventArgs } from "@glideapps/glide-data-grid";
-import { createRef, Suspense } from "react";
-import { Atelier, type AtelierShellHandle } from "@/atelier";
+import { Suspense } from "react";
+import { Atelier } from "@/atelier";
 import {
 	act,
 	fireEvent,
@@ -23,9 +23,9 @@ type MockedDataEditorProps = {
 			Partial<
 				Pick<
 					CellClickedEventArgs,
-					"shiftKey" | "ctrlKey" | "metaKey" | "altKey" | "isTouch"
+					"shiftKey" | "ctrlKey" | "metaKey" | "isTouch"
 				>
-			>,
+			> & { altKey?: boolean },
 	) => void;
 	onPaste?: (
 		target: readonly [number, number],
@@ -86,6 +86,7 @@ vi.mock("@glideapps/glide-data-grid", async (importOriginal) => ({
 		const { columns, getCellContent, rows } = props;
 		return (
 			<div data-testid="csv-data-grid">
+				<canvas aria-label="Mock grid surface" />
 				{columns.map((column) => (
 					<div key={column.title}>{column.title}</div>
 				))}
@@ -1896,7 +1897,7 @@ test("text wrapping persists without changing CSV bytes and adapts row heights t
 	}
 });
 
-test("Atelier FileView and Shell open plain CSV in the built-in property table by default", async () => {
+test("Atelier opens plain CSV by location in the built-in property table", async () => {
 	const lix = await openLix();
 	let rendered: ReturnType<typeof render> | undefined;
 	const content = new TextEncoder().encode("name,notes\nAlice,hello\n");
@@ -1906,20 +1907,15 @@ test("Atelier FileView and Shell open plain CSV in the built-in property table b
 			["/default.CSV", content],
 		);
 		const fileId = String(result.rows[0]!.id);
-		rendered = render(<Atelier.FileView lix={lix} fileId={fileId} />);
+		rendered = render(
+			<Atelier lix={lix} location={{ path: "/default.CSV" }} />,
+		);
 		await screen.findByRole("button", { name: "Views" });
 		await screen.findByTestId("csv-data-grid");
 		expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Add row" })).toBeInTheDocument();
 		clickCsvHeader(1);
 		await screen.findByRole("menuitem", { name: "Wrap content" });
-		await act(async () => rendered?.unmount());
-		const ref = createRef<AtelierShellHandle>();
-		rendered = render(<Atelier.Shell lix={lix} ref={ref} />);
-		await waitFor(() => expect(ref.current).not.toBeNull());
-		await act(async () => {
-			await ref.current!.documents.open("/default.CSV");
-		});
 		await screen.findByRole("button", { name: "Views" });
 		await screen.findByTestId("csv-data-grid");
 		expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();

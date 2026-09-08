@@ -1,4 +1,8 @@
 import {
+	loadMediaFile,
+	PreparedMediaSurface,
+} from "../../extension-runtime/prepared-media";
+import {
 	Suspense,
 	useCallback,
 	useEffect,
@@ -467,12 +471,29 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display SVG, PNG, and JPEG images.",
 	icon: ImageIcon,
-	component: ({ atelier, view }) => (
-		<ImageView
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			sourceCommitId={view.state.sourceCommitId as string | undefined}
-			diffSession={atelier.diff.session}
-		/>
-	),
+	load: loadMediaFile,
+	component: ({ atelier, view, data }) => {
+		return (
+			<PreparedMediaSurface
+				key={view.instanceId}
+				readySelector="img[src]"
+				kind="image"
+				data={data}
+				branchId={view.state.branchId as string | undefined}
+				commitId={
+					(view.state.sourceCommitId ??
+						view.state.afterCommitId ??
+						view.state.beforeCommitId) as string | undefined
+				}
+				allowNative={!atelier.diff.session}
+			>
+				<ImageView
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					sourceCommitId={view.state.sourceCommitId as string | undefined}
+					diffSession={atelier.diff.session}
+				/>
+			</PreparedMediaSurface>
+		);
+	},
 });

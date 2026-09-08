@@ -88,14 +88,22 @@ async function start() {
 							: { maxWidth: 960, margin: "0 auto", padding: "48px 24px" }
 					}
 				>
-					<Atelier.FileView
+					<Atelier
 						lix={lix}
-						fileId={fileId}
+						location={{ path: filePath }}
+						defaultOpenPanels={[]}
 						readOnly={params.get("edit") !== "1"}
-						onOpenFile={(path) => {
-							window.location.search = new URLSearchParams({
-								file: path,
-							}).toString();
+						navigation={{
+							href: (location) =>
+								"path" in location
+									? `?${new URLSearchParams({ file: location.path })}`
+									: "/",
+							navigate: (location) => {
+								if ("path" in location)
+									window.location.search = new URLSearchParams({
+										file: location.path,
+									}).toString();
+							},
 						}}
 					/>
 				</div>
@@ -115,7 +123,7 @@ function PreviewApp({ lix }: { readonly lix: Lix }) {
 		branchSession.getSnapshot,
 	);
 	return (
-		<Atelier.Shell
+		<Atelier
 			lix={lix}
 			branchSession={branchSession}
 			onEvent={(event) => {

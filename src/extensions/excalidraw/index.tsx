@@ -1,3 +1,9 @@
+import { SceneContent } from "./scene-content";
+import {
+	loadTextFile,
+	preparedFile,
+	PreparedFileSurface,
+} from "../../extension-runtime/prepared-file";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { PenTool, TriangleAlert } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
@@ -367,15 +373,33 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Draw and edit Excalidraw scenes.",
 	icon: PenTool,
-	component: ({ atelier, view }) => (
-		<ExcalidrawView
-			atelier={atelier}
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			isActiveView={view.isActive}
-			isPanelFocused={view.isFocused}
-			beforeCommitId={view.state.beforeCommitId as string | null | undefined}
-			afterCommitId={view.state.afterCommitId as string | null | undefined}
-		/>
-	),
+	load: loadTextFile,
+	component: ({ atelier, view, data }) => {
+		const file = preparedFile(data);
+		return (
+			<PreparedFileSurface
+				key={file?.id ?? view.instanceId}
+				readySelector="canvas"
+				initial={
+					file ? (
+						<SceneContent content={file.content} />
+					) : (
+						<p>File not found in the workspace.</p>
+					)
+				}
+			>
+				<ExcalidrawView
+					atelier={atelier}
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					isActiveView={view.isActive}
+					isPanelFocused={view.isFocused}
+					beforeCommitId={
+						view.state.beforeCommitId as string | null | undefined
+					}
+					afterCommitId={view.state.afterCommitId as string | null | undefined}
+				/>
+			</PreparedFileSurface>
+		);
+	},
 });

@@ -1,107 +1,36 @@
-import { act, waitFor } from "@testing-library/react";
-import { use } from "react";
-import { flushSync } from "react-dom";
-import { describe, expect, test, vi } from "vitest";
+import { createContext, useContext } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, test } from "vitest";
 import { Search } from "lucide-react";
 import { createReactExtensionDefinition } from "./react-extension";
 import type { ExtensionRuntime, ExtensionView } from "./types";
-import { useLix } from "../lib/lix-react";
-
-const atelier = { lix: {} as ExtensionRuntime["lix"] } as ExtensionRuntime;
-const view: ExtensionView = {
-	instanceId: "async-view-1",
-	state: {},
-	panel: "left",
-	isActive: true,
-	isFocused: true,
-	preferences: { get: () => undefined, set: () => {}, delete: () => {} },
-	registerNewFileDraftHandler: () => () => {},
-};
 
 describe("createReactExtensionDefinition", () => {
-	test("provides the runtime Lix to every React extension", async () => {
-		let observedLix: unknown;
-		function LixProbe() {
-			observedLix = useLix();
-			return <span>Ready</span>;
-		}
+	test("renders extension content on the server within the host's React context", () => {
+		const Context = createContext("missing");
 		const definition = createReactExtensionDefinition({
-			manifest: { apiVersion: 1, id: "lix-probe", name: "Lix probe" },
-			description: "Lix context test",
+			manifest: { apiVersion: 1, id: "test", name: "Test" },
+			description: "An extension",
 			icon: Search,
-			component: () => <LixProbe />,
-		});
-		const element = document.createElement("div");
-		let mounted: ReturnType<typeof definition.mount>;
-		await act(async () => {
-			mounted = definition.mount({
-				atelier,
-				view,
-				element,
-				signal: new AbortController().signal,
-			});
-		});
-
-		await waitFor(() => expect(element).toHaveTextContent("Ready"));
-		expect(observedLix).toBe(atelier.lix);
-		await act(async () => mounted?.dispose?.());
-	});
-
-	test("contains suspension inside the React extension root", async () => {
-		let resolve!: (value: string) => void;
-		const pendingValue = new Promise<string>((next) => {
-			resolve = next;
-		});
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
-		function SuspendingProbe() {
-			return <span>{use(pendingValue)}</span>;
-		}
-		const definition = createReactExtensionDefinition({
-			manifest: {
-				apiVersion: 1,
-				id: "async-view",
-				name: "Async view",
+			component: function Content({ data }) {
+				return (
+					<h1>
+						{useContext(Context)}: {String(data)}
+					</h1>
+				);
 			},
-			description: "Suspending extension test",
-			icon: Search,
-			component: () => <SuspendingProbe />,
 		});
-		const element = document.createElement("div");
-		const mounted = definition.mount({
-			atelier,
-			view,
-			element,
-			signal: new AbortController().signal,
-		});
-
-		// Extension runtime snapshots may update while an initial query is pending.
-		// A boundary in this root must absorb every retry rather than escalating the
-		// suspension into React's "async Client Component" failure.
-		expect(() => {
-			for (let index = 0; index < 110; index += 1) {
-				flushSync(() => mounted?.update?.({ atelier, view }));
-			}
-		}).not.toThrow();
-		expect(
-			element.querySelector("[data-atelier-extension-suspended]"),
-		).not.toBeNull();
-		expect(element).toHaveTextContent("Loading Async view…");
-
-		resolve("Ready");
-		await act(async () => pendingValue);
-		await waitFor(() => expect(element).toHaveTextContent("Ready"));
-		expect(
-			element.querySelector("[data-atelier-extension-suspended]"),
-		).toBeNull();
-		expect(
-			consoleError.mock.calls.some((call) =>
-				call.some((value) => String(value).includes("async Client Component")),
-			),
-		).toBe(false);
-
-		await act(async () => mounted?.dispose?.());
-		consoleError.mockRestore();
+		const Component = definition.Component!;
+		const html = renderToStaticMarkup(
+			<Context.Provider value="repository">
+				<Component
+					atelier={{} as ExtensionRuntime}
+					view={{} as ExtensionView}
+					data="prepared document"
+				/>
+			</Context.Provider>,
+		);
+		expect(html).toContain("repository: prepared document");
+		expect(definition.mount).toBeUndefined();
 	});
 });
