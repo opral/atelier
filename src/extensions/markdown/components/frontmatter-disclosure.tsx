@@ -102,24 +102,16 @@ export function FrontmatterDisclosure({
 			observeFirstBlock(firstBlock);
 			updatePosition();
 
-			const handleFocusOut = () => {
-				window.requestAnimationFrame(() => {
-					const active = document.activeElement;
-					if (
-						firstBlock.contains(active) ||
-						buttonRef.current?.contains(active)
-					) {
-						return;
-					}
-					hideSoon();
-				});
-			};
+			// The affordance lives in the margin above the document: it appears
+			// while the pointer is above the first line and stays out of the way
+			// while reading or editing that line. Keyboard users reach it by
+			// tabbing to the button, which reveals it via :focus-visible.
 			const handleSurfacePointerMove = (event: PointerEvent) => {
 				const currentSurfaceRect = surface.getBoundingClientRect();
 				const currentBlockRect = firstBlock.getBoundingClientRect();
 				if (
 					event.clientY >= currentSurfaceRect.top &&
-					event.clientY <= currentBlockRect.bottom
+					event.clientY < currentBlockRect.top
 				) {
 					show();
 					return;
@@ -127,15 +119,9 @@ export function FrontmatterDisclosure({
 				hideSoon();
 			};
 			const handleSurfacePointerLeave = () => hideSoon();
-			firstBlock.addEventListener("pointerenter", show);
-			firstBlock.addEventListener("focusin", show);
-			firstBlock.addEventListener("focusout", handleFocusOut);
 			surface.addEventListener("pointermove", handleSurfacePointerMove);
 			surface.addEventListener("pointerleave", handleSurfacePointerLeave);
 			cleanupTarget = () => {
-				firstBlock.removeEventListener("pointerenter", show);
-				firstBlock.removeEventListener("focusin", show);
-				firstBlock.removeEventListener("focusout", handleFocusOut);
 				surface.removeEventListener("pointermove", handleSurfacePointerMove);
 				surface.removeEventListener("pointerleave", handleSurfacePointerLeave);
 			};
