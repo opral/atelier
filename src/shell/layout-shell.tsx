@@ -4431,13 +4431,6 @@ function LayoutShellLoadedContentResolved({
 					readOnly={isHostReadOnly}
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
-					// The status chip toggles: pressing it while the working review
-					// is already open leaves review mode.
-					onOpenWorkingChanges={() =>
-						workingChangesReviewOpen
-							? exitDiffReview()
-							: handleOpenWorkingChangesReview()
-					}
 					onOpenHistory={() =>
 						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
 							panel: "left",

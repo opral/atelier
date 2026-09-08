@@ -1,5 +1,6 @@
 export { Atelier } from "./atelier";
 export type { AtelierShellProps, AtelierShellHandle } from "./atelier";
+export type { AtelierHistoryProps } from "./history";
 export type { AtelierFileViewProps } from "./file-view";
 export {
 	coerceAtelierSessionUiState,

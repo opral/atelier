@@ -11,6 +11,7 @@ const publicDeclarations = new Set([
 	"file-icons.d.ts",
 	"atelier.d.ts",
 	"file-view.d.ts",
+	"history.d.ts",
 	"lib/workspace-file-ops.d.ts",
 	"state-adapters.d.ts",
 	"dev-tools/developer-tools-menu.d.ts",

@@ -2,6 +2,7 @@ import type { Lix } from "@lix-js/sdk";
 import {
 	Atelier,
 	type AtelierShellProps,
+	type AtelierHistoryProps,
 	type AtelierShellHandle,
 	type AtelierSlots,
 	type AtelierTopBarProps,
@@ -31,4 +32,8 @@ export function mountAtelier(lix: Lix): void {
 	void props;
 	void createElement(Atelier.FileView, { lix, fileId: "file", readOnly: true });
 	void fileIconUrl("/README.md");
+}
+
+export function renderHistory(atelier: AtelierHistoryProps["atelier"]) {
+	return createElement(Atelier.History, { atelier });
 }
