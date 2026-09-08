@@ -179,8 +179,8 @@ describe("loadAtelier", () => {
 						id: "redacted",
 						placement: ["central"],
 						Component: () => null,
-					load: async ({ lix: reader }) => {
-						await reader.execute(
+						load: async ({ lix: reader }) => {
+							await reader.execute(
 								"SELECT 'PRIVATE_VALUE_MUST_NOT_TRANSFER' AS secret",
 							);
 							return { label: "Public result" };

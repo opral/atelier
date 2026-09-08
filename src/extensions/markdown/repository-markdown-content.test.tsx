@@ -17,7 +17,12 @@ function render(
 	prepared?: AtelierInitialState,
 	commitId?: string,
 ) {
-	const value = { hydrated: false, connected: false, navigation, initialState: prepared };
+	const value = {
+		hydrated: false,
+		connected: false,
+		navigation,
+		initialState: prepared,
+	};
 	return renderToStaticMarkup(
 		<AtelierRenderContext.Provider value={value}>
 			<RepositoryMarkdownContent

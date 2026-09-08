@@ -959,7 +959,11 @@ function LayoutShellStateLoader(
 		return () => {
 			cancelled = true;
 		};
-	}, [activeBranchId, configuration.reviewStatusStore, preparedState?.branchId]);
+	}, [
+		activeBranchId,
+		configuration.reviewStatusStore,
+		preparedState?.branchId,
+	]);
 
 	const uiStateKV = useMemo<AtelierUiState>(
 		() => ({
