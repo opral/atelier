@@ -77,6 +77,15 @@ export interface ExtensionDefinition {
 		atelier: ExtensionRuntime;
 		view: ExtensionView;
 	}>;
+	/**
+	 * Optional control rendered by the shell at the trailing end of a side
+	 * panel's section header while this view is the active section (a scope
+	 * switch, a filter). It shares state with the view through preferences.
+	 */
+	readonly HeaderAccessory?: ComponentType<{
+		atelier: ExtensionRuntime;
+		view: ExtensionView;
+	}>;
 	/** Browser-only compatibility for repository-installed imperative extensions. */
 	readonly mount?: (args: {
 		atelier: ExtensionRuntime;

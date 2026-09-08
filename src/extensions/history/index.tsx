@@ -1,6 +1,17 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { History } from "lucide-react";
-import type { AtelierDiffSession } from "@/extension-api";
+import {
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
+import { ArrowLeftRight, History } from "lucide-react";
+import type {
+	AtelierDiffSession,
+	AtelierExtensionPreferences,
+	AtelierJsonValue,
+} from "@/extension-api";
 import { DiffGlyph } from "@/components/diff-glyph";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
@@ -8,24 +19,162 @@ import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviews,
+	selectFileRevisions,
+	selectWorkingFileDiff,
 	selectWorkingFileDiffs,
 	selectCommitParent,
 	selectWorkingChangeCount,
 	type CheckpointRow,
+	type FileRevisionRow,
 } from "@/queries";
 import { createReactExtensionDefinition } from "@/extension-runtime/react-extension";
 import { parseExtensionManifest } from "@/extension-runtime/extension-manifest";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import manifestJson from "./manifest.json";
 
+export type HistoryScope = "file" | "repository";
+
+const SCOPE_PREFERENCE_KEY = "scope";
+
+/**
+ * A plain scope is the user's switch; the object form is the scope History
+ * froze for itself when a review opened (see useHistoryScope).
+ */
+type ScopeOverride = { readonly scope: HistoryScope; readonly auto: boolean };
+
+function readScopeOverride(
+	preferences: AtelierExtensionPreferences | undefined,
+): ScopeOverride | null {
+	const value = preferences?.get(SCOPE_PREFERENCE_KEY);
+	if (value === "file" || value === "repository")
+		return { scope: value, auto: false };
+	if (value && typeof value === "object" && !Array.isArray(value)) {
+		const scope = (value as { readonly [key: string]: AtelierJsonValue }).scope;
+		if (scope === "file" || scope === "repository")
+			return { scope, auto: true };
+	}
+	return null;
+}
+
+/**
+ * The timeline follows the active document: a file on screen scopes History
+ * to that file, no file means the repository. An override (the user's switch,
+ * or the scope frozen for an open review) wins while a file is active.
+ */
+export function resolveHistoryScope(
+	activeFileId: string | null,
+	override: HistoryScope | null,
+): HistoryScope {
+	if (!activeFileId) return "repository";
+	return override ?? "file";
+}
+
+/**
+ * Scope state shared through the extension preference so the header switch
+ * and the list agree. The owner (the list) also manages the automatic rule's
+ * two edges: a review opening files from the timeline must not flip the
+ * panel underneath the user, so the scope in effect when a review opens is
+ * frozen until it closes; and once no file is active the user's switch
+ * clears, so the next file opens on the automatic scope again.
+ */
+function useHistoryScope(
+	atelier: HistoryRuntime,
+	preferences: AtelierExtensionPreferences | undefined,
+	{ owner = false }: { readonly owner?: boolean } = {},
+) {
+	const activeFileId = atelier.documents?.activeFileId ?? null;
+	const activeFilePath = atelier.documents?.activeFilePath ?? null;
+	const override = readScopeOverride(preferences);
+	const scope = resolveHistoryScope(activeFileId, override?.scope ?? null);
+	const reviewing = atelier.diff.session !== null;
+	// The scope to freeze is the one shown before the review opened; the
+	// review may activate its first file in the same render it opens.
+	const idleScopeRef = useRef(scope);
+	if (!reviewing) idleScopeRef.current = scope;
+	useEffect(() => {
+		if (!owner || !preferences) return;
+		if (reviewing && override === null) {
+			const frozen: AtelierJsonValue = {
+				scope: idleScopeRef.current,
+				auto: true,
+			};
+			preferences.set(SCOPE_PREFERENCE_KEY, frozen);
+		} else if (!reviewing && override?.auto) {
+			preferences.delete(SCOPE_PREFERENCE_KEY);
+		} else if (!reviewing && activeFileId === null && override) {
+			preferences.delete(SCOPE_PREFERENCE_KEY);
+		}
+	}, [owner, preferences, reviewing, override, activeFileId]);
+	const setScope = (next: HistoryScope) => {
+		if (!activeFileId) return;
+		preferences?.set(SCOPE_PREFERENCE_KEY, next);
+	};
+	return { scope, setScope, activeFileId, activeFilePath };
+}
+
+/**
+ * Header control: the exchange glyph beside the current scope's name (design
+ * 11c). Pressing it swaps to the other scope; it never opens a menu. Absent
+ * when no file is active, since there is nothing to swap to.
+ */
+export function HistoryScopeSwitch({
+	atelier,
+	preferences,
+}: {
+	readonly atelier: HistoryRuntime;
+	readonly preferences?: AtelierExtensionPreferences;
+}) {
+	const { scope, setScope, activeFileId } = useHistoryScope(
+		atelier,
+		preferences,
+	);
+	if (!activeFileId) return null;
+	const other: HistoryScope = scope === "file" ? "repository" : "file";
+	return (
+		<button
+			type="button"
+			data-attr="history-scope-switch"
+			aria-label={`Showing ${scope === "file" ? "this file" : "the repository"}. Switch to ${other === "file" ? "this file" : "the repository"}`}
+			title={`Switch to ${other === "file" ? "this file" : "the repository"}`}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={() => setScope(other)}
+			className="group/scope mr-1.5 flex h-6 shrink-0 items-center gap-1 self-start rounded-[5px] px-1.5 text-[11.5px] font-medium text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+		>
+			<span>{scope === "file" ? "This file" : "Repository"}</span>
+			<ArrowLeftRight
+				aria-hidden="true"
+				className="size-2.5 text-[var(--color-icon-quaternary)] transition-colors group-hover/scope:text-[var(--color-icon-secondary)]"
+				strokeWidth={2}
+			/>
+		</button>
+	);
+}
+
 /**
  * The History tab lists workspace moments: working changes first, then
  * checkpoints. One click on a checkpoint opens a read-only comparison from its
  * immediate predecessor to that checkpoint — it never restores anything.
+ * Scoped to the active file, it lists only the moments that touched that file
+ * and names what happened to it at each one.
  */
-export function HistoryView({ atelier }: { readonly atelier: HistoryRuntime }) {
+export function HistoryView({
+	atelier,
+	preferences,
+}: {
+	readonly atelier: HistoryRuntime;
+	readonly preferences?: AtelierExtensionPreferences;
+}) {
 	const containerRef = useRef<HTMLElement>(null);
 	const [wide, setWide] = useState(false);
+	const { scope, activeFileId, activeFilePath } = useHistoryScope(
+		atelier,
+		preferences,
+		{ owner: true },
+	);
+	const file =
+		scope === "file" && activeFileId
+			? { id: activeFileId, path: activeFilePath }
+			: null;
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container || typeof ResizeObserver === "undefined") return;
@@ -46,42 +195,66 @@ export function HistoryView({ atelier }: { readonly atelier: HistoryRuntime }) {
 			<div
 				className={wide ? "mx-auto w-full max-w-[60rem] px-5 py-4" : "w-full"}
 			>
-				<WorkingChangesRow atelier={atelier} wide={wide} />
-				<CheckpointList atelier={atelier} wide={wide} />
+				<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
+				<CheckpointList atelier={atelier} wide={wide} file={file} />
 			</div>
 		</section>
 	);
 }
 
+type ScopedFile = { readonly id: string; readonly path: string | null };
+
+const FILE_CHANGE_LABEL = {
+	added: "added",
+	modified: "edited",
+	removed: "removed",
+} as const;
+
 function WorkingChangesRow({
 	atelier,
 	wide,
+	file,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly wide: boolean;
+	readonly file: ScopedFile | null;
 }) {
 	const filesDescriptionId = useId();
 	// Non-suspending: creating a checkpoint refires this query for the fresh
 	// span, and a suspending read would blank the whole History panel
 	// (checkpoints included) while it resolves — on cold replicas, for seconds.
-	const workingChangeCount = useQueryResult((queryLix) =>
-		selectWorkingChangeCount(queryLix),
+	const workingChangeCount = useQueryResult(
+		(queryLix) => selectWorkingChangeCount(queryLix),
+		{ enabled: file === null },
+	);
+	const fileDiff = useQueryResult(
+		(queryLix) => selectWorkingFileDiff(queryLix, file?.id ?? ""),
+		{ enabled: file !== null },
 	);
 	const changeCount = workingChangeCount.rows[0]?.change_count ?? 0;
 	const fileCount = workingChangeCount.rows[0]?.file_count ?? 0;
-	const workingCountLabel =
-		fileCount > 0
+	const fileChange = file ? (fileDiff.rows[0] ?? null) : null;
+	const workingCountLabel = file
+		? fileChange
+			? FILE_CHANGE_LABEL[fileChange.diff_type]
+			: ""
+		: fileCount > 0
 			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
 			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
 	const isViewing =
 		atelier.diff.session !== null && "working" in atelier.diff.session.target;
 	// Pressing the active entry again leaves review mode — the row toggles.
-	const toggleWorkingChanges = () =>
-		isViewing
-			? atelier.diff.exit()
-			: void atelier.diff.open({ target: { working: true } });
+	const toggleWorkingChanges = () => {
+		if (isViewing) {
+			atelier.diff.exit();
+			return;
+		}
+		void atelier.diff.open({ target: { working: true } }).then(() => {
+			if (file?.path) atelier.diff.openFile(file.path);
+		});
+	};
 
-	if (fileCount === 0) return null;
+	if (file ? fileChange === null : fileCount === 0) return null;
 
 	return (
 		<div
@@ -118,7 +291,17 @@ function WorkingChangesRow({
 							{`now · ${workingCountLabel}`}
 						</span>
 					</span>
-					{wide ? (
+					{file && fileChange ? (
+						<ChangeKindDot
+							changeKind={fileChange.diff_type}
+							moved={
+								fileChange.from_path !== null &&
+								fileChange.to_path !== null &&
+								fileChange.from_path !== fileChange.to_path
+							}
+							className="mr-1.5 self-center"
+						/>
+					) : wide ? (
 						<WorkingFilePreview
 							atelier={atelier}
 							descriptionId={filesDescriptionId}
@@ -126,7 +309,7 @@ function WorkingChangesRow({
 					) : null}
 				</button>
 			</div>
-			{!wide ? (
+			{!wide && !file ? (
 				<AnimatedHistoryDisclosure open={isViewing}>
 					<WorkingChangeFileList atelier={atelier} />
 				</AnimatedHistoryDisclosure>
@@ -193,14 +376,71 @@ function WorkingChangeFileList({
 	);
 }
 
+/**
+ * Which checkpoints touched the file, and how. Revisions are observed at the
+ * commit that sealed them, so a revision at a checkpoint commit is that
+ * checkpoint's change; the change kind comes from the neighbouring older
+ * revision (none: added; tombstone: removed; otherwise edited).
+ */
+export function fileChangesByCheckpoint(
+	revisions: readonly FileRevisionRow[],
+	checkpointIds: ReadonlySet<string>,
+): ReadonlyMap<
+	string,
+	{
+		readonly changeKind: "added" | "modified" | "removed";
+		readonly path: string | null;
+	}
+> {
+	const byCommit = new Map<
+		string,
+		{ changeKind: "added" | "modified" | "removed"; path: string | null }
+	>();
+	const ordered = [...revisions].sort(
+		(left, right) => left.depth - right.depth,
+	);
+	ordered.forEach((revision, index) => {
+		if (!checkpointIds.has(revision.commit_id)) return;
+		const older = ordered[index + 1];
+		const changeKind = revision.is_deleted
+			? "removed"
+			: !older || older.is_deleted
+				? "added"
+				: "modified";
+		byCommit.set(revision.commit_id, { changeKind, path: revision.path });
+	});
+	return byCommit;
+}
+
 function CheckpointList({
 	atelier,
 	wide,
+	file,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly wide: boolean;
+	readonly file: ScopedFile | null;
 }) {
-	const checkpoints = useQuery((lix) => selectCheckpoints(lix));
+	const allCheckpoints = useQuery((lix) => selectCheckpoints(lix));
+	const revisions = useQueryResult(
+		(lix) => selectFileRevisions(lix, file?.id ?? ""),
+		{ enabled: file !== null },
+	);
+	const fileChanges = useMemo(
+		() =>
+			file
+				? fileChangesByCheckpoint(
+						revisions.rows,
+						new Set(allCheckpoints.map((checkpoint) => checkpoint.commit_id)),
+					)
+				: null,
+		[file, revisions.rows, allCheckpoints],
+	);
+	const checkpoints = fileChanges
+		? allCheckpoints.filter((checkpoint) =>
+				fileChanges.has(checkpoint.commit_id),
+			)
+		: allCheckpoints;
 	// The oldest checkpoint has no older checkpoint to diff against; its base
 	// is its commit's first parent (the repository's beginning).
 	const oldestCommitId = checkpoints.at(-1)?.commit_id ?? null;
@@ -214,22 +454,50 @@ function CheckpointList({
 			? (oldestParent.rows[0]?.parent_id ?? null)
 			: undefined;
 
+	if (file && revisions.status === "success" && checkpoints.length === 0) {
+		return (
+			<p
+				role="status"
+				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+			>
+				No checkpoint includes this file yet.
+			</p>
+		);
+	}
+
 	return (
 		<ol aria-label="Checkpoints" className="space-y-0">
-			{checkpoints.map((checkpoint, index) => (
-				<CheckpointItem
-					key={checkpoint.commit_id}
-					atelier={atelier}
-					checkpoint={checkpoint}
-					wide={wide}
-					previousCommitId={
-						checkpoints[index + 1]?.commit_id ??
-						(index === checkpoints.length - 1 ? oldestParentId : undefined)
-					}
-					index={index}
-					count={checkpoints.length}
-				/>
-			))}
+			{checkpoints.map((checkpoint) => {
+				// In file scope a checkpoint diffs against the previous checkpoint
+				// overall (the file's neighbour may be several checkpoints back,
+				// and the pair is what the review shows for the whole workspace).
+				const position = allCheckpoints.indexOf(checkpoint);
+				const previousCommitId =
+					allCheckpoints[position + 1]?.commit_id ??
+					(position === allCheckpoints.length - 1 ? oldestParentId : undefined);
+				return (
+					<CheckpointItem
+						key={checkpoint.commit_id}
+						atelier={atelier}
+						checkpoint={checkpoint}
+						wide={wide}
+						previousCommitId={previousCommitId}
+						index={position}
+						count={allCheckpoints.length}
+						fileChange={
+							fileChanges?.get(checkpoint.commit_id)
+								? {
+										...fileChanges.get(checkpoint.commit_id)!,
+										path:
+											fileChanges.get(checkpoint.commit_id)!.path ??
+											file?.path ??
+											null,
+									}
+								: null
+						}
+					/>
+				);
+			})}
 		</ol>
 	);
 }
@@ -241,6 +509,7 @@ function CheckpointItem({
 	previousCommitId,
 	index,
 	count,
+	fileChange,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly checkpoint: CheckpointRow;
@@ -249,6 +518,11 @@ function CheckpointItem({
 	readonly previousCommitId: string | null | undefined;
 	readonly index: number;
 	readonly count: number;
+	/** Present in file scope: what happened to the file at this checkpoint. */
+	readonly fileChange: {
+		readonly changeKind: "added" | "modified" | "removed";
+		readonly path: string | null;
+	} | null;
 }) {
 	const filesDescriptionId = useId();
 	const isInitial = index === count - 1;
@@ -283,10 +557,14 @@ function CheckpointItem({
 						atelier.diff.exit();
 						return;
 					}
-					void atelier.diff.open({
-						base: previousCommitId ? { commitId: previousCommitId } : null,
-						target: { commitId: checkpoint.commit_id },
-					});
+					void atelier.diff
+						.open({
+							base: previousCommitId ? { commitId: previousCommitId } : null,
+							target: { commitId: checkpoint.commit_id },
+						})
+						.then(() => {
+							if (fileChange?.path) atelier.diff.openFile(fileChange.path);
+						});
 				}}
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
@@ -317,9 +595,17 @@ function CheckpointItem({
 						>
 							{formatCheckpointRelativeTime(checkpoint.created_at)}
 						</time>
+						{fileChange
+							? ` · ${FILE_CHANGE_LABEL[fileChange.changeKind]}`
+							: null}
 					</span>
 				</span>
-				{wide ? (
+				{fileChange ? (
+					<ChangeKindDot
+						changeKind={fileChange.changeKind}
+						className="mr-1.5 self-center"
+					/>
+				) : wide ? (
 					<CheckpointFilePreview
 						descriptionId={filesDescriptionId}
 						atelier={atelier}
@@ -328,7 +614,7 @@ function CheckpointItem({
 					/>
 				) : null}
 			</button>
-			{!wide ? (
+			{!wide && !fileChange ? (
 				<AnimatedHistoryDisclosure open={isViewing}>
 					<CheckpointFileList
 						atelier={atelier}
@@ -593,14 +879,16 @@ function CheckpointFileList({
 function ChangeKindDot({
 	changeKind,
 	moved = false,
+	className = "",
 }: {
 	readonly changeKind: "added" | "modified" | "removed";
 	readonly moved?: boolean;
+	readonly className?: string;
 }) {
 	return (
 		<DiffGlyph
 			kind={moved && changeKind === "modified" ? "moved" : changeKind}
-			className="ml-auto shrink-0"
+			className={`ml-auto shrink-0 ${className}`}
 		/>
 	);
 }
@@ -651,5 +939,10 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Browse repository checkpoints.",
 	icon: History,
-	component: ({ atelier }) => <HistoryView atelier={atelier} />,
+	component: ({ atelier, view }) => (
+		<HistoryView atelier={atelier} preferences={view.preferences} />
+	),
+	headerAccessory: ({ atelier, view }) => (
+		<HistoryScopeSwitch atelier={atelier} preferences={view.preferences} />
+	),
 });

@@ -109,6 +109,40 @@ export function selectWorkingFileDiffs(lix: Lix) {
 		.$castTo<FileDiffRow>();
 }
 
+/** The working diff row for one file, or none when it is unchanged. */
+export function selectWorkingFileDiff(lix: Lix, fileId: string) {
+	return selectWorkingFileDiffs(lix).where("id", "=", fileId);
+}
+
+/**
+ * One row per revision of a file reachable from the active head, newest
+ * first. A revision is observed at the commit that sealed it, so on a linear
+ * branch the checkpoint commits are exactly where the file changed; depth 0
+ * at a non-checkpoint commit is the working change.
+ */
+export type FileRevisionRow = {
+	commit_id: string;
+	commit_created_at: string | null;
+	depth: number;
+	is_deleted: boolean;
+	path: string | null;
+};
+
+export function selectFileRevisions(lix: Lix, fileId: string) {
+	return qb(lix)
+		.selectFrom(sql<any>`lix_history('lix_file')`.as("history"))
+		.select([
+			sql<string>`lixcol_observed_commit_id`.as("commit_id"),
+			sql<string | null>`lixcol_commit_created_at`.as("commit_created_at"),
+			sql<number>`lixcol_depth`.as("depth"),
+			sql<boolean>`lixcol_is_deleted`.as("is_deleted"),
+			"path",
+		])
+		.where("id", "=", fileId)
+		.orderBy(sql`lixcol_depth`, "asc")
+		.$castTo<FileRevisionRow>();
+}
+
 export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
