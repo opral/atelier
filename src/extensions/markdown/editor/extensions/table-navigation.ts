@@ -122,17 +122,38 @@ export const TableNavigationExtension = Extension.create({
 			return selectNear(editor, cellPos + 1, 1);
 		};
 
+		const insertCellBreak = (editor: any) => {
+			if (!tableContext(editor)) return false;
+			const { $from, $to } = editor.state.selection;
+			// A generic block split creates a new cell in just this row.
+			// Keep table editing inline; cross-cell selections must not split
+			// or merge the table's structural nodes.
+			if (!$from.sameParent($to)) return true;
+			const { state, view } = editor;
+			const marks = state.storedMarks ?? $from.marks();
+			const tr = state.tr.replaceSelectionWith(
+				state.schema.nodes.hardBreak.create(),
+			);
+			tr.ensureMarks(marks);
+			view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+
 		return {
+			Enter: ({ editor }) => insertCellBreak(editor),
+			"Shift-Enter": ({ editor }) => insertCellBreak(editor),
 			Tab: ({ editor }) => moveCell(editor, 1),
 			"Shift-Tab": ({ editor }) => moveCell(editor, -1),
 			"Mod-Enter": ({ editor }) => exitTable(editor, 1),
 			ArrowUp: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				return context?.rowIndex === 0 && context.$from.parentOffset === 0
 					? exitTable(editor, -1)
 					: false;
 			},
 			ArrowDown: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (!context) return false;
 				return context.rowIndex === context.table.childCount - 1 &&
@@ -141,6 +162,7 @@ export const TableNavigationExtension = Extension.create({
 					: false;
 			},
 			ArrowLeft: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (!context || context.rowIndex !== 0 || context.cellIndex !== 0) {
 					return false;
@@ -148,6 +170,7 @@ export const TableNavigationExtension = Extension.create({
 				return context.$from.parentOffset === 0 ? exitTable(editor, -1) : false;
 			},
 			ArrowRight: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (
 					!context ||

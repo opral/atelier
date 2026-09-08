@@ -522,7 +522,7 @@ test("Cmd-Z cancels an image paste that is still being stored", async () => {
 	await lix.close();
 });
 
-test("paste at start inserts before existing content (TipTap + Lix)", async () => {
+test("paste at start stays inline with existing content (TipTap + Lix)", async () => {
 	const lix = await openLix({
 		keyValues: [
 			{
@@ -568,14 +568,14 @@ test("paste at start inserts before existing content (TipTap + Lix)", async () =
 	const mdAfter = await waitForMarkdown(
 		lix,
 		fileId,
-		(markdown) => markdown === "New\n\nStart",
+		(markdown) => markdown === ensureTrailingNewline("NewStart"),
 	);
-	expect(mdAfter).toBe("New\n\nStart");
+	expect(mdAfter).toBe(ensureTrailingNewline("NewStart"));
 
 	editor.destroy();
 });
 
-test("paste at end inserts after existing content (TipTap + Lix)", async () => {
+test("paste at end stays inline with existing content (TipTap + Lix)", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("paste_end_after");
 
@@ -608,9 +608,9 @@ test("paste at end inserts after existing content (TipTap + Lix)", async () => {
 	const mdAfter = await waitForMarkdown(
 		lix,
 		fileId,
-		(markdown) => markdown === ensureTrailingNewline("Start\n\nNew"),
+		(markdown) => markdown === ensureTrailingNewline("StartNew"),
 	);
-	expect(mdAfter).toBe(ensureTrailingNewline("Start\n\nNew"));
+	expect(mdAfter).toBe(ensureTrailingNewline("StartNew"));
 	editor.destroy();
 });
 

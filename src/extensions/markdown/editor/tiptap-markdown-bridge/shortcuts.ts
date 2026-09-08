@@ -321,6 +321,9 @@ export const MarkdownWcShortcuts = Extension.create({
 		const insertHardBreak = () => {
 			flushDomSelection();
 			const { state, view } = this.editor;
+			if (state.selection.$from.parent.type.spec.code) {
+				return newlineInCode(state, (tr) => view.dispatch(tr));
+			}
 			const hardBreak = (state.schema.nodes as any).hardBreak;
 			if (!hardBreak) return false;
 
@@ -529,6 +532,7 @@ export const MarkdownWcShortcuts = Extension.create({
 			return -1;
 		};
 
+		// Nested lists own their empty-item keys before the enclosing quote exits.
 		const escapeEmptyBlockquote = () => {
 			const { state } = this.editor;
 			const { selection } = state;
@@ -538,7 +542,7 @@ export const MarkdownWcShortcuts = Extension.create({
 			if (
 				$from.parent?.type?.name !== "paragraph" ||
 				$from.parent.content.size !== 0 ||
-				blockquoteDepth($from) < 0
+				$from.node($from.depth - 1)?.type?.name !== "blockquote"
 			) {
 				return false;
 			}

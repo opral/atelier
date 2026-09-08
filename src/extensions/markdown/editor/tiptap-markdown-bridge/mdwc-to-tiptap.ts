@@ -2,6 +2,9 @@
 
 const SPREAD_META_KEY = "__mdwc_spread";
 export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__atelier_empty_scaffold";
+export const LIST_LEADING_PARAGRAPH_DATA_KEY =
+	"__atelier_list_leading_paragraph";
+export const CODE_META_DATA_KEY = "__mdwc_code_meta";
 export const EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY = "__atelier_empty_paragraph";
 
 type PMMark = {
@@ -140,27 +143,37 @@ function astBlockToPM(
 					standaloneImageAsBlock: index > 0,
 				}),
 			);
-			return {
-				type: "listItem",
-				attrs,
-				// Markdown allows a bare list marker with no children. Its editor
-				// representation still needs a paragraph to hold the caret.
-				content: content.length > 0 ? content : [{ type: "paragraph" }],
-			};
+			// Markdown permits empty items and items beginning with a quote,
+			// heading, code block, or nested list. The editor requires a leading
+			// paragraph; omit this scaffold when saving unless it contains text.
+			if (content[0]?.type !== "paragraph") {
+				content.unshift({
+					type: "paragraph",
+					attrs: { data: { [LIST_LEADING_PARAGRAPH_DATA_KEY]: true } },
+				});
+			}
+			return { type: "listItem", attrs, content };
 		}
 		case "blockquote": {
 			const n = node as any;
+			const content = (n.children || []).map(astBlockToPM);
 			return {
 				type: "blockquote",
 				attrs: { data: buildNodeData(n.data) },
-				content: (n.children || []).map(astBlockToPM),
+				// A bare > marker still needs an editable text block.
+				content: content.length > 0 ? content : [{ type: "paragraph" }],
 			};
 		}
 		case "code": {
 			const n = node as any;
 			return {
 				type: "codeBlock",
-				attrs: { language: n.lang ?? null, data: buildNodeData(n.data) },
+				attrs: {
+					language: n.lang ?? null,
+					data: buildNodeData(n.data, {
+						[CODE_META_DATA_KEY]: n.meta ?? undefined,
+					}),
+				},
 				content: textContent(n.value || ""),
 			};
 		}

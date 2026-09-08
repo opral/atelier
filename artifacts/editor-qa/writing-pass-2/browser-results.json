@@ -1,0 +1,360 @@
+{
+  "browser": "143.0.7499.4",
+  "results": [
+    {
+      "name": "inline sentence paste",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "data": {
+                "id": "id_wwwzqmngx9"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello beautiful world"
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "Hello beautiful world\n",
+      "html": "<p data-diff-key=\"id_wwwzqmngx9\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Hello beautiful world</p>",
+      "selection": {
+        "type": "text",
+        "anchor": 17,
+        "head": 17
+      }
+    },
+    {
+      "name": "literal code paste",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "js",
+              "data": {
+                "id": "id_0au5mjnh1y"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "before\n# heading\n- item\n\n  **literal**  \nAFTER"
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "```js\nbefore\n# heading\n- item\n\n  **literal**  \nAFTER\n```\n",
+      "html": "<pre data-language=\"js\"><span class=\"markdown-code-language\" aria-label=\"Code language: JavaScript\" contenteditable=\"false\">JavaScript</span><code data-diff-key=\"id_0au5mjnh1y\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" class=\"language-js\">before\n# heading\n- item\n\n  **literal**  \nAFTER</code></pre>",
+      "selection": {
+        "type": "text",
+        "anchor": 42,
+        "head": 42
+      }
+    },
+    {
+      "name": "Shift Enter in code",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null,
+              "data": {
+                "id": "id_hvx75nnh76"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "left\nRIGHT"
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "```\nleft\nRIGHT\n```\n",
+      "html": "<pre><code data-diff-key=\"id_hvx75nnh76\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">left\nRIGHT</code></pre>",
+      "selection": {
+        "type": "text",
+        "anchor": 6,
+        "head": 6
+      }
+    },
+    {
+      "name": "Enter inside table cell",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": {
+                "id": "id_7v1mzsnh9k"
+              }
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_8wsj7dnh9k"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_yzhd7inh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "One"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_oesg8hnh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Two"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_8sy9kxnh9k"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_t3v3ysnh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Hello "
+                      },
+                      {
+                        "type": "hardBreak",
+                        "attrs": {
+                          "data": {
+                            "id": "id_eiuqk2nhbv"
+                          },
+                          "soft": false
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "text": "world"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_rwded0nh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "second"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "| One             | Two    |\n| --------------- | ------ |\n| Hello <br>world | second |\n",
+      "html": "<table data-diff-key=\"id_7v1mzsnh9k\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><tbody><tr data-diff-key=\"id_8wsj7dnh9k\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><th data-diff-key=\"id_yzhd7inh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\">One</th><th data-diff-key=\"id_oesg8hnh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\">Two</th></tr><tr data-diff-key=\"id_8sy9kxnh9k\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><td data-diff-key=\"id_t3v3ysnh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Hello <br data-diff-key=\"id_eiuqk2nhbv\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\">world</td><td data-diff-key=\"id_rwded0nh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">second</td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 22,
+        "head": 22
+      }
+    },
+    {
+      "name": "structured paste inside table",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": {
+                "id": "id_7v1mzsnh9k"
+              }
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_8wsj7dnh9k"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_yzhd7inh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "One"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_oesg8hnh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Two"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_8sy9kxnh9k"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_t3v3ysnh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Hello "
+                      },
+                      {
+                        "type": "hardBreak",
+                        "attrs": {
+                          "data": {
+                            "id": "id_eiuqk2nhbv"
+                          },
+                          "soft": false
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "text": "# heading"
+                      },
+                      {
+                        "type": "hardBreak",
+                        "attrs": {
+                          "data": {
+                            "id": "id_32eyc6nhcq"
+                          },
+                          "soft": false
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "text": "- itemworld"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_rwded0nh9k"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "second"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "| One                                | Two    |\n| ---------------------------------- | ------ |\n| Hello <br># heading<br>- itemworld | second |\n",
+      "html": "<table data-diff-key=\"id_7v1mzsnh9k\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><tbody><tr data-diff-key=\"id_8wsj7dnh9k\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><th data-diff-key=\"id_yzhd7inh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\">One</th><th data-diff-key=\"id_oesg8hnh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\">Two</th></tr><tr data-diff-key=\"id_8sy9kxnh9k\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><td data-diff-key=\"id_t3v3ysnh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Hello <br data-diff-key=\"id_eiuqk2nhbv\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"># heading<br data-diff-key=\"id_32eyc6nhcq\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\">- itemworld</td><td data-diff-key=\"id_rwded0nh9k\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">second</td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 38,
+        "head": 38
+      }
+    }
+  ],
+  "errors": []
+}

@@ -89,13 +89,77 @@ export function handlePaste(args: {
 		});
 	}
 
-	const text = event?.clipboardData?.getData?.("text/plain") ?? "";
+	const text: string = event?.clipboardData?.getData?.("text/plain") ?? "";
 	if (!text) return false;
 
 	event.preventDefault?.();
+	const selection = editor?.state?.selection;
+	if (
+		selection?.$from?.sameParent(selection.$to) &&
+		(selection.$from.parent.type.spec.code ||
+			(!text.trim() && selection.$from.parent.type.name !== "tableCell"))
+	) {
+		// Code and whitespace are literal input. Parsing them as Markdown can
+		// replace a code fence with headings/lists or discard the input entirely.
+		editor.view.dispatch(editor.state.tr.insertText(text));
+		return true;
+	}
 	const ast = parseMarkdown(text);
 	const tiptapDoc = astToTiptapDoc(ast) as any;
-	return insertPastedBlocks(editor, tiptapDoc?.content ?? []);
+	const blocks = tiptapDoc?.content ?? [];
+	if (
+		selection?.$from?.sameParent(selection.$to) &&
+		selection.$from.parent.type.name === "tableCell" &&
+		(/[\r\n]/.test(text) ||
+			blocks.length !== 1 ||
+			blocks[0].type !== "paragraph" ||
+			!text.trim())
+	) {
+		// Cells accept inline content only. Block Markdown would split the table
+		// around the caret, so keep its source inside this cell with line breaks.
+		const content = text
+			.replace(/\r\n?/g, "\n")
+			.split("\n")
+			.flatMap((line, index) => [
+				...(index > 0 ? [{ type: "hardBreak" }] : []),
+				...(line ? [{ type: "text", text: line }] : []),
+			]);
+		return insertContentAt(
+			editor,
+			{ from: selection.from, to: selection.to },
+			content,
+		);
+	}
+
+	if (
+		blocks.length === 1 &&
+		blocks[0].type === "paragraph" &&
+		!/[\r\n]/.test(text)
+	) {
+		// Markdown trims insignificant boundary spaces, but clipboard fragments
+		// such as "beautiful " need those spaces when inserted into a sentence.
+		const content = blocks[0].content ?? [];
+		const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+		const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+		const first = content[0];
+		const last = content.at(-1);
+		const existingLeading =
+			first?.type === "text" ? (first.text.match(/^[ \t]+/)?.[0] ?? "") : "";
+		const existingTrailing =
+			last?.type === "text" ? (last.text.match(/[ \t]+$/)?.[0] ?? "") : "";
+		if (leading.length > existingLeading.length)
+			content.unshift({
+				type: "text",
+				text: leading.slice(existingLeading.length),
+			});
+		if (trailing.length > existingTrailing.length)
+			content.push({
+				type: "text",
+				text: trailing.slice(existingTrailing.length),
+			});
+		blocks[0].content = content;
+	}
+	return insertPastedBlocks(editor, blocks);
 }
 
 /**
@@ -277,29 +341,28 @@ function insertPastedBlocks(
 	if (!target) return false;
 
 	const { from, to, inlineFrom, inlineTo, sameParent } = target;
-	if (from !== to) {
-		// A single paragraph can replace an inline selection without changing
-		// the surrounding block. Multi-block Markdown must stay as blocks or
-		// all content after the first paragraph would be discarded.
-		if (inlineFrom && inlineTo && sameParent) {
-			const first = Array.isArray(blockFragment) ? blockFragment[0] : null;
-			const isSingleParagraph =
-				blockFragment.length === 1 &&
-				first &&
-				first.type === "paragraph" &&
-				Array.isArray(first.content);
-			if (isSingleParagraph) {
-				return insertContentAt(
-					editor,
-					{ from, to } as any,
-					first.content,
-					options?.preserveLiveSelection,
-				);
-			}
-		}
+	// A paragraph fragment belongs inline both at a caret and over selected
+	// text. Inserting its wrapper would split a sentence into separate blocks.
+	const first = blockFragment[0];
+	if (
+		inlineFrom &&
+		inlineTo &&
+		sameParent &&
+		blockFragment.length === 1 &&
+		first?.type === "paragraph" &&
+		Array.isArray(first.content)
+	) {
 		return insertContentAt(
 			editor,
-			{ from, to } as any,
+			{ from, to },
+			first.content,
+			options?.preserveLiveSelection,
+		);
+	}
+	if (from !== to) {
+		return insertContentAt(
+			editor,
+			{ from, to },
 			blockFragment,
 			options?.preserveLiveSelection,
 		);
