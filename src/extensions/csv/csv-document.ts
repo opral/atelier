@@ -1,5 +1,5 @@
 import type { CsvParseResult } from "./csv-data";
-import { detectCsvFormat, normalizeCsvHeaders } from "./csv-data";
+import { detectCsvFormat, normalizeCsvHeaders } from "./csv-format";
 
 /**
  * Editable CSV document model with line-preserving serialization.
@@ -46,8 +46,11 @@ export function parseCsvDocument(rawText: string): CsvDocument {
 export function serializeCsvDocument(document: CsvDocument): string {
 	let out = document.bom;
 	for (const record of document.records) {
+		const serialized =
+			record.raw ?? serializeCsvRecord(record.cells, document.delimiter);
+		// An unquoted empty final field has no bytes and disappears on reopen.
 		out +=
-			(record.raw ?? serializeCsvRecord(record.cells, document.delimiter)) +
+			(serialized === "" && record.terminator === "" ? '""' : serialized) +
 			record.terminator;
 	}
 	return out;

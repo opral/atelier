@@ -1,0 +1,23 @@
+
+> @opral/atelier@0.7.3 test /tmp/atelier-csv-baseline
+> vitest run src/lib/lix-diff-commands.test.ts --maxWorkers=4
+
+
+ RUN  v4.1.10 /tmp/atelier-csv-baseline
+
+ ❯ src/lib/lix-diff-commands.test.ts (12 tests | 1 failed) 106ms
+     × sweeps the selected file's new directories into the checkpoint 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/lix-diff-commands.test.ts > Lix SQL diff commands > sweeps the selected file's new directories into the checkpoint
+LixError: sql2 DataFusion error: Execution error: filesystem descriptor is missing its snapshot
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 passed (12)
+   Start at  17:30:10
+   Duration  327ms (transform 31ms, setup 25ms, import 61ms, tests 106ms, environment 80ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

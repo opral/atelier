@@ -1,3 +1,4 @@
+import type { CellClickedEventArgs } from "@glideapps/glide-data-grid";
 import { createRef, Suspense } from "react";
 import { Atelier, type AtelierShellHandle } from "@/atelier";
 import {
@@ -16,6 +17,23 @@ import { CsvView } from "./index";
 import { readCsvMetadata, type CsvColumnInfo } from "./csv-metadata";
 
 type MockedDataEditorProps = {
+	onCellClicked?: (
+		cell: readonly [number, number],
+		event: Pick<CellClickedEventArgs, "preventDefault"> &
+			Partial<
+				Pick<
+					CellClickedEventArgs,
+					"shiftKey" | "ctrlKey" | "metaKey" | "altKey" | "isTouch"
+				>
+			>,
+	) => void;
+	onPaste?: (
+		target: readonly [number, number],
+		values: readonly (readonly string[])[],
+	) => boolean;
+	onDelete?: (selection: {
+		rows: { length: number; toArray: () => number[] };
+	}) => boolean;
 	columns: readonly { title: string; width?: number }[];
 	onColumnResizeEnd?: (
 		column: { title: string },
@@ -2010,5 +2028,247 @@ test("CSV review to HEAD retains current column metadata without false property 
 				utils!.unmount();
 			});
 		await lix.close();
+	}
+});
+
+async function sortAndSearchMappingFixture(query: string) {
+	fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+	fireEvent.keyDown(screen.getByRole("button", { name: "Sort column" }), {
+		key: "ArrowDown",
+	});
+	fireEvent.click(await screen.findByRole("menuitemradio", { name: "name" }));
+	fireEvent.click(screen.getByRole("button", { name: "Close" }));
+	fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+		target: { value: query },
+	});
+	await waitFor(() =>
+		expect(screen.getByTestId("csv-cell-0-0")).toHaveTextContent("Alice"),
+	);
+}
+
+test("fresh mapping: filtered sorted paste updates visible sources and appends beyond them", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nHidden,closed\nBob,trial\nAlice,trial\n",
+	);
+	try {
+		await sortAndSearchMappingFixture("trial");
+		act(() => {
+			expect(
+				latestDataEditorProps.current?.onPaste?.(
+					[0, 0],
+					[
+						["Alice", "won"],
+						["Bob", "lost"],
+						["New", "trial"],
+					],
+				),
+			).toBe(false);
+		});
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,stage\nHidden,closed\nBob,lost\nAlice,won\nNew,trial\n"),
+		);
+		expect((await fixture.read()).lixcol_metadata).toEqual({
+			other_extension: { preserved: true },
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("fresh mapping: clearing filtered sorted cells never deletes or edits hidden records", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nHidden,closed\nBob,trial\nAlice,trial\n",
+	);
+	try {
+		await sortAndSearchMappingFixture("trial");
+		act(() => {
+			expect(
+				latestDataEditorProps.current?.onDelete?.({
+					rows: { length: 0, toArray: () => [] },
+				}),
+			).toBe(true);
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{ location: [1, 0], value: { kind: "text", data: "" } },
+				{ location: [1, 1], value: { kind: "text", data: "" } },
+			]);
+		});
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,stage\nHidden,closed\nBob,\nAlice,\n"),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("fresh mapping: deleting one sorted visible row uses its original record", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nHidden,closed\nBob,trial\nAlice,trial\n",
+	);
+	try {
+		await sortAndSearchMappingFixture("trial");
+		act(() => {
+			expect(
+				latestDataEditorProps.current?.onDelete?.({
+					rows: { length: 1, toArray: () => [0] },
+				}),
+			).toBe(false);
+		});
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,stage\nHidden,closed\nBob,trial\n"),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("fresh mapping: inserted and deleted columns keep surviving property IDs and external metadata", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		const before = readCsvMetadata((await fixture.read()).lixcol_metadata)!;
+		clickCsvHeader(0);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Insert column left" }),
+		);
+		await waitFor(() =>
+			expect(latestDataEditorProps.current?.columns).toHaveLength(3),
+		);
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[2],
+			).toMatchObject({
+				id: before.columns[1].id,
+				header: "stage",
+				index: 2,
+				type: "select",
+			}),
+		);
+		clickCsvHeader(0);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Delete column" }),
+		);
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				"name,stage\nAlice,qualified\nBob,trial\n",
+			);
+			expect(readCsvMetadata(row.lixcol_metadata)?.columns).toEqual(
+				before.columns,
+			);
+			expect(row.lixcol_metadata).toMatchObject({
+				other_extension: { preserved: true },
+			});
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test.each(["shiftKey", "ctrlKey", "metaKey", "altKey"] as const)(
+	"checkbox callback preserves modifier selection without toggling: %s",
+	async (modifier) => {
+		const source =
+			"name,done,stage\nHidden,no,closed\nBob,yes,trial\nAlice,0,trial\n";
+		const fixture = await renderMetadataCsv(source, {
+			atelier_csv: {
+				version: 1,
+				columns: [{ id: "done", header: "done", index: 1, type: "checkbox" }],
+			},
+		});
+		try {
+			await sortAndSearchMappingFixture("trial");
+			const prevented = vi.fn();
+			act(() =>
+				latestDataEditorProps.current?.onCellClicked?.([1, 0], {
+					preventDefault: prevented,
+					[modifier]: true,
+				}),
+			);
+			expect(prevented).not.toHaveBeenCalled();
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe(source);
+			expect(latestDataEditorProps.current?.getCellContent([1, 0]).data).toBe(
+				"0",
+			);
+		} finally {
+			await fixture.close();
+		}
+	},
+);
+
+test.each([false, true])(
+	"ordinary/touch sorted checkbox uses displayed row encoding and source index: touch=%s",
+	async (isTouch) => {
+		const fixture = await renderMetadataCsv(
+			"name,done,stage\nHidden,no,closed\nBob,yes,trial\nAlice,0,trial\n",
+			{
+				atelier_csv: {
+					version: 1,
+					columns: [{ id: "done", header: "done", index: 1, type: "checkbox" }],
+				},
+			},
+		);
+		try {
+			await sortAndSearchMappingFixture("trial");
+			const prevented = vi.fn();
+			act(() =>
+				latestDataEditorProps.current?.onCellClicked?.([1, 0], {
+					preventDefault: prevented,
+					isTouch,
+				}),
+			);
+			expect(prevented).toHaveBeenCalledOnce();
+			await waitFor(async () =>
+				expect(
+					new TextDecoder().decode(
+						(await fixture.read()).content as Uint8Array,
+					),
+				).toBe(
+					"name,done,stage\nHidden,no,closed\nBob,yes,trial\nAlice,1,trial\n",
+				),
+			);
+		} finally {
+			await fixture.close();
+		}
+	},
+);
+
+test("fresh checkbox follow-up preserves every supported boolean encoding", async () => {
+	const source = "name,done\nr0,yes\nr1,no\nr2,TRUE\nr3,False\nr4,1\nr5,0\n";
+	const fixture = await renderMetadataCsv(source, {
+		atelier_csv: {
+			version: 1,
+			columns: [{ id: "done", header: "done", index: 1, type: "checkbox" }],
+		},
+	});
+	try {
+		const expected = ["no", "yes", "false", "true", "0", "1"];
+		for (let row = 0; row < expected.length; row++) {
+			act(() =>
+				latestDataEditorProps.current?.onCellClicked?.([1, row], {
+					preventDefault: () => {},
+					isTouch: row % 2 === 1,
+				}),
+			);
+			await waitFor(() =>
+				expect(
+					latestDataEditorProps.current?.getCellContent([1, row]).data,
+				).toBe(expected[row]),
+			);
+		}
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,done\nr0,no\nr1,yes\nr2,false\nr3,true\nr4,0\nr5,1\n"),
+		);
+	} finally {
+		await fixture.close();
 	}
 });

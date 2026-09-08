@@ -302,3 +302,55 @@ describe("serializeCsvRecord", () => {
 		);
 	});
 });
+
+describe("CSV QA: blank records survive structural edits", () => {
+	test.each(["name", "name\nvalue", "name\r\nvalue"])(
+		"reopens an appended single-column empty row: %j",
+		(source) => {
+			const edited = appendDocumentRow(parseCsvDocument(source), 1);
+			expect(
+				csvDocumentView(parseCsvDocument(serializeCsvDocument(edited))),
+			).toEqual(csvDocumentView(edited));
+		},
+	);
+	test("reopens a cleared last single-column value without a trailing newline", () => {
+		const edited = setDocumentCells(parseCsvDocument("name\nvalue"), [
+			{ row: 0, column: 0, value: "" },
+		]);
+		expect(
+			csvDocumentView(parseCsvDocument(serializeCsvDocument(edited))).rows,
+		).toEqual([{ rowNumber: 1, cells: [""] }]);
+	});
+});
+
+describe("CSV QA: structural edit persistence matrix", () => {
+	test.each([",", ";", "\t"])(
+		"retains row and column edits with delimiter %j",
+		(delimiter) => {
+			for (const newline of ["\n", "\r\n", "\r"]) {
+				for (const trailing of ["", newline]) {
+					const original = parseCsvDocument(
+						`name${delimiter}value${newline}alpha${delimiter}1${newline}beta${delimiter}2${trailing}`,
+					);
+					const variants = [
+						insertDocumentRow(original, 0, 2),
+						appendDocumentRow(original, 2),
+						deleteDocumentRows(original, [1]),
+						insertDocumentColumn(original, 0),
+						insertDocumentColumn(original, 2),
+						deleteDocumentColumns(original, [1]),
+						setDocumentCells(original, [
+							{ row: 1, column: 0, value: 'say "hello"\nnext' },
+						]),
+						renameDocumentColumn(original, 1, `a${delimiter}b`),
+					];
+					for (const edited of variants) {
+						expect(
+							csvDocumentView(parseCsvDocument(serializeCsvDocument(edited))),
+						).toEqual(csvDocumentView(edited));
+					}
+				}
+			}
+		},
+	);
+});

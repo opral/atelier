@@ -1,0 +1,487 @@
+{
+	"browser": "143.0.7499.4",
+	"scope": "Real Glide DataEditor plus production providePropertyEditor; excludes CsvView persistence and custom canvas checkbox toggle",
+	"results": [
+		{
+			"name": "Enter commit text",
+			"rows": [
+				[
+					"edited",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 1]
+		},
+		{
+			"name": "Enter commit number",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"-123.45",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [4, 1]
+		},
+		{
+			"name": "Enter commit email",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"new+tag@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [5, 1]
+		},
+		{
+			"name": "Enter commit url",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com/a?b=1"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [6, 1]
+		},
+		{
+			"name": "Escape cancels",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 0]
+		},
+		{
+			"name": "Tab commits and moves right",
+			"rows": [
+				[
+					"tabbed",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [1, 0]
+		},
+		{
+			"name": "Shift Tab commits and moves left",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"99",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [3, 0]
+		},
+		{
+			"name": "outside click commits",
+			"rows": [
+				[
+					"blurred",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 0]
+		},
+		{
+			"name": "rapid multiline Shift Enter then Enter",
+			"rows": [
+				[
+					"first\nsecond",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 1]
+		},
+		{
+			"name": "native multiline tab clipboard inside cell editor",
+			"rows": [
+				[
+					"one\ttwo\nthree\tfour",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 1]
+		},
+		{
+			"name": "IME picker Enter guard then normal selection",
+			"rows": [
+				[
+					"Hello world",
+					"漢字",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [1, 0]
+		},
+		{
+			"name": "keyboard creates option",
+			"rows": [
+				[
+					"Hello world",
+					"Created",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [1, 0]
+		},
+		{
+			"name": "checkbox property picker",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"no",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [2, 0]
+		},
+		{
+			"name": "date property save",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2027-01-02",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [3, 0]
+		},
+		{
+			"name": "native CDP composition with synthetic composing Enter then commit",
+			"rows": [
+				[
+					"漢",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 1]
+		},
+		{
+			"name": "pointer-down opens text editor before release",
+			"rows": [
+				[
+					"pressed",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 1]
+		},
+		{
+			"name": "Shift click selects range without opening editor",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [0, 0]
+		},
+		{
+			"name": "Control click preserves selection gesture and public click callback",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [1, 1]
+		},
+		{
+			"name": "Meta click preserves selection gesture and public click callback",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [1, 1]
+		},
+		{
+			"name": "Alt click preserves selection gesture and public click callback",
+			"rows": [
+				[
+					"Hello world",
+					"Existing",
+					"yes",
+					"2026-09-08",
+					"12",
+					"a@example.com",
+					"https://example.com"
+				],
+				[
+					"second",
+					"漢字",
+					"no",
+					"2026-09-09",
+					"34",
+					"b@example.com",
+					"https://openai.com"
+				]
+			],
+			"selection": [1, 1]
+		}
+	],
+	"errors": []
+}

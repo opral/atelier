@@ -202,3 +202,97 @@ index f46c1051a3a9c56265deedf63078737ec3b89e34..83d67c01b3534ff15fc33af35b868f78
  
  /** @category Cells */
  export interface BaseGridCell {
+diff --git a/src/internal/data-grid-overlay-editor/data-grid-overlay-editor.tsx b/src/internal/data-grid-overlay-editor/data-grid-overlay-editor.tsx
+--- a/src/internal/data-grid-overlay-editor/data-grid-overlay-editor.tsx
++++ b/src/internal/data-grid-overlay-editor/data-grid-overlay-editor.tsx
+@@ -120,5 +120,7 @@
+     const onKeyDown = React.useCallback(
+         async (event: React.KeyboardEvent) => {
++            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
++            if (event.key !== "Escape" && event.key !== "Tab" && (event.key !== "Enter" || event.shiftKey)) return;
+             let save = false;
+             if (event.key === "Escape") {
+                 event.stopPropagation();
+diff --git a/dist/esm/internal/data-grid-overlay-editor/data-grid-overlay-editor.js b/dist/esm/internal/data-grid-overlay-editor/data-grid-overlay-editor.js
+--- a/dist/esm/internal/data-grid-overlay-editor/data-grid-overlay-editor.js
++++ b/dist/esm/internal/data-grid-overlay-editor/data-grid-overlay-editor.js
+@@ -45,6 +45,8 @@
+         finished.current = true;
+     }, [onFinishEditing]);
+     const onKeyDown = React.useCallback(async (event) => {
++        if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
++        if (event.key !== "Escape" && event.key !== "Tab" && (event.key !== "Enter" || event.shiftKey)) return;
+         let save = false;
+         if (event.key === "Escape") {
+             event.stopPropagation();
+diff --git a/dist/cjs/internal/data-grid-overlay-editor/data-grid-overlay-editor.js b/dist/cjs/internal/data-grid-overlay-editor/data-grid-overlay-editor.js
+--- a/dist/cjs/internal/data-grid-overlay-editor/data-grid-overlay-editor.js
++++ b/dist/cjs/internal/data-grid-overlay-editor/data-grid-overlay-editor.js
+@@ -73,6 +73,8 @@
+         finished.current = true;
+     }, [onFinishEditing]);
+     const onKeyDown = React.useCallback(async (event) => {
++        if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
++        if (event.key !== "Escape" && event.key !== "Tab" && (event.key !== "Enter" || event.shiftKey)) return;
+         let save = false;
+         if (event.key === "Escape") {
+             event.stopPropagation();
+diff --git a/src/data-editor/data-editor.tsx b/src/data-editor/data-editor.tsx
+--- a/src/data-editor/data-editor.tsx
++++ b/src/data-editor/data-editor.tsx
+@@ -2230,2 +2230,3 @@
+                 }
++                if (!a.isTouch && (a.shiftKey || a.ctrlKey || a.metaKey || a.altKey)) return false;
+                 if (a.button === 1) return !isPrevented.current;
+diff --git a/dist/esm/data-editor/data-editor.js b/dist/esm/data-editor/data-editor.js
+--- a/dist/esm/data-editor/data-editor.js
++++ b/dist/esm/data-editor/data-editor.js
+@@ -1200,2 +1200,3 @@
+             }
++            if (!a.isTouch && (a.shiftKey || a.ctrlKey || a.metaKey || a.altKey)) return false;
+             if (a.button === 1)
+diff --git a/dist/cjs/data-editor/data-editor.js b/dist/cjs/data-editor/data-editor.js
+--- a/dist/cjs/data-editor/data-editor.js
++++ b/dist/cjs/data-editor/data-editor.js
+@@ -1229,2 +1229,3 @@
+             }
++            if (!a.isTouch && (a.shiftKey || a.ctrlKey || a.metaKey || a.altKey)) return false;
+             if (a.button === 1)
+diff --git a/src/internal/data-grid/data-grid.tsx b/src/internal/data-grid/data-grid.tsx
+--- a/src/internal/data-grid/data-grid.tsx
++++ b/src/internal/data-grid/data-grid.tsx
+@@ -645,3 +645,3 @@
+             }
+-            return result;
++            return { ...result, altKey: ev?.altKey ?? false };
+         },
+diff --git a/dist/esm/internal/data-grid/data-grid.js b/dist/esm/internal/data-grid/data-grid.js
+--- a/dist/esm/internal/data-grid/data-grid.js
++++ b/dist/esm/internal/data-grid/data-grid.js
+@@ -239,3 +239,3 @@
+         }
+-        return result;
++        return { ...result, altKey: ev?.altKey ?? false };
+     }, [
+diff --git a/dist/cjs/internal/data-grid/data-grid.js b/dist/cjs/internal/data-grid/data-grid.js
+--- a/dist/cjs/internal/data-grid/data-grid.js
++++ b/dist/cjs/internal/data-grid/data-grid.js
+@@ -266,3 +266,3 @@
+         }
+-        return result;
++        return { ...result, altKey: ev?.altKey ?? false };
+     }, [
+diff --git a/src/internal/data-grid/event-args.ts b/src/internal/data-grid/event-args.ts
+--- a/src/internal/data-grid/event-args.ts
++++ b/src/internal/data-grid/event-args.ts
+@@ -4,2 +4,3 @@
+ export interface BaseGridMouseEventArgs {
++    readonly altKey?: boolean;
+     readonly shiftKey: boolean;
+diff --git a/dist/dts/internal/data-grid/event-args.d.ts b/dist/dts/internal/data-grid/event-args.d.ts
+--- a/dist/dts/internal/data-grid/event-args.d.ts
++++ b/dist/dts/internal/data-grid/event-args.d.ts
+@@ -4,2 +4,3 @@
+ export interface BaseGridMouseEventArgs {
++    readonly altKey?: boolean;
+     readonly shiftKey: boolean;

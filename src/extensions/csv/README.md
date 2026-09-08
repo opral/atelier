@@ -2,6 +2,8 @@
 
 The `atelier_csv` extension edits ordinary CSV content and optionally stores property definitions in the same Lix file's `lixcol_metadata.atelier_csv` namespace. There is no descriptor sidecar and no new table file format. This is the sole built-in `atelier_csv` handler used by both `Atelier.Shell` and `Atelier.FileView`; it needs no preview flag or host registration. Column clicks and double-clicks use the same property menu, including its inline name field.
 
+Live and review grids use the same line-preserving parser, including trailing empty records. An edited empty final single-column row is serialized as `""` when no trailing newline exists so it survives reopening. Generated display headers avoid collisions with literal numbered headers; source headers remain unchanged.
+
 ```json
 {
 	"atelier_csv": {
@@ -41,6 +43,8 @@ The CSV plugin needs no changes: it can continue projecting CSV content for Lix 
 Row numbers reveal checkboxes on hover; selecting a row reveals the remaining checkboxes. Click to toggle individual rows, Shift-click for a range, or use the header checkbox to select all visible rows. The selection bar supports bulk property edits, deletion, and clearing selection (also Escape). Delete/Backspace deletes selected rows. Select, checkbox, and date properties use their corresponding bulk editors; plain CSV columns use text inputs. Bulk checkbox edits preserve each cell's existing yes/no, true/false, or 1/0 encoding. Search/filter/sort changes that alter the visible row mapping clear the selection. Selection itself is temporary and never writes metadata.
 
 The workspace patches Glide 6.0.3 to import the cell overlay eagerly. Its upstream `React.lazy` otherwise starts a separate network request on the first edit. The patch also prevents a queued canvas-focus callback from stealing focus after an editor opens. Keep both changes together when upgrading Glide. Because Atelier externalizes Glide in its library build, consuming workspaces must carry this patch too until the behavior is fixed upstream.
+
+The overlay patch also ignores composing keys and schedules edit completion only for Enter, Tab, and Escape. Ordinary typing and Shift+Enter must not queue a delayed cancellation that can race a subsequent commit. Modified non-touch clicks still emit the public click callback but do not activate editors or renderer edits, preserving modifier-assisted selection. Keep the source, ESM, and CommonJS changes together.
 
 The Glide patch additionally provides opt-in `pointer-down` activation for plain text-backed editors (text, number, email, and URL). Selection and editor mounting happen together on an unmodified primary mouse press; releasing the button does not reopen the editor. Modifier-assisted range selection, row selectors, context menus, and touch scrolling retain their existing behavior. Select/date pickers and checkbox cells keep click activation.
 
