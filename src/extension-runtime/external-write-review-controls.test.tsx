@@ -816,7 +816,7 @@ describe("ExternalWriteReviewControls", () => {
 		);
 		const sizers = document.querySelectorAll(".external-write-review-sizer");
 		const sizerTexts = Array.from(sizers, (node) => node.textContent);
-		expect(sizerTexts).toContain("company-brain-productization.md");
+		expect(sizerTexts).toContain("gtm/company-brain-productization.md");
 		expect(sizerTexts).toContain("3 of 3");
 		expect(sizerTexts).toContain("Seen 3 of 3");
 		for (const sizer of sizers) {

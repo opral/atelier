@@ -20,6 +20,7 @@ import {
 	Minus,
 	RotateCcw,
 } from "lucide-react";
+import { PathLabel, pathLabelText } from "../components/path-label";
 import { fileIconUrl } from "@/file-icons";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
@@ -374,10 +375,15 @@ export function ExternalWriteReviewControls({
 	// The name slot is sized by the longest file name (capped by the
 	// ellipsis) and the counter by its widest value, so the float keeps one
 	// width while stepping through files.
-	const longestFileName = listFiles.reduce((longest, file) => {
-		const name = fileNameFromDiffPath(file.path);
-		return name.length > longest.length ? name : longest;
-	}, navigation?.fileName ?? "");
+	const longestFileName = listFiles.reduce(
+		(longest, file) => {
+			const name = pathLabelText(file.path);
+			return name.length > longest.length ? name : longest;
+		},
+		navigation?.filePath
+			? pathLabelText(navigation.filePath)
+			: (navigation?.fileName ?? ""),
+	);
 	const hasVisibleFile =
 		navigation !== undefined && navigation.activeIndex !== null;
 	// With no changed file on screen the arrows are the way to one.
@@ -484,7 +490,10 @@ export function ExternalWriteReviewControls({
 									className="external-write-review-menu-file-icon"
 								/>
 								<span className="external-write-review-menu-name">
-									{fileNameFromDiffPath(file.path)}
+									<PathLabel
+										path={file.path}
+										parentClassName="external-write-review-path-parent"
+									/>
 								</span>
 								{viewing ? (
 									<small className="external-write-review-menu-tag">
@@ -534,7 +543,10 @@ export function ExternalWriteReviewControls({
 								className="external-write-review-menu-file-icon"
 							/>
 							<span className="external-write-review-menu-name">
-								{fileNameFromDiffPath(file.path)}
+								<PathLabel
+									path={file.path}
+									parentClassName="external-write-review-path-parent"
+								/>
 							</span>
 							<small className="external-write-review-menu-tag">unseen</small>
 						</button>
@@ -639,7 +651,7 @@ export function ExternalWriteReviewControls({
 									alt=""
 									className="external-write-review-file-icon"
 								/>
-								<span title={navigation.fileName}>
+								<span title={navigation.filePath ?? navigation.fileName}>
 									<strong className="external-write-review-stable">
 										<span
 											aria-hidden="true"
@@ -647,7 +659,16 @@ export function ExternalWriteReviewControls({
 										>
 											{longestFileName}
 										</span>
-										<span>{navigation.fileName}</span>
+										<span>
+											{navigation.filePath ? (
+												<PathLabel
+													path={navigation.filePath}
+													parentClassName="external-write-review-path-parent"
+												/>
+											) : (
+												navigation.fileName
+											)}
+										</span>
 									</strong>
 									<small className="external-write-review-stable">
 										<span
@@ -883,11 +904,6 @@ function PrimaryVerbStackIcon({
 		return <StackedIcon name="flag-stack" paths={FLAG_PATHS} />;
 	}
 	return <UndoStackIcon />;
-}
-
-function fileNameFromDiffPath(path: string): string {
-	const segments = path.split("/").filter(Boolean);
-	return segments[segments.length - 1] ?? path;
 }
 
 function isMacPlatform(): boolean {
