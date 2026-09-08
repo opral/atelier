@@ -100,7 +100,7 @@
 		z-index: 10;
 		width: 6px;
 		min-height: 36px;
-		background-color: rgba(87, 83, 78, 0.58);
+		background-color: var(--color-scrollbar-thumb);
 		border-radius: 9999px;
 		opacity: 0;
 		pointer-events: none;
@@ -142,7 +142,7 @@
 	}
 
 	.markdown-image-paste-hint[data-state="error"] {
-		background: var(--color-error-50);
+		background: var(--color-bg-status-danger);
 		box-shadow: inset 0 0 0 1px var(--color-error-200);
 		color: var(--color-error-800);
 	}
@@ -1068,19 +1068,22 @@
 	}
 
 	.markdown-view .ProseMirror .syntax-comment {
-		color: var(--color-text-tertiary);
+		color: var(--color-syntax-comment);
 		font-style: italic;
 	}
 
 	.markdown-view .ProseMirror .syntax-keyword {
-		color: oklch(0.5 0.14 245);
+		color: var(--color-syntax-keyword);
 		font-weight: 400;
 	}
 
 	.markdown-view .ProseMirror .syntax-literal,
-	.markdown-view .ProseMirror .syntax-number,
+	.markdown-view .ProseMirror .syntax-number {
+		color: var(--color-syntax-number);
+	}
+
 	.markdown-view .ProseMirror .syntax-string {
-		color: oklch(0.49 0.11 155);
+		color: var(--color-syntax-string);
 	}
 
 	.markdown-view .ProseMirror .syntax-property {
@@ -1090,29 +1093,6 @@
 	.markdown-view .ProseMirror .syntax-type {
 		color: inherit;
 		font-weight: 400;
-	}
-
-	.dark .markdown-view .ProseMirror pre {
-		box-shadow: none;
-	}
-
-	.dark .markdown-view .ProseMirror .syntax-keyword {
-		color: oklch(0.76 0.1 245);
-	}
-
-	.dark
-		.markdown-view
-		.ProseMirror
-		:is(.syntax-literal, .syntax-number, .syntax-string) {
-		color: oklch(0.78 0.09 155);
-	}
-
-	.dark .markdown-view .ProseMirror .syntax-property {
-		color: inherit;
-	}
-
-	.dark .markdown-view .ProseMirror .syntax-type {
-		color: inherit;
 	}
 
 	.markdown-view .ProseMirror img {
@@ -1142,7 +1122,7 @@
 	   previews exactly where an image, PDF, or later embed will land. */
 	.markdown-view .atelier-markdown-drop-indicator {
 		border-radius: 999px;
-		background: var(--color-brand-500);
+		background: var(--color-border-drop-target);
 		box-shadow: 0 0 0 1px var(--color-bg-panel);
 		animation: markdown-drop-indicator-in 100ms ease-out;
 	}
@@ -1615,7 +1595,7 @@
 		width: 100%;
 		aspect-ratio: 16 / 9;
 		overflow: hidden;
-		background: #17140f;
+		background: var(--color-bg-inverse-media);
 		border-radius: 0.625rem;
 		transition: box-shadow 120ms ease-out;
 	}
@@ -1647,7 +1627,7 @@
 		display: block;
 		width: 100%;
 		height: 100%;
-		background: #17140f;
+		background: var(--color-bg-inverse-media);
 	}
 
 	.markdown-view .ProseMirror .markdown-video-toolbar {
@@ -1659,7 +1639,7 @@
 		align-items: center;
 		gap: 0.125rem;
 		padding: 0.1875rem 0.25rem;
-		background: rgb(28 25 23 / 82%);
+		background: color-mix(in srgb, var(--color-bg-inverse) 82%, transparent);
 		border-radius: 0.5rem;
 		font-size: 0.6563rem;
 		font-weight: 600;
@@ -1687,19 +1667,19 @@
 
 	.markdown-view .ProseMirror .markdown-video-open {
 		padding: 0.25rem 0.4375rem;
-		color: #e7e2da;
+		color: var(--color-text-inverse-primary);
 		cursor: pointer;
 		text-decoration: none;
 	}
 
 	.markdown-view .ProseMirror .markdown-video-open:hover {
-		color: #ffffff;
+		color: var(--color-text-inverse-primary);
 	}
 
 	.markdown-view .ProseMirror .markdown-video-toolbar-divider {
 		width: 1px;
 		height: 0.75rem;
-		background: #3a352f;
+		background: var(--color-border-inverse);
 	}
 
 	/* The shared delete button sits inside the dark toolbar chip — restyle it
@@ -1708,7 +1688,7 @@
 		width: auto;
 		height: auto;
 		padding: 0.25rem 0.4375rem;
-		color: #c9c2b8;
+		color: var(--color-text-inverse-secondary);
 		background: none;
 		border: none;
 		opacity: 1;
@@ -1720,7 +1700,7 @@
 		.ProseMirror
 		.markdown-video-toolbar
 		.markdown-asset-delete:hover {
-		color: #eba59c;
+		color: var(--color-text-inverse-danger);
 		background: none;
 	}
 
@@ -1730,7 +1710,7 @@
 		left: 50%;
 		display: none;
 		padding: 0.375rem 0.75rem;
-		color: #a39c95;
+		color: var(--color-text-inverse-tertiary);
 		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
 		font-size: 0.6875rem;
 		transform: translate(-50%, -50%);
@@ -2237,12 +2217,12 @@
 	align-items: center;
 	gap: 0.1rem;
 	padding: 0.18rem 0.24rem;
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	border: 1px solid var(--color-border-inverse-hairline);
 	border-radius: 0.5rem;
-	background: rgb(28, 25, 23);
+	background: var(--color-bg-inverse);
 	box-shadow:
 		0 6px 16px rgba(28, 25, 23, 0.35),
-		0 1px 0 rgba(255, 255, 255, 0.08) inset;
+		0 1px 0 var(--color-border-inverse-hairline) inset;
 	font-size: 0.66rem;
 	font-weight: 620;
 	line-height: 1;
@@ -2254,12 +2234,12 @@
 	gap: 0.26rem;
 	padding: 0.26rem 0.45rem;
 	border-radius: 0.34rem;
-	color: rgb(235, 165, 156);
+	color: var(--color-text-inverse-danger);
 	cursor: pointer;
 }
 
 .markdown-inline-review-chip > button:hover:not(:disabled) {
-	background: rgba(255, 255, 255, 0.09);
+	background: var(--color-bg-inverse-overlay);
 }
 
 .markdown-inline-review-chip > button:disabled {
@@ -2268,7 +2248,7 @@
 }
 
 .markdown-inline-review-chip > button:focus-visible {
-	outline: 2px solid rgba(255, 255, 255, 0.9);
+	outline: 2px solid var(--color-text-inverse-primary);
 	outline-offset: 1px;
 }
 
@@ -2278,13 +2258,13 @@
 }
 
 .markdown-inline-review-chip-keep {
-	color: rgb(167, 217, 180) !important;
+	color: var(--color-text-inverse-success) !important;
 }
 
 .markdown-inline-review-chip-divider {
 	width: 1px;
 	height: 0.75rem;
-	background: rgba(255, 255, 255, 0.16);
+	background: var(--color-border-inverse-hairline);
 }
 
 .markdown-inline-review-chip-error {
@@ -2294,8 +2274,8 @@
 	width: max-content;
 	max-width: 16rem;
 	border-radius: 0.4rem;
-	background: rgb(127, 29, 29);
-	color: rgb(254, 226, 226);
+	background: var(--color-error-900);
+	color: var(--color-error-100);
 	padding: 0.28rem 0.45rem;
 	font-size: 0.66rem;
 	font-weight: 500;

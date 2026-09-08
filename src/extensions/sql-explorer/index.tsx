@@ -439,7 +439,7 @@ function QueryView({
 					onClick={() => void runQuery(query)}
 					disabled={isRunning}
 					data-attr="sql-run-query"
-					className="inline-flex items-center gap-1.5 rounded-[8px] bg-[var(--color-bg-action-primary)] px-3.5 py-1.5 text-[12.5px] font-bold text-[var(--color-text-on-action-primary)] shadow-[var(--shadow-action-primary)] hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:opacity-60"
+					className="inline-flex items-center gap-1.5 rounded-[8px] bg-[var(--color-bg-action-primary)] px-3.5 py-1.5 text-ui font-bold text-[var(--color-text-on-action-primary)] shadow-[var(--shadow-action-primary)] hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:opacity-60"
 				>
 					<Play aria-hidden="true" className="h-2.5 w-2.5 fill-current" />
 					Run
@@ -462,13 +462,13 @@ function QueryView({
 				</span>
 				<span className="flex-1" />
 				{isRunning ? (
-					<span className="font-mono text-[11.5px] text-[var(--color-text-tertiary)]">
+					<span className="font-mono text-ui-sm text-[var(--color-text-tertiary)]">
 						Running…
 					</span>
 				) : run === null ? null : (
 					<span
 						data-attr="sql-run-status"
-						className="font-mono text-[11.5px] text-[var(--color-text-tertiary)]"
+						className="font-mono text-ui-sm text-[var(--color-text-tertiary)]"
 					>
 						{run.hasResultColumns
 							? `${run.rows.length} ${run.rows.length === 1 ? "row" : "rows"}`
@@ -496,7 +496,7 @@ function QueryView({
 			)}
 			<div className="atelier-sql-results min-h-0 flex-1 overflow-auto">
 				{run === null || !run.hasResultColumns ? (
-					<div className="flex h-full items-center justify-center p-6 text-[12.5px] text-[var(--color-text-quaternary)]">
+					<div className="flex h-full items-center justify-center p-6 text-ui text-[var(--color-text-quaternary)]">
 						{run === null
 							? "Run a query to see results."
 							: "Statement finished without result rows."}

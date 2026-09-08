@@ -40,7 +40,7 @@ describe("CheckpointStatusBar", () => {
 		fireEvent.click(screen.getByText("Auto-accept"));
 		expect(switchControl).toBeChecked();
 		expect(switchControl).toHaveAttribute("aria-checked", "true");
-		expect(label).toHaveClass("text-[var(--color-brand-700)]");
+		expect(label).toHaveClass("text-[var(--color-text-brand)]");
 		expect(label?.querySelector(".h-3.w-5")).not.toBeNull();
 		expect(
 			label?.querySelector(".top-px.left-px.size-2.translate-x-2"),

@@ -21,6 +21,18 @@
 1. `pnpm install`
 2. `pnpm run dev`
 
+### Design tokens
+
+`src/shell/theme.css` is the only place that may hold a literal color, shadow, radius, size, or duration. Components and extension stylesheets consume tokens; they do not restate values.
+
+- **Semantic over primitive.** Use role tokens (`--color-text-tertiary`, `--color-bg-action-primary`, `--color-ring-focus-visible`) rather than palette steps (`--color-neutral-500`, `--color-brand-700`). Palette steps appear outside `theme.css` only where a third-party library needs its own variables bridged (Excalidraw). If no role token fits, add one to `theme.css` instead of reaching for a step.
+- **No fallbacks in `var()`.** `var(--color-x, #hex)` hides a missing token; `theme.css` is always loaded under `.atelier-root`, so reference the token bare.
+- **Dark chrome uses the inverse set.** Anything floating dark over the light UI (review pill, media frames, player controls) uses `--color-bg-inverse*`, `--color-text-inverse-*`, `--color-border-inverse*`, and `--shadow-inverse`. Do not hand-mix warm grays.
+- **Code uses the syntax set.** Text editor and markdown code blocks share `--color-syntax-*`.
+- **Scales.** Radii: `--radius-tag` (3px) inside controls, `--radius-control` (7px) for buttons, inputs, menu items, `--radius-panel` (8px) for popovers and panels; Tailwind exposes them as `rounded-tag`, `rounded-control`, `rounded-panel`. UI type: `text-ui-xs` (11px), `text-ui-sm` (11.5px), `text-ui` (12.5px), `text-ui-lg` (13px), each with its line height; document typography in the markdown extension keeps its own editorial scale. Motion: `--duration-fast`, `--duration-base`, `--duration-slow`. Control rows follow `--atelier-panel-header-height`.
+- **Focus.** `outline: 2px solid var(--color-ring-focus-visible)` with `outline-offset: 1px` (or `-2px` inside clipped containers). Avoid box-shadow rings.
+- **There is no dark theme.** Semantic tokens have light values only; nothing toggles `.dark`. Adding dark support means giving the semantic tokens dark values in `theme.css`, not overriding component styles.
+
 ### Opening a PR
 
 1. `pnpm run ci`

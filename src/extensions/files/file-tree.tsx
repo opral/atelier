@@ -157,7 +157,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-type='item'][data-item-type='folder'] > [data-item-section='icon'] {
-		color: #60a5fa;
+		color: var(--color-icon-folder);
 	}
 
 	[data-type='item'][data-item-type='folder']
@@ -355,7 +355,7 @@ const FILE_TREE_UNSAFE_CSS = `
 		border: 1px solid var(--color-border-panel);
 		border-radius: 6px;
 		background: var(--color-bg-panel);
-		box-shadow: 0 1px 2px rgba(28, 25, 23, 0.06);
+		box-shadow: var(--shadow-action-secondary);
 		color: var(--color-text-primary);
 		caret-color: var(--color-text-primary);
 		padding-inline: 6px;
@@ -1096,7 +1096,7 @@ function TreeItemContextMenuButton({
 			aria-keyshortcuts={ariaKeyShortcuts}
 			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 				destructive
-					? "text-[var(--color-text-secondary)] hover:bg-[var(--color-error-50)] hover:text-[var(--color-text-status-danger)] focus-visible:bg-[var(--color-error-50)] focus-visible:text-[var(--color-text-status-danger)]"
+					? "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-status-danger)] hover:text-[var(--color-text-status-danger)] focus-visible:bg-[var(--color-bg-status-danger)] focus-visible:text-[var(--color-text-status-danger)]"
 					: "hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)]"
 			}`}
 			onClick={onClick}

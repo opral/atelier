@@ -63,7 +63,7 @@
 	top: 0;
 	height: 100%;
 	border-radius: 999px;
-	background: rgba(168, 162, 158, 0.7);
+	background: var(--color-scrollbar-thumb);
 	opacity: 0;
 }
 

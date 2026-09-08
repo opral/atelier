@@ -1390,7 +1390,9 @@ function FilesViewContent({
 			) : null}
 			{/* Compact New row for side-panel use. */}
 			{context?.panelSide !== "central" && !readOnly ? (
-				<div className={`transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}>
+				<div
+					className={`transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
+				>
 					{createRequest ? (
 						<CompactNewButton disabled />
 					) : (
@@ -1467,7 +1469,7 @@ const CompactNewButton = forwardRef<
 		<button
 			ref={ref}
 			type="button"
-			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-[7px] px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-control px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 			data-attr="file-new"
 			onMouseDown={(event) => event.preventDefault()}
 			disabled={disabled}

@@ -90,7 +90,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-control text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -160,7 +160,7 @@ export function TopBar({
 				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
 					{reviewTitle ? (
 						<span
-							className="max-w-80 truncate px-1 font-bold text-[var(--color-brand-700)]"
+							className="max-w-80 truncate px-1 font-bold text-[var(--color-text-brand)]"
 							data-attr="diff-mode-title"
 						>
 							{reviewTitle}
@@ -169,7 +169,7 @@ export function TopBar({
 						<span
 							className={`ph-mask max-w-60 truncate px-1 font-semibold ${
 								isReviewing
-									? "text-[var(--color-warning-600)]"
+									? "text-[var(--color-text-status-warning)]"
 									: "text-[var(--color-text-primary)]"
 							}`}
 						>
@@ -200,7 +200,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-[7px] text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-control text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"

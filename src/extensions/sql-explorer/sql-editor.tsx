@@ -53,9 +53,13 @@ const editorFocused = StateField.define<boolean>({
 });
 
 const highlight = HighlightStyle.define([
-	{ tag: tags.keyword, color: "var(--color-brand-700)", fontWeight: "600" },
-	{ tag: tags.string, color: "var(--color-success-700)" },
-	{ tag: tags.number, color: "var(--color-warning-700)" },
+	{
+		tag: tags.keyword,
+		color: "var(--color-syntax-keyword)",
+		fontWeight: "600",
+	},
+	{ tag: tags.string, color: "var(--color-syntax-string)" },
+	{ tag: tags.number, color: "var(--color-syntax-number)" },
 	{ tag: tags.comment, color: "var(--color-text-tertiary)" },
 ]);
 

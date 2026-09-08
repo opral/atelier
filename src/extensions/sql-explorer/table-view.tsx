@@ -183,7 +183,7 @@ export function TableView({
 					aria-hidden="true"
 					className="h-[13px] w-[13px] shrink-0 text-[var(--color-icon-secondary)]"
 				/>
-				<span className="font-mono text-[12.5px] font-semibold text-[var(--color-text-primary)]">
+				<span className="font-mono text-ui font-semibold text-[var(--color-text-primary)]">
 					{baseTable}
 				</span>
 				{availableSurfaces.length > 1 ? (
@@ -226,7 +226,7 @@ export function TableView({
 				/>
 				<span className="flex-1" />
 				{data === null ? null : (
-					<span className="font-mono text-[11.5px] whitespace-nowrap">
+					<span className="font-mono text-ui-sm whitespace-nowrap">
 						<span
 							className="font-semibold text-[var(--color-text-status-success)]"
 							title={formatQueryTimingDetails(
@@ -340,7 +340,7 @@ function FilterBar({
 			{filters.map((filter, index) => (
 				<span
 					key={`${filter.column}-${index}`}
-					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 font-mono text-[11px] text-[var(--color-text-primary)]"
+					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 font-mono text-ui-xs text-[var(--color-text-primary)]"
 				>
 					{filter.column} {operatorSymbol(filter.operator)} {filter.value}
 					<button
@@ -382,7 +382,7 @@ function FilterBar({
 					className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-quaternary)] focus-visible:outline-none"
 				/>
 			) : (
-				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 font-mono text-[11px] text-[var(--color-text-primary)]">
+				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 font-mono text-ui-xs text-[var(--color-text-primary)]">
 					{pending.column}
 					{pending.operator === null ? null : (
 						<>
@@ -405,7 +405,7 @@ function FilterBar({
 										setPending(null);
 									}
 								}}
-								className="w-24 bg-transparent font-mono text-[11px] focus-visible:outline-none"
+								className="w-24 bg-transparent font-mono text-ui-xs focus-visible:outline-none"
 							/>
 						</>
 					)}

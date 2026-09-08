@@ -159,7 +159,7 @@
 		display: inline-block;
 		max-width: 100%;
 		padding: 0 6px;
-		border-radius: 3px;
+		border-radius: var(--radius-tag);
 		line-height: 20px;
 		white-space: nowrap;
 		overflow: hidden;
@@ -175,7 +175,7 @@
 		vertical-align: middle;
 	}
 	.csv-review-checkbox.is-checked {
-		border-radius: 3px;
+		border-radius: var(--radius-tag);
 		background: var(--color-bg-action-primary);
 		color: var(--color-text-on-action-primary);
 	}

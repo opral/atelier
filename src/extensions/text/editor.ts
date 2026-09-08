@@ -69,7 +69,7 @@ const atelierHighlightStyle = HighlightStyle.define([
 			tags.definitionKeyword,
 			tags.modifier,
 		],
-		color: "rgb(162, 28, 175)",
+		color: "var(--color-syntax-keyword)",
 	},
 	{
 		tag: [
@@ -79,28 +79,28 @@ const atelierHighlightStyle = HighlightStyle.define([
 			tags.function(tags.variableName),
 			tags.standard(tags.variableName),
 		],
-		color: "rgb(29, 78, 216)",
+		color: "var(--color-syntax-type)",
 	},
 	{
 		tag: [tags.string, tags.special(tags.string), tags.regexp],
-		color: "rgb(63, 125, 32)",
+		color: "var(--color-syntax-string)",
 	},
 	{
 		tag: [tags.bool, tags.null, tags.number, tags.integer, tags.float],
-		color: "rgb(194, 65, 12)",
+		color: "var(--color-syntax-number)",
 	},
 	{
 		tag: [tags.comment, tags.meta],
-		color: "rgb(120, 113, 108)",
+		color: "var(--color-syntax-comment)",
 		fontStyle: "italic",
 	},
 	{
 		tag: [tags.propertyName, tags.attributeName],
-		color: "rgb(3, 105, 161)",
+		color: "var(--color-syntax-property)",
 	},
 	{
 		tag: [tags.invalid],
-		color: "rgb(185, 28, 28)",
+		color: "var(--color-syntax-invalid)",
 		textDecoration: "underline wavy",
 	},
 ]);
@@ -136,7 +136,7 @@ const atelierEditorTheme = EditorView.theme({
 	},
 	".cm-activeLine": {
 		backgroundColor:
-			"color-mix(in srgb, var(--color-brand-50) 28%, transparent)",
+			"color-mix(in srgb, var(--color-bg-brand-soft) 28%, transparent)",
 	},
 	".cm-gutters": {
 		minWidth: "38px",
@@ -152,7 +152,7 @@ const atelierEditorTheme = EditorView.theme({
 	},
 	".cm-activeLineGutter": {
 		backgroundColor:
-			"color-mix(in srgb, var(--color-brand-50) 28%, transparent)",
+			"color-mix(in srgb, var(--color-bg-brand-soft) 28%, transparent)",
 		color: "var(--color-text-tertiary)",
 	},
 	".cm-panels": {

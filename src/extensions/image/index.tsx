@@ -370,7 +370,7 @@ function ImageToolbarButton({
 				<Button
 					aria-label={ariaLabel}
 					aria-pressed={isPressed}
-					className="h-7 min-w-7 gap-1.5 rounded-[7px] px-2 text-[11.5px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-35 [&_svg]:size-3.75"
+					className="h-7 min-w-7 gap-1.5 rounded-control px-2 text-[11.5px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-35 [&_svg]:size-3.75"
 					disabled={disabled}
 					onClick={onClick}
 					size="sm"

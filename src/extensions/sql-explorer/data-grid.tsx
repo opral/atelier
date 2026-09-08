@@ -116,13 +116,13 @@ export function formatGridCell(
 	if (value === null || value === undefined) {
 		return {
 			text: "null",
-			className: "font-mono text-[11.5px] text-[var(--color-text-quaternary)]",
+			className: "font-mono text-ui-sm text-[var(--color-text-quaternary)]",
 		};
 	}
 	if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
 		return {
 			text: formatByteSize(value.byteLength),
-			className: "font-mono text-[11.5px] text-[var(--color-text-tertiary)]",
+			className: "font-mono text-ui-sm text-[var(--color-text-tertiary)]",
 		};
 	}
 	if (typeof value === "number" || typeof value === "bigint") {
@@ -140,7 +140,7 @@ export function formatGridCell(
 	if (typeof value === "object") {
 		return {
 			text: Array.isArray(value) ? "[…]" : "{…}",
-			className: "font-mono text-[11.5px] text-[var(--color-text-quaternary)]",
+			className: "font-mono text-ui-sm text-[var(--color-text-quaternary)]",
 		};
 	}
 	const text = String(value);
@@ -154,12 +154,12 @@ export function formatGridCell(
 	if (name.endsWith("_at") || /^\d{4}-\d{2}-\d{2}[ T]/.test(text)) {
 		return {
 			text,
-			className: "font-mono text-[11.5px] text-[var(--color-text-quaternary)]",
+			className: "font-mono text-ui-sm text-[var(--color-text-quaternary)]",
 		};
 	}
 	return {
 		text,
-		className: "text-[12.5px] font-medium text-[var(--color-text-primary)]",
+		className: "text-ui font-medium text-[var(--color-text-primary)]",
 	};
 }
 
@@ -374,7 +374,7 @@ function JsonCell({
 				aria-expanded={isOpen}
 				data-attr={kind === "row_ref" ? "sql-row-ref-cell" : "sql-json-cell"}
 				onClick={toggle}
-				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
 					isOpen
 						? "border-[var(--color-icon-brand)] text-[var(--color-text-secondary)]"
 						: "border-transparent text-[var(--color-text-quaternary)] hover:border-[var(--color-border-panel)] hover:text-[var(--color-text-secondary)]"
@@ -396,7 +396,7 @@ function JsonCell({
 						maxWidth: "calc(100vw - 24px)",
 						zIndex: 30,
 					}}
-					className="rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-3 shadow-[0px_12px_32px_-4px_rgba(0,0,0,0.12),0px_4px_8px_-2px_rgba(0,0,0,0.08)]"
+					className="rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-3 shadow-lg"
 				>
 					<div className="flex items-center justify-between pb-2">
 						<span className="font-mono text-[12px] font-semibold text-[var(--color-text-primary)]">
@@ -415,7 +415,7 @@ function JsonCell({
 									.then(() => setHasCopied(true))
 									.catch(() => undefined);
 							}}
-							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-ui-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 						>
 							<Copy aria-hidden="true" className="h-3 w-3" />
 							{hasCopied ? "Copied" : "Copy"}
@@ -546,7 +546,7 @@ export function GridFooter({
 		<div className="atelier-sql-grid-footer flex h-9 shrink-0 items-center gap-3 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5">
 			<span
 				data-attr="sql-grid-row-range"
-				className="font-mono text-[11.5px] text-[var(--color-text-tertiary)]"
+				className="font-mono text-ui-sm text-[var(--color-text-tertiary)]"
 			>
 				{format(start)}–{format(end)}{" "}
 				<span className="text-[var(--color-text-quaternary)]">of</span>{" "}
@@ -572,7 +572,7 @@ export function GridFooter({
 					onClick={() => onPageChange(page - 1)}
 					path="m15 18-6-6 6-6"
 				/>
-				<span className="px-1 text-[11.5px] text-[var(--color-text-secondary)]">
+				<span className="px-1 text-ui-sm text-[var(--color-text-secondary)]">
 					Page {format(page + 1)}{" "}
 					<span className="text-[var(--color-text-quaternary)]">
 						of {format(pageCount)}
@@ -635,7 +635,7 @@ function PageSizeSelect({
 	readonly onPageSizeChange: (pageSize: number) => void;
 }) {
 	return (
-		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-[11.5px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]">
+		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-ui-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]">
 			<select
 				aria-label="Rows per page"
 				value={pageSize}

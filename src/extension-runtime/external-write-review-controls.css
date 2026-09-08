@@ -62,8 +62,8 @@
 		gap: 0.125rem;
 		padding: 0.4375rem;
 		border-radius: 0.75rem;
-		background: rgb(28, 25, 23);
-		box-shadow: 0 14px 32px rgba(28, 25, 23, 0.42);
+		background: var(--color-bg-inverse);
+		box-shadow: var(--shadow-inverse);
 	}
 
 	.external-write-review-button-exit {
@@ -74,7 +74,7 @@
 		padding: 0 0.5rem;
 		border-radius: 0.5rem;
 		background: transparent;
-		color: rgb(231, 226, 218);
+		color: var(--color-text-inverse-primary);
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
@@ -85,16 +85,16 @@
 	}
 
 	.external-write-review-button-exit:hover {
-		background: rgba(255, 255, 255, 0.09);
-		color: white;
+		background: var(--color-bg-inverse-overlay);
+		color: var(--color-text-inverse-primary);
 	}
 
 	.external-write-review-button-exit > kbd {
-		border: 1px solid rgb(75, 70, 63);
+		border: 1px solid var(--color-border-inverse-strong);
 		border-radius: 0.25rem;
-		background: rgb(42, 38, 32);
+		background: var(--color-bg-inverse-raised);
 		padding: 0.125rem 0.25rem;
-		color: rgb(201, 194, 184);
+		color: var(--color-text-inverse-secondary);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 0.59rem;
@@ -106,7 +106,7 @@
 		width: 1px;
 		height: 1.25rem;
 		margin: 0 0.25rem;
-		background: rgb(58, 53, 47);
+		background: var(--color-border-inverse);
 	}
 
 	/* The ▾ file checklist: every changed file, all ticked by default.
@@ -117,10 +117,10 @@
 		flex-direction: column;
 		gap: 1px;
 		padding: 0.375rem;
-		border: 1px solid rgb(58, 53, 47);
+		border: 1px solid var(--color-border-inverse);
 		border-radius: 0.625rem;
-		background: rgb(28, 25, 23);
-		box-shadow: 0 14px 32px rgba(28, 25, 23, 0.42);
+		background: var(--color-bg-inverse);
+		box-shadow: var(--shadow-inverse);
 	}
 
 	.external-write-review-menu > button {
@@ -129,7 +129,7 @@
 		gap: 0.5rem;
 		padding: 0.4375rem 0.625rem;
 		border-radius: 0.375rem;
-		color: rgb(201, 194, 184);
+		color: var(--color-text-inverse-secondary);
 		font-size: 0.75rem;
 		font-weight: 600;
 		text-align: left;
@@ -137,12 +137,12 @@
 	}
 
 	.external-write-review-menu > button[data-ticked] {
-		color: rgb(231, 226, 218);
+		color: var(--color-text-inverse-primary);
 		font-weight: 700;
 	}
 
 	.external-write-review-menu > button:hover {
-		background: rgb(42, 38, 32);
+		background: var(--color-bg-inverse-raised);
 	}
 
 	.external-write-review-menu-tick {
@@ -152,7 +152,7 @@
 		flex: none;
 		align-items: center;
 		justify-content: center;
-		border: 1.5px solid rgb(87, 83, 78);
+		border: 1.5px solid var(--color-border-inverse-strong);
 		border-radius: 0.25rem;
 		box-sizing: border-box;
 	}
@@ -165,7 +165,7 @@
 	.external-write-review-menu-tick > svg {
 		width: 0.5625rem;
 		height: 0.5625rem;
-		color: white;
+		color: var(--color-text-on-action-primary);
 		stroke-width: 3.2;
 	}
 
@@ -192,14 +192,14 @@
 	.external-write-review-menu-divider {
 		height: 1px;
 		margin: 0.25rem 0.125rem;
-		background: rgb(58, 53, 47);
+		background: var(--color-border-inverse);
 	}
 
 	/* Row state, right-aligned: "viewing", "left out", "unseen". */
 	.external-write-review-menu-tag {
 		margin-left: auto;
 		padding-left: 0.75rem;
-		color: rgb(140, 133, 124);
+		color: var(--color-text-inverse-tertiary);
 		font-size: 0.625rem;
 		font-weight: 500;
 	}
@@ -207,23 +207,23 @@
 	/* Unseen rows cannot be ticked: clicking one opens the file, which is
 	   what makes it seen (and ticked). */
 	.external-write-review-menu > button[data-state="unseen"] {
-		color: rgb(140, 133, 124);
+		color: var(--color-text-inverse-tertiary);
 		font-weight: 500;
 	}
 
 	.external-write-review-menu
 		> button[data-state="unseen"]:hover:not(:disabled) {
-		color: rgb(201, 194, 184);
+		color: var(--color-text-inverse-secondary);
 	}
 
 	.external-write-review-menu
 		> button[data-state="unseen"]
 		.external-write-review-menu-tick {
-		border-color: rgb(87, 83, 78);
+		border-color: var(--color-border-inverse-strong);
 	}
 
 	.external-write-review-menu > button[data-viewing] {
-		background: rgb(42, 38, 32);
+		background: var(--color-bg-inverse-raised);
 	}
 
 	/* A verb's arrow menu: "{Verb} all N files", "Undo only {file}". */
@@ -253,7 +253,7 @@
 	}
 
 	.external-write-review-verb-menu > button:disabled {
-		color: rgb(140, 133, 124);
+		color: var(--color-text-inverse-tertiary);
 		cursor: default;
 	}
 
@@ -262,7 +262,7 @@
 	}
 
 	.external-write-review-verb-menu kbd {
-		color: rgb(140, 133, 124);
+		color: var(--color-text-inverse-tertiary);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 0.59rem;
@@ -279,10 +279,10 @@
 		gap: 0.375rem;
 		margin: 0 0.25rem 0 0.0625rem;
 		padding: 0 0.5rem;
-		border: 1px solid rgb(58, 53, 47);
+		border: 1px solid var(--color-border-inverse);
 		border-radius: 0.5rem;
-		background: rgb(42, 38, 32);
-		color: rgb(231, 226, 218);
+		background: var(--color-bg-inverse-raised);
+		color: var(--color-text-inverse-primary);
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
@@ -291,7 +291,7 @@
 	}
 
 	.external-write-review-scope-chip:hover:not(:disabled) {
-		background: rgb(52, 47, 40);
+		background: var(--color-bg-inverse-hover);
 	}
 
 	.external-write-review-scope-chip:disabled {
@@ -302,7 +302,7 @@
 	.external-write-review-scope-chip > svg {
 		width: 0.625rem;
 		height: 0.625rem;
-		color: rgb(201, 194, 184);
+		color: var(--color-text-inverse-secondary);
 	}
 
 	/* The progress ring: orange = will be acted on, light grey = seen but
@@ -314,8 +314,9 @@
 		border-radius: 50%;
 		background: conic-gradient(
 			var(--color-bg-action-primary) 0deg var(--ring-ticked, 0deg),
-			rgb(140, 133, 124) var(--ring-ticked, 0deg) var(--ring-seen, 0deg),
-			rgb(87, 83, 78) var(--ring-seen, 0deg) 360deg
+			var(--color-text-inverse-tertiary) var(--ring-ticked, 0deg)
+				var(--ring-seen, 0deg),
+			var(--color-border-inverse-strong) var(--ring-seen, 0deg) 360deg
 		);
 	}
 
@@ -325,7 +326,7 @@
 		align-items: center;
 		gap: 0.42rem;
 		padding: 0 0.55rem 0 0.12rem;
-		color: rgb(231, 226, 218);
+		color: var(--color-text-inverse-primary);
 	}
 
 	.external-write-review-navigation > button {
@@ -335,12 +336,12 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 0.4375rem;
-		color: rgb(201, 194, 184);
+		color: var(--color-text-inverse-secondary);
 	}
 
 	.external-write-review-navigation > button:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.09);
-		color: white;
+		background: var(--color-bg-inverse-overlay);
+		color: var(--color-text-inverse-primary);
 	}
 
 	.external-write-review-navigation svg {
@@ -352,7 +353,11 @@
 		width: 0.875rem;
 		height: 0.875rem;
 		flex: none;
-		color: rgba(255, 255, 255, 0.72);
+		color: color-mix(
+			in srgb,
+			var(--color-text-inverse-primary) 72%,
+			transparent
+		);
 	}
 
 	.external-write-review-navigation > span {
@@ -370,13 +375,13 @@
 	}
 
 	.external-write-review-navigation small {
-		color: rgb(140, 133, 124);
+		color: var(--color-text-inverse-tertiary);
 		font-size: 0.72rem;
 		white-space: nowrap;
 	}
 
 	.external-write-review-navigation-placeholder {
-		color: rgb(168, 162, 158);
+		color: var(--color-text-inverse-secondary);
 		font-weight: 600;
 	}
 
@@ -419,13 +424,13 @@
 		padding: 0.3125rem 0.5625rem;
 		background: transparent;
 		/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
-		color: rgb(235, 165, 156);
+		color: var(--color-text-inverse-danger);
 		font-weight: 600;
 	}
 
 	.external-write-review-button-reject:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.09);
-		color: rgb(244, 198, 191);
+		background: var(--color-bg-inverse-overlay);
+		color: var(--color-text-inverse-danger-hover);
 	}
 
 	/* A verb is a split button: the big half acts on the ticked set, the
@@ -447,7 +452,7 @@
 	}
 
 	.external-write-review-split-reject:has(.external-write-review-split-arrow) {
-		border-color: rgb(90, 58, 58);
+		border-color: var(--color-border-inverse-danger);
 	}
 
 	.external-write-review-split-arrow {
@@ -474,24 +479,24 @@
 	.external-write-review-split-accept .external-write-review-split-arrow {
 		border-left: 1px solid rgba(0, 0, 0, 0.25);
 		background: var(--color-bg-action-primary-hover);
-		color: rgb(244, 208, 189);
+		color: var(--color-text-inverse-danger-hover);
 	}
 
 	.external-write-review-split-accept
 		.external-write-review-split-arrow:hover:not(:disabled) {
-		color: white;
+		color: var(--color-text-on-action-primary);
 	}
 
 	.external-write-review-split-reject .external-write-review-split-arrow {
-		border-left: 1px solid rgb(90, 58, 58);
-		background: rgb(42, 38, 32);
-		color: rgb(235, 165, 156);
+		border-left: 1px solid var(--color-border-inverse-danger);
+		background: var(--color-bg-inverse-raised);
+		color: var(--color-text-inverse-danger);
 	}
 
 	.external-write-review-split-reject
 		.external-write-review-split-arrow:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.09);
-		color: rgb(244, 198, 191);
+		background: var(--color-bg-inverse-overlay);
+		color: var(--color-text-inverse-danger-hover);
 	}
 
 	/* The pill divider between the stepper and the verbs. */
@@ -500,14 +505,14 @@
 		width: 1px;
 		height: 1rem;
 		margin-left: 0.125rem;
-		background: rgb(58, 53, 47);
+		background: var(--color-border-inverse);
 	}
 
 	.external-write-review-shortcut {
 		border-radius: 0.25rem;
-		background: rgba(255, 255, 255, 0.18);
+		background: var(--color-bg-inverse-overlay-strong);
 		padding: 0.125rem 0.3125rem;
-		color: rgb(244, 208, 189);
+		color: var(--color-text-inverse-danger-hover);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 0.59rem;
