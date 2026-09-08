@@ -38,6 +38,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
 	AlertTriangle,
@@ -1442,6 +1443,32 @@ function CsvTable({
 			rows: CompactSelection.empty(),
 		});
 	}, []);
+	// Glide only tracks pointer events on its own canvas, so a press on the
+	// blank panel around the table (the grid is sized to its content) would
+	// otherwise leave the last cell or rows selected. A press directly on the
+	// surrounding surface deselects, like clicking off a table in Notion;
+	// presses on controls inside that surface keep the selection they act on.
+	// The clear waits a tick: pointerdown runs before the browser moves focus
+	// off Glide's focused accessibility cell, and clearing while that cell is
+	// still focused makes Glide re-select it as its table re-renders.
+	const deselectOnBlankPress = useCallback(
+		(event: ReactPointerEvent<HTMLElement>) => {
+			if (event.button !== 0 || event.target !== event.currentTarget) return;
+			window.setTimeout(() => {
+				setGridSelection((current) =>
+					current.current === undefined &&
+					current.rows.length === 0 &&
+					current.columns.length === 0
+						? current
+						: {
+								columns: CompactSelection.empty(),
+								rows: CompactSelection.empty(),
+							},
+				);
+			}, 0);
+		},
+		[],
+	);
 	const selectedRows = gridSelection.rows
 		.toArray()
 		.filter((row) => row < rowMap.length);
@@ -1633,7 +1660,7 @@ function CsvTable({
 
 	return (
 		<>
-			<div className="csv-toolbar">
+			<div className="csv-toolbar" onPointerDown={deselectOnBlankPress}>
 				<CsvViewMenu
 					views={savedViews}
 					activeId={activeSavedView?.id ?? null}
@@ -1865,6 +1892,16 @@ function CsvTable({
 						};
 					}
 				}}
+				onPointerDown={deselectOnBlankPress}
+				data-csv-selection={
+					gridSelection.current
+						? "cell"
+						: gridSelection.rows.length > 0
+							? "rows"
+							: gridSelection.columns.length > 0
+								? "columns"
+								: "none"
+				}
 				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
 			>
 				{reviewModel ? (

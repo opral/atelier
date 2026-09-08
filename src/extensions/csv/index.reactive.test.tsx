@@ -1,4 +1,8 @@
-import type { CellClickedEventArgs } from "@glideapps/glide-data-grid";
+import {
+	CompactSelection,
+	type CellClickedEventArgs,
+	type GridSelection,
+} from "@glideapps/glide-data-grid";
 import { Suspense } from "react";
 import { Atelier } from "@/atelier";
 import {
@@ -2267,4 +2271,60 @@ test("fresh checkbox follow-up preserves every supported boolean encoding", asyn
 	} finally {
 		await fixture.close();
 	}
+});
+
+test("pressing the blank surface around the table clears the selection", async () => {
+	await renderMetadataCsv();
+	const grid = screen.getByTestId("csv-data-grid");
+	const surface = grid.parentElement!;
+	const selection = () =>
+		latestDataEditorProps.current as unknown as {
+			gridSelection: GridSelection;
+			onGridSelectionChange?: (next: GridSelection) => void;
+		};
+	const emptySelection = {
+		columns: CompactSelection.empty(),
+		rows: CompactSelection.empty(),
+	};
+	await act(async () => {
+		selection().onGridSelectionChange?.({
+			...emptySelection,
+			current: {
+				cell: [0, 0],
+				range: { x: 0, y: 0, width: 1, height: 1 },
+				rangeStack: [],
+			},
+		});
+	});
+	expect(selection().gridSelection.current).toBeDefined();
+
+	// A press that lands on the grid itself is Glide's business.
+	await act(async () => {
+		fireEvent.pointerDown(grid, { button: 0 });
+	});
+	expect(selection().gridSelection.current).toBeDefined();
+
+	// A press on the surrounding surface deselects (after the tick that lets
+	// focus leave the grid).
+	await act(async () => {
+		fireEvent.pointerDown(surface, { button: 0 });
+	});
+	await waitFor(() =>
+		expect(selection().gridSelection.current).toBeUndefined(),
+	);
+
+	// Rows too, via the toolbar background.
+	await act(async () => {
+		selection().onGridSelectionChange?.({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.fromSingleSelection(1),
+		});
+	});
+	expect(selection().gridSelection.rows.length).toBe(1);
+	await act(async () => {
+		fireEvent.pointerDown(document.querySelector(".csv-toolbar")!, {
+			button: 0,
+		});
+	});
+	await waitFor(() => expect(selection().gridSelection.rows.length).toBe(0));
 });
