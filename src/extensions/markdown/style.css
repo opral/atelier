@@ -2310,6 +2310,18 @@
 	overflow-y: visible;
 }
 
+/* Diffs must contribute their full height to the embedded document, too.
+   An absolute overlay leaves the host at its minimum height and clips long
+   reviews inside the extension host's overflow boundary. */
+.atelier-file-view .markdown-review-overlay {
+	position: relative;
+	inset: auto;
+}
+
+.atelier-file-view .markdown-review .markdown-review-surface {
+	height: auto;
+}
+
 .atelier-file-view .markdown-view .tiptap {
 	min-height: 0;
 }
