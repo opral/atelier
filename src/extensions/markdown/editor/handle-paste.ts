@@ -128,6 +128,38 @@ export function handlePaste(args: {
 		const tiptapDoc = astToTiptapDoc(ast) as any;
 		const blocks = tiptapDoc?.content ?? [];
 		if (
+			blocks.length === 1 &&
+			blocks[0].type === "imageBlock" &&
+			!/[\r\n]/.test(text) &&
+			selection?.$from?.sameParent(selection.$to) &&
+			selection.$from.parent.inlineContent
+		) {
+			// Inline clipboard fragments omit the trailing block newline. Keep a
+			// copied inline image in its sentence; full image-block copies retain
+			// the newline and continue through block insertion below.
+			const attrs = blocks[0].attrs;
+			const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+			const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+			return insertContentAt(
+				editor,
+				{ from: selection.from, to: selection.to },
+				[
+					...(leading ? [{ type: "text", text: leading }] : []),
+					{
+						type: "image",
+						attrs: {
+							src: attrs.src,
+							alt: attrs.alt,
+							title: attrs.title,
+							data: attrs.imageData,
+						},
+					},
+					...(trailing ? [{ type: "text", text: trailing }] : []),
+				],
+			);
+		}
+
+		if (
 			selection?.$from?.sameParent(selection.$to) &&
 			selection.$from.parent.type.name === "tableCell" &&
 			(/[\r\n]/.test(text) ||

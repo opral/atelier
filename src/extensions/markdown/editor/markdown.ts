@@ -28,7 +28,7 @@ export function parseMarkdownSourceRaw(markdown: string): AstRoot {
 		extensions: [gfm(), frontmatter(["yaml"])],
 		mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
 	});
-	restoreEmptyTaskItems(ast);
+	restoreEmptyTaskItems(ast, markdown);
 	return ast;
 }
 
@@ -37,7 +37,11 @@ export function parseMarkdownSourceRaw(markdown: string): AstRoot {
  * serialize for an empty task (`- [ ] `) comes back as a plain list item whose
  * text is `[ ]`. Restore the task semantics before building the editor doc.
  */
-function restoreEmptyTaskItems(node: any, insideList = false): void {
+function restoreEmptyTaskItems(
+	node: any,
+	source: string,
+	insideList = false,
+): void {
 	if (!node || typeof node !== "object") return;
 
 	if (
@@ -56,7 +60,15 @@ function restoreEmptyTaskItems(node: any, insideList = false): void {
 			typeof inline[0].value === "string"
 				? /^\[([ xX])\]$/.exec(inline[0].value)
 				: null;
-		if (marker) {
+		const originalMarker = marker
+			? source.slice(
+					inline[0].position?.start?.offset,
+					inline[0].position?.end?.offset,
+				)
+			: null;
+		// Escapes and entities can decode to [ ] without being a task marker.
+		// Only recover the bare syntax that our empty-task serializer emits.
+		if (marker && originalMarker === inline[0].value) {
 			node.checked = marker[1]?.toLowerCase() === "x";
 			paragraph.children = [];
 		}
@@ -64,7 +76,7 @@ function restoreEmptyTaskItems(node: any, insideList = false): void {
 
 	const childIsInsideList = node.type === "list";
 	for (const child of Array.isArray(node.children) ? node.children : []) {
-		restoreEmptyTaskItems(child, childIsInsideList);
+		restoreEmptyTaskItems(child, source, childIsInsideList);
 	}
 }
 

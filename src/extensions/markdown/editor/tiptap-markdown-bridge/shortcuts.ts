@@ -312,7 +312,12 @@ export const MarkdownWcShortcuts = Extension.create({
 				"\uFFFC",
 				"\uFFFC",
 			);
-			const textToDelete = previousWordText(textBefore);
+			// Inline leaves occupy one document position. Treat them as word
+			// boundaries rather than joining text on both sides into one token.
+			const leafBoundary = textBefore.lastIndexOf("\uFFFC");
+			const textToDelete = textBefore.endsWith("\uFFFC")
+				? "\uFFFC"
+				: previousWordText(textBefore.slice(leafBoundary + 1));
 			if (!textToDelete) return false;
 
 			const from = Math.max($from.start(), $from.pos - textToDelete.length);

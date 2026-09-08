@@ -1,5 +1,7 @@
 import { Extension } from "@tiptap/core";
-import { Plugin } from "@tiptap/pm/state";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+
+const assignIdsBeforeComposition = new PluginKey("assignIdsBeforeComposition");
 
 function defaultGenId() {
 	// Simple, readable id good enough for tests/runtime without external deps
@@ -28,12 +30,32 @@ export function createAssignDataIdExtension(opts?: AssignDataIdOptions) {
 		addProseMirrorPlugins() {
 			return [
 				new Plugin({
+					props: {
+						handleDOMEvents: {
+							compositionstart: (view) => {
+								if (!view.editable) return false;
+								// Updating node markup after the browser starts composing
+								// replaces its DOM target and can duplicate committed text.
+								// Assign missing IDs before the native composition mutation.
+								view.dispatch(
+									view.state.tr
+										.setMeta(assignIdsBeforeComposition, true)
+										.setMeta("addToHistory", false),
+								);
+								return false;
+							},
+						},
+					},
 					appendTransaction: (
 						_trs: readonly any[],
 						oldState: any,
 						newState: any,
 					) => {
-						if (oldState.doc === newState.doc) return null;
+						if (
+							oldState.doc === newState.doc &&
+							!_trs.some((tr) => tr.getMeta(assignIdsBeforeComposition))
+						)
+							return null;
 
 						const tr = newState.tr;
 						let modified = false;

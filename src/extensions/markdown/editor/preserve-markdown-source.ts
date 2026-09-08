@@ -34,15 +34,34 @@ export function preserveMarkdownSource(
 	const next = segments(serialized);
 	// Definitions are invisible in the editor and absent from its serialized
 	// document. Keep their source even when their neighboring block was edited.
-	const definitions = parseMarkdownSourceRaw(original)
-		.children.filter((node) => node.type === "definition")
-		.map((node) =>
-			original.slice(node.position!.start.offset!, node.position!.end.offset!),
-		);
+	const definitions: string[] = [];
+	const collectDefinitions = (node: any, depth: number): void => {
+		if (node.type === "definition") {
+			definitions.push(
+				depth === 1
+					? original.slice(node.position.start.offset, node.position.end.offset)
+					: // Container prefixes cannot be copied into a detached definition.
+						// Retain its label, target, and title using standalone syntax.
+						serializeAst({ type: "root", children: [node] }).trimEnd(),
+			);
+		}
+		for (const child of node.children ?? [])
+			collectDefinitions(child, depth + 1);
+	};
+	collectDefinitions(parseMarkdownSourceRaw(original), 0);
 	const withDefinitions = (text: string) => {
 		if (next.length === 0) return text;
+		if (definitions.length === 0) return text;
+		const existing = new Set<string>();
+		const collectExisting = (node: any): void => {
+			if (node.type === "definition")
+				existing.add(serializeAst({ type: "root", children: [node] }));
+			for (const child of node.children ?? []) collectExisting(child);
+		};
+		collectExisting(parseMarkdownSourceRaw(text));
 		const missing = definitions.filter(
-			(definition) => !text.includes(definition),
+			(definition) =>
+				!existing.has(serializeAst(parseMarkdownSourceRaw(definition))),
 		);
 		if (missing.length === 0) return text;
 		const candidate =

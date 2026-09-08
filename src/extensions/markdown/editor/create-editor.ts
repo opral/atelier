@@ -191,8 +191,12 @@ function markdownClipboardText(slice: Slice): string {
 			type: "doc",
 			content: [{ type: "paragraph", content: node.content.toJSON() }],
 		}).replace(/\n$/, "");
-		const leading = text.match(/^[ \t]+/)?.[0] ?? "";
-		const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+		const leading = node.firstChild?.isText
+			? (node.firstChild.text?.match(/^[ \t]+/)?.[0] ?? "")
+			: "";
+		const trailing = node.lastChild?.isText
+			? (node.lastChild.text?.match(/[ \t]+$/)?.[0] ?? "")
+			: "";
 		if (leading && !markdown.startsWith(leading)) markdown = leading + markdown;
 		if (trailing && !markdown.endsWith(trailing)) markdown += trailing;
 		return markdown;

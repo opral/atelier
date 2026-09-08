@@ -13,6 +13,31 @@ export const TableNavigationExtension = Extension.create({
 		return [
 			new Plugin({
 				props: {
+					handleDOMEvents: {
+						beforeinput(view, event) {
+							if (!view.editable) return false;
+							const input = event as InputEvent;
+							if (
+								!input.cancelable ||
+								input.isComposing ||
+								input.inputType !== "insertText" ||
+								input.data == null
+							)
+								return false;
+							if (!deleteSelectedTableText(view.state)) return false;
+							input.preventDefault();
+							return deleteSelectedTableText(view.state, (tr) => {
+								view.dispatch(tr.insertText(input.data!).scrollIntoView());
+							});
+						},
+						compositionstart(view) {
+							if (!view.editable) return false;
+							// Native IME replacement bypasses handleTextInput. Clear
+							// only selected cell contents before the browser composes.
+							deleteSelectedTableText(view.state, (tr) => view.dispatch(tr));
+							return false;
+						},
+					},
 					handleTextInput(view, from, to, text) {
 						if (
 							from !== view.state.selection.from ||
