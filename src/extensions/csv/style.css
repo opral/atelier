@@ -30,7 +30,7 @@
 		margin-top: 8px;
 		padding: 6px 14px;
 		border: 1px solid var(--color-bg-action-primary);
-		border-radius: 8px;
+		border-radius: 7px;
 		background: var(--color-bg-action-primary);
 		color: var(--color-text-on-action-primary);
 		font-size: 13px;
@@ -105,7 +105,7 @@
 		flex-direction: column;
 		padding: 4px;
 		border: 1px solid var(--color-border-panel);
-		border-radius: 9px;
+		border-radius: 8px;
 		background: var(--background);
 		box-shadow: var(--shadow-lg);
 	}
@@ -114,7 +114,8 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		border-radius: 6px;
+		min-height: 30px;
+		border-radius: 7px;
 		padding: 5px 8px;
 		color: var(--color-text-secondary);
 		font-size: 12.5px;

@@ -83,6 +83,9 @@ export type PropertyCell = TextCell & {
 	csvNewOption?: string;
 	csvWrappedLines?: CsvTextLine[];
 };
+/** Select pills mirror the shell's tags: 20px tall with a 6px text inset. */
+const PILL_HEIGHT = 20;
+const PILL_INSET = 6;
 export function drawPropertyCell(
 	args: Parameters<DrawCellCallback>[0],
 	drawContent: () => void,
@@ -164,41 +167,52 @@ export function drawPropertyCell(
 	if (info.type === "select" && value) {
 		const option = info.options?.find((o) => o.value === value);
 		const [bg, fg] = palette[option?.color as keyof CsvPalette] ?? palette.gray;
+		// The pill is the shell's 20px tag (6px inset, 3px radius) and starts on
+		// the same inset as plain text so columns of mixed types share one edge.
+		const inset = theme.cellHorizontalPadding;
+		const pillX = rect.x + inset;
+		const pillY = rect.y + (rect.height - PILL_HEIGHT) / 2;
 		ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
-		const width = Math.min(ctx.measureText(value).width + 16, rect.width - 24);
+		const width = Math.min(
+			ctx.measureText(value).width + PILL_INSET * 2,
+			rect.width - inset * 2,
+		);
 		ctx.fillStyle = bg;
 		ctx.beginPath();
-		ctx.roundRect(rect.x + 12, rect.y + (rect.height - 24) / 2, width, 24, 4);
+		ctx.roundRect(pillX, pillY, width, PILL_HEIGHT, 3);
 		ctx.fill();
 		ctx.fillStyle = fg;
 		ctx.textBaseline = "middle";
 		let label = value;
-		if (ctx.measureText(label).width > width - 16) {
-			while (label.length && ctx.measureText(label + "…").width > width - 16)
+		const labelWidth = width - PILL_INSET * 2;
+		if (ctx.measureText(label).width > labelWidth) {
+			while (label.length && ctx.measureText(label + "…").width > labelWidth)
 				label = label.slice(0, -1);
 			label += "…";
 		}
+		const textX = pillX + PILL_INSET;
+		const textY = rect.y + rect.height / 2 + 1;
 		drawCsvSearchHighlights(
 			ctx,
 			value,
 			search,
-			rect.x + 20,
-			rect.y + rect.height / 2 + 1,
-			width - 16 - (label !== value ? ctx.measureText("…").width : 0),
+			textX,
+			textY,
+			labelWidth - (label !== value ? ctx.measureText("…").width : 0),
 			18,
 			searchColor,
 		);
-		ctx.fillText(label, rect.x + 20, rect.y + rect.height / 2 + 1);
+		ctx.fillText(label, textX, textY);
 		if (!option) {
 			ctx.fillStyle = theme.textMedium;
-			ctx.fillRect(rect.x + 12, rect.y + (rect.height + 24) / 2 - 2, width, 2);
+			ctx.fillRect(pillX, pillY + PILL_HEIGHT - 2, width, 2);
 		}
 	} else if (
 		info.type === "checkbox" &&
 		/^(yes|no|true|false|1|0)?$/i.test(value)
 	) {
 		const checked = /^(yes|true|1)$/i.test(value);
-		const x = rect.x + 14,
+		const x = rect.x + theme.cellHorizontalPadding,
 			y = rect.y + (rect.height - 16) / 2;
 		if (search && csvSearchMatches(value, search).length) {
 			ctx.fillStyle = searchColor;

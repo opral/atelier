@@ -18,7 +18,7 @@
 	overscroll-behavior: contain;
 	padding: 4px 12px 12px;
 	border: 1px solid var(--color-border-panel);
-	border-radius: 10px;
+	border-radius: 8px;
 	background: var(--color-bg-panel);
 	color: var(--color-text-secondary);
 	box-shadow: var(--shadow-md);
@@ -110,10 +110,10 @@
 .csv-review-detail-pill {
 	display: inline-block;
 	max-width: 100%;
-	padding: 1px 7px;
-	border-radius: 4px;
+	padding: 0 6px;
+	border-radius: 3px;
 	overflow-wrap: anywhere;
-	line-height: 22px;
+	line-height: 20px;
 }
 .csv-review-detail-type {
 	display: inline-flex;

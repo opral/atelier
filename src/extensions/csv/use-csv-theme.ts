@@ -2,8 +2,8 @@ import { useLayoutEffect, useState, type RefObject } from "react";
 import { CSV_COLOR_FALLBACKS, type CsvPalette } from "./csv-palette";
 const FALLBACK_THEME = {
 	baseFontStyle: "13px",
-	headerFontStyle: "500 13px",
-	headerIconSize: 18,
+	headerFontStyle: "13px",
+	headerIconSize: 16,
 	textDark: "#44403c",
 	textHeader: "#78716c",
 	fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
