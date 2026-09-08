@@ -83,7 +83,7 @@ describe("Atelier instance file controller", () => {
 				fireEvent.click(pill);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.queryByText("Unable to render Atelier")).toBeNull();
 		} finally {

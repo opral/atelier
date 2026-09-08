@@ -226,6 +226,7 @@ function MountedFile(
 				accept: unavailable,
 				reject: unavailable,
 				resolve: unavailable,
+				checkpointAll: unavailable,
 			},
 		}),
 		[

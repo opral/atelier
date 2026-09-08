@@ -32,6 +32,8 @@ function atelierStub(overrides?: {
 		readonly path: string;
 	}[];
 	readonly workingChangesActive?: boolean;
+	readonly checkpointAll?: () => Promise<void>;
+	readonly readOnly?: boolean;
 }): ExtensionRuntime {
 	const session = overrides?.workingChangesActive
 		? {
@@ -57,6 +59,7 @@ function atelierStub(overrides?: {
 				}
 			: null;
 	return {
+		readOnly: overrides?.readOnly ?? false,
 		icons: {
 			fileUrl: () =>
 				"data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=",
@@ -68,6 +71,7 @@ function atelierStub(overrides?: {
 			exit: () => {},
 			accept: async () => {},
 			reject: async () => {},
+			checkpointAll: overrides?.checkpointAll ?? (async () => {}),
 			autoAccept: false,
 		},
 		reviews: {
@@ -132,6 +136,66 @@ describe("HistoryView", () => {
 			).toBeNull(),
 		);
 		expect(screen.getByText("Latest checkpoint")).toBeVisible();
+		view.unmount();
+		await lix.close();
+	});
+
+	test("Checkpoint all seals every working change without entering review", async () => {
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[
+				fakeUuid("checkpoint-all-file"),
+				"/checkpoint-all.md",
+				new TextEncoder().encode("edited"),
+			],
+		);
+		const open = vi.fn(async () => {});
+		const checkpointAll = vi.fn(async () => {
+			await createCheckpoint(lix);
+		});
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ open, checkpointAll })} />
+			</LixProvider>,
+		);
+		const button = await screen.findByRole("button", {
+			name: "Checkpoint all",
+		});
+		await act(async () => {
+			fireEvent.click(button);
+		});
+		expect(checkpointAll).toHaveBeenCalledOnce();
+		expect(open).not.toHaveBeenCalled();
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("button", { name: "Working changes" }),
+			).toBeNull(),
+		);
+		expect(screen.getByText("Latest checkpoint")).toBeVisible();
+		view.unmount();
+		await lix.close();
+	});
+
+	test("a read-only host has no Checkpoint all", async () => {
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[
+				fakeUuid("checkpoint-all-readonly"),
+				"/checkpoint-all-readonly.md",
+				new TextEncoder().encode("edited"),
+			],
+		);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ readOnly: true })} />
+			</LixProvider>,
+		);
+		expect(
+			await screen.findByRole("button", { name: "Working changes" }),
+		).toBeEnabled();
+		expect(screen.queryByRole("button", { name: "Checkpoint all" })).toBeNull();
 		view.unmount();
 		await lix.close();
 	});
