@@ -235,6 +235,7 @@ export function markdownWcNodes(
 		}),
 		Node.create({
 			name: "tableCell",
+			isolating: true,
 			content: "inline*",
 			addAttributes() {
 				return {

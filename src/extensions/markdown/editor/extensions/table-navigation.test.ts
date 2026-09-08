@@ -237,9 +237,12 @@ test.each([false, true])(
 			from,
 			to: editor.state.selection.from - 2,
 		});
-		const before = editor.state.doc.toJSON();
 		expect(sendKey(editor, "Enter", shift)).toBe(true);
-		expect(editor.state.doc.toJSON()).toEqual(before);
+		const row = editor.state.doc.firstChild!.firstChild!;
+		expect(row.childCount).toBe(2);
+		expect(row.child(0).textContent).toBe("alp");
+		expect(row.child(0).lastChild!.type.name).toBe("hardBreak");
+		expect(row.child(1).textContent).toBe("ta");
 	},
 );
 

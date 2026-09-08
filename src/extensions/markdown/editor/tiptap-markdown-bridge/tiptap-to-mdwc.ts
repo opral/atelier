@@ -300,7 +300,32 @@ function pmInlineToMd(
 			const alt = n.attrs?.alt ?? null;
 			const im: any = { type: "image", url: src, title, alt };
 			if (n.attrs?.data != null) im.data = n.attrs.data;
-			out.push(im as any);
+			out.push(applyMarksToInline(im, n.marks || []));
+		}
+	}
+	return mergeAdjacentInlineMarks(out);
+}
+
+// Splitting a marked run into separately delimited Markdown can create literal
+// delimiters (notably four adjacent tildes). Rejoin shared wrappers first.
+function mergeAdjacentInlineMarks(nodes: any[]): any[] {
+	const out: any[] = [];
+	for (const node of nodes) {
+		const previous = out[out.length - 1];
+		if (
+			previous?.type === node.type &&
+			["strong", "emphasis", "delete", "link"].includes(node.type) &&
+			JSON.stringify({ ...previous, children: undefined }) ===
+				JSON.stringify({ ...node, children: undefined })
+		) {
+			previous.children.push(...node.children);
+		} else {
+			out.push(node);
+		}
+	}
+	for (const node of out) {
+		if (Array.isArray(node.children)) {
+			node.children = mergeAdjacentInlineMarks(node.children);
 		}
 	}
 	return out;
@@ -323,24 +348,30 @@ function isHtmlHardBreak(node: any): boolean {
 }
 
 function applyMarksToText(value: string, marks: PMMark[]): any {
-	let node: any = { type: "text", value } as any;
-	const order: PMMark["type"][] = ["bold", "italic", "strike", "code", "link"];
-	for (const t of order) {
-		if (marks.find((m) => m.type === t)) {
-			if (t === "bold") node = { type: "strong", children: [node] } as any;
-			else if (t === "italic")
-				node = { type: "emphasis", children: [node] } as any;
-			else if (t === "strike")
-				node = { type: "delete", children: [node] } as any;
-			else if (t === "code") node = { type: "inlineCode", value } as any;
-			else if (t === "link") {
-				const mark = marks.find((m) => m.type === "link")!;
-				const href = mark.attrs?.href ?? null;
-				const title = mark.attrs?.title ?? null;
-				const ln: any = { type: "link", url: href, title, children: [node] };
-				if (mark.attrs?.data != null) ln.data = mark.attrs.data;
-				node = ln as any;
-			}
+	const node = marks.some((mark) => mark.type === "code")
+		? { type: "inlineCode", value }
+		: { type: "text", value };
+	return applyMarksToInline(node, marks);
+}
+
+function applyMarksToInline(inline: any, marks: PMMark[]): any {
+	let node = inline;
+	const order: PMMark["type"][] = ["bold", "italic", "strike", "link"];
+	for (const type of order) {
+		const mark = marks.find((candidate) => candidate.type === type);
+		if (!mark) continue;
+		if (type === "link") {
+			node = {
+				type: "link",
+				url: mark.attrs?.href ?? null,
+				title: mark.attrs?.title ?? null,
+				children: [node],
+				...(mark.attrs?.data != null ? { data: mark.attrs.data } : {}),
+			};
+		} else {
+			const astType =
+				type === "bold" ? "strong" : type === "italic" ? "emphasis" : "delete";
+			node = { type: astType, children: [node] };
 		}
 	}
 	return node;

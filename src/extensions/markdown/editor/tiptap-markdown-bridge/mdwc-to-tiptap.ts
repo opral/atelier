@@ -382,6 +382,7 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 				out.push({
 					type: "image",
 					attrs: { src, title, alt, data: im.data ?? null },
+					marks: active.length ? [...active] : undefined,
 				} as any);
 				break;
 			}

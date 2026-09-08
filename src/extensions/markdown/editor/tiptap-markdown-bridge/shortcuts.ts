@@ -5,8 +5,12 @@ import {
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
-import { exitCode, newlineInCode } from "@tiptap/pm/commands";
-import { TextSelection } from "@tiptap/pm/state";
+import {
+	createParagraphNear,
+	exitCode,
+	newlineInCode,
+} from "@tiptap/pm/commands";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 
@@ -479,12 +483,11 @@ export const MarkdownWcShortcuts = Extension.create({
 			const atEnd =
 				selection.empty && $from.parentOffset === $from.parent.content.size;
 			if (atEnd && $from.parent.textContent.endsWith("\n\n")) {
-				view.dispatch(
-					state.tr.delete(selection.from - 2, selection.from).scrollIntoView(),
-				);
-				return exitCode(view.state, (transaction) =>
-					view.dispatch(transaction),
-				);
+				return this.editor
+					.chain()
+					.deleteRange({ from: selection.from - 2, to: selection.from })
+					.exitCode()
+					.run();
 			}
 
 			return newlineInCode(state, (transaction) => view.dispatch(transaction));
@@ -781,6 +784,14 @@ export const MarkdownWcShortcuts = Extension.create({
 			// Enter in list: create a new list item; for tasks, make it unchecked
 			Enter: () => {
 				flushDomSelection();
+				if (
+					this.editor.state.selection instanceof NodeSelection &&
+					this.editor.state.selection.node.isBlock
+				) {
+					return createParagraphNear(this.editor.state, (tr) =>
+						this.editor.view.dispatch(tr),
+					);
+				}
 				if (convertDivider()) return true;
 				if (convertCodeFence()) return true;
 				if (enterCodeBlock()) return true;

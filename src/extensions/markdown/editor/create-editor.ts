@@ -1,7 +1,9 @@
+import { deleteSelectedTableText } from "./extensions/table-selection";
+import { closeHistory } from "@tiptap/pm/history";
 import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import type { Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
@@ -159,9 +161,42 @@ function openExternalLink(url: string): void {
  * paste handler. Serialize the selected ProseMirror slice through the same
  * Markdown bridge used for persisted documents.
  */
-function markdownClipboardText(slice: {
-	content: { toJSON: () => any };
-}): string {
+function markdownClipboardText(slice: Slice): string {
+	let node = slice.content.childCount === 1 ? slice.content.firstChild : null;
+	let depth = 1;
+	while (
+		node &&
+		!node.inlineContent &&
+		node.childCount === 1 &&
+		depth < slice.openStart
+	) {
+		node = node.firstChild;
+		depth += 1;
+	}
+	if (
+		node?.inlineContent &&
+		slice.openStart >= depth &&
+		slice.openEnd >= depth
+	) {
+		// An open text-block slice represents selected inline content, not its
+		// surrounding heading/list/code container. Keep code literal and retain
+		// whitespace needed when a fragment is pasted back into a sentence.
+		const text = node.textContent;
+		let onlyText = true;
+		node.forEach((child) => {
+			if (!child.isText) onlyText = false;
+		});
+		if (node.type.spec.code || (onlyText && !text.trim())) return text;
+		let markdown = serializeTiptapDocToMarkdown({
+			type: "doc",
+			content: [{ type: "paragraph", content: node.content.toJSON() }],
+		}).replace(/\n$/, "");
+		const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+		const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+		if (leading && !markdown.startsWith(leading)) markdown = leading + markdown;
+		if (trailing && !markdown.endsWith(trailing)) markdown += trailing;
+		return markdown;
+	}
 	return serializeTiptapDocToMarkdown({
 		type: "doc",
 		content: slice.content.toJSON(),
@@ -400,6 +435,29 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			...editorProps,
 			handleDOMEvents: {
 				...(editorProps?.handleDOMEvents ?? {}),
+				cut: (view: any, event: ClipboardEvent) => {
+					const customCut = editorProps?.handleDOMEvents?.cut;
+					if (typeof customCut === "function" && customCut(view, event))
+						return true;
+					if (
+						!view.editable ||
+						!event.clipboardData ||
+						!deleteSelectedTableText(view.state)
+					)
+						return false;
+					const clipboard = view.serializeForClipboard(
+						view.state.selection.content(),
+					);
+					event.clipboardData.setData("text/plain", clipboard.text);
+					event.clipboardData.setData("text/html", clipboard.dom.innerHTML);
+					event.preventDefault();
+					deleteSelectedTableText(view.state, (tr) =>
+						view.dispatch(closeHistory(tr)),
+					);
+					view.dispatch(closeHistory(view.state.tr));
+					return true;
+				},
+
 				keydown: (view: any, event: KeyboardEvent) => {
 					if (
 						currentEditor &&

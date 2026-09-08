@@ -1,3 +1,5 @@
+import { deleteSelectedTableText } from "./extensions/table-selection";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
 import type { StoredPastedMarkdownImage } from "./store-pasted-image";
@@ -92,74 +94,95 @@ export function handlePaste(args: {
 	const text: string = event?.clipboardData?.getData?.("text/plain") ?? "";
 	if (!text) return false;
 
-	event.preventDefault?.();
-	const selection = editor?.state?.selection;
-	if (
-		selection?.$from?.sameParent(selection.$to) &&
-		(selection.$from.parent.type.spec.code ||
-			(!text.trim() && selection.$from.parent.type.name !== "tableCell"))
-	) {
-		// Code and whitespace are literal input. Parsing them as Markdown can
-		// replace a code fence with headings/lists or discard the input entirely.
-		editor.view.dispatch(editor.state.tr.insertText(text));
-		return true;
-	}
-	const ast = parseMarkdown(text);
-	const tiptapDoc = astToTiptapDoc(ast) as any;
-	const blocks = tiptapDoc?.content ?? [];
-	if (
-		selection?.$from?.sameParent(selection.$to) &&
-		selection.$from.parent.type.name === "tableCell" &&
-		(/[\r\n]/.test(text) ||
-			blocks.length !== 1 ||
-			blocks[0].type !== "paragraph" ||
-			!text.trim())
-	) {
-		// Cells accept inline content only. Block Markdown would split the table
-		// around the caret, so keep its source inside this cell with line breaks.
-		const content = text
-			.replace(/\r\n?/g, "\n")
-			.split("\n")
-			.flatMap((line, index) => [
-				...(index > 0 ? [{ type: "hardBreak" }] : []),
-				...(line ? [{ type: "text", text: line }] : []),
-			]);
-		return insertContentAt(
-			editor,
-			{ from: selection.from, to: selection.to },
-			content,
-		);
-	}
+	// A paste is one Undo action, independent of typing on either side.
+	editor.view?.dispatch(closeHistory(editor.state.tr));
+	try {
+		event.preventDefault?.();
+		const selection = editor?.state?.selection;
+		if (
+			deleteSelectedTableText(editor.state, (tr) => {
+				const nodes = text
+					.replace(/\r\n?/g, "\n")
+					.split("\n")
+					.flatMap((line, index) => [
+						...(index ? [editor.schema.nodes.hardBreak.create()] : []),
+						...(line ? [editor.schema.text(line)] : []),
+					]);
+				tr.replaceSelection(new Slice(Fragment.fromArray(nodes), 0, 0));
+				editor.view.dispatch(tr);
+			})
+		)
+			return true;
 
-	if (
-		blocks.length === 1 &&
-		blocks[0].type === "paragraph" &&
-		!/[\r\n]/.test(text)
-	) {
-		// Markdown trims insignificant boundary spaces, but clipboard fragments
-		// such as "beautiful " need those spaces when inserted into a sentence.
-		const content = blocks[0].content ?? [];
-		const leading = text.match(/^[ \t]+/)?.[0] ?? "";
-		const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
-		const first = content[0];
-		const last = content.at(-1);
-		const existingLeading =
-			first?.type === "text" ? (first.text.match(/^[ \t]+/)?.[0] ?? "") : "";
-		const existingTrailing =
-			last?.type === "text" ? (last.text.match(/[ \t]+$/)?.[0] ?? "") : "";
-		if (leading.length > existingLeading.length)
-			content.unshift({
-				type: "text",
-				text: leading.slice(existingLeading.length),
-			});
-		if (trailing.length > existingTrailing.length)
-			content.push({
-				type: "text",
-				text: trailing.slice(existingTrailing.length),
-			});
-		blocks[0].content = content;
+		if (
+			selection?.$from?.sameParent(selection.$to) &&
+			(selection.$from.parent.type.spec.code ||
+				(!text.trim() && selection.$from.parent.type.name !== "tableCell"))
+		) {
+			// Code and whitespace are literal input. Parsing them as Markdown can
+			// replace a code fence with headings/lists or discard the input entirely.
+			editor.view.dispatch(editor.state.tr.insertText(text));
+			return true;
+		}
+		const ast = parseMarkdown(text);
+		const tiptapDoc = astToTiptapDoc(ast) as any;
+		const blocks = tiptapDoc?.content ?? [];
+		if (
+			selection?.$from?.sameParent(selection.$to) &&
+			selection.$from.parent.type.name === "tableCell" &&
+			(/[\r\n]/.test(text) ||
+				blocks.length !== 1 ||
+				blocks[0].type !== "paragraph" ||
+				!text.trim())
+		) {
+			// Cells accept inline content only. Block Markdown would split the table
+			// around the caret, so keep its source inside this cell with line breaks.
+			const content = text
+				.replace(/\r\n?/g, "\n")
+				.split("\n")
+				.flatMap((line, index) => [
+					...(index > 0 ? [{ type: "hardBreak" }] : []),
+					...(line ? [{ type: "text", text: line }] : []),
+				]);
+			return insertContentAt(
+				editor,
+				{ from: selection.from, to: selection.to },
+				content,
+			);
+		}
+
+		if (
+			blocks.length === 1 &&
+			blocks[0].type === "paragraph" &&
+			!/[\r\n]/.test(text)
+		) {
+			// Markdown trims insignificant boundary spaces, but clipboard fragments
+			// such as "beautiful " need those spaces when inserted into a sentence.
+			const content = blocks[0].content ?? [];
+			const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+			const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+			const first = content[0];
+			const last = content.at(-1);
+			const existingLeading =
+				first?.type === "text" ? (first.text.match(/^[ \t]+/)?.[0] ?? "") : "";
+			const existingTrailing =
+				last?.type === "text" ? (last.text.match(/[ \t]+$/)?.[0] ?? "") : "";
+			if (leading.length > existingLeading.length)
+				content.unshift({
+					type: "text",
+					text: leading.slice(existingLeading.length),
+				});
+			if (trailing.length > existingTrailing.length)
+				content.push({
+					type: "text",
+					text: trailing.slice(existingTrailing.length),
+				});
+			blocks[0].content = content;
+		}
+		return insertPastedBlocks(editor, blocks);
+	} finally {
+		editor.view?.dispatch(closeHistory(editor.state.tr));
 	}
-	return insertPastedBlocks(editor, blocks);
 }
 
 /**

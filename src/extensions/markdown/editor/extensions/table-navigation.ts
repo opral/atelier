@@ -1,5 +1,6 @@
 import { Extension } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import { Plugin, TextSelection } from "@tiptap/pm/state";
+import { deleteSelectedTableText } from "./table-selection";
 
 /**
  * Keyboard behavior for the editor's lightweight GFM table schema.
@@ -7,6 +8,25 @@ import { TextSelection } from "@tiptap/pm/state";
 export const TableNavigationExtension = Extension.create({
 	name: "tableNavigation",
 	priority: 1100,
+
+	addProseMirrorPlugins() {
+		return [
+			new Plugin({
+				props: {
+					handleTextInput(view, from, to, text) {
+						if (
+							from !== view.state.selection.from ||
+							to !== view.state.selection.to
+						)
+							return false;
+						return deleteSelectedTableText(view.state, (tr) => {
+							view.dispatch(tr.insertText(text).scrollIntoView());
+						});
+					},
+				},
+			}),
+		];
+	},
 
 	addKeyboardShortcuts() {
 		const tableContext = (editor: any) => {
@@ -125,21 +145,42 @@ export const TableNavigationExtension = Extension.create({
 		const insertCellBreak = (editor: any) => {
 			if (!tableContext(editor)) return false;
 			const { $from, $to } = editor.state.selection;
-			// A generic block split creates a new cell in just this row.
-			// Keep table editing inline; cross-cell selections must not split
-			// or merge the table's structural nodes.
-			if (!$from.sameParent($to)) return true;
+			// Replace only inline contents, including when the range crosses cells.
+			// Generic block replacement can otherwise merge rows or add columns.
 			const { state, view } = editor;
 			const marks = state.storedMarks ?? $from.marks();
-			const tr = state.tr.replaceSelectionWith(
-				state.schema.nodes.hardBreak.create(),
-			);
-			tr.ensureMarks(marks);
-			view.dispatch(tr.scrollIntoView());
+			const insertBreak = (tr: typeof state.tr) => {
+				tr.replaceSelectionWith(state.schema.nodes.hardBreak.create());
+				tr.ensureMarks(marks);
+				view.dispatch(tr.scrollIntoView());
+			};
+			if (!$from.sameParent($to)) {
+				deleteSelectedTableText(state, insertBreak);
+				return true;
+			}
+			insertBreak(state.tr);
 			return true;
 		};
 
+		const deleteTableText = (editor: any, direction: -1 | 1) => {
+			if (
+				deleteSelectedTableText(editor.state, (tr) => editor.view.dispatch(tr))
+			)
+				return true;
+			const context = tableContext(editor);
+			if (!context || !editor.state.selection.empty) return false;
+			return direction < 0
+				? context.$from.parentOffset === 0
+				: context.$from.parentOffset === context.$from.parent.content.size;
+		};
+
 		return {
+			Backspace: ({ editor }) => deleteTableText(editor, -1),
+			Delete: ({ editor }) => deleteTableText(editor, 1),
+			"Mod-Backspace": ({ editor }) => deleteTableText(editor, -1),
+			"Cmd-Backspace": ({ editor }) => deleteTableText(editor, -1),
+			"Ctrl-Backspace": ({ editor }) => deleteTableText(editor, -1),
+			"Mod-Delete": ({ editor }) => deleteTableText(editor, 1),
 			Enter: ({ editor }) => insertCellBreak(editor),
 			"Shift-Enter": ({ editor }) => insertCellBreak(editor),
 			Tab: ({ editor }) => moveCell(editor, 1),

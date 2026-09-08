@@ -72,6 +72,11 @@ export function createAssignDataIdExtension(opts?: AssignDataIdOptions) {
 							seen.add(id!);
 						});
 
+						// ID assignment only changes metadata. setNodeMarkup clears
+						// stored marks, so restore the writing style from the edit.
+						if (modified && newState.storedMarks) {
+							tr.setStoredMarks(newState.storedMarks);
+						}
 						return modified ? tr : null;
 					},
 				}),
