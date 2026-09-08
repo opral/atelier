@@ -1,0 +1,642 @@
+{
+  "browser": "143.0.7499.4",
+  "scope": "Production editor extensions in temporary Vite harness; no full shell or persistence",
+  "results": [
+    {
+      "name": "bold survives Enter and typing",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "data": {
+                "id": "id_db3ber071y"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "bold"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "data": {
+                "id": "id_3qtoyb071y"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "continued"
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "**bold**\n\n**continued**\n",
+      "html": "<p data-diff-key=\"id_db3ber071y\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"><strong>bold</strong></p><p data-diff-key=\"id_3qtoyb071y\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"><strong>continued</strong></p>",
+      "selection": {
+        "type": "text",
+        "anchor": 16,
+        "head": 16
+      }
+    },
+    {
+      "name": "selected divider Enter preserves divider",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "horizontalRule",
+            "attrs": {
+              "autoInput": false,
+              "data": {
+                "id": "id_mrc3qp074r"
+              }
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "data": {
+                "id": "id_4ti4nz074r"
+              }
+            }
+          }
+        ]
+      },
+      "markdown": "---\n\n<span></span>\n",
+      "html": "<hr data-diff-key=\"id_mrc3qp074r\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><p data-diff-key=\"id_4ti4nz074r\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p>",
+      "selection": {
+        "type": "text",
+        "anchor": 2,
+        "head": 2
+      }
+    },
+    {
+      "name": "code exit",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null,
+              "data": {
+                "id": "id_6m1uet076a"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "code"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "data": {
+                "id": "id_o8mmoq076a"
+              }
+            }
+          }
+        ]
+      },
+      "markdown": "```\ncode\n```\n\n<span></span>\n",
+      "html": "<pre><code data-diff-key=\"id_6m1uet076a\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">code</code></pre><p data-diff-key=\"id_o8mmoq076a\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p>",
+      "selection": {
+        "type": "text",
+        "anchor": 7,
+        "head": 7
+      }
+    },
+    {
+      "name": "single undo restores code trailing newlines",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null,
+              "data": {
+                "id": "id_syi6bj076q"
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "code\n\n"
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "```\ncode\n\n\n```\n",
+      "html": "<pre><code data-diff-key=\"id_syi6bj076q\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">code\n\n</code></pre>",
+      "selection": {
+        "type": "text",
+        "anchor": 7,
+        "head": 7
+      }
+    },
+    {
+      "name": "Backspace at cell boundary",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": null
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": null
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "A"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "B"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": null
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "C"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "D"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "| A | B |\n| - | - |\n| C | D |\n",
+      "html": "<table><tbody><tr><th scope=\"col\">A</th><th scope=\"col\">B</th></tr><tr><td>C</td><td>D</td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 6,
+        "head": 6
+      }
+    },
+    {
+      "name": "Delete at cell boundary",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": null
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": null
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "A"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "B"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": null
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "C"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "D"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "| A | B |\n| - | - |\n| C | D |\n",
+      "html": "<table><tbody><tr><th scope=\"col\">A</th><th scope=\"col\">B</th></tr><tr><td>C</td><td>D</td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 4,
+        "head": 4
+      }
+    },
+    {
+      "name": "cross-cell Delete clears contents and preserves shape",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": {
+                "id": "id_j08ldn07a3"
+              }
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_c6gkmn07a3"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_h24k3c07a4"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_aojl9207a3"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_0ir9c307a3"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_8md5ym07a3"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_ap7lyp07a3"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "|   |   |\n| - | - |\n|   |   |\n",
+      "html": "<table data-diff-key=\"id_j08ldn07a3\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><tbody><tr data-diff-key=\"id_c6gkmn07a3\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><td data-diff-key=\"id_h24k3c07a4\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td><th data-diff-key=\"id_aojl9207a3\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\"></th></tr><tr data-diff-key=\"id_0ir9c307a3\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><td data-diff-key=\"id_8md5ym07a3\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td><td data-diff-key=\"id_ap7lyp07a3\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 3,
+        "head": 3
+      }
+    },
+    {
+      "name": "cross-cell Enter replaces text with a hard break and preserves shape",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": {
+                "id": "id_k4u1ai07bn"
+              }
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_yik8ke07bn"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_uve3h807bn"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "hardBreak",
+                        "attrs": {
+                          "data": {
+                            "id": "id_x2o97207bn"
+                          },
+                          "soft": false
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_caku0e07bn"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_3qd6c407bn"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_k99ukm07bn"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_ckfa3407bn"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "| <br> |   |\n| ---- | - |\n|      |   |\n",
+      "html": "<table data-diff-key=\"id_k4u1ai07bn\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><tbody><tr data-diff-key=\"id_yik8ke07bn\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><th data-diff-key=\"id_uve3h807bn\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\"><br data-diff-key=\"id_x2o97207bn\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"></th><th data-diff-key=\"id_caku0e07bn\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\"></th></tr><tr data-diff-key=\"id_3qd6c407bn\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><td data-diff-key=\"id_k99ukm07bn\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td><td data-diff-key=\"id_ckfa3407bn\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 4,
+        "head": 4
+      }
+    },
+    {
+      "name": "typing over cross-cell selection preserves shape",
+      "json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "table",
+            "attrs": {
+              "align": [
+                null,
+                null
+              ],
+              "data": {
+                "id": "id_ccy7kz07cr"
+              }
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_dp5xn207cr"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_0v3owg07cr"
+                      }
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "X"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": true,
+                      "align": null,
+                      "data": {
+                        "id": "id_vwj9y807cr"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "data": {
+                    "id": "id_yqsxy807cr"
+                  }
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_nh7c7507cr"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "isHeader": false,
+                      "align": null,
+                      "data": {
+                        "id": "id_syprhl07cr"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "| X |   |\n| - | - |\n|   |   |\n",
+      "html": "<table data-diff-key=\"id_ccy7kz07cr\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><tbody><tr data-diff-key=\"id_dp5xn207cr\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><th data-diff-key=\"id_0v3owg07cr\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\">X</th><th data-diff-key=\"id_vwj9y807cr\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\" scope=\"col\"></th></tr><tr data-diff-key=\"id_yqsxy807cr\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><td data-diff-key=\"id_nh7c7507cr\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td><td data-diff-key=\"id_syprhl07cr\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></td></tr></tbody></table>",
+      "selection": {
+        "type": "text",
+        "anchor": 4,
+        "head": 4
+      }
+    }
+  ],
+  "errors": []
+}

@@ -5,9 +5,14 @@ import {
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
-import { exitCode, newlineInCode } from "@tiptap/pm/commands";
-import { TextSelection } from "@tiptap/pm/state";
+import {
+	createParagraphNear,
+	exitCode,
+	newlineInCode,
+} from "@tiptap/pm/commands";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
+import { outdentSelectedListItems } from "./list-keyboard-commands";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
@@ -307,7 +312,12 @@ export const MarkdownWcShortcuts = Extension.create({
 				"\uFFFC",
 				"\uFFFC",
 			);
-			const textToDelete = previousWordText(textBefore);
+			// Inline leaves occupy one document position. Treat them as word
+			// boundaries rather than joining text on both sides into one token.
+			const leafBoundary = textBefore.lastIndexOf("\uFFFC");
+			const textToDelete = textBefore.endsWith("\uFFFC")
+				? "\uFFFC"
+				: previousWordText(textBefore.slice(leafBoundary + 1));
 			if (!textToDelete) return false;
 
 			const from = Math.max($from.start(), $from.pos - textToDelete.length);
@@ -320,6 +330,9 @@ export const MarkdownWcShortcuts = Extension.create({
 		const insertHardBreak = () => {
 			flushDomSelection();
 			const { state, view } = this.editor;
+			if (state.selection.$from.parent.type.spec.code) {
+				return newlineInCode(state, (tr) => view.dispatch(tr));
+			}
 			const hardBreak = (state.schema.nodes as any).hardBreak;
 			if (!hardBreak) return false;
 
@@ -475,12 +488,11 @@ export const MarkdownWcShortcuts = Extension.create({
 			const atEnd =
 				selection.empty && $from.parentOffset === $from.parent.content.size;
 			if (atEnd && $from.parent.textContent.endsWith("\n\n")) {
-				view.dispatch(
-					state.tr.delete(selection.from - 2, selection.from).scrollIntoView(),
-				);
-				return exitCode(view.state, (transaction) =>
-					view.dispatch(transaction),
-				);
+				return this.editor
+					.chain()
+					.deleteRange({ from: selection.from - 2, to: selection.from })
+					.exitCode()
+					.run();
 			}
 
 			return newlineInCode(state, (transaction) => view.dispatch(transaction));
@@ -528,6 +540,7 @@ export const MarkdownWcShortcuts = Extension.create({
 			return -1;
 		};
 
+		// Nested lists own their empty-item keys before the enclosing quote exits.
 		const escapeEmptyBlockquote = () => {
 			const { state } = this.editor;
 			const { selection } = state;
@@ -537,7 +550,7 @@ export const MarkdownWcShortcuts = Extension.create({
 			if (
 				$from.parent?.type?.name !== "paragraph" ||
 				$from.parent.content.size !== 0 ||
-				blockquoteDepth($from) < 0
+				$from.node($from.depth - 1)?.type?.name !== "blockquote"
 			) {
 				return false;
 			}
@@ -598,96 +611,10 @@ export const MarkdownWcShortcuts = Extension.create({
 			return true;
 		};
 
-		const outdentListItem = () => {
-			const { state } = this.editor;
-			const { $from } = state.selection as any;
-			let listItemDepth = -1;
-			for (let depth = $from.depth; depth > 0; depth--) {
-				if ($from.node(depth)?.type?.name === "listItem") {
-					listItemDepth = depth;
-					break;
-				}
-			}
-			if (listItemDepth < 2) return false;
-
-			const listDepth = listItemDepth - 1;
-			const listNode = $from.node(listDepth);
-			const listItem = $from.node(listItemDepth);
-			if (
-				listNode?.type?.name !== "bulletList" &&
-				listNode?.type?.name !== "orderedList"
-			) {
-				return false;
-			}
-
-			const itemIndex = $from.index(listDepth);
-			const beforeItems: any[] = [];
-			const afterItems: any[] = [];
-			for (let index = 0; index < listNode.childCount; index++) {
-				const child = listNode.child(index);
-				if (index < itemIndex) beforeItems.push(child);
-				if (index > itemIndex) afterItems.push(child);
-			}
-
-			const listAttrsForIndex = (index: number) => {
-				if (listNode.type.name !== "orderedList") return listNode.attrs;
-				return {
-					...listNode.attrs,
-					start: Number(listNode.attrs?.start ?? 1) + index,
-				};
-			};
-			const createList = (items: any[], startIndex: number) =>
-				items.length > 0
-					? listNode.type.create(listAttrsForIndex(startIndex), items)
-					: null;
-
-			return this.editor.commands.command(({ tr, dispatch }) => {
-				const listFrom = $from.before(listDepth);
-				const listTo = $from.after(listDepth);
-				const offsetInItem = $from.pos - $from.before(listItemDepth);
-				const beforeList = createList(beforeItems, 0);
-				const afterList = createList(afterItems, itemIndex + 1);
-
-				if (listDepth === 1) {
-					const liftedContent: any[] = [];
-					listItem.forEach((child: any) => liftedContent.push(child));
-					const replacement = [
-						...(beforeList ? [beforeList] : []),
-						...liftedContent,
-						...(afterList ? [afterList] : []),
-					];
-					tr.replaceWith(listFrom, listTo, replacement);
-					const beforeSize = beforeList?.nodeSize ?? 0;
-					tr.setSelection(
-						TextSelection.near(
-							tr.doc.resolve(listFrom + beforeSize + offsetInItem - 1),
-						),
-					);
-					if (dispatch) dispatch(tr.scrollIntoView());
-					return true;
-				}
-
-				const parentListItemDepth = listItemDepth - 2;
-				const parentListItem = $from.node(parentListItemDepth);
-				if (parentListItem?.type?.name !== "listItem") return false;
-				const parentListItemTo = $from.after(parentListItemDepth);
-
-				if (beforeList) tr.replaceWith(listFrom, listTo, beforeList);
-				else tr.delete(listFrom, listTo);
-
-				const liftedContent: any[] = [];
-				listItem.forEach((child: any) => liftedContent.push(child));
-				if (afterList) liftedContent.push(afterList);
-				const liftedItem = listItem.type.create(listItem.attrs, liftedContent);
-				const insertPos = tr.mapping.map(parentListItemTo);
-				tr.insert(insertPos, liftedItem);
-				tr.setSelection(
-					TextSelection.near(tr.doc.resolve(insertPos + offsetInItem)),
-				);
-				if (dispatch) dispatch(tr.scrollIntoView());
-				return true;
-			});
-		};
+		const outdentListItem = () =>
+			outdentSelectedListItems(this.editor.state, (tr) =>
+				this.editor.view.dispatch(tr),
+			);
 
 		return {
 			// Bold / Italic / Strike
@@ -747,8 +674,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				}
 				const para: any = $from.parent;
 				const isEmptyPara =
-					para?.type?.name === "paragraph" &&
-					(para.textContent || "").length === 0;
+					para?.type?.name === "paragraph" && para.content.size === 0;
 				if (!isEmptyPara || $from.parentOffset !== 0) return false;
 
 				let listItemDepth = -1;
@@ -863,6 +789,14 @@ export const MarkdownWcShortcuts = Extension.create({
 			// Enter in list: create a new list item; for tasks, make it unchecked
 			Enter: () => {
 				flushDomSelection();
+				if (
+					this.editor.state.selection instanceof NodeSelection &&
+					this.editor.state.selection.node.isBlock
+				) {
+					return createParagraphNear(this.editor.state, (tr) =>
+						this.editor.view.dispatch(tr),
+					);
+				}
 				if (convertDivider()) return true;
 				if (convertCodeFence()) return true;
 				if (enterCodeBlock()) return true;
@@ -892,10 +826,9 @@ export const MarkdownWcShortcuts = Extension.create({
 				// If current paragraph is empty, exit the list (lift)
 				const para: any = $from.parent;
 				const isEmptyPara =
-					para?.type?.name === "paragraph" &&
-					(para.textContent || "").length === 0;
-				if (isEmptyPara) {
-					return this.editor.commands.liftListItem("listItem");
+					para?.type?.name === "paragraph" && para.content.size === 0;
+				if (state.selection.empty && isEmptyPara) {
+					return outdentListItem();
 				}
 				if (isTask) {
 					return this.editor.commands.splitListItem("listItem", {

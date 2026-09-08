@@ -1,0 +1,62 @@
+{
+  "browser": "143.0.7499.4",
+  "pass": true,
+  "before": {
+    "doc": "doc(paragraph(\"after\"))",
+    "json": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "data": {
+              "id": "id_9awhoopn6n"
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "after"
+            }
+          ]
+        }
+      ]
+    },
+    "selection": {
+      "type": "text",
+      "anchor": 1,
+      "head": 1
+    },
+    "markdown": "after\n"
+  },
+  "after": {
+    "doc": "doc(paragraph(\"after\"))",
+    "json": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "data": {
+              "id": "id_9awhoopn6n"
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "after"
+            }
+          ]
+        }
+      ]
+    },
+    "selection": {
+      "type": "text",
+      "anchor": 1,
+      "head": 1
+    },
+    "markdown": "after\n",
+    "removed": 1,
+    "status": "error"
+  }
+}

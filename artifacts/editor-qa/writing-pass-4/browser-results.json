@@ -1,0 +1,380 @@
+{
+  "browser": "143.0.7499.4",
+  "results": [
+    {
+      "mode": "table-same",
+      "pass": true,
+      "before": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_jijpzrb9f0"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_jaufbmb9f1"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ow3lleb9f1"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ttaunrb9f1"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_k66qvdb9f1"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_ivtwi0b9f1"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_9v9vryb9f1"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "text": "al漢字phabetagammadelta"
+      },
+      "undone": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))"
+    },
+    {
+      "mode": "table-cross",
+      "pass": true,
+      "before": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_lp66krb9iz"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_7pcekxb9iz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_1p5gigb9iz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_3dm4leb9iz"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_7wt65eb9iz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_hpme3pb9iz"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_g9f1kbb9iz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "text": "al漢字lta"
+      },
+      "undone": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))"
+    },
+    {
+      "mode": "paragraph",
+      "pass": true,
+      "before": "doc(paragraph(\"alpha\"))",
+      "after": {
+        "doc": "doc(paragraph(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_i6st4xb9nb"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "text": "al漢字pha"
+      },
+      "undone": "doc(paragraph(\"alpha\"))"
+    },
+    {
+      "mode": "code",
+      "pass": true,
+      "before": "doc(codeBlock(\"alpha\"))",
+      "after": {
+        "doc": "doc(codeBlock(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_govra9b9r5"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "text": "al漢字pha"
+      },
+      "undone": "doc(codeBlock(\"alpha\"))"
+    },
+    {
+      "mode": "native-cross",
+      "pass": true,
+      "before": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_362lhab9uz"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_ehrtm6b9uz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_yxbwdsb9uz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_n5nhmbb9uz"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_o4fa6zb9uz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_t4a3ngb9uz"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_bl2moub9uz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "text": "al漢字lta"
+      },
+      "undone": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))"
+    }
+  ],
+  "errors": []
+}

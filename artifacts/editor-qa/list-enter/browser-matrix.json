@@ -1,0 +1,73 @@
+{
+  "browser": "143.0.7499.4",
+  "results": [
+    {
+      "name": "bullet",
+      "pass": true,
+      "start": "- Parent\n  - Child\n  -\n",
+      "lifted": "- Parent\n  - Child\n-\n",
+      "exited": "- Parent\n  - Child\n\n<span></span>\n",
+      "typed": "- Parent\n  - Child\n\nAfter list\n"
+    },
+    {
+      "name": "ordered",
+      "pass": true,
+      "start": "1. Parent\n   1. Child\n   2.\n",
+      "lifted": "1. Parent\n   1. Child\n2.\n",
+      "exited": "1. Parent\n   1. Child\n\n<span></span>\n",
+      "typed": "1. Parent\n   1. Child\n\nAfter list\n"
+    },
+    {
+      "name": "task",
+      "pass": true,
+      "start": "- [x] Parent\n  - [x] Child\n  - [ ] \n",
+      "lifted": "- [x] Parent\n  - [x] Child\n- [ ] \n",
+      "exited": "- [x] Parent\n  - [x] Child\n\n<span></span>\n",
+      "typed": "- [x] Parent\n  - [x] Child\n\nAfter list\n"
+    },
+    {
+      "name": "mixed",
+      "pass": true,
+      "start": "1. Parent\n   - Child\n   -\n",
+      "lifted": "1. Parent\n   - Child\n2.\n",
+      "exited": "1. Parent\n   - Child\n\n<span></span>\n",
+      "typed": "1. Parent\n   - Child\n\nAfter list\n"
+    },
+    {
+      "name": "nested Shift+Tab",
+      "pass": true,
+      "markdown": "- Parent\n- Child\n"
+    },
+    {
+      "name": "Backspace on empty nested sibling",
+      "pass": true,
+      "markdown": "- Parent\n  - Child\n"
+    },
+    {
+      "name": "load empty item \"-\\n\"",
+      "pass": true,
+      "markdown": "- Editable\n"
+    },
+    {
+      "name": "load empty item \"1.\\n\"",
+      "pass": true,
+      "markdown": "1. Editable\n"
+    },
+    {
+      "name": "load empty item \"- [ ]\\n\"",
+      "pass": true,
+      "markdown": "- [ ] Editable\n"
+    },
+    {
+      "name": "load empty item \"- Parent\\n  - Child\\n  -\\n\"",
+      "pass": true,
+      "markdown": "- Parent\n  - Child\n  - Editable\n"
+    },
+    {
+      "name": "load empty item \"1. Parent\\n   1. Child\\n   2.\\n\"",
+      "pass": true,
+      "markdown": "1. Parent\n   1. Child\n   2. Editable\n"
+    }
+  ],
+  "errors": []
+}

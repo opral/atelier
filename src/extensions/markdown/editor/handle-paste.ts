@@ -1,3 +1,6 @@
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import { deleteSelectedTableText } from "./extensions/table-selection";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
 import type { StoredPastedMarkdownImage } from "./store-pasted-image";
@@ -89,13 +92,130 @@ export function handlePaste(args: {
 		});
 	}
 
-	const text = event?.clipboardData?.getData?.("text/plain") ?? "";
+	const text: string = event?.clipboardData?.getData?.("text/plain") ?? "";
 	if (!text) return false;
 
-	event.preventDefault?.();
-	const ast = parseMarkdown(text);
-	const tiptapDoc = astToTiptapDoc(ast) as any;
-	return insertPastedBlocks(editor, tiptapDoc?.content ?? []);
+	// A paste is one Undo action, independent of typing on either side.
+	editor.view?.dispatch(closeHistory(editor.state.tr));
+	try {
+		event.preventDefault?.();
+		const selection = editor?.state?.selection;
+		if (
+			deleteSelectedTableText(editor.state, (tr) => {
+				const nodes = text
+					.replace(/\r\n?/g, "\n")
+					.split("\n")
+					.flatMap((line, index) => [
+						...(index ? [editor.schema.nodes.hardBreak.create()] : []),
+						...(line ? [editor.schema.text(line)] : []),
+					]);
+				tr.replaceSelection(new Slice(Fragment.fromArray(nodes), 0, 0));
+				editor.view.dispatch(tr);
+			})
+		)
+			return true;
+
+		if (
+			selection?.$from?.sameParent(selection.$to) &&
+			(selection.$from.parent.type.spec.code ||
+				(!text.trim() && selection.$from.parent.type.name !== "tableCell"))
+		) {
+			// Code and whitespace are literal input. Parsing them as Markdown can
+			// replace a code fence with headings/lists or discard the input entirely.
+			editor.view.dispatch(editor.state.tr.insertText(text));
+			return true;
+		}
+		const ast = parseMarkdown(text);
+		const tiptapDoc = astToTiptapDoc(ast) as any;
+		const blocks = tiptapDoc?.content ?? [];
+		if (
+			blocks.length === 1 &&
+			blocks[0].type === "imageBlock" &&
+			!/[\r\n]/.test(text) &&
+			selection?.$from?.sameParent(selection.$to) &&
+			selection.$from.parent.inlineContent
+		) {
+			// Inline clipboard fragments omit the trailing block newline. Keep a
+			// copied inline image in its sentence; full image-block copies retain
+			// the newline and continue through block insertion below.
+			const attrs = blocks[0].attrs;
+			const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+			const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+			return insertContentAt(
+				editor,
+				{ from: selection.from, to: selection.to },
+				[
+					...(leading ? [{ type: "text", text: leading }] : []),
+					{
+						type: "image",
+						attrs: {
+							src: attrs.src,
+							alt: attrs.alt,
+							title: attrs.title,
+							data: attrs.imageData,
+						},
+					},
+					...(trailing ? [{ type: "text", text: trailing }] : []),
+				],
+			);
+		}
+
+		if (
+			selection?.$from?.sameParent(selection.$to) &&
+			selection.$from.parent.type.name === "tableCell" &&
+			(/[\r\n]/.test(text) ||
+				blocks.length !== 1 ||
+				blocks[0].type !== "paragraph" ||
+				!text.trim())
+		) {
+			// Cells accept inline content only. Block Markdown would split the table
+			// around the caret, so keep its source inside this cell with line breaks.
+			const content = text
+				.replace(/\r\n?/g, "\n")
+				.split("\n")
+				.flatMap((line, index) => [
+					...(index > 0 ? [{ type: "hardBreak" }] : []),
+					...(line ? [{ type: "text", text: line }] : []),
+				]);
+			return insertContentAt(
+				editor,
+				{ from: selection.from, to: selection.to },
+				content,
+			);
+		}
+
+		if (
+			blocks.length === 1 &&
+			blocks[0].type === "paragraph" &&
+			!/[\r\n]/.test(text)
+		) {
+			// Markdown trims insignificant boundary spaces, but clipboard fragments
+			// such as "beautiful " need those spaces when inserted into a sentence.
+			const content = blocks[0].content ?? [];
+			const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+			const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+			const first = content[0];
+			const last = content.at(-1);
+			const existingLeading =
+				first?.type === "text" ? (first.text.match(/^[ \t]+/)?.[0] ?? "") : "";
+			const existingTrailing =
+				last?.type === "text" ? (last.text.match(/[ \t]+$/)?.[0] ?? "") : "";
+			if (leading.length > existingLeading.length)
+				content.unshift({
+					type: "text",
+					text: leading.slice(existingLeading.length),
+				});
+			if (trailing.length > existingTrailing.length)
+				content.push({
+					type: "text",
+					text: trailing.slice(existingTrailing.length),
+				});
+			blocks[0].content = content;
+		}
+		return insertPastedBlocks(editor, blocks);
+	} finally {
+		editor.view?.dispatch(closeHistory(editor.state.tr));
+	}
 }
 
 /**
@@ -271,35 +391,93 @@ function insertPastedBlocks(
 		preferredTarget.from >= 0 &&
 		preferredTarget.to >= preferredTarget.from &&
 		preferredTarget.to <= editor.state.doc.content.size;
+	if (preferredTarget !== undefined && !preferredTargetIsValid) return false;
 	const target = preferredTargetIsValid
 		? resolvePasteTarget(editor, preferredTarget.from, preferredTarget.to)
 		: currentTarget;
 	if (!target) return false;
 
 	const { from, to, inlineFrom, inlineTo, sameParent } = target;
-	if (from !== to) {
-		// A single paragraph can replace an inline selection without changing
-		// the surrounding block. Multi-block Markdown must stay as blocks or
-		// all content after the first paragraph would be discarded.
-		if (inlineFrom && inlineTo && sameParent) {
-			const first = Array.isArray(blockFragment) ? blockFragment[0] : null;
-			const isSingleParagraph =
-				blockFragment.length === 1 &&
-				first &&
-				first.type === "paragraph" &&
-				Array.isArray(first.content);
-			if (isSingleParagraph) {
-				return insertContentAt(
-					editor,
-					{ from, to } as any,
-					first.content,
-					options?.preserveLiveSelection,
-				);
-			}
+	// A paragraph fragment belongs inline both at a caret and over selected
+	// text. Inserting its wrapper would split a sentence into separate blocks.
+	const first = blockFragment[0];
+	if (
+		inlineFrom &&
+		inlineTo &&
+		blockFragment.length === 1 &&
+		first?.type === "imageBlock"
+	) {
+		const targetState = editor.state.apply(
+			editor.state.tr.setSelection(
+				TextSelection.create(editor.state.doc, from, to),
+			),
+		);
+		let tableTransaction: Transaction | undefined;
+		if (
+			sameParent &&
+			targetState.selection.$from.parent.type.name === "tableCell"
+		) {
+			tableTransaction = targetState.tr;
+		} else {
+			deleteSelectedTableText(targetState, (tr) => {
+				tableTransaction = tr;
+			});
 		}
+		if (tableTransaction) {
+			// Stored assets use the original paste anchor even if the caret moved
+			// while uploading. Table cells need an inline image and a cell-preserving
+			// replacement; fitting an image block would tear the table apart.
+			const attrs = first.attrs;
+			tableTransaction.replaceSelectionWith(
+				editor.schema.nodes.image.create({
+					src: attrs.src,
+					alt: attrs.alt,
+					title: attrs.title,
+					data: attrs.imageData,
+				}),
+				false,
+			);
+			if (options?.preserveLiveSelection) {
+				if (
+					editor.state.selection.from !== from ||
+					editor.state.selection.to !== to
+				) {
+					tableTransaction.setSelection(
+						editor.state.selection
+							.getBookmark()
+							.map(tableTransaction.mapping)
+							.resolve(tableTransaction.doc),
+					);
+				}
+				closeHistory(tableTransaction);
+				tableTransaction.setMeta(IMAGE_PASTE_TRANSACTION_META, true);
+			}
+			editor.view.dispatch(tableTransaction);
+			if (options?.preserveLiveSelection)
+				editor.view.dispatch(closeHistory(editor.state.tr));
+			return true;
+		}
+	}
+
+	if (
+		inlineFrom &&
+		inlineTo &&
+		sameParent &&
+		blockFragment.length === 1 &&
+		first?.type === "paragraph" &&
+		Array.isArray(first.content)
+	) {
 		return insertContentAt(
 			editor,
-			{ from, to } as any,
+			{ from, to },
+			first.content,
+			options?.preserveLiveSelection,
+		);
+	}
+	if (from !== to) {
+		return insertContentAt(
+			editor,
+			{ from, to },
 			blockFragment,
 			options?.preserveLiveSelection,
 		);
@@ -414,6 +592,26 @@ function trackPasteTarget(
 			target.to,
 			isCollapsed ? -1 : 1,
 		);
+		if (fromResult.deletedAcross && toResult.deletedAcross) {
+			const $targetFrom = transaction.before.resolve(target.from);
+			const containerDepth = $targetFrom.sharedDepth(target.to);
+			const containerFrom = containerDepth
+				? $targetFrom.before(containerDepth)
+				: 0;
+			const containerTo = containerDepth
+				? $targetFrom.after(containerDepth)
+				: transaction.before.content.size;
+			const removedContainer =
+				transaction.mapping.mapResult(containerFrom, 1).deleted &&
+				transaction.mapping.mapResult(containerTo, -1).deleted;
+			if (removedContainer) {
+				// Removing the containing block invalidates the upload anchor. A
+				// larger replacement of text inside that block still keeps the image
+				// after the new user input through the normal mapping below.
+				target = null;
+				return;
+			}
+		}
 		const selectedContentWasReplaced =
 			!isCollapsed &&
 			Boolean(

@@ -690,6 +690,45 @@ describe("lists", () => {
 		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
 	});
 
+	test.each([
+		["-\n", null],
+		["4.\n", null],
+		["- [ ] \n", false],
+		["4. [x] \n", true],
+		["- parent\n  - child\n  -\n", null],
+		["4. parent\n   1. child\n   2.\n", null],
+	] as const)(
+		"loaded empty item has an editable paragraph: %s",
+		(markdown, checked) => {
+			const editor = new Editor({
+				extensions: MarkdownWc(),
+				content: astToTiptapDoc(parseMarkdown(markdown)),
+			});
+			try {
+				expect(() => editor.state.doc.check()).not.toThrow();
+				let emptyParagraphPosition: number | undefined;
+				editor.state.doc.descendants((node, pos) => {
+					if (node.type.name !== "listItem" || node.textContent !== "") return;
+					expect(node.firstChild?.type.name).toBe("paragraph");
+					expect(node.attrs.checked).toBe(checked);
+					emptyParagraphPosition = pos + 2;
+				});
+				expect(emptyParagraphPosition).toBeDefined();
+				const serialized = serializeAst(tiptapDocToAst(editor.getJSON()));
+				expect(roundtripMarkdownThroughEditor(serialized)).toBe(serialized);
+				editor.commands.setTextSelection(emptyParagraphPosition!);
+				expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+				expect(editor.state.selection.$from.parent.textContent).toBe("");
+				editor.commands.insertContent("editable");
+				expect(editor.state.selection.$from.parent.textContent).toBe(
+					"editable",
+				);
+			} finally {
+				editor.destroy();
+			}
+		},
+	);
+
 	test("empty task item stays a task after reopening the editor", () => {
 		const markdown = "- [ ] \n";
 		const reopened = roundtripThroughEditor(parseMarkdown(markdown));

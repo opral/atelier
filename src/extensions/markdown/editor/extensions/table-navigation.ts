@@ -1,5 +1,6 @@
 import { Extension } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import { Plugin, TextSelection } from "@tiptap/pm/state";
+import { deleteSelectedTableText } from "./table-selection";
 
 /**
  * Keyboard behavior for the editor's lightweight GFM table schema.
@@ -7,6 +8,50 @@ import { TextSelection } from "@tiptap/pm/state";
 export const TableNavigationExtension = Extension.create({
 	name: "tableNavigation",
 	priority: 1100,
+
+	addProseMirrorPlugins() {
+		return [
+			new Plugin({
+				props: {
+					handleDOMEvents: {
+						beforeinput(view, event) {
+							if (!view.editable) return false;
+							const input = event as InputEvent;
+							if (
+								!input.cancelable ||
+								input.isComposing ||
+								input.inputType !== "insertText" ||
+								input.data == null
+							)
+								return false;
+							if (!deleteSelectedTableText(view.state)) return false;
+							input.preventDefault();
+							return deleteSelectedTableText(view.state, (tr) => {
+								view.dispatch(tr.insertText(input.data!).scrollIntoView());
+							});
+						},
+						compositionstart(view) {
+							if (!view.editable) return false;
+							// Native IME replacement bypasses handleTextInput. Clear
+							// only selected cell contents before the browser composes.
+							deleteSelectedTableText(view.state, (tr) => view.dispatch(tr));
+							return false;
+						},
+					},
+					handleTextInput(view, from, to, text) {
+						if (
+							from !== view.state.selection.from ||
+							to !== view.state.selection.to
+						)
+							return false;
+						return deleteSelectedTableText(view.state, (tr) => {
+							view.dispatch(tr.insertText(text).scrollIntoView());
+						});
+					},
+				},
+			}),
+		];
+	},
 
 	addKeyboardShortcuts() {
 		const tableContext = (editor: any) => {
@@ -122,17 +167,59 @@ export const TableNavigationExtension = Extension.create({
 			return selectNear(editor, cellPos + 1, 1);
 		};
 
+		const insertCellBreak = (editor: any) => {
+			if (!tableContext(editor)) return false;
+			const { $from, $to } = editor.state.selection;
+			// Replace only inline contents, including when the range crosses cells.
+			// Generic block replacement can otherwise merge rows or add columns.
+			const { state, view } = editor;
+			const marks = state.storedMarks ?? $from.marks();
+			const insertBreak = (tr: typeof state.tr) => {
+				tr.replaceSelectionWith(state.schema.nodes.hardBreak.create());
+				tr.ensureMarks(marks);
+				view.dispatch(tr.scrollIntoView());
+			};
+			if (!$from.sameParent($to)) {
+				deleteSelectedTableText(state, insertBreak);
+				return true;
+			}
+			insertBreak(state.tr);
+			return true;
+		};
+
+		const deleteTableText = (editor: any, direction: -1 | 1) => {
+			if (
+				deleteSelectedTableText(editor.state, (tr) => editor.view.dispatch(tr))
+			)
+				return true;
+			const context = tableContext(editor);
+			if (!context || !editor.state.selection.empty) return false;
+			return direction < 0
+				? context.$from.parentOffset === 0
+				: context.$from.parentOffset === context.$from.parent.content.size;
+		};
+
 		return {
+			Backspace: ({ editor }) => deleteTableText(editor, -1),
+			Delete: ({ editor }) => deleteTableText(editor, 1),
+			"Mod-Backspace": ({ editor }) => deleteTableText(editor, -1),
+			"Cmd-Backspace": ({ editor }) => deleteTableText(editor, -1),
+			"Ctrl-Backspace": ({ editor }) => deleteTableText(editor, -1),
+			"Mod-Delete": ({ editor }) => deleteTableText(editor, 1),
+			Enter: ({ editor }) => insertCellBreak(editor),
+			"Shift-Enter": ({ editor }) => insertCellBreak(editor),
 			Tab: ({ editor }) => moveCell(editor, 1),
 			"Shift-Tab": ({ editor }) => moveCell(editor, -1),
 			"Mod-Enter": ({ editor }) => exitTable(editor, 1),
 			ArrowUp: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				return context?.rowIndex === 0 && context.$from.parentOffset === 0
 					? exitTable(editor, -1)
 					: false;
 			},
 			ArrowDown: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (!context) return false;
 				return context.rowIndex === context.table.childCount - 1 &&
@@ -141,6 +228,7 @@ export const TableNavigationExtension = Extension.create({
 					: false;
 			},
 			ArrowLeft: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (!context || context.rowIndex !== 0 || context.cellIndex !== 0) {
 					return false;
@@ -148,6 +236,7 @@ export const TableNavigationExtension = Extension.create({
 				return context.$from.parentOffset === 0 ? exitTable(editor, -1) : false;
 			},
 			ArrowRight: ({ editor }) => {
+				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (
 					!context ||

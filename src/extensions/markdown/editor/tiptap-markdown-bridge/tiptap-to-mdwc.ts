@@ -1,5 +1,7 @@
 import { normalizeAst } from "../markdown";
 import {
+	CODE_META_DATA_KEY,
+	LIST_LEADING_PARAGRAPH_DATA_KEY,
 	EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY,
 	EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY,
 } from "./mdwc-to-tiptap";
@@ -25,6 +27,8 @@ function extractNodeData(attrs: PMNode["attrs"]): {
 	}
 	delete clone[EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY];
 	delete clone[EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY];
+	delete clone[LIST_LEADING_PARAGRAPH_DATA_KEY];
+	delete clone[CODE_META_DATA_KEY];
 	return {
 		data: Object.keys(clone).length > 0 ? clone : undefined,
 		spread,
@@ -150,9 +154,18 @@ function pmBlockToAst(
 		}
 		case "listItem": {
 			const listItemData = extractNodeData(node.attrs);
+			const content = node.content || [];
+			const first = content[0];
+			const omitLeadingScaffold =
+				content.length > 1 &&
+				first?.type === "paragraph" &&
+				first.attrs?.data?.[LIST_LEADING_PARAGRAPH_DATA_KEY] &&
+				!first.content?.length;
 			const out: any = {
 				type: "listItem",
-				children: (node.content || []).map((child) => pmBlockToAst(child)),
+				children: (omitLeadingScaffold ? content.slice(1) : content).map(
+					(child) => pmBlockToAst(child),
+				),
 			};
 			if (listItemData.data) out.data = listItemData.data;
 			if (listItemData.spread !== undefined) out.spread = listItemData.spread;
@@ -178,6 +191,8 @@ function pmBlockToAst(
 			const codeData = extractNodeData(node.attrs);
 			if (codeData.data) out.data = codeData.data;
 			if (lang != null) out.lang = lang;
+			const meta = node.attrs?.data?.[CODE_META_DATA_KEY];
+			if (typeof meta === "string") out.meta = meta;
 			return out;
 		}
 		case "horizontalRule": {
@@ -207,7 +222,7 @@ function pmBlockToAst(
 			return {
 				type: "tableCell",
 				data: cellData.data,
-				children: pmInlineToMd(node.content || []),
+				children: pmInlineToMd(node.content || [], { htmlBreaks: true }),
 			};
 		}
 		case "markdownFrontmatter": {
@@ -253,20 +268,24 @@ function pmBlockToAst(
 	}
 }
 
-function pmInlineToMd(nodes: PMNode[]): any[] {
+function pmInlineToMd(
+	nodes: PMNode[],
+	options: { htmlBreaks?: boolean } = {},
+): any[] {
 	const out: any[] = [];
 	for (let index = 0; index < nodes.length; index += 1) {
 		const n = nodes[index];
 		if (n.type === "text") {
 			out.push(applyMarksToText(n.text || "", n.marks || []));
 		} else if (n.type === "hardBreak") {
-			if (n.attrs?.soft === true) {
+			if (n.attrs?.soft === true && !options.htmlBreaks) {
 				out.push({ type: "text", value: "\n" });
 				continue;
 			}
-			const br: any = isTrailingHardBreak(nodes, index)
-				? { type: "html", value: "<br>" }
-				: { type: "break" };
+			const br: any =
+				options.htmlBreaks || isTrailingHardBreak(nodes, index)
+					? { type: "html", value: "<br>" }
+					: { type: "break" };
 			if (n.attrs?.data != null) br.data = n.attrs.data;
 			out.push(br as any);
 		} else if (n.type === "markdownInlineHtml") {
@@ -281,7 +300,32 @@ function pmInlineToMd(nodes: PMNode[]): any[] {
 			const alt = n.attrs?.alt ?? null;
 			const im: any = { type: "image", url: src, title, alt };
 			if (n.attrs?.data != null) im.data = n.attrs.data;
-			out.push(im as any);
+			out.push(applyMarksToInline(im, n.marks || []));
+		}
+	}
+	return mergeAdjacentInlineMarks(out);
+}
+
+// Splitting a marked run into separately delimited Markdown can create literal
+// delimiters (notably four adjacent tildes). Rejoin shared wrappers first.
+function mergeAdjacentInlineMarks(nodes: any[]): any[] {
+	const out: any[] = [];
+	for (const node of nodes) {
+		const previous = out[out.length - 1];
+		if (
+			previous?.type === node.type &&
+			["strong", "emphasis", "delete", "link"].includes(node.type) &&
+			JSON.stringify({ ...previous, children: undefined }) ===
+				JSON.stringify({ ...node, children: undefined })
+		) {
+			previous.children.push(...node.children);
+		} else {
+			out.push(node);
+		}
+	}
+	for (const node of out) {
+		if (Array.isArray(node.children)) {
+			node.children = mergeAdjacentInlineMarks(node.children);
 		}
 	}
 	return out;
@@ -304,24 +348,30 @@ function isHtmlHardBreak(node: any): boolean {
 }
 
 function applyMarksToText(value: string, marks: PMMark[]): any {
-	let node: any = { type: "text", value } as any;
-	const order: PMMark["type"][] = ["bold", "italic", "strike", "code", "link"];
-	for (const t of order) {
-		if (marks.find((m) => m.type === t)) {
-			if (t === "bold") node = { type: "strong", children: [node] } as any;
-			else if (t === "italic")
-				node = { type: "emphasis", children: [node] } as any;
-			else if (t === "strike")
-				node = { type: "delete", children: [node] } as any;
-			else if (t === "code") node = { type: "inlineCode", value } as any;
-			else if (t === "link") {
-				const mark = marks.find((m) => m.type === "link")!;
-				const href = mark.attrs?.href ?? null;
-				const title = mark.attrs?.title ?? null;
-				const ln: any = { type: "link", url: href, title, children: [node] };
-				if (mark.attrs?.data != null) ln.data = mark.attrs.data;
-				node = ln as any;
-			}
+	const node = marks.some((mark) => mark.type === "code")
+		? { type: "inlineCode", value }
+		: { type: "text", value };
+	return applyMarksToInline(node, marks);
+}
+
+function applyMarksToInline(inline: any, marks: PMMark[]): any {
+	let node = inline;
+	const order: PMMark["type"][] = ["bold", "italic", "strike", "link"];
+	for (const type of order) {
+		const mark = marks.find((candidate) => candidate.type === type);
+		if (!mark) continue;
+		if (type === "link") {
+			node = {
+				type: "link",
+				url: mark.attrs?.href ?? null,
+				title: mark.attrs?.title ?? null,
+				children: [node],
+				...(mark.attrs?.data != null ? { data: mark.attrs.data } : {}),
+			};
+		} else {
+			const astType =
+				type === "bold" ? "strong" : type === "italic" ? "emphasis" : "delete";
+			node = { type: astType, children: [node] };
 		}
 	}
 	return node;
