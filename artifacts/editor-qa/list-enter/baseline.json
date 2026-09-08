@@ -1,0 +1,380 @@
+[
+  {
+    "json": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "data": {
+              "id": "id_yhwwxvaumc"
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Ideas"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "data": {
+              "__atelier_empty_paragraph": true,
+              "id": "id_kz4cbgaumc"
+            }
+          }
+        },
+        {
+          "type": "bulletList",
+          "attrs": {
+            "isTaskList": false,
+            "data": {
+              "__mdwc_spread": false,
+              "id": "id_4qsvbfaumc"
+            }
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "attrs": {
+                "checked": null,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_svoe0raumc"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_wzbuk2aumc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Rapid API but for coding agents"
+                    }
+                  ]
+                },
+                {
+                  "type": "bulletList",
+                  "attrs": {
+                    "isTaskList": false,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_63bz0iaumc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "attrs": {
+                        "checked": null,
+                        "data": {
+                          "__mdwc_spread": false,
+                          "id": "id_dsoexpaumc"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "attrs": {
+                            "data": {
+                              "id": "id_4selhraumc"
+                            }
+                          },
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "rapid api is outdated. api's are massively more impactful for coding agents"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "attrs": {
+                        "checked": null,
+                        "data": {
+                          "__mdwc_spread": false,
+                          "id": "id_aidrp8aumh"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "attrs": {
+                            "data": {
+                              "id": "id_hatesyaumh"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "# Ideas\n\n<span></span>\n\n- Rapid API but for coding agents\n  - rapid api is outdated. api's are massively more impactful for coding agents\n  -\n",
+    "html": "<h1 data-diff-key=\"id_yhwwxvaumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Ideas</h1><p data-diff-key=\"id_kz4cbgaumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p><ul data-diff-key=\"id_4qsvbfaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><li data-diff-key=\"id_svoe0raumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_wzbuk2aumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Rapid API but for coding agents</p><ul data-diff-key=\"id_63bz0iaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><li data-diff-key=\"id_dsoexpaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_4selhraumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">rapid api is outdated. api's are massively more impactful for coding agents</p></div></li><li data-diff-key=\"id_aidrp8aumh\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_hatesyaumh\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p></div></li></ul></div></li></ul>",
+    "selection": {
+      "type": "text",
+      "anchor": 126,
+      "head": 126
+    }
+  },
+  {
+    "json": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "data": {
+              "id": "id_yhwwxvaumc"
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Ideas"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "data": {
+              "__atelier_empty_paragraph": true,
+              "id": "id_kz4cbgaumc"
+            }
+          }
+        },
+        {
+          "type": "bulletList",
+          "attrs": {
+            "isTaskList": false,
+            "data": {
+              "__mdwc_spread": false,
+              "id": "id_4qsvbfaumc"
+            }
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "attrs": {
+                "checked": null,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_svoe0raumc"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_wzbuk2aumc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Rapid API but for coding agents"
+                    }
+                  ]
+                },
+                {
+                  "type": "bulletList",
+                  "attrs": {
+                    "isTaskList": false,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_63bz0iaumc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "attrs": {
+                        "checked": null,
+                        "data": {
+                          "__mdwc_spread": false,
+                          "id": "id_dsoexpaumc"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "attrs": {
+                            "data": {
+                              "id": "id_4selhraumc"
+                            }
+                          },
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "rapid api is outdated. api's are massively more impactful for coding agents"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_aidrp8aumh"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_hatesyaumh"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "# Ideas\n\n<span></span>\n\n- Rapid API but for coding agents\n  - rapid api is outdated. api's are massively more impactful for coding agents\n  -\n",
+    "html": "<h1 data-diff-key=\"id_yhwwxvaumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Ideas</h1><p data-diff-key=\"id_kz4cbgaumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p><ul data-diff-key=\"id_4qsvbfaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><li data-diff-key=\"id_svoe0raumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_wzbuk2aumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Rapid API but for coding agents</p><ul data-diff-key=\"id_63bz0iaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><li data-diff-key=\"id_dsoexpaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_4selhraumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">rapid api is outdated. api's are massively more impactful for coding agents</p></div></li></ul><li data-diff-key=\"id_aidrp8aumh\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_hatesyaumh\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p></div></li></div></li></ul>",
+    "selection": {
+      "type": "text",
+      "anchor": 127,
+      "head": 127
+    }
+  },
+  {
+    "json": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "data": {
+              "id": "id_yhwwxvaumc"
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Ideas"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "data": {
+              "__atelier_empty_paragraph": true,
+              "id": "id_kz4cbgaumc"
+            }
+          }
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "data": {
+              "id": "id_wzbuk2aumc"
+            }
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Rapid API but for coding agents"
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "attrs": {
+            "isTaskList": false,
+            "data": {
+              "__mdwc_spread": false,
+              "id": "id_63bz0iaumc"
+            }
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "attrs": {
+                "checked": null,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_dsoexpaumc"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_4selhraumc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "rapid api is outdated. api's are massively more impactful for coding agents"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "attrs": {
+            "checked": null,
+            "data": {
+              "__mdwc_spread": false,
+              "id": "id_aidrp8aumh"
+            }
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_hatesyaumh"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "# Ideas\n\n<span></span>\n\nRapid API but for coding agents\n\n- rapid api is outdated. api's are massively more impactful for coding agents\n\n-\n",
+    "html": "<h1 data-diff-key=\"id_yhwwxvaumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Ideas</h1><p data-diff-key=\"id_kz4cbgaumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p><p data-diff-key=\"id_wzbuk2aumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">Rapid API but for coding agents</p><ul data-diff-key=\"id_63bz0iaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><li data-diff-key=\"id_dsoexpaumc\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_4selhraumc\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\">rapid api is outdated. api's are massively more impactful for coding agents</p></div></li></ul><li data-diff-key=\"id_aidrp8aumh\" data-diff-mode=\"element\" data-diff-show-when-removed=\"true\"><div><p data-diff-key=\"id_hatesyaumh\" data-diff-mode=\"words\" data-diff-show-when-removed=\"true\"></p></div></li>",
+    "selection": {
+      "type": "text",
+      "anchor": 125,
+      "head": 125
+    }
+  }
+]

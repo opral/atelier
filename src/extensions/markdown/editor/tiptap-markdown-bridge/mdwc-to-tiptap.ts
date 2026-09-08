@@ -132,17 +132,20 @@ function astBlockToPM(
 				}),
 				...(hasChecked ? { checked: n.checked } : {}),
 			};
+			// ProseMirror list items require a paragraph first. Keep a lone
+			// image inline there, while later standalone-image paragraphs can
+			// still be movable blocks.
+			const content = (n.children || []).map((child: any, index: number) =>
+				astBlockToPM(child, {
+					standaloneImageAsBlock: index > 0,
+				}),
+			);
 			return {
 				type: "listItem",
 				attrs,
-				// ProseMirror list items require a paragraph first. Keep a lone
-				// image inline there, while later standalone-image paragraphs can
-				// still be movable blocks.
-				content: (n.children || []).map((child: any, index: number) =>
-					astBlockToPM(child, {
-						standaloneImageAsBlock: index > 0,
-					}),
-				),
+				// Markdown allows a bare list marker with no children. Its editor
+				// representation still needs a paragraph to hold the caret.
+				content: content.length > 0 ? content : [{ type: "paragraph" }],
 			};
 		}
 		case "blockquote": {

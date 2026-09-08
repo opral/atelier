@@ -259,7 +259,8 @@ export function markdownWcNodes(
 		}),
 		Node.create({
 			name: "listItem",
-			group: "block",
+			// Items belong only to lists. Treating them as generic blocks lets
+			// list lifting stop inside another item and creates bare <li> nodes.
 			content: "paragraph block*",
 			defining: true,
 			addAttributes() {

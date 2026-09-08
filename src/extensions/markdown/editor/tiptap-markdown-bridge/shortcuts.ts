@@ -8,6 +8,7 @@ import {
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
+import { outdentSelectedListItems } from "./list-keyboard-commands";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
@@ -598,96 +599,10 @@ export const MarkdownWcShortcuts = Extension.create({
 			return true;
 		};
 
-		const outdentListItem = () => {
-			const { state } = this.editor;
-			const { $from } = state.selection as any;
-			let listItemDepth = -1;
-			for (let depth = $from.depth; depth > 0; depth--) {
-				if ($from.node(depth)?.type?.name === "listItem") {
-					listItemDepth = depth;
-					break;
-				}
-			}
-			if (listItemDepth < 2) return false;
-
-			const listDepth = listItemDepth - 1;
-			const listNode = $from.node(listDepth);
-			const listItem = $from.node(listItemDepth);
-			if (
-				listNode?.type?.name !== "bulletList" &&
-				listNode?.type?.name !== "orderedList"
-			) {
-				return false;
-			}
-
-			const itemIndex = $from.index(listDepth);
-			const beforeItems: any[] = [];
-			const afterItems: any[] = [];
-			for (let index = 0; index < listNode.childCount; index++) {
-				const child = listNode.child(index);
-				if (index < itemIndex) beforeItems.push(child);
-				if (index > itemIndex) afterItems.push(child);
-			}
-
-			const listAttrsForIndex = (index: number) => {
-				if (listNode.type.name !== "orderedList") return listNode.attrs;
-				return {
-					...listNode.attrs,
-					start: Number(listNode.attrs?.start ?? 1) + index,
-				};
-			};
-			const createList = (items: any[], startIndex: number) =>
-				items.length > 0
-					? listNode.type.create(listAttrsForIndex(startIndex), items)
-					: null;
-
-			return this.editor.commands.command(({ tr, dispatch }) => {
-				const listFrom = $from.before(listDepth);
-				const listTo = $from.after(listDepth);
-				const offsetInItem = $from.pos - $from.before(listItemDepth);
-				const beforeList = createList(beforeItems, 0);
-				const afterList = createList(afterItems, itemIndex + 1);
-
-				if (listDepth === 1) {
-					const liftedContent: any[] = [];
-					listItem.forEach((child: any) => liftedContent.push(child));
-					const replacement = [
-						...(beforeList ? [beforeList] : []),
-						...liftedContent,
-						...(afterList ? [afterList] : []),
-					];
-					tr.replaceWith(listFrom, listTo, replacement);
-					const beforeSize = beforeList?.nodeSize ?? 0;
-					tr.setSelection(
-						TextSelection.near(
-							tr.doc.resolve(listFrom + beforeSize + offsetInItem - 1),
-						),
-					);
-					if (dispatch) dispatch(tr.scrollIntoView());
-					return true;
-				}
-
-				const parentListItemDepth = listItemDepth - 2;
-				const parentListItem = $from.node(parentListItemDepth);
-				if (parentListItem?.type?.name !== "listItem") return false;
-				const parentListItemTo = $from.after(parentListItemDepth);
-
-				if (beforeList) tr.replaceWith(listFrom, listTo, beforeList);
-				else tr.delete(listFrom, listTo);
-
-				const liftedContent: any[] = [];
-				listItem.forEach((child: any) => liftedContent.push(child));
-				if (afterList) liftedContent.push(afterList);
-				const liftedItem = listItem.type.create(listItem.attrs, liftedContent);
-				const insertPos = tr.mapping.map(parentListItemTo);
-				tr.insert(insertPos, liftedItem);
-				tr.setSelection(
-					TextSelection.near(tr.doc.resolve(insertPos + offsetInItem)),
-				);
-				if (dispatch) dispatch(tr.scrollIntoView());
-				return true;
-			});
-		};
+		const outdentListItem = () =>
+			outdentSelectedListItems(this.editor.state, (tr) =>
+				this.editor.view.dispatch(tr),
+			);
 
 		return {
 			// Bold / Italic / Strike
@@ -747,8 +662,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				}
 				const para: any = $from.parent;
 				const isEmptyPara =
-					para?.type?.name === "paragraph" &&
-					(para.textContent || "").length === 0;
+					para?.type?.name === "paragraph" && para.content.size === 0;
 				if (!isEmptyPara || $from.parentOffset !== 0) return false;
 
 				let listItemDepth = -1;
@@ -892,10 +806,9 @@ export const MarkdownWcShortcuts = Extension.create({
 				// If current paragraph is empty, exit the list (lift)
 				const para: any = $from.parent;
 				const isEmptyPara =
-					para?.type?.name === "paragraph" &&
-					(para.textContent || "").length === 0;
-				if (isEmptyPara) {
-					return this.editor.commands.liftListItem("listItem");
+					para?.type?.name === "paragraph" && para.content.size === 0;
+				if (state.selection.empty && isEmptyPara) {
+					return outdentListItem();
 				}
 				if (isTask) {
 					return this.editor.commands.splitListItem("listItem", {
