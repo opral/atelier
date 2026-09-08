@@ -1,0 +1,1805 @@
+{
+  "browser": "143.0.7499.4",
+  "results": [
+    {
+      "backward": false,
+      "input": "native",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"alé\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_s9esx7hhs9"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_gujymkhhs9"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_p8s1zxhhs9"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alé"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_vddyoghhs9"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_2g5r5whhs9"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_hy6b2khhs9"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_z883bdhhs9"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alé |     |\n| --- | --- |\n|     | lta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_kqpi3ohhth"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_gw6almhhth"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ddry60hhth"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_hr9v44hhth"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_d3hxp6hhth"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_0egi5shhth"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_8at3nlhhth"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      }
+    },
+    {
+      "backward": false,
+      "input": "composition",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"alé\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_6nd1enhhuc"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_p44qeuhhuc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_gn0cdfhhuc"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alé"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_4arjlfhhuc"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_n19d40hhuc"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_l9kah9hhuc"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_uyfgz4hhuc"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alé |     |\n| --- | --- |\n|     | lta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_2mvdcghhvj"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_o76cwfhhvj"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_0v32s6hhvj"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_pa7li2hhvj"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_5f8ki0hhvj"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_0pdz81hhvj"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_bae3xahhvj"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      }
+    },
+    {
+      "backward": false,
+      "input": "cancel",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_1zkm44hhwe"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_1kijmwhhwe"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ddg97zhhwe"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_3zfyxkhhwe"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_0q4punhhwe"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_u6j7z9hhwe"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_t9sw6chhwe"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| al |     |\n| -- | --- |\n|    | lta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_2o322dhhxl"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_741tv4hhxl"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_uzpk9fhhxl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_7u7sakhhxl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_83tlq9hhxl"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_7nci4khhxl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_54cnpfhhxl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      }
+    },
+    {
+      "backward": true,
+      "input": "native",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"alé\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_raqbudhhyg"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_cu9u25hhyg"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ogtk5uhhyg"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alé"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_mybo4mhhyg"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_1agc3xhhyg"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_dy8t3ohhyg"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_itd0i7hhyg"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alé |     |\n| --- | --- |\n|     | lta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_6p6wiihhzl"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_cjl231hhzl"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_xm5atrhhzl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_wbc0cchhzl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_18qmzzhhzl"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_dfycjrhhzl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_hifbquhhzl"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      }
+    },
+    {
+      "backward": true,
+      "input": "composition",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"alé\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_07f7azhi0e"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_fku1urhi0e"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_bywe6thi0e"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alé"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_7ceadfhi0e"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_x6bjoihi0e"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_bu5a0phi0e"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_5ia4ybhi0e"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alé |     |\n| --- | --- |\n|     | lta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_5eago0hi1k"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_ejw32ehi1k"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_60h9x3hi1k"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_wq4ifehi1k"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_rnkhuvhi1k"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_e1p11uhi1k"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_p5wj02hi1k"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      }
+    },
+    {
+      "backward": true,
+      "input": "cancel",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_55agijhi2d"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_wxt3bwhi2d"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_pbsrp5hi2d"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_mvsajqhi2d"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_xcgjqqhi2d"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_rg4nophi2d"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_9xvvm2hi2d"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| al |     |\n| -- | --- |\n|    | lta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_ee7ighhi3j"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_tsrp35hi3j"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_xuyfu5hi3j"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_is7zdshi3j"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_jq6kadhi3j"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_abmc9bhi3j"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_2s4hx8hi3j"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      }
+    }
+  ]
+}

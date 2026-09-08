@@ -1,0 +1,1544 @@
+{
+  "browser": "143.0.7499.4",
+  "results": [
+    {
+      "mode": "cell",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 5,
+          "head": 5
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n\nafter\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al\", image, \"pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_um10zxooez"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_s65ks8ooez"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_dhuiu6ooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        },
+                        {
+                          "type": "image",
+                          "attrs": {
+                            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC",
+                            "alt": "image",
+                            "title": null,
+                            "data": {
+                              "id": "id_pirv84ooez"
+                            }
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "text": "pha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_9iqmivooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_0fcfmfooez"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_cxq9laooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_9ekoxaooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_0h3d08ooez"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 6,
+          "head": 6
+        },
+        "markdown": "| al![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC)pha | beta  |\n| ----------------------------------------------------------------------------------------------------------------------------- | ----- |\n| gamma                                                                                                                         | delta |\n\nafter\n"
+      },
+      "typed": {
+        "doc": "doc(table(tableRow(tableCell(\"al\", image, \"Xpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_um10zxooez"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_s65ks8ooez"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_dhuiu6ooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        },
+                        {
+                          "type": "image",
+                          "attrs": {
+                            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC",
+                            "alt": "image",
+                            "title": null,
+                            "data": {
+                              "id": "id_pirv84ooez"
+                            }
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "text": "Xpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_9iqmivooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_0fcfmfooez"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_cxq9laooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_9ekoxaooez"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_0h3d08ooez"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 7,
+          "head": 7
+        },
+        "markdown": "| al![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC)Xpha | beta  |\n| ------------------------------------------------------------------------------------------------------------------------------ | ----- |\n| gamma                                                                                                                          | delta |\n\nafter\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_mnhx7moog2"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_wqh69soog2"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_rxq7taoog2"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_9bfcl4oog2"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_lhk2yboog2"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_tqkavqoog2"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_tbwjysoog2"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_jx4p5soog2"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 5,
+          "head": 5
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n\nafter\n"
+      }
+    },
+    {
+      "mode": "cross",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 5,
+          "head": 27
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n\nafter\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al\", image), tableCell), tableRow(tableCell, tableCell(\"lta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_0in9fsooh3"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_rv49m2ooh3"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_mqnwxyooh3"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        },
+                        {
+                          "type": "image",
+                          "attrs": {
+                            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC",
+                            "alt": "image",
+                            "title": null,
+                            "data": {
+                              "id": "id_wx2lkbooh3"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_cyf5lkooh3"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_wrqabiooh3"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_p1tj0sooh3"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_6o83muooh3"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_8aeoisooh3"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 6,
+          "head": 6
+        },
+        "markdown": "| al![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC) |     |\n| -------------------------------------------------------------------------------------------------------------------------- | --- |\n|                                                                                                                            | lta |\n\nafter\n"
+      },
+      "typed": {
+        "doc": "doc(table(tableRow(tableCell(\"al\", image, \"X\"), tableCell), tableRow(tableCell, tableCell(\"lta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_0in9fsooh3"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_rv49m2ooh3"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_mqnwxyooh3"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        },
+                        {
+                          "type": "image",
+                          "attrs": {
+                            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC",
+                            "alt": "image",
+                            "title": null,
+                            "data": {
+                              "id": "id_wx2lkbooh3"
+                            }
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "text": "X"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_cyf5lkooh3"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_wrqabiooh3"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_p1tj0sooh3"
+                        }
+                      }
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_6o83muooh3"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "lta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_8aeoisooh3"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 7,
+          "head": 7
+        },
+        "markdown": "| al![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC)X |     |\n| --------------------------------------------------------------------------------------------------------------------------- | --- |\n|                                                                                                                             | lta |\n\nafter\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_fknk7yoohz"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_k8nzheoohz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_gmwtd3oohz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_89uobxoohz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_y7sypooohz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_axq3meoohz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_8h903foohz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_l9s7jqoohz"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 5,
+          "head": 27
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n\nafter\n"
+      }
+    },
+    {
+      "mode": "moved",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 5,
+          "head": 5
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n\nafter\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al\", image, \"pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after!\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_4uxm6iooiz"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_u9vqjaooiz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_v85og3ooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        },
+                        {
+                          "type": "image",
+                          "attrs": {
+                            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC",
+                            "alt": "image",
+                            "title": null,
+                            "data": {
+                              "id": "id_rcgo02ooiz"
+                            }
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "text": "pha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_2olltnooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_bf2jsnooiz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_bibbtxooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_0ulj4qooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_5or6soooiz"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after!"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 41,
+          "head": 41
+        },
+        "markdown": "| al![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC)pha | beta  |\n| ----------------------------------------------------------------------------------------------------------------------------- | ----- |\n| gamma                                                                                                                         | delta |\n\nafter!\n"
+      },
+      "typed": {
+        "doc": "doc(table(tableRow(tableCell(\"al\", image, \"pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after!X\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_4uxm6iooiz"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_u9vqjaooiz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_v85og3ooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al"
+                        },
+                        {
+                          "type": "image",
+                          "attrs": {
+                            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC",
+                            "alt": "image",
+                            "title": null,
+                            "data": {
+                              "id": "id_rcgo02ooiz"
+                            }
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "text": "pha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_2olltnooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_bf2jsnooiz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_bibbtxooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_0ulj4qooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_5or6soooiz"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after!X"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 42,
+          "head": 42
+        },
+        "markdown": "| al![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6AAAAAElFTkSuQmCC)pha | beta  |\n| ----------------------------------------------------------------------------------------------------------------------------- | ----- |\n| gamma                                                                                                                         | delta |\n\nafter!X\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))), paragraph(\"after!\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_4uxm6iooiz"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_u9vqjaooiz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_v85og3ooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_2olltnooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_bf2jsnooiz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_bibbtxooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_0ulj4qooiz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_5or6soooiz"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "after!"
+                }
+              ]
+            }
+          ]
+        },
+        "selection": {
+          "type": "text",
+          "anchor": 40,
+          "head": 40
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n\nafter!\n"
+      }
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,3582 @@
+{
+  "browser": "143.0.7499.4",
+  "results": [
+    {
+      "markdown": "alpha",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "alpha\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_5pbfsmfn2o"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "al漢字pha\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_5pbfsmfn2o"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "alpha\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_5pbfsmfn2o"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "al漢字pha\n"
+      },
+      "expected": "doc(paragraph(\"al漢字pha\"))"
+    },
+    {
+      "markdown": "alpha",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "alpha\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(\"al漢字a\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_cq6olsfn50"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "al漢字a\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_cq6olsfn50"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "alpha\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(\"al漢字a\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_cq6olsfn50"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "al漢字a\n"
+      },
+      "expected": "doc(paragraph(\"al漢字a\"))"
+    },
+    {
+      "markdown": "# alpha",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(heading(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# alpha\n"
+      },
+      "after": {
+        "doc": "doc(heading(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": {
+                  "id": "id_shlit6fn75"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# al漢字pha\n"
+      },
+      "undone": {
+        "doc": "doc(heading(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": {
+                  "id": "id_shlit6fn75"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# alpha\n"
+      },
+      "redone": {
+        "doc": "doc(heading(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": {
+                  "id": "id_shlit6fn75"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# al漢字pha\n"
+      },
+      "expected": "doc(heading(\"al漢字pha\"))"
+    },
+    {
+      "markdown": "# alpha",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(heading(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# alpha\n"
+      },
+      "after": {
+        "doc": "doc(heading(\"al漢字a\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": {
+                  "id": "id_l3msobfn9b"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# al漢字a\n"
+      },
+      "undone": {
+        "doc": "doc(heading(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": {
+                  "id": "id_l3msobfn9b"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# alpha\n"
+      },
+      "redone": {
+        "doc": "doc(heading(\"al漢字a\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 1,
+                "data": {
+                  "id": "id_l3msobfn9b"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "# al漢字a\n"
+      },
+      "expected": "doc(heading(\"al漢字a\"))"
+    },
+    {
+      "markdown": "- alpha",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- alpha\n"
+      },
+      "after": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字pha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_9zt4f6fnbk"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_znmxc9fnbk"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_o50vw3fnbk"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- al漢字pha\n"
+      },
+      "undone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_9zt4f6fnbk"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_znmxc9fnbk"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_o50vw3fnbk"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- alpha\n"
+      },
+      "redone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字pha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_9zt4f6fnbk"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_znmxc9fnbk"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_o50vw3fnbk"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- al漢字pha\n"
+      },
+      "expected": "doc(bulletList(listItem(paragraph(\"al漢字pha\"))))"
+    },
+    {
+      "markdown": "- alpha",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- alpha\n"
+      },
+      "after": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字a\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_epzz1mfnds"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_wv8qyifnds"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_2g8nanfnds"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- al漢字a\n"
+      },
+      "undone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_epzz1mfnds"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_wv8qyifnds"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_2g8nanfnds"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- alpha\n"
+      },
+      "redone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字a\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": false,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_epzz1mfnds"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_wv8qyifnds"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_2g8nanfnds"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- al漢字a\n"
+      },
+      "expected": "doc(bulletList(listItem(paragraph(\"al漢字a\"))))"
+    },
+    {
+      "markdown": "4. alpha",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(orderedList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. alpha\n"
+      },
+      "after": {
+        "doc": "doc(orderedList(listItem(paragraph(\"al漢字pha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_o6r15efnfz"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_j47q0ifnfz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_4wlsk0fnfz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. al漢字pha\n"
+      },
+      "undone": {
+        "doc": "doc(orderedList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_o6r15efnfz"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_j47q0ifnfz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_4wlsk0fnfz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. alpha\n"
+      },
+      "redone": {
+        "doc": "doc(orderedList(listItem(paragraph(\"al漢字pha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_o6r15efnfz"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_j47q0ifnfz"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_4wlsk0fnfz"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. al漢字pha\n"
+      },
+      "expected": "doc(orderedList(listItem(paragraph(\"al漢字pha\"))))"
+    },
+    {
+      "markdown": "4. alpha",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(orderedList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. alpha\n"
+      },
+      "after": {
+        "doc": "doc(orderedList(listItem(paragraph(\"al漢字a\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_a0alw3fni6"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_ey6m68fni6"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_8qalttfni6"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. al漢字a\n"
+      },
+      "undone": {
+        "doc": "doc(orderedList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_a0alw3fni6"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_ey6m68fni6"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_8qalttfni6"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. alpha\n"
+      },
+      "redone": {
+        "doc": "doc(orderedList(listItem(paragraph(\"al漢字a\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "orderedList",
+              "attrs": {
+                "start": 4,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_a0alw3fni6"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": null,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_ey6m68fni6"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_8qalttfni6"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "4. al漢字a\n"
+      },
+      "expected": "doc(orderedList(listItem(paragraph(\"al漢字a\"))))"
+    },
+    {
+      "markdown": "- [x] alpha",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] alpha\n"
+      },
+      "after": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字pha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_nuub3kfnkf"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_rbm7h6fnkf"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_0p7njgfnkf"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] al漢字pha\n"
+      },
+      "undone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_nuub3kfnkf"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_rbm7h6fnkf"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_0p7njgfnkf"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] alpha\n"
+      },
+      "redone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字pha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_nuub3kfnkf"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_rbm7h6fnkf"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_0p7njgfnkf"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] al漢字pha\n"
+      },
+      "expected": "doc(bulletList(listItem(paragraph(\"al漢字pha\"))))"
+    },
+    {
+      "markdown": "- [x] alpha",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] alpha\n"
+      },
+      "after": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字a\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_jeyldkfnml"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_dybgnsfnml"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_eyfo5cfnml"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] al漢字a\n"
+      },
+      "undone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"alpha\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_jeyldkfnml"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_dybgnsfnml"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_eyfo5cfnml"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] alpha\n"
+      },
+      "redone": {
+        "doc": "doc(bulletList(listItem(paragraph(\"al漢字a\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "bulletList",
+              "attrs": {
+                "isTaskList": true,
+                "data": {
+                  "__mdwc_spread": false,
+                  "id": "id_jeyldkfnml"
+                }
+              },
+              "content": [
+                {
+                  "type": "listItem",
+                  "attrs": {
+                    "checked": true,
+                    "data": {
+                      "__mdwc_spread": false,
+                      "id": "id_dybgnsfnml"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "data": {
+                          "id": "id_eyfo5cfnml"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "- [x] al漢字a\n"
+      },
+      "expected": "doc(bulletList(listItem(paragraph(\"al漢字a\"))))"
+    },
+    {
+      "markdown": "> alpha",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(blockquote(paragraph(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "alpha"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> alpha\n"
+      },
+      "after": {
+        "doc": "doc(blockquote(paragraph(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": {
+                  "id": "id_pxr0iwfnoq"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_elbii0fnoq"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "al漢字pha"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> al漢字pha\n"
+      },
+      "undone": {
+        "doc": "doc(blockquote(paragraph(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": {
+                  "id": "id_pxr0iwfnoq"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_elbii0fnoq"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "alpha"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> alpha\n"
+      },
+      "redone": {
+        "doc": "doc(blockquote(paragraph(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": {
+                  "id": "id_pxr0iwfnoq"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_elbii0fnoq"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "al漢字pha"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> al漢字pha\n"
+      },
+      "expected": "doc(blockquote(paragraph(\"al漢字pha\")))"
+    },
+    {
+      "markdown": "> alpha",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(blockquote(paragraph(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "alpha"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> alpha\n"
+      },
+      "after": {
+        "doc": "doc(blockquote(paragraph(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": {
+                  "id": "id_u2ssglfnqv"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_g55n0efnqv"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "al漢字a"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> al漢字a\n"
+      },
+      "undone": {
+        "doc": "doc(blockquote(paragraph(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": {
+                  "id": "id_u2ssglfnqv"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_g55n0efnqv"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "alpha"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> alpha\n"
+      },
+      "redone": {
+        "doc": "doc(blockquote(paragraph(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "blockquote",
+              "attrs": {
+                "data": {
+                  "id": "id_u2ssglfnqv"
+                }
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "data": {
+                      "id": "id_g55n0efnqv"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "al漢字a"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "> al漢字a\n"
+      },
+      "expected": "doc(blockquote(paragraph(\"al漢字a\")))"
+    },
+    {
+      "markdown": "```txt\nalpha\n```",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(codeBlock(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nalpha\n```\n"
+      },
+      "after": {
+        "doc": "doc(codeBlock(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_f3gsljfnt4"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nal漢字pha\n```\n"
+      },
+      "undone": {
+        "doc": "doc(codeBlock(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_f3gsljfnt4"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nalpha\n```\n"
+      },
+      "redone": {
+        "doc": "doc(codeBlock(\"al漢字pha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_f3gsljfnt4"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nal漢字pha\n```\n"
+      },
+      "expected": "doc(codeBlock(\"al漢字pha\"))"
+    },
+    {
+      "markdown": "```txt\nalpha\n```",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(codeBlock(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nalpha\n```\n"
+      },
+      "after": {
+        "doc": "doc(codeBlock(\"al漢字a\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_9qu6srfnva"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nal漢字a\n```\n"
+      },
+      "undone": {
+        "doc": "doc(codeBlock(\"alpha\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_9qu6srfnva"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nalpha\n```\n"
+      },
+      "redone": {
+        "doc": "doc(codeBlock(\"al漢字a\"))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "codeBlock",
+              "attrs": {
+                "language": "txt",
+                "data": {
+                  "id": "id_9qu6srfnva"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "```txt\nal漢字a\n```\n"
+      },
+      "expected": "doc(codeBlock(\"al漢字a\"))"
+    },
+    {
+      "markdown": "**alpha**",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(bold(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**alpha**\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(bold(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_ymzd3xfnxe"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**al漢字pha**\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(bold(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_ymzd3xfnxe"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**alpha**\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(bold(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_ymzd3xfnxe"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**al漢字pha**\n"
+      },
+      "expected": "doc(paragraph(bold(\"al漢字pha\")))"
+    },
+    {
+      "markdown": "**alpha**",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(bold(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**alpha**\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(bold(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_3wwis9fnzk"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**al漢字a**\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(bold(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_3wwis9fnzk"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**alpha**\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(bold(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_3wwis9fnzk"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "**al漢字a**\n"
+      },
+      "expected": "doc(paragraph(bold(\"al漢字a\")))"
+    },
+    {
+      "markdown": "_alpha_",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(italic(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_alpha_\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(italic(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_l0qsznfo1r"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_al漢字pha_\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(italic(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_l0qsznfo1r"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_alpha_\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(italic(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_l0qsznfo1r"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_al漢字pha_\n"
+      },
+      "expected": "doc(paragraph(italic(\"al漢字pha\")))"
+    },
+    {
+      "markdown": "_alpha_",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(italic(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_alpha_\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(italic(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_xe9p1jfo3x"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_al漢字a_\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(italic(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_xe9p1jfo3x"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_alpha_\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(italic(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_xe9p1jfo3x"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ],
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "_al漢字a_\n"
+      },
+      "expected": "doc(paragraph(italic(\"al漢字a\")))"
+    },
+    {
+      "markdown": "[alpha](https://example.com)",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(link(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[alpha](https://example.com)\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(link(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_fhf6zpfo62"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[al漢字pha](https://example.com)\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(link(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_fhf6zpfo62"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[alpha](https://example.com)\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(link(\"al漢字pha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_fhf6zpfo62"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "al漢字pha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[al漢字pha](https://example.com)\n"
+      },
+      "expected": "doc(paragraph(link(\"al漢字pha\")))"
+    },
+    {
+      "markdown": "[alpha](https://example.com)",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(paragraph(link(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[alpha](https://example.com)\n"
+      },
+      "after": {
+        "doc": "doc(paragraph(link(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_gbvvkafo88"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[al漢字a](https://example.com)\n"
+      },
+      "undone": {
+        "doc": "doc(paragraph(link(\"alpha\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_gbvvkafo88"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "alpha"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[alpha](https://example.com)\n"
+      },
+      "redone": {
+        "doc": "doc(paragraph(link(\"al漢字a\")))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "data": {
+                  "id": "id_gbvvkafo88"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com",
+                        "title": null,
+                        "data": null
+                      }
+                    }
+                  ],
+                  "text": "al漢字a"
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "[al漢字a](https://example.com)\n"
+      },
+      "expected": "doc(paragraph(link(\"al漢字a\")))"
+    },
+    {
+      "markdown": "| alpha | beta |\n| --- | --- |\n| gamma | delta |",
+      "variant": "caret",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_0byv3tfoai"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_8mn0xcfoai"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_n1y42wfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ggeg43foai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_egz9v9foai"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_vu4kbbfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_vorw6kfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| al漢字pha | beta  |\n| ------- | ----- |\n| gamma   | delta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_0byv3tfoai"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_8mn0xcfoai"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_n1y42wfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ggeg43foai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_egz9v9foai"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_vu4kbbfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_vorw6kfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "redone": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_0byv3tfoai"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_8mn0xcfoai"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_n1y42wfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字pha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_ggeg43foai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_egz9v9foai"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_vu4kbbfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_vorw6kfoai"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| al漢字pha | beta  |\n| ------- | ----- |\n| gamma   | delta |\n"
+      },
+      "expected": "doc(table(tableRow(tableCell(\"al漢字pha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))"
+    },
+    {
+      "markdown": "| alpha | beta |\n| --- | --- |\n| gamma | delta |",
+      "variant": "range",
+      "pass": true,
+      "before": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": null
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": null
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "after": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字a\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_6xkykgfocr"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_qj73uvfocs"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_206v85focs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_unaq06focs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_q3h9y7focs"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_hizgcmfocs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_ji111cfocs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| al漢字a | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "undone": {
+        "doc": "doc(table(tableRow(tableCell(\"alpha\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_6xkykgfocr"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_qj73uvfocs"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_206v85focs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "alpha"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_unaq06focs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_q3h9y7focs"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_hizgcmfocs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_ji111cfocs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| alpha | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "redone": {
+        "doc": "doc(table(tableRow(tableCell(\"al漢字a\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))",
+        "json": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "align": [
+                  null,
+                  null
+                ],
+                "data": {
+                  "id": "id_6xkykgfocr"
+                }
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_qj73uvfocs"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_206v85focs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "al漢字a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": true,
+                        "align": null,
+                        "data": {
+                          "id": "id_unaq06focs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "beta"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "attrs": {
+                    "data": {
+                      "id": "id_q3h9y7focs"
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_hizgcmfocs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "gamma"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "attrs": {
+                        "isHeader": false,
+                        "align": null,
+                        "data": {
+                          "id": "id_ji111cfocs"
+                        }
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "delta"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "markdown": "| al漢字a | beta  |\n| ----- | ----- |\n| gamma | delta |\n"
+      },
+      "expected": "doc(table(tableRow(tableCell(\"al漢字a\"), tableCell(\"beta\")), tableRow(tableCell(\"gamma\"), tableCell(\"delta\"))))"
+    }
+  ],
+  "errors": []
+}
