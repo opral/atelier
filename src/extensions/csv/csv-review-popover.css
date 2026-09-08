@@ -1,0 +1,127 @@
+.csv-review-trigger {
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+.csv-review-trigger:focus-visible {
+	outline: 2px solid var(--color-ring-focus-visible);
+	outline-offset: -2px;
+}
+.csv-review-popover {
+	position: fixed;
+	z-index: 1000;
+	box-sizing: border-box;
+	width: 320px;
+	max-width: calc(100vw - 16px);
+	max-height: calc(100vh - 16px);
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 4px 12px 12px;
+	border: 1px solid var(--color-border-panel);
+	border-radius: 10px;
+	background: var(--color-bg-panel);
+	color: var(--color-text-secondary);
+	box-shadow: var(--shadow-md);
+	font-family: inherit;
+	font-size: 13px;
+	line-height: 1.5;
+	text-align: left;
+	outline: none;
+}
+.csv-review-popover-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 36px;
+}
+.csv-review-popover-heading strong {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 500;
+	color: var(--color-text-primary);
+}
+.csv-review-popover-heading button {
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--color-icon-secondary);
+	cursor: pointer;
+}
+.csv-review-popover-heading button:hover {
+	background: var(--color-bg-hover);
+}
+.csv-review-popover-heading button:focus-visible {
+	outline: 2px solid var(--color-ring-focus-visible);
+	outline-offset: 1px;
+}
+.csv-review-detail {
+	padding-top: 9px;
+	border-top: 1px solid var(--color-border-panel);
+}
+.csv-review-detail + .csv-review-detail {
+	margin-top: 12px;
+}
+.csv-review-detail h4 {
+	margin: 0 0 8px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--color-text-secondary);
+}
+.csv-review-detail dl {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+}
+.csv-review-detail dl > div {
+	display: grid;
+	grid-template-columns: 42px minmax(0, 1fr);
+	gap: 10px;
+	align-items: baseline;
+}
+.csv-review-detail dt {
+	font-size: 11px;
+	color: var(--color-text-tertiary);
+}
+.csv-review-detail dd {
+	margin: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.csv-review-detail [data-side="before"] dd {
+	color: var(--color-text-diff-removed);
+}
+.csv-review-detail [data-side="after"] dd {
+	color: var(--color-text-diff-added);
+}
+.csv-review-absent {
+	color: var(--color-text-tertiary);
+	font-style: italic;
+}
+
+.csv-review-detail-pill {
+	display: inline-block;
+	max-width: 100%;
+	padding: 1px 7px;
+	border-radius: 4px;
+	overflow-wrap: anywhere;
+	line-height: 22px;
+}
+.csv-review-detail-type {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--color-text-secondary);
+}
+.csv-review-detail-type svg {
+	flex: none;
+	color: var(--color-icon-tertiary);
+}

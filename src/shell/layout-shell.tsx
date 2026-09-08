@@ -1631,24 +1631,22 @@ function LayoutShellLoadedContentResolved({
 	// editor-level review count at zero.
 	const isReviewMode = workingChangesReviewOpen || historicalReview !== null;
 
-	// Shell-level ESC fallback for when no float is mounted (e.g. the active
-	// view has no pending diff). Registered on document, not window: the
-	// float's window-capture handler always runs first regardless of listener
-	// registration order and stops propagation when it consumes ESC (to close
-	// its file list without leaving diff mode).
+	// Fallback when no review float consumes Escape. Nested dialogs receive the
+	// event first; deferring the final check also lets a float registered later
+	// on window consume it without depending on listener registration order.
 	useEffect(() => {
 		if (!isReviewMode) return;
+		let active = true;
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			event.stopPropagation();
-			exitDiffReview();
-		};
-		document.addEventListener("keydown", handleKeyDown, { capture: true });
-		return () => {
-			document.removeEventListener("keydown", handleKeyDown, {
-				capture: true,
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			queueMicrotask(() => {
+				if (active && !event.defaultPrevented) exitDiffReview();
 			});
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			active = false;
+			window.removeEventListener("keydown", handleKeyDown);
 		};
 	}, [exitDiffReview, isReviewMode]);
 

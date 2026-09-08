@@ -448,7 +448,6 @@ Browser verification passed for Sort/Filter outside search and cell clicks, nest
 
 final result: passed
 
-
 ## CSV color and border QA — 2026-09-08
 
 Scope: selection, column properties/color submenus, Sort, search and narrow-menu layout in the live CSV preview. Grounded in `src/shell/theme.css` and Atelier's existing compact panel menus. Captures are from this audit run at 1440×800 and 390×600.
@@ -470,7 +469,6 @@ Limits: light-theme visual audit and targeted keyboard checks; this does not est
 
 ![4. Search match and focus](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/tokens-04-search.png)
 
-
 ## Picker focus-border correction — 2026-09-08
 
 1. **Select picker — fixed.** Reproduced the reported square 2px orange outline overlapping the rounded popup corners. The prior generic input focus rule caused it. Full-width picker search now uses its existing 1px divider as the orange focus indicator; the panel retains a single neutral rounded border. Autofocus, filtering and Enter-to-select still work.
@@ -482,16 +480,13 @@ Checked the focused states in Chromium at 1100×700 and inspected both screensho
 
 ![Date-field focus](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/date-border-after.png)
 
-
 ## Tag legibility refinement — 2026-09-08
 
 Darkened all nine shared tag foreground tokens while preserving pastel fills. Each foreground/background pair now exceeds 7:1 contrast: {'gray': 8.78, 'brown': 7.11, 'orange': 7.1, 'yellow': 7.39, 'green': 7.33, 'blue': 7.34, 'purple': 7.28, 'pink': 7.13, 'red': 7.09}. Search placeholder uses text-tertiary instead of text-quaternary; Clear value uses text-secondary. Inspected the focused dropdown and canvas at 1100×700; search, Enter-to-select and Escape still work. CSS/palette-only change.
 
-
 ## Typed filter controls — 2026-09-08
 
 Filters now reuse CsvToolbarSelect and CsvPill for searchable select options, with the same tokens and menu states as column controls. Selected options remain visible as colored pills. Checkbox/date/number columns have typed controls and predicates; untyped CSV retains contains matching. Browser checks passed for option search, keyboard selection, exact filtering, switching columns, checkbox/date/text values, layered Escape and outside dismissal. Inspected `/tmp/csv-qa/filter-select-options.png` and `/tmp/csv-qa/filter-select-chosen.png`. All 36 filter/reactive/dismissal tests, main/preview typechecks, lint and whitespace checks passed.
-
 
 ## Multi-select filters and independent agent QA — 2026-09-08
 
@@ -507,7 +502,6 @@ Remaining scope gaps: only one filter condition (no compound AND/OR groups or ad
 
 ![Narrow layout](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/multi-independent-narrow.png)
 
-
 ## Select option management — 2026-09-08
 
 Added option name editing, deletion, drag reordering, and Move up/Move down within the existing column-property side menu. Name edits retain color and update all exact matching CSV cells atomically with metadata. Blank/duplicate names and collisions with unlisted cell values are rejected. Used-option deletion shows the affected row count and requires an explicit second click; unused deletion is immediate. Reordering touches only descriptor order. Active filters follow option renames and drop deleted choices.
@@ -517,7 +511,6 @@ Validation: 33 option-edit/reactive tests passed, including a single atomic cont
 ![Option editor](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/option-management.png)
 
 ![Used-option deletion confirmation](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/option-delete.png)
-
 
 ## Compound filter rules — 2026-09-08
 
@@ -552,3 +545,13 @@ Validation: 55 targeted tests pass, covering wrap boundaries/newlines/emoji, met
 Confirmed the property table is the sole built-in `atelier_csv` file handler, shared by the full shell and standalone FileView. The previous renderer was replaced in place, so there is no alternate registration or opt-in flag. Removed the remaining legacy double-click header rename input, state, and CSS; both clicks and double-clicks now open the same column property menu. Retained the history/diff presentation and row operations.
 
 Added integration coverage for opening ordinary uppercase-extension CSV files through both public entry points without metadata or custom extensions, plus a registry check for a single default CSV handler. Fixed the checkbox renderer's exported type annotation so production declarations do not expose an internal Glide import. Rebuilt the package and built its external consumer fixture successfully. CSV/file routing suite: 151 tests pass. Browser verification opened plain-pipeline.csv through the normal shell file browser and confirmed Views/Filter controls. Screenshot: csv-token-qa/default-shell-csv.png.
+
+### Inline CSV review — 2026-09-08
+
+Replaced the review overlay and vague settings banner with a union grid below the existing toolbar. Added/removed rows and columns remain inline with green/+ and red/− indicators; orange cells, headers, and moved-row markers open exact change details. Option chips preserve their configured colors. Unchanged effective text properties and values stay quiet. Saved-view changes are inspectable through the toolbar change count.
+
+Three sub-agents implemented/reviewed the semantic model, accessible popovers, and integrated design/behavior. QA found and resolved lost HEAD metadata, empty added/removed column details, ambiguous row pairing, missing move indicators, translucent sticky surfaces, clipped removed values, Escape exiting review too early, mobile toolbar wrapping, and loss of resized widths/scroll when entering review. Layout state is retained above the revision boundary. Escape handling in the review controls and shell now gives nested dialogs first access without changing Cmd/Ctrl+Enter behavior.
+
+Browser checks at1200px and390px confirmed the same header y-coordinate and40px default row/header heights before and during review, unchanged geometry while popovers open, retained resized widths, horizontal/vertical scroll retention in both directions, viewport-clamped popovers, and hover/click/keyboard/outside dismissal. Tested mixed changes, metadata-only changes, whole-file additions/removals, and100-row scroll cases. Screenshots: review-mixed-1200.png, review-mixed-390.png, review-cell-1200.png, review-cell-390.png under /tmp/csv-qa at verification time.
+
+Validation: production and consumer builds, main/preview typechecks, focused lint, and whitespace checks pass. Full suite on latest main:1279 passed,1 skipped,1 failed; the only failure is the previously reproduced baseline filesystem-snapshot/checkpoint test in lix-diff-commands.test.ts. Review model/grid/popover and shell/controls regressions cover the new behavior.

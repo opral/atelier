@@ -1,0 +1,225 @@
+@scope (.atelier-root) {
+	.csv-review-scroll {
+		position: absolute;
+		inset: 0;
+		overflow: auto;
+		overscroll-behavior: contain;
+		background: var(--color-bg-panel);
+	}
+	.csv-review-table {
+		border-collapse: separate;
+		border-spacing: 0;
+		table-layout: fixed;
+		font-size: 13px;
+		font-weight: 400;
+		color: var(--color-text-secondary);
+	}
+	.csv-review-table th,
+	.csv-review-table td {
+		padding: 0;
+		border: 0;
+		border-right: 1px solid var(--color-border-table-grid);
+		border-bottom: 1px solid var(--color-border-table-grid);
+		box-sizing: border-box;
+		vertical-align: middle;
+		text-align: left;
+		background: var(--color-bg-panel);
+		font-weight: 400;
+	}
+	.csv-review-table thead th {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		height: 40px;
+		color: var(--color-text-tertiary);
+		font-weight: 500;
+	}
+	.csv-review-table .csv-review-gutter {
+		position: sticky;
+		left: 0;
+		width: 44px;
+		text-align: center;
+		z-index: 1;
+		color: var(--color-text-quaternary);
+		font-size: 10px;
+	}
+	.csv-review-table thead .csv-review-gutter {
+		z-index: 3;
+	}
+	.csv-review-header-content {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		height: 39px;
+		padding: 0 8px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+	}
+	.csv-review-header-name {
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.csv-review-type-icon {
+		flex: none;
+		color: var(--color-icon-tertiary);
+	}
+	.csv-review-cell-content {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		height: 100%;
+		padding: 0 8px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+	}
+	.csv-review-clipped-value {
+		display: block;
+		position: relative;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
+		line-height: 20px;
+	}
+	.csv-review-cell-content:has(.csv-review-mark) .csv-review-clipped-value {
+		padding-right: 14px;
+	}
+	.csv-review-cell-content .csv-review-mark {
+		position: absolute;
+		right: 1px;
+		top: 7px;
+	}
+	.csv-review-table button {
+		cursor: pointer;
+	}
+	.csv-review-table button:hover {
+		box-shadow: inset 0 0 0 1px var(--color-border-selection-current);
+	}
+	.csv-review-table button:focus-visible {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: -2px;
+	}
+	.csv-review-table tr[data-diff-status="added"] > *,
+	.csv-review-table td[data-diff-status="added"],
+	.csv-review-table th[data-diff-status="added"] {
+		background-color: var(--color-bg-panel);
+		background-image: linear-gradient(
+			var(--color-bg-diff-added),
+			var(--color-bg-diff-added)
+		);
+	}
+	.csv-review-table tr[data-diff-status="removed"] > *,
+	.csv-review-table td[data-diff-status="removed"],
+	.csv-review-table th[data-diff-status="removed"] {
+		background-color: var(--color-bg-panel);
+		background-image: linear-gradient(
+			var(--color-bg-diff-removed),
+			var(--color-bg-diff-removed)
+		);
+	}
+	.csv-review-table td[data-diff-status="modified"],
+	.csv-review-table thead th[data-diff-status="modified"] {
+		background: var(--color-bg-selection-current);
+	}
+	.csv-review-table thead th[data-diff-status="modified"] {
+		box-shadow: inset 0 -2px var(--color-bg-action-primary);
+	}
+	.csv-review-mark {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: none;
+	}
+	.csv-review-mark.is-added {
+		color: var(--color-text-diff-added);
+	}
+	.csv-review-mark.is-removed {
+		color: var(--color-text-diff-removed);
+	}
+	.csv-review-mark.is-modified {
+		color: var(--color-bg-action-primary);
+	}
+	.csv-review-row-number {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	.csv-review-pill {
+		display: inline-block;
+		max-width: 100%;
+		padding: 1px 7px;
+		border-radius: 4px;
+		line-height: 22px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		vertical-align: middle;
+	}
+	.csv-review-checkbox {
+		display: inline-flex;
+		width: 14px;
+		height: 14px;
+		align-items: center;
+		justify-content: center;
+		vertical-align: middle;
+	}
+	.csv-review-checkbox.is-checked {
+		border-radius: 3px;
+		background: var(--color-bg-action-primary);
+		color: var(--color-text-on-action-primary);
+	}
+	.csv-review-table mark {
+		background: var(--color-bg-search-match);
+		color: inherit;
+		border-radius: 2px;
+	}
+	.csv-review-empty {
+		padding: 20px 52px;
+		font-size: 13px;
+		color: var(--color-text-tertiary);
+	}
+	.csv-toolbar .csv-review-summary {
+		display: inline-flex;
+		padding: 0;
+		font-size: 12px;
+		line-height: 20px;
+		white-space: nowrap;
+		color: var(--color-text-tertiary);
+	}
+	.csv-toolbar button.csv-review-summary:hover {
+		background: transparent;
+		color: var(--color-bg-action-primary);
+	}
+}
+
+@scope (.atelier-root) {
+	.csv-review-row-moved {
+		display: grid;
+		place-items: center;
+		width: 100%;
+		height: 40px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+	}
+	@container (max-width: 540px) {
+		.csv-review-summary-word {
+			display: none;
+		}
+		.csv-toolbar .csv-review-summary {
+			min-width: 20px;
+			justify-content: center;
+		}
+	}
+}
