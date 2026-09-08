@@ -352,8 +352,11 @@ describe("ExternalWriteReviewControls", () => {
 		const checkpointAll = screen.getByRole("menuitem", {
 			name: /Checkpoint all 3 files/,
 		});
-		// Every item carries its verb's icon, like the big half.
-		expect(checkpointAll.querySelector("svg")).not.toBeNull();
+		// "All" carries a stacked flag, distinct from the big half's single one.
+		expect(checkpointAll.querySelector("svg")).toHaveAttribute(
+			"data-icon",
+			"flag-stack",
+		);
 		fireEvent.click(checkpointAll);
 		await waitFor(() =>
 			expect(primary).toHaveBeenCalledWith(
@@ -393,9 +396,17 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "More undo options" }));
-		for (const item of screen.getAllByRole("menuitem")) {
-			expect(item.querySelector("svg")).not.toBeNull();
-		}
+		// One file keeps the single undo glyph; "all" stacks it.
+		expect(
+			screen
+				.getByRole("menuitem", { name: "Undo only leads.csv" })
+				.querySelector("svg"),
+		).not.toHaveAttribute("data-icon");
+		expect(
+			screen
+				.getByRole("menuitem", { name: /Undo all 3 files/ })
+				.querySelector("svg"),
+		).toHaveAttribute("data-icon", "undo-stack");
 		fireEvent.click(
 			screen.getByRole("menuitem", { name: "Undo only leads.csv" }),
 		);

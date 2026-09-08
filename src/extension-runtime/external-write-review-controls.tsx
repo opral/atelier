@@ -549,7 +549,7 @@ export function ExternalWriteReviewControls({
 						disabled={readOnly || isCommitting}
 						onClick={() => void runPrimary("all")}
 					>
-						<PrimaryVerbIcon mode={mode} />
+						<PrimaryVerbStackIcon mode={mode} />
 						<span className="external-write-review-menu-name">
 							{verb.label} all {totalCount} files
 						</span>
@@ -584,7 +584,7 @@ export function ExternalWriteReviewControls({
 						disabled={readOnly || isCommitting}
 						onClick={() => void runUndo("all")}
 					>
-						<RotateCcw aria-hidden="true" />
+						<UndoStackIcon />
 						<span className="external-write-review-menu-name">
 							Undo all {totalCount} files
 						</span>
@@ -819,6 +819,63 @@ function PrimaryVerbIcon({
 	if (mode === "working-changes") return <Flag aria-hidden="true" />;
 	if (mode === "historical") return <RotateCcw aria-hidden="true" />;
 	return <Check aria-hidden="true" />;
+}
+
+// Lucide's flag and rotate-ccw outlines, stacked: two offset copies read
+// as "all of them" next to the single glyph on the big half.
+const FLAG_PATHS = [
+	"M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528",
+];
+const ROTATE_CCW_PATHS = [
+	"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",
+	"M3 3v5h5",
+];
+
+function StackedIcon({
+	name,
+	paths,
+}: {
+	readonly name: string;
+	readonly paths: readonly string[];
+}): ReactNode {
+	return (
+		<svg
+			aria-hidden="true"
+			data-icon={name}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth={2.4}
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<g transform="translate(7 -1) scale(0.78)" opacity={0.5}>
+				{paths.map((d) => (
+					<path key={d} d={d} />
+				))}
+			</g>
+			<g transform="translate(0 5) scale(0.78)">
+				{paths.map((d) => (
+					<path key={d} d={d} />
+				))}
+			</g>
+		</svg>
+	);
+}
+
+function UndoStackIcon(): ReactNode {
+	return <StackedIcon name="undo-stack" paths={ROTATE_CCW_PATHS} />;
+}
+
+function PrimaryVerbStackIcon({
+	mode,
+}: {
+	readonly mode: DiffFloatMode;
+}): ReactNode {
+	if (mode === "working-changes") {
+		return <StackedIcon name="flag-stack" paths={FLAG_PATHS} />;
+	}
+	return <UndoStackIcon />;
 }
 
 function fileNameFromDiffPath(path: string): string {
