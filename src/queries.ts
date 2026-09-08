@@ -32,6 +32,8 @@ export type FileDiffRow = {
 
 export type WorkingFileDiffContentRow = {
 	from_content: unknown | null;
+	from_metadata?: unknown;
+	to_metadata?: unknown;
 	to_content: unknown | null;
 };
 
@@ -167,15 +169,17 @@ export async function selectWorkingFileDiffContent(
 ): Promise<WorkingFileDiffContentRow> {
 	const results = await lix.executeBatch([
 		{
-			sql: "SELECT content FROM lix_state_at('lix_file', $1) WHERE id = $2",
+			sql: "SELECT content, lixcol_metadata FROM lix_state_at('lix_file', $1) WHERE id = $2",
 			params: [beforeCommitId, fileId],
 		},
 		{
-			sql: "SELECT content FROM lix_state_at('lix_file', $1) WHERE id = $2",
+			sql: "SELECT content, lixcol_metadata FROM lix_state_at('lix_file', $1) WHERE id = $2",
 			params: [afterCommitId, fileId],
 		},
 	]);
 	return {
+		from_metadata: results[0]?.rows[0]?.lixcol_metadata,
+		to_metadata: results[1]?.rows[0]?.lixcol_metadata,
 		from_content: results[0]?.rows[0]?.content ?? null,
 		to_content: results[1]?.rows[0]?.content ?? null,
 	};

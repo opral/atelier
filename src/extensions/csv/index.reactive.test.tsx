@@ -1,4 +1,5 @@
-import { Suspense } from "react";
+import { createRef, Suspense } from "react";
+import { Atelier, type AtelierShellHandle } from "@/atelier";
 import {
 	act,
 	fireEvent,
@@ -12,20 +13,29 @@ import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { CsvView } from "./index";
+import { readCsvMetadata, type CsvColumnInfo } from "./csv-metadata";
 
 type MockedDataEditorProps = {
-	columns: readonly { title: string }[];
+	columns: readonly { title: string; width?: number }[];
+	onColumnResizeEnd?: (
+		column: { title: string },
+		newSize: number,
+		columnIndex: number,
+	) => void;
 	getCellContent: (cell: readonly [number, number]) => {
 		displayData: string;
 		kind: string;
 		data?: string;
 		readonly?: boolean;
+		allowWrapping?: boolean;
+		csvInfo?: CsvColumnInfo;
 	};
 	rows: number;
+	rowHeight: number | ((row: number) => number);
 	onCellsEdited?: (
 		edits: readonly {
 			location: readonly [number, number];
-			value: { kind: string; data: string };
+			value: { kind: string; data: string; csvNewOption?: string };
 		}[],
 	) => boolean | void;
 	onCellContextMenu?: (
@@ -51,8 +61,9 @@ const latestDataEditorProps = vi.hoisted(() => ({
 	current: null as MockedDataEditorProps | null,
 }));
 
-vi.mock("@glideapps/glide-data-grid", () => ({
-	DataEditor: (props: MockedDataEditorProps) => {
+vi.mock("@glideapps/glide-data-grid", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@glideapps/glide-data-grid")>()),
+	DataEditorCore: (props: MockedDataEditorProps) => {
 		latestDataEditorProps.current = props;
 		const { columns, getCellContent, rows } = props;
 		return (
@@ -89,11 +100,17 @@ vi.mock("@glideapps/glide-data-grid", () => ({
 			hasIndex: () => false,
 			length: 0,
 		}),
-		fromSingleSelection: (index: number) => ({
-			toArray: () => [index],
-			hasIndex: (candidate: number) => candidate === index,
-			length: 1,
-		}),
+		fromSingleSelection: (index: number | readonly [number, number]) => {
+			const rows =
+				typeof index === "number"
+					? [index]
+					: Array.from({ length: index[1] - index[0] }, (_, i) => index[0] + i);
+			return {
+				toArray: () => rows,
+				hasIndex: (candidate: number) => rows.includes(candidate),
+				length: rows.length,
+			};
+		},
 	},
 }));
 
@@ -455,7 +472,7 @@ test("deletes a row via the context menu", async () => {
 	}
 });
 
-test("renames a column via double-clicking the header", async () => {
+test("double-clicking a header uses the same column menu to rename", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
@@ -492,7 +509,7 @@ test("renames a column via double-clicking the header", async () => {
 		});
 
 		const input = await screen.findByRole("textbox", {
-			name: /rename column/i,
+			name: "Column name",
 		});
 		expect(input).toHaveValue("notes");
 		await act(async () => {
@@ -687,6 +704,26 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 				content: new TextEncoder().encode("name,value\nsnapshot,1"),
 			})
 			.execute();
+		await lix.execute(
+			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
+			[
+				{
+					atelier_csv: {
+						version: 1,
+						columns: [
+							{
+								id: "value",
+								header: "value",
+								index: 1,
+								type: "select",
+								options: [{ value: "1", color: "green" }],
+							},
+						],
+					},
+				},
+				fakeUuid("file_csv_snapshot"),
+			],
+		);
 		const snapshotCommitId = await activeCommitId(lix);
 		await qb(lix)
 			.updateTable("lix_file")
@@ -694,6 +731,20 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 			.where("id", "=", fakeUuid("file_csv_snapshot"))
 			.execute();
 
+		await lix.execute(
+			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
+			[
+				{
+					atelier_csv: {
+						version: 1,
+						columns: [
+							{ id: "value", header: "value", index: 1, type: "number" },
+						],
+					},
+				},
+				fakeUuid("file_csv_snapshot"),
+			],
+		);
 		await act(async () => {
 			utils = render(
 				<LixProvider lix={lix}>
@@ -712,6 +763,17 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 
 		expect(await screen.findByText("snapshot")).toBeInTheDocument();
 		expect(screen.queryByText("head")).toBeNull();
+		expect(
+			latestDataEditorProps.current?.getCellContent([1, 0]).csvInfo,
+		).toMatchObject({
+			type: "select",
+			options: [{ value: "1", color: "green" }],
+		});
+		expect(latestDataEditorProps.current?.getCellContent([1, 0]).readonly).toBe(
+			true,
+		);
+		clickCsvHeader(1);
+		expect(screen.queryByRole("menuitem", { name: /Change type/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		expect(
@@ -847,3 +909,1015 @@ async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
 	);
 	return result.rows[0]?.commit_id as string;
 }
+
+async function renderMetadataCsv(
+	source = "name,stage\nAlice,qualified\nBob,trial\n",
+	root: unknown = { other_extension: { preserved: true } },
+) {
+	const lix = await openLix();
+	const fileId = fakeUuid("csv_metadata_integration");
+	await lix.execute(
+		"INSERT INTO lix_file (id, path, content, lixcol_metadata) VALUES ($1, $2, $3, $4)",
+		[fileId, "/table.csv", new TextEncoder().encode(source), root as never],
+	);
+	const rendered = render(
+		<LixProvider lix={lix}>
+			<Suspense fallback={null}>
+				<CsvView fileId={fileId} />
+			</Suspense>
+		</LixProvider>,
+	);
+	await screen.findByTestId("csv-data-grid");
+	return {
+		lix,
+		fileId,
+		rendered,
+		read: async () =>
+			(
+				await lix.execute(
+					"SELECT content, lixcol_metadata FROM lix_file WHERE id = $1",
+					[fileId],
+				)
+			).rows[0]!,
+		close: async () => {
+			rendered.unmount();
+			await lix.close();
+		},
+	};
+}
+
+function clickCsvHeader(column: number, isDoubleClick = false) {
+	act(() =>
+		latestDataEditorProps.current?.onHeaderClicked?.(column, {
+			isDoubleClick,
+			bounds: { x: 160 * column, y: 20, width: 160, height: 40 },
+			preventDefault: () => {},
+		}),
+	);
+}
+
+async function configureSelect(column = 1) {
+	clickCsvHeader(column);
+	fireEvent.click(await screen.findByRole("menuitem", { name: /Change type/ }));
+	fireEvent.click(await screen.findByRole("menuitemradio", { name: "Select" }));
+	await waitFor(() =>
+		expect(
+			latestDataEditorProps.current?.getCellContent([column, 0]).csvInfo?.type,
+		).toBe("select"),
+	);
+	fireEvent.keyDown(window, { key: "Escape" });
+}
+
+test("configuring a select stores optional metadata without changing CSV bytes or unrelated metadata", async () => {
+	const source = "\uFEFFname;stage\r\nAlice;qualified\r\nBob;trial\r\n";
+	const fixture = await renderMetadataCsv(source);
+	try {
+		expect(
+			latestDataEditorProps.current?.getCellContent([1, 0]).csvInfo,
+		).toBeUndefined();
+		await configureSelect();
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				source.replace(/^\uFEFF/, ""),
+			);
+			expect(row.lixcol_metadata).toMatchObject({
+				other_extension: { preserved: true },
+			});
+			expect(readCsvMetadata(row.lixcol_metadata)?.columns[1]).toMatchObject({
+				header: "stage",
+				type: "select",
+				options: [{ value: "qualified" }, { value: "trial" }],
+			});
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("creating a select option saves the row and option together in one file update", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[1]
+					?.type,
+			).toBe("select"),
+		);
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		const writes: string[] = [];
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (sql.startsWith("UPDATE")) writes.push(sql);
+				return execute(sql, params, options);
+			},
+		);
+		act(() =>
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{
+					location: [1, 0],
+					value: { kind: "text", data: "won", csvNewOption: "won" },
+				},
+			]),
+		);
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toContain(
+				"Alice,won",
+			);
+			expect(
+				readCsvMetadata(row.lixcol_metadata)?.columns[1]?.options,
+			).toContainEqual({ value: "won", color: "gray" });
+		});
+		expect(writes).toHaveLength(1);
+		expect(writes[0]).toContain("content = $1, lixcol_metadata = $2");
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("renaming and inserting columns retains the configured column identity", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		const id = latestDataEditorProps.current?.getCellContent([1, 0]).csvInfo
+			?.id;
+		clickCsvHeader(1, true);
+		const rename = await screen.findByRole("textbox", {
+			name: "Column name",
+		});
+		fireEvent.change(rename, { target: { value: "progress" } });
+		fireEvent.keyDown(rename, { key: "Enter" });
+		await waitFor(() =>
+			expect(latestDataEditorProps.current?.columns[1]?.title).toBe("progress"),
+		);
+		clickCsvHeader(1);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Insert column left" }),
+		);
+		await waitFor(() =>
+			expect(
+				latestDataEditorProps.current?.getCellContent([2, 0]).csvInfo?.id,
+			).toBe(id),
+		);
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(readCsvMetadata(row.lixcol_metadata)?.columns[2]).toMatchObject({
+				id,
+				header: "progress",
+				index: 2,
+				type: "select",
+			});
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toContain(
+				"name,,progress",
+			);
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("filtered and sorted cell edits update the underlying original row", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nZoe,qualified\nAlice,trial\nBob,trial\n",
+	);
+	try {
+		fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Sort column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(await screen.findByRole("menuitemradio", { name: "name" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "trial" },
+		});
+		await waitFor(() =>
+			expect(screen.getByTestId("csv-cell-0-0")).toHaveTextContent("Alice"),
+		);
+		act(() =>
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{ location: [1, 0], value: { kind: "text", data: "won" } },
+			]),
+		);
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,stage\nZoe,qualified\nAlice,won\nBob,trial\n"),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("ragged CSV virtual columns can be configured and retain their type after reopening", async () => {
+	const source = "name,stage\nAlice,qualified,high\nBob,trial,low\n";
+	const fixture = await renderMetadataCsv(source);
+	let reopened: ReturnType<typeof render> | undefined;
+	try {
+		await configureSelect(2);
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[2],
+			).toMatchObject({
+				index: 2,
+				header: "",
+				type: "select",
+				options: [{ value: "high" }, { value: "low" }],
+			}),
+		);
+		fixture.rendered.unmount();
+		reopened = render(
+			<LixProvider lix={fixture.lix}>
+				<Suspense fallback={null}>
+					<CsvView fileId={fixture.fileId} />
+				</Suspense>
+			</LixProvider>,
+		);
+		await screen.findByTestId("csv-data-grid");
+		await waitFor(() =>
+			expect(
+				latestDataEditorProps.current?.getCellContent([2, 0]).csvInfo,
+			).toMatchObject({
+				type: "select",
+				options: [{ value: "high" }, { value: "low" }],
+			}),
+		);
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(source);
+	} finally {
+		reopened?.unmount();
+		await fixture.close();
+	}
+});
+
+test("repeated creation of the same select option retains valid metadata with one option", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		act(() =>
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{
+					location: [1, 0],
+					value: { kind: "text", data: "won", csvNewOption: "won" },
+				},
+				{
+					location: [1, 1],
+					value: { kind: "text", data: "won", csvNewOption: "won" },
+				},
+			]),
+		);
+		await waitFor(async () => {
+			const row = await fixture.read();
+			const metadata = readCsvMetadata(row.lixcol_metadata);
+			expect(metadata).toBeDefined();
+			expect(
+				metadata?.columns[1]?.options?.filter(
+					(option) => option.value === "won",
+				),
+			).toEqual([{ value: "won", color: "gray" }]);
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				"name,stage\nAlice,won\nBob,won\n",
+			);
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("inserting a column clears the old positional filter instead of filtering a different column", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "stage" }),
+		);
+		fireEvent.change(screen.getByRole("textbox", { name: "Filter value" }), {
+			target: { value: "trial" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(1));
+		clickCsvHeader(1);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Insert column left" }),
+		);
+		await waitFor(() =>
+			expect(latestDataEditorProps.current?.columns).toHaveLength(3),
+		);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(2));
+		expect(screen.getByRole("button", { name: "Filter" })).not.toHaveClass(
+			"is-active",
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("column-menu name commits on Enter while preserving values and column identity", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		const id = latestDataEditorProps.current?.getCellContent([1, 0]).csvInfo
+			?.id;
+		clickCsvHeader(1);
+		const input = await screen.findByRole("textbox", { name: "Column name" });
+		fireEvent.change(input, { target: { value: "Progress" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				"name,Progress\nAlice,qualified\nBob,trial\n",
+			);
+			expect(readCsvMetadata(row.lixcol_metadata)?.columns[1]).toMatchObject({
+				id,
+				header: "Progress",
+				type: "select",
+			});
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("column-menu name commits on blur without requiring another rename action", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		clickCsvHeader(1);
+		const input = await screen.findByRole("textbox", { name: "Column name" });
+		fireEvent.change(input, { target: { value: "Progress" } });
+		fireEvent.blur(input);
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,Progress\nAlice,qualified\nBob,trial\n"),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("Escape cancels an edited column-menu name even when blur follows", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		clickCsvHeader(1);
+		const input = await screen.findByRole("textbox", { name: "Column name" });
+		fireEvent.change(input, { target: { value: "Cancelled name" } });
+		fireEvent.keyDown(input, { key: "Escape" });
+		fireEvent.blur(input);
+		await waitFor(() =>
+			expect(screen.queryByRole("textbox", { name: "Column name" })).toBeNull(),
+		);
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe("name,stage\nAlice,qualified\nBob,trial\n");
+		clickCsvHeader(1);
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toHaveValue("stage");
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("the property color submenu persists a swatch without changing CSV values", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		clickCsvHeader(1);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Edit property" }),
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Edit option qualified" }),
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: /green/i }),
+		);
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(
+				readCsvMetadata(row.lixcol_metadata)?.columns[1]?.options,
+			).toContainEqual({ value: "qualified", color: "green" });
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				"name,stage\nAlice,qualified\nBob,trial\n",
+			);
+			expect(row.lixcol_metadata).toMatchObject({
+				other_extension: { preserved: true },
+			});
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("column types can be reached and selected through keyboard submenu navigation", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		clickCsvHeader(1);
+		const input = await screen.findByRole("textbox", { name: "Column name" });
+		fireEvent.keyDown(input, { key: "ArrowDown" });
+		const changeType = screen.getByRole("menuitem", { name: /Change type/ });
+		expect(changeType).toHaveFocus();
+		fireEvent.keyDown(changeType, { key: "ArrowRight" });
+		const textChoice = await screen.findByRole("menuitemradio", {
+			name: "Text",
+		});
+		await waitFor(() => expect(textChoice).toHaveFocus());
+		fireEvent.keyDown(textChoice, { key: "ArrowDown" });
+		const selectChoice = screen.getByRole("menuitemradio", { name: "Select" });
+		await waitFor(() => expect(selectChoice).toHaveFocus());
+		fireEvent.keyDown(selectChoice, { key: "Enter" });
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[1]
+					?.type,
+			).toBe("select"),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("select all deletes only visible source rows after filtering and sorting", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nZoe,qualified\nBob,trial\nAlice,trial\n",
+	);
+	try {
+		fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Sort column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(await screen.findByRole("menuitemradio", { name: "name" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "trial" },
+		});
+		await waitFor(() =>
+			expect(screen.getByTestId("csv-cell-0-0")).toHaveTextContent("Alice"),
+		);
+		fireEvent.click(
+			screen.getByRole("checkbox", { name: "Select all visible rows" }),
+		);
+		expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+		fireEvent.click(
+			screen.getByRole("button", { name: "Delete 2 selected rows" }),
+		);
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,stage\nZoe,qualified\n"),
+		);
+		expect(
+			screen.queryByRole("group", { name: "Selected rows" }),
+		).not.toBeInTheDocument();
+		expect((await fixture.read()).lixcol_metadata).toEqual({
+			other_extension: { preserved: true },
+		});
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("bulk property changes update every selected row in one edit while retaining hidden rows", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nZoe,qualified\nBob,trial\nAlice,trial\n",
+	);
+	try {
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "trial" },
+		});
+		await waitFor(() =>
+			expect(screen.getByText("2 of 3 rows")).toBeInTheDocument(),
+		);
+		fireEvent.click(
+			screen.getByRole("checkbox", { name: "Select all visible rows" }),
+		);
+		fireEvent.keyDown(screen.getByRole("button", { name: "Edit property" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(await screen.findByRole("menuitem", { name: "stage" }));
+		fireEvent.change(screen.getByLabelText("Set value for 2 rows"), {
+			target: { value: "won" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Apply to selected rows" }),
+		);
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe("name,stage\nZoe,qualified\nBob,won\nAlice,won\n"),
+		);
+		expect(
+			screen.queryByRole("group", { name: "Selected rows" }),
+		).not.toBeInTheDocument();
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("changing the visible row set clears selection without modifying CSV", async () => {
+	const source = "name,stage\nAlice,qualified\nBob,trial\n";
+	const fixture = await renderMetadataCsv(source);
+	try {
+		fireEvent.click(
+			screen.getByRole("checkbox", { name: "Select all visible rows" }),
+		);
+		expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+		fireEvent.keyDown(
+			screen.getByRole("checkbox", { name: "Select all visible rows" }),
+			{ key: "Escape" },
+		);
+		expect(
+			screen.queryByRole("group", { name: "Selected rows" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("checkbox", { name: "Select all visible rows" }),
+		);
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "Alice" },
+		});
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("group", { name: "Selected rows" }),
+			).not.toBeInTheDocument(),
+		);
+		expect(
+			screen.getByRole("checkbox", { name: "Select all visible rows" }),
+		).not.toBeChecked();
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(source);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("select filters reuse colored options and reset when switching to a text column", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "stage" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter column" }),
+			).toHaveFocus(),
+		);
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value" }), {
+			key: "ArrowDown",
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("textbox", { name: "Search filter options" }),
+			).toHaveFocus(),
+		);
+		const option = await screen.findByRole("menuitemcheckbox", {
+			name: "trial",
+		});
+		expect(option.querySelector(".csv-option-pill")).not.toBeNull();
+		fireEvent.click(option);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(1));
+		expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+			"Bob",
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemcheckbox", { name: "qualified" }),
+		);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(2));
+		expect(
+			screen.getByRole("menuitemcheckbox", { name: "trial" }),
+		).toBeChecked();
+		expect(
+			screen.getByRole("menuitemcheckbox", { name: "qualified" }),
+		).toBeChecked();
+		fireEvent.keyDown(screen.getByRole("menu", { name: "Filter value" }), {
+			key: "Escape",
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter value" }),
+			).toHaveFocus(),
+		);
+
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(await screen.findByRole("menuitemradio", { name: "name" }));
+		expect(
+			await screen.findByRole("textbox", { name: "Filter value" }),
+		).toHaveValue("");
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(2));
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("renaming an option persists matching CSV cells and metadata together", async () => {
+	const fixture = await renderMetadataCsv(undefined, {
+		atelier_csv: {
+			version: 1,
+			columns: [
+				{ id: "name", header: "name", index: 0, type: "text" },
+				{
+					id: "stage",
+					header: "stage",
+					index: 1,
+					type: "select",
+					options: [
+						{ value: "qualified", color: "green" },
+						{ value: "trial", color: "purple" },
+					],
+				},
+			],
+			views: [
+				{
+					id: "trial-view",
+					name: "Evaluations",
+					filter: {
+						mode: "all",
+						rules: [{ columnId: "stage", value: ["trial"] }],
+					},
+					sort: null,
+					search: "",
+					widths: [],
+				},
+			],
+		},
+	});
+	try {
+		await configureSelect();
+		clickCsvHeader(1);
+		fireEvent.click(
+			await screen.findByRole("menuitem", {
+				name: "Edit property",
+			}),
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Edit option trial" }),
+		);
+		fireEvent.change(
+			await screen.findByRole("textbox", { name: "Option name" }),
+			{ target: { value: "evaluating" } },
+		);
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		const writes: string[] = [];
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (sql.startsWith("UPDATE")) writes.push(sql);
+				return execute(sql, params, options);
+			},
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+		await waitFor(async () => {
+			const row = await fixture.read();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				"name,stage\nAlice,qualified\nBob,evaluating\n",
+			);
+			expect(
+				readCsvMetadata(row.lixcol_metadata)?.columns[1]?.options?.map(
+					(option) => option.value,
+				),
+			).toEqual(["qualified", "evaluating"]);
+			expect(
+				readCsvMetadata(row.lixcol_metadata)?.views?.[0]?.filter.rules[0]
+					?.value,
+			).toEqual(["evaluating"]);
+		});
+		expect(writes).toHaveLength(1);
+		expect(writes[0]).toContain("content = $1, lixcol_metadata = $2");
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("compound filters keep source row mapping correct when sorted cells are edited", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage,contacted\nAlice,trial,no\nBob,qualified,yes\nCara,trial,yes\nDrew,discovery,yes\n",
+	);
+	try {
+		await configureSelect();
+		fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "stage" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter column" }),
+			).toHaveFocus(),
+		);
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value" }), {
+			key: "ArrowDown",
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("textbox", { name: "Search filter options" }),
+			).toHaveFocus(),
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemcheckbox", { name: "trial" }),
+		);
+		fireEvent.click(
+			screen.getByRole("menuitemcheckbox", { name: "qualified" }),
+		);
+		fireEvent.keyDown(screen.getByRole("menu", { name: "Filter value" }), {
+			key: "Escape",
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter value" }),
+			).toHaveFocus(),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column 2" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "contacted" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter column 2" }),
+			).toHaveFocus(),
+		);
+		fireEvent.change(screen.getByRole("textbox", { name: "Filter value 2" }), {
+			target: { value: "yes" },
+		});
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(2));
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Sort column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(await screen.findByRole("menuitemradio", { name: "name" }));
+		await waitFor(() =>
+			expect(screen.getByRole("button", { name: "Sort column" })).toHaveFocus(),
+		);
+		fireEvent.keyDown(screen.getByRole("button", { name: "Sort direction" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "Descending" }),
+		);
+		await waitFor(() =>
+			expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+				"Cara",
+			),
+		);
+		act(() =>
+			latestDataEditorProps.current?.onCellsEdited?.([
+				{ location: [0, 0], value: { kind: "text", data: "Zora" } },
+			]),
+		);
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe(
+				"name,stage,contacted\nAlice,trial,no\nBob,qualified,yes\nZora,trial,yes\nDrew,discovery,yes\n",
+			),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("saved views persist on plain CSV without changing bytes and survive column configuration and remount", async () => {
+	const source = "\uFEFFname;stage\r\nAlice;qualified\r\nBob;trial\r\n";
+	const fixture = await renderMetadataCsv(source);
+	try {
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "Alice" },
+		});
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(1));
+		act(() =>
+			latestDataEditorProps.current?.onColumnResizeEnd?.(
+				{ title: "name" },
+				300,
+				0,
+			),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Views" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save as new view" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "View name" }), {
+			target: { value: "Needs follow-up" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save view" }));
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.views?.[0]
+					?.name,
+			).toBe("Needs follow-up"),
+		);
+		expect(latestDataEditorProps.current?.rows).toBe(1);
+		expect(latestDataEditorProps.current?.columns[0]?.width).toBe(300);
+		expect(
+			screen.queryByRole("button", { name: "Save changes" }),
+		).not.toBeInTheDocument();
+		const stored = await fixture.read();
+		expect(
+			new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+				stored.content as Uint8Array,
+			),
+		).toBe(source);
+		expect(stored.lixcol_metadata).toMatchObject({
+			other_extension: { preserved: true },
+		});
+		await configureSelect();
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[1]
+					?.type,
+			).toBe("select"),
+		);
+		expect(
+			readCsvMetadata((await fixture.read()).lixcol_metadata)?.views,
+		).toHaveLength(1);
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "Bob" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.views?.[0]
+					?.search,
+			).toBe("Bob"),
+		);
+		fixture.rendered.unmount();
+		const remounted = render(
+			<LixProvider lix={fixture.lix}>
+				<Suspense fallback={null}>
+					<CsvView fileId={fixture.fileId} />
+				</Suspense>
+			</LixProvider>,
+		);
+		try {
+			await screen.findByTestId("csv-data-grid");
+			expect(latestDataEditorProps.current?.rows).toBe(2);
+			fireEvent.click(screen.getByRole("button", { name: "Views" }));
+			fireEvent.click(screen.getByRole("button", { name: "Needs follow-up" }));
+			await waitFor(() =>
+				expect(screen.getByTestId("csv-cell-0-0")).toHaveTextContent("Bob"),
+			);
+			expect(latestDataEditorProps.current?.rows).toBe(1);
+			expect(latestDataEditorProps.current?.columns[0]?.width).toBe(300);
+			fireEvent.click(screen.getByRole("button", { name: "Views" }));
+			fireEvent.click(screen.getByRole("button", { name: "Rename view" }));
+			fireEvent.change(screen.getByRole("textbox", { name: "View name" }), {
+				target: { value: "Evaluation" },
+			});
+			fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+			await waitFor(async () =>
+				expect(
+					readCsvMetadata((await fixture.read()).lixcol_metadata)?.views?.[0]
+						?.name,
+				).toBe("Evaluation"),
+			);
+			fireEvent.click(screen.getByRole("button", { name: "Views" }));
+			fireEvent.click(screen.getByRole("button", { name: "Delete view" }));
+			fireEvent.click(screen.getByRole("button", { name: "Delete view" }));
+			await waitFor(async () =>
+				expect(
+					readCsvMetadata((await fixture.read()).lixcol_metadata)?.views,
+				).toEqual([]),
+			);
+			expect(latestDataEditorProps.current?.rows).toBe(2);
+			expect(
+				new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+					(await fixture.read()).content as Uint8Array,
+				),
+			).toBe(source);
+		} finally {
+			remounted.unmount();
+		}
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("text wrapping persists without changing CSV bytes and adapts row heights to column width", async () => {
+	const source =
+		'name,notes\r\nAlice,"A longer note that should wrap onto several lines in a narrow column."\r\nBob,Short\r\n';
+	const fixture = await renderMetadataCsv(source);
+	const rowHeight = (row: number) => {
+		const height = latestDataEditorProps.current!.rowHeight;
+		return typeof height === "number" ? height : height(row);
+	};
+	try {
+		act(() =>
+			latestDataEditorProps.current?.onColumnResizeEnd?.(
+				{ title: "notes" },
+				112,
+				1,
+			),
+		);
+		clickCsvHeader(1);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Wrap content" }),
+		);
+		await waitFor(() =>
+			expect(
+				latestDataEditorProps.current?.getCellContent([1, 0]).allowWrapping,
+			).toBe(true),
+		);
+		expect(rowHeight(0)).toBeGreaterThan(40);
+		expect(rowHeight(1)).toBe(40);
+		const narrowHeight = rowHeight(0);
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[1]
+					?.wrap,
+			).toBe(true),
+		);
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(source);
+		expect((await fixture.read()).lixcol_metadata).toMatchObject({
+			other_extension: { preserved: true },
+		});
+		act(() =>
+			latestDataEditorProps.current?.onColumnResizeEnd?.(
+				{ title: "notes" },
+				520,
+				1,
+			),
+		);
+		expect(rowHeight(0)).toBeLessThan(narrowHeight);
+		clickCsvHeader(1);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Unwrap content" }),
+		);
+		await waitFor(() => expect(rowHeight(0)).toBe(40));
+		await waitFor(async () =>
+			expect(
+				readCsvMetadata((await fixture.read()).lixcol_metadata)?.columns[1]
+					?.wrap,
+			).toBe(false),
+		);
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(source);
+		await configureSelect(1);
+		clickCsvHeader(1);
+		await screen.findByRole("menuitem", { name: "Edit property" });
+		expect(
+			screen.queryByRole("menuitem", { name: "Wrap content" }),
+		).not.toBeInTheDocument();
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("Atelier FileView and Shell open plain CSV in the built-in property table by default", async () => {
+	const lix = await openLix();
+	let rendered: ReturnType<typeof render> | undefined;
+	const content = new TextEncoder().encode("name,notes\nAlice,hello\n");
+	try {
+		const result = await lix.execute(
+			"INSERT INTO lix_file (path, content) VALUES ($1, $2) RETURNING id",
+			["/default.CSV", content],
+		);
+		const fileId = String(result.rows[0]!.id);
+		rendered = render(<Atelier.FileView lix={lix} fileId={fileId} />);
+		await screen.findByRole("button", { name: "Views" });
+ await screen.findByTestId("csv-data-grid");
+		expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Add row" })).toBeInTheDocument();
+		clickCsvHeader(1);
+		await screen.findByRole("menuitem", { name: "Wrap content" });
+		await act(async () => rendered?.unmount());
+		const ref = createRef<AtelierShellHandle>();
+		rendered = render(<Atelier.Shell lix={lix} ref={ref} />);
+		await waitFor(() => expect(ref.current).not.toBeNull());
+		await act(async () => {
+			await ref.current!.documents.open("/default.CSV");
+		});
+		await screen.findByRole("button", { name: "Views" });
+ await screen.findByTestId("csv-data-grid");
+		expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
+		expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+			"Alice",
+		);
+		const file = (
+			await lix.execute(
+				"SELECT content, lixcol_metadata FROM lix_file WHERE id = $1",
+				[fileId],
+			)
+		).rows[0]!;
+		expect(file.content).toEqual(content);
+		expect(file.lixcol_metadata).toBeNull();
+	} finally {
+		await act(async () => rendered?.unmount());
+		await lix.close();
+	}
+});

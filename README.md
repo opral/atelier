@@ -33,6 +33,8 @@ import { Atelier } from "@opral/atelier";
 ```
 
 `FileView` mounts the same file extension as the shell, without tabs or panels.
+
+CSV files open in the built-in table view by default in both `Atelier.Shell` and `Atelier.FileView`. It supports optional typed columns, colored select options, compound filters, saved views, row selection, and text wrapping. Plain CSV files work without metadata or configuration. See [CSV properties](src/extensions/csv/README.md) for the file metadata format.
 It discovers bundled, host-provided (`extensions`), and Lix-installed extensions
 through the same registry. No separate preview implementation is required.
 Pass `readOnly` to disable editing; omit it to edit. Use `onOpenFile` to route

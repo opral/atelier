@@ -31,6 +31,8 @@ export type FileDataAtCommit =
 			readonly loading: false;
 			readonly data: Uint8Array | null;
 			readonly afterData?: Uint8Array | null;
+			readonly beforeMetadata?: unknown;
+			readonly afterMetadata?: unknown;
 			readonly error?: true;
 	  };
 
@@ -89,6 +91,8 @@ export function useWorkingFileData(
 		readonly key: string;
 		readonly data: Uint8Array | null;
 		readonly afterData: Uint8Array | null;
+		readonly beforeMetadata?: unknown;
+		readonly afterMetadata?: unknown;
 		readonly error?: true;
 	} | null>(null);
 	useEffect(() => {
@@ -104,6 +108,8 @@ export function useWorkingFileData(
 				if (cancelled) return;
 				setResolved({
 					key,
+					beforeMetadata: row.from_metadata,
+					afterMetadata: row.to_metadata,
 					data:
 						row.from_content === null
 							? null
@@ -132,6 +138,8 @@ export function useWorkingFileData(
 				loading: false,
 				data: resolved.data,
 				afterData: resolved.afterData,
+				beforeMetadata: resolved.beforeMetadata,
+				afterMetadata: resolved.afterMetadata,
 				...(resolved.error ? { error: true as const } : {}),
 			}
 		: { loading: true };
@@ -155,6 +163,8 @@ export async function getWorkingFileData(
 ): Promise<{
 	readonly beforeData: Uint8Array | null;
 	readonly afterData: Uint8Array | null;
+	readonly beforeMetadata?: unknown;
+	readonly afterMetadata?: unknown;
 } | null> {
 	const row = await selectWorkingFileDiffContent(
 		lix,

@@ -10,6 +10,7 @@ import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
 import { HostBrandMark, HostRepositoryPicker } from "./host-navbar";
+import { seedCsvDemo } from "./seed-csv-demo";
 import { seedWorkspace } from "./seed-workspace";
 import "./style.css";
 
@@ -22,6 +23,7 @@ async function start() {
 		storage: new OpfsStorage({ name: "atelier-preview-lix-opfs-0.12" }),
 	});
 	await seedWorkspace(lix);
+	await seedCsvDemo(lix);
 	const params = new URLSearchParams(window.location.search);
 	const filePath = params.get("file");
 	if (filePath) {
@@ -33,8 +35,59 @@ async function start() {
 		if (typeof fileId !== "string")
 			throw new Error(`File not found: ${filePath}`);
 		createRoot(mountElement).render(
-			<main style={{ height: "100%", overflowY: "auto" }}>
-				<div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px" }}>
+			<main
+				style={{
+					height: "100%",
+					overflowY: "auto",
+					display: "flex",
+					flexDirection: "column",
+				}}
+			>
+				{filePath.endsWith(".csv") && (
+					<nav
+						className="csv-demo-nav"
+						style={{
+							display: "flex",
+							gap: 20,
+							padding: "12px 20px",
+							fontSize: 13,
+							background: "#f7f6f3",
+							borderBottom: "1px solid #e9e8e4",
+						}}
+					>
+						<a href="/">Atelier</a>
+						<a
+							href="?file=/csv-extension/pipeline.csv&edit=1"
+							style={{
+								fontWeight: filePath.endsWith("/pipeline.csv") ? 600 : 400,
+							}}
+						>
+							Pipeline
+						</a>
+						<a
+							href="?file=/csv-extension/plain-pipeline.csv&edit=1"
+							style={{
+								fontWeight: filePath.endsWith("/plain-pipeline.csv")
+									? 600
+									: 400,
+							}}
+						>
+							Plain CSV
+						</a>
+					</nav>
+				)}
+				<div
+					style={
+						filePath.endsWith(".csv")
+							? {
+									display: "flex",
+									flexDirection: "column",
+									flex: 1,
+									minHeight: 0,
+								}
+							: { maxWidth: 960, margin: "0 auto", padding: "48px 24px" }
+					}
+				>
 					<Atelier.FileView
 						lix={lix}
 						fileId={fileId}

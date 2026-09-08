@@ -27,6 +27,7 @@ overrides:
   prosemirror-transform: 1.12.0
   prosemirror-view: 1.42.0
 patchedDependencies:
+  '@glideapps/glide-data-grid@6.0.3': patches/@glideapps__glide-data-grid@6.0.3.patch
   "@pierre/trees": patches/@pierre__trees.patch
 
 peerDependencyRules:

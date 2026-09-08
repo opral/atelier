@@ -1,0 +1,204 @@
+diff --git a/dist/cjs/data-editor/data-editor.js b/dist/cjs/data-editor/data-editor.js
+index 081f3b38d82107204ac3f3620d6724ffad01b43f..1a6d64ca862c4a9de3a71b02c5411b81d3745e36 100644
+--- a/dist/cjs/data-editor/data-editor.js
++++ b/dist/cjs/data-editor/data-editor.js
+@@ -55,7 +55,7 @@ const color_parser_js_1 = require("../internal/data-grid/color-parser.js");
+ const math_js_1 = require("../common/math.js");
+ const event_args_js_1 = require("../internal/data-grid/event-args.js");
+ const data_editor_keybindings_js_1 = require("./data-editor-keybindings.js");
+-const DataGridOverlayEditor = React.lazy(async () => await import("../internal/data-grid-overlay-editor/data-grid-overlay-editor.js"));
++const DataGridOverlayEditor = require("../internal/data-grid-overlay-editor/data-grid-overlay-editor.js").default;
+ // There must be a better way
+ let idCounter = 0;
+ function getSpanStops(cells) {
+@@ -96,6 +96,8 @@ const emptyGridSelection = {
+ const DataEditorImpl = (p, forwardedRef) => {
+     const [gridSelectionInner, setGridSelectionInner] = React.useState(emptyGridSelection);
+     const [overlay, setOverlay] = React.useState();
++    const overlayRef = React.useRef(overlay);
++    overlayRef.current = overlay;
+     const searchInputRef = React.useRef(null);
+     const canvasRef = React.useRef(null);
+     const [mouseState, setMouseState] = React.useState();
+@@ -300,7 +302,9 @@ const DataEditorImpl = (p, forwardedRef) => {
+         }
+         else {
+             window.requestAnimationFrame(() => {
+-                gridRef.current?.focus();
++                // A single click can open the editor before this frame runs.
++                // Keep its focus instead of returning it to the canvas.
++                if (overlayRef.current === undefined) gridRef.current?.focus();
+             });
+         }
+     }, []);
+@@ -990,7 +994,9 @@ const DataEditorImpl = (p, forwardedRef) => {
+     const lastMouseSelectLocation = React.useRef();
+     const touchDownArgs = React.useRef(visibleRegion);
+     const mouseDownData = React.useRef();
++    const pointerDownEditing = React.useRef(false);
+     const onMouseDown = React.useCallback((args) => {
++        pointerDownEditing.current = false;
+         isPrevented.current = false;
+         touchDownArgs.current = visibleRegionRef.current;
+         if (args.button !== 0 && args.button !== 1) {
+@@ -1016,11 +1022,22 @@ const DataEditorImpl = (p, forwardedRef) => {
+         lastMouseSelectLocation.current = undefined;
+         if (!args.isTouch && args.button === 0 && !fh) {
+             handleSelect(args);
++            if (args.kind === "cell" && args.location[0] >= rowMarkerOffset &&
++                args.location[1] < rows && !args.shiftKey && !args.ctrlKey && !args.metaKey && !args.altKey) {
++                const content = getMangledCellContent(args.location);
++                if (content.kind === data_grid_types_js_1.GridCellKind.Text && content.allowOverlay && content.readonly !== true &&
++                    content.activationBehaviorOverride === "pointer-down") {
++                    pointerDownEditing.current = true;
++                    setMouseState(undefined);
++                    onCellActivated?.([args.location[0] - rowMarkerOffset, args.location[1]]);
++                    setOverlaySimple({ target: args.bounds, content, cell: args.location, highlight: false, forceEditMode: false });
++                }
++            }
+         }
+         else if (!args.isTouch && args.button === 1) {
+             lastMouseSelectLocation.current = args.location;
+         }
+-    }, [gridSelection, handleSelect]);
++    }, [gridSelection, handleSelect, rowMarkerOffset, rows, getMangledCellContent, onCellActivated, setOverlaySimple]);
+     const [renameGroup, setRenameGroup] = React.useState();
+     const handleGroupHeaderSelection = React.useCallback((args) => {
+         if (args.kind !== event_args_js_1.groupHeaderKind || columnSelect !== "multi") {
+@@ -1175,6 +1192,10 @@ const DataEditorImpl = (p, forwardedRef) => {
+         setFillHighlightRegion(undefined);
+         setScrollDir(undefined);
+         isActivelyDraggingHeader.current = false;
++        if (pointerDownEditing.current) {
++            pointerDownEditing.current = false;
++            return;
++        }
+         if (isOutside)
+             return;
+         if (mouse?.fillHandle === true &&
+@@ -1246,6 +1267,10 @@ const DataEditorImpl = (p, forwardedRef) => {
+                                 (a.isDoubleClick === true || cellActivationBehavior === "second-click");
+                         break;
+                     }
++                    case "pointer-down": {
++                        shouldActivate = !a.shiftKey && !a.ctrlKey && !a.metaKey && !a.altKey;
++                        break;
++                    }
+                     case "single-click": {
+                         shouldActivate = true;
+                         break;
+diff --git a/dist/dts/internal/data-grid/data-grid-types.d.ts b/dist/dts/internal/data-grid/data-grid-types.d.ts
+index 4007ec6485ebdf8a5c60c30e3e82fb9468e6eba8..4ef8826aac76225caea4c008b64b7010987ed9a4 100644
+--- a/dist/dts/internal/data-grid/data-grid-types.d.ts
++++ b/dist/dts/internal/data-grid/data-grid-types.d.ts
+@@ -189,7 +189,7 @@ export interface Rectangle {
+     height: number;
+ }
+ export declare function isRectangleEqual(a: Rectangle | undefined, b: Rectangle | undefined): boolean;
+-export type CellActiviationBehavior = "double-click" | "single-click" | "second-click";
++export type CellActiviationBehavior = "double-click" | "single-click" | "second-click" | "pointer-down";
+ /** @category Cells */
+ export interface BaseGridCell {
+     readonly allowOverlay: boolean;
+diff --git a/dist/esm/data-editor/data-editor.js b/dist/esm/data-editor/data-editor.js
+index ec05aa9866c70032fc5509ff557cb8c542e384ed..69a939d1d2222a20c2510073741ad47ce0f01d07 100644
+--- a/dist/esm/data-editor/data-editor.js
++++ b/dist/esm/data-editor/data-editor.js
+@@ -26,7 +26,7 @@ import { withAlpha } from "../internal/data-grid/color-parser.js";
+ import { combineRects, getClosestRect, pointInRect } from "../common/math.js";
+ import { groupHeaderKind, outOfBoundsKind, headerKind, mouseEventArgsAreEqual, } from "../internal/data-grid/event-args.js";
+ import { useKeybindingsWithDefaults } from "./data-editor-keybindings.js";
+-const DataGridOverlayEditor = React.lazy(async () => await import("../internal/data-grid-overlay-editor/data-grid-overlay-editor.js"));
++import DataGridOverlayEditor from "../internal/data-grid-overlay-editor/data-grid-overlay-editor.js";
+ // There must be a better way
+ let idCounter = 0;
+ function getSpanStops(cells) {
+@@ -67,6 +67,8 @@ const emptyGridSelection = {
+ const DataEditorImpl = (p, forwardedRef) => {
+     const [gridSelectionInner, setGridSelectionInner] = React.useState(emptyGridSelection);
+     const [overlay, setOverlay] = React.useState();
++    const overlayRef = React.useRef(overlay);
++    overlayRef.current = overlay;
+     const searchInputRef = React.useRef(null);
+     const canvasRef = React.useRef(null);
+     const [mouseState, setMouseState] = React.useState();
+@@ -271,7 +273,9 @@ const DataEditorImpl = (p, forwardedRef) => {
+         }
+         else {
+             window.requestAnimationFrame(() => {
+-                gridRef.current?.focus();
++                // A single click can open the editor before this frame runs.
++                // Keep its focus instead of returning it to the canvas.
++                if (overlayRef.current === undefined) gridRef.current?.focus();
+             });
+         }
+     }, []);
+@@ -961,7 +965,9 @@ const DataEditorImpl = (p, forwardedRef) => {
+     const lastMouseSelectLocation = React.useRef();
+     const touchDownArgs = React.useRef(visibleRegion);
+     const mouseDownData = React.useRef();
++    const pointerDownEditing = React.useRef(false);
+     const onMouseDown = React.useCallback((args) => {
++        pointerDownEditing.current = false;
+         isPrevented.current = false;
+         touchDownArgs.current = visibleRegionRef.current;
+         if (args.button !== 0 && args.button !== 1) {
+@@ -987,11 +993,22 @@ const DataEditorImpl = (p, forwardedRef) => {
+         lastMouseSelectLocation.current = undefined;
+         if (!args.isTouch && args.button === 0 && !fh) {
+             handleSelect(args);
++            if (args.kind === "cell" && args.location[0] >= rowMarkerOffset &&
++                args.location[1] < rows && !args.shiftKey && !args.ctrlKey && !args.metaKey && !args.altKey) {
++                const content = getMangledCellContent(args.location);
++                if (content.kind === GridCellKind.Text && content.allowOverlay && content.readonly !== true &&
++                    content.activationBehaviorOverride === "pointer-down") {
++                    pointerDownEditing.current = true;
++                    setMouseState(undefined);
++                    onCellActivated?.([args.location[0] - rowMarkerOffset, args.location[1]]);
++                    setOverlaySimple({ target: args.bounds, content, cell: args.location, highlight: false, forceEditMode: false });
++                }
++            }
+         }
+         else if (!args.isTouch && args.button === 1) {
+             lastMouseSelectLocation.current = args.location;
+         }
+-    }, [gridSelection, handleSelect]);
++    }, [gridSelection, handleSelect, rowMarkerOffset, rows, getMangledCellContent, onCellActivated, setOverlaySimple]);
+     const [renameGroup, setRenameGroup] = React.useState();
+     const handleGroupHeaderSelection = React.useCallback((args) => {
+         if (args.kind !== groupHeaderKind || columnSelect !== "multi") {
+@@ -1146,6 +1163,10 @@ const DataEditorImpl = (p, forwardedRef) => {
+         setFillHighlightRegion(undefined);
+         setScrollDir(undefined);
+         isActivelyDraggingHeader.current = false;
++        if (pointerDownEditing.current) {
++            pointerDownEditing.current = false;
++            return;
++        }
+         if (isOutside)
+             return;
+         if (mouse?.fillHandle === true &&
+@@ -1217,6 +1238,10 @@ const DataEditorImpl = (p, forwardedRef) => {
+                                 (a.isDoubleClick === true || cellActivationBehavior === "second-click");
+                         break;
+                     }
++                    case "pointer-down": {
++                        shouldActivate = !a.shiftKey && !a.ctrlKey && !a.metaKey && !a.altKey;
++                        break;
++                    }
+                     case "single-click": {
+                         shouldActivate = true;
+                         break;
+diff --git a/src/internal/data-grid/data-grid-types.ts b/src/internal/data-grid/data-grid-types.ts
+index f46c1051a3a9c56265deedf63078737ec3b89e34..83d67c01b3534ff15fc33af35b868f78a8d222cc 100644
+--- a/src/internal/data-grid/data-grid-types.ts
++++ b/src/internal/data-grid/data-grid-types.ts
+@@ -299,7 +299,7 @@ export function isRectangleEqual(a: Rectangle | undefined, b: Rectangle | undefi
+     return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+ }
+ 
+-export type CellActiviationBehavior = "double-click" | "single-click" | "second-click";
++export type CellActiviationBehavior = "double-click" | "single-click" | "second-click" | "pointer-down";
+ 
+ /** @category Cells */
+ export interface BaseGridCell {
