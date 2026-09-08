@@ -222,7 +222,9 @@ describe("open file lifecycle", () => {
 			);
 		});
 		fireEvent.click(await findFilesTreeItem("one.md"));
-		expect(await screen.findByRole("heading", { name: "One" })).toBeVisible();
+		await waitFor(() => {
+			expect(screen.getByRole("heading", { name: "One" })).toBeVisible();
+		});
 		expect(onEvent).toHaveBeenCalledWith({
 			type: "document_open_attempted",
 			filePath: "/one.md",
@@ -251,7 +253,9 @@ describe("open file lifecycle", () => {
 
 		// A plain click navigates the active tab in place.
 		fireEvent.click(await findFilesTreeItem("two.md"));
-		expect(await screen.findByRole("heading", { name: "Two" })).toBeVisible();
+		await waitFor(() => {
+			expect(screen.getByRole("heading", { name: "Two" })).toBeVisible();
+		});
 		await waitFor(() => {
 			const value = sessionStateStore.getSnapshot();
 			expect(value?.panels?.central?.views).toEqual([
@@ -404,7 +408,9 @@ describe("open file lifecycle", () => {
 				.execute();
 		});
 		fireEvent.click(await findFilesTreeItem("next.md"));
-		expect(await screen.findByRole("heading", { name: "Next" })).toBeVisible();
+		await waitFor(() => {
+			expect(screen.getByRole("heading", { name: "Next" })).toBeVisible();
+		});
 		expect(screen.getByTestId("files-view-tree-scroll")).toBeInTheDocument();
 
 		await act(async () => {

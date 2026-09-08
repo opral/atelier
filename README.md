@@ -1,137 +1,96 @@
 # Atelier
 
-### The embeddable lix workspace
-
-Atelier is a workspace UI — editor, files, and diffs — that mounts into any host application. Hosts bring their own [lix](https://github.com/opral/lix); Atelier renders the space to work in it.
-
-Atelier is the workspace engine inside any host. The included web preview demonstrates a browser app backed by Lix.
-
-Atelier is two things at once:
-
-1. **The embeddable workspace shell** — mount `<Atelier.Shell lix={lix} />` and get the full editor, files, history, and review surface.
-2. **A library of workspace components for building Lix applications** — the same extensions that power the shell are composable on their own. Building a Lix app and want to render Markdown, preview a file, or show a change? The extension that owns the file type does the rendering; your app owns the frame.
-
-The second story is the direction: plug-and-play workspace UI, batteries included, powered by extensions.
-
-### File previews (Quick Look)
-
-Any surface in a host app can render a file — live, at a commit, or as a change — through the extension that owns its file type:
+Atelier is an embeddable React workspace for [Lix](https://github.com/opral/lix): files, editors, history, and review in one component.
 
 ```tsx
 import { Atelier } from "@opral/atelier";
-
-// The live document.
-<Atelier.FileView lix={lix} fileId={id} readOnly />
-
-// The document as of a commit.
-<Atelier.FileView lix={lix} fileId={id} filePath="/README.md"
-	targetCommitId={commitId} />
-
-// The change since a base — the same presentation the review surface shows.
-<Atelier.FileView lix={lix} fileId={id} filePath="/README.md"
-	targetCommitId={commitId} diff={{ baseCommitId }} />
-```
-
-`FileView` mounts the same file extension as the shell, without tabs or panels.
-
-CSV files open in the built-in table view by default in both `Atelier.Shell` and `Atelier.FileView`. It supports optional typed columns, colored select options, compound filters, saved views, row selection, and text wrapping. Plain CSV files work without metadata or configuration. See [CSV properties](src/extensions/csv/README.md) for the file metadata format.
-It discovers bundled, host-provided (`extensions`), and Lix-installed extensions
-through the same registry. No separate preview implementation is required.
-Pass `readOnly` to disable editing; omit it to edit. Use `onOpenFile` to route
-document links in your host. The host owns the supplied Lix and closes it after unmount.
-
-### Composing History
-
-`Atelier.History` renders the built-in working changes and checkpoint timeline.
-It includes its own Lix provider, loading state, and error boundary, so a host
-extension can compose it inside a separate React root:
-
-```tsx
-import { Atelier } from "@opral/atelier";
-
-// `atelier` is the runtime supplied to the extension's mount/update callbacks.
-if (!atelier.diff) throw new Error("History requires a diff runtime");
-
-<div className="flex min-h-0 flex-1 flex-col">
-  <HostHistoryActions />
-  <Atelier.History atelier={{ ...atelier, diff: atelier.diff }} />
-</div>
-```
-
-Register the wrapper with `ATELIER_BUILTIN_EXTENSION_IDS.history` to replace the
-shell's History view. Forward each `update` callback's runtime to the component
-and unmount the React root on `dispose`. The component requires `lix`, `icons`,
-and `diff`; the host owns Lix's lifecycle. Host messaging and actions stay in
-the wrapper rather than in Atelier slots or the extension runtime.
-
-## Why "Atelier"?
-
-**Atelier** (French, _[atəlje]_) is an artist's workshop — the private studio where an artist and their assistants make the work. Not the gallery where it's shown, not the storage where it's kept: the room where the work actually happens.
-
-That's this component's job. Lix holds the workspace — the files, the history, every change. Atelier is the room you step into to work on it.
-
-## Usage
-
-```tsx
-import { openLix } from "@lix-js/sdk";
-import { Atelier, type AtelierShellHandle } from "@opral/atelier";
-import { createRef } from "react";
 import "@opral/atelier/style.css";
 
-// The host creates and owns the lix.
-const lix = await openLix();
-const shell = createRef<AtelierShellHandle>();
-
-<Atelier.Shell
-	lix={lix}
-	ref={shell}
-	slots={{
-		navbarStart: <a href="/">Host home</a>,
-		navbarEnd: <AccountMenu />,
-	}}
-/>;
+<Atelier lix={lix} location={{ path: "/README.md" }} />
 ```
 
-The mounted shell exposes document and view commands through its ref:
+The host owns the Lix handle and closes it after unmount. Atelier owns its UI, subscriptions, extension loading, and editor lifecycle.
 
-```ts
-await shell.current?.documents.open("/notes/idea.md");
-await shell.current?.documents.startNew();
-await shell.current?.documents.closeActive();
+## Server rendering
+
+Load the initial view on the server, then pass the serializable result to the same component on the server and browser:
+
+```tsx
+import { Atelier, loadAtelier } from "@opral/atelier";
+
+// Server loader. Open a session with the viewer's permitted access first.
+const lix = await openRepositoryLix();
+let initialState;
+try {
+  initialState = await loadAtelier({
+    lix,
+    location: { path: "/README.md" },
+    readOnly: true,
+  });
+} finally {
+  await lix.close();
+}
+
+// Render on both server and browser. The browser handle may arrive later.
+<Atelier initialState={initialState} lix={browserLix} />
 ```
 
-The ref becomes available at mount. Commands issued while the shell is loading
-are queued until its runtime is ready. `Atelier.ShellSkeleton` provides the
-workspace loading frame. Configuration (state stores, branch session, extensions,
-events, and debug integration) is passed directly as shell props.
+`initialState` contains the shell layout, prepared query results, and extension data. It contains no live Lix handle. Use your framework's safe serialization for embedding it in HTML. Rendering and initial hydration need no database reads. A browser Lix can connect afterward to enable subscriptions and editing. Prepare the session on the requested branch; `loadAtelier` does not change a borrowed session's branch.
 
-Host extensions are passed as `{ manifest, entry }` registrations. The host
-manifest describes the view while `entry` supplies its already-loaded icon and
-mount function; module paths belong only to workspace-installed extension
-manifests. A registration using an id from `ATELIER_BUILTIN_EXTENSION_IDS`
-replaces that bundled view.
+## Routing
 
-The target runtime is the browser. Atelier's fixed slots let a host fill bounded
-navbar regions while Atelier retains ownership of the workspace chrome.
+A location identifies a repository path or an extension view:
 
-## What's in the workspace
+```tsx
+<Atelier
+  lix={lix}
+  location={{ path: "/notes.md", branchId }}
+  navigation={{
+    href: location => repositoryUrl(location),
+    fileHref: file => rawFileUrl(file),
+    navigate: location => router.navigate(repositoryUrl(location)),
+  }}
+/>
+```
 
-| Feature      | Description                                     |
-| ------------ | ----------------------------------------------- |
-| Editor       | Markdown-native writing surface.                |
-| Files        | Browse and open the files in the lix workspace. |
-| Drawings     | Sketch on an Excalidraw canvas (`.excalidraw`). |
-| HTML         | Run self-contained interactive HTML artifacts.  |
-| Inline diffs | Keep or undo edits with word-level context.     |
+The optional `fileHref({ path, branchId, commitId })` returns a raw file URL. It enables repository-relative Markdown images and native image, PDF, and video rendering during SSR, including files too large to inline. After hydration PDFs progressively enhance to the existing PDF.js canvas, page controls, and accessible page text using the raw URL and bounded range requests; no browser Lix connection or full-blob database read is required. A download link remains available if rendering fails. Serve the requested revision with the correct media content type and support HTTP ranges for large media. File revisions keep native playback stable when unrelated files change.
 
-## Powered by Lix
+Extension locations use `{ view: "dashboard", state: { filter: "open" } }`. Native links use `href`, so documents remain navigable before JavaScript starts. Optional `slots`, state stores, branch session, and events integrate host controls without exposing a separate workspace runtime.
 
-Atelier's change control is powered by [Lix](https://github.com/opral/lix), a version control system that can handle any file format and is designed for building applications on top of.
+## Extensions
 
-## Status
+Extensions load data and render in Atelier's React tree:
 
-Atelier exposes one workspace instance and a React view for rendering it. The development preview lives under `preview/web/`.
+```tsx
+const extensions = [{
+  id: "summary",
+  name: "Summary",
+  async load({ lix, signal }) {
+    signal.throwIfAborted();
+    const result = await lix.execute("SELECT count(*) AS count FROM lix_file");
+    return { count: Number(result.rows[0].count) };
+  },
+  Component({ data }) {
+    return <p>{data.count} files</p>;
+  },
+}];
+
+const initialState = await loadAtelier({
+  lix, extensions, location: { view: "summary" },
+});
+<Atelier initialState={initialState} lix={browserLix} extensions={extensions} />
+```
+
+Register the same trusted extensions on the server and browser. Loaders return plain JSON; components receive `{ data, atelier, view }`. Components must support server rendering and can initialize browser editors in effects while retaining their initial content. `fileExtensions` associates an extension with file types. Reusing a built-in extension ID replaces that built-in view.
+
+Bundled Markdown, CSV, text, HTML, images, media, and drawings provide initial content. Markdown and CSV progressively initialize their interactive editors; drawings provide a basic SVG scene until Excalidraw is ready. Large media previews are deferred to avoid embedding unbounded binary data. Browser-installed repository extensions remain browser-only; the server does not execute arbitrary repository JavaScript.
+
+See [embedding](docs/embedding.md) and [CSV properties](src/extensions/csv/README.md). The development preview is in `preview/web/`.
 
 ## License
 
-Atelier is released under the [MIT License](./LICENSE).
+[MIT](./LICENSE).
+
+## Composable history
+
+`Atelier.History` remains available to host extensions as `<Atelier.History atelier={atelier} />`.

@@ -1,6 +1,6 @@
 # CSV properties
 
-The `atelier_csv` extension edits ordinary CSV content and optionally stores property definitions in the same Lix file's `lixcol_metadata.atelier_csv` namespace. There is no descriptor sidecar and no new table file format. This is the sole built-in `atelier_csv` handler used by both `Atelier.Shell` and `Atelier.FileView`; it needs no preview flag or host registration. Column clicks and double-clicks use the same property menu, including its inline name field.
+The `atelier_csv` extension edits ordinary CSV content and optionally stores property definitions in the same Lix file's `lixcol_metadata.atelier_csv` namespace. There is no descriptor sidecar and no new table file format. This is the sole built-in `atelier_csv` handler used by `<Atelier>` for server-prepared and client-only workspaces; it needs no preview flag or host registration. Column clicks and double-clicks use the same property menu, including its inline name field.
 
 Live and review grids use the same line-preserving parser, including trailing empty records. An edited empty final single-column row is serialized as `""` when no trailing newline exists so it survives reopening. Generated display headers avoid collisions with literal numbered headers; source headers remain unchanged.
 

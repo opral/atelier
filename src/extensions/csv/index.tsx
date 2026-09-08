@@ -1,3 +1,9 @@
+import { CsvContent } from "./csv-content";
+import {
+	loadTextFile,
+	preparedFile,
+	PreparedFileSurface,
+} from "../../extension-runtime/prepared-file";
 import { compareCsvValues } from "./csv-sort";
 import {
 	wrapCsvText,
@@ -1962,7 +1968,7 @@ function CsvTable({
 										(event.shiftKey ||
 											event.ctrlKey ||
 											event.metaKey ||
-											event.altKey)) ||
+											("altKey" in event && event.altKey))) ||
 									info?.type !== "checkbox" ||
 									!/^(yes|no|true|false|1|0)?$/i.test(value)
 								)
@@ -2564,36 +2570,52 @@ export const extension = createReactExtensionDefinition({
 	description:
 		"Edit CSV tables with optional typed columns, filters, and saved views.",
 	icon: Table2,
-	component: ({ atelier, view }) => (
-		<CsvView
-			fileId={view.state.fileId as string}
-			diffSession={atelier.diff.session}
-			filePath={view.state.filePath as string | undefined}
-			readOnly={atelier.readOnly}
-			beforeCommitId={
-				typeof view.state.beforeCommitId === "string"
-					? view.state.beforeCommitId
-					: null
-			}
-			afterCommitId={
-				typeof view.state.afterCommitId === "string"
-					? view.state.afterCommitId
-					: null
-			}
-			beforeFileId={
-				typeof view.state.beforeFileId === "string"
-					? view.state.beforeFileId
-					: null
-			}
-			beforeExists={view.state.beforeExists !== false}
-			afterExists={view.state.afterExists !== false}
-			afterFileId={
-				typeof view.state.afterFileId === "string"
-					? view.state.afterFileId
-					: null
-			}
-			isActiveView={view.isActive}
-			isPanelFocused={view.isFocused}
-		/>
-	),
+	load: loadTextFile,
+	component: ({ atelier, view, data }) => {
+		const file = preparedFile(data);
+		return (
+			<PreparedFileSurface
+				key={file?.id ?? view.instanceId}
+				readySelector="canvas"
+				initial={
+					file ? (
+						<CsvContent content={file.content} />
+					) : (
+						<p>File not found in the workspace.</p>
+					)
+				}
+			>
+				<CsvView
+					fileId={view.state.fileId as string}
+					diffSession={atelier.diff.session}
+					filePath={view.state.filePath as string | undefined}
+					readOnly={atelier.readOnly}
+					beforeCommitId={
+						typeof view.state.beforeCommitId === "string"
+							? view.state.beforeCommitId
+							: null
+					}
+					afterCommitId={
+						typeof view.state.afterCommitId === "string"
+							? view.state.afterCommitId
+							: null
+					}
+					beforeFileId={
+						typeof view.state.beforeFileId === "string"
+							? view.state.beforeFileId
+							: null
+					}
+					beforeExists={view.state.beforeExists !== false}
+					afterExists={view.state.afterExists !== false}
+					afterFileId={
+						typeof view.state.afterFileId === "string"
+							? view.state.afterFileId
+							: null
+					}
+					isActiveView={view.isActive}
+					isPanelFocused={view.isFocused}
+				/>
+			</PreparedFileSurface>
+		);
+	},
 });

@@ -1,4 +1,4 @@
-import { parse } from "papaparse";
+import Papa from "papaparse";
 
 /**
  * Detects the delimiter and dominant newline via a Papa Parse preview pass.
@@ -11,7 +11,7 @@ export function detectCsvFormat(text: string): {
 	newline: "\n" | "\r\n" | "\r";
 } {
 	if (text.length === 0) return { delimiter: ",", newline: "\n" };
-	const result = parse<string[]>(text, { preview: 10, skipEmptyLines: true });
+	const result = Papa.parse<string[]>(text, { preview: 10, skipEmptyLines: true });
 	const delimiter =
 		typeof result.meta.delimiter === "string" &&
 		result.meta.delimiter.length === 1

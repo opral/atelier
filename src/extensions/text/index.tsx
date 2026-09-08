@@ -1,4 +1,9 @@
 import {
+	loadTextFile,
+	preparedFile,
+	PreparedFileSurface,
+} from "../../extension-runtime/prepared-file";
+import {
 	Suspense,
 	useEffect,
 	useLayoutEffect,
@@ -452,15 +457,35 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Edit text and source files.",
 	icon: FileCode2,
-	component: ({ atelier, view }) => (
-		<TextView
-			atelier={atelier}
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			isActiveView={view.isActive}
-			isPanelFocused={view.isFocused}
-			beforeCommitId={view.state.beforeCommitId as string | null | undefined}
-			afterCommitId={view.state.afterCommitId as string | null | undefined}
-		/>
-	),
+	load: loadTextFile,
+	component: ({ atelier, view, data }) => {
+		const file = preparedFile(data);
+		return (
+			<PreparedFileSurface
+				key={file?.id ?? view.instanceId}
+				readySelector=".cm-editor"
+				initial={
+					file ? (
+						<pre className="whitespace-pre-wrap p-4 font-mono text-sm">
+							{file.content}
+						</pre>
+					) : (
+						<p>File not found in the workspace.</p>
+					)
+				}
+			>
+				<TextView
+					atelier={atelier}
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					isActiveView={view.isActive}
+					isPanelFocused={view.isFocused}
+					beforeCommitId={
+						view.state.beforeCommitId as string | null | undefined
+					}
+					afterCommitId={view.state.afterCommitId as string | null | undefined}
+				/>
+			</PreparedFileSurface>
+		);
+	},
 });

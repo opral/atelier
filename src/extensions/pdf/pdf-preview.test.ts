@@ -26,6 +26,29 @@ afterEach(() => {
 });
 
 describe("renderPdfPreview", () => {
+	test("uses bounded range loading for repository URLs", async () => {
+		pdfMocks.getDocument.mockReturnValue({
+			promise: Promise.resolve(fakePdfDocument(1)),
+			destroy: vi.fn(),
+		});
+		const controller = await renderPdfPreview({
+			src: "/raw/large.pdf?commit=pinned",
+			container: document.createElement("div"),
+		});
+		expect(pdfMocks.getDocument).toHaveBeenCalledWith(
+			expect.objectContaining({
+				url: "/raw/large.pdf?commit=pinned",
+				disableAutoFetch: true,
+				disableStream: true,
+				rangeChunkSize: 256 * 1024,
+			}),
+		);
+		expect(pdfMocks.getDocument.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+			"data",
+		);
+		controller.destroy();
+	});
+
 	test("honors page fragments, bounds PDF.js resources, and exposes page text", async () => {
 		const documentProxy = fakePdfDocument(6);
 		pdfMocks.getDocument.mockReturnValue({

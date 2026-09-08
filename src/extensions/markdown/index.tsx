@@ -1,3 +1,9 @@
+import { RepositoryMarkdownContent } from "./repository-markdown-content";
+import {
+	loadTextFile,
+	preparedFile,
+	PreparedFileSurface,
+} from "../../extension-runtime/prepared-file";
 import { Suspense, useEffect } from "react";
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -1055,63 +1061,88 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display file contents.",
 	icon: FileText,
-	component: ({ atelier, view }) => (
-		<MarkdownView
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			readOnly={atelier.readOnly}
-			isActiveView={view.isActive}
-			isPanelFocused={view.isFocused}
-			focusOnLoad={Boolean(view.state.focusOnLoad)}
-			defaultBlock={
-				view.state.defaultBlock === "heading1" ? "heading1" : undefined
-			}
-			activeBranchId={atelier.branches.activeId}
-			diffSession={atelier.diff.session}
-			beforeCommitId={
-				typeof view.state.beforeCommitId === "string"
-					? view.state.beforeCommitId
-					: null
-			}
-			afterCommitId={
-				typeof view.state.afterCommitId === "string"
-					? view.state.afterCommitId
-					: null
-			}
-			beforeFileId={
-				typeof view.state.beforeFileId === "string"
-					? view.state.beforeFileId
-					: null
-			}
-			beforeExists={view.state.beforeExists !== false}
-			afterExists={view.state.afterExists !== false}
-			afterFileId={
-				typeof view.state.afterFileId === "string"
-					? view.state.afterFileId
-					: null
-			}
-			onDiffAccept={atelier.diff.accept}
-			onDiffReject={atelier.diff.reject}
-			onDiffResolve={atelier.diff.resolve}
-			autoAcceptReviews={
-				(atelier.diff.session !== null &&
-					"working" in atelier.diff.session.target) ||
-				atelier.diff.autoAccept
-			}
-			openWorkspaceFile={(args) =>
-				atelier.documents.open(args.filePath, {
-					...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
-					...(args.state ? { state: args.state } : {}),
-					...(args.focus !== undefined ? { focus: args.focus } : {}),
-				})
-			}
-			onDocumentModified={(filePath) =>
-				atelier.events.emit({
-					type: "document_modified",
-					filePath,
-					modifiedBy: "user",
-				})
-			}
-		/>
-	),
+	load: loadTextFile,
+	component: ({ atelier, view, data }) => {
+		const file = preparedFile(data);
+		return (
+			<PreparedFileSurface
+				key={file?.id ?? view.instanceId}
+				readySelector=".tiptap.ProseMirror"
+				initial={
+					file ? (
+						<RepositoryMarkdownContent
+							content={file.content}
+							path={file.path}
+							branchId={atelier.branches.activeId}
+							commitId={[
+								view.state.sourceCommitId,
+								view.state.afterCommitId,
+								view.state.beforeCommitId,
+							].find((value): value is string => typeof value === "string")}
+						/>
+					) : (
+						<p>File not found in the workspace.</p>
+					)
+				}
+			>
+				<MarkdownView
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					readOnly={atelier.readOnly}
+					isActiveView={view.isActive}
+					isPanelFocused={view.isFocused}
+					focusOnLoad={Boolean(view.state.focusOnLoad)}
+					defaultBlock={
+						view.state.defaultBlock === "heading1" ? "heading1" : undefined
+					}
+					activeBranchId={atelier.branches.activeId}
+					diffSession={atelier.diff.session}
+					beforeCommitId={
+						typeof view.state.beforeCommitId === "string"
+							? view.state.beforeCommitId
+							: null
+					}
+					afterCommitId={
+						typeof view.state.afterCommitId === "string"
+							? view.state.afterCommitId
+							: null
+					}
+					beforeFileId={
+						typeof view.state.beforeFileId === "string"
+							? view.state.beforeFileId
+							: null
+					}
+					beforeExists={view.state.beforeExists !== false}
+					afterExists={view.state.afterExists !== false}
+					afterFileId={
+						typeof view.state.afterFileId === "string"
+							? view.state.afterFileId
+							: null
+					}
+					onDiffAccept={atelier.diff.accept}
+					onDiffReject={atelier.diff.reject}
+					onDiffResolve={atelier.diff.resolve}
+					autoAcceptReviews={
+						(atelier.diff.session !== null &&
+							"working" in atelier.diff.session.target) ||
+						atelier.diff.autoAccept
+					}
+					openWorkspaceFile={(args) =>
+						atelier.documents.open(args.filePath, {
+							...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
+							...(args.state ? { state: args.state } : {}),
+							...(args.focus !== undefined ? { focus: args.focus } : {}),
+						})
+					}
+					onDocumentModified={(filePath) =>
+						atelier.events.emit({
+							type: "document_modified",
+							filePath,
+							modifiedBy: "user",
+						})
+					}
+				/>
+			</PreparedFileSurface>
+		);
+	},
 });

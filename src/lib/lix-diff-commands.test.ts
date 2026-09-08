@@ -93,17 +93,19 @@ describe("Lix SQL diff commands", () => {
 			);
 			expect(checkpoint?.commitId).toEqual(expect.any(String));
 
-			// /docs and /docs/handbook were committed with their file by the
-			// engine's dependency closure; /notes still has a changed file, so
-			// its descriptor stays working.
-			const remainingDirs = await lix.execute(
-				`SELECT coalesce(to_path, from_path) AS path
-				 FROM lix_diff('lix_directory')`,
+			// Assert the committed directory snapshot directly. The engine's
+			// directory diff currently cannot project a missing descriptor snapshot.
+			const committedDirs = await lix.execute(
+				"SELECT path FROM lix_state_at('lix_directory', $1)",
+				[checkpoint!.commitId],
 			);
-			const remainingDirPaths = remainingDirs.rows
-				.map((row) => row.path)
-				.sort();
-			expect(remainingDirPaths).toEqual(["/notes"]);
+			expect(committedDirs.rows.map((row) => row.path).sort()).toEqual([
+				"/docs",
+				"/docs/handbook",
+			]);
+			expect(await workingFileDiffs(lix)).toEqual([
+				expect.objectContaining({ id: outsideId }),
+			]);
 
 			// Checkpointing the remaining file clears the working file diff.
 			await createCheckpointForFiles(lix, [outsideId], await workingEpoch(lix));

@@ -47,7 +47,14 @@ export const renderPdfPreview: PdfPreviewRenderer = async ({
 	GlobalWorkerOptions.workerSrc = workerModule.default;
 
 	const loadingTask: PDFDocumentLoadingTask = getDocument({
-		...(data ? { data: Uint8Array.from(data) } : { url: src }),
+		...(data
+			? { data: Uint8Array.from(data) }
+			: {
+					url: src,
+					disableAutoFetch: true,
+					disableStream: true,
+					rangeChunkSize: 256 * 1024,
+				}),
 		maxImageSize: MAX_PDF_IMAGE_PIXELS,
 		canvasMaxAreaInBytes: MAX_PDF_CANVAS_BYTES,
 		isEvalSupported: false,

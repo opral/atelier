@@ -1,3 +1,4 @@
+import { DeclarativeExtension } from "../extension-runtime/declarative-extension";
 import clsx from "clsx";
 import {
 	forwardRef,
@@ -1334,6 +1335,7 @@ function ViewRenderer({
 	const hostRef = useRef<ExtensionHostRecord | null>(null);
 
 	useLayoutEffect(() => {
+		if (view.Component) return;
 		hostRef.current = registry.ensureHost({
 			view,
 			instance,
@@ -1363,7 +1365,15 @@ function ViewRenderer({
 			data-panel-side={side}
 			data-active={isActive ? "true" : undefined}
 			className="flex min-h-0 flex-1 flex-col overflow-hidden"
-		/>
+		>
+			{view.Component ? (
+				<DeclarativeExtension
+					definition={view}
+					atelier={atelier}
+					view={extensionView}
+				/>
+			) : null}
+		</div>
 	);
 }
 

@@ -1,3 +1,8 @@
+import {
+	PreparedFileSurface,
+	loadTextFile,
+	preparedFile,
+} from "../../extension-runtime/prepared-file";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { FileCode2 } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
@@ -435,12 +440,33 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Display self-contained HTML artifacts.",
 	icon: FileCode2,
-	component: ({ atelier, view }) => (
-		<HtmlView
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			sourceCommitId={view.state.sourceCommitId as string | undefined}
-			diffSession={atelier.diff.session}
-		/>
-	),
+	load: loadTextFile,
+	component: ({ atelier, view, data }) => {
+		const file = preparedFile(data);
+		return (
+			<PreparedFileSurface
+				key={file?.id ?? view.instanceId}
+				readySelector="iframe"
+				initial={
+					file ? (
+						<iframe
+							title={file.path}
+							className="h-full min-h-96 w-full"
+							sandbox=""
+							srcDoc={file.content}
+						/>
+					) : (
+						<p>File not found in the workspace.</p>
+					)
+				}
+			>
+				<HtmlView
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					sourceCommitId={view.state.sourceCommitId as string | undefined}
+					diffSession={atelier.diff.session}
+				/>
+			</PreparedFileSurface>
+		);
+	},
 });

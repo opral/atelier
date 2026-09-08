@@ -1,3 +1,7 @@
+import {
+	loadMediaFile,
+	PreparedMediaSurface,
+} from "../../extension-runtime/prepared-media";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Film, VideoOff } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
@@ -239,12 +243,29 @@ export const extension = createReactExtensionDefinition({
 	),
 	description: "Play MP4, MOV, and WebM videos.",
 	icon: Film,
-	component: ({ atelier, view }) => (
-		<VideoView
-			fileId={view.state.fileId as string}
-			filePath={view.state.filePath as string | undefined}
-			sourceCommitId={view.state.sourceCommitId as string | undefined}
-			diffSession={atelier.diff.session}
-		/>
-	),
+	load: loadMediaFile,
+	component: ({ atelier, view, data }) => {
+		return (
+			<PreparedMediaSurface
+				key={view.instanceId}
+				readySelector="video[src]"
+				kind="video"
+				data={data}
+				branchId={view.state.branchId as string | undefined}
+				commitId={
+					(view.state.sourceCommitId ??
+						view.state.afterCommitId ??
+						view.state.beforeCommitId) as string | undefined
+				}
+				allowNative={!atelier.diff.session}
+			>
+				<VideoView
+					fileId={view.state.fileId as string}
+					filePath={view.state.filePath as string | undefined}
+					sourceCommitId={view.state.sourceCommitId as string | undefined}
+					diffSession={atelier.diff.session}
+				/>
+			</PreparedMediaSurface>
+		);
+	},
 });

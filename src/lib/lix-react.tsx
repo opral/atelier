@@ -71,6 +71,45 @@ type QueryCacheEntry<TRow> = {
 
 type QueryCache = Map<string, QueryCacheEntry<any>>;
 
+/** Initial query rows belong to one Atelier runtime, never to a shared connection. */
+const initialQueryRows = new WeakMap<
+	QueryCache,
+	Map<string, readonly unknown[]>
+>();
+
+export function seedAtelierQueries(
+	lix: Lix,
+	queries: readonly {
+		sql: string;
+		params: readonly unknown[];
+		rows: readonly unknown[];
+	}[],
+): void {
+	const cache = getLixQueryCache(lix);
+	const rows = initialQueryRows.get(cache) ?? new Map();
+	for (const query of queries) {
+		const key = `${query.sql}:${JSON.stringify(query.params)}`;
+		rows.set(key, query.rows);
+		for (const entry of cache.values()) {
+			if (entry.cacheKeyBase.endsWith(`:${key}`)) {
+				setQueryRows(entry, [...query.rows]);
+			}
+		}
+	}
+	initialQueryRows.set(cache, rows);
+}
+
+function initialRows<TRow>(
+	cache: QueryCache,
+	builder: QueryLike<TRow>,
+): TRow[] | undefined {
+	const compiled = builder.compile();
+	const rows = initialQueryRows
+		.get(cache)
+		?.get(`${compiled.sql}:${JSON.stringify(compiled.parameters)}`);
+	return rows === undefined ? undefined : ([...rows] as TRow[]);
+}
+
 const queryCaches = new WeakMap<object, QueryCache>();
 const disabledQueryCache: QueryCache = new Map();
 const MAX_INACTIVE_QUERY_ENTRIES = 128;
@@ -395,6 +434,13 @@ function getQueryCacheEntry<TRow>(
 		stopObservation: undefined,
 		releaseGeneration: 0,
 	};
+	const preparedRows = initialRows(queryCache, builder);
+	if (preparedRows !== undefined) {
+		entry.snapshot = { status: "success", rows: preparedRows };
+		entry.promise = Promise.resolve(preparedRows);
+		cacheQueryEntry(queryCache, cacheKey, entry);
+		return entry;
+	}
 	markQueryActivity("execute");
 	entry.promise = entry.execute().then(
 		(rows) => {
@@ -460,6 +506,11 @@ function getCommittedQueryCacheEntry<TRow>(args: {
 					args.reuseObservedResult,
 				)
 		: () => executeQueryEntryOnce(entry);
+	const preparedRows = initialRows(args.queryCache, args.builder);
+	if (preparedRows !== undefined) {
+		entry.snapshot = { status: "success", rows: preparedRows };
+		entry.promise = Promise.resolve(preparedRows);
+	}
 	cacheQueryEntry(args.queryCache, args.cacheKey, entry);
 	return entry;
 }
