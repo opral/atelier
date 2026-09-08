@@ -349,9 +349,12 @@ describe("ExternalWriteReviewControls", () => {
 		const menu = screen.getByRole("menu", { name: "Checkpoint options" });
 		expect(menu).toBeVisible();
 		expect(screen.queryByRole("menuitem", { name: /with a name/ })).toBeNull();
-		fireEvent.click(
-			screen.getByRole("menuitem", { name: /Checkpoint all 3 files/ }),
-		);
+		const checkpointAll = screen.getByRole("menuitem", {
+			name: /Checkpoint all 3 files/,
+		});
+		// Every item carries its verb's icon, like the big half.
+		expect(checkpointAll.querySelector("svg")).not.toBeNull();
+		fireEvent.click(checkpointAll);
 		await waitFor(() =>
 			expect(primary).toHaveBeenCalledWith(
 				["file-icp", "file-leads", "file-readme"],
@@ -390,6 +393,9 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "More undo options" }));
+		for (const item of screen.getAllByRole("menuitem")) {
+			expect(item.querySelector("svg")).not.toBeNull();
+		}
 		fireEvent.click(
 			screen.getByRole("menuitem", { name: "Undo only leads.csv" }),
 		);
