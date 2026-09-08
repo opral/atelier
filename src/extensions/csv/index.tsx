@@ -23,6 +23,8 @@ import {
 import { useCsvTheme } from "./use-csv-theme";
 import {
 	Suspense,
+	createContext,
+	useContext,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -125,6 +127,8 @@ import {
 	type CsvDocument,
 } from "./csv-document";
 import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
+import { buildCsvReviewModel } from "./csv-review-model";
+import { CsvReviewGrid, CsvReviewSummary } from "./csv-review-grid";
 import "./style.css";
 
 type CsvViewProps = {
@@ -207,6 +211,20 @@ type HistoricalCsvFile = {
 	readonly controls: "review" | "none";
 };
 
+type CsvRetainedLayout = {
+	scroll?: { x: number; y: number };
+	widths: Record<string, number>;
+	search: string;
+	sort: { column: number; direction: 1 | -1 } | null;
+	filter: CsvFilterGroup;
+	wraps: Record<string, boolean>;
+	activeViewId: string | null;
+};
+// Revision components can suspend/remount independently. Keep local presentation
+// above that boundary so entering review does not reset the user's table layout.
+const CsvLayoutContext = createContext<{
+	current: CsvRetainedLayout | null;
+} | null>(null);
 const EMPTY_FILE_DATA = new Uint8Array();
 
 export function CsvView({
@@ -224,6 +242,10 @@ export function CsvView({
 	afterExists,
 }: CsvViewProps) {
 	assertFileId(fileId);
+	const retainedLayout = useMemo<{
+		current: CsvRetainedLayout | null;
+		fileId: string;
+	}>(() => ({ current: null, fileId }), [fileId]);
 	// Deferred so revision switches keep the previous table mounted while the
 	// next revision's reads suspend, instead of flashing the fallback.
 	const revision = useDeferredRevisionProps({
@@ -235,22 +257,24 @@ export function CsvView({
 		afterExists,
 	});
 	return (
-		<Suspense fallback={<CsvLoadingSpinner />}>
-			<CsvViewContent
-				fileId={fileId}
-				diffSession={diffSession}
-				filePath={filePath}
-				isActiveView={isActiveView}
-				isPanelFocused={isPanelFocused}
-				readOnly={readOnly}
-				beforeCommitId={revision.beforeCommitId}
-				afterCommitId={revision.afterCommitId}
-				beforeFileId={revision.beforeFileId}
-				afterFileId={revision.afterFileId}
-				beforeExists={revision.beforeExists}
-				afterExists={revision.afterExists}
-			/>
-		</Suspense>
+		<CsvLayoutContext.Provider value={retainedLayout}>
+			<Suspense fallback={<CsvLoadingSpinner />}>
+				<CsvViewContent
+					fileId={fileId}
+					diffSession={diffSession}
+					filePath={filePath}
+					isActiveView={isActiveView}
+					isPanelFocused={isPanelFocused}
+					readOnly={readOnly}
+					beforeCommitId={revision.beforeCommitId}
+					afterCommitId={revision.afterCommitId}
+					beforeFileId={revision.beforeFileId}
+					afterFileId={revision.afterFileId}
+					beforeExists={revision.beforeExists}
+					afterExists={revision.afterExists}
+				/>
+			</Suspense>
+		</CsvLayoutContext.Provider>
 	);
 }
 
@@ -948,7 +972,7 @@ function CsvViewLoaded({
 				</div>
 			) : null}
 			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-				{parsed.columns.length === 0 ? (
+				{parsed.columns.length === 0 && !reviewData ? (
 					<CsvEmptyState
 						filePath={fileRow.path}
 						onCreateTable={onCreateTable}
@@ -959,7 +983,8 @@ function CsvViewLoaded({
 						columnInfo={columnInfo}
 						savedViews={readCsvMetadata(fileRow.lixcol_metadata)?.views ?? []}
 						isActiveView={isActiveView}
-						editing={editing}
+						editing={reviewData ? undefined : editing}
+						reviewData={reviewData}
 					/>
 				)}
 				{saveError ? (
@@ -968,102 +993,38 @@ function CsvViewLoaded({
 						<span>Save failed: {saveError}</span>
 					</div>
 				) : null}
-				{reviewData ? <CsvReviewOverlay reviewData={reviewData} /> : null}
 			</div>
-		</div>
-	);
-}
-
-function CsvReviewOverlay({
-	reviewData,
-}: {
-	readonly reviewData: CsvReviewData;
-}) {
-	const diffHtml = useMemo(
-		() => (reviewData ? renderCsvReviewDiffHtml(reviewData) : null),
-		[reviewData],
-	);
-
-	return (
-		<div className="csv-review-overlay">
-			<CsvMetadataChanges
-				before={reviewData.beforeMetadata}
-				after={reviewData.afterMetadata}
-			/>
-			{diffHtml ? (
-				<div
-					className="ph-mask csv-review-table"
-					dangerouslySetInnerHTML={{ __html: diffHtml }}
-				/>
-			) : (
-				<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-					<Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-					<span>Loading review…</span>
-				</div>
-			)}
-		</div>
-	);
-}
-
-function CsvMetadataChanges({
-	before,
-	after,
-}: {
-	before: unknown;
-	after: unknown;
-}) {
-	const from = readCsvMetadata(before),
-		to = readCsvMetadata(after);
-	if (JSON.stringify(from) === JSON.stringify(to)) return null;
-	const ids = new Set([
-		...(from?.columns ?? []).map((c) => c.id),
-		...(to?.columns ?? []).map((c) => c.id),
-	]);
-	return (
-		<div className="csv-metadata-changes">
-			<strong>Table settings changed</strong>
-			{JSON.stringify(from?.views) !== JSON.stringify(to?.views) && (
-				<div>Saved views updated</div>
-			)}
-			{[...ids].map((id) => {
-				const a = from?.columns.find((c) => c.id === id),
-					b = to?.columns.find((c) => c.id === id);
-				if (JSON.stringify(a) === JSON.stringify(b)) return null;
-				return (
-					<div key={id}>
-						<span>{b?.header ?? a?.header}</span>
-						<span>
-							{a?.type ?? "text"} → {b?.type ?? "text"}
-							{JSON.stringify(a?.options) !== JSON.stringify(b?.options)
-								? " · Options or colors updated"
-								: ""}
-						</span>
-					</div>
-				);
-			})}
 		</div>
 	);
 }
 
 function CsvTable({
 	parsed: sourceParsed,
+	reviewData,
 	columnInfo,
 	savedViews,
 	isActiveView,
 	editing,
 }: {
 	readonly parsed: CsvParseResult;
+	readonly reviewData?: CsvReviewData | null;
 	readonly savedViews: readonly CsvSavedView[];
 	readonly columnInfo: readonly (CsvColumnInfo | undefined)[];
 	readonly isActiveView: boolean;
 	readonly editing?: CsvTableEditing;
 }) {
+	const retainedLayout = useContext(CsvLayoutContext);
+	const retained = retainedLayout?.current;
+	const reviewModel = useMemo(
+		() => (reviewData ? buildCsvReviewModel(reviewData) : null),
+		[reviewData],
+	);
 	const gridRef = useRef<DataEditorRef>(null);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const { theme: gridTheme, palette, searchColor } = useCsvTheme(containerRef);
 	const imageWindowLoader = useMemo(() => new ImageWindowLoaderImpl(), []);
 	const editable = editing !== undefined;
-	const [search, setSearch] = useState("");
+	const [search, setSearch] = useState(retained?.search ?? "");
 	const drawCell = useCallback<DrawCellCallback>(
 		(args, drawContent) =>
 			drawPropertyCell(args, drawContent, search, palette, searchColor),
@@ -1072,8 +1033,10 @@ function CsvTable({
 	const [sort, setSort] = useState<{
 		column: number;
 		direction: 1 | -1;
-	} | null>(null);
-	const [filter, setFilter] = useState<CsvFilterGroup>(EMPTY_CSV_FILTER);
+	} | null>(retained?.sort ?? null);
+	const [filter, setFilter] = useState<CsvFilterGroup>(
+		retained?.filter ?? EMPTY_CSV_FILTER,
+	);
 	const activeFilterCount = filter.rules.filter(isActiveCsvFilterRule).length;
 	const [toolbarMenu, setToolbarMenu] = useState<"sort" | "filter" | null>(
 		null,
@@ -1132,8 +1095,11 @@ function CsvTable({
 		readonly overrides: Record<number, number>;
 	}>(() => ({
 		key: columnsKey,
-		initial: parsed.columns.map((header, index) =>
-			measureColumnWidth(header, parsed.rows, index),
+		initial: parsed.columns.map(
+			(header, index) =>
+				retained?.widths[`id:${columnInfo[index]?.id}`] ??
+				retained?.widths[`header:${header}`] ??
+				measureColumnWidth(header, parsed.rows, index),
 		),
 		overrides: {},
 	}));
@@ -1155,7 +1121,7 @@ function CsvTable({
 		setColumnWidthState(widthState);
 	}
 	const [wrapOverrides, setWrapOverrides] = useState<Record<string, boolean>>(
-		{},
+		retained?.wraps ?? {},
 	);
 	const wrappedColumns = useMemo(
 		() =>
@@ -1210,7 +1176,9 @@ function CsvTable({
 		(row: number) => wrappedLayout?.[row]?.height ?? ROW_HEIGHT,
 		[wrappedLayout],
 	);
-	const [activeViewId, setActiveViewId] = useState<string | null>(null);
+	const [activeViewId, setActiveViewId] = useState<string | null>(
+		retained?.activeViewId ?? null,
+	);
 	const activeSavedView = savedViews.find((view) => view.id === activeViewId);
 	const currentViewSettings: CsvViewSettings = {
 		filter,
@@ -1256,6 +1224,35 @@ function CsvTable({
 			),
 		}));
 	};
+
+	useLayoutEffect(() => {
+		if (!retainedLayout) return;
+		const widths = { ...retainedLayout.current?.widths };
+		parsed.columns.forEach((header, index) => {
+			const width = widthState.overrides[index] ?? widthState.initial[index]!;
+			widths[`header:${header}`] = width;
+			if (columnInfo[index]?.id) widths[`id:${columnInfo[index]!.id}`] = width;
+		});
+		retainedLayout.current = {
+			scroll: retainedLayout.current?.scroll,
+			widths,
+			search,
+			sort,
+			filter,
+			wraps: wrapOverrides,
+			activeViewId,
+		};
+	}, [
+		retainedLayout,
+		widthState,
+		parsed.columns,
+		columnInfo,
+		search,
+		sort,
+		filter,
+		wrapOverrides,
+		activeViewId,
+	]);
 
 	useEffect(() => {
 		if (!isActiveView) return;
@@ -1702,11 +1699,17 @@ function CsvTable({
 					/>
 				)}
 				<span className="csv-row-count">
-					{rowMap.length}
-					{rowMap.length !== sourceParsed.rows.length
-						? ` of ${sourceParsed.rows.length}`
-						: ""}{" "}
-					{sourceParsed.rows.length === 1 ? "row" : "rows"}
+					{reviewModel ? (
+						<CsvReviewSummary model={reviewModel} />
+					) : (
+						<>
+							{rowMap.length}
+							{rowMap.length !== sourceParsed.rows.length
+								? ` of ${sourceParsed.rows.length}`
+								: ""}{" "}
+							{sourceParsed.rows.length === 1 ? "row" : "rows"}
+						</>
+					)}
 				</span>
 				<div className="csv-toolbar-actions">
 					<button
@@ -1848,140 +1851,200 @@ function CsvTable({
 			</div>
 			<div
 				ref={containerRef}
+				onScrollCapture={(event) => {
+					const target = event.target;
+					if (
+						target instanceof HTMLElement &&
+						(target.classList.contains("dvn-scroller") ||
+							target.classList.contains("csv-review-scroll")) &&
+						retainedLayout?.current
+					) {
+						retainedLayout.current.scroll = {
+							x: target.scrollLeft,
+							y: target.scrollTop,
+						};
+					}
+				}}
 				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
 			>
-				<label
-					className="csv-select-all"
-					title={
-						selectedRows.length === rowMap.length && rowMap.length > 0
-							? "Deselect all rows"
-							: "Select all visible rows"
-					}
-				>
-					<input
-						type="checkbox"
-						aria-label="Select all visible rows"
-						checked={rowMap.length > 0 && selectedRows.length === rowMap.length}
-						disabled={rowMap.length === 0}
-						ref={(input) => {
-							if (input)
-								input.indeterminate =
-									selectedRows.length > 0 &&
-									selectedRows.length < rowMap.length;
+				{reviewModel ? (
+					<CsvReviewGrid
+						model={reviewModel}
+						initialScroll={retained?.scroll}
+						widths={reviewModel.columns.map((column) =>
+							column.afterIndex !== null
+								? (widthState.overrides[column.afterIndex] ??
+									widthState.initial[column.afterIndex] ??
+									COLUMN_MIN_WIDTH)
+								: (retained?.widths[`id:${column.beforeInfo?.id}`] ??
+									retained?.widths[
+										`header:${column.beforeTitle ?? column.title}`
+									] ??
+									measureColumnWidth(
+										column.title,
+										reviewModel.rows.map((row, index) => ({
+											rowNumber: index + 1,
+											cells: row.cells.map((cell) => cell.value),
+										})),
+										reviewModel.columns.indexOf(column),
+									)),
+						)}
+						wrapped={reviewModel.columns.map((column) =>
+							column.afterIndex !== null
+								? (wrappedColumns[column.afterIndex] ?? false)
+								: (column.beforeInfo?.wrap ?? false),
+						)}
+						rowHeight={(row) => {
+							const visibleIndex =
+								row.afterIndex === null ? -1 : rowMap.indexOf(row.afterIndex);
+							return visibleIndex < 0 ? ROW_HEIGHT : getRowHeight(visibleIndex);
 						}}
-						onChange={(event) => {
-							setGridSelection({
-								columns: CompactSelection.empty(),
-								rows: event.target.checked
-									? CompactSelection.fromSingleSelection([0, rowMap.length])
-									: CompactSelection.empty(),
-							});
-						}}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") {
-								event.preventDefault();
-								clearSelection();
-							} else if (
-								editing &&
-								selectedRows.length > 0 &&
-								(event.key === "Delete" || event.key === "Backspace")
-							) {
-								event.preventDefault();
-								deleteSelectedRows();
-							}
-						}}
+						search={search}
+						filter={filter}
+						sort={sort}
 					/>
-				</label>
-				<DataEditor
-					ref={gridRef}
-					renderers={csvCellRenderers}
-					imageWindowLoader={imageWindowLoader}
-					className="csv-data-grid"
-					drawCell={drawCell}
-					provideEditor={providePropertyEditor}
-					onCellClicked={(cell, event) => {
-						const [col, row] = cell,
-							info = columnInfo[col],
-							value = parsed.rows[row]?.cells[col] ?? "";
-						if (
-							!editing ||
-							info?.type !== "checkbox" ||
-							!/^(yes|no|true|false|1|0)?$/i.test(value)
-						)
-							return;
-						event.preventDefault();
-						const pair = /^(true|false)$/i.test(value)
-							? ["true", "false"]
-							: /^[01]$/.test(value)
-								? ["1", "0"]
-								: ["yes", "no"];
-						editing.onCellsEdited([
-							{
-								row: sourceRowIndex(row),
-								column: col,
-								value: /^(yes|true|1)$/i.test(value) ? pair[1]! : pair[0]!,
-							},
-						]);
-					}}
-					cellActivationBehavior="single-click"
-					headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
-					columns={columns}
-					rows={parsed.rows.length}
-					getCellContent={getCellContent}
-					getCellsForSelection={true}
-					width={gridWidth}
-					height={gridHeight}
-					rowMarkerWidth={ROW_MARKER_WIDTH}
-					rowHeight={wrappedLayout ? getRowHeight : ROW_HEIGHT}
-					headerHeight={HEADER_HEIGHT}
-					minColumnWidth={COLUMN_MIN_WIDTH}
-					maxColumnWidth={COLUMN_MAX_WIDTH}
-					maxColumnAutoWidth={COLUMN_MAX_WIDTH}
-					onColumnResizeEnd={onColumnResizeEnd}
-					rowMarkers={{
-						kind: selectedRows.length ? "checkbox-visible" : "both",
-						width: ROW_MARKER_WIDTH,
-						theme: {
-							accentColor: gridTheme.accentColor,
-							accentLight: gridTheme.accentLight,
-						},
-					}}
-					rangeSelect="multi-rect"
-					columnSelect="multi"
-					rowSelect="multi"
-					rowSelectionMode="multi"
-					copyHeaders={true}
-					gridSelection={gridSelection}
-					onGridSelectionChange={setGridSelection}
-					onDelete={(selection) => {
-						if (selection.rows.length > 0) {
-							if (editing) {
-								editing.onDeleteRows(
-									selection.rows
-										.toArray()
-										.filter((row) => row < rowMap.length)
-										.map(sourceRowIndex),
-								);
-								clearSelection();
+				) : (
+					<>
+						<label
+							className="csv-select-all"
+							title={
+								selectedRows.length === rowMap.length && rowMap.length > 0
+									? "Deselect all rows"
+									: "Select all visible rows"
 							}
-							return false;
-						}
-						return editable;
-					}}
-					drawHeader={drawCsvHeader}
-					onCellsEdited={editable ? handleCellsEdited : undefined}
-					onPaste={editable ? handlePaste : false}
-					fillHandle={editable}
-					onCellContextMenu={editable ? handleCellContextMenu : undefined}
-					onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
-					onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
-					onHeaderClicked={editable ? handleHeaderClicked : undefined}
-					freezeColumns={0}
-					fixedShadowX={false}
-					fixedShadowY={false}
-					smoothScrollX={true}
-					theme={gridTheme}
-				/>
+						>
+							<input
+								type="checkbox"
+								aria-label="Select all visible rows"
+								checked={
+									rowMap.length > 0 && selectedRows.length === rowMap.length
+								}
+								disabled={rowMap.length === 0}
+								ref={(input) => {
+									if (input)
+										input.indeterminate =
+											selectedRows.length > 0 &&
+											selectedRows.length < rowMap.length;
+								}}
+								onChange={(event) => {
+									setGridSelection({
+										columns: CompactSelection.empty(),
+										rows: event.target.checked
+											? CompactSelection.fromSingleSelection([0, rowMap.length])
+											: CompactSelection.empty(),
+									});
+								}}
+								onKeyDown={(event) => {
+									if (event.key === "Escape") {
+										event.preventDefault();
+										clearSelection();
+									} else if (
+										editing &&
+										selectedRows.length > 0 &&
+										(event.key === "Delete" || event.key === "Backspace")
+									) {
+										event.preventDefault();
+										deleteSelectedRows();
+									}
+								}}
+							/>
+						</label>
+						<DataEditor
+							ref={gridRef}
+							scrollOffsetX={retained?.scroll?.x}
+							scrollOffsetY={retained?.scroll?.y}
+							renderers={csvCellRenderers}
+							imageWindowLoader={imageWindowLoader}
+							className="csv-data-grid"
+							drawCell={drawCell}
+							provideEditor={providePropertyEditor}
+							onCellClicked={(cell, event) => {
+								const [col, row] = cell,
+									info = columnInfo[col],
+									value = parsed.rows[row]?.cells[col] ?? "";
+								if (
+									!editing ||
+									info?.type !== "checkbox" ||
+									!/^(yes|no|true|false|1|0)?$/i.test(value)
+								)
+									return;
+								event.preventDefault();
+								const pair = /^(true|false)$/i.test(value)
+									? ["true", "false"]
+									: /^[01]$/.test(value)
+										? ["1", "0"]
+										: ["yes", "no"];
+								editing.onCellsEdited([
+									{
+										row: sourceRowIndex(row),
+										column: col,
+										value: /^(yes|true|1)$/i.test(value) ? pair[1]! : pair[0]!,
+									},
+								]);
+							}}
+							cellActivationBehavior="single-click"
+							headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
+							columns={columns}
+							rows={parsed.rows.length}
+							getCellContent={getCellContent}
+							getCellsForSelection={true}
+							width={gridWidth}
+							height={gridHeight}
+							rowMarkerWidth={ROW_MARKER_WIDTH}
+							rowHeight={wrappedLayout ? getRowHeight : ROW_HEIGHT}
+							headerHeight={HEADER_HEIGHT}
+							minColumnWidth={COLUMN_MIN_WIDTH}
+							maxColumnWidth={COLUMN_MAX_WIDTH}
+							maxColumnAutoWidth={COLUMN_MAX_WIDTH}
+							onColumnResizeEnd={onColumnResizeEnd}
+							rowMarkers={{
+								kind: selectedRows.length ? "checkbox-visible" : "both",
+								width: ROW_MARKER_WIDTH,
+								theme: {
+									accentColor: gridTheme.accentColor,
+									accentLight: gridTheme.accentLight,
+								},
+							}}
+							rangeSelect="multi-rect"
+							columnSelect="multi"
+							rowSelect="multi"
+							rowSelectionMode="multi"
+							copyHeaders={true}
+							gridSelection={gridSelection}
+							onGridSelectionChange={setGridSelection}
+							onDelete={(selection) => {
+								if (selection.rows.length > 0) {
+									if (editing) {
+										editing.onDeleteRows(
+											selection.rows
+												.toArray()
+												.filter((row) => row < rowMap.length)
+												.map(sourceRowIndex),
+										);
+										clearSelection();
+									}
+									return false;
+								}
+								return editable;
+							}}
+							drawHeader={drawCsvHeader}
+							onCellsEdited={editable ? handleCellsEdited : undefined}
+							onPaste={editable ? handlePaste : false}
+							fillHandle={editable}
+							onCellContextMenu={editable ? handleCellContextMenu : undefined}
+							onHeaderContextMenu={
+								editable ? handleHeaderContextMenu : undefined
+							}
+							onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
+							onHeaderClicked={editable ? handleHeaderClicked : undefined}
+							freezeColumns={0}
+							fixedShadowX={false}
+							fixedShadowY={false}
+							smoothScrollX={true}
+							theme={gridTheme}
+						/>
+					</>
+				)}
 				{editing &&
 				typeof gridWidth === "number" &&
 				typeof gridHeight === "number" ? (
@@ -2444,12 +2507,17 @@ function buildHistoricalCsvFile(args: {
 			? decodeFileDataToBytes(args.fileRow.content)
 			: EMPTY_FILE_DATA;
 
+	const afterMetadata =
+		args.revision.afterCommitId !== null
+			? args.afterSnapshot?.lixcol_metadata
+			: args.fileRow?.lixcol_metadata;
+
 	return {
 		fileRow: {
 			id: args.fileId,
 			path,
 			content: afterData,
-			lixcol_metadata: args.afterSnapshot?.lixcol_metadata,
+			lixcol_metadata: afterMetadata,
 		},
 		review: {
 			fileId: args.fileId,
@@ -2465,7 +2533,7 @@ function buildHistoricalCsvFile(args: {
 		},
 		reviewData: {
 			beforeMetadata: args.beforeSnapshot?.lixcol_metadata,
-			afterMetadata: args.afterSnapshot?.lixcol_metadata,
+			afterMetadata,
 			beforeData,
 			afterData,
 		},

@@ -575,6 +575,26 @@ describe("diff review navigation", () => {
 			).toBeVisible();
 			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
 
+			// An editor-level details popover consumes Escape before shell review
+			// shortcuts. Neither the float nor the shell fallback may exit here.
+			const consumeNestedEscape = (event: KeyboardEvent) => {
+				if (event.key === "Escape") event.preventDefault();
+			};
+			document.addEventListener("keydown", consumeNestedEscape);
+			try {
+				await act(async () => {
+					fireEvent.keyDown(document.body, { key: "Escape" });
+				});
+				expect(
+					document.querySelector("[data-review-mode='true']"),
+				).not.toBeNull();
+				expect(
+					screen.getByRole("button", { name: /^Checkpoint/ }),
+				).toBeVisible();
+			} finally {
+				document.removeEventListener("keydown", consumeNestedEscape);
+			}
+
 			fireEvent.keyDown(window, { key: "Escape" });
 			await waitFor(() => {
 				expect(

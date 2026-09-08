@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
+import { CsvReviewTrigger } from "../extensions/csv/csv-review-popover";
 import { ExternalWriteReviewControls } from "./external-write-review-controls";
 
 const NAVIGATION = {
@@ -16,6 +17,63 @@ const FILES = [
 ] as const;
 
 describe("ExternalWriteReviewControls", () => {
+	test("Escape dismisses nested change details before exiting review", () => {
+		const exit = vi.fn();
+		render(
+			<>
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={NAVIGATION}
+					files={FILES}
+					onExit={exit}
+				/>
+				<CsvReviewTrigger
+					label="Stage changed"
+					details={[{ label: "Value", before: "Trial", after: "Qualified" }]}
+				>
+					Qualified
+				</CsvReviewTrigger>
+			</>,
+		);
+		const trigger = screen.getByRole("button", { name: "Stage changed" });
+		fireEvent.click(trigger);
+		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(exit).not.toHaveBeenCalled();
+		expect(trigger).toHaveFocus();
+		fireEvent.keyDown(trigger, { key: "Escape" });
+		expect(exit).toHaveBeenCalledOnce();
+	});
+
+	test("Escape dismisses hover details without exiting the review", () => {
+		const exit = vi.fn();
+		render(
+			<>
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={NAVIGATION}
+					files={FILES}
+					onExit={exit}
+				/>
+				<CsvReviewTrigger
+					label="Stage changed"
+					details={[{ label: "Value", before: "Trial", after: "Qualified" }]}
+				>
+					Qualified
+				</CsvReviewTrigger>
+			</>,
+		);
+		fireEvent.pointerEnter(
+			screen.getByRole("button", { name: "Stage changed" }),
+			{ pointerType: "mouse" },
+		);
+		fireEvent.keyDown(document.body, { key: "Escape" });
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(exit).not.toHaveBeenCalled();
+	});
+
 	test("the chip defaults to the viewed file and scopes both verbs to it", async () => {
 		const primary = vi.fn(async () => {});
 		const undo = vi.fn();

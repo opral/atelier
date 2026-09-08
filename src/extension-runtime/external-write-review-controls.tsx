@@ -202,20 +202,21 @@ export function ExternalWriteReviewControls({
 
 	useEffect(() => {
 		if (!isActive) return;
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				event.preventDefault();
-				event.stopPropagation();
-				event.stopImmediatePropagation();
-				// The chip still shows the selection after the list closes, so
-				// closing does not reset it — no hidden state either way.
-				if (isListOpen) {
-					setIsListOpen(false);
-					return;
-				}
-				onExit?.();
+		// Escape bubbles after nested editors, dialogs and popovers can consume it.
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			// The chip still shows the selection after the list closes, so
+			// closing does not reset it — no hidden state either way.
+			if (isListOpen) {
+				setIsListOpen(false);
 				return;
 			}
+			onExit?.();
+		};
+		const handleKeyDown = (event: KeyboardEvent) => {
 			const usesPrimaryModifier =
 				event.metaKey || (event.ctrlKey && !event.metaKey);
 			if (!usesPrimaryModifier) return;
@@ -228,8 +229,10 @@ export function ExternalWriteReviewControls({
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
+		window.addEventListener("keydown", handleEscape);
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown, { capture: true });
+			window.removeEventListener("keydown", handleEscape);
 		};
 	}, [isActive, isListOpen, onExit, runPrimary]);
 

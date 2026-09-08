@@ -286,23 +286,6 @@
 }
 
 @scope (.atelier-root) {
-	.csv-metadata-changes {
-		padding: 14px 20px;
-		border-bottom: 1px solid var(--color-border-panel);
-		background: var(--color-bg-notice-neutral);
-		font-size: 12px;
-	}
-	.csv-metadata-changes strong {
-		display: block;
-		font-weight: 500;
-		margin-bottom: 6px;
-	}
-	.csv-metadata-changes > div {
-		display: flex;
-		gap: 15px;
-		color: var(--color-text-tertiary);
-		line-height: 1.8;
-	}
 }
 
 /* Column menus are portalled: these rules intentionally do not rely on grid ancestry. */

@@ -1890,7 +1890,7 @@ test("Atelier FileView and Shell open plain CSV in the built-in property table b
 		const fileId = String(result.rows[0]!.id);
 		rendered = render(<Atelier.FileView lix={lix} fileId={fileId} />);
 		await screen.findByRole("button", { name: "Views" });
- await screen.findByTestId("csv-data-grid");
+		await screen.findByTestId("csv-data-grid");
 		expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Add row" })).toBeInTheDocument();
 		clickCsvHeader(1);
@@ -1903,7 +1903,7 @@ test("Atelier FileView and Shell open plain CSV in the built-in property table b
 			await ref.current!.documents.open("/default.CSV");
 		});
 		await screen.findByRole("button", { name: "Views" });
- await screen.findByTestId("csv-data-grid");
+		await screen.findByTestId("csv-data-grid");
 		expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
 		expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
 			"Alice",
@@ -1918,6 +1918,97 @@ test("Atelier FileView and Shell open plain CSV in the built-in property table b
 		expect(file.lixcol_metadata).toBeNull();
 	} finally {
 		await act(async () => rendered?.unmount());
+		await lix.close();
+	}
+});
+
+test("CSV review to HEAD retains current column metadata without false property changes", async () => {
+	const metadata = {
+		atelier_csv: {
+			version: 1,
+			columns: [
+				{
+					id: "stage",
+					header: "Stage",
+					index: 1,
+					type: "select",
+					options: [
+						{ value: "Trial", color: "purple" },
+						{ value: "Qualified", color: "blue" },
+					],
+				},
+			],
+		},
+	};
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	const fileId = fakeUuid("csv_head_review_metadata");
+	try {
+		await lix.execute(
+			"INSERT INTO lix_file (id,path,content,lixcol_metadata) VALUES ($1,$2,$3,$4)",
+			[
+				fileId,
+				"/head-metadata.csv",
+				new TextEncoder().encode("Name,Stage\nAlex,Trial\n"),
+				JSON.stringify(metadata),
+			],
+		);
+		const beforeCommitId = await activeCommitId(lix);
+		await lix.execute("UPDATE lix_file SET content=$1 WHERE id=$2", [
+			new TextEncoder().encode("Name,Stage\nAlex,Qualified\n"),
+			fileId,
+		]);
+		const view = (reviewing: boolean) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<CsvView
+						fileId={fileId}
+						filePath="/head-metadata.csv"
+						beforeCommitId={reviewing ? beforeCommitId : undefined}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		await act(async () => {
+			utils = render(view(false));
+		});
+		await screen.findByTestId("csv-data-grid");
+		act(() => {
+			latestDataEditorProps.current?.onColumnResizeEnd?.(
+				{ title: "Name" },
+				260,
+				0,
+			);
+		});
+		expect(latestDataEditorProps.current?.columns[0]?.width).toBe(260);
+		await act(async () => {
+			utils!.rerender(view(true));
+		});
+		const table = await screen.findByRole("table", { name: "CSV changes" });
+		expect(table.querySelectorAll("col")[1]).toHaveStyle({ width: "260px" });
+		expect(screen.getByRole("columnheader", { name: "Stage" })).toHaveAttribute(
+			"data-diff-status",
+			"unchanged",
+		);
+		expect(table.querySelector(".csv-review-pill")).toHaveTextContent(
+			"Qualified",
+		);
+		expect(screen.queryByText("Table settings changed")).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: /Stage: column modified/ }),
+		).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Stage, row 1: changed" }),
+		);
+		expect(screen.getByRole("dialog")).toHaveTextContent("Trial");
+		expect(screen.getByRole("dialog")).toHaveTextContent("Qualified");
+	} finally {
+		if (utils)
+			await act(async () => {
+				utils!.unmount();
+			});
 		await lix.close();
 	}
 });
