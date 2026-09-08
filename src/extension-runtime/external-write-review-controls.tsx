@@ -6,6 +6,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type CSSProperties,
 	type ReactNode,
 } from "react";
 import {
@@ -30,7 +31,15 @@ export type DiffFloatFile = {
 	readonly path: string;
 };
 
+/** What a verb acts on: the ticked seen set, or every changed file. */
+export type DiffFloatScope = "selection" | "all";
+/** Undo additionally offers the single file on screen. */
+export type DiffFloatUndoScope = DiffFloatScope | "file";
+
 const EMPTY_FILES: readonly DiffFloatFile[] = [];
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+type OpenMenu = "list" | "primary" | "undo" | null;
 
 type ExternalWriteReviewControlsProps = {
 	readonly isActive: boolean;
@@ -45,18 +54,21 @@ type ExternalWriteReviewControlsProps = {
 	/** Which diff-mode flow the float commits: working changes or a historical checkpoint. */
 	readonly mode: DiffFloatMode;
 	readonly navigation?: ExternalWriteReviewNavigation;
-	/** Every changed file in this diff — the scope chip defaults to the viewed file. */
+	/** Every changed file in this diff, in stepper order. */
 	readonly files?: readonly DiffFloatFile[];
 	/**
 	 * Walk the selection back. Hidden in historical mode (the past is
-	 * read-only).
+	 * read-only). "file" undoes only the file on screen and keeps the
+	 * session open; the other scopes conclude it.
 	 */
 	readonly onUndo?: (
-		selectedFileIds: readonly string[],
+		fileIds: readonly string[],
+		options: { readonly scope: DiffFloatUndoScope },
 	) => void | Promise<void>;
-	/** The orange verb: Checkpoint / Restore, applied to the selection (⌘⏎). */
+	/** The orange verb: Checkpoint / Restore, applied to the scope (⌘⏎). */
 	readonly onPrimary?: (
-		selectedFileIds: readonly string[],
+		fileIds: readonly string[],
+		options: { readonly scope: DiffFloatScope },
 	) => void | Promise<void>;
 	readonly onExit?: () => void;
 };
@@ -69,26 +81,30 @@ const PRIMARY_VERBS: Record<
 	historical: { label: "Restore", busyLabel: "Restoring…" },
 };
 
-function untickedFilesExcept(
-	files: readonly DiffFloatFile[],
-	selectedFileId: string | null,
-): ReadonlySet<string> {
-	if (!selectedFileId) return new Set();
-	return new Set(
-		files.filter((file) => file.id !== selectedFileId).map((file) => file.id),
-	);
+function seenSetOf(activeFileId: string | null): ReadonlySet<string> {
+	return activeFileId ? new Set([activeFileId]) : EMPTY_IDS;
+}
+
+function withoutId(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
+	if (!set.has(id)) return set;
+	const next = new Set(set);
+	next.delete(id);
+	return next;
 }
 
 /**
  * Diff mode's floating action bar.
  *
- * One float, one anatomy: stepper · scope chip · actions. The chip is the
- * working set — the viewed file by default, one press applies to it (⌘⏎). Its
- * checklist opens from the chip, and every action to its right applies to
- * the selection: the labels never change, the chip's count does. The scope
- * sits ahead of the verbs because it belongs to all of them. One changed
- * file = no chip and no stepper arrows. Anything smaller than a file
- * happens inline on the change itself.
+ * One float, one anatomy: stepper · scope chip · actions. The scope is the
+ * seen set: a changed file counts as seen once it has been on screen in this
+ * review session, and stepping ‹ › only ever adds to it. Every verb to the
+ * chip's right acts on the ticked seen files; unticking a seen file in the
+ * chip's list is the only way to leave it out. The chip always carries the
+ * denominator ("Seen 3 of 6") and its ring shows ticked, seen-but-left-out
+ * and unseen as three wedges. The verbs are split buttons: the big half acts
+ * on the ticked set (⌘⏎), the arrow offers "all N files" (⇧⌘⏎). One changed
+ * file = no chip, no stepper arrows and no arrows on the verbs. Anything
+ * smaller than a file happens inline on the change itself.
  */
 export function ExternalWriteReviewControls({
 	isActive,
@@ -104,38 +120,88 @@ export function ExternalWriteReviewControls({
 }: ExternalWriteReviewControlsProps) {
 	const [isCommitting, setIsCommitting] = useState(false);
 	const [commitError, setCommitError] = useState<string | null>(null);
-	const [isListOpen, setIsListOpen] = useState(false);
+	const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
 	const listFiles = useMemo(() => files ?? EMPTY_FILES, [files]);
 	const activeFileId =
-		listFiles[navigation?.activeIndex ?? 0]?.id ?? listFiles[0]?.id ?? null;
+		navigation?.activeIndex === null || navigation?.activeIndex === undefined
+			? null
+			: (listFiles[navigation.activeIndex]?.id ?? null);
 	const activeFileIdRef = useRef(activeFileId);
-	const listFilesRef = useRef(listFiles);
 	activeFileIdRef.current = activeFileId;
-	listFilesRef.current = listFiles;
-	const [untickedFileIds, setUntickedFileIds] = useState<ReadonlySet<string>>(
-		() => untickedFilesExcept(listFiles, activeFileId),
+	const [seenFileIds, setSeenFileIds] = useState<ReadonlySet<string>>(() =>
+		seenSetOf(activeFileId),
 	);
+	const [leftOutFileIds, setLeftOutFileIds] =
+		useState<ReadonlySet<string>>(EMPTY_IDS);
 	const listId = useId();
+	const primaryMenuId = useId();
+	const undoMenuId = useId();
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const chipRef = useRef<HTMLButtonElement | null>(null);
-	const listRef = useRef<HTMLDivElement | null>(null);
+	const primarySplitRef = useRef<HTMLDivElement | null>(null);
+	const undoSplitRef = useRef<HTMLDivElement | null>(null);
+	const menuRef = useRef<HTMLDivElement | null>(null);
 
-	const selectedFiles = listFiles.filter(
-		(file) => !untickedFileIds.has(file.id),
-	);
+	// The file on screen joins the seen set; nothing ever leaves it.
+	useEffect(() => {
+		if (!isActive || !activeFileId) return;
+		setSeenFileIds((current) =>
+			current.has(activeFileId) ? current : new Set(current).add(activeFileId),
+		);
+	}, [activeFileId, isActive]);
+
+	// A session that starts while the previous float is still fading out
+	// reuses this instance: its scope begins again with the file on screen.
+	const wasActiveRef = useRef(isActive);
+	useEffect(() => {
+		if (isActive && !wasActiveRef.current) {
+			setSeenFileIds(seenSetOf(activeFileIdRef.current));
+			setLeftOutFileIds(EMPTY_IDS);
+			setCommitError(null);
+		}
+		wasActiveRef.current = isActive;
+	}, [isActive]);
+
+	// Opening review hands the keyboard to the float: ← → step through the
+	// changed files without leaving it. A step opens a file, which may pull
+	// focus into its view; the float takes it back once the file is on
+	// screen so the next arrow press still steps.
+	const refocusAfterStepRef = useRef(false);
+	useEffect(() => {
+		if (!isActive) return;
+		rootRef.current?.focus({ preventScroll: true });
+	}, [isActive]);
+	useEffect(() => {
+		if (!refocusAfterStepRef.current) return;
+		refocusAfterStepRef.current = false;
+		rootRef.current?.focus({ preventScroll: true });
+	}, [activeFileId]);
+	useEffect(() => {
+		const root = rootRef.current;
+		if (!root || !isActive || !navigation) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented) return;
+			if (event.metaKey || event.ctrlKey || event.altKey) return;
+			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+			event.preventDefault();
+			refocusAfterStepRef.current = true;
+			if (event.key === "ArrowLeft") {
+				navigation.onPrevious?.();
+			} else {
+				navigation.onNext?.();
+			}
+		};
+		root.addEventListener("keydown", handleKeyDown);
+		return () => root.removeEventListener("keydown", handleKeyDown);
+	}, [isActive, navigation]);
+	const seenFiles = listFiles.filter((file) => seenFileIds.has(file.id));
+	const unseenFiles = listFiles.filter((file) => !seenFileIds.has(file.id));
+	const tickedFiles = seenFiles.filter((file) => !leftOutFileIds.has(file.id));
+	const leftOutCount = seenFiles.length - tickedFiles.length;
 	const hasScopeChip = listFiles.length > 1;
 
-	// A new diff starts scoped to the file that opened it. Browsing with the
-	// stepper does not discard a working set the user has explicitly adjusted.
-	const fileSetKey = listFiles.map((file) => file.id).join("\n");
-	useEffect(() => {
-		setUntickedFileIds(
-			untickedFilesExcept(listFilesRef.current, activeFileIdRef.current),
-		);
-	}, [fileSetKey]);
-
 	const toggleFile = useCallback((fileId: string) => {
-		setUntickedFileIds((current) => {
+		setLeftOutFileIds((current) => {
 			const next = new Set(current);
 			if (next.has(fileId)) {
 				next.delete(fileId);
@@ -146,59 +212,86 @@ export function ExternalWriteReviewControls({
 		});
 	}, []);
 
-	// The master row: all ticked → untick the lot; anything less → tick all.
-	const toggleAllFiles = useCallback(() => {
-		setUntickedFileIds((current) =>
-			current.size === 0
-				? new Set(listFiles.map((file) => file.id))
-				: new Set(),
-		);
-	}, [listFiles]);
+	// The master row: every seen file ticked → leave the lot out; anything
+	// less → tick every seen file. Unseen files stay untouched either way.
+	const toggleAllSeen = useCallback(() => {
+		setLeftOutFileIds((current) => {
+			const allTicked = seenFiles.every((file) => !current.has(file.id));
+			return allTicked ? new Set(seenFiles.map((file) => file.id)) : EMPTY_IDS;
+		});
+	}, [seenFiles]);
 
+	const allFileIds = listFiles.map((file) => file.id);
 	const selectionIds = hasScopeChip
-		? selectedFiles.map((file) => file.id)
-		: listFiles.map((file) => file.id);
-	const hasSelection = !hasScopeChip || selectedFiles.length > 0;
+		? tickedFiles.map((file) => file.id)
+		: allFileIds;
+	const hasSelection = selectionIds.length > 0;
 
-	const runPrimary = useCallback(async () => {
-		if (readOnly || !onPrimary || isCommitting || !hasSelection) return;
-		setCommitError(null);
-		setIsCommitting(true);
-		try {
-			await onPrimary(selectionIds);
-			setIsListOpen(false);
-			setUntickedFileIds(
-				untickedFilesExcept(listFiles, activeFileIdRef.current),
-			);
-		} catch (cause) {
-			setCommitError(
-				cause instanceof Error ? cause.message : "The action failed",
-			);
-		} finally {
-			setIsCommitting(false);
-		}
-	}, [
-		hasSelection,
-		isCommitting,
-		listFiles,
-		onPrimary,
-		readOnly,
-		selectionIds,
-	]);
-	const runUndo = useCallback(async () => {
-		if (readOnly || !onUndo || isCommitting || !hasSelection) return;
-		setCommitError(null);
-		setIsCommitting(true);
-		try {
-			await onUndo(selectionIds);
-		} catch (cause) {
-			setCommitError(
-				cause instanceof Error ? cause.message : "The action failed",
-			);
-		} finally {
-			setIsCommitting(false);
-		}
-	}, [hasSelection, isCommitting, onUndo, readOnly, selectionIds]);
+	const idsForScope = useCallback(
+		(scope: DiffFloatUndoScope): readonly string[] => {
+			if (scope === "all") return allFileIds;
+			if (scope === "file") return activeFileId ? [activeFileId] : [];
+			return selectionIds;
+		},
+		[activeFileId, allFileIds, selectionIds],
+	);
+
+	const runPrimary = useCallback(
+		async (scope: DiffFloatScope = "selection") => {
+			if (readOnly || !onPrimary || isCommitting) return;
+			const fileIds = idsForScope(scope);
+			if (fileIds.length === 0) return;
+			setCommitError(null);
+			setIsCommitting(true);
+			try {
+				await onPrimary(fileIds, { scope });
+				setOpenMenu(null);
+				// The verb concludes the session: the next one starts over.
+				setSeenFileIds(seenSetOf(activeFileIdRef.current));
+				setLeftOutFileIds(EMPTY_IDS);
+			} catch (cause) {
+				setCommitError(
+					cause instanceof Error ? cause.message : "The action failed",
+				);
+			} finally {
+				setIsCommitting(false);
+			}
+		},
+		[idsForScope, isCommitting, onPrimary, readOnly],
+	);
+	const runUndo = useCallback(
+		async (scope: DiffFloatUndoScope = "selection") => {
+			if (readOnly || !onUndo || isCommitting) return;
+			const fileIds = idsForScope(scope);
+			if (fileIds.length === 0) return;
+			setCommitError(null);
+			setIsCommitting(true);
+			try {
+				await onUndo(fileIds, { scope });
+				setOpenMenu(null);
+				if (scope === "file") {
+					// The file leaves the list; the session carries on.
+					const [fileId] = fileIds;
+					if (fileId) {
+						setSeenFileIds((current) => withoutId(current, fileId));
+						setLeftOutFileIds((current) => withoutId(current, fileId));
+					}
+				} else {
+					setSeenFileIds(seenSetOf(activeFileIdRef.current));
+					setLeftOutFileIds(EMPTY_IDS);
+				}
+			} catch (cause) {
+				setCommitError(
+					cause instanceof Error ? cause.message : "The action failed",
+				);
+			} finally {
+				setIsCommitting(false);
+			}
+		},
+		[idsForScope, isCommitting, onUndo, readOnly],
+	);
+
+	const showUndo = mode !== "historical" && Boolean(onUndo);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -210,8 +303,8 @@ export function ExternalWriteReviewControls({
 			event.stopImmediatePropagation();
 			// The chip still shows the selection after the list closes, so
 			// closing does not reset it — no hidden state either way.
-			if (isListOpen) {
-				setIsListOpen(false);
+			if (openMenu) {
+				setOpenMenu(null);
 				return;
 			}
 			onExit?.();
@@ -219,13 +312,19 @@ export function ExternalWriteReviewControls({
 		const handleKeyDown = (event: KeyboardEvent) => {
 			const usesPrimaryModifier =
 				event.metaKey || (event.ctrlKey && !event.metaKey);
-			if (!usesPrimaryModifier) return;
-			if (event.altKey || event.shiftKey) return;
+			if (!usesPrimaryModifier || event.altKey) return;
 			if (event.key === "Enter") {
 				event.preventDefault();
 				event.stopPropagation();
 				event.stopImmediatePropagation();
-				void runPrimary();
+				void runPrimary(event.shiftKey ? "all" : "selection");
+				return;
+			}
+			if (event.key === "Backspace" && event.shiftKey && showUndo) {
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				void runUndo("all");
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
@@ -234,35 +333,68 @@ export function ExternalWriteReviewControls({
 			window.removeEventListener("keydown", handleKeyDown, { capture: true });
 			window.removeEventListener("keydown", handleEscape);
 		};
-	}, [isActive, isListOpen, onExit, runPrimary]);
+	}, [isActive, onExit, openMenu, runPrimary, runUndo, showUndo]);
 
 	useEffect(() => {
-		if (!isListOpen) return;
+		if (!openMenu) return;
 		const handlePointerDown = (event: PointerEvent) => {
 			if (rootRef.current?.contains(event.target as Node)) return;
-			setIsListOpen(false);
+			setOpenMenu(null);
 		};
 		window.addEventListener("pointerdown", handlePointerDown);
 		return () => {
 			window.removeEventListener("pointerdown", handlePointerDown);
 		};
-	}, [isListOpen]);
+	}, [openMenu]);
 
-	// The checklist belongs to the chip: align its left edge with the chip's.
+	// Each menu belongs to its control: the checklist shares the chip's left
+	// edge, a verb menu shares its split button's right edge.
 	useLayoutEffect(() => {
-		if (!isListOpen) return;
-		const chip = chipRef.current;
-		const list = listRef.current;
+		if (!openMenu) return;
+		const menu = menuRef.current;
 		const root = rootRef.current;
-		if (!chip || !list || !root) return;
-		const chipLeft =
-			chip.getBoundingClientRect().left - root.getBoundingClientRect().left;
-		list.style.marginLeft = `${Math.max(chipLeft, 0)}px`;
-	}, [isListOpen]);
+		const anchor =
+			openMenu === "list"
+				? chipRef.current
+				: openMenu === "primary"
+					? primarySplitRef.current
+					: undoSplitRef.current;
+		if (!menu || !root || !anchor) return;
+		const rootLeft = root.getBoundingClientRect().left;
+		const anchorRect = anchor.getBoundingClientRect();
+		const offset =
+			openMenu === "list"
+				? anchorRect.left - rootLeft
+				: anchorRect.right - rootLeft - menu.getBoundingClientRect().width;
+		menu.style.marginLeft = `${Math.max(offset, 0)}px`;
+	}, [openMenu]);
 
 	const verb = PRIMARY_VERBS[mode];
-	const showStepperArrows = (navigation?.fileCount ?? 0) > 1;
-	const allSelected = selectedFiles.length === listFiles.length;
+	const fileCount = navigation?.fileCount ?? listFiles.length;
+	// The name slot is sized by the longest file name (capped by the
+	// ellipsis) and the counter by its widest value, so the float keeps one
+	// width while stepping through files.
+	const longestFileName = listFiles.reduce((longest, file) => {
+		const name = fileNameFromDiffPath(file.path);
+		return name.length > longest.length ? name : longest;
+	}, navigation?.fileName ?? "");
+	const hasVisibleFile =
+		navigation !== undefined && navigation.activeIndex !== null;
+	// With no changed file on screen the arrows are the way to one.
+	const showStepperArrows = fileCount > 1 || !hasVisibleFile;
+	const showVerbArrows = listFiles.length > 1;
+	const allSeenTicked = seenFiles.length > 0 && leftOutCount === 0;
+	const totalCount = listFiles.length;
+	const chipLabel =
+		leftOutCount === 0
+			? `Seen ${tickedFiles.length} of ${totalCount}`
+			: `${tickedFiles.length} of ${totalCount}`;
+	const ringStyle = {
+		"--ring-ticked": `${(tickedFiles.length / Math.max(totalCount, 1)) * 360}deg`,
+		"--ring-seen": `${(seenFiles.length / Math.max(totalCount, 1)) * 360}deg`,
+	} as CSSProperties;
+	const shortcut = (keys: string) =>
+		isMacPlatform() ? keys : keys.replace("⌘", "Ctrl+").replace("⇧", "Shift+");
 
 	return (
 		<div
@@ -281,11 +413,12 @@ export function ExternalWriteReviewControls({
 			role="group"
 			aria-label="Diff review actions"
 			data-diff-float-mode={mode}
+			tabIndex={-1}
 		>
-			{isListOpen && hasScopeChip ? (
+			{openMenu === "list" && hasScopeChip ? (
 				<div
 					id={listId}
-					ref={listRef}
+					ref={menuRef}
 					role="group"
 					aria-label="Files in the working set"
 					className="external-write-review-menu"
@@ -294,26 +427,36 @@ export function ExternalWriteReviewControls({
 						type="button"
 						role="checkbox"
 						aria-checked={
-							allSelected ? "true" : hasSelection ? "mixed" : "false"
+							allSeenTicked
+								? "true"
+								: tickedFiles.length > 0
+									? "mixed"
+									: "false"
 						}
 						data-attr="diff-scope-all-files"
-						onClick={toggleAllFiles}
+						disabled={seenFiles.length === 0}
+						onClick={toggleAllSeen}
 					>
 						<span
 							aria-hidden="true"
 							className="external-write-review-menu-tick"
-							data-ticked={hasSelection ? "true" : undefined}
+							data-ticked={tickedFiles.length > 0 ? "true" : undefined}
 						>
-							{allSelected ? <Check /> : hasSelection ? <Minus /> : null}
+							{allSeenTicked ? (
+								<Check />
+							) : tickedFiles.length > 0 ? (
+								<Minus />
+							) : null}
 						</span>
-						<span className="external-write-review-menu-name">All files</span>
+						<span className="external-write-review-menu-name">Seen files</span>
 					</button>
 					<span
 						aria-hidden="true"
 						className="external-write-review-menu-divider"
 					/>
-					{listFiles.map((file) => {
-						const ticked = !untickedFileIds.has(file.id);
+					{seenFiles.map((file) => {
+						const ticked = !leftOutFileIds.has(file.id);
+						const viewing = file.id === activeFileId;
 						return (
 							<button
 								key={file.id}
@@ -323,7 +466,9 @@ export function ExternalWriteReviewControls({
 								data-file-id={file.id}
 								aria-checked={ticked}
 								data-attr="diff-scope-file"
+								data-state={ticked ? "ticked" : "left-out"}
 								data-ticked={ticked ? "true" : undefined}
+								data-viewing={viewing ? "true" : undefined}
 								onClick={() => toggleFile(file.id)}
 							>
 								<span
@@ -341,9 +486,117 @@ export function ExternalWriteReviewControls({
 								<span className="external-write-review-menu-name">
 									{fileNameFromDiffPath(file.path)}
 								</span>
+								{viewing ? (
+									<small className="external-write-review-menu-tag">
+										viewing
+									</small>
+								) : ticked ? null : (
+									<small className="external-write-review-menu-tag">
+										left out
+									</small>
+								)}
 							</button>
 						);
 					})}
+					{unseenFiles.length > 0 && seenFiles.length > 0 ? (
+						<span
+							aria-hidden="true"
+							className="external-write-review-menu-divider"
+						/>
+					) : null}
+					{unseenFiles.map((file) => (
+						// An unseen file cannot be ticked; opening it is what makes
+						// it seen (and ticked). The list stays open so the row is
+						// watched moving into the seen group.
+						<button
+							key={file.id}
+							type="button"
+							data-testid={`diff-scope-file:${file.id}`}
+							data-file-id={file.id}
+							data-attr="diff-scope-open-file"
+							data-state="unseen"
+							title="Open this file to add it to the seen set"
+							disabled={!navigation?.onOpen}
+							onClick={() => {
+								refocusAfterStepRef.current = true;
+								navigation?.onOpen?.(
+									listFiles.findIndex((candidate) => candidate.id === file.id),
+								);
+							}}
+						>
+							<span
+								aria-hidden="true"
+								className="external-write-review-menu-tick"
+							/>
+							<img
+								src={fileIconUrl(file.path)}
+								alt=""
+								className="external-write-review-menu-file-icon"
+							/>
+							<span className="external-write-review-menu-name">
+								{fileNameFromDiffPath(file.path)}
+							</span>
+							<small className="external-write-review-menu-tag">unseen</small>
+						</button>
+					))}
+				</div>
+			) : null}
+			{openMenu === "primary" && onPrimary ? (
+				<div
+					id={primaryMenuId}
+					ref={menuRef}
+					role="menu"
+					aria-label={`${verb.label} options`}
+					className="external-write-review-menu external-write-review-verb-menu"
+				>
+					<button
+						type="button"
+						role="menuitem"
+						data-attr="diff-primary-all"
+						disabled={readOnly || isCommitting}
+						onClick={() => void runPrimary("all")}
+					>
+						<PrimaryVerbStackIcon mode={mode} />
+						<span className="external-write-review-menu-name">
+							{verb.label} all {totalCount} files
+						</span>
+						<kbd>{shortcut("⇧⌘⏎")}</kbd>
+					</button>
+				</div>
+			) : null}
+			{openMenu === "undo" && showUndo ? (
+				<div
+					id={undoMenuId}
+					ref={menuRef}
+					role="menu"
+					aria-label="Undo options"
+					className="external-write-review-menu external-write-review-verb-menu"
+				>
+					<button
+						type="button"
+						role="menuitem"
+						data-attr="diff-undo-file"
+						disabled={readOnly || isCommitting || !activeFileId}
+						onClick={() => void runUndo("file")}
+					>
+						<RotateCcw aria-hidden="true" />
+						<span className="external-write-review-menu-name">
+							Undo only {navigation?.fileName ?? "this file"}
+						</span>
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						data-attr="diff-undo-all"
+						disabled={readOnly || isCommitting}
+						onClick={() => void runUndo("all")}
+					>
+						<UndoStackIcon />
+						<span className="external-write-review-menu-name">
+							Undo all {totalCount} files
+						</span>
+						<kbd>{shortcut("⇧⌘⌫")}</kbd>
+					</button>
 				</div>
 			) : null}
 			<div className="external-write-review-scope">
@@ -379,17 +632,47 @@ export function ExternalWriteReviewControls({
 								<ChevronLeft aria-hidden="true" />
 							</button>
 						) : null}
-						<img
-							src={fileIconUrl(navigation.fileName)}
-							alt=""
-							className="external-write-review-file-icon"
-						/>
-						<span title={navigation.fileName}>
-							<strong>{navigation.fileName}</strong>
-							<small>
-								{navigation.activeIndex + 1} of {navigation.fileCount}
-							</small>
-						</span>
+						{navigation.fileName !== null && navigation.activeIndex !== null ? (
+							<>
+								<img
+									src={fileIconUrl(navigation.fileName)}
+									alt=""
+									className="external-write-review-file-icon"
+								/>
+								<span title={navigation.fileName}>
+									<strong className="external-write-review-stable">
+										<span
+											aria-hidden="true"
+											className="external-write-review-sizer"
+										>
+											{longestFileName}
+										</span>
+										<span>{navigation.fileName}</span>
+									</strong>
+									<small className="external-write-review-stable">
+										<span
+											aria-hidden="true"
+											className="external-write-review-sizer"
+										>
+											{navigation.fileCount} of {navigation.fileCount}
+										</span>
+										<span>
+											{navigation.activeIndex + 1} of {navigation.fileCount}
+										</span>
+									</small>
+								</span>
+							</>
+						) : (
+							<span data-attr="diff-no-file">
+								<strong className="external-write-review-navigation-placeholder">
+									No changed file open
+								</strong>
+								<small>
+									{navigation.fileCount}{" "}
+									{navigation.fileCount === 1 ? "file" : "files"}
+								</small>
+							</span>
+						)}
 						{showStepperArrows ? (
 							<button
 								type="button"
@@ -406,71 +689,124 @@ export function ExternalWriteReviewControls({
 						type="button"
 						ref={chipRef}
 						className="external-write-review-scope-chip"
-						aria-label={`Working set: ${selectedFiles.length} of ${listFiles.length} files`}
+						aria-label={`Working set: ${tickedFiles.length} of ${totalCount} files`}
 						aria-haspopup="menu"
-						aria-expanded={isListOpen}
+						aria-expanded={openMenu === "list"}
 						aria-controls={listId}
-						onClick={() => setIsListOpen((open) => !open)}
+						onClick={() =>
+							setOpenMenu((current) => (current === "list" ? null : "list"))
+						}
 						disabled={isCommitting}
 						data-attr="diff-scope-chip"
+						data-ticked-count={tickedFiles.length}
+						data-seen-count={seenFiles.length}
+						data-file-count={totalCount}
 					>
 						<span
 							aria-hidden="true"
-							className="external-write-review-menu-tick"
-							data-ticked={hasSelection ? "true" : undefined}
-						>
-							{allSelected ? <Check /> : hasSelection ? <Minus /> : null}
+							className="external-write-review-ring"
+							style={ringStyle}
+						/>
+						<span className="external-write-review-stable">
+							<span aria-hidden="true" className="external-write-review-sizer">
+								Seen {totalCount} of {totalCount}
+							</span>
+							<span>{chipLabel}</span>
 						</span>
-						<span>
-							{selectedFiles.length}{" "}
-							{selectedFiles.length === 1 ? "file" : "files"}
-						</span>
-						{isListOpen ? (
+						{openMenu === "list" ? (
 							<ChevronDown aria-hidden="true" />
 						) : (
 							<ChevronUp aria-hidden="true" />
 						)}
 					</button>
 				) : null}
-				{mode !== "historical" && onUndo ? (
-					<button
-						type="button"
-						className="external-write-review-button external-write-review-button-reject"
-						onClick={() => void runUndo()}
-						disabled={readOnly || isCommitting || !hasSelection}
-						data-attr="diff-undo"
-						title={
-							readOnly ? "Edit access is required" : (commitError ?? undefined)
-						}
+				{showUndo ? (
+					<div
+						ref={undoSplitRef}
+						className="external-write-review-split external-write-review-split-reject"
 					>
-						<RotateCcw aria-hidden="true" />
-						<span>Undo</span>
-					</button>
+						<button
+							type="button"
+							className="external-write-review-button external-write-review-button-reject"
+							onClick={() => void runUndo("selection")}
+							disabled={readOnly || isCommitting || !hasSelection}
+							data-attr="diff-undo"
+							title={
+								readOnly
+									? "Edit access is required"
+									: (commitError ?? undefined)
+							}
+						>
+							<RotateCcw aria-hidden="true" />
+							<span>Undo</span>
+						</button>
+						{showVerbArrows ? (
+							<button
+								type="button"
+								className="external-write-review-split-arrow"
+								aria-label="More undo options"
+								aria-haspopup="menu"
+								aria-expanded={openMenu === "undo"}
+								aria-controls={undoMenuId}
+								disabled={readOnly || isCommitting}
+								data-attr="diff-undo-menu"
+								onClick={() =>
+									setOpenMenu((current) => (current === "undo" ? null : "undo"))
+								}
+							>
+								<ChevronDown aria-hidden="true" />
+							</button>
+						) : null}
+					</div>
 				) : null}
 				{onPrimary ? (
-					<button
-						type="button"
-						className="external-write-review-button external-write-review-button-accept"
-						onClick={() => void runPrimary()}
-						disabled={readOnly || isCommitting || !hasSelection}
-						aria-label={isCommitting ? verb.busyLabel : verb.label}
-						data-attr="diff-primary"
-						title={
-							readOnly
-								? "Sign in with edit access to create a checkpoint"
-								: (commitError ?? undefined)
-						}
+					<div
+						ref={primarySplitRef}
+						className="external-write-review-split external-write-review-split-accept"
 					>
-						{isCommitting ? (
-							<LoaderCircle aria-hidden="true" className="animate-spin" />
-						) : (
-							<PrimaryVerbIcon mode={mode} />
-						)}
-						<span>{isCommitting ? verb.busyLabel : verb.label}</span>
-						<kbd className="external-write-review-shortcut">
-							{isMacPlatform() ? "⌘⏎" : "Ctrl⏎"}
-						</kbd>
-					</button>
+						<button
+							type="button"
+							className="external-write-review-button external-write-review-button-accept"
+							onClick={() => void runPrimary("selection")}
+							disabled={readOnly || isCommitting || !hasSelection}
+							aria-label={isCommitting ? verb.busyLabel : verb.label}
+							data-attr="diff-primary"
+							title={
+								readOnly
+									? "Sign in with edit access to create a checkpoint"
+									: (commitError ?? undefined)
+							}
+						>
+							{isCommitting ? (
+								<LoaderCircle aria-hidden="true" className="animate-spin" />
+							) : (
+								<PrimaryVerbIcon mode={mode} />
+							)}
+							<span>{isCommitting ? verb.busyLabel : verb.label}</span>
+							<kbd className="external-write-review-shortcut">
+								{shortcut("⌘⏎")}
+							</kbd>
+						</button>
+						{showVerbArrows ? (
+							<button
+								type="button"
+								className="external-write-review-split-arrow"
+								aria-label={`More ${verb.label.toLowerCase()} options`}
+								aria-haspopup="menu"
+								aria-expanded={openMenu === "primary"}
+								aria-controls={primaryMenuId}
+								disabled={readOnly || isCommitting}
+								data-attr="diff-primary-menu"
+								onClick={() =>
+									setOpenMenu((current) =>
+										current === "primary" ? null : "primary",
+									)
+								}
+							>
+								<ChevronDown aria-hidden="true" />
+							</button>
+						) : null}
+					</div>
 				) : null}
 			</div>
 			{commitError ? (
@@ -490,6 +826,63 @@ function PrimaryVerbIcon({
 	if (mode === "working-changes") return <Flag aria-hidden="true" />;
 	if (mode === "historical") return <RotateCcw aria-hidden="true" />;
 	return <Check aria-hidden="true" />;
+}
+
+// Lucide's flag and rotate-ccw outlines, stacked: two offset copies read
+// as "all of them" next to the single glyph on the big half.
+const FLAG_PATHS = [
+	"M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528",
+];
+const ROTATE_CCW_PATHS = [
+	"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",
+	"M3 3v5h5",
+];
+
+function StackedIcon({
+	name,
+	paths,
+}: {
+	readonly name: string;
+	readonly paths: readonly string[];
+}): ReactNode {
+	return (
+		<svg
+			aria-hidden="true"
+			data-icon={name}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth={2.4}
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<g transform="translate(7 -1) scale(0.78)" opacity={0.5}>
+				{paths.map((d) => (
+					<path key={d} d={d} />
+				))}
+			</g>
+			<g transform="translate(0 5) scale(0.78)">
+				{paths.map((d) => (
+					<path key={d} d={d} />
+				))}
+			</g>
+		</svg>
+	);
+}
+
+function UndoStackIcon(): ReactNode {
+	return <StackedIcon name="undo-stack" paths={ROTATE_CCW_PATHS} />;
+}
+
+function PrimaryVerbStackIcon({
+	mode,
+}: {
+	readonly mode: DiffFloatMode;
+}): ReactNode {
+	if (mode === "working-changes") {
+		return <StackedIcon name="flag-stack" paths={FLAG_PATHS} />;
+	}
+	return <UndoStackIcon />;
 }
 
 function fileNameFromDiffPath(path: string): string {

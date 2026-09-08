@@ -45,6 +45,7 @@ export function createExtensionHostContext(
 				accept: async () => {},
 				reject: async () => {},
 				resolve: async () => {},
+				checkpointAll: async () => {},
 				autoAccept: false,
 			},
 		},

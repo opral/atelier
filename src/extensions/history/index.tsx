@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { History } from "lucide-react";
+import { Flag, History } from "lucide-react";
 import type { AtelierDiffSession } from "@/extension-api";
 import { DiffGlyph } from "@/components/diff-glyph";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
@@ -83,6 +83,26 @@ function WorkingChangesRow({
 		isViewing
 			? atelier.diff.exit()
 			: void atelier.diff.open({ target: { working: true } });
+	// "Checkpoint all" seals everything without entering review. The row
+	// disappears on its own once the working count reaches zero.
+	const [checkpointingAll, setCheckpointingAll] = useState(false);
+	const [checkpointAllError, setCheckpointAllError] = useState<string | null>(
+		null,
+	);
+	const checkpointAll = async () => {
+		if (checkpointingAll) return;
+		setCheckpointAllError(null);
+		setCheckpointingAll(true);
+		try {
+			await atelier.diff.checkpointAll();
+		} catch (cause) {
+			setCheckpointAllError(
+				cause instanceof Error ? cause.message : "The checkpoint failed",
+			);
+		} finally {
+			setCheckpointingAll(false);
+		}
+	};
 
 	if (fileCount === 0) return null;
 
@@ -95,38 +115,54 @@ function WorkingChangesRow({
 					: "border-transparent"
 			}`}
 		>
-			<button
-				type="button"
-				aria-label="Working changes"
-				aria-describedby={wide ? filesDescriptionId : undefined}
-				onClick={toggleWorkingChanges}
-				onMouseDown={(event) => event.preventDefault()}
-				data-attr="history-working-changes"
-				className={`flex w-full min-h-10 gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
-			>
-				<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-					<span
-						aria-hidden="true"
-						className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
-					/>
-				</span>
-				<span
-					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
+			<div className={`flex ${wide ? "items-center" : "items-start"}`}>
+				<button
+					type="button"
+					aria-label="Working changes"
+					aria-describedby={wide ? filesDescriptionId : undefined}
+					onClick={toggleWorkingChanges}
+					onMouseDown={(event) => event.preventDefault()}
+					data-attr="history-working-changes"
+					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
 				>
-					<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
-						Working changes
+					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
+						<span
+							aria-hidden="true"
+							className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
+						/>
 					</span>
-					<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
-						{`now · ${workingCountLabel}`}
+					<span
+						className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
+					>
+						<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
+							Working changes
+						</span>
+						<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
+							{`now · ${workingCountLabel}`}
+						</span>
 					</span>
-				</span>
-				{wide ? (
-					<WorkingFilePreview
-						atelier={atelier}
-						descriptionId={filesDescriptionId}
-					/>
-				) : null}
-			</button>
+					{wide ? (
+						<WorkingFilePreview
+							atelier={atelier}
+							descriptionId={filesDescriptionId}
+						/>
+					) : null}
+				</button>
+				{atelier.readOnly ? null : (
+					<button
+						type="button"
+						onClick={() => void checkpointAll()}
+						onMouseDown={(event) => event.preventDefault()}
+						disabled={checkpointingAll}
+						title={checkpointAllError ?? "Seal every working change"}
+						data-attr="history-checkpoint-all"
+						className={`my-1.5 mr-1.5 inline-flex h-6 shrink-0 items-center gap-1 self-start rounded-[6px] border border-[var(--color-border-brand-soft)] px-1.5 text-[11.5px] font-semibold text-[var(--color-brand-700)] transition-colors hover:bg-[var(--color-bg-brand-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-default disabled:opacity-60 ${wide ? "" : "ml-1"}`}
+					>
+						<Flag aria-hidden="true" className="h-3 w-3" />
+						Checkpoint all
+					</button>
+				)}
+			</div>
 			{!wide ? (
 				<AnimatedHistoryDisclosure open={isViewing}>
 					<WorkingChangeFileList atelier={atelier} />

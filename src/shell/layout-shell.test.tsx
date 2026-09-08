@@ -504,7 +504,7 @@ describe("diff review navigation", () => {
 			).toBe(fakeUuid("auto-changed-file"));
 			await waitFor(() => {
 				expect(
-					screen.queryByRole("button", { name: /^Checkpoint/ }),
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 				).toBeNull();
 			});
 			expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
@@ -530,7 +530,7 @@ describe("diff review navigation", () => {
 				);
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			const reviewBatch = reviewOpenExecuteBatch.mock.calls.find(
 				([statements]) =>
@@ -571,7 +571,7 @@ describe("diff review navigation", () => {
 				).toHaveAttribute("aria-checked", "true");
 			});
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.queryByRole("button", { name: /^Keep/ })).toBeNull();
 
@@ -589,7 +589,7 @@ describe("diff review navigation", () => {
 					document.querySelector("[data-review-mode='true']"),
 				).not.toBeNull();
 				expect(
-					screen.getByRole("button", { name: /^Checkpoint/ }),
+					screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 				).toBeVisible();
 			} finally {
 				document.removeEventListener("keydown", consumeNestedEscape);
@@ -598,7 +598,7 @@ describe("diff review navigation", () => {
 			fireEvent.keyDown(window, { key: "Escape" });
 			await waitFor(() => {
 				expect(
-					screen.queryByRole("button", { name: /^Checkpoint/ }),
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 				).toBeNull();
 			});
 			expect(
@@ -612,7 +612,7 @@ describe("diff review navigation", () => {
 				}),
 			);
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 
 			fireEvent.click(await findFilesTreeItem("auto-stable.md"));
@@ -625,7 +625,9 @@ describe("diff review navigation", () => {
 			expect(
 				document.querySelector("[data-review-mode='true']"),
 			).not.toBeNull();
-			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
 
 			await act(async () => {
 				fireEvent.keyDown(window, { key: "Escape" });
@@ -651,11 +653,19 @@ describe("diff review navigation", () => {
 				}),
 			);
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
-			expect(
-				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
-			).toBe(fakeUuid("auto-stable-file"));
+			// An unchanged file was on screen, so the review opens the first
+			// changed file's diff in its place.
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-changed-file"));
+				expect(activeView?.state?.afterCommitId).toBeUndefined();
+				expect(activeView?.state?.beforeCommitId).toBeUndefined();
+			});
 			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
@@ -704,13 +714,18 @@ describe("diff review navigation", () => {
 				}),
 			);
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.getByRole("button", { name: "Exit" })).toBeVisible();
+			// Returning to "now" releases the snapshot view; the unchanged file
+			// it showed is not the review's scope, so the changed file's diff
+			// opens live in its place.
 			await waitFor(() => {
-				const activeView =
-					sessionStateStore.getSnapshot()?.panels.central.views[0];
-				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-stable-file"));
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-changed-file"));
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
 				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
@@ -719,7 +734,9 @@ describe("diff review navigation", () => {
 			);
 			const execute = vi.spyOn(lix, "execute");
 			execute.mockClear();
-			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			fireEvent.click(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			);
 			expect(
 				await screen.findByRole("button", {
 					name: "Latest checkpoint. Open checkpoint history",
@@ -779,10 +796,12 @@ describe("diff review navigation", () => {
 				}),
 			);
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			const execute = vi.spyOn(lix, "execute");
-			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			fireEvent.click(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			);
 			await waitFor(() => {
 				expect(
 					execute.mock.calls.some(([statement]) =>
@@ -792,7 +811,7 @@ describe("diff review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(
-					screen.queryByRole("button", { name: /^Checkpoint/ }),
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 				).toBeNull();
 			});
 		} finally {
@@ -862,14 +881,16 @@ describe("diff review navigation", () => {
 				}),
 			);
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(blockedHistoryReadCount).toBe(0);
 
-			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			fireEvent.click(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			);
 			await waitFor(() => {
 				expect(
-					screen.queryByRole("button", { name: /^Checkpoint/ }),
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 				).toBeNull();
 			});
 			expect(blockedHistoryReadCount).toBe(0);
@@ -924,7 +945,7 @@ describe("diff review navigation", () => {
 				}),
 			);
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(
 				await screen.findByRole("button", {
@@ -934,7 +955,9 @@ describe("diff review navigation", () => {
 
 			const execute = vi.spyOn(lix, "execute");
 
-			fireEvent.click(screen.getByRole("button", { name: /^Checkpoint/ }));
+			fireEvent.click(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			);
 			await waitFor(() => {
 				expect(
 					execute.mock.calls.some(([statement]) =>
@@ -945,7 +968,7 @@ describe("diff review navigation", () => {
 			// The verb concludes the session even with unticked files remaining.
 			await waitFor(() => {
 				expect(
-					screen.queryByRole("button", { name: /^Checkpoint/ }),
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 				).toBeNull();
 			});
 			// The unticked file's changes survive for the next review.
@@ -960,7 +983,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("enters review mode without revealing a file; files open on explicit selection", async () => {
+	test("enters review mode on the first changed file when nothing is open; files open on explicit selection", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const atelier = createAtelier({ lix, sessionStateStore });
@@ -1012,16 +1035,21 @@ describe("diff review navigation", () => {
 			await waitFor(() => expect(workingChanges).toBeEnabled());
 			fireEvent.click(workingChanges);
 
-			// Review mode opens in place: the float appears and the central
-			// panel keeps whatever it showed before — no file is auto-revealed.
+			// Nothing was on screen, so review mode opens the first changed
+			// file's diff: the float never names a file that isn't visible.
 			expect(
-				await screen.findByRole("button", { name: /^Checkpoint/ }),
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
-			const centralAfterOpen = sessionStateStore.getSnapshot()?.panels.central;
-			const activeAfterOpen = centralAfterOpen?.views.find(
-				(view) => view.instance === centralAfterOpen.activeInstance,
-			);
-			expect(activeAfterOpen?.state?.fileId).toBeUndefined();
+			await waitFor(() => {
+				const central = sessionStateStore.getSnapshot()?.panels.central;
+				const activeView = central?.views.find(
+					(view) => view.instance === central.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(
+					fakeUuid("empty-state-working-change-a"),
+				);
+			});
+			expect(screen.getByText("1 of 2")).toBeVisible();
 			const workingFiles = await screen.findByRole("list", {
 				name: "Files in working changes",
 			});
@@ -1049,7 +1077,9 @@ describe("diff review navigation", () => {
 					fakeUuid("empty-state-working-change-z"),
 				);
 			});
-			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -1165,18 +1195,8 @@ describe("diff review navigation", () => {
 				"a-checkpoint.md",
 				"z-checkpoint.md",
 			]);
-			const selectedCentral = sessionStateStore
-				.getSnapshot()
-				?.panels.central.views.find(
-					(view) =>
-						view.instance ===
-						sessionStateStore.getSnapshot()?.panels.central.activeInstance,
-				);
-			expect(selectedCentral?.state?.afterCommitId).toBeUndefined();
-			expect(checkpointHistoryStatements).toEqual([]);
-			await act(async () => {
-				fireEvent.click(fileButtons[0]!);
-			});
+			// Nothing was on screen, so the first changed file opens on entry:
+			// the float never names a file that isn't visible.
 			await waitFor(
 				() => {
 					const central = sessionStateStore.getSnapshot()?.panels.central;
@@ -1637,11 +1657,8 @@ describe("diff review navigation", () => {
 			});
 			const removedFileButton = within(workingFiles).getByRole("button");
 			expect(removedFileButton).toHaveTextContent("removed-working-change.md");
-			// No auto-reveal: the removed file opens from history only when the
-			// user selects it.
-			await act(async () => {
-				fireEvent.click(removedFileButton);
-			});
+			// Nothing was on screen, so the removed file's diff opens from
+			// history on entry.
 			await waitFor(() => {
 				const central = sessionStateStore.getSnapshot()?.panels.central;
 				const activeView = central?.views.find(
@@ -1654,7 +1671,9 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByTestId("markdown-review-editor"),
 			).toHaveTextContent("Removed");
-			expect(screen.getByRole("button", { name: /^Checkpoint/ })).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

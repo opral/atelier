@@ -19,6 +19,30 @@
 			transform 0.15s ease;
 	}
 
+	/* The float takes keyboard focus when review opens (← → step files);
+	   the buttons inside keep their own focus rings. */
+	.external-write-review-actions:focus {
+		outline: none;
+	}
+
+	/* A slot that keeps one width while its text changes: the hidden sizer
+	   holds the widest value, the visible text sits on top of it. */
+	.external-write-review-stable {
+		display: inline-grid;
+	}
+
+	.external-write-review-stable > * {
+		grid-area: 1 / 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.external-write-review-sizer {
+		visibility: hidden;
+	}
+
 	.external-write-review-actions[data-presence="closing"] {
 		opacity: 0;
 		transform: translateX(-50%) translateY(0.5rem);
@@ -171,6 +195,80 @@
 		background: rgb(58, 53, 47);
 	}
 
+	/* Row state, right-aligned: "viewing", "left out", "unseen". */
+	.external-write-review-menu-tag {
+		margin-left: auto;
+		padding-left: 0.75rem;
+		color: rgb(140, 133, 124);
+		font-size: 0.625rem;
+		font-weight: 500;
+	}
+
+	/* Unseen rows cannot be ticked: clicking one opens the file, which is
+	   what makes it seen (and ticked). */
+	.external-write-review-menu > button[data-state="unseen"] {
+		color: rgb(140, 133, 124);
+		font-weight: 500;
+	}
+
+	.external-write-review-menu
+		> button[data-state="unseen"]:hover:not(:disabled) {
+		color: rgb(201, 194, 184);
+	}
+
+	.external-write-review-menu
+		> button[data-state="unseen"]
+		.external-write-review-menu-tick {
+		border-color: rgb(87, 83, 78);
+	}
+
+	.external-write-review-menu > button[data-viewing] {
+		background: rgb(42, 38, 32);
+	}
+
+	/* A verb's arrow menu: "{Verb} all N files", "Undo only {file}". */
+	.external-write-review-verb-menu {
+		min-width: 11rem;
+	}
+
+	/* Each item carries its verb's icon, like the big half beside it; the
+	   shortcut sits at the far right. */
+	.external-write-review-verb-menu > button {
+		gap: 0.5rem;
+	}
+
+	.external-write-review-verb-menu > button > svg {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex: none;
+	}
+
+	.external-write-review-verb-menu > button:disabled > svg {
+		opacity: 0.6;
+	}
+
+	.external-write-review-verb-menu kbd {
+		margin-left: auto;
+		padding-left: 0.875rem;
+	}
+
+	.external-write-review-verb-menu > button:disabled {
+		color: rgb(140, 133, 124);
+		cursor: default;
+	}
+
+	.external-write-review-verb-menu > button:disabled:hover {
+		background: transparent;
+	}
+
+	.external-write-review-verb-menu kbd {
+		color: rgb(140, 133, 124);
+		font-family:
+			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+		font-size: 0.59rem;
+		font-weight: 700;
+	}
+
 	/* The scope chip: the working set, visible even with the list closed.
 	   Stretches to the row height so its box matches the orange verb beside
 	   it, border included. */
@@ -207,10 +305,18 @@
 		color: rgb(201, 194, 184);
 	}
 
-	.external-write-review-scope-chip .external-write-review-menu-tick {
+	/* The progress ring: orange = will be acted on, light grey = seen but
+	   left out, dark = unseen. The wedges come from the chip's counts. */
+	.external-write-review-ring {
 		width: 0.8125rem;
 		height: 0.8125rem;
-		border-radius: 0.21875rem;
+		flex: none;
+		border-radius: 50%;
+		background: conic-gradient(
+			var(--color-bg-action-primary) 0deg var(--ring-ticked, 0deg),
+			rgb(140, 133, 124) var(--ring-ticked, 0deg) var(--ring-seen, 0deg),
+			rgb(87, 83, 78) var(--ring-seen, 0deg) 360deg
+		);
 	}
 
 	.external-write-review-navigation {
@@ -258,18 +364,20 @@
 	}
 
 	.external-write-review-navigation strong {
-		overflow: hidden;
 		max-width: 9rem;
 		font-size: 0.75rem;
 		font-weight: 700;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	.external-write-review-navigation small {
 		color: rgb(140, 133, 124);
 		font-size: 0.72rem;
 		white-space: nowrap;
+	}
+
+	.external-write-review-navigation-placeholder {
+		color: rgb(168, 162, 158);
+		font-weight: 600;
 	}
 
 	.external-write-review-button {
@@ -308,7 +416,6 @@
 	}
 
 	.external-write-review-button-reject {
-		margin-right: 0.125rem;
 		padding: 0.3125rem 0.5625rem;
 		background: transparent;
 		/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
@@ -317,6 +424,72 @@
 	}
 
 	.external-write-review-button-reject:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.09);
+		color: rgb(244, 198, 191);
+	}
+
+	/* A verb is a split button: the big half acts on the ticked set, the
+	   arrow opens its menu ("all N files"). One rounded box, one border. */
+	.external-write-review-split {
+		display: inline-flex;
+		align-items: stretch;
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.external-write-review-split > .external-write-review-button {
+		border-radius: 0;
+	}
+
+	.external-write-review-split-reject {
+		margin-right: 0.125rem;
+		border: 1px solid transparent;
+	}
+
+	.external-write-review-split-reject:has(.external-write-review-split-arrow) {
+		border-color: rgb(90, 58, 58);
+	}
+
+	.external-write-review-split-arrow {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.4375rem;
+		transition:
+			background-color 120ms ease,
+			color 120ms ease;
+	}
+
+	.external-write-review-split-arrow > svg {
+		width: 0.625rem;
+		height: 0.625rem;
+		stroke-width: 2.6;
+	}
+
+	.external-write-review-split-arrow:disabled {
+		cursor: default;
+		opacity: 0.7;
+	}
+
+	.external-write-review-split-accept .external-write-review-split-arrow {
+		border-left: 1px solid rgba(0, 0, 0, 0.25);
+		background: var(--color-bg-action-primary-hover);
+		color: rgb(244, 208, 189);
+	}
+
+	.external-write-review-split-accept
+		.external-write-review-split-arrow:hover:not(:disabled) {
+		color: white;
+	}
+
+	.external-write-review-split-reject .external-write-review-split-arrow {
+		border-left: 1px solid rgb(90, 58, 58);
+		background: rgb(42, 38, 32);
+		color: rgb(235, 165, 156);
+	}
+
+	.external-write-review-split-reject
+		.external-write-review-split-arrow:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.09);
 		color: rgb(244, 198, 191);
 	}

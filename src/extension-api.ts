@@ -299,7 +299,11 @@ export type AtelierDiffApi = {
 		/** Defaults to the latest checkpoint for a working target. */
 		readonly base?: AtelierDiffRef | null;
 		readonly target: AtelierDiffRef;
-		/** Reveal the first changed file (default: false — the session opens without navigating). */
+		/**
+		 * Always open the first changed file. By default the session keeps a
+		 * changed file that is already on screen and reveals the first changed
+		 * file only when nothing (or an unchanged file) is showing.
+		 */
 		readonly reveal?: boolean;
 	}) => Promise<void>;
 	readonly openFile: (path: string) => void;
@@ -308,6 +312,12 @@ export type AtelierDiffApi = {
 	readonly reject: (path: string) => Promise<void>;
 	/** Accept with authored content: writes the bytes, then resolves. */
 	readonly resolve: (path: string, data: Uint8Array) => Promise<void>;
+	/**
+	 * Seal every working change into a checkpoint without opening a session.
+	 * An open working-changes session concludes with it. Rejects when the host
+	 * is read-only.
+	 */
+	readonly checkpointAll: () => Promise<void>;
 	readonly autoAccept: boolean;
 };
 

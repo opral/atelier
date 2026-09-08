@@ -19,9 +19,12 @@ export type ResolveExternalWriteReviewArgs = {
 };
 
 export type ExternalWriteReviewNavigation = {
-	readonly fileName: string;
-	readonly activeIndex: number;
+	/** Null when no changed file is on screen: the bar never names a file it isn't showing. */
+	readonly fileName: string | null;
+	readonly activeIndex: number | null;
 	readonly fileCount: number;
 	readonly onPrevious?: () => void;
 	readonly onNext?: () => void;
+	/** Open the changed file at this index (the chip's list offers unseen files). */
+	readonly onOpen?: (index: number) => void;
 };
