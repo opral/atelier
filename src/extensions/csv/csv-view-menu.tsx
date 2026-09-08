@@ -71,7 +71,16 @@ export function CsvViewMenu({
 		close();
 	};
 	return (
-		<div className="csv-view-switcher">
+		<div
+			className="csv-view-switcher"
+			onKeyDown={(event) => {
+				// Escape backs out of a form the way its Cancel button does; the
+				// popover itself closes on the next Escape.
+				if (event.key !== "Escape" || mode === "list") return;
+				event.preventDefault();
+				setMode("list");
+			}}
+		>
 			<button
 				type="button"
 				ref={trigger}

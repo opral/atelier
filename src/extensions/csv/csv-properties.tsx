@@ -259,6 +259,25 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const listRef = useRef<HTMLDivElement>(null);
 	const activeOptionRef = useRef<HTMLButtonElement>(null);
 	const listId = useId();
+	const dialogRef = useRef<HTMLDivElement>(null);
+	// The picker is positioned once, so scrolling the table would detach it
+	// from its cell; scrolling anything outside the picker closes it instead.
+	useEffect(() => {
+		const onScroll = (event: Event) => {
+			if (
+				event.target instanceof Node &&
+				dialogRef.current?.contains(event.target)
+			)
+				return;
+			onFinishedEditing();
+		};
+		document.addEventListener("scroll", onScroll, {
+			capture: true,
+			passive: true,
+		});
+		return () =>
+			document.removeEventListener("scroll", onScroll, { capture: true });
+	}, [onFinishedEditing]);
 	useEffect(() => {
 		// Glide restores canvas focus after an edit closes. A double-click can
 		// reopen immediately, so focus the new editor after that restoration.
@@ -285,7 +304,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const canCreate =
 		info.type === "select" &&
 		newValue.length > 0 &&
-		!options.some((o) => o.value === newValue);
+		!options.some((o) => o.value.toLowerCase() === newValue.toLowerCase());
 	const activeValue = candidates[active]?.value;
 	useEffect(() => {
 		const list = listRef.current;
@@ -316,6 +335,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The dialog contains focusable controls and owns Escape; input-only navigation below leaves button activation native.
 		<div
+			ref={dialogRef}
 			className="csv-property-popover click-outside-ignore"
 			role="dialog"
 			aria-label={`${info.header} value`}

@@ -83,6 +83,19 @@ const latestDataEditorProps = vi.hoisted(() => ({
 	current: null as MockedDataEditorProps | null,
 }));
 
+const mockSelection = (rows: readonly number[]) => ({
+	toArray: () => [...rows],
+	hasIndex: (candidate: number) => rows.includes(candidate),
+	length: rows.length,
+	add: (index: number | readonly [number, number]) =>
+		mockSelection([
+			...rows,
+			...(typeof index === "number"
+				? [index]
+				: Array.from({ length: index[1] - index[0] }, (_, i) => index[0] + i)),
+		]),
+});
+
 vi.mock("@glideapps/glide-data-grid", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@glideapps/glide-data-grid")>()),
 	DataEditorCore: (props: MockedDataEditorProps) => {
@@ -118,21 +131,13 @@ vi.mock("@glideapps/glide-data-grid", async (importOriginal) => ({
 		Uri: "uri",
 	},
 	CompactSelection: {
-		empty: () => ({
-			toArray: () => [],
-			hasIndex: () => false,
-			length: 0,
-		}),
+		empty: () => mockSelection([]),
 		fromSingleSelection: (index: number | readonly [number, number]) => {
 			const rows =
 				typeof index === "number"
 					? [index]
 					: Array.from({ length: index[1] - index[0] }, (_, i) => index[0] + i);
-			return {
-				toArray: () => rows,
-				hasIndex: (candidate: number) => rows.includes(candidate),
-				length: rows.length,
-			};
+			return mockSelection(rows);
 		},
 	},
 }));
@@ -1442,7 +1447,7 @@ test("bulk property changes update every selected row in one edit while retainin
 	}
 });
 
-test("changing the visible row set clears selection without modifying CSV", async () => {
+test("selection follows rows that stay visible and drops the rest without modifying CSV", async () => {
 	const source = "name,stage\nAlice,qualified\nBob,trial\n";
 	const fixture = await renderMetadataCsv(source);
 	try {
@@ -1460,17 +1465,30 @@ test("changing the visible row set clears selection without modifying CSV", asyn
 		fireEvent.click(
 			screen.getByRole("checkbox", { name: "Select all visible rows" }),
 		);
+		// Alice stays visible and selected; Bob leaves the mapping and the selection.
 		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
 			target: { value: "Alice" },
+		});
+		await waitFor(() =>
+			expect(screen.getByRole("status")).toHaveTextContent("1 selected"),
+		);
+		// Nothing left visible: nothing left selected.
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "zzz" },
 		});
 		await waitFor(() =>
 			expect(
 				screen.queryByRole("group", { name: "Selected rows" }),
 			).not.toBeInTheDocument(),
 		);
-		expect(
-			screen.getByRole("checkbox", { name: "Select all visible rows" }),
-		).not.toBeChecked();
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "" },
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("checkbox", { name: "Select all visible rows" }),
+			).not.toBeChecked(),
+		);
 		expect(
 			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
 		).toBe(source);

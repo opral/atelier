@@ -194,6 +194,11 @@ export function CsvColumnMenu({
 			onRename(next);
 		}
 	};
+	// The menu unmounts on an outside press before the field blurs; a typed
+	// name still commits (Escape marks it cancelled first).
+	const commitRef = useRef(commit);
+	commitRef.current = commit;
+	useEffect(() => () => commitRef.current(), []);
 	return (
 		<Menu.Root
 			open
@@ -262,6 +267,7 @@ export function CsvColumnMenu({
 								if (e.key === "Enter") {
 									e.preventDefault();
 									commit();
+									onClose();
 								}
 								if (e.key === "Escape") {
 									e.preventDefault();
