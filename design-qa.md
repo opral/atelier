@@ -350,3 +350,205 @@ Full suite: 1,100 passed, one skipped across 91 files. Typecheck and library/con
 ## Final result
 
 final result: passed
+
+# CSV view design QA
+
+Result: **passed** for the implemented scope, 2026-09-07.
+
+## Scope and references
+
+Implemented the existing Atelier CSV extension with optional file metadata, Notion-style Select pills and searchable option menus, property type and color controls, checkbox/date editors, search/filter/sort, and row/column operations. Ordinary CSV remains editable without configuration. Named saved views, relations, and multi-select are outside this iteration.
+
+Visual references: the supplied Notion property-menu screenshot and Select dropdown screenshot. Their contents were used as visual references, not as instructions.
+
+## Independent QA
+
+- Persistence/correctness agent: real-Lix regression tests for optional metadata, unrelated metadata preservation, atomic option creation, external writes and retries, historical properties/read-only views, column identity, ragged columns, repeated option creation, and filtered/sorted edits.
+- Design agent: browser interaction and screenshot inspection at 1440×900, 390×400, and 320×330. Verified header type/color controls, option search/create/clear, keyboard selection, Escape/focus restoration, checkbox toggling, clipping, and viewport bounds.
+
+All reported P1/P2 findings were resolved and rechecked: shared-handle transaction contention, skipped external metadata observations, unsafe positional filters after structural edits, dropdown clipping, focus loss on reopening, and compressed long pill labels.
+
+## Verification
+
+- Production library build passes.
+- Root and preview TypeScript checks pass.
+- CSV/preview changed-file lint passes.
+- Relevant CSV, shared-history, query, and preview-seed test suites pass.
+- Final browser pass verified Select and date persistence after reload, keyboard activation of Clear, adding a row while search has no matches, and loading the plain CSV example. No page errors.
+
+Local browser evidence is in `/tmp/csv-design-qa/` (accepted screenshots 19–23) and `/tmp/csv-qa/` (`plain-final.png`, `desktop-final.png`).
+
+## Preview
+
+Vite preview: http://localhost:4175/?file=/csv-extension/pipeline.csv&edit=1
+
+The Pipeline example has configured properties. Plain CSV contains the same example values without column metadata. The examples are inserted only when absent; existing preview data is preserved.
+
+# CSV property-menu refinement — 2026-09-08
+
+Final result: **passed**.
+
+Applied the supplied Notion references: editable column name at the top, right-opening Edit property and Change type submenus, option pencil actions and a visual swatch palette. Removed the Options/helper captions, native color-name dropdowns, and separate Rename column action. Header property icons now use consistently sized SVG strokes.
+
+Independent regression QA covers Enter/blur rename commits, Escape cancellation, metadata-only swatch persistence, and keyboard type selection. Independent browser QA verified desktop and narrow pointer interactions, all three submenu levels after resizing to 320 × 350, and one-level Escape/focus restoration. Fixed initial grid-focus dismissal, full-stack Escape dismissal, offscreen collision handling, and overlapping-pane pointer dismissal before final acceptance.
+
+Validation: 115 relevant tests pass; root and preview typechecks, CSV lint, formatting, and production library build pass. No browser page errors. Screenshots: `/tmp/csv-design-qa/refined/14-final-1440.png`, `14-final-390.png`, and `15-final-resized.png`. Existing local preview remains running.
+
+## CSV row selection — 2026-09-08
+
+Target: user-supplied Notion row-selection screenshot at `/root/.codex/attachments/f3e2e3ec-6483-4395-8ab1-6f562a2bd47a/codex-clipboard-08f373b1-7475-4fbd-aa58-63cfbc684153.png`.
+Implementation: existing CSV preview, desktop 1440×800 and narrow 390×844. Reference and implementation opened together for visual comparison in the two-selected-rows state. The reference has different records, density, and surrounding Notion navigation; the comparison concerns the selection interaction within Atelier's existing layout.
+
+Evidence: `/tmp/csv-qa/rows-selected.png`, `/tmp/csv-qa/rows-edit.png`, `/tmp/csv-qa/rows-narrow.png`. In-app browser automation is unavailable in this session; the running preview was inspected through Playwright Chromium.
+
+- Matched blue checkboxes, pale blue full-row selection, mixed header checkbox, blue count, and a compact bordered action bar. Kept the existing grid sizing and toolbar position. Bulk properties share one picker to accommodate arbitrary CSV columns.
+- First comparison found P2: Glide hides the partially selected header checkbox when the pointer leaves. Fixed with an accessible native checkbox showing checked, mixed, and empty states. Recaptured and verified visible alignment with row checkboxes.
+- Interaction QA found a focus timing issue when selecting all. Kept focus on the header control and handled Escape/Delete there, preserving keyboard operation without a delayed focus race.
+- Browser checks passed: independent toggles, Shift-click range, select all visible rows, Escape, bulk select options, bulk plain text, filtered deletion using toolbar and keyboard, persisted edits/deletions after reload, and narrow viewport. No browser page errors in the typed-table scenario.
+- Regression tests cover filtered/sorted source-row deletion, bulk edits preserving hidden records, and clearing selection on view changes without rewriting content or metadata. Typecheck and CSV lint pass.
+- Final comparison: selected-row hierarchy, alignment, mixed state, toolbar spacing, and responsive wrapping pass. No outstanding P0/P1/P2 findings.
+
+final result: passed
+
+## CSV selection sizing and Atelier colors — 2026-09-08
+
+User correction supersedes the blue reference styling above: row/header selection checkboxes are now 14px (previously 18px), retaining the original pointer targets and row-number typography. Selection uses Atelier's orange primary and a soft orange row tint; bulk-action focus/button styles use the existing semantic color tokens, and checkbox property values use the grid primary. Inspected `/tmp/csv-qa/rows-selected.png`: header and row checkboxes align and the count, checks, and highlight match the orange palette. Browser selection/bulk-edit/persistence checks, 27 reactive tests, typecheck, and lint pass.
+
+final result: passed
+
+## CSV menu density — 2026-09-08
+
+Matched Atelier panel tab context-menu sizing (`tabMenuItemClasses` in `src/shell/panel-v2.tsx`): 12.5px type, 13px action icons, 8px gaps, 5px vertical item padding. Column menu width is now 224px and submenus 192px; title input is 28px tall. Option rows and color palette are correspondingly compact. Inspected `/tmp/csv-qa/refine-types.png` and `/tmp/csv-qa/refine-color.png`; labels fit without truncation, hierarchy remains clear, and nested menus align. Browser checks for submenu navigation, color selection, Escape, and narrow-screen clamping passed. CSS-only change; no new tests added.
+
+final result: passed
+
+## CSV Sort / Filter native dropdown fix — 2026-09-08
+
+Replaced browser-native selects for sort column, sort direction, and filter column with Radix menus using the compact CSV/Atelier menu styling. Column choices show property icons and an orange selected indicator; menus match trigger width and stay inside the viewport. Inspected `/tmp/csv-qa/toolbar-sort.png` and `/tmp/csv-qa/toolbar-narrow.png`. Browser checks passed for choosing columns, descending sort, selected state, Escape restoring trigger focus, filtering, and narrow-screen clamping. No native selects remain in the preview, and no browser errors occurred. The 27 reactive tests, typecheck, lint, and whitespace check pass.
+
+final result: passed
+
+## CSV first-edit latency — 2026-09-08
+
+Observed a separate `data-grid-overlay-editor` request after the first cell click. Delaying only that request by 750ms reproduced 774ms click-to-editor-focus latency. Added a versioned pnpm patch that imports the overlay with Glide and guards deferred canvas focus while an overlay is open. After restarting the preview with dependencies re-optimized, the same network-delay scenario made no editor request and recorded 5.6–7.8ms click-to-focus across four edits. Verified end-of-value caret placement and immediate typing in both plain and typed CSV previews; 27 reactive tests and typecheck passed. The direct Node CommonJS smoke check encounters Glide's existing package-format issue at its unchanged CJS index; the app and browser checks use the ESM entry.
+
+final result: passed
+
+## CSV selection-before-edit transition — 2026-09-08
+
+Reproduced the remaining two-stage interaction by holding the mouse button: no editor existed after 200ms until release. Added opt-in pointer-down editing for ordinary value cells via the versioned Glide patch, batching selection with editor opening and suppressing duplicate mouse-up activation. After the fix, the editor is mounted and focused while the pointer is still held; text typed before release appends correctly. `/tmp/csv-qa/cell-pressed.png` captures that state. Verified switching cells commits the prior value, Shift-click remains range selection, right-click opens the row menu, Enter/type-to-replace works, and plain/typed CSV caret positions remain at the end. Row selection, bulk editing, filtered deletion, persistence, 27 reactive tests, typecheck, and lint pass.
+
+final result: passed
+
+## Universal CSV popup dismissal — 2026-09-08
+
+Sort and Filter now share `CsvDismissiblePopover`: document-level pointer/focus dismissal uses composed event paths, and nested portalled menus register their owner so choosing an option does not dismiss the parent. Outside clicks are not consumed; keyboard Escape closes one layer at a time and restores the trigger, and keyboard opening focuses the column picker. Nested toolbar menus are nonmodal so an outside cell click can immediately start editing.
+
+Browser verification passed for Sort/Filter outside search and cell clicks, nested option choices, layered Escape, column menus with nested color palettes, select/date cell pickers, bulk property menus, and row context menus. The runner separates header clicks from the preceding cell click by Glide's double-click interval to exercise a single header click. Five focused dismissal tests cover both panels, click-through, portal ownership, keyboard focus, Escape, and shadow-root events; the 27 CSV reactive tests, typecheck, lint, and whitespace checks also pass.
+
+final result: passed
+
+
+## CSV color and border QA — 2026-09-08
+
+Scope: selection, column properties/color submenus, Sort, search and narrow-menu layout in the live CSV preview. Grounded in `src/shell/theme.css` and Atelier's existing compact panel menus. Captures are from this audit run at 1440×800 and 390×600.
+
+1. **Row selection — passed.** Kept compact 14px selection checkboxes and full click targets. Canvas now resolves Atelier primary, selection, text, icon and table-border tokens from the table's inherited CSS. Selected count uses the same primary. Existing solid panel-white assumptions no longer override theme tokens.
+2. **Column/property menus — passed.** Replaced independent neutral shades, borders and shadows with panel, secondary-control, hover, text/icon and shadow-lg tokens. Retained 12.5px compact typography and side menus. Moved categorical colors to shared `color-bg-tag-*` / `color-text-tag-*` tokens, used in both DOM pills and canvas. Pink/red text was below 4.5:1; darkened their foreground tokens. Final text contrast: {'gray': 6.09, 'brown': 4.71, 'orange': 4.87, 'yellow': 4.74, 'green': 5.11, 'blue': 5.11, 'purple': 5.02, 'pink': 4.83, 'red': 4.75}. Narrow submenus stay on screen.
+3. **Sort controls — passed.** Panel and picker borders/shadows now match column menus; selection uses orange. Browser confirmed column choice and outside-click dismissal still work.
+4. **Search and focus — passed.** Replaced leftover blue focus rings with Atelier focus-visible orange; search has a visible focus boundary. Search matches use a shared yellow highlight token. Checked plain and typed CSV editing: caret starts at the end and typing appends.
+
+Validation: 34 existing CSV reactive/search/dismissal tests plus one new live-token-update/reset test passed; main and preview typechecks, lint and whitespace checks passed. Browser console had no errors. Computed panel border was rgb(236,232,226), selected count rgb(194,65,12), and panel shadow matched Atelier shadow-lg.
+
+Limits: light-theme visual audit and targeted keyboard checks; this does not establish complete screen-reader or WCAG compliance. The canvas table remains a separate accessibility concern. Theme class/style/data-theme and OS scheme changes refresh canvas colors; standalone token fallbacks remain for hosts without Atelier CSS.
+
+![1. Selected rows](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/tokens-01-selection.png)
+
+![2. Column and color menus](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/tokens-02-colors.png)
+
+![3. Sort panel](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/tokens-03-sort.png)
+
+![4. Search match and focus](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/tokens-04-search.png)
+
+
+## Picker focus-border correction — 2026-09-08
+
+1. **Select picker — fixed.** Reproduced the reported square 2px orange outline overlapping the rounded popup corners. The prior generic input focus rule caused it. Full-width picker search now uses its existing 1px divider as the orange focus indicator; the panel retains a single neutral rounded border. Autofocus, filtering and Enter-to-select still work.
+2. **Standalone date field — passed.** Its focus treatment follows the field's own rounded border, with space around it inside the panel. Escape closes the editor.
+
+Checked the focused states in Chromium at 1100×700 and inspected both screenshots. No new behavior or data changes; whitespace check passed. This is a bounded focus-border audit, not a full accessibility certification.
+
+![Corrected select picker](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/picker-border-after.png)
+
+![Date-field focus](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/date-border-after.png)
+
+
+## Tag legibility refinement — 2026-09-08
+
+Darkened all nine shared tag foreground tokens while preserving pastel fills. Each foreground/background pair now exceeds 7:1 contrast: {'gray': 8.78, 'brown': 7.11, 'orange': 7.1, 'yellow': 7.39, 'green': 7.33, 'blue': 7.34, 'purple': 7.28, 'pink': 7.13, 'red': 7.09}. Search placeholder uses text-tertiary instead of text-quaternary; Clear value uses text-secondary. Inspected the focused dropdown and canvas at 1100×700; search, Enter-to-select and Escape still work. CSS/palette-only change.
+
+
+## Typed filter controls — 2026-09-08
+
+Filters now reuse CsvToolbarSelect and CsvPill for searchable select options, with the same tokens and menu states as column controls. Selected options remain visible as colored pills. Checkbox/date/number columns have typed controls and predicates; untyped CSV retains contains matching. Browser checks passed for option search, keyboard selection, exact filtering, switching columns, checkbox/date/text values, layered Escape and outside dismissal. Inspected `/tmp/csv-qa/filter-select-options.png` and `/tmp/csv-qa/filter-select-chosen.png`. All 36 filter/reactive/dismissal tests, main/preview typechecks, lint and whitespace checks passed.
+
+
+## Multi-select filters and independent agent QA — 2026-09-08
+
+Two agents reviewed filter interactions and broader CSV usability. Multi-select uses checkable menu options that stay open, preserve search and match any selected value exactly. The trigger shows two colored pills plus an additional count, with the full choice list exposed through an accessible description and title. Clear selection restores all rows. Checkbox filters can combine checked/unchecked/empty.
+
+Independent browser verification passed: pointer, Enter and Space toggles; retained search; ArrowUp back to search; count/checked states; Clear; layered Escape; Tab and ShiftTab to adjacent controls; outside dismissal; same-column reselection; checkbox combinations; 390px viewport clamping. Root also verified that renaming a filtered column preserves the filter and sorting. All 37 filter/reactive/dismissal tests and typecheck pass.
+
+Related fix by the broader UX reviewer: long cell option lists scroll the active keyboard option into view, including Create; option/list IDs are unique per editor. Verified with 50 options and two simultaneous editor instances.
+
+Remaining scope gaps: only one filter condition (no compound AND/OR groups or advanced operators), no saved views, and no option rename/delete/reorder. The reviewer also found that unlisted CSV values are available in filters but not yet offered by cell/bulk pickers; this remains a separate consistency issue. These reviews establish the tested interactions, not complete Notion parity.
+
+![Multi-select filter](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/multi-independent.png)
+
+![Narrow layout](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/multi-independent-narrow.png)
+
+
+## Select option management — 2026-09-08
+
+Added option name editing, deletion, drag reordering, and Move up/Move down within the existing column-property side menu. Name edits retain color and update all exact matching CSV cells atomically with metadata. Blank/duplicate names and collisions with unlisted cell values are rejected. Used-option deletion shows the affected row count and requires an explicit second click; unused deletion is immediate. Reordering touches only descriptor order. Active filters follow option renames and drop deleted choices.
+
+Validation: 33 option-edit/reactive tests passed, including a single atomic content+metadata write assertion and CSV format preservation. Main/preview typechecks, lint and whitespace checks passed. Browser checks passed for duplicate blocking, rename, matching row values, both reorder methods, delete cancellation/confirmation, reload persistence, active-filter preservation, 390px layout, and keyboard access to confirmation controls. Screenshots inspected.
+
+![Option editor](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/option-management.png)
+
+![Used-option deletion confirmation](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/option-delete.png)
+
+
+## Compound filter rules — 2026-09-08
+
+The filter panel supports multiple column rules with Match All (AND) or Match Any (OR). Each rule reuses typed value controls, including multiple select/checkbox choices; select values within a rule use OR. The toolbar counts active rules. Incomplete rules do not affect results in either mode. New rules focus their column selector; removing a rule focuses a remaining rule. Clear filters resets the group.
+
+Browser verified Stage Trial/Qualified AND Contacted Checked returns 4/10 fixture rows, Any returns 8/10, adding an incomplete rule does not broaden Any, removing Stage leaves 7/10 checked rows, and clearing restores all rows. 390px viewport fits without clipped controls. 41 rule/reactive/dismissal tests passed, including sorted compound-filter edits targeting the correct source CSV record. Main and preview typechecks, lint and whitespace checks passed.
+
+This implements a flat All/Any group with multiple values inside individual rules; nested arbitrary rule groups are not included. Rules remain local view state. Option rename/delete updates every applicable rule; structural column changes reset positional rules.
+
+![All rules](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/compound-all.png)
+
+![Any rules at narrow width](/root/.codex/visualizations/2026/09/07/01a07e1e-c49d-7233-a12e-e2816f05ba73/csv-token-qa/compound-narrow.png)
+
+### Saved CSV views — 2026-09-08
+
+Implemented named views in optional `lixcol_metadata.atelier_csv.views`, using stable column IDs for compound filter rules, sorting, and column widths. Search is included. Added a compact Views control with save-as, explicit Save changes, reset, rename, duplicate-name prevention, and delete confirmation. Default view restores the unfiltered table and automatic widths. Reopening starts on Default view, with saved views available for selection. No sidecar or CSV byte changes for view operations.
+
+Audited desktop (1440px) and narrow (390px) browser screenshots. Menu uses Atelier surface, border, text, hover, and orange primary tokens. Confirmed outside-click dismissal and form focus. Fixed a column-menu close callback that restored canvas focus after an outside click, closing the newly opened view menu. Canvas focus now returns only if another control has not acquired it.
+
+Validation: 68 targeted tests pass across saved-view serialization/restoration, metadata parsing, compound filters, popover dismissal, reactive CSV integration, file synchronization, and option management. Integration verifies plain CSV BOM/delimiter/newline preservation, unrelated metadata preservation, saved widths, remount, update, rename/delete, property edits retaining views, and option renames updating saved filters atomically. Browser checks passed compound-filter and sort restoration, width restoration after reload, switching, update, duplicate names, rename/delete, cancellation, outside dismissal, and narrow layout. Main/preview typechecks, CSV lint, and whitespace checks pass.
+
+Screenshots: `csv-token-qa/views-saved.png`, `csv-token-qa/views-menu.png`, and `csv-token-qa/views-narrow.png` in the task visualization directory.
+
+### Text column wrapping — 2026-09-08
+
+Added text-only Wrap content / Unwrap content menu actions. Default-view wrapping persists as optional column metadata; named views snapshot wrapping by stable column ID with their widths. Shared text layout drives canvas painting and variable row heights, preserves explicit line breaks and search offsets, and splits long tokens at grapheme boundaries. Resizing and edits recompute heights. Wrapped text editors keep the column width and use the same padding and line height as the canvas; caret still starts at the end.
+
+Validation: 55 targeted tests pass, covering wrap boundaries/newlines/emoji, metadata preservation, width-sensitive row heights, unwrap, text-only menu availability, saved-view compatibility, and existing CSV integrations. Browser checks verified narrow Notes wrapping, default reload persistence, independent wrapped/unwrapped saved views, search highlights spanning a line break, and cell editing/caret placement. Main and preview typechecks, CSV lint, and whitespace checks pass. Screenshots: wrapped-notes.png, wrapped-search.png, wrapped-edit.png in csv-token-qa.
+
+### Built-in CSV integration — 2026-09-08
+
+Confirmed the property table is the sole built-in `atelier_csv` file handler, shared by the full shell and standalone FileView. The previous renderer was replaced in place, so there is no alternate registration or opt-in flag. Removed the remaining legacy double-click header rename input, state, and CSS; both clicks and double-clicks now open the same column property menu. Retained the history/diff presentation and row operations.
+
+Added integration coverage for opening ordinary uppercase-extension CSV files through both public entry points without metadata or custom extensions, plus a registry check for a single default CSV handler. Fixed the checkbox renderer's exported type annotation so production declarations do not expose an internal Glide import. Rebuilt the package and built its external consumer fixture successfully. CSV/file routing suite: 151 tests pass. Browser verification opened plain-pipeline.csv through the normal shell file browser and confirmed Views/Filter controls. Screenshot: csv-token-qa/default-shell-csv.png.

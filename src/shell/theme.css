@@ -156,3 +156,26 @@
 }
 
 @custom-variant mobile (@media (max-width: 767px));
+
+/* Categorical labels are independent of success/error status semantics. */
+@theme static {
+	--color-bg-tag-gray: #eeedeb;
+	--color-text-tag-gray: #44403c;
+	--color-bg-tag-brown: #eee3da;
+	--color-text-tag-brown: #60432e;
+	--color-bg-tag-orange: #fae8d4;
+	--color-text-tag-orange: #783d10;
+	--color-bg-tag-yellow: #f6efc9;
+	--color-text-tag-yellow: #604900;
+	--color-bg-tag-green: #dfece3;
+	--color-text-tag-green: #285238;
+	--color-bg-tag-blue: #deebf7;
+	--color-text-tag-blue: #294d69;
+	--color-bg-tag-purple: #ebe2f3;
+	--color-text-tag-purple: #583c70;
+	--color-bg-tag-pink: #f5e0ec;
+	--color-text-tag-pink: #693b53;
+	--color-bg-tag-red: #f8e0de;
+	--color-text-tag-red: #7b332f;
+	--color-bg-search-match: var(--color-warning-200);
+}

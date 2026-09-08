@@ -92,3 +92,27 @@ body,
 .host-repo__item:hover {
 	background: rgb(245, 244, 241);
 }
+
+.csv-demo-nav {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	align-items: center;
+	height: 44px;
+	flex-shrink: 0;
+}
+.csv-demo-nav a {
+	color: #77746c;
+	text-decoration: none;
+	font-size: 12px;
+}
+.csv-demo-nav a:first-child {
+	color: #48453e;
+	font-weight: 600;
+	margin-right: 10px;
+}
+.csv-demo-nav a:hover {
+	color: #37352f;
+}
+
+.csv-demo-nav {
+	box-sizing: border-box;
+}

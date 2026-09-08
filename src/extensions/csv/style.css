@@ -93,7 +93,7 @@
 		font-size: 12px;
 		line-height: 1.2;
 		transform: translateX(-50%);
-		box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+		box-shadow: var(--shadow-md);
 		pointer-events: none;
 	}
 
@@ -103,10 +103,10 @@
 		gap: 6px;
 		margin-top: 8px;
 		padding: 6px 14px;
-		border: 1px solid rgb(234, 88, 12);
+		border: 1px solid var(--color-bg-action-primary);
 		border-radius: 8px;
-		background: rgb(194, 65, 12);
-		color: rgb(255, 255, 255);
+		background: var(--color-bg-action-primary);
+		color: var(--color-text-on-action-primary);
 		font-size: 13px;
 		font-weight: 500;
 		line-height: 1.2;
@@ -114,57 +114,55 @@
 	}
 
 	.csv-create-table-button:hover {
-		background: rgb(154, 52, 18);
+		background: var(--color-bg-action-primary-hover);
 	}
 
+	/* Append controls continue the grid geometry and use quiet table states. */
 	.csv-append-column-strip,
 	.csv-append-row-strip {
 		position: absolute;
 		display: flex;
-		border-radius: 6px;
-		color: var(--color-icon-secondary, var(--color-text-tertiary));
+		align-items: center;
+		box-sizing: border-box;
+		height: 40px;
+		padding: 0;
+		border: 0;
+		border-bottom: 1px solid var(--color-border-table-grid);
+		border-radius: 0;
+		background: var(--color-bg-panel);
+		color: var(--color-text-tertiary);
+		font-size: 13px;
+		font-weight: 400;
 		cursor: pointer;
-		opacity: 0.6;
 		transition:
-			opacity 120ms ease,
-			background-color 120ms ease;
+			background-color 120ms ease,
+			color 120ms ease;
 	}
-
 	.csv-append-column-strip {
 		top: 0;
-		width: 28px;
-		align-items: flex-start;
+		width: 40px;
 		justify-content: center;
-		padding-top: 13px;
 	}
-
 	.csv-append-row-strip {
 		left: 0;
-		height: 28px;
-		align-items: center;
 		justify-content: flex-start;
-		padding-left: 15px;
 	}
-
+	.csv-append-row-strip > svg {
+		flex-shrink: 0;
+		margin: 0 15px;
+	}
+	.csv-append-row-strip > span {
+		padding-left: 8px;
+	}
 	.csv-append-column-strip:hover,
 	.csv-append-row-strip:hover {
-		background: rgb(251, 239, 228);
-		color: rgb(194, 65, 12);
-		opacity: 1;
+		background: var(--color-bg-table-row-hover);
+		color: var(--color-text-secondary);
 	}
-
-	.csv-rename-input {
-		position: fixed;
-		z-index: 41;
-		box-sizing: border-box;
-		padding: 0 15px;
-		border: 2px solid rgb(234, 88, 12);
-		border-radius: 0;
-		background: rgb(255, 255, 255);
-		color: var(--color-text-primary);
-		font-size: 14px;
-		font-weight: 700;
-		outline: none;
+	.csv-append-column-strip:focus-visible,
+	.csv-append-row-strip:focus-visible {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: -2px;
 	}
 
 	.csv-grid-menu-backdrop {
@@ -180,12 +178,10 @@
 		min-width: 180px;
 		flex-direction: column;
 		padding: 4px;
-		border: 1px solid var(--color-border-subtle);
-		border-radius: 10px;
+		border: 1px solid var(--color-border-panel);
+		border-radius: 9px;
 		background: var(--background);
-		box-shadow:
-			0 10px 24px rgba(28, 25, 23, 0.12),
-			0 2px 6px rgba(28, 25, 23, 0.08);
+		box-shadow: var(--shadow-lg);
 	}
 
 	.csv-grid-menu-item {
@@ -193,9 +189,9 @@
 		align-items: center;
 		gap: 8px;
 		border-radius: 6px;
-		padding: 7px 10px;
-		color: var(--color-text-primary);
-		font-size: 13px;
+		padding: 5px 8px;
+		color: var(--color-text-secondary);
+		font-size: 12.5px;
 		line-height: 1.2;
 		text-align: left;
 		cursor: pointer;
@@ -215,10 +211,10 @@
 	}
 
 	.csv-grid-menu-item-destructive {
-		color: var(--color-text-notice-error, rgb(185, 28, 28));
+		color: var(--color-text-status-danger);
 	}
 
 	.csv-grid-menu-item-destructive:hover {
-		background: rgba(185, 28, 28, 0.08);
+		background: var(--color-error-50);
 	}
 }

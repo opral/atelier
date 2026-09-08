@@ -120,3 +120,17 @@ describe("buildExtensionRegistry", () => {
 		).not.toBe(installedFiles);
 	});
 });
+
+test("ordinary CSV files resolve to exactly one built-in CSV handler", () => {
+	const { extensionMap } = buildExtensionRegistry([], []);
+	const definitions = [...extensionMap.values()];
+	const csv = extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.csv);
+	expect(csv).toBeDefined();
+	expect(findFileHandlerExtension(definitions, "/data.csv")).toBe(csv);
+	expect(findFileHandlerExtension(definitions, "/data.CSV")).toBe(csv);
+	expect(
+		definitions.filter((definition) =>
+			definition.fileExtensions?.includes("csv"),
+		),
+	).toEqual([csv]);
+});

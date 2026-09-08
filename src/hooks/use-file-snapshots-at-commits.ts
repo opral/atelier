@@ -6,12 +6,14 @@ export type HistoricalFileSnapshot = {
 	readonly id: string;
 	readonly path: string;
 	readonly content: unknown;
+	readonly lixcol_metadata?: unknown;
 };
 
 type HistoricalFileSnapshotRow = {
 	readonly id: string;
 	readonly path: string | null;
 	readonly content: unknown | null;
+	readonly lixcol_metadata?: unknown;
 };
 
 /**
@@ -98,7 +100,7 @@ function useFileSnapshotAtCommit(
 	const row = useQueryTakeFirst<HistoricalFileSnapshotRow>(
 		(lix) =>
 			selectFilesStateAt(lix, commitId ?? "")
-				.select(["id", "path", "content"])
+				.select(["id", "path", "content", "lixcol_metadata"])
 				.where("id", "=", snapshotFileId),
 		{
 			subscribe: false,
@@ -106,5 +108,10 @@ function useFileSnapshotAtCommit(
 		},
 	);
 	if (!row || typeof row.path !== "string") return undefined;
-	return { id: row.id, path: row.path, content: row.content };
+	return {
+		id: row.id,
+		path: row.path,
+		content: row.content,
+		lixcol_metadata: row.lixcol_metadata,
+	};
 }

@@ -1,4 +1,27 @@
 import {
+	wrapCsvText,
+	csvWrappedRowHeight,
+	CSV_TEXT_HORIZONTAL_PADDING,
+	type CsvTextLine,
+} from "./csv-text-wrap";
+import { CsvViewMenu } from "./csv-view-menu";
+import {
+	captureCsvView,
+	restoreCsvView,
+	csvViewSettingsKey,
+	type CsvSavedView,
+	type CsvViewSettings,
+} from "./csv-views";
+import { editCsvOption, type CsvOptionEdit } from "./csv-option-edit";
+import { CsvFilterRules } from "./csv-filter-rules";
+import {
+	matchesCsvFilterGroup,
+	isActiveCsvFilterRule,
+	EMPTY_CSV_FILTER,
+	type CsvFilterGroup,
+} from "./csv-filter";
+import { useCsvTheme } from "./use-csv-theme";
+import {
 	Suspense,
 	useCallback,
 	useEffect,
@@ -10,20 +33,21 @@ import {
 import {
 	AlertTriangle,
 	ArrowDownToLine,
-	ArrowLeftToLine,
-	ArrowRightToLine,
 	ArrowUpToLine,
 	Loader2,
-	Pencil,
 	Plus,
 	Table2,
 	Trash2,
 } from "lucide-react";
 import {
 	CompactSelection,
-	DataEditor,
+	DataEditorCore as DataEditor,
+	ImageWindowLoaderImpl,
+	sprites,
 	GridCellKind,
 	type DrawHeaderCallback,
+	type DrawCellCallback,
+	type DataEditorRef,
 	type EditableGridCell,
 	type EditListItem,
 	type GridCell,
@@ -48,7 +72,27 @@ import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
 } from "@/extension-runtime/external-write-review";
-import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
+import { useSyncedCsvFile } from "./use-synced-csv-file";
+import {
+	readCsvMetadata,
+	resolveColumnInfo,
+	type CsvMetadata,
+	type CsvColumnInfo,
+} from "./csv-metadata";
+import {
+	CSV_HEADER_ICONS,
+	CSV_TYPES,
+	CSV_COLORS,
+	drawPropertyCell,
+	providePropertyEditor,
+	type PropertyCell,
+} from "./csv-properties";
+import { CsvColumnMenu } from "./csv-column-menu";
+import { CsvToolbarSelect } from "./csv-toolbar-select";
+import { CsvDismissiblePopover } from "./csv-dismissible-popover";
+import { CsvRowActions } from "./csv-row-actions";
+import { csvCellRenderers } from "./csv-grid-renderers";
+import { Search, ListFilter, ArrowUpDown, X } from "lucide-react";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import { useDeferredRevisionProps } from "@/extension-runtime/use-deferred-revision-props";
 import {
@@ -101,32 +145,32 @@ type CsvViewProps = {
 const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
 const ROW_MARKER_WIDTH = 44;
-const APPEND_STRIP_SIZE = 28;
+const APPEND_STRIP_SIZE = 40;
 const COLUMN_SAMPLE_ROW_LIMIT = 100;
-const ROW_HEIGHT = 48;
+const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 40;
-const CSV_GRID_THEME = {
-	accentColor: "rgb(194, 65, 12)",
-	accentFg: "rgb(255, 255, 255)",
-	accentLight: "rgba(234, 88, 12, 0.07)",
-	bgHeader: "rgb(255, 255, 255)",
-	bgHeaderHasFocus: "rgb(255, 255, 255)",
-	bgHeaderHovered: "rgb(255, 255, 255)",
-	borderColor: "rgb(244, 241, 236)",
-	headerBottomBorderColor: "rgb(244, 241, 236)",
-	horizontalBorderColor: "rgb(244, 241, 236)",
-	linkColor: "rgb(194, 65, 12)",
-	resizeIndicatorColor: "rgb(234, 88, 12)",
-	textHeaderSelected: "rgb(124, 45, 18)",
-};
 
 type CsvFileRow = {
 	readonly id: string;
 	readonly path: string;
 	readonly content: Uint8Array;
+	readonly lixcol_metadata?: unknown;
 };
 
 type CsvTableEditing = {
+	readonly onSaveView: (
+		id: string,
+		name: string,
+		settings: CsvViewSettings,
+	) => void;
+	readonly onRenameView: (id: string, name: string) => void;
+	readonly onDeleteView: (id: string) => void;
+	readonly onEditOption: (column: number, edit: CsvOptionEdit) => boolean;
+	readonly onChangeColumn: (
+		column: number,
+		patch: Partial<CsvColumnInfo>,
+	) => void;
+	readonly onSelectOption: (row: number, column: number, value: string) => void;
 	readonly onCellsEdited: (edits: readonly CsvCellEdit[]) => void;
 	readonly onRowAppended: () => void;
 	readonly onInsertRow: (atRow: number) => void;
@@ -151,10 +195,15 @@ type CsvGridMenuState =
 			readonly headerBounds: Rectangle;
 	  };
 
+type CsvReviewData = ExternalWriteReviewData & {
+	beforeMetadata?: unknown;
+	afterMetadata?: unknown;
+};
+
 type HistoricalCsvFile = {
 	readonly fileRow: CsvFileRow;
 	readonly review: ExternalWriteReview | null;
-	readonly reviewData: ExternalWriteReviewData | undefined;
+	readonly reviewData: CsvReviewData | undefined;
 	readonly controls: "review" | "none";
 };
 
@@ -231,7 +280,7 @@ function CsvLiveViewContent({ fileId, ...props }: CsvViewProps) {
 	const fileResult = useQueryResult<CsvFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
-			.select(["id", "path", "content"])
+			.select(["id", "path", "content", "lixcol_metadata"])
 			.where("id", "=", fileId)
 			.limit(1),
 	);
@@ -341,12 +390,15 @@ function EditableCsvView({
 					...fileRow,
 					path: reviewPath ?? fileRow.path,
 					content: reviewBase.afterData ?? EMPTY_FILE_DATA,
+					lixcol_metadata: reviewBase.afterMetadata,
 				}
 			: fileRow;
 	const fileText = decodeFileDataToText(effectiveFileRow.content);
-	const reviewData: ExternalWriteReviewData | null =
+	const reviewData: CsvReviewData | null =
 		reviewing && !reviewBase.loading && !reviewBase.error
 			? {
+					beforeMetadata: reviewBase.beforeMetadata,
+					afterMetadata: reviewBase.afterMetadata,
 					beforeData: reviewBase.data ?? new Uint8Array(),
 					afterData: reviewBase.afterData ?? EMPTY_FILE_DATA,
 				}
@@ -356,11 +408,13 @@ function EditableCsvView({
 	const originKey = useMemo(() => createCsvEditorOriginKey(), []);
 	const {
 		text: syncedText,
+		metadata,
 		saveError,
 		persist,
-	} = useSyncedTextFile({
+	} = useSyncedCsvFile({
 		fileId,
 		initialText: fileText,
+		initialMetadata: effectiveFileRow.lixcol_metadata,
 		reviewText: null,
 		reviewing: isReviewing,
 		readOnly,
@@ -379,21 +433,178 @@ function EditableCsvView({
 		documentRef.current = csvDocument;
 	}, [csvDocument]);
 
+	const metadataRef = useRef(metadata);
+	useEffect(() => {
+		metadataRef.current = metadata;
+	}, [metadata]);
+	const materializeColumns = useCallback(() => {
+		const headers = csvDocumentView(documentRef.current).columns.map(
+			(_, i) => documentRef.current.records[0]?.cells[i] ?? "",
+		);
+		const resolved = resolveColumnInfo(metadataRef.current, headers);
+		return headers.map(
+			(header, index) =>
+				({
+					...resolved[index],
+					id: resolved[index]?.id ?? crypto.randomUUID(),
+					header,
+					index,
+					type: resolved[index]?.type ?? "text",
+				}) as CsvColumnInfo,
+		);
+	}, []);
 	const applyDocumentEdit = useCallback(
-		(mutate: (current: CsvDocument) => CsvDocument) => {
+		(
+			mutate: (current: CsvDocument) => CsvDocument,
+			nextMetadata?: CsvMetadata,
+		) => {
 			if (isReadOnly) return;
 			const next = mutate(documentRef.current);
-			if (next === documentRef.current) return;
+			if (next === documentRef.current && !nextMetadata) return;
 			// The ref updates synchronously so rapid consecutive grid edits
 			// (paste, fill, overlay commits) compose before React re-renders.
 			documentRef.current = next;
 			const nextText = serializeCsvDocument(next);
 			setDocumentText(nextText);
-			persist(nextText);
+			if (nextMetadata) {
+				nextMetadata = { ...metadataRef.current, ...nextMetadata };
+				metadataRef.current = nextMetadata;
+			}
+			persist(nextText, nextMetadata);
 		},
 		[isReadOnly, persist],
 	);
 
+	const handleSaveView = useCallback(
+		(id: string, name: string, settings: CsvViewSettings) => {
+			const columns = materializeColumns();
+			const saved = captureCsvView(id, name, settings, columns);
+			const views = metadataRef.current?.views ?? [];
+			applyDocumentEdit((d) => d, {
+				version: 1,
+				columns,
+				views: views.some((savedView) => savedView.id === id)
+					? views.map((savedView) => (savedView.id === id ? saved : savedView))
+					: [...views, saved],
+			});
+		},
+		[applyDocumentEdit, materializeColumns],
+	);
+	const handleRenameView = useCallback(
+		(id: string, name: string) => {
+			applyDocumentEdit((d) => d, {
+				version: 1,
+				columns: materializeColumns(),
+				views: (metadataRef.current?.views ?? []).map((savedView) =>
+					savedView.id === id ? { ...savedView, name } : savedView,
+				),
+			});
+		},
+		[applyDocumentEdit, materializeColumns],
+	);
+	const handleDeleteView = useCallback(
+		(id: string) => {
+			applyDocumentEdit((d) => d, {
+				version: 1,
+				columns: materializeColumns(),
+				views: (metadataRef.current?.views ?? []).filter(
+					(savedView) => savedView.id !== id,
+				),
+			});
+		},
+		[applyDocumentEdit, materializeColumns],
+	);
+
+	const handleChangeColumn = useCallback(
+		(column: number, patch: Partial<CsvColumnInfo>) => {
+			const columns = materializeColumns();
+			const current = columns[column];
+			if (!current) return;
+			const options =
+				patch.type === "select" && !current.options
+					? [
+							...new Set(
+								csvDocumentView(documentRef.current)
+									.rows.map((r) => r.cells[column] ?? "")
+									.filter(Boolean),
+							),
+						].map((value, i) => ({
+							value,
+							color:
+								Object.keys(CSV_COLORS)[i % Object.keys(CSV_COLORS).length]!,
+						}))
+					: current.options;
+			columns[column] = {
+				...current,
+				...(options ? { options } : {}),
+				...patch,
+			};
+			applyDocumentEdit((d) => d, { version: 1, columns });
+		},
+		[applyDocumentEdit, materializeColumns],
+	);
+	const handleEditOption = useCallback(
+		(column: number, edit: CsvOptionEdit) => {
+			if (isReadOnly) return false;
+			const result = editCsvOption(
+				documentRef.current,
+				materializeColumns(),
+				column,
+				edit,
+			);
+			if (!result) return false;
+			applyDocumentEdit(() => result.document, {
+				version: 1,
+				columns: result.columns,
+				views: (metadataRef.current?.views ?? []).map((savedView) => ({
+					...savedView,
+					filter: {
+						...savedView.filter,
+						rules: savedView.filter.rules.map((rule) => {
+							if (
+								rule.columnId !== result.columns[column]?.id ||
+								edit.kind === "move"
+							)
+								return rule;
+							const rename = (value: string) =>
+								value === edit.value
+									? edit.kind === "rename"
+										? edit.name.trim()
+										: ""
+									: value;
+							return {
+								...rule,
+								value:
+									typeof rule.value === "string"
+										? rename(rule.value)
+										: rule.value.map(rename).filter(Boolean),
+							};
+						}),
+					},
+				})),
+			});
+			return true;
+		},
+		[applyDocumentEdit, materializeColumns, isReadOnly],
+	);
+	const handleSelectOption = useCallback(
+		(row: number, column: number, value: string) => {
+			const columns = materializeColumns();
+			const current = columns[column];
+			if (!current) return;
+			columns[column] = {
+				...current,
+				options: current.options?.some((o) => o.value === value)
+					? current.options
+					: [...(current.options ?? []), { value, color: "gray" }],
+			};
+			applyDocumentEdit((d) => setDocumentCells(d, [{ row, column, value }]), {
+				version: 1,
+				columns,
+			});
+		},
+		[applyDocumentEdit, materializeColumns],
+	);
 	const handleCellsEdited = useCallback(
 		(edits: readonly CsvCellEdit[]) => {
 			applyDocumentEdit((current) => setDocumentCells(current, edits));
@@ -424,25 +635,55 @@ function EditableCsvView({
 
 	const handleInsertColumn = useCallback(
 		(atColumn: number) => {
-			applyDocumentEdit((current) => insertDocumentColumn(current, atColumn));
+			const columns = metadataRef.current ? materializeColumns() : undefined;
+			const next = insertDocumentColumn(documentRef.current, atColumn);
+			if (columns) {
+				columns.splice(atColumn, 0, {
+					id: crypto.randomUUID(),
+					header: next.records[0]?.cells[atColumn] ?? "",
+					index: atColumn,
+					type: "text",
+				});
+			}
+			applyDocumentEdit(
+				() => next,
+				columns
+					? {
+							version: 1,
+							columns: columns.map((c, index) => ({ ...c, index })),
+						}
+					: undefined,
+			);
 		},
-		[applyDocumentEdit],
+		[applyDocumentEdit, materializeColumns],
 	);
 
 	const handleDeleteColumns = useCallback(
 		(columns: readonly number[]) => {
-			applyDocumentEdit((current) => deleteDocumentColumns(current, columns));
+			const info = metadataRef.current
+				? materializeColumns()
+						.filter((_, i) => !columns.includes(i))
+						.map((c, index) => ({ ...c, index }))
+				: undefined;
+			applyDocumentEdit(
+				(current) => deleteDocumentColumns(current, columns),
+				info ? { version: 1, columns: info } : undefined,
+			);
 		},
-		[applyDocumentEdit],
+		[applyDocumentEdit, materializeColumns],
 	);
 
 	const handleRenameColumn = useCallback(
 		(column: number, name: string) => {
-			applyDocumentEdit((current) =>
-				renameDocumentColumn(current, column, name),
+			const columns = metadataRef.current ? materializeColumns() : undefined;
+			if (columns?.[column])
+				columns[column] = { ...columns[column], header: name };
+			applyDocumentEdit(
+				(current) => renameDocumentColumn(current, column, name),
+				columns ? { version: 1, columns } : undefined,
 			);
 		},
-		[applyDocumentEdit],
+		[applyDocumentEdit, materializeColumns],
 	);
 
 	const handleCreateTable = useCallback(() => {
@@ -454,6 +695,12 @@ function EditableCsvView({
 			isReadOnly
 				? undefined
 				: {
+						onSaveView: handleSaveView,
+						onRenameView: handleRenameView,
+						onDeleteView: handleDeleteView,
+						onEditOption: handleEditOption,
+						onChangeColumn: handleChangeColumn,
+						onSelectOption: handleSelectOption,
 						onCellsEdited: handleCellsEdited,
 						onRowAppended: handleRowAppended,
 						onInsertRow: handleInsertRow,
@@ -463,6 +710,12 @@ function EditableCsvView({
 						onRenameColumn: handleRenameColumn,
 					},
 		[
+			handleSaveView,
+			handleRenameView,
+			handleDeleteView,
+			handleEditOption,
+			handleChangeColumn,
+			handleSelectOption,
 			handleCellsEdited,
 			handleDeleteColumns,
 			handleDeleteRows,
@@ -478,8 +731,16 @@ function EditableCsvView({
 		<CsvWorkingReviewUnavailable message={reviewUnavailableMessage} />
 	) : (
 		<CsvViewLoaded
-			fileRow={effectiveFileRow}
-			parsedOverride={view}
+			fileRow={
+				isReviewing
+					? effectiveFileRow
+					: {
+							...effectiveFileRow,
+							content: new TextEncoder().encode(documentText),
+							lixcol_metadata: metadata ? { atelier_csv: metadata } : undefined,
+						}
+			}
+			parsedOverride={isReviewing ? parseCsv(fileText) : view}
 			editing={editing}
 			onCreateTable={isReadOnly ? undefined : handleCreateTable}
 			saveError={saveError}
@@ -575,7 +836,12 @@ function CsvWorkingHistoricalView({
 	}
 	if (before.loading) return <CsvLoadingSpinner />;
 	const beforeSnapshot = before.data
-		? { id: fileId, path: workingFile.path, content: before.data }
+		? {
+				id: fileId,
+				path: workingFile.path,
+				content: before.data,
+				lixcol_metadata: before.beforeMetadata,
+			}
 		: undefined;
 	return (
 		<CsvHistoricalViewResolved
@@ -583,7 +849,16 @@ function CsvWorkingHistoricalView({
 			fileId={fileId}
 			editorRevision={editorRevision}
 			beforeSnapshot={beforeSnapshot}
-			afterSnapshot={undefined}
+			afterSnapshot={
+				before.afterData
+					? {
+							id: fileId,
+							path: workingFile.path,
+							content: before.afterData,
+							lixcol_metadata: before.afterMetadata,
+						}
+					: undefined
+			}
 		/>
 	);
 }
@@ -649,12 +924,20 @@ function CsvViewLoaded({
 	readonly editing?: CsvTableEditing;
 	readonly onCreateTable?: () => void;
 	readonly saveError?: string | null;
-	readonly reviewData?: ExternalWriteReviewData | null;
+	readonly reviewData?: CsvReviewData | null;
 	readonly isActiveView?: boolean;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
 		return parsedOverride ?? parseCsv(decodeFileDataToText(fileRow.content));
 	}, [fileRow, parsedOverride]);
+
+	const columnInfo = useMemo(() => {
+		const document = parseCsvDocument(decodeFileDataToText(fileRow.content));
+		return resolveColumnInfo(
+			readCsvMetadata(fileRow.lixcol_metadata),
+			parsed.columns.map((_, i) => document.records[0]?.cells[i] ?? ""),
+		);
+	}, [fileRow.content, fileRow.lixcol_metadata, parsed.columns]);
 
 	return (
 		<div className="csv-view flex min-h-0 flex-1 flex-col bg-background">
@@ -673,6 +956,8 @@ function CsvViewLoaded({
 				) : (
 					<CsvTable
 						parsed={parsed}
+						columnInfo={columnInfo}
+						savedViews={readCsvMetadata(fileRow.lixcol_metadata)?.views ?? []}
 						isActiveView={isActiveView}
 						editing={editing}
 					/>
@@ -692,7 +977,7 @@ function CsvViewLoaded({
 function CsvReviewOverlay({
 	reviewData,
 }: {
-	readonly reviewData: ExternalWriteReviewData;
+	readonly reviewData: CsvReviewData;
 }) {
 	const diffHtml = useMemo(
 		() => (reviewData ? renderCsvReviewDiffHtml(reviewData) : null),
@@ -701,6 +986,10 @@ function CsvReviewOverlay({
 
 	return (
 		<div className="csv-review-overlay">
+			<CsvMetadataChanges
+				before={reviewData.beforeMetadata}
+				after={reviewData.afterMetadata}
+			/>
 			{diffHtml ? (
 				<div
 					className="ph-mask csv-review-table"
@@ -716,16 +1005,122 @@ function CsvReviewOverlay({
 	);
 }
 
+function CsvMetadataChanges({
+	before,
+	after,
+}: {
+	before: unknown;
+	after: unknown;
+}) {
+	const from = readCsvMetadata(before),
+		to = readCsvMetadata(after);
+	if (JSON.stringify(from) === JSON.stringify(to)) return null;
+	const ids = new Set([
+		...(from?.columns ?? []).map((c) => c.id),
+		...(to?.columns ?? []).map((c) => c.id),
+	]);
+	return (
+		<div className="csv-metadata-changes">
+			<strong>Table settings changed</strong>
+			{JSON.stringify(from?.views) !== JSON.stringify(to?.views) && (
+				<div>Saved views updated</div>
+			)}
+			{[...ids].map((id) => {
+				const a = from?.columns.find((c) => c.id === id),
+					b = to?.columns.find((c) => c.id === id);
+				if (JSON.stringify(a) === JSON.stringify(b)) return null;
+				return (
+					<div key={id}>
+						<span>{b?.header ?? a?.header}</span>
+						<span>
+							{a?.type ?? "text"} → {b?.type ?? "text"}
+							{JSON.stringify(a?.options) !== JSON.stringify(b?.options)
+								? " · Options or colors updated"
+								: ""}
+						</span>
+					</div>
+				);
+			})}
+		</div>
+	);
+}
+
 function CsvTable({
-	parsed,
+	parsed: sourceParsed,
+	columnInfo,
+	savedViews,
 	isActiveView,
 	editing,
 }: {
 	readonly parsed: CsvParseResult;
+	readonly savedViews: readonly CsvSavedView[];
+	readonly columnInfo: readonly (CsvColumnInfo | undefined)[];
 	readonly isActiveView: boolean;
 	readonly editing?: CsvTableEditing;
 }) {
+	const gridRef = useRef<DataEditorRef>(null);
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const { theme: gridTheme, palette, searchColor } = useCsvTheme(containerRef);
+	const imageWindowLoader = useMemo(() => new ImageWindowLoaderImpl(), []);
 	const editable = editing !== undefined;
+	const [search, setSearch] = useState("");
+	const drawCell = useCallback<DrawCellCallback>(
+		(args, drawContent) =>
+			drawPropertyCell(args, drawContent, search, palette, searchColor),
+		[search, palette, searchColor],
+	);
+	const [sort, setSort] = useState<{
+		column: number;
+		direction: 1 | -1;
+	} | null>(null);
+	const [filter, setFilter] = useState<CsvFilterGroup>(EMPTY_CSV_FILTER);
+	const activeFilterCount = filter.rules.filter(isActiveCsvFilterRule).length;
+	const [toolbarMenu, setToolbarMenu] = useState<"sort" | "filter" | null>(
+		null,
+	);
+	const sortTriggerRef = useRef<HTMLButtonElement>(null);
+	const filterTriggerRef = useRef<HTMLButtonElement>(null);
+	const rowMap = useMemo(() => {
+		const rows = sourceParsed.rows
+			.map((_, index) => index)
+			.filter((index) => {
+				const row = sourceParsed.rows[index]!;
+				return (
+					(!search ||
+						row.cells.some((c) =>
+							c.toLowerCase().includes(search.toLowerCase()),
+						)) &&
+					matchesCsvFilterGroup(row.cells, filter, columnInfo)
+				);
+			});
+		if (sort)
+			rows.sort((a, b) => {
+				const av = sourceParsed.rows[a]!.cells[sort.column] ?? "",
+					bv = sourceParsed.rows[b]!.cells[sort.column] ?? "";
+				const numeric = columnInfo[sort.column]?.type === "number";
+				return (
+					sort.direction *
+					(numeric &&
+					av !== "" &&
+					bv !== "" &&
+					Number.isFinite(Number(av)) &&
+					Number.isFinite(Number(bv))
+						? Number(av) - Number(bv)
+						: av.localeCompare(bv, undefined, { numeric: true }))
+				);
+			});
+		return rows;
+	}, [sourceParsed.rows, search, sort, filter, columnInfo]);
+	const parsed = {
+		...sourceParsed,
+		rows: rowMap.map((i) => sourceParsed.rows[i]!),
+	};
+	const sourceRowIndex = useCallback(
+		(row: number) =>
+			rowMap[row] ??
+			sourceParsed.rows.length + Math.max(0, row - rowMap.length),
+		[rowMap, sourceParsed.rows.length],
+	);
 	const columnCount = parsed.columns.length;
 	// Width state keyed by the column set (not the parse result identity) so
 	// user resizes and auto widths survive cell edits and only reset when the
@@ -759,6 +1154,109 @@ function CsvTable({
 					};
 		setColumnWidthState(widthState);
 	}
+	const [wrapOverrides, setWrapOverrides] = useState<Record<string, boolean>>(
+		{},
+	);
+	const wrappedColumns = useMemo(
+		() =>
+			parsed.columns.map(
+				(_, index) =>
+					(columnInfo[index]?.type ?? "text") === "text" &&
+					(wrapOverrides[columnInfo[index]?.id ?? String(index)] ??
+						columnInfo[index]?.wrap ??
+						false),
+			),
+		[parsed.columns, columnInfo, wrapOverrides],
+	);
+	const measureContext = useMemo(
+		() =>
+			typeof document === "undefined"
+				? null
+				: document.createElement("canvas").getContext("2d"),
+		[],
+	);
+	const wrappedLayout = useMemo(() => {
+		if (!wrappedColumns.some(Boolean)) return undefined;
+		if (measureContext)
+			measureContext.font = `${gridTheme.baseFontStyle} ${gridTheme.fontFamily}`;
+		const measure = (text: string) =>
+			measureContext?.measureText(text).width ?? text.length * 7;
+		return rowMap.map((sourceRow) => {
+			const lines: Record<number, CsvTextLine[]> = {};
+			let lineCount = 1;
+			wrappedColumns.forEach((wrapped, column) => {
+				if (!wrapped) return;
+				const width =
+					widthState.overrides[column] ?? widthState.initial[column]!;
+				lines[column] = wrapCsvText(
+					sourceParsed.rows[sourceRow]?.cells[column] ?? "",
+					width - CSV_TEXT_HORIZONTAL_PADDING * 2,
+					measure,
+				);
+				lineCount = Math.max(lineCount, lines[column]!.length);
+			});
+			return { lines, height: csvWrappedRowHeight(lineCount) };
+		});
+	}, [
+		wrappedColumns,
+		widthState,
+		sourceParsed.rows,
+		rowMap,
+		gridTheme.baseFontStyle,
+		gridTheme.fontFamily,
+		measureContext,
+	]);
+	const getRowHeight = useCallback(
+		(row: number) => wrappedLayout?.[row]?.height ?? ROW_HEIGHT,
+		[wrappedLayout],
+	);
+	const [activeViewId, setActiveViewId] = useState<string | null>(null);
+	const activeSavedView = savedViews.find((view) => view.id === activeViewId);
+	const currentViewSettings: CsvViewSettings = {
+		filter,
+		sort,
+		search,
+		wrapped: wrappedColumns,
+		widths: parsed.columns.map(
+			(_, i) => widthState.overrides[i] ?? widthState.initial[i]!,
+		),
+	};
+	const restoredViewSettings = restoreCsvView(
+		activeSavedView,
+		columnInfo,
+		widthState.initial,
+	);
+	const viewDirty =
+		!!activeSavedView &&
+		csvViewSettingsKey(currentViewSettings) !==
+			csvViewSettingsKey(restoredViewSettings);
+	const selectView = (id: string | null) => {
+		const settings = restoreCsvView(
+			savedViews.find((view) => view.id === id),
+			columnInfo,
+			widthState.initial,
+		);
+		setActiveViewId(id);
+		setWrapOverrides(
+			Object.fromEntries(
+				columnInfo.map((column, index) => [
+					column?.id ?? String(index),
+					settings.wrapped?.[index] ?? false,
+				]),
+			),
+		);
+		setFilter(settings.filter);
+		setSort(settings.sort);
+		setSearch(settings.search);
+		setToolbarMenu(null);
+		setColumnWidthState((current) => ({
+			...current,
+			overrides: Object.fromEntries(
+				settings.widths.map((width, index) => [index, width]),
+			),
+		}));
+	};
+
 	useEffect(() => {
 		if (!isActiveView) return;
 		const frame = window.requestAnimationFrame(() => {
@@ -772,7 +1270,6 @@ function CsvTable({
 	// Apple Numbers-style sizing: the grid canvas is only as large as the
 	// table itself (capped by the container), so no phantom cells or grid
 	// lines render beyond the last column and the trailing row.
-	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [containerSize, setContainerSize] = useState<{
 		readonly width: number;
 		readonly height: number;
@@ -795,25 +1292,36 @@ function CsvTable({
 		return parsed.columns.map((title, index) => ({
 			id: String(index),
 			title,
+			icon: columnInfo[index]?.type ?? "text",
 			width: widthState.overrides[index] ?? widthState.initial[index],
 			// The hover chevron that opens the column menu.
 			hasMenu: editable,
 		}));
-	}, [editable, parsed.columns, widthState]);
+	}, [editable, parsed.columns, widthState, columnInfo]);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
-			if (editable) {
+			if (editable || columnInfo[columnIndex]) {
 				// Editable cells are plain text so the overlay edits the raw
 				// value; URL/email link affordances stay in read-only views.
 				return {
 					kind: GridCellKind.Text,
 					data: value,
 					displayData: value,
-					allowOverlay: true,
-					readonly: false,
+					allowOverlay: editable,
+					// Plain values edit on press, avoiding a selection-only frame
+					// while the pointer is held. Pickers retain click activation.
+					activationBehaviorOverride: !["select", "checkbox", "date"].includes(
+						columnInfo[columnIndex]?.type ?? "text",
+					)
+						? "pointer-down"
+						: undefined,
+					readonly: !editable,
+					allowWrapping: wrappedColumns[columnIndex],
+					csvWrappedLines: wrappedLayout?.[rowIndex]?.lines[columnIndex],
+					csvInfo: columnInfo[columnIndex],
 					copyData: value,
-				};
+				} as PropertyCell;
 			}
 			const linkUrl = toExternalLinkUrl(value);
 			if (linkUrl) {
@@ -840,7 +1348,7 @@ function CsvTable({
 				copyData: value,
 			};
 		},
-		[editable, parsed.rows],
+		[editable, parsed.rows, columnInfo, wrappedColumns, wrappedLayout],
 	);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
@@ -869,8 +1377,16 @@ function CsvTable({
 			for (const item of items) {
 				const value = editedCellText(item.value);
 				if (value === null || item.location[0] >= columnCount) continue;
+				if ((item.value as PropertyCell).csvNewOption) {
+					editing.onSelectOption(
+						sourceRowIndex(item.location[1]),
+						item.location[0],
+						value,
+					);
+					continue;
+				}
 				edits.push({
-					row: item.location[1],
+					row: sourceRowIndex(item.location[1]),
 					column: item.location[0],
 					value,
 				});
@@ -878,7 +1394,7 @@ function CsvTable({
 			if (edits.length > 0) editing.onCellsEdited(edits);
 			return true;
 		},
-		[columnCount, editing],
+		[columnCount, editing, sourceRowIndex],
 	);
 	const handlePaste = useCallback(
 		(target: Item, values: readonly (readonly string[])[]) => {
@@ -890,26 +1406,75 @@ function CsvTable({
 					const column = startColumn + columnOffset;
 					// Pasting can extend rows but not add columns (yet).
 					if (column >= columnCount) return;
-					edits.push({ row: startRow + rowOffset, column, value });
+					edits.push({
+						row: sourceRowIndex(startRow + rowOffset),
+						column,
+						value,
+					});
 				});
 			});
 			if (edits.length > 0) editing.onCellsEdited(edits);
 			return false;
 		},
-		[columnCount, editing],
+		[columnCount, editing, sourceRowIndex],
 	);
 	const [gridSelection, setGridSelection] = useState<GridSelection>(() => ({
 		columns: CompactSelection.empty(),
 		rows: CompactSelection.empty(),
 	}));
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
-	const closeMenu = useCallback(() => setMenu(null), []);
+	const closeMenu = useCallback(() => {
+		setMenu(null);
+		requestAnimationFrame(() => {
+			const doc = containerRef.current?.ownerDocument;
+			let active = doc?.activeElement;
+			while (active?.shadowRoot?.activeElement)
+				active = active.shadowRoot.activeElement;
+			// Outside clicks may already have focused another control or opened a menu.
+			if (
+				!active ||
+				active === doc?.body ||
+				containerRef.current?.contains(active)
+			)
+				gridRef.current?.focus();
+		});
+	}, []);
 	const clearSelection = useCallback(() => {
 		setGridSelection({
 			columns: CompactSelection.empty(),
 			rows: CompactSelection.empty(),
 		});
 	}, []);
+	const selectedRows = gridSelection.rows
+		.toArray()
+		.filter((row) => row < rowMap.length);
+	const deleteSelectedRows = () => {
+		editing?.onDeleteRows(selectedRows.map(sourceRowIndex));
+		clearSelection();
+		gridRef.current?.focus();
+	};
+
+	// Preserve view predicates on rename; reset when column identities/positions change.
+	const columnIdentities = parsed.columns.map(
+		(_, index) => columnInfo[index]?.id,
+	);
+	const previousIdentities = useRef(columnIdentities);
+	useEffect(() => {
+		const previous = previousIdentities.current;
+		previousIdentities.current = columnIdentities;
+		if (
+			previous.length === columnIdentities.length &&
+			previous.every((id, i) => !id || id === columnIdentities[i])
+		)
+			return;
+		setSort(null);
+		setFilter(EMPTY_CSV_FILTER);
+	}, [columnIdentities]);
+	const rowMapKey = rowMap.join(",");
+	useEffect(() => {
+		clearSelection();
+		setMenu(null);
+	}, [rowMapKey, clearSelection]);
 
 	const handleCellContextMenu = useCallback(
 		(
@@ -998,41 +1563,26 @@ function CsvTable({
 		},
 		[editing, widthState],
 	);
-	const [renaming, setRenaming] = useState<{
-		readonly column: number;
-		readonly bounds: Rectangle;
-	} | null>(null);
 	const handleHeaderClicked = useCallback(
 		(
 			columnIndex: number,
 			event: {
-				readonly isDoubleClick?: boolean;
 				readonly bounds: Rectangle;
 				readonly preventDefault: () => void;
 			},
 		) => {
-			if (!editing || !event.isDoubleClick || columnIndex < 0) return;
-			event.preventDefault();
-			setRenaming({ column: columnIndex, bounds: event.bounds });
+			if (!editing || columnIndex < 0) return;
+			handleHeaderMenuClick(columnIndex, event.bounds);
 		},
-		[editing],
-	);
-	const commitRename = useCallback(
-		(column: number, name: string) => {
-			setRenaming(null);
-			const trimmed = name.trim();
-			if (trimmed.length === 0 || trimmed === parsed.columns[column]) return;
-			editing?.onRenameColumn(column, trimmed);
-		},
-		[editing, parsed.columns],
+		[editing, handleHeaderMenuClick],
 	);
 
 	// Rows/columns the menu operates on: the multi-selection when the clicked
 	// target is part of it, otherwise just the clicked target.
 	const menuRows = useMemo<readonly number[]>(() => {
 		if (menu?.kind !== "row") return [];
-		const selectedRows = gridSelection.rows.toArray();
-		return selectedRows.includes(menu.row) ? selectedRows : [menu.row];
+		const contextRows = gridSelection.rows.toArray();
+		return contextRows.includes(menu.row) ? contextRows : [menu.row];
 	}, [gridSelection.rows, menu]);
 	const menuColumns = useMemo<readonly number[]>(() => {
 		if (menu?.kind !== "column") return [];
@@ -1062,7 +1612,12 @@ function CsvTable({
 			0,
 		) +
 		2;
-	const contentHeight = HEADER_HEIGHT + parsed.rows.length * ROW_HEIGHT + 2;
+	const contentHeight =
+		HEADER_HEIGHT +
+		(wrappedLayout
+			? wrappedLayout.reduce((total, row) => total + row.height, 0)
+			: parsed.rows.length * ROW_HEIGHT) +
+		2;
 	// A gutter stays reserved for the append strips so they never cover the
 	// grid, even when the table overflows and scrolls.
 	const gutter = editable ? APPEND_STRIP_SIZE : 0;
@@ -1080,162 +1635,480 @@ function CsvTable({
 		: "100%";
 
 	return (
-		<div
-			ref={containerRef}
-			className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
-		>
-			<DataEditor
-				className="csv-data-grid"
-				columns={columns}
-				rows={parsed.rows.length}
-				getCellContent={getCellContent}
-				getCellsForSelection={true}
-				width={gridWidth}
-				height={gridHeight}
-				rowMarkerWidth={ROW_MARKER_WIDTH}
-				rowHeight={ROW_HEIGHT}
-				headerHeight={HEADER_HEIGHT}
-				minColumnWidth={COLUMN_MIN_WIDTH}
-				maxColumnWidth={COLUMN_MAX_WIDTH}
-				maxColumnAutoWidth={COLUMN_MAX_WIDTH}
-				onColumnResizeEnd={onColumnResizeEnd}
-				rowMarkers="number"
-				rangeSelect="multi-rect"
-				columnSelect="multi"
-				rowSelect="multi"
-				copyHeaders={true}
-				gridSelection={gridSelection}
-				onGridSelectionChange={setGridSelection}
-				drawHeader={drawCsvHeader}
-				onCellsEdited={editable ? handleCellsEdited : undefined}
-				onPaste={editable ? handlePaste : false}
-				fillHandle={editable}
-				onCellContextMenu={editable ? handleCellContextMenu : undefined}
-				onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
-				onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
-				onHeaderClicked={editable ? handleHeaderClicked : undefined}
-				freezeColumns={0}
-				fixedShadowX={false}
-				fixedShadowY={false}
-				smoothScrollX={true}
-				theme={CSV_GRID_THEME}
-			/>
-			{editing &&
-			typeof gridWidth === "number" &&
-			typeof gridHeight === "number" ? (
-				<>
+		<>
+			<div className="csv-toolbar">
+				<CsvViewMenu
+					views={savedViews}
+					activeId={activeSavedView?.id ?? null}
+					dirty={viewDirty}
+					onSelect={selectView}
+					onSave={
+						editing
+							? (id, name) => {
+									editing.onSaveView(id, name, currentViewSettings);
+									setActiveViewId(id);
+								}
+							: undefined
+					}
+					onRename={editing?.onRenameView}
+					onDelete={
+						editing
+							? (id) => {
+									editing.onDeleteView(id);
+									if (activeViewId === id) selectView(null);
+								}
+							: undefined
+					}
+				/>
+				{selectedRows.length > 0 && (
+					<CsvRowActions
+						count={selectedRows.length}
+						columns={parsed.columns}
+						columnInfo={columnInfo}
+						onClear={() => {
+							clearSelection();
+							gridRef.current?.focus();
+						}}
+						onDelete={editing ? deleteSelectedRows : undefined}
+						onEdit={
+							editing
+								? (column, value) => {
+										editing.onCellsEdited(
+											selectedRows.map((row) => {
+												const previous = parsed.rows[row]?.cells[column] ?? "";
+												const next =
+													columnInfo[column]?.type === "checkbox" &&
+													value !== ""
+														? /^(true|false)$/i.test(previous)
+															? value === "yes"
+																? "true"
+																: "false"
+															: /^[01]$/.test(previous)
+																? value === "yes"
+																	? "1"
+																	: "0"
+																: value
+														: value;
+												return {
+													row: sourceRowIndex(row),
+													column,
+													value: next,
+												};
+											}),
+										);
+									}
+								: undefined
+						}
+					/>
+				)}
+				<span className="csv-row-count">
+					{rowMap.length}
+					{rowMap.length !== sourceParsed.rows.length
+						? ` of ${sourceParsed.rows.length}`
+						: ""}{" "}
+					{sourceParsed.rows.length === 1 ? "row" : "rows"}
+				</span>
+				<div className="csv-toolbar-actions">
 					<button
 						type="button"
-						className="csv-append-column-strip"
-						style={{ left: gridWidth, height: gridHeight }}
-						title="Add column"
-						aria-label="Add column"
-						onClick={() => editing.onInsertColumn(columnCount)}
+						ref={filterTriggerRef}
+						aria-expanded={toolbarMenu === "filter"}
+						aria-haspopup="dialog"
+						aria-label="Filter"
+						className={activeFilterCount ? "is-active" : ""}
+						onClick={() =>
+							setToolbarMenu(toolbarMenu === "filter" ? null : "filter")
+						}
 					>
-						<Plus aria-hidden="true" size={14} />
+						<ListFilter size={14} />
+						Filter
+						{activeFilterCount > 0 && (
+							<span className="csv-filter-count" aria-hidden="true">
+								{activeFilterCount}
+							</span>
+						)}
 					</button>
 					<button
 						type="button"
-						className="csv-append-row-strip"
-						style={{ top: gridHeight, width: gridWidth }}
-						title="Add row"
-						aria-label="Add row"
-						onClick={() => editing.onRowAppended()}
+						ref={sortTriggerRef}
+						aria-expanded={toolbarMenu === "sort"}
+						aria-haspopup="dialog"
+						className={sort ? "is-active" : ""}
+						onClick={() =>
+							setToolbarMenu(toolbarMenu === "sort" ? null : "sort")
+						}
 					>
-						<Plus aria-hidden="true" size={14} />
+						<ArrowUpDown size={14} />
+						Sort{sort && <span className="csv-toolbar-dot" />}
 					</button>
-				</>
-			) : null}
-			{menu && editing ? (
-				<CsvGridMenu
-					menu={menu}
-					menuRows={menuRows}
-					menuColumns={menuColumns}
-					columnTitle={
-						menu.kind === "column" ? parsed.columns[menu.column] : undefined
+					<label className="csv-table-search">
+						<Search size={14} />
+						<input
+							aria-label="Search table"
+							placeholder="Search"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+						/>
+						{search && (
+							<button
+								type="button"
+								aria-label="Clear search"
+								onClick={() => setSearch("")}
+							>
+								<X size={12} />
+							</button>
+						)}
+					</label>
+				</div>
+				{toolbarMenu && (
+					<CsvDismissiblePopover
+						key={toolbarMenu}
+						className={
+							toolbarMenu === "filter"
+								? "csv-compound-filter-popover"
+								: undefined
+						}
+						label={toolbarMenu === "sort" ? "Sort by" : "Filter by"}
+						trigger={toolbarMenu === "sort" ? sortTriggerRef : filterTriggerRef}
+						onDismiss={() => setToolbarMenu(null)}
+					>
+						<div className="csv-toolbar-popover-title">
+							{toolbarMenu === "sort" ? "Sort by" : "Filter by"}
+							<button
+								type="button"
+								aria-label="Close"
+								onClick={() => setToolbarMenu(null)}
+							>
+								<X size={14} />
+							</button>
+						</div>
+						{toolbarMenu === "filter" ? (
+							<CsvFilterRules
+								group={filter}
+								columns={parsed.columns}
+								columnInfo={columnInfo}
+								rows={sourceParsed.rows}
+								onChange={setFilter}
+							/>
+						) : (
+							<>
+								<CsvToolbarSelect
+									label="Sort column"
+									value={String(sort?.column ?? "")}
+									options={parsed.columns.map((label, index) => {
+										const Icon = CSV_TYPES.find(
+											(type) =>
+												type.type === (columnInfo[index]?.type ?? "text"),
+										)!.icon;
+										return {
+											value: String(index),
+											label,
+											icon: <Icon size={13} aria-hidden="true" />,
+										};
+									})}
+									onChange={(value) =>
+										setSort({
+											column: Number(value),
+											direction: sort?.direction ?? 1,
+										})
+									}
+								/>
+								{sort && (
+									<CsvToolbarSelect
+										label="Sort direction"
+										value={String(sort.direction)}
+										options={[
+											{ value: "1", label: "Ascending" },
+											{ value: "-1", label: "Descending" },
+										]}
+										onChange={(value) =>
+											setSort({ ...sort, direction: Number(value) as 1 | -1 })
+										}
+									/>
+								)}
+							</>
+						)}
+						<button
+							type="button"
+							className="csv-option-clear"
+							onClick={() => {
+								if (toolbarMenu === "sort") setSort(null);
+								else setFilter(EMPTY_CSV_FILTER);
+								setToolbarMenu(null);
+							}}
+						>
+							{toolbarMenu === "sort"
+								? "Remove sort"
+								: filter.rules.length > 1
+									? "Clear filters"
+									: "Remove filter"}
+						</button>
+					</CsvDismissiblePopover>
+				)}
+			</div>
+			<div
+				ref={containerRef}
+				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
+			>
+				<label
+					className="csv-select-all"
+					title={
+						selectedRows.length === rowMap.length && rowMap.length > 0
+							? "Deselect all rows"
+							: "Select all visible rows"
 					}
-					onClose={closeMenu}
-					onInsertRow={(atRow) =>
-						runStructuralEdit(() => editing.onInsertRow(atRow))
-					}
-					onDeleteRows={(rows) =>
-						runStructuralEdit(() => editing.onDeleteRows(rows))
-					}
-					onInsertColumn={(atColumn) =>
-						runStructuralEdit(() => editing.onInsertColumn(atColumn))
-					}
-					onDeleteColumns={(cols) =>
-						runStructuralEdit(() => editing.onDeleteColumns(cols))
-					}
-					onRenameColumn={(column, bounds) => {
-						closeMenu();
-						setRenaming({ column, bounds });
+				>
+					<input
+						type="checkbox"
+						aria-label="Select all visible rows"
+						checked={rowMap.length > 0 && selectedRows.length === rowMap.length}
+						disabled={rowMap.length === 0}
+						ref={(input) => {
+							if (input)
+								input.indeterminate =
+									selectedRows.length > 0 &&
+									selectedRows.length < rowMap.length;
+						}}
+						onChange={(event) => {
+							setGridSelection({
+								columns: CompactSelection.empty(),
+								rows: event.target.checked
+									? CompactSelection.fromSingleSelection([0, rowMap.length])
+									: CompactSelection.empty(),
+							});
+						}}
+						onKeyDown={(event) => {
+							if (event.key === "Escape") {
+								event.preventDefault();
+								clearSelection();
+							} else if (
+								editing &&
+								selectedRows.length > 0 &&
+								(event.key === "Delete" || event.key === "Backspace")
+							) {
+								event.preventDefault();
+								deleteSelectedRows();
+							}
+						}}
+					/>
+				</label>
+				<DataEditor
+					ref={gridRef}
+					renderers={csvCellRenderers}
+					imageWindowLoader={imageWindowLoader}
+					className="csv-data-grid"
+					drawCell={drawCell}
+					provideEditor={providePropertyEditor}
+					onCellClicked={(cell, event) => {
+						const [col, row] = cell,
+							info = columnInfo[col],
+							value = parsed.rows[row]?.cells[col] ?? "";
+						if (
+							!editing ||
+							info?.type !== "checkbox" ||
+							!/^(yes|no|true|false|1|0)?$/i.test(value)
+						)
+							return;
+						event.preventDefault();
+						const pair = /^(true|false)$/i.test(value)
+							? ["true", "false"]
+							: /^[01]$/.test(value)
+								? ["1", "0"]
+								: ["yes", "no"];
+						editing.onCellsEdited([
+							{
+								row: sourceRowIndex(row),
+								column: col,
+								value: /^(yes|true|1)$/i.test(value) ? pair[1]! : pair[0]!,
+							},
+						]);
 					}}
+					cellActivationBehavior="single-click"
+					headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
+					columns={columns}
+					rows={parsed.rows.length}
+					getCellContent={getCellContent}
+					getCellsForSelection={true}
+					width={gridWidth}
+					height={gridHeight}
+					rowMarkerWidth={ROW_MARKER_WIDTH}
+					rowHeight={wrappedLayout ? getRowHeight : ROW_HEIGHT}
+					headerHeight={HEADER_HEIGHT}
+					minColumnWidth={COLUMN_MIN_WIDTH}
+					maxColumnWidth={COLUMN_MAX_WIDTH}
+					maxColumnAutoWidth={COLUMN_MAX_WIDTH}
+					onColumnResizeEnd={onColumnResizeEnd}
+					rowMarkers={{
+						kind: selectedRows.length ? "checkbox-visible" : "both",
+						width: ROW_MARKER_WIDTH,
+						theme: {
+							accentColor: gridTheme.accentColor,
+							accentLight: gridTheme.accentLight,
+						},
+					}}
+					rangeSelect="multi-rect"
+					columnSelect="multi"
+					rowSelect="multi"
+					rowSelectionMode="multi"
+					copyHeaders={true}
+					gridSelection={gridSelection}
+					onGridSelectionChange={setGridSelection}
+					onDelete={(selection) => {
+						if (selection.rows.length > 0) {
+							if (editing) {
+								editing.onDeleteRows(
+									selection.rows
+										.toArray()
+										.filter((row) => row < rowMap.length)
+										.map(sourceRowIndex),
+								);
+								clearSelection();
+							}
+							return false;
+						}
+						return editable;
+					}}
+					drawHeader={drawCsvHeader}
+					onCellsEdited={editable ? handleCellsEdited : undefined}
+					onPaste={editable ? handlePaste : false}
+					fillHandle={editable}
+					onCellContextMenu={editable ? handleCellContextMenu : undefined}
+					onHeaderContextMenu={editable ? handleHeaderContextMenu : undefined}
+					onHeaderMenuClick={editable ? handleHeaderMenuClick : undefined}
+					onHeaderClicked={editable ? handleHeaderClicked : undefined}
+					freezeColumns={0}
+					fixedShadowX={false}
+					fixedShadowY={false}
+					smoothScrollX={true}
+					theme={gridTheme}
 				/>
-			) : null}
-			{renaming && editing ? (
-				<CsvHeaderRenameInput
-					key={renaming.column}
-					bounds={renaming.bounds}
-					initialValue={parsed.columns[renaming.column] ?? ""}
-					onCommit={(name) => commitRename(renaming.column, name)}
-					onCancel={() => setRenaming(null)}
-				/>
-			) : null}
-		</div>
-	);
-}
-
-function CsvHeaderRenameInput({
-	bounds,
-	initialValue,
-	onCommit,
-	onCancel,
-}: {
-	readonly bounds: Rectangle;
-	readonly initialValue: string;
-	readonly onCommit: (name: string) => void;
-	readonly onCancel: () => void;
-}) {
-	const [value, setValue] = useState(initialValue);
-	const inputRef = useRef<HTMLInputElement | null>(null);
-	useEffect(() => {
-		inputRef.current?.focus();
-		inputRef.current?.select();
-	}, []);
-	// Guards against the blur that fires while the input unmounts after
-	// Enter/Escape already resolved the rename.
-	const doneRef = useRef(false);
-	const finish = (action: () => void) => {
-		if (doneRef.current) return;
-		doneRef.current = true;
-		action();
-	};
-	return (
-		<input
-			className="csv-rename-input"
-			style={{
-				left: bounds.x,
-				top: bounds.y,
-				width: Math.max(bounds.width, 120),
-				height: bounds.height,
-			}}
-			value={value}
-			aria-label="Rename column"
-			ref={inputRef}
-			onChange={(event) => setValue(event.target.value)}
-			onBlur={() => finish(() => onCommit(value))}
-			onKeyDown={(event) => {
-				event.stopPropagation();
-				if (event.key === "Enter") {
-					event.preventDefault();
-					finish(() => onCommit(value));
-				} else if (event.key === "Escape") {
-					event.preventDefault();
-					finish(onCancel);
-				}
-			}}
-		/>
+				{editing &&
+				typeof gridWidth === "number" &&
+				typeof gridHeight === "number" ? (
+					<>
+						<button
+							type="button"
+							className="csv-append-column-strip"
+							style={{ left: gridWidth }}
+							title="Add column"
+							aria-label="Add column"
+							onClick={() => editing.onInsertColumn(columnCount)}
+						>
+							<Plus aria-hidden="true" size={14} />
+						</button>
+						<button
+							type="button"
+							className="csv-append-row-strip"
+							style={{ top: gridHeight, width: gridWidth }}
+							title="Add row"
+							aria-label="Add row"
+							onClick={() => {
+								setSearch("");
+								setFilter(EMPTY_CSV_FILTER);
+								setSort(null);
+								editing.onRowAppended();
+								requestAnimationFrame(() =>
+									gridRef.current?.scrollTo(0, sourceParsed.rows.length),
+								);
+							}}
+						>
+							<Plus aria-hidden="true" size={14} />
+							<span>New row</span>
+						</button>
+					</>
+				) : null}
+				{menu && editing ? (
+					menu.kind === "column" ? (
+						<CsvColumnMenu
+							x={menu.x}
+							y={menu.y}
+							title={parsed.columns[menu.column] ?? ""}
+							wrapped={wrappedColumns[menu.column]}
+							onToggleWrap={() => {
+								const key = columnInfo[menu.column]?.id ?? String(menu.column);
+								const wrap = !wrappedColumns[menu.column];
+								if (activeSavedView)
+									setWrapOverrides((previous) => ({
+										...previous,
+										[key]: wrap,
+									}));
+								else {
+									setWrapOverrides((previous) => {
+										const next = { ...previous };
+										delete next[key];
+										return next;
+									});
+									editing.onChangeColumn(menu.column, { wrap });
+								}
+							}}
+							info={
+								columnInfo[menu.column] ?? {
+									id: "",
+									header: parsed.columns[menu.column] ?? "",
+									index: menu.column,
+									type: "text",
+								}
+							}
+							optionValues={sourceParsed.rows.map(
+								(row) => row.cells[menu.column] ?? "",
+							)}
+							onEditOption={(edit) => {
+								if (!editing.onEditOption(menu.column, edit)) return;
+								if (edit.kind !== "move")
+									setFilter((previous) => ({
+										...previous,
+										rules: previous.rules.map((rule) => {
+											if (rule.column !== menu.column) return rule;
+											const values =
+												typeof rule.value === "string"
+													? [rule.value]
+													: rule.value;
+											return {
+												...rule,
+												value: values.flatMap((value) =>
+													value !== edit.value
+														? [value]
+														: edit.kind === "rename"
+															? [edit.name.trim()]
+															: [],
+												),
+											};
+										}),
+									}));
+							}}
+							onRename={(name) => editing.onRenameColumn(menu.column, name)}
+							onChange={(patch) => editing.onChangeColumn(menu.column, patch)}
+							onClose={closeMenu}
+							onInsertLeft={() =>
+								runStructuralEdit(() => editing.onInsertColumn(menu.column))
+							}
+							onInsertRight={() =>
+								runStructuralEdit(() => editing.onInsertColumn(menu.column + 1))
+							}
+							onDelete={() =>
+								runStructuralEdit(() => editing.onDeleteColumns(menuColumns))
+							}
+						/>
+					) : (
+						<CsvGridMenu
+							menu={menu}
+							menuRows={menuRows}
+							onClose={closeMenu}
+							onInsertRow={(atRow) =>
+								runStructuralEdit(() =>
+									editing.onInsertRow(sourceRowIndex(atRow)),
+								)
+							}
+							onDeleteRows={(rows) =>
+								runStructuralEdit(() =>
+									editing.onDeleteRows(rows.map(sourceRowIndex)),
+								)
+							}
+						/>
+					)
+				) : null}
+			</div>
+		</>
 	);
 }
 
@@ -1246,11 +2119,11 @@ function CsvHeaderRenameInput({
 const drawCsvHeader: DrawHeaderCallback = (args, drawContent) => {
 	if (args.isSelected) {
 		const { ctx, rect } = args;
-		ctx.fillStyle = CSV_GRID_THEME.bgHeader;
+		ctx.fillStyle = args.theme.bgHeader;
 		ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-		ctx.fillStyle = "rgba(234, 88, 12, 0.1)";
+		ctx.fillStyle = args.theme.accentLight;
 		ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-		ctx.fillStyle = CSV_GRID_THEME.accentColor;
+		ctx.fillStyle = args.theme.accentColor;
 		ctx.fillRect(rect.x, rect.y + rect.height - 2, rect.width, 2);
 	}
 	drawContent();
@@ -1259,32 +2132,28 @@ const drawCsvHeader: DrawHeaderCallback = (args, drawContent) => {
 function CsvGridMenu({
 	menu,
 	menuRows,
-	menuColumns,
-	columnTitle,
 	onClose,
 	onInsertRow,
 	onDeleteRows,
-	onInsertColumn,
-	onDeleteColumns,
-	onRenameColumn,
 }: {
-	readonly menu: CsvGridMenuState;
+	readonly menu: Extract<CsvGridMenuState, { kind: "row" }>;
 	readonly menuRows: readonly number[];
-	readonly menuColumns: readonly number[];
-	readonly columnTitle?: string | undefined;
 	readonly onClose: () => void;
 	readonly onInsertRow: (atRow: number) => void;
 	readonly onDeleteRows: (rows: readonly number[]) => void;
-	readonly onInsertColumn: (atColumn: number) => void;
-	readonly onDeleteColumns: (columns: readonly number[]) => void;
-	readonly onRenameColumn: (column: number, bounds: Rectangle) => void;
 }) {
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") onClose();
 		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
+		window.addEventListener("keydown", onKeyDown, true);
+		const frame = requestAnimationFrame(() =>
+			menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus(),
+		);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown, true);
+			cancelAnimationFrame(frame);
+		};
 	}, [onClose]);
 
 	// Clamp into the viewport so menus opened near the bottom/right edge
@@ -1292,65 +2161,44 @@ function CsvGridMenu({
 	const menuRef = useRef<HTMLDivElement | null>(null);
 	const [position, setPosition] = useState({ x: menu.x, y: menu.y });
 	useLayoutEffect(() => {
-		const rect = menuRef.current?.getBoundingClientRect();
-		if (!rect) return;
-		setPosition({
-			x: Math.max(0, Math.min(menu.x, window.innerWidth - rect.width - 8)),
-			y: Math.max(0, Math.min(menu.y, window.innerHeight - rect.height - 8)),
-		});
+		const update = () => {
+			const rect = menuRef.current?.getBoundingClientRect();
+			if (!rect) return;
+			setPosition({
+				x: Math.max(8, Math.min(menu.x, window.innerWidth - rect.width - 8)),
+				y: Math.max(8, Math.min(menu.y, window.innerHeight - rect.height - 8)),
+			});
+		};
+		update();
+		const observer =
+			typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+		if (menuRef.current) observer?.observe(menuRef.current);
+		window.addEventListener("resize", update);
+		return () => {
+			observer?.disconnect();
+			window.removeEventListener("resize", update);
+		};
 	}, [menu]);
 
-	const items =
-		menu.kind === "row"
-			? [
-					{
-						label: "Insert row above",
-						icon: ArrowUpToLine,
-						onSelect: () => onInsertRow(menu.row),
-					},
-					{
-						label: "Insert row below",
-						icon: ArrowDownToLine,
-						onSelect: () => onInsertRow(menu.row + 1),
-					},
-					{
-						label:
-							menuRows.length > 1
-								? `Delete ${menuRows.length} rows`
-								: "Delete row",
-						icon: Trash2,
-						destructive: true,
-						onSelect: () => onDeleteRows(menuRows),
-					},
-				]
-			: [
-					{
-						label: "Rename column",
-						icon: Pencil,
-						onSelect: () => onRenameColumn(menu.column, menu.headerBounds),
-					},
-					{
-						label: "Insert column left",
-						icon: ArrowLeftToLine,
-						onSelect: () => onInsertColumn(menu.column),
-					},
-					{
-						label: "Insert column right",
-						icon: ArrowRightToLine,
-						onSelect: () => onInsertColumn(menu.column + 1),
-					},
-					{
-						label:
-							menuColumns.length > 1
-								? `Delete ${menuColumns.length} columns`
-								: columnTitle
-									? `Delete column “${truncateLabel(columnTitle)}”`
-									: "Delete column",
-						icon: Trash2,
-						destructive: true,
-						onSelect: () => onDeleteColumns(menuColumns),
-					},
-				];
+	const items = [
+		{
+			label: "Insert row above",
+			icon: ArrowUpToLine,
+			onSelect: () => onInsertRow(menu.row),
+		},
+		{
+			label: "Insert row below",
+			icon: ArrowDownToLine,
+			onSelect: () => onInsertRow(menu.row + 1),
+		},
+		{
+			label:
+				menuRows.length > 1 ? `Delete ${menuRows.length} rows` : "Delete row",
+			icon: Trash2,
+			destructive: true,
+			onSelect: () => onDeleteRows(menuRows),
+		},
+	];
 
 	return (
 		<>
@@ -1365,8 +2213,31 @@ function CsvGridMenu({
 			/>
 			<div
 				ref={menuRef}
+				onKeyDown={(event) => {
+					if (!["ArrowDown", "ArrowUp", "Tab"].includes(event.key)) return;
+					if (
+						event.key !== "Tab" &&
+						["INPUT", "SELECT"].includes((event.target as HTMLElement).tagName)
+					)
+						return;
+					const focusTargets = Array.from(
+						event.currentTarget.querySelectorAll<HTMLElement>(
+							"button,input,select",
+						),
+					);
+					const index = focusTargets.indexOf(event.target as HTMLElement);
+					event.preventDefault();
+					focusTargets[
+						(index +
+							(event.key === "ArrowUp" || event.shiftKey ? -1 : 1) +
+							focusTargets.length) %
+							focusTargets.length
+					]?.focus();
+				}}
 				className="csv-grid-menu"
 				role="menu"
+				tabIndex={-1}
+				aria-label="Row actions"
 				style={{ left: position.x, top: position.y }}
 			>
 				{items.map((item) => (
@@ -1392,10 +2263,6 @@ function CsvGridMenu({
 			</div>
 		</>
 	);
-}
-
-function truncateLabel(label: string): string {
-	return label.length > 24 ? `${label.slice(0, 24)}…` : label;
 }
 
 /**
@@ -1547,6 +2414,7 @@ function buildHistoricalCsvFile(args: {
 				id: args.fileId,
 				path,
 				content: data,
+				lixcol_metadata: args.afterSnapshot?.lixcol_metadata,
 			},
 			review: null,
 			reviewData: undefined,
@@ -1581,6 +2449,7 @@ function buildHistoricalCsvFile(args: {
 			id: args.fileId,
 			path,
 			content: afterData,
+			lixcol_metadata: args.afterSnapshot?.lixcol_metadata,
 		},
 		review: {
 			fileId: args.fileId,
@@ -1595,6 +2464,8 @@ function buildHistoricalCsvFile(args: {
 			afterCommitId: args.revision.afterCommitId ?? "",
 		},
 		reviewData: {
+			beforeMetadata: args.beforeSnapshot?.lixcol_metadata,
+			afterMetadata: args.afterSnapshot?.lixcol_metadata,
 			beforeData,
 			afterData,
 		},
@@ -1623,7 +2494,8 @@ export const extension = createReactExtensionDefinition({
 		"bundled:atelier_csv/manifest.json",
 		JSON.stringify(manifestJson),
 	),
-	description: "Display and edit CSV files as a table.",
+	description:
+		"Edit CSV tables with optional typed columns, filters, and saved views.",
 	icon: Table2,
 	component: ({ atelier, view }) => (
 		<CsvView
