@@ -231,9 +231,25 @@
 		min-width: 11rem;
 	}
 
+	/* Each item carries its verb's icon, like the big half beside it; the
+	   shortcut sits at the far right. */
 	.external-write-review-verb-menu > button {
-		justify-content: space-between;
-		gap: 0.875rem;
+		gap: 0.5rem;
+	}
+
+	.external-write-review-verb-menu > button > svg {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex: none;
+	}
+
+	.external-write-review-verb-menu > button:disabled > svg {
+		opacity: 0.6;
+	}
+
+	.external-write-review-verb-menu kbd {
+		margin-left: auto;
+		padding-left: 0.875rem;
 	}
 
 	.external-write-review-verb-menu > button:disabled {

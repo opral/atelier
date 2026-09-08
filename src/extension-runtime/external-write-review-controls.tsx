@@ -549,6 +549,7 @@ export function ExternalWriteReviewControls({
 						disabled={readOnly || isCommitting}
 						onClick={() => void runPrimary("all")}
 					>
+						<PrimaryVerbIcon mode={mode} />
 						<span className="external-write-review-menu-name">
 							{verb.label} all {totalCount} files
 						</span>
@@ -571,6 +572,7 @@ export function ExternalWriteReviewControls({
 						disabled={readOnly || isCommitting || !activeFileId}
 						onClick={() => void runUndo("file")}
 					>
+						<RotateCcw aria-hidden="true" />
 						<span className="external-write-review-menu-name">
 							Undo only {navigation?.fileName ?? "this file"}
 						</span>
@@ -582,6 +584,7 @@ export function ExternalWriteReviewControls({
 						disabled={readOnly || isCommitting}
 						onClick={() => void runUndo("all")}
 					>
+						<RotateCcw aria-hidden="true" />
 						<span className="external-write-review-menu-name">
 							Undo all {totalCount} files
 						</span>
