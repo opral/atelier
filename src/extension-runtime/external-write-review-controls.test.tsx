@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { CsvReviewTrigger } from "../extensions/csv/csv-review-popover";
 import { ExternalWriteReviewControls } from "./external-write-review-controls";
@@ -222,7 +228,11 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(scopeRow("file-leads"));
 		// Once anything is left out the label drops the "Seen" prefix.
 		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("1 of 3");
-		expect(chip("Working set: 1 of 3 files")).not.toHaveTextContent("Seen");
+		expect(
+			within(chip("Working set: 1 of 3 files")).queryByText(/^Seen/, {
+				ignore: ".external-write-review-sizer",
+			}),
+		).toBeNull();
 		expect(scopeRow("file-leads")).toHaveAttribute("data-state", "left-out");
 		expect(
 			screen.getByRole("checkbox", { name: "Seen files" }),
@@ -591,7 +601,9 @@ describe("ExternalWriteReviewControls", () => {
 		expect(
 			screen.queryByRole("button", { name: "More undo options" }),
 		).toBeNull();
-		expect(screen.getByText("1 of 1")).toBeVisible();
+		expect(
+			screen.getByText("1 of 1", { ignore: ".external-write-review-sizer" }),
+		).toBeVisible();
 	});
 
 	test("read-only review keeps the float visible but disables mutations", () => {
@@ -657,6 +669,106 @@ describe("ExternalWriteReviewControls", () => {
 			),
 		);
 		expect(button).toBeEnabled();
+	});
+
+	test("opening review focuses the float; ← → step files from there only", () => {
+		const onPrevious = vi.fn();
+		const onNext = vi.fn();
+		render(
+			<>
+				<input aria-label="Elsewhere" />
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={{ ...NAVIGATION, onPrevious, onNext }}
+					files={FILES}
+					onPrimary={vi.fn()}
+				/>
+			</>,
+		);
+		const float = screen.getByRole("group", { name: "Diff review actions" });
+		expect(float).toHaveFocus();
+
+		fireEvent.keyDown(float, { key: "ArrowRight" });
+		expect(onNext).toHaveBeenCalledOnce();
+		fireEvent.keyDown(float, { key: "ArrowLeft" });
+		expect(onPrevious).toHaveBeenCalledOnce();
+		// From a button inside the float the arrows still step.
+		fireEvent.keyDown(screen.getByRole("button", { name: "Checkpoint" }), {
+			key: "ArrowRight",
+		});
+		expect(onNext).toHaveBeenCalledTimes(2);
+
+		// Outside the float the arrows belong to whatever has focus.
+		const elsewhere = screen.getByRole("textbox", { name: "Elsewhere" });
+		elsewhere.focus();
+		fireEvent.keyDown(elsewhere, { key: "ArrowRight" });
+		fireEvent.keyDown(document.body, { key: "ArrowLeft" });
+		expect(onNext).toHaveBeenCalledTimes(2);
+		expect(onPrevious).toHaveBeenCalledOnce();
+	});
+
+	test("the float takes focus back after a keyboard step opens the next file", () => {
+		const { rerender } = render(
+			<>
+				<input aria-label="Editor" />
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={NAVIGATION}
+					files={FILES}
+					onPrimary={vi.fn()}
+				/>
+			</>,
+		);
+		const float = screen.getByRole("group", { name: "Diff review actions" });
+		fireEvent.keyDown(float, { key: "ArrowRight" });
+		// The opened file's view grabs focus…
+		screen.getByRole("textbox", { name: "Editor" }).focus();
+		rerender(
+			<>
+				<input aria-label="Editor" />
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={{
+						...NAVIGATION,
+						fileName: "launch-post.md",
+						activeIndex: 1,
+					}}
+					files={FILES}
+					onPrimary={vi.fn()}
+				/>
+			</>,
+		);
+		// …and the float takes it back once the file is on screen.
+		expect(float).toHaveFocus();
+	});
+
+	test("the stepper reserves room for the longest file name and the widest counter", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileName: "icp.md", fileCount: 3 }}
+				files={[
+					{ id: "file-icp", path: "/icp.md" },
+					{ id: "file-long", path: "/gtm/company-brain-productization.md" },
+					{ id: "file-readme", path: "/README.md" },
+				]}
+				onPrimary={vi.fn()}
+			/>,
+		);
+		const sizers = document.querySelectorAll(".external-write-review-sizer");
+		const sizerTexts = Array.from(sizers, (node) => node.textContent);
+		expect(sizerTexts).toContain("company-brain-productization.md");
+		expect(sizerTexts).toContain("3 of 3");
+		expect(sizerTexts).toContain("Seen 3 of 3");
+		for (const sizer of sizers) {
+			expect(sizer).toHaveAttribute("aria-hidden", "true");
+		}
+		expect(screen.getByText("icp.md")).toBeVisible();
+		expect(screen.getByText("1 of 3")).toBeVisible();
 	});
 
 	test("puts the Esc Exit control at the far left of the float", () => {

@@ -162,6 +162,38 @@ export function ExternalWriteReviewControls({
 		wasActiveRef.current = isActive;
 	}, [isActive]);
 
+	// Opening review hands the keyboard to the float: ← → step through the
+	// changed files without leaving it. A step opens a file, which may pull
+	// focus into its view; the float takes it back once the file is on
+	// screen so the next arrow press still steps.
+	const refocusAfterStepRef = useRef(false);
+	useEffect(() => {
+		if (!isActive) return;
+		rootRef.current?.focus({ preventScroll: true });
+	}, [isActive]);
+	useEffect(() => {
+		if (!refocusAfterStepRef.current) return;
+		refocusAfterStepRef.current = false;
+		rootRef.current?.focus({ preventScroll: true });
+	}, [activeFileId]);
+	useEffect(() => {
+		const root = rootRef.current;
+		if (!root || !isActive || !navigation) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented) return;
+			if (event.metaKey || event.ctrlKey || event.altKey) return;
+			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+			event.preventDefault();
+			refocusAfterStepRef.current = true;
+			if (event.key === "ArrowLeft") {
+				navigation.onPrevious?.();
+			} else {
+				navigation.onNext?.();
+			}
+		};
+		root.addEventListener("keydown", handleKeyDown);
+		return () => root.removeEventListener("keydown", handleKeyDown);
+	}, [isActive, navigation]);
 	const seenFiles = listFiles.filter((file) => seenFileIds.has(file.id));
 	const unseenFiles = listFiles.filter((file) => !seenFileIds.has(file.id));
 	const tickedFiles = seenFiles.filter((file) => !leftOutFileIds.has(file.id));
@@ -339,6 +371,13 @@ export function ExternalWriteReviewControls({
 
 	const verb = PRIMARY_VERBS[mode];
 	const fileCount = navigation?.fileCount ?? listFiles.length;
+	// The name slot is sized by the longest file name (capped by the
+	// ellipsis) and the counter by its widest value, so the float keeps one
+	// width while stepping through files.
+	const longestFileName = listFiles.reduce((longest, file) => {
+		const name = fileNameFromDiffPath(file.path);
+		return name.length > longest.length ? name : longest;
+	}, navigation?.fileName ?? "");
 	const hasVisibleFile =
 		navigation !== undefined && navigation.activeIndex !== null;
 	// With no changed file on screen the arrows are the way to one.
@@ -374,6 +413,7 @@ export function ExternalWriteReviewControls({
 			role="group"
 			aria-label="Diff review actions"
 			data-diff-float-mode={mode}
+			tabIndex={-1}
 		>
 			{openMenu === "list" && hasScopeChip ? (
 				<div
@@ -590,9 +630,25 @@ export function ExternalWriteReviewControls({
 									className="external-write-review-file-icon"
 								/>
 								<span title={navigation.fileName}>
-									<strong>{navigation.fileName}</strong>
-									<small>
-										{navigation.activeIndex + 1} of {navigation.fileCount}
+									<strong className="external-write-review-stable">
+										<span
+											aria-hidden="true"
+											className="external-write-review-sizer"
+										>
+											{longestFileName}
+										</span>
+										<span>{navigation.fileName}</span>
+									</strong>
+									<small className="external-write-review-stable">
+										<span
+											aria-hidden="true"
+											className="external-write-review-sizer"
+										>
+											{navigation.fileCount} of {navigation.fileCount}
+										</span>
+										<span>
+											{navigation.activeIndex + 1} of {navigation.fileCount}
+										</span>
 									</small>
 								</span>
 							</>
@@ -641,7 +697,12 @@ export function ExternalWriteReviewControls({
 							className="external-write-review-ring"
 							style={ringStyle}
 						/>
-						<span>{chipLabel}</span>
+						<span className="external-write-review-stable">
+							<span aria-hidden="true" className="external-write-review-sizer">
+								Seen {totalCount} of {totalCount}
+							</span>
+							<span>{chipLabel}</span>
+						</span>
 						{openMenu === "list" ? (
 							<ChevronDown aria-hidden="true" />
 						) : (

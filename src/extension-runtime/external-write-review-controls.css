@@ -19,6 +19,30 @@
 			transform 0.15s ease;
 	}
 
+	/* The float takes keyboard focus when review opens (← → step files);
+	   the buttons inside keep their own focus rings. */
+	.external-write-review-actions:focus {
+		outline: none;
+	}
+
+	/* A slot that keeps one width while its text changes: the hidden sizer
+	   holds the widest value, the visible text sits on top of it. */
+	.external-write-review-stable {
+		display: inline-grid;
+	}
+
+	.external-write-review-stable > * {
+		grid-area: 1 / 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.external-write-review-sizer {
+		visibility: hidden;
+	}
+
 	.external-write-review-actions[data-presence="closing"] {
 		opacity: 0;
 		transform: translateX(-50%) translateY(0.5rem);
@@ -324,12 +348,9 @@
 	}
 
 	.external-write-review-navigation strong {
-		overflow: hidden;
 		max-width: 9rem;
 		font-size: 0.75rem;
 		font-weight: 700;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	.external-write-review-navigation small {
