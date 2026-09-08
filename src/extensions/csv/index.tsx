@@ -1,3 +1,4 @@
+import { compareCsvValues } from "./csv-sort";
 import {
 	wrapCsvText,
 	csvWrappedRowHeight,
@@ -1060,16 +1061,9 @@ function CsvTable({
 			rows.sort((a, b) => {
 				const av = sourceParsed.rows[a]!.cells[sort.column] ?? "",
 					bv = sourceParsed.rows[b]!.cells[sort.column] ?? "";
-				const numeric = columnInfo[sort.column]?.type === "number";
 				return (
 					sort.direction *
-					(numeric &&
-					av !== "" &&
-					bv !== "" &&
-					Number.isFinite(Number(av)) &&
-					Number.isFinite(Number(bv))
-						? Number(av) - Number(bv)
-						: av.localeCompare(bv, undefined, { numeric: true }))
+					compareCsvValues(av, bv, columnInfo[sort.column]?.type)
 				);
 			});
 		return rows;
@@ -1964,6 +1958,11 @@ function CsvTable({
 									value = parsed.rows[row]?.cells[col] ?? "";
 								if (
 									!editing ||
+									(!event.isTouch &&
+										(event.shiftKey ||
+											event.ctrlKey ||
+											event.metaKey ||
+											event.altKey)) ||
 									info?.type !== "checkbox" ||
 									!/^(yes|no|true|false|1|0)?$/i.test(value)
 								)

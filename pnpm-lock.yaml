@@ -11,7 +11,7 @@ overrides:
 
 patchedDependencies:
   '@glideapps/glide-data-grid@6.0.3':
-    hash: 89ad9a2aeef92d594107f70bae1d62acc61649d5c40ab15a3cb0011a1cc571fd
+    hash: 4caa186a2f62fb20d155a8c8b8f5a0656d0ec60a3b1d491a03192a29cbb7d56c
     path: patches/@glideapps__glide-data-grid@6.0.3.patch
   '@pierre/trees':
     hash: 9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6
@@ -71,7 +71,7 @@ importers:
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@glideapps/glide-data-grid':
         specifier: ^6.0.3
-        version: 6.0.3(patch_hash=89ad9a2aeef92d594107f70bae1d62acc61649d5c40ab15a3cb0011a1cc571fd)(lodash@4.18.1)(marked@16.4.2)(react-dom@19.2.7(react@19.2.7))(react-responsive-carousel@3.2.23)(react@19.2.7)
+        version: 6.0.3(patch_hash=4caa186a2f62fb20d155a8c8b8f5a0656d0ec60a3b1d491a03192a29cbb7d56c)(lodash@4.18.1)(marked@16.4.2)(react-dom@19.2.7(react@19.2.7))(react-responsive-carousel@3.2.23)(react@19.2.7)
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
@@ -5780,7 +5780,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
-  '@glideapps/glide-data-grid@6.0.3(patch_hash=89ad9a2aeef92d594107f70bae1d62acc61649d5c40ab15a3cb0011a1cc571fd)(lodash@4.18.1)(marked@16.4.2)(react-dom@19.2.7(react@19.2.7))(react-responsive-carousel@3.2.23)(react@19.2.7)':
+  '@glideapps/glide-data-grid@6.0.3(patch_hash=4caa186a2f62fb20d155a8c8b8f5a0656d0ec60a3b1d491a03192a29cbb7d56c)(lodash@4.18.1)(marked@16.4.2)(react-dom@19.2.7(react@19.2.7))(react-responsive-carousel@3.2.23)(react@19.2.7)':
     dependencies:
       '@linaria/react': 4.5.4(react@19.2.7)
       canvas-hypertxt: 1.0.3

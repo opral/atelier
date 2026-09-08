@@ -25,7 +25,7 @@ const metadata: CsvMetadata = {
 	],
 };
 
-async function setup(initialMetadata: unknown = null, readOnly = false) {
+async function setup(initialMetadata: unknown = null, initialReadOnly = false) {
 	const lix = await openLix();
 	const fileId = fakeUuid("csv_metadata_hook");
 	await lix.execute(
@@ -38,17 +38,27 @@ async function setup(initialMetadata: unknown = null, readOnly = false) {
 		],
 	);
 	const hook = renderHook(
-		() =>
+		({
+			readOnly,
+			reviewing = false,
+		}: {
+			readOnly: boolean;
+			reviewing?: boolean;
+		}) =>
 			useSyncedCsvFile({
 				fileId,
 				initialText: text,
 				initialMetadata,
 				readOnly,
-				reviewing: false,
+				reviewing,
 				reviewText: null,
 				originKey: "csv-test",
 			}),
 		{
+			initialProps: { readOnly: initialReadOnly } as {
+				readOnly: boolean;
+				reviewing?: boolean;
+			},
 			wrapper: ({ children }: { children: ReactNode }) => (
 				<LixProvider lix={lix}>{children}</LixProvider>
 			),
@@ -321,6 +331,445 @@ test("reconciles external column metadata observed while a content save is runni
 		);
 		expect(fixture.hook.result.current.text).toContain("Bob");
 	} finally {
+		await fixture.close();
+	}
+});
+
+test("queued CSV edits resume when a temporarily read-only view becomes editable", async () => {
+	const fixture = await setup();
+	let release = () => {};
+	try {
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		let gated = false;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (!gated && sql.startsWith("UPDATE")) {
+					gated = true;
+					await gate;
+				}
+				return execute(sql, params, options);
+			},
+		);
+		act(() => {
+			fixture.hook.result.current.persist(text.replace("Alice", "Bob"));
+			fixture.hook.result.current.persist(text.replace("Alice", "Carol"));
+		});
+		fixture.hook.rerender({ readOnly: true });
+		release();
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toContain("Bob"),
+		);
+		fixture.hook.rerender({ readOnly: false });
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toContain("Carol"),
+		);
+	} finally {
+		release();
+		await fixture.close();
+	}
+});
+test("rapid metadata-only changes do not rewrite external CSV bytes discovered during the first save", async () => {
+	const fixture = await setup();
+	let release = () => {};
+	try {
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		let gated = false;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (!gated && sql.startsWith("UPDATE lix_file SET lixcol_metadata")) {
+					gated = true;
+					await gate;
+				}
+				return execute(sql, params, options);
+			},
+		);
+		act(() => fixture.hook.result.current.persist(text, metadata));
+		await waitFor(() => expect(gated).toBe(true));
+		const latest = {
+			...metadata,
+			columns: metadata.columns.map((column) => ({ ...column, wrap: true })),
+		};
+		act(() => fixture.hook.result.current.persist(text, latest));
+		const external = "name,stage\nExternal,trial\n";
+		await execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+			new TextEncoder().encode(external),
+			fixture.fileId,
+		]);
+		release();
+		await waitFor(async () =>
+			expect((await fixture.read()).lixcol_metadata).toEqual({
+				atelier_csv: latest,
+			}),
+		);
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(external);
+		await waitFor(() =>
+			expect(fixture.hook.result.current.text).toBe(external),
+		);
+	} finally {
+		release();
+		await fixture.close();
+	}
+});
+
+test("a delayed reconciliation read cannot overwrite a newer observed external edit", async () => {
+	const fixture = await setup();
+	let releaseSave = () => {},
+		releaseRead = () => {};
+	try {
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		const saveGate = new Promise<void>((resolve) => (releaseSave = resolve));
+		const readGate = new Promise<void>((resolve) => (releaseRead = resolve));
+		let saved = false,
+			read = false;
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				const result = await execute(sql, params, options);
+				if (!saved && sql.startsWith("UPDATE lix_file SET content")) {
+					saved = true;
+					await saveGate;
+				} else if (
+					saved &&
+					!read &&
+					sql === "SELECT content, lixcol_metadata FROM lix_file WHERE id = $1"
+				) {
+					read = true;
+					await readGate;
+				}
+				return result;
+			},
+		);
+		act(() =>
+			fixture.hook.result.current.persist(text.replace("Alice", "Bob")),
+		);
+		await waitFor(() => expect(saved).toBe(true));
+		await act(async () => {
+			await execute("UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2", [
+				{ other: true },
+				fixture.fileId,
+			]);
+		});
+		releaseSave();
+		await waitFor(() => expect(read).toBe(true));
+		const external = text.replace("Alice", "External");
+		await act(async () => {
+			await execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+				new TextEncoder().encode(external),
+				fixture.fileId,
+			]);
+		});
+		await waitFor(() =>
+			expect(fixture.hook.result.current.text).toBe(external),
+		);
+		await act(async () => {
+			releaseRead();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+		expect(fixture.hook.result.current.text).toBe(external);
+	} finally {
+		releaseSave();
+		releaseRead();
+		await fixture.close();
+	}
+});
+
+test("a delayed read when leaving review cannot replace an edit saved since the read began", async () => {
+	const fixture = await setup();
+	let release = () => {};
+	try {
+		fixture.hook.rerender({ readOnly: false, reviewing: true });
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		let gated = false;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				const result = await execute(sql, params, options);
+				if (
+					!gated &&
+					sql === "SELECT content, lixcol_metadata FROM lix_file WHERE id = $1"
+				) {
+					gated = true;
+					await gate;
+				}
+				return result;
+			},
+		);
+		fixture.hook.rerender({ readOnly: false, reviewing: false });
+		await waitFor(() => expect(gated).toBe(true));
+		const edited = text.replace("Alice", "Edited");
+		act(() => fixture.hook.result.current.persist(edited));
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toBe(edited),
+		);
+		await act(async () => {
+			release();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+		expect(fixture.hook.result.current.text).toBe(edited);
+	} finally {
+		release();
+		await fixture.close();
+	}
+});
+
+test("opening and closing review preserves edits queued behind an in-flight save", async () => {
+	const fixture = await setup();
+	let release = () => {};
+	try {
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		let gated = false;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (!gated && sql.startsWith("UPDATE")) {
+					gated = true;
+					await gate;
+				}
+				return execute(sql, params, options);
+			},
+		);
+		act(() => {
+			fixture.hook.result.current.persist(text.replace("Alice", "Bob"));
+			fixture.hook.result.current.persist(text.replace("Alice", "Carol"));
+		});
+		fixture.hook.rerender({ readOnly: false, reviewing: true });
+		release();
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toContain("Bob"),
+		);
+		fixture.hook.rerender({ readOnly: false, reviewing: false });
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toContain("Carol"),
+		);
+	} finally {
+		release();
+		await fixture.close();
+	}
+});
+
+test.each([false, true])(
+	"queued metadata-only edit retains in-flight content intent (first write fails: %s)",
+	async (fail) => {
+		const fixture = await setup({ other: "keep" });
+		let release = () => {};
+		try {
+			const execute = fixture.lix.execute.bind(fixture.lix);
+			let gated = false;
+			const gate = new Promise<void>((resolve) => (release = resolve));
+			vi.spyOn(fixture.lix, "execute").mockImplementation(
+				async (sql, params, options) => {
+					if (!gated && sql.startsWith("UPDATE")) {
+						gated = true;
+						await gate;
+						if (fail) throw new Error("Temporary storage failure");
+					}
+					return execute(sql, params, options);
+				},
+			);
+			const edited = text.replace("Alice", "Bob");
+			act(() => {
+				fixture.hook.result.current.persist(edited);
+				fixture.hook.result.current.persist(edited, metadata);
+			});
+			release();
+			await waitFor(
+				async () => {
+					const row = await fixture.read();
+					expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+						edited,
+					);
+					expect(row.lixcol_metadata).toEqual({
+						other: "keep",
+						atelier_csv: metadata,
+					});
+					expect(fixture.hook.result.current.saveError).toBeNull();
+				},
+				{ timeout: 3500 },
+			);
+		} finally {
+			release();
+			await fixture.close();
+		}
+	},
+);
+
+test.each(["readOnly", "reviewing"] as const)(
+	"previously queued edits drain after unmount while %s blocks the view",
+	async (flag) => {
+		const fixture = await setup();
+		let release = () => {};
+		try {
+			const execute = fixture.lix.execute.bind(fixture.lix);
+			let gated = false;
+			const gate = new Promise<void>((resolve) => (release = resolve));
+			vi.spyOn(fixture.lix, "execute").mockImplementation(
+				async (sql, params, options) => {
+					if (!gated && sql.startsWith("UPDATE")) {
+						gated = true;
+						await gate;
+					}
+					return execute(sql, params, options);
+				},
+			);
+			act(() => {
+				fixture.hook.result.current.persist(text.replace("Alice", "Bob"));
+				fixture.hook.result.current.persist(text.replace("Alice", "Carol"));
+			});
+			fixture.hook.rerender({
+				readOnly: flag === "readOnly",
+				reviewing: flag === "reviewing",
+			});
+			fixture.hook.unmount();
+			release();
+			await waitFor(async () =>
+				expect(
+					new TextDecoder().decode(
+						(await fixture.read()).content as Uint8Array,
+					),
+				).toContain("Carol"),
+			);
+		} finally {
+			release();
+			await fixture.close();
+		}
+	},
+);
+
+test("fresh matrix: no-op content callback after metadata save keeps externally updated CSV bytes", async () => {
+	const fixture = await setup();
+	let release = () => {};
+	try {
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		let gated = false;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (!gated && sql.startsWith("UPDATE lix_file SET lixcol_metadata")) {
+					gated = true;
+					await gate;
+				}
+				return execute(sql, params, options);
+			},
+		);
+		act(() => fixture.hook.result.current.persist(text, metadata));
+		await waitFor(() => expect(gated).toBe(true));
+		act(() => fixture.hook.result.current.persist(text));
+		const external = text.replace("Alice", "External");
+		await execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+			new TextEncoder().encode(external),
+			fixture.fileId,
+		]);
+		release();
+		await waitFor(() =>
+			expect(fixture.hook.result.current.text).toBe(external),
+		);
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(external);
+	} finally {
+		release();
+		await fixture.close();
+	}
+});
+test("fresh matrix: repeated unchanged content does not create file writes", async () => {
+	const fixture = await setup();
+	try {
+		const spy = vi.spyOn(fixture.lix, "execute");
+		act(() => {
+			fixture.hook.result.current.persist(text);
+			fixture.hook.result.current.persist(text);
+		});
+		expect(
+			spy.mock.calls.filter(([sql]) => sql.startsWith("UPDATE")),
+		).toHaveLength(0);
+	} finally {
+		await fixture.close();
+	}
+});
+test("fresh matrix: an old file queue drains without changing a newly mounted file", async () => {
+	const fixture = await setup();
+	let release = () => {},
+		unmountNew = () => {};
+	try {
+		const nextId = fakeUuid("csv_new_file_after_switch");
+		await fixture.lix.execute(
+			"INSERT INTO lix_file (id,path,content) VALUES ($1,$2,$3)",
+			[nextId, "/next.csv", new TextEncoder().encode("name\nNext\n")],
+		);
+		const execute = fixture.lix.execute.bind(fixture.lix);
+		let gated = false;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		vi.spyOn(fixture.lix, "execute").mockImplementation(
+			async (sql, params, options) => {
+				if (
+					!gated &&
+					sql.startsWith("UPDATE") &&
+					params?.includes(fixture.fileId)
+				) {
+					gated = true;
+					await gate;
+				}
+				return execute(sql, params, options);
+			},
+		);
+		act(() => {
+			fixture.hook.result.current.persist(text.replace("Alice", "Bob"));
+			fixture.hook.result.current.persist(text.replace("Alice", "Carol"));
+		});
+		fixture.hook.unmount();
+		const next = renderHook(
+			() =>
+				useSyncedCsvFile({
+					fileId: nextId,
+					initialText: "name\nNext\n",
+					initialMetadata: null,
+					reviewText: null,
+					reviewing: false,
+					readOnly: false,
+					originKey: "next-test",
+				}),
+			{
+				wrapper: ({ children }: { children: ReactNode }) => (
+					<LixProvider lix={fixture.lix}>{children}</LixProvider>
+				),
+			},
+		);
+		unmountNew = next.unmount;
+		act(() => next.result.current.persist("name\nNew edit\n"));
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode(
+					(
+						await execute("SELECT content FROM lix_file WHERE id = $1", [
+							nextId,
+						])
+					).rows[0]!.content as Uint8Array,
+				),
+			).toContain("New edit"),
+		);
+		release();
+		await waitFor(async () =>
+			expect(
+				new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+			).toContain("Carol"),
+		);
+		expect(next.result.current.text).toBe("name\nNew edit\n");
+	} finally {
+		release();
+		unmountNew();
 		await fixture.close();
 	}
 });

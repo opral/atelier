@@ -87,9 +87,18 @@ export function buildCsvReviewModel(input: {
 		const id = afterInfo[i]?.id;
 		if (id) matchColumn(i, (j) => beforeInfo[j]?.id === id);
 	});
+	// Once both sides declare identity, matching names or values cannot
+	// override a delete/recreate with a different stable column ID.
+	const compatibleIdentity = (a: number, b: number) =>
+		!afterInfo[a]?.id ||
+		!beforeInfo[b]?.id ||
+		afterInfo[a]!.id === beforeInfo[b]!.id;
 	afterHeaders.forEach((header, i) => {
 		if (!matchedColumns.has(i))
-			matchColumn(i, (j) => beforeHeaders[j] === header);
+			matchColumn(
+				i,
+				(j) => compatibleIdentity(i, j) && beforeHeaders[j] === header,
+			);
 	});
 	// Without stable metadata IDs, recognize a renamed column only when its data
 	// uniquely agrees. Never pair unrelated deleted/inserted columns by position.
@@ -98,6 +107,7 @@ export function buildCsvReviewModel(input: {
 			if (matchedColumns.has(i)) return;
 			const candidates = beforeHeaders.flatMap((_header, j) =>
 				!usedColumns.has(j) &&
+				compatibleIdentity(i, j) &&
 				before.rows.some((row) => (row.cells[j] ?? "").trim() !== "") &&
 				before.rows.every((row, r) => row.cells[j] === after.rows[r]?.cells[i])
 					? [j]

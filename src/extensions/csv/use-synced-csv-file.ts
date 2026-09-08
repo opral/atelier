@@ -18,6 +18,7 @@ type Options = {
 	originKey: string;
 };
 type Pending = { text: string; metadata?: CsvMetadata };
+type QueuedWrite = Pending & { writeContent: boolean };
 const equalMetadata = (
 	a: CsvMetadata | undefined,
 	b: CsvMetadata | undefined,
@@ -46,12 +47,15 @@ export function useSyncedCsvFile({
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const local = useRef<Pending>({ text, metadata });
 	const clean = useRef<Pending>({ text: initialText, metadata });
-	const queued = useRef<Pending | null>(null);
+	const queued = useRef<QueuedWrite | null>(null);
 	const running = useRef(false);
 	const observationSkipped = useRef(false);
 	const editSequence = useRef(0);
+	const observationSequence = useRef(0);
 	const reviewingRef = useRef(reviewing);
 	reviewingRef.current = reviewing;
+	const readOnlyRef = useRef(readOnly);
+	readOnlyRef.current = readOnly;
 	const blocked = useRef(reviewing || readOnly);
 	blocked.current = reviewing || readOnly;
 	const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,8 +70,9 @@ export function useSyncedCsvFile({
 				const next = queued.current;
 				queued.current = null;
 				try {
+					let storedText = next.text;
 					if (next.metadata === undefined) {
-						if (next.text !== clean.current.text) {
+						if (next.writeContent) {
 							const result = await lix.execute(
 								"UPDATE lix_file SET content = $1 WHERE id = $2",
 								[new TextEncoder().encode(next.text), fileId],
@@ -77,25 +82,25 @@ export function useSyncedCsvFile({
 								throw new Error(
 									"Could not save because the file no longer exists.",
 								);
-						}
+						} else storedText = clean.current.text;
 					} else {
-						const storedText = await writeCsvMetadata(
+						storedText = await writeCsvMetadata(
 							lix,
 							fileId,
 							next,
-							next.text !== clean.current.text,
+							next.writeContent,
 							originKey,
 						);
-						if (
-							storedText !== next.text &&
-							local.current.text === next.text &&
-							queued.current === null
-						) {
-							local.current = { ...local.current, text: storedText };
-							setText(storedText);
-						}
-						next.text = storedText;
 					}
+					if (
+						storedText !== next.text &&
+						local.current.text === next.text &&
+						queued.current === null
+					) {
+						local.current = { ...local.current, text: storedText };
+						setText(storedText);
+					}
+					next.text = storedText;
 					clean.current = {
 						text: next.text,
 						metadata: next.metadata ?? clean.current.metadata,
@@ -104,9 +109,13 @@ export function useSyncedCsvFile({
 				} catch (error) {
 					failed = true;
 					// Preserve a failed schema update even if a newer content-only edit arrived.
-					const newer = queued.current as Pending | null;
+					const newer = queued.current as QueuedWrite | null;
 					queued.current = newer
-						? { text: newer.text, metadata: newer.metadata ?? next.metadata }
+						? {
+								text: newer.text,
+								metadata: newer.metadata ?? next.metadata,
+								writeContent: newer.writeContent || next.writeContent,
+							}
 						: next;
 					setSaveError(
 						error instanceof Error ? error.message : "Could not save CSV",
@@ -125,6 +134,7 @@ export function useSyncedCsvFile({
 			else if (!failed && observationSkipped.current && !blocked.current) {
 				observationSkipped.current = false;
 				const sequence = editSequence.current;
+				const observation = observationSequence.current;
 				void lix
 					.execute(
 						"SELECT content, lixcol_metadata FROM lix_file WHERE id = $1",
@@ -135,7 +145,8 @@ export function useSyncedCsvFile({
 							blocked.current ||
 							running.current ||
 							queued.current ||
-							sequence !== editSequence.current
+							sequence !== editSequence.current ||
+							observation !== observationSequence.current
 						)
 							return;
 						const row = result.rows[0];
@@ -159,6 +170,11 @@ export function useSyncedCsvFile({
 		(nextText: string, nextMetadata?: CsvMetadata) => {
 			if (blocked.current) return;
 			editSequence.current += 1;
+			// Preserve the user's intent at edit time. A metadata-only edit must
+			// not become a content write when an earlier save discovers new bytes.
+			const writeContent =
+				nextText !== local.current.text ||
+				Boolean(queued.current?.writeContent);
 			local.current = {
 				text: nextText,
 				metadata: nextMetadata ?? local.current.metadata,
@@ -166,6 +182,7 @@ export function useSyncedCsvFile({
 			setText(nextText);
 			if (nextMetadata !== undefined) setMetadata(nextMetadata);
 			queued.current = {
+				writeContent,
 				text: nextText,
 				metadata: nextMetadata ?? queued.current?.metadata,
 			};
@@ -175,11 +192,28 @@ export function useSyncedCsvFile({
 	);
 
 	useEffect(() => {
+		blocked.current = reviewingRef.current || readOnlyRef.current;
+		return () => {
+			// The closed view cannot accept new edits. Finish writes that the user
+			// already made, even if review or a read-only state paused the queue.
+			blocked.current = false;
+			void flush();
+		};
+	}, [flush]);
+
+	useEffect(() => {
+		if (!reviewing && !readOnly) void flush();
+	}, [reviewing, readOnly, flush]);
+
+	useEffect(() => {
+		let canceled = false;
 		if (reviewing) {
-			queued.current = null;
+			// Existing edits stay queued while review blocks new writes.
 			if (reviewText !== null) setText(reviewText);
 		}
 		if (!reviewing && wasReviewing.current) {
+			const sequence = editSequence.current;
+			const observation = observationSequence.current;
 			void lix
 				.execute(
 					"SELECT content, lixcol_metadata FROM lix_file WHERE id = $1",
@@ -187,7 +221,15 @@ export function useSyncedCsvFile({
 				)
 				.then((result) => {
 					const row = result.rows[0];
-					if (!row || reviewingRef.current || running.current || queued.current)
+					if (
+						!row ||
+						canceled ||
+						sequence !== editSequence.current ||
+						observation !== observationSequence.current ||
+						reviewingRef.current ||
+						running.current ||
+						queued.current
+					)
 						return;
 					const next = {
 						text: decodeFileDataToText(row.content),
@@ -197,13 +239,17 @@ export function useSyncedCsvFile({
 					setText(next.text);
 					setMetadata(next.metadata);
 				})
-				.catch((error) =>
-					setSaveError(
-						error instanceof Error ? error.message : "Could not reload CSV",
-					),
-				);
+				.catch((error) => {
+					if (!canceled)
+						setSaveError(
+							error instanceof Error ? error.message : "Could not reload CSV",
+						);
+				});
 		}
 		wasReviewing.current = reviewing;
+		return () => {
+			canceled = true;
+		};
 	}, [fileId, lix, reviewing, reviewText]);
 
 	useEffect(() => {
@@ -219,7 +265,9 @@ export function useSyncedCsvFile({
 					const event = await events.next();
 					if (!event || closed) continue;
 					const row = event.result.rows[0];
-					if (!row || reviewingRef.current) continue;
+					if (!row) continue;
+					observationSequence.current += 1;
+					if (reviewingRef.current) continue;
 					if (running.current || queued.current) {
 						observationSkipped.current = true;
 						continue;

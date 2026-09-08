@@ -1,3 +1,4 @@
+import { compareCsvValues } from "./csv-sort";
 import {
 	useLayoutEffect,
 	useRef,
@@ -142,17 +143,7 @@ export function CsvReviewGrid({
 					const av = a.cells[column]?.value ?? "",
 						bv = b.cells[column]?.value ?? "";
 					return (
-						sort.direction *
-						(info[sort.column]?.type === "number" &&
-						av.trim() &&
-						bv.trim() &&
-						Number.isFinite(Number(av)) &&
-						Number.isFinite(Number(bv))
-							? Number(av) - Number(bv)
-							: av.localeCompare(bv, undefined, {
-									numeric: true,
-									sensitivity: "base",
-								}))
+						sort.direction * compareCsvValues(av, bv, info[sort.column]?.type)
 					);
 				});
 		}

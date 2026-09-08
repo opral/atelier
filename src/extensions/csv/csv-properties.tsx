@@ -309,6 +309,8 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			style={{ position: "fixed", left: x, top: y, width, maxHeight: height }}
 			onKeyDown={(e) => {
 				e.stopPropagation();
+				// Enter/Escape belong to the IME while a candidate is composing.
+				if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
 				if (e.key === "Escape") {
 					e.preventDefault();
 					onFinishedEditing();

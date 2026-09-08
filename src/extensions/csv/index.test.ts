@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { ExternalWriteReviewData } from "@/extension-runtime/external-write-review";
+import { csvDocumentView, parseCsvDocument } from "./csv-document";
 import { parseCsv, renderCsvReviewDiffHtml } from "./index";
 
 describe("parseCsv", () => {
@@ -95,5 +96,26 @@ describe("renderCsvReviewDiffHtml", () => {
 		expect(html).not.toMatch(/<[^>]+\son[a-z]+\s*=/i);
 		expect(html).toContain("&lt;img");
 		expect(html).toContain("&lt;script&gt;");
+	});
+});
+
+describe("CSV QA: consistent review and live records", () => {
+	test.each([
+		"name,value\nalpha,1\n,\n",
+		"name\nvalue\n\n",
+		'name\n" "',
+		"a,b\r\n1,2\n3,4\r",
+		'a,b\nx"y,"z" trailing\n',
+	])("preserves live rows in review: %j", (source) => {
+		expect(parseCsv(source)).toEqual(csvDocumentView(parseCsvDocument(source)));
+	});
+	test("keeps generated headers distinct from literal numbered headers", () => {
+		expect(parseCsv("name,name,name 2,,Column 4\na,b,c,d,e").columns).toEqual([
+			"name",
+			"name 3",
+			"name 2",
+			"Column 4",
+			"Column 4 2",
+		]);
 	});
 });
