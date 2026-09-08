@@ -106,7 +106,7 @@ function WorkingChangesRow({
 	return (
 		<div
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-[8px] border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
 					: "border-transparent"
@@ -120,7 +120,7 @@ function WorkingChangesRow({
 					onClick={toggleWorkingChanges}
 					onMouseDown={(event) => event.preventDefault()}
 					data-attr="history-working-changes"
-					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
+					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
 				>
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
 						<span
@@ -153,7 +153,7 @@ function WorkingChangesRow({
 						disabled={checkpointingAll}
 						title={checkpointAllError ?? "Seal every working change"}
 						data-attr="history-checkpoint-all"
-						className={`my-1.5 mr-1.5 inline-flex h-6 shrink-0 items-center gap-1 self-start rounded-[6px] border border-[var(--color-border-brand-soft)] px-1.5 text-[11.5px] font-semibold text-[var(--color-brand-700)] transition-colors hover:bg-[var(--color-bg-brand-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-default disabled:opacity-60 ${wide ? "" : "ml-1"}`}
+						className={`my-1.5 mr-1.5 inline-flex h-6 shrink-0 items-center gap-1 self-start rounded-[6px] border border-[var(--color-border-brand-soft)] px-1.5 text-[11.5px] font-semibold text-[var(--color-text-brand)] transition-colors hover:bg-[var(--color-bg-brand-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-default disabled:opacity-60 ${wide ? "" : "ml-1"}`}
 					>
 						<Flag aria-hidden="true" className="h-3 w-3" />
 						Checkpoint all
@@ -301,7 +301,7 @@ function CheckpointItem({
 	return (
 		<li
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-[8px] border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
 					: "border-transparent"
@@ -325,7 +325,7 @@ function CheckpointItem({
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-[8px] py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${
+				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${
 					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
 				}`}
 			>

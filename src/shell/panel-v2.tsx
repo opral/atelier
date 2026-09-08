@@ -617,12 +617,12 @@ function SidebarSectionPicker({
 					// while open, which is the whole affordance. px-1.5 puts the label
 					// text on the sidebar's content column — the same x as the tree
 					// rows' icons, whose centers sit under the top bar's mark.
-					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-neutral-600)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
+					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
 				>
 					<span>{activeLabel}</span>
 					<ChevronDown
 						aria-hidden="true"
-						className="size-2.25 text-[var(--color-icon-quaternary)] transition-[transform,color] group-hover/section:text-[var(--color-neutral-600)] group-data-[state=open]/section:rotate-180 group-data-[state=open]/section:text-[var(--color-neutral-600)]"
+						className="size-2.25 text-[var(--color-icon-quaternary)] transition-[transform,color] group-hover/section:text-[var(--color-icon-secondary)] group-data-[state=open]/section:rotate-180 group-data-[state=open]/section:text-[var(--color-icon-secondary)]"
 						strokeWidth={2.6}
 					/>
 				</button>
@@ -939,7 +939,7 @@ function AddViewMenu({
 				{availableViews.length === 0 ? (
 					<DropdownMenuItem
 						disabled
-						className="h-7 rounded-[7px] px-2 text-xs font-medium text-[var(--color-text-tertiary)]"
+						className="h-7 rounded-control px-2 text-xs font-medium text-[var(--color-text-tertiary)]"
 					>
 						No views available
 					</DropdownMenuItem>
@@ -951,7 +951,7 @@ function AddViewMenu({
 								selectedViewRef.current = true;
 								onAddView(ext.kind);
 							}}
-							className="h-7 rounded-[7px] px-2 text-xs font-medium text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]"
+							className="h-7 rounded-control px-2 text-xs font-medium text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]"
 						>
 							<ext.icon className="h-4 w-4" />
 							<span>{ext.label}</span>
@@ -1546,7 +1546,7 @@ const fileGlyphForLabel = (label: string): TabIcon | null => {
 };
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center rounded-[7px] border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
+	"group relative flex h-7 flex-none max-w-80 items-center rounded-control border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;

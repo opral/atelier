@@ -1,8 +1,8 @@
 @scope (.atelier-root) {
 	.atelier-text-view,
 	.atelier-text-surface {
-		--atelier-text-selection-bg: rgb(224, 216, 207);
-		--atelier-text-selection-fg: var(--color-neutral-900);
+		--atelier-text-selection-bg: var(--color-bg-selection-text);
+		--atelier-text-selection-fg: var(--color-text-primary);
 		position: relative;
 		display: flex;
 		min-height: 0;
@@ -84,7 +84,7 @@
 	}
 
 	.atelier-text-editor-host .cm-scroller {
-		scrollbar-color: var(--color-neutral-300) transparent;
+		scrollbar-color: var(--color-bg-control) transparent;
 		scrollbar-width: thin;
 	}
 

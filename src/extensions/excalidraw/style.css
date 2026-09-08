@@ -37,8 +37,8 @@
 	--island-bg-color: var(--color-bg-panel);
 	--default-bg-color: var(--color-bg-panel);
 	--color-surface-lowest: var(--color-bg-panel);
-	--color-surface-low: rgb(245, 242, 237);
-	--color-surface-mid: rgb(245, 242, 237);
+	--color-surface-low: var(--color-bg-hover);
+	--color-surface-mid: var(--color-bg-hover);
 	--color-surface-high: rgb(240, 236, 230);
 	--color-on-surface: var(--color-text-primary);
 	--text-primary-color: var(--color-text-primary);

@@ -30,7 +30,7 @@
 		margin-top: 8px;
 		padding: 6px 14px;
 		border: 1px solid var(--color-bg-action-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-control);
 		background: var(--color-bg-action-primary);
 		color: var(--color-text-on-action-primary);
 		font-size: 13px;
@@ -61,8 +61,8 @@
 		font-weight: 400;
 		cursor: pointer;
 		transition:
-			background-color 120ms ease,
-			color 120ms ease;
+			background-color var(--duration-base) ease,
+			color var(--duration-base) ease;
 	}
 	.csv-append-column-strip {
 		top: 0;
@@ -105,7 +105,7 @@
 		flex-direction: column;
 		padding: 4px;
 		border: 1px solid var(--color-border-panel);
-		border-radius: 9px;
+		border-radius: var(--radius-panel);
 		background: var(--background);
 		box-shadow: var(--shadow-lg);
 	}
@@ -114,7 +114,8 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		border-radius: 6px;
+		min-height: 30px;
+		border-radius: var(--radius-control);
 		padding: 5px 8px;
 		color: var(--color-text-secondary);
 		font-size: 12.5px;
@@ -125,7 +126,7 @@
 
 	.csv-grid-menu-item-icon {
 		flex-shrink: 0;
-		color: var(--color-icon-secondary, var(--color-text-tertiary));
+		color: var(--color-icon-secondary);
 	}
 
 	.csv-grid-menu-item-destructive .csv-grid-menu-item-icon {
@@ -133,7 +134,7 @@
 	}
 
 	.csv-grid-menu-item:hover {
-		background: var(--color-bg-hover, rgba(28, 25, 23, 0.06));
+		background: var(--color-bg-hover);
 	}
 
 	.csv-grid-menu-item-destructive {
@@ -141,6 +142,6 @@
 	}
 
 	.csv-grid-menu-item-destructive:hover {
-		background: var(--color-error-50);
+		background: var(--color-bg-status-danger);
 	}
 }

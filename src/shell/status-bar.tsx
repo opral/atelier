@@ -94,7 +94,7 @@ function AutoAcceptToggle({
 		<label
 			className={`inline-flex h-5 cursor-pointer select-none items-center gap-1.5 font-semibold transition-colors ${
 				checked
-					? "text-[var(--color-brand-700)]"
+					? "text-[var(--color-text-brand)]"
 					: "text-[var(--color-text-tertiary)]"
 			}`}
 		>
@@ -112,7 +112,7 @@ function AutoAcceptToggle({
 				aria-hidden="true"
 				className={`relative h-3 w-5 shrink-0 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-ring-focus-visible)] peer-focus-visible:ring-offset-1 ${
 					checked
-						? "border-[var(--color-brand-600)] bg-[var(--color-brand-600)]"
+						? "border-[var(--color-bg-control-checked)] bg-[var(--color-bg-control-checked)]"
 						: "border-[var(--color-border-panel)] bg-[var(--color-bg-control)]"
 				}`}
 			>

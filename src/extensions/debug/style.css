@@ -46,7 +46,7 @@
 
 	.atelier-debug-branch code,
 	.atelier-debug-elapsed {
-		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 	}
 
 	.atelier-debug-branch code {
@@ -124,7 +124,7 @@
 		flex-shrink: 0;
 		border-bottom: 1px solid var(--color-border-subtle);
 		padding: 8px 16px;
-		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 		font-size: 11.5px;
 	}
 
@@ -159,7 +159,7 @@
 	}
 
 	.atelier-debug-result-error {
-		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 		color: var(--color-text-status-danger);
 	}
 
@@ -168,7 +168,7 @@
 		flex-shrink: 0;
 		border-top: 1px solid var(--color-border-subtle);
 		padding: 7px 12px;
-		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 		font-size: 10.5px;
 		color: var(--color-text-tertiary);
 	}

@@ -114,6 +114,59 @@
 	--color-border-table-grid: var(--color-border-subtle);
 	--color-bg-table-row-hover: rgb(250, 246, 240);
 
+	/* Controls. */
+	--color-bg-control: var(--color-neutral-300);
+	--color-bg-control-checked: var(--color-brand-600);
+	--color-border-drop-target: var(--color-brand-500);
+	/* Plain-text editor selection (the browser default is too blue for the warm UI). */
+	--color-bg-selection-text: rgb(224, 216, 207);
+	/* Brand-toned text that is not a link (labels, chips, review titles). */
+	--color-text-brand: var(--color-brand-700);
+	--color-border-strong: var(--color-neutral-300);
+	--color-bg-brand-subtle: var(--color-bg-brand-soft);
+	/* Status fills pair with the text-status-* colors above. */
+	--color-bg-status-danger: var(--color-error-50);
+	--color-bg-status-success: var(--color-success-50);
+	--color-text-status-warning: var(--color-warning-700);
+	--color-scrollbar-thumb: color-mix(
+		in srgb,
+		var(--color-neutral-500) 60%,
+		transparent
+	);
+	--color-icon-folder: rgb(96, 165, 250);
+
+	/* Inverse surface: dark chrome floating over the light UI (review pill,
+	   media frames, player controls). Prominence follows the light set. */
+	--color-bg-inverse: var(--color-neutral-900);
+	--color-bg-inverse-raised: rgb(42, 38, 32);
+	--color-bg-inverse-hover: rgb(58, 53, 47);
+	--color-bg-inverse-media: rgb(23, 20, 15);
+	--color-bg-inverse-overlay: rgba(255, 255, 255, 0.09);
+	--color-bg-inverse-overlay-strong: rgba(255, 255, 255, 0.16);
+	--color-bg-inverse-scrim: rgba(20, 16, 10, 0.55);
+	--color-border-inverse: rgb(58, 53, 47);
+	--color-border-inverse-strong: rgb(87, 83, 78);
+	--color-border-inverse-hairline: rgba(255, 255, 255, 0.09);
+	--color-text-inverse-primary: rgb(231, 226, 218);
+	--color-text-inverse-secondary: rgb(201, 194, 184);
+	--color-text-inverse-tertiary: rgb(140, 133, 124);
+	--color-text-inverse-brand: rgb(232, 168, 124);
+	--color-text-inverse-danger: rgb(235, 165, 156);
+	--color-text-inverse-danger-hover: rgb(244, 198, 191);
+	--color-border-inverse-danger: rgb(90, 58, 58);
+	--color-text-inverse-success: rgb(167, 217, 180);
+	--shadow-inverse: 0 14px 32px rgba(28, 25, 23, 0.42);
+
+	/* Code syntax. One restrained palette for the text editor and markdown
+	   code blocks: keywords and literals carry a hue, the rest reads as text. */
+	--color-syntax-keyword: oklch(0.5 0.14 245);
+	--color-syntax-string: oklch(0.49 0.11 155);
+	--color-syntax-number: var(--color-syntax-string);
+	--color-syntax-comment: var(--color-text-tertiary);
+	--color-syntax-type: var(--color-text-primary);
+	--color-syntax-property: var(--color-text-secondary);
+	--color-syntax-invalid: var(--color-error-700);
+
 	--color-error-50: rgb(254, 242, 242);
 	--color-error-100: rgb(254, 226, 226);
 	--color-error-200: rgb(254, 202, 202);
@@ -151,8 +204,28 @@
 	--shadow-lg:
 		0px 12px 32px -4px rgba(0, 0, 0, 0.08), 0px 4px 8px -2px rgba(0, 0, 0, 0.08);
 
-	/* Border radiuses */
+	/* Border radiuses. Tags sit inside controls, controls inside panels. */
+	--radius-tag: 3px;
+	--radius-control: 7px;
+	--radius-panel: 8px;
 	--radius-full: 9999px;
+
+	/* UI type scale. Document typography (markdown) keeps its own editorial
+	   scale; everything else picks from these. Each size carries its line
+	   height as a Tailwind text-* utility. */
+	--text-ui-xs: 11px;
+	--text-ui-xs--line-height: 16px;
+	--text-ui-sm: 11.5px;
+	--text-ui-sm--line-height: 16px;
+	--text-ui: 12.5px;
+	--text-ui--line-height: 16px;
+	--text-ui-lg: 13px;
+	--text-ui-lg--line-height: 20px;
+
+	/* Motion. */
+	--duration-fast: 100ms;
+	--duration-base: 120ms;
+	--duration-slow: 160ms;
 }
 
 @custom-variant mobile (@media (max-width: 767px));
