@@ -33,13 +33,11 @@ export function CheckpointStatusBar({
 	readOnly = false,
 	autoAcceptAgentChanges = false,
 	onAutoAcceptAgentChangesChange,
-	onOpenWorkingChanges,
 	onOpenHistory,
 }: {
 	readonly readOnly?: boolean;
 	readonly autoAcceptAgentChanges?: boolean;
 	readonly onAutoAcceptAgentChangesChange?: (enabled: boolean) => void;
-	readonly onOpenWorkingChanges?: () => void;
 	readonly onOpenHistory?: () => void;
 }): JSX.Element {
 	const workingChangeCount = useQueryResult((queryLix) =>
@@ -64,7 +62,7 @@ export function CheckpointStatusBar({
 			<CheckpointStatus
 				statusLabel={`${workingCountLabel} since checkpoint`}
 				hasWorkingChanges
-				onActivate={onOpenWorkingChanges}
+				onActivate={onOpenHistory}
 			/>
 		);
 
@@ -138,9 +136,7 @@ function CheckpointStatus({
 	readonly hasWorkingChanges?: boolean;
 	readonly onActivate?: () => void;
 }): JSX.Element {
-	const actionLabel = hasWorkingChanges
-		? "Open changes review"
-		: "Open checkpoint history";
+	const actionLabel = "Open checkpoint history";
 
 	return onActivate ? (
 		<button

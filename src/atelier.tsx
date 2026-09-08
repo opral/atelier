@@ -14,6 +14,7 @@ import {
 	type AtelierInstance,
 } from "./atelier-instance";
 import { FileView } from "./file-view";
+import { History } from "./history";
 
 /** Commands owned by a mounted workspace. The host owns the Lix lifecycle. */
 export type AtelierShellHandle = Pick<AtelierInstance, "documents" | "views">;
@@ -96,4 +97,9 @@ function Shell({
 	);
 }
 
-export const Atelier = { Shell, FileView, ShellSkeleton: AtelierSkeleton };
+export const Atelier = {
+	Shell,
+	FileView,
+	History,
+	ShellSkeleton: AtelierSkeleton,
+};

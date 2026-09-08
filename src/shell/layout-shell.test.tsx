@@ -33,6 +33,17 @@ import {
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { AtelierEvent } from "@/extension-api";
 
+async function openWorkingChangesFromHistory() {
+	fireEvent.click(
+		await screen.findByRole("button", {
+			name: /files? changed since checkpoint\. Open checkpoint history/,
+		}),
+	);
+	fireEvent.click(
+		await screen.findByRole("button", { name: /Working changes/ }),
+	);
+}
+
 const ASYNC_UI_TIMEOUT = 10_000;
 
 describe("resolveLixFileForOpen", () => {
@@ -495,7 +506,7 @@ describe("diff review navigation", () => {
 			await waitFor(() => {
 				expect(
 					screen.getByRole("button", {
-						name: "1 file changed since checkpoint. Open changes review",
+						name: "1 file changed since checkpoint. Open checkpoint history",
 					}),
 				).toBeVisible();
 			});
@@ -523,11 +534,7 @@ describe("diff review navigation", () => {
 			});
 			const reviewOpenExecuteBatch = vi.spyOn(lix, "executeBatch");
 			await act(async () => {
-				fireEvent.click(
-					screen.getByRole("button", {
-						name: "1 file changed since checkpoint. Open changes review",
-					}),
-				);
+				await openWorkingChangesFromHistory();
 			});
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
@@ -603,14 +610,10 @@ describe("diff review navigation", () => {
 			});
 			expect(
 				screen.getByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open checkpoint history",
 				}),
 			).toBeVisible();
-			fireEvent.click(
-				screen.getByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
-				}),
-			);
+			await openWorkingChangesFromHistory();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
@@ -647,11 +650,7 @@ describe("diff review navigation", () => {
 				expect(activeView?.kind).toBe(HISTORY_EXTENSION_KIND);
 				activeHistoryInstance = leftPanel?.activeInstance ?? null;
 			});
-			fireEvent.click(
-				screen.getByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
-				}),
-			);
+			await openWorkingChangesFromHistory();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
@@ -790,11 +789,7 @@ describe("diff review navigation", () => {
 					</LixProvider>,
 				);
 			});
-			fireEvent.click(
-				await screen.findByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
-				}),
-			);
+			await openWorkingChangesFromHistory();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
@@ -875,11 +870,7 @@ describe("diff review navigation", () => {
 				}
 				return originalExecute(statement, params);
 			});
-			fireEvent.click(
-				await screen.findByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
-				}),
-			);
+			await openWorkingChangesFromHistory();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
@@ -939,11 +930,7 @@ describe("diff review navigation", () => {
 					</LixProvider>,
 				);
 			});
-			fireEvent.click(
-				await screen.findByRole("button", {
-					name: "2 files changed since checkpoint. Open changes review",
-				}),
-			);
+			await openWorkingChangesFromHistory();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
@@ -974,7 +961,7 @@ describe("diff review navigation", () => {
 			// The unticked file's changes survive for the next review.
 			expect(
 				await screen.findByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
+					name: "1 file changed since checkpoint. Open checkpoint history",
 				}),
 			).toBeVisible();
 		} finally {
@@ -1716,11 +1703,7 @@ describe("diff review navigation", () => {
 					.execute();
 			});
 
-			fireEvent.click(
-				await screen.findByRole("button", {
-					name: "1 file changed since checkpoint. Open changes review",
-				}),
-			);
+			await openWorkingChangesFromHistory();
 			const undoButton = await screen.findByRole("button", {
 				name: /^Undo/,
 			});

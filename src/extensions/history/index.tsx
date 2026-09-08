@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Flag, History } from "lucide-react";
 import type { AtelierDiffSession } from "@/extension-api";
 import { DiffGlyph } from "@/components/diff-glyph";
-import type { ExtensionRuntime } from "@/extension-runtime/types";
+import type { AtelierHistoryProps } from "../../history";
+type HistoryRuntime = AtelierHistoryProps["atelier"];
 import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
@@ -22,11 +23,7 @@ import manifestJson from "./manifest.json";
  * checkpoints. One click on a checkpoint opens a read-only comparison from its
  * immediate predecessor to that checkpoint — it never restores anything.
  */
-export function HistoryView({
-	atelier,
-}: {
-	readonly atelier: ExtensionRuntime;
-}) {
+export function HistoryView({ atelier }: { readonly atelier: HistoryRuntime }) {
 	const containerRef = useRef<HTMLElement>(null);
 	const [wide, setWide] = useState(false);
 	useEffect(() => {
@@ -60,7 +57,7 @@ function WorkingChangesRow({
 	atelier,
 	wide,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly wide: boolean;
 }) {
 	const filesDescriptionId = useId();
@@ -175,7 +172,7 @@ function WorkingChangesRow({
 function WorkingChangeFileList({
 	atelier,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 }) {
 	const session = atelier.diff.session;
 	const sessionFiles =
@@ -234,7 +231,7 @@ function CheckpointList({
 	atelier,
 	wide,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly wide: boolean;
 }) {
 	const checkpoints = useQuery((lix) => selectCheckpoints(lix));
@@ -279,7 +276,7 @@ function CheckpointItem({
 	index,
 	count,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly checkpoint: CheckpointRow;
 	readonly wide: boolean;
 	/** Undefined disables the row; null diffs from the repository's beginning. */
@@ -381,7 +378,7 @@ function WorkingFilePreview({
 	atelier,
 	descriptionId,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly descriptionId: string;
 }) {
 	const result = useQueryResult((lix) => selectWorkingFileDiffs(lix));
@@ -400,7 +397,7 @@ function CheckpointFilePreview({
 	commitId,
 	previousCommitId,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly descriptionId: string;
 	readonly commitId: string;
 	readonly previousCommitId: string | null | undefined;
@@ -450,7 +447,7 @@ function InlineFilePreview({
 	descriptionId,
 	result,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly descriptionId: string;
 	readonly result: {
 		readonly status: "pending" | "success" | "error";
@@ -563,7 +560,7 @@ function CheckpointFileList({
 	atelier,
 	commitId,
 }: {
-	readonly atelier: ExtensionRuntime;
+	readonly atelier: HistoryRuntime;
 	readonly commitId: string;
 }) {
 	const session = atelier.diff.session;

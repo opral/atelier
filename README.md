@@ -40,6 +40,30 @@ through the same registry. No separate preview implementation is required.
 Pass `readOnly` to disable editing; omit it to edit. Use `onOpenFile` to route
 document links in your host. The host owns the supplied Lix and closes it after unmount.
 
+### Composing History
+
+`Atelier.History` renders the built-in working changes and checkpoint timeline.
+It includes its own Lix provider, loading state, and error boundary, so a host
+extension can compose it inside a separate React root:
+
+```tsx
+import { Atelier } from "@opral/atelier";
+
+// `atelier` is the runtime supplied to the extension's mount/update callbacks.
+if (!atelier.diff) throw new Error("History requires a diff runtime");
+
+<div className="flex min-h-0 flex-1 flex-col">
+  <HostHistoryActions />
+  <Atelier.History atelier={{ ...atelier, diff: atelier.diff }} />
+</div>
+```
+
+Register the wrapper with `ATELIER_BUILTIN_EXTENSION_IDS.history` to replace the
+shell's History view. Forward each `update` callback's runtime to the component
+and unmount the React root on `dispose`. The component requires `lix`, `icons`,
+and `diff`; the host owns Lix's lifecycle. Host messaging and actions stay in
+the wrapper rather than in Atelier slots or the extension runtime.
+
 ## Why "Atelier"?
 
 **Atelier** (French, _[atəlje]_) is an artist's workshop — the private studio where an artist and their assistants make the work. Not the gallery where it's shown, not the storage where it's kept: the room where the work actually happens.
