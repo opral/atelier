@@ -13,7 +13,13 @@ import { LixProvider } from "@/lib/lix-react";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
-import { HistoryView } from ".";
+import {
+	fileChangesByCheckpoint,
+	HistoryScopeSwitch,
+	HistoryView,
+	resolveHistoryScope,
+} from ".";
+import type { AtelierExtensionPreferences } from "@/extension-api";
 
 function atelierStub(overrides?: {
 	readonly historicalCommitId?: string;
@@ -34,6 +40,7 @@ function atelierStub(overrides?: {
 	readonly workingChangesActive?: boolean;
 	readonly checkpointAll?: () => Promise<void>;
 	readonly readOnly?: boolean;
+	readonly activeFile?: { readonly id: string; readonly path: string } | null;
 }): ExtensionRuntime {
 	const session = overrides?.workingChangesActive
 		? {
@@ -60,6 +67,10 @@ function atelierStub(overrides?: {
 			: null;
 	return {
 		readOnly: overrides?.readOnly ?? false,
+		documents: {
+			activeFileId: overrides?.activeFile?.id ?? null,
+			activeFilePath: overrides?.activeFile?.path ?? null,
+		},
 		icons: {
 			fileUrl: () =>
 				"data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=",
@@ -552,6 +563,274 @@ describe("HistoryView", () => {
 		expect(historyReads).toBe(0);
 
 		await act(async () => view?.unmount());
+		await lix.close();
+	});
+});
+
+function memoryPreferences(
+	initial: Record<string, unknown> = {},
+): AtelierExtensionPreferences & { readonly store: Map<string, unknown> } {
+	const store = new Map<string, unknown>(Object.entries(initial));
+	return {
+		store,
+		get: (key) => store.get(key) as never,
+		set: (key, value) => void store.set(key, value),
+		delete: (key) => void store.delete(key),
+	};
+}
+
+describe("history scope", () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	test("resolves to the file when one is active; a switch sticks while files are active", () => {
+		expect(resolveHistoryScope(null, null)).toBe("repository");
+		expect(resolveHistoryScope("a", null)).toBe("file");
+		expect(resolveHistoryScope("a", "repository")).toBe("repository");
+		// Opening another file inside repository history keeps the scope.
+		expect(resolveHistoryScope("b", "repository")).toBe("repository");
+		expect(resolveHistoryScope(null, "file")).toBe("repository");
+	});
+
+	test("maps file revisions onto the checkpoints that sealed them", () => {
+		const changes = fileChangesByCheckpoint(
+			[
+				{
+					commit_id: "head",
+					commit_created_at: null,
+					depth: 0,
+					is_deleted: false,
+					path: "/a.md",
+				},
+				{
+					commit_id: "cp3",
+					commit_created_at: null,
+					depth: 1,
+					is_deleted: true,
+					path: null,
+				},
+				{
+					commit_id: "cp2",
+					commit_created_at: null,
+					depth: 2,
+					is_deleted: false,
+					path: "/a.md",
+				},
+				{
+					commit_id: "cp1",
+					commit_created_at: null,
+					depth: 3,
+					is_deleted: false,
+					path: "/a.md",
+				},
+			],
+			new Set(["cp1", "cp2", "cp3", "cp0"]),
+		);
+		expect([...changes.entries()]).toEqual([
+			["cp3", { changeKind: "removed", path: null }],
+			["cp2", { changeKind: "modified", path: "/a.md" }],
+			["cp1", { changeKind: "added", path: "/a.md" }],
+		]);
+	});
+
+	test("file scope lists only the checkpoints that touched the file, with what happened", async () => {
+		const lix = await openLix();
+		const fileA = fakeUuid("scope-file-a");
+		const fileB = fakeUuid("scope-file-b");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileA, "/a.md", new TextEncoder().encode("one")],
+		);
+		await createCheckpoint(lix);
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileB, "/b.md", new TextEncoder().encode("other")],
+		);
+		await createCheckpoint(lix);
+		await lix.execute("UPDATE lix_file SET content = $2 WHERE id = $1", [
+			fileA,
+			new TextEncoder().encode("two"),
+		]);
+		await createCheckpoint(lix);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({ activeFile: { id: fileA, path: "/a.md" } })}
+				/>
+			</LixProvider>,
+		);
+		const list = await screen.findByRole("list", { name: "Checkpoints" });
+		await waitFor(() =>
+			expect(within(list).getAllByRole("listitem")).toHaveLength(2),
+		);
+		const items = within(list).getAllByRole("listitem");
+		expect(items[0]).toHaveTextContent("Latest checkpoint");
+		expect(items[0]).toHaveTextContent("· edited");
+		expect(items[1]).toHaveTextContent("· added");
+		expect(
+			screen.queryByRole("button", { name: "Working changes" }),
+		).toBeNull();
+		view.unmount();
+		await lix.close();
+	});
+
+	test("repository scope through a switch for the active file shows every checkpoint", async () => {
+		const lix = await openLix();
+		const fileA = fakeUuid("scope-repo-a");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileA, "/a.md", new TextEncoder().encode("one")],
+		);
+		await createCheckpoint(lix);
+		const preferences = memoryPreferences({ scope: "repository" });
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({ activeFile: { id: fileA, path: "/a.md" } })}
+					preferences={preferences}
+				/>
+			</LixProvider>,
+		);
+		const list = await screen.findByRole("list", { name: "Checkpoints" });
+		// The initial checkpoint never touched the file; repository scope shows it.
+		await waitFor(() =>
+			expect(within(list).getAllByRole("listitem")).toHaveLength(2),
+		);
+		expect(screen.getByText("Initial checkpoint")).toBeVisible();
+		expect(list).not.toHaveTextContent("· added");
+		view.unmount();
+		await lix.close();
+	});
+
+	test("a review opening from repository scope keeps the panel on the repository", async () => {
+		const lix = await openLix();
+		const fileA = fakeUuid("scope-freeze-a");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileA, "/a.md", new TextEncoder().encode("one")],
+		);
+		const preferences = memoryPreferences();
+		// Nothing active: repository scope, and a review opens.
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({
+						workingChangesActive: true,
+						workingChangeFiles: [{ id: fileA, path: "/a.md" }],
+					})}
+					preferences={preferences}
+				/>
+			</LixProvider>,
+		);
+		await screen.findByRole("button", { name: "Working changes" });
+		await waitFor(() =>
+			expect(preferences.store.get("scope")).toEqual({
+				scope: "repository",
+				auto: true,
+			}),
+		);
+		// The review activates a file: the panel stays on the repository.
+		view.rerender(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({
+						workingChangesActive: true,
+						workingChangeFiles: [{ id: fileA, path: "/a.md" }],
+						activeFile: { id: fileA, path: "/a.md" },
+					})}
+					preferences={preferences}
+				/>
+			</LixProvider>,
+		);
+		expect(
+			await screen.findByRole("list", { name: "Files in working changes" }),
+		).toBeVisible();
+		// Review closes with the file still active: back to the automatic scope.
+		view.rerender(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({ activeFile: { id: fileA, path: "/a.md" } })}
+					preferences={preferences}
+				/>
+			</LixProvider>,
+		);
+		await waitFor(() => expect(preferences.store.has("scope")).toBe(false));
+		// The in-memory store does not re-render on its own; the shell's does.
+		view.rerender(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({ activeFile: { id: fileA, path: "/a.md" } })}
+					preferences={preferences}
+				/>
+			</LixProvider>,
+		);
+		expect(
+			await screen.findByRole("button", { name: "Working changes" }),
+		).toHaveTextContent("now · added");
+		view.unmount();
+		await lix.close();
+	});
+
+	test("file scope shows the file's own working change and hides other files' changes", async () => {
+		const lix = await openLix();
+		const fileA = fakeUuid("scope-working-a");
+		const fileB = fakeUuid("scope-working-b");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileA, "/a.md", new TextEncoder().encode("one")],
+		);
+		await createCheckpoint(lix);
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileB, "/b.md", new TextEncoder().encode("other")],
+		);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({ activeFile: { id: fileA, path: "/a.md" } })}
+				/>
+			</LixProvider>,
+		);
+		await screen.findByRole("list", { name: "Checkpoints" });
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("button", { name: "Working changes" }),
+			).toBeNull(),
+		);
+		await act(async () => {
+			await lix.execute("UPDATE lix_file SET content = $2 WHERE id = $1", [
+				fileA,
+				new TextEncoder().encode("two"),
+			]);
+		});
+		const row = await screen.findByRole("button", { name: "Working changes" });
+		expect(row).toHaveTextContent("now · edited");
+		view.unmount();
+		await lix.close();
+	});
+
+	test("the scope switch swaps scope for the active file and hides without one", async () => {
+		const lix = await openLix();
+		const preferences = memoryPreferences();
+		const atelier = atelierStub({
+			activeFile: { id: "file-1", path: "/x.md" },
+		});
+		const view = render(
+			<HistoryScopeSwitch atelier={atelier} preferences={preferences} />,
+		);
+		const button = screen.getByRole("button", { name: /Showing this file/ });
+		fireEvent.click(button);
+		expect(preferences.store.get("scope")).toBe("repository");
+		view.rerender(
+			<HistoryScopeSwitch atelier={atelier} preferences={preferences} />,
+		);
+		expect(
+			screen.getByRole("button", { name: /Showing the repository/ }),
+		).toHaveTextContent("Repository");
+		view.rerender(
+			<HistoryScopeSwitch atelier={atelierStub()} preferences={preferences} />,
+		);
+		expect(screen.queryByRole("button")).toBeNull();
+		view.unmount();
 		await lix.close();
 	});
 });

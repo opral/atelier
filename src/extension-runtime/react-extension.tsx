@@ -19,6 +19,11 @@ type ReactRenderer = (args: {
 	data: AtelierJsonValue;
 }) => ReactNode;
 
+type ReactAccessoryRenderer = (args: {
+	atelier: ExtensionRuntime;
+	view: ExtensionView;
+}) => ReactNode;
+
 /** Bundled views participate in Atelier's parent React tree, including SSR. */
 export function createReactExtensionDefinition(args: {
 	manifest: ExtensionManifest;
@@ -28,6 +33,8 @@ export function createReactExtensionDefinition(args: {
 	menuItems?: AtelierExtensionMenuItems;
 	load?: AtelierExtensionLoader;
 	component: ReactRenderer;
+	/** Rendered in the side panel's section header while the view is active. */
+	headerAccessory?: ReactAccessoryRenderer;
 }): ExtensionDefinition {
 	return {
 		kind: args.manifest.id,
@@ -39,5 +46,16 @@ export function createReactExtensionDefinition(args: {
 		menuItems: args.menuItems,
 		load: args.load,
 		Component: args.component,
+		...(args.headerAccessory
+			? {
+					HeaderAccessory: ({
+						atelier,
+						view,
+					}: {
+						atelier: ExtensionRuntime;
+						view: ExtensionView;
+					}) => args.headerAccessory!({ atelier, view }),
+				}
+			: {}),
 	};
 }

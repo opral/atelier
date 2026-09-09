@@ -371,19 +371,45 @@ export function PanelV2({
 		) : (
 			emptyStatePlaceholder
 		);
+	// The active section may contribute a control at the header's trailing
+	// end (a scope switch); it renders with that view's own runtime.
+	const activeSectionEntry =
+		panel.views.find((entry) => entry.instance === panel.activeInstance) ??
+		panel.views[0] ??
+		null;
+	const activeSectionDefinition = activeSectionEntry
+		? resolveViewDefinition(activeSectionEntry.kind)
+		: null;
+	const activeSectionContext = activeSectionEntry
+		? viewContexts.get(activeSectionEntry.instance)
+		: undefined;
+	const HeaderAccessory = activeSectionDefinition?.HeaderAccessory;
+	const sectionAccessory =
+		HeaderAccessory && activeSectionContext ? (
+			<HeaderAccessory
+				atelier={activeSectionContext.atelier}
+				view={activeSectionContext.view}
+			/>
+		) : null;
 	const sideSectionPicker =
 		side !== "central" && hasViews ? (
-			<SidebarSectionPicker
-				side={side}
-				panel={panel}
-				availableViews={availableViews}
-				resolveViewDefinition={resolveViewDefinition}
-				preferencesFor={viewContext.preferencesFor}
-				onSelectView={onSelectView}
-				onAddView={onAddView}
-				onHidePanel={onHidePanel}
-				tabLabel={tabLabel}
-			/>
+			<div
+				data-atelier-part="section-header"
+				className="flex items-start justify-between gap-2"
+			>
+				<SidebarSectionPicker
+					side={side}
+					panel={panel}
+					availableViews={availableViews}
+					resolveViewDefinition={resolveViewDefinition}
+					preferencesFor={viewContext.preferencesFor}
+					onSelectView={onSelectView}
+					onAddView={onAddView}
+					onHidePanel={onHidePanel}
+					tabLabel={tabLabel}
+				/>
+				{sectionAccessory}
+			</div>
 		) : null;
 
 	return (

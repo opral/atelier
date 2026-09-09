@@ -33,12 +33,33 @@ import {
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import type { AtelierEvent } from "@/extension-api";
 
+// History scopes itself to the active file; these flows exercise the
+// repository timeline, so switch back when a file is on screen.
+async function showRepositoryHistory() {
+	await screen.findAllByLabelText("Checkpoint history");
+	// Every History instance shares the extension preference, so one press
+	// switches them all; the store updates asynchronously.
+	const [scopeSwitch] = screen.queryAllByRole("button", {
+		name: /Showing this file/,
+	});
+	if (!scopeSwitch) return;
+	await act(async () => {
+		fireEvent.click(scopeSwitch);
+	});
+	await waitFor(() =>
+		expect(
+			screen.queryAllByRole("button", { name: /Showing this file/ }),
+		).toHaveLength(0),
+	);
+}
+
 async function openWorkingChangesFromHistory() {
 	fireEvent.click(
 		await screen.findByRole("button", {
 			name: /files? changed since checkpoint\. Open checkpoint history/,
 		}),
 	);
+	await showRepositoryHistory();
 	fireEvent.click(
 		await screen.findByRole("button", { name: /Working changes/ }),
 	);
@@ -646,6 +667,7 @@ describe("diff review navigation", () => {
 			});
 			await act(async () => {
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 			let activeHistoryInstance: string | null = null;
 			await waitFor(() => {
@@ -1021,6 +1043,7 @@ describe("diff review navigation", () => {
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.execute();
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 			const workingChanges = await screen.findByRole("button", {
 				name: "Working changes",
@@ -1134,6 +1157,7 @@ describe("diff review navigation", () => {
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 
 			const checkpointList = await screen.findByRole(
@@ -1328,6 +1352,7 @@ describe("diff review navigation", () => {
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 			const checkpointList = await screen.findByRole("list", {
 				name: "Checkpoints",
@@ -1420,6 +1445,7 @@ describe("diff review navigation", () => {
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 			const checkpointList = await screen.findByRole("list", {
 				name: "Checkpoints",
@@ -1544,6 +1570,7 @@ describe("diff review navigation", () => {
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 			const originalExecute = lix.execute.bind(lix);
 			const historyCalls: Array<{
@@ -1638,6 +1665,7 @@ describe("diff review navigation", () => {
 			await act(async () => {
 				await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await showRepositoryHistory();
 			});
 			const workingChanges = await screen.findByRole("button", {
 				name: "Working changes",
