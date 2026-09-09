@@ -96,7 +96,7 @@ describe("Lix SQL diff commands", () => {
 			// Assert the committed directory snapshot directly. The engine's
 			// directory diff currently cannot project a missing descriptor snapshot.
 			const committedDirs = await lix.execute(
-				"SELECT path FROM lix_state_at('lix_directory', $1)",
+				"SELECT path FROM lix_as_of('lix_directory', $1) WHERE path LIKE '/docs%'",
 				[checkpoint!.commitId],
 			);
 			expect(committedDirs.rows.map((row) => row.path).sort()).toEqual([

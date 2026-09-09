@@ -173,7 +173,9 @@ describe("EmbedFilePickerMenu", () => {
 			name: "Search repository files",
 		});
 		expect(search).toHaveFocus();
-		const options = await screen.findAllByRole("option");
+		const options = (await screen.findAllByRole("option")).filter(
+			(option) => !option.getAttribute("aria-label")?.startsWith("/.lix/"),
+		);
 		expect(options.map((option) => option.getAttribute("aria-label"))).toEqual([
 			"/assets/kickoff.mp4",
 			"/design/brand.sketch",
@@ -188,6 +190,8 @@ describe("EmbedFilePickerMenu", () => {
 		});
 		expect(upload.closest(".markdown-slash-menu-scroll")).toBeNull();
 
+		fireEvent.change(search, { target: { value: "kickoff" } });
+		await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
 		fireEvent.keyDown(search, { key: "Enter" });
 		await waitFor(() => {
 			expect(markdownOf(editor)).toBe("![kickoff](../assets/kickoff.mp4)\n");

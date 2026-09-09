@@ -779,7 +779,7 @@ export async function selectFilesAtCommit(
 	commitId: string,
 ): Promise<LixFileForOpen[]> {
 	const result = await lix.execute(
-		`SELECT id, path FROM lix_state_at('lix_file', $1) ORDER BY path`,
+		`SELECT id, path FROM lix_as_of('lix_file', $1) ORDER BY path`,
 		[commitId],
 	);
 	return result.rows.flatMap((row): LixFileForOpen[] => {
@@ -2775,8 +2775,8 @@ function LayoutShellLoadedContentResolved({
 				`SELECT 1 AS current
 				 FROM lix_diff('lix_file')
 				 WHERE id = $1
-				   AND lix_latest_checkpoint_commit_id() = $2
-				   AND lix_active_branch_commit_id() = $3
+				   AND lixcol_from_commit_id = $2
+				   AND lixcol_to_commit_id = $3
 				 LIMIT 1`,
 				[review.fileId, review.beforeCommitId, review.afterCommitId],
 			);
@@ -4008,7 +4008,7 @@ function LayoutShellLoadedContentResolved({
 			let createdAt: string | undefined;
 			try {
 				const result = await lix.execute(
-					"SELECT lixcol_created_at AS created_at FROM lix_checkpoint WHERE commit_id = $1 LIMIT 1",
+					"SELECT created_at FROM lix_commit WHERE id = $1 AND is_checkpoint LIMIT 1",
 					[options.target.commitId],
 				);
 				const value = result.rows[0]?.created_at;

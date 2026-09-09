@@ -37,13 +37,16 @@ export async function readPreparedFile(
 	const query =
 		typeof commit === "string"
 			? selectFilesStateAt(lix, commit)
-			: qb(lix).selectFrom("lix_file as lix_state_at");
+			: qb(lix).selectFrom("lix_file as lix_as_of");
 	const row = await query
 		.select([
 			"id",
 			"path",
 			"lixcol_change_id",
-			sql<string>`lix_active_branch_commit_id()`.as("commit_id"),
+			(typeof commit === "string"
+				? sql<string>`${commit}`
+				: sql<string>`lix_active_branch_commit_id()`
+			).as("commit_id"),
 			sql<number>`octet_length(content)`.as("size"),
 			maxContentBytes === undefined
 				? sql<unknown>`content`.as("content")

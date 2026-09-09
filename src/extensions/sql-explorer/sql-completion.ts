@@ -17,10 +17,12 @@ export function functionDescription(name: string): string {
 		(
 			{
 				lix_history:
-					"Revisions of a tracked relation, optionally anchored at a commit.",
-				lix_state_at: "Tracked state of a relation at a specific commit.",
+					"Changes introduced by retained mainline commits. Filter lixcol_commit_is_checkpoint for checkpoints.",
+				lix_log:
+					"Retained mainline commits, with checkpoint flags and first parents.",
+				lix_as_of: "Tracked state of a relation at a specific commit.",
 				lix_diff:
-					"Compare a relation across commits. Defaults to latest checkpoint → active head.",
+					"Compare a relation across commits. Defaults to working baseline → active head.",
 				lix_commit_ancestry:
 					"Reachable commits and their depth from the active head or a specified commit.",
 				lix_create_checkpoint:

@@ -19,9 +19,10 @@ export function CheckpointAbsentFile({
 	const checkpoint = useQueryTakeFirst<{ created_at: string }>(
 		(lix) =>
 			qb(lix)
-				.selectFrom("lix_checkpoint")
-				.select(["lixcol_created_at as created_at"])
-				.where("commit_id", "=", commitId ?? "")
+				.selectFrom("lix_commit")
+				.select(["created_at"])
+				.where("is_checkpoint", "=", true)
+				.where("id", "=", commitId ?? "")
 				.limit(1),
 		{ subscribe: false },
 	);

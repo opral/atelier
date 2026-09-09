@@ -85,6 +85,7 @@ describe("MarkdownView", () => {
 				content: new TextEncoder().encode("# Initial delivery"),
 			})
 			.execute();
+		await createCheckpoint(lix);
 		const execute = vi.spyOn(lix, "execute");
 		const observe = vi.spyOn(lix, "observe");
 		const isLiveDeliveryStatement = (statement: unknown) => {
@@ -998,7 +999,7 @@ describe("MarkdownView", () => {
 		expect(reviewEditor).toHaveTextContent("Before");
 		expect(reviewEditor).toHaveTextContent("After");
 		const historyCalls = execute.mock.calls.filter(([statement]) =>
-			String(statement).includes("lix_state_at('lix_file'"),
+			String(statement).includes("lix_as_of('lix_file'"),
 		);
 		expect(historyCalls).toHaveLength(2);
 		// Each side's snapshot read stays bounded to the one requested file.

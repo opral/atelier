@@ -95,7 +95,7 @@ function useFileSnapshotAtCommit(
 	exists: boolean,
 ): HistoricalFileSnapshot | undefined {
 	const snapshotFileId = explicitFileId ?? fileId;
-	// lix_state_at: a file absent at the commit produces no row, so absence
+	// lix_as_of: a file absent at the commit produces no row, so absence
 	// needs no null-interpretation — zero rows already means "did not exist".
 	const row = useQueryTakeFirst<HistoricalFileSnapshotRow>(
 		(lix) =>

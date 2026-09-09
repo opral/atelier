@@ -21,14 +21,15 @@ type HistoryRuntime = AtelierHistoryProps["atelier"];
 import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
-	selectCheckpointFilePreviews,
-	selectFileRevisions,
+	selectCheckpointFilePreviewPage,
+	CHECKPOINT_PREVIEW_PAGE_SIZE,
+	type CheckpointFilePreviewRow,
+	type FileCheckpointChangeRow,
+	selectFileCheckpointChanges,
 	selectWorkingFileDiff,
 	selectWorkingFileDiffs,
-	selectCommitParent,
 	selectWorkingChangeCount,
 	type CheckpointRow,
-	type FileRevisionRow,
 } from "@/queries";
 import { createReactExtensionDefinition } from "@/extension-runtime/react-extension";
 import { parseExtensionManifest } from "@/extension-runtime/extension-manifest";
@@ -400,42 +401,6 @@ function WorkingChangeFileList({
 	);
 }
 
-/**
- * Which checkpoints touched the file, and how. Revisions are observed at the
- * commit that sealed them, so a revision at a checkpoint commit is that
- * checkpoint's change; the change kind comes from the neighbouring older
- * revision (none: added; tombstone: removed; otherwise edited).
- */
-export function fileChangesByCheckpoint(
-	revisions: readonly FileRevisionRow[],
-	checkpointIds: ReadonlySet<string>,
-): ReadonlyMap<
-	string,
-	{
-		readonly changeKind: "added" | "modified" | "removed";
-		readonly path: string | null;
-	}
-> {
-	const byCommit = new Map<
-		string,
-		{ changeKind: "added" | "modified" | "removed"; path: string | null }
-	>();
-	const ordered = [...revisions].sort(
-		(left, right) => left.depth - right.depth,
-	);
-	ordered.forEach((revision, index) => {
-		if (!checkpointIds.has(revision.commit_id)) return;
-		const older = ordered[index + 1];
-		const changeKind = revision.is_deleted
-			? "removed"
-			: !older || older.is_deleted
-				? "added"
-				: "modified";
-		byCommit.set(revision.commit_id, { changeKind, path: revision.path });
-	});
-	return byCommit;
-}
-
 function CheckpointList({
 	atelier,
 	wide,
@@ -446,39 +411,24 @@ function CheckpointList({
 	readonly file: ScopedFile | null;
 }) {
 	const allCheckpoints = useQuery((lix) => selectCheckpoints(lix));
-	const revisions = useQueryResult(
-		(lix) => selectFileRevisions(lix, file?.id ?? ""),
+	const changes = useQueryResult(
+		(lix) => selectFileCheckpointChanges(lix, file?.id ?? ""),
 		{ enabled: file !== null },
 	);
 	const fileChanges = useMemo(
 		() =>
 			file
-				? fileChangesByCheckpoint(
-						revisions.rows,
-						new Set(allCheckpoints.map((checkpoint) => checkpoint.commit_id)),
-					)
+				? new Map(changes.rows.map((change) => [change.commit_id, change]))
 				: null,
-		[file, revisions.rows, allCheckpoints],
+		[file, changes.rows],
 	);
 	const checkpoints = fileChanges
 		? allCheckpoints.filter((checkpoint) =>
 				fileChanges.has(checkpoint.commit_id),
 			)
 		: allCheckpoints;
-	// The oldest checkpoint has no older checkpoint to diff against; its base
-	// is its commit's first parent (the repository's beginning).
-	const oldestCommitId = checkpoints.at(-1)?.commit_id ?? null;
-	const oldestParent = useQueryResult((lix) =>
-		selectCommitParent(lix, oldestCommitId ?? ""),
-	);
-	// Null means the repository's beginning: the genesis checkpoint has no
-	// parent commit, and its diff base is the empty repository.
-	const oldestParentId =
-		oldestParent.status === "success"
-			? (oldestParent.rows[0]?.parent_id ?? null)
-			: undefined;
 
-	if (file && revisions.status === "success" && checkpoints.length === 0) {
+	if (file && changes.status === "success" && checkpoints.length === 0) {
 		return (
 			<p
 				role="status"
@@ -489,40 +439,94 @@ function CheckpointList({
 		);
 	}
 
+	const pages: CheckpointRow[][] = [];
+	for (
+		let offset = 0;
+		offset < checkpoints.length;
+		offset += CHECKPOINT_PREVIEW_PAGE_SIZE
+	) {
+		pages.push(
+			checkpoints.slice(offset, offset + CHECKPOINT_PREVIEW_PAGE_SIZE),
+		);
+	}
 	return (
 		<ol aria-label="Checkpoints" className="space-y-0">
+			{pages.map((page) => (
+				<CheckpointPage
+					key={page.map((checkpoint) => checkpoint.commit_id).join(":")}
+					atelier={atelier}
+					wide={wide}
+					checkpoints={page}
+					allCheckpoints={allCheckpoints}
+					fileChanges={fileChanges}
+					file={file}
+				/>
+			))}
+		</ol>
+	);
+}
+
+type PreviewResult = {
+	readonly status: "pending" | "success" | "error";
+	readonly rows: readonly CheckpointFilePreviewRow[];
+};
+
+/** Render one page without adding DOM wrappers; fetch it when a row is visible. */
+function CheckpointPage({
+	atelier,
+	wide,
+	checkpoints,
+	allCheckpoints,
+	fileChanges,
+	file,
+}: {
+	readonly atelier: HistoryRuntime;
+	readonly wide: boolean;
+	readonly checkpoints: readonly CheckpointRow[];
+	readonly allCheckpoints: readonly CheckpointRow[];
+	readonly fileChanges: ReadonlyMap<string, FileCheckpointChangeRow> | null;
+	readonly file: ScopedFile | null;
+}) {
+	const [visible, setVisible] = useState(false);
+	const result = useQueryResult(
+		(lix) =>
+			selectCheckpointFilePreviewPage(
+				lix,
+				checkpoints.map((checkpoint) => checkpoint.commit_id),
+			),
+		{ subscribe: false, enabled: visible && wide && file === null },
+	);
+	return (
+		<>
 			{checkpoints.map((checkpoint) => {
-				// In file scope a checkpoint diffs against the previous checkpoint
-				// overall (the file's neighbour may be several checkpoints back,
-				// and the pair is what the review shows for the whole workspace).
-				const position = allCheckpoints.indexOf(checkpoint);
-				const previousCommitId =
-					allCheckpoints[position + 1]?.commit_id ??
-					(position === allCheckpoints.length - 1 ? oldestParentId : undefined);
+				const change = fileChanges?.get(checkpoint.commit_id);
 				return (
 					<CheckpointItem
 						key={checkpoint.commit_id}
 						atelier={atelier}
 						checkpoint={checkpoint}
 						wide={wide}
-						previousCommitId={previousCommitId}
-						index={position}
+						index={allCheckpoints.indexOf(checkpoint)}
 						count={allCheckpoints.length}
 						fileChange={
-							fileChanges?.get(checkpoint.commit_id)
+							change
 								? {
-										...fileChanges.get(checkpoint.commit_id)!,
-										path:
-											fileChanges.get(checkpoint.commit_id)!.path ??
-											file?.path ??
-											null,
+										changeKind: change.change_kind,
+										path: change.path ?? file?.path ?? null,
 									}
 								: null
 						}
+						preview={{
+							status: result.status,
+							rows: result.rows.filter(
+								(row) => row.commit_id === checkpoint.commit_id,
+							),
+						}}
+						onPreviewVisible={() => setVisible(true)}
 					/>
 				);
 			})}
-		</ol>
+		</>
 	);
 }
 
@@ -530,16 +534,15 @@ function CheckpointItem({
 	atelier,
 	wide,
 	checkpoint,
-	previousCommitId,
 	index,
 	count,
 	fileChange,
+	preview,
+	onPreviewVisible,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly checkpoint: CheckpointRow;
 	readonly wide: boolean;
-	/** Undefined disables the row; null diffs from the repository's beginning. */
-	readonly previousCommitId: string | null | undefined;
 	readonly index: number;
 	readonly count: number;
 	/** Present in file scope: what happened to the file at this checkpoint. */
@@ -547,7 +550,10 @@ function CheckpointItem({
 		readonly changeKind: "added" | "modified" | "removed";
 		readonly path: string | null;
 	} | null;
+	readonly preview: PreviewResult;
+	readonly onPreviewVisible: () => void;
 }) {
+	const previousCommitId = checkpoint.parent_commit_id;
 	const filesDescriptionId = useId();
 	const isInitial = index === count - 1;
 	const label =
@@ -573,9 +579,7 @@ function CheckpointItem({
 		>
 			<button
 				type="button"
-				disabled={previousCommitId === undefined}
 				onClick={() => {
-					if (previousCommitId === undefined) return;
 					// Pressing the viewed checkpoint again leaves review mode.
 					if (isViewing) {
 						atelier.diff.exit();
@@ -633,8 +637,8 @@ function CheckpointItem({
 					<CheckpointFilePreview
 						descriptionId={filesDescriptionId}
 						atelier={atelier}
-						commitId={checkpoint.commit_id}
-						previousCommitId={previousCommitId}
+						result={preview}
+						onVisible={onPreviewVisible}
 					/>
 				) : null}
 			</button>
@@ -670,28 +674,29 @@ function WorkingFilePreview({
 function CheckpointFilePreview({
 	atelier,
 	descriptionId,
-	commitId,
-	previousCommitId,
+	result,
+	onVisible,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly descriptionId: string;
-	readonly commitId: string;
-	readonly previousCommitId: string | null | undefined;
+	readonly result: PreviewResult;
+	readonly onVisible: () => void;
 }) {
 	const previewRef = useRef<HTMLSpanElement>(null);
-	const [visible, setVisible] = useState(false);
+	const onVisibleRef = useRef(onVisible);
+	onVisibleRef.current = onVisible;
 	useEffect(() => {
 		const element = previewRef.current;
 		if (!element) return;
 		if (typeof IntersectionObserver === "undefined") {
-			setVisible(true);
+			onVisibleRef.current();
 			return;
 		}
 		// A long history should only fetch names near the visible scroll area.
 		const observer = new IntersectionObserver(
 			([entry]) => {
 				if (!entry?.isIntersecting) return;
-				setVisible(true);
+				onVisibleRef.current();
 				observer.disconnect();
 			},
 			{ rootMargin: "160px" },
@@ -699,11 +704,6 @@ function CheckpointFilePreview({
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
-	const result = useQueryResult(
-		(lix) =>
-			selectCheckpointFilePreviews(lix, commitId, previousCommitId ?? null),
-		{ subscribe: false, enabled: visible && previousCommitId !== undefined },
-	);
 	return (
 		<span
 			ref={previewRef}

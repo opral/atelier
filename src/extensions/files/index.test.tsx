@@ -421,9 +421,13 @@ describe("FilesView", () => {
 		await waitFor(() => {
 			expect(queryFilesTreeRenameInput()).toBeNull();
 		});
-		expect(await qb(lix).selectFrom("lix_file").select("id").execute()).toEqual(
-			[],
-		);
+		expect(
+			await qb(lix)
+				.selectFrom("lix_file")
+				.select("id")
+				.where("path", "not like", "/.lix/%")
+				.execute(),
+		).toEqual([]);
 		expect(openFile).not.toHaveBeenCalled();
 
 		await act(async () => view?.unmount());

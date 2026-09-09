@@ -13,12 +13,7 @@ import { LixProvider } from "@/lib/lix-react";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
-import {
-	fileChangesByCheckpoint,
-	HistoryScopeSwitch,
-	HistoryView,
-	resolveHistoryScope,
-} from ".";
+import { HistoryScopeSwitch, HistoryView, resolveHistoryScope } from ".";
 import type { AtelierExtensionPreferences } from "@/extension-api";
 
 function atelierStub(overrides?: {
@@ -116,6 +111,7 @@ describe("HistoryView", () => {
 
 	test("shows working changes after edits and removes the row after checkpointing", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const view = render(
 			<LixProvider lix={lix}>
 				<HistoryView atelier={atelierStub()} />
@@ -156,6 +152,7 @@ describe("HistoryView", () => {
 		// No intersection API means render all rows (e.g. non-browser hosts).
 		vi.stubGlobal("IntersectionObserver", undefined);
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileIds = ["wide-a", "wide-b", "wide-c"].map(fakeUuid);
 		for (const [index, name] of [
 			"alpha.md",
@@ -185,8 +182,8 @@ describe("HistoryView", () => {
 		const historyReads = () =>
 			execute.mock.calls.filter(
 				([sql]) =>
-					String(sql).includes("lix_diff('lix_file',") ||
-					String(sql).includes("lix_state_at("),
+					String(sql).includes("lix_history('lix_file',") ||
+					String(sql).includes("lix_as_of("),
 			);
 		expect(historyReads()).toHaveLength(0);
 		expect(within(latest).queryByText("alpha.md")).toBeNull();
@@ -236,6 +233,7 @@ describe("HistoryView", () => {
 			},
 		);
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
 			[
@@ -259,8 +257,8 @@ describe("HistoryView", () => {
 		const historicalReads = () =>
 			execute.mock.calls.filter(
 				([sql]) =>
-					String(sql).includes("lix_diff('lix_file',") ||
-					String(sql).includes("lix_state_at("),
+					String(sql).includes("lix_history('lix_file',") ||
+					String(sql).includes("lix_as_of("),
 			);
 		expect(historicalReads()).toHaveLength(0);
 		const observed = intersections.find(({ target }) =>
@@ -279,12 +277,32 @@ describe("HistoryView", () => {
 		);
 		expect(await within(latest).findByText("visible.md")).toBeVisible();
 		expect(historicalReads()).toHaveLength(1);
+		// Every visible row on this page shares one pinned IN query.
+		act(() => {
+			for (const visibleRow of intersections) {
+				visibleRow.callback(
+					[
+						{
+							isIntersecting: true,
+							target: visibleRow.target,
+						} as IntersectionObserverEntry,
+					],
+					{} as IntersectionObserver,
+				);
+			}
+		});
+		expect(historicalReads()).toHaveLength(1);
+		expect(String(historicalReads()[0]?.[0])).toMatch(
+			/lixcol_to_commit_id.*in/i,
+		);
+
 		view.unmount();
 		await lix.close();
 	});
 
 	test("lists files while working changes is active", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
@@ -338,6 +356,7 @@ describe("HistoryView", () => {
 
 	test("lists workspace moments and opens a checkpoint on click", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
@@ -411,6 +430,7 @@ describe("HistoryView", () => {
 
 	test("opens a checkpoint file without collapsing the checkpoint", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
 			[
@@ -488,6 +508,7 @@ describe("HistoryView", () => {
 
 	test("switches checkpoint file lists without another history query", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileId = fakeUuid("history-switch-file");
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
@@ -585,6 +606,7 @@ describe("history file paths", () => {
 	test("rows show one muted parent, and drop it in a narrow panel", async () => {
 		const resize = mockHistoryWidth();
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileId = fakeUuid("path-file");
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
@@ -631,49 +653,9 @@ describe("history scope", () => {
 		expect(resolveHistoryScope(null, "file")).toBe("repository");
 	});
 
-	test("maps file revisions onto the checkpoints that sealed them", () => {
-		const changes = fileChangesByCheckpoint(
-			[
-				{
-					commit_id: "head",
-					commit_created_at: null,
-					depth: 0,
-					is_deleted: false,
-					path: "/a.md",
-				},
-				{
-					commit_id: "cp3",
-					commit_created_at: null,
-					depth: 1,
-					is_deleted: true,
-					path: null,
-				},
-				{
-					commit_id: "cp2",
-					commit_created_at: null,
-					depth: 2,
-					is_deleted: false,
-					path: "/a.md",
-				},
-				{
-					commit_id: "cp1",
-					commit_created_at: null,
-					depth: 3,
-					is_deleted: false,
-					path: "/a.md",
-				},
-			],
-			new Set(["cp1", "cp2", "cp3", "cp0"]),
-		);
-		expect([...changes.entries()]).toEqual([
-			["cp3", { changeKind: "removed", path: null }],
-			["cp2", { changeKind: "modified", path: "/a.md" }],
-			["cp1", { changeKind: "added", path: "/a.md" }],
-		]);
-	});
-
 	test("file scope lists only the checkpoints that touched the file, with what happened", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileA = fakeUuid("scope-file-a");
 		const fileB = fakeUuid("scope-file-b");
 		await lix.execute(
@@ -715,6 +697,7 @@ describe("history scope", () => {
 
 	test("repository scope through a switch for the active file shows every checkpoint", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileA = fakeUuid("scope-repo-a");
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
@@ -743,6 +726,7 @@ describe("history scope", () => {
 
 	test("a review opening from repository scope keeps the panel on the repository", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileA = fakeUuid("scope-freeze-a");
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
@@ -812,6 +796,7 @@ describe("history scope", () => {
 
 	test("file scope shows the file's own working change and hides other files' changes", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const fileA = fakeUuid("scope-working-a");
 		const fileB = fakeUuid("scope-working-b");
 		await lix.execute(
@@ -850,6 +835,7 @@ describe("history scope", () => {
 
 	test("the scope switch swaps scope for the active file and hides without one", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const preferences = memoryPreferences();
 		const atelier = atelierStub({
 			activeFile: { id: "file-1", path: "/x.md" },

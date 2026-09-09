@@ -23,9 +23,9 @@ import type {
 } from "./extension-runtime/types";
 import { qb } from "./lib/lix-kysely";
 import {
-	selectCheckpointFilePreviews,
+	selectCheckpointFilePreviewPage,
+	CHECKPOINT_PREVIEW_PAGE_SIZE,
 	selectCheckpoints,
-	selectCommitParent,
 	selectFilesystemDirectories,
 	selectFilesystemFiles,
 	selectWorkingChangeCount,
@@ -333,18 +333,12 @@ function assertJsonData(
 
 async function prepareHistory(lix: Lix): Promise<void> {
 	const checkpoints = await selectCheckpoints(lix).execute();
-	const oldest = await selectCommitParent(
-		lix,
-		checkpoints.at(-1)?.commit_id ?? "",
-	).execute();
 	await selectWorkingFileDiffs(lix).execute();
-	await Promise.all(
-		checkpoints.map((checkpoint, index) =>
-			selectCheckpointFilePreviews(
-				lix,
-				checkpoint.commit_id,
-				checkpoints[index + 1]?.commit_id ?? oldest[0]?.parent_id ?? null,
-			).execute(),
-		),
-	);
+	const firstPage = checkpoints.slice(0, CHECKPOINT_PREVIEW_PAGE_SIZE);
+	if (firstPage.length > 0) {
+		await selectCheckpointFilePreviewPage(
+			lix,
+			firstPage.map((checkpoint) => checkpoint.commit_id),
+		).execute();
+	}
 }

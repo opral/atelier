@@ -471,6 +471,7 @@ async function findFilesTreeItem(path: string): Promise<HTMLElement> {
 describe("diff review navigation", () => {
 	test("opens checkpoint working changes without requiring agent-turn metadata", async () => {
 		const lix = await openLix();
+		await createCheckpoint(lix);
 		const sessionStateStore = createMemorySessionStateStore();
 		const preferencesStore = createMemoryPreferencesStore({
 			version: 1,
@@ -526,6 +527,7 @@ describe("diff review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
+					.where("path", "not like", "/.lix/%")
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.where("id", "=", fakeUuid("auto-changed-file"))
 					.execute();
@@ -576,7 +578,7 @@ describe("diff review navigation", () => {
 				expect.arrayContaining([
 					expect.objectContaining({
 						sql: expect.stringContaining(
-							"lix_latest_checkpoint_commit_id() AS before_commit_id",
+							"working_base_commit_id AS before_commit_id",
 						),
 					}),
 					expect.objectContaining({
@@ -771,7 +773,7 @@ describe("diff review navigation", () => {
 			).toBeVisible();
 			expect(
 				execute.mock.calls.some(([statement]) =>
-					String(statement).includes("lix_state_at('lix_file'"),
+					String(statement).includes("lix_as_of('lix_file'"),
 				),
 			).toBe(false);
 			await waitFor(() => {
@@ -805,6 +807,7 @@ describe("diff review navigation", () => {
 			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "=", fakeUuid("checkpoint-with-blocked-history"))
 				.execute();
@@ -892,7 +895,7 @@ describe("diff review navigation", () => {
 			});
 			let blockedHistoryReadCount = 0;
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_state_at('lix_file'")) {
+				if (String(statement).includes("lix_as_of('lix_file'")) {
 					blockedHistoryReadCount += 1;
 					await historyReadGate;
 				}
@@ -946,6 +949,7 @@ describe("diff review navigation", () => {
 			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "in", [selectedFileId, remainingFileId])
 				.execute();
@@ -1040,6 +1044,7 @@ describe("diff review navigation", () => {
 			await act(async () => {
 				await qb(lix)
 					.updateTable("lix_file")
+					.where("path", "not like", "/.lix/%")
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.execute();
 				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
@@ -1141,6 +1146,7 @@ describe("diff review navigation", () => {
 			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.execute();
 			await createCheckpoint(lix);
@@ -1176,7 +1182,7 @@ describe("diff review navigation", () => {
 			const execute = vi
 				.spyOn(lix, "execute")
 				.mockImplementation(async (statement, params) => {
-					if (String(statement).includes("lix_state_at('lix_file'")) {
+					if (String(statement).includes("lix_as_of('lix_file'")) {
 						checkpointHistoryStatements.push(String(statement));
 						activeCheckpointFileReads += 1;
 						maxActiveCheckpointFileReads = Math.max(
@@ -1279,6 +1285,7 @@ describe("diff review navigation", () => {
 			const previous = await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.execute();
 			const latest = await createCheckpoint(lix);
@@ -1293,7 +1300,7 @@ describe("diff review navigation", () => {
 			expect(selected).toHaveLength(files.length);
 			expect(
 				execute.mock.calls.filter(([statement]) =>
-					String(statement).includes("lix_state_at('lix_file'"),
+					String(statement).includes("lix_as_of('lix_file'"),
 				),
 			).toEqual([]);
 		} finally {
@@ -1327,11 +1334,13 @@ describe("diff review navigation", () => {
 			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ content: new TextEncoder().encode("# At checkpoint\n") })
 				.execute();
 			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ path: "/current-name.csv" })
 				.where("id", "=", renamedId)
 				.execute();
@@ -1428,6 +1437,7 @@ describe("diff review navigation", () => {
 			await createCheckpoint(lix);
 			await qb(lix)
 				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
 				.set({ content: new TextEncoder().encode("# After\n") })
 				.where("id", "=", fileId)
 				.execute();
@@ -1469,7 +1479,7 @@ describe("diff review navigation", () => {
 				markHistoryStarted = resolve;
 			});
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_state_at('lix_file'")) {
+				if (String(statement).includes("lix_as_of('lix_file'")) {
 					markHistoryStarted();
 					await historyBlocked;
 				}
@@ -1578,7 +1588,7 @@ describe("diff review navigation", () => {
 				readonly params: unknown[];
 			}> = [];
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_state_at('lix_file'")) {
+				if (String(statement).includes("lix_as_of('lix_file'")) {
 					historyCalls.push({
 						statement: String(statement),
 						params: [...(params ?? [])],

@@ -90,3 +90,6 @@ export type {
 } from "./dev-tools/simulate-agent-workflow";
 
 export type { AtelierHistoryProps } from "./history";
+
+export { AtelierFile } from "./atelier-file";
+export type { AtelierFileProps } from "./atelier-file";

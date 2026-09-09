@@ -39,6 +39,7 @@ export type WorkingFileDiffContentRow = {
 
 export type CheckpointRow = {
 	commit_id: string;
+	parent_commit_id: string | null;
 	created_at: string;
 };
 
@@ -90,7 +91,7 @@ export function selectFilesystemFiles(lix: Lix) {
 }
 
 /**
- * The working file diff defaults to latest checkpoint → active branch head.
+ * The working file diff defaults to working baseline → active branch head.
  * One row per changed file, path resolved for the side that has one — removed
  * files keep their pre-deletion path from the base side.
  */
@@ -114,33 +115,29 @@ export function selectWorkingFileDiff(lix: Lix, fileId: string) {
 	return selectWorkingFileDiffs(lix).where("id", "=", fileId);
 }
 
-/**
- * One row per revision of a file reachable from the active head, newest
- * first. A revision is observed at the commit that sealed it, so on a linear
- * branch the checkpoint commits are exactly where the file changed; depth 0
- * at a non-checkpoint commit is the working change.
- */
-export type FileRevisionRow = {
+/** Net changes introduced by each retained checkpoint on the active mainline. */
+export type FileCheckpointChangeRow = {
 	commit_id: string;
-	commit_created_at: string | null;
-	depth: number;
-	is_deleted: boolean;
+	parent_commit_id: string;
+	commit_created_at: string;
+	change_kind: "added" | "modified" | "removed";
 	path: string | null;
 };
 
-export function selectFileRevisions(lix: Lix, fileId: string) {
+export function selectFileCheckpointChanges(lix: Lix, fileId: string) {
 	return qb(lix)
 		.selectFrom(sql<any>`lix_history('lix_file')`.as("history"))
 		.select([
-			sql<string>`lixcol_observed_commit_id`.as("commit_id"),
-			sql<string | null>`lixcol_commit_created_at`.as("commit_created_at"),
-			sql<number>`lixcol_depth`.as("depth"),
-			sql<boolean>`lixcol_is_deleted`.as("is_deleted"),
-			"path",
+			sql<string>`lixcol_to_commit_id`.as("commit_id"),
+			sql<string>`lixcol_from_commit_id`.as("parent_commit_id"),
+			sql<string>`lixcol_commit_created_at`.as("commit_created_at"),
+			sql<FileCheckpointChangeRow["change_kind"]>`diff_type`.as("change_kind"),
+			sql<string | null>`coalesce(to_path, from_path)`.as("path"),
 		])
 		.where("id", "=", fileId)
-		.orderBy(sql`lixcol_depth`, "asc")
-		.$castTo<FileRevisionRow>();
+		.where(sql<boolean>`lixcol_commit_is_checkpoint`, "=", true)
+		.orderBy(sql`lixcol_position`, "asc")
+		.$castTo<FileCheckpointChangeRow>();
 }
 
 export function selectWorkingChangeCount(lix: Lix) {
@@ -169,8 +166,9 @@ export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
 }> {
 	const results = await lix.executeBatch([
 		{
-			sql: `SELECT lix_latest_checkpoint_commit_id() AS before_commit_id,
-			             lix_active_branch_commit_id() AS after_commit_id`,
+			sql: `SELECT working_base_commit_id AS before_commit_id,
+			             commit_id AS after_commit_id
+			      FROM lix_branch WHERE id = lix_active_branch_id()`,
 		},
 		{
 			sql: `SELECT id, diff_type,
@@ -203,11 +201,11 @@ export async function selectWorkingFileDiffContent(
 ): Promise<WorkingFileDiffContentRow> {
 	const results = await lix.executeBatch([
 		{
-			sql: "SELECT content, lixcol_metadata FROM lix_state_at('lix_file', $1) WHERE id = $2",
+			sql: "SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $1) WHERE id = $2",
 			params: [beforeCommitId, fileId],
 		},
 		{
-			sql: "SELECT content, lixcol_metadata FROM lix_state_at('lix_file', $1) WHERE id = $2",
+			sql: "SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $1) WHERE id = $2",
 			params: [afterCommitId, fileId],
 		},
 	]);
@@ -220,38 +218,47 @@ export async function selectWorkingFileDiffContent(
 }
 
 /**
- * Point-in-time file state: lix_state_at returns the complete tracked file
+ * Point-in-time file state: lix_as_of returns the complete tracked file
  * rows as of one commit, with the live relation's columns. An entity absent
  * at that commit contributes no row, and pk `=` / `IN` predicates bound the
  * historical read to the requested entities.
  */
 export function selectFilesStateAt(lix: Lix, commitId: string) {
 	return qb(lix).selectFrom(
-		sql<any>`lix_state_at('lix_file', ${commitId})`.as("lix_state_at"),
+		sql<any>`lix_as_of('lix_file', ${commitId})`.as("lix_as_of"),
 	);
 }
 
-/** File-name metadata for a checkpoint, using the same base as its comparison. */
-export function selectCheckpointFilePreviews(
+export const CHECKPOINT_PREVIEW_PAGE_SIZE = 20;
+export type CheckpointFilePreviewRow = {
+	commit_id: string;
+	id: string;
+	path: string;
+};
+
+/** One pinned, bounded history read for a visible page of checkpoint names. */
+export function selectCheckpointFilePreviewPage(
 	lix: Lix,
-	commitId: string,
-	previousCommitId: string | null,
+	commitIds: readonly string[],
 ) {
-	if (previousCommitId === null) {
-		return selectFilesStateAt(lix, commitId)
-			.select(["id", "path"])
-			.orderBy("path", "asc")
-			.$castTo<{ id: string; path: string }>();
+	if (
+		commitIds.length === 0 ||
+		commitIds.length > CHECKPOINT_PREVIEW_PAGE_SIZE
+	) {
+		throw new Error("A checkpoint preview page must contain 1–20 commit IDs.");
 	}
 	return qb(lix)
 		.selectFrom(
-			sql<any>`lix_diff('lix_file', ${previousCommitId}, ${commitId})`.as(
-				"diff",
-			),
+			sql<any>`lix_history('lix_file', ${commitIds[0]})`.as("history"),
 		)
-		.select(["id", sql<string>`coalesce(to_path, from_path)`.as("path")])
+		.select([
+			sql<string>`lixcol_to_commit_id`.as("commit_id"),
+			"id",
+			sql<string>`coalesce(to_path, from_path)`.as("path"),
+		])
+		.where(sql<string>`lixcol_to_commit_id`, "in", [...commitIds])
 		.orderBy("path", "asc")
-		.$castTo<{ id: string; path: string }>();
+		.$castTo<CheckpointFilePreviewRow>();
 }
 
 /**
@@ -282,22 +289,14 @@ export async function selectFilePathsAtCommits(
 	return paths;
 }
 
+/** Checkpoints on the active branch, ordered by ancestry rather than time. */
 export function selectCheckpoints(lix: Lix) {
 	return qb(lix)
-		.selectFrom("lix_checkpoint")
-		.select(["commit_id", "lixcol_created_at as created_at"])
-		.orderBy("created_at", "desc")
+		.selectFrom(sql<any>`lix_log()`.as("log"))
+		.select(["commit_id", "parent_commit_id", "created_at"])
+		.where("is_checkpoint", "=", true)
+		.orderBy("position", "asc")
 		.$castTo<CheckpointRow>();
-}
-
-/** First parent of a commit — position 0 of its ordered parent list. */
-export function selectCommitParent(lix: Lix, commitId: string) {
-	return qb(lix)
-		.selectFrom("lix_commit")
-		.select(sql<string | null>`parent_commit_ids ->> 0`.as("parent_id"))
-		.where("id", "=", commitId)
-		.limit(1)
-		.$castTo<{ parent_id: string | null }>();
 }
 
 export function selectLatestCheckpoint(lix: Lix) {

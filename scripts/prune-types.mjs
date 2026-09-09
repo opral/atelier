@@ -10,6 +10,7 @@ const publicDeclarations = new Set([
 	"extension-api.d.ts",
 	"file-icons.d.ts",
 	"atelier.d.ts",
+	"atelier-file.d.ts",
 	"history.d.ts",
 	"load-atelier.d.ts",
 	"atelier-state.d.ts",
