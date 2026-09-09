@@ -326,7 +326,7 @@ describe("HistoryView", () => {
 		});
 		const fileButtons = within(fileList).getAllByRole("button");
 		expect(fileButtons.map((button) => button.textContent)).toEqual([
-			"one.md",
+			"docs/one.md",
 			"two.md",
 		]);
 		fireEvent.click(fileButtons[1]!);
@@ -464,7 +464,7 @@ describe("HistoryView", () => {
 		});
 		const fileButtons = within(fileList).getAllByRole("button");
 		expect(fileButtons.map((button) => button.textContent)).toEqual([
-			"one.txt",
+			"docs/one.txt",
 			"two.txt",
 		]);
 		fireEvent.click(fileButtons[1]!);
@@ -578,6 +578,46 @@ function memoryPreferences(
 		delete: (key) => void store.delete(key),
 	};
 }
+
+describe("history file paths", () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	test("rows show one muted parent, and drop it in a narrow panel", async () => {
+		const resize = mockHistoryWidth();
+		const lix = await openLix();
+		const fileId = fakeUuid("path-file");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileId, "/docs/guides/setup.md", new TextEncoder().encode("x")],
+		);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({
+						workingChangesActive: true,
+						workingChangeFiles: [{ id: fileId, path: "/docs/guides/setup.md" }],
+					})}
+				/>
+			</LixProvider>,
+		);
+		const list = await screen.findByRole("list", {
+			name: "Files in working changes",
+		});
+		resize(320);
+		const button = within(list).getByRole("button");
+		expect(button).toHaveTextContent("…/guides/setup.md");
+		expect(button.querySelector("[data-attr='path-parent']")).toHaveTextContent(
+			"…/guides/",
+		);
+		expect(button).toHaveAttribute("title", "/docs/guides/setup.md");
+		resize(200);
+		await waitFor(() =>
+			expect(within(list).getByRole("button")).toHaveTextContent(/^setup\.md$/),
+		);
+		view.unmount();
+		await lix.close();
+	});
+});
 
 describe("history scope", () => {
 	afterEach(() => vi.unstubAllGlobals());

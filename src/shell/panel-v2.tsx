@@ -106,6 +106,7 @@ export function PanelV2({
 	onHidePanel,
 	viewContext,
 	tabLabel,
+	tabTooltip,
 	emptyStatePlaceholder,
 	onActiveViewInteraction,
 	dropId,
@@ -407,6 +408,7 @@ export function PanelV2({
 					onAddView={onAddView}
 					onHidePanel={onHidePanel}
 					tabLabel={tabLabel}
+					tabTooltip={tabTooltip}
 				/>
 				{sectionAccessory}
 			</div>
@@ -552,6 +554,11 @@ export type PanelV2Props = {
 		view: ExtensionDefinition,
 		instance: ExtensionInstance,
 	) => string;
+	/** Hover text for a tab when it should say more than its label (a file's path). */
+	readonly tabTooltip?: (
+		view: ExtensionDefinition,
+		instance: ExtensionInstance,
+	) => string | undefined;
 	readonly emptyStatePlaceholder?: ReactNode;
 	readonly onActiveViewInteraction?: (instance: string) => void;
 	readonly dropId?: string;
@@ -611,6 +618,7 @@ function SidebarSectionPicker({
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly onHidePanel?: () => void;
 	readonly tabLabel?: PanelV2Props["tabLabel"];
+	readonly tabTooltip?: PanelV2Props["tabTooltip"];
 }) {
 	const activeEntry =
 		panel.views.find((entry) => entry.instance === panel.activeInstance) ??
@@ -783,6 +791,7 @@ export function PanelTabStrip({
 	onRemoveView,
 	onAddView,
 	tabLabel,
+	tabTooltip,
 	preferencesFor,
 }: {
 	readonly side: PanelSide;
@@ -795,6 +804,7 @@ export function PanelTabStrip({
 	/** Enables the trailing "+" — the same view menu the sidebars offer. */
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly tabLabel?: PanelV2Props["tabLabel"];
+	readonly tabTooltip?: PanelV2Props["tabTooltip"];
 	readonly preferencesFor?: (
 		extensionId: ExtensionKind,
 	) => AtelierExtensionPreferences;
@@ -886,6 +896,12 @@ export function PanelTabStrip({
 							kind={entry.kind}
 							icon={fileGlyphForLabel(label) ?? view.icon}
 							label={label}
+							tooltip={
+								tabTooltip?.(view, entry) ??
+								(typeof entry.state?.filePath === "string"
+									? entry.state.filePath
+									: undefined)
+							}
 							isActive={activeInstance === entry.instance}
 							isFocused={isFocused && activeInstance === entry.instance}
 							isPending={entry.isPending}
@@ -1496,6 +1512,7 @@ function SortableTab({
 	kind,
 	icon,
 	label,
+	tooltip,
 	isActive,
 	isFocused,
 	isPending,
@@ -1541,6 +1558,7 @@ function SortableTab({
 				ref={setNodeRef}
 				icon={icon}
 				label={label}
+				tooltip={tooltip}
 				isActive={isActive}
 				isFocused={isFocused}
 				isPending={isPending}
@@ -1608,6 +1626,7 @@ const TabButtonBase = forwardRef<
 		{
 			icon: Icon,
 			label,
+			tooltip,
 			isActive,
 			isFocused,
 			isPending,
@@ -1638,7 +1657,7 @@ const TabButtonBase = forwardRef<
 			<button
 				type="button"
 				aria-label={isCompact ? label : undefined}
-				title={isCompact ? label : undefined}
+				title={isCompact ? (tooltip ?? label) : undefined}
 				onClick={(event) => {
 					dragOnClick?.(event);
 					onClick?.(event);
@@ -1684,7 +1703,7 @@ const TabButtonBase = forwardRef<
 							: "max-w-[10rem]",
 						isPending && "italic",
 					)}
-					title={label}
+					title={tooltip ?? label}
 				>
 					{label}
 				</span>
@@ -1739,6 +1758,8 @@ TabButtonBase.displayName = "PanelTabButton";
 export type PanelTabPreviewProps = {
 	readonly icon: TabIcon;
 	readonly label: string;
+	/** Hover text when it should say more than the label (a file's full path). */
+	readonly tooltip?: string;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly isPending?: boolean;

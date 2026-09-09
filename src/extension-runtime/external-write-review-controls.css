@@ -56,6 +56,12 @@
 		}
 	}
 
+	/* One muted parent folder before a file name (design 12b), on dark chrome. */
+	.external-write-review-path-parent {
+		color: rgb(168, 162, 158);
+		font-weight: 500;
+	}
+
 	.external-write-review-scope {
 		display: flex;
 		align-items: center;

@@ -2221,6 +2221,7 @@ function LayoutShellLoadedContentResolved({
 			fileName: activeFile
 				? (fileNameFromPath(activeFile.path) ?? activeFile.path)
 				: null,
+			filePath: activeFile?.path ?? null,
 			activeIndex: activeFile ? activeReviewFileIndex : null,
 			fileCount: pendingReviewFiles.length,
 			onPrevious: () => openAtOffset(-1),
@@ -3894,6 +3895,12 @@ function LayoutShellLoadedContentResolved({
 		}
 		return (
 			<PanelTabStrip
+				tabTooltip={(_view, entry) => {
+					const fileId = entry.state?.fileId;
+					return typeof fileId === "string"
+						? currentFilePathsById.get(fileId)
+						: undefined;
+				}}
 				side="central"
 				panel={centralPanel}
 				visibleExtensions={visibleExtensions}
@@ -3916,6 +3923,7 @@ function LayoutShellLoadedContentResolved({
 		renderHostTabStrip,
 		preferencesFor,
 		visibleExtensions,
+		currentFilePathsById,
 	]);
 
 	const activeDiffPath =
@@ -4366,6 +4374,17 @@ function LayoutShellLoadedContentResolved({
 										)
 									}
 									viewContext={extensionHostContext}
+									// Tabs stay name-only; the full path lives in the tooltip
+									// (design 12b), resolved from the live file table.
+									tabTooltip={(_view, entry) => {
+										const fileId = entry.state?.fileId;
+										return (
+											documentPathFromView(entry) ??
+											(typeof fileId === "string"
+												? currentFilePathsById.get(fileId)
+												: undefined)
+										);
+									}}
 									onAddView={addViewOnCentral}
 									{...(isHostReadOnly
 										? {}

@@ -1,4 +1,6 @@
 import {
+	createContext,
+	useContext,
 	useEffect,
 	useId,
 	useMemo,
@@ -13,6 +15,7 @@ import type {
 	AtelierJsonValue,
 } from "@/extension-api";
 import { DiffGlyph } from "@/components/diff-glyph";
+import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
 import { useQuery, useQueryResult } from "@/lib/lix-react";
@@ -157,6 +160,23 @@ export function HistoryScopeSwitch({
  * Scoped to the active file, it lists only the moments that touched that file
  * and names what happened to it at each one.
  */
+/**
+ * A parent folder before a file name needs room; under this width even a
+ * truncated parent is noise, so rows fall back to the bare name (the full
+ * path stays in each row's title).
+ */
+const PARENT_HINT_MIN_WIDTH = 240;
+const ShowPathParentsContext = createContext(true);
+
+function HistoryFilePath({ path }: { readonly path: string }) {
+	const showParents = useContext(ShowPathParentsContext);
+	return showParents ? (
+		<PathLabel path={path} layout="row" className="min-w-0" />
+	) : (
+		<span className="min-w-0 truncate">{splitPathLabel(path).name}</span>
+	);
+}
+
 export function HistoryView({
 	atelier,
 	preferences,
@@ -166,6 +186,7 @@ export function HistoryView({
 }) {
 	const containerRef = useRef<HTMLElement>(null);
 	const [wide, setWide] = useState(false);
+	const [showParents, setShowParents] = useState(true);
 	const { scope, activeFileId, activeFilePath } = useHistoryScope(
 		atelier,
 		preferences,
@@ -179,7 +200,9 @@ export function HistoryView({
 		const container = containerRef.current;
 		if (!container || typeof ResizeObserver === "undefined") return;
 		const observer = new ResizeObserver(([entry]) => {
-			if (entry) setWide(entry.contentRect.width >= 640);
+			if (!entry) return;
+			setWide(entry.contentRect.width >= 640);
+			setShowParents(entry.contentRect.width >= PARENT_HINT_MIN_WIDTH);
 		});
 		observer.observe(container);
 		return () => observer.disconnect();
@@ -192,12 +215,14 @@ export function HistoryView({
 			data-layout={wide ? "wide" : "compact"}
 			className="min-h-0 flex-1 overflow-y-auto px-1 py-2"
 		>
-			<div
-				className={wide ? "mx-auto w-full max-w-[60rem] px-5 py-4" : "w-full"}
-			>
-				<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
-				<CheckpointList atelier={atelier} wide={wide} file={file} />
-			</div>
+			<ShowPathParentsContext.Provider value={showParents}>
+				<div
+					className={wide ? "mx-auto w-full max-w-[60rem] px-5 py-4" : "w-full"}
+				>
+					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
+					<CheckpointList atelier={atelier} wide={wide} file={file} />
+				</div>
+			</ShowPathParentsContext.Provider>
 		</section>
 	);
 }
@@ -349,6 +374,7 @@ function WorkingChangeFileList({
 							openWorkingChangeFile?.(file.path);
 						}}
 						data-attr="history-open-working-change-file"
+						title={file.path}
 						onMouseDown={(event) => event.preventDefault()}
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
@@ -357,9 +383,7 @@ function WorkingChangeFileList({
 							alt=""
 							className="h-3.5 w-3.5 shrink-0"
 						/>
-						<span className="truncate">
-							{fileNameFromHistoryPath(file.path)}
-						</span>
+						<HistoryFilePath path={file.path} />
 						{file.movedFromPath ? (
 							<span className="truncate text-[var(--color-text-quaternary)]">
 								· {movedFromHint(file.movedFromPath, file.path)}
@@ -739,9 +763,7 @@ function InlineFilePreview({
 							alt=""
 							className="h-3.5 w-3.5 shrink-0"
 						/>
-						<span className="truncate">
-							{fileNameFromHistoryPath(file.path)}
-						</span>
+						<HistoryFilePath path={file.path} />
 					</span>
 				))}
 				{remaining > 0 ? <span className="shrink-0">+{remaining}</span> : null}
@@ -844,6 +866,7 @@ function CheckpointFileList({
 							openCheckpointFile?.(file.path);
 						}}
 						data-attr="history-open-checkpoint-file"
+						title={file.path}
 						onMouseDown={(event) => event.preventDefault()}
 						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
 					>
@@ -852,9 +875,7 @@ function CheckpointFileList({
 							alt=""
 							className="h-3.5 w-3.5 shrink-0"
 						/>
-						<span className="truncate">
-							{fileNameFromHistoryPath(file.path)}
-						</span>
+						<HistoryFilePath path={file.path} />
 						{file.movedFromPath ? (
 							<span className="truncate text-[var(--color-text-quaternary)]">
 								· {movedFromHint(file.movedFromPath, file.path)}
@@ -908,11 +929,6 @@ function movedFromHint(movedFromPath: string, path: string): string {
 		return fromDir.length > 0 ? `${fromDir}/` : "/";
 	}
 	return fromName;
-}
-
-function fileNameFromHistoryPath(path: string): string {
-	const segments = path.split("/").filter(Boolean);
-	return segments[segments.length - 1] ?? path;
 }
 
 function FilledFlag() {

@@ -7,10 +7,16 @@ import type {
 	ExtensionDefinition,
 	ExtensionKind,
 	ExtensionState,
+	ExtensionInstance,
 } from "../extension-runtime/types";
 import { PanelV2 } from "./panel-v2";
 
 type CentralPanelProps = {
+	/** Hover text for a document tab: the file's full path. */
+	readonly tabTooltip?: (
+		view: ExtensionDefinition,
+		instance: ExtensionInstance,
+	) => string | undefined;
 	readonly panel: PanelState;
 	readonly onSelectView: (key: string) => void;
 	readonly onRemoveView: (key: string) => void;
@@ -51,6 +57,7 @@ export function CentralPanel({
 	emptyState: emptyStateOverride,
 	showTabBar = false,
 	customTabStrip,
+	tabTooltip,
 }: CentralPanelProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
@@ -86,6 +93,7 @@ export function CentralPanel({
 			onRemoveView={onRemoveView}
 			viewContext={viewContext}
 			tabLabel={labelResolver}
+			tabTooltip={tabTooltip}
 			onActiveViewInteraction={finalizePendingIfNeeded}
 			onAddView={onAddView}
 			emptyStatePlaceholder={emptyState}
