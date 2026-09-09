@@ -118,6 +118,10 @@
 	/* The ▾ file checklist: every changed file, all ticked by default.
 	   Rendered above the bottom-anchored pill, right edges aligned. */
 	.external-write-review-menu {
+		/* Keep the top controls reachable as the retained working set grows. */
+		max-height: min(24rem, calc(100dvh - 10rem));
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		min-width: 13.125rem;
 		display: flex;
 		flex-direction: column;
@@ -130,6 +134,7 @@
 	}
 
 	.external-write-review-menu > button {
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
