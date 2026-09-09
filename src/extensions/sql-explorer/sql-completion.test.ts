@@ -17,13 +17,23 @@ const columns = [
 ];
 const history: TableFunction = {
 	name: "lix_history",
-	signature: "(relation TEXT) | (relation TEXT, as_of TEXT)",
+	signature: "(relation TEXT) | (relation TEXT, anchor TEXT)",
 	relations: new Map([
-		["lix_file", [...columns, { name: "lixcol_depth", type: "int" }]],
+		[
+			"lix_file",
+			[
+				{ name: "id", type: "text" },
+				{ name: "from_path", type: "text" },
+				{ name: "to_path", type: "text" },
+				{ name: "diff_type", type: "text" },
+				{ name: "lixcol_position", type: "int" },
+				{ name: "lixcol_commit_is_checkpoint", type: "bool" },
+			],
+		],
 	]),
 };
 const stateAt: TableFunction = {
-	name: "lix_state_at",
+	name: "lix_as_of",
 	signature: "(relation TEXT, commit_id TEXT)",
 	relations: new Map([["lix_file", columns]]),
 };
@@ -56,11 +66,7 @@ describe("catalog SQL completion", () => {
 			"SELECT * FROM lix_",
 			"SELECT * FROM lix_file JOIN lix_",
 		]) {
-			expect(labels(query)).toEqual([
-				"lix_file",
-				"lix_history",
-				"lix_state_at",
-			]);
+			expect(labels(query)).toEqual(["lix_file", "lix_history", "lix_as_of"]);
 		}
 	});
 	test.each([
@@ -69,25 +75,25 @@ describe("catalog SQL completion", () => {
 		"SELECT path, name|\nFROM lix_file\nORDER BY path\nLIMIT 100;",
 		"SELECT id, | FROM lix_file f",
 		'SELECT | FROM public."lix_file"',
-		"SELECT | FROM lix_state_at('lix_file', 'commit')",
+		"SELECT | FROM lix_as_of('lix_file', 'commit')",
 	])("completes unqualified surface columns: %s", (query) => {
 		expect(labels(query)).toEqual(["id", "path", "name"]);
 	});
 	test("uses the function result schema and isolates statements and nested query blocks", () => {
 		expect(labels("SELECT | FROM lix_history('lix_file')")).toContain(
-			"lixcol_depth",
+			"lixcol_position",
 		);
 		expect(
 			labels("SELECT * FROM lix_history('lix_file'); SELECT | FROM lix_file"),
-		).not.toContain("lixcol_depth");
+		).not.toContain("lixcol_position");
 		expect(
 			labels("SELECT (SELECT | FROM lix_file) FROM lix_history('lix_file')"),
-		).not.toContain("lixcol_depth");
+		).not.toContain("lixcol_position");
 		expect(
 			labels(
 				"SELECT | FROM lix_file WHERE id IN (SELECT id FROM lix_history('lix_file'))",
 			),
-		).not.toContain("lixcol_depth");
+		).not.toContain("lixcol_position");
 	});
 	test.each([
 		"SELECT f.| FROM lix_file AS f",
@@ -97,31 +103,30 @@ describe("catalog SQL completion", () => {
 	});
 	test("completes relation-specific result columns for a function alias", () => {
 		expect(labels("SELECT h.| FROM lix_history('lix_file') AS h")).toContain(
-			"lixcol_depth",
+			"lixcol_position",
 		);
-		expect(
-			labels("SELECT s.| FROM lix_state_at('lix_file', 'commit') s"),
-		).toEqual(["id", "path", "name"]);
+		expect(labels("SELECT s.| FROM lix_as_of('lix_file', 'commit') s")).toEqual(
+			["id", "path", "name"],
+		);
 	});
 	test("offers valid relations only inside the first literal function argument", () => {
-		expect(labels("SELECT * FROM lix_state_at('lix_")).toEqual(["lix_file"]);
-		expect(complete("SELECT * FROM lix_state_at('lix_file', 'lix_")).toBeNull();
+		expect(labels("SELECT * FROM lix_as_of('lix_")).toEqual(["lix_file"]);
+		expect(complete("SELECT * FROM lix_as_of('lix_file', 'lix_")).toBeNull();
 		expect(complete("SELECT 'lix_")).toBeNull();
 		expect(complete("SELECT 'it''s lix_")).toBeNull();
 	});
 	test("suppresses comments, including explicit completion", () => {
 		expect(complete("-- FROM lix_", true)).toBeNull();
 		expect(complete("SELECT /* lix_", true)).toBeNull();
-		expect(labels("-- ignored\nSELECT * FROM lix_")).toContain("lix_state_at");
+		expect(labels("-- ignored\nSELECT * FROM lix_")).toContain("lix_as_of");
 	});
 	test("tracks nested argument expressions and ignores quoted commas", () => {
-		const text =
-			"SELECT * FROM lix_state_at('lix_file', coalesce('a,b', 'c'), ";
+		const text = "SELECT * FROM lix_as_of('lix_file', coalesce('a,b', 'c'), ";
 		expect(activeFunction(text, text.length, schema)?.argument).toBe(2);
 	});
 	test("creates an editable minimum-arity call without a runnable default commit", () => {
 		expect(functionTemplate(stateAt)).toBe(
-			"lix_state_at('${relation}', '${commit_id}')",
+			"lix_as_of('${relation}', '${commit_id}')",
 		);
 		expect(functionTemplate(history)).toBe("lix_history('${relation}')");
 	});

@@ -119,7 +119,9 @@ describe("markdown QA round 8", () => {
 			{ type: "blockquote", content: [paragraph(text("quoted"))] },
 		]);
 		caretIn(editor, "quoted");
-		command("heading1").toggle(editor);
+		const toggle = command("heading1").toggle;
+		if (!toggle) throw new Error("heading1 must support toggling");
+		toggle(editor);
 		expect(md(editor)).toBe("# quoted\n");
 	});
 
@@ -128,7 +130,9 @@ describe("markdown QA round 8", () => {
 			{ type: "codeBlock", content: [text("a\nb\n\nc")] },
 		]);
 		editor.commands.setTextSelection(3);
-		command("paragraph").toggle(editor);
+		const toggle = command("paragraph").toggle;
+		if (!toggle) throw new Error("paragraph must support toggling");
+		toggle(editor);
 		expect(md(editor)).toBe("a\n\nb\n\nc\n");
 		expect(editor.state.selection.$from.parent.textContent).toBe("a");
 	});

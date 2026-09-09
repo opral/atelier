@@ -5,8 +5,9 @@ import { qb } from "@/lib/lix-kysely";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import {
 	selectCheckpoints,
-	selectCheckpointFilePreviews,
+	selectCheckpointFilePreviewPage,
 	selectFilesystemEntries,
+	selectFileCheckpointChanges,
 	selectLatestCheckpoint,
 	selectWorkingChangeCount,
 	selectWorkingFileDiffContent,
@@ -113,9 +114,91 @@ describe("selectFilesystemEntries", () => {
 });
 
 describe("checkpoint queries", () => {
+	test("uses a dirty fork's actual baseline for review and checkpoint history", async () => {
+		const lix = await openLix();
+		try {
+			const id = fakeUuid("dirty-fork-history");
+			await lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[id, "/draft.md", new TextEncoder().encode("inherited")],
+			);
+			const head = await lix.execute(
+				"SELECT lix_active_branch_commit_id() AS id",
+			);
+			const inheritedCommit = head.rows[0]!.id as string;
+			const draft = await lix.createBranch({
+				name: "Draft",
+				fromCommitId: inheritedCommit,
+			});
+			await lix.switchBranch({ branchId: draft.id });
+			const empty = await selectWorkingFileDiffSnapshot(lix);
+			expect(empty.beforeCommitId).toBe(inheritedCommit);
+			expect(empty.files).toEqual([]);
+			await lix.execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+				new TextEncoder().encode("reviewed"),
+				id,
+			]);
+			const review = await selectWorkingFileDiffSnapshot(lix);
+			expect(review.beforeCommitId).toBe(inheritedCommit);
+			const contents = await selectWorkingFileDiffContent(
+				lix,
+				id,
+				review.beforeCommitId,
+				review.afterCommitId,
+			);
+			expect(
+				new TextDecoder().decode(contents.from_content as Uint8Array),
+			).toBe("inherited");
+			const checkpoint = await createCheckpoint(lix);
+			const changes = await selectFileCheckpointChanges(lix, id).execute();
+			expect(changes).toEqual([
+				expect.objectContaining({
+					commit_id: checkpoint.commitId,
+					parent_commit_id: inheritedCommit,
+					change_kind: "modified",
+				}),
+			]);
+			const checkpoints = await selectCheckpoints(lix).execute();
+			expect(checkpoints[0]).toMatchObject({
+				commit_id: checkpoint.commitId,
+				parent_commit_id: inheritedCommit,
+			});
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("excludes other branches and keeps empty checkpoint entries", async () => {
+		const lix = await openLix();
+		try {
+			const mainId = await lix.activeBranchId();
+			const mainCheckpoint = await createCheckpoint(lix);
+			const draft = await lix.createBranch({ name: "Other" });
+			await lix.switchBranch({ branchId: draft.id });
+			const otherCheckpoint = await createCheckpoint(lix);
+			await lix.switchBranch({ branchId: mainId });
+			const checkpoints = await selectCheckpoints(lix).execute();
+			expect(checkpoints.map((row) => row.commit_id)).toContain(
+				mainCheckpoint.commitId,
+			);
+			expect(checkpoints.map((row) => row.commit_id)).not.toContain(
+				otherCheckpoint.commitId,
+			);
+			expect(
+				await selectCheckpointFilePreviewPage(lix, [
+					mainCheckpoint.commitId,
+				]).execute(),
+			).toEqual([]);
+		} finally {
+			await lix.close();
+		}
+	});
+
 	test("returns net working changes and newest-first checkpoints", async () => {
 		const lix = await openLix();
 
+		expect(await selectCheckpoints(lix).execute()).toEqual([]);
+		await createCheckpoint(lix);
 		const initialCheckpoints = await selectCheckpoints(lix).execute();
 		expect(initialCheckpoints).toHaveLength(1);
 
@@ -226,7 +309,7 @@ describe("checkpoint queries", () => {
 	});
 });
 
-describe("selectCheckpointFilePreviews", () => {
+describe("selectCheckpointFilePreviewPage", () => {
 	test("lists changed files with checkpoint paths for renamed and deleted files", async () => {
 		const lix = await openLix();
 		const ids = ["preview-rename", "preview-delete", "preview-unchanged"].map(
@@ -254,22 +337,30 @@ describe("selectCheckpointFilePreviews", () => {
 			ids[0],
 		]);
 		expect(
-			await selectCheckpointFilePreviews(
-				lix,
-				target.commitId,
-				base.commitId,
-			).execute(),
+			await selectCheckpointFilePreviewPage(lix, [target.commitId]).execute(),
 		).toEqual([
-			{ id: ids[1], path: "/removed.csv" },
-			{ id: ids[0], path: "/renamed.md" },
+			{ commit_id: target.commitId, id: ids[1], path: "/removed.csv" },
+			{ commit_id: target.commitId, id: ids[0], path: "/renamed.md" },
 		]);
 		expect(
-			await selectCheckpointFilePreviews(lix, base.commitId, null).execute(),
+			await selectCheckpointFilePreviewPage(lix, [base.commitId]).execute(),
 		).toEqual([
-			{ id: ids[0], path: "/before.md" },
-			{ id: ids[1], path: "/removed.csv" },
-			{ id: ids[2], path: "/unchanged.txt" },
+			{ commit_id: base.commitId, id: ids[0], path: "/before.md" },
+			{ commit_id: base.commitId, id: ids[1], path: "/removed.csv" },
+			{ commit_id: base.commitId, id: ids[2], path: "/unchanged.txt" },
 		]);
+		const page = await selectCheckpointFilePreviewPage(lix, [
+			target.commitId,
+			base.commitId,
+		]).execute();
+		expect(page).toHaveLength(5);
+		expect(page.filter((row) => row.id === ids[1])).toEqual(
+			expect.arrayContaining([
+				{ commit_id: target.commitId, id: ids[1], path: "/removed.csv" },
+				{ commit_id: base.commitId, id: ids[1], path: "/removed.csv" },
+			]),
+		);
+
 		await lix.close();
 	});
 });

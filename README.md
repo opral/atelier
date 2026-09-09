@@ -93,6 +93,8 @@ const initialState = await loadAtelier({
 
 Register the same trusted extensions on the server and browser. Loaders return plain JSON; components receive `{ data, atelier, view }`. Components must support server rendering and can initialize browser editors in effects while retaining their initial content. `fileExtensions` associates an extension with file types. Reusing a built-in extension ID replaces that built-in view.
 
+Inside an extension component, `useAtelierConnected()` reports when the borrowed live Lix session is connected. Gate imperative host commands such as `atelier.documents.open(path)` and queries not included in the prepared state on this value. It is false during prepared rendering and connection validation, then updates to true; rendering prepared content does not need to wait.
+
 Bundled Markdown, CSV, text, HTML, images, media, and drawings provide initial content. Markdown and CSV progressively initialize their interactive editors; drawings provide a basic SVG scene until Excalidraw is ready. Large media previews are deferred to avoid embedding unbounded binary data. Browser-installed repository extensions remain browser-only; the server does not execute arbitrary repository JavaScript.
 
 See [embedding](docs/embedding.md) and [CSV properties](src/extensions/csv/README.md). The development preview is in `preview/web/`.

@@ -36,8 +36,8 @@ export async function createCheckpointForFiles(
 		 FROM lix_create_checkpoint(ARRAY(
 		   SELECT row_ref
 		   FROM lix_diff('lix_file')
-		   WHERE lix_latest_checkpoint_commit_id() = $1
-		     AND lix_active_branch_commit_id() = $2
+		   WHERE lixcol_from_commit_id = $1
+		     AND lixcol_to_commit_id = $2
 		     AND id IN (${fileIdParameters(fileIds, 3)})
 		 ))`,
 		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
@@ -64,8 +64,8 @@ export async function revertWorkingChangesForFiles(
 		`INSERT INTO lix_revert (row_ref)
 		 SELECT row_ref
 		 FROM lix_diff('lix_file')
-		 WHERE lix_latest_checkpoint_commit_id() = $1
-		   AND lix_active_branch_commit_id() = $2
+		 WHERE lixcol_from_commit_id = $1
+		   AND lixcol_to_commit_id = $2
 		   AND id IN (${fileIdParameters(fileIds, 3)})`,
 		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
@@ -96,13 +96,13 @@ export async function writeReviewedFile(
 		);
 	const transaction = await lix.beginTransaction();
 	try {
-		// These coordinate functions and the diff relation are supported in
-		// SELECT, but not in bound UPDATE/DELETE predicates. The transaction
+		// The diff endpoint columns are supported in
+		// SELECT, not in bound UPDATE/DELETE predicates. The transaction
 		// keeps this check and the conditional write on the same snapshot.
 		const current = await transaction.execute(
 			`SELECT 1 AS current FROM lix_diff('lix_file')
-			 WHERE id = $1 AND lix_latest_checkpoint_commit_id() = $2
-			   AND lix_active_branch_commit_id() = $3`,
+			 WHERE id = $1 AND lixcol_from_commit_id = $2
+			   AND lixcol_to_commit_id = $3`,
 			[args.fileId, args.beforeCommitId, args.afterCommitId],
 		);
 		if (current.rows.length !== 1) throw stale();

@@ -1,15 +1,101 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import { createRoot, hydrateRoot } from "react-dom/client";
-import { act, StrictMode } from "react";
+import { act, StrictMode, useEffect, useState } from "react";
 import { openLix } from "./test-utils/node-lix-sdk";
 import { loadAtelier } from "./load-atelier";
 import { Atelier } from "./atelier";
 import { qb } from "./lib/lix-kysely";
 import { createSnapshotLix } from "./snapshot-lix";
+import { useAtelierConnected } from "./atelier-render-context";
+import type { AtelierExtensionRuntime } from "./extension-api";
 import type { SqlParam } from "@lix-js/sdk";
 
 describe("Atelier server rendering", () => {
+	it("exposes connection readiness only after validation so host commands can read live data", async () => {
+		const lix = await openLix();
+		const container = document.createElement("div");
+		document.body.append(container);
+		const root = createRoot(container);
+		let release!: () => void;
+		const barrier = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const failures: unknown[] = [];
+		function ConnectionView({ atelier }: { atelier: AtelierExtensionRuntime }) {
+			const connected = useAtelierConnected();
+			const [value, setValue] = useState("pending");
+			useEffect(() => {
+				if (!connected) return;
+				void atelier.lix
+					.execute("SELECT 42 AS unprepared_live_query")
+					.then((result) =>
+						setValue(String(result.rows[0]?.unprepared_live_query)),
+					)
+					.catch((error) => failures.push(error));
+			}, [connected, atelier.lix]);
+			return (
+				<div data-testid="connection-state">
+					{connected ? "connected" : "prepared"}:{value}
+				</div>
+			);
+		}
+		try {
+			const extensions = [{ id: "connection-test", Component: ConnectionView }];
+			const centralPanel = { home: { extensionId: "connection-test" } };
+			const initialState = await loadAtelier({
+				lix,
+				centralPanel,
+				extensions,
+				location: { view: "connection-test" },
+			});
+			const delayed = new Proxy(lix, {
+				get(target, property) {
+					if (property === "execute")
+						return async (sql: string, params: SqlParam[] = []) => {
+							if (
+								sql === "SELECT value FROM lix_key_value WHERE key = 'lix_id'"
+							)
+								await barrier;
+							return target.execute(sql, params);
+						};
+					const value = Reflect.get(target, property, target);
+					return typeof value === "function" ? value.bind(target) : value;
+				},
+			});
+			await act(async () =>
+				root.render(
+					<Atelier
+						lix={delayed}
+						initialState={initialState}
+						centralPanel={centralPanel}
+						extensions={extensions}
+					/>,
+				),
+			);
+			expect(
+				container.querySelector('[data-testid="connection-state"]')
+					?.textContent,
+			).toBe("prepared:pending");
+			expect(failures).toEqual([]);
+			await act(async () => {
+				release();
+			});
+			await vi.waitFor(() =>
+				expect(
+					container.querySelector('[data-testid="connection-state"]')
+						?.textContent,
+				).toBe("connected:42"),
+			);
+			expect(failures).toEqual([]);
+		} finally {
+			release();
+			await act(async () => root.unmount());
+			container.remove();
+			await lix.close();
+		}
+	});
+
 	it("cannot activate a delayed live connection after it was detached", async () => {
 		const lix = await openLix();
 		try {

@@ -203,7 +203,7 @@ describe("SqlExplorerView", () => {
 		fireEvent.keyDown(editor, { key: "Enter", metaKey: true });
 
 		expect(await screen.findByText("/notes/hello.md")).toBeInTheDocument();
-		expect(screen.getByText("1 row", { exact: false })).toBeInTheDocument();
+		expect(screen.getByText("2 rows", { exact: false })).toBeInTheDocument();
 		expect(screen.getByText(/execute .* ms/)).toBeInTheDocument();
 		expect(screen.queryByText(/decode .* ms/)).not.toBeInTheDocument();
 		expect(screen.queryByText(/ui render .* ms/)).not.toBeInTheDocument();
@@ -249,7 +249,7 @@ describe("SqlExplorerView", () => {
 		).not.toContain("_by_branch");
 		expect(
 			document.querySelector("[data-attr='sql-grid-row-range']"),
-		).toHaveTextContent(/1–1 of 1 row/);
+		).toHaveTextContent(/1–2 of 2 rows/);
 	});
 
 	test("surfaces engine errors without crashing", async () => {
@@ -433,7 +433,7 @@ describe("SqlExplorerView", () => {
 			/>,
 		);
 		const functionRow = await screen.findByRole("button", {
-			name: "lix_state_at",
+			name: "lix_as_of",
 		});
 		expect(
 			screen.queryByRole("button", { name: "lix_working_diff" }),
@@ -442,13 +442,13 @@ describe("SqlExplorerView", () => {
 		const view = EditorView.findFromDOM(editor)!;
 		act(() => view.dispatch({ selection: { anchor: view.state.doc.length } }));
 		fireEvent.change(screen.getByRole("textbox", { name: "Search schema" }), {
-			target: { value: "state_at" },
+			target: { value: "as_of" },
 		});
 		expect(screen.queryByRole("button", { name: "lix_file" })).toBeNull();
 		fireEvent.click(functionRow);
 		fireEvent.click(screen.getByRole("button", { name: "Insert call" }));
 		expect(view.state.doc.toString()).toBe(
-			"SELECT * FROM lix_state_at('relation', 'commit_id')",
+			"SELECT * FROM lix_as_of('relation', 'commit_id')",
 		);
 		expect(
 			view.state.sliceDoc(

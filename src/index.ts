@@ -7,6 +7,7 @@ export type {
 	LoadAtelierOptions,
 } from "./atelier-state";
 export type { AtelierNavigation } from "./atelier-render-context";
+export { useAtelierConnected } from "./atelier-render-context";
 export {
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
@@ -90,3 +91,6 @@ export type {
 } from "./dev-tools/simulate-agent-workflow";
 
 export type { AtelierHistoryProps } from "./history";
+
+export { AtelierFile } from "./atelier-file";
+export type { AtelierFileProps } from "./atelier-file";
