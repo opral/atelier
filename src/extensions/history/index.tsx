@@ -14,7 +14,7 @@ import type {
 	AtelierExtensionPreferences,
 	AtelierJsonValue,
 } from "@/extension-api";
-import { DiffGlyph } from "@/components/diff-glyph";
+import { DiffGlyph, WorkingDot } from "@/components/diff-glyph";
 import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
@@ -312,10 +312,7 @@ function WorkingChangesRow({
 					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
 				>
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-						<span
-							aria-hidden="true"
-							className="h-2 w-2 rounded-full bg-[var(--color-icon-brand)] ring-3 ring-[var(--color-bg-brand-soft)]"
-						/>
+						<WorkingDot className="ring-3 ring-[var(--color-bg-brand-soft)]" />
 					</span>
 					<span
 						className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}

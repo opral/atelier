@@ -5,14 +5,15 @@
  * grayscale and deuteranopia:
  *
  *   added    dot + plus      green
- *   modified plain dot       brand orange
+ *   modified dot + tilde     brand orange
  *   removed  dot + minus     red
  *   moved    dot + chevron   slate blue
  *   conflict split dot       purple (reserved — no producer until merges)
  *
  * Internal detail needs ≥10px to stay crisp. Listings run 12px; the compact
- * file tree runs the 10px floor; below that (the 7px status bar dot)
- * callers keep a plain color dot and let these views carry the types.
+ * file tree runs the 10px floor; below that callers use WorkingDot, the
+ * plain 7px dot, and let these views carry the types. Every kind carries a
+ * knockout, so all five share one silhouette and none reads heavier.
  */
 
 import {
@@ -87,7 +88,7 @@ export function DiffGlyph({
 				) : (
 					<circle cx="6" cy="6" r={DIFF_GLYPH_RADIUS} fill={fill} />
 				)}
-				{kind === "added" || kind === "removed" || kind === "moved" ? (
+				{kind !== "conflict" ? (
 					<path
 						d={DIFF_GLYPH_KNOCKOUT_PATHS[kind]}
 						stroke={knockout}
@@ -99,5 +100,23 @@ export function DiffGlyph({
 				) : null}
 			</svg>
 		</span>
+	);
+}
+
+/**
+ * The plain dot for surfaces below the knockout floor: the status bar and a
+ * listing's "working changes" marker. One size everywhere, so the dot never
+ * reads bigger in one place than another.
+ */
+export function WorkingDot({
+	className = "",
+}: {
+	readonly className?: string;
+}) {
+	return (
+		<span
+			aria-hidden="true"
+			className={`inline-block size-[7px] shrink-0 rounded-full bg-[var(--color-icon-brand)] ${className}`}
+		/>
 	);
 }
