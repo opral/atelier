@@ -1,15 +1,22 @@
 @scope (.atelier-root) {
 	/* Values mirror the diff-mode mocks: #1C1917 pill, 12px radius, 7px pad. */
+	/* The float spans the review area so the pill can use all of it. It was
+	   once anchored at left: 50%, which capped its shrink-to-fit width at
+	   half the panel and squeezed the chip and verbs; now only the file name
+	   gives way (see the container query at the end). The wrapper itself is
+	   pointer-inert so it never shadows the page around the pill. */
 	.external-write-review-actions {
 		position: absolute;
-		left: 50%;
+		left: 1rem;
+		right: 1rem;
 		bottom: 3rem;
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 0.55rem;
-		transform: translateX(-50%);
+		container-type: inline-size;
+		pointer-events: none;
 		/* Entering and leaving review fade symmetrically with the page's
 		   review-focus dimming (150ms): a keyframe covers the mount, the
 		   transition covers the presence-managed exit. */
@@ -17,6 +24,10 @@
 		transition:
 			opacity 0.15s ease,
 			transform 0.15s ease;
+	}
+
+	.external-write-review-actions > * {
+		pointer-events: auto;
 	}
 
 	/* The float takes keyboard focus when review opens (← → step files);
@@ -45,14 +56,17 @@
 
 	.external-write-review-actions[data-presence="closing"] {
 		opacity: 0;
-		transform: translateX(-50%) translateY(0.5rem);
+		transform: translateY(0.5rem);
+	}
+
+	.external-write-review-actions[data-presence="closing"] > * {
 		pointer-events: none;
 	}
 
 	@keyframes external-write-review-float-in {
 		from {
 			opacity: 0;
-			transform: translateX(-50%) translateY(0.5rem);
+			transform: translateY(0.5rem);
 		}
 	}
 
@@ -64,6 +78,8 @@
 
 	.external-write-review-scope {
 		display: flex;
+		align-self: center;
+		max-width: 100%;
 		align-items: center;
 		gap: 0.125rem;
 		padding: 0.4375rem;
@@ -331,8 +347,15 @@
 		);
 	}
 
+	/* Only the file navigation gives way when the pill runs out of room;
+	   the chip and the verbs keep their full labels. */
+	.external-write-review-scope > * {
+		flex: none;
+	}
+
 	.external-write-review-navigation {
 		display: flex;
+		flex: 0 1 auto;
 		min-width: 0;
 		align-items: center;
 		gap: 0.42rem;
@@ -380,12 +403,14 @@
 	}
 
 	.external-write-review-navigation strong {
+		min-width: 0;
 		max-width: 9rem;
 		font-size: 0.75rem;
 		font-weight: 700;
 	}
 
 	.external-write-review-navigation small {
+		flex: none;
 		color: var(--color-text-inverse-tertiary);
 		font-size: 0.72rem;
 		white-space: nowrap;
@@ -537,5 +562,73 @@
 		padding: 0.3rem 0.5rem;
 		color: var(--color-text-status-danger);
 		font-size: 0.68rem;
+	}
+
+	/* The chip's compact count is drawn from a data attribute so the
+	   accessible text stays one string ("Seen 1 of 23"). */
+	.external-write-review-chip-short {
+		display: none;
+	}
+
+	.external-write-review-chip-short::before {
+		content: attr(data-label);
+	}
+
+	/* Narrow review areas (side panels open on a small window): the labels
+	   that only repeat what the glyphs say go first — "Seen", "Exit", the
+	   ⌘⏎ hint — and the parent folder, before the file name has to
+	   ellipsise. The threshold is the pill's natural width with every label
+	   on, so nothing truncates while a label could still be dropped. */
+	@container (max-width: 54rem) {
+		.external-write-review-chip-long,
+		.external-write-review-button-exit > span,
+		.external-write-review-button-accept > .external-write-review-shortcut {
+			display: none;
+		}
+
+		.external-write-review-chip-short {
+			display: block;
+		}
+
+		.external-write-review-navigation strong {
+			max-width: 6rem;
+		}
+
+		/* The name alone; the muted parent folder is the first to go. */
+		.external-write-review-navigation .external-write-review-path-parent {
+			display: none;
+		}
+	}
+
+	/* Tighter still: the file name goes, the stepper keeps its arrows and
+	   "n of m" counter so the position stays readable and steppable. */
+	@container (max-width: 36rem) {
+		.external-write-review-navigation {
+			flex: none;
+		}
+
+		.external-write-review-navigation strong,
+		.external-write-review-navigation .external-write-review-file-icon {
+			display: none;
+		}
+	}
+
+	/* Phone-narrow: the stepper is arrows only and Undo is its icon. The
+	   primary verb keeps its word — it is the one thing the pill is for. */
+	@container (max-width: 32rem) {
+		.external-write-review-navigation small,
+		.external-write-review-button-reject > span {
+			display: none;
+		}
+	}
+
+	/* Below that the stepper and the Exit button go: Esc still exits, and
+	   every file is reachable from the chip's list. */
+	@container (max-width: 27rem) {
+		.external-write-review-button-exit,
+		.external-write-review-exit-divider,
+		.external-write-review-navigation {
+			display: none;
+		}
 	}
 }
