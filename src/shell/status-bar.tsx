@@ -1,5 +1,6 @@
 import { type JSX, type ReactNode } from "react";
 import { Flag } from "lucide-react";
+import { WorkingDot } from "@/components/diff-glyph";
 import { useQueryResult } from "@/lib/lix-react";
 import { selectWorkingChangeCount } from "@/queries";
 
@@ -153,12 +154,7 @@ function CheckpointStatus({
 			{hasWorkingChanges ? null : (
 				<Flag aria-hidden="true" className="h-3 w-3" />
 			)}
-			{hasWorkingChanges ? (
-				<span
-					aria-hidden="true"
-					className="h-1.5 w-1.5 rounded-full bg-[var(--color-icon-brand)]"
-				/>
-			) : null}
+			{hasWorkingChanges ? <WorkingDot /> : null}
 			<span>{statusLabel}</span>
 		</button>
 	) : (
@@ -166,12 +162,7 @@ function CheckpointStatus({
 			{hasWorkingChanges ? null : (
 				<Flag aria-hidden="true" className="h-3 w-3" />
 			)}
-			{hasWorkingChanges ? (
-				<span
-					aria-hidden="true"
-					className="h-1.5 w-1.5 rounded-full bg-[var(--color-icon-brand)]"
-				/>
-			) : null}
+			{hasWorkingChanges ? <WorkingDot /> : null}
 			<span>{statusLabel}</span>
 		</span>
 	);
