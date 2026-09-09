@@ -209,7 +209,9 @@
 	}
 	.csv-toolbar-popover {
 		position: absolute;
-		top: calc(var(--atelier-panel-header-height) - 4px);
+		/* Anchored to the toolbar's bottom edge so a wrapped toolbar keeps its
+		   second row (and the trigger that closes this) visible. */
+		top: calc(100% - 5px);
 		right: var(--csv-toolbar-inset);
 		width: 244px;
 		max-width: calc(100vw - 24px);

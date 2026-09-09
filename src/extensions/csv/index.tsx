@@ -38,6 +38,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
 	AlertTriangle,
@@ -1069,7 +1070,12 @@ function CsvTable({
 					bv = sourceParsed.rows[b]!.cells[sort.column] ?? "";
 				return (
 					sort.direction *
-					compareCsvValues(av, bv, columnInfo[sort.column]?.type)
+					compareCsvValues(
+						av,
+						bv,
+						columnInfo[sort.column]?.type,
+						columnInfo[sort.column]?.options,
+					)
 				);
 			});
 		return rows;
@@ -1084,6 +1090,30 @@ function CsvTable({
 			sourceParsed.rows.length + Math.max(0, row - rowMap.length),
 		[rowMap, sourceParsed.rows.length],
 	);
+	// Flips a checkbox cell between its own yes/no encoding. Returns false when
+	// the cell is not a boolean-shaped checkbox so callers fall through.
+	const toggleCheckbox = (col: number, row: number): boolean => {
+		const value = parsed.rows[row]?.cells[col] ?? "";
+		if (
+			!editing ||
+			columnInfo[col]?.type !== "checkbox" ||
+			!/^(yes|no|true|false|1|0)?$/i.test(value)
+		)
+			return false;
+		const pair = /^(true|false)$/i.test(value)
+			? ["true", "false"]
+			: /^[01]$/.test(value)
+				? ["1", "0"]
+				: ["yes", "no"];
+		editing.onCellsEdited([
+			{
+				row: sourceRowIndex(row),
+				column: col,
+				value: /^(yes|true|1)$/i.test(value) ? pair[1]! : pair[0]!,
+			},
+		]);
+		return true;
+	};
 	const columnCount = parsed.columns.length;
 	// Width state keyed by the column set (not the parse result identity) so
 	// user resizes and auto widths survive cell edits and only reset when the
@@ -1298,7 +1328,15 @@ function CsvTable({
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
-			if (editable || columnInfo[columnIndex]) {
+			const propertyType = columnInfo[columnIndex]?.type;
+			// Read-only email and URL properties render as links like untyped
+			// link-shaped values do; every other property keeps its renderer.
+			if (
+				editable ||
+				(columnInfo[columnIndex] &&
+					propertyType !== "email" &&
+					propertyType !== "url")
+			) {
 				// Editable cells are plain text so the overlay edits the raw
 				// value; URL/email link affordances stay in read-only views.
 				return {
@@ -1320,7 +1358,10 @@ function CsvTable({
 					copyData: value,
 				} as PropertyCell;
 			}
-			const linkUrl = toExternalLinkUrl(value);
+			const linkUrl =
+				propertyType === "email" && /^[^\s@]+@[^\s@]+$/.test(value.trim())
+					? `mailto:${value.trim()}`
+					: toExternalLinkUrl(value);
 			if (linkUrl) {
 				return {
 					kind: GridCellKind.Uri,
@@ -1419,6 +1460,12 @@ function CsvTable({
 		columns: CompactSelection.empty(),
 		rows: CompactSelection.empty(),
 	}));
+	const gridSelectionRef = useRef(gridSelection);
+	gridSelectionRef.current = gridSelection;
+	const hasSelection = (selection: GridSelection) =>
+		selection.current !== undefined ||
+		selection.rows.length > 0 ||
+		selection.columns.length > 0;
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => {
 		setMenu(null);
@@ -1427,11 +1474,14 @@ function CsvTable({
 			let active = doc?.activeElement;
 			while (active?.shadowRoot?.activeElement)
 				active = active.shadowRoot.activeElement;
-			// Outside clicks may already have focused another control or opened a menu.
+			// Outside clicks may already have focused another control or opened a
+			// menu. Focusing Glide with nothing selected makes it select the first
+			// cell, so only hand focus back when there is a selection to return to.
 			if (
-				!active ||
-				active === doc?.body ||
-				containerRef.current?.contains(active)
+				(!active ||
+					active === doc?.body ||
+					containerRef.current?.contains(active)) &&
+				hasSelection(gridSelectionRef.current)
 			)
 				gridRef.current?.focus();
 		});
@@ -1442,6 +1492,39 @@ function CsvTable({
 			rows: CompactSelection.empty(),
 		});
 	}, []);
+	// Glide only tracks pointer events on its own canvas, so a press on the
+	// blank panel around the table (the grid is sized to its content) would
+	// otherwise leave the last cell or rows selected. A press directly on the
+	// surrounding surface deselects, like clicking off a table in Notion;
+	// presses on controls inside that surface keep the selection they act on.
+	// The clear waits a tick: pointerdown runs before the browser moves focus
+	// off Glide's focused accessibility cell, and clearing while that cell is
+	// still focused makes Glide re-select it as its table re-renders.
+	const deselectOnBlankPress = useCallback(
+		(event: ReactPointerEvent<HTMLElement>) => {
+			if (event.button !== 0 || event.target !== event.currentTarget) return;
+			window.setTimeout(() => {
+				// An open editor commits on this press and Glide refocuses its
+				// canvas, which would auto-select the first cell; take focus off
+				// the grid before emptying the selection.
+				const active = containerRef.current?.ownerDocument.activeElement;
+				if (
+					active instanceof HTMLElement &&
+					containerRef.current?.contains(active)
+				)
+					active.blur();
+				setGridSelection((current) =>
+					hasSelection(current)
+						? {
+								columns: CompactSelection.empty(),
+								rows: CompactSelection.empty(),
+							}
+						: current,
+				);
+			}, 0);
+		},
+		[],
+	);
 	const selectedRows = gridSelection.rows
 		.toArray()
 		.filter((row) => row < rowMap.length);
@@ -1467,11 +1550,89 @@ function CsvTable({
 		setSort(null);
 		setFilter(EMPTY_CSV_FILTER);
 	}, [columnIdentities]);
+	// When the visible row mapping changes (search, filter, sort, an edit
+	// that re-sorts, an appended row) the selection follows the rows that
+	// stay visible and drops the ones that vanish, so Enter/Tab/arrows keep
+	// working on the row the user just edited. Ranges collapse to their
+	// anchor cell. A pending append selects the new row's first cell so
+	// typing continues there.
 	const rowMapKey = rowMap.join(",");
+	// The map array is rebuilt on every metadata or content change; only a
+	// change in the visible mapping itself matters here.
+	const rowMapRef = useRef(rowMap);
+	rowMapRef.current = rowMap;
+	const previousRowMap = useRef({ key: rowMapKey, map: rowMap });
+	const pendingAppend = useRef(false);
+	// A column appended past the right edge is otherwise invisible: the grid
+	// is sized to the panel and nothing hints at the new column. Reveal it.
+	const pendingColumnReveal = useRef(false);
 	useEffect(() => {
-		clearSelection();
+		if (!pendingColumnReveal.current) return;
+		pendingColumnReveal.current = false;
+		const column = columnCount - 1;
+		requestAnimationFrame(() => {
+			gridRef.current?.scrollTo(column, 0, "horizontal");
+			gridRef.current?.focus();
+		});
+	}, [columnCount]);
+	useEffect(() => {
+		const previous = previousRowMap.current;
+		const rowMap = rowMapRef.current;
+		previousRowMap.current = { key: rowMapKey, map: rowMap };
+		if (previous.key === rowMapKey) return;
 		setMenu(null);
-	}, [rowMapKey, clearSelection]);
+		if (pendingAppend.current && rowMap.length > previous.map.length) {
+			pendingAppend.current = false;
+			const row = rowMap.length - 1;
+			setGridSelection({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.empty(),
+				current: {
+					cell: [0, row],
+					range: { x: 0, y: row, width: 1, height: 1 },
+					rangeStack: [],
+				},
+			});
+			requestAnimationFrame(() => {
+				gridRef.current?.scrollTo(0, row);
+				gridRef.current?.focus();
+			});
+			return;
+		}
+		setGridSelection((current) => {
+			const remapRow = (row: number) => {
+				const source = previous.map[row];
+				return source === undefined ? -1 : rowMap.indexOf(source);
+			};
+			const rows = current.rows
+				.toArray()
+				.map(remapRow)
+				.filter((row) => row >= 0)
+				.sort((left, right) => left - right);
+			let next: GridSelection = {
+				columns: CompactSelection.empty(),
+				rows: rows.reduce(
+					(selection, row) => selection.add(row),
+					CompactSelection.empty(),
+				),
+			};
+			if (current.current) {
+				const row = remapRow(current.current.cell[1]);
+				if (row >= 0) {
+					const column = current.current.cell[0];
+					next = {
+						...next,
+						current: {
+							cell: [column, row],
+							range: { x: column, y: row, width: 1, height: 1 },
+							rangeStack: [],
+						},
+					};
+				}
+			}
+			return next;
+		});
+	}, [rowMapKey]);
 
 	const handleCellContextMenu = useCallback(
 		(
@@ -1489,13 +1650,16 @@ function CsvTable({
 			event.preventDefault();
 			// Anchor the menu visually: select the clicked row unless it is
 			// already part of a multi-row selection the menu will act on.
-			setGridSelection((current) =>
-				current.rows.hasIndex(row)
-					? current
-					: {
-							columns: CompactSelection.empty(),
-							rows: CompactSelection.fromSingleSelection(row),
-						},
+			// Glide selects the pressed cell on this same mousedown; land after it.
+			requestAnimationFrame(() =>
+				setGridSelection((current) =>
+					current.rows.hasIndex(row)
+						? current
+						: {
+								columns: CompactSelection.empty(),
+								rows: CompactSelection.fromSingleSelection(row),
+							},
+				),
 			);
 			setMenu({
 				kind: "row",
@@ -1633,7 +1797,21 @@ function CsvTable({
 
 	return (
 		<>
-			<div className="csv-toolbar">
+			<div
+				className="csv-toolbar"
+				onPointerDown={deselectOnBlankPress}
+				onKeyDown={(event) => {
+					if (
+						event.key === "Escape" &&
+						!event.defaultPrevented &&
+						selectedRows.length > 0 &&
+						(event.target as HTMLElement).closest(".csv-row-actions")
+					) {
+						event.preventDefault();
+						clearSelection();
+					}
+				}}
+			>
 				<CsvViewMenu
 					views={savedViews}
 					activeId={activeSavedView?.id ?? null}
@@ -1751,6 +1929,15 @@ function CsvTable({
 							placeholder="Search"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key !== "Escape") return;
+								e.preventDefault();
+								if (search) setSearch("");
+								else {
+									clearSelection();
+									e.currentTarget.blur();
+								}
+							}}
 						/>
 						{search && (
 							<button
@@ -1865,6 +2052,16 @@ function CsvTable({
 						};
 					}
 				}}
+				onPointerDown={deselectOnBlankPress}
+				data-csv-selection={
+					gridSelection.current
+						? "cell"
+						: gridSelection.rows.length > 0
+							? "rows"
+							: gridSelection.columns.length > 0
+								? "columns"
+								: "none"
+				}
 				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
 			>
 				{reviewModel ? (
@@ -1958,34 +2155,83 @@ function CsvTable({
 							className="csv-data-grid"
 							drawCell={drawCell}
 							provideEditor={providePropertyEditor}
+							onKeyDown={(event) => {
+								const current = gridSelection.current;
+								// Enter or Space on a checkbox flips it instead of opening
+								// the yes/no picker.
+								if (
+									(event.key === "Enter" || event.key === " ") &&
+									current &&
+									toggleCheckbox(current.cell[0], current.cell[1])
+								) {
+									event.cancel();
+									return;
+								}
+								// Glide binds a single key to delete (Delete off macOS);
+								// Backspace does the same work here.
+								if (event.key === "Backspace" && editing) {
+									if (selectedRows.length > 0) {
+										event.cancel();
+										deleteSelectedRows();
+										return;
+									}
+									if (current) {
+										event.cancel();
+										const { x, y, width, height } = current.range;
+										const edits: CsvCellEdit[] = [];
+										for (let row = y; row < y + height; row += 1)
+											for (let column = x; column < x + width; column += 1)
+												if (row < rowMap.length)
+													edits.push({
+														row: sourceRowIndex(row),
+														column,
+														value: "",
+													});
+										if (edits.length) editing.onCellsEdited(edits);
+										return;
+									}
+								}
+								// Tab past the last column continues on the next row (and
+								// Shift+Tab back) instead of leaving the grid for the scroller.
+								if (event.key === "Tab" && current) {
+									const [column, row] = current.cell;
+									const target = event.shiftKey
+										? column === 0 && row > 0
+											? ([columnCount - 1, row - 1] as const)
+											: null
+										: column === columnCount - 1 && row < parsed.rows.length - 1
+											? ([0, row + 1] as const)
+											: null;
+									if (target) {
+										event.cancel();
+										setGridSelection({
+											columns: CompactSelection.empty(),
+											rows: CompactSelection.empty(),
+											current: {
+												cell: [target[0], target[1]],
+												range: {
+													x: target[0],
+													y: target[1],
+													width: 1,
+													height: 1,
+												},
+												rangeStack: [],
+											},
+										});
+									}
+								}
+							}}
 							onCellClicked={(cell, event) => {
-								const [col, row] = cell,
-									info = columnInfo[col],
-									value = parsed.rows[row]?.cells[col] ?? "";
 								if (
 									!editing ||
 									(!event.isTouch &&
 										(event.shiftKey ||
 											event.ctrlKey ||
 											event.metaKey ||
-											("altKey" in event && event.altKey))) ||
-									info?.type !== "checkbox" ||
-									!/^(yes|no|true|false|1|0)?$/i.test(value)
+											("altKey" in event && event.altKey)))
 								)
 									return;
-								event.preventDefault();
-								const pair = /^(true|false)$/i.test(value)
-									? ["true", "false"]
-									: /^[01]$/.test(value)
-										? ["1", "0"]
-										: ["yes", "no"];
-								editing.onCellsEdited([
-									{
-										row: sourceRowIndex(row),
-										column: col,
-										value: /^(yes|true|1)$/i.test(value) ? pair[1]! : pair[0]!,
-									},
-								]);
+								if (toggleCheckbox(cell[0], cell[1])) event.preventDefault();
 							}}
 							cellActivationBehavior="single-click"
 							headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
@@ -2014,7 +2260,10 @@ function CsvTable({
 							columnSelect="multi"
 							rowSelect="multi"
 							rowSelectionMode="multi"
-							copyHeaders={true}
+							copyHeaders={
+								gridSelection.rows.length > 0 ||
+								(gridSelection.current?.range.height ?? 0) > 1
+							}
 							gridSelection={gridSelection}
 							onGridSelectionChange={setGridSelection}
 							onDelete={(selection) => {
@@ -2060,7 +2309,10 @@ function CsvTable({
 							style={{ left: gridWidth }}
 							title="Add column"
 							aria-label="Add column"
-							onClick={() => editing.onInsertColumn(columnCount)}
+							onClick={() => {
+								pendingColumnReveal.current = true;
+								editing.onInsertColumn(columnCount);
+							}}
 						>
 							<Plus aria-hidden="true" size={14} />
 						</button>
@@ -2074,10 +2326,8 @@ function CsvTable({
 								setSearch("");
 								setFilter(EMPTY_CSV_FILTER);
 								setSort(null);
+								pendingAppend.current = true;
 								editing.onRowAppended();
-								requestAnimationFrame(() =>
-									gridRef.current?.scrollTo(0, sourceParsed.rows.length),
-								);
 							}}
 						>
 							<Plus aria-hidden="true" size={14} />
@@ -2151,7 +2401,11 @@ function CsvTable({
 								runStructuralEdit(() => editing.onInsertColumn(menu.column))
 							}
 							onInsertRight={() =>
-								runStructuralEdit(() => editing.onInsertColumn(menu.column + 1))
+								runStructuralEdit(() => {
+									if (menu.column === columnCount - 1)
+										pendingColumnReveal.current = true;
+									editing.onInsertColumn(menu.column + 1);
+								})
 							}
 							onDelete={() =>
 								runStructuralEdit(() => editing.onDeleteColumns(menuColumns))

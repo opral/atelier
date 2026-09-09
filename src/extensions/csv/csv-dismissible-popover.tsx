@@ -66,7 +66,11 @@ export function CsvDismissiblePopover({
 		doc.addEventListener("focusin", onOutside);
 		doc.addEventListener("keydown", onEscape);
 		if (trigger.current?.matches(":focus-visible")) {
-			node.querySelector<HTMLElement>('[aria-haspopup="menu"], input')?.focus();
+			node
+				.querySelector<HTMLElement>(
+					'[aria-haspopup="menu"], input, .csv-view-list > button',
+				)
+				?.focus();
 		}
 		return () => {
 			doc.removeEventListener("pointerdown", onOutside, true);

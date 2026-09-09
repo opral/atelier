@@ -1,4 +1,8 @@
-import type { CellClickedEventArgs } from "@glideapps/glide-data-grid";
+import {
+	CompactSelection,
+	type CellClickedEventArgs,
+	type GridSelection,
+} from "@glideapps/glide-data-grid";
 import { Suspense } from "react";
 import { Atelier } from "@/atelier";
 import {
@@ -79,6 +83,19 @@ const latestDataEditorProps = vi.hoisted(() => ({
 	current: null as MockedDataEditorProps | null,
 }));
 
+const mockSelection = (rows: readonly number[]) => ({
+	toArray: () => [...rows],
+	hasIndex: (candidate: number) => rows.includes(candidate),
+	length: rows.length,
+	add: (index: number | readonly [number, number]) =>
+		mockSelection([
+			...rows,
+			...(typeof index === "number"
+				? [index]
+				: Array.from({ length: index[1] - index[0] }, (_, i) => index[0] + i)),
+		]),
+});
+
 vi.mock("@glideapps/glide-data-grid", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@glideapps/glide-data-grid")>()),
 	DataEditorCore: (props: MockedDataEditorProps) => {
@@ -114,21 +131,13 @@ vi.mock("@glideapps/glide-data-grid", async (importOriginal) => ({
 		Uri: "uri",
 	},
 	CompactSelection: {
-		empty: () => ({
-			toArray: () => [],
-			hasIndex: () => false,
-			length: 0,
-		}),
+		empty: () => mockSelection([]),
 		fromSingleSelection: (index: number | readonly [number, number]) => {
 			const rows =
 				typeof index === "number"
 					? [index]
 					: Array.from({ length: index[1] - index[0] }, (_, i) => index[0] + i);
-			return {
-				toArray: () => rows,
-				hasIndex: (candidate: number) => rows.includes(candidate),
-				length: rows.length,
-			};
+			return mockSelection(rows);
 		},
 	},
 }));
@@ -1438,7 +1447,7 @@ test("bulk property changes update every selected row in one edit while retainin
 	}
 });
 
-test("changing the visible row set clears selection without modifying CSV", async () => {
+test("selection follows rows that stay visible and drops the rest without modifying CSV", async () => {
 	const source = "name,stage\nAlice,qualified\nBob,trial\n";
 	const fixture = await renderMetadataCsv(source);
 	try {
@@ -1456,17 +1465,30 @@ test("changing the visible row set clears selection without modifying CSV", asyn
 		fireEvent.click(
 			screen.getByRole("checkbox", { name: "Select all visible rows" }),
 		);
+		// Alice stays visible and selected; Bob leaves the mapping and the selection.
 		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
 			target: { value: "Alice" },
+		});
+		await waitFor(() =>
+			expect(screen.getByRole("status")).toHaveTextContent("1 selected"),
+		);
+		// Nothing left visible: nothing left selected.
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "zzz" },
 		});
 		await waitFor(() =>
 			expect(
 				screen.queryByRole("group", { name: "Selected rows" }),
 			).not.toBeInTheDocument(),
 		);
-		expect(
-			screen.getByRole("checkbox", { name: "Select all visible rows" }),
-		).not.toBeChecked();
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "" },
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("checkbox", { name: "Select all visible rows" }),
+			).not.toBeChecked(),
+		);
 		expect(
 			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
 		).toBe(source);
@@ -2267,4 +2289,60 @@ test("fresh checkbox follow-up preserves every supported boolean encoding", asyn
 	} finally {
 		await fixture.close();
 	}
+});
+
+test("pressing the blank surface around the table clears the selection", async () => {
+	await renderMetadataCsv();
+	const grid = screen.getByTestId("csv-data-grid");
+	const surface = grid.parentElement!;
+	const selection = () =>
+		latestDataEditorProps.current as unknown as {
+			gridSelection: GridSelection;
+			onGridSelectionChange?: (next: GridSelection) => void;
+		};
+	const emptySelection = {
+		columns: CompactSelection.empty(),
+		rows: CompactSelection.empty(),
+	};
+	await act(async () => {
+		selection().onGridSelectionChange?.({
+			...emptySelection,
+			current: {
+				cell: [0, 0],
+				range: { x: 0, y: 0, width: 1, height: 1 },
+				rangeStack: [],
+			},
+		});
+	});
+	expect(selection().gridSelection.current).toBeDefined();
+
+	// A press that lands on the grid itself is Glide's business.
+	await act(async () => {
+		fireEvent.pointerDown(grid, { button: 0 });
+	});
+	expect(selection().gridSelection.current).toBeDefined();
+
+	// A press on the surrounding surface deselects (after the tick that lets
+	// focus leave the grid).
+	await act(async () => {
+		fireEvent.pointerDown(surface, { button: 0 });
+	});
+	await waitFor(() =>
+		expect(selection().gridSelection.current).toBeUndefined(),
+	);
+
+	// Rows too, via the toolbar background.
+	await act(async () => {
+		selection().onGridSelectionChange?.({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.fromSingleSelection(1),
+		});
+	});
+	expect(selection().gridSelection.rows.length).toBe(1);
+	await act(async () => {
+		fireEvent.pointerDown(document.querySelector(".csv-toolbar")!, {
+			button: 0,
+		});
+	});
+	await waitFor(() => expect(selection().gridSelection.rows.length).toBe(0));
 });
