@@ -30,7 +30,17 @@ export async function renameWorkspaceEntry(
 	entry: WorkspaceEntryRef,
 	nextPath: string,
 ): Promise<void> {
-	if (await workspacePathExists(lix, nextPath)) {
+	const destination = await workspaceEntryAtPath(lix, nextPath);
+	if (destination) {
+		// Another client may already have applied this rename to the same file.
+		// Treat that replay as complete instead of inventing a collision suffix.
+		if (
+			entry.kind === destination.kind &&
+			("id" in entry && "id" in destination
+				? entry.id === destination.id
+				: "path" in entry && entry.path === nextPath)
+		)
+			return;
 		throw new WorkspacePathTakenError(nextPath);
 	}
 	if (entry.kind === "file") {
@@ -68,19 +78,22 @@ export async function deleteWorkspaceEntry(
 		.execute();
 }
 
-async function workspacePathExists(lix: Lix, path: string): Promise<boolean> {
+async function workspaceEntryAtPath(
+	lix: Lix,
+	path: string,
+): Promise<WorkspaceEntryRef | null> {
 	const [file] = await qb(lix)
 		.selectFrom("lix_file")
 		.where("path", "=", path)
 		.select(["id"])
 		.limit(1)
 		.execute();
-	if (file) return true;
+	if (file) return { kind: "file", id: file.id };
 	const [directory] = await qb(lix)
 		.selectFrom("lix_directory")
 		.where("path", "=", path)
 		.select(["path"])
 		.limit(1)
 		.execute();
-	return Boolean(directory);
+	return directory ? { kind: "directory", path: directory.path } : null;
 }
