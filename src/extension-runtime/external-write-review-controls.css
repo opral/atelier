@@ -564,10 +564,8 @@
 		font-size: 0.68rem;
 	}
 
-	/* Narrow review areas (side panels open on a small window): the labels
-	   that only repeat what the glyphs say go first — "Seen", "Exit", the
-	   ⌘⏎ hint — and the file name gets a shorter run before it ellipsises.
-	   The counts and the verbs stay whole. */
+	/* The chip's compact count is drawn from a data attribute so the
+	   accessible text stays one string ("Seen 1 of 23"). */
 	.external-write-review-chip-short {
 		display: none;
 	}
@@ -576,7 +574,12 @@
 		content: attr(data-label);
 	}
 
-	@container (max-width: 44rem) {
+	/* Narrow review areas (side panels open on a small window): the labels
+	   that only repeat what the glyphs say go first — "Seen", "Exit", the
+	   ⌘⏎ hint — and the parent folder, before the file name has to
+	   ellipsise. The threshold is the pill's natural width with every label
+	   on, so nothing truncates while a label could still be dropped. */
+	@container (max-width: 54rem) {
 		.external-write-review-chip-long,
 		.external-write-review-button-exit > span,
 		.external-write-review-button-accept > .external-write-review-shortcut {
@@ -593,6 +596,38 @@
 
 		/* The name alone; the muted parent folder is the first to go. */
 		.external-write-review-navigation .external-write-review-path-parent {
+			display: none;
+		}
+	}
+
+	/* Tighter still: the file name goes, the stepper keeps its arrows and
+	   "n of m" counter so the position stays readable and steppable. */
+	@container (max-width: 36rem) {
+		.external-write-review-navigation {
+			flex: none;
+		}
+
+		.external-write-review-navigation strong,
+		.external-write-review-navigation .external-write-review-file-icon {
+			display: none;
+		}
+	}
+
+	/* Phone-narrow: the stepper is arrows only and Undo is its icon. The
+	   primary verb keeps its word — it is the one thing the pill is for. */
+	@container (max-width: 32rem) {
+		.external-write-review-navigation small,
+		.external-write-review-button-reject > span {
+			display: none;
+		}
+	}
+
+	/* Below that the stepper and the Exit button go: Esc still exits, and
+	   every file is reachable from the chip's list. */
+	@container (max-width: 27rem) {
+		.external-write-review-button-exit,
+		.external-write-review-exit-divider,
+		.external-write-review-navigation {
 			display: none;
 		}
 	}
