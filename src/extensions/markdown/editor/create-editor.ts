@@ -389,8 +389,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			initialContent ?? (astToTiptapDoc(ast, { defaultBlock }) as JSONContent),
 		onCreate: ({ editor }) => {
 			currentEditor = editor as Editor;
-			persistenceBaseline.lastAcknowledgedMarkdown =
-				buildNormalizedMarkdownFromEditor(editor);
+			// TipTap emits create on a later timer. Edits can arrive first; they
+			// must not become the acknowledged baseline before being persisted.
+			if (persistenceBaseline.documentRevision === 0) {
+				persistenceBaseline.lastAcknowledgedMarkdown =
+					buildNormalizedMarkdownFromEditor(editor);
+			}
 			persistenceBaselines.set(editor, persistenceBaseline);
 			onCreate?.({ editor });
 		},
