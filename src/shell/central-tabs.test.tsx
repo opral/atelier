@@ -272,6 +272,9 @@ describe("central tabs with a pinned home", () => {
 				await shell.atelier.documents.open("/one.md");
 			});
 			expect(homeTab()).toHaveAttribute("aria-label", "Home");
+			// A pinned tab cannot be dragged, but remains an enabled navigation button.
+			expect(homeTab()).not.toHaveAttribute("aria-disabled", "true");
+			expect(homeTab()).not.toHaveAttribute("aria-roledescription");
 			expect(homeLabel()).toHaveAttribute("aria-hidden", "true");
 			expect(homeLabel()?.className).toContain("max-w-0");
 

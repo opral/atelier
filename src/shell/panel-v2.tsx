@@ -1571,10 +1571,15 @@ function SortableTab({
 				dataViewInstance={instance}
 				dataViewKind={kind}
 				style={style}
-				buttonProps={{
-					...(attributes as ButtonHTMLAttributes<HTMLButtonElement>),
-					...(listeners as ButtonHTMLAttributes<HTMLButtonElement>),
-				}}
+				// Pinned tabs are not draggable, but their navigation stays enabled.
+				buttonProps={
+					isPinned
+						? undefined
+						: {
+								...(attributes as ButtonHTMLAttributes<HTMLButtonElement>),
+								...(listeners as ButtonHTMLAttributes<HTMLButtonElement>),
+							}
+				}
 			/>
 		</TabContextMenu>
 	);
