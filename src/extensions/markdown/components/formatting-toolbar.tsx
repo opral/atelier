@@ -35,6 +35,7 @@ import { normalizeUrl } from "../editor/normalize-url";
 import {
 	TOOLBAR_BLOCK_OPTIONS,
 	type ToolbarBlockType,
+	convertListItem,
 } from "../editor/block-commands";
 
 type FormatState = {
@@ -271,15 +272,28 @@ export function FormattingToolbar({
 				);
 			}
 			setLinkOpen(next);
+			// Closing without applying must not strand focus on the toolbar
+			// button: the caret and selection go back where they were.
+			if (!next) editor?.chain().focus().run();
 		},
 		[editor],
 	);
+
+	// Mod-K in the editor opens the same popover the Link button does.
+	useEffect(() => {
+		if (!editor) return;
+		const dom = editor.view.dom;
+		const open = () => handleLinkOpenChange(true);
+		dom.addEventListener("atelier-markdown-link", open);
+		return () => dom.removeEventListener("atelier-markdown-link", open);
+	}, [editor, handleLinkOpenChange]);
 
 	const handleApplyLink = useCallback(() => {
 		if (!editor) return;
 		const href = normalizeUrl(linkValue);
 		if (!href) {
 			setLinkOpen(false);
+			editor.chain().focus().run();
 			return;
 		}
 		const chain = editor.chain().focus();
@@ -324,38 +338,22 @@ export function FormattingToolbar({
 			setTaskListState(editor, null);
 			return;
 		}
-		if (editor.isActive("bulletList") && editor.state.selection.empty) {
+		// Pressed again, the button turns the item back into text; from another
+		// list type it converts just this item.
+		if (editor.isActive("bulletList")) {
+			editor.chain().focus().liftListItem("listItem").run();
 			return;
 		}
-		const chain = editor.chain().focus() as any;
-		let success = editor.isActive("bulletList")
-			? (chain.liftListItem?.("listItem")?.run?.() ?? false)
-			: (chain.wrapIn?.("bulletList")?.run?.() ?? false);
-		if (!success) {
-			const altChain = editor.chain().focus() as any;
-			success =
-				chain.toggleList?.("bulletList", "listItem")?.run?.() ??
-				altChain.toggleBulletList?.()?.run?.() ??
-				false;
-		}
+		convertListItem(editor, "bulletList", { checked: null });
 	}, [editor, hasTaskListCommand]);
 
 	const handleToggleOrderedList = useCallback(() => {
 		if (!editor) return;
-		if (editor.isActive("orderedList") && editor.state.selection.empty) {
+		if (editor.isActive("orderedList")) {
+			editor.chain().focus().liftListItem("listItem").run();
 			return;
 		}
-		const chain = editor.chain().focus() as any;
-		let success = editor.isActive("orderedList")
-			? (chain.liftListItem?.("listItem")?.run?.() ?? false)
-			: (chain.wrapIn?.("orderedList")?.run?.() ?? false);
-		if (!success) {
-			const altChain = editor.chain().focus() as any;
-			success =
-				chain.toggleList?.("orderedList", "listItem")?.run?.() ??
-				altChain.toggleOrderedList?.()?.run?.() ??
-				false;
-		}
+		convertListItem(editor, "orderedList", { checked: null });
 	}, [editor]);
 
 	const handleToggleTaskList = useCallback(() => {
@@ -436,7 +434,7 @@ export function FormattingToolbar({
 								)}
 								onMouseDown={suppressMouseDown}
 							>
-								<Select.Value className="block w-[4.25rem] truncate">
+								<Select.Value className="block w-[5.25rem] truncate">
 									{activeBlockLabel}
 								</Select.Value>
 								<Select.Icon className="text-[var(--color-icon-tertiary)] transition-transform duration-100 data-[popup-open]:rotate-180">

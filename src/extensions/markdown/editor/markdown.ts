@@ -156,10 +156,14 @@ export function serializeAst(ast: any): string {
 			],
 			bullet: "-",
 			listItemIndent: "one",
-			rule: "-",
+			// "---" as a document's first line re-parses as a YAML frontmatter
+			// fence and swallows everything up to the next rule; "***" cannot.
+			rule: "*",
 			ruleRepetition: 3,
 			ruleSpaces: false,
-			emphasis: "_",
+			// "_" cannot open intraword emphasis, so the serializer would fall
+			// back to hex entities for foo*bar*baz; "*" works in every position.
+			emphasis: "*",
 			strong: "*",
 			fence: "`",
 			fences: true,

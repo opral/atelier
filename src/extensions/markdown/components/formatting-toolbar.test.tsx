@@ -282,7 +282,7 @@ describe("FormattingToolbar", () => {
 		destroyEditor(setup);
 	});
 
-	test("wraps the current block in a bullet list without unwrapping a collapsed list selection", async () => {
+	test("wraps the current block in a bullet list and a second click turns it back into text", async () => {
 		const setup = createEditor(paragraphDoc);
 		const utils = renderToolbar(setup.editor);
 
@@ -304,9 +304,9 @@ describe("FormattingToolbar", () => {
 			fireEvent.click(bulletButton);
 		});
 
-		expect(setup.editor.isActive("bulletList")).toBe(true);
+		expect(setup.editor.isActive("bulletList")).toBe(false);
 		doc = setup.editor.getJSON() as any;
-		expect(doc.content?.[0]?.type).toBe("bulletList");
+		expect(doc.content?.[0]?.type).toBe("paragraph");
 
 		await act(async () => {
 			utils.unmount();
@@ -338,7 +338,7 @@ describe("FormattingToolbar", () => {
 		destroyEditor(setup);
 	});
 
-	test("keeps the final single-item bullet list serialized after choosing the bullet-list control", async () => {
+	test("turns the final single-item bullet list into text when its control is pressed again", async () => {
 		const setup = createEditor(
 			astToTiptapDoc(parseMarkdown(newFileMarkdown)) as JSONContent,
 		);
@@ -353,7 +353,9 @@ describe("FormattingToolbar", () => {
 			fireEvent.click(bulletButton);
 		});
 
-		expect(buildMarkdownFromEditor(setup.editor)).toBe(newFileMarkdown);
+		expect(buildMarkdownFromEditor(setup.editor)).toBe(
+			newFileMarkdown.replace("- github stars", "github stars"),
+		);
 
 		await act(async () => {
 			utils.unmount();

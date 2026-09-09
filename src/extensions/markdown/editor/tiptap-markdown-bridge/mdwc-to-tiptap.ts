@@ -1,3 +1,4 @@
+import { serializeAst } from "../markdown";
 // Avoid tight compile-time coupling to mdast types; operate on structural shape
 
 const SPREAD_META_KEY = "__mdwc_spread";
@@ -249,6 +250,18 @@ function astBlockToPM(
 				content: flattenInline((n.children || []) as any, []),
 			};
 		}
+		case "footnoteDefinition": {
+			// Kept as read-only source so an edit elsewhere cannot drop it.
+			const n = node as any;
+			return {
+				type: "markdownUnsupported",
+				attrs: {
+					kind: "html",
+					value: serializeAst({ type: "root", children: [n] }).trimEnd(),
+					data: buildNodeData(n.data),
+				},
+			};
+		}
 		default:
 			// Fallback: paragraph of inline content if present
 			// @ts-ignore
@@ -404,6 +417,19 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 				out.push({
 					type: "markdownInlineHtml",
 					attrs: { value: html.value ?? "", data: html.data ?? null },
+				});
+				break;
+			}
+			case "footnoteReference": {
+				// Not editable here, but never lost: the reference travels as
+				// verbatim source and parses back into a footnote on reload.
+				const reference = n as any;
+				out.push({
+					type: "markdownInlineHtml",
+					attrs: {
+						value: `[^${reference.label ?? reference.identifier}]`,
+						data: reference.data ?? null,
+					},
 				});
 				break;
 			}

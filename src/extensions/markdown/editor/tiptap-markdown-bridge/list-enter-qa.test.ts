@@ -211,8 +211,9 @@ describe("Enter list regression QA", () => {
 			expect(editor.state.doc.child(1).type.name).toBe("paragraph");
 			expect(editor.state.doc.child(2).type.name).toBe(type);
 			expect(editor.state.doc.child(2).textContent).toBe("after");
+			// The empty item carried nothing, so the items after it close the gap.
 			if (type === "orderedList")
-				expect(editor.state.doc.child(2).attrs.start).toBe(6);
+				expect(editor.state.doc.child(2).attrs.start).toBe(5);
 		},
 	);
 

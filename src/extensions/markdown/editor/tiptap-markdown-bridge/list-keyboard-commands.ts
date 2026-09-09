@@ -8,14 +8,30 @@ export const outdentSelectedListItems: Command = (state, dispatch) => {
 	// ProseMirror preserves selections and trailing parent content when lifting.
 	// Its list splits copy the old start attribute, so restore the number of the
 	// first surviving item in each resulting ordered list.
+	// A lifted item keeps its number as text ("2." becomes the second
+	// paragraph), so the items after it keep counting. An EMPTY lifted item
+	// carried no content: it vanishes and the items after it close the gap,
+	// otherwise Enter on an empty "2." leaves "3." behind.
+	const liftedItemStarts = new Set<number>();
+	for (const $pos of [state.selection.$from, state.selection.$to]) {
+		for (let depth = $pos.depth; depth > 0; depth -= 1) {
+			const node = $pos.node(depth);
+			if (node.type.name !== "listItem") continue;
+			if (node.childCount === 1 && node.firstChild?.content.size === 0)
+				liftedItemStarts.add($pos.before(depth));
+			break;
+		}
+	}
 	const numberedItems: { pos: number; number: number }[] = [];
 	state.doc.descendants((node, pos) => {
 		if (node.type.name !== "orderedList") return;
+		let lifted = 0;
 		node.forEach((_item, offset, index) => {
 			numberedItems.push({
 				pos: pos + offset + 3,
-				number: Number(node.attrs.start ?? 1) + index,
+				number: Number(node.attrs.start ?? 1) + index - lifted,
 			});
+			if (liftedItemStarts.has(pos + offset + 1)) lifted += 1;
 		});
 	});
 	return liftListItem(itemType)(

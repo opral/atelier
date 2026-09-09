@@ -57,7 +57,9 @@ function colonEmojiState(state: EditorState): EmojiCommandState {
 	}
 
 	const query = textBefore.slice(colonIndex + 1);
-	if (!/^[\p{L}\p{N}_+-]{0,64}$/u.test(query)) {
+	// A colon on its own is punctuation; the picker opens once a query
+	// follows it (two characters, like Notion), so "10:30" and "note:" stay put.
+	if (query.length < 2 || !/^[\p{L}\p{N}_+-]{0,64}$/u.test(query)) {
 		return INACTIVE_EMOJI_STATE;
 	}
 	const blockStart = $from.start();

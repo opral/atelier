@@ -3,6 +3,20 @@ import {
 	parseMarkdownSourceRaw,
 	serializeAst,
 } from "./markdown";
+import { astToTiptapDoc, tiptapDocToAst } from "./tiptap-markdown-bridge";
+
+/**
+ * The spelling a block has after a trip through the editor. Comparing source
+ * against the editor's output with this (rather than a bare parse+serialize)
+ * means differences the editor introduces on every block, such as mark
+ * nesting order, do not count as edits, so untouched blocks keep their
+ * original spelling.
+ */
+function canonicalMarkdown(text: string): string {
+	const ast = parseMarkdownSource(text);
+	const doc = astToTiptapDoc(ast as never);
+	return serializeAst(tiptapDocToAst(doc as never));
+}
 
 /** Reuse original block spelling, then verify the assembled document in context.
  * Whole-document parsing matters: adjacent lists, reference definitions, and
@@ -12,13 +26,13 @@ export function preserveMarkdownSource(
 	original: string,
 	serialized: string,
 ): string {
-	const canonical = (text: string) => serializeAst(parseMarkdownSource(text));
+	const canonical = canonicalMarkdown;
 	const target = canonical(serialized);
 	if (canonical(original) === target) return original;
 	const segments = (text: string) => {
 		const nodes = parseMarkdownSource(text).children;
 		return nodes.map((node, index) => ({
-			key: serializeAst({ type: "root", children: [node] }),
+			key: canonical(serializeAst({ type: "root", children: [node] })),
 			text: text.slice(
 				index === 0 ? 0 : node.position.start.offset,
 				nodes[index + 1]?.position.start.offset ?? text.length,
@@ -97,5 +111,14 @@ export function preserveMarkdownSource(
 			safe[index] = previous;
 	}
 	const result = withDefinitions(safe.join(""));
-	return canonical(result) === target ? result : serialized;
+	return matchLineEndings(
+		original,
+		canonical(result) === target ? result : serialized,
+	);
+}
+
+/** Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. */
+function matchLineEndings(original: string, text: string): string {
+	if (!original.includes("\r\n")) return text;
+	return text.replace(/\r?\n/g, "\r\n");
 }
