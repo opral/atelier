@@ -23,3 +23,8 @@ export const AtelierRenderContext = createContext<{
 export function useAtelierRenderContext() {
 	return useContext(AtelierRenderContext);
 }
+
+/** Whether an extension can issue live queries and imperative commands. */
+export function useAtelierConnected(): boolean {
+	return useAtelierRenderContext().connected;
+}

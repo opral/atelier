@@ -7,6 +7,7 @@ export type {
 	LoadAtelierOptions,
 } from "./atelier-state";
 export type { AtelierNavigation } from "./atelier-render-context";
+export { useAtelierConnected } from "./atelier-render-context";
 export {
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
