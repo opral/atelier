@@ -25,7 +25,7 @@ import { fileIconUrl } from "@/file-icons";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
 
-export type DiffFloatMode = "working-changes" | "historical";
+export type DiffFloatMode = "working-changes" | "historical" | "review-applied";
 
 export type DiffFloatFile = {
 	readonly id: string;
@@ -80,6 +80,7 @@ const PRIMARY_VERBS: Record<
 > = {
 	"working-changes": { label: "Checkpoint", busyLabel: "Checkpointing…" },
 	historical: { label: "Restore", busyLabel: "Restoring…" },
+	"review-applied": { label: "Keep", busyLabel: "Keeping…" },
 };
 
 function seenSetOf(activeFileId: string | null): ReadonlySet<string> {
@@ -900,6 +901,7 @@ function PrimaryVerbStackIcon({
 }: {
 	readonly mode: DiffFloatMode;
 }): ReactNode {
+	if (mode === "review-applied") return <Check aria-hidden="true" />;
 	if (mode === "working-changes") {
 		return <StackedIcon name="flag-stack" paths={FLAG_PATHS} />;
 	}

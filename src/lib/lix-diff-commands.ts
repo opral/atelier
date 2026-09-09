@@ -171,3 +171,36 @@ export async function restoreCheckpointFiles(
 function isString(value: unknown): value is string {
 	return typeof value === "string";
 }
+
+/** Undo an already-applied span, rejecting later edits to selected files atomically. */
+export async function undoAppliedFiles(
+	lix: Lix,
+	fileIds: readonly string[],
+	range: { beforeCommitId: string; afterCommitId: string },
+): Promise<void> {
+	if (!fileIds.length) return;
+	const tx = await lix.beginTransaction();
+	try {
+		const head = (
+			await tx.execute("SELECT lix_active_branch_commit_id() AS id")
+		).rows[0]?.id;
+		if (typeof head !== "string")
+			throw new Error("Missing active branch head.");
+		const changed = await tx.execute(
+			`SELECT id FROM lix_diff('lix_file', $1, $2) WHERE id IN (${fileIdParameters(fileIds, 3)})`,
+			[range.afterCommitId, head, ...fileIds],
+		);
+		if (changed.rows.length)
+			throw new Error(
+				"These files changed after the reviewed changes. Undo was not applied; review the newer edits first.",
+			);
+		await tx.execute(
+			`INSERT INTO lix_apply (row_ref) SELECT row_ref FROM lix_diff('lix_file', $1, $2) WHERE id IN (${fileIdParameters(fileIds, 3)})`,
+			[range.afterCommitId, range.beforeCommitId, ...fileIds],
+		);
+		await tx.commit();
+	} catch (error) {
+		await tx.rollback().catch(() => {});
+		throw error;
+	}
+}

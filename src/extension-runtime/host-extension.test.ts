@@ -6,6 +6,7 @@ import { hostExtensionDefinition } from "./host-extension";
 describe("hostExtensionDefinition", () => {
 	test("normalizes a declarative host extension", () => {
 		const Component = vi.fn(() => null);
+		const HeaderAccessory = vi.fn(() => null);
 		const menuItems = vi.fn(() => []);
 		const registration: AtelierExtensionRegistration = {
 			id: "host_terminal",
@@ -15,6 +16,7 @@ describe("hostExtensionDefinition", () => {
 			icon: Terminal,
 			menuItems,
 			Component,
+			HeaderAccessory,
 		};
 
 		expect(hostExtensionDefinition(registration)).toMatchObject({
@@ -25,6 +27,7 @@ describe("hostExtensionDefinition", () => {
 			multiInstance: true,
 			menuItems,
 			Component,
+			HeaderAccessory,
 		});
 	});
 });

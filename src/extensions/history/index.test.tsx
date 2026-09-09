@@ -833,7 +833,7 @@ describe("history scope", () => {
 		await lix.close();
 	});
 
-	test("the scope switch swaps scope for the active file and hides without one", async () => {
+	test("the scope switch swaps scope for the active file and labels repository context without one", async () => {
 		const lix = await openLix();
 		await createCheckpoint(lix);
 		const preferences = memoryPreferences();
@@ -856,6 +856,9 @@ describe("history scope", () => {
 			<HistoryScopeSwitch atelier={atelierStub()} preferences={preferences} />,
 		);
 		expect(screen.queryByRole("button")).toBeNull();
+		expect(screen.getByLabelText("Showing the repository")).toHaveTextContent(
+			"Repository",
+		);
 		view.unmount();
 		await lix.close();
 	});

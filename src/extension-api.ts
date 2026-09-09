@@ -273,6 +273,7 @@ export type AtelierDiffFile = {
 };
 
 export type AtelierDiffSession = {
+	readonly intent?: "review-applied";
 	/** The older side; null means the repository's beginning. */
 	readonly base: AtelierDiffRef | null;
 	readonly target: AtelierDiffRef;
@@ -297,6 +298,8 @@ export type AtelierDiffApi = {
 	readonly session: AtelierDiffSession | null;
 	readonly open: (options: {
 		/** Defaults to the latest checkpoint for a working target. */
+		/** Review an already-applied commit span with Keep / Undo. Requires two commit refs. */
+		readonly intent?: "review-applied";
 		readonly base?: AtelierDiffRef | null;
 		readonly target: AtelierDiffRef;
 		/**
@@ -401,6 +404,11 @@ export type AtelierExtensionRegistration = {
 	readonly hidden?: boolean;
 	readonly menuItems?: AtelierExtensionMenuItems;
 	readonly load?: AtelierExtensionLoader;
+	/** Control shown at the trailing end of this view's side-panel header. */
+	readonly HeaderAccessory?: ComponentType<{
+		readonly atelier: AtelierExtensionRuntime;
+		readonly view: AtelierExtensionView;
+	}>;
 	readonly Component: ComponentType<{
 		readonly data: AtelierJsonValue;
 		readonly atelier: AtelierExtensionRuntime;

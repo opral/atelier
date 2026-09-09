@@ -106,3 +106,29 @@ See [embedding](docs/embedding.md) and [CSV properties](src/extensions/csv/READM
 ## Composable history
 
 `Atelier.History` remains available to host extensions as `<Atelier.History atelier={atelier} />`.
+
+### Reviewing already-applied changes
+
+Use `intent: "review-applied"` when the changes are already in the local
+repository, for example after an agent finishes a turn:
+
+```ts
+await atelier.diff.open({
+	base: { commitId: beforeAgentTurn },
+	target: { commitId: afterAgentTurn },
+	intent: "review-applied",
+});
+```
+
+Both refs must be commits. Atelier displays **Keep / Undo** for that exact span.
+Keep records a private per-file decision without creating a checkpoint. Undo
+reverses the selected files' changes, including additions, deletions, and renames.
+If a selected file changed after the target commit, Undo fails without overwriting
+those edits; unrelated files can continue changing. Decisions use the configured
+review-status store, and resolved files are skipped when reopening the same span.
+Partial decisions advance to the remaining files; resolving all files exits review.
+Read-only hosts can inspect the span but cannot resolve it.
+
+Without `intent`, the existing working-change and historical comparison behavior
+is unchanged. The public diff session exposes `intent` so extensions can identify
+an applied review. No callbacks or action configuration are required.

@@ -19,5 +19,7 @@ export function hostExtensionDefinition(
 		menuItems: registration.menuItems,
 		load: registration.load,
 		Component: registration.Component as ExtensionDefinition["Component"],
+		HeaderAccessory:
+			registration.HeaderAccessory as ExtensionDefinition["HeaderAccessory"],
 	};
 }

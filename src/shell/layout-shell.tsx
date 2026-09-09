@@ -50,6 +50,7 @@ import {
 	restoreCheckpoint,
 	restoreCheckpointFiles,
 	revertWorkingChangesForFiles,
+	undoAppliedFiles,
 	writeReviewedFile,
 } from "@/lib/lix-diff-commands";
 import { qb } from "@/lib/lix-kysely";
@@ -57,6 +58,7 @@ import {
 	selectFilePathsAtCommits,
 	selectFilesStateAt,
 	selectWorkingFileDiffSnapshot,
+	selectAppliedFileDiffSnapshot,
 } from "@/queries";
 import {
 	ExtensionHostRegistryProvider,
@@ -616,6 +618,7 @@ const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
  * either the mutable working state or an immutable historical commit.
  */
 type DiffReviewState = {
+	readonly intent?: "review-applied";
 	readonly kind: "working" | "historical";
 	/**
 	 * The compared span. Working reviews cover latest-checkpoint-to-head at
@@ -2266,21 +2269,11 @@ function LayoutShellLoadedContentResolved({
 				)}`
 			: "Viewing checkpoint"
 		: workingChangesReviewOpen
-			? `Reviewing changes since checkpoint${reviewFileCountLabel}`
+			? `${workingReview?.intent === "review-applied" ? "Reviewing applied changes" : "Reviewing changes since checkpoint"}${reviewFileCountLabel}`
 			: null;
 
 	// The float's orange verb, scoped by its ▾ checklist: the viewed file by
 	// default, or the explicit multi-file selection the user made.
-	const handleDiffPrimary = useCallback(
-		async (selectedFileIds: readonly string[]) => {
-			if (historicalReview) {
-				await handleRestoreCheckpoint(selectedFileIds);
-				return;
-			}
-			await handleCreateCheckpoint(selectedFileIds);
-		},
-		[handleCreateCheckpoint, handleRestoreCheckpoint, historicalReview],
-	);
 
 	const resolveAndOpenFile = useCallback(
 		async ({
@@ -3003,6 +2996,69 @@ function LayoutShellLoadedContentResolved({
 		],
 	);
 
+	const resolveAppliedFiles = useCallback(
+		async (fileIds: readonly string[], outcome: "accepted" | "rejected") => {
+			if (isHostReadOnly) throw new Error("This workspace is read-only.");
+			const session = diffReviewRef.current;
+			if (session?.intent !== "review-applied" || !session.range)
+				throw new Error("No applied review is open.");
+			const selected = new Set(fileIds);
+			const reviews = session.externalWriteReviews.filter((r) =>
+				selected.has(r.fileId),
+			);
+			if (reviews.length === 0) return;
+			if (outcome === "rejected")
+				await undoAppliedFiles(
+					lix,
+					reviews.map((r) => r.fileId),
+					session.range,
+				);
+			for (const review of reviews) {
+				await runDiffReviewResolution(review, outcome, () =>
+					persistReviewResolution(review, outcome),
+				);
+			}
+			if (diffReviewRef.current !== session) return;
+			const remaining = session.files.filter((file) => !selected.has(file.id));
+			if (!remaining.length) {
+				exitDiffReview();
+				return;
+			}
+			const next = remaining[0]!;
+			setDiffReview({
+				...session,
+				files: remaining,
+				externalWriteReviews: session.externalWriteReviews.filter(
+					(r) => !selected.has(r.fileId),
+				),
+				diffFileId: next.id,
+			});
+			openWorkingChangeFileAtRange(next, session.range);
+		},
+		[
+			isHostReadOnly,
+			lix,
+			runDiffReviewResolution,
+			persistReviewResolution,
+			exitDiffReview,
+			openWorkingChangeFileAtRange,
+		],
+	);
+	const handleDiffPrimary = useCallback(
+		async (fileIds: readonly string[]) => {
+			if (diffReviewRef.current?.intent === "review-applied")
+				return resolveAppliedFiles(fileIds, "accepted");
+			if (historicalReview) return handleRestoreCheckpoint(fileIds);
+			return handleCreateCheckpoint(fileIds);
+		},
+		[
+			resolveAppliedFiles,
+			historicalReview,
+			handleRestoreCheckpoint,
+			handleCreateCheckpoint,
+		],
+	);
+
 	const handleCloseView = useCallback(
 		({
 			panel,
@@ -3575,14 +3631,17 @@ function LayoutShellLoadedContentResolved({
 		});
 	}, [handleOpenExtensionView]);
 	const handleOpenWorkingChangesReview = useCallback(
-		(openOptions?: { readonly reveal?: boolean }) => {
+		(openOptions?: {
+			readonly reveal?: boolean;
+			readonly appliedRange?: { beforeCommitId: string; afterCommitId: string };
+		}) => {
 			// Read-only / anonymous must never look like a clickable no-op. History
 			// is always reachable even when the review query finds no files.
 			if (isHostReadOnly) {
 				revealHistory();
 			}
 			workingReviewOpeningRef.current = true;
-			void (async () => {
+			return (async () => {
 				// The batch pins the existing coordinate functions and the one-argument
 				// HOT diff to one repository snapshot. No review-only SQL surface is
 				// needed, and selected content remains lazy/server-first.
@@ -3590,27 +3649,41 @@ function LayoutShellLoadedContentResolved({
 					beforeCommitId,
 					afterCommitId: headCommitId,
 					files: workingDiffs,
-				} = await selectWorkingFileDiffSnapshot(lix);
+				} = openOptions?.appliedRange
+					? await selectAppliedFileDiffSnapshot(
+							lix,
+							openOptions.appliedRange.beforeCommitId,
+							openOptions.appliedRange.afterCommitId,
+						)
+					: await selectWorkingFileDiffSnapshot(lix);
 				if (workingDiffs.length === 0) return;
 				// Every changed file joins the review — kinds without a content
 				// diff (drawings, images, pdfs) still review, checkpoint, and
 				// revert at file granularity. Filtering them out strands their
 				// changes outside every checkpoint: the status bar counts raw
 				// diffs and would report them as changed forever.
-				const checkpointFiles = workingDiffs.map((file): LixFileForOpen => {
-					const movedFromPath = movedFromSidePaths(
-						file.diff_type,
-						file.from_path,
-						file.to_path,
-					);
-					return {
-						id: file.id,
-						path: file.path,
-						checkpointChangeKind: file.diff_type,
-						workingEpoch: { beforeCommitId, afterCommitId: headCommitId },
-						...(movedFromPath ? { movedFromPath } : {}),
-					};
-				});
+				const checkpointFiles = workingDiffs
+					.filter(
+						(file) =>
+							!openOptions?.appliedRange ||
+							!resolvedReviewIdsRef.current.has(
+								externalWriteReviewId(file.id, beforeCommitId, headCommitId),
+							),
+					)
+					.map((file): LixFileForOpen => {
+						const movedFromPath = movedFromSidePaths(
+							file.diff_type,
+							file.from_path,
+							file.to_path,
+						);
+						return {
+							id: file.id,
+							path: file.path,
+							checkpointChangeKind: file.diff_type,
+							workingEpoch: { beforeCommitId, afterCommitId: headCommitId },
+							...(movedFromPath ? { movedFromPath } : {}),
+						};
+					});
 				const firstChangedFile = checkpointFiles[0];
 				const removedFileIds: ReadonlySet<string> = new Set(
 					workingDiffs
@@ -3662,6 +3735,9 @@ function LayoutShellLoadedContentResolved({
 					openOptions?.reveal === true || !changedFileOnScreen;
 				setDiffReview({
 					kind: "working",
+					...(openOptions?.appliedRange
+						? { intent: "review-applied" as const }
+						: {}),
 					range: reviewRange,
 					files: checkpointFiles,
 					diffFileId: revealFirstFile ? firstChangedFile.id : null,
@@ -3679,6 +3755,7 @@ function LayoutShellLoadedContentResolved({
 				}
 			})()
 				.catch((error: unknown) => {
+					if (openOptions?.appliedRange) throw error;
 					if (!isHostReadOnly) revealHistory();
 					console.warn(
 						"[checkpoint] failed to open working changes review",
@@ -3961,7 +4038,11 @@ function LayoutShellLoadedContentResolved({
 				base: workingReview.range
 					? { commitId: workingReview.range.beforeCommitId }
 					: null,
-				target: { working: true },
+				target:
+					workingReview.intent && workingReview.range
+						? { commitId: workingReview.range.afterCommitId }
+						: { working: true },
+				...(workingReview.intent ? { intent: workingReview.intent } : {}),
 				files: workingReview.files.map((file) => {
 					const review = reviewsByFileId.get(file.id);
 					return {
@@ -3979,7 +4060,11 @@ function LayoutShellLoadedContentResolved({
 					};
 				}),
 				activePath: activeDiffPath,
-				capabilities: { checkpoint: true, undo: true, restore: false },
+				capabilities: {
+					checkpoint: !workingReview.intent,
+					undo: true,
+					restore: false,
+				},
 			};
 		}
 		return null;
@@ -3991,10 +4076,29 @@ function LayoutShellLoadedContentResolved({
 	]);
 	const openDiffSession = useCallback(
 		async (options: {
+			readonly intent?: "review-applied";
 			readonly base?: AtelierDiffRef | null;
 			readonly target: AtelierDiffRef;
 			readonly reveal?: boolean;
 		}) => {
+			if (options.intent === "review-applied") {
+				if (
+					!options.base ||
+					!("commitId" in options.base) ||
+					!("commitId" in options.target)
+				)
+					throw new Error(
+						"review-applied requires base and target commit refs.",
+					);
+				await handleOpenWorkingChangesReview({
+					reveal: options.reveal,
+					appliedRange: {
+						beforeCommitId: options.base.commitId,
+						afterCommitId: options.target.commitId,
+					},
+				});
+				return;
+			}
 			if ("working" in options.target) {
 				handleOpenWorkingChangesReview(
 					options.reveal === undefined ? undefined : { reveal: options.reveal },
@@ -4036,6 +4140,13 @@ function LayoutShellLoadedContentResolved({
 	);
 	const resolveDiffSessionFile = useCallback(
 		async (path: string, outcome: "accepted" | "rejected") => {
+			if (diffReviewRef.current?.intent === "review-applied") {
+				const file = diffReviewRef.current.files.find(
+					(candidate) => candidate.path === path,
+				);
+				if (!file) throw new Error(`No pending review for ${path}`);
+				return resolveAppliedFiles([file.id], outcome);
+			}
 			const review = diffReviewRef.current?.externalWriteReviews.find(
 				(candidate) => candidate.path === path,
 			);
@@ -4053,7 +4164,11 @@ function LayoutShellLoadedContentResolved({
 				await handleRejectExternalWriteReview(args);
 			}
 		},
-		[handleAcceptExternalWriteReview, handleRejectExternalWriteReview],
+		[
+			handleAcceptExternalWriteReview,
+			handleRejectExternalWriteReview,
+			resolveAppliedFiles,
+		],
 	);
 	const resolveDiffSessionFileWithData = useCallback(
 		async (path: string, data: Uint8Array) => {
@@ -4082,6 +4197,7 @@ function LayoutShellLoadedContentResolved({
 	const [reviewFloatClosing, setReviewFloatClosing] = useState(false);
 	const lastReviewFloatRef = useRef<{
 		historical: boolean;
+		applied: boolean;
 		navigation: typeof reviewNavigation;
 		files: typeof pendingReviewFiles;
 	} | null>(null);
@@ -4092,6 +4208,7 @@ function LayoutShellLoadedContentResolved({
 	// exit fade.
 	const liveReviewFloatContent = {
 		historical: Boolean(historicalReview),
+		applied: diffReview?.intent === "review-applied",
 		navigation: reviewNavigation,
 		files: pendingReviewFiles,
 	};
@@ -4443,7 +4560,11 @@ function LayoutShellLoadedContentResolved({
 						onExited={() => setReviewFloatClosing(false)}
 						readOnly={isHostReadOnly}
 						mode={
-							reviewFloatContent.historical ? "historical" : "working-changes"
+							reviewFloatContent.applied
+								? "review-applied"
+								: reviewFloatContent.historical
+									? "historical"
+									: "working-changes"
 						}
 						navigation={reviewFloatContent.navigation}
 						files={reviewFloatContent.files}
@@ -4453,7 +4574,9 @@ function LayoutShellLoadedContentResolved({
 							// is pointer-inert and its key handling is detached.
 							isHostReadOnly || reviewFloatContent.historical
 								? undefined
-								: handleUndoReviews
+								: reviewFloatContent.applied
+									? (fileIds) => resolveAppliedFiles(fileIds, "rejected")
+									: handleUndoReviews
 						}
 						onPrimary={isHostReadOnly ? undefined : handleDiffPrimary}
 						onExit={exitDiffReview}
@@ -4463,6 +4586,7 @@ function LayoutShellLoadedContentResolved({
 					readOnly={isHostReadOnly}
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
+					onReviewWorkingChanges={() => handleOpenWorkingChangesReview()}
 					onOpenHistory={() =>
 						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
 							panel: "left",

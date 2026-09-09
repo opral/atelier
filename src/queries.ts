@@ -192,6 +192,21 @@ export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
 	};
 }
 
+/** An explicitly pinned span, independent of the workspace checkpoint. */
+export async function selectAppliedFileDiffSnapshot(
+	lix: Lix,
+	beforeCommitId: string,
+	afterCommitId: string,
+) {
+	const result = await lix.execute(
+		`SELECT id, diff_type, coalesce(to_path, from_path) AS path,
+          row_count, from_path, to_path FROM lix_diff('lix_file', $1, $2)
+   ORDER BY coalesce(to_path, from_path) ASC`,
+		[beforeCommitId, afterCommitId],
+	);
+	return { beforeCommitId, afterCommitId, files: result.rows as FileDiffRow[] };
+}
+
 /** Lazily loads one selected file's immutable bytes from the review epoch. */
 export async function selectWorkingFileDiffContent(
 	lix: Lix,

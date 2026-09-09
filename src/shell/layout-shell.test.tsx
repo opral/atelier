@@ -56,12 +56,8 @@ async function showRepositoryHistory() {
 async function openWorkingChangesFromHistory() {
 	fireEvent.click(
 		await screen.findByRole("button", {
-			name: /files? changed since checkpoint\. Open checkpoint history/,
+			name: /files? changed since checkpoint\. Review working changes/,
 		}),
-	);
-	await showRepositoryHistory();
-	fireEvent.click(
-		await screen.findByRole("button", { name: /Working changes/ }),
 	);
 }
 
@@ -535,7 +531,7 @@ describe("diff review navigation", () => {
 			await waitFor(() => {
 				expect(
 					screen.getByRole("button", {
-						name: "1 file changed since checkpoint. Open checkpoint history",
+						name: "1 file changed since checkpoint. Review working changes",
 					}),
 				).toBeVisible();
 			});
@@ -639,7 +635,7 @@ describe("diff review navigation", () => {
 			});
 			expect(
 				screen.getByRole("button", {
-					name: "1 file changed since checkpoint. Open checkpoint history",
+					name: "1 file changed since checkpoint. Review working changes",
 				}),
 			).toBeVisible();
 			await openWorkingChangesFromHistory();
@@ -993,7 +989,7 @@ describe("diff review navigation", () => {
 			// The unticked file's changes survive for the next review.
 			expect(
 				await screen.findByRole("button", {
-					name: "1 file changed since checkpoint. Open checkpoint history",
+					name: "1 file changed since checkpoint. Review working changes",
 				}),
 			).toBeVisible();
 		} finally {

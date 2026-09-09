@@ -77,17 +77,12 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 file changed since checkpoint. Open checkpoint history",
+				name: "1 file changed since checkpoint. Review working changes",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
 			});
-			const workingChanges = await screen.findByRole("button", {
-				name: "Working changes",
-			});
-			await act(async () => {
-				fireEvent.click(workingChanges);
-			});
+
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
@@ -128,17 +123,12 @@ describe("Atelier instance file controller", () => {
 				rendered = render(<Atelier instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
-				name: "1 file changed since checkpoint. Open checkpoint history",
+				name: "1 file changed since checkpoint. Review working changes",
 			});
 			await act(async () => {
 				fireEvent.click(pill);
 			});
-			const workingChanges = await screen.findByRole("button", {
-				name: "Working changes",
-			});
-			await act(async () => {
-				fireEvent.click(workingChanges);
-			});
+
 			expect(
 				await screen.findByRole("region", { name: "Checkpoint history" }),
 			).toBeVisible();

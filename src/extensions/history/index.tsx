@@ -132,7 +132,17 @@ export function HistoryScopeSwitch({
 		atelier,
 		preferences,
 	);
-	if (!activeFileId) return null;
+	if (!activeFileId) {
+		return (
+			<span
+				data-attr="history-scope-label"
+				aria-label="Showing the repository"
+				className="mr-1.5 flex h-6 shrink-0 items-center self-start px-1.5 text-[11.5px] font-medium text-[var(--color-text-quaternary)]"
+			>
+				Repository
+			</span>
+		);
+	}
 	const other: HistoryScope = scope === "file" ? "repository" : "file";
 	return (
 		<button

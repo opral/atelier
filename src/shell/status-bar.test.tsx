@@ -74,6 +74,7 @@ describe("CheckpointStatusBar", () => {
 					<Suspense fallback={null}>
 						<CheckpointStatusBar
 							onOpenHistory={openHistory}
+							onReviewWorkingChanges={openHistory}
 							onAutoAcceptAgentChangesChange={setAutoAccept}
 						/>
 					</Suspense>
@@ -82,7 +83,7 @@ describe("CheckpointStatusBar", () => {
 		});
 
 		const historyButton = await screen.findByRole("button", {
-			name: "1 file changed since checkpoint. Open checkpoint history",
+			name: "1 file changed since checkpoint. Review working changes",
 		});
 		expect(historyButton).toHaveTextContent("1 file changed since checkpoint");
 		expect(historyButton.querySelector(".lucide-flag")).toBeNull();
@@ -101,7 +102,7 @@ describe("CheckpointStatusBar", () => {
 	});
 
 	test("keeps the working-changes pill clickable in read-only workspaces", async () => {
- const openHistory = vi.fn();
+		const openHistory = vi.fn();
 		const lix = await openLix();
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
@@ -116,14 +117,18 @@ describe("CheckpointStatusBar", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<CheckpointStatusBar readOnly onOpenHistory={openHistory} />
+						<CheckpointStatusBar
+							readOnly
+							onOpenHistory={openHistory}
+							onReviewWorkingChanges={openHistory}
+						/>
 					</Suspense>
 				</LixProvider>,
 			);
 		});
 
 		const historyButton = await screen.findByRole("button", {
-			name: "1 file changed since checkpoint. Open checkpoint history",
+			name: "1 file changed since checkpoint. Review working changes",
 		});
 		fireEvent.click(historyButton);
 		expect(openHistory).toHaveBeenCalledOnce();
@@ -161,7 +166,7 @@ describe("CheckpointStatusBar", () => {
 		).toBeVisible();
 		expect(
 			screen.queryByRole("button", {
-				name: "1 file changed since checkpoint. Open checkpoint history",
+				name: "1 file changed since checkpoint. Review working changes",
 			}),
 		).toBeNull();
 
