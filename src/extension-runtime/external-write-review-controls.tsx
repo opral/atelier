@@ -392,10 +392,14 @@ export function ExternalWriteReviewControls({
 	const showVerbArrows = listFiles.length > 1;
 	const allSeenTicked = seenFiles.length > 0 && leftOutCount === 0;
 	const totalCount = listFiles.length;
+	// "Seen" prefixes the count only while nothing seen is left out. Narrow
+	// pills show the bare count instead: that variant is drawn from a data
+	// attribute so the accessible text stays one string.
 	const chipLabel =
 		leftOutCount === 0
 			? `Seen ${tickedFiles.length} of ${totalCount}`
 			: `${tickedFiles.length} of ${totalCount}`;
+	const chipShortLabel = `${tickedFiles.length} of ${totalCount}`;
 	const ringStyle = {
 		"--ring-ticked": `${(tickedFiles.length / Math.max(totalCount, 1)) * 360}deg`,
 		"--ring-seen": `${(seenFiles.length / Math.max(totalCount, 1)) * 360}deg`,
@@ -664,6 +668,7 @@ export function ExternalWriteReviewControls({
 											{navigation.filePath ? (
 												<PathLabel
 													path={navigation.filePath}
+													layout="row"
 													parentClassName="external-write-review-path-parent"
 												/>
 											) : (
@@ -730,10 +735,25 @@ export function ExternalWriteReviewControls({
 							style={ringStyle}
 						/>
 						<span className="external-write-review-stable">
-							<span aria-hidden="true" className="external-write-review-sizer">
+							<span
+								aria-hidden="true"
+								className="external-write-review-sizer external-write-review-chip-long"
+							>
 								Seen {totalCount} of {totalCount}
 							</span>
-							<span>{chipLabel}</span>
+							<span
+								aria-hidden="true"
+								className="external-write-review-sizer external-write-review-chip-short"
+								data-label={`${totalCount} of ${totalCount}`}
+							/>
+							<span className="external-write-review-chip-long">
+								{chipLabel}
+							</span>
+							<span
+								aria-hidden="true"
+								className="external-write-review-chip-short"
+								data-label={chipShortLabel}
+							/>
 						</span>
 						{openMenu === "list" ? (
 							<ChevronDown aria-hidden="true" />
