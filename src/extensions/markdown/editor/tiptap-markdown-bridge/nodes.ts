@@ -591,6 +591,15 @@ export function markdownWcNodes(
 				return { data: { default: null }, soft: { default: false } };
 			},
 			renderHTML({ node }) {
+				// A soft break is a source newline inside a paragraph. It stays a
+				// node so the source wrapping survives edits, but it reads as a
+				// space, the way CommonMark renders it, not as a line break.
+				if (node.attrs.soft === true) {
+					return [
+						"span",
+						{ ...diffAttrs(node, "element"), "data-soft-break": "" },
+					];
+				}
 				return ["br", diffAttrs(node, "element")];
 			},
 		}),

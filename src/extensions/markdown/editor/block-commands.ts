@@ -15,6 +15,7 @@ import {
 	TextQuote,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import type { ComponentType } from "react";
 
 export type BlockCommand = {
@@ -30,7 +31,76 @@ export type BlockCommand = {
 	toggle?: (editor: Editor) => void;
 };
 
+/** Lifts the selection out of a blockquote before another block type applies. */
+function unquoted(editor: Editor) {
+	const chain = editor.chain().focus();
+	return editor.isActive("blockquote") ? chain.lift("blockquote") : chain;
+}
+
+/**
+ * Turns the selected item into the target list type on its own, the way
+ * Notion converts one block: the item leaves its list (splitting it) and
+ * starts a list of the target type. Wrapping in place would nest the item
+ * inside its predecessor; converting the parent list would change siblings.
+ */
+export function convertListItem(
+	editor: Editor,
+	listType: "bulletList" | "orderedList",
+	itemAttrs?: Record<string, unknown>,
+): boolean {
+	const inList = editor.isActive("listItem");
+	const chain = editor.chain().focus() as any;
+	if (inList) chain.liftListItem("listItem");
+	if (!chain.wrapInList(listType).run()) return false;
+	if (!itemAttrs) return true;
+	const { state, view } = editor;
+	const $from = state.selection.$from;
+	for (let depth = $from.depth; depth > 0; depth -= 1) {
+		if ($from.node(depth).type.name !== "listItem") continue;
+		view.dispatch(
+			state.tr.setNodeMarkup($from.before(depth), undefined, {
+				...$from.node(depth).attrs,
+				...itemAttrs,
+			}),
+		);
+		break;
+	}
+	return true;
+}
+
+/** A code block becomes one paragraph per line; blank lines are dropped. */
+function codeBlockToParagraphs(editor: Editor): boolean {
+	const { state } = editor;
+	const $from = state.selection.$from;
+	if ($from.parent.type.name !== "codeBlock") return false;
+	const paragraph = state.schema.nodes.paragraph;
+	const lines = $from.parent.textContent
+		.split("\n")
+		.filter((line) => line.trim());
+	const nodes = (lines.length ? lines : [""]).map((line) =>
+		paragraph.create(null, line ? state.schema.text(line) : undefined),
+	);
+	const from = $from.before();
+	const tr = state.tr.replaceWith(from, $from.after(), nodes);
+	tr.setSelection(TextSelection.create(tr.doc, from + 1));
+	editor.view.dispatch(tr.scrollIntoView());
+	return true;
+}
+
 export const BLOCK_COMMANDS: BlockCommand[] = [
+	{
+		id: "paragraph",
+		label: "Text",
+		description: "Paragraph",
+		icon: Pilcrow,
+		keywords: ["p", "text", "paragraph"],
+		insert: (editor) =>
+			codeBlockToParagraphs(editor) ||
+			unquoted(editor).setNode("paragraph").run(),
+		toggle: (editor) =>
+			codeBlockToParagraphs(editor) ||
+			unquoted(editor).setNode("paragraph").run(),
+	},
 	{
 		id: "frontmatter",
 		label: "Frontmatter",
@@ -44,24 +114,13 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		},
 	},
 	{
-		id: "paragraph",
-		label: "Text",
-		description: "Paragraph",
-		icon: Pilcrow,
-		keywords: ["p", "text", "paragraph"],
-		insert: (editor) => editor.chain().focus().setNode("paragraph").run(),
-		toggle: (editor) => editor.chain().focus().setNode("paragraph").run(),
-	},
-	{
 		id: "heading1",
 		label: "Heading 1",
 		description: "Large heading",
 		icon: Heading1,
 		keywords: ["h1", "#", "title"],
-		insert: (editor) =>
-			editor.chain().focus().setNode("heading", { level: 1 }).run(),
-		toggle: (editor) =>
-			editor.chain().focus().setNode("heading", { level: 1 }).run(),
+		insert: (editor) => unquoted(editor).setNode("heading", { level: 1 }).run(),
+		toggle: (editor) => unquoted(editor).setNode("heading", { level: 1 }).run(),
 	},
 	{
 		id: "heading2",
@@ -69,10 +128,8 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Section heading",
 		icon: Heading2,
 		keywords: ["h2", "##", "subtitle"],
-		insert: (editor) =>
-			editor.chain().focus().setNode("heading", { level: 2 }).run(),
-		toggle: (editor) =>
-			editor.chain().focus().setNode("heading", { level: 2 }).run(),
+		insert: (editor) => unquoted(editor).setNode("heading", { level: 2 }).run(),
+		toggle: (editor) => unquoted(editor).setNode("heading", { level: 2 }).run(),
 	},
 	{
 		id: "heading3",
@@ -80,10 +137,8 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Subheading",
 		icon: Heading3,
 		keywords: ["h3", "###"],
-		insert: (editor) =>
-			editor.chain().focus().setNode("heading", { level: 3 }).run(),
-		toggle: (editor) =>
-			editor.chain().focus().setNode("heading", { level: 3 }).run(),
+		insert: (editor) => unquoted(editor).setNode("heading", { level: 3 }).run(),
+		toggle: (editor) => unquoted(editor).setNode("heading", { level: 3 }).run(),
 	},
 	{
 		id: "bulletList",
@@ -92,10 +147,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: List,
 		keywords: ["ul", "-", "unordered", "bullets"],
 		insert: (editor) => {
-			const chain = editor.chain().focus() as any;
-			if (!chain.wrapIn?.("bulletList")?.run?.()) {
-				chain.toggleBulletList?.()?.run?.();
-			}
+			convertListItem(editor, "bulletList", { checked: null });
 		},
 	},
 	{
@@ -105,10 +157,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: ListOrdered,
 		keywords: ["ol", "1.", "numbered", "ordered"],
 		insert: (editor) => {
-			const chain = editor.chain().focus() as any;
-			if (!chain.wrapIn?.("orderedList")?.run?.()) {
-				chain.toggleOrderedList?.()?.run?.();
-			}
+			convertListItem(editor, "orderedList", { checked: null });
 		},
 	},
 	{
@@ -174,12 +223,12 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Code snippet",
 		icon: Code2,
 		keywords: ["code", "```", "pre", "snippet"],
-		insert: (editor) => editor.chain().focus().setNode("codeBlock").run(),
+		insert: (editor) => unquoted(editor).setNode("codeBlock").run(),
 		toggle: (editor) => {
 			if (editor.isActive("codeBlock")) {
 				editor.chain().focus().lift("codeBlock").run();
 			} else {
-				editor.chain().focus().setNode("codeBlock").run();
+				unquoted(editor).setNode("codeBlock").run();
 			}
 		},
 	},
@@ -205,7 +254,13 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: Minus,
 		keywords: ["hr", "---", "divider", "line", "separator"],
 		insert: (editor) => {
-			editor.chain().focus().insertContent({ type: "horizontalRule" }).run();
+			// The caret continues in a paragraph below; leaving the rule selected
+			// would let the next keystroke replace it.
+			editor
+				.chain()
+				.focus()
+				.insertContent([{ type: "horizontalRule" }, { type: "paragraph" }])
+				.run();
 		},
 	},
 	{

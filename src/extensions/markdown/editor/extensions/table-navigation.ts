@@ -115,6 +115,37 @@ export const TableNavigationExtension = Extension.create({
 			return true;
 		};
 
+		const onTextblockEdge = (editor: any, direction: "up" | "down") => {
+			try {
+				return editor.view.endOfTextblock(direction);
+			} catch {
+				return false;
+			}
+		};
+
+		// Same column in another row (the last cell when that row is shorter).
+		const selectCell = (
+			editor: any,
+			context: NonNullable<ReturnType<typeof tableContext>>,
+			rowIndex: number,
+			bias: -1 | 1,
+		) => {
+			const row = context.table.child(rowIndex);
+			const cellIndex = Math.min(context.cellIndex, row.childCount - 1);
+			let pos = context.tablePos + 1;
+			for (let index = 0; index < rowIndex; index += 1)
+				pos += context.table.child(index).nodeSize;
+			pos += 1;
+			for (let index = 0; index < cellIndex; index += 1)
+				pos += row.child(index).nodeSize;
+			const cell = row.child(cellIndex);
+			return selectNear(
+				editor,
+				bias < 0 ? pos + cell.nodeSize - 1 : pos + 1,
+				bias,
+			);
+		};
+
 		const moveCell = (editor: any, direction: -1 | 1) => {
 			const context = tableContext(editor);
 			if (!context) return false;
@@ -211,21 +242,31 @@ export const TableNavigationExtension = Extension.create({
 			Tab: ({ editor }) => moveCell(editor, 1),
 			"Shift-Tab": ({ editor }) => moveCell(editor, -1),
 			"Mod-Enter": ({ editor }) => exitTable(editor, 1),
+			// Up and down move by row within the same column, like a grid; the
+			// browser's default walks cells in DOM order, which reads as a jump
+			// sideways. On a cell's first/last visual line only, so a multi-line
+			// cell still moves within itself first.
 			ArrowUp: ({ editor }) => {
 				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
-				return context?.rowIndex === 0 && context.$from.parentOffset === 0
-					? exitTable(editor, -1)
-					: false;
+				if (!context) return false;
+				const onFirstLine =
+					context.$from.parentOffset === 0 || onTextblockEdge(editor, "up");
+				if (!onFirstLine) return false;
+				if (context.rowIndex === 0) return exitTable(editor, -1);
+				return selectCell(editor, context, context.rowIndex - 1, -1);
 			},
 			ArrowDown: ({ editor }) => {
 				if (!editor.state.selection.empty) return false;
 				const context = tableContext(editor);
 				if (!context) return false;
-				return context.rowIndex === context.table.childCount - 1 &&
-					context.$from.parentOffset === context.$from.parent.content.size
-					? exitTable(editor, 1)
-					: false;
+				const onLastLine =
+					context.$from.parentOffset === context.$from.parent.content.size ||
+					onTextblockEdge(editor, "down");
+				if (!onLastLine) return false;
+				if (context.rowIndex === context.table.childCount - 1)
+					return exitTable(editor, 1);
+				return selectCell(editor, context, context.rowIndex + 1, 1);
 			},
 			ArrowLeft: ({ editor }) => {
 				if (!editor.state.selection.empty) return false;

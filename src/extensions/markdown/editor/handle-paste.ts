@@ -95,6 +95,23 @@ export function handlePaste(args: {
 	const text: string = event?.clipboardData?.getData?.("text/plain") ?? "";
 	if (!text) return false;
 
+	// A URL pasted over selected text links that text instead of replacing it.
+	const pastedUrl = /^https?:\/\/\S+$/.test(text.trim()) ? text.trim() : null;
+	const pasteSelection = editor?.state?.selection;
+	if (
+		pastedUrl &&
+		pasteSelection &&
+		!pasteSelection.empty &&
+		pasteSelection.$from.sameParent(pasteSelection.$to) &&
+		pasteSelection.$from.parent.inlineContent &&
+		!pasteSelection.$from.parent.type.spec.code
+	) {
+		event.preventDefault?.();
+		editor.view?.dispatch(closeHistory(editor.state.tr));
+		editor.chain().focus().setMark("link", { href: pastedUrl }).run();
+		return true;
+	}
+
 	// A paste is one Undo action, independent of typing on either side.
 	editor.view?.dispatch(closeHistory(editor.state.tr));
 	try {

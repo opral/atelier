@@ -51,6 +51,34 @@ export const BlockBoundaryNavigationExtension = Extension.create({
 	name: "blockBoundaryNavigation",
 
 	addKeyboardShortcuts() {
+		// A code block keeps whitespace, so the browser's caret stops at the end
+		// of the last line before it leaves the block. Leave from the first or
+		// last visual line directly, like any other paragraph.
+		const leaveCodeBlock = (direction: -1 | 1) => {
+			const { state, view } = this.editor;
+			const { selection } = state;
+			if (!selection.empty || selection instanceof NodeSelection) return false;
+			const { $from } = selection as any;
+			if ($from.parent?.type?.name !== "codeBlock") return false;
+			let onEdge = false;
+			try {
+				onEdge = view.endOfTextblock(direction < 0 ? "up" : "down");
+			} catch {
+				onEdge = false;
+			}
+			if (!onEdge) return false;
+			const target =
+				direction < 0 ? $from.before($from.depth) : $from.after($from.depth);
+			if (direction < 0 ? target <= 0 : target >= state.doc.content.size)
+				return false;
+			view.dispatch(
+				state.tr
+					.setSelection(Selection.near(state.doc.resolve(target), direction))
+					.scrollIntoView(),
+			);
+			return true;
+		};
+
 		const selectAdjacentAtomicBlock = (direction: -1 | 1) => {
 			const { state, view } = this.editor;
 			const { selection } = state;
@@ -137,8 +165,8 @@ export const BlockBoundaryNavigationExtension = Extension.create({
 		return {
 			ArrowLeft: () => moveAcrossAtomicBoundary(-1),
 			ArrowRight: () => moveAcrossAtomicBoundary(1),
-			ArrowUp: () => moveAcrossAtomicBoundary(-1),
-			ArrowDown: () => moveAcrossAtomicBoundary(1),
+			ArrowUp: () => moveAcrossAtomicBoundary(-1) || leaveCodeBlock(-1),
+			ArrowDown: () => moveAcrossAtomicBoundary(1) || leaveCodeBlock(1),
 		};
 	},
 });

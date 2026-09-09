@@ -1082,7 +1082,7 @@ test("paste inline formatting markdown (TipTap + Lix)", async () => {
 		fileId,
 		persistDebounceMs: 0,
 	});
-	const input = "This has **bold**, _italic_, and `code`.";
+	const input = "This has **bold**, *italic*, and `code`.";
 	await handlePaste({
 		editor,
 		event: {

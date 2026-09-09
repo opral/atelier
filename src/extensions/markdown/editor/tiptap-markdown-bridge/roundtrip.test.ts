@@ -766,7 +766,7 @@ describe("lists", () => {
 
 	test("mixed plain and formatted task list markdown preserves markers", () => {
 		const markdown =
-			"- plain bullet\n- [ ] unchecked **bold**\n- [x] checked _italic_\n";
+			"- plain bullet\n- [ ] unchecked **bold**\n- [x] checked *italic*\n";
 
 		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
 	});

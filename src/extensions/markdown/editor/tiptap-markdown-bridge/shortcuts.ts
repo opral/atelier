@@ -13,6 +13,7 @@ import {
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
+import { convertListItem } from "../block-commands";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
@@ -623,6 +624,20 @@ export const MarkdownWcShortcuts = Extension.create({
 			"Shift-Mod-s": () =>
 				this.editor.chain().focus().toggleMark("strike").run(),
 
+			"Mod-e": () => this.editor.chain().focus().toggleMark("code").run(),
+			// Link editing lives in the toolbar; the editor only asks for it.
+			"Mod-k": () => {
+				this.editor.view.dom.dispatchEvent(
+					new CustomEvent("atelier-markdown-link", { bubbles: true }),
+				);
+				return true;
+			},
+			"Mod-Shift-7": () =>
+				convertListItem(this.editor, "orderedList", { checked: null }),
+			"Mod-Shift-8": () =>
+				convertListItem(this.editor, "bulletList", { checked: null }),
+			"Mod-Shift-9": () =>
+				convertListItem(this.editor, "bulletList", { checked: false }),
 			"Mod-Backspace": deletePreviousWord,
 			"Cmd-Backspace": deletePreviousWord,
 			"Ctrl-Backspace": deletePreviousWord,
@@ -665,6 +680,20 @@ export const MarkdownWcShortcuts = Extension.create({
 				const { selection } = state;
 				if (!selection.empty) return false;
 				const $from: any = selection.$from;
+				// Backspace at the top of the body selects the frontmatter first;
+				// deleting a whole YAML block on one keystroke is too easy to do
+				// by accident.
+				if (
+					$from.depth === 1 &&
+					$from.parentOffset === 0 &&
+					$from.index(0) === 1 &&
+					state.doc.firstChild?.type.name === "markdownFrontmatter"
+				) {
+					this.editor.view.dispatch(
+						state.tr.setSelection(NodeSelection.create(state.doc, 0)),
+					);
+					return true;
+				}
 				if (
 					$from.parent?.type?.name === "codeBlock" &&
 					$from.parentOffset === 0 &&
@@ -675,7 +704,8 @@ export const MarkdownWcShortcuts = Extension.create({
 				const para: any = $from.parent;
 				const isEmptyPara =
 					para?.type?.name === "paragraph" && para.content.size === 0;
-				if (!isEmptyPara || $from.parentOffset !== 0) return false;
+				if (para?.type?.name !== "paragraph" || $from.parentOffset !== 0)
+					return false;
 
 				let listItemDepth = -1;
 				for (let d = $from.depth; d > 0; d--) {
@@ -687,6 +717,11 @@ export const MarkdownWcShortcuts = Extension.create({
 				}
 				if (listItemDepth < 0) return false;
 				if ($from.node(listItemDepth).firstChild !== para) return false;
+				// Backspace at the start of an item's text lifts the item out of
+				// the list (a nested item outdents one level), the way Notion turns
+				// a bullet back into text. The browser default would instead fold
+				// the text into the previous item as a continuation paragraph.
+				if (!isEmptyPara) return outdentListItem();
 
 				const listDepth = listItemDepth - 1;
 				const listNode = listDepth > 0 ? $from.node(listDepth) : null;
@@ -778,10 +813,44 @@ export const MarkdownWcShortcuts = Extension.create({
 					const node = $from.node(depth);
 					if (node?.type?.name !== "listItem") continue;
 					const nextChild = node.maybeChild($from.index(depth) + 1);
-					return (
+					if (
 						nextChild?.type?.name === "bulletList" ||
 						nextChild?.type?.name === "orderedList"
+					) {
+						return true;
+					}
+					// Delete at the end of an item's last paragraph joins the next
+					// item's text onto this line, instead of pulling the whole next
+					// item in as a continuation paragraph.
+					if (nextChild) return false;
+					const list = $from.node(depth - 1);
+					const nextItem = list?.maybeChild($from.index(depth - 1) + 1);
+					if (nextItem?.firstChild?.type?.name !== "paragraph") return false;
+					const nextParagraphStart = $from.after(depth) + 2;
+					this.editor.view.dispatch(
+						state.tr.delete($from.pos, nextParagraphStart).scrollIntoView(),
 					);
+					return true;
+				}
+				return false;
+			},
+
+			// Toggle the task under the caret, the Notion shortcut.
+			"Mod-Enter": () => {
+				const { state } = this.editor;
+				const $from: any = state.selection.$from;
+				for (let d = $from.depth; d > 0; d--) {
+					const n = $from.node(d);
+					if (n?.type?.name !== "listItem") continue;
+					if (n.attrs?.checked !== true && n.attrs?.checked !== false)
+						return false;
+					this.editor.view.dispatch(
+						state.tr.setNodeMarkup($from.before(d), undefined, {
+							...n.attrs,
+							checked: !n.attrs.checked,
+						}),
+					);
+					return true;
 				}
 				return false;
 			},
@@ -806,11 +875,13 @@ export const MarkdownWcShortcuts = Extension.create({
 				// Find enclosing listItem
 				let inListItem = false;
 				let isTask = false;
+				let itemDepth = -1;
 				for (let d = $from.depth; d > 0; d--) {
 					const n = $from.node(d);
 					if (n?.type?.name === "listItem") {
 						inListItem = true;
 						isTask = n.attrs?.checked === true || n.attrs?.checked === false;
+						itemDepth = d;
 						break;
 					}
 				}
@@ -830,12 +901,60 @@ export const MarkdownWcShortcuts = Extension.create({
 				if (state.selection.empty && isEmptyPara) {
 					return outdentListItem();
 				}
-				if (isTask) {
-					return this.editor.commands.splitListItem("listItem", {
-						checked: false,
-					});
+				const item = $from.node(itemDepth);
+				const paragraphIndex = $from.index(itemDepth);
+				const newItemAttrs = isTask
+					? { ...item.attrs, checked: false }
+					: item.attrs;
+				if (
+					state.selection.empty &&
+					paragraphIndex === 0 &&
+					$from.parentOffset === 0
+				) {
+					// Enter at the start of an item's text opens an empty item above
+					// and keeps the caret with the text. Splitting there would move
+					// the item's attributes (a task's check) onto the empty item.
+					const empty = item.type.create(
+						newItemAttrs,
+						state.schema.nodes.paragraph.create(),
+					);
+					this.editor.view.dispatch(
+						state.tr.insert($from.before(itemDepth), empty).scrollIntoView(),
+					);
+					return true;
 				}
-				return this.editor.commands.splitListItem("listItem");
+				const following = item.maybeChild(paragraphIndex + 1);
+				if (
+					state.selection.empty &&
+					$from.parentOffset === para.content.size &&
+					(following?.type?.name === "bulletList" ||
+						following?.type?.name === "orderedList")
+				) {
+					// Enter at the end of an item that has children starts a new
+					// first child, so the children stay under their parent (a split
+					// would carry them off under the new empty item).
+					const childList = following;
+					const firstChild = childList.firstChild;
+					const childIsTask =
+						firstChild?.attrs?.checked === true ||
+						firstChild?.attrs?.checked === false;
+					const empty = item.type.create(
+						childIsTask ? { ...firstChild.attrs, checked: false } : {},
+						state.schema.nodes.paragraph.create(),
+					);
+					const insertPos = $from.after(itemDepth + 1) + 1;
+					const tr = state.tr.insert(insertPos, empty);
+					tr.setSelection(TextSelection.create(tr.doc, insertPos + 2));
+					this.editor.view.dispatch(tr.scrollIntoView());
+					return true;
+				}
+				// The new item starts as plain text: an inline code mark at the
+				// split point must not carry over.
+				return this.editor
+					.chain()
+					.splitListItem("listItem", isTask ? { checked: false } : undefined)
+					.unsetMark("code")
+					.run();
 			},
 		};
 	},

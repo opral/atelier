@@ -216,8 +216,8 @@ describe("Markdown typing shortcuts (input rules)", () => {
 
 	test.each([
 		["**bold**", "**bold**\n", "bold"],
-		["*italic*", "_italic_\n", "italic"],
-		["_italic_", "_italic_\n", "italic"],
+		["*italic*", "*italic*\n", "italic"],
+		["_italic_", "*italic*\n", "italic"],
 		["~~strike~~", "~~strike~~\n", "strike"],
 		["`inline code`", "`inline code`\n", "code"],
 	])("%s → %s mark", (typed, markdown, markName) => {

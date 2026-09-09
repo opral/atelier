@@ -384,9 +384,10 @@ test("keeps soft source lines structural when a mounted editor persists an edit"
 	const proseMirror = editor.view.dom;
 	const paragraph = proseMirror.querySelector("p");
 	expect(paragraph).not.toBeNull();
-	expect(
-		Array.from(paragraph!.children).filter((child) => child.tagName === "BR"),
-	).toHaveLength(2);
+	// Soft source newlines stay structural (one node per line break) but
+	// render as spaces, not <br>.
+	expect(paragraph!.querySelectorAll("[data-soft-break]")).toHaveLength(2);
+	expect(paragraph!.querySelectorAll("br")).toHaveLength(0);
 	expect(
 		Array.from(paragraph!.childNodes)
 			.filter((node) => node.nodeType === Node.TEXT_NODE)
@@ -429,9 +430,7 @@ test("keeps soft source lines structural when a mounted editor persists an edit"
 	await act(async () => {
 		hydrateMarkdownEditorAuthoritativeMarkdown(editor, expectedMarkdown);
 	});
-	expect(
-		Array.from(paragraph!.children).filter((child) => child.tagName === "BR"),
-	).toHaveLength(2);
+	expect(paragraph!.querySelectorAll("[data-soft-break]")).toHaveLength(2);
 	expect(proseMirror).toHaveTextContent("first linesecond line!third line");
 	expect(proseMirror).toHaveTextContent("tail sentinel");
 });
@@ -757,6 +756,23 @@ test("deactivates and restores the toolbar around real frontmatter focus", async
 	});
 });
 
+// The disclosure shows while the pointer is in the margin above the first
+// block; jsdom has no layout, so give the block a box below the surface top.
+function hoverAboveFirstBlock(firstBlock: Element) {
+	vi.spyOn(firstBlock, "getBoundingClientRect").mockReturnValue({
+		top: 60,
+		bottom: 84,
+		left: 0,
+		right: 400,
+		width: 400,
+		height: 24,
+		x: 0,
+		y: 60,
+		toJSON: () => ({}),
+	} as DOMRect);
+	fireEvent.pointerMove(firstBlock, { clientY: 30, clientX: 20 });
+}
+
 test("adds frontmatter from the first Markdown block disclosure", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
 		fileId: fakeUuid("file_frontmatter_disclosure"),
@@ -768,7 +784,7 @@ test("adds frontmatter from the first Markdown block disclosure", async () => {
 	expect(firstBlock).not.toBeNull();
 
 	await act(async () => {
-		fireEvent.pointerEnter(firstBlock!);
+		hoverAboveFirstBlock(firstBlock!);
 	});
 	const addButton = screen.getByRole("button", { name: "Add frontmatter" });
 	expect(addButton).toHaveAttribute("data-visible", "true");
@@ -915,7 +931,7 @@ test("removing the final property removes frontmatter and restores its disclosur
 		.querySelector(".ProseMirror > p");
 	expect(firstBlock).not.toBeNull();
 	await act(async () => {
-		fireEvent.pointerEnter(firstBlock!);
+		hoverAboveFirstBlock(firstBlock!);
 	});
 	expect(
 		screen.getByRole("button", { name: "Add frontmatter" }),
