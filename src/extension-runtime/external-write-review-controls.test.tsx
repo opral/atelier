@@ -111,7 +111,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(undo).toHaveBeenCalledWith(["file-tiktok"], { scope: "selection" });
 	});
 
-	test("stepping to a file adds it to the seen set; stepping away never removes it", () => {
+	test("stepping to a file ticks it; stepping away never unticks it", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -154,10 +154,9 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		expect(scopeRow("file-icp")).toBeChecked();
 		expect(scopeRow("file-leads")).toBeChecked();
-		// Unseen rows are listed below the seen ones, unticked until picked.
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
-		expect(scopeRow("file-readme")).toHaveTextContent("unseen");
+		// Rows keep file order; a file not yet viewed is simply unticked.
 		expect(scopeRow("file-readme")).not.toBeChecked();
+		expect(scopeRow("file-readme")).not.toHaveTextContent("unseen");
 		expect(scopeRow("file-icp")).toHaveTextContent("viewing");
 		const rows = screen.getAllByRole("checkbox");
 		expect(rows.map((row) => row.getAttribute("data-file-id"))).toEqual([
@@ -168,7 +167,7 @@ describe("ExternalWriteReviewControls", () => {
 		]);
 	});
 
-	test("ticking an unseen row adds it to the working set; opening it keeps it ticked", () => {
+	test("ticking an unviewed row adds it to the working set; viewing it keeps it ticked", () => {
 		const onOpen = vi.fn();
 		const { rerender } = render(
 			<ExternalWriteReviewControls
@@ -183,7 +182,6 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(scopeRow("file-readme"));
 		expect(onOpen).not.toHaveBeenCalled();
 		expect(scopeRow("file-readme")).toBeChecked();
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("2 of 3");
 		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
 			"aria-checked",
@@ -228,7 +226,7 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(chip("Working set: 1 of 2 files"));
-		expect(scopeRow("file-tiktok")).toHaveAttribute("data-state", "unseen");
+		expect(scopeRow("file-tiktok")).not.toBeChecked();
 		expect(scopeRow("file-launch")).toBeChecked();
 	});
 
@@ -264,7 +262,7 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		fireEvent.click(scopeRow("file-leads"));
 		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("1 of 3");
-		expect(scopeRow("file-leads")).toHaveAttribute("data-state", "left-out");
+		expect(scopeRow("file-leads")).not.toBeChecked();
 		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
 			"aria-checked",
 			"mixed",
@@ -316,7 +314,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 	});
 
-	test("the All files master row ticks or clears every file, seen or not", () => {
+	test("the All files master row ticks or clears every file, viewed or not", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -345,12 +343,11 @@ describe("ExternalWriteReviewControls", () => {
 
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		const allFiles = () => screen.getByRole("checkbox", { name: "All files" });
-		// Two seen and ticked, one unseen: the master row is mixed.
+		// Two viewed and ticked, one not: the master row is mixed.
 		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
 		fireEvent.click(allFiles());
 		expect(allFiles()).toHaveAttribute("aria-checked", "true");
 		expect(scopeRow("file-readme")).toBeChecked();
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 		expect(chip("Working set: 3 of 3 files")).toHaveTextContent("3 of 3");
 
 		// From everything, the master row clears the lot and the verbs wait.
@@ -539,7 +536,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(chip("Working set: 2 of 2 files")).toHaveTextContent("2 of 2");
 	});
 
-	test("a file joining the list mid-review arrives unseen; the selection is kept", () => {
+	test("a file joining the list mid-review arrives unticked; the selection is kept", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -566,7 +563,7 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 0 of 3 files"));
 		expect(scopeRow("file-tiktok")).not.toBeChecked();
 		expect(scopeRow("file-tiktok")).toBeEnabled();
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
+		expect(scopeRow("file-readme")).not.toBeChecked();
 	});
 
 	test("with no changed file on screen nothing is seen and the stepper names no file", () => {

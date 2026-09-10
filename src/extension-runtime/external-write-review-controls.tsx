@@ -97,19 +97,17 @@ function withoutId(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
 /**
  * Diff mode's floating action bar.
  *
- * One float, one anatomy: stepper · scope chip · actions. The scope starts
- * as the seen set: a changed file counts as seen once it has been on screen
- * in this review session, stepping ‹ › only ever adds to it, and a file is
- * ticked the moment it is seen. Any file can be ticked or unticked in the
- * chip's list, seen or not; the "All files" master row ticks or clears the
- * whole list. Every verb to the chip's right acts on the ticked files. The
- * chip always reads "ticked of total" ("3 of 6"): the number every verb
- * acts on. Its ring shows ticked, seen-but-left-out and unseen as three
- * wedges. The verbs
- * are split buttons: the big half acts on the ticked set (⌘⏎), the arrow
- * offers "all N files" (⇧⌘⏎). One changed file = no chip, no stepper arrows
- * and no arrows on the verbs. Anything smaller than a file happens inline on
- * the change itself.
+ * One float, one anatomy: stepper · scope chip · actions. The chip opens a
+ * plain file picker: every changed file, in list order, as a checkbox, with
+ * an "All files" master row. The selection starts as the file on screen and
+ * grows as ‹ › steps through files (a file ticks the first time it is
+ * viewed, and stays ticked unless unticked by hand); any row can be ticked
+ * or unticked at any time. Every verb to the chip's right acts on the ticked
+ * files, and the chip reads "ticked of total" ("1 of 180"). The verbs are
+ * split buttons: the big half acts on the ticked set (⌘⏎), the arrow offers
+ * "all N files" (⇧⌘⏎). One changed file = no chip, no stepper arrows and no
+ * arrows on the verbs. Anything smaller than a file happens inline on the
+ * change itself.
  */
 export function ExternalWriteReviewControls({
 	isActive,
@@ -136,8 +134,9 @@ export function ExternalWriteReviewControls({
 	const [seenFileIds, setSeenFileIds] = useState<ReadonlySet<string>>(() =>
 		seenSetOf(activeFileId),
 	);
-	// Seen files are ticked unless left out; unseen files are ticked only
-	// when picked. Both sets are the user's own choices for this session.
+	// A viewed file is ticked unless unticked by hand; a file not yet viewed
+	// is ticked only when picked. Both sets are the user's own choices for
+	// this session, and viewing is tracked only to tick a file once.
 	const [leftOutFileIds, setLeftOutFileIds] =
 		useState<ReadonlySet<string>>(EMPTY_IDS);
 	const [pickedFileIds, setPickedFileIds] =
@@ -422,7 +421,6 @@ export function ExternalWriteReviewControls({
 	const chipLabel = `${tickedFiles.length} of ${totalCount}`;
 	const ringStyle = {
 		"--ring-ticked": `${(tickedFiles.length / Math.max(totalCount, 1)) * 360}deg`,
-		"--ring-seen": `${(seenFiles.length / Math.max(totalCount, 1)) * 360}deg`,
 	} as CSSProperties;
 	const shortcut = (keys: string) =>
 		isMacPlatform() ? keys : keys.replace("⌘", "Ctrl+").replace("⇧", "Shift+");
@@ -481,8 +479,8 @@ export function ExternalWriteReviewControls({
 						aria-hidden="true"
 						className="external-write-review-menu-divider"
 					/>
-					{seenFiles.map((file) => {
-						const ticked = !leftOutFileIds.has(file.id);
+					{listFiles.map((file) => {
+						const ticked = isTicked(file);
 						const viewing = file.id === activeFileId;
 						return (
 							<button
@@ -493,7 +491,7 @@ export function ExternalWriteReviewControls({
 								data-file-id={file.id}
 								aria-checked={ticked}
 								data-attr="diff-scope-file"
-								data-state={ticked ? "ticked" : "left-out"}
+								data-state={ticked ? "ticked" : "unticked"}
 								data-ticked={ticked ? "true" : undefined}
 								data-viewing={viewing ? "true" : undefined}
 								onClick={() => toggleFile(file.id)}
@@ -520,58 +518,7 @@ export function ExternalWriteReviewControls({
 									<small className="external-write-review-menu-tag">
 										viewing
 									</small>
-								) : ticked ? null : (
-									<small className="external-write-review-menu-tag">
-										left out
-									</small>
-								)}
-							</button>
-						);
-					})}
-					{unseenFiles.length > 0 && seenFiles.length > 0 ? (
-						<span
-							aria-hidden="true"
-							className="external-write-review-menu-divider"
-						/>
-					) : null}
-					{unseenFiles.map((file) => {
-						// An unseen file ticks like any other; it just has not been
-						// on screen yet. Stepping ‹ › to it makes it seen, and it
-						// stays ticked either way.
-						const ticked = pickedFileIds.has(file.id);
-						return (
-							<button
-								key={file.id}
-								type="button"
-								role="checkbox"
-								data-testid={`diff-scope-file:${file.id}`}
-								data-file-id={file.id}
-								aria-checked={ticked}
-								data-attr="diff-scope-file"
-								data-state="unseen"
-								data-ticked={ticked ? "true" : undefined}
-								title="Not opened in this review yet"
-								onClick={() => toggleFile(file.id)}
-							>
-								<span
-									aria-hidden="true"
-									className="external-write-review-menu-tick"
-									data-ticked={ticked ? "true" : undefined}
-								>
-									{ticked ? <Check /> : null}
-								</span>
-								<img
-									src={fileIconUrl(file.path)}
-									alt=""
-									className="external-write-review-menu-file-icon"
-								/>
-								<span className="external-write-review-menu-name">
-									<PathLabel
-										path={file.path}
-										parentClassName="external-write-review-path-parent"
-									/>
-								</span>
-								<small className="external-write-review-menu-tag">unseen</small>
+								) : null}
 							</button>
 						);
 					})}
@@ -745,7 +692,6 @@ export function ExternalWriteReviewControls({
 						disabled={isCommitting}
 						data-attr="diff-scope-chip"
 						data-ticked-count={tickedFiles.length}
-						data-seen-count={seenFiles.length}
 						data-file-count={totalCount}
 					>
 						<span

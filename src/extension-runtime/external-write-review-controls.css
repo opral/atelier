@@ -222,31 +222,13 @@
 		background: var(--color-border-inverse);
 	}
 
-	/* Row state, right-aligned: "viewing", "left out", "unseen". */
+	/* Row state, right-aligned: "viewing". */
 	.external-write-review-menu-tag {
 		margin-left: auto;
 		padding-left: 0.75rem;
 		color: var(--color-text-inverse-tertiary);
 		font-size: 0.625rem;
 		font-weight: 500;
-	}
-
-	/* Unseen rows tick like the rest; the muted ink only says the file has
-	   not been on screen in this review yet. */
-	.external-write-review-menu > button[data-state="unseen"] {
-		color: var(--color-text-inverse-tertiary);
-		font-weight: 500;
-	}
-
-	.external-write-review-menu
-		> button[data-state="unseen"]:hover:not(:disabled) {
-		color: var(--color-text-inverse-secondary);
-	}
-
-	.external-write-review-menu
-		> button[data-state="unseen"]
-		.external-write-review-menu-tick {
-		border-color: var(--color-border-inverse-strong);
 	}
 
 	.external-write-review-menu > button[data-viewing] {
@@ -332,8 +314,8 @@
 		color: var(--color-text-inverse-secondary);
 	}
 
-	/* The progress ring: orange = will be acted on, light grey = seen but
-	   left out, dark = unseen. The wedges come from the chip's counts. */
+	/* The progress ring: orange = will be acted on, the rest not. The wedge
+	   comes from the chip's counts. */
 	.external-write-review-ring {
 		width: 0.8125rem;
 		height: 0.8125rem;
@@ -341,9 +323,7 @@
 		border-radius: 50%;
 		background: conic-gradient(
 			var(--color-bg-action-primary) 0deg var(--ring-ticked, 0deg),
-			var(--color-text-inverse-tertiary) var(--ring-ticked, 0deg)
-				var(--ring-seen, 0deg),
-			var(--color-border-inverse-strong) var(--ring-seen, 0deg) 360deg
+			var(--color-border-inverse-strong) var(--ring-ticked, 0deg) 360deg
 		);
 	}
 
