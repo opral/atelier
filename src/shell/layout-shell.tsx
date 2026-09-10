@@ -2178,6 +2178,12 @@ function LayoutShellLoadedContentResolved({
 		: null;
 	const navigationActivePathRef = useRef(navigationActivePath);
 	navigationActivePathRef.current = navigationActivePath;
+	const homeViewActive =
+		navigationActiveView !== undefined &&
+		centralBehavior.homeKind !== null &&
+		navigationActiveView.kind === centralBehavior.homeKind;
+	const homeViewActiveRef = useRef(homeViewActive);
+	homeViewActiveRef.current = homeViewActive;
 	const pendingReviewFiles = historicalReview
 		? historicalReview.files
 		: workingChangesReviewOpen
@@ -3731,8 +3737,13 @@ function LayoutShellLoadedContentResolved({
 				const changedFileOnScreen = checkpointFiles.some(
 					(file) => file.id === activeFileId || file.path === activePath,
 				);
+				// The host's home view is a review-aware listing: with it on
+				// screen the user picks the file from the list, so opening
+				// review must not navigate away from it.
+				const homeOnScreen = homeViewActiveRef.current;
 				const revealFirstFile =
-					openOptions?.reveal === true || !changedFileOnScreen;
+					openOptions?.reveal === true ||
+					(!changedFileOnScreen && !homeOnScreen);
 				setDiffReview({
 					kind: "working",
 					...(openOptions?.appliedRange
@@ -4586,7 +4597,15 @@ function LayoutShellLoadedContentResolved({
 					readOnly={isHostReadOnly}
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
-					onReviewWorkingChanges={() => handleOpenWorkingChangesReview()}
+					reviewingWorkingChanges={workingChangesReviewOpen}
+					onReviewWorkingChanges={() => {
+						// The same control opens and closes the review.
+						if (workingChangesReviewOpen) {
+							exitDiffReview();
+							return;
+						}
+						handleOpenWorkingChangesReview();
+					}}
 					onOpenHistory={() =>
 						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
 							panel: "left",

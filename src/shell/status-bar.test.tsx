@@ -54,6 +54,42 @@ describe("CheckpointStatusBar", () => {
 		await lix.close();
 	});
 
+	test("names the working-changes control as the review's close while reviewing", async () => {
+		const lix = await openLix();
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[
+				fakeUuid("checkpoint-status-reviewing"),
+				"/checkpoint-status-reviewing.md",
+				new TextEncoder().encode("# Working\n"),
+			],
+		);
+		const toggleReview = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CheckpointStatusBar
+							reviewingWorkingChanges
+							onReviewWorkingChanges={toggleReview}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const closeButton = await screen.findByRole("button", {
+			name: "1 file changed since checkpoint. Close review",
+		});
+		expect(closeButton).toHaveAttribute("aria-pressed", "true");
+		fireEvent.click(closeButton);
+		expect(toggleReview).toHaveBeenCalledOnce();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("shows working changes and controls the auto-accept preference", async () => {
 		const lix = await openLix();
 		await lix.execute(

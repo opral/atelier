@@ -36,12 +36,15 @@ export function CheckpointStatusBar({
 	onAutoAcceptAgentChangesChange,
 	onOpenHistory,
 	onReviewWorkingChanges,
+	reviewingWorkingChanges = false,
 }: {
 	readonly readOnly?: boolean;
 	readonly autoAcceptAgentChanges?: boolean;
 	readonly onAutoAcceptAgentChangesChange?: (enabled: boolean) => void;
 	readonly onOpenHistory?: () => void;
 	readonly onReviewWorkingChanges?: () => void;
+	/** The working review is open; the same control now closes it. */
+	readonly reviewingWorkingChanges?: boolean;
 }): JSX.Element {
 	const workingChangeCount = useQueryResult((queryLix) =>
 		selectWorkingChangeCount(queryLix),
@@ -65,6 +68,7 @@ export function CheckpointStatusBar({
 			<CheckpointStatus
 				statusLabel={`${workingCountLabel} since checkpoint`}
 				hasWorkingChanges
+				reviewing={reviewingWorkingChanges}
 				onActivate={onReviewWorkingChanges}
 			/>
 		);
@@ -133,20 +137,25 @@ function AutoAcceptToggle({
 function CheckpointStatus({
 	statusLabel,
 	hasWorkingChanges = false,
+	reviewing = false,
 	onActivate,
 }: {
 	readonly statusLabel: string;
 	readonly hasWorkingChanges?: boolean;
+	readonly reviewing?: boolean;
 	readonly onActivate?: () => void;
 }): JSX.Element {
 	const actionLabel = hasWorkingChanges
-		? "Review working changes"
+		? reviewing
+			? "Close review"
+			: "Review working changes"
 		: "Open checkpoint history";
 
 	return onActivate ? (
 		<button
 			type="button"
 			aria-label={`${statusLabel}. ${actionLabel}`}
+			aria-pressed={hasWorkingChanges ? reviewing : undefined}
 			onClick={onActivate}
 			onMouseDown={(event) => event.preventDefault()}
 			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
