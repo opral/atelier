@@ -1,7 +1,6 @@
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
-import { canJoin } from "@tiptap/pm/transform";
 
 const joinAdjacentListsKey = new PluginKey("markdownJoinAdjacentLists");
 
@@ -77,8 +76,16 @@ export const JoinAdjacentListsExtension = Extension.create({
 					let joined = false;
 					for (let guard = 0; guard < 100; guard += 1) {
 						const position = findJoinPosition(tr.doc);
-						if (position === null || !canJoin(tr.doc, position)) break;
-						tr.join(position);
+						if (position === null) break;
+						// join() throws when the boundary cannot be joined; that ends
+						// the pass. (No import from @tiptap/pm/transform: hosts
+						// pre-optimize Atelier's TipTap sub-imports by name, and a
+						// new one would make Vite re-optimize mid-session.)
+						try {
+							tr.join(position);
+						} catch {
+							break;
+						}
 						joined = true;
 					}
 					if (!joined) return null;
