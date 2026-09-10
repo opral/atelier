@@ -2238,6 +2238,20 @@
 		line-height: 1.35;
 	}
 
+	/* The @ menu reuses the palette; only the matched characters and the
+	   "more results" hint are its own. */
+	.markdown-mention-match {
+		background: transparent;
+		color: var(--color-text-brand);
+	}
+
+	.markdown-mention-more {
+		padding: 0.3rem 0.55rem 0.4rem 3.12rem;
+		color: var(--color-text-tertiary);
+		font-size: 0.71rem;
+		font-weight: 450;
+	}
+
 	.markdown-embed-file-empty {
 		padding: 1.35rem 0.75rem 1.55rem;
 		color: var(--color-text-tertiary);

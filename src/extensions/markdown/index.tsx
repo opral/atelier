@@ -45,6 +45,7 @@ import { SlashCommandMenu } from "./components/slash-command-menu";
 import { SelectionToolbar } from "./components/selection-toolbar";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
+import { MentionMenu } from "./components/mention-menu";
 import type { MarkdownReviewDiff } from "./review-diff";
 import {
 	decodeFileDataToBytes,
@@ -502,6 +503,7 @@ function MarkdownLiveViewLoaded({
 							<SlashCommandMenu />
 							<EmojiPickerMenu />
 							<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
+							<MentionMenu sourceFilePath={effectiveFileRow.path} />
 						</>
 					)}
 				</div>

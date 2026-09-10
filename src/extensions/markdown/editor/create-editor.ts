@@ -18,6 +18,7 @@ import {
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
+import { MentionCommandsExtension } from "./extensions/mention-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
@@ -391,6 +392,9 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				onStateChange: () => {},
 			}),
 			EmbedFileCommandsExtension.configure({
+				onStateChange: () => {},
+			}),
+			MentionCommandsExtension.configure({
 				onStateChange: () => {},
 			}),
 			TableNavigationExtension,
