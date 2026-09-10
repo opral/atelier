@@ -1880,6 +1880,23 @@
 		display: none;
 	}
 
+	/* Links to workspace files carry the file's icon, Notion's page mention. */
+	.markdown-view .ProseMirror .markdown-document-link-icon {
+		display: inline-block;
+		width: 1em;
+		height: 1em;
+		margin: 0 0.3em 0 0;
+		border-radius: 0;
+		vertical-align: -0.2em;
+		user-select: none;
+	}
+
+	/* A link to a path that does not exist: the underline turns dashed. */
+	.markdown-view .ProseMirror .markdown-document-link-missing {
+		text-decoration-style: dashed;
+		text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+	}
+
 	/* Task lists. The box takes the bullet's place: a 1rem square, then a
 	   0.5rem gap, so the text lands on the same column as bullet text. */
 	.markdown-view .ProseMirror li[data-task] {

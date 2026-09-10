@@ -2645,13 +2645,13 @@ function CsvEmptyState({
 	);
 }
 
+/** The table's own chrome, empty, so the toolbar row is there from the first
+ *  paint and the grid appears beneath it without the rows moving. */
 function CsvLoadingSpinner() {
 	return (
-		<div className="flex h-full items-center justify-center px-3 py-2 text-muted-foreground">
-			<div className="flex items-center gap-2 text-sm">
-				<Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-				<span>Loading CSV…</span>
-			</div>
+		<div className="flex h-full flex-col" role="status">
+			<div className="csv-toolbar" aria-hidden="true" />
+			<span className="sr-only">Loading CSV…</span>
 		</div>
 	);
 }

@@ -20,6 +20,8 @@ import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
+import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
+import { createDocumentExistence } from "./document-existence";
 import { preserveMarkdownSource } from "./preserve-markdown-source";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
@@ -366,10 +368,16 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				})
 		: undefined;
 
+	const documentExistence = createDocumentExistence(lix);
 	editorInstance = new Editor({
 		extensions: [
 			...markdownExtensions,
 			JoinAdjacentListsExtension,
+			DocumentLinkIconsExtension.configure({
+				sourceFilePath: sourceFilePath ?? null,
+				exists: documentExistence.exists,
+				subscribe: documentExistence.subscribe,
+			}),
 			...additionalExtensions,
 			History.configure({
 				depth: 200,
@@ -539,6 +547,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					sourceFilePath,
 					openWorkspaceFile,
 					sourceCommitId,
+					documentExistence.exists,
 				)
 			: undefined;
 	editorDom.addEventListener("click", handleExternalLinkClick, {

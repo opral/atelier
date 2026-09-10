@@ -18,6 +18,7 @@ export function bindDocumentLinks(
 	sourceFilePath: string,
 	openFile: MarkdownWorkspaceFileOpener,
 	sourceCommitId?: string,
+	exists: (path: string) => boolean | undefined = () => undefined,
 ): () => void {
 	let active: HTMLAnchorElement | null = null;
 	let card: HTMLDivElement | null = null;
@@ -62,15 +63,20 @@ export function bindDocumentLinks(
 		);
 		card.className = "atelier-markdown-link-card";
 		card.setAttribute("role", error ? "alert" : "tooltip");
+		const missing = exists(path) === false;
 		const label = document.createElement("strong");
 		label.textContent = error
 			? "Could not open document"
-			: "In this repository";
+			: missing
+				? "Not in this repository"
+				: "In this repository";
 		const destination = document.createElement("div");
 		destination.className = "atelier-markdown-link-path";
 		destination.textContent = path;
 		const hint = document.createElement("div");
-		hint.textContent = error ?? "Open in a tab";
+		hint.textContent =
+			error ??
+			(missing ? "No file at this path yet" : "Click to open in a tab");
 		card.append(label, destination, hint);
 		(root.closest(".atelier-root") ?? document.body).append(card);
 		const rect = link.getBoundingClientRect();
@@ -115,6 +121,10 @@ export function bindDocumentLinks(
 		event.preventDefault();
 		event.stopImmediatePropagation();
 		hide();
+		if (exists(path) === false) {
+			show(link, path, "No file at this path yet.");
+			return;
+		}
 		Promise.resolve()
 			.then(() =>
 				openFile({

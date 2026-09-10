@@ -118,7 +118,7 @@ export function DeclarativeExtension({
 	const Component = definition.Component!;
 	return (
 		<AtelierErrorBoundary>
-			<Suspense fallback={<div role="status">Loading {definition.label}…</div>}>
+			<Suspense fallback={<LoadingSurface label={definition.label} />}>
 				<LixProvider lix={atelier.lix}>
 					{error && data !== undefined ? (
 						<div role="alert">
@@ -128,12 +128,25 @@ export function DeclarativeExtension({
 					{error && data === undefined ? (
 						<div role="alert">{error.message}</div>
 					) : definition.load && data === undefined ? (
-						<div role="status">Loading {definition.label}…</div>
+						<LoadingSurface label={definition.label} />
 					) : (
 						<Component data={data ?? null} atelier={atelier} view={view} />
 					)}
 				</LixProvider>
 			</Suspense>
 		</AtelierErrorBoundary>
+	);
+}
+
+/**
+ * The view's ground while its data is on the way: nothing to read, so a
+ * file opening never flashes a line of text before its content. Screen
+ * readers still get the status.
+ */
+function LoadingSurface({ label }: { readonly label: string }) {
+	return (
+		<div role="status" className="min-h-0 flex-1">
+			<span className="sr-only">Loading {label}…</span>
+		</div>
 	);
 }

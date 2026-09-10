@@ -118,7 +118,7 @@ test("shows a destination on hover and focus, dismisses with Escape, and cleans 
 	vi.advanceTimersByTime(150);
 	expect(document.querySelector('[role="tooltip"]')).toBe(card);
 	expect(document.querySelector('[role="tooltip"]')?.textContent).toContain(
-		"In this repository/docs/guide.mdOpen in a tab",
+		"In this repository/docs/guide.mdClick to open in a tab",
 	);
 	window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 	expect(document.querySelector('[role="tooltip"]')).toBeNull();

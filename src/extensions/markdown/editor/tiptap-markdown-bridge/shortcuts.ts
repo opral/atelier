@@ -1058,7 +1058,10 @@ export const MarkdownWcShortcuts = Extension.create({
 							return true;
 						});
 					}
-					return true;
+					// An empty line that still owns content (an image, a quote, a
+					// nested list of another kind) leaves the list with that
+					// content, the way Notion turns the bullet back into text.
+					return outdentListItem();
 				}
 
 				return false;
