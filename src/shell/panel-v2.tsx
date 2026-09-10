@@ -1312,7 +1312,7 @@ function TabBar({
 	return (
 		<div
 			ref={rootRef}
-			className={clsx(styles.tabBar, height === "topbar" && "h-[46px]")}
+			className={clsx(styles.tabBar, height === "topbar" && "h-[40px]")}
 			data-height={height}
 			data-overflow-left={overflow.left ? "true" : undefined}
 			data-overflow-right={overflow.right ? "true" : undefined}

@@ -69,7 +69,7 @@ export function TopBar({
 		<header
 			{...rootProps}
 			className={cn(
-				"relative grid h-[46px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[var(--color-text-secondary)]",
+				"relative grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[var(--color-text-secondary)]",
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
