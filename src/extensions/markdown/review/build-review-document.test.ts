@@ -294,6 +294,38 @@ test("diffs blockquote text and table cells inside stable containers", () => {
 	);
 });
 
+test("changing one line of a code block keeps one block with marked lines", () => {
+	const before = "```ts\nconst a = 1;\nconst b = 2;\n```\n";
+	const after = "```ts\nconst a = 1;\nconst b = 3;\nconst c = 4;\n```\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+
+	expect(review.doc.content).toHaveLength(1);
+	const block = review.doc.content?.[0];
+	expect(block?.type).toBe("codeBlock");
+	const text = block?.content?.[0]?.text;
+	expect(text).toBe("const a = 1;\nconst b = 2;\nconst b = 3;\nconst c = 4;");
+	const ranges = block?.attrs?.data?.markdownReview?.lineRanges;
+	expect(
+		ranges?.map((range: any) => [
+			range.status,
+			text?.slice(range.from, range.to),
+		]),
+	).toEqual([
+		["removed", "const b = 2;\n"],
+		["added", "const b = 3;\n"],
+		["added", "const c = 4;"],
+	]);
+	expect(projectMarkdownReviewDocument(review.doc, "before")).toEqual(
+		markdownDoc(before),
+	);
+	expect(projectMarkdownReviewDocument(review.doc, "after")).toEqual(
+		markdownDoc(after),
+	);
+});
+
 test("keeps task-state changes scoped to list items", () => {
 	const before = "- [ ] Keep label\n- [ ] Stable task\n";
 	const after = "- [x] Keep label\n- [ ] Stable task\n";
@@ -306,7 +338,12 @@ test("keeps task-state changes scoped to list items", () => {
 	expect(review.doc.content?.[0]?.type).toBe("bulletList");
 	expect(reviewStatus(review.doc.content?.[0])).toBeNull();
 	expect(textOccurrences(review.doc, "Stable task")).toBe(1);
-	expect(textOccurrences(review.doc, "Keep label")).toBe(2);
+	// The ticked item stays one item, marked modified, rather than a
+	// removed copy followed by an added copy.
+	expect(textOccurrences(review.doc, "Keep label")).toBe(1);
+	const ticked = review.doc.content?.[0]?.content?.[0];
+	expect(ticked?.attrs?.checked).toBe(true);
+	expect(ticked?.attrs?.data?.markdownReview?.status).toBe("modified");
 	expect(projectMarkdownReviewDocument(review.doc, "before")).toEqual(
 		markdownDoc(before),
 	);

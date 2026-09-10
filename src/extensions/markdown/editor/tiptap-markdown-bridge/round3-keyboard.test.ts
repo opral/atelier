@@ -103,7 +103,19 @@ test("Enter exits code with one undo restoring the original content", () => {
 	expect(editor.state.doc.textContent).toBe("code\n\n");
 });
 
-test.each(["italic", "strike", "code"])(
+test("Enter ends inline code: the new paragraph is plain", () => {
+	const editor = create(p("styled", [{ type: "code" }]));
+	cursor(editor, "styled");
+	expect(key(editor, "Enter")).toBe(true);
+	editor.commands.insertContent("continued");
+	expect(
+		editor.state.selection.$from.parent.firstChild?.marks.map(
+			(value) => value.type.name,
+		),
+	).not.toContain("code");
+});
+
+test.each(["italic", "strike"])(
 	"Enter continues %s after the new paragraph receives an ID",
 	(mark) => {
 		const editor = create(p("styled", [{ type: mark }]));

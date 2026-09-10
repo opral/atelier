@@ -3,11 +3,17 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-type MarkdownReviewStatus = "added" | "removed";
+type MarkdownReviewStatus = "added" | "removed" | "modified";
 
 type MarkdownReviewMetadata = {
 	readonly changeId: string;
 	readonly status: MarkdownReviewStatus;
+	/** A merged code block's one-sided lines, as offsets into its text. */
+	readonly lineRanges?: readonly {
+		readonly status: "added" | "removed";
+		readonly from: number;
+		readonly to: number;
+	}[];
 };
 
 const REVIEW_MARK_NAME = "markdownReviewDiff";
@@ -23,7 +29,9 @@ function reviewMetadata(value: unknown): MarkdownReviewMetadata | null {
 	if (
 		typeof candidate.changeId !== "string" ||
 		candidate.changeId.length === 0 ||
-		(candidate.status !== "added" && candidate.status !== "removed")
+		(candidate.status !== "added" &&
+			candidate.status !== "removed" &&
+			candidate.status !== "modified")
 	) {
 		return null;
 	}
@@ -31,6 +39,12 @@ function reviewMetadata(value: unknown): MarkdownReviewMetadata | null {
 	return {
 		changeId: candidate.changeId,
 		status: candidate.status,
+		...(Array.isArray(candidate.lineRanges)
+			? {
+					lineRanges:
+						candidate.lineRanges as MarkdownReviewMetadata["lineRanges"],
+				}
+			: {}),
 	};
 }
 
@@ -53,7 +67,21 @@ function buildReviewDecorations(doc: ProseMirrorNode): DecorationSet {
 			(node.attrs?.data as Record<string, unknown> | null | undefined)
 				?.markdownReview,
 		);
-		if (nodeMetadata && !node.isText) {
+		if (nodeMetadata?.lineRanges && !node.isText) {
+			// A code block's diff lives in its lines, not on the block.
+			for (const range of nodeMetadata.lineRanges) {
+				decorations.push(
+					Decoration.inline(
+						position + 1 + range.from,
+						position + 1 + range.to,
+						{
+							"data-review-change-id": nodeMetadata.changeId,
+							"data-review-status": range.status,
+						},
+					),
+				);
+			}
+		} else if (nodeMetadata && !node.isText) {
 			const emptyParagraph =
 				node.type.name === "paragraph" &&
 				node.content.size === 0 &&

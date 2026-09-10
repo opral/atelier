@@ -59,7 +59,8 @@ export function SlashCommandMenu() {
 		}) ?? INACTIVE_SLASH_STATE;
 	const [selection, setSelection] = useState({ query: "", index: 0 });
 	const [position, setPosition] = useState<{
-		top: number;
+		top: number | null;
+		bottom: number | null;
 		left: number;
 		placement: "above" | "below";
 	} | null>(null);
@@ -128,7 +129,9 @@ export function SlashCommandMenu() {
 				placement = "below";
 			} else {
 				// Position above
-				top = coords.top - gap - Math.min(menuHeight, spaceAbove);
+				// Anchored by its bottom edge, the menu hugs the caret line
+				// whatever height the filtered list ends up with.
+				top = coords.top - gap;
 				placement = "above";
 			}
 
@@ -138,7 +141,12 @@ export function SlashCommandMenu() {
 				left = viewportWidth - menuWidth - gap;
 			}
 
-			setPosition({ top, left, placement });
+			setPosition({
+				top: placement === "below" ? top : null,
+				bottom: placement === "above" ? viewportHeight - top : null,
+				left,
+				placement,
+			});
 		};
 
 		updatePosition();
@@ -268,7 +276,8 @@ export function SlashCommandMenu() {
 			className="markdown-slash-menu"
 			style={{
 				position: "fixed",
-				top: position.top,
+				top: position.top ?? undefined,
+				bottom: position.bottom ?? undefined,
 				left: position.left,
 			}}
 			role="listbox"

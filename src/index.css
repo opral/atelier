@@ -645,9 +645,9 @@
 	.atelier-root
 		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror
-		:is(p, h1).is-empty::before {
+		:is(p, h1, h2, h3, h4, h5, h6).is-empty::before {
 		color: var(--color-text-tertiary);
-		opacity: 0.72;
+		opacity: 0.55;
 		font-style: normal;
 		font-weight: 400;
 		content: attr(data-placeholder);

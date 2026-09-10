@@ -4,13 +4,11 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	type KeyboardEvent,
 	type MouseEvent,
 } from "react";
 import { Toolbar } from "@base-ui/react/toolbar";
 import { Select } from "@base-ui/react/select";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { Popover } from "@base-ui/react/popover";
 import clsx from "clsx";
 import {
 	Bold,
@@ -19,24 +17,32 @@ import {
 	Code2,
 	Copy,
 	Italic,
-	Link as LinkIcon,
 	List,
 	ListChecks,
 	ListOrdered,
 	Strikethrough,
-	Unlink,
-	X,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { useEditorCtx } from "../editor/editor-context";
 import { buildMarkdownFromEditor } from "../editor/build-markdown-from-editor";
-import { normalizeUrl } from "../editor/normalize-url";
 import {
 	TOOLBAR_BLOCK_OPTIONS,
 	type ToolbarBlockType,
+	computeTaskListActive,
 	convertListItem,
+	getActiveBlock,
+	setTaskListState,
 } from "../editor/block-commands";
+import { LinkPopover } from "./link-popover";
+import {
+	TOOLBAR_TOOLTIP_DELAY,
+	ToolbarIconButton,
+	iconButtonActiveClass,
+	iconButtonClass,
+} from "./toolbar-icon-button";
+
+export { iconButtonActiveClass, iconButtonClass };
 
 type FormatState = {
 	block: ToolbarBlockType;
@@ -49,14 +55,6 @@ type FormatState = {
 	isOrderedList: boolean;
 	isTaskList: boolean;
 };
-
-/** 28px square icon button, matching the panel-header chips in the islands UI. */
-const iconButtonClass =
-	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-[var(--color-icon-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
-
-/** Pressed state for a formatting toggle. */
-const iconButtonActiveClass =
-	"bg-[var(--color-bg-control-selected)] text-[var(--color-text-primary)] [&_svg]:text-[var(--color-icon-control-selected)]";
 
 const ToolbarSeparator = () => (
 	<Toolbar.Separator className="mx-1.5 h-3.5 w-px bg-[var(--color-border-subtle)]" />
@@ -93,10 +91,7 @@ export function FormattingToolbar({
 	);
 	const [blockMenuOpen, setBlockMenuOpen] = useState(false);
 	const [linkOpen, setLinkOpen] = useState(false);
-	const [linkValue, setLinkValue] = useState("");
-	const [linkEditing, setLinkEditing] = useState(false);
 	const [frontmatterEditing, setFrontmatterEditing] = useState(false);
-	const linkInputRef = useRef<HTMLInputElement>(null);
 	const formattingControlsRef = useRef<HTMLDivElement>(null);
 	const [overflowEdges, setOverflowEdges] = useState({
 		left: false,
@@ -262,75 +257,14 @@ export function FormattingToolbar({
 		editor.chain().focus().toggleMark("code").run();
 	}, [editor]);
 
-	const handleLinkOpenChange = useCallback(
-		(next: boolean) => {
-			if (next && editor) {
-				const active = editor.isActive("link");
-				setLinkEditing(active);
-				setLinkValue(
-					active ? String(editor.getAttributes("link")?.href ?? "") : "",
-				);
-			}
-			setLinkOpen(next);
-			// Closing without applying must not strand focus on the toolbar
-			// button: the caret and selection go back where they were.
-			if (!next) editor?.chain().focus().run();
-		},
-		[editor],
-	);
-
 	// Mod-K in the editor opens the same popover the Link button does.
 	useEffect(() => {
-		if (!editor) return;
+		if (!editor || controlsDisabled) return;
 		const dom = editor.view.dom;
-		const open = () => handleLinkOpenChange(true);
+		const open = () => setLinkOpen(true);
 		dom.addEventListener("atelier-markdown-link", open);
 		return () => dom.removeEventListener("atelier-markdown-link", open);
-	}, [editor, handleLinkOpenChange]);
-
-	const handleApplyLink = useCallback(() => {
-		if (!editor) return;
-		const href = normalizeUrl(linkValue);
-		if (!href) {
-			setLinkOpen(false);
-			editor.chain().focus().run();
-			return;
-		}
-		const chain = editor.chain().focus();
-		if (editor.isActive("link")) {
-			// Caret inside an existing link — update the whole mark range.
-			chain.extendMarkRange("link").setMark("link", { href }).run();
-		} else if (!editor.state.selection.empty) {
-			// Apply to the current selection.
-			chain.setMark("link", { href }).run();
-		} else {
-			// No selection — insert the URL itself as the linked text.
-			chain
-				.insertContent({
-					type: "text",
-					text: linkValue.trim() || href,
-					marks: [{ type: "link", attrs: { href } }],
-				})
-				.run();
-		}
-		setLinkOpen(false);
-	}, [editor, linkValue]);
-
-	const handleRemoveLink = useCallback(() => {
-		if (!editor) return;
-		editor.chain().focus().extendMarkRange("link").unsetMark("link").run();
-		setLinkOpen(false);
-	}, [editor]);
-
-	const handleLinkKeyDown = useCallback(
-		(event: KeyboardEvent<HTMLInputElement>) => {
-			if (event.key === "Enter") {
-				event.preventDefault();
-				handleApplyLink();
-			}
-		},
-		[handleApplyLink],
-	);
+	}, [editor, controlsDisabled]);
 
 	const handleToggleBulletList = useCallback(() => {
 		if (!editor) return;
@@ -387,363 +321,264 @@ export function FormattingToolbar({
 		return () => window.clearTimeout(reset);
 	}, [copyStatus]);
 
+	// Popups portal into the app root, not document.body: that is where the
+	// font stack and the theme tokens live.
+	const portalContainer =
+		(editor?.view.dom.closest(".atelier-root") as HTMLElement | null) ??
+		undefined;
+
 	return (
-		<Toolbar.Root
-			className={clsx(
-				"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-[var(--color-border-subtle)] px-2.5 text-foreground",
-				className,
-			)}
-			aria-label="Formatting toolbar"
-			aria-disabled={controlsDisabled}
-			data-attr="markdown-format-toolbar"
-			data-disabled={controlsDisabled ? "true" : "false"}
-		>
-			<div className="relative min-w-0 flex-1 self-stretch">
-				<fieldset disabled={controlsDisabled} className="contents">
-					<Toolbar.Group
-						ref={formattingControlsRef}
-						className={clsx(
-							"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
-							controlsDisabled && "opacity-40",
-						)}
-						aria-label="Text formatting controls"
-						aria-disabled={controlsDisabled}
-						data-attr="markdown-format-controls"
-						data-disabled={controlsDisabled ? "true" : "false"}
-						onScroll={updateOverflowEdges}
-					>
-						<Select.Root
-							value={displayedFormatState.block}
-							onValueChange={(value) => {
-								if (value !== null) handleBlockChange(value);
-							}}
-							open={blockMenuOpen}
-							onOpenChange={setBlockMenuOpen}
+		<Tooltip.Provider delay={TOOLBAR_TOOLTIP_DELAY}>
+			<Toolbar.Root
+				className={clsx(
+					"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-[var(--color-border-subtle)] px-2.5 text-foreground",
+					className,
+				)}
+				aria-label="Formatting toolbar"
+				aria-disabled={controlsDisabled}
+				data-attr="markdown-format-toolbar"
+				data-disabled={controlsDisabled ? "true" : "false"}
+			>
+				<div className="relative min-w-0 flex-1 self-stretch">
+					<fieldset disabled={controlsDisabled} className="contents">
+						<Toolbar.Group
+							ref={formattingControlsRef}
+							className={clsx(
+								"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
+								controlsDisabled && "opacity-40",
+							)}
+							aria-label="Text formatting controls"
+							aria-disabled={controlsDisabled}
+							data-attr="markdown-format-controls"
+							data-disabled={controlsDisabled ? "true" : "false"}
+							onScroll={updateOverflowEdges}
 						>
-							<Toolbar.Button
-								render={<Select.Trigger />}
-								data-attr="markdown-block-selector"
-								className={clsx(
-									"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
-									// While the menu is open the trigger stays completely
-									// unfilled — the cursor is usually still on it, so even
-									// the hover tint reads as a stuck pill.
-									blockMenuOpen
-										? "text-[var(--color-text-primary)]"
-										: "hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
-								)}
-								onMouseDown={suppressMouseDown}
+							<Select.Root
+								value={displayedFormatState.block}
+								onValueChange={(value) => {
+									if (value !== null) handleBlockChange(value);
+								}}
+								open={blockMenuOpen}
+								onOpenChange={(open) => {
+									setBlockMenuOpen(open);
+									// Closing without a choice hands the caret back.
+									if (!open) editor?.chain().focus().run();
+								}}
 							>
-								<Select.Value className="block w-[5.25rem] truncate">
-									{activeBlockLabel}
-								</Select.Value>
-								<Select.Icon className="text-[var(--color-icon-tertiary)] transition-transform duration-100 data-[popup-open]:rotate-180">
-									<ChevronDown className="size-[13px] stroke-[2]" aria-hidden />
-								</Select.Icon>
-							</Toolbar.Button>
-							<Select.Portal>
-								<Select.Positioner
-									className="z-50 outline-none"
-									side="bottom"
-									align="start"
-									sideOffset={6}
-									alignItemWithTrigger={false}
+								<Toolbar.Button
+									render={<Select.Trigger />}
+									data-attr="markdown-block-selector"
+									className={clsx(
+										"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+										// While the menu is open the trigger stays completely
+										// unfilled — the cursor is usually still on it, so even
+										// the hover tint reads as a stuck pill.
+										blockMenuOpen
+											? "text-[var(--color-text-primary)]"
+											: "hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+									)}
+									onMouseDown={suppressMouseDown}
 								>
-									<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
-										<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
-											Turn into
-										</div>
-										{TOOLBAR_BLOCK_OPTIONS.map((option) => (
-											<Select.Item
-												key={option.value}
-												value={option.value}
-												className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-[var(--color-bg-hover)] data-[highlighted]:text-[var(--color-text-primary)]"
-											>
-												<span className="flex size-4.5 items-center justify-center text-[12px] text-[var(--color-icon-tertiary)] group-data-[highlighted]:text-[var(--color-text-secondary)] [&_svg]:stroke-[1.8]">
-													<option.icon className="h-3.5 w-3.5" aria-hidden />
-												</span>
-												<div className="flex flex-1 flex-col">
-													<span className="text-[12.5px] font-semibold leading-4 text-[var(--color-text-primary)]">
-														{option.label}
-													</span>
-													<span className="text-[11.5px] font-normal leading-4 text-[var(--color-text-tertiary)]">
-														{option.description}
-													</span>
-												</div>
-												<Select.ItemIndicator className="text-[var(--color-text-link-hover)]">
-													<Check
-														className="h-3.5 w-3.5 stroke-[2]"
-														aria-hidden
-													/>
-												</Select.ItemIndicator>
-											</Select.Item>
-										))}
-									</Select.Popup>
-								</Select.Positioner>
-							</Select.Portal>
-						</Select.Root>
-
-						<ToolbarSeparator />
-
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isBold && iconButtonActiveClass,
-							)}
-							onClick={handleToggleBold}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isBold}
-							aria-label="Bold"
-							data-attr="markdown-format-bold"
-						>
-							<Bold className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isItalic && iconButtonActiveClass,
-							)}
-							onClick={handleToggleItalic}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isItalic}
-							aria-label="Italic"
-							data-attr="markdown-format-italic"
-						>
-							<Italic className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isStrike && iconButtonActiveClass,
-							)}
-							onClick={handleToggleStrike}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isStrike}
-							aria-label="Strikethrough"
-							data-attr="markdown-format-strike"
-						>
-							<Strikethrough className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isCode && iconButtonActiveClass,
-							)}
-							onClick={handleToggleCode}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isCode}
-							aria-label="Inline code"
-							data-attr="markdown-format-code"
-						>
-							<Code2 className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-
-						<Popover.Root open={linkOpen} onOpenChange={handleLinkOpenChange}>
-							<Toolbar.Button
-								render={<Popover.Trigger />}
-								className={clsx(
-									iconButtonClass,
-									(linkOpen || displayedFormatState.isLink) &&
-										iconButtonActiveClass,
-								)}
-								onMouseDown={suppressMouseDown}
-								aria-label="Link"
-								data-attr="markdown-format-link"
-							>
-								<LinkIcon className="size-3.5" aria-hidden />
-							</Toolbar.Button>
-							<Popover.Portal>
-								<Popover.Positioner
-									className="z-50 outline-none"
-									side="bottom"
-									align="start"
-									sideOffset={6}
-								>
-									<Popover.Popup
-										initialFocus={linkInputRef}
-										className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
-										data-attr="markdown-link-popover"
+									<Select.Value className="block w-[5.25rem] truncate">
+										{activeBlockLabel}
+									</Select.Value>
+									<Select.Icon className="text-[var(--color-icon-tertiary)] transition-transform duration-100 data-[popup-open]:rotate-180">
+										<ChevronDown
+											className="size-[13px] stroke-[2]"
+											aria-hidden
+										/>
+									</Select.Icon>
+								</Toolbar.Button>
+								<Select.Portal container={portalContainer}>
+									<Select.Positioner
+										className="z-50 outline-none"
+										side="bottom"
+										align="start"
+										sideOffset={6}
+										alignItemWithTrigger={false}
 									>
-										<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-2 text-[var(--color-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-[var(--color-border-brand-soft)] focus-within:bg-[var(--color-bg-panel)] focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--color-bg-brand-soft)]">
-											<LinkIcon
-												className="size-3.5 shrink-0 text-[var(--color-icon-tertiary)]"
-												aria-hidden
-											/>
-											<input
-												ref={linkInputRef}
-												value={linkValue}
-												onChange={(event) => setLinkValue(event.target.value)}
-												onKeyDown={handleLinkKeyDown}
-												aria-label="Link URL"
-												placeholder="https://… or ./document.md"
-												className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-[var(--color-text-primary)] outline-none placeholder:font-normal placeholder:text-[var(--color-text-tertiary)]"
-												data-attr="markdown-link-input"
-											/>
-										</div>
-										<div className="mt-1.5 flex items-center gap-1">
-											{linkEditing && (
-												<button
-													type="button"
-													onClick={handleRemoveLink}
-													className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-status-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-													data-attr="markdown-link-remove"
+										<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
+											<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
+												Turn into
+											</div>
+											{TOOLBAR_BLOCK_OPTIONS.map((option) => (
+												<Select.Item
+													key={option.value}
+													value={option.value}
+													className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-[var(--color-bg-hover)] data-[highlighted]:text-[var(--color-text-primary)]"
 												>
-													<Unlink className="size-3.5" aria-hidden />
-													Remove
-												</button>
-											)}
-											<Popover.Close className="ml-auto inline-flex h-7 items-center gap-1 rounded-[7px] px-2.5 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]">
-												<X className="size-3.5" aria-hidden />
-												Cancel
-											</Popover.Close>
-											<button
-												type="button"
-												onClick={handleApplyLink}
-												className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-[var(--color-bg-action-primary)] px-3 text-[12.5px] font-semibold text-[var(--color-text-on-action-primary)] shadow-[0_1px_2px_rgba(194,65,12,0.18)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
-												data-attr="markdown-link-apply"
-											>
-												<Check className="size-3.5" aria-hidden />
-												{linkEditing ? "Update" : "Add link"}
-											</button>
-										</div>
-									</Popover.Popup>
-								</Popover.Positioner>
-							</Popover.Portal>
-						</Popover.Root>
+													<span className="flex size-4.5 items-center justify-center text-[12px] text-[var(--color-icon-tertiary)] group-data-[highlighted]:text-[var(--color-text-secondary)] [&_svg]:stroke-[1.8]">
+														<option.icon className="h-3.5 w-3.5" aria-hidden />
+													</span>
+													<div className="flex flex-1 flex-col">
+														<span className="text-[12.5px] font-semibold leading-4 text-[var(--color-text-primary)]">
+															{option.label}
+														</span>
+														<span className="text-[11.5px] font-normal leading-4 text-[var(--color-text-tertiary)]">
+															{option.description}
+														</span>
+													</div>
+													<Select.ItemIndicator className="text-[var(--color-text-link-hover)]">
+														<Check
+															className="h-3.5 w-3.5 stroke-[2]"
+															aria-hidden
+														/>
+													</Select.ItemIndicator>
+												</Select.Item>
+											))}
+										</Select.Popup>
+									</Select.Positioner>
+								</Select.Portal>
+							</Select.Root>
 
-						<ToolbarSeparator />
+							<ToolbarSeparator />
 
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isOrderedList && iconButtonActiveClass,
-							)}
-							onClick={handleToggleOrderedList}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isOrderedList}
-							aria-label="Numbered list"
-							data-attr="markdown-format-ordered-list"
-						>
-							<ListOrdered className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isBulletList && iconButtonActiveClass,
-							)}
-							onClick={handleToggleBulletList}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isBulletList}
-							aria-label="Bullet list"
-							data-attr="markdown-format-bullet-list"
-						>
-							<List className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-
-						<Toolbar.Button
-							className={clsx(
-								iconButtonClass,
-								displayedFormatState.isTaskList && iconButtonActiveClass,
-							)}
-							onClick={handleToggleTaskList}
-							onMouseDown={suppressMouseDown}
-							aria-pressed={displayedFormatState.isTaskList}
-							aria-label="Checklist"
-							data-attr="markdown-format-task-list"
-						>
-							<ListChecks className="size-3.5" aria-hidden />
-						</Toolbar.Button>
-					</Toolbar.Group>
-				</fieldset>
-				<span
-					className="markdown-format-toolbar-overflow-indicator markdown-format-toolbar-overflow-indicator-left"
-					data-visible={overflowEdges.left}
-					aria-hidden
-				/>
-				<span
-					className="markdown-format-toolbar-overflow-indicator markdown-format-toolbar-overflow-indicator-right"
-					data-visible={overflowEdges.right}
-					aria-hidden
-				/>
-			</div>
-
-			<div className="flex shrink-0 items-center bg-[var(--color-bg-panel)] pl-0.5">
-				<ToolbarSeparator />
-				<Tooltip.Root>
-					<Tooltip.Trigger
-						render={
-							<Toolbar.Button
-								className={clsx(
-									iconButtonClass,
-									"ml-auto",
-									copyStatus === "error" &&
-										"text-[var(--color-text-status-danger)]",
-								)}
-								onClick={handleCopyMarkdown}
-								onMouseDown={suppressMouseDown}
-								data-attr="markdown-copy-markdown"
-								aria-label={
-									copyStatus === "success" ? "Copied markdown" : "Copy markdown"
-								}
+							<ToolbarIconButton
+								label="Bold"
+								shortcut="bold"
+								active={displayedFormatState.isBold}
+								onClick={handleToggleBold}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-bold"
 							>
-								<span className="relative inline-flex size-3.5 items-center justify-center">
-									<Copy
-										className={clsx(
-											"size-3.5 transition-all duration-150",
-											copyStatus === "success"
-												? "scale-75 opacity-0"
-												: "scale-100 opacity-100",
-										)}
-										aria-hidden
-									/>
-									<Check
-										className={clsx(
-											"absolute size-3.5 text-[var(--color-text-status-success)] transition-all duration-150",
-											copyStatus === "success"
-												? "scale-100 opacity-100"
-												: "scale-75 opacity-0",
-										)}
-										aria-hidden
-									/>
-								</span>
-							</Toolbar.Button>
-						}
+								<Bold className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+
+							<ToolbarIconButton
+								label="Italic"
+								shortcut="italic"
+								active={displayedFormatState.isItalic}
+								onClick={handleToggleItalic}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-italic"
+							>
+								<Italic className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+
+							<ToolbarIconButton
+								label="Strikethrough"
+								shortcut="strike"
+								active={displayedFormatState.isStrike}
+								onClick={handleToggleStrike}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-strike"
+							>
+								<Strikethrough className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+
+							<ToolbarIconButton
+								label="Inline code"
+								shortcut="code"
+								active={displayedFormatState.isCode}
+								onClick={handleToggleCode}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-code"
+							>
+								<Code2 className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+
+							<LinkPopover
+								editor={editor}
+								open={linkOpen}
+								onOpenChange={setLinkOpen}
+								linkActive={displayedFormatState.isLink}
+								portalContainer={portalContainer}
+								triggerDataAttr="markdown-format-link"
+							/>
+
+							<ToolbarSeparator />
+
+							<ToolbarIconButton
+								label="Numbered list"
+								shortcut="orderedList"
+								active={displayedFormatState.isOrderedList}
+								onClick={handleToggleOrderedList}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-ordered-list"
+							>
+								<ListOrdered className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+
+							<ToolbarIconButton
+								label="Bullet list"
+								shortcut="bulletList"
+								active={displayedFormatState.isBulletList}
+								onClick={handleToggleBulletList}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-bullet-list"
+							>
+								<List className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+
+							<ToolbarIconButton
+								label="Checklist"
+								tooltip="To-do list"
+								shortcut="taskList"
+								active={displayedFormatState.isTaskList}
+								onClick={handleToggleTaskList}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-task-list"
+							>
+								<ListChecks className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+						</Toolbar.Group>
+					</fieldset>
+					<span
+						className="markdown-format-toolbar-overflow-indicator markdown-format-toolbar-overflow-indicator-left"
+						data-visible={overflowEdges.left}
+						aria-hidden
 					/>
-					<Tooltip.Portal>
-						<Tooltip.Positioner side="top" align="center" sideOffset={6}>
-							<Tooltip.Popup className="rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] px-2 py-1 text-xs text-[var(--color-text-primary)] shadow-md transition-opacity duration-150 data-[state=closed]:opacity-0 data-[state=open]:opacity-100">
-								{copyStatus === "success" ? "Copied Markdown" : "Copy Markdown"}
-							</Tooltip.Popup>
-						</Tooltip.Positioner>
-					</Tooltip.Portal>
-				</Tooltip.Root>
-			</div>
-		</Toolbar.Root>
+					<span
+						className="markdown-format-toolbar-overflow-indicator markdown-format-toolbar-overflow-indicator-right"
+						data-visible={overflowEdges.right}
+						aria-hidden
+					/>
+				</div>
+
+				<div className="flex shrink-0 items-center bg-[var(--color-bg-panel)] pl-0.5">
+					<ToolbarSeparator />
+					<ToolbarIconButton
+						label={
+							copyStatus === "success" ? "Copied markdown" : "Copy markdown"
+						}
+						tooltip={
+							copyStatus === "success" ? "Copied Markdown" : "Copy Markdown"
+						}
+						pressable={false}
+						className={clsx(
+							"ml-auto",
+							copyStatus === "error" &&
+								"text-[var(--color-text-status-danger)]",
+						)}
+						onClick={handleCopyMarkdown}
+						portalContainer={portalContainer}
+						data-attr="markdown-copy-markdown"
+					>
+						<span className="relative inline-flex size-3.5 items-center justify-center">
+							<Copy
+								className={clsx(
+									"size-3.5 transition-all duration-150",
+									copyStatus === "success"
+										? "scale-75 opacity-0"
+										: "scale-100 opacity-100",
+								)}
+								aria-hidden
+							/>
+							<Check
+								className={clsx(
+									"absolute size-3.5 text-[var(--color-text-status-success)] transition-all duration-150",
+									copyStatus === "success"
+										? "scale-100 opacity-100"
+										: "scale-75 opacity-0",
+								)}
+								aria-hidden
+							/>
+						</span>
+					</ToolbarIconButton>
+				</div>
+			</Toolbar.Root>
+		</Tooltip.Provider>
 	);
-}
-
-function getActiveBlock(editor: Editor): ToolbarBlockType {
-	if (editor.isActive("heading", { level: 1 })) return "heading-1";
-	if (editor.isActive("heading", { level: 2 })) return "heading-2";
-	if (editor.isActive("heading", { level: 3 })) return "heading-3";
-	if (editor.isActive("codeBlock")) return "code";
-	if (editor.isActive("blockquote")) return "blockquote";
-	return "paragraph";
-}
-
-function computeTaskListActive(editor: Editor, hasTaskListCommand: boolean) {
-	if (hasTaskListCommand && editor.isActive("taskList")) return true;
-	const itemAttrs = editor.getAttributes("listItem");
-	if (itemAttrs && "checked" in itemAttrs) {
-		return typeof itemAttrs.checked === "boolean";
-	}
-	const listAttrs = editor.getAttributes("bulletList");
-	if (listAttrs?.isTaskList) return true;
-	return false;
 }
 
 function toggleTaskListFallback(editor: Editor) {
@@ -759,68 +594,4 @@ function toggleTaskListFallback(editor: Editor) {
 	const isCurrentlyTask =
 		listItemAttrs && typeof listItemAttrs.checked === "boolean";
 	setTaskListState(editor, isCurrentlyTask ? null : false);
-}
-
-function setTaskListState(editor: Editor, checked: boolean | null) {
-	const { state, view } = editor;
-	const { selection } = state;
-	const tr = state.tr;
-	let applied = false;
-	const touchedBulletLists = new Set<number>();
-
-	const applyListItem = (node: any, pos: number) => {
-		if (node.type.name !== "listItem") return;
-		if (checked === null && node.attrs.checked == null) return;
-		if (checked !== null && node.attrs.checked === checked) return;
-		tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked });
-		applied = true;
-	};
-
-	const applyBulletList = (node: any, pos: number) => {
-		if (node.type.name !== "bulletList" || touchedBulletLists.has(pos)) return;
-		touchedBulletLists.add(pos);
-		const isTaskList = checked !== null;
-		if (node.attrs.isTaskList === isTaskList) return;
-		tr.setNodeMarkup(pos, undefined, { ...node.attrs, isTaskList });
-		applied = true;
-	};
-
-	const visitSelection = () => {
-		state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
-			applyListItem(node, pos);
-			applyBulletList(node, pos);
-		});
-	};
-
-	const visitAncestors = () => {
-		const $from: any = selection.$from;
-		let appliedListItem = false;
-		let appliedBulletList = false;
-		for (
-			let depth = $from.depth;
-			depth > 0 && (!appliedListItem || !appliedBulletList);
-			depth--
-		) {
-			const node = $from.node(depth);
-			if (!appliedListItem && node.type.name === "listItem") {
-				applyListItem(node, $from.before(depth));
-				appliedListItem = true;
-				continue;
-			}
-			if (!appliedBulletList && node.type.name === "bulletList") {
-				applyBulletList(node, $from.before(depth));
-				appliedBulletList = true;
-			}
-		}
-	};
-
-	if (selection.empty) {
-		visitAncestors();
-	} else {
-		visitSelection();
-	}
-
-	if (applied) {
-		view.dispatch(tr);
-	}
 }

@@ -350,3 +350,210 @@ export const TOOLBAR_BLOCK_OPTIONS: ToolbarBlockOption[] =
 			apply: cmd.toggle!,
 		}),
 	);
+
+/** The block type currently under the caret, as the toolbar dropdown names it. */
+export function getActiveBlock(editor: Editor): ToolbarBlockType {
+	if (editor.isActive("heading", { level: 1 })) return "heading-1";
+	if (editor.isActive("heading", { level: 2 })) return "heading-2";
+	if (editor.isActive("heading", { level: 3 })) return "heading-3";
+	if (editor.isActive("codeBlock")) return "code";
+	if (editor.isActive("blockquote")) return "blockquote";
+	return "paragraph";
+}
+
+/**
+ * True when the caret sits in a checklist item. The bridge stores tasks as
+ * bullet lists whose items carry a boolean `checked`, so a dedicated task
+ * list node is only consulted when the schema has one.
+ */
+export function computeTaskListActive(
+	editor: Editor,
+	hasTaskListCommand: boolean = typeof (editor.commands as any)
+		?.toggleTaskList === "function",
+): boolean {
+	if (hasTaskListCommand && editor.isActive("taskList")) return true;
+	const itemAttrs = editor.getAttributes("listItem");
+	if (itemAttrs && "checked" in itemAttrs) {
+		return typeof itemAttrs.checked === "boolean";
+	}
+	const listAttrs = editor.getAttributes("bulletList");
+	if (listAttrs?.isTaskList) return true;
+	return false;
+}
+
+/**
+ * Marks the selected list items (or the caret's item) as checklist items
+ * (`checked: false`) or plain bullets (`checked: null`), keeping the parent
+ * bullet list's `isTaskList` flag in step.
+ */
+export function setTaskListState(editor: Editor, checked: boolean | null) {
+	const { state, view } = editor;
+	const { selection } = state;
+	const tr = state.tr;
+	let applied = false;
+	const touchedBulletLists = new Set<number>();
+
+	const applyListItem = (node: any, pos: number) => {
+		if (node.type.name !== "listItem") return;
+		if (checked === null && node.attrs.checked == null) return;
+		if (checked !== null && node.attrs.checked === checked) return;
+		tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked });
+		applied = true;
+	};
+
+	const applyBulletList = (node: any, pos: number) => {
+		if (node.type.name !== "bulletList" || touchedBulletLists.has(pos)) return;
+		touchedBulletLists.add(pos);
+		const isTaskList = checked !== null;
+		if (node.attrs.isTaskList === isTaskList) return;
+		tr.setNodeMarkup(pos, undefined, { ...node.attrs, isTaskList });
+		applied = true;
+	};
+
+	const visitSelection = () => {
+		state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+			applyListItem(node, pos);
+			applyBulletList(node, pos);
+		});
+	};
+
+	const visitAncestors = () => {
+		const $from: any = selection.$from;
+		let appliedListItem = false;
+		let appliedBulletList = false;
+		for (
+			let depth = $from.depth;
+			depth > 0 && (!appliedListItem || !appliedBulletList);
+			depth--
+		) {
+			const node = $from.node(depth);
+			if (!appliedListItem && node.type.name === "listItem") {
+				applyListItem(node, $from.before(depth));
+				appliedListItem = true;
+				continue;
+			}
+			if (!appliedBulletList && node.type.name === "bulletList") {
+				applyBulletList(node, $from.before(depth));
+				appliedBulletList = true;
+			}
+		}
+	};
+
+	if (selection.empty) {
+		visitAncestors();
+	} else {
+		visitSelection();
+	}
+
+	if (applied) {
+		view.dispatch(tr);
+	}
+}
+
+/** Block kinds offered by the selection toolbar's "Turn into" list. */
+export type SelectionBlockType =
+	| ToolbarBlockType
+	| "bullet-list"
+	| "ordered-list"
+	| "task-list";
+
+export type SelectionBlockOption = {
+	value: SelectionBlockType;
+	label: string;
+	icon: ComponentType<{ className?: string }>;
+	apply: (editor: Editor) => void;
+};
+
+/** Lifts the caret's item out of every enclosing list. */
+function leaveLists(editor: Editor) {
+	for (let guard = 0; guard < 16 && editor.isActive("listItem"); guard += 1) {
+		if (!editor.chain().focus().liftListItem("listItem").run()) break;
+	}
+}
+
+/** The block kind under the caret, lists included. */
+export function getSelectionBlockType(editor: Editor): SelectionBlockType {
+	if (computeTaskListActive(editor)) return "task-list";
+	if (editor.isActive("bulletList")) return "bullet-list";
+	if (editor.isActive("orderedList")) return "ordered-list";
+	return getActiveBlock(editor);
+}
+
+/**
+ * "Turn into" entries for the selection toolbar. Text, headings, quote and
+ * code first leave any list so the block converts as a whole, the way
+ * Notion does; the list kinds convert just the selected item(s).
+ */
+export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
+	...TOOLBAR_BLOCK_OPTIONS.filter((option) =>
+		["paragraph", "heading-1", "heading-2", "heading-3"].includes(option.value),
+	).map((option) => ({
+		value: option.value,
+		label: option.label,
+		icon: option.icon,
+		apply: (editor: Editor) => {
+			leaveLists(editor);
+			option.apply(editor);
+		},
+	})),
+	{
+		value: "bullet-list",
+		label: "Bulleted list",
+		icon: List,
+		apply: (editor) => {
+			if (computeTaskListActive(editor)) {
+				setTaskListState(editor, null);
+				editor.commands.focus();
+				return;
+			}
+			if (editor.isActive("bulletList")) {
+				editor.commands.focus();
+				return;
+			}
+			convertListItem(editor, "bulletList", { checked: null });
+		},
+	},
+	{
+		value: "ordered-list",
+		label: "Numbered list",
+		icon: ListOrdered,
+		apply: (editor) => {
+			if (editor.isActive("orderedList")) {
+				editor.commands.focus();
+				return;
+			}
+			convertListItem(editor, "orderedList", { checked: null });
+		},
+	},
+	{
+		value: "task-list",
+		label: "To-do list",
+		icon: CheckSquare,
+		apply: (editor) => {
+			if (computeTaskListActive(editor)) {
+				editor.commands.focus();
+				return;
+			}
+			if (editor.isActive("bulletList")) {
+				setTaskListState(editor, false);
+				editor.commands.focus();
+				return;
+			}
+			convertListItem(editor, "bulletList", { checked: false });
+		},
+	},
+	...(["blockquote", "code"] as const).map((value) => {
+		const option = TOOLBAR_BLOCK_OPTIONS.find(
+			(entry) => entry.value === value,
+		)!;
+		return {
+			value: option.value,
+			label: option.label,
+			icon: option.icon,
+			apply: (editor: Editor) => {
+				leaveLists(editor);
+				option.apply(editor);
+			},
+		};
+	}),
+];

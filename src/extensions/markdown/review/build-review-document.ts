@@ -8,7 +8,13 @@ const REVIEW_DATA_KEY = "markdownReview";
 const MAX_ALIGNMENT_CELLS = 250_000;
 const GREEDY_LOOKAHEAD = 128;
 
-type ReviewStatus = "added" | "removed";
+/**
+ * "modified" marks a node kept on both sides whose own attributes changed
+ * (a ticked task, a re-levelled heading, a list that became a task list):
+ * the before projection restores the original attributes, the after
+ * projection keeps the new ones, and the node is never dropped.
+ */
+type ReviewStatus = "added" | "removed" | "modified";
 
 export type MarkdownReviewDecision = "keep" | "undo";
 
@@ -780,17 +786,48 @@ function nodeText(node: JSONContent): string {
 	return (node.content ?? []).map(nodeText).join(" ");
 }
 
+/**
+ * Attrs that describe a node's own change rather than its identity. They
+ * must not keep a before/after pair from merging: a toggled checkbox, a
+ * re-levelled heading, or a bullet list gaining its first task item would
+ * otherwise paint the whole block as removed and then added again, and the
+ * document would jump by the block's height in review.
+ */
+const CHANGE_ATTR_KEYS: Record<string, readonly string[]> = {
+	bulletList: ["isTaskList"],
+	orderedList: ["isTaskList"],
+	listItem: ["checked"],
+	heading: ["level"],
+	codeBlock: ["language"],
+};
+
+/** A span of a merged code block's text that exists on one side only. */
+type LineRange = {
+	readonly status: "added" | "removed";
+	readonly from: number;
+	readonly to: number;
+};
+
+function mergeableAttrs(node: JSONContent): string {
+	const keys = CHANGE_ATTR_KEYS[node.type ?? ""];
+	if (!keys || !node.attrs) return exactAttrs(node.attrs);
+	const attrs: Record<string, unknown> = { ...node.attrs };
+	for (const key of keys) delete attrs[key];
+	return exactAttrs(attrs);
+}
+
 function canMergeInline(before: JSONContent, after: JSONContent): boolean {
 	if (before.type !== after.type) return false;
 	if (
 		before.type !== "paragraph" &&
 		before.type !== "heading" &&
-		before.type !== "tableCell"
+		before.type !== "tableCell" &&
+		before.type !== "codeBlock"
 	) {
 		return false;
 	}
 	return (
-		exactAttrs(before.attrs) === exactAttrs(after.attrs) &&
+		mergeableAttrs(before) === mergeableAttrs(after) &&
 		Object.hasOwn(before, "content") === Object.hasOwn(after, "content")
 	);
 }
@@ -808,7 +845,7 @@ function canMergeContainer(before: JSONContent, after: JSONContent): boolean {
 		return false;
 	}
 	return (
-		exactAttrs(before.attrs) === exactAttrs(after.attrs) &&
+		mergeableAttrs(before) === mergeableAttrs(after) &&
 		Object.hasOwn(before, "content") === Object.hasOwn(after, "content")
 	);
 }
@@ -818,17 +855,191 @@ function mergeChangedNode(
 	after: JSONContent,
 	changeId: string,
 ): JSONContent | null {
+	if (before.type === "codeBlock" && canMergeInline(before, after)) {
+		return mergeCodeBlock(before, after, changeId);
+	}
 	if (canMergeInline(before, after)) {
-		return mergeInlineNode(before, after, changeId);
+		return withAttrChange(
+			before,
+			mergeInlineNode(before, after, changeId),
+			changeId,
+		);
 	}
 	if (!canMergeContainer(before, after)) return null;
+	return withAttrChange(
+		before,
+		{
+			...cloneContent(after),
+			content: mergeChildNodes(
+				before.content ?? [],
+				after.content ?? [],
+				changeId,
+			),
+		},
+		changeId,
+	);
+}
+
+/**
+ * A code block cannot carry marks, so its diff is kept as line ranges on the
+ * node: the merged text holds both sides' lines, and each side's projection
+ * drops the other side's ranges. The view paints the ranges as decorations.
+ */
+function mergeCodeBlock(
+	before: JSONContent,
+	after: JSONContent,
+	changeId: string,
+): JSONContent {
+	const beforeText = codeText(before);
+	const afterText = codeText(after);
+	let text = "";
+	const lineRanges: LineRange[] = [];
+	for (const op of diffLines(splitLines(beforeText), splitLines(afterText))) {
+		const from = text.length;
+		text += op.text;
+		if (op.status !== "kept") {
+			lineRanges.push({ status: op.status, from, to: text.length });
+		}
+	}
+	// Every line carries its newline while diffing; whether the block's text
+	// ends with one is remembered per side and restored on projection.
+	const trailingNewline = {
+		before: beforeText.endsWith("\n"),
+		after: afterText.endsWith("\n"),
+	};
+	if (!trailingNewline.after && text.endsWith("\n")) text = text.slice(0, -1);
+	const last = lineRanges.at(-1);
+	if (last && last.to > text.length) {
+		lineRanges[lineRanges.length - 1] = { ...last, to: text.length };
+	}
+	const data =
+		after.attrs?.data && typeof after.attrs.data === "object"
+			? cloneValue(after.attrs.data)
+			: {};
 	return {
 		...cloneContent(after),
-		content: mergeChildNodes(
-			before.content ?? [],
-			after.content ?? [],
-			changeId,
-		),
+		content: text ? [{ type: "text", text }] : [],
+		attrs: {
+			...(after.attrs ?? {}),
+			data: {
+				...data,
+				[REVIEW_DATA_KEY]: {
+					changeId,
+					status: "modified",
+					originalAttrs: cloneValue(before.attrs),
+					lineRanges,
+					trailingNewline,
+				},
+			},
+		},
+	};
+}
+
+function codeText(node: JSONContent): string {
+	return (node.content ?? [])
+		.map((child) => (child.type === "text" ? (child.text ?? "") : ""))
+		.join("");
+}
+
+/** Every line with a newline attached, so lines compare as whole units. */
+function splitLines(text: string): string[] {
+	if (!text) return [];
+	const lines = text.split("\n");
+	if (lines.at(-1) === "") lines.pop();
+	return lines.map((line) => `${line}\n`);
+}
+
+function diffLines(
+	before: readonly string[],
+	after: readonly string[],
+): { status: "kept" | "added" | "removed"; text: string }[] {
+	const columns = after.length + 1;
+	const lengths = new Uint32Array((before.length + 1) * columns);
+	for (let left = 1; left <= before.length; left += 1) {
+		for (let right = 1; right <= after.length; right += 1) {
+			const index = left * columns + right;
+			lengths[index] =
+				before[left - 1] === after[right - 1]
+					? lengths[(left - 1) * columns + right - 1]! + 1
+					: Math.max(
+							lengths[(left - 1) * columns + right]!,
+							lengths[left * columns + right - 1]!,
+						);
+		}
+	}
+	const reversed: { status: "kept" | "added" | "removed"; text: string }[] = [];
+	let left = before.length;
+	let right = after.length;
+	while (left > 0 || right > 0) {
+		if (left > 0 && right > 0 && before[left - 1] === after[right - 1]) {
+			reversed.push({ status: "kept", text: after[right - 1]! });
+			left -= 1;
+			right -= 1;
+		} else if (
+			right > 0 &&
+			(left === 0 ||
+				lengths[left * columns + right - 1]! >=
+					lengths[(left - 1) * columns + right]!)
+		) {
+			reversed.push({ status: "added", text: after[right - 1]! });
+			right -= 1;
+		} else {
+			reversed.push({ status: "removed", text: before[left - 1]! });
+			left -= 1;
+		}
+	}
+	return reversed.reverse();
+}
+
+/** Keeps the side's lines of a merged code block's text. */
+function projectCodeText(
+	node: JSONContent,
+	review: {
+		lineRanges: readonly LineRange[];
+		trailingNewline?: { before: boolean; after: boolean };
+	},
+	side: "before" | "after",
+): void {
+	const drop = side === "before" ? "added" : "removed";
+	const full = codeText(node);
+	let text = "";
+	let cursor = 0;
+	for (const range of review.lineRanges) {
+		text += full.slice(cursor, range.from);
+		if (range.status !== drop) text += full.slice(range.from, range.to);
+		cursor = range.to;
+	}
+	text += full.slice(cursor);
+	const endsWithNewline = review.trailingNewline?.[side] ?? false;
+	if (!endsWithNewline && text.endsWith("\n")) text = text.slice(0, -1);
+	if (endsWithNewline && text && !text.endsWith("\n")) text += "\n";
+	node.content = text ? [{ type: "text", text }] : [];
+}
+
+/** A merged node whose attrs changed remembers the before attrs. */
+function withAttrChange(
+	before: JSONContent,
+	merged: JSONContent,
+	changeId: string,
+): JSONContent {
+	if (exactAttrs(before.attrs) === exactAttrs(merged.attrs)) return merged;
+	const data =
+		merged.attrs?.data && typeof merged.attrs.data === "object"
+			? cloneValue(merged.attrs.data)
+			: {};
+	return {
+		...merged,
+		attrs: {
+			...(merged.attrs ?? {}),
+			data: {
+				...data,
+				[REVIEW_DATA_KEY]: {
+					changeId,
+					status: "modified",
+					originalAttrs: cloneValue(before.attrs),
+				},
+			},
+		},
 	};
 }
 
@@ -893,6 +1104,10 @@ function inlineTokens(content: readonly JSONContent[]): InlineToken[] {
 			tokens.push(cloneContent(node));
 			continue;
 		}
+		// A token is a word (or punctuation run) with the whitespace that
+		// follows it, so a replaced phrase reads as one run. Matching ignores
+		// that trailing whitespace (see inlineTokenKey), and matchedToken emits
+		// the whitespace difference on its own.
 		const pieces = node.text.match(
 			/[\p{L}\p{N}_]+(?:\s+)?|[^\s\p{L}\p{N}_]+(?:\s+)?|\s+/gu,
 		) ?? [node.text];
@@ -942,7 +1157,15 @@ function diffInlineTokens(
 			right > 0 &&
 			inlineTokenKey(before[left - 1]!) === inlineTokenKey(after[right - 1]!)
 		) {
-			reversed.push(cloneContent(after[right - 1]!));
+			// Built back to front: the pieces go in reverse order.
+			const pieces = matchedToken(
+				before[left - 1]!,
+				after[right - 1]!,
+				changeId,
+			);
+			for (let index = pieces.length - 1; index >= 0; index -= 1) {
+				reversed.push(pieces[index]!);
+			}
 			left -= 1;
 			right -= 1;
 		} else if (
@@ -984,15 +1207,59 @@ function diffInlinePrefixSuffix(
 		suffix += 1;
 	}
 	return [
-		...after.slice(0, prefix).map(cloneContent),
+		...after
+			.slice(0, prefix)
+			.flatMap((token, index) => matchedToken(before[index]!, token, changeId)),
 		...before
 			.slice(prefix, before.length - suffix)
 			.map((token) => markInlineToken(token, changeId, "removed")),
 		...after
 			.slice(prefix, after.length - suffix)
 			.map((token) => markInlineToken(token, changeId, "added")),
-		...after.slice(after.length - suffix).map(cloneContent),
+		...after
+			.slice(after.length - suffix)
+			.flatMap((token, index) =>
+				matchedToken(before[before.length - suffix + index]!, token, changeId),
+			),
 	];
+}
+
+/**
+ * Two tokens that match on their word may still differ in the whitespace
+ * after it (a word that was last in its block and now has a successor). The
+ * word stays unchanged; only the whitespace difference is marked, so both
+ * projections stay exact and the word is not painted removed and added.
+ */
+function matchedToken(
+	before: InlineToken,
+	after: InlineToken,
+	changeId: string,
+): JSONContent[] {
+	if (
+		before.type !== "text" ||
+		after.type !== "text" ||
+		before.text === after.text ||
+		typeof before.text !== "string" ||
+		typeof after.text !== "string"
+	) {
+		return [cloneContent(after)];
+	}
+	const word = after.text.trimEnd();
+	const beforeTail = before.text.slice(word.length);
+	const afterTail = after.text.slice(word.length);
+	const pieces: JSONContent[] = [];
+	if (word) pieces.push({ ...cloneContent(after), text: word });
+	if (beforeTail) {
+		pieces.push(
+			markInlineToken({ ...before, text: beforeTail }, changeId, "removed"),
+		);
+	}
+	if (afterTail) {
+		pieces.push(
+			markInlineToken({ ...after, text: afterTail }, changeId, "added"),
+		);
+	}
+	return pieces;
 }
 
 function markInlineToken(
@@ -1067,7 +1334,19 @@ function resolveNodeDecisions(
 	) {
 		return null;
 	}
-	if (nodeReview && nodeDecision) restoreNodeAttrs(clone, nodeReview);
+	if (nodeReview && nodeDecision) {
+		const side = decisionSide(nodeDecision);
+		restoreNodeAttrs(clone, nodeReview, side);
+		if (nodeReview.lineRanges)
+			projectCodeText(
+				clone,
+				{
+					lineRanges: nodeReview.lineRanges,
+					trailingNewline: nodeReview.trailingNewline,
+				},
+				side,
+			);
+	}
 
 	const reviewMark = clone.marks?.find(
 		(mark) => mark.type === REVIEW_MARK_NAME,
@@ -1107,7 +1386,18 @@ function projectNode(
 	if (nodeReview && shouldDropReviewSide(nodeReview.status, side)) {
 		return null;
 	}
-	if (nodeReview) restoreNodeAttrs(clone, nodeReview);
+	if (nodeReview) {
+		restoreNodeAttrs(clone, nodeReview, side);
+		if (nodeReview.lineRanges)
+			projectCodeText(
+				clone,
+				{
+					lineRanges: nodeReview.lineRanges,
+					trailingNewline: nodeReview.trailingNewline,
+				},
+				side,
+			);
+	}
 
 	const reviewMark = clone.marks?.find(
 		(mark) => mark.type === REVIEW_MARK_NAME,
@@ -1151,8 +1441,14 @@ function shouldDropReviewSide(
 function restoreNodeAttrs(
 	node: JSONContent,
 	review: NonNullable<ReturnType<typeof readNodeReview>>,
+	side: "before" | "after",
 ): void {
-	if (review.hasOriginalAttrs) {
+	// A modified node keeps its new attrs on the after side; only the
+	// review bookkeeping comes off.
+	if (
+		review.hasOriginalAttrs &&
+		!(review.status === "modified" && side === "after")
+	) {
 		if (review.originalAttrs === undefined) delete node.attrs;
 		else node.attrs = cloneValue(review.originalAttrs);
 		return;
@@ -1170,6 +1466,8 @@ function readNodeReview(node: JSONContent): {
 	readonly status: ReviewStatus;
 	readonly hasOriginalAttrs: boolean;
 	readonly originalAttrs: JSONContent["attrs"] | undefined;
+	readonly lineRanges: readonly LineRange[] | undefined;
+	readonly trailingNewline: { before: boolean; after: boolean } | undefined;
 } | null {
 	const value = node.attrs?.data?.[REVIEW_DATA_KEY];
 	if (!value || typeof value !== "object") return null;
@@ -1178,12 +1476,19 @@ function readNodeReview(node: JSONContent): {
 	const status = record.status;
 	return typeof changeId === "string" &&
 		changeId.length > 0 &&
-		(status === "added" || status === "removed")
+		(status === "added" || status === "removed" || status === "modified")
 		? {
 				changeId,
 				status,
 				hasOriginalAttrs: Object.hasOwn(record, "originalAttrs"),
 				originalAttrs: record.originalAttrs as JSONContent["attrs"] | undefined,
+				lineRanges: Array.isArray(record.lineRanges)
+					? (record.lineRanges as LineRange[])
+					: undefined,
+				trailingNewline:
+					record.trailingNewline && typeof record.trailingNewline === "object"
+						? (record.trailingNewline as { before: boolean; after: boolean })
+						: undefined,
 			}
 		: null;
 }
@@ -1208,6 +1513,11 @@ function reviewChangeId(args: {
 }
 
 function inlineTokenKey(token: InlineToken): string {
+	if (token.type === "text" && typeof token.text === "string") {
+		return stableStringify(
+			comparableValue({ ...token, text: token.text.trimEnd() }),
+		);
+	}
 	return stableStringify(comparableValue(token));
 }
 

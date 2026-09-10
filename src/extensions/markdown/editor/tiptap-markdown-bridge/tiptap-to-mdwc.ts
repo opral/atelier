@@ -163,8 +163,18 @@ function pmBlockToAst(
 				!first.content?.length;
 			const out: any = {
 				type: "listItem",
+				// An item whose own line is empty but that still has children
+				// keeps that empty line: without it the marker and the nested
+				// list collapse into one another.
 				children: (omitLeadingScaffold ? content.slice(1) : content).map(
-					(child) => pmBlockToAst(child),
+					(child, index, items) =>
+						pmBlockToAst(child, {
+							preserveEmptyParagraph:
+								index === 0 &&
+								items.length > 1 &&
+								child.type === "paragraph" &&
+								!pmInlineToMd(child.content || []).length,
+						}),
 				),
 			};
 			if (listItemData.data) out.data = listItemData.data;
