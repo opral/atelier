@@ -399,7 +399,9 @@
 		min-width: 0;
 		align-items: baseline;
 		gap: 0.42rem;
-		line-height: 1;
+		/* The name slot clips for its ellipsis; the line box needs room for
+		   descenders ("gtm/") or they are cut off. */
+		line-height: 1.3;
 	}
 
 	.external-write-review-navigation strong {
