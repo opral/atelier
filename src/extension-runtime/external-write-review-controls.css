@@ -231,8 +231,8 @@
 		font-weight: 500;
 	}
 
-	/* Unseen rows cannot be ticked: clicking one opens the file, which is
-	   what makes it seen (and ticked). */
+	/* Unseen rows tick like the rest; the muted ink only says the file has
+	   not been on screen in this review yet. */
 	.external-write-review-menu > button[data-state="unseen"] {
 		color: var(--color-text-inverse-tertiary);
 		font-weight: 500;

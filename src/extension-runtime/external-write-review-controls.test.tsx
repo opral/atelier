@@ -160,20 +160,21 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		expect(scopeRow("file-icp")).toBeChecked();
 		expect(scopeRow("file-leads")).toBeChecked();
-		// Unseen rows are listed below the seen ones; they are not ticks but
-		// open the file, which is what makes it seen.
+		// Unseen rows are listed below the seen ones, unticked until picked.
 		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 		expect(scopeRow("file-readme")).toHaveTextContent("unseen");
+		expect(scopeRow("file-readme")).not.toBeChecked();
 		expect(scopeRow("file-icp")).toHaveTextContent("viewing");
 		const rows = screen.getAllByRole("checkbox");
 		expect(rows.map((row) => row.getAttribute("data-file-id"))).toEqual([
 			null,
 			"file-icp",
 			"file-leads",
+			"file-readme",
 		]);
 	});
 
-	test("clicking an unseen row opens the file, which makes it seen and ticked", () => {
+	test("ticking an unseen row adds it to the working set; opening it keeps it ticked", () => {
 		const onOpen = vi.fn();
 		const { rerender } = render(
 			<ExternalWriteReviewControls
@@ -186,10 +187,18 @@ describe("ExternalWriteReviewControls", () => {
 		);
 		fireEvent.click(chip("Working set: 1 of 3 files"));
 		fireEvent.click(scopeRow("file-readme"));
-		expect(onOpen).toHaveBeenCalledWith(2);
+		expect(onOpen).not.toHaveBeenCalled();
+		expect(scopeRow("file-readme")).toBeChecked();
+		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
+		// A picked unseen file is not "the seen set", so the label is bare.
+		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("2 of 3");
+		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
+			"aria-checked",
+			"mixed",
+		);
 
-		// The host shows the file; the row moves into the seen group, ticked,
-		// and the list stays open.
+		// Stepping to the file makes it seen; it stays ticked and the list
+		// stays open.
 		rerender(
 			<ExternalWriteReviewControls
 				isActive
@@ -208,9 +217,6 @@ describe("ExternalWriteReviewControls", () => {
 		expect(scopeRow("file-readme")).toBeChecked();
 		expect(scopeRow("file-readme")).toHaveTextContent("viewing");
 		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("Seen 2 of 3");
-		expect(
-			screen.getByRole("group", { name: "Diff review actions" }),
-		).toHaveFocus();
 	});
 
 	test("uses the currently viewed file when the review opens later in the list", () => {
@@ -272,9 +278,10 @@ describe("ExternalWriteReviewControls", () => {
 			}),
 		).toBeNull();
 		expect(scopeRow("file-leads")).toHaveAttribute("data-state", "left-out");
-		expect(
-			screen.getByRole("checkbox", { name: "Seen files" }),
-		).toHaveAttribute("aria-checked", "mixed");
+		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
+			"aria-checked",
+			"mixed",
+		);
 
 		// Step away and back: leads.csv is still left out.
 		rerender(
@@ -322,7 +329,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 	});
 
-	test("the Seen files master row toggles the seen set; empty selection disables the verbs", () => {
+	test("the All files master row ticks or clears every file, seen or not", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -350,22 +357,28 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(chip("Working set: 2 of 3 files"));
-		const seenFiles = () =>
-			screen.getByRole("checkbox", { name: "Seen files" });
-		expect(seenFiles()).toHaveAttribute("aria-checked", "true");
-		fireEvent.click(seenFiles());
-		expect(seenFiles()).toHaveAttribute("aria-checked", "false");
+		const allFiles = () => screen.getByRole("checkbox", { name: "All files" });
+		// Two seen and ticked, one unseen: the master row is mixed.
+		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "true");
+		expect(scopeRow("file-readme")).toBeChecked();
+		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
+		expect(chip("Working set: 3 of 3 files")).toHaveTextContent("All 3 files");
+
+		// From everything, the master row clears the lot and the verbs wait.
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "false");
+		expect(scopeRow("file-icp")).not.toBeChecked();
+		expect(scopeRow("file-readme")).not.toBeChecked();
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
-		// The unseen file is untouched either way.
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 
-		// From partial, the master row ticks every seen file back on.
+		// From partial, it ticks everything again.
 		fireEvent.click(scopeRow("file-icp"));
-		expect(seenFiles()).toHaveAttribute("aria-checked", "mixed");
-		fireEvent.click(seenFiles());
-		expect(seenFiles()).toHaveAttribute("aria-checked", "true");
-		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("Seen 2 of 3");
+		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "true");
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeEnabled();
 	});
 
