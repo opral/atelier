@@ -370,40 +370,6 @@ export function MarkdownReviewEditor({
 
 	return (
 		<>
-			{reviewDocument.changes[0]?.kind === "format" && decisions.size === 0 ? (
-				<section
-					className="shrink-0 border-b p-4 text-sm"
-					aria-label="Formatting review"
-				>
-					<p>Formatting changed</p>
-					<details>
-						<summary className="cursor-pointer">Show source diff</summary>
-						<FormattingSourceDiff
-							before={beforeMarkdown}
-							after={afterMarkdown}
-						/>
-					</details>
-					{reviewEnabled ? (
-						<div className="mt-2 flex gap-3">
-							<button
-								type="button"
-								disabled={busy}
-								onClick={() => void decide("undo")}
-							>
-								Undo formatting
-							</button>
-							<button
-								type="button"
-								disabled={busy}
-								onClick={() => void decide("keep")}
-							>
-								Keep formatting
-							</button>
-						</div>
-					) : null}
-					{error ? <p role="alert">{error}</p> : null}
-				</section>
-			) : null}
 			{externalEditor ? null : (
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
 					<EditorContent
@@ -573,49 +539,3 @@ function isMacPlatform(): boolean {
 }
 
 /** Source-only comparison; never inserts diff marks into the rendered document. */
-function FormattingSourceDiff({
-	before,
-	after,
-}: {
-	before: string;
-	after: string;
-}) {
-	const left = before.split("\n");
-	const right = after.split("\n");
-	let start = 0;
-	while (
-		start < left.length &&
-		start < right.length &&
-		left[start] === right[start]
-	)
-		start++;
-	let end = 0;
-	while (
-		end < left.length - start &&
-		end < right.length - start &&
-		left[left.length - 1 - end] === right[right.length - 1 - end]
-	)
-		end++;
-	return (
-		<pre
-			className="mt-2 max-h-80 overflow-auto whitespace-pre text-xs"
-			aria-label="Markdown source diff"
-		>
-			{left.slice(start, left.length - end).map((line, index) => (
-				<div
-					key={`before-${index}`}
-					className="bg-red-500/10"
-				>{`- ${line}`}</div>
-			))}
-			{right.slice(start, right.length - end).map((line, index) => (
-				<div
-					key={`after-${index}`}
-					className="bg-green-500/10"
-				>{`+ ${line}`}</div>
-			))}
-			{before.endsWith("\n") !== after.endsWith("\n") ? (
-				<div>Final newline changed</div>
-			) : null}
-		</pre>
-	);
-}

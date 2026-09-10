@@ -2292,6 +2292,46 @@
 		text-decoration-color: var(--color-border-diff-removed);
 	}
 
+	/* Formatting-only changes sit in the sentence as small monospace glyphs:
+	   the source the block lost, struck; the source it gained, bold. Grey
+	   ground, so they read as notes rather than as errors. */
+	.markdown-review .ProseMirror .markdown-review-format-glyph {
+		display: inline-block;
+		margin: 0 1px;
+		padding: 1px 3px;
+		border-radius: 3px;
+		background: var(--color-bg-hover-canvas);
+		color: var(--color-text-secondary);
+		font-family:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.72em;
+		line-height: 1;
+		vertical-align: 0.18em;
+		user-select: none;
+		cursor: pointer;
+	}
+
+	.markdown-review .ProseMirror .markdown-review-format-glyph > s {
+		color: var(--color-text-diff-removed);
+		text-decoration: line-through;
+		text-decoration-color: currentColor;
+	}
+
+	.markdown-review .ProseMirror .markdown-review-format-glyph > s + b {
+		margin-left: 3px;
+	}
+
+	.markdown-review .ProseMirror .markdown-review-format-glyph > b {
+		color: var(--color-text-primary);
+		font-weight: 700;
+	}
+
+	.markdown-review
+		.ProseMirror
+		.markdown-review-format-glyph[data-review-active="true"] {
+		box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+	}
+
 	/* A node whose attributes changed (a ticked task, a re-levelled heading)
 	   stays in place with a soft brand tint; its text is not a diff. */
 	.markdown-review .ProseMirror [data-review-status="modified"] {
