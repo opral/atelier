@@ -80,6 +80,8 @@ export function CsvPill({ value, color }: { value: string; color?: string }) {
 }
 export type PropertyCell = TextCell & {
 	csvInfo?: CsvColumnInfo;
+	/** The info was inferred from values: render typed, edit as plain text. */
+	csvInferred?: boolean;
 	csvNewOption?: string;
 	csvWrappedLines?: CsvTextLine[];
 };
@@ -503,7 +505,11 @@ export const providePropertyEditor: ProvideEditorCallback<GridCell> = (
 ) => {
 	const info = (cell as PropertyCell).csvInfo;
 	if ((cell as PropertyCell).readonly) return undefined;
-	if (info && ["select", "checkbox", "date"].includes(info.type)) {
+	if (
+		info &&
+		!(cell as PropertyCell).csvInferred &&
+		["select", "checkbox", "date"].includes(info.type)
+	) {
 		return {
 			editor: PropertyEditor,
 			disablePadding: true,

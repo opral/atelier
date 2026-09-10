@@ -1000,9 +1000,10 @@ test("configuring a select stores optional metadata without changing CSV bytes o
 	const source = "\uFEFFname;stage\r\nAlice;qualified\r\nBob;trial\r\n";
 	const fixture = await renderMetadataCsv(source);
 	try {
+		// Without metadata the column still carries an inferred, text kind.
 		expect(
 			latestDataEditorProps.current?.getCellContent([1, 0]).csvInfo,
-		).toBeUndefined();
+		).toMatchObject({ inferred: true, type: "text" });
 		await configureSelect();
 		await waitFor(async () => {
 			const row = await fixture.read();
@@ -1846,9 +1847,59 @@ test("saved views persist on plain CSV without changing bytes and survive column
 	}
 });
 
+test("long text columns wrap by default, before any metadata exists", async () => {
+	const long =
+		"A note long enough that the column's typical value runs past sixty characters.";
+	const source = `name,notes\r\nAlice,${long}\r\nBob,${long}\r\nCara,Short\r\n`;
+	const fixture = await renderMetadataCsv(source);
+	try {
+		act(() =>
+			latestDataEditorProps.current?.onColumnResizeEnd?.(
+				{ title: "notes" },
+				200,
+				1,
+			),
+		);
+		await waitFor(() =>
+			expect(
+				latestDataEditorProps.current?.getCellContent([1, 0]),
+			).toMatchObject({
+				allowWrapping: true,
+				csvInferred: true,
+				csvInfo: { type: "text", wrap: true, inferred: true },
+			}),
+		);
+		const height = latestDataEditorProps.current!.rowHeight;
+		expect(typeof height === "number" ? height : height(0)).toBeGreaterThan(40);
+		expect(typeof height === "number" ? height : height(2)).toBe(40);
+		// The title column is the row's anchor: heavier, primary ink.
+		expect(latestDataEditorProps.current?.getCellContent([0, 0])).toMatchObject(
+			{ themeOverride: { baseFontStyle: "600 13px" } },
+		);
+		expect(
+			(
+				latestDataEditorProps.current?.getCellContent([1, 0]) as {
+					themeOverride?: unknown;
+				}
+			).themeOverride,
+		).toBeUndefined();
+		// Inference never writes: the file keeps its bytes and no metadata.
+		expect(
+			new TextDecoder().decode((await fixture.read()).content as Uint8Array),
+		).toBe(source);
+		expect(
+			readCsvMetadata((await fixture.read()).lixcol_metadata),
+		).toBeUndefined();
+	} finally {
+		await fixture.close();
+	}
+});
+
 test("text wrapping persists without changing CSV bytes and adapts row heights to column width", async () => {
+	// Two short notes keep the column's typical value short, so wrapping
+	// is the user's choice here rather than inferred.
 	const source =
-		'name,notes\r\nAlice,"A longer note that should wrap onto several lines in a narrow column."\r\nBob,Short\r\n';
+		'name,notes\r\nAlice,"A longer note that should wrap onto several lines in a narrow column."\r\nBob,Short\r\nCara,Also short\r\n';
 	const fixture = await renderMetadataCsv(source);
 	const rowHeight = (row: number) => {
 		const height = latestDataEditorProps.current!.rowHeight;

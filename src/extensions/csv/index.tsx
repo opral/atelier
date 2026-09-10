@@ -28,6 +28,7 @@ import {
 	type CsvFilterGroup,
 } from "./csv-filter";
 import { useCsvTheme } from "./use-csv-theme";
+import { inferColumnInfo } from "./csv-infer";
 import {
 	Suspense,
 	createContext,
@@ -44,7 +45,6 @@ import {
 	AlertTriangle,
 	ArrowDownToLine,
 	ArrowUpToLine,
-	Loader2,
 	Plus,
 	Table2,
 	Trash2,
@@ -1029,7 +1029,21 @@ function CsvTable({
 	);
 	const gridRef = useRef<DataEditorRef>(null);
 	const containerRef = useRef<HTMLDivElement | null>(null);
-	const { theme: gridTheme, palette, searchColor } = useCsvTheme(containerRef);
+	const {
+		theme: gridTheme,
+		palette,
+		searchColor,
+		titleColor,
+		hoverColor,
+	} = useCsvTheme(containerRef);
+	// What each column renders as: metadata first, values otherwise. Only
+	// presentation, wrapping, and checkbox toggling read this; editing,
+	// filters, and property menus keep to the metadata.
+	const displayInfo = useMemo(
+		() => inferColumnInfo(sourceParsed.columns, sourceParsed.rows, columnInfo),
+		[sourceParsed.columns, sourceParsed.rows, columnInfo],
+	);
+	const [hoverRow, setHoverRow] = useState<number | null>(null);
 	const imageWindowLoader = useMemo(() => new ImageWindowLoaderImpl(), []);
 	const editable = editing !== undefined;
 	const [search, setSearch] = useState(retained?.search ?? "");
@@ -1096,7 +1110,7 @@ function CsvTable({
 		const value = parsed.rows[row]?.cells[col] ?? "";
 		if (
 			!editing ||
-			columnInfo[col]?.type !== "checkbox" ||
+			displayInfo[col]?.type !== "checkbox" ||
 			!/^(yes|no|true|false|1|0)?$/i.test(value)
 		)
 			return false;
@@ -1157,12 +1171,13 @@ function CsvTable({
 		() =>
 			parsed.columns.map(
 				(_, index) =>
-					(columnInfo[index]?.type ?? "text") === "text" &&
+					(displayInfo[index]?.type ?? "text") === "text" &&
 					(wrapOverrides[columnInfo[index]?.id ?? String(index)] ??
 						columnInfo[index]?.wrap ??
+						displayInfo[index]?.wrap ??
 						false),
 			),
-		[parsed.columns, columnInfo, wrapOverrides],
+		[parsed.columns, columnInfo, displayInfo, wrapOverrides],
 	);
 	const measureContext = useMemo(
 		() =>
@@ -1319,49 +1334,30 @@ function CsvTable({
 		return parsed.columns.map((title, index) => ({
 			id: String(index),
 			title,
-			icon: columnInfo[index]?.type ?? "text",
+			icon: displayInfo[index]?.type ?? "text",
 			width: widthState.overrides[index] ?? widthState.initial[index],
 			// The hover chevron that opens the column menu.
 			hasMenu: editable,
 		}));
-	}, [editable, parsed.columns, widthState, columnInfo]);
+	}, [editable, parsed.columns, widthState, displayInfo]);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
-			const propertyType = columnInfo[columnIndex]?.type;
-			// Read-only email and URL properties render as links like untyped
-			// link-shaped values do; every other property keeps its renderer.
-			if (
-				editable ||
-				(columnInfo[columnIndex] &&
-					propertyType !== "email" &&
-					propertyType !== "url")
-			) {
-				// Editable cells are plain text so the overlay edits the raw
-				// value; URL/email link affordances stay in read-only views.
-				return {
-					kind: GridCellKind.Text,
-					data: value,
-					displayData: value,
-					allowOverlay: editable,
-					// Plain values edit on press, avoiding a selection-only frame
-					// while the pointer is held. Pickers retain click activation.
-					activationBehaviorOverride: !["select", "checkbox", "date"].includes(
-						columnInfo[columnIndex]?.type ?? "text",
-					)
-						? "pointer-down"
-						: undefined,
-					readonly: !editable,
-					allowWrapping: wrappedColumns[columnIndex],
-					csvWrappedLines: wrappedLayout?.[rowIndex]?.lines[columnIndex],
-					csvInfo: columnInfo[columnIndex],
-					copyData: value,
-				} as PropertyCell;
-			}
+			const info = displayInfo[columnIndex];
+			const propertyType = info?.type ?? "text";
+			// Read-only email and URL properties render as links, as do
+			// link-shaped values in columns without a configured property.
+			// Everything else, including inferred kinds, keeps its renderer.
+			const linkShaped =
+				propertyType === "email" ||
+				propertyType === "url" ||
+				(info?.inferred === true && propertyType === "text");
 			const linkUrl =
-				propertyType === "email" && /^[^\s@]+@[^\s@]+$/.test(value.trim())
-					? `mailto:${value.trim()}`
-					: toExternalLinkUrl(value);
+				!editable && linkShaped
+					? propertyType === "email" && /^[^\s@]+@[^\s@]+$/.test(value.trim())
+						? `mailto:${value.trim()}`
+						: toExternalLinkUrl(value)
+					: null;
 			if (linkUrl) {
 				return {
 					kind: GridCellKind.Uri,
@@ -1377,16 +1373,47 @@ function CsvTable({
 					},
 				};
 			}
+			// Editable cells are plain text so the overlay edits the raw
+			// value; URL/email link affordances stay in read-only views.
 			return {
 				kind: GridCellKind.Text,
 				data: value,
 				displayData: value,
-				allowOverlay: false,
-				readonly: true,
+				allowOverlay: editable,
+				// Plain values edit on press, avoiding a selection-only frame
+				// while the pointer is held. Pickers retain click activation.
+				activationBehaviorOverride: !["select", "checkbox", "date"].includes(
+					propertyType,
+				)
+					? "pointer-down"
+					: undefined,
+				readonly: !editable,
+				allowWrapping: wrappedColumns[columnIndex],
+				csvWrappedLines: wrappedLayout?.[rowIndex]?.lines[columnIndex],
+				csvInfo: info,
+				csvInferred: info?.inferred === true,
 				copyData: value,
-			};
+				// The first column is the record's title: semibold in primary
+				// ink, so a row has somewhere for the eye to land.
+				...(columnIndex === 0
+					? {
+							themeOverride: {
+								baseFontStyle: `600 ${gridTheme.baseFontStyle}`,
+								textDark: titleColor,
+							},
+						}
+					: {}),
+			} as PropertyCell;
 		},
-		[editable, parsed.rows, columnInfo, wrappedColumns, wrappedLayout],
+		[
+			editable,
+			parsed.rows,
+			displayInfo,
+			wrappedColumns,
+			wrappedLayout,
+			gridTheme.baseFontStyle,
+			titleColor,
+		],
 	);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
@@ -2296,6 +2323,15 @@ function CsvTable({
 							fixedShadowY={false}
 							smoothScrollX={true}
 							theme={gridTheme}
+							// Hairlines between rows only; columns separate by
+							// alignment, as in a document table.
+							verticalBorder={false}
+							onItemHovered={(args) =>
+								setHoverRow(args.kind === "cell" ? args.location[1] : null)
+							}
+							getRowThemeOverride={(row) =>
+								row === hoverRow ? { bgCell: hoverColor } : undefined
+							}
 						/>
 					</>
 				)}
