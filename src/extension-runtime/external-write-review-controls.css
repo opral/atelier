@@ -566,30 +566,15 @@
 		font-size: 0.68rem;
 	}
 
-	/* The chip's compact count is drawn from a data attribute so the
-	   accessible text stays one string ("Seen 1 of 23"). */
-	.external-write-review-chip-short {
-		display: none;
-	}
-
-	.external-write-review-chip-short::before {
-		content: attr(data-label);
-	}
-
 	/* Narrow review areas (side panels open on a small window): the labels
-	   that only repeat what the glyphs say go first — "Seen", "Exit", the
-	   ⌘⏎ hint — and the parent folder, before the file name has to
-	   ellipsise. The threshold is the pill's natural width with every label
-	   on, so nothing truncates while a label could still be dropped. */
+	   that only repeat what the glyphs say go first — "Exit", the ⌘⏎ hint —
+	   and the parent folder, before the file name has to ellipsise. The
+	   threshold is the pill's natural width with every label on, so nothing
+	   truncates while a label could still be dropped. */
 	@container (max-width: 54rem) {
-		.external-write-review-chip-long,
 		.external-write-review-button-exit > span,
 		.external-write-review-button-accept > .external-write-review-shortcut {
 			display: none;
-		}
-
-		.external-write-review-chip-short {
-			display: block;
 		}
 
 		.external-write-review-navigation strong {

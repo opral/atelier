@@ -103,8 +103,9 @@ function withoutId(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
  * ticked the moment it is seen. Any file can be ticked or unticked in the
  * chip's list, seen or not; the "All files" master row ticks or clears the
  * whole list. Every verb to the chip's right acts on the ticked files. The
- * chip always carries the denominator ("Seen 3 of 6", "All 6 files") and its
- * ring shows ticked, seen-but-left-out and unseen as three wedges. The verbs
+ * chip always reads "ticked of total" ("3 of 6"): the number every verb
+ * acts on. Its ring shows ticked, seen-but-left-out and unseen as three
+ * wedges. The verbs
  * are split buttons: the big half acts on the ticked set (⌘⏎), the arrow
  * offers "all N files" (⇧⌘⏎). One changed file = no chip, no stepper arrows
  * and no arrows on the verbs. Anything smaller than a file happens inline on
@@ -210,8 +211,6 @@ export function ExternalWriteReviewControls({
 			? !leftOutFileIds.has(file.id)
 			: pickedFileIds.has(file.id);
 	const tickedFiles = listFiles.filter(isTicked);
-	const leftOutCount = seenFiles.filter((file) => !isTicked(file)).length;
-	const pickedCount = unseenFiles.filter(isTicked).length;
 	const hasScopeChip = listFiles.length > 1;
 
 	const toggleIn = (current: ReadonlySet<string>, fileId: string) => {
@@ -419,16 +418,8 @@ export function ExternalWriteReviewControls({
 	const showStepperArrows = fileCount > 1 || !hasVisibleFile;
 	const showVerbArrows = listFiles.length > 1;
 	const totalCount = listFiles.length;
-	// The label names the set when it is a known one: everything, or exactly
-	// the seen files. Otherwise it is the bare count. Narrow pills show the
-	// bare count instead: that variant is drawn from a data attribute so the
-	// accessible text stays one string.
-	const chipLabel = allTicked
-		? `All ${totalCount} files`
-		: leftOutCount === 0 && pickedCount === 0
-			? `Seen ${tickedFiles.length} of ${totalCount}`
-			: `${tickedFiles.length} of ${totalCount}`;
-	const chipShortLabel = `${tickedFiles.length} of ${totalCount}`;
+	// "1 of 180": the count every verb acts on, over the whole list.
+	const chipLabel = `${tickedFiles.length} of ${totalCount}`;
 	const ringStyle = {
 		"--ring-ticked": `${(tickedFiles.length / Math.max(totalCount, 1)) * 360}deg`,
 		"--ring-seen": `${(seenFiles.length / Math.max(totalCount, 1)) * 360}deg`,
@@ -763,25 +754,10 @@ export function ExternalWriteReviewControls({
 							style={ringStyle}
 						/>
 						<span className="external-write-review-stable">
-							<span
-								aria-hidden="true"
-								className="external-write-review-sizer external-write-review-chip-long"
-							>
-								Seen {totalCount} of {totalCount}
+							<span aria-hidden="true" className="external-write-review-sizer">
+								{totalCount} of {totalCount}
 							</span>
-							<span
-								aria-hidden="true"
-								className="external-write-review-sizer external-write-review-chip-short"
-								data-label={`${totalCount} of ${totalCount}`}
-							/>
-							<span className="external-write-review-chip-long">
-								{chipLabel}
-							</span>
-							<span
-								aria-hidden="true"
-								className="external-write-review-chip-short"
-								data-label={chipShortLabel}
-							/>
+							<span>{chipLabel}</span>
 						</span>
 						{openMenu === "list" ? (
 							<ChevronDown aria-hidden="true" />
