@@ -2345,6 +2345,24 @@
 			0 18px 50px rgba(28, 25, 23, 0.14),
 			0 5px 16px rgba(28, 25, 23, 0.08),
 			0 1px 2px rgba(28, 25, 23, 0.08);
+		/* Fades in on appearance and out from where it stood on dismissal. */
+		animation: markdown-selection-toolbar-in 140ms ease;
+		transition:
+			opacity 140ms ease,
+			transform 140ms ease;
+	}
+
+	.markdown-selection-toolbar[data-state="closing"] {
+		opacity: 0;
+		transform: translateY(4px);
+		pointer-events: none;
+	}
+
+	@keyframes markdown-selection-toolbar-in {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
 	}
 
 	.markdown-selection-toolbar-trigger {

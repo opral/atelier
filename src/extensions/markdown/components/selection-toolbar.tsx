@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Toolbar } from "@base-ui/react/toolbar";
 import { Select } from "@base-ui/react/select";
@@ -181,6 +181,9 @@ function computePanelPosition(
  *   <SelectionToolbar />
  * </EditorProvider>
  */
+const SELECTION_TOOLBAR_FADE_MS = 140;
+const SELECTION_TOOLBAR_HOVER_CLOSE_MS = 160;
+
 export function SelectionToolbar() {
 	const { editor } = useEditorCtx();
 	const state =
@@ -196,6 +199,10 @@ export function SelectionToolbar() {
 	const [blockMenuOpen, setBlockMenuOpen] = useState(false);
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [position, setPosition] = useState<PanelPosition | null>(null);
+	// The panel fades out from where it last stood before it unmounts.
+	const [closing, setClosing] = useState(false);
+	const lastPositionRef = useRef<PanelPosition | null>(null);
+	const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const rangeKey = `${state.from}:${state.to}`;
 	const editable = Boolean(editor && editor.isEditable);
@@ -262,6 +269,41 @@ export function SelectionToolbar() {
 		};
 	}, [editor, shouldShow, state.from, state.to]);
 
+	const visible = Boolean(shouldShow && position && !position.hidden);
+	useEffect(() => {
+		if (visible) {
+			lastPositionRef.current = position;
+			setClosing(false);
+			return;
+		}
+		if (!lastPositionRef.current) return;
+		setClosing(true);
+		const timer = setTimeout(() => {
+			setClosing(false);
+			lastPositionRef.current = null;
+		}, SELECTION_TOOLBAR_FADE_MS);
+		return () => clearTimeout(timer);
+	}, [visible, position]);
+
+	// The "Turn into" list opens on hover, like Notion's, and closes once the
+	// pointer has left both the trigger and the list for a moment.
+	const cancelHoverClose = useCallback(() => {
+		if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+		hoverTimerRef.current = null;
+	}, []);
+	const openBlockMenuFromHover = useCallback(() => {
+		cancelHoverClose();
+		setBlockMenuOpen(true);
+	}, [cancelHoverClose]);
+	const closeBlockMenuFromHover = useCallback(() => {
+		cancelHoverClose();
+		hoverTimerRef.current = setTimeout(() => {
+			setBlockMenuOpen(false);
+			editor?.chain().focus().run();
+		}, SELECTION_TOOLBAR_HOVER_CLOSE_MS);
+	}, [cancelHoverClose, editor]);
+	useEffect(() => cancelHoverClose, [cancelHoverClose]);
+
 	const activeBlock = useMemo(
 		() =>
 			SELECTION_BLOCK_OPTIONS.find((option) => option.value === state.block) ??
@@ -301,7 +343,9 @@ export function SelectionToolbar() {
 		event.preventDefault();
 	}, []);
 
-	if (!editor || !shouldShow || !position || position.hidden) return null;
+	if (!editor || (!visible && !closing)) return null;
+	const panelPosition = visible ? position : lastPositionRef.current;
+	if (!panelPosition) return null;
 
 	const portalTarget =
 		(editor.view.dom.closest(".atelier-root") as HTMLElement | null) ??
@@ -315,13 +359,15 @@ export function SelectionToolbar() {
 				className="markdown-selection-toolbar"
 				style={{
 					position: "fixed",
-					top: position.top ?? undefined,
-					bottom: position.bottom ?? undefined,
-					left: position.left,
+					top: panelPosition.top ?? undefined,
+					bottom: panelPosition.bottom ?? undefined,
+					left: panelPosition.left,
 				}}
 				aria-label="Selection formatting"
+				aria-hidden={visible ? undefined : true}
 				data-attr="markdown-selection-toolbar"
-				data-placement={position.placement}
+				data-placement={panelPosition.placement}
+				data-state={visible ? "open" : "closing"}
 				onMouseDown={suppressMouseDown}
 			>
 				<Select.Root
@@ -344,6 +390,8 @@ export function SelectionToolbar() {
 						)}
 						aria-label={`Turn into. Current block: ${activeBlock.label}`}
 						data-attr="markdown-selection-block-selector"
+						onMouseEnter={openBlockMenuFromHover}
+						onMouseLeave={closeBlockMenuFromHover}
 					>
 						<activeBlock.icon
 							className="markdown-selection-toolbar-trigger-icon"
@@ -368,6 +416,8 @@ export function SelectionToolbar() {
 							<Select.Popup
 								className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100"
 								data-attr="markdown-selection-block-menu"
+								onMouseEnter={cancelHoverClose}
+								onMouseLeave={closeBlockMenuFromHover}
 							>
 								<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
 									Turn into
