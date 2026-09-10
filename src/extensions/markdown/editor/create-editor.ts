@@ -19,6 +19,7 @@ import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
+import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { preserveMarkdownSource } from "./preserve-markdown-source";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
@@ -368,6 +369,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	editorInstance = new Editor({
 		extensions: [
 			...markdownExtensions,
+			JoinAdjacentListsExtension,
 			...additionalExtensions,
 			History.configure({
 				depth: 200,
