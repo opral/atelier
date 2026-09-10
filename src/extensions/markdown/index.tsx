@@ -42,6 +42,7 @@ import { parseExtensionManifest } from "../../extension-runtime/extension-manife
 import manifestJson from "./manifest.json";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
+import { SelectionToolbar } from "./components/selection-toolbar";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
 import type { MarkdownReviewDiff } from "./review-diff";
@@ -64,7 +65,6 @@ import {
 	useWorkingFileData,
 	workingReviewFile,
 } from "@/shell/external-write-review-history";
-import { AnimatedZap } from "@/components/animated-zap";
 import type { MarkdownWorkspaceFileOpener } from "@/extensions/markdown/editor/markdown-asset";
 
 type MarkdownViewProps = {
@@ -498,6 +498,7 @@ function MarkdownLiveViewLoaded({
 					</div>
 					{editorReadOnly ? null : (
 						<>
+							<SelectionToolbar />
 							<SlashCommandMenu />
 							<EmojiPickerMenu />
 							<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
@@ -1037,13 +1038,19 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 	}
 }
 
+/**
+ * While a document's rows are on their way the view shows the same white
+ * surface the editor paints, with the toolbar's strip of chrome above it,
+ * so opening a file never flashes a spinner between two pages.
+ */
 function MarkdownLoadingSpinner(): ReactNode {
 	return (
-		<div className="flex h-full items-center justify-center px-3 py-2 text-muted-foreground">
-			<div className="flex items-center gap-2 text-sm">
-				<AnimatedZap size={13} tone="muted" className="shrink-0" />
-				<span>Loading editor…</span>
-			</div>
+		<div className="markdown-view flex h-full flex-col bg-background">
+			<div
+				aria-hidden="true"
+				className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
+			/>
+			<div className="min-h-0 flex-1" />
 		</div>
 	);
 }

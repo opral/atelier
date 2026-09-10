@@ -44,9 +44,24 @@ export const outdentSelectedListItems: Command = (state, dispatch) => {
 							item.number,
 						]),
 					);
+					// Siblings that became children of the lifted item start a new
+					// list: they count from 1, not from their old positions.
+					const liftedRanges: [number, number][] = [];
+					for (const $pos of [state.selection.$from, state.selection.$to]) {
+						for (let depth = $pos.depth; depth > 0; depth -= 1) {
+							if ($pos.node(depth).type.name !== "listItem") continue;
+							const from = tr.mapping.map($pos.before(depth));
+							const lifted = tr.doc.nodeAt(from);
+							if (lifted) liftedRanges.push([from, from + lifted.nodeSize]);
+							break;
+						}
+					}
 					tr.doc.descendants((node, pos) => {
 						if (node.type.name !== "orderedList") return;
-						const start = numbers.get(pos + 3);
+						const insideLifted = liftedRanges.some(
+							([from, to]) => pos > from && pos < to,
+						);
+						const start = insideLifted ? 1 : numbers.get(pos + 3);
 						if (start !== undefined && start !== node.attrs.start) {
 							tr.setNodeMarkup(pos, undefined, { ...node.attrs, start });
 						}

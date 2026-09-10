@@ -16,6 +16,8 @@ export const slashCommandsPluginKey = new PluginKey<SlashCommandState>(
 );
 
 export type SlashCommandState = {
+	/** Document position of a slash the user dismissed with Escape. */
+	readonly dismissedAt?: number | null;
 	active: boolean;
 	query: string;
 	range: { from: number; to: number } | null;
@@ -51,10 +53,16 @@ export const SlashCommandsExtension = Extension.create<SlashCommandsOptions>({
 						return { active: false, query: "", range: null };
 					},
 					apply(tr, prev, _oldState, newState): SlashCommandState {
-						// Check for explicit close via metadata
+						// Check for explicit close via metadata. The dismissed slash is
+						// remembered so typing on after Escape does not reopen the menu.
 						const meta = tr.getMeta(slashCommandsPluginKey);
 						if (meta?.close) {
-							return { active: false, query: "", range: null };
+							return {
+								active: false,
+								query: "",
+								range: null,
+								dismissedAt: prev.range?.from ?? null,
+							};
 						}
 
 						// If not active and no text input, keep inactive
@@ -134,6 +142,10 @@ export const SlashCommandsExtension = Extension.create<SlashCommandsOptions>({
 						const blockStart = $from.start();
 						const from = blockStart + slashIndex;
 						const to = blockStart + textBefore.length;
+
+						if (prev.dismissedAt === from) {
+							return { ...prev, active: false, query: "", range: null };
+						}
 
 						return {
 							active: true,

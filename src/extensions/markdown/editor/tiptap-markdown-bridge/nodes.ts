@@ -368,10 +368,17 @@ export function markdownWcNodes(
 			content: "block+",
 			defining: true,
 			addAttributes() {
-				return { data: { default: null } };
+				return { data: { default: null }, alert: { default: null } };
 			},
 			renderHTML({ node }) {
-				return ["blockquote", diffAttrs(node, "element"), 0];
+				return [
+					"blockquote",
+					{
+						...diffAttrs(node, "element"),
+						...(node.attrs.alert ? { "data-alert": node.attrs.alert } : {}),
+					},
+					0,
+				];
 			},
 		}),
 		// code block

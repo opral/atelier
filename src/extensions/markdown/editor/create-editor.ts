@@ -328,10 +328,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		return persistPromise;
 	};
 	const placeholderConfig: any = {
+		// The hint names the block the caret is in: the slash prompt for
+		// plain text, or the heading level.
 		placeholder: ({ node }: { node: any }) => {
 			if (node.childCount !== 0) return "";
-			if (node.type.name === "heading" && node.attrs?.level === 1) {
-				return "Heading 1";
+			if (node.type.name === "heading") {
+				return `Heading ${node.attrs?.level ?? 1}`;
 			}
 			return node.type.name === "paragraph" ? "Press ‘/’ for commands" : "";
 		},
@@ -340,8 +342,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		includeChildren: false,
 		shouldShow: ({ editor, node }: { editor: Editor; node: any }) =>
 			editor.isFocused &&
-			(node.type.name === "paragraph" ||
-				(node.type.name === "heading" && node.attrs?.level === 1)) &&
+			(node.type.name === "paragraph" || node.type.name === "heading") &&
 			node.childCount === 0,
 	};
 
@@ -430,6 +431,10 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			// owned by persistence may finish its payload captured in onUpdate.
 		},
 		editorProps: {
+			// Keep a couple of lines of context around the caret while typing
+			// near the top or bottom edge, instead of pinning it to the edge.
+			scrollThreshold: { top: 72, bottom: 96, left: 0, right: 0 },
+			scrollMargin: { top: 88, bottom: 128, left: 0, right: 0 },
 			clipboardTextSerializer: (slice: any) => markdownClipboardText(slice),
 			handlePaste: (_view: any, event: ClipboardEvent) => {
 				if (!currentEditor) return false;

@@ -811,11 +811,12 @@ function TipTapEditorLoadingState({
 }: {
 	readonly className?: string;
 }) {
+	// The document surface and nothing else: a file that takes a moment to
+	// arrive should look like the page it is about to become, not like a
+	// spinner or a skeleton flashing in between.
 	return (
 		<div className={className ?? undefined}>
-			<div className="w-full bg-background px-3 py-12">
-				<div className="mx-auto h-48 w-full max-w-5xl animate-pulse rounded-md bg-muted" />
-			</div>
+			<div className="h-full w-full bg-background" />
 		</div>
 	);
 }

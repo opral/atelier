@@ -324,17 +324,7 @@ function WorkingChangesRow({
 							{`now · ${workingCountLabel}`}
 						</span>
 					</span>
-					{file && fileChange ? (
-						<ChangeKindDot
-							changeKind={fileChange.diff_type}
-							moved={
-								fileChange.from_path !== null &&
-								fileChange.to_path !== null &&
-								fileChange.from_path !== fileChange.to_path
-							}
-							className="mr-1.5 self-center"
-						/>
-					) : wide ? (
+					{file ? null : wide ? (
 						<WorkingFilePreview
 							atelier={atelier}
 							descriptionId={filesDescriptionId}
@@ -635,12 +625,7 @@ function CheckpointItem({
 							: null}
 					</span>
 				</span>
-				{fileChange ? (
-					<ChangeKindDot
-						changeKind={fileChange.changeKind}
-						className="mr-1.5 self-center"
-					/>
-				) : wide ? (
+				{fileChange ? null : wide ? (
 					<CheckpointFilePreview
 						descriptionId={filesDescriptionId}
 						atelier={atelier}

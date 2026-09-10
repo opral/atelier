@@ -398,11 +398,11 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
 	});
 
-	test("Tab on a non-empty paragraph remains available for focus traversal", () => {
+	test("Tab on a non-empty paragraph is swallowed so focus stays in the document", () => {
 		const editor = createEditor();
 		typeText(editor, "text");
 
-		expect(sendKey(editor, "Tab")).toBe(false);
+		expect(sendKey(editor, "Tab")).toBe(true);
 		expect(editor.state.doc.textContent).toBe("text");
 	});
 
@@ -826,7 +826,7 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(buildMarkdownFromEditor(editor)).toBe("- parent\n- child updated\n");
 	});
 
-	test("Shift-Tab outdents a middle ordered child without reordering later siblings", () => {
+	test("Shift-Tab outdents a middle ordered child; the siblings it adopts count from 1", () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
@@ -864,7 +864,7 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(sendKey(editor, "Tab", { shift: true })).toBe(true);
 
 		expect(buildMarkdownFromEditor(editor)).toBe(
-			"- parent\n  3. before\n- current\n  5. after\n",
+			"- parent\n  3. before\n- current\n  1. after\n",
 		);
 	});
 
@@ -1075,7 +1075,7 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(item.textContent).toBe("firstcontinuation");
 	});
 
-	test("Delete at the end of a parent line preserves its child list", () => {
+	test("Delete at the end of a parent line joins its first child's text", () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
@@ -1109,12 +1109,10 @@ describe("Keyboard shortcuts (keymap)", () => {
 				},
 			],
 		});
-		const before = editor.state.doc.toJSON();
 		setCursorAfterText(editor, "parent");
 
 		expect(sendKey(editor, "Delete")).toBe(true);
-		expect(editor.state.doc.toJSON()).toEqual(before);
-		expect(buildMarkdownFromEditor(editor)).toBe("- parent\n  - child\n");
+		expect(buildMarkdownFromEditor(editor)).toBe("- parentchild\n");
 	});
 
 	test("Enter midway through an item transfers its child list to the new item", () => {

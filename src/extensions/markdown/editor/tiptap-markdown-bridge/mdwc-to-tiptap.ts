@@ -158,9 +158,10 @@ function astBlockToPM(
 		case "blockquote": {
 			const n = node as any;
 			const content = (n.children || []).map(astBlockToPM);
+			const alert = alertKind(content);
 			return {
 				type: "blockquote",
-				attrs: { data: buildNodeData(n.data) },
+				attrs: { data: buildNodeData(n.data), ...(alert ? { alert } : {}) },
 				// A bare > marker still needs an editable text block.
 				content: content.length > 0 ? content : [{ type: "paragraph" }],
 			};
@@ -472,4 +473,18 @@ function softLineBreakText(value: string, active: PMMark[]): PMNode[] {
 function addMark(active: PMMark[], mark: PMMark): PMMark[] {
 	if (active.find((m) => m.type === mark.type)) return active;
 	return [...active, mark];
+}
+
+/**
+ * A GitHub alert is a blockquote whose first line is a `[!NOTE]`-style
+ * marker. The marker stays in the text (it is the source), and the kind
+ * rides along as an attribute so the view can draw the callout.
+ */
+function alertKind(content: readonly any[]): string | null {
+	const first = content[0];
+	if (first?.type !== "paragraph") return null;
+	const text = first.content?.[0];
+	if (text?.type !== "text" || typeof text.text !== "string") return null;
+	const match = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i.exec(text.text);
+	return match ? match[1]!.toLowerCase() : null;
 }

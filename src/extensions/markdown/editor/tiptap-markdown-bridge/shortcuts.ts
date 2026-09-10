@@ -10,7 +10,8 @@ import {
 	exitCode,
 	newlineInCode,
 } from "@tiptap/pm/commands";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { closeHistory } from "@tiptap/pm/history";
+import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
@@ -71,6 +72,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				});
 			rules.push(bullet("-"));
 			rules.push(bullet("*"));
+			rules.push(bullet("+"));
 		}
 
 		// Ordered list: 1. + space (captures custom start)
@@ -107,6 +109,9 @@ export const MarkdownWcShortcuts = Extension.create({
 						const { $from } = state.selection as any;
 						const paragraph = $from.parent;
 						if (paragraph?.type?.name !== "paragraph") return null;
+						// Only a line that is nothing but the dashes becomes a rule;
+						// text after the caret must never be swept away with it.
+						if ($from.parentOffset !== paragraph.content.size) return null;
 						const horizontalRule = (state.schema.nodes as any).horizontalRule;
 						const trailingParagraph = (state.schema.nodes as any).paragraph;
 						return commands.command(({ state, tr, dispatch }: any) => {
@@ -249,8 +254,13 @@ export const MarkdownWcShortcuts = Extension.create({
 
 		if ((schema.marks as any).bold) {
 			rules.push(
+				// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
 				markInputRule({
-					find: /(?:^|\s)(?:\*\*([^*]+)\*\*)$/,
+					find: /(?:^|\s)(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
+					type: (schema.marks as any).bold,
+				}),
+				markInputRule({
+					find: /(?:^|\s)(?:__(\S(?:[^_]*\S)?)__)$/,
 					type: (schema.marks as any).bold,
 				}),
 			);
@@ -259,11 +269,11 @@ export const MarkdownWcShortcuts = Extension.create({
 		if ((schema.marks as any).italic) {
 			rules.push(
 				markInputRule({
-					find: /(?:^|\s)(?:\*([^*]+)\*)$/,
+					find: /(?:^|\s)(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
 					type: (schema.marks as any).italic,
 				}),
 				markInputRule({
-					find: /(?:^|\s)(?:_([^_]+)_)$/,
+					find: /(?:^|\s)(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
 					type: (schema.marks as any).italic,
 				}),
 			);
@@ -272,7 +282,7 @@ export const MarkdownWcShortcuts = Extension.create({
 		if ((schema.marks as any).strike) {
 			rules.push(
 				markInputRule({
-					find: /(?:^|\s)(?:~~([^~]+)~~)$/,
+					find: /(?:^|\s)(?:~~(\S(?:[^~]*\S)?)~~)$/,
 					type: (schema.marks as any).strike,
 				}),
 			);
@@ -287,7 +297,40 @@ export const MarkdownWcShortcuts = Extension.create({
 			);
 		}
 
-		return rules;
+		// A URL followed by a space becomes a link, as in Notion; the space
+		// itself stays outside the link.
+		if ((schema.marks as any).link) {
+			rules.push(
+				new InputRule({
+					find: /(?:^|\s)((?:https?:\/\/|www\.)[^\s<]+)\s$/,
+					handler: ({ state, range, match }) => {
+						const url = String(match[1] ?? "");
+						const href = normalizeUrl(url);
+						if (!href) return null;
+						const linkType = (state.schema.marks as any).link;
+						const tr = state.tr;
+						const urlEnd = range.to;
+						const urlStart = urlEnd - url.length;
+						tr.addMark(urlStart, urlEnd, linkType.create({ href }));
+						tr.insertText(" ", urlEnd);
+						tr.removeStoredMark(linkType);
+					},
+				}),
+			);
+		}
+
+		// Every conversion is its own undo step: Mod-Z after "# " gives the
+		// typed "#" back instead of erasing it with the heading.
+		return rules.map(
+			(rule) =>
+				new InputRule({
+					find: rule.find,
+					handler: (props) => {
+						closeHistory(props.state.tr);
+						return rule.handler(props);
+					},
+				}),
+		);
 	},
 
 	addKeyboardShortcuts() {
@@ -617,6 +660,200 @@ export const MarkdownWcShortcuts = Extension.create({
 				this.editor.view.dispatch(tr),
 			);
 
+		/** Position just inside the end of the last textblock within [from, to). */
+		const lastTextblockEndIn = (from: number, to: number) => {
+			let end = -1;
+			this.editor.state.doc.nodesBetween(from, to, (node, pos) => {
+				if (node.isTextblock) end = pos + 1 + node.content.size;
+			});
+			return end;
+		};
+		/** Position just inside the start of the first textblock at or after pos. */
+		const firstTextblockStartFrom = (pos: number) => {
+			let start = -1;
+			const { doc } = this.editor.state;
+			doc.nodesBetween(pos, doc.content.size, (node, nodePos) => {
+				if (start >= 0) return false;
+				if (node.isTextblock && nodePos + 1 > pos) {
+					start = nodePos + 1;
+					return false;
+				}
+				return true;
+			});
+			return start;
+		};
+		const isAtomBlock = (node: any) =>
+			node && node.isBlock && !node.isTextblock && (node.isAtom || node.isLeaf);
+		/**
+		 * A selection that starts in an item's text and ends at the start of
+		 * its nested child would take the child with it. Trim it to the text,
+		 * so deleting a line leaves the children where they are.
+		 */
+		const deleteSelectionWithinTextblock = () => {
+			const { state } = this.editor;
+			const { selection } = state;
+			if (selection.empty) return false;
+			const { $from, $to } = selection;
+			if (
+				!$from.parent.isTextblock ||
+				$to.parentOffset !== 0 ||
+				$to.depth <= $from.depth ||
+				$from.sameParent($to)
+			) {
+				return false;
+			}
+			const end = $from.end();
+			this.editor.view.dispatch(
+				state.tr.delete($from.pos, end).scrollIntoView(),
+			);
+			return true;
+		};
+		/**
+		 * Backspace at the start of a top-level block looks at what is above:
+		 * text folds onto the block above it; a table, a rule, or an image is
+		 * selected first so one keystroke never deletes it; a code block is
+		 * never joined with prose.
+		 */
+		const backspaceAcrossBlockAbove = ($from: any) => {
+			const { state, view } = this.editor;
+			if ($from.depth !== 1 || $from.parentOffset !== 0) return false;
+			const index = $from.index(0);
+			if (index === 0) return false;
+			const previous = state.doc.child(index - 1);
+			const blockStart = $from.before(1);
+			if (previous.type.name === "table" || isAtomBlock(previous)) {
+				view.dispatch(
+					state.tr.setSelection(
+						NodeSelection.create(state.doc, blockStart - previous.nodeSize),
+					),
+				);
+				return true;
+			}
+			if (previous.type.name === "codeBlock") {
+				view.dispatch(
+					state.tr.setSelection(
+						TextSelection.create(state.doc, blockStart - 1),
+					),
+				);
+				return true;
+			}
+			if (
+				previous.type.name !== "bulletList" &&
+				previous.type.name !== "orderedList" &&
+				previous.type.name !== "blockquote"
+			) {
+				return false;
+			}
+			if ($from.parent.content.size === 0) {
+				// An empty paragraph after the block simply goes; the caret
+				// lands at the end of the block above.
+				const tr = state.tr.delete(blockStart, $from.after(1));
+				tr.setSelection(Selection.near(tr.doc.resolve(blockStart), -1));
+				view.dispatch(tr.scrollIntoView());
+				return true;
+			}
+			const joinAt = lastTextblockEndIn(
+				blockStart - previous.nodeSize,
+				blockStart,
+			);
+			if (joinAt < 0) return false;
+			view.dispatch(state.tr.delete(joinAt, $from.pos).scrollIntoView());
+			return true;
+		};
+		/**
+		 * Delete at the end of a textblock joins the next textblock's text onto
+		 * this line, whatever structure lies between (the end of a list, a
+		 * nested item, a quote). Atoms and code blocks are selected or left
+		 * alone instead.
+		 */
+		const deleteAcrossBlockBelow = ($from: any) => {
+			const { state, view } = this.editor;
+			if (!$from.parent.isTextblock) return false;
+			if ($from.parentOffset !== $from.parent.content.size) return false;
+			const afterBlock = $from.after($from.depth);
+			const nextNode = state.doc.nodeAt(afterBlock);
+			// The very next sibling decides for atoms and tables.
+			if (
+				nextNode &&
+				(nextNode.type.name === "table" || isAtomBlock(nextNode))
+			) {
+				view.dispatch(
+					state.tr.setSelection(NodeSelection.create(state.doc, afterBlock)),
+				);
+				return true;
+			}
+			const nextStart = firstTextblockStartFrom($from.pos);
+			if (nextStart < 0) return false;
+			const $next = state.doc.resolve(nextStart);
+			for (let depth = $next.depth; depth > 0; depth -= 1) {
+				if ($next.node(depth).type.name === "codeBlock") return true;
+			}
+			if ($next.parent.content.size === 0 && $next.depth === 1) {
+				view.dispatch(
+					state.tr.delete(nextStart - 1, nextStart + 1).scrollIntoView(),
+				);
+				return true;
+			}
+			view.dispatch(state.tr.delete($from.pos, nextStart).scrollIntoView());
+			return true;
+		};
+		const isEmptyItem = (node: any) =>
+			node?.type?.name === "listItem" &&
+			node.childCount === 1 &&
+			node.firstChild?.type?.name === "paragraph" &&
+			node.firstChild.content.size === 0;
+		/**
+		 * Backspace at the start of a block whose previous sibling is empty
+		 * deletes that empty sibling and keeps the caret where it is: the
+		 * text folds up into the empty item's place instead of leaving the
+		 * list, and a paragraph after a list drops the list's empty tail.
+		 */
+		const removeEmptyBlockAbove = ($from: any, listItemDepth: number) => {
+			const { state, view } = this.editor;
+			if (listItemDepth > 0) {
+				if ($from.node(listItemDepth).firstChild !== $from.parent) return false;
+				const listDepth = listItemDepth - 1;
+				const index = $from.index(listDepth);
+				if (index === 0) return false;
+				const previous = $from.node(listDepth).child(index - 1);
+				if (!isEmptyItem(previous)) return false;
+				const itemStart = $from.before(listItemDepth);
+				view.dispatch(
+					state.tr
+						.delete(itemStart - previous.nodeSize, itemStart)
+						.scrollIntoView(),
+				);
+				return true;
+			}
+			if ($from.depth !== 1) return false;
+			const index = $from.index(0);
+			if (index === 0) return false;
+			const previous = state.doc.child(index - 1);
+			const blockStart = $from.before(1);
+			if (previous.type.name === "paragraph" && previous.content.size === 0) {
+				view.dispatch(
+					state.tr
+						.delete(blockStart - previous.nodeSize, blockStart)
+						.scrollIntoView(),
+				);
+				return true;
+			}
+			if (
+				(previous.type.name === "bulletList" ||
+					previous.type.name === "orderedList") &&
+				isEmptyItem(previous.lastChild)
+			) {
+				const tail = previous.lastChild!;
+				const removeWholeList = previous.childCount === 1;
+				const to = removeWholeList ? blockStart : blockStart - 1;
+				const from = removeWholeList
+					? blockStart - previous.nodeSize
+					: blockStart - 1 - tail.nodeSize;
+				view.dispatch(state.tr.delete(from, to).scrollIntoView());
+				return true;
+			}
+			return false;
+		};
 		return {
 			// Bold / Italic / Strike
 			"Mod-b": () => this.editor.chain().focus().toggleMark("bold").run(),
@@ -645,20 +882,23 @@ export const MarkdownWcShortcuts = Extension.create({
 			Tab: () => {
 				const { state } = this.editor;
 				const $from: any = state.selection.$from;
+				// A code block indents, as in Notion (tab-size 2 in the view).
+				if ($from.parent?.type?.name === "codeBlock") {
+					return this.editor.chain().focus().insertContent("\t").run();
+				}
 				for (let d = $from.depth; d > 0; d--) {
-					if ($from.node(d)?.type?.name === "listItem") {
+					const name = $from.node(d)?.type?.name;
+					if (name === "listItem") {
 						this.editor.chain().focus().sinkListItem("listItem").run();
 						return true;
 					}
+					// Cells hand Tab to the table's own navigation.
+					if (name === "tableCell" || name === "tableHeader") return false;
 				}
-				if (
-					state.selection.empty &&
-					$from.parent?.type?.name === "paragraph" &&
-					$from.parent.content.size === 0
-				) {
-					return true;
-				}
-				return false;
+				// Anywhere else there is nothing to indent; swallowing the key
+				// keeps focus in the document instead of jumping to the next
+				// control on the page.
+				return true;
 			},
 
 			"Shift-Tab": () => {
@@ -676,10 +916,20 @@ export const MarkdownWcShortcuts = Extension.create({
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
 				if (escapeEmptyBlockquote()) return true;
+				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
 				const { selection } = state;
 				if (!selection.empty) return false;
 				const $from: any = selection.$from;
+				// A heading turns back into text first, like Notion; the merge
+				// into the block above is the next keystroke.
+				if (
+					$from.parent?.type?.name === "heading" &&
+					$from.parentOffset === 0 &&
+					$from.parent.content.size > 0
+				) {
+					return this.editor.commands.setNode("paragraph");
+				}
 				// Backspace at the top of the body selects the frontmatter first;
 				// deleting a whole YAML block on one keystroke is too easy to do
 				// by accident.
@@ -696,10 +946,13 @@ export const MarkdownWcShortcuts = Extension.create({
 				}
 				if (
 					$from.parent?.type?.name === "codeBlock" &&
-					$from.parentOffset === 0 &&
-					$from.parent.content.size === 0
+					$from.parentOffset === 0
 				) {
-					return this.editor.commands.setNode("paragraph");
+					// Empty: back to text. With content: nothing to join with.
+					if ($from.parent.content.size === 0) {
+						return this.editor.commands.setNode("paragraph");
+					}
+					return true;
 				}
 				const para: any = $from.parent;
 				const isEmptyPara =
@@ -715,7 +968,21 @@ export const MarkdownWcShortcuts = Extension.create({
 						break;
 					}
 				}
-				if (listItemDepth < 0) return false;
+				// An empty block right above is what Backspace at a block start
+				// removes, whether the empty block is a paragraph or a list item
+				// (then a following paragraph, or the next item, takes its place).
+				if (removeEmptyBlockAbove($from, listItemDepth)) return true;
+				// The first line of a quote leaves the quote rather than merging
+				// with the quote above it.
+				if (
+					listItemDepth < 0 &&
+					$from.depth >= 2 &&
+					$from.node($from.depth - 1).type.name === "blockquote" &&
+					$from.index($from.depth - 1) === 0
+				) {
+					return this.editor.commands.lift("blockquote");
+				}
+				if (listItemDepth < 0) return backspaceAcrossBlockAbove($from);
 				if ($from.node(listItemDepth).firstChild !== para) return false;
 				// Backspace at the start of an item's text lifts the item out of
 				// the list (a nested item outdents one level), the way Notion turns
@@ -727,29 +994,29 @@ export const MarkdownWcShortcuts = Extension.create({
 				const listNode = listDepth > 0 ? $from.node(listDepth) : null;
 				const listItem = $from.node(listItemDepth);
 				const listItemIndex = $from.index(listDepth);
+				// The caret lands at the end of whatever comes before the removed
+				// item, never at the start of the item after it.
+				const deleteAndSettleBefore = (from: number, to: number) => {
+					const tr = state.tr.delete(from, to);
+					tr.setSelection(Selection.near(tr.doc.resolve(from), -1));
+					this.editor.view.dispatch(tr.scrollIntoView());
+					return true;
+				};
 				if (listNode?.childCount > 1 && listItem.childCount === 1) {
-					return this.editor
-						.chain()
-						.focus()
-						.deleteRange({
-							from: $from.before(listItemDepth),
-							to: $from.after(listItemDepth),
-						})
-						.run();
+					return deleteAndSettleBefore(
+						$from.before(listItemDepth),
+						$from.after(listItemDepth),
+					);
 				}
 				if (
 					listDepth > 1 &&
 					listNode?.childCount === 1 &&
 					listItem.childCount === 1
 				) {
-					return this.editor
-						.chain()
-						.focus()
-						.deleteRange({
-							from: $from.before(listDepth),
-							to: $from.after(listDepth),
-						})
-						.run();
+					return deleteAndSettleBefore(
+						$from.before(listDepth),
+						$from.after(listDepth),
+					);
 				}
 				if (
 					listDepth === 1 &&
@@ -798,41 +1065,19 @@ export const MarkdownWcShortcuts = Extension.create({
 			},
 
 			Delete: () => {
+				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
 				const { selection } = state;
 				if (!selection.empty) return false;
 				const { $from } = selection as any;
 				if (
-					$from.parent?.type?.name !== "paragraph" ||
+					!$from.parent?.isTextblock ||
 					$from.parentOffset !== $from.parent.content.size
 				) {
 					return false;
 				}
-
-				for (let depth = $from.depth - 1; depth > 0; depth--) {
-					const node = $from.node(depth);
-					if (node?.type?.name !== "listItem") continue;
-					const nextChild = node.maybeChild($from.index(depth) + 1);
-					if (
-						nextChild?.type?.name === "bulletList" ||
-						nextChild?.type?.name === "orderedList"
-					) {
-						return true;
-					}
-					// Delete at the end of an item's last paragraph joins the next
-					// item's text onto this line, instead of pulling the whole next
-					// item in as a continuation paragraph.
-					if (nextChild) return false;
-					const list = $from.node(depth - 1);
-					const nextItem = list?.maybeChild($from.index(depth - 1) + 1);
-					if (nextItem?.firstChild?.type?.name !== "paragraph") return false;
-					const nextParagraphStart = $from.after(depth) + 2;
-					this.editor.view.dispatch(
-						state.tr.delete($from.pos, nextParagraphStart).scrollIntoView(),
-					);
-					return true;
-				}
-				return false;
+				if ($from.parent.type.name === "codeBlock") return false;
+				return deleteAcrossBlockBelow($from);
 			},
 
 			// Toggle the task under the caret, the Notion shortcut.
@@ -858,13 +1103,41 @@ export const MarkdownWcShortcuts = Extension.create({
 			// Enter in list: create a new list item; for tasks, make it unchecked
 			Enter: () => {
 				flushDomSelection();
+				// A new block is its own undo step: Mod-Z after typing into it
+				// takes back the typing, not the split as well.
+				this.editor.view.dispatch(closeHistory(this.editor.state.tr));
 				if (
 					this.editor.state.selection instanceof NodeSelection &&
 					this.editor.state.selection.node.isBlock
 				) {
-					return createParagraphNear(this.editor.state, (tr) =>
-						this.editor.view.dispatch(tr),
+					// Always below the selected block, frontmatter included.
+					const { state, view } = this.editor;
+					const at = state.selection.to;
+					const tr = state.tr.insert(
+						at,
+						state.schema.nodes.paragraph!.create(),
 					);
+					tr.setSelection(TextSelection.create(tr.doc, at + 1));
+					view.dispatch(tr.scrollIntoView());
+					return true;
+				}
+				{
+					// Inside a list item a line break right at the caret would end
+					// up stranded at the item's edge after the split (a "<br>" or a
+					// lone "\" in the file), so the split consumes it. The item's
+					// line must keep some content, or the split would read as Enter
+					// on an empty item.
+					const { state, view } = this.editor;
+					const $at: any = state.selection.$from;
+					const inItem =
+						$at.depth >= 2 && $at.node($at.depth - 1).type.name === "listItem";
+					if (state.selection.empty && inItem && $at.parent.content.size > 1) {
+						if ($at.nodeBefore?.type?.name === "hardBreak") {
+							view.dispatch(state.tr.delete($at.pos - 1, $at.pos));
+						} else if ($at.nodeAfter?.type?.name === "hardBreak") {
+							view.dispatch(state.tr.delete($at.pos, $at.pos + 1));
+						}
+					}
 				}
 				if (convertDivider()) return true;
 				if (convertCodeFence()) return true;
@@ -889,10 +1162,16 @@ export const MarkdownWcShortcuts = Extension.create({
 					// Enter replaces a range selection before splitting the remaining block.
 					// Running both commands in one chain keeps the split position mapped to
 					// the document produced by the deletion.
-					if (state.selection.empty) {
-						return this.editor.commands.splitBlock();
-					}
-					return this.editor.chain().deleteSelection().splitBlock().run();
+					// The second half of a split heading is text, and inline code
+					// does not carry into the new block.
+					const splitsHeading =
+						$from.parent.type.name === "heading" &&
+						$from.parentOffset < $from.parent.content.size;
+					const chain = state.selection.empty
+						? this.editor.chain().splitBlock()
+						: this.editor.chain().deleteSelection().splitBlock();
+					if (splitsHeading) chain.setNode("paragraph");
+					return chain.unsetMark("code").run();
 				}
 				// If current paragraph is empty, exit the list (lift)
 				const para: any = $from.parent;
