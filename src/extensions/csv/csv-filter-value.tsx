@@ -1,6 +1,7 @@
 import { Square, SquareCheck } from "lucide-react";
 import type { CsvColumnInfo } from "./csv-metadata";
 import { CsvPill } from "./csv-properties";
+import { selectOptions } from "./csv-select-options";
 import { CsvToolbarSelect } from "./csv-toolbar-select";
 
 export function CsvFilterValue({
@@ -17,13 +18,8 @@ export function CsvFilterValue({
 	onChange: (value: string | readonly string[]) => void;
 }) {
 	if (info?.type === "select") {
-		// Keep external CSV values available even if their option metadata is absent.
-		const options = new Map(
-			(info.options ?? []).map((option) => [option.value, option]),
-		);
-		for (const item of values)
-			if (item && !options.has(item))
-				options.set(item, { value: item, color: "gray" });
+		// Declared options plus every value the column holds, coloured alike.
+		const options = selectOptions(info, values);
 		return (
 			<CsvToolbarSelect
 				label={label}
@@ -31,7 +27,7 @@ export function CsvFilterValue({
 				value={typeof value === "string" ? (value ? [value] : []) : value}
 				placeholder="Choose options"
 				searchable
-				options={[...options.values()].map((option) => ({
+				options={options.map((option) => ({
 					value: option.value,
 					label: option.value,
 					content: <CsvPill {...option} />,

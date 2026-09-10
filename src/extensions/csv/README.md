@@ -24,7 +24,7 @@ Live and review grids use the same line-preserving parser, including trailing em
 }
 ```
 
-Supported property types are `text`, `select`, `checkbox`, `date`, `number`, `email`, and `url`. Types control presentation and editing; changing a type never coerces existing values. Select values remain ordinary CSV strings. Options can exist without any row using them. Unknown option colors render gray, and unlisted select values remain visible with a subtle underline.
+Supported property types are `text`, `select`, `checkbox`, `date`, `number`, `email`, and `url`. Types control presentation and editing; changing a type never coerces existing values. Select values remain ordinary CSV strings, and the CSV is the source of truth for which values exist: a select's picker, bulk editor, and filter offer the declared options first, in their declared order, then every other value the column holds (a stage an agent wrote, an imported value), coloured by a stable hash of the value. Choosing such a value writes only the cell; declaring it through Edit property or the picker's Create row adds colour and order in metadata. Options can exist without any row using them. Unknown option colors render gray.
 
 Text columns offer **Wrap content / Unwrap content** in the column menu. Wrapping respects explicit line breaks and expands each row to fit its longest wrapped cell; resizing, filtering, sorting, and editing recompute row heights. Search highlighting follows text across wrapped lines. Default-view wrapping is optional `columns[].wrap` metadata; a named view snapshots its own wrapping in `widths[].wrap` and uses **Save changes** for updates. CSV bytes remain untouched by wrap changes.
 

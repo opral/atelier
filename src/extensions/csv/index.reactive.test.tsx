@@ -1876,13 +1876,12 @@ test("long text columns wrap by default, before any metadata exists", async () =
 		expect(latestDataEditorProps.current?.getCellContent([0, 0])).toMatchObject(
 			{ themeOverride: { baseFontStyle: "600 13px" } },
 		);
-		expect(
-			(
-				latestDataEditorProps.current?.getCellContent([1, 0]) as {
-					themeOverride?: unknown;
-				}
-			).themeOverride,
-		).toBeUndefined();
+		const secondCell = latestDataEditorProps.current!.getCellContent([
+			1, 0,
+		]) as {
+			themeOverride?: unknown;
+		};
+		expect(secondCell.themeOverride).toBeUndefined();
 		// Inference never writes: the file keeps its bytes and no metadata.
 		expect(
 			new TextDecoder().decode((await fixture.read()).content as Uint8Array),

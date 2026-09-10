@@ -1044,6 +1044,21 @@ function CsvTable({
 		[sourceParsed.columns, sourceParsed.rows, columnInfo],
 	);
 	const [hoverRow, setHoverRow] = useState<number | null>(null);
+	// What each select column holds, so its picker offers values that no
+	// metadata declares (an agent's new stage, an import) beside the rest.
+	const optionValuesByColumn = useMemo(() => {
+		const byColumn = new Map<number, string[]>();
+		displayInfo.forEach((info, column) => {
+			if (info?.type !== "select") return;
+			const distinct = new Set<string>();
+			for (const row of sourceParsed.rows) {
+				const value = row.cells[column];
+				if (value) distinct.add(value);
+			}
+			byColumn.set(column, [...distinct]);
+		});
+		return byColumn;
+	}, [displayInfo, sourceParsed.rows]);
 	const imageWindowLoader = useMemo(() => new ImageWindowLoaderImpl(), []);
 	const editable = editing !== undefined;
 	const [search, setSearch] = useState(retained?.search ?? "");
@@ -1392,6 +1407,7 @@ function CsvTable({
 				csvWrappedLines: wrappedLayout?.[rowIndex]?.lines[columnIndex],
 				csvInfo: info,
 				csvInferred: info?.inferred === true,
+				csvOptionValues: optionValuesByColumn.get(columnIndex),
 				copyData: value,
 				// The first column is the record's title: semibold in primary
 				// ink, so a row has somewhere for the eye to land.
@@ -1409,6 +1425,7 @@ function CsvTable({
 			editable,
 			parsed.rows,
 			displayInfo,
+			optionValuesByColumn,
 			wrappedColumns,
 			wrappedLayout,
 			gridTheme.baseFontStyle,
@@ -1867,6 +1884,7 @@ function CsvTable({
 						count={selectedRows.length}
 						columns={parsed.columns}
 						columnInfo={columnInfo}
+						optionValues={(column) => optionValuesByColumn.get(column) ?? []}
 						onClear={() => {
 							clearSelection();
 							gridRef.current?.focus();

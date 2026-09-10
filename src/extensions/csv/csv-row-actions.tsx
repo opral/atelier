@@ -8,12 +8,14 @@ import {
 	X,
 } from "lucide-react";
 import { CSV_TYPES, CsvPill } from "./csv-properties";
+import { selectOptions } from "./csv-select-options";
 import type { CsvColumnInfo } from "./csv-metadata";
 
 export function CsvRowActions({
 	count,
 	columns,
 	columnInfo,
+	optionValues,
 	onEdit,
 	onDelete,
 	onClear,
@@ -21,6 +23,8 @@ export function CsvRowActions({
 	count: number;
 	columns: readonly string[];
 	columnInfo: readonly (CsvColumnInfo | undefined)[];
+	/** Every value a column holds, so selects offer undeclared ones too. */
+	optionValues?: (column: number) => readonly string[];
 	onEdit?: (column: number, value: string) => void;
 	onDelete?: () => void;
 	onClear: () => void;
@@ -29,6 +33,10 @@ export function CsvRowActions({
 	const [column, setColumn] = useState<number | null>(null);
 	const [draft, setDraft] = useState("");
 	const info = column === null ? undefined : columnInfo[column];
+	const options =
+		column === null || info?.type !== "select"
+			? []
+			: selectOptions(info, optionValues?.(column) ?? []);
 	const apply = (value: string) => {
 		if (column === null) return;
 		onEdit?.(column, value);
@@ -125,8 +133,8 @@ export function CsvRowActions({
 														e.stopPropagation();
 												}}
 											/>
-											{info.options
-												?.filter((o) =>
+											{options
+												.filter((o) =>
 													o.value.toLowerCase().includes(draft.toLowerCase()),
 												)
 												.map((option) => (
@@ -141,7 +149,7 @@ export function CsvRowActions({
 														/>
 													</Menu.Item>
 												))}
-											{!info.options?.some((o) =>
+											{!options.some((o) =>
 												o.value.toLowerCase().includes(draft.toLowerCase()),
 											) && (
 												<div className="csv-bulk-label">
