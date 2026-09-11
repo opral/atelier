@@ -5,11 +5,7 @@ import {
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
-import {
-	createParagraphNear,
-	exitCode,
-	newlineInCode,
-} from "@tiptap/pm/commands";
+import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
