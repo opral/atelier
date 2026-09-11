@@ -5,13 +5,15 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy } from "lucide-react";
+import { Copy, Info } from "lucide-react";
 import type { ResultColumn } from "@lix-js/sdk";
 
 export type GridColumnSpec = {
 	readonly name: string;
 	/** Short type badge ("text", "int", "blob", …); empty hides the badge. */
 	readonly type: string;
+	/** What the column means; shown on hover and marked with a small glyph. */
+	readonly description?: string;
 };
 
 export type GridSort = {
@@ -194,6 +196,12 @@ export function DataGrid({
 										{column.type}
 									</span>
 								)}
+								{column.description ? (
+									<Info
+										aria-hidden="true"
+										className="ml-1 inline-block h-[11px] w-[11px] align-[-1.5px] text-[var(--color-icon-quaternary)]"
+									/>
+								) : null}
 								<SortChevron
 									direction={isSorted ? sort.direction : undefined}
 								/>
@@ -202,6 +210,7 @@ export function DataGrid({
 						return (
 							<th
 								key={column.name}
+								title={column.description}
 								aria-sort={
 									isSorted
 										? sort.direction === "asc"

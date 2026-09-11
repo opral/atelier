@@ -41,6 +41,7 @@ const schema: Schema = {
 	baseTables: [{ name: "lix_file", surfaces: ["current", "history"] }],
 	tables: new Map([["lix_file", columns]]),
 	functions: [history, stateAt],
+	descriptions: new Map(),
 };
 function complete(source: string, explicit = false) {
 	const marker = source.indexOf("|");
