@@ -91,6 +91,61 @@
 		outline-offset: -2px;
 	}
 
+	/* The platform scrollbars take a gutter and dress like a document
+	   window; the grid draws its own thin thumbs over its edges instead. */
+	.csv-view .dvn-scroller,
+	.csv-view .csv-review-scroll {
+		scrollbar-width: none;
+	}
+	.csv-view .dvn-scroller::-webkit-scrollbar,
+	.csv-view .csv-review-scroll::-webkit-scrollbar {
+		display: none;
+	}
+
+	.csv-overlay-scrollbars {
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+		height: 100%;
+		/* Over the grid canvas, under its menus. */
+		z-index: 2;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 240ms ease;
+	}
+	.csv-overlay-scrollbars[data-active],
+	.csv-view:hover .csv-overlay-scrollbars {
+		opacity: 1;
+	}
+	.csv-overlay-thumb {
+		position: absolute;
+		pointer-events: auto;
+		border-radius: 3px;
+		background: color-mix(in srgb, var(--color-text-primary) 32%, transparent);
+		transition: background-color 160ms ease;
+	}
+	.csv-overlay-thumb:hover,
+	.csv-overlay-thumb:active {
+		background: color-mix(in srgb, var(--color-text-primary) 52%, transparent);
+	}
+	.csv-overlay-thumb-horizontal {
+		left: 3px;
+		bottom: 3px;
+		height: 6px;
+	}
+	.csv-overlay-thumb-vertical {
+		top: 3px;
+		right: 3px;
+		width: 6px;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.csv-overlay-scrollbars,
+		.csv-overlay-thumb {
+			transition: none;
+		}
+	}
+
 	.csv-grid-menu-backdrop {
 		position: fixed;
 		inset: 0;

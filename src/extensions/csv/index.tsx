@@ -12,6 +12,7 @@ import {
 	type CsvTextLine,
 } from "./csv-text-wrap";
 import { CsvViewMenu } from "./csv-view-menu";
+import { CsvOverlayScrollbars } from "./csv-overlay-scrollbars";
 import {
 	captureCsvView,
 	restoreCsvView,
@@ -1760,9 +1761,10 @@ function CsvTable({
 	// outside press) and then reaches Glide as a header click; without this
 	// the click would reopen what it just closed and the menu could never be
 	// toggled from its header.
-	const suppressHeaderOpenRef = useRef<{ column: number; until: number } | null>(
-		null,
-	);
+	const suppressHeaderOpenRef = useRef<{
+		column: number;
+		until: number;
+	} | null>(null);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
 			if (!editing) return;
@@ -2134,6 +2136,10 @@ function CsvTable({
 				}
 				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
 			>
+				<CsvOverlayScrollbars
+					containerRef={containerRef}
+					scrollerSelector=".dvn-scroller, .csv-review-scroll"
+				/>
 				{reviewModel ? (
 					<CsvReviewGrid
 						model={reviewModel}
@@ -2365,6 +2371,9 @@ function CsvTable({
 							fixedShadowX={false}
 							fixedShadowY={false}
 							smoothScrollX={true}
+							// The platform scrollbars are hidden in CSS and the grid's
+							// own thin thumbs overlay its edges; no gutter to reserve.
+							experimental={{ scrollbarWidthOverride: 0 }}
 							theme={gridTheme}
 							// Hairlines between rows only; columns separate by
 							// alignment, as in a document table.
