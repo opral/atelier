@@ -3,13 +3,23 @@ import {
 	type MarkdownWorkspaceFileOpener,
 } from "./markdown-asset";
 
-/** Relative Markdown destinations are resolved against the containing file. */
+/**
+ * The workspace path a host URL points at, or null. The host knows its own
+ * URL grammar; Atelier only asks. Undefined when the host has no URLs.
+ */
+export type HostLinkResolver = (href: string) => string | null;
+
+/**
+ * Relative Markdown destinations are resolved against the containing file;
+ * absolute ones are the host's to recognize.
+ */
 export function documentLinkPath(
 	href: string,
 	sourceFilePath: string,
+	resolveHostHref?: HostLinkResolver,
 ): string | null {
-	if (!href.trim() || /^[#?]/.test(href) || /^[a-z][a-z\d+.-]*:/i.test(href))
-		return null;
+	if (!href.trim() || /^[#?]/.test(href)) return null;
+	if (/^[a-z][a-z\d+.-]*:/i.test(href)) return resolveHostHref?.(href) ?? null;
 	return resolveMarkdownAssetPath({ src: href, sourceFilePath });
 }
 
@@ -19,6 +29,7 @@ export function bindDocumentLinks(
 	openFile: MarkdownWorkspaceFileOpener,
 	sourceCommitId?: string,
 	exists: (path: string) => boolean | undefined = () => undefined,
+	resolveHostHref?: HostLinkResolver,
 ): () => void {
 	let active: HTMLAnchorElement | null = null;
 	let card: HTMLDivElement | null = null;
@@ -92,7 +103,12 @@ export function bindDocumentLinks(
 		}
 		hide();
 		const path =
-			link && documentLinkPath(link.getAttribute("href") ?? "", sourceFilePath);
+			link &&
+			documentLinkPath(
+				link.getAttribute("href") ?? "",
+				sourceFilePath,
+				resolveHostHref,
+			);
 		if (!link || !path) return;
 		active = link;
 		timer = setTimeout(
@@ -116,7 +132,12 @@ export function bindDocumentLinks(
 		if (event instanceof KeyboardEvent && event.key !== "Enter") return;
 		const link = anchor(event);
 		const path =
-			link && documentLinkPath(link.getAttribute("href") ?? "", sourceFilePath);
+			link &&
+			documentLinkPath(
+				link.getAttribute("href") ?? "",
+				sourceFilePath,
+				resolveHostHref,
+			);
 		if (!link || !path) return;
 		event.preventDefault();
 		event.stopImmediatePropagation();

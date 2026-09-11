@@ -22,6 +22,7 @@ import { MentionCommandsExtension } from "./extensions/mention-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
+import type { AtelierDocumentLinks } from "@/extension-api";
 import { createDocumentExistence } from "./document-existence";
 import { preserveMarkdownSource } from "./preserve-markdown-source";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
@@ -58,6 +59,8 @@ type CreateEditorArgs = {
 	shouldPersist?: () => boolean;
 	resolveImageSrc?: (src: string) => string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	/** The host's file URLs; absolute links to them behave like relative ones. */
+	documentLinks?: AtelierDocumentLinks;
 	originKey?: string;
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
 	onImagePasteStatus?: (status: MarkdownImagePasteStatus) => void;
@@ -243,6 +246,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		shouldPersist = () => true,
 		resolveImageSrc,
 		openWorkspaceFile,
+		documentLinks,
 		originKey = createMarkdownEditorOriginKey(),
 		onPersist,
 		onImagePasteStatus,
@@ -370,6 +374,17 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		: undefined;
 
 	const documentExistence = createDocumentExistence(lix);
+	// A host URL names a file by id or path; an id becomes a path once the
+	// file list is known, so the link is plain until then and a document after.
+	const resolveHostHref = documentLinks
+		? (href: string): string | null => {
+				const target = documentLinks.resolve(href);
+				if (!target) return null;
+				return "path" in target
+					? target.path
+					: (documentExistence.pathOf(target.id) ?? null);
+			}
+		: undefined;
 	editorInstance = new Editor({
 		extensions: [
 			...markdownExtensions,
@@ -378,6 +393,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				sourceFilePath: sourceFilePath ?? null,
 				exists: documentExistence.exists,
 				subscribe: documentExistence.subscribe,
+				...(resolveHostHref ? { resolveHostHref } : {}),
 			}),
 			...additionalExtensions,
 			History.configure({
@@ -553,6 +569,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					openWorkspaceFile,
 					sourceCommitId,
 					documentExistence.exists,
+					resolveHostHref,
 				)
 			: undefined;
 	editorDom.addEventListener("click", handleExternalLinkClick, {

@@ -20,6 +20,7 @@ import { useLix, useQuery } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { fileIconUrl } from "@/extensions/files/file-icons";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
+import { useDocumentLinks } from "../editor/document-links-context";
 
 const INACTIVE_MENTION_STATE: MentionCommandState = {
 	active: false,
@@ -61,10 +62,16 @@ export function buildMentionItems({
 	filePaths,
 	query,
 	sourceFilePath,
+	hrefFor,
 }: {
 	readonly filePaths: readonly string[];
 	readonly query: string;
 	readonly sourceFilePath: string;
+	/**
+	 * The host's permanent URL for a path, when it has one; it survives
+	 * renames where a relative link would not. Null falls back to relative.
+	 */
+	readonly hrefFor?: (path: string) => string | null;
 }): { readonly items: MentionItem[]; readonly total: number } {
 	const lowerQuery = query.trim().toLowerCase();
 	const candidates: Array<{ item: MentionItem; score: number }> = [];
@@ -86,10 +93,9 @@ export function buildMentionItems({
 				match = { start: nameIndex, end: nameIndex + lowerQuery.length };
 			}
 		}
-		const href = relativeMarkdownAssetSrc({
-			sourceFilePath,
-			workspacePath: path,
-		});
+		const href =
+			hrefFor?.(path) ??
+			relativeMarkdownAssetSrc({ sourceFilePath, workspacePath: path });
 		if (!href) return;
 		const parent = path.split("/").filter(Boolean).slice(0, -1).join("/");
 		candidates.push({
@@ -248,21 +254,30 @@ function MentionMenuContent({
 	readonly sourceFilePath: string;
 }) {
 	const lix = useLix();
-	const fileRows = useQuery<{ path: string }>((lixInstance) =>
+	const documentLinks = useDocumentLinks();
+	const fileRows = useQuery<{ id: string; path: string }>((lixInstance) =>
 		qb(lixInstance)
 			.selectFrom("lix_file")
-			.select(["path"])
+			.select(["id", "path"])
 			.orderBy("path", "asc"),
 	);
-	const { items, total } = useMemo(
-		() =>
-			buildMentionItems({
-				filePaths: fileRows.map((row) => row.path),
-				query,
-				sourceFilePath,
-			}),
-		[fileRows, query, sourceFilePath],
-	);
+	const permalink = documentLinks?.href;
+	const { items, total } = useMemo(() => {
+		const idByPath = new Map(fileRows.map((row) => [row.path, row.id]));
+		return buildMentionItems({
+			filePaths: fileRows.map((row) => row.path),
+			query,
+			sourceFilePath,
+			...(permalink
+				? {
+						hrefFor: (path: string) => {
+							const id = idByPath.get(path);
+							return id ? permalink({ id, path }) : null;
+						},
+					}
+				: {}),
+		});
+	}, [fileRows, permalink, query, sourceFilePath]);
 	const trimmedQuery = query.trim();
 	// The "New file" row is the last option whenever there is a name to use
 	// that no file has yet; an existing file is picked from the list instead.
@@ -293,17 +308,20 @@ function MentionMenuContent({
 	const createAndMention = useCallback(async () => {
 		const path = newFilePath;
 		if (!path) return;
-		const href = relativeMarkdownAssetSrc({
+		const relativeHref = relativeMarkdownAssetSrc({
 			sourceFilePath,
 			workspacePath: path,
 		});
-		if (!href) return;
+		if (!relativeHref) return;
 		setError(null);
+		let href = relativeHref;
 		try {
-			await qb(lix)
+			const created = await qb(lix)
 				.insertInto("lix_file")
 				.values({ path, content: new Uint8Array() })
-				.execute();
+				.returning("id")
+				.executeTakeFirst();
+			if (permalink && created?.id) href = permalink({ id: created.id, path });
 		} catch {
 			setError("The file could not be created.");
 			return;
@@ -312,7 +330,7 @@ function MentionMenuContent({
 			href,
 			label: mentionLabel(path.split("/").at(-1) ?? path),
 		});
-	}, [lix, mention, newFilePath, sourceFilePath]);
+	}, [lix, mention, newFilePath, permalink, sourceFilePath]);
 
 	const activate = useCallback(
 		(index: number) => {

@@ -13,8 +13,9 @@ export function createDocumentExistence(lix: Lix | null | undefined) {
 	const known = new Map<string, boolean>();
 	const pending = new Set<string>();
 	const listeners = new Set<() => void>();
-	// Every file path, once the observed list has arrived.
+	// Every file path, once the observed list has arrived, and each id's path.
 	let paths: Set<string> | null = null;
+	const pathById = new Map<string, string>();
 	let closed = false;
 	const notify = () => {
 		for (const listener of listeners) listener();
@@ -46,7 +47,7 @@ export function createDocumentExistence(lix: Lix | null | undefined) {
 		hasSql &&
 		lix &&
 		typeof (lix as { observe?: unknown }).observe === "function"
-			? lix.observe("SELECT path FROM lix_file", [])
+			? lix.observe("SELECT id, path FROM lix_file", [])
 			: null;
 	if (events) {
 		void (async () => {
@@ -57,6 +58,10 @@ export function createDocumentExistence(lix: Lix | null | undefined) {
 					paths = new Set(
 						event.result.rows.map((row) => String(row.path ?? "")),
 					);
+					pathById.clear();
+					for (const row of event.result.rows) {
+						pathById.set(String(row.id ?? ""), String(row.path ?? ""));
+					}
 					notify();
 				}
 			} catch {
@@ -71,6 +76,8 @@ export function createDocumentExistence(lix: Lix | null | undefined) {
 			if (answer === undefined) lookup(path);
 			return answer;
 		},
+		/** The path of a file id, once the file list has been observed. */
+		pathOf: (id: string): string | undefined => pathById.get(id),
 		subscribe: (listener: () => void) => {
 			listeners.add(listener);
 			return () => {

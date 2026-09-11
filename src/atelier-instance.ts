@@ -3,6 +3,7 @@ import type {
 	AtelierDocumentOpenOptions,
 	AtelierDocumentsApi,
 	AtelierEvent,
+	AtelierDocumentLinks,
 	AtelierExtensionRegistration,
 	AtelierExtensionRuntime,
 	AtelierFilesViewOptions,
@@ -45,6 +46,8 @@ export type AtelierOptions = {
 	 */
 	readonly readOnly?: boolean;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
+	/** The host's file URLs; see `AtelierDocumentLinks`. */
+	readonly documentLinks?: AtelierDocumentLinks;
 	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
 	readonly onEvent?: (event: AtelierEvent) => void;
 	/** Per-tab shell state. Hosts should normally back this with sessionStorage. */
@@ -240,6 +243,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		branchSession,
 		reviewStatusStore,
 		...(options.debug !== undefined ? { debug: options.debug } : {}),
+		...(options.documentLinks !== undefined
+			? { documentLinks: options.documentLinks }
+			: {}),
 		...(options.readOnly !== undefined ? { readOnly: options.readOnly } : {}),
 		...(options.extensions !== undefined
 			? { extensions: [...options.extensions] }

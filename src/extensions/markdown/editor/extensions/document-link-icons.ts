@@ -3,7 +3,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { fileIconUrl } from "@/extensions/files/file-icons";
-import { documentLinkPath } from "../document-links";
+import { documentLinkPath, type HostLinkResolver } from "../document-links";
 
 export const documentLinkIconsKey = new PluginKey<DecorationSet>(
 	"markdownDocumentLinkIcons",
@@ -17,6 +17,8 @@ export type DocumentLinkIconsOptions = {
 	 */
 	readonly exists: (path: string) => boolean | undefined;
 	readonly subscribe?: (notify: () => void) => () => void;
+	/** The host's own file URLs, resolved to workspace paths. */
+	readonly resolveHostHref?: HostLinkResolver;
 };
 
 type LinkRange = {
@@ -27,14 +29,18 @@ type LinkRange = {
 };
 
 /** Consecutive text under one link mark is one link. */
-function linkRanges(doc: ProseMirrorNode, sourceFilePath: string): LinkRange[] {
+function linkRanges(
+	doc: ProseMirrorNode,
+	sourceFilePath: string,
+	resolveHostHref?: HostLinkResolver,
+): LinkRange[] {
 	const ranges: LinkRange[] = [];
 	doc.descendants((node, pos) => {
 		if (!node.isText) return;
 		const mark = node.marks.find((candidate) => candidate.type.name === "link");
 		if (!mark) return;
 		const href = String(mark.attrs.href ?? "");
-		const path = documentLinkPath(href, sourceFilePath);
+		const path = documentLinkPath(href, sourceFilePath, resolveHostHref);
 		if (!path) return;
 		const previous = ranges.at(-1);
 		if (previous && previous.to === pos && previous.mark.eq(mark)) {
@@ -52,7 +58,11 @@ function buildDecorations(
 ): DecorationSet {
 	if (!options.sourceFilePath) return DecorationSet.empty;
 	const decorations: Decoration[] = [];
-	for (const range of linkRanges(doc, options.sourceFilePath)) {
+	for (const range of linkRanges(
+		doc,
+		options.sourceFilePath,
+		options.resolveHostHref,
+	)) {
 		const exists = options.exists(range.path);
 		if (exists === undefined) continue;
 		if (!exists) {

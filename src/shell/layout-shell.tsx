@@ -4289,6 +4289,9 @@ function LayoutShellLoadedContentResolved({
 			...(configuration.debug !== undefined
 				? { debug: configuration.debug }
 				: {}),
+			...(configuration.documentLinks !== undefined
+				? { documentLinks: configuration.documentLinks }
+				: {}),
 			...(configuration.filesView !== undefined
 				? { filesView: configuration.filesView }
 				: {}),
@@ -4311,6 +4314,7 @@ function LayoutShellLoadedContentResolved({
 		}),
 		[
 			configuration.debug,
+			configuration.documentLinks,
 			configuration.filesView,
 			configuration.readOnly,
 			emitEvent,

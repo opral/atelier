@@ -324,8 +324,28 @@ export type AtelierDiffApi = {
 	readonly autoAccept: boolean;
 };
 
+/**
+ * How the host names files in URLs. Atelier links documents to each other
+ * by relative path, but a document can also carry the host's own permanent
+ * URL for a file (pasted from the browser, written by an agent). The host
+ * says which URLs are its files here, and how to write one.
+ */
+export type AtelierDocumentLinks = {
+	/** The file a host URL points at in this workspace; null for any other URL. */
+	readonly resolve: (
+		href: string,
+	) => { readonly id: string } | { readonly path: string } | null;
+	/** The host's permanent URL for a file. Mentions insert it when present. */
+	readonly href?: (file: {
+		readonly id: string;
+		readonly path: string;
+	}) => string;
+};
+
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
+	/** The host's file URLs, when it has any; see `AtelierDocumentLinks`. */
+	readonly documentLinks?: AtelierDocumentLinks;
 	/**
 	 * Optional host bridge for comparing the workspace replica with its remote.
 	 * The host owns the returned handle and its lifecycle. Keeping this lazy

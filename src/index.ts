@@ -60,6 +60,7 @@ export type {
 	AtelierExtensionPreferences,
 	AtelierExtensionRegistration,
 	AtelierExtensionSeparatorMenuItem,
+	AtelierDocumentLinks,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierDiffApi,

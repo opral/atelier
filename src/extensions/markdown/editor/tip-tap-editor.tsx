@@ -11,6 +11,8 @@ import {
 import { EditorContent, useEditorState } from "@tiptap/react";
 import type { Editor, Extensions } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
+import { useDocumentLinks } from "./document-links-context";
+import type { AtelierDocumentLinks } from "@/extension-api";
 import { useEditorCtx } from "./editor-context";
 import {
 	useLix,
@@ -300,6 +302,20 @@ function TipTapEditorLoadedContent({
 		if (!canOpenWorkspaceFile) return undefined;
 		return (args) => openWorkspaceFileRef.current?.(args);
 	}, [canOpenWorkspaceFile]);
+	const documentLinks = useDocumentLinks();
+	const documentLinksRef = useRef(documentLinks);
+	const hasDocumentLinks = documentLinks !== undefined;
+	// Stable like the opener: the host's object may change identity without
+	// the editor being rebuilt.
+	const stableDocumentLinks = useMemo<AtelierDocumentLinks | undefined>(() => {
+		if (!hasDocumentLinks) return undefined;
+		return {
+			resolve: (href) => documentLinksRef.current?.resolve(href) ?? null,
+		};
+	}, [hasDocumentLinks]);
+	useLayoutEffect(() => {
+		documentLinksRef.current = documentLinks;
+	}, [documentLinks]);
 	const readOnlyRef = useRef(readOnly);
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
 	const [imagePasteStatus, setImagePasteStatus] =
@@ -333,6 +349,7 @@ function TipTapEditorLoadedContent({
 			shouldPersist: () => !readOnlyRef.current,
 			originKey: editorOriginKey,
 			openWorkspaceFile: stableOpenWorkspaceFile,
+			documentLinks: stableDocumentLinks,
 			additionalExtensions,
 			onImagePasteStatus: notifyImagePasteStatus,
 			onPersist: (args) => onPersistRef.current?.(args),

@@ -30,11 +30,16 @@ test("links to existing files get an icon; missing targets are marked", () => {
 					listeners.add(listener);
 					return () => listeners.delete(listener);
 				},
+				// The host's permanent URL for the pipeline file.
+				resolveHostHref: (href) =>
+					href === "https://host.test/@acme/repo/file/abc/pipeline.csv"
+						? "/docs/pipeline.csv"
+						: null,
 			}),
 		],
 		content: astToTiptapDoc(
 			parseMarkdown(
-				"See [pipeline](./pipeline.csv), [gone](./missing.md), [later](./later.md) and [web](https://example.com).",
+				"See [pipeline](./pipeline.csv), [gone](./missing.md), [later](./later.md), [perma](https://host.test/@acme/repo/file/abc/pipeline.csv) and [web](https://example.com).",
 			),
 		) as JSONContent,
 	});
@@ -42,14 +47,18 @@ test("links to existing files get an icon; missing targets are marked", () => {
 	const icons = () => element.querySelectorAll(".markdown-document-link-icon");
 	const missing = () =>
 		element.querySelectorAll(".markdown-document-link-missing");
-	expect(icons()).toHaveLength(1);
+	// The relative link and the host's permanent URL both show the icon.
+	expect(icons()).toHaveLength(2);
 	expect(icons()[0]?.closest("a")?.getAttribute("href")).toBe("./pipeline.csv");
+	expect(icons()[1]?.closest("a")?.getAttribute("href")).toBe(
+		"https://host.test/@acme/repo/file/abc/pipeline.csv",
+	);
 	expect(missing()).toHaveLength(1);
 	expect(missing()[0]?.textContent).toBe("gone");
 	// An answer that arrives later repaints without a document change.
 	known.set("/docs/later.md", true);
 	for (const listener of listeners) listener();
-	expect(icons()).toHaveLength(2);
+	expect(icons()).toHaveLength(3);
 	expect(
 		element.querySelectorAll("a[href='https://example.com'] img"),
 	).toHaveLength(0);
