@@ -98,9 +98,12 @@ describe("ExternalWriteReviewControls", () => {
 			/>,
 		);
 
-		// The stepper's position and the chip's count both read "1 of 2".
-		expect(screen.getAllByText("1 of 2")).toHaveLength(2);
+		// Only the chip reads "1 of 2"; the stepper shows its position as dots.
+		expect(screen.getAllByText("1 of 2")).toHaveLength(1);
 		expect(chip("Working set: 1 of 2 files")).toHaveTextContent("1 of 2");
+		const pager = screen.getByRole("img", { name: "File 1 of 2" });
+		expect(pager.querySelectorAll("i")).toHaveLength(2);
+		expect(pager.querySelector("i[data-active]")).toBe(pager.firstElementChild);
 		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
 		await waitFor(() =>
 			expect(primary).toHaveBeenCalledWith(["file-tiktok"], {
@@ -653,9 +656,9 @@ describe("ExternalWriteReviewControls", () => {
 		expect(
 			screen.queryByRole("button", { name: "More undo options" }),
 		).toBeNull();
-		expect(
-			screen.getByText("1 of 1", { ignore: ".external-write-review-sizer" }),
-		).toBeVisible();
+		// One file needs no position at all.
+		expect(screen.queryByText("1 of 1")).toBeNull();
+		expect(screen.queryByRole("img", { name: /^File \d+ of/ })).toBeNull();
 	});
 
 	test("read-only review keeps the float visible but disables mutations", () => {
@@ -814,7 +817,7 @@ describe("ExternalWriteReviewControls", () => {
 		const sizers = document.querySelectorAll(".external-write-review-sizer");
 		const sizerTexts = Array.from(sizers, (node) => node.textContent);
 		expect(sizerTexts).toContain("gtm/company-brain-productization.md");
-		expect(sizerTexts).toContain("3 of 3");
+		expect(screen.getByRole("img", { name: "File 1 of 3" })).toBeVisible();
 		for (const sizer of sizers) {
 			expect(sizer).toHaveAttribute("aria-hidden", "true");
 		}

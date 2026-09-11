@@ -386,9 +386,38 @@
 
 	.external-write-review-navigation strong {
 		min-width: 0;
-		max-width: 9rem;
+		max-width: 12rem;
 		font-size: 0.75rem;
 		font-weight: 700;
+	}
+
+	.external-write-review-pager {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		gap: 0.24rem;
+		align-self: center;
+	}
+
+	.external-write-review-pager i {
+		width: 0.3rem;
+		height: 0.3rem;
+		border-radius: 50%;
+		background: var(--color-text-inverse-tertiary);
+		opacity: 0.55;
+	}
+
+	.external-write-review-pager i[data-active] {
+		background: var(--color-text-inverse-primary);
+		opacity: 1;
+	}
+
+	.external-write-review-pager-index {
+		flex: none;
+		color: var(--color-text-inverse-tertiary);
+		font-size: 0.72rem;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
 
 	.external-write-review-navigation small {
