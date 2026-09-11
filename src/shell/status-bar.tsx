@@ -34,17 +34,21 @@ export function CheckpointStatusBar({
 	readOnly = false,
 	autoAcceptAgentChanges = false,
 	onAutoAcceptAgentChangesChange,
-	onOpenHistory,
+	onReviewLatestCheckpoint,
 	onReviewWorkingChanges,
 	reviewingWorkingChanges = false,
+	reviewingLatestCheckpoint = false,
 }: {
 	readonly readOnly?: boolean;
 	readonly autoAcceptAgentChanges?: boolean;
 	readonly onAutoAcceptAgentChangesChange?: (enabled: boolean) => void;
-	readonly onOpenHistory?: () => void;
+	/** With nothing to review since the checkpoint, the pill reviews the checkpoint itself. */
+	readonly onReviewLatestCheckpoint?: () => void;
 	readonly onReviewWorkingChanges?: () => void;
 	/** The working review is open; the same control now closes it. */
 	readonly reviewingWorkingChanges?: boolean;
+	/** A checkpoint review is open; the same control now closes it. */
+	readonly reviewingLatestCheckpoint?: boolean;
 }): JSX.Element {
 	const workingChangeCount = useQueryResult((queryLix) =>
 		selectWorkingChangeCount(queryLix),
@@ -62,7 +66,8 @@ export function CheckpointStatusBar({
 		workingChangeCount.status === "pending" ? null : changeCount === 0 ? (
 			<CheckpointStatus
 				statusLabel={LATEST_CHECKPOINT_TITLE}
-				onActivate={onOpenHistory}
+				reviewing={reviewingLatestCheckpoint}
+				onActivate={onReviewLatestCheckpoint}
 			/>
 		) : (
 			<CheckpointStatus
@@ -145,17 +150,17 @@ function CheckpointStatus({
 	readonly reviewing?: boolean;
 	readonly onActivate?: () => void;
 }): JSX.Element {
-	const actionLabel = hasWorkingChanges
-		? reviewing
-			? "Close review"
-			: "Review working changes"
-		: "Open checkpoint history";
+	const actionLabel = reviewing
+		? "Close review"
+		: hasWorkingChanges
+			? "Review working changes"
+			: "Review latest checkpoint";
 
 	return onActivate ? (
 		<button
 			type="button"
 			aria-label={`${statusLabel}. ${actionLabel}`}
-			aria-pressed={hasWorkingChanges ? reviewing : undefined}
+			aria-pressed={reviewing}
 			onClick={onActivate}
 			onMouseDown={(event) => event.preventDefault()}
 			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"

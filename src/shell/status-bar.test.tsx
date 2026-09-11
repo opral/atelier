@@ -109,7 +109,7 @@ describe("CheckpointStatusBar", () => {
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
 						<CheckpointStatusBar
-							onOpenHistory={openHistory}
+							onReviewLatestCheckpoint={openHistory}
 							onReviewWorkingChanges={openHistory}
 							onAutoAcceptAgentChangesChange={setAutoAccept}
 						/>
@@ -155,7 +155,7 @@ describe("CheckpointStatusBar", () => {
 					<Suspense fallback={null}>
 						<CheckpointStatusBar
 							readOnly
-							onOpenHistory={openHistory}
+							onReviewLatestCheckpoint={openHistory}
 							onReviewWorkingChanges={openHistory}
 						/>
 					</Suspense>
@@ -172,6 +172,46 @@ describe("CheckpointStatusBar", () => {
 			screen.queryByRole("switch", { name: "Auto-accept agent changes" }),
 		).toBeNull();
 
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("with nothing since the checkpoint, the pill reviews the checkpoint itself", async () => {
+		const lix = await openLix();
+		const reviewLatest = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CheckpointStatusBar onReviewLatestCheckpoint={reviewLatest} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		const pill = await screen.findByRole("button", {
+			name: "Latest checkpoint. Review latest checkpoint",
+		});
+		expect(pill).toHaveAttribute("aria-pressed", "false");
+		fireEvent.click(pill);
+		expect(reviewLatest).toHaveBeenCalledOnce();
+		await act(async () => {
+			view?.rerender(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CheckpointStatusBar
+							onReviewLatestCheckpoint={reviewLatest}
+							reviewingLatestCheckpoint
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		expect(
+			await screen.findByRole("button", {
+				name: "Latest checkpoint. Close review",
+			}),
+		).toHaveAttribute("aria-pressed", "true");
 		await act(async () => view?.unmount());
 		await lix.close();
 	});
