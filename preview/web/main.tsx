@@ -111,6 +111,8 @@ async function start() {
 		);
 		return;
 	}
+	// The preview is a dev tool: scripts (visual QA) may reach the workspace.
+	Object.assign(window, { atelierPreviewLix: lix });
 	createRoot(mountElement).render(<PreviewApp lix={lix} />);
 }
 

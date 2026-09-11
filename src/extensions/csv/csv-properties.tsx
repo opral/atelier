@@ -40,6 +40,7 @@ import {
 	type CsvPalette,
 } from "./csv-palette";
 export { CSV_COLORS } from "./csv-palette";
+import { selectOptionColor, selectOptions } from "./csv-select-options";
 export const CSV_TYPES = [
 	{ type: "text", label: "Text", icon: CaseSensitive },
 	{ type: "select", label: "Select", icon: CircleChevronDown },
@@ -80,6 +81,10 @@ export function CsvPill({ value, color }: { value: string; color?: string }) {
 }
 export type PropertyCell = TextCell & {
 	csvInfo?: CsvColumnInfo;
+	/** Every value the column holds; a select offers these beside metadata. */
+	csvOptionValues?: readonly string[];
+	/** The info was inferred from values: render typed, edit as plain text. */
+	csvInferred?: boolean;
 	csvNewOption?: string;
 	csvWrappedLines?: CsvTextLine[];
 };
@@ -165,8 +170,9 @@ export function drawPropertyCell(
 	ctx.rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
 	ctx.clip();
 	if (info.type === "select" && value) {
-		const option = info.options?.find((o) => o.value === value);
-		const [bg, fg] = palette[option?.color as keyof CsvPalette] ?? palette.gray;
+		const [bg, fg] =
+			palette[selectOptionColor(info, value) as keyof CsvPalette] ??
+			palette.gray;
 		// The pill is the shell's 20px tag (6px inset, 3px radius) and starts on
 		// the same inset as plain text so columns of mixed types share one edge.
 		const inset = theme.cellHorizontalPadding;
@@ -203,10 +209,6 @@ export function drawPropertyCell(
 			searchColor,
 		);
 		ctx.fillText(label, textX, textY);
-		if (!option) {
-			ctx.fillStyle = theme.textMedium;
-			ctx.fillRect(pillX, pillY + PILL_HEIGHT - 2, width, 2);
-		}
 	} else if (
 		info.type === "checkbox" &&
 		/^(yes|no|true|false|1|0)?$/i.test(value)
@@ -296,7 +298,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					{ value: "yes", color: "blue" },
 					{ value: "no", color: "gray" },
 				]
-			: (info.options ?? []);
+			: selectOptions(info, cell.csvOptionValues ?? []);
 	const candidates = options.filter((o) =>
 		o.value.toLowerCase().includes(query.toLowerCase()),
 	);
@@ -503,7 +505,11 @@ export const providePropertyEditor: ProvideEditorCallback<GridCell> = (
 ) => {
 	const info = (cell as PropertyCell).csvInfo;
 	if ((cell as PropertyCell).readonly) return undefined;
-	if (info && ["select", "checkbox", "date"].includes(info.type)) {
+	if (
+		info &&
+		!(cell as PropertyCell).csvInferred &&
+		["select", "checkbox", "date"].includes(info.type)
+	) {
 		return {
 			editor: PropertyEditor,
 			disablePadding: true,

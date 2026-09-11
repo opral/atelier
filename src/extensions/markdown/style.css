@@ -1880,6 +1880,23 @@
 		display: none;
 	}
 
+	/* Links to workspace files carry the file's icon, Notion's page mention. */
+	.markdown-view .ProseMirror .markdown-document-link-icon {
+		display: inline-block;
+		width: 1em;
+		height: 1em;
+		margin: 0 0.3em 0 0;
+		border-radius: 0;
+		vertical-align: -0.2em;
+		user-select: none;
+	}
+
+	/* A link to a path that does not exist: the underline turns dashed. */
+	.markdown-view .ProseMirror .markdown-document-link-missing {
+		text-decoration-style: dashed;
+		text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+	}
+
 	/* Task lists. The box takes the bullet's place: a 1rem square, then a
 	   0.5rem gap, so the text lands on the same column as bullet text. */
 	.markdown-view .ProseMirror li[data-task] {
@@ -2221,6 +2238,20 @@
 		line-height: 1.35;
 	}
 
+	/* The @ menu reuses the palette; only the matched characters and the
+	   "more results" hint are its own. */
+	.markdown-mention-match {
+		background: transparent;
+		color: var(--color-text-brand);
+	}
+
+	.markdown-mention-more {
+		padding: 0.3rem 0.55rem 0.4rem 3.12rem;
+		color: var(--color-text-tertiary);
+		font-size: 0.71rem;
+		font-weight: 450;
+	}
+
 	.markdown-embed-file-empty {
 		padding: 1.35rem 0.75rem 1.55rem;
 		color: var(--color-text-tertiary);
@@ -2273,6 +2304,46 @@
 		color: var(--color-text-diff-removed);
 		text-decoration: line-through;
 		text-decoration-color: var(--color-border-diff-removed);
+	}
+
+	/* Formatting-only changes sit in the sentence as small monospace glyphs:
+	   the source the block lost, struck; the source it gained, bold. Grey
+	   ground, so they read as notes rather than as errors. */
+	.markdown-review .ProseMirror .markdown-review-format-glyph {
+		display: inline-block;
+		margin: 0 1px;
+		padding: 1px 3px;
+		border-radius: 3px;
+		background: var(--color-bg-hover-canvas);
+		color: var(--color-text-secondary);
+		font-family:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.72em;
+		line-height: 1;
+		vertical-align: 0.18em;
+		user-select: none;
+		cursor: pointer;
+	}
+
+	.markdown-review .ProseMirror .markdown-review-format-glyph > s {
+		color: var(--color-text-diff-removed);
+		text-decoration: line-through;
+		text-decoration-color: currentColor;
+	}
+
+	.markdown-review .ProseMirror .markdown-review-format-glyph > s + b {
+		margin-left: 3px;
+	}
+
+	.markdown-review .ProseMirror .markdown-review-format-glyph > b {
+		color: var(--color-text-primary);
+		font-weight: 700;
+	}
+
+	.markdown-review
+		.ProseMirror
+		.markdown-review-format-glyph[data-review-active="true"] {
+		box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
 	}
 
 	/* A node whose attributes changed (a ticked task, a re-levelled heading)

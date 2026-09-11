@@ -5,11 +5,7 @@ import {
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
-import {
-	createParagraphNear,
-	exitCode,
-	newlineInCode,
-} from "@tiptap/pm/commands";
+import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
@@ -1058,7 +1054,10 @@ export const MarkdownWcShortcuts = Extension.create({
 							return true;
 						});
 					}
-					return true;
+					// An empty line that still owns content (an image, a quote, a
+					// nested list of another kind) leaves the list with that
+					// content, the way Notion turns the bullet back into text.
+					return outdentListItem();
 				}
 
 				return false;

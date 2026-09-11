@@ -222,31 +222,13 @@
 		background: var(--color-border-inverse);
 	}
 
-	/* Row state, right-aligned: "viewing", "left out", "unseen". */
+	/* Row state, right-aligned: "viewing". */
 	.external-write-review-menu-tag {
 		margin-left: auto;
 		padding-left: 0.75rem;
 		color: var(--color-text-inverse-tertiary);
 		font-size: 0.625rem;
 		font-weight: 500;
-	}
-
-	/* Unseen rows cannot be ticked: clicking one opens the file, which is
-	   what makes it seen (and ticked). */
-	.external-write-review-menu > button[data-state="unseen"] {
-		color: var(--color-text-inverse-tertiary);
-		font-weight: 500;
-	}
-
-	.external-write-review-menu
-		> button[data-state="unseen"]:hover:not(:disabled) {
-		color: var(--color-text-inverse-secondary);
-	}
-
-	.external-write-review-menu
-		> button[data-state="unseen"]
-		.external-write-review-menu-tick {
-		border-color: var(--color-border-inverse-strong);
 	}
 
 	.external-write-review-menu > button[data-viewing] {
@@ -332,8 +314,8 @@
 		color: var(--color-text-inverse-secondary);
 	}
 
-	/* The progress ring: orange = will be acted on, light grey = seen but
-	   left out, dark = unseen. The wedges come from the chip's counts. */
+	/* The progress ring: orange = will be acted on, the rest not. The wedge
+	   comes from the chip's counts. */
 	.external-write-review-ring {
 		width: 0.8125rem;
 		height: 0.8125rem;
@@ -341,9 +323,7 @@
 		border-radius: 50%;
 		background: conic-gradient(
 			var(--color-bg-action-primary) 0deg var(--ring-ticked, 0deg),
-			var(--color-text-inverse-tertiary) var(--ring-ticked, 0deg)
-				var(--ring-seen, 0deg),
-			var(--color-border-inverse-strong) var(--ring-seen, 0deg) 360deg
+			var(--color-border-inverse-strong) var(--ring-ticked, 0deg) 360deg
 		);
 	}
 
@@ -566,30 +546,15 @@
 		font-size: 0.68rem;
 	}
 
-	/* The chip's compact count is drawn from a data attribute so the
-	   accessible text stays one string ("Seen 1 of 23"). */
-	.external-write-review-chip-short {
-		display: none;
-	}
-
-	.external-write-review-chip-short::before {
-		content: attr(data-label);
-	}
-
 	/* Narrow review areas (side panels open on a small window): the labels
-	   that only repeat what the glyphs say go first — "Seen", "Exit", the
-	   ⌘⏎ hint — and the parent folder, before the file name has to
-	   ellipsise. The threshold is the pill's natural width with every label
-	   on, so nothing truncates while a label could still be dropped. */
+	   that only repeat what the glyphs say go first — "Exit", the ⌘⏎ hint —
+	   and the parent folder, before the file name has to ellipsise. The
+	   threshold is the pill's natural width with every label on, so nothing
+	   truncates while a label could still be dropped. */
 	@container (max-width: 54rem) {
-		.external-write-review-chip-long,
 		.external-write-review-button-exit > span,
 		.external-write-review-button-accept > .external-write-review-shortcut {
 			display: none;
-		}
-
-		.external-write-review-chip-short {
-			display: block;
 		}
 
 		.external-write-review-navigation strong {

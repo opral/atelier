@@ -3,13 +3,14 @@ import { afterEach, expect, test, vi } from "vitest";
 import { GridCellKind } from "@glideapps/glide-data-grid";
 import { providePropertyEditor } from "./csv-properties";
 afterEach(cleanup);
-function mountPicker() {
+function mountPicker(optionValues?: readonly string[]) {
 	const finish = vi.fn();
 	const value = {
 		kind: GridCellKind.Text,
 		data: "Existing",
 		displayData: "Existing",
 		allowOverlay: true,
+		csvOptionValues: optionValues,
 		csvInfo: {
 			id: "stage",
 			header: "Stage",
@@ -65,4 +66,20 @@ test("Arrow keys select an existing option and Enter commits it", () => {
 	expect(finish).toHaveBeenCalledWith(
 		expect.objectContaining({ data: "漢字" }),
 	);
+});
+
+test("a value the column holds without metadata is offered like a declared option", () => {
+	const { input, finish } = mountPicker(["Existing", "Research", "漢字"]);
+	// Declared first, in metadata order; the undeclared value after them.
+	expect(
+		screen.getAllByRole("option").map((option) => option.textContent),
+	).toEqual(["Existing", "漢字", "Research"]);
+	fireEvent.change(input, { target: { value: "research" } });
+	// It is a real option now, so there is nothing to create.
+	expect(screen.queryByText("Create")).toBeNull();
+	fireEvent.keyDown(input, { key: "Enter" });
+	expect(finish).toHaveBeenCalledWith(
+		expect.objectContaining({ data: "Research" }),
+	);
+	expect(finish.mock.calls[0]?.[0]).not.toHaveProperty("csvNewOption");
 });

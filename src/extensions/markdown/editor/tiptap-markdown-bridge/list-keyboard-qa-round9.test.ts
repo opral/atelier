@@ -16,6 +16,10 @@ const item = (content: JSONContent[]): JSONContent => ({
 	attrs: { checked: null },
 	content,
 });
+const list = (
+	content: JSONContent[],
+	type: "bulletList" | "orderedList" = "bulletList",
+): JSONContent => ({ type, content });
 function editorFor(content: JSONContent[]) {
 	const editor = new Editor({
 		extensions: MarkdownWc(),
@@ -102,5 +106,44 @@ describe("Backspace at a block start removes an empty block above", () => {
 		caretAtStart(editor, "only");
 		expect(key(editor, "Backspace")).toBe(true);
 		expect(buildMarkdownFromEditor(editor)).toBe("only\n");
+	});
+});
+
+describe("Backspace on an empty item that still owns content", () => {
+	const image = () => ({
+		type: "imageBlock",
+		attrs: { src: "assets/shot.png", alt: "shot" },
+	});
+	test("a nested empty item with an image outdents with its image", () => {
+		const editor = editorFor([
+			list([
+				item([
+					paragraph(text("Social engagement API")),
+					list([item([paragraph(), image()])]),
+				]),
+			]),
+		]);
+		let pos = -1;
+		editor.state.doc.descendants((node, p) => {
+			if (pos < 0 && node.isTextblock && node.content.size === 0) pos = p + 1;
+		});
+		editor.view.dispatch(
+			editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)),
+		);
+		expect(key(editor, "Backspace")).toBe(true);
+		const root = editor.state.doc.firstChild!;
+		expect(root.childCount).toBe(2);
+		expect(root.child(1).firstChild?.content.size).toBe(0);
+		expect(root.child(1).child(1).type.name).toBe("imageBlock");
+	});
+
+	test("a top-level empty item with an image becomes text plus the image", () => {
+		const editor = editorFor([list([item([paragraph(), image()])])]);
+		editor.view.dispatch(
+			editor.state.tr.setSelection(TextSelection.create(editor.state.doc, 3)),
+		);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(editor.state.doc.content.child(0).type.name).toBe("paragraph");
+		expect(editor.state.doc.content.child(1).type.name).toBe("imageBlock");
 	});
 });

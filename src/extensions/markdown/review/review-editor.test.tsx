@@ -529,7 +529,7 @@ function isMacTestPlatform(): boolean {
 }
 
 test.each(["keep", "undo"] as const)(
-	"%s formatting without marking rendered content",
+	"%s formatting shown as inline glyphs, decided from the keyboard",
 	async (decision) => {
 		lix = await openLix();
 		const before = "## 1\\. TL;DR\n\n*Unchanged*";
@@ -541,20 +541,34 @@ test.each(["keep", "undo"] as const)(
 					reviewDiff={{ beforeMarkdown: before, afterMarkdown: after }}
 					sourceFilePath="/format.md"
 					reviewEnabled
+					isActive
 					onComplete={onComplete}
 				/>
 			</LixProvider>,
 		);
-		await screen.findByText("Formatting changed");
-		expect(view.container.querySelector("[data-review-change-id]")).toBeNull();
-		fireEvent.click(screen.getByText("Show source diff"));
-		expect(screen.getByLabelText("Markdown source diff").textContent).toContain(
-			"TL;DR",
+		// The escape shows struck in the heading; the emphasis swap shows
+		// "*" struck and "_" bold at both ends of the word. No source dump.
+		await waitFor(() =>
+			expect(
+				view.container.querySelectorAll(".markdown-review-format-glyph"),
+			).toHaveLength(3),
 		);
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: decision === "keep" ? "Keep formatting" : "Undo formatting",
-			}),
+		const glyphs = [
+			...view.container.querySelectorAll(".markdown-review-format-glyph"),
+		].map((glyph) => glyph.textContent);
+		expect(glyphs).toEqual(["\\", "*_", "*_"]);
+		expect(screen.queryByText("Formatting changed")).toBeNull();
+		await act(async () =>
+			window.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					key: decision === "keep" ? "Enter" : "Backspace",
+					...(decision === "keep"
+						? { shiftKey: true, ...primaryModifier() }
+						: {}),
+					bubbles: true,
+					cancelable: true,
+				}),
+			),
 		);
 		await waitFor(() =>
 			expect(onComplete).toHaveBeenCalledWith(
@@ -578,14 +592,18 @@ test("historical review follows changed revision props", async () => {
 	const view = render(content("Old alpha", "New alpha"));
 	await waitFor(() => expect(view.container).toHaveTextContent("alpha"));
 	view.rerender(content("*Beta*", "_Beta_\n"));
-	await screen.findByText("Formatting changed");
+	await waitFor(() =>
+		expect(
+			view.container.querySelectorAll(".markdown-review-format-glyph").length,
+		).toBeGreaterThan(0),
+	);
 	expect(view.container.querySelector(".ProseMirror")).toHaveTextContent(
 		"Beta",
 	);
 	expect(view.container.querySelector(".ProseMirror")).not.toHaveTextContent(
 		"alpha",
 	);
-	expect(screen.queryByRole("button", { name: "Keep formatting" })).toBeNull();
+	expect(screen.queryByText("Formatting changed")).toBeNull();
 	view.unmount();
 });
 
@@ -603,8 +621,22 @@ test("completed formatting review does not resolve again through keyboard shortc
 			/>
 		</LixProvider>,
 	);
-	await screen.findByText("Formatting changed");
-	fireEvent.click(screen.getByRole("button", { name: "Keep formatting" }));
+	await waitFor(() =>
+		expect(
+			view.container.querySelectorAll(".markdown-review-format-glyph").length,
+		).toBeGreaterThan(0),
+	);
+	await act(async () =>
+		window.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "Enter",
+				shiftKey: true,
+				...primaryModifier(),
+				bubbles: true,
+				cancelable: true,
+			}),
+		),
+	);
 	await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
 	const event = new KeyboardEvent("keydown", {
 		key: "Backspace",

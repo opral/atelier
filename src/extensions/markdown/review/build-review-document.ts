@@ -14,7 +14,18 @@ const GREEDY_LOOKAHEAD = 128;
  * the before projection restores the original attributes, the after
  * projection keeps the new ones, and the node is never dropped.
  */
-type ReviewStatus = "added" | "removed" | "modified";
+type ReviewStatus = "added" | "removed" | "modified" | "format";
+
+/**
+ * A formatting-only difference inside a block, placed at an offset into
+ * the block's rendered text: what the source lost and what it gained
+ * there, so the view can draw the change in the sentence it belongs to.
+ */
+export type FormatMark = {
+	readonly offset: number;
+	readonly removed: string;
+	readonly added: string;
+};
 
 export type MarkdownReviewDecision = "keep" | "undo";
 
@@ -70,7 +81,12 @@ export function buildMarkdownReviewDocument(
 	) {
 		const id = "formatting";
 		return {
-			doc: cloneContent(afterDoc),
+			doc: withFormatMarks(
+				cloneContent(afterDoc),
+				reviewDiff.beforeMarkdown,
+				reviewDiff.afterMarkdown,
+				id,
+			),
 			changes: [{ id, kind: "format", before: beforeDoc, after: afterDoc }],
 			usedSemanticBlockIds: false,
 			beforeMarkdown: reviewDiff.beforeMarkdown,
@@ -323,6 +339,197 @@ export function materializeMarkdownReviewDecisions(
 				: chunk.afterText;
 		})
 		.join("");
+}
+
+/**
+ * Attaches formatting marks to each top-level block whose source changed
+ * while its rendering did not. Blocks pair up by index: the two documents
+ * render identically, so they have the same blocks in the same order.
+ * When the source cannot be split per block, every mark lands on the first
+ * block, at its start.
+ */
+function withFormatMarks(
+	doc: JSONContent,
+	beforeMarkdown: string,
+	afterMarkdown: string,
+	changeId: string,
+): JSONContent {
+	const nodes = doc.content ?? [];
+	if (nodes.length === 0) return doc;
+	const beforeSegments = rawNodeSegments(beforeMarkdown, nodes.length);
+	const afterSegments = rawNodeSegments(afterMarkdown, nodes.length);
+	const pairs: { index: number; before: string; after: string }[] =
+		beforeSegments && afterSegments
+			? nodes.map((_node, index) => ({
+					index,
+					before: beforeSegments[index] ?? "",
+					after: afterSegments[index] ?? "",
+				}))
+			: [{ index: 0, before: beforeMarkdown, after: afterMarkdown }];
+	const content = nodes.map((node) => cloneContent(node));
+	for (const pair of pairs) {
+		if (pair.before === pair.after) continue;
+		const node = content[pair.index]!;
+		const rendered = renderedText(node);
+		// Blank lines between blocks and a file's final newline render as
+		// nothing, so the diff runs over the block's own source. A change to
+		// that trailing whitespace alone still gets one glyph, at the block's
+		// end; otherwise the change would have nothing to navigate to.
+		const before = pair.before.replace(/\n+$/, "");
+		const after = pair.after.replace(/\n+$/, "");
+		const offsets = renderedOffsets(after, rendered);
+		const marks: FormatMark[] = characterHunks(before, after).map((hunk) => ({
+			offset: offsets[hunk.afterOffset] ?? rendered.length,
+			removed: hunk.removed,
+			added: hunk.added,
+		}));
+		if (marks.length === 0) {
+			marks.push({
+				offset: rendered.length,
+				removed: pair.before.slice(before.length),
+				added: pair.after.slice(after.length),
+			});
+		}
+		const data =
+			node.attrs?.data && typeof node.attrs.data === "object"
+				? cloneValue(node.attrs.data)
+				: {};
+		content[pair.index] = {
+			...node,
+			attrs: {
+				...(node.attrs ?? {}),
+				data: {
+					...data,
+					[REVIEW_DATA_KEY]: {
+						changeId,
+						status: "format",
+						originalAttrs: cloneValue(node.attrs),
+						marks,
+					},
+				},
+			},
+		};
+	}
+	return { ...doc, content };
+}
+
+/** The text a block shows: its text nodes, in order. */
+function renderedText(node: JSONContent): string {
+	if (node.type === "text") return node.text ?? "";
+	return (node.content ?? []).map(renderedText).join("");
+}
+
+/**
+ * For each source offset, the rendered offset the view is at once the
+ * source up to there has been read. Rendered text is the source minus its
+ * syntax, in order, so a two-pointer walk aligns them: a source character
+ * that matches the next rendered one advances both, any other is syntax.
+ */
+function renderedOffsets(source: string, rendered: string): number[] {
+	const offsets: number[] = new Array(source.length + 1);
+	let at = 0;
+	for (let index = 0; index < source.length; index += 1) {
+		offsets[index] = at;
+		if (at < rendered.length && source[index] === rendered[at]) at += 1;
+	}
+	offsets[source.length] = at;
+	return offsets;
+}
+
+const MAX_CHARACTER_DIFF_CELLS = 250_000;
+
+type CharacterHunk = {
+	/** Where the hunk sits in the after text, after the common prefix. */
+	readonly afterOffset: number;
+	readonly removed: string;
+	readonly added: string;
+};
+
+/**
+ * Character-level hunks between two versions of a block's source, each a
+ * run of removed and/or added characters at one place. A swap ("*" for
+ * "_") is one hunk with both sides filled.
+ */
+function characterHunks(before: string, after: string): CharacterHunk[] {
+	let prefix = 0;
+	while (
+		prefix < before.length &&
+		prefix < after.length &&
+		before[prefix] === after[prefix]
+	) {
+		prefix += 1;
+	}
+	let suffix = 0;
+	while (
+		suffix < before.length - prefix &&
+		suffix < after.length - prefix &&
+		before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+	) {
+		suffix += 1;
+	}
+	const left = before.slice(prefix, before.length - suffix);
+	const right = after.slice(prefix, after.length - suffix);
+	if (!left && !right) return [];
+	if (
+		!left ||
+		!right ||
+		left.length * right.length > MAX_CHARACTER_DIFF_CELLS
+	) {
+		return [{ afterOffset: prefix, removed: left, added: right }];
+	}
+	const columns = right.length + 1;
+	const lengths = new Uint32Array((left.length + 1) * columns);
+	for (let l = 1; l <= left.length; l += 1) {
+		for (let r = 1; r <= right.length; r += 1) {
+			const index = l * columns + r;
+			lengths[index] =
+				left[l - 1] === right[r - 1]
+					? lengths[(l - 1) * columns + r - 1]! + 1
+					: Math.max(
+							lengths[(l - 1) * columns + r]!,
+							lengths[l * columns + r - 1]!,
+						);
+		}
+	}
+	// Walk back to front, collecting operations, then group them into hunks.
+	const ops: { kind: "keep" | "removed" | "added"; char: string; r: number }[] =
+		[];
+	let l = left.length;
+	let r = right.length;
+	while (l > 0 || r > 0) {
+		if (l > 0 && r > 0 && left[l - 1] === right[r - 1]) {
+			ops.push({ kind: "keep", char: right[r - 1]!, r: r - 1 });
+			l -= 1;
+			r -= 1;
+		} else if (
+			r > 0 &&
+			(l === 0 ||
+				lengths[l * columns + r - 1]! >= lengths[(l - 1) * columns + r]!)
+		) {
+			ops.push({ kind: "added", char: right[r - 1]!, r: r - 1 });
+			r -= 1;
+		} else {
+			ops.push({ kind: "removed", char: left[l - 1]!, r });
+			l -= 1;
+		}
+	}
+	ops.reverse();
+	const hunks: CharacterHunk[] = [];
+	let current: { afterOffset: number; removed: string; added: string } | null =
+		null;
+	for (const op of ops) {
+		if (op.kind === "keep") {
+			if (current) hunks.push(current);
+			current = null;
+			continue;
+		}
+		if (!current)
+			current = { afterOffset: prefix + op.r, removed: "", added: "" };
+		if (op.kind === "removed") current.removed += op.char;
+		else current.added += op.char;
+	}
+	if (current) hunks.push(current);
+	return hunks;
 }
 
 function markdownToDoc(markdown: string): JSONContent {
@@ -1468,6 +1675,7 @@ function readNodeReview(node: JSONContent): {
 	readonly originalAttrs: JSONContent["attrs"] | undefined;
 	readonly lineRanges: readonly LineRange[] | undefined;
 	readonly trailingNewline: { before: boolean; after: boolean } | undefined;
+	readonly marks: readonly FormatMark[] | undefined;
 } | null {
 	const value = node.attrs?.data?.[REVIEW_DATA_KEY];
 	if (!value || typeof value !== "object") return null;
@@ -1476,7 +1684,10 @@ function readNodeReview(node: JSONContent): {
 	const status = record.status;
 	return typeof changeId === "string" &&
 		changeId.length > 0 &&
-		(status === "added" || status === "removed" || status === "modified")
+		(status === "added" ||
+			status === "removed" ||
+			status === "modified" ||
+			status === "format")
 		? {
 				changeId,
 				status,
@@ -1489,6 +1700,9 @@ function readNodeReview(node: JSONContent): {
 					record.trailingNewline && typeof record.trailingNewline === "object"
 						? (record.trailingNewline as { before: boolean; after: boolean })
 						: undefined,
+				marks: Array.isArray(record.marks)
+					? (record.marks as FormatMark[])
+					: undefined,
 			}
 		: null;
 }

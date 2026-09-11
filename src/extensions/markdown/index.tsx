@@ -45,6 +45,7 @@ import { SlashCommandMenu } from "./components/slash-command-menu";
 import { SelectionToolbar } from "./components/selection-toolbar";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
+import { MentionMenu } from "./components/mention-menu";
 import type { MarkdownReviewDiff } from "./review-diff";
 import {
 	decodeFileDataToBytes,
@@ -502,6 +503,7 @@ function MarkdownLiveViewLoaded({
 							<SlashCommandMenu />
 							<EmojiPickerMenu />
 							<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
+							<MentionMenu sourceFilePath={effectiveFileRow.path} />
 						</>
 					)}
 				</div>
@@ -1077,16 +1079,30 @@ export const extension = createReactExtensionDefinition({
 				readySelector=".tiptap.ProseMirror"
 				initial={
 					file ? (
-						<RepositoryMarkdownContent
-							content={file.content}
-							path={file.path}
-							branchId={atelier.branches.activeId}
-							commitId={[
-								view.state.sourceCommitId,
-								view.state.afterCommitId,
-								view.state.beforeCommitId,
-							].find((value): value is string => typeof value === "string")}
-						/>
+						// Laid out exactly like the editor that replaces it (toolbar
+						// strip, container, the ProseMirror column), so the swap to
+						// the live editor moves nothing on screen.
+						<div className="markdown-view flex h-full flex-col bg-background">
+							{atelier.readOnly ? null : (
+								<div
+									aria-hidden="true"
+									className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
+								/>
+							)}
+							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-background">
+								<RepositoryMarkdownContent
+									className="ProseMirror"
+									content={file.content}
+									path={file.path}
+									branchId={atelier.branches.activeId}
+									commitId={[
+										view.state.sourceCommitId,
+										view.state.afterCommitId,
+										view.state.beforeCommitId,
+									].find((value): value is string => typeof value === "string")}
+								/>
+							</div>
+						</div>
 					) : (
 						<p>File not found in the workspace.</p>
 					)

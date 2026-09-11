@@ -7,11 +7,13 @@ export function RepositoryMarkdownContent({
 	path,
 	branchId,
 	commitId,
+	className,
 }: {
 	readonly content: string;
 	readonly path: string;
 	readonly branchId: string;
 	readonly commitId?: string;
+	readonly className?: string;
 }) {
 	const { navigation, initialState } = useAtelierRenderContext();
 	// A prepared document may remain visible while another tab or revision
@@ -29,6 +31,7 @@ export function RepositoryMarkdownContent({
 	return (
 		<MarkdownContent
 			content={content}
+			className={className}
 			href={(href) => {
 				const target = documentLinkPath(href, path);
 				if (!target || !navigation) return href;

@@ -15,15 +15,18 @@ export function MarkdownContent({
 	content,
 	href,
 	src,
+	className,
 }: {
 	readonly content: string;
 	readonly href?: (href: string) => string;
 	/** Resolve repository assets; undefined omits images without a usable URL. */
 	readonly src?: (src: string) => string | undefined;
+	/** Extra root classes, e.g. "ProseMirror" to take the editor's own layout. */
+	readonly className?: string;
 }) {
 	return (
 		<article
-			className="tiptap mx-auto w-full px-6 py-5 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-[var(--color-border-subtle)] [&_th]:bg-[var(--color-bg-hover)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-[var(--color-border-subtle)] [&_td]:px-3 [&_td]:py-2"
+			className={`tiptap mx-auto w-full px-6 py-5 ${className ?? ""} [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-[var(--color-border-subtle)] [&_th]:bg-[var(--color-bg-hover)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-[var(--color-border-subtle)] [&_td]:px-3 [&_td]:py-2`}
 			data-atelier-markdown-content=""
 		>
 			{renderNode(astToTiptapDoc(parseMarkdown(content)), 0, href, src)}

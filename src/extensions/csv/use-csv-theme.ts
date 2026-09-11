@@ -55,6 +55,10 @@ const DEFAULT_APPEARANCE = {
 	},
 	palette: CSV_COLOR_FALLBACKS as CsvPalette,
 	searchColor: "#fef08a",
+	/** The title column's ink: primary text, the rest of the grid secondary. */
+	titleColor: "#1c1917",
+	/** The hovered row's ground. */
+	hoverColor: "#f5f2ed",
 };
 
 /** Canvas cannot consume var(). Resolve the owning table's inherited Atelier tokens. */
@@ -89,6 +93,11 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 						"--color-bg-search-match",
 						DEFAULT_APPEARANCE.searchColor,
 					),
+					titleColor: read(
+						"--color-text-primary",
+						DEFAULT_APPEARANCE.titleColor,
+					),
+					hoverColor: read("--color-bg-hover", DEFAULT_APPEARANCE.hoverColor),
 				};
 				return JSON.stringify(next) === JSON.stringify(previous)
 					? previous

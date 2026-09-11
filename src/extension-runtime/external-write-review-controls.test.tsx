@@ -1,10 +1,4 @@
-import {
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-	within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { CsvReviewTrigger } from "../extensions/csv/csv-review-popover";
 import { ExternalWriteReviewControls } from "./external-write-review-controls";
@@ -104,9 +98,9 @@ describe("ExternalWriteReviewControls", () => {
 			/>,
 		);
 
-		expect(screen.getByText("1 of 2")).toBeVisible();
-		// The chip always carries the denominator.
-		expect(chip("Working set: 1 of 2 files")).toHaveTextContent("Seen 1 of 2");
+		// The stepper's position and the chip's count both read "1 of 2".
+		expect(screen.getAllByText("1 of 2")).toHaveLength(2);
+		expect(chip("Working set: 1 of 2 files")).toHaveTextContent("1 of 2");
 		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
 		await waitFor(() =>
 			expect(primary).toHaveBeenCalledWith(["file-tiktok"], {
@@ -117,7 +111,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(undo).toHaveBeenCalledWith(["file-tiktok"], { scope: "selection" });
 	});
 
-	test("stepping to a file adds it to the seen set; stepping away never removes it", () => {
+	test("stepping to a file ticks it; stepping away never unticks it", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -127,7 +121,7 @@ describe("ExternalWriteReviewControls", () => {
 				onPrimary={vi.fn()}
 			/>,
 		);
-		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("Seen 1 of 3");
+		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("1 of 3");
 
 		rerender(
 			<ExternalWriteReviewControls
@@ -143,7 +137,7 @@ describe("ExternalWriteReviewControls", () => {
 				onPrimary={vi.fn()}
 			/>,
 		);
-		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("Seen 2 of 3");
+		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("2 of 3");
 
 		// Back to the first file: leads.csv stays seen.
 		rerender(
@@ -160,20 +154,20 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		expect(scopeRow("file-icp")).toBeChecked();
 		expect(scopeRow("file-leads")).toBeChecked();
-		// Unseen rows are listed below the seen ones; they are not ticks but
-		// open the file, which is what makes it seen.
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
-		expect(scopeRow("file-readme")).toHaveTextContent("unseen");
+		// Rows keep file order; a file not yet viewed is simply unticked.
+		expect(scopeRow("file-readme")).not.toBeChecked();
+		expect(scopeRow("file-readme")).not.toHaveTextContent("unseen");
 		expect(scopeRow("file-icp")).toHaveTextContent("viewing");
 		const rows = screen.getAllByRole("checkbox");
 		expect(rows.map((row) => row.getAttribute("data-file-id"))).toEqual([
 			null,
 			"file-icp",
 			"file-leads",
+			"file-readme",
 		]);
 	});
 
-	test("clicking an unseen row opens the file, which makes it seen and ticked", () => {
+	test("ticking an unviewed row adds it to the working set; viewing it keeps it ticked", () => {
 		const onOpen = vi.fn();
 		const { rerender } = render(
 			<ExternalWriteReviewControls
@@ -186,10 +180,16 @@ describe("ExternalWriteReviewControls", () => {
 		);
 		fireEvent.click(chip("Working set: 1 of 3 files"));
 		fireEvent.click(scopeRow("file-readme"));
-		expect(onOpen).toHaveBeenCalledWith(2);
+		expect(onOpen).not.toHaveBeenCalled();
+		expect(scopeRow("file-readme")).toBeChecked();
+		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("2 of 3");
+		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
+			"aria-checked",
+			"mixed",
+		);
 
-		// The host shows the file; the row moves into the seen group, ticked,
-		// and the list stays open.
+		// Stepping to the file makes it seen; it stays ticked and the list
+		// stays open.
 		rerender(
 			<ExternalWriteReviewControls
 				isActive
@@ -207,10 +207,7 @@ describe("ExternalWriteReviewControls", () => {
 		);
 		expect(scopeRow("file-readme")).toBeChecked();
 		expect(scopeRow("file-readme")).toHaveTextContent("viewing");
-		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("Seen 2 of 3");
-		expect(
-			screen.getByRole("group", { name: "Diff review actions" }),
-		).toHaveFocus();
+		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("2 of 3");
 	});
 
 	test("uses the currently viewed file when the review opens later in the list", () => {
@@ -229,7 +226,7 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(chip("Working set: 1 of 2 files"));
-		expect(scopeRow("file-tiktok")).toHaveAttribute("data-state", "unseen");
+		expect(scopeRow("file-tiktok")).not.toBeChecked();
 		expect(scopeRow("file-launch")).toBeChecked();
 	});
 
@@ -264,17 +261,12 @@ describe("ExternalWriteReviewControls", () => {
 		rerender(atLeads);
 		fireEvent.click(chip("Working set: 2 of 3 files"));
 		fireEvent.click(scopeRow("file-leads"));
-		// Once anything is left out the label drops the "Seen" prefix.
 		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("1 of 3");
-		expect(
-			within(chip("Working set: 1 of 3 files")).queryByText(/^Seen/, {
-				ignore: ".external-write-review-sizer",
-			}),
-		).toBeNull();
-		expect(scopeRow("file-leads")).toHaveAttribute("data-state", "left-out");
-		expect(
-			screen.getByRole("checkbox", { name: "Seen files" }),
-		).toHaveAttribute("aria-checked", "mixed");
+		expect(scopeRow("file-leads")).not.toBeChecked();
+		expect(screen.getByRole("checkbox", { name: "All files" })).toHaveAttribute(
+			"aria-checked",
+			"mixed",
+		);
 
 		// Step away and back: leads.csv is still left out.
 		rerender(
@@ -299,7 +291,7 @@ describe("ExternalWriteReviewControls", () => {
 		);
 		// Committing closes the list and starts the scope over.
 		expect(screen.queryByRole("checkbox")).toBeNull();
-		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("Seen 1 of 3");
+		expect(chip("Working set: 1 of 3 files")).toHaveTextContent("1 of 3");
 	});
 
 	test("the selection survives closing the list — the chip keeps it visible", () => {
@@ -322,7 +314,7 @@ describe("ExternalWriteReviewControls", () => {
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 	});
 
-	test("the Seen files master row toggles the seen set; empty selection disables the verbs", () => {
+	test("the All files master row ticks or clears every file, viewed or not", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -350,22 +342,27 @@ describe("ExternalWriteReviewControls", () => {
 		);
 
 		fireEvent.click(chip("Working set: 2 of 3 files"));
-		const seenFiles = () =>
-			screen.getByRole("checkbox", { name: "Seen files" });
-		expect(seenFiles()).toHaveAttribute("aria-checked", "true");
-		fireEvent.click(seenFiles());
-		expect(seenFiles()).toHaveAttribute("aria-checked", "false");
+		const allFiles = () => screen.getByRole("checkbox", { name: "All files" });
+		// Two viewed and ticked, one not: the master row is mixed.
+		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "true");
+		expect(scopeRow("file-readme")).toBeChecked();
+		expect(chip("Working set: 3 of 3 files")).toHaveTextContent("3 of 3");
+
+		// From everything, the master row clears the lot and the verbs wait.
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "false");
+		expect(scopeRow("file-icp")).not.toBeChecked();
+		expect(scopeRow("file-readme")).not.toBeChecked();
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeDisabled();
 		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
-		// The unseen file is untouched either way.
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
 
-		// From partial, the master row ticks every seen file back on.
+		// From partial, it ticks everything again.
 		fireEvent.click(scopeRow("file-icp"));
-		expect(seenFiles()).toHaveAttribute("aria-checked", "mixed");
-		fireEvent.click(seenFiles());
-		expect(seenFiles()).toHaveAttribute("aria-checked", "true");
-		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("Seen 2 of 3");
+		expect(allFiles()).toHaveAttribute("aria-checked", "mixed");
+		fireEvent.click(allFiles());
+		expect(allFiles()).toHaveAttribute("aria-checked", "true");
 		expect(screen.getByRole("button", { name: "Checkpoint" })).toBeEnabled();
 	});
 
@@ -536,10 +533,10 @@ describe("ExternalWriteReviewControls", () => {
 				onPrimary={vi.fn()}
 			/>,
 		);
-		expect(chip("Working set: 2 of 2 files")).toHaveTextContent("Seen 2 of 2");
+		expect(chip("Working set: 2 of 2 files")).toHaveTextContent("2 of 2");
 	});
 
-	test("a file joining the list mid-review arrives unseen; the selection is kept", () => {
+	test("a file joining the list mid-review arrives unticked; the selection is kept", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
 				isActive
@@ -566,7 +563,7 @@ describe("ExternalWriteReviewControls", () => {
 		fireEvent.click(chip("Working set: 0 of 3 files"));
 		expect(scopeRow("file-tiktok")).not.toBeChecked();
 		expect(scopeRow("file-tiktok")).toBeEnabled();
-		expect(scopeRow("file-readme")).toHaveAttribute("data-state", "unseen");
+		expect(scopeRow("file-readme")).not.toBeChecked();
 	});
 
 	test("with no changed file on screen nothing is seen and the stepper names no file", () => {
@@ -818,12 +815,13 @@ describe("ExternalWriteReviewControls", () => {
 		const sizerTexts = Array.from(sizers, (node) => node.textContent);
 		expect(sizerTexts).toContain("gtm/company-brain-productization.md");
 		expect(sizerTexts).toContain("3 of 3");
-		expect(sizerTexts).toContain("Seen 3 of 3");
 		for (const sizer of sizers) {
 			expect(sizer).toHaveAttribute("aria-hidden", "true");
 		}
 		expect(screen.getByText("icp.md")).toBeVisible();
-		expect(screen.getByText("1 of 3")).toBeVisible();
+		for (const counter of screen.getAllByText("1 of 3")) {
+			expect(counter).toBeVisible();
+		}
 	});
 
 	test("puts the Esc Exit control at the far left of the float", () => {

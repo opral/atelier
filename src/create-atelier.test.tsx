@@ -12,6 +12,7 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createAtelier } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
+import type { AtelierExtensionRegistration } from "./extension-api";
 import {
 	fileExtensionInstanceForKind,
 	FILES_EXTENSION_KIND,
@@ -87,6 +88,104 @@ describe("Atelier instance file controller", () => {
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.queryByText("Unable to render Atelier")).toBeNull();
+
+			// The same pill closes the review it opened.
+			const closePill = await screen.findByRole("button", {
+				name: "1 file changed since checkpoint. Close review",
+			});
+			expect(closePill).toHaveAttribute("aria-pressed", "true");
+			await act(async () => {
+				fireEvent.click(closePill);
+			});
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+				).toBeNull();
+			});
+			expect(
+				await screen.findByRole("button", {
+					name: "1 file changed since checkpoint. Review working changes",
+				}),
+			).toHaveAttribute("aria-pressed", "false");
+		} finally {
+			await act(async () => rendered?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("keeps the host home on screen when the pill opens review", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		const HOME_EXTENSION_ID = "test_pill_home";
+		const homeRegistration: AtelierExtensionRegistration = {
+			id: HOME_EXTENSION_ID,
+			name: "Home",
+			placement: ["central"],
+			hidden: true,
+			icon: ({ className }: { className?: string }) => (
+				<svg className={className} aria-hidden="true" />
+			),
+			Component: () => <div data-testid="test-pill-home">home</div>,
+		};
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore,
+			extensions: [homeRegistration],
+			centralPanel: { home: { extensionId: HOME_EXTENSION_ID } },
+		});
+		let rendered: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("home-pill-working-file"),
+					path: "/home-pill-working.md",
+					content: new TextEncoder().encode("# Before\n"),
+				})
+				.execute();
+			await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.where("id", "=", fakeUuid("home-pill-working-file"))
+				.execute();
+
+			await act(async () => {
+				rendered = render(<Atelier instance={atelier} />);
+			});
+			await screen.findByTestId("test-pill-home");
+			const pill = await screen.findByRole("button", {
+				name: "1 file changed since checkpoint. Review working changes",
+			});
+			await act(async () => {
+				fireEvent.click(pill);
+			});
+
+			// Review mode is on, but the home listing stays the active view:
+			// the user picks the file from it instead of being navigated away.
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
+			expect(screen.getByTestId("test-pill-home")).toBeVisible();
+			const central = sessionStateStore.getSnapshot()?.panels.central;
+			expect(central?.views.map((view) => view.kind)).toEqual([
+				HOME_EXTENSION_ID,
+			]);
+			expect(screen.queryByText("Reviewing home-pill-working.md")).toBeNull();
+
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", {
+						name: "1 file changed since checkpoint. Close review",
+					}),
+				);
+			});
+			await waitFor(() => {
+				expect(
+					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+				).toBeNull();
+			});
+			expect(screen.getByTestId("test-pill-home")).toBeVisible();
 		} finally {
 			await act(async () => rendered?.unmount());
 			await lix.close();

@@ -326,6 +326,34 @@ test("changing one line of a code block keeps one block with marked lines", () =
 	);
 });
 
+test("a formatting-only change carries marks at rendered offsets", () => {
+	const before = "## 1\\. TL;DR\n\nSaw \\~9 months and *em* here.\n";
+	const after = "## 1. TL;DR\n\nSaw ~9 months and _em_ here.\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+	expect(review.changes[0]?.kind).toBe("format");
+	const marksOf = (index: number) =>
+		review.doc.content?.[index]?.attrs?.data?.markdownReview?.marks;
+	// "1\. TL;DR": the backslash sat between "1" and ".", so offset 1.
+	expect(marksOf(0)).toEqual([{ offset: 1, removed: "\\", added: "" }]);
+	// "Saw ~9 months and em here.": the escape before "~" at 4; the emphasis
+	// markers around "em" at 18 and 20, each "*" → "_".
+	expect(marksOf(1)).toEqual([
+		{ offset: 4, removed: "\\", added: "" },
+		{ offset: 18, removed: "*", added: "_" },
+		{ offset: 20, removed: "*", added: "_" },
+	]);
+	// Marks are bookkeeping: both projections are the rendered document.
+	expect(projectMarkdownReviewDocument(review.doc, "before")).toEqual(
+		markdownDoc(before),
+	);
+	expect(projectMarkdownReviewDocument(review.doc, "after")).toEqual(
+		markdownDoc(after),
+	);
+});
+
 test("keeps task-state changes scoped to list items", () => {
 	const before = "- [ ] Keep label\n- [ ] Stable task\n";
 	const after = "- [x] Keep label\n- [ ] Stable task\n";
@@ -568,12 +596,29 @@ function visit(node: any, callback: (node: any) => void): void {
 	for (const child of node.content ?? []) visit(child, callback);
 }
 
+test("a whitespace-only change still anchors a glyph at the block's end", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "a\n\n\nb",
+		afterMarkdown: "a\n\nb\n",
+	});
+	expect(review.changes.map((change) => change.kind)).toEqual(["format"]);
+	const marksOf = (index: number) =>
+		review.doc.content?.[index]?.attrs?.data?.markdownReview?.marks;
+	// Nothing renders differently, so each block's glyph sits after its text
+	// and shows the newlines that moved.
+	expect(marksOf(0)).toEqual([{ offset: 1, removed: "\n\n\n", added: "\n\n" }]);
+	expect(marksOf(1)).toEqual([{ offset: 1, removed: "", added: "\n" }]);
+});
+
 test("formatting-only changes leave rendered content unmarked and resolve exact bytes", () => {
 	const beforeMarkdown = "## 1\\. TL;DR\r\n\r\n*Keep*";
 	const afterMarkdown = "## 1. TL;DR\n\n_Keep_\n";
 	const review = buildMarkdownReviewDocument({ beforeMarkdown, afterMarkdown });
 	expect(review.changes.map((change) => change.kind)).toEqual(["format"]);
-	expect(changeIds(review.doc)).toEqual([]);
+	// The marks carry the change id so the view can navigate to them; they
+	// do not mark rendered content as added or removed.
+	expect(changeIds(review.doc)).toEqual(["formatting"]);
+	expect(reviewStatus(review.doc.content?.[0])).toBeNull();
 	for (const decision of ["keep", "undo"] as const) {
 		expect(
 			materializeMarkdownReviewDecisions(
