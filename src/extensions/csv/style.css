@@ -200,3 +200,27 @@
 		background: var(--color-bg-status-danger);
 	}
 }
+
+/* Glide's cell editor lives in a body-level portal, outside the shell's
+   scope. It sits exactly on the cell it edits, its text where the canvas
+   drew it, keeps the cell's width (long text wraps and grows it downward,
+   as a document table's cell would) and lifts on a soft shadow instead of
+   the accent ring. */
+.atelier-csv-portal .gdg-style {
+	/* min-width carries the cell's width; never grow to the content. */
+	width: 0;
+	max-width: none;
+	border-radius: 4px;
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--gdg-text-dark) 16%, transparent),
+		0 1px 2px color-mix(in srgb, var(--gdg-text-dark) 8%, transparent),
+		0 6px 16px color-mix(in srgb, var(--gdg-text-dark) 12%, transparent);
+}
+.atelier-csv-portal .gdg-style.gdg-pad {
+	/* One pixel of bloom, then 12 + 16 line + 2 + 10 = the 40px row: the
+	   text stays where the cell drew it. */
+	padding: 13px calc(var(--gdg-cell-horizontal-padding, 8px) + 1px) 11px;
+}
+.atelier-csv-portal .gdg-style.gdg-pad .gdg-growing-entry {
+	margin-top: 0;
+}
