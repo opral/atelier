@@ -547,9 +547,7 @@ test("pressing the open menu's own header closes it instead of reopening it", as
 		});
 		await clickHeader();
 		await waitFor(() => {
-			expect(
-				screen.queryByRole("textbox", { name: "Column name" }),
-			).toBeNull();
+			expect(screen.queryByRole("textbox", { name: "Column name" })).toBeNull();
 		});
 		// A press elsewhere closes it too, and the next header click opens it.
 		await clickHeader();
@@ -564,9 +562,7 @@ test("pressing the open menu's own header closes it instead of reopening it", as
 			});
 		});
 		await waitFor(() => {
-			expect(
-				screen.queryByRole("textbox", { name: "Column name" }),
-			).toBeNull();
+			expect(screen.queryByRole("textbox", { name: "Column name" })).toBeNull();
 		});
 		await clickHeader();
 		expect(
@@ -2475,4 +2471,53 @@ test("pressing the blank surface around the table clears the selection", async (
 		});
 	});
 	await waitFor(() => expect(selection().gridSelection.rows.length).toBe(0));
+});
+
+test("checkpoint review reveals CSV column additions on a freshly opened surface", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			"/leads.csv",
+			new TextEncoder().encode(
+				"company,website\r\nExample,https://example.com\r\n",
+			),
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute("UPDATE lix_file SET content = $1 WHERE path = $2", [
+			new TextEncoder().encode(
+				"company,website,company_size_min,company_size_max\r\nExample,https://example.com,51,200\r\n",
+			),
+			"/leads.csv",
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		const observe = vi.spyOn(lix, "observe");
+		utils = render(<Atelier lix={lix} />);
+		await waitFor(() => expect(observe).toHaveBeenCalled());
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Latest checkpoint. Review latest checkpoint",
+			}),
+		);
+		await waitFor(() => {
+			expect(
+				screen.getByRole("columnheader", { name: /company_size_min/ }),
+			).toHaveAttribute("data-diff-status", "added");
+		});
+		expect(
+			screen.getByRole("columnheader", { name: /company_size_max/ }),
+		).toHaveAttribute("data-diff-status", "added");
+		expect(
+			screen.getByRole("columnheader", { name: "company" }),
+		).toHaveAttribute("data-diff-status", "unchanged");
+		expect(
+			screen.getByRole("button", { name: "Review changes" }),
+		).toBeVisible();
+		expect(
+			utils.container.querySelector("[data-atelier-initial-content]"),
+		).toBeNull();
+	} finally {
+		utils?.unmount();
+		await lix.close();
+	}
 });

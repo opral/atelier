@@ -89,6 +89,7 @@ import {
 	fileNameFromPath,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
+	CSV_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
@@ -2399,7 +2400,8 @@ function LayoutShellLoadedContentResolved({
 			const beforeExists = changeKind !== "added";
 			const afterExists = changeKind !== "removed";
 			const sourceCommitId = afterExists ? commitId : previousCommitId;
-			return handler?.kind === FILE_EXTENSION_KIND
+			return handler?.kind === FILE_EXTENSION_KIND ||
+				handler?.kind === CSV_EXTENSION_KIND
 				? {
 						beforeCommitId: previousCommitId,
 						afterCommitId: commitId,
