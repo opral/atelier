@@ -107,3 +107,64 @@ test("saved views restore per-column wrapping independently of the default layou
 		false,
 	]);
 });
+
+test("saved views keep each rule's condition and drop a view naming an unknown one", () => {
+	const conditioned = captureCsvView(
+		"open",
+		"Still open",
+		{
+			...settings,
+			filter: {
+				mode: "all",
+				rules: [
+					{ id: "a", column: 1, operator: "is_not", value: ["Onboarded"] },
+					{ id: "b", column: 0, operator: "not_empty", value: "" },
+					{ id: "c", column: 2, value: ["true"] },
+				],
+			},
+		},
+		columns,
+	);
+	expect(conditioned.filter.rules).toEqual([
+		{ columnId: "stage", operator: "is_not", value: ["Onboarded"] },
+		{ columnId: "name", operator: "not_empty", value: "" },
+		{ columnId: "contacted", value: ["true"] },
+	]);
+	const restored = restoreCsvView(conditioned, columns, [100, 100, 100]);
+	expect(restored.filter.rules).toEqual([
+		{ id: "open-0", column: 1, operator: "is_not", value: ["Onboarded"] },
+		{ id: "open-1", column: 0, operator: "not_empty", value: "" },
+		{ id: "open-2", column: 2, value: ["true"] },
+	]);
+	expect(csvViewSettingsKey(restored)).not.toBe(
+		csvViewSettingsKey({
+			...restored,
+			filter: {
+				...restored.filter,
+				rules: restored.filter.rules.map((rule) => ({ ...rule, operator: undefined })),
+			},
+		}),
+	);
+	const metadata = readCsvMetadata(
+		JSON.parse(
+			JSON.stringify({
+				atelier_csv: {
+					version: 1,
+					columns,
+					views: [
+						conditioned,
+						{
+							...conditioned,
+							id: "bogus",
+							filter: {
+								mode: "all",
+								rules: [{ columnId: "stage", operator: "unlike", value: "x" }],
+							},
+						},
+					],
+				},
+			}),
+		),
+	)!;
+	expect(metadata.views?.map((view) => view.id)).toEqual(["open"]);
+});

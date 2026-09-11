@@ -4,7 +4,14 @@ import { CsvToolbarSelect } from "./csv-toolbar-select";
 import { CsvFilterValue } from "./csv-filter-value";
 import { CSV_TYPES } from "./csv-properties";
 import type { CsvColumnInfo } from "./csv-metadata";
-import type { CsvFilterGroup, CsvFilterRule } from "./csv-filter";
+import {
+	csvFilterOperatorNeedsValue,
+	csvFilterOperators,
+	csvFilterRuleOperator,
+	type CsvFilterGroup,
+	type CsvFilterOperator,
+	type CsvFilterRule,
+} from "./csv-filter";
 
 export function CsvFilterRules({
 	group,
@@ -102,20 +109,26 @@ export function CsvFilterRules({
 							})}
 							onChange={(value) => {
 								const column = Number(value);
-								if (rule.column !== column)
-									update(rule.id, { column, value: "" });
+								if (rule.column === column) return;
+								// A condition the new column also offers carries over;
+								// otherwise the column's default applies.
+								const operator =
+									rule.operator &&
+									csvFilterOperators(columnInfo[column]?.type).some(
+										(option) => option.value === rule.operator,
+									)
+										? rule.operator
+										: undefined;
+								update(rule.id, { column, operator, value: "" });
 							}}
 						/>
 						{rule.column !== null && (
-							<CsvFilterValue
-								key={`${rule.column}:${columnInfo[rule.column]?.type ?? "text"}`}
-								label={
-									index === 0 ? "Filter value" : `Filter value ${index + 1}`
-								}
+							<CsvFilterCondition
+								rule={rule}
+								index={index}
 								info={columnInfo[rule.column]}
 								values={rows.map((row) => row.cells[rule.column!] ?? "")}
-								value={rule.value}
-								onChange={(value) => update(rule.id, { value })}
+								onChange={(patch) => update(rule.id, patch)}
 							/>
 						)}
 					</div>
@@ -137,5 +150,51 @@ export function CsvFilterRules({
 				Add rule
 			</button>
 		</>
+	);
+}
+
+/** The rule's condition and, when the condition takes one, its value. */
+function CsvFilterCondition({
+	rule,
+	index,
+	info,
+	values,
+	onChange,
+}: {
+	rule: CsvFilterRule;
+	index: number;
+	info: CsvColumnInfo | undefined;
+	values: readonly string[];
+	onChange: (patch: Partial<CsvFilterRule>) => void;
+}) {
+	const type = info?.type;
+	const operator = csvFilterRuleOperator(rule, type);
+	const suffix = index === 0 ? "" : ` ${index + 1}`;
+	return (
+		<div className="csv-filter-rule-condition">
+			<CsvToolbarSelect
+				label={`Filter condition${suffix}`}
+				fitOptions
+				value={operator}
+				options={csvFilterOperators(type).map((option) => ({
+					value: option.value,
+					label: option.label,
+				}))}
+				onChange={(value) =>
+					onChange({ operator: value as CsvFilterOperator })
+				}
+			/>
+			{csvFilterOperatorNeedsValue(operator) && (
+				<CsvFilterValue
+					key={`${rule.column}:${type ?? "text"}`}
+					label={`Filter value${suffix}`}
+					info={info}
+					operator={operator}
+					values={values}
+					value={rule.value}
+					onChange={(value) => onChange({ value })}
+				/>
+			)}
+		</div>
 	);
 }

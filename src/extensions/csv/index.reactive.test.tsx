@@ -1639,6 +1639,71 @@ test("select filters reuse colored options and reset when switching to a text co
 	}
 });
 
+test("a rule's condition can be turned around: is not, then is empty without a value", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "stage" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter column" }),
+			).toHaveFocus(),
+		);
+		expect(screen.getByRole("button", { name: "Filter condition" })).toHaveTextContent("Is");
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemcheckbox", { name: "trial" }),
+		);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(1));
+		expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+			"Bob",
+		);
+		fireEvent.keyDown(screen.getByRole("menu", { name: "Filter value" }), {
+			key: "Escape",
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter value" }),
+			).toHaveFocus(),
+		);
+		fireEvent.keyDown(
+			screen.getByRole("button", { name: "Filter condition" }),
+			{ key: "ArrowDown" },
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "Is not" }),
+		);
+		await waitFor(() =>
+			expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+				"Alice",
+			),
+		);
+		expect(latestDataEditorProps.current?.rows).toBe(1);
+		expect(
+			screen.getByRole("button", { name: "Filter value" }),
+		).toHaveAccessibleDescription(/Matches none of: trial/);
+		fireEvent.keyDown(
+			screen.getByRole("button", { name: "Filter condition" }),
+			{ key: "ArrowDown" },
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "Is empty" }),
+		);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(0));
+		expect(screen.queryByRole("button", { name: "Filter value" })).toBeNull();
+	} finally {
+		await fixture.close();
+	}
+});
+
 test("renaming an option persists matching CSV cells and metadata together", async () => {
 	const fixture = await renderMetadataCsv(undefined, {
 		atelier_csv: {

@@ -638,6 +638,11 @@
 	width: var(--radix-dropdown-menu-trigger-width);
 	max-height: min(300px, var(--radix-dropdown-menu-content-available-height));
 }
+/* A compact trigger (a filter condition) opens a menu wide enough to read. */
+.csv-toolbar-options-fit {
+	width: max-content;
+	min-width: max(var(--radix-dropdown-menu-trigger-width), 150px);
+}
 .csv-toolbar-option-check {
 	margin-left: auto;
 	display: flex;
@@ -843,6 +848,26 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
 		gap: 6px;
+	}
+	/* The condition beside its value, the way a sentence reads: is not · Trial. */
+	.csv-filter-rule-condition {
+		display: flex;
+		gap: 6px;
+		min-width: 0;
+	}
+	.csv-filter-rule-condition > .csv-toolbar-select:first-child {
+		flex: 0 1 auto;
+		width: auto;
+		max-width: 100%;
+	}
+	.csv-filter-rule-condition > .csv-toolbar-select:first-child:not(:last-child) {
+		max-width: 50%;
+	}
+	.csv-filter-rule-condition > .csv-toolbar-select:not(:first-child),
+	.csv-filter-rule-condition > input {
+		flex: 1 1 0;
+		min-width: 0;
+		width: auto;
 	}
 	.csv-filter-rule + .csv-filter-rule {
 		border-top: 1px solid var(--color-border-panel);
