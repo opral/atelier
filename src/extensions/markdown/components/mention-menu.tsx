@@ -8,7 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useEditorState } from "@tiptap/react";
-import { FilePlus, Folder } from "lucide-react";
+import { FilePlus } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import { useEditorCtx } from "../editor/editor-context";
 import {
@@ -30,9 +30,10 @@ const INACTIVE_MENTION_STATE: MentionCommandState = {
 /** Rows shown before the "more results" hint. */
 export const MENTION_RESULT_LIMIT = 8;
 const DOCUMENT_EXTENSIONS = new Set(["md", "markdown", "txt"]);
+/** What "New file" may create; any other suffix is part of the name. */
+const CREATABLE_EXTENSIONS = new Set(["md", "markdown", "txt", "csv", "json"]);
 
 export type MentionItem = {
-	readonly kind: "file" | "directory";
 	readonly path: string;
 	readonly name: string;
 	/** Link text: a document's name without its extension, otherwise the name. */
@@ -44,8 +45,7 @@ export type MentionItem = {
 	readonly match: { readonly start: number; readonly end: number } | null;
 };
 
-function mentionLabel(kind: MentionItem["kind"], name: string): string {
-	if (kind === "directory") return name;
+function mentionLabel(name: string): string {
 	const extension = fileExtensionFromPath(name);
 	return extension && DOCUMENT_EXTENSIONS.has(extension)
 		? name.replace(/\.[^.]*$/, "")
@@ -53,24 +53,22 @@ function mentionLabel(kind: MentionItem["kind"], name: string): string {
 }
 
 /**
- * Ranks repository files and folders for a query. Name prefix beats name
- * substring beats path substring; ties keep path order. With no query every
- * file is offered in path order and folders stay out of the way.
+ * Ranks repository files for a query. Name prefix beats name substring beats
+ * path substring; ties keep path order. With no query every file is offered
+ * in path order.
  */
 export function buildMentionItems({
 	filePaths,
-	directoryPaths,
 	query,
 	sourceFilePath,
 }: {
 	readonly filePaths: readonly string[];
-	readonly directoryPaths: readonly string[];
 	readonly query: string;
 	readonly sourceFilePath: string;
 }): { readonly items: MentionItem[]; readonly total: number } {
 	const lowerQuery = query.trim().toLowerCase();
 	const candidates: Array<{ item: MentionItem; score: number }> = [];
-	const consider = (kind: MentionItem["kind"], path: string) => {
+	const consider = (path: string) => {
 		if (path === sourceFilePath) return;
 		// Hidden entries (dot segments, the .lix folder) are not for prose.
 		if (path.split("/").some((segment) => segment.startsWith("."))) return;
@@ -87,8 +85,6 @@ export function buildMentionItems({
 			if (nameIndex >= 0) {
 				match = { start: nameIndex, end: nameIndex + lowerQuery.length };
 			}
-		} else if (kind === "directory") {
-			return;
 		}
 		const href = relativeMarkdownAssetSrc({
 			sourceFilePath,
@@ -99,18 +95,16 @@ export function buildMentionItems({
 		candidates.push({
 			score,
 			item: {
-				kind,
 				path,
 				name,
-				label: mentionLabel(kind, name),
+				label: mentionLabel(name),
 				href,
 				directoryLabel: parent,
 				match,
 			},
 		});
 	};
-	for (const path of filePaths) consider("file", path);
-	for (const path of directoryPaths) consider("directory", path);
+	for (const path of filePaths) consider(path);
 	candidates.sort(
 		(left, right) =>
 			right.score - left.score || left.item.path.localeCompare(right.item.path),
@@ -127,7 +121,10 @@ export function newMentionFilePath(
 	query: string,
 ): string {
 	const name = query.trim().replace(/\/+/g, "-");
-	const withExtension = fileExtensionFromPath(name) ? name : `${name}.md`;
+	// "notes.txt" is a text file; "v1.2" is a name, not a ".2" file.
+	const extension = fileExtensionFromPath(name);
+	const withExtension =
+		extension && CREATABLE_EXTENSIONS.has(extension) ? name : `${name}.md`;
 	const directory = sourceFilePath.split("/").slice(0, -1).join("/");
 	return `${directory}/${withExtension}`;
 }
@@ -257,26 +254,26 @@ function MentionMenuContent({
 			.select(["path"])
 			.orderBy("path", "asc"),
 	);
-	const directoryRows = useQuery<{ path: string }>((lixInstance) =>
-		qb(lixInstance)
-			.selectFrom("lix_directory")
-			.select(["path"])
-			.orderBy("path", "asc"),
-	);
 	const { items, total } = useMemo(
 		() =>
 			buildMentionItems({
 				filePaths: fileRows.map((row) => row.path),
-				directoryPaths: directoryRows.map((row) => row.path),
 				query,
 				sourceFilePath,
 			}),
-		[directoryRows, fileRows, query, sourceFilePath],
+		[fileRows, query, sourceFilePath],
 	);
 	const trimmedQuery = query.trim();
-	// The "New file" row is the last option whenever there is a name to use.
-	const newFileIndex = trimmedQuery ? items.length : -1;
-	const optionCount = items.length + (trimmedQuery ? 1 : 0);
+	// The "New file" row is the last option whenever there is a name to use
+	// that no file has yet; an existing file is picked from the list instead.
+	const newFilePath = trimmedQuery
+		? newMentionFilePath(sourceFilePath, trimmedQuery)
+		: "";
+	const newFileIndex =
+		newFilePath && !fileRows.some((row) => row.path === newFilePath)
+			? items.length
+			: -1;
+	const optionCount = items.length + (newFileIndex >= 0 ? 1 : 0);
 	const [selection, setSelection] = useState({ query, index: 0 });
 	const selectedIndex =
 		selection.query === query
@@ -294,7 +291,8 @@ function MentionMenuContent({
 	);
 
 	const createAndMention = useCallback(async () => {
-		const path = newMentionFilePath(sourceFilePath, trimmedQuery);
+		const path = newFilePath;
+		if (!path) return;
 		const href = relativeMarkdownAssetSrc({
 			sourceFilePath,
 			workspacePath: path,
@@ -312,9 +310,9 @@ function MentionMenuContent({
 		}
 		mention({
 			href,
-			label: mentionLabel("file", path.split("/").at(-1) ?? path),
+			label: mentionLabel(path.split("/").at(-1) ?? path),
 		});
-	}, [lix, mention, sourceFilePath, trimmedQuery]);
+	}, [lix, mention, newFilePath, sourceFilePath]);
 
 	const activate = useCallback(
 		(index: number) => {
@@ -379,7 +377,7 @@ function MentionMenuContent({
 				{items.length > 0 ? (
 					<div className="markdown-slash-group">
 						<div className="markdown-slash-group-label" aria-hidden="true">
-							{trimmedQuery ? "Files and folders" : "Files"}
+							Files
 						</div>
 						{items.map((item, index) => (
 							<div
@@ -392,11 +390,7 @@ function MentionMenuContent({
 									className="markdown-slash-option-icon markdown-embed-file-option-icon"
 									aria-hidden="true"
 								>
-									{item.kind === "directory" ? (
-										<Folder />
-									) : (
-										<img src={fileIconUrl(item.path)} alt="" />
-									)}
+									<img src={fileIconUrl(item.path)} alt="" />
 								</span>
 								<span className="markdown-slash-option-copy">
 									<span className="markdown-slash-option-label">
@@ -429,7 +423,7 @@ function MentionMenuContent({
 				) : (
 					<div className="markdown-embed-file-empty" role="status">
 						{trimmedQuery
-							? `No file or folder matches “${trimmedQuery}”.`
+							? `No file matches “${trimmedQuery}”.`
 							: "No other files in this repository yet."}
 					</div>
 				)}
@@ -440,7 +434,7 @@ function MentionMenuContent({
 						</div>
 						<div
 							className="markdown-slash-option markdown-embed-file-option"
-							aria-label={`New file ${newMentionFilePath(sourceFilePath, trimmedQuery)}`}
+							aria-label={`New file ${newFilePath}`}
 							{...rowProps(newFileIndex)}
 						>
 							<span
@@ -451,11 +445,7 @@ function MentionMenuContent({
 							</span>
 							<span className="markdown-slash-option-copy">
 								<span className="markdown-slash-option-label">
-									New file “
-									{newMentionFilePath(sourceFilePath, trimmedQuery)
-										.split("/")
-										.at(-1)}
-									”
+									New file “{newFilePath.split("/").at(-1)}”
 								</span>
 								<span className="markdown-slash-option-description">
 									Next to this document, then mentioned here

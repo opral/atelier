@@ -40,12 +40,9 @@ describe("buildMentionItems", () => {
 		"/research/Lead scoring.md",
 		"/README.md",
 	];
-	const directoryPaths = ["/gtm", "/gtm/campaigns", "/research"];
-
-	test("with no query lists every other file in path order, folders aside", () => {
+	test("with no query lists every other file in path order", () => {
 		const { items, total } = buildMentionItems({
 			filePaths,
-			directoryPaths,
 			query: "",
 			sourceFilePath: "/gtm/GTM playbook.md",
 		});
@@ -70,7 +67,6 @@ describe("buildMentionItems", () => {
 	test("ranks name prefixes over substrings over paths and marks the match", () => {
 		const { items } = buildMentionItems({
 			filePaths,
-			directoryPaths,
 			query: "lea",
 			sourceFilePath: "/gtm/GTM playbook.md",
 		});
@@ -82,7 +78,6 @@ describe("buildMentionItems", () => {
 		expect(items[1]?.match).toEqual({ start: 0, end: 3 });
 		const substring = buildMentionItems({
 			filePaths,
-			directoryPaths,
 			query: "book",
 			sourceFilePath: "/README.md",
 		});
@@ -90,15 +85,13 @@ describe("buildMentionItems", () => {
 			"GTM playbook.md",
 		]);
 		expect(substring.items[0]?.match).toEqual({ start: 8, end: 12 });
-		const folders = buildMentionItems({
+		const byPath = buildMentionItems({
 			filePaths,
-			directoryPaths,
 			query: "camp",
 			sourceFilePath: "/gtm/GTM playbook.md",
 		});
-		expect(folders.items.map((item) => [item.kind, item.href])).toEqual([
-			["directory", "campaigns"],
-			["file", "campaigns/Company%20brain%20productization.md"],
+		expect(byPath.items.map((item) => item.href)).toEqual([
+			"campaigns/Company%20brain%20productization.md",
 		]);
 	});
 
@@ -107,6 +100,7 @@ describe("buildMentionItems", () => {
 			"/gtm/interviews.md",
 		);
 		expect(newMentionFilePath("/README.md", "notes.txt")).toBe("/notes.txt");
+		expect(newMentionFilePath("/README.md", "v1.2")).toBe("/v1.2.md");
 	});
 });
 
@@ -218,7 +212,7 @@ describe("MentionMenu", () => {
 		});
 		await screen.findByRole("option", { name: "New file /docs/interviews.md" });
 		expect(screen.getByRole("status")).toHaveTextContent(
-			"No file or folder matches “interviews”.",
+			"No file matches “interviews”.",
 		);
 		await act(async () => {
 			fireEvent.keyDown(editor.view.dom, { key: "Enter", shiftKey: true });

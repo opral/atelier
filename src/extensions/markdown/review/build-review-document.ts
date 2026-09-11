@@ -368,20 +368,28 @@ function withFormatMarks(
 			: [{ index: 0, before: beforeMarkdown, after: afterMarkdown }];
 	const content = nodes.map((node) => cloneContent(node));
 	for (const pair of pairs) {
-		// Blank lines between blocks and a file's final newline render as
-		// nothing; a glyph for them would point at nothing.
-		const before = pair.before.replace(/\n+$/, "");
-		const after = pair.after.replace(/\n+$/, "");
-		if (before === after) continue;
+		if (pair.before === pair.after) continue;
 		const node = content[pair.index]!;
 		const rendered = renderedText(node);
+		// Blank lines between blocks and a file's final newline render as
+		// nothing, so the diff runs over the block's own source. A change to
+		// that trailing whitespace alone still gets one glyph, at the block's
+		// end; otherwise the change would have nothing to navigate to.
+		const before = pair.before.replace(/\n+$/, "");
+		const after = pair.after.replace(/\n+$/, "");
 		const offsets = renderedOffsets(after, rendered);
 		const marks: FormatMark[] = characterHunks(before, after).map((hunk) => ({
 			offset: offsets[hunk.afterOffset] ?? rendered.length,
 			removed: hunk.removed,
 			added: hunk.added,
 		}));
-		if (marks.length === 0) continue;
+		if (marks.length === 0) {
+			marks.push({
+				offset: rendered.length,
+				removed: pair.before.slice(before.length),
+				added: pair.after.slice(after.length),
+			});
+		}
 		const data =
 			node.attrs?.data && typeof node.attrs.data === "object"
 				? cloneValue(node.attrs.data)

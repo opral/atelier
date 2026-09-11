@@ -439,6 +439,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		onDestroy: () => {
 			cleanupExternalLinkClick?.();
 			cleanupExternalLinkClick = null;
+			documentExistence.close();
 			destroyed = true;
 			currentEditor = null;
 			// Destruction only releases TipTap. A debounce or serialized drain already

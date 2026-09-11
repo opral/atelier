@@ -537,5 +537,3 @@ function isMacPlatform(): boolean {
 	if (typeof navigator === "undefined") return true;
 	return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 }
-
-/** Source-only comparison; never inserts diff marks into the rendered document. */

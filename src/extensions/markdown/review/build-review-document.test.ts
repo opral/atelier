@@ -596,6 +596,20 @@ function visit(node: any, callback: (node: any) => void): void {
 	for (const child of node.content ?? []) visit(child, callback);
 }
 
+test("a whitespace-only change still anchors a glyph at the block's end", () => {
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: "a\n\n\nb",
+		afterMarkdown: "a\n\nb\n",
+	});
+	expect(review.changes.map((change) => change.kind)).toEqual(["format"]);
+	const marksOf = (index: number) =>
+		review.doc.content?.[index]?.attrs?.data?.markdownReview?.marks;
+	// Nothing renders differently, so each block's glyph sits after its text
+	// and shows the newlines that moved.
+	expect(marksOf(0)).toEqual([{ offset: 1, removed: "\n\n\n", added: "\n\n" }]);
+	expect(marksOf(1)).toEqual([{ offset: 1, removed: "", added: "\n" }]);
+});
+
 test("formatting-only changes leave rendered content unmarked and resolve exact bytes", () => {
 	const beforeMarkdown = "## 1\\. TL;DR\r\n\r\n*Keep*";
 	const afterMarkdown = "## 1. TL;DR\n\n_Keep_\n";

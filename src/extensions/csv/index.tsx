@@ -62,6 +62,7 @@ import {
 	type EditListItem,
 	type GridCell,
 	type GridColumn,
+	type GridMouseEventArgs,
 	type GridSelection,
 	type Item,
 	type Rectangle,
@@ -1044,6 +1045,15 @@ function CsvTable({
 		[sourceParsed.columns, sourceParsed.rows, columnInfo],
 	);
 	const [hoverRow, setHoverRow] = useState<number | null>(null);
+	const handleItemHovered = useCallback(
+		(args: GridMouseEventArgs) =>
+			setHoverRow(args.kind === "cell" ? args.location[1] : null),
+		[],
+	);
+	const rowThemeOverride = useCallback(
+		(row: number) => (row === hoverRow ? { bgCell: hoverColor } : undefined),
+		[hoverColor, hoverRow],
+	);
 	// What each select column holds, so its picker offers values that no
 	// metadata declares (an agent's new stage, an import) beside the rest.
 	const optionValuesByColumn = useMemo(() => {
@@ -1203,8 +1213,6 @@ function CsvTable({
 	);
 	const wrappedLayout = useMemo(() => {
 		if (!wrappedColumns.some(Boolean)) return undefined;
-		if (measureContext)
-			measureContext.font = `${gridTheme.baseFontStyle} ${gridTheme.fontFamily}`;
 		const measure = (text: string) =>
 			measureContext?.measureText(text).width ?? text.length * 7;
 		return rowMap.map((sourceRow) => {
@@ -1212,6 +1220,10 @@ function CsvTable({
 			let lineCount = 1;
 			wrappedColumns.forEach((wrapped, column) => {
 				if (!wrapped) return;
+				// The title column draws semibold, so it measures semibold; a
+				// regular measure under-counts and wraps a line too late.
+				if (measureContext)
+					measureContext.font = `${column === 0 ? "600 " : ""}${gridTheme.baseFontStyle} ${gridTheme.fontFamily}`;
 				const width =
 					widthState.overrides[column] ?? widthState.initial[column]!;
 				lines[column] = wrapCsvText(
@@ -2344,12 +2356,8 @@ function CsvTable({
 							// Hairlines between rows only; columns separate by
 							// alignment, as in a document table.
 							verticalBorder={false}
-							onItemHovered={(args) =>
-								setHoverRow(args.kind === "cell" ? args.location[1] : null)
-							}
-							getRowThemeOverride={(row) =>
-								row === hoverRow ? { bgCell: hoverColor } : undefined
-							}
+							onItemHovered={handleItemHovered}
+							getRowThemeOverride={rowThemeOverride}
 						/>
 					</>
 				)}

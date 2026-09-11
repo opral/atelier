@@ -65,9 +65,11 @@ export const MentionCommandsExtension =
 						apply(tr, prev, _oldState, newState): MentionCommandState {
 							const meta = tr.getMeta(mentionCommandsPluginKey);
 							if (meta?.close) {
+								// A dismissal keeps this `@` closed until the caret leaves
+								// it; a pick replaced the `@`, so there is nothing to keep.
 								return {
 									...INACTIVE_MENTION_STATE,
-									dismissedAt: prev.range?.from ?? null,
+									dismissedAt: meta.dismiss ? (prev.range?.from ?? null) : null,
 								};
 							}
 							if (!prev.active && !tr.docChanged) return prev;
@@ -97,9 +99,12 @@ export const MentionCommandsExtension =
 								return prev.active ? INACTIVE_MENTION_STATE : prev;
 							}
 							const query = textBefore.slice(atIndex + 1);
+							// A `:` or `/` after a space belongs to the emoji or slash
+							// menu; the mention closes rather than share the keyboard.
 							if (
 								/^\s/.test(query) ||
 								/\s{2}$/.test(query) ||
+								/\s[:/]/.test(query) ||
 								query.length > MAX_QUERY_LENGTH
 							) {
 								return prev.active ? INACTIVE_MENTION_STATE : prev;
@@ -136,6 +141,7 @@ export const MentionCommandsExtension =
 					this.editor.view.dispatch(
 						this.editor.state.tr.setMeta(mentionCommandsPluginKey, {
 							close: true,
+							dismiss: true,
 						}),
 					);
 					return true;
@@ -149,7 +155,12 @@ export const MentionCommandsExtension =
 					() =>
 					({ tr, dispatch }: CommandProps) => {
 						if (dispatch) {
-							dispatch(tr.setMeta(mentionCommandsPluginKey, { close: true }));
+							dispatch(
+								tr.setMeta(mentionCommandsPluginKey, {
+									close: true,
+									dismiss: true,
+								}),
+							);
 						}
 						return true;
 					},

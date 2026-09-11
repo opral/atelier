@@ -79,6 +79,27 @@ describe("MentionCommandsExtension", () => {
 		expect(editor.getText()).toBe("@lea");
 	});
 
+	test("a space then : or / hands over to the emoji and slash menus", () => {
+		const editor = createEditor("See ");
+		editor.commands.insertContent("@x");
+		expect(stateOf(editor).active).toBe(true);
+		editor.commands.insertContent(" :sm");
+		expect(stateOf(editor).active).toBe(false);
+		const slash = createEditor("See ");
+		slash.commands.insertContent("@x /");
+		expect(stateOf(slash).active).toBe(false);
+	});
+
+	test("after a pick, a fresh @ at the same place opens again", () => {
+		const editor = createEditor("See ");
+		editor.commands.insertContent("@lea");
+		editor.commands.insertMention({ href: "leads.csv", label: "leads" });
+		// Delete the mention back to the "@" position and start over.
+		editor.commands.deleteRange({ from: 5, to: editor.state.selection.from });
+		editor.commands.insertContent("@");
+		expect(stateOf(editor)).toMatchObject({ active: true, query: "" });
+	});
+
 	test("insertMention replaces @query with a relative link and a space", () => {
 		const editor = createEditor("Leads are in ");
 		editor.commands.insertContent("@lea");

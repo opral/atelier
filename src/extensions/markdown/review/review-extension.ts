@@ -92,6 +92,7 @@ function formatGlyph(
 	}
 	glyph.title = `Formatting: ${parts.join(", ")}`;
 	glyph.setAttribute("aria-label", glyph.title);
+	glyph.setAttribute("role", "img");
 	return glyph;
 }
 
