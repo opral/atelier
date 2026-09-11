@@ -1756,9 +1756,22 @@ function CsvTable({
 		},
 		[editing],
 	);
+	// A press on the header of the open menu closes the menu (Radix sees an
+	// outside press) and then reaches Glide as a header click; without this
+	// the click would reopen what it just closed and the menu could never be
+	// toggled from its header.
+	const suppressHeaderOpenRef = useRef<{ column: number; until: number } | null>(
+		null,
+	);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
 			if (!editing) return;
+			const suppress = suppressHeaderOpenRef.current;
+			if (suppress) {
+				suppressHeaderOpenRef.current = null;
+				if (suppress.column === columnIndex && Date.now() < suppress.until)
+					return;
+			}
 			// screenPosition is the chevron rect at the right edge of the
 			// header cell; reconstruct the header cell rect from it.
 			const width =
@@ -2459,6 +2472,17 @@ function CsvTable({
 							onRename={(name) => editing.onRenameColumn(menu.column, name)}
 							onChange={(patch) => editing.onChangeColumn(menu.column, patch)}
 							onClose={closeMenu}
+							onPointerDownOutside={(event) => {
+								const bounds = menu.headerBounds;
+								const onHeader =
+									event.clientX >= bounds.x &&
+									event.clientX <= bounds.x + bounds.width &&
+									event.clientY >= bounds.y &&
+									event.clientY <= bounds.y + bounds.height;
+								suppressHeaderOpenRef.current = onHeader
+									? { column: menu.column, until: Date.now() + 500 }
+									: null;
+							}}
 							onInsertLeft={() =>
 								runStructuralEdit(() => editing.onInsertColumn(menu.column))
 							}

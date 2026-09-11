@@ -500,6 +500,86 @@ test("deletes a row via the context menu", async () => {
 	}
 });
 
+test("pressing the open menu's own header closes it instead of reopening it", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		const fileId = fakeUuid("file_csv_toggle_column_menu");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/toggle.csv",
+				content: new TextEncoder().encode("name,notes\nalpha,beta\n"),
+			})
+			.execute();
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		expect(await screen.findByText("alpha")).toBeInTheDocument();
+		const bounds = { x: 100, y: 0, width: 120, height: 40 };
+		const clickHeader = async () => {
+			await act(async () => {
+				latestDataEditorProps.current?.onHeaderClicked?.(1, {
+					bounds,
+					preventDefault: () => {},
+				});
+			});
+		};
+		await clickHeader();
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toBeVisible();
+		// The second press lands on the header: Radix sees an outside press
+		// and closes the menu, then Glide reports the header click.
+		await act(async () => {
+			fireEvent.pointerDown(document.body, {
+				clientX: bounds.x + 10,
+				clientY: bounds.y + 10,
+				button: 0,
+			});
+		});
+		await clickHeader();
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("textbox", { name: "Column name" }),
+			).toBeNull();
+		});
+		// A press elsewhere closes it too, and the next header click opens it.
+		await clickHeader();
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toBeVisible();
+		await act(async () => {
+			fireEvent.pointerDown(document.body, {
+				clientX: 900,
+				clientY: 500,
+				button: 0,
+			});
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("textbox", { name: "Column name" }),
+			).toBeNull();
+		});
+		await clickHeader();
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toBeVisible();
+	} finally {
+		if (utils) {
+			await act(async () => utils?.unmount());
+		}
+		await lix.close();
+	}
+});
+
 test("double-clicking a header uses the same column menu to rename", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
