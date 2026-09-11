@@ -230,6 +230,7 @@ export function SqlExplorerView({
 			<Sidebar
 				history={history}
 				baseTables={schema?.baseTables ?? null}
+				descriptions={schema?.descriptions ?? EMPTY_DESCRIPTIONS}
 				functions={schema?.functions ?? []}
 				error={schemaError}
 				onRefresh={() => setSchemaRevision((revision) => revision + 1)}
@@ -279,6 +280,9 @@ export function SqlExplorerView({
 							?.surfaces ?? ["current"]
 					}
 					columnsBySurface={columnsBySurface}
+					{...(schema.descriptions.get(mode.baseTable)
+						? { description: schema.descriptions.get(mode.baseTable) }
+						: {})}
 				/>
 			) : null}
 			<div
@@ -529,10 +533,13 @@ function QueryView({
 	);
 }
 
+const EMPTY_DESCRIPTIONS: ReadonlyMap<string, string> = new Map();
+
 function Sidebar({
 	onReturnQuery,
 	history,
 	baseTables,
+	descriptions,
 	functions,
 	activeQuery,
 	activeTable,
@@ -548,6 +555,7 @@ function Sidebar({
 }: {
 	readonly history: readonly string[];
 	readonly baseTables: readonly SchemaBaseTable[] | null;
+	readonly descriptions: ReadonlyMap<string, string>;
 	readonly functions: readonly TableFunction[];
 	readonly activeQuery: string | null;
 	readonly activeTable: string | null;
@@ -649,7 +657,7 @@ function Sidebar({
 						className="atelier-sql-schema-row"
 						aria-current={activeTable === table.name ? "true" : undefined}
 						data-attr="sql-schema-table"
-						title={table.name}
+						title={descriptions.get(table.name) ?? table.name}
 						onClick={() => onSelectTable(table.name)}
 					>
 						<Table size={13} />

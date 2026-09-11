@@ -121,11 +121,14 @@ export function TableView({
 	baseTable,
 	availableSurfaces,
 	columnsBySurface,
+	description,
 }: {
 	readonly lix: Lix;
 	readonly baseTable: string;
 	readonly availableSurfaces: readonly TableSurface[];
 	readonly columnsBySurface: ReadonlyMap<TableSurface, GridColumnSpec[]>;
+	/** What the table means, in the schema author's words. */
+	readonly description?: string;
 }) {
 	const [surface, setSurface] = useState<TableSurface>("current");
 	const [filters, setFilters] = useState<readonly TableFilter[]>([]);
@@ -186,6 +189,15 @@ export function TableView({
 				<span className="font-mono text-ui font-semibold text-[var(--color-text-primary)]">
 					{baseTable}
 				</span>
+				{description ? (
+					<span
+						data-attr="sql-table-description"
+						className="min-w-0 max-w-[38ch] truncate text-ui-sm text-[var(--color-text-tertiary)]"
+						title={description}
+					>
+						{description}
+					</span>
+				) : null}
 				{availableSurfaces.length > 1 ? (
 					<span
 						role="tablist"
