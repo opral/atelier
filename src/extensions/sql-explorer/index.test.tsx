@@ -250,6 +250,17 @@ describe("SqlExplorerView", () => {
 		expect(
 			document.querySelector("[data-attr='sql-grid-row-range']"),
 		).toHaveTextContent(/1–2 of 2 rows/);
+		// The catalog's descriptions: the table's beside its name, a column's
+		// on its header.
+		expect(
+			document.querySelector("[data-attr='sql-table-description']"),
+		).toHaveTextContent(/^A file in the repository/);
+		expect(
+			screen.getByRole("columnheader", { name: /^path/ }),
+		).toHaveAttribute(
+			"title",
+			"Absolute path from the repository root, ending in the file's name.",
+		);
 	});
 
 	test("surfaces engine errors without crashing", async () => {
