@@ -54,6 +54,7 @@ type CreateEditorArgs = {
 	sourceFilePath?: string;
 	sourceCommitId?: string;
 	defaultBlock?: EmptyMarkdownDefaultBlock;
+	/** Save coalescing window from the first edit; later edits do not reset it. Defaults to 20ms. */
 	persistDebounceMs?: number;
 	persistState?: boolean;
 	shouldPersist?: () => boolean;
@@ -273,7 +274,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		documentRevision: 0,
 		acknowledgedRevision: 0,
 	};
-	const persistDebounceMsResolved = persistDebounceMs ?? 0;
+	const persistWindowMs = persistDebounceMs ?? 20;
 	const persistOnce = async (): Promise<number | undefined> => {
 		const snapshot = pendingPersistenceSnapshot;
 		if (!snapshot) return undefined;
@@ -446,21 +447,23 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			persistenceBaseline.documentRevision += 1;
 			if (!fileId || !persistState || !shouldPersist()) return;
 			// Capture the payload while TipTap is alive. The persistence owner can
-			// then finish independently if the view is destroyed before its debounce
+			// then finish independently if the view is destroyed before its save window
 			// or an in-flight write completes.
 			pendingPersistenceSnapshot = {
 				revision: persistenceBaseline.documentRevision,
 				doc: transaction.doc,
 			};
-			if (persistDebounceMsResolved <= 0) {
+			if (persistWindowMs <= 0) {
 				void runPersist().catch(() => {});
 				return;
 			}
-			if (persistStateTimer) clearTimeout(persistStateTimer);
+			// Keep the first edit’s deadline; continuous typing must not postpone
+			// persistence. An in-flight save already drains the latest snapshot.
+			if (persistStateTimer || persistPromise) return;
 			persistStateTimer = setTimeout(() => {
 				persistStateTimer = null;
 				void runPersist().catch(() => {});
-			}, persistDebounceMsResolved);
+			}, persistWindowMs);
 		},
 		onDestroy: () => {
 			cleanupExternalLinkClick?.();
@@ -468,7 +471,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			documentExistence.close();
 			destroyed = true;
 			currentEditor = null;
-			// Destruction only releases TipTap. A debounce or serialized drain already
+			// Destruction only releases TipTap. A save window or serialized drain already
 			// owned by persistence may finish its payload captured in onUpdate.
 		},
 		editorProps: {

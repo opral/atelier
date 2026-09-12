@@ -1644,3 +1644,99 @@ test("saving a heading edit preserves untouched Markdown source across successiv
 		await lix.close();
 	}
 });
+
+test("continuous typing persists each bounded window without waiting for silence", async () => {
+	const lix = await openLix();
+	const writes: string[] = [];
+	const client = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute")
+				return async (...args: Parameters<typeof lix.execute>) => {
+					if (args[0].startsWith("UPDATE lix_file SET content")) {
+						writes.push(new TextDecoder().decode(args[1]![0] as Uint8Array));
+						return { columns: [], rows: [], rowsAffected: 1 };
+					}
+					return target.execute(...args);
+				};
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+	vi.useFakeTimers();
+	const editor = createEditor({
+		lix: client,
+		fileId: fakeUuid("bounded_typing"),
+		initialMarkdown: "Start",
+	});
+	try {
+		for (let i = 0; i < 8; i += 1) {
+			editor.commands.insertContent(String(i));
+			await vi.advanceTimersByTimeAsync(5);
+			if (i === 2) expect(writes).toHaveLength(0);
+			if (i === 3) expect(writes).toHaveLength(1);
+		}
+		expect(writes).toHaveLength(2);
+		expect(writes[0]).toContain("0123");
+		expect(writes[1]).toContain("01234567");
+	} finally {
+		editor.destroy();
+		vi.useRealTimers();
+		await lix.close();
+	}
+});
+
+test("a save in flight coalesces newer edits into one serialized latest snapshot", async () => {
+	const lix = await openLix();
+	const writes: string[] = [];
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let active = 0;
+	let maxActive = 0;
+	const client = new Proxy(lix, {
+		get(target, property) {
+			if (property === "execute")
+				return async (...args: Parameters<typeof lix.execute>) => {
+					if (args[0].startsWith("UPDATE lix_file SET content")) {
+						active += 1;
+						maxActive = Math.max(maxActive, active);
+						writes.push(new TextDecoder().decode(args[1]![0] as Uint8Array));
+						if (writes.length === 1) await gate;
+						active -= 1;
+						return { columns: [], rows: [], rowsAffected: 1 };
+					}
+					return target.execute(...args);
+				};
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+	vi.useFakeTimers();
+	const editor = createEditor({
+		lix: client,
+		fileId: fakeUuid("bounded_inflight"),
+		initialMarkdown: "Start",
+	});
+	try {
+		editor.commands.insertContent("A");
+		await vi.advanceTimersByTimeAsync(20);
+		for (const text of ["B", "C", "D"]) {
+			editor.commands.insertContent(text);
+			await vi.advanceTimersByTimeAsync(25);
+		}
+		expect(writes).toHaveLength(1);
+		release();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(writes).toHaveLength(2);
+		expect(writes[1]).toContain("ABCD");
+		expect(maxActive).toBe(1);
+		await vi.advanceTimersByTimeAsync(100);
+		expect(writes).toHaveLength(2);
+	} finally {
+		release();
+		editor.destroy();
+		vi.useRealTimers();
+		await lix.close();
+	}
+});
