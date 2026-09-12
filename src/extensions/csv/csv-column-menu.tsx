@@ -131,6 +131,7 @@ export function CsvColumnMenu({
 	onEditOption,
 	onChange,
 	onClose,
+	onPointerDownOutside,
 	onInsertLeft,
 	onInsertRight,
 	onDelete,
@@ -146,6 +147,8 @@ export function CsvColumnMenu({
 	onRename: (name: string) => void;
 	onChange: (patch: Partial<CsvColumnInfo>) => void;
 	onClose: () => void;
+	/** An outside press that is about to close the menu, before it closes. */
+	onPointerDownOutside?: (event: { clientX: number; clientY: number }) => void;
 	onInsertLeft: () => void;
 	onInsertRight: () => void;
 	onDelete: () => void;
@@ -236,6 +239,11 @@ export function CsvColumnMenu({
 					}}
 					onKeyDownCapture={() => {
 						interacted.current = true;
+					}}
+					onPointerDownOutside={(event) => {
+						const original = event.detail.originalEvent;
+						if (original instanceof MouseEvent)
+							onPointerDownOutside?.(original);
 					}}
 					side="bottom"
 					align="start"

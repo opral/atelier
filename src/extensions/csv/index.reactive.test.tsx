@@ -500,6 +500,82 @@ test("deletes a row via the context menu", async () => {
 	}
 });
 
+test("pressing the open menu's own header closes it instead of reopening it", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		const fileId = fakeUuid("file_csv_toggle_column_menu");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/toggle.csv",
+				content: new TextEncoder().encode("name,notes\nalpha,beta\n"),
+			})
+			.execute();
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView fileId={fileId} />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		expect(await screen.findByText("alpha")).toBeInTheDocument();
+		const bounds = { x: 100, y: 0, width: 120, height: 40 };
+		const clickHeader = async () => {
+			await act(async () => {
+				latestDataEditorProps.current?.onHeaderClicked?.(1, {
+					bounds,
+					preventDefault: () => {},
+				});
+			});
+		};
+		await clickHeader();
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toBeVisible();
+		// The second press lands on the header: Radix sees an outside press
+		// and closes the menu, then Glide reports the header click.
+		await act(async () => {
+			fireEvent.pointerDown(document.body, {
+				clientX: bounds.x + 10,
+				clientY: bounds.y + 10,
+				button: 0,
+			});
+		});
+		await clickHeader();
+		await waitFor(() => {
+			expect(screen.queryByRole("textbox", { name: "Column name" })).toBeNull();
+		});
+		// A press elsewhere closes it too, and the next header click opens it.
+		await clickHeader();
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toBeVisible();
+		await act(async () => {
+			fireEvent.pointerDown(document.body, {
+				clientX: 900,
+				clientY: 500,
+				button: 0,
+			});
+		});
+		await waitFor(() => {
+			expect(screen.queryByRole("textbox", { name: "Column name" })).toBeNull();
+		});
+		await clickHeader();
+		expect(
+			await screen.findByRole("textbox", { name: "Column name" }),
+		).toBeVisible();
+	} finally {
+		if (utils) {
+			await act(async () => utils?.unmount());
+		}
+		await lix.close();
+	}
+});
+
 test("double-clicking a header uses the same column menu to rename", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
@@ -1563,6 +1639,73 @@ test("select filters reuse colored options and reset when switching to a text co
 	}
 });
 
+test("a rule's condition can be turned around: is not, then is empty without a value", async () => {
+	const fixture = await renderMetadataCsv();
+	try {
+		await configureSelect();
+		fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter column" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "stage" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter column" }),
+			).toHaveFocus(),
+		);
+		expect(
+			screen.getByRole("button", { name: "Filter condition" }),
+		).toHaveTextContent("Is");
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemcheckbox", { name: "trial" }),
+		);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(1));
+		expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+			"Bob",
+		);
+		fireEvent.keyDown(screen.getByRole("menu", { name: "Filter value" }), {
+			key: "Escape",
+		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Filter value" }),
+			).toHaveFocus(),
+		);
+		fireEvent.keyDown(
+			screen.getByRole("button", { name: "Filter condition" }),
+			{ key: "ArrowDown" },
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "Is not" }),
+		);
+		await waitFor(() =>
+			expect(latestDataEditorProps.current?.getCellContent([0, 0]).data).toBe(
+				"Alice",
+			),
+		);
+		expect(latestDataEditorProps.current?.rows).toBe(1);
+		expect(
+			screen.getByRole("button", { name: "Filter value" }),
+		).toHaveAccessibleDescription(/Matches none of: trial/);
+		fireEvent.keyDown(
+			screen.getByRole("button", { name: "Filter condition" }),
+			{ key: "ArrowDown" },
+		);
+		fireEvent.click(
+			await screen.findByRole("menuitemradio", { name: "Is empty" }),
+		);
+		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(0));
+		expect(screen.queryByRole("button", { name: "Filter value" })).toBeNull();
+	} finally {
+		await fixture.close();
+	}
+});
+
 test("renaming an option persists matching CSV cells and metadata together", async () => {
 	const fixture = await renderMetadataCsv(undefined, {
 		atelier_csv: {
@@ -2395,4 +2538,53 @@ test("pressing the blank surface around the table clears the selection", async (
 		});
 	});
 	await waitFor(() => expect(selection().gridSelection.rows.length).toBe(0));
+});
+
+test("checkpoint review reveals CSV column additions on a freshly opened surface", async () => {
+	const lix = await openLix();
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			"/leads.csv",
+			new TextEncoder().encode(
+				"company,website\r\nExample,https://example.com\r\n",
+			),
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute("UPDATE lix_file SET content = $1 WHERE path = $2", [
+			new TextEncoder().encode(
+				"company,website,company_size_min,company_size_max\r\nExample,https://example.com,51,200\r\n",
+			),
+			"/leads.csv",
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		const observe = vi.spyOn(lix, "observe");
+		utils = render(<Atelier lix={lix} />);
+		await waitFor(() => expect(observe).toHaveBeenCalled());
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Latest checkpoint. Review latest checkpoint",
+			}),
+		);
+		await waitFor(() => {
+			expect(
+				screen.getByRole("columnheader", { name: /company_size_min/ }),
+			).toHaveAttribute("data-diff-status", "added");
+		});
+		expect(
+			screen.getByRole("columnheader", { name: /company_size_max/ }),
+		).toHaveAttribute("data-diff-status", "added");
+		expect(
+			screen.getByRole("columnheader", { name: "company" }),
+		).toHaveAttribute("data-diff-status", "unchanged");
+		expect(
+			screen.getByRole("button", { name: "Review changes" }),
+		).toBeVisible();
+		expect(
+			utils.container.querySelector("[data-atelier-initial-content]"),
+		).toBeNull();
+	} finally {
+		utils?.unmount();
+		await lix.close();
+	}
 });

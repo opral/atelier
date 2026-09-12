@@ -7,7 +7,9 @@ function stubLix(initial: string[]) {
 	const waiting: Array<(event: unknown) => void> = [];
 	const push = () => {
 		const event = {
-			result: { rows: [...files].map((path) => ({ path })) },
+			result: {
+				rows: [...files].map((path) => ({ id: `id:${path}`, path })),
+			},
 		};
 		for (const resolve of waiting.splice(0)) resolve(event);
 	};
@@ -58,6 +60,8 @@ describe("createDocumentExistence", () => {
 		stub.setFiles(["/a.md", "/b.md"]);
 		await settle();
 		expect(existence.exists("/b.md")).toBe(true);
+		expect(existence.pathOf("id:/b.md")).toBe("/b.md");
+		expect(existence.pathOf("id:/c.md")).toBeUndefined();
 		expect(existence.exists("/c.md")).toBe(false);
 		expect(notified).toBe(3);
 		existence.close();

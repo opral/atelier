@@ -89,6 +89,7 @@ import {
 	fileNameFromPath,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
+	CSV_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
@@ -612,6 +613,10 @@ type LixFileForOpen = {
 };
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
+
+/** The newest checkpoint on the head's first-parent chain, and what it follows. */
+const LATEST_CHECKPOINT_SQL =
+	"SELECT commit_id, parent_commit_id FROM lix_log() WHERE is_checkpoint ORDER BY position LIMIT 1";
 
 /**
  * The one diff-mode state: a review of the span between two commits, aimed at
@@ -2395,7 +2400,8 @@ function LayoutShellLoadedContentResolved({
 			const beforeExists = changeKind !== "added";
 			const afterExists = changeKind !== "removed";
 			const sourceCommitId = afterExists ? commitId : previousCommitId;
-			return handler?.kind === FILE_EXTENSION_KIND
+			return handler?.kind === FILE_EXTENSION_KIND ||
+				handler?.kind === CSV_EXTENSION_KIND
 				? {
 						beforeCommitId: previousCommitId,
 						afterCommitId: commitId,
@@ -4258,6 +4264,32 @@ function LayoutShellLoadedContentResolved({
 			changedFileCount: diffSession?.files.length ?? 0,
 		});
 	}, [diffSession, emitEvent]);
+	// The status-bar pill with nothing to review since the checkpoint: the
+	// checkpoint itself, as the History view opens it (its span against its
+	// parent, files as snapshots), without switching the side panel.
+	const handleReviewLatestCheckpoint = useCallback(() => {
+		if (historicalReview) {
+			exitDiffReview();
+			return;
+		}
+		void (async () => {
+			const result = await lix.execute(LATEST_CHECKPOINT_SQL);
+			const row = result.rows[0];
+			const commitId = row?.commit_id;
+			if (typeof commitId !== "string") {
+				// No checkpoint yet: history is where that is explained.
+				revealHistory();
+				return;
+			}
+			const parent = row?.parent_commit_id;
+			await openDiffSession({
+				base: typeof parent === "string" ? { commitId: parent } : null,
+				target: { commitId },
+			});
+		})().catch((error: unknown) => {
+			console.error("Could not open the latest checkpoint review", error);
+		});
+	}, [exitDiffReview, historicalReview, lix, openDiffSession, revealHistory]);
 	const diffApi = useMemo(
 		(): AtelierDiffApi => ({
 			session: diffSession,
@@ -4289,6 +4321,9 @@ function LayoutShellLoadedContentResolved({
 			...(configuration.debug !== undefined
 				? { debug: configuration.debug }
 				: {}),
+			...(configuration.documentLinks !== undefined
+				? { documentLinks: configuration.documentLinks }
+				: {}),
 			...(configuration.filesView !== undefined
 				? { filesView: configuration.filesView }
 				: {}),
@@ -4311,6 +4346,7 @@ function LayoutShellLoadedContentResolved({
 		}),
 		[
 			configuration.debug,
+			configuration.documentLinks,
 			configuration.filesView,
 			configuration.readOnly,
 			emitEvent,
@@ -4598,6 +4634,7 @@ function LayoutShellLoadedContentResolved({
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
 					reviewingWorkingChanges={workingChangesReviewOpen}
+					reviewingLatestCheckpoint={historicalReview !== null}
 					onReviewWorkingChanges={() => {
 						// The same control opens and closes the review.
 						if (workingChangesReviewOpen) {
@@ -4606,11 +4643,7 @@ function LayoutShellLoadedContentResolved({
 						}
 						handleOpenWorkingChangesReview();
 					}}
-					onOpenHistory={() =>
-						handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
-							panel: "left",
-						})
-					}
+					onReviewLatestCheckpoint={handleReviewLatestCheckpoint}
 				/>
 			</div>
 			<DragOverlay>

@@ -187,6 +187,15 @@ export function drawPropertyCell(
 		ctx.beginPath();
 		ctx.roundRect(pillX, pillY, width, PILL_HEIGHT, 3);
 		ctx.fill();
+		// A hairline in the chip's own ink keeps it legible on a hovered row
+		// or a selected column, whose washes sit close to a pale chip.
+		ctx.strokeStyle = fg;
+		ctx.globalAlpha = 0.22;
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.roundRect(pillX + 0.5, pillY + 0.5, width - 1, PILL_HEIGHT - 1, 2.5);
+		ctx.stroke();
+		ctx.globalAlpha = 1;
 		ctx.fillStyle = fg;
 		ctx.textBaseline = "middle";
 		let label = value;

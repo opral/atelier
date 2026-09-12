@@ -8,6 +8,8 @@ const publicDeclarations = new Set([
 	"atelier-error-boundary.d.ts",
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
+	"components/diff-glyph.d.ts",
+	"components/diff-glyph-geometry.d.ts",
 	"file-icons.d.ts",
 	"atelier.d.ts",
 	"atelier-file.d.ts",

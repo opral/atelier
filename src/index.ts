@@ -60,6 +60,7 @@ export type {
 	AtelierExtensionPreferences,
 	AtelierExtensionRegistration,
 	AtelierExtensionSeparatorMenuItem,
+	AtelierDocumentLinks,
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierDiffApi,
@@ -91,6 +92,14 @@ export type {
 } from "./dev-tools/simulate-agent-workflow";
 
 export type { AtelierHistoryProps } from "./history";
+
+/**
+ * The diff-type glyph every Atelier surface draws (History, the file tree,
+ * the review controls). Hosts that list files render the same shapes from
+ * the same source instead of redrawing them.
+ */
+export { DiffGlyph, WorkingDot } from "./components/diff-glyph";
+export type { DiffGlyphKind } from "./components/diff-glyph";
 
 export { AtelierFile } from "./atelier-file";
 export type { AtelierFileProps } from "./atelier-file";

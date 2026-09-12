@@ -415,6 +415,21 @@ export function ExternalWriteReviewControls({
 		navigation !== undefined && navigation.activeIndex !== null;
 	// With no changed file on screen the arrows are the way to one.
 	const showStepperArrows = fileCount > 1 || !hasVisibleFile;
+	// The arrows say where they go; the position itself is the pager's.
+	const neighbourTitle = (
+		direction: "Previous" | "Next",
+		step: -1 | 1,
+	): string | undefined => {
+		if (
+			navigation?.activeIndex === null ||
+			navigation?.activeIndex === undefined
+		)
+			return undefined;
+		const neighbour = listFiles[navigation.activeIndex + step];
+		return neighbour
+			? `${direction}: ${neighbour.path.split("/").filter(Boolean).at(-1) ?? neighbour.path}`
+			: undefined;
+	};
 	const showVerbArrows = listFiles.length > 1;
 	const totalCount = listFiles.length;
 	// "1 of 180": the count every verb acts on, over the whole list.
@@ -610,6 +625,7 @@ export function ExternalWriteReviewControls({
 							<button
 								type="button"
 								aria-label="Previous changed file"
+								title={neighbourTitle("Previous", -1)}
 								onClick={navigation.onPrevious}
 							>
 								<ChevronLeft aria-hidden="true" />
@@ -642,17 +658,12 @@ export function ExternalWriteReviewControls({
 											)}
 										</span>
 									</strong>
-									<small className="external-write-review-stable">
-										<span
-											aria-hidden="true"
-											className="external-write-review-sizer"
-										>
-											{navigation.fileCount} of {navigation.fileCount}
-										</span>
-										<span>
-											{navigation.activeIndex + 1} of {navigation.fileCount}
-										</span>
-									</small>
+									{navigation.fileCount > 1 ? (
+										<StepperPosition
+											index={navigation.activeIndex}
+											count={navigation.fileCount}
+										/>
+									) : null}
 								</span>
 							</>
 						) : (
@@ -670,6 +681,7 @@ export function ExternalWriteReviewControls({
 							<button
 								type="button"
 								aria-label="Next changed file"
+								title={neighbourTitle("Next", 1)}
 								onClick={navigation.onNext}
 							>
 								<ChevronRight aria-hidden="true" />
@@ -881,4 +893,33 @@ function PrimaryVerbStackIcon({
 function isMacPlatform(): boolean {
 	if (typeof navigator === "undefined") return true;
 	return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+}
+
+/**
+ * Where the stepper stands among the changed files: one dot per file for a
+ * handful, a compact index beyond that. The chip beside it already reads
+ * "ticked of total", so the position does not say "N of M" a second time.
+ */
+function StepperPosition({
+	index,
+	count,
+}: {
+	readonly index: number;
+	readonly count: number;
+}): ReactNode {
+	const label = `File ${index + 1} of ${count}`;
+	if (count > 8) {
+		return (
+			<small className="external-write-review-pager-index" aria-label={label}>
+				{index + 1}/{count}
+			</small>
+		);
+	}
+	return (
+		<span className="external-write-review-pager" role="img" aria-label={label}>
+			{Array.from({ length: count }, (_, dot) => (
+				<i key={dot} data-active={dot === index ? "true" : undefined} />
+			))}
+		</span>
+	);
 }

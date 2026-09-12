@@ -1,8 +1,10 @@
 import type { CsvColumnInfo } from "./csv-metadata";
 import {
+	CSV_FILTER_OPERATORS,
 	EMPTY_CSV_FILTER,
 	isActiveCsvFilterRule,
 	type CsvFilterGroup,
+	type CsvFilterOperator,
 } from "./csv-filter";
 
 export type CsvViewSettings = {
@@ -17,7 +19,11 @@ export type CsvSavedView = {
 	name: string;
 	filter: {
 		mode: "all" | "any";
-		rules: { columnId: string; value: string | readonly string[] }[];
+		rules: {
+			columnId: string;
+			operator?: CsvFilterOperator;
+			value: string | readonly string[];
+		}[];
 	};
 	sort: { columnId: string; direction: 1 | -1 } | null;
 	search: string;
@@ -39,7 +45,13 @@ export function captureCsvView(
 				.filter(isActiveCsvFilterRule)
 				.flatMap((rule) =>
 					columns[rule.column!]
-						? [{ columnId: columns[rule.column!]!.id, value: rule.value }]
+						? [
+								{
+									columnId: columns[rule.column!]!.id,
+									...(rule.operator ? { operator: rule.operator } : {}),
+									value: rule.value,
+								},
+							]
 						: [],
 				),
 		},
@@ -91,7 +103,14 @@ export function restoreCsvView(
 				const column = indexOf(rule.columnId);
 				return column < 0
 					? []
-					: [{ id: `${view.id}-${i}`, column, value: rule.value }];
+					: [
+							{
+								id: `${view.id}-${i}`,
+								column,
+								...(rule.operator ? { operator: rule.operator } : {}),
+								value: rule.value,
+							},
+						];
 			}),
 		},
 		sort:
@@ -125,8 +144,9 @@ export function csvViewSettingsKey(settings: CsvViewSettings): string {
 			mode: settings.filter.mode,
 			rules: settings.filter.rules
 				.filter(isActiveCsvFilterRule)
-				.map(({ column, value }) => ({
+				.map(({ column, operator, value }) => ({
 					column,
+					operator: operator ?? null,
 					value: typeof value === "string" ? value : [...value].sort(),
 				})),
 		},
@@ -167,6 +187,10 @@ export function readCsvViews(value: unknown): CsvSavedView[] {
 				(rule) =>
 					object(rule) &&
 					typeof rule.columnId === "string" &&
+					(rule.operator === undefined ||
+						CSV_FILTER_OPERATORS.includes(
+							rule.operator as CsvFilterOperator,
+						)) &&
 					(typeof rule.value === "string" ||
 						(Array.isArray(rule.value) &&
 							rule.value.every((v) => typeof v === "string"))),

@@ -26,9 +26,11 @@ const ISO_DATE =
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL = /^https?:\/\/\S+$/i;
 
-const PALETTE_NAMES = Object.keys(CSV_COLOR_FALLBACKS) as Array<
-	keyof typeof CSV_COLOR_FALLBACKS
->;
+// Gray is the "no colour" colour and sinks into a hovered row, so an
+// inferred value always gets a hue; gray stays for declared options.
+const PALETTE_NAMES = (
+	Object.keys(CSV_COLOR_FALLBACKS) as Array<keyof typeof CSV_COLOR_FALLBACKS>
+).filter((name) => name !== "gray");
 
 /** Stable per value, so a chip keeps its colour across files and reloads. */
 export function inferredOptionColor(value: string): string {

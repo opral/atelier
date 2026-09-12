@@ -57,6 +57,27 @@ test("resolves document-relative and root paths without treating URLs or fragmen
 	}
 });
 
+test("absolute links are the host's to recognize", () => {
+	const resolve = (href: string) =>
+		href === "https://host.test/@acme/repo/file/abc/brief.md"
+			? "/plans/brief.md"
+			: null;
+	expect(
+		documentLinkPath(
+			"https://host.test/@acme/repo/file/abc/brief.md",
+			"/docs/discovery.md",
+			resolve,
+		),
+	).toBe("/plans/brief.md");
+	expect(
+		documentLinkPath("https://example.com/a.md", "/docs/discovery.md", resolve),
+	).toBeNull();
+	// A relative link never asks the host.
+	expect(
+		documentLinkPath("guide.md", "/docs/discovery.md", () => "/wrong.md"),
+	).toBe("/docs/guide.md");
+});
+
 test("opens document tabs, preserves checkpoint context, and leaves external links alone", async () => {
 	const root = document.createElement("div");
 	root.innerHTML =

@@ -73,8 +73,8 @@ describe("inferColumnKind", () => {
 
 	test("assigns each value a stable palette colour", () => {
 		expect(inferredOptionColor("trial")).toBe(inferredOptionColor("trial"));
+		expect(inferredOptionColor("Pending")).not.toBe("gray");
 		expect([
-			"gray",
 			"brown",
 			"orange",
 			"yellow",

@@ -91,6 +91,61 @@
 		outline-offset: -2px;
 	}
 
+	/* The platform scrollbars take a gutter and dress like a document
+	   window; the grid draws its own thin thumbs over its edges instead. */
+	.csv-view .dvn-scroller,
+	.csv-view .csv-review-scroll {
+		scrollbar-width: none;
+	}
+	.csv-view .dvn-scroller::-webkit-scrollbar,
+	.csv-view .csv-review-scroll::-webkit-scrollbar {
+		display: none;
+	}
+
+	.csv-overlay-scrollbars {
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+		height: 100%;
+		/* Over the grid canvas, under its menus. */
+		z-index: 2;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 240ms ease;
+	}
+	.csv-overlay-scrollbars[data-active],
+	.csv-view:hover .csv-overlay-scrollbars {
+		opacity: 1;
+	}
+	.csv-overlay-thumb {
+		position: absolute;
+		pointer-events: auto;
+		border-radius: 3px;
+		background: color-mix(in srgb, var(--color-text-primary) 32%, transparent);
+		transition: background-color 160ms ease;
+	}
+	.csv-overlay-thumb:hover,
+	.csv-overlay-thumb:active {
+		background: color-mix(in srgb, var(--color-text-primary) 52%, transparent);
+	}
+	.csv-overlay-thumb-horizontal {
+		left: 3px;
+		bottom: 3px;
+		height: 6px;
+	}
+	.csv-overlay-thumb-vertical {
+		top: 3px;
+		right: 3px;
+		width: 6px;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.csv-overlay-scrollbars,
+		.csv-overlay-thumb {
+			transition: none;
+		}
+	}
+
 	.csv-grid-menu-backdrop {
 		position: fixed;
 		inset: 0;
@@ -144,4 +199,28 @@
 	.csv-grid-menu-item-destructive:hover {
 		background: var(--color-bg-status-danger);
 	}
+}
+
+/* Glide's cell editor lives in a body-level portal, outside the shell's
+   scope. It sits exactly on the cell it edits, its text where the canvas
+   drew it, keeps the cell's width (long text wraps and grows it downward,
+   as a document table's cell would) and lifts on a soft shadow instead of
+   the accent ring. */
+.atelier-csv-portal .gdg-style {
+	/* min-width carries the cell's width; never grow to the content. */
+	width: 0;
+	max-width: none;
+	border-radius: 4px;
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--gdg-text-dark) 16%, transparent),
+		0 1px 2px color-mix(in srgb, var(--gdg-text-dark) 8%, transparent),
+		0 6px 16px color-mix(in srgb, var(--gdg-text-dark) 12%, transparent);
+}
+.atelier-csv-portal .gdg-style.gdg-pad {
+	/* One pixel of bloom, then 12 + 16 line + 2 + 10 = the 40px row: the
+	   text stays where the cell drew it. */
+	padding: 13px calc(var(--gdg-cell-horizontal-padding, 8px) + 1px) 11px;
+}
+.atelier-csv-portal .gdg-style.gdg-pad .gdg-growing-entry {
+	margin-top: 0;
 }

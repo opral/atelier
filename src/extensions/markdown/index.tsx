@@ -46,6 +46,7 @@ import { SelectionToolbar } from "./components/selection-toolbar";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
 import { MentionMenu } from "./components/mention-menu";
+import { DocumentLinksContext } from "./editor/document-links-context";
 import type { MarkdownReviewDiff } from "./review-diff";
 import {
 	decodeFileDataToBytes,
@@ -1108,63 +1109,65 @@ export const extension = createReactExtensionDefinition({
 					)
 				}
 			>
-				<MarkdownView
-					fileId={view.state.fileId as string}
-					filePath={view.state.filePath as string | undefined}
-					readOnly={atelier.readOnly}
-					isActiveView={view.isActive}
-					isPanelFocused={view.isFocused}
-					focusOnLoad={Boolean(view.state.focusOnLoad)}
-					defaultBlock={
-						view.state.defaultBlock === "heading1" ? "heading1" : undefined
-					}
-					activeBranchId={atelier.branches.activeId}
-					diffSession={atelier.diff.session}
-					beforeCommitId={
-						typeof view.state.beforeCommitId === "string"
-							? view.state.beforeCommitId
-							: null
-					}
-					afterCommitId={
-						typeof view.state.afterCommitId === "string"
-							? view.state.afterCommitId
-							: null
-					}
-					beforeFileId={
-						typeof view.state.beforeFileId === "string"
-							? view.state.beforeFileId
-							: null
-					}
-					beforeExists={view.state.beforeExists !== false}
-					afterExists={view.state.afterExists !== false}
-					afterFileId={
-						typeof view.state.afterFileId === "string"
-							? view.state.afterFileId
-							: null
-					}
-					onDiffAccept={atelier.diff.accept}
-					onDiffReject={atelier.diff.reject}
-					onDiffResolve={atelier.diff.resolve}
-					autoAcceptReviews={
-						(atelier.diff.session !== null &&
-							"working" in atelier.diff.session.target) ||
-						atelier.diff.autoAccept
-					}
-					openWorkspaceFile={(args) =>
-						atelier.documents.open(args.filePath, {
-							...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
-							...(args.state ? { state: args.state } : {}),
-							...(args.focus !== undefined ? { focus: args.focus } : {}),
-						})
-					}
-					onDocumentModified={(filePath) =>
-						atelier.events.emit({
-							type: "document_modified",
-							filePath,
-							modifiedBy: "user",
-						})
-					}
-				/>
+				<DocumentLinksContext.Provider value={atelier.documentLinks}>
+					<MarkdownView
+						fileId={view.state.fileId as string}
+						filePath={view.state.filePath as string | undefined}
+						readOnly={atelier.readOnly}
+						isActiveView={view.isActive}
+						isPanelFocused={view.isFocused}
+						focusOnLoad={Boolean(view.state.focusOnLoad)}
+						defaultBlock={
+							view.state.defaultBlock === "heading1" ? "heading1" : undefined
+						}
+						activeBranchId={atelier.branches.activeId}
+						diffSession={atelier.diff.session}
+						beforeCommitId={
+							typeof view.state.beforeCommitId === "string"
+								? view.state.beforeCommitId
+								: null
+						}
+						afterCommitId={
+							typeof view.state.afterCommitId === "string"
+								? view.state.afterCommitId
+								: null
+						}
+						beforeFileId={
+							typeof view.state.beforeFileId === "string"
+								? view.state.beforeFileId
+								: null
+						}
+						beforeExists={view.state.beforeExists !== false}
+						afterExists={view.state.afterExists !== false}
+						afterFileId={
+							typeof view.state.afterFileId === "string"
+								? view.state.afterFileId
+								: null
+						}
+						onDiffAccept={atelier.diff.accept}
+						onDiffReject={atelier.diff.reject}
+						onDiffResolve={atelier.diff.resolve}
+						autoAcceptReviews={
+							(atelier.diff.session !== null &&
+								"working" in atelier.diff.session.target) ||
+							atelier.diff.autoAccept
+						}
+						openWorkspaceFile={(args) =>
+							atelier.documents.open(args.filePath, {
+								...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
+								...(args.state ? { state: args.state } : {}),
+								...(args.focus !== undefined ? { focus: args.focus } : {}),
+							})
+						}
+						onDocumentModified={(filePath) =>
+							atelier.events.emit({
+								type: "document_modified",
+								filePath,
+								modifiedBy: "user",
+							})
+						}
+					/>
+				</DocumentLinksContext.Provider>
 			</PreparedFileSurface>
 		);
 	},

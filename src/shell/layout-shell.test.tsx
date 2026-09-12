@@ -762,11 +762,10 @@ describe("diff review navigation", () => {
 			fireEvent.click(
 				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			);
-			expect(
-				await screen.findByRole("button", {
-					name: "Latest checkpoint. Open checkpoint history",
-				}),
-			).toBeVisible();
+			const idlePill = await screen.findByRole("button", {
+				name: "Latest checkpoint. Review latest checkpoint",
+			});
+			expect(idlePill).toBeVisible();
 			expect(
 				execute.mock.calls.some(([statement]) =>
 					String(statement).includes("lix_as_of('lix_file'"),
@@ -774,6 +773,22 @@ describe("diff review navigation", () => {
 			).toBe(false);
 			await waitFor(() => {
 				expect(screen.queryByText("Reviewing auto-changed.md")).toBeNull();
+			});
+			// The idle pill reviews the checkpoint it names, as the History
+			// view would, without switching the side panel to History.
+			const leftBefore = sessionStateStore.getSnapshot()?.panels.left;
+			fireEvent.click(idlePill);
+			expect(await screen.findByRole("button", { name: "Exit" })).toBeVisible();
+			expect(
+				await screen.findByRole("list", { name: "Files at this checkpoint" }),
+			).toBeVisible();
+			expect(sessionStateStore.getSnapshot()?.panels.left).toEqual(leftBefore);
+			const closePill = await screen.findByRole("button", {
+				name: "Latest checkpoint. Close review",
+			});
+			fireEvent.click(closePill);
+			await waitFor(() => {
+				expect(screen.queryByRole("button", { name: "Exit" })).toBeNull();
 			});
 		} finally {
 			await act(async () => utils?.unmount());

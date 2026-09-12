@@ -90,3 +90,126 @@ test("compound Any accepts either rule and incomplete rules never widen matches"
 		),
 	).toBe(true);
 });
+
+import {
+	csvFilterOperators,
+	defaultCsvFilterOperator,
+	isActiveCsvFilterRule,
+} from "./csv-filter";
+
+test("text conditions compare case-insensitively: is, is not, starts, ends, does not contain", () => {
+	expect(matchesCsvFilter("Trial", "trial", "text", "is")).toBe(true);
+	expect(matchesCsvFilter("Trial extended", "trial", "text", "is")).toBe(false);
+	expect(matchesCsvFilter("Trial", "trial", "text", "is_not")).toBe(false);
+	expect(matchesCsvFilter("", "trial", "text", "is_not")).toBe(true);
+	expect(
+		matchesCsvFilter("Trial extended", "ext", "text", "not_contains"),
+	).toBe(false);
+	expect(matchesCsvFilter("Trial", "ext", "text", "not_contains")).toBe(true);
+	expect(matchesCsvFilter("Trial extended", "tri", "text", "starts_with")).toBe(
+		true,
+	);
+	expect(matchesCsvFilter("Trial extended", "ded", "text", "ends_with")).toBe(
+		true,
+	);
+	expect(matchesCsvFilter("Trial extended", "tri", "text", "ends_with")).toBe(
+		false,
+	);
+});
+test("empty conditions look at the cell alone, and blank whitespace counts as empty", () => {
+	expect(matchesCsvFilter("  ", "", "text", "empty")).toBe(true);
+	expect(matchesCsvFilter("x", "", "select", "empty")).toBe(false);
+	expect(matchesCsvFilter("x", "", "number", "not_empty")).toBe(true);
+	expect(matchesCsvFilter("", "", "date", "not_empty")).toBe(false);
+});
+test("number and date conditions compare values", () => {
+	expect(matchesCsvFilter("10", "5", "number", "gt")).toBe(true);
+	expect(matchesCsvFilter("10", "10", "number", "gt")).toBe(false);
+	expect(matchesCsvFilter("10", "10", "number", "gte")).toBe(true);
+	expect(matchesCsvFilter("9.5", "10", "number", "lt")).toBe(true);
+	expect(matchesCsvFilter("10", "10", "number", "lte")).toBe(true);
+	expect(matchesCsvFilter("10", "10", "number", "is_not")).toBe(false);
+	expect(matchesCsvFilter("", "10", "number", "is_not")).toBe(true);
+	expect(matchesCsvFilter("abc", "10", "number", "gt")).toBe(false);
+	expect(matchesCsvFilter("2026-09-09", "2026-09-10", "date", "before")).toBe(
+		true,
+	);
+	expect(matchesCsvFilter("2026-09-10", "2026-09-10", "date", "before")).toBe(
+		false,
+	);
+	expect(
+		matchesCsvFilter("2026-09-10", "2026-09-10", "date", "on_or_before"),
+	).toBe(true);
+	expect(matchesCsvFilter("2026-09-11", "2026-09-10", "date", "after")).toBe(
+		true,
+	);
+	expect(
+		matchesCsvFilter("2026-09-10", "2026-09-10", "date", "on_or_after"),
+	).toBe(true);
+	expect(matchesCsvFilter("soon", "2026-09-10", "date", "after")).toBe(false);
+});
+test("select and checkbox is not excludes every chosen value and keeps blanks", () => {
+	expect(
+		matchesCsvFilter("Trial", ["Trial", "Qualified"], "select", "is_not"),
+	).toBe(false);
+	expect(matchesCsvFilter("Onboarded", ["Trial"], "select", "is_not")).toBe(
+		true,
+	);
+	expect(matchesCsvFilter("", ["Trial"], "select", "is_not")).toBe(true);
+	expect(matchesCsvFilter("Trial", [], "select", "is_not")).toBe(true);
+	expect(matchesCsvFilter("yes", ["true"], "checkbox", "is_not")).toBe(false);
+	expect(matchesCsvFilter("no", ["true"], "checkbox", "is_not")).toBe(true);
+});
+test("each type offers Notion's conditions and a rule without one means the type's default", () => {
+	expect(csvFilterOperators("text").map((option) => option.value)).toEqual([
+		"is",
+		"is_not",
+		"contains",
+		"not_contains",
+		"starts_with",
+		"ends_with",
+		"empty",
+		"not_empty",
+	]);
+	expect(csvFilterOperators("select").map((option) => option.label)).toEqual([
+		"Is",
+		"Is not",
+		"Is empty",
+		"Is not empty",
+	]);
+	expect(csvFilterOperators("checkbox")).toHaveLength(2);
+	expect(csvFilterOperators("date").map((option) => option.value)).toContain(
+		"on_or_after",
+	);
+	expect(csvFilterOperators("number").map((option) => option.label)).toContain(
+		"≥",
+	);
+	expect(defaultCsvFilterOperator("text")).toBe("contains");
+	expect(defaultCsvFilterOperator("email")).toBe("contains");
+	expect(defaultCsvFilterOperator(undefined)).toBe("contains");
+	expect(defaultCsvFilterOperator("select")).toBe("is");
+	expect(defaultCsvFilterOperator("date")).toBe("is");
+});
+test("an empty condition is active without a value; a condition the column lacks falls back", () => {
+	expect(
+		isActiveCsvFilterRule({ id: "a", column: 0, operator: "empty", value: "" }),
+	).toBe(true);
+	expect(
+		isActiveCsvFilterRule({ id: "a", column: 0, operator: "is", value: "" }),
+	).toBe(false);
+	const group: CsvFilterGroup = {
+		mode: "all",
+		rules: [
+			{ id: "a", column: 0, operator: "not_empty", value: "" },
+			// starts_with is a text condition; on a checkbox it reads as "is".
+			{ id: "b", column: 1, operator: "starts_with", value: ["true"] },
+		],
+	};
+	expect(matchesCsvFilterGroup(["Trial", "yes"], group, typedColumns)).toBe(
+		true,
+	);
+	expect(matchesCsvFilterGroup(["", "yes"], group, typedColumns)).toBe(false);
+	expect(matchesCsvFilterGroup(["Trial", "no"], group, typedColumns)).toBe(
+		false,
+	);
+});

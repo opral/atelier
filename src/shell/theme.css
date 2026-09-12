@@ -232,7 +232,7 @@
 
 /* Categorical labels are independent of success/error status semantics. */
 @theme static {
-	--color-bg-tag-gray: #eeedeb;
+	--color-bg-tag-gray: #e9e7e4;
 	--color-text-tag-gray: #44403c;
 	--color-bg-tag-brown: #eee3da;
 	--color-text-tag-brown: #60432e;

@@ -12,6 +12,8 @@ import {
 	type CsvTextLine,
 } from "./csv-text-wrap";
 import { CsvViewMenu } from "./csv-view-menu";
+import { CsvOverlayScrollbars } from "./csv-overlay-scrollbars";
+import { useEditorOverlayFollowsScroll } from "./csv-editor-overlay";
 import {
 	captureCsvView,
 	restoreCsvView,
@@ -162,6 +164,11 @@ const APPEND_STRIP_SIZE = 40;
 const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 40;
+/** The cell editor stays clipped beneath the header and the row markers. */
+const EDITOR_OVERLAY_INSET = {
+	top: HEADER_HEIGHT,
+	left: ROW_MARKER_WIDTH,
+} as const;
 
 type CsvFileRow = {
 	readonly id: string;
@@ -1333,9 +1340,7 @@ function CsvTable({
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [isActiveView]);
-	useEffect(() => {
-		if (editable) ensureGlideOverlayPortal();
-	}, [editable]);
+	useEditorOverlayFollowsScroll(containerRef, EDITOR_OVERLAY_INSET, editable);
 	// Apple Numbers-style sizing: the grid canvas is only as large as the
 	// table itself (capped by the container), so no phantom cells or grid
 	// lines render beyond the last column and the trailing row.
@@ -1756,9 +1761,23 @@ function CsvTable({
 		},
 		[editing],
 	);
+	// A press on the header of the open menu closes the menu (Radix sees an
+	// outside press) and then reaches Glide as a header click; without this
+	// the click would reopen what it just closed and the menu could never be
+	// toggled from its header.
+	const suppressHeaderOpenRef = useRef<{
+		column: number;
+		until: number;
+	} | null>(null);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
 			if (!editing) return;
+			const suppress = suppressHeaderOpenRef.current;
+			if (suppress) {
+				suppressHeaderOpenRef.current = null;
+				if (suppress.column === columnIndex && Date.now() < suppress.until)
+					return;
+			}
 			// screenPosition is the chevron rect at the right edge of the
 			// header cell; reconstruct the header cell rect from it.
 			const width =
@@ -2121,6 +2140,10 @@ function CsvTable({
 				}
 				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
 			>
+				<CsvOverlayScrollbars
+					containerRef={containerRef}
+					scrollerSelector=".dvn-scroller, .csv-review-scroll"
+				/>
 				{reviewModel ? (
 					<CsvReviewGrid
 						model={reviewModel}
@@ -2291,6 +2314,10 @@ function CsvTable({
 								if (toggleCheckbox(cell[0], cell[1])) event.preventDefault();
 							}}
 							cellActivationBehavior="single-click"
+							// The editor sits on its cell, one pixel over its edges so
+							// the focus ring stays under it; the styling in style.css
+							// keeps it the cell's width and lifts it.
+							editorBloom={[1, 1]}
 							headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
 							columns={columns}
 							rows={parsed.rows.length}
@@ -2352,6 +2379,12 @@ function CsvTable({
 							fixedShadowX={false}
 							fixedShadowY={false}
 							smoothScrollX={true}
+							// Rows move by the pixel, not by whole rows, so the open
+							// cell editor can follow the scroller exactly.
+							smoothScrollY={true}
+							// The platform scrollbars are hidden in CSS and the grid's
+							// own thin thumbs overlay its edges; no gutter to reserve.
+							experimental={{ scrollbarWidthOverride: 0 }}
 							theme={gridTheme}
 							// Hairlines between rows only; columns separate by
 							// alignment, as in a document table.
@@ -2459,6 +2492,17 @@ function CsvTable({
 							onRename={(name) => editing.onRenameColumn(menu.column, name)}
 							onChange={(patch) => editing.onChangeColumn(menu.column, patch)}
 							onClose={closeMenu}
+							onPointerDownOutside={(event) => {
+								const bounds = menu.headerBounds;
+								const onHeader =
+									event.clientX >= bounds.x &&
+									event.clientX <= bounds.x + bounds.width &&
+									event.clientY >= bounds.y &&
+									event.clientY <= bounds.y + bounds.height;
+								suppressHeaderOpenRef.current = onHeader
+									? { column: menu.column, until: Date.now() + 500 }
+									: null;
+							}}
 							onInsertLeft={() =>
 								runStructuralEdit(() => editing.onInsertColumn(menu.column))
 							}
@@ -2647,23 +2691,6 @@ function CsvGridMenu({
 			</div>
 		</>
 	);
-}
-
-/**
- * Glide's overlay editor mounts into a hardcoded `document.getElementById("portal")`
- * and silently fails to open without it. Atelier is a library, so hosts cannot
- * be expected to provide the div — create it on demand.
- */
-function ensureGlideOverlayPortal(): void {
-	if (typeof document === "undefined") return;
-	if (document.getElementById("portal")) return;
-	const portal = document.createElement("div");
-	portal.id = "portal";
-	portal.style.position = "fixed";
-	portal.style.left = "0";
-	portal.style.top = "0";
-	portal.style.zIndex = "9999";
-	document.body.appendChild(portal);
 }
 
 function editedCellText(value: EditableGridCell): string | null {
@@ -2892,7 +2919,7 @@ export const extension = createReactExtensionDefinition({
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
-				readySelector="canvas"
+				readySelector="canvas, .csv-review-table"
 				initial={
 					file ? (
 						<CsvContent content={file.content} />

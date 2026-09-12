@@ -95,6 +95,20 @@ describe("buildMentionItems", () => {
 		]);
 	});
 
+	test("the host's permalink wins over a relative link when it has one", () => {
+		const { items } = buildMentionItems({
+			filePaths,
+			query: "lead",
+			sourceFilePath: "/gtm/GTM playbook.md",
+			hrefFor: (path) =>
+				path === "/gtm/leads.csv" ? "https://host.test/file/leads" : null,
+		});
+		expect(items.map((item) => [item.name, item.href])).toEqual([
+			["leads.csv", "https://host.test/file/leads"],
+			["Lead scoring.md", "../research/Lead%20scoring.md"],
+		]);
+	});
+
 	test("a new file lands next to the source document as Markdown", () => {
 		expect(newMentionFilePath("/gtm/GTM playbook.md", "interviews")).toBe(
 			"/gtm/interviews.md",

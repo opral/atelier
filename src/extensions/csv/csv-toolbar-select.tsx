@@ -14,11 +14,15 @@ type ToolbarSelectProps = {
 	options: readonly ToolbarOption[];
 	placeholder?: string;
 	searchable?: boolean;
+	/** Size the menu to its options rather than to the trigger. */
+	fitOptions?: boolean;
 } & (
 	| {
 			multiple: true;
 			value: readonly string[];
 			onChange: (value: string[]) => void;
+			/** How the chosen values combine; "Matches any of" unless the caller says otherwise. */
+			matchHint?: string;
 	  }
 	| { multiple?: false; value: string; onChange: (value: string) => void }
 );
@@ -30,8 +34,12 @@ export function CsvToolbarSelect({
 	onChange,
 	placeholder = "Choose a column",
 	searchable = false,
+	fitOptions = false,
 	multiple,
+	...rest
 }: ToolbarSelectProps) {
+	const matchHint =
+		("matchHint" in rest ? rest.matchHint : undefined) ?? "Matches any of";
 	const [open, setOpen] = useState(false);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const tabTarget = useRef<HTMLElement | null>(null);
@@ -110,14 +118,14 @@ export function CsvToolbarSelect({
 			{multiple && (
 				<span id={descriptionId} className="sr-only">
 					{selected.length
-						? `Matches any of: ${selected.map((option) => option.label).join(", ")}`
+						? `${matchHint}: ${selected.map((option) => option.label).join(", ")}`
 						: "All values"}
 				</span>
 			)}
 			<Menu.Portal>
 				<Menu.Content
 					data-csv-popover-owner={owner}
-					className="csv-column-menu csv-toolbar-options"
+					className={`csv-column-menu csv-toolbar-options${fitOptions ? " csv-toolbar-options-fit" : ""}`}
 					align="start"
 					sideOffset={4}
 					collisionPadding={8}
@@ -181,7 +189,7 @@ export function CsvToolbarSelect({
 					{multiple ? (
 						<>
 							<div className="csv-filter-match-hint">
-								Matches any selected option
+								{matchHint} the selected options
 							</div>
 							{filtered.map((option) => (
 								<Menu.CheckboxItem

@@ -11,6 +11,8 @@ import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
 import { Check, RotateCcw } from "lucide-react";
 import { useLix } from "@/lib/lix-react";
+import { useDocumentLinks } from "../editor/document-links-context";
+import type { AtelierDocumentLinks } from "@/extension-api";
 import { createEditor } from "../editor/create-editor";
 import type { MarkdownWorkspaceFileOpener } from "../editor/markdown-asset";
 import type { MarkdownReviewDiff } from "../review-diff";
@@ -104,6 +106,20 @@ export function MarkdownReviewEditor({
 		if (!canOpenWorkspaceFile) return undefined;
 		return (args) => openWorkspaceFileRef.current?.(args);
 	}, [canOpenWorkspaceFile]);
+	const documentLinks = useDocumentLinks();
+	const documentLinksRef = useRef(documentLinks);
+	const hasDocumentLinks = documentLinks !== undefined;
+	// Stable like the opener: the host's object may change identity without
+	// the editor being rebuilt.
+	const stableDocumentLinks = useMemo<AtelierDocumentLinks | undefined>(() => {
+		if (!hasDocumentLinks) return undefined;
+		return {
+			resolve: (href) => documentLinksRef.current?.resolve(href) ?? null,
+		};
+	}, [hasDocumentLinks]);
+	useLayoutEffect(() => {
+		documentLinksRef.current = documentLinks;
+	}, [documentLinks]);
 	useLayoutEffect(() => {
 		reviewDocumentRef.current = reviewDocument.doc;
 		openWorkspaceFileRef.current = openWorkspaceFile;
@@ -160,6 +176,7 @@ export function MarkdownReviewEditor({
 			sourceFilePath,
 			sourceCommitId: afterCommitId,
 			openWorkspaceFile: stableOpenWorkspaceFile,
+			documentLinks: stableDocumentLinks,
 			editable: false,
 			persistState: false,
 		});
@@ -170,6 +187,7 @@ export function MarkdownReviewEditor({
 		externalEditor,
 		lix,
 		sourceFilePath,
+		stableDocumentLinks,
 		stableOpenWorkspaceFile,
 	]);
 
