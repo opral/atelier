@@ -879,7 +879,7 @@ test("does not flush stale editor content when destroyed while suspended", async
 	expect(await readMarkdown(lix, fileId)).toBe(externalMarkdown);
 });
 
-test("stale in-flight autosave cannot overwrite a concurrent external write", async () => {
+test("a user save commits once against the latest local state in acceptance order", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("autosave_compare_and_swap");
 	const initialMarkdown = "Initial\n";
@@ -929,17 +929,18 @@ test("stale in-flight autosave cannot overwrite a concurrent external write", as
 	editor.commands.setTextSelection(editor.state.doc.content.size);
 	editor.commands.insertContent(" Local edit");
 
+	const expectedLocal = buildNormalizedMarkdownFromEditor(editor);
 	const persisted = await waitForMarkdown(
 		lix,
 		fileId,
-		(markdown) => markdown === externalMarkdown,
+		(markdown) => markdown === expectedLocal,
 	);
 	expect(interleavedExternalWrite).toBe(true);
-	expect(persisted).toBe(externalMarkdown);
+	expect(persisted).toBe(expectedLocal);
 
 	editor.destroy();
 	await new Promise((resolve) => setTimeout(resolve, 20));
-	expect(await readMarkdown(lix, fileId)).toBe(externalMarkdown);
+	expect(await readMarkdown(lix, fileId)).toBe(expectedLocal);
 });
 
 test("two Enters create three persisted paragraphs in order", async () => {
