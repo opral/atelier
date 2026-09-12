@@ -51,6 +51,7 @@ type TipTapEditorProps = {
 	className?: string;
 	onReady?: (editor: Editor) => void;
 	onDispose?: (editor: Editor) => void;
+	/** Save coalescing window from the first edit; later edits do not reset it. Defaults to 20ms. */
 	persistDebounceMs?: number;
 	focusOnLoad?: boolean;
 	defaultBlock?: EmptyMarkdownDefaultBlock;
@@ -281,7 +282,7 @@ function TipTapEditorLoadedContent({
 }) {
 	const lix = useLix();
 	const { setEditor } = useEditorCtx();
-	const PERSIST_DEBOUNCE_MS = persistDebounceMs ?? 500;
+	const PERSIST_WINDOW_MS = persistDebounceMs ?? 20;
 	const editorOriginKey = useMemo(
 		() => originKey ?? createMarkdownEditorOriginKey(),
 		[originKey],
@@ -346,7 +347,7 @@ function TipTapEditorLoadedContent({
 			fileId: activeFileId,
 			sourceFilePath: sourceFilePath ?? undefined,
 			defaultBlock,
-			persistDebounceMs: PERSIST_DEBOUNCE_MS,
+			persistDebounceMs: PERSIST_WINDOW_MS,
 			editable: !readOnlyRef.current,
 			shouldPersist: () => !readOnlyRef.current,
 			originKey: editorOriginKey,
@@ -371,7 +372,7 @@ function TipTapEditorLoadedContent({
 	}, [
 		lix,
 		activeFileId,
-		PERSIST_DEBOUNCE_MS,
+		PERSIST_WINDOW_MS,
 		hasInitialFile,
 		initialMarkdown,
 		sourceFilePath,
