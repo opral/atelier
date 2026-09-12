@@ -302,6 +302,8 @@ function TipTapEditorLoadedContent({
 	}, [canOpenWorkspaceFile]);
 	const readOnlyRef = useRef(readOnly);
 	const [editor, setEditorInstance] = useState<Editor | null>(null);
+	const [persistenceAcknowledgment, setPersistenceAcknowledgment] = useState(0);
+	const [persistenceError, setPersistenceError] = useState<Error | null>(null);
 	const [imagePasteStatus, setImagePasteStatus] =
 		useState<MarkdownImagePasteStatus | null>(null);
 	const notifyImagePasteStatus = useEffectEvent(
@@ -335,7 +337,11 @@ function TipTapEditorLoadedContent({
 			openWorkspaceFile: stableOpenWorkspaceFile,
 			additionalExtensions,
 			onImagePasteStatus: notifyImagePasteStatus,
-			onPersist: (args) => onPersistRef.current?.(args),
+			onPersistenceError: setPersistenceError,
+			onPersist: (args) => {
+				setPersistenceAcknowledgment((revision) => revision + 1);
+				onPersistRef.current?.(args);
+			},
 		});
 		setEditorInstance(nextEditor);
 		return () => {
@@ -644,6 +650,59 @@ function TipTapEditorLoadedContent({
 		suspendExternalSync,
 	]);
 
+	// A save acknowledgment changes the clean baseline without a TipTap update.
+	// Re-read a deferred winner after that boundary rather than leaving it queued
+	// forever, or applying an observation that predates the successful save.
+	useEffect(() => {
+		if (
+			!persistenceAcknowledgment ||
+			!editor ||
+			!activeFileId ||
+			!externalSyncState ||
+			externalSyncState.pendingExternalMarkdown === null ||
+			suspendExternalSync
+		)
+			return;
+		const acknowledged = markdownEditorLastAcknowledgedMarkdown(editor);
+		const expectedFile = markdownEditorExpectedFileMarkdown(editor);
+		if (buildNormalizedMarkdownFromEditor(editor) !== acknowledged) return;
+		let cancelled = false;
+		void lix
+			.execute("SELECT content FROM lix_file WHERE id = $1", [activeFileId])
+			.then((result) => {
+				if (cancelled || editor.isDestroyed || !result.rows[0]) return;
+				if (
+					markdownEditorLastAcknowledgedMarkdown(editor) !== acknowledged ||
+					markdownEditorExpectedFileMarkdown(editor) !== expectedFile ||
+					buildNormalizedMarkdownFromEditor(editor) !== acknowledged
+				)
+					return;
+				const markdown = decodeMarkdownData(result.rows[0].content);
+				externalSyncState.pendingExternalMarkdown = null;
+				setEditorMarkdown(editor, markdown, defaultBlock);
+			})
+			.catch((error: unknown) => {
+				if (!cancelled)
+					setPersistenceError(
+						error instanceof Error
+							? error
+							: new Error("Could not reload saved file."),
+					);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		persistenceAcknowledgment,
+		sourceFile,
+		editor,
+		activeFileId,
+		externalSyncState,
+		suspendExternalSync,
+		lix,
+		defaultBlock,
+	]);
+
 	useEffect(() => {
 		if (!editor || !externalSyncState || suspendExternalSync) return;
 		const applyPendingExternalMarkdown = () => {
@@ -717,6 +776,7 @@ function TipTapEditorLoadedContent({
 
 	return (
 		<div className={`relative min-h-0 ${className ?? ""}`}>
+			{persistenceError ? <p role="alert">{persistenceError.message}</p> : null}
 			<div
 				ref={scrollContainerRef}
 				role="presentation"

@@ -2238,3 +2238,222 @@ test("claims file drops on the editor surface outside the ProseMirror content", 
 		.executeTakeFirst();
 	expect(stored?.path).toBe("/assets/diagram.png");
 });
+
+test("applies an authoritative winner delivered before local save acknowledgment", async () => {
+	const fileId = fakeUuid("file_acknowledgment_race");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+		persistDebounceMs: 0,
+	});
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	let committed!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const accepted = new Promise<void>((resolve) => {
+		committed = resolve;
+	});
+	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
+		const result = await execute(sql, params, options);
+		if (
+			sql === "UPDATE lix_file SET content = $1 WHERE id = $2" &&
+			options?.originKey === "atelier.markdown-editor:test-origin"
+		) {
+			committed();
+			await held;
+		}
+		return result;
+	});
+	await setEditorText(editor, "Local saved");
+	await accepted;
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Later remote winner\n",
+		"remote",
+	);
+	await settleMarkdownObserver();
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent("Local saved");
+	await act(async () => {
+		release();
+	});
+	await waitFor(() =>
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"Later remote winner",
+		),
+	);
+});
+
+test("an older save acknowledgment preserves and saves a newer queued user revision once", async () => {
+	const fileId = fakeUuid("file_newer_acknowledgment_race");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+		persistDebounceMs: 0,
+	});
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	let committed!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const accepted = new Promise<void>((resolve) => {
+		committed = resolve;
+	});
+	const writes: string[] = [];
+	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
+		const isSave =
+			sql === "UPDATE lix_file SET content = $1 WHERE id = $2" &&
+			options?.originKey === "atelier.markdown-editor:test-origin";
+		if (isSave)
+			writes.push(new TextDecoder().decode(params?.[0] as Uint8Array));
+		const result = await execute(sql, params, options);
+		if (isSave && writes.length === 1) {
+			committed();
+			await held;
+		}
+		return result;
+	});
+	await setEditorText(editor, "First local");
+	await accepted;
+	await setEditorText(editor, "Newer user revision");
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Remote in between\n",
+		"remote",
+	);
+	await settleMarkdownObserver();
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Newer user revision",
+	);
+	await act(async () => {
+		release();
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toBe("Newer user revision\n"),
+	);
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Newer user revision",
+	);
+	expect(writes).toEqual(["First local\n", "Newer user revision\n"]);
+});
+
+test("a focused independent editor view follows the eventual authoritative file winner", async () => {
+	const fileId = fakeUuid("file_independent_focused_winner");
+	const { lix } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+	});
+	const secondSession = await lix.openAnotherSession();
+	let secondEditor: Editor | null = null;
+	const secondView = render(
+		<Suspense>
+			<Providers lix={secondSession}>
+				<TipTapEditor
+					fileId={fileId}
+					onReady={(editor) => {
+						secondEditor = editor;
+					}}
+				/>
+			</Providers>
+		</Suspense>,
+	);
+	try {
+		await waitFor(() => expect(secondEditor).not.toBeNull());
+		act(() => {
+			secondEditor!.commands.focus();
+		});
+		await writeMarkdownFileWithOrigin(
+			lix,
+			fileId,
+			"Accepted remote winner\n",
+			"remote",
+		);
+		await waitFor(() =>
+			expect(
+				secondView.container.querySelector('[data-testid="tiptap-editor"]'),
+			).toHaveTextContent("Accepted remote winner"),
+		);
+		expect(buildNormalizedMarkdownFromEditor(secondEditor!)).toBe(
+			"Accepted remote winner\n",
+		);
+	} finally {
+		secondView.unmount();
+		await secondSession.close();
+	}
+});
+
+test("a delayed acknowledgment read cannot replace a newer observed winner", async () => {
+	const fileId = fakeUuid("file_delayed_acknowledgment_read");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+		persistDebounceMs: 0,
+	});
+	const execute = lix.execute.bind(lix);
+	let releaseSave!: () => void;
+	let signalSave!: () => void;
+	let releaseRead!: () => void;
+	let signalRead!: () => void;
+	const heldSave = new Promise<void>((resolve) => {
+		releaseSave = resolve;
+	});
+	const saved = new Promise<void>((resolve) => {
+		signalSave = resolve;
+	});
+	const heldRead = new Promise<void>((resolve) => {
+		releaseRead = resolve;
+	});
+	const readStarted = new Promise<void>((resolve) => {
+		signalRead = resolve;
+	});
+	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
+		const result = await execute(sql, params, options);
+		if (
+			sql === "UPDATE lix_file SET content = $1 WHERE id = $2" &&
+			options?.originKey === "atelier.markdown-editor:test-origin"
+		) {
+			signalSave();
+			await heldSave;
+		}
+		if (sql === "SELECT content FROM lix_file WHERE id = $1") {
+			signalRead();
+			await heldRead;
+		}
+		return result;
+	});
+	await setEditorText(editor, "Local saved");
+	await saved;
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"First remote winner\n",
+		"remote",
+	);
+	await settleMarkdownObserver();
+	await act(async () => {
+		releaseSave();
+	});
+	await readStarted;
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Newest remote winner\n",
+		"remote",
+	);
+	await waitFor(() =>
+		expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+			"Newest remote winner",
+		),
+	);
+	await act(async () => {
+		releaseRead();
+	});
+	await settleMarkdownObserver();
+	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
+		"Newest remote winner",
+	);
+});

@@ -60,6 +60,7 @@ type CreateEditorArgs = {
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	originKey?: string;
 	onPersist?: (args: { fileId: string; filePath?: string }) => void;
+	onPersistenceError?: (error: Error | null) => void;
 	onImagePasteStatus?: (status: MarkdownImagePasteStatus) => void;
 };
 
@@ -73,7 +74,7 @@ type MarkdownPersistenceBaseline = {
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
 
 /**
- * Advances an editor's compare-and-swap baseline after authoritative file data
+ * Advances an editor's persistence baseline after authoritative file data
  * has been hydrated into that editor without emitting an update transaction.
  */
 export function acknowledgeMarkdownEditorPersistence(
@@ -88,7 +89,7 @@ export function acknowledgeMarkdownEditorPersistence(
 }
 
 /**
- * Returns the latest Markdown durably accepted by the file compare-and-swap.
+ * Returns the latest Markdown durably accepted by the local file write.
  * External delivery uses this as its clean baseline so it does not have to
  * wait for a second observer round trip to rediscover a successful local save.
  */
@@ -245,6 +246,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		openWorkspaceFile,
 		originKey = createMarkdownEditorOriginKey(),
 		onPersist,
+		onPersistenceError,
 		onImagePasteStatus,
 	} = args;
 
@@ -293,16 +295,19 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			lix,
 			fileId: fileId!,
 			markdown,
-			expectedMarkdown: persistenceBaseline.expectedFileMarkdown,
 			originKey,
 		});
-		if (!didPersist) return revision;
+		if (!didPersist)
+			throw new Error(
+				"Could not save because the file no longer exists. Your draft is still in this editor.",
+			);
 		persistenceBaseline.lastAcknowledgedMarkdown = normalizedMarkdown;
 		persistenceBaseline.expectedFileMarkdown = markdown;
 		persistenceBaseline.acknowledgedRevision = revision;
 		if (pendingPersistenceSnapshot?.revision === revision) {
 			pendingPersistenceSnapshot = null;
 		}
+		onPersistenceError?.(null);
 		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
 		return revision;
 	};
@@ -325,6 +330,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 					clearTimeout(persistStateTimer);
 					persistStateTimer = null;
 				}
+			} catch (error) {
+				onPersistenceError?.(
+					error instanceof Error ? error : new Error("Could not save file."),
+				);
+				throw error;
 			} finally {
 				persistPromise = null;
 			}

@@ -58,7 +58,6 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 			expect(execute).not.toHaveBeenCalled();
 		});
 
-		let expectedMarkdown = initialMarkdown;
 		const save = async (value: string): Promise<number> => {
 			const rendered = new Promise<void>((resolve) => {
 				renderWaiters.set(value, resolve);
@@ -69,10 +68,8 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 					lix,
 					fileId,
 					markdown: value,
-					expectedMarkdown,
 				});
 				expect(didPersist).toBe(true);
-				expectedMarkdown = value;
 				await withTimeout(rendered, 5_000);
 			});
 			return performance.now() - start;
