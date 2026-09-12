@@ -251,7 +251,11 @@ test("diffs changed list items recursively without highlighting the whole list",
 });
 
 test("marks the copy the edit produced, not its identical twin", () => {
-	const trio = ["- [x] Ship v0.16", "- [ ] Write the post", "- [ ] Record the demo"];
+	const trio = [
+		"- [x] Ship v0.16",
+		"- [ ] Write the post",
+		"- [ ] Record the demo",
+	];
 	const tail = ["- [ ] Draft the FAQ", "- [ ] Update the docs"];
 	const withDuplicate = `${[...trio, ...trio, ...tail].join("\n")}\n`;
 	const once = `${[...trio, ...tail].join("\n")}\n`;
@@ -259,7 +263,9 @@ test("marks the copy the edit produced, not its identical twin", () => {
 		const rows: string[] = [];
 		visit(doc, (node) => {
 			if (node.type === "listItem")
-				rows.push(`${reviewStatus(node) ?? "kept"}:${documentText(node).trim()}`);
+				rows.push(
+					`${reviewStatus(node) ?? "kept"}:${documentText(node).trim()}`,
+				);
 		});
 		return rows;
 	};
@@ -306,8 +312,7 @@ test("marks the copy the edit produced, not its identical twin", () => {
 
 test("shifts duplicated top-level blocks onto the added copy", () => {
 	const before = "## Notes\n\nSame paragraph.\n\n## End\n";
-	const after =
-		"## Notes\n\nSame paragraph.\n\nSame paragraph.\n\n## End\n";
+	const after = "## Notes\n\nSame paragraph.\n\nSame paragraph.\n\n## End\n";
 	const review = buildMarkdownReviewDocument({
 		beforeMarkdown: before,
 		afterMarkdown: after,

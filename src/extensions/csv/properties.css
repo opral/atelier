@@ -860,7 +860,8 @@
 		width: auto;
 		max-width: 100%;
 	}
-	.csv-filter-rule-condition > .csv-toolbar-select:first-child:not(:last-child) {
+	.csv-filter-rule-condition
+		> .csv-toolbar-select:first-child:not(:last-child) {
 		max-width: 50%;
 	}
 	.csv-filter-rule-condition > .csv-toolbar-select:not(:first-child),

@@ -141,7 +141,10 @@ test("saved views keep each rule's condition and drop a view naming an unknown o
 			...restored,
 			filter: {
 				...restored.filter,
-				rules: restored.filter.rules.map((rule) => ({ ...rule, operator: undefined })),
+				rules: restored.filter.rules.map((rule) => ({
+					...rule,
+					operator: undefined,
+				})),
 			},
 		}),
 	);
@@ -166,5 +169,5 @@ test("saved views keep each rule's condition and drop a view naming an unknown o
 			}),
 		),
 	)!;
-	expect(metadata.views?.map((view) => view.id)).toEqual(["open"]);
+	expect(metadata.views?.map((saved) => saved.id)).toEqual(["open"]);
 });

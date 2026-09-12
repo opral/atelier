@@ -417,7 +417,7 @@ export function ExternalWriteReviewControls({
 	const showStepperArrows = fileCount > 1 || !hasVisibleFile;
 	// The arrows say where they go; the position itself is the pager's.
 	const neighbourTitle = (
-		verb: "Previous" | "Next",
+		direction: "Previous" | "Next",
 		step: -1 | 1,
 	): string | undefined => {
 		if (
@@ -427,7 +427,7 @@ export function ExternalWriteReviewControls({
 			return undefined;
 		const neighbour = listFiles[navigation.activeIndex + step];
 		return neighbour
-			? `${verb}: ${neighbour.path.split("/").filter(Boolean).at(-1) ?? neighbour.path}`
+			? `${direction}: ${neighbour.path.split("/").filter(Boolean).at(-1) ?? neighbour.path}`
 			: undefined;
 	};
 	const showVerbArrows = listFiles.length > 1;

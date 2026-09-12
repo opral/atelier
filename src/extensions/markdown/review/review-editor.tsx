@@ -187,6 +187,7 @@ export function MarkdownReviewEditor({
 		externalEditor,
 		lix,
 		sourceFilePath,
+		stableDocumentLinks,
 		stableOpenWorkspaceFile,
 	]);
 

@@ -29,7 +29,8 @@ export function CsvFilterValue({
 	value: string | readonly string[];
 	onChange: (value: string | readonly string[]) => void;
 }) {
-	const matchHint = operator === "is_not" ? "Matches none of" : "Matches any of";
+	const matchHint =
+		operator === "is_not" ? "Matches none of" : "Matches any of";
 	if (info?.type === "select") {
 		// Declared options plus every value the column holds, coloured alike.
 		const options = selectOptions(info, values);

@@ -1655,7 +1655,9 @@ test("a rule's condition can be turned around: is not, then is empty without a v
 				screen.getByRole("button", { name: "Filter column" }),
 			).toHaveFocus(),
 		);
-		expect(screen.getByRole("button", { name: "Filter condition" })).toHaveTextContent("Is");
+		expect(
+			screen.getByRole("button", { name: "Filter condition" }),
+		).toHaveTextContent("Is");
 		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value" }), {
 			key: "ArrowDown",
 		});

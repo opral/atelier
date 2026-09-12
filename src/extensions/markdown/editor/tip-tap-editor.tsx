@@ -371,6 +371,7 @@ function TipTapEditorLoadedContent({
 		sourceFilePath,
 		defaultBlock,
 		editorOriginKey,
+		stableDocumentLinks,
 		stableOpenWorkspaceFile,
 		additionalExtensions,
 	]);

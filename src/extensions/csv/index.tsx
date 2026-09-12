@@ -1340,11 +1340,7 @@ function CsvTable({
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [isActiveView]);
-	useEditorOverlayFollowsScroll(
-		containerRef,
-		EDITOR_OVERLAY_INSET,
-		editable,
-	);
+	useEditorOverlayFollowsScroll(containerRef, EDITOR_OVERLAY_INSET, editable);
 	// Apple Numbers-style sizing: the grid canvas is only as large as the
 	// table itself (capped by the container), so no phantom cells or grid
 	// lines render beyond the last column and the trailing row.

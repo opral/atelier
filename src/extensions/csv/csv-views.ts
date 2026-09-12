@@ -188,7 +188,9 @@ export function readCsvViews(value: unknown): CsvSavedView[] {
 					object(rule) &&
 					typeof rule.columnId === "string" &&
 					(rule.operator === undefined ||
-						CSV_FILTER_OPERATORS.includes(rule.operator as CsvFilterOperator)) &&
+						CSV_FILTER_OPERATORS.includes(
+							rule.operator as CsvFilterOperator,
+						)) &&
 					(typeof rule.value === "string" ||
 						(Array.isArray(rule.value) &&
 							rule.value.every((v) => typeof v === "string"))),

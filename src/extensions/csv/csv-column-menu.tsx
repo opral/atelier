@@ -242,7 +242,8 @@ export function CsvColumnMenu({
 					}}
 					onPointerDownOutside={(event) => {
 						const original = event.detail.originalEvent;
-						if (original instanceof MouseEvent) onPointerDownOutside?.(original);
+						if (original instanceof MouseEvent)
+							onPointerDownOutside?.(original);
 					}}
 					side="bottom"
 					align="start"

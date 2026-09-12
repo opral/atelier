@@ -180,9 +180,7 @@ function CsvFilterCondition({
 					value: option.value,
 					label: option.label,
 				}))}
-				onChange={(value) =>
-					onChange({ operator: value as CsvFilterOperator })
-				}
+				onChange={(value) => onChange({ operator: value as CsvFilterOperator })}
 			/>
 			{csvFilterOperatorNeedsValue(operator) && (
 				<CsvFilterValue

@@ -886,8 +886,7 @@ function shiftAmbiguousRuns(
 				side === "before"
 					? result[head]!.beforeIndex!
 					: result[head]!.afterIndex!;
-			const pairIndex =
-				side === "before" ? pair.beforeIndex : pair.afterIndex;
+			const pairIndex = side === "before" ? pair.beforeIndex : pair.afterIndex;
 			if (
 				!interchangeableNodes(
 					side === "before" ? before : after,
@@ -1120,7 +1119,9 @@ type LineRange = {
  */
 const INVISIBLE_DATA_KEYS = ["__mdwc_spread"] as const;
 
-function withoutInvisibleData(attrs: JSONContent["attrs"]): JSONContent["attrs"] {
+function withoutInvisibleData(
+	attrs: JSONContent["attrs"],
+): JSONContent["attrs"] {
 	const data = attrs?.data;
 	if (!data || typeof data !== "object") return attrs;
 	const record = data as Record<string, unknown>;
