@@ -8,6 +8,8 @@ type MarkdownReviewStatus = "added" | "removed" | "modified" | "format";
 type MarkdownReviewMetadata = {
 	readonly changeId: string;
 	readonly status: MarkdownReviewStatus;
+	/** A serialization-only change: tracked for undo, never painted. */
+	readonly hidden?: boolean;
 	/** A merged code block's one-sided lines, as offsets into its text. */
 	readonly lineRanges?: readonly {
 		readonly status: "added" | "removed";
@@ -46,6 +48,7 @@ function reviewMetadata(value: unknown): MarkdownReviewMetadata | null {
 	return {
 		changeId: candidate.changeId,
 		status: candidate.status,
+		...(candidate.hidden === true ? { hidden: true } : {}),
 		...(Array.isArray(candidate.lineRanges)
 			? {
 					lineRanges:
@@ -124,7 +127,9 @@ function decorationAttributes(
 ): Record<string, string> {
 	return {
 		"data-review-change-id": metadata.changeId,
-		"data-review-status": metadata.status,
+		// A hidden change keeps its click target and its undo, but the node
+		// reads exactly as it did: nothing visible about it changed.
+		...(metadata.hidden ? {} : { "data-review-status": metadata.status }),
 		...(options.emptyParagraph ? { "data-review-empty": "true" } : {}),
 	};
 }

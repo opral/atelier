@@ -120,11 +120,16 @@ export function buildMarkdownReviewDocument(
 	const beforeIds = validatedBlockIds(beforeNodes, reviewDiff.beforeBlocks);
 	const afterIds = validatedBlockIds(afterNodes, reviewDiff.afterBlocks);
 	const useSemanticIds = beforeIds !== null && afterIds !== null;
-	const alignments = alignNodes(
-		beforeNodes,
-		afterNodes,
-		useSemanticIds ? beforeIds : null,
-		useSemanticIds ? afterIds : null,
+	const alignments = shiftAmbiguousRuns(
+		alignNodes(
+			beforeNodes,
+			afterNodes,
+			useSemanticIds ? beforeIds : null,
+			useSemanticIds ? afterIds : null,
+		),
+		{ nodes: beforeNodes, segments: beforeSegments },
+		{ nodes: afterNodes, segments: afterSegments },
+		useSemanticIds,
 	);
 	const moves = useSemanticIds
 		? identifyMoves(alignments, beforeNodes, afterNodes, beforeIds, afterIds)
@@ -837,6 +842,99 @@ function alignNodes(
 	return reversed.reverse();
 }
 
+/** One side of an alignment, with the raw Markdown behind each node when known. */
+type AlignmentSide = {
+	readonly nodes: readonly JSONContent[];
+	readonly segments?: readonly string[] | null;
+};
+
+/**
+ * Slides a pure insert or delete run down past neighbours it cannot be told
+ * apart from, so the marked copy is the one the edit produced.
+ *
+ * Editing repeated content leaves the aligner a free choice: removing the
+ * second of two identical list items is the same edit as removing the first.
+ * The cheapest path takes the earliest, which reads as "the entry you kept
+ * was deleted, the duplicate below stayed" — and, for a duplicated block, as
+ * "the original is new". Shifting the run onto the last interchangeable
+ * position matches the gesture: the copy that appeared is the new one, and
+ * the copy that went away is the one that was there twice.
+ *
+ * Interchangeable means the nodes are identical and, at the top level, their
+ * raw Markdown is too, so the change plan still resolves to the exact bytes.
+ * Semantic ids already say which copy changed, so they are never rearranged.
+ */
+function shiftAmbiguousRuns(
+	alignments: Alignment[],
+	before: AlignmentSide,
+	after: AlignmentSide,
+	useSemanticIds: boolean,
+): Alignment[] {
+	if (useSemanticIds) return alignments;
+	const result = [...alignments];
+	for (let index = 0; index < result.length; index += 1) {
+		const side = runSide(result[index]!);
+		if (!side) continue;
+		let end = index + 1;
+		while (end < result.length && runSide(result[end]!) === side) end += 1;
+		let head = index;
+		while (end < result.length) {
+			const pair = result[end]!;
+			if (pair.beforeIndex === undefined || pair.afterIndex === undefined)
+				break;
+			const runIndex =
+				side === "before"
+					? result[head]!.beforeIndex!
+					: result[head]!.afterIndex!;
+			const pairIndex =
+				side === "before" ? pair.beforeIndex : pair.afterIndex;
+			if (
+				!interchangeableNodes(
+					side === "before" ? before : after,
+					runIndex,
+					pairIndex,
+				)
+			) {
+				break;
+			}
+			result[head] =
+				side === "before"
+					? { beforeIndex: runIndex, afterIndex: pair.afterIndex }
+					: { beforeIndex: pair.beforeIndex, afterIndex: runIndex };
+			result[end] =
+				side === "before"
+					? { beforeIndex: pairIndex }
+					: { afterIndex: pairIndex };
+			head += 1;
+			end += 1;
+		}
+		index = end - 1;
+	}
+	return result;
+}
+
+/** "before" for a deletion, "after" for an insertion, null for a kept pair. */
+function runSide(alignment: Alignment): "before" | "after" | null {
+	if (alignment.beforeIndex !== undefined && alignment.afterIndex === undefined)
+		return "before";
+	if (alignment.afterIndex !== undefined && alignment.beforeIndex === undefined)
+		return "after";
+	return null;
+}
+
+function interchangeableNodes(
+	side: AlignmentSide,
+	left: number,
+	right: number,
+): boolean {
+	const first = side.nodes[left];
+	const second = side.nodes[right];
+	if (!first || !second) return false;
+	if (exactFingerprint(first) !== exactFingerprint(second)) return false;
+	const segments = side.segments;
+	return !segments || segments[left] === segments[right];
+}
+
 function alignNodesGreedily(
 	before: readonly JSONContent[],
 	after: readonly JSONContent[],
@@ -1015,10 +1113,37 @@ type LineRange = {
 	readonly to: number;
 };
 
+/**
+ * Serialization-only node data: the blank lines between list items decide
+ * how the list is written back, never how it reads. A diff that treats them
+ * as content repaints a whole list because one blank line moved.
+ */
+const INVISIBLE_DATA_KEYS = ["__mdwc_spread"] as const;
+
+function withoutInvisibleData(attrs: JSONContent["attrs"]): JSONContent["attrs"] {
+	const data = attrs?.data;
+	if (!data || typeof data !== "object") return attrs;
+	const record = data as Record<string, unknown>;
+	let stripped: Record<string, unknown> | undefined;
+	for (const key of INVISIBLE_DATA_KEYS) {
+		if (Object.hasOwn(record, key)) {
+			stripped ??= { ...record };
+			delete stripped[key];
+		}
+	}
+	return stripped ? { ...attrs, data: stripped } : attrs;
+}
+
+/** The attributes a reader can see: what the node renders as, not how it serializes. */
+function renderedAttrs(attrs: JSONContent["attrs"]): string {
+	return exactAttrs(withoutInvisibleData(attrs));
+}
+
 function mergeableAttrs(node: JSONContent): string {
+	const visible = withoutInvisibleData(node.attrs);
 	const keys = CHANGE_ATTR_KEYS[node.type ?? ""];
-	if (!keys || !node.attrs) return exactAttrs(node.attrs);
-	const attrs: Record<string, unknown> = { ...node.attrs };
+	if (!keys || !visible) return exactAttrs(visible);
+	const attrs: Record<string, unknown> = { ...visible };
 	for (const key of keys) delete attrs[key];
 	return exactAttrs(attrs);
 }
@@ -1234,6 +1359,9 @@ function withAttrChange(
 		merged.attrs?.data && typeof merged.attrs.data === "object"
 			? cloneValue(merged.attrs.data)
 			: {};
+	// Serialization-only differences still travel with the node so both
+	// sides project to their exact bytes; the view leaves them unpainted.
+	const hidden = renderedAttrs(before.attrs) === renderedAttrs(merged.attrs);
 	return {
 		...merged,
 		attrs: {
@@ -1243,6 +1371,7 @@ function withAttrChange(
 				[REVIEW_DATA_KEY]: {
 					changeId,
 					status: "modified",
+					...(hidden ? { hidden: true } : {}),
 					originalAttrs: cloneValue(before.attrs),
 				},
 			},
@@ -1256,7 +1385,13 @@ function mergeChildNodes(
 	changeId: string,
 ): JSONContent[] {
 	const content: JSONContent[] = [];
-	for (const alignment of alignNodes(before, after, null, null)) {
+	const alignments = shiftAmbiguousRuns(
+		alignNodes(before, after, null, null),
+		{ nodes: before },
+		{ nodes: after },
+		false,
+	);
+	for (const alignment of alignments) {
 		const beforeNode =
 			alignment.beforeIndex === undefined
 				? undefined
@@ -1671,6 +1806,7 @@ function restoreNodeAttrs(
 function readNodeReview(node: JSONContent): {
 	readonly changeId: string;
 	readonly status: ReviewStatus;
+	readonly hidden: boolean;
 	readonly hasOriginalAttrs: boolean;
 	readonly originalAttrs: JSONContent["attrs"] | undefined;
 	readonly lineRanges: readonly LineRange[] | undefined;
@@ -1691,6 +1827,7 @@ function readNodeReview(node: JSONContent): {
 		? {
 				changeId,
 				status,
+				hidden: record.hidden === true,
 				hasOriginalAttrs: Object.hasOwn(record, "originalAttrs"),
 				originalAttrs: record.originalAttrs as JSONContent["attrs"] | undefined,
 				lineRanges: Array.isArray(record.lineRanges)

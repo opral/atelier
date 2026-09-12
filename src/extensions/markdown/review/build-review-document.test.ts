@@ -250,6 +250,138 @@ test("diffs changed list items recursively without highlighting the whole list",
 	);
 });
 
+test("marks the copy the edit produced, not its identical twin", () => {
+	const trio = ["- [x] Ship v0.16", "- [ ] Write the post", "- [ ] Record the demo"];
+	const tail = ["- [ ] Draft the FAQ", "- [ ] Update the docs"];
+	const withDuplicate = `${[...trio, ...trio, ...tail].join("\n")}\n`;
+	const once = `${[...trio, ...tail].join("\n")}\n`;
+	const listItems = (doc: any): string[] => {
+		const rows: string[] = [];
+		visit(doc, (node) => {
+			if (node.type === "listItem")
+				rows.push(`${reviewStatus(node) ?? "kept"}:${documentText(node).trim()}`);
+		});
+		return rows;
+	};
+
+	// Removing one of two identical runs removes the second: the reader keeps
+	// the entry that was already there and loses the one that repeated it.
+	const removed = buildMarkdownReviewDocument({
+		beforeMarkdown: withDuplicate,
+		afterMarkdown: once,
+	});
+	expect(listItems(removed.doc)).toEqual([
+		"kept:Ship v0.16",
+		"kept:Write the post",
+		"kept:Record the demo",
+		"removed:Ship v0.16",
+		"removed:Write the post",
+		"removed:Record the demo",
+		"kept:Draft the FAQ",
+		"kept:Update the docs",
+	]);
+
+	// Duplicating a run marks the copy, never the original.
+	const added = buildMarkdownReviewDocument({
+		beforeMarkdown: once,
+		afterMarkdown: withDuplicate,
+	});
+	expect(listItems(added.doc)).toEqual([
+		"kept:Ship v0.16",
+		"kept:Write the post",
+		"kept:Record the demo",
+		"added:Ship v0.16",
+		"added:Write the post",
+		"added:Record the demo",
+		"kept:Draft the FAQ",
+		"kept:Update the docs",
+	]);
+	expect(projectMarkdownReviewDocument(removed.doc, "before")).toEqual(
+		markdownDoc(withDuplicate),
+	);
+	expect(projectMarkdownReviewDocument(removed.doc, "after")).toEqual(
+		markdownDoc(once),
+	);
+});
+
+test("shifts duplicated top-level blocks onto the added copy", () => {
+	const before = "## Notes\n\nSame paragraph.\n\n## End\n";
+	const after =
+		"## Notes\n\nSame paragraph.\n\nSame paragraph.\n\n## End\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+
+	const paragraphs = (review.doc.content ?? []).filter(
+		(node: any) => node.type === "paragraph",
+	);
+	expect(paragraphs.map((node: any) => reviewStatus(node))).toEqual([
+		null,
+		"added",
+	]);
+	expect(projectMarkdownReviewDocument(review.doc, "before")).toEqual(
+		markdownDoc(before),
+	);
+	expect(projectMarkdownReviewDocument(review.doc, "after")).toEqual(
+		markdownDoc(after),
+	);
+});
+
+test("a blank line between list items changes bytes, not the diff", () => {
+	const tight = "- [ ] Alpha\n- [ ] Beta\n- [ ] Gamma\n";
+	const loose = "- [ ] Alpha\n\n- [ ] Beta\n\n- [ ] Gamma\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: tight,
+		afterMarkdown: loose,
+	});
+
+	// One list, still merged: the spacing decides how it is written back.
+	expect(review.doc.content).toHaveLength(1);
+	let painted = 0;
+	visit(review.doc, (node) => {
+		if (reviewStatus(node)) painted += 1;
+	});
+	expect(painted).toBe(0);
+	expect(
+		(review.doc.content?.[0] as any)?.attrs?.data?.markdownReview?.hidden,
+	).toBe(true);
+	expect(projectMarkdownReviewDocument(review.doc, "before")).toEqual(
+		markdownDoc(tight),
+	);
+	expect(projectMarkdownReviewDocument(review.doc, "after")).toEqual(
+		markdownDoc(loose),
+	);
+	expect(
+		materializeMarkdownReviewDecisions(
+			review,
+			new Map(review.changes.map((change) => [change.id, "undo" as const])),
+		),
+	).toBe(tight);
+});
+
+test("a spacing change around an edit leaves only the edit painted", () => {
+	const before = "- [ ] Alpha\n- [ ] Beta\n";
+	const after = "- [ ] Alpha\n\n- [ ] Beta\n\n- [ ] Gamma\n";
+	const review = buildMarkdownReviewDocument({
+		beforeMarkdown: before,
+		afterMarkdown: after,
+	});
+
+	const painted: string[] = [];
+	visit(review.doc, (node) => {
+		if (node.type === "listItem" && reviewStatus(node))
+			painted.push(documentText(node).trim());
+	});
+	expect(painted).toEqual(["Gamma"]);
+	expect(projectMarkdownReviewDocument(review.doc, "before")).toEqual(
+		markdownDoc(before),
+	);
+	expect(projectMarkdownReviewDocument(review.doc, "after")).toEqual(
+		markdownDoc(after),
+	);
+});
+
 test("diffs blockquote text and table cells inside stable containers", () => {
 	const before = [
 		"> Keep this quote and remove old wording.",
