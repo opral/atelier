@@ -35,12 +35,14 @@ async function renderEditorForMarkdownFile({
 	originKey = "atelier.markdown-editor:test-origin",
 	withToolbar = false,
 	persistDebounceMs = 60_000,
+	withheldObservedMarkdown,
 }: {
 	fileId: string;
 	markdown: string;
 	originKey?: string;
 	withToolbar?: boolean;
 	persistDebounceMs?: number;
+	withheldObservedMarkdown?: string;
 }): Promise<{ lix: Lix; editor: Editor }> {
 	const lix = await openLix({
 		keyValues: [
@@ -65,6 +67,32 @@ async function renderEditorForMarkdownFile({
 			content: new TextEncoder().encode(markdown),
 		})
 		.execute();
+
+	if (withheldObservedMarkdown !== undefined) {
+		const observe = lix.observe.bind(lix);
+		vi.spyOn(lix, "observe").mockImplementation((...args) => {
+			const stream = observe(...args);
+			const next = stream.next.bind(stream);
+			vi.spyOn(stream, "next").mockImplementation(async () => {
+				for (;;) {
+					const event = await next();
+					// Coalesce away the own-save echo so these tests explicitly
+					// exercise a remote observation arriving while still dirty.
+					if (
+						!event ||
+						!event.result.rows.some(
+							(row) =>
+								row.content instanceof Uint8Array &&
+								new TextDecoder().decode(row.content) ===
+									withheldObservedMarkdown,
+						)
+					)
+						return event;
+				}
+			});
+			return stream;
+		});
+	}
 
 	let editorRef: Editor | null = null;
 	let rendered: ReturnType<typeof render> | undefined;
@@ -2245,6 +2273,7 @@ test("applies an authoritative winner delivered before local save acknowledgment
 		fileId,
 		markdown: "Initial\n",
 		persistDebounceMs: 0,
+		withheldObservedMarkdown: "Local saved\n",
 	});
 	const execute = lix.execute.bind(lix);
 	let release!: () => void;
@@ -2392,6 +2421,7 @@ test("a delayed acknowledgment read cannot replace a newer observed winner", asy
 		fileId,
 		markdown: "Initial\n",
 		persistDebounceMs: 0,
+		withheldObservedMarkdown: "Local saved\n",
 	});
 	const execute = lix.execute.bind(lix);
 	let releaseSave!: () => void;
