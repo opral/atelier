@@ -73,6 +73,7 @@ type MarkdownPersistenceBaseline = {
 	expectedFileMarkdown: string;
 	documentRevision: number;
 	acknowledgedRevision: number;
+	observationGeneration: number;
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
@@ -87,6 +88,7 @@ export function acknowledgeMarkdownEditorPersistence(
 ): void {
 	const baseline = persistenceBaselines.get(editor);
 	if (!baseline) return;
+	baseline.observationGeneration += 1;
 	baseline.lastAcknowledgedMarkdown = buildNormalizedMarkdownFromEditor(editor);
 	baseline.expectedFileMarkdown = markdown;
 	baseline.acknowledgedRevision = baseline.documentRevision;
@@ -273,6 +275,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		expectedFileMarkdown: initialFileMarkdown,
 		documentRevision: 0,
 		acknowledgedRevision: 0,
+		observationGeneration: 0,
 	};
 	const persistWindowMs = persistDebounceMs ?? 20;
 	const persistOnce = async (): Promise<number | undefined> => {
@@ -296,6 +299,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 			return revision;
 		}
+		const observationGeneration = persistenceBaseline.observationGeneration;
 		const didPersist = await upsertMarkdownFile({
 			lix,
 			fileId: fileId!,
@@ -306,9 +310,13 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			throw new Error(
 				"Could not save because the file no longer exists. Your draft is still in this editor.",
 			);
-		persistenceBaseline.lastAcknowledgedMarkdown = normalizedMarkdown;
-		persistenceBaseline.expectedFileMarkdown = markdown;
-		persistenceBaseline.acknowledgedRevision = revision;
+		// Observations can arrive after the local commit but before its promise
+		// returns. Keep that newer clean baseline instead of reviving the old save.
+		if (persistenceBaseline.observationGeneration === observationGeneration) {
+			persistenceBaseline.lastAcknowledgedMarkdown = normalizedMarkdown;
+			persistenceBaseline.expectedFileMarkdown = markdown;
+			persistenceBaseline.acknowledgedRevision = revision;
+		}
 		if (pendingPersistenceSnapshot?.revision === revision) {
 			pendingPersistenceSnapshot = null;
 		}
