@@ -176,7 +176,7 @@ test("a checked task keeps its box, and a marked one is not struck twice", () =>
 	});
 
 	expect(diff.html).toContain('data-task="x"');
-	expect(MARKDOWN_DIFF_CSS).toContain(
-		'li[data-task="x"]:not([data-review-status]) > p',
-	);
+	// A done task is struck; a task whose words changed keeps them plain, so
+	// an added word is not wearing the deletion's decoration.
+	expect(MARKDOWN_DIFF_CSS).toContain(":not(:has(> p [data-review-status]))");
 });
