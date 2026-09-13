@@ -91,18 +91,21 @@ export const MARKDOWN_DIFF_CSS = `
 	border-right: 0;
 	transform: rotate(-45deg);
 }
-/* A done task reads as done, as in the app — unless the diff is already
-   colouring the whole row. Inside it, a marked word takes its own colour and
-   an added one is never struck. */
+/* A done task reads as done, as in the app: dimmed, struck, box filled. */
 .md-diff li[data-task="x"]:not([data-review-status]) > p {
 	color: var(--md-diff-ink-3);
 	text-decoration: line-through;
 	text-decoration-color: rgba(120, 113, 108, 0.6);
 }
-.md-diff li[data-task="x"] > p span[data-review-status] {
-	color: var(--md-diff-ink);
-	text-decoration-color: currentColor;
+/* A line the diff wrote into keeps the dimming and drops the rule: a
+   descendant cannot undo an inherited strikethrough, and an added word
+   wearing one reads as a word that was deleted. */
+.md-diff
+	li[data-task="x"]:not([data-review-status]):has(> p [data-review-status])
+	> p {
+	text-decoration: none;
 }
+
 
 .md-diff blockquote {
 	margin: 0 0 8px;

@@ -181,9 +181,9 @@ test("a checked task keeps its box, and a marked one is not struck twice", () =>
 	expect(MARKDOWN_DIFF_CSS).toContain(
 		'li[data-task="x"]:not([data-review-status]) > p',
 	);
-	expect(MARKDOWN_DIFF_CSS).toContain(
-		'li[data-task="x"] > p span[data-review-status]',
-	);
+	// A line the diff wrote into drops the rule, so an added word is not
+	// rendered as a deleted one.
+	expect(MARKDOWN_DIFF_CSS).toContain(":has(> p [data-review-status])");
 });
 
 test("an image is named, not fetched, unless the caller asks for the tag", () => {
