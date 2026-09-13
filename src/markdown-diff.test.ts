@@ -180,3 +180,57 @@ test("a checked task keeps its box, and a marked one is not struck twice", () =>
 	// an added word is not wearing the deletion's decoration.
 	expect(MARKDOWN_DIFF_CSS).toContain(":not(:has(> p [data-review-status]))");
 });
+
+test("an image is named, not fetched, unless the caller asks for the tag", () => {
+	const diff = renderMarkdownDiff({
+		beforeMarkdown: "Plain.\n",
+		afterMarkdown:
+			"Plain.\n\n![The funnel](https://tracker.example/pixel.gif)\n",
+	});
+
+	// A document's author picks the address; rendering the tag would have the
+	// reader's client call it.
+	expect(diff.html).not.toContain("<img");
+	expect(diff.html).not.toContain("tracker.example/pixel.gif");
+	expect(diff.html).toContain("The funnel");
+	expect(diff.html).toContain("tracker.example");
+	expect(MARKDOWN_DIFF_CSS).toContain(".md-diff-image");
+});
+
+test("a rewrite is trimmed like anything else, and says what is missing", () => {
+	const before = Array.from(
+		{ length: 40 },
+		(_, index) => `Paragraph ${index + 1}.`,
+	).join("\n\n");
+	const after = Array.from(
+		{ length: 40 },
+		(_, index) => `Rewritten paragraph ${index + 1}.`,
+	).join("\n\n");
+	const diff = renderMarkdownDiff({
+		beforeMarkdown: `${before}\n`,
+		afterMarkdown: `${after}\n`,
+		maxLines: 8,
+	});
+
+	// Every line changed, so there is no context to drop: the budget has to
+	// cut into the change itself rather than render the whole document.
+	expect(diff.hidden).toBeGreaterThan(20);
+	expect(diff.html).toContain("md-diff-gap");
+	expect(diff.html).toMatch(/⋯ \d+ more lines/);
+	expect(diff.html).not.toMatch(/⋯ \d+ unchanged lines/);
+	expect(diff.html.match(/<p/g)?.length).toBeLessThanOrEqual(8);
+});
+
+test("a run of dropped context still reads as unchanged", () => {
+	const items = Array.from(
+		{ length: 40 },
+		(_, index) => `- Item ${index + 1}`,
+	).join("\n");
+	const diff = renderMarkdownDiff({
+		beforeMarkdown: `${items}\n`,
+		afterMarkdown: `${items}\n- The new one\n`,
+		maxLines: 6,
+	});
+
+	expect(diff.html).toMatch(/⋯ \d+ unchanged lines/);
+});

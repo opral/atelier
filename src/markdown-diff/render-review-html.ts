@@ -46,6 +46,14 @@ export function escapeHtml(value: string): string {
 		.replaceAll('"', "&quot;");
 }
 
+/** Where an image points, said plainly: a host, or the kind of data URI. */
+function imageHost(source: string): string | null {
+	if (/^data:image\//i.test(source)) return "embedded image";
+	const match = /^https?:\/\/([^/?#]+)/i.exec(source);
+	if (match?.[1]) return match[1];
+	return source ? source.slice(0, 60) : null;
+}
+
 function reviewStatus(node: JSONContent): ReviewStatus | null {
 	const data = node.attrs?.data as Record<string, unknown> | null | undefined;
 	const review = data?.markdownReview as { status?: unknown } | undefined;
@@ -131,8 +139,21 @@ function hasMarkedText(node: JSONContent): boolean {
 	return search(node, null, 0);
 }
 
-export function renderReviewHtml(doc: JSONContent): string {
-	return (doc.content ?? []).map((node) => renderNode(node)).join("");
+export type RenderOptions = {
+	/**
+	 * "describe" names an image and where it points; "embed" writes the
+	 * <img>. A card renders in the reader's client, and a document's image
+	 * URL is chosen by whoever wrote the document: embedding it makes the
+	 * reader's client call that address. Default "describe".
+	 */
+	readonly images?: "describe" | "embed";
+};
+
+export function renderReviewHtml(
+	doc: JSONContent,
+	options: RenderOptions = {},
+): string {
+	return (doc.content ?? []).map((node) => renderNode(node, options)).join("");
 }
 
 function attributes(node: JSONContent, extra: string[] = []): string {
@@ -142,18 +163,20 @@ function attributes(node: JSONContent, extra: string[] = []): string {
 	return parts.length ? ` ${parts.join(" ")}` : "";
 }
 
-function renderChildren(node: JSONContent): string {
-	return (node.content ?? []).map((child) => renderNode(child)).join("");
+function renderChildren(node: JSONContent, options: RenderOptions): string {
+	return (node.content ?? [])
+		.map((child) => renderNode(child, options))
+		.join("");
 }
 
-function renderNode(node: JSONContent): string {
+function renderNode(node: JSONContent, options: RenderOptions): string {
 	switch (node.type) {
 		case "text":
 			return renderText(node);
 		case "hardBreak":
 			return "<br>";
 		case "paragraph": {
-			const inner = renderChildren(node);
+			const inner = renderChildren(node, options);
 			// An empty paragraph is Atelier's invisible anchor, not a blank line
 			// the reader should see marked.
 			if (!inner) return `<p${attributes(node)}><br></p>`;
@@ -164,7 +187,7 @@ function renderNode(node: JSONContent): string {
 				6,
 				Math.max(1, Number(node.attrs?.level ?? 1) || 1),
 			);
-			return `<h${level}${attributes(node)}>${renderChildren(node)}</h${level}>`;
+			return `<h${level}${attributes(node)}>${renderChildren(node, options)}</h${level}>`;
 		}
 		case "bulletList":
 		case "orderedList": {
@@ -175,7 +198,7 @@ function renderNode(node: JSONContent): string {
 					: [];
 			const task =
 				node.attrs?.isTaskList === true ? ['data-task-list="true"'] : [];
-			return `<${tag}${attributes(node, [...start, ...task])}>${renderChildren(node)}</${tag}>`;
+			return `<${tag}${attributes(node, [...start, ...task])}>${renderChildren(node, options)}</${tag}>`;
 		}
 		case "listItem":
 		case "taskItem": {
@@ -184,24 +207,24 @@ function renderNode(node: JSONContent): string {
 				checked === true || checked === false
 					? [`data-task="${checked ? "x" : " "}"`]
 					: [];
-			return `<li${attributes(node, task)}>${renderChildren(node)}</li>`;
+			return `<li${attributes(node, task)}>${renderChildren(node, options)}</li>`;
 		}
 		case "blockquote":
-			return `<blockquote${attributes(node)}>${renderChildren(node)}</blockquote>`;
+			return `<blockquote${attributes(node)}>${renderChildren(node, options)}</blockquote>`;
 		case "codeBlock": {
 			const language = node.attrs?.language;
 			const languageAttribute =
 				typeof language === "string" && language
 					? [`data-language="${escapeHtml(language)}"`]
 					: [];
-			return `<pre${attributes(node, languageAttribute)}><code>${renderCodeText(node)}</code></pre>`;
+			return `<pre${attributes(node, languageAttribute)}><code>${renderCodeText(node, options)}</code></pre>`;
 		}
 		case "horizontalRule":
 			return `<hr${attributes(node)}>`;
 		case "table":
-			return `<table${attributes(node)}><tbody>${renderChildren(node)}</tbody></table>`;
+			return `<table${attributes(node)}><tbody>${renderChildren(node, options)}</tbody></table>`;
 		case "tableRow":
-			return `<tr${attributes(node)}>${renderChildren(node)}</tr>`;
+			return `<tr${attributes(node)}>${renderChildren(node, options)}</tr>`;
 		case "tableCell":
 		case "tableHeader": {
 			const header =
@@ -212,25 +235,34 @@ function renderNode(node: JSONContent): string {
 					? [`data-align="${escapeHtml(align)}"`]
 					: [];
 			const tag = header ? "th" : "td";
-			return `<${tag}${attributes(node, alignment)}>${renderChildren(node)}</${tag}>`;
+			return `<${tag}${attributes(node, alignment)}>${renderChildren(node, options)}</${tag}>`;
 		}
 		case "image":
 		case "imageBlock": {
 			const source = String(node.attrs?.src ?? "");
-			const alt = escapeHtml(String(node.attrs?.alt ?? ""));
-			// A card is served as static text; only fully-qualified sources can
-			// load, and a repository-relative one would resolve to the host.
-			const safe = /^(https?:|data:image\/)/i.test(source);
-			return safe
-				? `<img${attributes(node)} src="${escapeHtml(source)}" alt="${alt}">`
-				: `<span class="md-diff-missing"${attributes(node)}>${alt || "image"}</span>`;
+			const alt = String(node.attrs?.alt ?? "");
+			// Only fully-qualified sources can load from a standalone document;
+			// a repository-relative one would resolve against whatever host
+			// renders it.
+			const loadable = /^(https?:|data:image\/)/i.test(source);
+			if (options.images === "embed" && loadable)
+				return `<img${attributes(node)} src="${escapeHtml(source)}" alt="${escapeHtml(alt)}">`;
+			// Named, not fetched: rendering the tag would have the reader's
+			// client call an address the document's author chose.
+			const where = imageHost(source);
+			const label = alt || "image";
+			return `<span class="md-diff-image"${attributes(node)}>${escapeHtml(label)}${where ? ` <span class="md-diff-image-src">${escapeHtml(where)}</span>` : ""}</span>`;
 		}
 		case "markdownDiffGap": {
 			const count = Number(node.attrs?.count ?? 0);
 			const of = String(node.attrs?.of ?? "doc");
 			const inList =
 				of === "bulletList" || of === "orderedList" || of === "taskList";
-			const label = `${count} unchanged ${count === 1 ? "line" : "lines"}`;
+			const lines = count === 1 ? "line" : "lines";
+			const label =
+				node.attrs?.changed === true
+					? `${count} more ${lines}`
+					: `${count} unchanged ${lines}`;
 			const tag = inList ? "li" : "div";
 			return `<${tag} class="md-diff-gap">⋯ ${escapeHtml(label)}</${tag}>`;
 		}
@@ -245,14 +277,16 @@ function renderNode(node: JSONContent): string {
 		default:
 			return VOID_BLOCKS.has(node.type ?? "")
 				? ""
-				: `<div${attributes(node)}>${renderChildren(node)}</div>`;
+				: `<div${attributes(node)}>${renderChildren(node, options)}</div>`;
 	}
 }
 
-function renderCodeText(node: JSONContent): string {
+function renderCodeText(node: JSONContent, options: RenderOptions): string {
 	return (node.content ?? [])
 		.map((child) =>
-			child.type === "text" ? escapeHtml(child.text ?? "") : renderNode(child),
+			child.type === "text"
+				? escapeHtml(child.text ?? "")
+				: renderNode(child, options),
 		)
 		.join("");
 }

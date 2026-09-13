@@ -73,21 +73,39 @@ export function pruneToChanges(
 				keep.delete(index);
 			}
 		}
+		// The change itself can outgrow the budget — a document rewritten whole
+		// is all change. Then the card shows the start of it and says how much
+		// more there is, rather than growing until something else truncates it.
+		if (keep.size > maxPerContainer) {
+			for (const index of [...keep]
+				.sort((left, right) => left - right)
+				.slice(maxPerContainer))
+				keep.delete(index);
+		}
 
 		const content: JSONContent[] = [];
 		let skipped = 0;
+		let skippedChange = false;
 		const flush = (): void => {
 			if (skipped === 0) return;
 			hidden += skipped;
 			content.push({
 				type: GAP_NODE_TYPE,
-				attrs: { count: skipped, of: node.type ?? "doc" },
+				attrs: {
+					count: skipped,
+					of: node.type ?? "doc",
+					// A run of dropped context is worth naming as unchanged; a
+					// run that took a change with it must not claim that.
+					changed: skippedChange,
+				},
 			});
 			skipped = 0;
+			skippedChange = false;
 		};
 		for (const [index, child] of children.entries()) {
 			if (!keep.has(index)) {
 				skipped += 1;
+				if (changed[index]) skippedChange = true;
 				continue;
 			}
 			flush();

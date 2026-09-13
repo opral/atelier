@@ -123,6 +123,23 @@ export const MARKDOWN_DIFF_CSS = `
 .md-diff .md-diff-raw { color: var(--md-diff-ink-3); white-space: pre-wrap; }
 .md-diff .md-diff-missing { color: var(--md-diff-ink-4); font-style: italic; }
 
+/* An image, named rather than loaded. */
+.md-diff .md-diff-image {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 5px;
+	padding: 1px 7px 1px 6px;
+	border: 1px solid var(--md-diff-rule);
+	border-radius: 6px;
+	color: var(--md-diff-ink-2);
+	font-size: 13px;
+}
+.md-diff .md-diff-image::before {
+	content: "▨";
+	color: var(--md-diff-ink-4);
+}
+.md-diff .md-diff-image-src { color: var(--md-diff-ink-4); font-size: 12px; }
+
 .md-diff a { color: rgb(194, 65, 12); text-underline-offset: 2px; }
 .md-diff img { max-width: 100%; height: auto; border-radius: 6px; }
 .md-diff hr { margin: 12px 0; border: 0; border-top: 1px solid var(--md-diff-rule); }
