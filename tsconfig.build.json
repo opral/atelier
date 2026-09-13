@@ -8,5 +8,5 @@
 		"rootDir": "./src",
 		"stripInternal": true
 	},
-	"include": ["src/index.ts", "src/file-icons.ts"]
+	"include": ["src/index.ts", "src/file-icons.ts", "src/markdown-diff.ts"]
 }

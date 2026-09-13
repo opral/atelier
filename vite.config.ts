@@ -19,6 +19,7 @@ export default defineConfig({
 				),
 				atelier: path.resolve(__dirname, "src/build-entry.ts"),
 				"file-icons": path.resolve(__dirname, "src/file-icons.ts"),
+				"markdown-diff": path.resolve(__dirname, "src/markdown-diff.ts"),
 				"state-adapters": path.resolve(__dirname, "src/state-adapters.ts"),
 			},
 			formats: ["es"],

@@ -26,6 +26,11 @@
 		},
 		"./style.css": "./dist/atelier.css",
 		"./package.json": "./package.json",
+		"./markdown-diff": {
+			"types": "./dist/types/markdown-diff.d.ts",
+			"import": "./dist/markdown-diff.js",
+			"default": "./dist/markdown-diff.js"
+		},
 		"./markdown": {
 			"types": "./dist/types/extensions/markdown/markdown-content.d.ts",
 			"import": "./dist/markdown.js",

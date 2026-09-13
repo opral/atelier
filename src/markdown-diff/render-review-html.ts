@@ -1,0 +1,283 @@
+import type { JSONContent } from "@tiptap/core";
+
+/**
+ * Serializes a review document to standalone HTML.
+ *
+ * The editor paints a review with ProseMirror decorations, which exist only
+ * while a view is mounted. A card in a chat has no editor, so the same review
+ * document is written out directly, carrying the attributes the decorations
+ * would have set — `data-review-status` on a node, a wrapping span on marked
+ * text — so one stylesheet dresses both surfaces.
+ */
+
+export type ReviewStatus = "added" | "removed" | "modified" | "format";
+
+export type MarkdownDiffStats = {
+	/** Blocks that exist only after: new paragraphs, list items, table rows. */
+	readonly added: number;
+	/** Blocks that existed only before. */
+	readonly removed: number;
+	/** Blocks kept on both sides whose text or attributes changed. */
+	readonly modified: number;
+};
+
+const VOID_BLOCKS = new Set(["horizontalRule", "image", "imageBlock"]);
+/** Blocks that count as one line of the change in the summary. */
+const COUNTED_BLOCKS = new Set([
+	"paragraph",
+	"heading",
+	"listItem",
+	"taskItem",
+	"codeBlock",
+	"blockquote",
+	"tableRow",
+	"horizontalRule",
+	"image",
+	"imageBlock",
+	"markdownUnsupported",
+	"markdownFrontmatter",
+]);
+
+export function escapeHtml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;");
+}
+
+function reviewStatus(node: JSONContent): ReviewStatus | null {
+	const data = node.attrs?.data as Record<string, unknown> | null | undefined;
+	const review = data?.markdownReview as { status?: unknown } | undefined;
+	const status = review?.status;
+	return status === "added" ||
+		status === "removed" ||
+		status === "modified" ||
+		status === "format"
+		? status
+		: null;
+}
+
+function markStatus(node: JSONContent): ReviewStatus | null {
+	for (const mark of node.marks ?? []) {
+		if (mark.type !== "markdownReviewDiff") continue;
+		const status = (mark.attrs as { status?: unknown } | undefined)?.status;
+		if (status === "added" || status === "removed") return status;
+	}
+	return null;
+}
+
+/** True when this node, or anything under it, is marked. */
+export function carriesChange(node: JSONContent): boolean {
+	if (reviewStatus(node) || markStatus(node)) return true;
+	return (node.content ?? []).some(carriesChange);
+}
+
+export function countMarkdownDiff(doc: JSONContent): MarkdownDiffStats {
+	let added = 0;
+	let removed = 0;
+	let modified = 0;
+	const walk = (
+		node: JSONContent,
+		parentType: string | null,
+		index: number,
+		inherited: ReviewStatus | null,
+	): void => {
+		const status = reviewStatus(node) ?? inherited;
+		if (isLine(node, parentType, index)) {
+			if (status === "added") added += 1;
+			else if (status === "removed") removed += 1;
+			else if (!status && hasMarkedText(node)) modified += 1;
+		}
+		for (const [childIndex, child] of (node.content ?? []).entries())
+			walk(child, node.type ?? null, childIndex, status);
+	};
+	walk(doc, null, 0, null);
+	return { added, removed, modified };
+}
+
+/**
+ * One line of the change, as a reader counts them. A list item's leading
+ * paragraph is the item's own text, not a line of its own; everything else
+ * that holds text stands on its own line, nested items included.
+ */
+function isLine(
+	node: JSONContent,
+	parentType: string | null,
+	index: number,
+): boolean {
+	if (!COUNTED_BLOCKS.has(node.type ?? "")) return false;
+	return !(
+		node.type === "paragraph" &&
+		index === 0 &&
+		(parentType === "listItem" || parentType === "taskItem")
+	);
+}
+
+/** Marked text belonging to this line, stopping before any line below it. */
+function hasMarkedText(node: JSONContent): boolean {
+	const search = (
+		candidate: JSONContent,
+		parentType: string | null,
+		index: number,
+	): boolean => {
+		if (candidate !== node && isLine(candidate, parentType, index))
+			return false;
+		if (markStatus(candidate)) return true;
+		return (candidate.content ?? []).some((child, childIndex) =>
+			search(child, candidate.type ?? null, childIndex),
+		);
+	};
+	return search(node, null, 0);
+}
+
+export function renderReviewHtml(doc: JSONContent): string {
+	return (doc.content ?? []).map((node) => renderNode(node)).join("");
+}
+
+function attributes(node: JSONContent, extra: string[] = []): string {
+	const status = reviewStatus(node);
+	const parts = [...extra];
+	if (status) parts.push(`data-review-status="${status}"`);
+	return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
+function renderChildren(node: JSONContent): string {
+	return (node.content ?? []).map((child) => renderNode(child)).join("");
+}
+
+function renderNode(node: JSONContent): string {
+	switch (node.type) {
+		case "text":
+			return renderText(node);
+		case "hardBreak":
+			return "<br>";
+		case "paragraph": {
+			const inner = renderChildren(node);
+			// An empty paragraph is Atelier's invisible anchor, not a blank line
+			// the reader should see marked.
+			if (!inner) return `<p${attributes(node)}><br></p>`;
+			return `<p${attributes(node)}>${inner}</p>`;
+		}
+		case "heading": {
+			const level = Math.min(
+				6,
+				Math.max(1, Number(node.attrs?.level ?? 1) || 1),
+			);
+			return `<h${level}${attributes(node)}>${renderChildren(node)}</h${level}>`;
+		}
+		case "bulletList":
+		case "orderedList": {
+			const tag = node.type === "orderedList" ? "ol" : "ul";
+			const start =
+				node.type === "orderedList" && typeof node.attrs?.start === "number"
+					? [`start="${node.attrs.start}"`]
+					: [];
+			const task =
+				node.attrs?.isTaskList === true ? ['data-task-list="true"'] : [];
+			return `<${tag}${attributes(node, [...start, ...task])}>${renderChildren(node)}</${tag}>`;
+		}
+		case "listItem":
+		case "taskItem": {
+			const checked = node.attrs?.checked;
+			const task =
+				checked === true || checked === false
+					? [`data-task="${checked ? "x" : " "}"`]
+					: [];
+			return `<li${attributes(node, task)}>${renderChildren(node)}</li>`;
+		}
+		case "blockquote":
+			return `<blockquote${attributes(node)}>${renderChildren(node)}</blockquote>`;
+		case "codeBlock": {
+			const language = node.attrs?.language;
+			const languageAttribute =
+				typeof language === "string" && language
+					? [`data-language="${escapeHtml(language)}"`]
+					: [];
+			return `<pre${attributes(node, languageAttribute)}><code>${renderCodeText(node)}</code></pre>`;
+		}
+		case "horizontalRule":
+			return `<hr${attributes(node)}>`;
+		case "table":
+			return `<table${attributes(node)}><tbody>${renderChildren(node)}</tbody></table>`;
+		case "tableRow":
+			return `<tr${attributes(node)}>${renderChildren(node)}</tr>`;
+		case "tableCell":
+		case "tableHeader": {
+			const header =
+				node.attrs?.isHeader === true || node.type === "tableHeader";
+			const align = node.attrs?.align;
+			const alignment =
+				typeof align === "string" && align
+					? [`data-align="${escapeHtml(align)}"`]
+					: [];
+			const tag = header ? "th" : "td";
+			return `<${tag}${attributes(node, alignment)}>${renderChildren(node)}</${tag}>`;
+		}
+		case "image":
+		case "imageBlock": {
+			const source = String(node.attrs?.src ?? "");
+			const alt = escapeHtml(String(node.attrs?.alt ?? ""));
+			// A card is served as static text; only fully-qualified sources can
+			// load, and a repository-relative one would resolve to the host.
+			const safe = /^(https?:|data:image\/)/i.test(source);
+			return safe
+				? `<img${attributes(node)} src="${escapeHtml(source)}" alt="${alt}">`
+				: `<span class="md-diff-missing"${attributes(node)}>${alt || "image"}</span>`;
+		}
+		case "markdownDiffGap": {
+			const count = Number(node.attrs?.count ?? 0);
+			const of = String(node.attrs?.of ?? "doc");
+			const inList =
+				of === "bulletList" || of === "orderedList" || of === "taskList";
+			const label = `${count} unchanged ${count === 1 ? "line" : "lines"}`;
+			const tag = inList ? "li" : "div";
+			return `<${tag} class="md-diff-gap">⋯ ${escapeHtml(label)}</${tag}>`;
+		}
+		case "markdownUnsupported":
+		case "markdownFrontmatter":
+		case "markdownInlineHtml": {
+			const value = String(node.attrs?.value ?? "");
+			const tag = node.type === "markdownInlineHtml" ? "span" : "pre";
+			// Raw source, shown as source: a card never runs a document's HTML.
+			return `<${tag} class="md-diff-raw"${attributes(node)}>${escapeHtml(value)}</${tag}>`;
+		}
+		default:
+			return VOID_BLOCKS.has(node.type ?? "")
+				? ""
+				: `<div${attributes(node)}>${renderChildren(node)}</div>`;
+	}
+}
+
+function renderCodeText(node: JSONContent): string {
+	return (node.content ?? [])
+		.map((child) =>
+			child.type === "text" ? escapeHtml(child.text ?? "") : renderNode(child),
+		)
+		.join("");
+}
+
+const MARK_TAGS: Record<string, { open: string; close: string }> = {
+	bold: { open: "<strong>", close: "</strong>" },
+	italic: { open: "<em>", close: "</em>" },
+	strike: { open: "<s>", close: "</s>" },
+	code: { open: "<code>", close: "</code>" },
+};
+
+function renderText(node: JSONContent): string {
+	let html = escapeHtml(node.text ?? "");
+	for (const mark of node.marks ?? []) {
+		const tags = MARK_TAGS[mark.type ?? ""];
+		if (tags) html = `${tags.open}${html}${tags.close}`;
+		else if (mark.type === "link") {
+			const href = String(mark.attrs?.href ?? "");
+			// Only navigable schemes; a card must not carry javascript: through.
+			const safe = /^(https?:|mailto:|#|\/)/i.test(href);
+			html = safe
+				? `<a href="${escapeHtml(href)}" rel="noreferrer noopener">${html}</a>`
+				: html;
+		}
+	}
+	const status = markStatus(node);
+	return status ? `<span data-review-status="${status}">${html}</span>` : html;
+}
