@@ -84,8 +84,12 @@ export const MARKDOWN_DIFF_CSS = `
 	border-right: 0;
 	transform: rotate(-45deg);
 }
-/* A done task reads as done — unless the diff is already colouring it. */
-.md-diff li[data-task="x"]:not([data-review-status]) > p {
+/* A done task reads as done — unless the diff is already colouring it.
+   A line whose words changed keeps them legible: two strikethroughs in one
+   line make an added word look deleted. */
+.md-diff
+	li[data-task="x"]:not([data-review-status]):not(:has(> p [data-review-status]))
+	> p {
 	color: var(--md-diff-ink-3);
 	text-decoration: line-through;
 	text-decoration-color: rgba(120, 113, 108, 0.6);
