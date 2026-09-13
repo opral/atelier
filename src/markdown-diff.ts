@@ -23,6 +23,13 @@ export type MarkdownDiffOptions = {
 	readonly maxLines?: number;
 	/** Skip the trim and render the whole document. */
 	readonly full?: boolean;
+	/**
+	 * "describe" names an image and where it points; "embed" writes the
+	 * `<img>`. A document's image address is chosen by whoever wrote the
+	 * document, and embedding it has the reader's client call that address.
+	 * Default "describe".
+	 */
+	readonly images?: "describe" | "embed";
 };
 
 export type MarkdownDiff = {
@@ -62,7 +69,9 @@ export function renderMarkdownDiff(options: MarkdownDiffOptions): MarkdownDiff {
 					: {}),
 			});
 	return {
-		html: renderReviewHtml(doc),
+		html: renderReviewHtml(doc, {
+			...(options.images ? { images: options.images } : {}),
+		}),
 		stats,
 		hidden,
 		unchanged,
@@ -70,8 +79,14 @@ export function renderMarkdownDiff(options: MarkdownDiffOptions): MarkdownDiff {
 }
 
 /** A whole document as it stands, with no diff: the read-side card. */
-export function renderMarkdownDocument(markdown: string): string {
+export function renderMarkdownDocument(
+	markdown: string,
+	options: Pick<MarkdownDiffOptions, "images"> = {},
+): string {
 	return renderReviewHtml(
 		astToTiptapDoc(parseMarkdown(markdown)) as JSONContent,
+		{
+			...(options.images ? { images: options.images } : {}),
+		},
 	);
 }

@@ -200,6 +200,23 @@ test("an image is named, not fetched, unless the caller asks for the tag", () =>
 	expect(diff.html).toContain("The funnel");
 	expect(diff.html).toContain("tracker.example");
 	expect(MARKDOWN_DIFF_CSS).toContain(".md-diff-image");
+
+	// A caller that owns the document can ask for the tag.
+	const embedded = renderMarkdownDiff({
+		beforeMarkdown: "Plain.\n",
+		afterMarkdown:
+			"Plain.\n\n![The funnel](https://tracker.example/pixel.gif)\n",
+		images: "embed",
+	});
+	expect(embedded.html).toContain(
+		'<img data-review-status="added" src="https://tracker.example/pixel.gif"',
+	);
+	expect(renderMarkdownDocument("![a](https://e.com/a.png)\n")).not.toContain(
+		"<img",
+	);
+	expect(
+		renderMarkdownDocument("![a](https://e.com/a.png)\n", { images: "embed" }),
+	).toContain("<img");
 });
 
 test("a rewrite is trimmed like anything else, and says what is missing", () => {
