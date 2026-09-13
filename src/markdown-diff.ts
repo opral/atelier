@@ -4,6 +4,7 @@ import { astToTiptapDoc } from "./extensions/markdown/editor/tiptap-markdown-bri
 import { buildMarkdownReviewDocument } from "./extensions/markdown/review/build-review-document";
 import { pruneToChanges } from "./markdown-diff/prune";
 import {
+	carriesChange,
 	countMarkdownDiff,
 	renderReviewHtml,
 	type MarkdownDiffStats,
@@ -48,8 +49,10 @@ export function renderMarkdownDiff(options: MarkdownDiffOptions): MarkdownDiff {
 		afterMarkdown: options.afterMarkdown,
 	});
 	const stats = countMarkdownDiff(review.doc);
-	const unchanged =
-		stats.added === 0 && stats.removed === 0 && stats.modified === 0;
+	// The document decides this, not the counters: a formatting-only change
+	// (emphasis restyled, raw HTML rewritten) is marked and visible without
+	// counting as a line.
+	const unchanged = !carriesChange(review.doc);
 	const { doc, hidden } = options.full
 		? { doc: review.doc, hidden: 0 }
 		: pruneToChanges(review.doc, {

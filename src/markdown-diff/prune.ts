@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
-import { carriesChange } from "./render-review-html";
+import { carriesChange, isCountedLine } from "./render-review-html";
 
 /**
  * Trims a review document to the parts worth putting in a card.
@@ -33,7 +33,12 @@ export function pruneToChanges(
 	doc: JSONContent,
 	options: PruneOptions = {},
 ): { readonly doc: JSONContent; readonly hidden: number } {
-	const context = Math.max(0, options.context ?? 1);
+	// A fractional window would add fractional indices to the keep set, which
+	// match no child: the whole document would fall away.
+	const requested = options.context ?? 1;
+	const context = Number.isFinite(requested)
+		? Math.max(0, Math.floor(requested))
+		: 1;
 	const maxPerContainer = Math.max(1, options.maxPerContainer ?? 14);
 	let hidden = 0;
 
@@ -47,7 +52,25 @@ export function pruneToChanges(
 			return { ...node, content: children.map(prune) };
 
 		const changed = children.map(carriesChange);
-		if (!changed.some(Boolean)) return node;
+		// A container nobody touched is still a container the card has to fit:
+		// an untouched 200-item list beside a one-word edit is most of the card.
+		if (!changed.some(Boolean)) {
+			const kept = children.slice(0, maxPerContainer).map(prune);
+			const dropped = children
+				.slice(maxPerContainer)
+				.reduce((total, child) => total + countLines(child), 0);
+			hidden += dropped;
+			return {
+				...node,
+				content: [
+					...kept,
+					{
+						type: GAP_NODE_TYPE,
+						attrs: { count: dropped, of: node.type ?? "doc", changed: false },
+					},
+				],
+			};
+		}
 
 		const keep = new Set<number>();
 		for (const [index, isChanged] of changed.entries()) {
@@ -104,7 +127,9 @@ export function pruneToChanges(
 		};
 		for (const [index, child] of children.entries()) {
 			if (!keep.has(index)) {
-				skipped += 1;
+				// A dropped child can be a whole table or a nested list: the
+				// reader is told how many lines went, not how many nodes.
+				skipped += countLines(child);
 				if (changed[index]) skippedChange = true;
 				continue;
 			}
@@ -116,6 +141,20 @@ export function pruneToChanges(
 	};
 
 	return { doc: prune(doc), hidden };
+}
+
+/** Lines a dropped node takes with it, counted as the summary counts them. */
+function countLines(
+	node: JSONContent,
+	parentType: string | null = null,
+	index = 0,
+): number {
+	const own = isCountedLine(node, parentType, index) ? 1 : 0;
+	return (node.content ?? []).reduce(
+		(total, child, childIndex) =>
+			total + countLines(child, node.type ?? null, childIndex),
+		own,
+	);
 }
 
 function distanceToChange(index: number, changed: readonly boolean[]): number {

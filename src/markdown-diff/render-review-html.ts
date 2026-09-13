@@ -29,7 +29,6 @@ const COUNTED_BLOCKS = new Set([
 	"listItem",
 	"taskItem",
 	"codeBlock",
-	"blockquote",
 	"tableRow",
 	"horizontalRule",
 	"image",
@@ -91,11 +90,17 @@ export function countMarkdownDiff(doc: JSONContent): MarkdownDiffStats {
 		index: number,
 		inherited: ReviewStatus | null,
 	): void => {
-		const status = reviewStatus(node) ?? inherited;
-		if (isLine(node, parentType, index)) {
+		const own = reviewStatus(node);
+		const status = own ?? inherited;
+		if (isCountedLine(node, parentType, index)) {
 			if (status === "added") added += 1;
 			else if (status === "removed") removed += 1;
-			else if (!status && hasMarkedText(node)) modified += 1;
+			// A node's own "modified"/"format" is a change the reader can see —
+			// a ticked task, a re-levelled heading, an edited code block — and
+			// counts once, on the node that carries it rather than on every
+			// child that inherits it.
+			else if (own === "modified" || own === "format" || hasMarkedText(node))
+				modified += 1;
 		}
 		for (const [childIndex, child] of (node.content ?? []).entries())
 			walk(child, node.type ?? null, childIndex, status);
@@ -109,12 +114,15 @@ export function countMarkdownDiff(doc: JSONContent): MarkdownDiffStats {
  * paragraph is the item's own text, not a line of its own; everything else
  * that holds text stands on its own line, nested items included.
  */
-function isLine(
+export function isCountedLine(
 	node: JSONContent,
 	parentType: string | null,
 	index: number,
 ): boolean {
 	if (!COUNTED_BLOCKS.has(node.type ?? "")) return false;
+	// An image inside a sentence is part of that sentence's line; only the
+	// block form stands on its own.
+	if (node.type === "image" && parentType === "paragraph") return false;
 	return !(
 		node.type === "paragraph" &&
 		index === 0 &&
@@ -129,7 +137,7 @@ function hasMarkedText(node: JSONContent): boolean {
 		parentType: string | null,
 		index: number,
 	): boolean => {
-		if (candidate !== node && isLine(candidate, parentType, index))
+		if (candidate !== node && isCountedLine(candidate, parentType, index))
 			return false;
 		if (markStatus(candidate)) return true;
 		return (candidate.content ?? []).some((child, childIndex) =>
@@ -164,9 +172,35 @@ function attributes(node: JSONContent, extra: string[] = []): string {
 }
 
 function renderChildren(node: JSONContent, options: RenderOptions): string {
-	return (node.content ?? [])
-		.map((child) => renderNode(child, options))
-		.join("");
+	const children = node.content ?? [];
+	const parts: string[] = [];
+	for (let index = 0; index < children.length; index += 1) {
+		const child = children[index]!;
+		// `pnpm run build` with one edited word arrives as three text nodes, all
+		// carrying the code mark. The document has one code span there, so the
+		// card draws one: the run is wrapped once and the diff marks sit inside.
+		if (hasCodeMark(child)) {
+			const run: JSONContent[] = [];
+			while (index < children.length && hasCodeMark(children[index]!)) {
+				run.push(children[index]!);
+				index += 1;
+			}
+			index -= 1;
+			parts.push(
+				`<code>${run.map((member) => renderText(member, { insideCode: true })).join("")}</code>`,
+			);
+			continue;
+		}
+		parts.push(renderNode(child, options));
+	}
+	return parts.join("");
+}
+
+function hasCodeMark(node: JSONContent): boolean {
+	return (
+		node.type === "text" &&
+		(node.marks ?? []).some((mark) => mark.type === "code")
+	);
 }
 
 function renderNode(node: JSONContent, options: RenderOptions): string {
@@ -263,6 +297,10 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 				node.attrs?.changed === true
 					? `${count} more ${lines}`
 					: `${count} unchanged ${lines}`;
+			// A table body holds rows and nothing else: a div here would be
+			// foster-parented out of the table it describes.
+			if (of === "table")
+				return `<tr class="md-diff-gap"><td colspan="99">⋯ ${escapeHtml(label)}</td></tr>`;
 			const tag = inList ? "li" : "div";
 			return `<${tag} class="md-diff-gap">⋯ ${escapeHtml(label)}</${tag}>`;
 		}
@@ -282,13 +320,56 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 }
 
 function renderCodeText(node: JSONContent, options: RenderOptions): string {
-	return (node.content ?? [])
+	const text = (node.content ?? [])
 		.map((child) =>
 			child.type === "text"
 				? escapeHtml(child.text ?? "")
 				: renderNode(child, options),
 		)
 		.join("");
+	// A merged code block keeps both revisions in one text node and says which
+	// offsets belong to which side. Without that, the card shows the old line
+	// and the new line one above the other with nothing telling them apart.
+	const ranges = lineRanges(node);
+	if (ranges.length === 0) return text;
+	const source = (node.content ?? [])
+		.map((child) => (child.type === "text" ? (child.text ?? "") : ""))
+		.join("");
+	const parts: string[] = [];
+	let cursor = 0;
+	for (const range of ranges) {
+		const from = Math.max(cursor, Math.min(range.from, source.length));
+		const to = Math.max(from, Math.min(range.to, source.length));
+		if (from > cursor) parts.push(escapeHtml(source.slice(cursor, from)));
+		if (to > from)
+			parts.push(
+				`<span data-review-status="${range.status}">${escapeHtml(source.slice(from, to))}</span>`,
+			);
+		cursor = to;
+	}
+	if (cursor < source.length) parts.push(escapeHtml(source.slice(cursor)));
+	return parts.join("");
+}
+
+/** A merged code block's one-sided lines, as offsets into its text. */
+function lineRanges(
+	node: JSONContent,
+): Array<{ status: "added" | "removed"; from: number; to: number }> {
+	const data = node.attrs?.data as Record<string, unknown> | null | undefined;
+	const review = data?.markdownReview as { lineRanges?: unknown } | undefined;
+	if (!Array.isArray(review?.lineRanges)) return [];
+	return review.lineRanges.flatMap((candidate) => {
+		const range = candidate as {
+			status?: unknown;
+			from?: unknown;
+			to?: unknown;
+		};
+		return (range.status === "added" || range.status === "removed") &&
+			typeof range.from === "number" &&
+			typeof range.to === "number"
+			? [{ status: range.status, from: range.from, to: range.to }]
+			: [];
+	});
 }
 
 const MARK_TAGS: Record<string, { open: string; close: string }> = {
@@ -298,15 +379,19 @@ const MARK_TAGS: Record<string, { open: string; close: string }> = {
 	code: { open: "<code>", close: "</code>" },
 };
 
-function renderText(node: JSONContent): string {
+function renderText(
+	node: JSONContent,
+	context: { insideCode?: boolean } = {},
+): string {
 	let html = escapeHtml(node.text ?? "");
 	for (const mark of node.marks ?? []) {
+		if (context.insideCode && mark.type === "code") continue;
 		const tags = MARK_TAGS[mark.type ?? ""];
 		if (tags) html = `${tags.open}${html}${tags.close}`;
 		else if (mark.type === "link") {
 			const href = String(mark.attrs?.href ?? "");
 			// Only navigable schemes; a card must not carry javascript: through.
-			const safe = /^(https?:|mailto:|#|\/)/i.test(href);
+			const safe = /^(https?:|mailto:|#|\/(?!\/))/i.test(href);
 			html = safe
 				? `<a href="${escapeHtml(href)}" rel="noreferrer noopener">${html}</a>`
 				: html;
