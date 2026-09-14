@@ -3,6 +3,7 @@
 	"id": "atelier_text",
 	"name": "Text",
 	"entry": "./index.js",
+	"diff": true,
 	"fileExtensions": [
 		"txt",
 		"log",

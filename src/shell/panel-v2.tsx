@@ -1,4 +1,12 @@
 import { DeclarativeExtension } from "../extension-runtime/declarative-extension";
+import {
+	VIEW_DIFF_SIDE_SEPARATOR,
+	ViewDiffCompare,
+	viewDiffSideRuntime,
+	viewDiffSideState,
+	viewDiffSides,
+	type ViewDiffSideKey,
+} from "../extension-runtime/view-diff-compare";
 import clsx from "clsx";
 import {
 	forwardRef,
@@ -1356,6 +1364,11 @@ function PanelContent({
 	);
 }
 
+/**
+ * A view instance's surface. When the instance has two refs and the view does
+ * not render its own diff, the shell compares the view with itself instead:
+ * the older commit on the left, the newer on the right.
+ */
 function ViewRenderer({
 	view,
 	instance,
@@ -1370,6 +1383,100 @@ function ViewRenderer({
 	extensionView: ExtensionView;
 	side: Area;
 	isActive: boolean;
+}) {
+	const sides = viewDiffSides({
+		definition: view,
+		session: atelier.diff.session,
+		state: instance.state,
+	});
+	const paneRuntime = useMemo(() => viewDiffSideRuntime(atelier), [atelier]);
+	return (
+		<div
+			data-testid={`atelier-view:${instance.instance}`}
+			data-view-instance={instance.instance}
+			data-view-key={instance.kind}
+			data-area-side={side}
+			data-active={isActive ? "true" : undefined}
+			className="flex min-h-0 flex-1 flex-col overflow-hidden"
+		>
+			{sides ? (
+				<ViewDiffCompare
+					sides={sides}
+					renderSide={({ key, commitId }) => (
+						<ViewDiffPane
+							view={view}
+							instance={instance}
+							extensionView={extensionView}
+							atelier={paneRuntime}
+							sideKey={key}
+							commitId={commitId}
+							path={sides.path}
+						/>
+					)}
+				/>
+			) : (
+				<ViewSurface
+					view={view}
+					instance={instance}
+					atelier={atelier}
+					extensionView={extensionView}
+				/>
+			)}
+		</div>
+	);
+}
+
+/** One side of the shell's comparison: the same view, pinned to one commit. */
+function ViewDiffPane({
+	view,
+	instance,
+	extensionView,
+	atelier,
+	sideKey,
+	commitId,
+	path,
+}: {
+	view: ExtensionDefinition;
+	instance: ExtensionInstance;
+	extensionView: ExtensionView;
+	atelier: ExtensionRuntime;
+	sideKey: ViewDiffSideKey;
+	commitId: string;
+	path: string;
+}) {
+	const instanceId = `${instance.instance}${VIEW_DIFF_SIDE_SEPARATOR}${sideKey}`;
+	const state = useMemo(
+		() => viewDiffSideState({ state: instance.state, path, commitId }),
+		[instance.state, path, commitId],
+	);
+	const paneInstance = useMemo<ExtensionInstance>(
+		() => ({ ...instance, instance: instanceId, state }),
+		[instance, instanceId, state],
+	);
+	const paneView = useMemo<ExtensionView>(
+		() => ({ ...extensionView, instanceId, state }),
+		[extensionView, instanceId, state],
+	);
+	return (
+		<ViewSurface
+			view={view}
+			instance={paneInstance}
+			atelier={atelier}
+			extensionView={paneView}
+		/>
+	);
+}
+
+function ViewSurface({
+	view,
+	instance,
+	atelier,
+	extensionView,
+}: {
+	view: ExtensionDefinition;
+	instance: ExtensionInstance;
+	atelier: ExtensionRuntime;
+	extensionView: ExtensionView;
 }) {
 	const registry = useExtensionHostRegistry();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1400,11 +1507,6 @@ function ViewRenderer({
 	return (
 		<div
 			ref={containerRef}
-			data-testid={`atelier-view:${instance.instance}`}
-			data-view-instance={instance.instance}
-			data-view-key={instance.kind}
-			data-area-side={side}
-			data-active={isActive ? "true" : undefined}
 			className="flex min-h-0 flex-1 flex-col overflow-hidden"
 		>
 			{view.Component ? (

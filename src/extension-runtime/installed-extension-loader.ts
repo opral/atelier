@@ -157,6 +157,7 @@ export async function loadInstalledExtensionsFromRows(
 					icon: Puzzle,
 					fileExtensions: manifest.fileExtensions,
 					multiInstance: manifest.multiInstance,
+					diff: manifest.diff,
 					menuItems: module.menuItems,
 					mount: module.mount,
 				},

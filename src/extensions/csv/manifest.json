@@ -3,5 +3,6 @@
 	"id": "atelier_csv",
 	"name": "CSV",
 	"entry": "./index.js",
+	"diff": true,
 	"fileExtensions": ["csv"]
 }

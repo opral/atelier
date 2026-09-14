@@ -69,6 +69,11 @@ export interface ExtensionDefinition {
 	readonly placement?: readonly Area[];
 	/** Excludes the view from add-view menus (still mountable programmatically). */
 	readonly hidden?: boolean;
+	/**
+	 * The view renders its own diff when it is given two refs. Without it the
+	 * shell compares two read-only instances of the view, before and after.
+	 */
+	readonly diff?: boolean;
 	/** Dynamic menu items rendered by Atelier on every view surface. */
 	readonly menuItems?: AtelierExtensionMenuItems;
 	readonly load?: import("../extension-api").AtelierExtensionLoader;
