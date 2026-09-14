@@ -3006,7 +3006,6 @@ function LayoutShellLoadedContentResolved({
 		[
 			exitDiffReview,
 			lix,
-			openWorkingChangeFileAtRange,
 			persistReviewResolution,
 			runDiffReviewResolution,
 			workingChangesReviewOpen,
