@@ -1,4 +1,4 @@
-import type { PanelSide, PanelState } from "../extension-runtime/types";
+import type { Area, AreaState } from "../extension-runtime/types";
 import type { AtelierJsonValue } from "../extension-api";
 import {
 	FILES_EXTENSION_KIND,
@@ -15,8 +15,8 @@ import {
  *
  * @example
  * const uiState: AtelierUiState = {
- *   focusedPanel: "left",
- *   panels: {
+ *   focusedArea: "left",
+ *   areas: {
  *     left: { views: [...], activeInstance: "files-1" },
  *     main: { views: [], activeInstance: null },
  *     right: { views: [], activeInstance: null },
@@ -25,25 +25,25 @@ import {
  * };
  */
 export type AtelierUiState = {
-	readonly focusedPanel: PanelSide;
-	readonly panels: Record<PanelSide, PanelState>;
+	readonly focusedArea: Area;
+	readonly areas: Record<Area, AreaState>;
 	readonly layout?: {
 		/**
 		 * Last known splitter percentages per panel side (0–100 range).
 		 */
-		readonly sizes?: Partial<Record<PanelSide, number>>;
+		readonly sizes?: Partial<Record<Area, number>>;
 	};
 };
 
 export type AtelierSessionUiState = Pick<
 	AtelierUiState,
-	"focusedPanel" | "panels"
+	"focusedArea" | "areas"
 >;
 
 export type AtelierUserPreferencesV1 = {
 	readonly version: 1;
 	readonly layout: {
-		readonly sizes: PanelLayoutSizes;
+		readonly sizes: AreaSizes;
 	};
 	/**
 	 * Review behavior is private to the current client. Optional keeps v1
@@ -61,12 +61,12 @@ export type AtelierUserPreferencesV1 = {
 /**
  * Default UI state used when no session snapshot exists.
  */
-export type PanelLayoutSizes = Record<PanelSide, number>;
-export type DefaultOpenPanel = Exclude<PanelSide, "main">;
+export type AreaSizes = Record<Area, number>;
+export type DefaultOpenArea = Exclude<Area, "main">;
 
-// A fresh workspace opens on the centered, full-width Files view. Side panels
+// A fresh workspace opens on the centered, full-width Files view. Side areas
 // remain available from the top-bar toggles.
-const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
+const DEFAULT_LAYOUT_SIZES: AreaSizes = {
 	left: 0,
 	main: 100,
 	right: 0,
@@ -74,19 +74,19 @@ const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 
 // The right sidebar defaults to History: opening it should show the
 // repository's timeline, not an empty placeholder asking for a view.
-const DEFAULT_RIGHT_PANEL_STATE: PanelState = {
+const DEFAULT_RIGHT_PANEL_STATE: AreaState = {
 	views: [{ instance: "history-default", kind: HISTORY_EXTENSION_KIND }],
 	activeInstance: "history-default",
 };
 
 /** Seeds the History default into a right panel persisted with no views. */
-function withDefaultRightView(panel: PanelState): PanelState {
-	return panel.views.length === 0 ? DEFAULT_RIGHT_PANEL_STATE : panel;
+function withDefaultRightView(area: AreaState): AreaState {
+	return area.views.length === 0 ? DEFAULT_RIGHT_PANEL_STATE : area;
 }
 
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
-	focusedPanel: "main",
-	panels: {
+	focusedArea: "main",
+	areas: {
 		left: {
 			views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-default",
@@ -103,9 +103,9 @@ const DEFAULT_ATELIER_USER_PREFERENCES: AtelierUserPreferencesV1 = {
 	review: { autoAcceptAgentChanges: false },
 };
 
-/** Creates the fresh-workspace state with requested side panels visible. */
+/** Creates the fresh-workspace state with requested side areas visible. */
 export function createInitialAtelierUiState(
-	defaultOpenPanels: readonly DefaultOpenPanel[] = [],
+	defaultOpenPanels: readonly DefaultOpenArea[] = [],
 ): AtelierUiState {
 	const sizes = { ...DEFAULT_LAYOUT_SIZES };
 	for (const side of defaultOpenPanels) {
@@ -121,24 +121,24 @@ export function createInitialAtelierUiState(
 }
 
 /**
- * Workspaces stored before the middle area was named "main" carry a
- * "central" key. Read it once here, so a saved layout survives the rename
- * rather than silently reverting to the default.
+ * Workspaces stored before the areas were named carry the old keys — `panels`
+ * holding a `central`. Read them once here, so a saved layout survives the
+ * rename rather than silently reverting to the default.
  */
 function withMainArea(value: unknown): Record<string, unknown> {
 	if (!value || typeof value !== "object") return {};
 	const candidate = { ...(value as Record<string, unknown>) };
-	if (candidate.main === undefined && candidate.central !== undefined)
+	if (candidate.main == null && candidate.central !== undefined)
 		candidate.main = candidate.central;
 	delete candidate.central;
 	return candidate;
 }
 
-function isPanelSide(value: unknown): value is PanelSide {
+function isArea(value: unknown): value is Area {
 	return value === "left" || value === "main" || value === "right";
 }
 
-function isViewInstance(value: unknown): value is PanelState["views"][number] {
+function isViewInstance(value: unknown): value is AreaState["views"][number] {
 	if (!value || typeof value !== "object") {
 		return false;
 	}
@@ -153,7 +153,7 @@ function isViewInstance(value: unknown): value is PanelState["views"][number] {
 	);
 }
 
-function coercePanelState(raw: unknown, fallback: PanelState): PanelState {
+function coerceAreaState(raw: unknown, fallback: AreaState): AreaState {
 	if (!raw || typeof raw !== "object") {
 		return fallback;
 	}
@@ -180,69 +180,69 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 	}
 
 	const candidate = raw as Record<string, unknown>;
-	const panelsCandidate = withMainArea(candidate.panels);
-	const layoutCandidate =
+	const areasCandidate = withMainArea(candidate.areas ?? candidate.panels);
+	// A copy: coercion reads the host's stored state, it does not rewrite it.
+	const layoutCandidate: Record<string, unknown> =
 		candidate.layout && typeof candidate.layout === "object"
-			? (candidate.layout as Record<string, unknown>)
+			? { ...(candidate.layout as Record<string, unknown>) }
 			: {};
 	if (layoutCandidate.sizes)
 		layoutCandidate.sizes = withMainArea(layoutCandidate.sizes);
 
-	const focused =
-		candidate.focusedPanel === "central" ? "main" : candidate.focusedPanel;
-	const focusedPanel = isPanelSide(focused)
+	const stored = candidate.focusedArea ?? candidate.focusedPanel;
+	const focused = stored === "central" ? "main" : stored;
+	const focusedArea = isArea(focused)
 		? focused
-		: DEFAULT_ATELIER_UI_STATE.focusedPanel;
+		: DEFAULT_ATELIER_UI_STATE.focusedArea;
 
-	// One instance id must appear in one panel: duplicates (from the old
+	// One instance id must appear in one area: duplicates (from the old
 	// per-load id counter) render as a single view, leaving the other panel's
 	// host empty. First occurrence wins, panel order left → main → right.
 	const seenInstances = new Set<string>();
-	const dedupePanel = (panel: PanelState): PanelState => {
-		const views = panel.views.filter((view) => {
+	const dedupeArea = (area: AreaState): AreaState => {
+		const views = area.views.filter((view) => {
 			if (seenInstances.has(view.instance)) return false;
 			seenInstances.add(view.instance);
 			return true;
 		});
-		if (views.length === panel.views.length) return panel;
+		if (views.length === area.views.length) return area;
 		return {
 			views,
 			activeInstance: views.some(
-				(view) => view.instance === panel.activeInstance,
+				(view) => view.instance === area.activeInstance,
 			)
-				? panel.activeInstance
+				? area.activeInstance
 				: (views[0]?.instance ?? null),
 		};
 	};
 	return {
-		focusedPanel,
-		panels: {
-			left: dedupePanel(
-				coercePanelState(
-					panelsCandidate.left,
-					DEFAULT_ATELIER_UI_STATE.panels.left,
+		focusedArea,
+		areas: {
+			left: dedupeArea(
+				coerceAreaState(
+					areasCandidate.left,
+					DEFAULT_ATELIER_UI_STATE.areas.left,
 				),
 			),
-			main: dedupePanel(
-				coercePanelState(
-					panelsCandidate.main,
-					DEFAULT_ATELIER_UI_STATE.panels.main,
+			main: dedupeArea(
+				coerceAreaState(
+					areasCandidate.main,
+					DEFAULT_ATELIER_UI_STATE.areas.main,
 				),
 			),
 			right: withDefaultRightView(
-				dedupePanel(
-					coercePanelState(
-						panelsCandidate.right,
-						DEFAULT_ATELIER_UI_STATE.panels.right,
+				dedupeArea(
+					coerceAreaState(
+						areasCandidate.right,
+						DEFAULT_ATELIER_UI_STATE.areas.right,
 					),
 				),
 			),
 		},
 		layout: {
 			sizes: normalizeLayoutSizes(
-				(layoutCandidate.sizes as
-					| Partial<Record<PanelSide, number>>
-					| undefined) ?? undefined,
+				(layoutCandidate.sizes as Partial<Record<Area, number>> | undefined) ??
+					undefined,
 			),
 		},
 	};
@@ -253,8 +253,8 @@ export function coerceAtelierSessionUiState(
 ): AtelierSessionUiState {
 	const coerced = coerceAtelierUiState(raw);
 	return {
-		focusedPanel: coerced.focusedPanel,
-		panels: coerced.panels,
+		focusedArea: coerced.focusedArea,
+		areas: coerced.areas,
 	};
 }
 
@@ -274,7 +274,7 @@ export function coerceAtelierUserPreferences(
 		version: 1,
 		layout: {
 			sizes: normalizeLayoutSizes(
-				withMainArea(layout.sizes) as Partial<Record<PanelSide, number>>,
+				withMainArea(layout.sizes) as Partial<Record<Area, number>>,
 			),
 		},
 		review: {
@@ -359,8 +359,8 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function normalizeLayoutSizes(
-	sizes?: Partial<Record<PanelSide, number>>,
-): PanelLayoutSizes {
+	sizes?: Partial<Record<Area, number>>,
+): AreaSizes {
 	return {
 		left: sizes?.left ?? DEFAULT_LAYOUT_SIZES.left,
 		main: sizes?.main ?? DEFAULT_LAYOUT_SIZES.main,

@@ -260,7 +260,7 @@ function MountedFile(
 		() => ({
 			instanceId,
 			state,
-			panel: "main",
+			area: "main",
 			isActive: true,
 			isFocused: false,
 			preferences: {

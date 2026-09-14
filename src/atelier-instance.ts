@@ -460,7 +460,7 @@ function waitForAtelierDocumentsCompletion(
 
 	return new Promise<void>((resolve, reject) => {
 		// A command's completion can be stolen after it executes — e.g. a
-		// session-state restore replacing the panels right after an open-view
+		// session-state restore replacing the areas right after an open-view
 		// added its tab. Without a deadline that wait never settles and, worse,
 		// deadlocks the whole command queue behind it. The command itself DID
 		// run; resolving on the deadline is the safe outcome.

@@ -13,10 +13,6 @@ export default defineConfig({
 	build: {
 		lib: {
 			entry: {
-				markdown: path.resolve(
-					__dirname,
-					"src/extensions/markdown/markdown-content.tsx",
-				),
 				atelier: path.resolve(__dirname, "src/build-entry.ts"),
 				"file-icons": path.resolve(__dirname, "src/file-icons.ts"),
 				render: path.resolve(__dirname, "src/render.ts"),

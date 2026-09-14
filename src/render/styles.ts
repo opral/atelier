@@ -24,13 +24,17 @@ const BASE_CSS = `
 
 /** CSV renders through html-diff, which marks status with its own attribute. */
 const CSV_CSS = `
-.csv-diff { overflow-x: auto; }
-.csv-diff table {
-	width: max-content;
-	min-width: 100%;
-	border-collapse: collapse;
+/* The frame belongs to the wrapper: a collapsed table ignores a radius, and
+   the wrapper is what clips. */
+.csv-diff {
+	overflow-x: auto;
 	border: 1px solid var(--atelier-border);
 	border-radius: var(--atelier-radius);
+}
+.csv-diff table {
+	width: 100%;
+	border: 0;
+	border-collapse: collapse;
 	font-size: 13px;
 }
 .csv-diff th, .csv-diff td {
@@ -39,6 +43,11 @@ const CSV_CSS = `
 	text-align: left;
 	vertical-align: top;
 	white-space: pre-wrap;
+	/* A wide column wraps rather than pushing the change off the card. */
+	max-width: 24ch;
+	overflow-wrap: anywhere;
+	/* A cell is written in whatever direction its language runs. */
+	unicode-bidi: plaintext;
 }
 .csv-diff thead th {
 	background: var(--atelier-bg-muted);
@@ -53,7 +62,8 @@ const CSV_CSS = `
 	background: var(--atelier-removed-bg);
 	color: var(--atelier-removed-ink);
 }
-.csv-diff [data-diff-mode="words"] [data-diff-status="removed"] {
+.csv-diff [data-diff-mode="words"] [data-diff-status="removed"],
+.csv-diff tr[data-diff-status="removed"] > td {
 	text-decoration: line-through;
 	text-decoration-color: var(--atelier-removed-edge);
 }
@@ -69,6 +79,12 @@ const CSV_CSS = `
 	border-radius: var(--atelier-radius-small);
 }
 .csv-diff td[data-diff-status], .csv-diff th[data-diff-status] { border-radius: 0; }
+/* The row a gap stands for, named rather than silently missing. */
+.csv-diff tr.csv-diff-gap > td {
+	color: var(--atelier-ink-subtle);
+	font-size: 12px;
+	text-align: center;
+}
 `;
 
 export const RENDER_CSS = [

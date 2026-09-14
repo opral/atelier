@@ -3,7 +3,7 @@ import { EDITOR_REVISION_STATE_KEYS } from "../extension-runtime/editor-revision
 import type {
 	ExtensionInstance,
 	ExtensionKind,
-	PanelState,
+	AreaState,
 } from "../extension-runtime/types";
 
 /** Reserved instance id of the pinned home tab. */
@@ -25,13 +25,13 @@ export type CentralSlotBehavior = {
 	/** Whether the main island can host this view. */
 	readonly canHost: (view: ExtensionInstance) => boolean;
 	/** Canonicalizes the main panel state (idempotent, reference-stable). */
-	readonly normalize: (panel: PanelState) => PanelState;
+	readonly normalize: (area: AreaState) => AreaState;
 	/** Places a view following the mode's navigation rules. */
 	readonly place: (
-		panel: PanelState,
+		area: AreaState,
 		view: ExtensionInstance,
 		intent?: CentralPlaceIntent,
-	) => PanelState;
+	) => AreaState;
 	/**
 	 * The instance to activate after a removal, given the REMAINING views and
 	 * the removed view's former index.
@@ -42,7 +42,7 @@ export type CentralSlotBehavior = {
 	) => string | null;
 };
 
-const panelViewsEqual = (left: PanelState, right: PanelState): boolean =>
+const panelViewsEqual = (left: AreaState, right: AreaState): boolean =>
 	left.activeInstance === right.activeInstance &&
 	left.views.length === right.views.length &&
 	left.views.every((view, index) => view === right.views[index]);
@@ -85,15 +85,15 @@ const ensurePinnedHomeView = (
  * home is active.
  */
 const insertCentralTabView = (
-	panel: PanelState,
+	area: AreaState,
 	view: ExtensionInstance,
 	intent: CentralPlaceIntent = {},
-): PanelState => {
-	const existingIndex = panel.views.findIndex(
+): AreaState => {
+	const existingIndex = area.views.findIndex(
 		(entry) => entry.instance === view.instance,
 	);
 	if (existingIndex !== -1) {
-		const existing = panel.views[existingIndex] as ExtensionInstance;
+		const existing = area.views[existingIndex] as ExtensionInstance;
 		// Activation, not replacement: keep accumulated state, let the new
 		// identity fields win. Revision keys ARE identity — a tab that once
 		// showed a historical snapshot must not stay pinned to it when the
@@ -114,22 +114,22 @@ const insertCentralTabView = (
 			...(mergedState ? { state: mergedState } : {}),
 			...(existing.isPinned ? { isPinned: true } : {}),
 		};
-		const views = panel.views.map((entry, index) =>
+		const views = area.views.map((entry, index) =>
 			index === existingIndex ? merged : entry,
 		);
 		return { views, activeInstance: merged.instance };
 	}
-	const activeIndex = panel.views.findIndex(
-		(entry) => entry.instance === panel.activeInstance,
+	const activeIndex = area.views.findIndex(
+		(entry) => entry.instance === area.activeInstance,
 	);
-	const activeEntry = activeIndex !== -1 ? panel.views[activeIndex] : null;
+	const activeEntry = activeIndex !== -1 ? area.views[activeIndex] : null;
 	const appendTab = intent.newTab ?? intent.documentOrigin === "new";
 	if (appendTab || !activeEntry || activeEntry.isPinned) {
 		// New tabs always join at the end of the strip, browser-style,
 		// regardless of which tab is active.
-		return { views: [...panel.views, view], activeInstance: view.instance };
+		return { views: [...area.views, view], activeInstance: view.instance };
 	}
-	const views = panel.views.map((entry, index) =>
+	const views = area.views.map((entry, index) =>
 		index === activeIndex ? view : entry,
 	);
 	return { views, activeInstance: view.instance };
@@ -148,18 +148,18 @@ export function createCentralSlotBehavior(config: {
 	return {
 		homeKind,
 		canHost,
-		normalize: (panel) => {
-			let views: ExtensionInstance[] = panel.views.filter(canHost);
+		normalize: (area) => {
+			let views: ExtensionInstance[] = area.views.filter(canHost);
 			if (homeKind) {
 				views = ensurePinnedHomeView(views, homeKind);
 			}
 			const activeInstance = views.some(
-				(view) => view.instance === panel.activeInstance,
+				(view) => view.instance === area.activeInstance,
 			)
-				? panel.activeInstance
+				? area.activeInstance
 				: (views[views.length - 1]?.instance ?? null);
 			const next = { views, activeInstance };
-			return panelViewsEqual(panel, next) ? panel : next;
+			return panelViewsEqual(area, next) ? area : next;
 		},
 		place: insertCentralTabView,
 		// Tabs close to the neighbor; the pinned home catches the last one.

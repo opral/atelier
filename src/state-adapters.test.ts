@@ -8,8 +8,8 @@ import {
 } from "./state-adapters";
 
 const shellState = {
-	focusedPanel: "main" as const,
-	panels: {
+	focusedArea: "main" as const,
+	areas: {
 		left: { views: [], activeInstance: null },
 		main: { views: [], activeInstance: null },
 		right: { views: [], activeInstance: null },
@@ -21,9 +21,9 @@ test("memory session state publishes changes", () => {
 	const listener = vi.fn();
 	const unsubscribe = store.subscribe(listener);
 
-	store.setSnapshot({ ...shellState, focusedPanel: "right" });
+	store.setSnapshot({ ...shellState, focusedArea: "right" });
 
-	expect(store.getSnapshot()?.focusedPanel).toBe("right");
+	expect(store.getSnapshot()?.focusedArea).toBe("right");
 	expect(listener).toHaveBeenCalledOnce();
 	unsubscribe();
 });

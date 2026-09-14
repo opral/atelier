@@ -3,7 +3,7 @@ import { DndContext } from "@dnd-kit/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { MainArea } from "./main-panel";
-import type { PanelState } from "../extension-runtime/types";
+import type { AreaState } from "../extension-runtime/types";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
 import { createExtensionHostContext } from "@/test-utils/extension-host-context";
@@ -72,7 +72,7 @@ const createViewContext = () =>
 
 describe("MainArea", () => {
 	test("renders the document action without desktop agent controls", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [],
 			activeInstance: null,
 		};
@@ -80,12 +80,12 @@ describe("MainArea", () => {
 		await renderWithProviders(
 			<DndContext>
 				<MainArea
-					panel={panelState}
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onCreateNewFile={vi.fn()}
 				/>
 			</DndContext>,
@@ -101,7 +101,7 @@ describe("MainArea", () => {
 
 	test("renders the shared add-view action in the tab strip", async () => {
 		const onAddView = vi.fn();
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [],
 			activeInstance: null,
 		};
@@ -109,12 +109,12 @@ describe("MainArea", () => {
 		await renderWithProviders(
 			<DndContext>
 				<MainArea
-					panel={panelState}
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onAddView={onAddView}
 					showTabBar
 				/>
@@ -130,7 +130,7 @@ describe("MainArea", () => {
 	});
 
 	test("does not render an add-view action when view creation is unavailable", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
 		};
@@ -138,12 +138,12 @@ describe("MainArea", () => {
 		await renderWithProviders(
 			<DndContext>
 				<MainArea
-					panel={panelState}
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					showTabBar
 				/>
 			</DndContext>,
@@ -154,7 +154,7 @@ describe("MainArea", () => {
 
 	test("renders the active view without a tab strip", async () => {
 		// The main editor hides tabs; files are switched from the left list.
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
 		};
@@ -162,12 +162,12 @@ describe("MainArea", () => {
 		await renderWithProviders(
 			<DndContext>
 				<MainArea
-					panel={panelState}
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 				/>
 			</DndContext>,
 		);
@@ -177,7 +177,7 @@ describe("MainArea", () => {
 	});
 
 	test("finalizes pending view when interacting with content", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [
 				{
 					instance: "search-1",
@@ -192,12 +192,12 @@ describe("MainArea", () => {
 		await renderWithProviders(
 			<DndContext>
 				<MainArea
-					panel={panelState}
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onFinalizePendingView={handleFinalize}
 				/>
 			</DndContext>,

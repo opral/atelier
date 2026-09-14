@@ -117,3 +117,113 @@ test("the palette is tokens a host can redefine, not literals in rules", () => {
 		.match(/(?:rgb|rgba|hsl)\(|#[0-9a-fA-F]{3,8}\b/g);
 	expect(literals).toBe(null);
 });
+
+test("a file created, emptied or deleted is never called unchanged", () => {
+	const csv = "id,v\n1,a\n";
+	// Created empty, deleted, truncated: three different things, none of them
+	// "nothing changed".
+	expect(toHtml({ path: "/a.csv", after: bytes("") })).toEqual({
+		skipped: "empty",
+	});
+	expect(toHtml({ path: "/a.csv", before: bytes("") })).toEqual({
+		skipped: "empty",
+	});
+	const truncated = toHtml({
+		path: "/a.csv",
+		before: bytes(csv),
+		after: bytes(""),
+	});
+	expect(isRendered(truncated) && truncated.kind).toBe("modified");
+	// The header was a line too, and it went with the row.
+	expect(isRendered(truncated) && truncated.counts).toEqual({
+		added: 0,
+		modified: 0,
+		removed: 2,
+	});
+	// A file of separators is not a table.
+	expect(
+		toHtml({ path: "/a.csv", before: bytes(",,\n"), after: bytes(",,,\n") }),
+	).toEqual({
+		skipped: "empty",
+	});
+});
+
+test("a renamed column counts as a change, as the table shows it", () => {
+	const renamed = toHtml({
+		path: "/leads.csv",
+		before: bytes("id,name\n1,a\n"),
+		after: bytes("id,title\n1,a\n"),
+	});
+
+	expect(isRendered(renamed)).toBe(true);
+	if (!isRendered(renamed)) return;
+	expect(renamed.counts).toEqual({ added: 0, modified: 1, removed: 0 });
+	expect(renamed.html).toContain('data-diff-status="added"');
+});
+
+test("the budget is measured against the view, document or not", () => {
+	const long = `${Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n")}\n`;
+	for (const document of [false, true])
+		expect(
+			toHtml(
+				{ path: "/b.md", after: bytes(long) },
+				{ maxBytes: 1_000, document },
+			),
+		).toEqual({ skipped: "too-large" });
+});
+
+test("a path that names a directory has no view", () => {
+	expect(toHtml({ path: "/a.md/", after: bytes("# Hi\n") })).toEqual({
+		skipped: "unsupported",
+	});
+	expect(toHtml({ path: "/docs/notes.csv/", after: bytes("id\n") })).toEqual({
+		skipped: "unsupported",
+	});
+	// Case is not part of a file type.
+	expect(isRendered(toHtml({ path: "/A.MD", after: bytes("# Hi\n") }))).toBe(
+		true,
+	);
+});
+
+test("a table is measured by the side that has the rows", () => {
+	const many = `id,v\n${Array.from({ length: 3_000 }, (_, i) => `${i},a`).join("\n")}\n`;
+	expect(
+		toHtml({
+			path: "/big.csv",
+			before: bytes(many),
+			after: bytes("id,v\n0,a\n"),
+		}),
+	).toEqual({ skipped: "too-large" });
+});
+
+test("a ledger is trimmed to the rows that changed", () => {
+	const rows = Array.from({ length: 120 }, (_, index) => `${index},acme,open`);
+	const before = `id,account,state\n${rows.join("\n")}\n`;
+	const after = before.replace("60,acme,open", "60,acme,closed");
+	const result = toHtml(
+		{ path: "/ledger.csv", before: bytes(before), after: bytes(after) },
+		{ maxBytes: 11_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	// The edit survives; the untouched bulk does not.
+	expect(result.counts).toEqual({ added: 0, modified: 1, removed: 0 });
+	expect(result.html).toContain("closed");
+	expect(result.hidden).toBeGreaterThan(100);
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		11_000,
+	);
+	// A row is dropped from both sides or from neither, so nothing that
+	// stayed reads as a deletion.
+	const removed = result.html.match(/data-diff-status="removed"/g) ?? [];
+	expect(removed.length).toBeLessThan(3);
+});
+
+test("a host retints by redefining a token on an ancestor", () => {
+	// The tokens are declared on the root, so the nearest ancestor that
+	// redefines one wins. Declared on the render itself they would beat the
+	// host every time, and the override would silently do nothing.
+	expect(RENDER_CSS.startsWith(":root {")).toBe(true);
+	expect(RENDER_CSS).not.toContain(".atelier-render {\n\t--atelier-ink:");
+});

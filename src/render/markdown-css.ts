@@ -41,39 +41,32 @@ export const MARKDOWN_CSS = `
 .md-diff li { margin: 1px 0; }
 .md-diff li > p { margin: 0; }
 
-/* Task items: the box takes the bullet's place, as in the app. */
+/* Task items: the box takes the bullet's place, as in the app.
+   It rides with the text rather than sitting at a fixed edge, so a line
+   written right-to-left keeps its box beside its words. */
 .md-diff li[data-task] {
 	list-style: none;
-	margin-left: -22px;
-	padding-left: 24px;
-	position: relative;
+	margin-left: -19px;
 }
-.md-diff li[data-task]::before {
+.md-diff li[data-task] > p::before {
 	content: "";
-	position: absolute;
-	left: 2px;
-	top: 5px;
+	display: inline-block;
 	width: 13px;
 	height: 13px;
+	margin-inline-end: 6px;
+	vertical-align: -2px;
 	border: 1.5px solid var(--atelier-ink-subtle);
 	border-radius: 3px;
 	box-sizing: border-box;
 }
-.md-diff li[data-task="x"]::before {
+.md-diff li[data-task="x"] > p::before {
 	border-color: var(--atelier-action);
-	background: var(--atelier-action);
-}
-.md-diff li[data-task="x"]::after {
-	content: "";
-	position: absolute;
-	left: 5px;
-	top: 8px;
-	width: 6px;
-	height: 3px;
-	border: 1.6px solid var(--atelier-bg);
-	border-top: 0;
-	border-right: 0;
-	transform: rotate(-45deg);
+	background-color: var(--atelier-action);
+	/* The tick, drawn rather than positioned: no second pseudo to place. */
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.2l2.2 2.2 4.6-4.6' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 11px 11px;
 }
 /* A done task reads as done, as in the app: dimmed, struck, box filled. */
 .md-diff li[data-task="x"]:not([data-review-status]) > p {
@@ -94,7 +87,7 @@ export const MARKDOWN_CSS = `
 .md-diff blockquote {
 	margin: 0 0 8px;
 	padding: 3px 0 3px 14px;
-	border-left: 3px solid currentColor;
+	border-left: 3px solid var(--atelier-border);
 }
 
 .md-diff pre {
@@ -114,6 +107,7 @@ export const MARKDOWN_CSS = `
 	border-radius: 4px;
 	background: color-mix(in srgb, var(--atelier-ink-subtle) 15%, transparent);
 }
+.md-diff pre [data-review-status="removed"] { text-decoration: none; }
 .md-diff pre code {
 	background: none;
 	padding: 0;
@@ -138,6 +132,7 @@ export const MARKDOWN_CSS = `
 	content: "▨";
 	color: var(--atelier-ink-subtle);
 }
+.md-diff .md-diff-image { margin: 0 4px 6px 0; }
 .md-diff .md-diff-image-src { color: var(--atelier-ink-subtle); font-size: 12px; }
 
 .md-diff a {
@@ -233,10 +228,10 @@ export const MARKDOWN_CSS = `
 .md-diff pre[data-review-status="removed"] {
 	box-shadow: inset 3px 0 0 var(--atelier-removed-edge);
 }
-.md-diff li[data-task="x"][data-review-status="added"]::before,
-.md-diff li[data-task="x"][data-review-status="removed"]::before {
+.md-diff li[data-task="x"][data-review-status="added"] > p::before,
+.md-diff li[data-task="x"][data-review-status="removed"] > p::before {
 	border-color: currentColor;
-	background: currentColor;
+	background-color: currentColor;
 }
 .md-diff tr[data-review-status] > td, .md-diff tr[data-review-status] > th { background: inherit; }
 

@@ -65,8 +65,8 @@ export interface ExtensionDefinition {
 	readonly fileExtensions?: readonly string[];
 	/** Allow more than one view of this extension in the same panel. */
 	readonly multiInstance?: boolean;
-	/** Panel sides this view may occupy. Defaults to the side panels. */
-	readonly placement?: readonly PanelSide[];
+	/** Panel sides this view may occupy. Defaults to the side areas. */
+	readonly placement?: readonly Area[];
 	/** Excludes the view from add-view menus (still mountable programmatically). */
 	readonly hidden?: boolean;
 	/** Dynamic menu items rendered by Atelier on every view surface. */
@@ -110,7 +110,7 @@ export type ExtensionRuntime = AtelierExtensionRuntime & {
 export interface ExtensionView {
 	readonly instanceId: string;
 	readonly state: ExtensionState;
-	readonly panel: PanelSide;
+	readonly area: Area;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	readonly preferences: AtelierExtensionPreferences;
@@ -125,7 +125,7 @@ export interface ExtensionHostContext {
 		extensionId: ExtensionKind,
 	) => AtelierExtensionPreferences;
 	readonly registerNewFileDraftHandler: (registration: {
-		readonly panelSide: PanelSide;
+		readonly area: Area;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
 		readonly handler: () => Promise<void> | void;
@@ -136,17 +136,17 @@ export interface ExtensionHostContext {
  * Lightweight state container that represents one panel island.
  *
  * @example
- * const leftPanel: PanelState = { views: [], activeInstance: null };
+ * const leftPanel: AreaState = { views: [], activeInstance: null };
  */
-export interface PanelState {
+export interface AreaState {
 	readonly views: ExtensionInstance[];
 	readonly activeInstance: string | null;
 }
 
 /**
- * Declares the available sides that panels can mount on.
+ * Declares the available sides that areas can mount on.
  *
  * @example
- * const side: PanelSide = "left";
+ * const side: Area = "left";
  */
-export type PanelSide = "left" | "right" | "main";
+export type Area = "left" | "right" | "main";

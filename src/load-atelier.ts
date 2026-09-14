@@ -221,9 +221,9 @@ async function prepareAtelierState(
 	if (existingTarget < 0) main.push(target);
 	else main[existingTarget] = target;
 	const ui = {
-		focusedPanel: "main" as const,
-		panels: {
-			...initial.panels,
+		focusedArea: "main" as const,
+		areas: {
+			...initial.areas,
 			main: { views: main, activeInstance: target.instance },
 		},
 	};
@@ -233,9 +233,9 @@ async function prepareAtelierState(
 	});
 	const visible = [target];
 	for (const side of options.defaultOpenPanels ?? []) {
-		const panel = ui.panels[side];
-		const active = panel.views.find(
-			(view) => view.instance === panel.activeInstance,
+		const area = ui.areas[side];
+		const active = area.views.find(
+			(view) => view.instance === area.activeInstance,
 		);
 		if (active) visible.push(active);
 	}

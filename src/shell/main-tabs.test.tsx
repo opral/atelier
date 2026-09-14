@@ -218,7 +218,7 @@ describe("main tabs with a pinned home", () => {
 				});
 			});
 			expect(
-				shell.sessionStateStore.getSnapshot()?.panels.main.views[1]?.state,
+				shell.sessionStateStore.getSnapshot()?.areas.main.views[1]?.state,
 			).toMatchObject({
 				fileId: fakeUuid("one"),
 				filePath: "/renamed.md",
@@ -234,7 +234,7 @@ describe("main tabs with a pinned home", () => {
 			});
 			await waitFor(() => {
 				expect(mainTabLabels()).toEqual(["«home»", "renamed.csv"]);
-				const main = shell.sessionStateStore.getSnapshot()?.panels.main;
+				const main = shell.sessionStateStore.getSnapshot()?.areas.main;
 				const instance = fileExtensionInstanceForKind(
 					CSV_EXTENSION_KIND,
 					fakeUuid("one"),
@@ -455,7 +455,7 @@ describe("main tabs with a pinned home", () => {
 		const shell = await renderTabbedShell();
 		try {
 			await act(async () => {
-				await shell.atelier.views.open(SIDE_EXTENSION_ID, { panel: "right" });
+				await shell.atelier.views.open(SIDE_EXTENSION_ID, { area: "right" });
 			});
 			expect(await screen.findByTestId("test-side-tool")).toBeInTheDocument();
 
@@ -498,12 +498,12 @@ describe("main tabs with a pinned home", () => {
 			await waitFor(() => {
 				const snapshot = shell.sessionStateStore.getSnapshot();
 				expect(
-					snapshot?.panels.left.views.some(
+					snapshot?.areas.left.views.some(
 						(view) => view.kind === "atelier_files",
 					),
 				).toBe(true);
 				expect(
-					snapshot?.panels.main.views.some(
+					snapshot?.areas.main.views.some(
 						(view) => view.kind === "atelier_files",
 					),
 				).toBe(false);

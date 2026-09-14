@@ -53,7 +53,7 @@
 		"lint:fix": "oxlint --tsconfig ./tsconfig.json --ignore-path .gitignore --ignore-pattern \"vendor/**\" --fix .",
 		"test": "vitest run",
 		"test:consumer": "pnpm run build && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
-		"ci": "pnpm run test:build-scripts && pnpm run build:lix && pnpm run build && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
+		"ci": "pnpm run build:lix && pnpm run build && pnpm run test:build-scripts && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
 		"test:build-scripts": "node --test scripts/*.test.mjs",
 		"tokens": "node scripts/generate-render-tokens.mjs"
 	},

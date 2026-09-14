@@ -14,9 +14,9 @@ import type {
 import type { ExtensionInstance } from "./extension-runtime/types";
 
 export type AtelierPreparedUiState = {
-	readonly focusedPanel: AtelierSessionUiState["focusedPanel"];
-	readonly panels: Record<
-		AtelierSessionUiState["focusedPanel"],
+	readonly focusedArea: AtelierSessionUiState["focusedArea"];
+	readonly areas: Record<
+		AtelierSessionUiState["focusedArea"],
 		{
 			readonly activeInstance: string | null;
 			readonly views: (Omit<ExtensionInstance, "state"> & {

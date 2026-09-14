@@ -14,7 +14,7 @@ import { openLix } from "../test-utils/node-lix-sdk";
 const view = {
 	instanceId: "view1",
 	state: {},
-	panel: "main",
+	area: "main",
 	isActive: true,
 	isFocused: true,
 } as ExtensionView;

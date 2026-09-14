@@ -12,7 +12,7 @@ export type ExtensionManifest = {
 	readonly fileExtensions?: readonly string[];
 	readonly multiInstance?: boolean;
 	/**
-	 * Panel sides this view may occupy. Defaults to the side panels; main
+	 * Panel sides this view may occupy. Defaults to the side areas; main
 	 * placement is reserved for document editors unless declared here.
 	 */
 	readonly placement?: readonly AtelierArea[];
@@ -161,10 +161,10 @@ export type AtelierViewOpenOptions = {
 	readonly newTab?: boolean;
 	readonly focus?: boolean;
 	/**
-	 * Target panel. Defaults to "main". Side panels follow the add-view
+	 * Target panel. Defaults to "main". Side areas follow the add-view
 	 * rules instead of the tab rules: `instanceId` and `newTab` are ignored.
 	 */
-	readonly panel?: AtelierArea;
+	readonly area?: AtelierArea;
 };
 
 export type AtelierViewsApi = {
@@ -213,7 +213,7 @@ export type AtelierEvent =
 	| {
 			type: "extension_opened";
 			extensionId: string;
-			panel: AtelierArea;
+			area: AtelierArea;
 	  }
 	| {
 			/**
@@ -402,7 +402,7 @@ export type AtelierExtensionRuntime = {
 export type AtelierExtensionView = {
 	readonly instanceId: string;
 	readonly state: AtelierExtensionState;
-	readonly panel: AtelierArea;
+	readonly area: AtelierArea;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	/** Preferences shared by every instance of this extension. */

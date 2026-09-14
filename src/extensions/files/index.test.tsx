@@ -175,7 +175,7 @@ describe("FilesView", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<FilesView context={{ panelSide: "main" }} />
+						<FilesView context={{ area: "main" }} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -210,7 +210,7 @@ describe("FilesView", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<FilesView context={{ panelSide: "main", openFile }} />
+						<FilesView context={{ area: "main", openFile }} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -285,7 +285,7 @@ describe("FilesView", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<FilesView context={{ panelSide: "main" }} />
+						<FilesView context={{ area: "main" }} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -399,7 +399,7 @@ describe("FilesView", () => {
 			view = render(
 				<LixProvider lix={lix}>
 					<Suspense fallback={null}>
-						<FilesView context={{ panelSide: "main", openFile }} />
+						<FilesView context={{ area: "main", openFile }} />
 					</Suspense>
 				</LixProvider>,
 			);
@@ -445,7 +445,7 @@ describe("FilesView", () => {
 							context={{
 								isActiveView: true,
 								isPanelFocused: false,
-								panelSide: "main",
+								area: "main",
 							}}
 						/>
 					</Suspense>
@@ -751,7 +751,7 @@ describe("FilesView", () => {
 			fileId: fakeUuid("guide"),
 			filePath: "/archive/docs/guide.md",
 			focus: false,
-			panel: "main",
+			area: "main",
 		});
 
 		await act(async () => view?.unmount());
@@ -1007,7 +1007,7 @@ describe("FilesView", () => {
 				fileId: fakeUuid("readme"),
 				filePath: "/README.md",
 				focus: false,
-				panel: "main",
+				area: "main",
 			});
 		});
 		expect(resolveFileForInteraction).not.toHaveBeenCalled();
@@ -1075,7 +1075,7 @@ describe("FilesView", () => {
 				fileId: fakeUuid("notes"),
 				filePath: "/notes.md",
 				focus: false,
-				panel: "main",
+				area: "main",
 			});
 		});
 		expect(resolveFileForInteraction).toHaveBeenCalledWith("/notes.md");
@@ -1188,7 +1188,7 @@ describe("FilesView", () => {
 				fileId: fakeUuid("readme"),
 				filePath: "/README.md",
 				focus: false,
-				panel: "main",
+				area: "main",
 			});
 		});
 		expect(resolveFileForInteraction).not.toHaveBeenCalled();

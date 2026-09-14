@@ -102,7 +102,7 @@ export function TopBar({
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent className="bg-[var(--color-bg-tooltip)] text-[var(--color-text-tooltip)] [&_[class*='bg-secondary']]:bg-[var(--color-bg-tooltip)] [&_[class*='fill-secondary']]:fill-[var(--color-bg-tooltip)]">
-						Toggle left panel ({leftShortcut})
+						Toggle left area ({leftShortcut})
 					</TooltipContent>
 				</Tooltip>
 				{navbarRepository !== undefined && navbarRepository !== null ? (
@@ -212,7 +212,7 @@ export function TopBar({
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent className="bg-[var(--color-bg-tooltip)] text-[var(--color-text-tooltip)] [&_[class*='bg-secondary']]:bg-[var(--color-bg-tooltip)] [&_[class*='fill-secondary']]:fill-[var(--color-bg-tooltip)]">
-						Toggle right panel ({rightShortcut})
+						Toggle right area ({rightShortcut})
 					</TooltipContent>
 				</Tooltip>
 			</div>

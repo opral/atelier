@@ -36,8 +36,8 @@ describe("loadAtelier", () => {
 				mainArea,
 				location: { view: "company-home" },
 			});
-			expect(initialState.ui.panels.main.activeInstance).toBe("main-home");
-			expect(initialState.ui.panels.main.views).toHaveLength(1);
+			expect(initialState.ui.areas.main.activeInstance).toBe("main-home");
+			expect(initialState.ui.areas.main.views).toHaveLength(1);
 			const html = renderToString(
 				createElement(Atelier, { initialState, extensions, mainArea }),
 			);
@@ -66,7 +66,7 @@ describe("loadAtelier", () => {
 			await lix.close();
 		}
 		const transferred: AtelierInitialState = JSON.parse(JSON.stringify(state));
-		const active = transferred.ui.panels.main.activeInstance!;
+		const active = transferred.ui.areas.main.activeInstance!;
 		expect(transferred.views[active]?.extensionId).toBe("atelier_file");
 		expect(transferred.views[active]?.data).toMatchObject({
 			path: "/README.md",
@@ -102,7 +102,7 @@ describe("loadAtelier", () => {
 			const home = await loadAtelier({ lix });
 			const file = await loadAtelier({ lix, location: { path: "/notes.txt" } });
 			expect(home.identity).toBe(file.identity);
-			expect(file.ui.panels.main.views[0]?.state?.filePath).toBe("/notes.txt");
+			expect(file.ui.areas.main.views[0]?.state?.filePath).toBe("/notes.txt");
 			await expect(
 				loadAtelier({ lix, location: { path: "/missing" } }),
 			).rejects.toMatchObject({ name: "AtelierLocationNotFoundError" });

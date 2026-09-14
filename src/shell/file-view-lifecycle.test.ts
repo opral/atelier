@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import type { PanelState } from "@/extension-runtime/types";
+import type { AreaState } from "@/extension-runtime/types";
 import { reconcileCurrentFileViews } from "./file-view-lifecycle";
 
-const EMPTY_PANEL: PanelState = { views: [], activeInstance: null };
+const EMPTY_PANEL: AreaState = { views: [], activeInstance: null };
 
 describe("reconcileCurrentFileViews", () => {
 	test("removes missing current file views regardless of renderer kind", () => {
@@ -17,7 +17,7 @@ describe("reconcileCurrentFileViews", () => {
 			state: { fileId: "file_missing", filePath: "/asset.other" },
 		};
 		const result = reconcileCurrentFileViews({
-			panels: {
+			areas: {
 				left: EMPTY_PANEL,
 				main: {
 					views: [currentView, missingView],
@@ -49,7 +49,7 @@ describe("reconcileCurrentFileViews", () => {
 			kind: "search",
 			state: { fileId: "incidental-metadata" },
 		};
-		const panels = {
+		const areas = {
 			left: { views: [nonFileView], activeInstance: nonFileView.instance },
 			main: {
 				views: [historicalView],
@@ -59,11 +59,11 @@ describe("reconcileCurrentFileViews", () => {
 		};
 
 		const result = reconcileCurrentFileViews({
-			panels,
+			areas,
 			currentFileIds: new Set(),
 		});
 
-		expect(result).toBe(panels);
+		expect(result).toBe(areas);
 	});
 
 	test("refreshes current file paths and generated tab labels", () => {
@@ -77,7 +77,7 @@ describe("reconcileCurrentFileViews", () => {
 				customState: true,
 			},
 		};
-		const panels = {
+		const areas = {
 			left: EMPTY_PANEL,
 			main: {
 				views: [currentView],
@@ -87,7 +87,7 @@ describe("reconcileCurrentFileViews", () => {
 		};
 
 		const result = reconcileCurrentFileViews({
-			panels,
+			areas,
 			currentFileIds: new Set(["file_current"]),
 			currentFilePathsById: new Map([
 				["file_current", "/project-aurora-launch-plan.md"],
@@ -109,7 +109,7 @@ describe("reconcileCurrentFileViews", () => {
 			state: { fileId: "file_current", filePath: "/notes.md" },
 		};
 		const result = reconcileCurrentFileViews({
-			panels: {
+			areas: {
 				left: EMPTY_PANEL,
 				main: {
 					views: [currentView],
@@ -149,7 +149,7 @@ describe("reconcileCurrentFileViews", () => {
 			state: { fileId: "file_current", filePath: "/notes.custom" },
 		};
 		const result = reconcileCurrentFileViews({
-			panels: {
+			areas: {
 				left: EMPTY_PANEL,
 				main: {
 					views: [fallbackView, installedView],

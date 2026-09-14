@@ -1,4 +1,4 @@
-import type { PanelState, ExtensionInstance } from "./types";
+import type { AreaState, ExtensionInstance } from "./types";
 
 /**
  * Inserts or replaces the single pending slot in a panel.
@@ -15,14 +15,14 @@ import type { PanelState, ExtensionInstance } from "./types";
  * });
  */
 export function upsertPendingExtension(
-	panel: PanelState,
+	area: AreaState,
 	view: ExtensionInstance,
-): PanelState {
+): AreaState {
 	const pendingExtension: ExtensionInstance = view.isPending
 		? view
 		: { ...view, isPending: true };
 
-	const viewsWithoutPending = panel.views.filter((entry) => !entry.isPending);
+	const viewsWithoutPending = area.views.filter((entry) => !entry.isPending);
 	const nextViews = [
 		...viewsWithoutPending.filter(
 			(entry) => entry.instance !== pendingExtension.instance,
@@ -46,12 +46,12 @@ export function upsertPendingExtension(
  * const next = activatePanelExtension(panel, "atelier_file-1");
  */
 export function activatePanelExtension(
-	panel: PanelState,
+	area: AreaState,
 	instance: string,
-): PanelState {
+): AreaState {
 	let found = false;
 
-	const views = panel.views.map((view) => {
+	const views = area.views.map((view) => {
 		if (view.instance !== instance) return view;
 		found = true;
 		if (!view.isPending) {
@@ -60,7 +60,7 @@ export function activatePanelExtension(
 		return { ...view, isPending: false };
 	});
 
-	if (!found) return panel;
+	if (!found) return area;
 
 	return {
 		views,

@@ -75,20 +75,25 @@ export function toHtml(
 		return { skipped: "failed" };
 	}
 	if (!isRendered(result)) return result;
-	const html = options.document
-		? asDocument(result.html, content.path)
-		: result.html;
+	// The budget is about the view: a document wrapper adds the stylesheet,
+	// which the caller asked for and did not budget against.
 	if (
 		options.maxBytes !== undefined &&
-		byteLength(html) > options.maxBytes &&
-		!options.document
+		byteLength(result.html) > options.maxBytes
 	)
 		return { skipped: "too-large" };
-	return { ...result, html };
+	return {
+		...result,
+		html: options.document
+			? asDocument(result.html, content.path)
+			: result.html,
+	};
 }
 
 /** The view that claims this path, if any. */
 function rendererFor(path: string): StaticRenderer | undefined {
+	// "a.md/" is a directory called "a.md", not a Markdown file.
+	if (path.endsWith("/")) return undefined;
 	const name = path.split("/").filter(Boolean).at(-1) ?? "";
 	const extension = name.includes(".")
 		? (name.split(".").at(-1)?.toLowerCase() ?? "")

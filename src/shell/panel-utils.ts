@@ -1,4 +1,4 @@
-import type { PanelState, ExtensionInstance } from "../extension-runtime/types";
+import type { AreaState, ExtensionInstance } from "../extension-runtime/types";
 
 const deepCloneValue = <T>(input: T): T => {
 	if (Array.isArray(input)) {
@@ -38,16 +38,16 @@ const deepCloneValue = <T>(input: T): T => {
 
 /**
  * Returns a view instance clone with deep-cloned state to keep transitions
- * immutable when moving tabs between panels.
+ * immutable when moving tabs between areas.
  *
  * @example
  * const cloned = cloneExtensionInstance(panelState, "files-1");
  */
 export const cloneExtensionInstance = (
-	panel: PanelState,
+	area: AreaState,
 	instance: string,
 ): ExtensionInstance | null => {
-	const view = panel.views.find((entry) => entry.instance === instance);
+	const view = area.views.find((entry) => entry.instance === instance);
 	if (!view) return null;
 	return {
 		...view,
@@ -56,28 +56,28 @@ export const cloneExtensionInstance = (
 };
 
 export const reorderPanelExtensionsByIndex = (
-	panel: PanelState,
+	area: AreaState,
 	fromIndex: number,
 	toIndex: number,
-): PanelState => {
+): AreaState => {
 	if (
 		fromIndex === toIndex ||
 		fromIndex < 0 ||
 		toIndex < 0 ||
-		fromIndex >= panel.views.length ||
-		toIndex >= panel.views.length
+		fromIndex >= area.views.length ||
+		toIndex >= area.views.length
 	) {
-		return panel;
+		return area;
 	}
 
-	const views = panel.views.slice();
+	const views = area.views.slice();
 	const [moving] = views.splice(fromIndex, 1);
 	views.splice(toIndex, 0, moving);
 	return {
 		views,
 		activeInstance:
-			panel.activeInstance === moving.instance
+			area.activeInstance === moving.instance
 				? moving.instance
-				: panel.activeInstance,
+				: area.activeInstance,
 	};
 };

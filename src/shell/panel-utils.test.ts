@@ -3,7 +3,7 @@ import {
 	cloneExtensionInstance,
 	reorderPanelExtensionsByIndex,
 } from "./panel-utils";
-import type { PanelState, ExtensionInstance } from "../extension-runtime/types";
+import type { AreaState, ExtensionInstance } from "../extension-runtime/types";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 
 const TEST_SEARCH_EXTENSION_KIND = "test_search";
@@ -12,7 +12,7 @@ const TEST_TASKS_EXTENSION_KIND = "test_tasks";
 describe("cloneViewInstanceByKey", () => {
 	test("clones the matched view and its state", () => {
 		const originalState = { label: "Files", filePath: "/docs/readme.md" };
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [
 				{
 					instance: "files-1",
@@ -33,7 +33,7 @@ describe("cloneViewInstanceByKey", () => {
 	});
 
 	test("deep clones nested state", () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [
 				{
 					instance: "files-1",
@@ -55,7 +55,7 @@ describe("cloneViewInstanceByKey", () => {
 	});
 
 	test("returns null when no matching view is found", () => {
-		const panelState: PanelState = { views: [], activeInstance: null };
+		const panelState: AreaState = { views: [], activeInstance: null };
 
 		const cloned = cloneExtensionInstance(panelState, "missing");
 
@@ -64,7 +64,7 @@ describe("cloneViewInstanceByKey", () => {
 });
 
 describe("panel view reordering", () => {
-	const samplePanel: PanelState = {
+	const samplePanel: AreaState = {
 		views: [
 			{ instance: "files-1", kind: FILES_EXTENSION_KIND },
 			{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND },

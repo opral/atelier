@@ -167,7 +167,7 @@ describe("Atelier instance file controller", () => {
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.getByTestId("test-pill-home")).toBeVisible();
-			const main = sessionStateStore.getSnapshot()?.panels.main;
+			const main = sessionStateStore.getSnapshot()?.areas.main;
 			expect(main?.views.map((view) => view.kind)).toEqual([HOME_EXTENSION_ID]);
 			expect(screen.queryByText("Reviewing home-pill-working.md")).toBeNull();
 
@@ -242,7 +242,7 @@ describe("Atelier instance file controller", () => {
 		}
 	});
 
-	test("keeps panels collapsed when the host does not open them by default", async () => {
+	test("keeps areas collapsed when the host does not open them by default", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -367,8 +367,8 @@ describe("Atelier instance file controller", () => {
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore({
-			focusedPanel: "main",
-			panels: {
+			focusedArea: "main",
+			areas: {
 				left: {
 					views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
 					activeInstance: "files-left",
@@ -464,7 +464,7 @@ describe("Atelier instance file controller", () => {
 
 			await waitFor(() => {
 				const mainViews =
-					sessionStateStore.getSnapshot()?.panels.main.views ?? [];
+					sessionStateStore.getSnapshot()?.areas.main.views ?? [];
 				expect(
 					mainViews.filter((view) => typeof view.state?.fileId === "string"),
 				).toEqual([]);
@@ -511,7 +511,7 @@ describe("Atelier instance file controller", () => {
 
 			await waitFor(() => {
 				const mainViews =
-					sessionStateStore.getSnapshot()?.panels.main.views ?? [];
+					sessionStateStore.getSnapshot()?.areas.main.views ?? [];
 				const documentPaths = mainViews
 					.map((view) => view.state?.filePath)
 					.filter((path): path is string => typeof path === "string");

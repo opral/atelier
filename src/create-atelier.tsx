@@ -262,18 +262,18 @@ function PreparedAtelierRuntime(
 			const visible = configuration.sessionStateStore.getSnapshot();
 			const saved = props.sessionStateStore.getSnapshot();
 			if (visible) {
-				const main = visible.panels.main;
+				const main = visible.areas.main;
 				props.sessionStateStore.setSnapshot(
 					saved
 						? {
 								...saved,
-								focusedPanel: visible.focusedPanel,
-								panels: {
-									...saved.panels,
+								focusedArea: visible.focusedArea,
+								areas: {
+									...saved.areas,
 									main: {
 										...main,
 										views: [
-											...saved.panels.main.views.filter(
+											...saved.areas.main.views.filter(
 												(view) =>
 													!main.views.some(
 														(item) => item.instance === view.instance,
@@ -390,18 +390,18 @@ function PreparedAtelierRuntime(
 					runtime.instance,
 				).sessionStateStore;
 				const previous = store.getSnapshot();
-				const main = next.ui.panels.main;
+				const main = next.ui.areas.main;
 				store.setSnapshot(
 					previous
 						? {
 								...previous,
-								focusedPanel: "main",
-								panels: {
-									...previous.panels,
+								focusedArea: "main",
+								areas: {
+									...previous.areas,
 									main: {
 										...main,
 										views: [
-											...previous.panels.main.views.filter(
+											...previous.areas.main.views.filter(
 												(view) =>
 													!main.views.some(
 														(item) => item.instance === view.instance,

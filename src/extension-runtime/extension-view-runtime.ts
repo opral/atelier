@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type {
-	PanelSide,
-	PanelState,
+	Area,
+	AreaState,
 	ExtensionHostContext,
 	ExtensionInstance,
 	ExtensionRuntime,
@@ -10,15 +10,15 @@ import type {
 import { hasHistoricalEditorRevisionState } from "./editor-revision-state";
 
 type UseExtensionViewRuntimeArgs = {
-	panel: PanelState;
-	panelSide: PanelSide;
+	areaState: AreaState;
+	area: Area;
 	isFocused: boolean;
 	host: ExtensionHostContext;
 };
 
 export function useExtensionViewRuntime({
-	panel,
-	panelSide,
+	areaState,
+	area,
 	isFocused,
 	host,
 }: UseExtensionViewRuntimeArgs): {
@@ -29,7 +29,7 @@ export function useExtensionViewRuntime({
 } {
 	const makeRuntime = useCallback(
 		(instance: ExtensionInstance) => {
-			const isActive = panel.activeInstance === instance.instance;
+			const isActive = areaState.activeInstance === instance.instance;
 			const readOnly =
 				host.atelier.readOnly ||
 				hasHistoricalEditorRevisionState(instance.state);
@@ -41,13 +41,13 @@ export function useExtensionViewRuntime({
 				view: {
 					instanceId: instance.instance,
 					state: instance.state ?? {},
-					panel: panelSide,
+					area: area,
 					isActive,
 					isFocused,
 					preferences: host.preferencesFor(instance.kind),
 					registerNewFileDraftHandler: (handler: () => Promise<void> | void) =>
 						host.registerNewFileDraftHandler({
-							panelSide,
+							area,
 							viewInstance: instance.instance,
 							isActiveView: isActive,
 							handler,
@@ -55,7 +55,7 @@ export function useExtensionViewRuntime({
 				},
 			};
 		},
-		[host, panelSide, panel.activeInstance, isFocused],
+		[host, area, areaState.activeInstance, isFocused],
 	);
 
 	return { makeRuntime };

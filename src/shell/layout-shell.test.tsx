@@ -173,7 +173,7 @@ describe("extension menu preferences", () => {
 
 			await act(async () => {
 				await atelier.views.open(FILES_EXTENSION_KIND, {
-					panel: "main",
+					area: "main",
 					newTab: true,
 				});
 			});
@@ -258,10 +258,10 @@ describe("open file lifecycle", () => {
 		// Files stays in the sidebar; the document is the only main view.
 		await waitFor(() => {
 			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.left?.views).toEqual([
+			expect(value?.areas?.left?.views).toEqual([
 				expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
 			]);
-			expect(value?.panels?.main?.views).toEqual([
+			expect(value?.areas?.main?.views).toEqual([
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: fakeUuid("one") }),
 				}),
@@ -275,7 +275,7 @@ describe("open file lifecycle", () => {
 		});
 		await waitFor(() => {
 			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.main?.views).toEqual([
+			expect(value?.areas?.main?.views).toEqual([
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: fakeUuid("two") }),
 				}),
@@ -287,7 +287,7 @@ describe("open file lifecycle", () => {
 			await atelier.documents.open("/one.md", { newTab: true });
 		});
 		await waitFor(() => {
-			expect(sessionStateStore.getSnapshot()?.panels?.main?.views).toHaveLength(
+			expect(sessionStateStore.getSnapshot()?.areas?.main?.views).toHaveLength(
 				2,
 			);
 		});
@@ -307,7 +307,7 @@ describe("open file lifecycle", () => {
 		});
 		await waitFor(() => {
 			expect(screen.getByTestId("main-panel-empty-state")).toBeVisible();
-			expect(sessionStateStore.getSnapshot()?.panels?.main?.views).toEqual([]);
+			expect(sessionStateStore.getSnapshot()?.areas?.main?.views).toEqual([]);
 		});
 
 		await act(async () => utils?.unmount());
@@ -336,9 +336,9 @@ describe("open file lifecycle", () => {
 		});
 		const initialState = {
 			...DEFAULT_ATELIER_UI_STATE,
-			focusedPanel: "right" as const,
-			panels: {
-				...DEFAULT_ATELIER_UI_STATE.panels,
+			focusedArea: "right" as const,
+			areas: {
+				...DEFAULT_ATELIER_UI_STATE.areas,
 				main: {
 					views: [
 						{
@@ -401,7 +401,7 @@ describe("open file lifecycle", () => {
 		});
 		await waitFor(async () => {
 			const state = sessionStateStore.getSnapshot();
-			expect(state?.panels.main).toEqual({
+			expect(state?.areas.main).toEqual({
 				views: [],
 				activeInstance: null,
 			});
@@ -513,7 +513,7 @@ describe("diff review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("auto-changed.md"));
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.main.views[0]?.state?.fileId,
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 				).toBe(fakeUuid("auto-changed-file"));
 			});
 
@@ -533,7 +533,7 @@ describe("diff review navigation", () => {
 				).toBeVisible();
 			});
 			expect(
-				sessionStateStore.getSnapshot()?.panels.main.views[0]?.state?.fileId,
+				sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 			).toBe(fakeUuid("auto-changed-file"));
 			await waitFor(() => {
 				expect(
@@ -643,7 +643,7 @@ describe("diff review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("auto-stable.md"));
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.main.views[0]?.state?.fileId,
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 				).toBe(fakeUuid("auto-stable-file"));
 			});
 			expect(
@@ -660,12 +660,12 @@ describe("diff review navigation", () => {
 				expect(document.querySelector("[data-review-mode='true']")).toBeNull();
 			});
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			let activeHistoryInstance: string | null = null;
 			await waitFor(() => {
-				const leftPanel = sessionStateStore.getSnapshot()?.panels.left;
+				const leftPanel = sessionStateStore.getSnapshot()?.areas.left;
 				const activeView = leftPanel?.views.find(
 					(view) => view.instance === leftPanel.activeInstance,
 				);
@@ -679,7 +679,7 @@ describe("diff review navigation", () => {
 			// An unchanged file was on screen, so the review opens the first
 			// changed file's diff in its place.
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()?.panels.main;
+				const main = sessionStateStore.getSnapshot()?.areas.main;
 				const activeView = main?.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -687,7 +687,7 @@ describe("diff review navigation", () => {
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
 				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
-			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+			expect(sessionStateStore.getSnapshot()?.areas.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
 			const checkpointList = await screen.findByRole("list", {
@@ -707,19 +707,19 @@ describe("diff review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.main.views[0]?.state
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 						?.beforeCommitId,
 				).toEqual(expect.any(String));
 				expect(
-					sessionStateStore.getSnapshot()?.panels.main.views[0]?.state
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 						?.afterCommitId,
 				).toEqual(expect.any(String));
 			});
 			expect(
-				sessionStateStore.getSnapshot()?.panels.main.views[0]?.state
+				sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 					?.beforeCommitId,
 			).not.toBe(
-				sessionStateStore.getSnapshot()?.panels.main.views[0]?.state
+				sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 					?.afterCommitId,
 			);
 			await waitFor(() => {
@@ -742,7 +742,7 @@ describe("diff review navigation", () => {
 			// it showed is not the review's scope, so the changed file's diff
 			// opens live in its place.
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()?.panels.main;
+				const main = sessionStateStore.getSnapshot()?.areas.main;
 				const activeView = main?.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -750,7 +750,7 @@ describe("diff review navigation", () => {
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
 				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
-			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+			expect(sessionStateStore.getSnapshot()?.areas.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
 			const execute = vi.spyOn(lix, "execute");
@@ -772,13 +772,13 @@ describe("diff review navigation", () => {
 			});
 			// The idle pill reviews the checkpoint it names, as the History
 			// view would, without switching the side panel to History.
-			const leftBefore = sessionStateStore.getSnapshot()?.panels.left;
+			const leftBefore = sessionStateStore.getSnapshot()?.areas.left;
 			fireEvent.click(idlePill);
 			expect(await screen.findByRole("button", { name: "Exit" })).toBeVisible();
 			expect(
 				await screen.findByRole("list", { name: "Files at this checkpoint" }),
 			).toBeVisible();
-			expect(sessionStateStore.getSnapshot()?.panels.left).toEqual(leftBefore);
+			expect(sessionStateStore.getSnapshot()?.areas.left).toEqual(leftBefore);
 			const closePill = await screen.findByRole("button", {
 				name: "Latest checkpoint. Close review",
 			});
@@ -891,7 +891,7 @@ describe("diff review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("added-active.md"));
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.main.views[0]?.state?.fileId,
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 				).toBe(fileId);
 			});
 
@@ -1041,7 +1041,7 @@ describe("diff review navigation", () => {
 				);
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
-			const initialCentral = sessionStateStore.getSnapshot()?.panels.main;
+			const initialCentral = sessionStateStore.getSnapshot()?.areas.main;
 			const initialActiveView = initialCentral?.views.find(
 				(view) => view.instance === initialCentral.activeInstance,
 			);
@@ -1053,7 +1053,7 @@ describe("diff review navigation", () => {
 					.where("path", "not like", "/.lix/%")
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.execute();
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const workingChanges = await screen.findByRole("button", {
@@ -1068,7 +1068,7 @@ describe("diff review navigation", () => {
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()?.panels.main;
+				const main = sessionStateStore.getSnapshot()?.areas.main;
 				const activeView = main?.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -1096,7 +1096,7 @@ describe("diff review navigation", () => {
 				),
 			).toHaveTextContent("After");
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()?.panels.main;
+				const main = sessionStateStore.getSnapshot()?.areas.main;
 				const activeView = main?.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -1168,7 +1168,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 
@@ -1228,7 +1228,7 @@ describe("diff review navigation", () => {
 			// the float never names a file that isn't visible.
 			await waitFor(
 				() => {
-					const main = sessionStateStore.getSnapshot()?.panels.main;
+					const main = sessionStateStore.getSnapshot()?.areas.main;
 					const activeView = main?.views.find(
 						(view) => view.instance === main.activeInstance,
 					);
@@ -1247,7 +1247,7 @@ describe("diff review navigation", () => {
 			});
 			await waitFor(
 				() => {
-					const main = sessionStateStore.getSnapshot()?.panels.main;
+					const main = sessionStateStore.getSnapshot()?.areas.main;
 					const activeView = main?.views.find(
 						(view) => view.instance === main.activeInstance,
 					);
@@ -1366,7 +1366,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const checkpointList = await screen.findByRole("list", {
@@ -1398,7 +1398,7 @@ describe("diff review navigation", () => {
 				);
 			});
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()!.panels.main;
+				const main = sessionStateStore.getSnapshot()!.areas.main;
 				const active = main.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -1413,7 +1413,7 @@ describe("diff review navigation", () => {
 				);
 			});
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()!.panels.main;
+				const main = sessionStateStore.getSnapshot()!.areas.main;
 				const active = main.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -1460,7 +1460,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const checkpointList = await screen.findByRole("list", {
@@ -1510,7 +1510,7 @@ describe("diff review navigation", () => {
 				expect(
 					sessionStateStore
 						.getSnapshot()
-						?.panels.main.views.some(
+						?.areas.main.views.some(
 							(view) =>
 								typeof view.state?.afterCommitId === "string" ||
 								typeof view.state?.beforeCommitId === "string",
@@ -1585,7 +1585,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const originalExecute = lix.execute.bind(lix);
@@ -1621,7 +1621,7 @@ describe("diff review navigation", () => {
 				);
 			});
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()!.panels.main;
+				const main = sessionStateStore.getSnapshot()!.areas.main;
 				const activeView = main.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -1680,7 +1680,7 @@ describe("diff review navigation", () => {
 
 			await act(async () => {
 				await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const workingChanges = await screen.findByRole("button", {
@@ -1697,7 +1697,7 @@ describe("diff review navigation", () => {
 			// Nothing was on screen, so the removed file's diff opens from
 			// history on entry.
 			await waitFor(() => {
-				const main = sessionStateStore.getSnapshot()?.panels.main;
+				const main = sessionStateStore.getSnapshot()?.areas.main;
 				const activeView = main?.views.find(
 					(view) => view.instance === main.activeInstance,
 				);
@@ -1804,8 +1804,8 @@ describe("installed extension lifecycle", () => {
 
 		const staleSessionState = {
 			...DEFAULT_ATELIER_UI_STATE,
-			panels: {
-				...DEFAULT_ATELIER_UI_STATE.panels,
+			areas: {
+				...DEFAULT_ATELIER_UI_STATE.areas,
 				left: {
 					views: [{ instance: extensionInstance, kind: extensionKind }],
 					activeInstance: extensionInstance,
@@ -1829,7 +1829,7 @@ describe("installed extension lifecycle", () => {
 
 			await waitFor(() => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.panels.left.views).toEqual([]);
+				expect(state?.areas.left.views).toEqual([]);
 			});
 
 			// A stale snapshot can also arrive after extension discovery has settled.
@@ -1837,7 +1837,7 @@ describe("installed extension lifecycle", () => {
 			act(() => sessionStateStore.setSnapshot(staleSessionState));
 			await waitFor(() => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.panels.left.views).toEqual([]);
+				expect(state?.areas.left.views).toEqual([]);
 			});
 
 			await act(async () => {
@@ -1887,7 +1887,7 @@ describe("installed extension lifecycle", () => {
 				await screen.findByText("Recovered extension content"),
 			).toBeInTheDocument();
 			const restoredState = sessionStateStore.getSnapshot();
-			const restoredEntry = restoredState?.panels.left.views.find(
+			const restoredEntry = restoredState?.areas.left.views.find(
 				(entry) => entry.kind === extensionKind,
 			);
 			expect(restoredEntry?.instance).toBeDefined();
@@ -1924,8 +1924,8 @@ describe("canonical UI state", () => {
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
 		const initialState = {
 			...DEFAULT_ATELIER_UI_STATE,
-			focusedPanel: "main" as const,
-			panels: {
+			focusedArea: "main" as const,
+			areas: {
 				left: {
 					views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
 					activeInstance: "files-default",
@@ -1983,11 +1983,11 @@ describe("canonical UI state", () => {
 
 			await waitFor(async () => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.focusedPanel).toBe("left");
+				expect(state?.focusedArea).toBe("left");
 				// The empty right panel gains its History default at coerce time;
 				// everything else persists exactly as it was.
-				expect(state?.panels).toEqual({
-					...initialState.panels,
+				expect(state?.areas).toEqual({
+					...initialState.areas,
 					right: {
 						views: [{ instance: "history-default", kind: "atelier_history" }],
 						activeInstance: "history-default",

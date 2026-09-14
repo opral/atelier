@@ -36,7 +36,7 @@ import { PanelV2, availableExtensionsForPanel } from "./panel-v2";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
 import { ExtensionRegistryProvider } from "../extension-runtime/extension-registry";
 import type {
-	PanelState,
+	AreaState,
 	ExtensionDefinition,
 } from "../extension-runtime/types";
 import type { Lix } from "@lix-js/sdk";
@@ -47,14 +47,14 @@ import { createExtensionHostContext } from "@/test-utils/extension-host-context"
 
 const TEST_SEARCH_EXTENSION_KIND = "test_search";
 
-const emptyPanel: PanelState = { views: [], activeInstance: null };
+const emptyPanel: AreaState = { views: [], activeInstance: null };
 
-const singleSearchPanel: PanelState = {
+const singleSearchPanel: AreaState = {
 	views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 	activeInstance: "search-1",
 };
 
-const pendingSearchPanel: PanelState = {
+const pendingSearchPanel: AreaState = {
 	views: [
 		{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND, isPending: true },
 	],
@@ -86,14 +86,14 @@ const multiInstanceSearchView: ExtensionDefinition = {
 };
 
 function StatefulMultiInstancePanel() {
-	const [panel, setPanel] = React.useState(singleSearchPanel);
+	const [area, setPanel] = React.useState(singleSearchPanel);
 	const nextInstance = React.useRef(2);
 	return (
 		<PanelV2
 			side="main"
-			panel={panel}
+			area={area}
 			isFocused={true}
-			onFocusPanel={vi.fn()}
+			onFocusArea={vi.fn()}
 			onSelectView={(instance) =>
 				setPanel((current) => ({ ...current, activeInstance: instance }))
 			}
@@ -152,9 +152,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={emptyPanel}
+				area={emptyPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -193,9 +193,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={singleSearchPanel}
+				area={singleSearchPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -214,7 +214,7 @@ describe("PanelV2", () => {
 	test("defers persisted panel views until the panel becomes visible and active", async () => {
 		const mount = vi.fn(searchViewOverride.mount);
 		const lazyView: ExtensionDefinition = { ...searchViewOverride, mount };
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [
 				{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND },
 				{ instance: "search-2", kind: TEST_SEARCH_EXTENSION_KIND },
@@ -224,10 +224,10 @@ describe("PanelV2", () => {
 		const rendered = renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={panel}
+				area={area}
 				contentVisible={false}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -240,10 +240,10 @@ describe("PanelV2", () => {
 			<ExtensionHostRegistryProvider>
 				<PanelV2
 					side="left"
-					panel={panel}
+					area={area}
 					contentVisible
 					isFocused={false}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onSelectView={vi.fn()}
 					onRemoveView={vi.fn()}
 					viewContext={createViewContext()}
@@ -261,9 +261,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={singleSearchPanel}
+				area={singleSearchPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -273,7 +273,7 @@ describe("PanelV2", () => {
 
 		expect(droppableMock).toHaveBeenCalledWith({
 			id: "left-panel",
-			data: { panel: "left" },
+			data: { area: "left" },
 		});
 	});
 
@@ -281,9 +281,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={singleSearchPanel}
+				area={singleSearchPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				tabLabel={() => "Custom Search"}
@@ -306,9 +306,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="main"
-				panel={singleSearchPanel}
+				area={singleSearchPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -321,7 +321,7 @@ describe("PanelV2", () => {
 				id: "search-1",
 				data: expect.objectContaining({
 					instance: "search-1",
-					panel: "main",
+					area: "main",
 					fromPanel: "main",
 				}),
 			}),
@@ -332,9 +332,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="main"
-				panel={singleSearchPanel}
+				area={singleSearchPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				onAddView={vi.fn()}
@@ -354,9 +354,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={pendingSearchPanel}
+				area={pendingSearchPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				onActiveViewInteraction={finalize}
@@ -374,9 +374,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={emptyPanel}
+				area={emptyPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -394,9 +394,9 @@ describe("PanelV2", () => {
 		renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={emptyPanel}
+				area={emptyPanel}
 				isFocused={false}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				emptyStatePlaceholder={<div />}
@@ -407,7 +407,7 @@ describe("PanelV2", () => {
 
 		expect(mocked).toHaveBeenCalledWith({
 			id: "custom-drop",
-			data: { panel: "left" },
+			data: { area: "left" },
 		});
 	});
 
@@ -425,16 +425,16 @@ describe("PanelV2", () => {
 				return { update, dispose };
 			},
 		};
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "lifecycle-1", kind: "lifecycle", state: { n: 1 } }],
 			activeInstance: "lifecycle-1",
 		};
 		const rendered = renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={panel}
+				area={area}
 				isFocused={true}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -447,14 +447,14 @@ describe("PanelV2", () => {
 			<ExtensionHostRegistryProvider>
 				<PanelV2
 					side="left"
-					panel={{
-						...panel,
+					area={{
+						...area,
 						views: [
 							{ instance: "lifecycle-1", kind: "lifecycle", state: { n: 2 } },
 						],
 					}}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onSelectView={vi.fn()}
 					onRemoveView={vi.fn()}
 					viewContext={createViewContext()}
@@ -470,16 +470,16 @@ describe("PanelV2", () => {
 	});
 
 	test("preserves focused extension DOM while its runtime snapshot updates", async () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
 		};
 		const rendered = renderWithinProvider(
 			<PanelV2
 				side="left"
-				panel={panel}
+				area={area}
 				isFocused={true}
-				onFocusPanel={vi.fn()}
+				onFocusArea={vi.fn()}
 				onSelectView={vi.fn()}
 				onRemoveView={vi.fn()}
 				viewContext={createViewContext()}
@@ -494,9 +494,9 @@ describe("PanelV2", () => {
 			<ExtensionHostRegistryProvider>
 				<PanelV2
 					side="left"
-					panel={panel}
+					area={area}
 					isFocused={false}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onSelectView={vi.fn()}
 					onRemoveView={vi.fn()}
 					viewContext={createViewContext()}

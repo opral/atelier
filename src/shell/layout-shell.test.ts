@@ -6,7 +6,7 @@ import {
 } from "./layout-shell";
 import type {
 	ExtensionDefinition,
-	PanelState,
+	AreaState,
 } from "../extension-runtime/types";
 
 const installedExtension = {
@@ -19,39 +19,39 @@ const installedExtension = {
 
 describe("reconcilePersistedExtensionViews", () => {
 	test("preserves unknown persisted views before installed extensions load", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "notes-1", kind: installedExtension.kind }],
 			activeInstance: "notes-1",
 		};
 
 		expect(
-			reconcilePersistedExtensionViews(panel, new Map(), {
+			reconcilePersistedExtensionViews(area, new Map(), {
 				preserveUnknownKinds: true,
 			}),
-		).toEqual(panel);
+		).toEqual(area);
 	});
 
 	test("keeps installed views after their definitions load", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "notes-1", kind: installedExtension.kind }],
 			activeInstance: "notes-1",
 		};
 
 		expect(
 			reconcilePersistedExtensionViews(
-				panel,
+				area,
 				new Map([[installedExtension.kind, installedExtension]]),
 			),
-		).toEqual(panel);
+		).toEqual(area);
 	});
 
 	test("drops stale unknown views after installed extension loading completes", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "missing-1", kind: "missing_extension" }],
 			activeInstance: "missing-1",
 		};
 
-		expect(reconcilePersistedExtensionViews(panel, new Map())).toEqual({
+		expect(reconcilePersistedExtensionViews(area, new Map())).toEqual({
 			views: [],
 			activeInstance: null,
 		});
@@ -61,13 +61,13 @@ describe("reconcilePersistedExtensionViews", () => {
 describe("selectNewFileDraftHandler", () => {
 	test("prefers the focused panel's active Files view", () => {
 		const left = {
-			panelSide: "left" as const,
+			area: "left" as const,
 			viewInstance: "files-left",
 			isActiveView: true,
 			handler: () => {},
 		};
 		const right = {
-			panelSide: "right" as const,
+			area: "right" as const,
 			viewInstance: "files-right",
 			isActiveView: true,
 			handler: () => {},
@@ -78,13 +78,13 @@ describe("selectNewFileDraftHandler", () => {
 
 	test("ignores inactive views and falls back in panel order", () => {
 		const inactiveCentral = {
-			panelSide: "main" as const,
+			area: "main" as const,
 			viewInstance: "files-main",
 			isActiveView: false,
 			handler: () => {},
 		};
 		const left = {
-			panelSide: "left" as const,
+			area: "left" as const,
 			viewInstance: "files-left",
 			isActiveView: true,
 			handler: () => {},

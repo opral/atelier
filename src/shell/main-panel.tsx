@@ -1,8 +1,8 @@
 import { useCallback, type ReactNode } from "react";
 import { FilePlus } from "lucide-react";
 import type {
-	PanelState,
-	PanelSide,
+	AreaState,
+	Area,
 	ExtensionHostContext,
 	ExtensionDefinition,
 	ExtensionKind,
@@ -17,14 +17,14 @@ type MainAreaProps = {
 		view: ExtensionDefinition,
 		instance: ExtensionInstance,
 	) => string | undefined;
-	readonly panel: PanelState;
+	readonly area: AreaState;
 	readonly onSelectView: (key: string) => void;
 	readonly onRemoveView: (key: string) => void;
 	readonly viewContext: ExtensionHostContext;
 	readonly onCreateNewFile?: () => void | Promise<void>;
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly isFocused: boolean;
-	readonly onFocusPanel: (side: PanelSide) => void;
+	readonly onFocusArea: (side: Area) => void;
 	readonly onFinalizePendingView?: (key: string) => void;
 	readonly emptyState?: ReactNode;
 	/** Renders the main tab strip (browser-style tabs mode). */
@@ -34,7 +34,7 @@ type MainAreaProps = {
 };
 
 /**
- * Main panel - the main content area between left and right panels.
+ * Main panel - the main content area between left and right areas.
  *
  * @example
  * <MainArea
@@ -45,12 +45,12 @@ type MainAreaProps = {
  * />
  */
 export function MainArea({
-	panel,
+	area,
 	onSelectView,
 	onRemoveView,
 	viewContext,
 	isFocused,
-	onFocusPanel,
+	onFocusArea,
 	onFinalizePendingView,
 	onCreateNewFile,
 	onAddView,
@@ -62,12 +62,12 @@ export function MainArea({
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
 			if (!onFinalizePendingView) return;
-			const entry = panel.views.find((view) => view.instance === key);
+			const entry = area.views.find((view) => view.instance === key);
 			if (entry?.isPending) {
 				onFinalizePendingView(key);
 			}
 		},
-		[onFinalizePendingView, panel.views],
+		[onFinalizePendingView, area.views],
 	);
 
 	const emptyState =
@@ -78,7 +78,7 @@ export function MainArea({
 		);
 
 	const labelResolver = useCallback(
-		(view: ExtensionDefinition, entry: (typeof panel.views)[number]) =>
+		(view: ExtensionDefinition, entry: (typeof area.views)[number]) =>
 			(entry.state?.atelier?.label as string | undefined) ?? view.label,
 		[],
 	);
@@ -86,9 +86,9 @@ export function MainArea({
 	return (
 		<PanelV2
 			side="main"
-			panel={panel}
+			area={area}
 			isFocused={isFocused}
-			onFocusPanel={onFocusPanel}
+			onFocusArea={onFocusArea}
 			onSelectView={onSelectView}
 			onRemoveView={onRemoveView}
 			viewContext={viewContext}

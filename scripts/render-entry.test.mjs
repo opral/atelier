@@ -34,12 +34,30 @@ test("the render entry is built", () => {
 	assert.ok(existsSync(join(root, "dist/render.css")));
 });
 
+/**
+ * Code only. The bundler writes `//#region src/…/csv-document.ts` banners,
+ * and a scan that reads those finds a DOM in a file name.
+ */
+function code(source) {
+	return source
+		.replace(/\/\*[\s\S]*?\*\//g, " ")
+		.split("\n")
+		.filter((line) => !line.trimStart().startsWith("//"))
+		.join("\n");
+}
+
 test("the render entry needs no browser and no React", () => {
 	const files = [...closure(entry)];
-	const source = files.map((file) => readFileSync(file, "utf8")).join("\n");
+	const source = files
+		.map((file) => code(readFileSync(file, "utf8")))
+		.join("\n");
 	assert.doesNotMatch(source, /from\s*"react/, "React reached the entry");
-	assert.doesNotMatch(source, /\bdocument\.(createElement|querySelector)\b/);
-	assert.doesNotMatch(source, /\bwindow\.[a-z]/);
+	// Any property access on the browser globals, whatever it is called, plus
+	// the constructors a parser reaches for when it thinks it has a DOM.
+	assert.doesNotMatch(source, /\bdocument\s*\.\s*\w/);
+	assert.doesNotMatch(source, /\bwindow\s*\.\s*\w/);
+	assert.doesNotMatch(source, /\b(DOMParser|XMLSerializer|HTMLElement)\b/);
+	assert.doesNotMatch(source, /globalThis\s*\.\s*(document|window)\b/);
 	const bytes = files.reduce((total, file) => total + statSync(file).size, 0);
 	assert.ok(
 		bytes <= MAX_CLOSURE_BYTES,
@@ -47,13 +65,23 @@ test("the render entry needs no browser and no React", () => {
 	);
 });
 
-test("the entry renders in plain node", async () => {
+test("every view renders in plain node", async () => {
 	const { toHtml, isRendered } = await import(entry);
-	const result = toHtml({
-		path: "/README.md",
-		after: new TextEncoder().encode("# Acme\n"),
+	const encode = (value) => new TextEncoder().encode(value);
+
+	const markdown = toHtml({ path: "/README.md", after: encode("# Acme\n") });
+	assert.ok(isRendered(markdown));
+	assert.equal(markdown.kind, "added");
+	assert.match(markdown.html, /<h1>Acme<\/h1>/);
+
+	// Each view separately: they are separate chunks, and a DOM dependency
+	// arriving in one of them is invisible if only the other is exercised.
+	const csv = toHtml({
+		path: "/leads.csv",
+		before: encode("id,v\n1,a\n"),
+		after: encode("id,v\n1,b\n"),
 	});
-	assert.ok(isRendered(result));
-	assert.equal(result.kind, "added");
-	assert.match(result.html, /<h1>Acme<\/h1>/);
+	assert.ok(isRendered(csv));
+	assert.match(csv.html, /<table>/);
+	assert.deepEqual(csv.counts, { added: 0, modified: 1, removed: 0 });
 });

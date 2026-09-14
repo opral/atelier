@@ -52,9 +52,11 @@ exception.
 
 Pair the HTML with `@opral/atelier/render.css` inside an element with class
 `atelier-render`, or pass `document: true` for a complete file with the styles
-inlined. The palette is `--atelier-*` custom properties generated from the
-app's theme: define your own on any ancestor and the render follows, with no
-theming API.
+inlined. The palette is `--atelier-*` custom properties, generated from the
+app's theme and declared on `:root`, so a host redefines one on any ancestor of
+the render and the cascade does the rest — there is no theming API. The diff
+grounds are composited over white when they are generated, so a dark palette
+needs more than an override today.
 
 ## Entries
 
@@ -64,7 +66,7 @@ theming API.
 | `@opral/atelier/render` | views, rendered without a shell | no React, no DOM, closure under 700 kB — enforced by `scripts/render-entry.test.mjs` |
 | `@opral/atelier/render.css` | the static views' stylesheet | generated tokens, no literals in rules |
 | `@opral/atelier/style.css` | the shell's stylesheet | |
-| `@opral/atelier/file-icons` | path → icon | |
+| `@opral/atelier/file-icons` | path → icon | no React, no DOM |
 | `@opral/atelier/state-adapters` | the shell's persistence ports | |
 | `@opral/atelier/dev-tools` | tools for working on Atelier | not for shipping |
 
