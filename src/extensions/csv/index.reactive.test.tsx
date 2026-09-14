@@ -2572,6 +2572,10 @@ test("checkpoint review reveals CSV column additions on a freshly opened surface
 				name: "Latest checkpoint. Review latest checkpoint",
 			}),
 		);
+		// Entering the checkpoint opens nothing; › steps to its changed file.
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Next changed file" }),
+		);
 		await waitFor(() => {
 			expect(
 				screen.getByRole("columnheader", { name: /company_size_min/ }),

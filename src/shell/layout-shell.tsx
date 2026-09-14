@@ -611,6 +611,27 @@ type LixFileForOpen = {
 	};
 };
 
+/**
+ * The file that takes a handled one's place on screen.
+ *
+ * When the files just handled include the one at the front of the handled
+ * run, the review moves to whatever now sits at that position — the next
+ * unhandled file, or the last one when the run was at the end. Returns null
+ * when nothing was removed ahead of the remaining files, so a review that
+ * handled files elsewhere in the list stays where it is.
+ */
+function nextReviewFile<T extends { readonly id: string }>(
+	before: readonly T[],
+	remaining: readonly T[],
+	removed: ReadonlySet<string>,
+): T | null {
+	const removedIndex = before.findIndex((file) => removed.has(file.id));
+	if (removedIndex === -1 || remaining.length === 0) return null;
+	return (
+		remaining[Math.min(Math.max(removedIndex, 0), remaining.length - 1)] ?? null
+	);
+}
+
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
 
 /** The newest checkpoint on the head's first-parent chain, and what it follows. */
@@ -1389,6 +1410,12 @@ function LayoutShellLoadedContentResolved({
 	const openHistoricalCheckpointFileRef = useRef<
 		((path: string) => void) | null
 	>(null);
+	// Checkpointing part of a review moves the working base; the handler that
+	// does it is defined before the one that opens a review, so it reaches it
+	// through here.
+	const reopenWorkingReviewRef = useRef<
+		((options?: { readonly revealPath?: string }) => Promise<boolean>) | null
+	>(null);
 	// Covers the commit gap between placing a historical document and the panel
 	// ref observing its revision state. Hosts may echo the route synchronously.
 	const historicalOpenPathRef = useRef<string | null>(null);
@@ -1594,21 +1621,35 @@ function LayoutShellLoadedContentResolved({
 				selected.has(review.fileId),
 			);
 			if (!session.range) return;
+			const range = session.range;
 			const checkpoint = await createCheckpointForFiles(
 				lix,
 				selectedFileIds,
-				session.range,
+				range,
 			);
 			if (!checkpoint) {
 				throw new Error("The selected files have no working changes.");
 			}
-			// The verb ends the session: checkpointing the selection is the
-			// review's conclusion, even when unticked files keep their changes
-			// (reopening shows them again).
-			exitDiffReview();
 			// Consume only the reviews that were already known when the workspace
 			// review opened. Checkpoint creation never discovers reviews via history.
 			void retireAcceptedReviews(selectedReviews);
+			const remaining = session.files.filter((file) => !selected.has(file.id));
+			if (remaining.length === 0) {
+				// Nothing left to review: the session concludes.
+				exitDiffReview();
+				return;
+			}
+			// The unticked files keep their changes, but sealing the others moved
+			// the working base, so the session's range is no longer theirs.
+			// Reopen from the live snapshot rather than pruning a stale one, and
+			// let the reopen show the next file with the range it just computed.
+			const next = nextReviewFile(session.files, remaining, selected);
+			const reopened = await reopenWorkingReviewRef.current?.(
+				next ? { revealPath: next.path } : undefined,
+			);
+			// The reopen reports its own outcome: the session ref is synced on
+			// render, so it cannot be read back here to tell.
+			if (!reopened) exitDiffReview();
 		},
 		[exitDiffReview, lix, retireAcceptedReviews],
 	);
@@ -1658,6 +1699,14 @@ function LayoutShellLoadedContentResolved({
 					? { ...current, files: remainingFiles }
 					: current,
 			);
+			// The restored file leaves the list; if it was the one on screen,
+			// the next remaining one takes its place.
+			const next = nextReviewFile(
+				historicalReview.files,
+				remainingFiles,
+				selected,
+			);
+			if (next) openHistoricalCheckpointFileRef.current?.(next.path);
 		},
 		[exitDiffReview, historicalReview, lix],
 	);
@@ -2638,24 +2687,6 @@ function LayoutShellLoadedContentResolved({
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
-	// Entering the past with nothing (or an unchanged file) on screen opens
-	// the first changed file's diff, once per target, so the float never
-	// names a file that isn't visible. A changed file already converted in
-	// place is the scope and stays put.
-	const autoRevealedCommitRef = useRef<string | null>(null);
-	useEffect(() => {
-		const commitId = historicalReview?.range?.afterCommitId ?? null;
-		if (!commitId) {
-			autoRevealedCommitRef.current = null;
-			return;
-		}
-		if (autoRevealedCommitRef.current === commitId) return;
-		autoRevealedCommitRef.current = commitId;
-		if (activeReviewFileIndex !== -1) return;
-		const firstFile = historicalReview?.files[0];
-		if (firstFile) openHistoricalCheckpointFile(firstFile.path);
-	}, [activeReviewFileIndex, historicalReview, openHistoricalCheckpointFile]);
-
 	// Selecting a checkpoint reveals its changed files without eagerly reading
 	// either file snapshot. Historical content is immutable and potentially
 	// cold; load it only when the user chooses a file from the disclosure.
@@ -2929,7 +2960,9 @@ function LayoutShellLoadedContentResolved({
 	const handleUndoReviews = useCallback(
 		async (
 			selectedFileIds: readonly string[],
-			options?: { readonly scope?: DiffFloatUndoScope },
+			// The float says which scope it resolved ("file", "selection", "all");
+			// the ids already carry that, and every scope concludes the same way.
+			_options?: { readonly scope?: DiffFloatUndoScope },
 		) => {
 			if (!workingChangesReviewOpen || selectedFileIds.length === 0) return;
 			const selected = new Set(selectedFileIds);
@@ -2941,39 +2974,28 @@ function LayoutShellLoadedContentResolved({
 			const range = session.range;
 			if (!range) return;
 			await revertWorkingChangesForFiles(lix, selectedFileIds, range);
-			if (options?.scope === "file") {
-				// "Undo only this file" keeps the session open: the file leaves
-				// the list and the next one takes its place on screen.
-				const remaining = session.files.filter(
-					(file) => !selected.has(file.id),
-				);
-				if (remaining.length === 0) {
-					exitDiffReview();
-				} else {
-					const removedIndex = session.files.findIndex((file) =>
-						selected.has(file.id),
-					);
-					const next =
-						remaining[
-							Math.min(Math.max(removedIndex, 0), remaining.length - 1)
-						];
-					setDiffReview((current) =>
-						current?.kind === "working" && current.range === range
-							? {
-									...current,
-									files: remaining,
-									externalWriteReviews: current.externalWriteReviews.filter(
-										(review) => !selected.has(review.fileId),
-									),
-									diffFileId: next?.id ?? null,
-								}
-							: current,
-					);
-					if (next) openWorkingChangeFileAtRange(next, range);
-				}
-			} else {
-				// Same conclusion semantics as Checkpoint: the verb ends the session.
+			// A review concludes when nothing is left to review, not when a
+			// verb is used. Undoing some of the files removes them from the
+			// list; the rest stay open. A revert is itself a working change,
+			// so the session's range is still the right one for what remains.
+			const remaining = session.files.filter((file) => !selected.has(file.id));
+			if (remaining.length === 0) {
 				exitDiffReview();
+			} else {
+				const next = nextReviewFile(session.files, remaining, selected);
+				setDiffReview((current) =>
+					current?.kind === "working" && current.range === range
+						? {
+								...current,
+								files: remaining,
+								externalWriteReviews: current.externalWriteReviews.filter(
+									(review) => !selected.has(review.fileId),
+								),
+								diffFileId: next?.id ?? current.diffFileId,
+							}
+						: current,
+				);
+				if (next) openWorkingChangeFileAtRange(next, range);
 			}
 			for (const review of selectedReviews) {
 				try {
@@ -3631,6 +3653,8 @@ function LayoutShellLoadedContentResolved({
 	const handleOpenWorkingChangesReview = useCallback(
 		(openOptions?: {
 			readonly reveal?: boolean;
+			/** Open this changed file once the session is set, with its range. */
+			readonly revealPath?: string;
 			readonly appliedRange?: { beforeCommitId: string; afterCommitId: string };
 		}) => {
 			// Read-only / anonymous must never look like a clickable no-op. History
@@ -3654,7 +3678,7 @@ function LayoutShellLoadedContentResolved({
 							openOptions.appliedRange.afterCommitId,
 						)
 					: await selectWorkingFileDiffSnapshot(lix);
-				if (workingDiffs.length === 0) return;
+				if (workingDiffs.length === 0) return false;
 				// Every changed file joins the review — kinds without a content
 				// diff (drawings, images, pdfs) still review, checkpoint, and
 				// revert at file granularity. Filtering them out strands their
@@ -3696,7 +3720,7 @@ function LayoutShellLoadedContentResolved({
 				if (!firstChangedFile) {
 					// Nothing reviewable: opening review mode is a quiet no-op rather
 					// than a surprise navigation to the History panel.
-					return;
+					return false;
 				}
 				if (historicalReview) {
 					// Working changes and a historical checkpoint are two targets of
@@ -3720,22 +3744,16 @@ function LayoutShellLoadedContentResolved({
 							afterCommitId: reviewRange.afterCommitId,
 						}))
 					: [];
-				// A changed file already on screen is the review's scope. With
-				// nothing (or an unchanged file) on screen the first changed
-				// file's diff opens instead, so the float never names a file
-				// that isn't visible. Hosts can force the reveal.
-				const activeFileId = navigationActiveFileIdRef.current;
-				const activePath = navigationActivePathRef.current;
-				const changedFileOnScreen = checkpointFiles.some(
-					(file) => file.id === activeFileId || file.path === activePath,
-				);
-				// The host's home view is a review-aware listing: with it on
-				// screen the user picks the file from the list, so opening
-				// review must not navigate away from it.
-				const homeOnScreen = homeViewActiveRef.current;
-				const revealFirstFile =
-					openOptions?.reveal === true ||
-					(!changedFileOnScreen && !homeOnScreen);
+				// Opening review mode is not a navigation. Whatever is on screen
+				// stays there — a changed file is the review's scope, anything
+				// else leaves the float naming no file — and the user steps
+				// through the changes from the float. A caller can still name a
+				// file to open, or ask for the first one explicitly.
+				const revealFile = openOptions?.revealPath
+					? checkpointFiles.find((file) => file.path === openOptions.revealPath)
+					: openOptions?.reveal === true
+						? firstChangedFile
+						: undefined;
 				setDiffReview({
 					kind: "working",
 					...(openOptions?.appliedRange
@@ -3743,27 +3761,29 @@ function LayoutShellLoadedContentResolved({
 						: {}),
 					range: reviewRange,
 					files: checkpointFiles,
-					diffFileId: revealFirstFile ? firstChangedFile.id : null,
+					diffFileId: revealFile?.id ?? null,
 					externalWriteReviews: sessionReviews,
 				});
-				if (revealFirstFile) {
+				if (revealFile) {
 					if (reviewRange) {
-						openWorkingChangeFileAtRange(firstChangedFile, reviewRange);
+						openWorkingChangeFileAtRange(revealFile, reviewRange);
 					} else {
 						openAutoRevealedFile({
-							fileId: firstChangedFile.id,
-							filePath: firstChangedFile.path,
+							fileId: revealFile.id,
+							filePath: revealFile.path,
 						});
 					}
 				}
+				return true;
 			})()
-				.catch((error: unknown) => {
+				.catch((error: unknown): false => {
 					if (openOptions?.appliedRange) throw error;
 					if (!isHostReadOnly) revealHistory();
 					console.warn(
 						"[checkpoint] failed to open working changes review",
 						error,
 					);
+					return false;
 				})
 				.finally(() => {
 					workingReviewOpeningRef.current = false;
@@ -3779,6 +3799,9 @@ function LayoutShellLoadedContentResolved({
 			revealHistory,
 		],
 	);
+
+	reopenWorkingReviewRef.current = (options) =>
+		handleOpenWorkingChangesReview(options);
 
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);

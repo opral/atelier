@@ -303,9 +303,9 @@ export type AtelierDiffApi = {
 		readonly base?: AtelierDiffRef | null;
 		readonly target: AtelierDiffRef;
 		/**
-		 * Always open the first changed file. By default the session keeps a
-		 * changed file that is already on screen and reveals the first changed
-		 * file only when nothing (or an unchanged file) is showing.
+		 * Also open the first changed file. By default opening a review is not
+		 * a navigation: whatever is on screen stays, and the user steps through
+		 * the changed files from the review float.
 		 */
 		readonly reveal?: boolean;
 	}) => Promise<void>;
