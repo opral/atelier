@@ -26,6 +26,8 @@ export type {
 export type { AtelierUserPreferencesV1 } from "./shell/ui-state";
 export type { AtelierArea, AtelierSlots } from "./create-atelier";
 export type {
+	// A host that lists changed files reads the session it is inside.
+	AtelierDiffSession,
 	AtelierEvent,
 	AtelierExtensionMenuItems,
 	AtelierExtensionRegistration,
