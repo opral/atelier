@@ -45,10 +45,15 @@ type VideoFileRow = {
 	readonly content: unknown;
 };
 
-/** Read-only player for the current video stored in the Lix workspace. */
+/**
+ * Read-only player for the current video stored in the Lix workspace.
+ *
+ * The dark stage belongs to the player, not to the view: a comparison puts two
+ * of them side by side, and the panel around them stays the panel.
+ */
 export function VideoView(props: VideoViewProps) {
 	return (
-		<div className="atelier-video-view" data-testid="video-viewer">
+		<div className="flex min-h-0 flex-1 flex-col">
 			<Suspense fallback={<VideoLoadingState />}>
 				<VideoViewContent {...props} />
 			</Suspense>
@@ -200,7 +205,7 @@ export function VideoPreview({
 		return <VideoErrorState filePath={filePath} />;
 	}
 	return (
-		<>
+		<div className="atelier-video-view" data-testid="video-viewer">
 			{/* React never renders children here — the imperative player owns it. */}
 			<div className="h-full min-h-0" ref={containerRef} />
 			{!objectUrl ? (
@@ -208,7 +213,7 @@ export function VideoPreview({
 					<VideoLoadingState />
 				</div>
 			) : null}
-		</>
+		</div>
 	);
 }
 

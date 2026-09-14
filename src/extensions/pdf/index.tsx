@@ -48,7 +48,7 @@ type PdfPreviewState = "loading" | "ready" | "error";
 /** Read-only renderer for a PDF stored in the Lix workspace. */
 export function PdfView(props: PdfViewProps) {
 	return (
-		<div className="atelier-pdf-view">
+		<div className="flex min-h-0 flex-1 flex-col">
 			<Suspense fallback={<PdfLoadingState />}>
 				<PdfViewContent {...props} />
 			</Suspense>
@@ -233,9 +233,11 @@ export function PdfPreview({
 		};
 	}, [bytes, initialPage, isPdf, objectUrl]);
 
+	// The document's own surface travels with the document: a comparison puts
+	// two of them side by side inside the panel.
 	return (
 		<div
-			className="atelier-pdf-preview"
+			className="atelier-pdf-view atelier-pdf-preview"
 			data-pdf-state={state}
 			data-testid="pdf-viewer"
 		>

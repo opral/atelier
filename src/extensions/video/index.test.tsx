@@ -163,6 +163,15 @@ describe("VideoView under review", () => {
 					view!.container.querySelectorAll(".atelier-video-player"),
 				).toHaveLength(2),
 			);
+			// The dark stage belongs to each player, not to the comparison: it
+			// used to wrap both sides, so an absent revision was unreadable text
+			// on black.
+			expect(
+				view!.container.querySelectorAll(".atelier-video-view"),
+			).toHaveLength(2);
+			expect(
+				view!.container.querySelector(".atelier-video-view [data-diff-side]"),
+			).toBeNull();
 		} finally {
 			await act(async () => view?.unmount());
 			await lix.close();
