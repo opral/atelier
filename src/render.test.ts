@@ -227,3 +227,28 @@ test("a host retints by redefining a token on an ancestor", () => {
 	expect(RENDER_CSS.startsWith(":root {")).toBe(true);
 	expect(RENDER_CSS).not.toContain(".atelier-render {\n\t--atelier-ink:");
 });
+
+test("a script the word differ cannot split is compared whole", () => {
+	// Arabic has no ASCII word boundaries, so a word-level diff returns the
+	// two versions interleaved letter by letter. The cell is marked changed
+	// instead, which a reader can actually read.
+	const result = toHtml({
+		path: "/i18n.csv",
+		before: bytes("key,ar\ncancel,إلغاء\n"),
+		after: bytes("key,ar\ncancel,إغلاق\n"),
+	});
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	expect(result.html).toContain('data-diff-status="modified"');
+	expect(result.html).toContain("إغلاق");
+	// No fragment of one word wearing the other's colour.
+	expect(result.html).not.toMatch(/إ<span/);
+	// ASCII cells keep their word-level comparison.
+	const latin = toHtml({
+		path: "/i18n.csv",
+		before: bytes("key,en\ncancel,Cancel now\n"),
+		after: bytes("key,en\ncancel,Close now\n"),
+	});
+	expect(isRendered(latin) && latin.html).toContain('data-diff-mode="words"');
+});
