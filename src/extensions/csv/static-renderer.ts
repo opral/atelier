@@ -4,6 +4,7 @@ import type {
 	Rendered,
 	StaticRenderer,
 } from "../../render/types";
+import { fileText } from "../../lib/decode-file-data";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
 import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
 
@@ -31,8 +32,8 @@ export const csvStaticRenderer: StaticRenderer = {
 			after.byteLength > MAX_SOURCE_BYTES
 		)
 			return { skipped: "too-large" };
-		const beforeText = text(before);
-		const afterText = text(after);
+		const beforeText = fileText(before);
+		const afterText = fileText(after);
 		if (beforeText === null || afterText === null)
 			return { skipped: "unsupported" };
 		// Only a file that stood on both sides can be unchanged; one that was
@@ -213,12 +214,4 @@ function identity(row: CsvRow): string {
 function sameCells(left: CsvRow, right: CsvRow): boolean {
 	if (left.cells.length !== right.cells.length) return false;
 	return left.cells.every((cell, index) => cell === right.cells[index]);
-}
-
-function text(bytes: Uint8Array): string | null {
-	try {
-		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-	} catch {
-		return null;
-	}
 }

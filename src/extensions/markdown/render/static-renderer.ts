@@ -4,6 +4,7 @@ import type {
 	RenderOptions,
 	StaticRenderer,
 } from "../../../render/types";
+import { fileText } from "../../../lib/decode-file-data";
 import { renderMarkdownDiff, renderMarkdownDocument } from "./index";
 
 /**
@@ -30,8 +31,8 @@ const DEFAULT_MAX_LINES = 14;
 export const markdownStaticRenderer: StaticRenderer = {
 	fileExtensions: ["md", "markdown", "mdx"],
 	render(content, options): Rendered | NotRendered {
-		const before = text(content.before);
-		const after = text(content.after);
+		const before = content.before === undefined ? "" : fileText(content.before);
+		const after = content.after === undefined ? "" : fileText(content.after);
 		if (before === null || after === null) return { skipped: "unsupported" };
 		if (
 			byteLength(before) > MAX_SOURCE_BYTES ||
@@ -103,16 +104,6 @@ function lineBudget(maxBytes: number | undefined): number {
 
 function lineCount(html: string): number {
 	return (html.match(/<(?:li|p|h[1-6]|tr|pre)\b/g) ?? []).length;
-}
-
-function text(bytes: Uint8Array | undefined): string | null {
-	if (bytes === undefined) return "";
-	try {
-		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-	} catch {
-		// Not text: there is no diff of it a reader could read.
-		return null;
-	}
 }
 
 function byteLength(value: string): number {

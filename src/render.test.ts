@@ -252,3 +252,13 @@ test("a script the word differ cannot split is compared whole", () => {
 	});
 	expect(isRendered(latin) && latin.html).toContain('data-diff-mode="words"');
 });
+
+test("bytes that are not text are refused, not mangled", () => {
+	// One strict reader for every view: a PNG at a .csv path used to reach the
+	// grid as replacement characters, because one decoder of four was lenient.
+	const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+	for (const path of ["/logo.csv", "/logo.md"])
+		expect(toHtml({ path, before: bytes("id\n1\n"), after: png })).toEqual({
+			skipped: "unsupported",
+		});
+});
