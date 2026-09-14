@@ -64,6 +64,7 @@ export function PreparedMediaSurface({
 	children,
 	readySelector,
 	allowNative = true,
+	diff = false,
 }: {
 	data: AtelierJsonValue;
 	kind: "image" | "pdf" | "video";
@@ -72,9 +73,12 @@ export function PreparedMediaSurface({
 	children: ReactNode;
 	readySelector: string;
 	allowNative?: boolean;
+	/** The view shows two revisions; one of them is not a preview of it. */
+	diff?: boolean;
 }) {
 	const { navigation } = useAtelierRenderContext();
 	const native = Boolean(
+		!diff &&
 		allowNative &&
 		navigation?.fileHref &&
 		data &&
@@ -102,7 +106,11 @@ export function PreparedMediaSurface({
 		);
 	}
 	return (
-		<PreparedFileSurface initial={initial} readySelector={readySelector}>
+		<PreparedFileSurface
+			initial={initial}
+			readySelector={readySelector}
+			diff={diff}
+		>
 			{children}
 		</PreparedFileSurface>
 	);

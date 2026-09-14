@@ -61,13 +61,6 @@
 		transform: translateX(-50%);
 	}
 
-	/* See the image view: a comparison moves floating controls off the
-	   bottom, where the review float sits. */
-	.atelier-diff-side .atelier-pdf-document .atelier-pdf-page-controls {
-		top: 0.75rem;
-		bottom: auto;
-	}
-
 	.atelier-pdf-document .atelier-pdf-page-button {
 		display: inline-flex;
 		height: 1.75rem;

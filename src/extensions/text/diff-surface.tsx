@@ -17,13 +17,14 @@ export default function TextDiffSurface({
 	readonly path: string;
 	/** `null` for a file the write created. */
 	readonly before: string | null;
-	readonly after: string;
+	/** `null` for a file the write deleted. */
+	readonly after: string | null;
 }) {
 	const fileDiff = useMemo<FileDiffMetadata>(
 		() =>
 			parseDiffFromFile(
 				before === null ? null : { name: path, contents: before },
-				{ name: path, contents: after },
+				after === null ? null : { name: path, contents: after },
 			),
 		[after, before, path],
 	);

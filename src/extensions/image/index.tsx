@@ -32,7 +32,11 @@ import { qb } from "@/lib/lix-kysely";
 import type { AtelierDiffSession } from "@/extension-api";
 import { selectFilesStateAt } from "@/queries";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
-import { DiffSides, useWorkingDiffSides } from "@/extension-runtime/diff-sides";
+import {
+	DiffSides,
+	useWorkingDiffSides,
+	viewShowsDiff,
+} from "@/extension-runtime/diff-sides";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -518,6 +522,10 @@ export const extension = createReactExtensionDefinition({
 	icon: ImageIcon,
 	load: loadMediaFile,
 	component: ({ atelier, view, data }) => {
+		const showsDiff = viewShowsDiff({
+			session: atelier.diff.session,
+			state: view.state,
+		});
 		return (
 			<PreparedMediaSurface
 				key={view.instanceId}
@@ -531,6 +539,7 @@ export const extension = createReactExtensionDefinition({
 						view.state.beforeCommitId) as string | undefined
 				}
 				allowNative={!atelier.diff.session}
+				diff={showsDiff}
 			>
 				<ImageView
 					fileId={view.state.fileId as string}

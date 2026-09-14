@@ -139,14 +139,18 @@ A review opens a file with two refs: the checkpoint and the working file, or
 the two ends of a checkpoint's span. Every view renders that diff itself.
 
 Markdown, CSV and text diff in place — marked words, changed cells, a unified
-diff. An image, a PDF, a video or a drawing cannot be diffed in place, so those
-views draw both revisions side by side: the older one on the left, the newer on
-the right. A file the write created has no left side; one it deleted has no
-right side.
+diff. An image, a PDF, a video, a drawing or an HTML artifact cannot be diffed
+in place, so those views draw both revisions side by side: the older one on the
+left, the newer on the right. A file the write created has no left side; one it
+deleted has no right side. Each side reads its own commit, assets included: an
+artifact's images come from the commit the artifact belongs to, so a checkpoint
+is never drawn with today's files.
 
 A view reads the working review from `atelier.diff.session`, and a checkpoint's
 span from `beforeCommitId` and `afterCommitId` in its own view state. The shell
-hands both refs to every view and decides nothing by file type.
+hands both refs to every view and decides nothing by file type. A view that is
+about to compare says so, and the prepared document waits: one revision painted
+first would only be replaced a moment later.
 
 ## Extensions
 

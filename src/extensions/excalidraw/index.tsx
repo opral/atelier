@@ -22,7 +22,7 @@ import {
 	getFileDataAtCommit,
 	workingReviewFile,
 } from "@/shell/external-write-review-history";
-import { DiffSides } from "@/extension-runtime/diff-sides";
+import { DiffSides, viewShowsDiff } from "@/extension-runtime/diff-sides";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import { parseExcalidrawScene } from "./scene";
@@ -401,6 +401,10 @@ export const extension = createReactExtensionDefinition({
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
 				readySelector="canvas, .atelier-diff-sides"
+				diff={viewShowsDiff({
+					session: atelier.diff.session,
+					state: view.state,
+				})}
 				initial={
 					file ? (
 						<SceneContent content={file.content} />

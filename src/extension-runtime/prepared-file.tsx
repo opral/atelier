@@ -86,10 +86,17 @@ export function PreparedFileSurface({
 	initial,
 	children,
 	readySelector,
+	diff = false,
 }: {
 	readonly initial: ReactNode;
 	readonly children: ReactNode;
 	readonly readySelector: string;
+	/**
+	 * The interactive surface is a comparison, so the prepared document — one
+	 * revision of the file — is the wrong picture. Wait for the comparison
+	 * instead of painting a page that is about to be replaced.
+	 */
+	readonly diff?: boolean;
 }) {
 	const { connected, hydrated } = useAtelierRenderContext();
 	const [ready, setReady] = useState(false);
@@ -123,8 +130,10 @@ export function PreparedFileSurface({
 				<div
 					className="min-h-0 flex-1 overflow-auto"
 					data-atelier-initial-content=""
+					data-atelier-awaiting-diff={diff || undefined}
+					role={diff ? "status" : undefined}
 				>
-					{initial}
+					{diff ? null : initial}
 				</div>
 			) : null}
 			{connected && hydrated ? (

@@ -300,7 +300,7 @@ describe("TextView under review", () => {
 		lix: Awaited<ReturnType<typeof openLix>>,
 		path: string,
 		before: Uint8Array | null,
-		after: Uint8Array,
+		after: Uint8Array | null,
 	) {
 		const fileId = fakeUuid(`review:${path}`);
 		if (before) {
@@ -310,7 +310,9 @@ describe("TextView under review", () => {
 				.execute();
 		}
 		const checkpoint = await createCheckpoint(lix);
-		if (before) {
+		if (!after) {
+			await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
+		} else if (before) {
 			await qb(lix)
 				.updateTable("lix_file")
 				.set({ content: after })
@@ -330,7 +332,7 @@ describe("TextView under review", () => {
 				{
 					id: fileId,
 					path,
-					changeKind: before ? "modified" : "added",
+					changeKind: !after ? "removed" : before ? "modified" : "added",
 					workingEpoch: {
 						beforeCommitId: snapshot.beforeCommitId,
 						afterCommitId: snapshot.afterCommitId,
@@ -474,6 +476,80 @@ describe("TextView under review", () => {
 		const diff = await screen.findByTestId("text-diff-view");
 		await waitFor(() => {
 			expect(diffText(diff)).toContain("export const created = true;");
+		});
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("a deleted file is still readable, as an all-removed diff", async () => {
+		const lix = await openLix();
+		const { fileId, atelier } = await reviewedFile(
+			lix,
+			"/src/gone.py",
+			new TextEncoder().encode("def gone():\n    return 1\n"),
+			null,
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, atelier, fileId, "/src/gone.py");
+		});
+
+		const diff = await screen.findByTestId("text-diff-view");
+		await waitFor(() => {
+			expect(diffText(diff)).toContain("def gone():");
+		});
+		// Not the stale-epoch error: the file is gone on purpose.
+		expect(screen.queryByRole("alert")).toBeNull();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("a checkpoint's span is diffed the same way", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("span:/src/span.py");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/src/span.py",
+				content: new TextEncoder().encode("x = 1\n"),
+			})
+			.execute();
+		const before = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("x = 2\n") })
+			.where("id", "=", fileId)
+			.execute();
+		const after = await createCheckpoint(lix);
+		const atelier = await createRuntime(lix);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={atelier}
+								fileId={fileId}
+								filePath="/src/span.py"
+								beforeCommitId={before.commitId}
+								afterCommitId={after.commitId}
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+
+		const diff = await screen.findByTestId("text-diff-view");
+		await waitFor(() => {
+			expect(diffText(diff)).toContain("x = 2");
+			expect(diffText(diff)).toContain("x = 1");
 		});
 
 		await act(async () => utils?.unmount());

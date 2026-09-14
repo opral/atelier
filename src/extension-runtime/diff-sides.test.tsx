@@ -1,9 +1,80 @@
 import { Suspense } from "react";
 import { act, render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
-import { DiffSides } from "./diff-sides";
+import type { AtelierDiffSession } from "@/extension-api";
+import { DiffSides, viewShowsDiff } from "./diff-sides";
+
+describe("viewShowsDiff", () => {
+	const session: AtelierDiffSession = {
+		base: { commitId: "commit_before" },
+		target: { working: true },
+		files: [
+			{
+				id: "file_1",
+				path: "/shot.png",
+				changeKind: "modified",
+				workingEpoch: {
+					beforeCommitId: "commit_before",
+					afterCommitId: "commit_after",
+				},
+				review: { id: "review_1", status: "pending" },
+			},
+		],
+		activePath: "/shot.png",
+		capabilities: { checkpoint: true, undo: true, restore: false },
+	};
+
+	test("a file under review is comparing", () => {
+		expect(viewShowsDiff({ session, state: { fileId: "file_1" } })).toBe(true);
+	});
+
+	test("so is a file opened at both ends of a span", () => {
+		expect(
+			viewShowsDiff({
+				session: null,
+				state: {
+					fileId: "file_1",
+					beforeCommitId: "commit_a",
+					afterCommitId: "commit_b",
+				},
+			}),
+		).toBe(true);
+	});
+
+	test("one revision is not", () => {
+		expect(viewShowsDiff({ session: null, state: { fileId: "file_1" } })).toBe(
+			false,
+		);
+		expect(
+			viewShowsDiff({
+				session: null,
+				state: { fileId: "file_1", sourceCommitId: "commit_a" },
+			}),
+		).toBe(false);
+		// Another file's review says nothing about this view.
+		expect(viewShowsDiff({ session, state: { fileId: "file_2" } })).toBe(false);
+		expect(viewShowsDiff({ session, state: { scope: "branch" } })).toBe(false);
+	});
+
+	test("a resolved review is over", () => {
+		expect(
+			viewShowsDiff({
+				session: {
+					...session,
+					files: [
+						{
+							...session.files[0]!,
+							review: { id: "review_1", status: "resolved" },
+						},
+					],
+				},
+				state: { fileId: "file_1" },
+			}),
+		).toBe(false);
+	});
+});
 
 test("both sides are labelled, and a missing one says when the file did not exist", async () => {
 	const lix = await openLix();

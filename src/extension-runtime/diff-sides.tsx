@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AtelierDiffSession } from "../extension-api";
+import type { ExtensionState } from "./types";
 import {
 	useWorkingFileData,
 	workingReviewFile,
@@ -77,6 +78,28 @@ function DiffSide({
 			</div>
 		</section>
 	);
+}
+
+/**
+ * Whether this view instance shows a comparison rather than one revision: a
+ * file under review, or a file opened at both ends of a checkpoint's span.
+ *
+ * The prepared surface asks before it paints. A single revision would be the
+ * wrong picture, and swapping it for the comparison a moment later reads as a
+ * flicker.
+ */
+export function viewShowsDiff(args: {
+	readonly session: AtelierDiffSession | null | undefined;
+	readonly state: ExtensionState | null | undefined;
+}): boolean {
+	const fileId =
+		typeof args.state?.fileId === "string" ? args.state.fileId : null;
+	if (!fileId) return false;
+	const reviewed = workingReviewFile(args.session, fileId);
+	if (reviewed?.review?.status === "pending" && reviewed.workingEpoch) {
+		return true;
+	}
+	return Boolean(args.state?.beforeCommitId && args.state?.afterCommitId);
 }
 
 /**

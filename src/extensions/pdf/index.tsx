@@ -10,7 +10,11 @@ import { qb } from "@/lib/lix-kysely";
 import { selectFilesStateAt } from "@/queries";
 import type { AtelierDiffSession } from "@/extension-api";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
-import { DiffSides, useWorkingDiffSides } from "@/extension-runtime/diff-sides";
+import {
+	DiffSides,
+	useWorkingDiffSides,
+	viewShowsDiff,
+} from "@/extension-runtime/diff-sides";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { renderPdfPreview } from "./pdf-preview";
@@ -341,6 +345,10 @@ export const extension = createReactExtensionDefinition({
 	icon: FileText,
 	load: loadMediaFile,
 	component: ({ atelier, view, data }) => {
+		const showsDiff = viewShowsDiff({
+			session: atelier.diff.session,
+			state: view.state,
+		});
 		return (
 			<PreparedMediaSurface
 				key={view.instanceId}
@@ -354,6 +362,7 @@ export const extension = createReactExtensionDefinition({
 						view.state.beforeCommitId) as string | undefined
 				}
 				allowNative={!atelier.diff.session}
+				diff={showsDiff}
 			>
 				<PdfView
 					fileId={view.state.fileId as string}

@@ -1,10 +1,24 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { findFileHandlerExtension } from "@/extension-runtime/file-handlers";
+import { LixProvider } from "@/lib/lix-react";
+import { qb } from "@/lib/lix-kysely";
+import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
+import type { AtelierDiffSession } from "@/extension-api";
 import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builtin-extension-registry";
 import {
 	HTML_ARTIFACT_CSP,
 	HtmlPreview,
+	HtmlView,
 	buildSandboxedHtmlDocument,
 	collectHtmlWorkspaceImagePaths,
 	extension,
@@ -190,3 +204,117 @@ function expectPolicyIsFirstInHead(source: string) {
 	expect(policy).toHaveAttribute("http-equiv", "Content-Security-Policy");
 	expect(policy).toHaveAttribute("content", HTML_ARTIFACT_CSP);
 }
+
+describe("HtmlView under review", () => {
+	const createObjectURL = vi.fn((_blob: Blob) => "blob:atelier-html-image");
+
+	beforeEach(() => {
+		Object.defineProperty(URL, "createObjectURL", {
+			configurable: true,
+			value: createObjectURL,
+		});
+		Object.defineProperty(URL, "revokeObjectURL", {
+			configurable: true,
+			value: vi.fn(),
+		});
+	});
+
+	afterEach(() => createObjectURL.mockClear());
+
+	test("renders both revisions, each with the assets of its own commit", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("review-artifact");
+		const logoId = fakeUuid("review-artifact-logo");
+		let view: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: fileId,
+						path: "/artifacts/report.html",
+						content: new TextEncoder().encode(
+							'<html><body><h1>Before</h1><img src="logo.png"></body></html>',
+						),
+					},
+					{
+						id: logoId,
+						path: "/artifacts/logo.png",
+						content: new TextEncoder().encode("checkpoint-logo"),
+					},
+				])
+				.execute();
+			const checkpoint = await createCheckpoint(lix);
+			// The write changed the artifact and the image it points at.
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({
+					content: new TextEncoder().encode(
+						'<html><body><h1>After</h1><img src="logo.png"></body></html>',
+					),
+				})
+				.where("id", "=", fileId)
+				.execute();
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("working-logo") })
+				.where("id", "=", logoId)
+				.execute();
+			const snapshot = await selectWorkingFileDiffSnapshot(lix);
+			const session: AtelierDiffSession = {
+				base: { commitId: checkpoint.commitId },
+				target: { working: true },
+				files: [
+					{
+						id: fileId,
+						path: "/artifacts/report.html",
+						changeKind: "modified",
+						workingEpoch: {
+							beforeCommitId: snapshot.beforeCommitId,
+							afterCommitId: snapshot.afterCommitId,
+						},
+						review: { id: "review-artifact", status: "pending" },
+					},
+				],
+				activePath: "/artifacts/report.html",
+				capabilities: { checkpoint: true, undo: true, restore: false },
+			};
+
+			await act(async () => {
+				view = render(
+					<div className="atelier-root">
+						<LixProvider lix={lix}>
+							<HtmlView
+								fileId={fileId}
+								filePath="/artifacts/report.html"
+								diffSession={session}
+							/>
+						</LixProvider>
+					</div>,
+				);
+			});
+
+			await waitFor(() =>
+				expect(
+					view!.container.querySelectorAll("[data-diff-side] iframe"),
+				).toHaveLength(2),
+			);
+			const frames = [
+				...view!.container.querySelectorAll("[data-diff-side] iframe"),
+			];
+			expect(frames[0]!.getAttribute("srcdoc")).toContain("<h1>Before</h1>");
+			expect(frames[1]!.getAttribute("srcdoc")).toContain("<h1>After</h1>");
+			// Each side resolved the logo at its own commit, so the checkpoint is
+			// never drawn with the working file's assets.
+			await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+			expect(
+				await Promise.all(
+					createObjectURL.mock.calls.map((call) => call[0].text()),
+				),
+			).toEqual(["checkpoint-logo", "working-logo"]);
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
+	});
+});
