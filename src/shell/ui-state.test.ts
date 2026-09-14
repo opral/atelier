@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 import {
 	coerceAtelierUiState,
+	coerceAtelierUserPreferences,
 	createInitialAtelierUiState,
 	DEFAULT_ATELIER_UI_STATE,
 	type AtelierUiState,
@@ -128,6 +129,15 @@ describe("createInitialAtelierUiState", () => {
 			right: 20,
 		});
 	});
+});
+
+test("preferences stored before the rename keep their sizes", () => {
+	const coerced = coerceAtelierUserPreferences({
+		version: 1,
+		layout: { sizes: { left: 20, central: 50, right: 30 } },
+	});
+
+	expect(coerced.layout.sizes).toEqual({ left: 20, main: 50, right: 30 });
 });
 
 test("a layout stored before the rename still opens where it was left", () => {

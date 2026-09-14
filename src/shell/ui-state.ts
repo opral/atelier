@@ -274,8 +274,7 @@ export function coerceAtelierUserPreferences(
 		version: 1,
 		layout: {
 			sizes: normalizeLayoutSizes(
-				(layout.sizes as Partial<Record<PanelSide, number>> | undefined) ??
-					undefined,
+				withMainArea(layout.sizes) as Partial<Record<PanelSide, number>>,
 			),
 		},
 		review: {
