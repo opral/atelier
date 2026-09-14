@@ -9,12 +9,17 @@ import {
 	type QueryCompiler,
 	type QueryResult,
 } from "kysely";
-import type { ExecuteResult, Lix, LixTransaction, SqlParam } from "@lix-js/sdk";
+import type {
+	StatementResult,
+	Lix,
+	LixTransaction,
+	SqlParam,
+} from "@lix-js/sdk";
 export { sql } from "kysely";
 
 export type LixDatabaseSchema = Record<string, Record<string, any>>;
 
-type LixQueryResult = ExecuteResult;
+type LixQueryResult = StatementResult;
 
 class LixConnection implements DatabaseConnection {
 	constructor(

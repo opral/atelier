@@ -63,6 +63,7 @@ export function createSnapshotLix(initialState: AtelierInitialState): {
 			rows: query.rows as ExecuteResult["rows"],
 			rowsAffected: 0,
 			notices: [],
+			commit: null,
 		};
 	};
 	const observe = (sql: string, params: SqlParam[] = []) => {
@@ -126,11 +127,24 @@ export function createSnapshotLix(initialState: AtelierInitialState): {
 		) => {
 			assertOpen();
 			if (live) return live.executeBatch(statements, options);
-			return Promise.all(
-				statements.map((statement) =>
-					execute(statement.sql, [...(statement.params ?? [])]),
+			return {
+				results: await Promise.all(
+					statements.map(async (statement, statementIndex) => {
+						const { commit: _commit, ...result } = await execute(
+							statement.sql,
+							[...(statement.params ?? [])],
+						);
+						return {
+							...result,
+							statementIndex,
+							...(statement.label !== undefined
+								? { label: statement.label }
+								: {}),
+						};
+					}),
 				),
-			);
+				commit: null,
+			};
 		},
 		observe,
 		activeBranchId: async () => {
