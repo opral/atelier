@@ -4,6 +4,7 @@ import {
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
 import {
+	lazy,
 	Suspense,
 	useEffect,
 	useLayoutEffect,
@@ -19,7 +20,7 @@ import {
 } from "@/extension-runtime/editor-revision-state";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
-import { decodeFileDataToText } from "@/lib/decode-file-data";
+import { decodeFileDataToText, fileText } from "@/lib/decode-file-data";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -32,6 +33,8 @@ import { parseExtensionManifest } from "../../extension-runtime/extension-manife
 import { createTextEditor, type TextEditorController } from "./editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
+
+const TextDiffSurface = lazy(() => import("./diff-surface"));
 
 type TextFileRow = {
 	readonly id: string;
@@ -142,6 +145,21 @@ function EditableTextView({
 				content: resolvedReviewData?.afterData ?? new Uint8Array(),
 			}
 		: fileRow;
+	const diff = isReviewing
+		? textDiffSides(resolvedReviewData?.data, resolvedReviewData?.afterData)
+		: null;
+	if (diff) {
+		return (
+			<Suspense fallback={<TextLoadingState />}>
+				<TextDiffSurface
+					key={fileId}
+					path={effectiveFileRow.path || filePath || `/${fileId}.txt`}
+					before={diff.before}
+					after={diff.after}
+				/>
+			</Suspense>
+		);
+	}
 	return (
 		<EditableTextViewResolved
 			atelier={atelier}
@@ -168,7 +186,7 @@ function EditableTextViewResolved({
 	readonly isReviewing: boolean;
 }) {
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
-	const fileText = useMemo(
+	const initialText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
@@ -181,7 +199,7 @@ function EditableTextViewResolved({
 		persist: persistUserEdit,
 	} = useSyncedTextFile({
 		fileId,
-		initialText: fileText,
+		initialText,
 		reviewText: null,
 		reviewing: isReviewing,
 		readOnly: atelier.readOnly,
@@ -202,6 +220,25 @@ function EditableTextViewResolved({
 			/>
 		</div>
 	);
+}
+
+/**
+ * Both sides of a review as text, or `null` when the diff view cannot show
+ * them: bytes that are not UTF-8, or two sides that read the same (the change
+ * was metadata, or an empty file was created). The read-only editor shows the
+ * after side in those cases.
+ */
+function textDiffSides(
+	beforeData: Uint8Array | null | undefined,
+	afterData: Uint8Array | null | undefined,
+): { readonly before: string | null; readonly after: string } | null {
+	if (!afterData) return null;
+	const after = fileText(afterData);
+	if (after === null) return null;
+	if (!beforeData) return after === "" ? null : { before: null, after };
+	const before = fileText(beforeData);
+	if (before === null || before === after) return null;
+	return { before, after };
 }
 
 function TextReviewUnavailable() {
@@ -463,7 +500,7 @@ export const extension = createReactExtensionDefinition({
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
-				readySelector=".cm-editor"
+				readySelector=".cm-editor, .atelier-text-diff"
 				initial={
 					file ? (
 						<pre className="whitespace-pre-wrap p-4 font-mono text-sm">

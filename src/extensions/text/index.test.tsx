@@ -19,6 +19,8 @@ import { qb } from "@/lib/lix-kysely";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
+import type { AtelierDiffSession } from "@/extension-api";
 import { TextView, extension } from "./index";
 
 describe("text extension routing", () => {
@@ -289,8 +291,225 @@ describe("TextView", () => {
 	});
 });
 
+describe("TextView under review", () => {
+	/**
+	 * Lands `after` as a working change over a checkpointed `before` (or over
+	 * nothing) and returns the runtime whose diff session reviews that file.
+	 */
+	async function reviewedFile(
+		lix: Awaited<ReturnType<typeof openLix>>,
+		path: string,
+		before: Uint8Array | null,
+		after: Uint8Array,
+	) {
+		const fileId = fakeUuid(`review:${path}`);
+		if (before) {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({ id: fileId, path, content: before })
+				.execute();
+		}
+		const checkpoint = await createCheckpoint(lix);
+		if (before) {
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: after })
+				.where("id", "=", fileId)
+				.execute();
+		} else {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({ id: fileId, path, content: after })
+				.execute();
+		}
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const atelier = await createRuntime(lix, {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true },
+			files: [
+				{
+					id: fileId,
+					path,
+					changeKind: before ? "modified" : "added",
+					workingEpoch: {
+						beforeCommitId: snapshot.beforeCommitId,
+						afterCommitId: snapshot.afterCommitId,
+					},
+					review: { id: `review:${path}`, status: "pending" },
+				},
+			],
+			activePath: path,
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		});
+		return { fileId, atelier };
+	}
+
+	/** The diff renders inside the `diffs-container` shadow root. */
+	function diffText(diff: HTMLElement): string {
+		return diff.querySelector("diffs-container")?.shadowRoot?.textContent ?? "";
+	}
+
+	function renderReview(
+		lix: Awaited<ReturnType<typeof openLix>>,
+		atelier: ExtensionRuntime,
+		fileId: string,
+		filePath: string,
+	) {
+		return render(
+			<div className="atelier-root">
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<TextView
+							atelier={atelier}
+							fileId={fileId}
+							filePath={filePath}
+							isActiveView
+							isPanelFocused={false}
+						/>
+					</Suspense>
+				</LixProvider>
+			</div>,
+		);
+	}
+
+	test("a modified file shows both sides as a diff", async () => {
+		const lix = await openLix();
+		const { fileId, atelier } = await reviewedFile(
+			lix,
+			"/src/session.py",
+			new TextEncoder().encode("class AgentSession:\n    pass\n"),
+			new TextEncoder().encode(
+				"class AgentSession:\n    def close(self):\n        pass\n",
+			),
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, atelier, fileId, "/src/session.py");
+		});
+
+		const diff = await screen.findByTestId("text-diff-view");
+		await waitFor(() => {
+			expect(diffText(diff)).toContain("def close(self):");
+		});
+		// The removed line is still readable in the diff, and nothing is
+		// editable while the file is under review.
+		expect(diffText(diff)).toContain("pass");
+		expect(screen.queryByTestId("text-editor-view")).toBeNull();
+		expect(utils!.container.querySelector(".cm-content")).toBeNull();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("the prepared document steps aside once the diff is on screen", async () => {
+		const lix = await openLix();
+		const { fileId, atelier } = await reviewedFile(
+			lix,
+			"/src/handoff.py",
+			new TextEncoder().encode("x = 1\n"),
+			new TextEncoder().encode("x = 2\n"),
+		);
+		const Component = extension.Component!;
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<Component
+								atelier={atelier}
+								data={{
+									id: fileId,
+									path: "/src/handoff.py",
+									content: "x = 2\n",
+								}}
+								view={{
+									instanceId: "text:handoff",
+									state: { fileId, filePath: "/src/handoff.py" },
+									area: "main",
+									isActive: true,
+									isFocused: false,
+									preferences: {
+										get: () => undefined,
+										set: () => {},
+										delete: () => {},
+									},
+									registerNewFileDraftHandler: () => () => {},
+								}}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+
+		// The server-rendered text stays on top until the interactive surface
+		// is populated. A diff, not only an editor, counts as populated.
+		const diff = await screen.findByTestId("text-diff-view");
+		await waitFor(() => {
+			expect(diffText(diff)).toContain("x = 2");
+			expect(
+				utils!.container.querySelector("[data-atelier-initial-content]"),
+			).toBeNull();
+		});
+		expect(diff.closest("[aria-hidden='true']")).toBeNull();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("a created file diffs against nothing", async () => {
+		const lix = await openLix();
+		const { fileId, atelier } = await reviewedFile(
+			lix,
+			"/src/new.ts",
+			null,
+			new TextEncoder().encode("export const created = true;\n"),
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, atelier, fileId, "/src/new.ts");
+		});
+
+		const diff = await screen.findByTestId("text-diff-view");
+		await waitFor(() => {
+			expect(diffText(diff)).toContain("export const created = true;");
+		});
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("bytes that are not text fall back to the read-only editor", async () => {
+		const lix = await openLix();
+		const { fileId, atelier } = await reviewedFile(
+			lix,
+			"/blob.log",
+			new TextEncoder().encode("plain before\n"),
+			new Uint8Array([0x6f, 0x6b, 0x0a, 0xff, 0xfe, 0xc3]),
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, atelier, fileId, "/blob.log");
+		});
+
+		expect(await screen.findByTestId("text-editor-view")).toHaveTextContent(
+			"ok",
+		);
+		expect(screen.queryByTestId("text-diff-view")).toBeNull();
+		expect(utils!.container.querySelector(".cm-content")).toHaveAttribute(
+			"contenteditable",
+			"false",
+		);
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+});
+
 async function createRuntime(
 	lix: Awaited<ReturnType<typeof openLix>>,
+	session: AtelierDiffSession | null = null,
 ): Promise<ExtensionRuntime> {
 	const activeBranchId = await lix.activeBranchId();
 	return {
@@ -315,7 +534,7 @@ async function createRuntime(
 			activeId: activeBranchId,
 		},
 		diff: {
-			session: null,
+			session,
 			open: async () => {},
 			openFile: () => {},
 			exit: () => {},
