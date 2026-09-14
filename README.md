@@ -1,27 +1,29 @@
 # Atelier
 
-**Atelier is a UI toolkit for [Lix](https://github.com/opral/lix): views over a lix, and a shell that arranges them.**
+**Atelier is a UI toolkit for [Lix](https://github.com/opral/lix).** It gives
+you views over a lix, and a shell that arranges them.
 
-A view shows lix data — a file, the history, a SQL console. Extensions are how
-you add your own. Views mount in an area of the shell, or render on their own
-as HTML for a surface that has no shell in it: a card in a chat, a mail, a page
-rendered on a server.
+A view shows lix data: a file, the history, a SQL console. You add your own
+views through extensions. Each view can run in two modes:
 
-The split is the one an operating system makes between a toolkit and a shell:
-Atelier ships both, and the shell is *one* arrangement, not the definition. A
-host can replace any bundled view by id, or build its own shell from the views.
+- **Mounted** — React, interactive, placed in an area of the shell.
+- **Static** — HTML, no React and no DOM. For a server, a chat card, an email.
 
-Three rules, for anyone adding to this package:
+A view does not have to support both. A canvas view has no static mode, and it
+says so. The shell is one arrangement of views, not the definition of Atelier:
+a host can replace any bundled view by id, or build its own shell from the
+views.
 
-- **The unit is a view, never a file type.** A capability that only works for
-  Markdown is a bug in the capability, not a new export.
-- **A view declares which modes it has.** Mounted (React, interactive) and
-  static (HTML, no DOM) are both optional; a canvas has no static mode, and
-  saying so is part of its contract.
-- **Bundled views are not privileged.** They use the same extension API a host
-  uses (see `ATELIER_BUILTIN_EXTENSION_IDS` for replacing one).
+### Rules for adding to this package
 
-Atelier does not own the Lix handle, the routing, or the product's chrome.
+1. **The unit is a view, not a file type.** A capability that only works for
+   Markdown belongs inside the Markdown view. It is not a new export.
+2. **A view declares its modes.** Mounted and static are both optional.
+3. **Bundled views are not special.** They use the same extension API a host
+   uses. `ATELIER_BUILTIN_EXTENSION_IDS` lists the ids you can replace.
+
+The host owns the Lix handle, the routing, the authentication, and the
+product's chrome. Atelier owns none of those.
 
 ## Mounted
 
@@ -32,7 +34,8 @@ import "@opral/atelier/style.css";
 <Atelier lix={lix} location={{ path: "/README.md" }} />;
 ```
 
-The host owns the Lix handle and closes it after unmount. Atelier owns its UI, subscriptions, extension loading, and editor lifecycle.
+The host opens the Lix handle and closes it after unmount. Atelier owns its
+UI, subscriptions, extension loading, and editor lifecycle.
 
 ## Static
 
@@ -40,32 +43,46 @@ The host owns the Lix handle and closes it after unmount. Atelier owns its UI, s
 import { toHtml } from "@opral/atelier/render";
 
 const view = toHtml({ path: "/README.md", before, after }, { maxBytes: 24_000 });
-if ("html" in view) send(view.html); // else view.skipped says why not
+if ("html" in view) send(view.html);
+else console.log(view.skipped); // why there is no view
 ```
 
-Bytes in, HTML out, for Markdown and CSV today. Which side is missing says what
-happened: no `before` is a file that was created, no `after` one that was
-deleted. The result carries `kind` and `counts` in `lix_diff`'s own vocabulary
-(`added` / `modified` / `removed`, counted in entities), plus `hidden` for what
-a budget left out. A file type with no static view answers `skipped`, never an
-exception.
+Bytes in, HTML out. Markdown and CSV have static views today.
 
-Pair the HTML with `@opral/atelier/render.css` inside an element with class
-`atelier-render`, or pass `document: true` for a complete file with the styles
-inlined. The palette is `--atelier-*` custom properties, generated from the
-app's theme and declared on `:root`, so a host redefines one on any ancestor of
-the render and the cascade does the rest — there is no theming API. The diff
-grounds are composited over white when they are generated, so a dark palette
-needs more than an override today.
+Which side is missing says what happened:
+
+| input | `kind` |
+| --- | --- |
+| `after` only | `added` |
+| `before` and `after` | `modified` |
+| `before` only | `removed` |
+
+`kind`, and the `counts` of entities added, modified and removed, use the same
+words as `lix_diff`. `hidden` is how many entities the size budget left out.
+
+A file type with no static view returns `{ skipped: "unsupported" }`. Other
+reasons are `unchanged`, `empty`, `too-large` and `failed`. `toHtml` does not
+throw.
+
+### Styling a static view
+
+Put the HTML inside an element with class `atelier-render` and load
+`@opral/atelier/render.css`. Or pass `document: true` to get a complete HTML
+file with the styles inlined.
+
+Colours are `--atelier-*` custom properties, generated from the app's theme and
+declared on `:root`. To change them, define your own on any ancestor of the
+render. There is no theming API. Dark mode needs more than an override today,
+because the diff backgrounds are mixed over white when they are generated.
 
 ## Entries
 
 | entry | what it is | guarantees |
 | --- | --- | --- |
 | `@opral/atelier` | the shell, and the extension API | React |
-| `@opral/atelier/render` | views, rendered without a shell | no React, no DOM, closure under 700 kB — enforced by `scripts/render-entry.test.mjs` |
-| `@opral/atelier/render.css` | the static views' stylesheet | generated tokens, no literals in rules |
-| `@opral/atelier/style.css` | the shell's stylesheet | |
+| `@opral/atelier/render` | views, without a shell | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
+| `@opral/atelier/render.css` | styles for static views | generated tokens, no colour literals in rules |
+| `@opral/atelier/style.css` | styles for the shell | |
 | `@opral/atelier/file-icons` | path → icon | no React, no DOM |
 | `@opral/atelier/state-adapters` | the shell's persistence ports | |
 | `@opral/atelier/dev-tools` | tools for working on Atelier | not for shipping |
