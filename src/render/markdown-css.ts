@@ -195,7 +195,11 @@ export const MARKDOWN_CSS = `
 
 /* Inline, the two versions sit side by side: without this they read as one
    word — a cell going 3 → 5 renders as "35". */
-.md-diff span[data-review-status] { padding: 0 2px; margin: 0 -1px; }
+.md-diff span[data-review-status] {
+	padding: 0 2px;
+	margin: 0 -1px;
+	unicode-bidi: isolate;
+}
 .md-diff span[data-review-status] > s { text-decoration: none; }
 /* A code chip inside a marked run would punch its own ground through the
    colour of the change. */

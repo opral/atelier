@@ -77,6 +77,9 @@ const CSV_CSS = `
 	padding: 0 2px;
 	margin: 0 -1px;
 	border-radius: var(--atelier-radius-small);
+	/* Each version is its own run: without isolation, a removed and an added
+	   Arabic word reorder into each other, letter by letter. */
+	unicode-bidi: isolate;
 }
 .csv-diff td[data-diff-status], .csv-diff th[data-diff-status] { border-radius: 0; }
 /* The row a gap stands for, named rather than silently missing. */
