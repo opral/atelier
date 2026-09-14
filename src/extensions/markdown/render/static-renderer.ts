@@ -44,7 +44,7 @@ export const markdownStaticRenderer: StaticRenderer = {
 		if (content.kind === "added" || content.kind === "removed") {
 			const source = content.kind === "added" ? after : before;
 			if (source.trim() === "") return { skipped: "empty" };
-			const html = renderMarkdownDocument(source, imageOption(options));
+			const html = scoped(renderMarkdownDocument(source, imageOption(options)));
 			const counts = lineCount(html);
 			return {
 				kind: content.kind,
@@ -67,7 +67,7 @@ export const markdownStaticRenderer: StaticRenderer = {
 		if (diff.unchanged) return { skipped: "unchanged" };
 		return {
 			kind: "modified",
-			html: diff.html,
+			html: scoped(diff.html),
 			counts: {
 				added: diff.stats.added,
 				modified: diff.stats.modified,
@@ -77,6 +77,11 @@ export const markdownStaticRenderer: StaticRenderer = {
 		};
 	},
 };
+
+/** The view's own scope, so a caller never has to know its class name. */
+function scoped(html: string): string {
+	return `<div class="md-diff">${html}</div>`;
+}
 
 function imageOption(options: RenderOptions): {
 	images?: "describe" | "embed";

@@ -14,6 +14,9 @@ test("a change renders in the file type's own view", () => {
 	expect(markdown.kind).toBe("modified");
 	expect(markdown.counts).toEqual({ added: 1, modified: 0, removed: 0 });
 	expect(markdown.html).toContain('data-review-status="added"');
+	// A view carries its own scope class: a caller inlines the HTML and the
+	// stylesheet, and never has to know what either is called.
+	expect(markdown.html.startsWith('<div class="md-diff">')).toBe(true);
 
 	const csv = toHtml({
 		path: "/leads.csv",

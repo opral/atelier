@@ -61,6 +61,13 @@ const CSV_CSS = `
 	text-decoration: none;
 }
 .csv-diff [data-diff-status="modified"] { background: var(--atelier-modified-bg); }
+/* Two versions of a cell sit side by side: without this "lead" and
+   "qualified" read as one word. */
+.csv-diff td span[data-diff-status], .csv-diff th span[data-diff-status] {
+	padding: 0 2px;
+	margin: 0 -1px;
+	border-radius: var(--atelier-radius-small);
+}
 .csv-diff td[data-diff-status], .csv-diff th[data-diff-status] { border-radius: 0; }
 `;
 
