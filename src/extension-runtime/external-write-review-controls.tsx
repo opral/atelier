@@ -185,6 +185,19 @@ export function ExternalWriteReviewControls({
 		refocusAfterStepRef.current = false;
 		rootRef.current?.focus({ preventScroll: true });
 	}, [activeFileId]);
+	// A verb disables the button that was pressed while it runs, and a
+	// disabled element lets focus fall to the body. When the session is
+	// still open afterwards, the float takes the keyboard back so ← → keep
+	// stepping; the file the verb moved to may pull focus on mount, and the
+	// flag above hands it back once that file is on screen.
+	const wasCommittingRef = useRef(isCommitting);
+	useEffect(() => {
+		const finished = wasCommittingRef.current && !isCommitting;
+		wasCommittingRef.current = isCommitting;
+		if (!finished || !isActive) return;
+		refocusAfterStepRef.current = true;
+		rootRef.current?.focus({ preventScroll: true });
+	}, [isActive, isCommitting]);
 	useEffect(() => {
 		const root = rootRef.current;
 		if (!root || !isActive || !navigation) return;

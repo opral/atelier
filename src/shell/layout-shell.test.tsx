@@ -1168,6 +1168,45 @@ describe("diff review navigation", () => {
 				`diff-scope-file:${ids[1]}`,
 				`diff-scope-file:${ids[2]}`,
 			]);
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+				);
+			});
+
+			// Undo again. The first revert moved the head, so the session must
+			// be reading a fresh epoch by now — this is where the review used
+			// to fail with "the working diff changed while it was being reviewed".
+			fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "1 file changed since checkpoint. Close review" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			expect(
+				screen.queryByText(
+					/The working diff changed while it was being reviewed/,
+				),
+			).toBeNull();
+			await waitFor(
+				() => {
+					const main = sessionStateStore.getSnapshot()?.areas.main;
+					const activeView = main?.views.find(
+						(view) => view.instance === main.activeInstance,
+					);
+					expect(activeView?.state?.fileId).toBe(ids[2]);
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "Undo" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

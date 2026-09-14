@@ -2975,27 +2975,20 @@ function LayoutShellLoadedContentResolved({
 			if (!range) return;
 			await revertWorkingChangesForFiles(lix, selectedFileIds, range);
 			// A review concludes when nothing is left to review, not when a
-			// verb is used. Undoing some of the files removes them from the
-			// list; the rest stay open. A revert is itself a working change,
-			// so the session's range is still the right one for what remains.
+			// verb is used. A revert publishes a commit, so the session's
+			// range — the epoch every file view reads both sides from — is
+			// stale the moment it lands; the remaining files are reopened from
+			// the live snapshot rather than kept on a range that no longer
+			// names the head.
 			const remaining = session.files.filter((file) => !selected.has(file.id));
 			if (remaining.length === 0) {
 				exitDiffReview();
 			} else {
 				const next = nextReviewFile(session.files, remaining, selected);
-				setDiffReview((current) =>
-					current?.kind === "working" && current.range === range
-						? {
-								...current,
-								files: remaining,
-								externalWriteReviews: current.externalWriteReviews.filter(
-									(review) => !selected.has(review.fileId),
-								),
-								diffFileId: next?.id ?? current.diffFileId,
-							}
-						: current,
+				const reopened = await reopenWorkingReviewRef.current?.(
+					next ? { revealPath: next.path } : undefined,
 				);
-				if (next) openWorkingChangeFileAtRange(next, range);
+				if (!reopened) exitDiffReview();
 			}
 			for (const review of selectedReviews) {
 				try {

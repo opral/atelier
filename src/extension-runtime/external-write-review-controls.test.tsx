@@ -114,6 +114,43 @@ describe("ExternalWriteReviewControls", () => {
 		expect(undo).toHaveBeenCalledWith(["file-tiktok"], { scope: "selection" });
 	});
 
+	test("a verb that leaves the session open hands the keyboard back to the float", async () => {
+		let finish: () => void = () => {};
+		const primary = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={NAVIGATION}
+				files={FILES}
+				onPrimary={primary}
+			/>,
+		);
+		const float = screen.getByRole("group", { name: "Diff review actions" });
+		const checkpoint = screen.getByRole("button", { name: "Checkpoint" });
+		checkpoint.focus();
+		expect(checkpoint).toHaveFocus();
+		fireEvent.click(checkpoint);
+		// While the verb runs its button is disabled, and focus has left it.
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Checkpointing…" }),
+			).toBeDisabled(),
+		);
+		finish();
+		// The session stayed open: the float, not the body, has the keyboard.
+		await waitFor(() =>
+			expect(float).toContainElement(document.activeElement as HTMLElement),
+		);
+		fireEvent.keyDown(float, { key: "ArrowRight" });
+		expect(NAVIGATION.onNext).toHaveBeenCalled();
+	});
+
 	test("stepping to a file ticks it; stepping away never unticks it", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls
