@@ -14,8 +14,14 @@ export default defineConfig({
 		emptyOutDir: true,
 	},
 	plugins: [react(), tailwindcss()],
+	// The SDK module worker loads the component transpiler using top-level await.
+	worker: { format: "es" },
 	resolve: {
 		alias: [
+			{
+				find: "@opral/atelier/dev-tools",
+				replacement: path.resolve(repositoryRoot, "src/dev-tools.ts"),
+			},
 			{
 				find: "@opral/atelier/style.css",
 				replacement: path.resolve(repositoryRoot, "src/index.css"),

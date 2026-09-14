@@ -103,6 +103,19 @@ if (!browserReady && mode === "only") {
 		`A browser artifact is required for ${revision}; source compilation is disabled in Workers Builds.`,
 	);
 }
+if (browserReady) {
+	// Artifacts contain build outputs, not node_modules. These packages are
+	// linked by pnpm, which does not install the linked packages' dependencies.
+	// Use their pinned npm lockfiles just as the source-build path does.
+	for (const packageRoot of [sdkRoot, opfsRoot]) {
+		run(
+			"npm",
+			["ci", "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline"],
+			process.env,
+			packageRoot,
+		);
+	}
+}
 if (!browserReady || (!browserOnly && !nativeReady)) {
 	await buildFromSource();
 }

@@ -232,16 +232,50 @@ test("auto falls back and off avoids artifact lookup", async (t) => {
 	assert.equal(f.lookups(), 1);
 });
 
-test("build entry installs and reuses exact artifacts without a Rust toolchain", async (t) => {
+test("build entry installs artifact runtime dependencies and reuses exact artifacts without Rust", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "atelier-build-entry-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
 	const lix = join(root, "vendor/lix");
-	await mkdir(join(lix, "packages/js-sdk"), { recursive: true });
-	await writeFile(
-		join(lix, "packages/js-sdk/package.json"),
-		'{"name":"fixture"}',
-	);
-	await writeFile(join(lix, ".gitignore"), "dist/\n*.node\n");
+	for (const name of ["js-sdk", "storage-opfs"]) {
+		const packageRoot = join(lix, "packages", name);
+		await mkdir(join(packageRoot, "runtime"), { recursive: true });
+		await writeFile(
+			join(packageRoot, "runtime/package.json"),
+			JSON.stringify({
+				name: "fixture-runtime",
+				version: "1.0.0",
+				main: "index.js",
+			}),
+		);
+		await writeFile(
+			join(packageRoot, "runtime/index.js"),
+			"module.exports = true;",
+		);
+		const packageManifest = {
+			name,
+			version: "1.0.0",
+			dependencies: { "fixture-runtime": "file:./runtime" },
+		};
+		await writeFile(
+			join(packageRoot, "package.json"),
+			JSON.stringify(packageManifest),
+		);
+		await writeFile(
+			join(packageRoot, "package-lock.json"),
+			JSON.stringify({
+				name,
+				version: "1.0.0",
+				lockfileVersion: 3,
+				requires: true,
+				packages: {
+					"": packageManifest,
+					"node_modules/fixture-runtime": { resolved: "runtime", link: true },
+					runtime: { name: "fixture-runtime", version: "1.0.0" },
+				},
+			}),
+		);
+	}
+	await writeFile(join(lix, ".gitignore"), "dist/\n*.node\nnode_modules/\n");
 	await command("git", ["init", "--quiet"], lix);
 	await command("git", ["add", "."], lix);
 	await command(
@@ -280,10 +314,29 @@ test("build entry installs and reuses exact artifacts without a Rust toolchain",
 		await command(process.execPath, args, root, env),
 		/HIT lix-browser-sdk/,
 	);
+	for (const name of ["js-sdk", "storage-opfs"]) {
+		assert.equal(
+			await readFile(
+				join(lix, "packages", name, "node_modules/fixture-runtime/index.js"),
+				"utf8",
+			),
+			"module.exports = true;",
+		);
+		await rm(join(lix, "packages", name, "node_modules"), { recursive: true });
+	}
 	assert.match(
 		await command(process.execPath, args, root, env),
 		/REUSE browser SDK/,
 	);
+	for (const name of ["js-sdk", "storage-opfs"]) {
+		assert.equal(
+			await readFile(
+				join(lix, "packages", name, "node_modules/fixture-runtime/index.js"),
+				"utf8",
+			),
+			"module.exports = true;",
+		);
+	}
 	assert.equal(f.downloads(), 1);
 	await rm(join(lix, "packages/js-sdk/dist/wasm/lix_js_sdk_bg.wasm"));
 	assert.match(
