@@ -133,6 +133,21 @@ The optional `fileHref({ path, branchId, commitId })` returns a raw file URL. It
 
 Extension locations use `{ view: "dashboard", state: { filter: "open" } }`. Native links use `href`, so documents remain navigable before JavaScript starts. Optional `slots`, state stores, branch session, and events integrate host controls without exposing a separate workspace runtime.
 
+## Diffs
+
+A review opens a file with two refs: the checkpoint and the working file, or
+the two ends of a checkpoint's span. Every view renders that diff itself.
+
+Markdown, CSV and text diff in place — marked words, changed cells, a unified
+diff. An image, a PDF, a video or a drawing cannot be diffed in place, so those
+views draw both revisions side by side: the older one on the left, the newer on
+the right. A file the write created has no left side; one it deleted has no
+right side.
+
+A view reads the working review from `atelier.diff.session`, and a checkpoint's
+span from `beforeCommitId` and `afterCommitId` in its own view state. The shell
+hands both refs to every view and decides nothing by file type.
+
 ## Extensions
 
 Extensions load data and render in Atelier's React tree:

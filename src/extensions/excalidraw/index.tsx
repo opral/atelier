@@ -20,9 +20,9 @@ import { useLix, useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
-	useWorkingFileData,
 	workingReviewFile,
 } from "@/shell/external-write-review-history";
+import { DiffSides } from "@/extension-runtime/diff-sides";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import { parseExcalidrawScene } from "./scene";
@@ -47,7 +47,7 @@ type ExcalidrawViewProps = {
 	readonly afterCommitId?: string | null;
 };
 
-function ExcalidrawView(props: ExcalidrawViewProps) {
+export function ExcalidrawView(props: ExcalidrawViewProps) {
 	return (
 		<Suspense fallback={<ExcalidrawLoadingState />}>
 			<ExcalidrawViewContent {...props} />
@@ -58,6 +58,34 @@ function ExcalidrawView(props: ExcalidrawViewProps) {
 function ExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 	assertFileId(fileId);
 	const revision = normalizeEditorRevisionState(props);
+	// A scene cannot be diffed in place, so both revisions are drawn: the
+	// checkpoint on the left, the working file on the right.
+	const reviewFile = workingReviewFile(props.atelier.diff.session, fileId);
+	const epoch =
+		reviewFile?.review?.status === "pending"
+			? reviewFile.workingEpoch
+			: undefined;
+	if (epoch) {
+		return (
+			<ExcalidrawDiffSides
+				{...props}
+				fileId={fileId}
+				filePath={reviewFile?.path ?? props.filePath}
+				beforeCommitId={epoch.beforeCommitId}
+				afterCommitId={epoch.afterCommitId}
+			/>
+		);
+	}
+	if (revision.beforeCommitId && revision.afterCommitId) {
+		return (
+			<ExcalidrawDiffSides
+				{...props}
+				fileId={fileId}
+				beforeCommitId={revision.beforeCommitId}
+				afterCommitId={revision.afterCommitId}
+			/>
+		);
+	}
 	if (editorRevisionMode(revision) !== "editor") {
 		return (
 			<HistoricalExcalidrawView
@@ -69,6 +97,45 @@ function ExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 		);
 	}
 	return <LiveExcalidrawViewContent fileId={fileId} {...props} />;
+}
+
+/** The scene at each end of a comparison, drawn side by side. */
+function ExcalidrawDiffSides({
+	fileId,
+	filePath,
+	beforeCommitId,
+	afterCommitId,
+	...props
+}: ExcalidrawViewProps & {
+	readonly beforeCommitId: string;
+	readonly afterCommitId: string;
+}) {
+	const path = filePath || `/${fileId}.excalidraw`;
+	return (
+		<DiffSides
+			filePath={path}
+			beforeCommitId={beforeCommitId}
+			afterCommitId={afterCommitId}
+			before={
+				<HistoricalExcalidrawView
+					{...props}
+					fileRow={undefined}
+					fileId={fileId}
+					filePath={path}
+					commitId={beforeCommitId}
+				/>
+			}
+			after={
+				<HistoricalExcalidrawView
+					{...props}
+					fileRow={undefined}
+					fileId={fileId}
+					filePath={path}
+					commitId={afterCommitId}
+				/>
+			}
+		/>
+	);
 }
 
 function LiveExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
@@ -96,6 +163,8 @@ function LiveExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 		);
 	}
 
+	// A file under review never reaches the editor: the comparison above
+	// replaces it while the review is open.
 	return (
 		<EditableExcalidrawView
 			key={fileId}
@@ -114,54 +183,6 @@ function EditableExcalidrawView({
 }: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: ExcalidrawFileRow;
 }) {
-	// The shell owns review detection: this file is under review whenever the
-	// working diff session marks it pending — diff mode covers every open
-	// surface, not just the revealed file.
-	const diffSession = atelier.diff.session;
-	const reviewFile = workingReviewFile(diffSession, fileId);
-	const isReviewing = reviewFile?.review?.status === "pending";
-	const epoch = isReviewing ? reviewFile?.workingEpoch : undefined;
-	const reviewData = useWorkingFileData(
-		epoch ? fileId : null,
-		epoch?.beforeCommitId,
-		epoch?.afterCommitId,
-	);
-	const resolvedReviewData = reviewData.loading ? null : reviewData;
-	if (isReviewing && !resolvedReviewData) return <ExcalidrawLoadingState />;
-	if (
-		isReviewing &&
-		(resolvedReviewData?.error || resolvedReviewData?.afterData === null)
-	) {
-		return <ExcalidrawReviewUnavailable />;
-	}
-	const effectiveFileRow = isReviewing
-		? {
-				...fileRow,
-				path: reviewFile?.path ?? fileRow.path,
-				content: resolvedReviewData?.afterData ?? new Uint8Array(),
-			}
-		: fileRow;
-	return (
-		<EditableExcalidrawViewResolved
-			atelier={atelier}
-			fileId={fileId}
-			filePath={filePath}
-			fileRow={effectiveFileRow}
-			isReviewing={isReviewing}
-		/>
-	);
-}
-
-function EditableExcalidrawViewResolved({
-	atelier,
-	fileId,
-	filePath,
-	fileRow,
-	isReviewing,
-}: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
-	readonly fileRow: ExcalidrawFileRow;
-	readonly isReviewing: boolean;
-}) {
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.excalidraw`;
 	const fileText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
@@ -177,7 +198,7 @@ function EditableExcalidrawViewResolved({
 		fileId,
 		initialText: fileText,
 		reviewText: null,
-		reviewing: isReviewing,
+		reviewing: false,
 		readOnly: atelier.readOnly,
 		originKey,
 	});
@@ -199,7 +220,7 @@ function EditableExcalidrawViewResolved({
 				<ExcalidrawCanvas
 					key={fileId}
 					sceneJson={documentText}
-					readOnly={isReviewing || atelier.readOnly}
+					readOnly={atelier.readOnly}
 					onSceneChange={persistUserEdit}
 				/>
 			</Suspense>
@@ -379,7 +400,7 @@ export const extension = createReactExtensionDefinition({
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
-				readySelector="canvas"
+				readySelector="canvas, .atelier-diff-sides"
 				initial={
 					file ? (
 						<SceneContent content={file.content} />

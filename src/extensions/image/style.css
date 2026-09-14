@@ -83,6 +83,13 @@
 		backdrop-filter: blur(14px);
 	}
 
+	/* Inside a comparison the zoom controls sit at the top: the review float
+	   owns the bottom of the screen, and two panes would meet it there. */
+	.atelier-diff-side .atelier-image-toolbar {
+		top: 12px;
+		bottom: auto;
+	}
+
 	.atelier-image-toolbar-divider {
 		width: 1px;
 		height: 18px;

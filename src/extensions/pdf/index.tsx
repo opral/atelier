@@ -9,10 +9,8 @@ import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import { selectFilesStateAt } from "@/queries";
 import type { AtelierDiffSession } from "@/extension-api";
-import {
-	useWorkingFileData,
-	workingReviewFile,
-} from "@/shell/external-write-review-history";
+import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
+import { DiffSides, useWorkingDiffSides } from "@/extension-runtime/diff-sides";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { renderPdfPreview } from "./pdf-preview";
@@ -26,6 +24,11 @@ type PdfViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
 	readonly sourceCommitId?: string;
+	/** Both set for a checkpoint's span: the view shows before beside after. */
+	readonly beforeCommitId?: string | null;
+	readonly afterCommitId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
 	readonly initialPage?: number;
 	readonly diffSession?: AtelierDiffSession | null;
 };
@@ -39,23 +42,11 @@ type PdfFileRow = {
 type PdfPreviewState = "loading" | "ready" | "error";
 
 /** Read-only renderer for a PDF stored in the Lix workspace. */
-export function PdfView({
-	fileId,
-	filePath,
-	sourceCommitId,
-	initialPage,
-	diffSession,
-}: PdfViewProps) {
+export function PdfView(props: PdfViewProps) {
 	return (
 		<div className="atelier-pdf-view">
 			<Suspense fallback={<PdfLoadingState />}>
-				<PdfViewContent
-					fileId={fileId}
-					filePath={filePath}
-					sourceCommitId={sourceCommitId}
-					initialPage={initialPage}
-					diffSession={diffSession}
-				/>
+				<PdfViewContent {...props} />
 			</Suspense>
 		</div>
 	);
@@ -66,16 +57,14 @@ function PdfViewContent({
 	filePath,
 	sourceCommitId,
 	initialPage,
+	beforeCommitId,
+	afterCommitId,
+	beforeExists,
+	afterExists,
 	diffSession,
 }: PdfViewProps) {
 	assertFileId(fileId);
-	const reviewFile = workingReviewFile(diffSession, fileId);
-	const epoch = reviewFile?.workingEpoch;
-	const reviewData = useWorkingFileData(
-		epoch ? fileId : null,
-		epoch?.beforeCommitId,
-		epoch?.afterCommitId,
-	);
+	const review = useWorkingDiffSides(fileId, diffSession);
 	const fileResult = useQueryResult<PdfFileRow>(
 		(lix) => {
 			if (sourceCommitId) {
@@ -91,23 +80,70 @@ function PdfViewContent({
 		},
 		{ subscribe: !sourceCommitId },
 	);
+	// A PDF cannot be diffed in place, so the review shows both revisions:
+	// the checkpoint on the left, the working file on the right.
+	if (review.reviewing) {
+		if (review.status === "loading") return <PdfLoadingState />;
+		if (review.status === "unavailable") return <PdfReviewUnavailable />;
+		const path = review.path || filePath || "document.pdf";
+		return (
+			<DiffSides
+				filePath={path}
+				beforeCommitId={review.beforeCommitId}
+				afterCommitId={review.afterCommitId}
+				before={
+					review.beforeData ? (
+						<PdfPreview data={review.beforeData} filePath={path} />
+					) : null
+				}
+				after={
+					review.afterData ? (
+						<PdfPreview data={review.afterData} filePath={path} />
+					) : null
+				}
+			/>
+		);
+	}
+	// The same two sides for a checkpoint's span, read from history.
+	if (beforeCommitId && afterCommitId) {
+		return (
+			<FileSnapshotsAtCommits
+				fileId={fileId}
+				beforeCommitId={beforeCommitId}
+				afterCommitId={afterCommitId}
+				beforeExists={beforeExists}
+				afterExists={afterExists}
+			>
+				{({ beforeSnapshot, afterSnapshot }) => {
+					const path =
+						afterSnapshot?.path ??
+						beforeSnapshot?.path ??
+						filePath ??
+						"document.pdf";
+					return (
+						<DiffSides
+							filePath={path}
+							beforeCommitId={beforeCommitId}
+							afterCommitId={afterCommitId}
+							before={
+								beforeSnapshot ? (
+									<PdfPreview data={beforeSnapshot.content} filePath={path} />
+								) : null
+							}
+							after={
+								afterSnapshot ? (
+									<PdfPreview data={afterSnapshot.content} filePath={path} />
+								) : null
+							}
+						/>
+					);
+				}}
+			</FileSnapshotsAtCommits>
+		);
+	}
 	if (fileResult.status === "pending") return <PdfLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
-	const resolvedReviewData = reviewData.loading ? null : reviewData;
-	if (epoch && !resolvedReviewData) return <PdfLoadingState />;
-	if (epoch && resolvedReviewData?.error) return <PdfReviewUnavailable />;
-	const observed = fileResult.rows[0];
-	const pinnedContent =
-		resolvedReviewData?.afterData ?? resolvedReviewData?.data;
-	const fileRow = epoch
-		? pinnedContent
-			? {
-					id: fileId,
-					path: reviewFile?.path ?? observed?.path ?? filePath ?? `/${fileId}`,
-					content: pinnedContent,
-				}
-			: undefined
-		: observed;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (
@@ -330,6 +366,12 @@ export const extension = createReactExtensionDefinition({
 					initialPage={
 						typeof view.state.page === "number" ? view.state.page : undefined
 					}
+					beforeCommitId={
+						view.state.beforeCommitId as string | null | undefined
+					}
+					afterCommitId={view.state.afterCommitId as string | null | undefined}
+					beforeExists={view.state.beforeExists !== false}
+					afterExists={view.state.afterExists !== false}
 					diffSession={atelier.diff.session}
 				/>
 			</PreparedMediaSurface>

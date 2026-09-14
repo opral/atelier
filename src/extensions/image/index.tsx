@@ -31,10 +31,8 @@ import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import type { AtelierDiffSession } from "@/extension-api";
 import { selectFilesStateAt } from "@/queries";
-import {
-	useWorkingFileData,
-	workingReviewFile,
-} from "@/shell/external-write-review-history";
+import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
+import { DiffSides, useWorkingDiffSides } from "@/extension-runtime/diff-sides";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
@@ -47,6 +45,11 @@ type ImageViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
 	readonly sourceCommitId?: string;
+	/** Both set for a checkpoint's span: the view shows before beside after. */
+	readonly beforeCommitId?: string | null;
+	readonly afterCommitId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
 	readonly diffSession?: AtelierDiffSession | null;
 };
 
@@ -90,7 +93,7 @@ export function imageMimeTypeFromPath(filePath: string): string | undefined {
 }
 
 /** Read-only renderer for the current image stored in the Lix workspace. */
-function ImageView(props: ImageViewProps) {
+export function ImageView(props: ImageViewProps) {
 	return (
 		<Suspense fallback={<ImageLoadingState />}>
 			<ImageViewContent {...props} />
@@ -102,16 +105,14 @@ function ImageViewContent({
 	fileId,
 	filePath,
 	sourceCommitId,
+	beforeCommitId,
+	afterCommitId,
+	beforeExists,
+	afterExists,
 	diffSession,
 }: ImageViewProps) {
 	assertFileId(fileId);
-	const reviewFile = workingReviewFile(diffSession, fileId);
-	const epoch = reviewFile?.workingEpoch;
-	const reviewData = useWorkingFileData(
-		epoch ? fileId : null,
-		epoch?.beforeCommitId,
-		epoch?.afterCommitId,
-	);
+	const review = useWorkingDiffSides(fileId, diffSession);
 	const fileResult = useQueryResult<ImageFileRow>(
 		(lix) =>
 			sourceCommitId
@@ -125,23 +126,67 @@ function ImageViewContent({
 						.limit(1),
 		{ subscribe: !sourceCommitId },
 	);
+	// An image cannot be diffed in place, so the review shows both revisions:
+	// the checkpoint on the left, the working file on the right.
+	if (review.reviewing) {
+		if (review.status === "loading") return <ImageLoadingState />;
+		if (review.status === "unavailable") return <ImageReviewUnavailable />;
+		const path = review.path || filePath || "image";
+		return (
+			<DiffSides
+				filePath={path}
+				beforeCommitId={review.beforeCommitId}
+				afterCommitId={review.afterCommitId}
+				before={
+					review.beforeData ? (
+						<ImagePreview data={review.beforeData} filePath={path} />
+					) : null
+				}
+				after={
+					review.afterData ? (
+						<ImagePreview data={review.afterData} filePath={path} />
+					) : null
+				}
+			/>
+		);
+	}
+	// The same two sides for a checkpoint's span, read from history.
+	if (beforeCommitId && afterCommitId) {
+		return (
+			<FileSnapshotsAtCommits
+				fileId={fileId}
+				beforeCommitId={beforeCommitId}
+				afterCommitId={afterCommitId}
+				beforeExists={beforeExists}
+				afterExists={afterExists}
+			>
+				{({ beforeSnapshot, afterSnapshot }) => {
+					const path =
+						afterSnapshot?.path ?? beforeSnapshot?.path ?? filePath ?? "image";
+					return (
+						<DiffSides
+							filePath={path}
+							beforeCommitId={beforeCommitId}
+							afterCommitId={afterCommitId}
+							before={
+								beforeSnapshot ? (
+									<ImagePreview data={beforeSnapshot.content} filePath={path} />
+								) : null
+							}
+							after={
+								afterSnapshot ? (
+									<ImagePreview data={afterSnapshot.content} filePath={path} />
+								) : null
+							}
+						/>
+					);
+				}}
+			</FileSnapshotsAtCommits>
+		);
+	}
 	if (fileResult.status === "pending") return <ImageLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
-	const resolvedReviewData = reviewData.loading ? null : reviewData;
-	if (epoch && !resolvedReviewData) return <ImageLoadingState />;
-	if (epoch && resolvedReviewData?.error) return <ImageReviewUnavailable />;
-	const observed = fileResult.rows[0];
-	const pinnedContent =
-		resolvedReviewData?.afterData ?? resolvedReviewData?.data;
-	const fileRow = epoch
-		? pinnedContent
-			? {
-					id: fileId,
-					path: reviewFile?.path ?? observed?.path ?? filePath ?? `/${fileId}`,
-					content: pinnedContent,
-				}
-			: undefined
-		: observed;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (
@@ -491,6 +536,12 @@ export const extension = createReactExtensionDefinition({
 					fileId={view.state.fileId as string}
 					filePath={view.state.filePath as string | undefined}
 					sourceCommitId={view.state.sourceCommitId as string | undefined}
+					beforeCommitId={
+						view.state.beforeCommitId as string | null | undefined
+					}
+					afterCommitId={view.state.afterCommitId as string | null | undefined}
+					beforeExists={view.state.beforeExists !== false}
+					afterExists={view.state.afterExists !== false}
 					diffSession={atelier.diff.session}
 				/>
 			</PreparedMediaSurface>

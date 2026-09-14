@@ -2210,3 +2210,79 @@ describe("canonical UI state", () => {
 		}
 	});
 });
+
+describe("a file the view cannot diff in place", () => {
+	test("shows the checkpoint beside the working file", async () => {
+		const lix = await openLix();
+		Object.defineProperty(URL, "createObjectURL", {
+			configurable: true,
+			value: vi.fn(() => "blob:atelier-image"),
+		});
+		Object.defineProperty(URL, "revokeObjectURL", {
+			configurable: true,
+			value: vi.fn(),
+		});
+		const atelier = createAtelier({
+			lix,
+			reviewStatusStore: createMemoryReviewStatusStore(),
+			sessionStateStore: createMemorySessionStateStore(),
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("review-shot"),
+					path: "/shot.png",
+					content: new Uint8Array([137, 80, 78, 71, 1]),
+				})
+				.execute();
+			await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.where("id", "=", fakeUuid("review-shot"))
+				.set({ content: new Uint8Array([137, 80, 78, 71, 2]) })
+				.execute();
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await openWorkingChangesFromHistory();
+			await act(async () => {
+				fireEvent.click(
+					await screen.findByRole("button", { name: "Next changed file" }),
+				);
+			});
+
+			// The image view draws both revisions itself: checkpoint left,
+			// working file right.
+			await waitFor(
+				() =>
+					expect(
+						utils!.container.querySelectorAll("[data-diff-side]"),
+					).toHaveLength(2),
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			await waitFor(() => {
+				expect(
+					utils!.container.querySelector("[data-diff-side='before'] img"),
+				).not.toBeNull();
+				expect(
+					utils!.container.querySelector("[data-diff-side='after'] img"),
+				).not.toBeNull();
+			});
+			// The review keeps its verbs while the comparison is on screen.
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+});

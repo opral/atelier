@@ -15,6 +15,9 @@ vi.mock("./pdf-preview", () => ({
 	renderPdfPreview: pdfRendererMocks.render,
 }));
 
+import { createCheckpoint } from "@/lib/lix-diff-commands";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
+import type { AtelierDiffSession } from "@/extension-api";
 import { PdfPreview, PdfView, extension } from "./index";
 
 describe("PDF extension routing", () => {
@@ -151,6 +154,76 @@ describe("PdfPreview", () => {
 		).toBeInTheDocument();
 		expect(createObjectURL).not.toHaveBeenCalled();
 		expect(pdfRendererMocks.render).not.toHaveBeenCalled();
+	});
+
+	test("renders the checkpoint beside the working PDF under review", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("review-pdf");
+		let view: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fileId,
+					path: "/assets/report.pdf",
+					content: new TextEncoder().encode("%PDF-1.7 before"),
+				})
+				.execute();
+			const checkpoint = await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({ content: new TextEncoder().encode("%PDF-1.7 after") })
+				.where("id", "=", fileId)
+				.execute();
+			const snapshot = await selectWorkingFileDiffSnapshot(lix);
+			const session: AtelierDiffSession = {
+				base: { commitId: checkpoint.commitId },
+				target: { working: true },
+				files: [
+					{
+						id: fileId,
+						path: "/assets/report.pdf",
+						changeKind: "modified",
+						workingEpoch: {
+							beforeCommitId: snapshot.beforeCommitId,
+							afterCommitId: snapshot.afterCommitId,
+						},
+						review: { id: "review-pdf", status: "pending" },
+					},
+				],
+				activePath: "/assets/report.pdf",
+				capabilities: { checkpoint: true, undo: true, restore: false },
+			};
+
+			await act(async () => {
+				view = render(
+					<div className="atelier-root">
+						<LixProvider lix={lix}>
+							<PdfView
+								fileId={fileId}
+								filePath="/assets/report.pdf"
+								diffSession={session}
+							/>
+						</LixProvider>
+					</div>,
+				);
+			});
+
+			await waitFor(() =>
+				expect(
+					view!.container.querySelectorAll("[data-diff-side]"),
+				).toHaveLength(2),
+			);
+			await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+			expect(
+				await Promise.all(
+					createObjectURL.mock.calls.map((call) => call[0].text()),
+				),
+			).toEqual(["%PDF-1.7 before", "%PDF-1.7 after"]);
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
 	});
 
 	test("loads direct PDF views from the requested historical commit", async () => {
