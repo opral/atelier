@@ -1,4 +1,4 @@
-import type { ExecuteResult, Lix, SqlParam } from "@lix-js/sdk";
+import type { StatementResult, Lix, SqlParam } from "@lix-js/sdk";
 import type {
 	AtelierInitialState,
 	AtelierLocation,
@@ -82,7 +82,7 @@ async function prepareAtelierState(
 	const capture = (
 		sql: string,
 		params: readonly unknown[],
-		result: ExecuteResult,
+		result: StatementResult,
 	) => {
 		queries.set(atelierQueryKey(sql, params), {
 			sql,
@@ -106,12 +106,16 @@ async function prepareAtelierState(
 					statements: readonly { sql: string; params?: readonly SqlParam[] }[],
 				) => {
 					signal.throwIfAborted();
-					const results = await target.executeBatch(statements);
+					const batch = await target.executeBatch(statements);
 					signal.throwIfAborted();
 					statements.forEach((statement, index) =>
-						capture(statement.sql, statement.params ?? [], results[index]!),
+						capture(
+							statement.sql,
+							statement.params ?? [],
+							batch.results[index]!,
+						),
 					);
-					return results;
+					return batch;
 				};
 			const value = Reflect.get(target, property, target);
 			return typeof value === "function" ? value.bind(target) : value;
@@ -130,7 +134,7 @@ async function prepareAtelierState(
 		const compiled = builder.compile();
 		return { sql: compiled.sql, params: compiled.parameters as SqlParam[] };
 	});
-	const results = await lix.executeBatch([
+	const { results } = await lix.executeBatch([
 		{ sql: "SELECT lix_active_branch_commit_id() AS commit_id" },
 		...statements,
 		{ sql: "SELECT value FROM lix_key_value WHERE key = 'lix_id'" },

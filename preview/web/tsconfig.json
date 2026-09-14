@@ -2,6 +2,7 @@
 	"extends": "../../tsconfig.json",
 	"compilerOptions": {
 		"paths": {
+			"@opral/atelier/dev-tools": ["../../src/dev-tools.ts"],
 			"@opral/atelier": ["../../src/index.ts"],
 			"@opral/atelier/style.css": ["../../src/index.css"],
 			"@/*": ["../../src/*"]

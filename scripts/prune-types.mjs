@@ -21,6 +21,7 @@ const publicDeclarations = new Set([
 	"atelier-state.d.ts",
 	"atelier-render-context.d.ts",
 	"extensions/markdown/markdown-content.d.ts",
+	"extensions/history/index.d.ts",
 	"lib/workspace-file-ops.d.ts",
 	"state-adapters.d.ts",
 	"dev-tools/developer-tools-menu.d.ts",

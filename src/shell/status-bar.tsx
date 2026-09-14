@@ -55,15 +55,11 @@ export function CheckpointStatusBar({
 	);
 	if (workingChangeCount.status === "error") throw workingChangeCount.error;
 	const workingRow = workingChangeCount.rows[0];
-	const changeCount = workingRow?.change_count ?? 0;
 	const fileCount = workingRow?.file_count ?? 0;
-	const workingCountLabel =
-		fileCount > 0
-			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
-			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
+	const workingCountLabel = `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`;
 
 	const historyStatus =
-		workingChangeCount.status === "pending" ? null : changeCount === 0 ? (
+		workingChangeCount.status === "pending" ? null : fileCount === 0 ? (
 			<CheckpointStatus
 				statusLabel={LATEST_CHECKPOINT_TITLE}
 				reviewing={reviewingLatestCheckpoint}

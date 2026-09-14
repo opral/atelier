@@ -63,6 +63,7 @@ function eventWithValue(
 			rows: [{ value }],
 			rowsAffected: 0,
 			notices: [],
+			commit: null,
 		},
 	};
 }
@@ -119,6 +120,7 @@ test("useQuery accepts the initial observe snapshot as authoritative", async () 
 			rows: [{ value: "authoritative-observe-snapshot" }],
 			rowsAffected: 0,
 			notices: [],
+			commit: null,
 		},
 	});
 
@@ -582,6 +584,7 @@ test("useQuery can treat advancing observer results as invalidations", async () 
 				rows: [],
 				rowsAffected: 0,
 				notices: [],
+				commit: null,
 			},
 		}),
 	);

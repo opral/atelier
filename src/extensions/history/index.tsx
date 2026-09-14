@@ -13,7 +13,7 @@ import type {
 	AtelierDiffSession,
 	AtelierExtensionPreferences,
 	AtelierJsonValue,
-} from "@/extension-api";
+} from "../../extension-api";
 import { DiffGlyph, WorkingDot } from "@/components/diff-glyph";
 import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
@@ -267,16 +267,13 @@ function WorkingChangesRow({
 		(queryLix) => selectWorkingFileDiff(queryLix, file?.id ?? ""),
 		{ enabled: file !== null },
 	);
-	const changeCount = workingChangeCount.rows[0]?.change_count ?? 0;
 	const fileCount = workingChangeCount.rows[0]?.file_count ?? 0;
 	const fileChange = file ? (fileDiff.rows[0] ?? null) : null;
 	const workingCountLabel = file
 		? fileChange
 			? FILE_CHANGE_LABEL[fileChange.diff_type]
 			: ""
-		: fileCount > 0
-			? `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`
-			: `${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
+		: `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`;
 	const isViewing =
 		atelier.diff.session !== null && "working" in atelier.diff.session.target;
 	// Pressing the active entry again leaves review mode — the row toggles.

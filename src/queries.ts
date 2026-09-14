@@ -11,8 +11,6 @@ export type FilesystemEntryRow = {
 };
 
 export type WorkingChangeCountRow = {
-	/** Changed atoms across the file tier (sum of per-file row_count). */
-	change_count: number;
 	/** Changed logical files. */
 	file_count: number;
 };
@@ -24,7 +22,6 @@ export type FileDiffRow = {
 	diff_type: "added" | "modified" | "removed";
 	/** Resolved for the side that has one: to for added/modified, from for removed. */
 	path: string;
-	row_count: number;
 	/** Side paths: a modified row whose sides differ is a move/rename. */
 	from_path: string | null;
 	to_path: string | null;
@@ -102,7 +99,6 @@ export function selectWorkingFileDiffs(lix: Lix) {
 			"id",
 			"diff_type",
 			sql<string>`coalesce(to_path, from_path)`.as("path"),
-			"row_count",
 			"from_path",
 			"to_path",
 		])
@@ -143,10 +139,7 @@ export function selectFileCheckpointChanges(lix: Lix, fileId: string) {
 export function selectWorkingChangeCount(lix: Lix) {
 	return qb(lix)
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
-		.select((eb) => [
-			sql<number>`coalesce(sum(row_count), 0)`.as("change_count"),
-			eb.fn.countAll<number>().as("file_count"),
-		])
+		.select((eb) => [eb.fn.countAll<number>().as("file_count")])
 		.$castTo<WorkingChangeCountRow>();
 }
 
@@ -164,7 +157,7 @@ export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
 	readonly afterCommitId: string;
 	readonly files: readonly FileDiffRow[];
 }> {
-	const results = await lix.executeBatch([
+	const { results } = await lix.executeBatch([
 		{
 			sql: `SELECT working_base_commit_id AS before_commit_id,
 			             commit_id AS after_commit_id
@@ -173,7 +166,7 @@ export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
 		{
 			sql: `SELECT id, diff_type,
 			             coalesce(to_path, from_path) AS path,
-			             row_count, from_path, to_path
+			             from_path, to_path
 			      FROM lix_diff('lix_file')
 			      ORDER BY coalesce(to_path, from_path) ASC`,
 		},
@@ -200,7 +193,7 @@ export async function selectAppliedFileDiffSnapshot(
 ) {
 	const result = await lix.execute(
 		`SELECT id, diff_type, coalesce(to_path, from_path) AS path,
-          row_count, from_path, to_path FROM lix_diff('lix_file', $1, $2)
+          from_path, to_path FROM lix_diff('lix_file', $1, $2)
    ORDER BY coalesce(to_path, from_path) ASC`,
 		[beforeCommitId, afterCommitId],
 	);
@@ -214,7 +207,7 @@ export async function selectWorkingFileDiffContent(
 	beforeCommitId: string,
 	afterCommitId: string,
 ): Promise<WorkingFileDiffContentRow> {
-	const results = await lix.executeBatch([
+	const { results } = await lix.executeBatch([
 		{
 			sql: "SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $1) WHERE id = $2",
 			params: [beforeCommitId, fileId],

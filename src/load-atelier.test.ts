@@ -84,6 +84,23 @@ describe("loadAtelier", () => {
 			expect(
 				(await source.lix.execute(query.sql, query.params as never[])).rows,
 			).toEqual(query.rows);
+			const batch = await source.lix.executeBatch([
+				{ sql: query.sql, params: query.params as never[], label: "" },
+				{ sql: query.sql, params: query.params as never[], label: "repeat" },
+			]);
+			expect(batch.commit).toBeNull();
+			expect(batch.results).toHaveLength(2);
+			expect(batch.results[0]).toMatchObject({
+				statementIndex: 0,
+				label: "",
+				rows: query.rows,
+			});
+			expect(batch.results[1]).toMatchObject({
+				statementIndex: 1,
+				label: "repeat",
+				rows: query.rows,
+			});
+			expect(batch.results.every((result) => !("commit" in result))).toBe(true);
 			await expect(
 				source.lix.execute("SELECT 'not prepared' AS value"),
 			).rejects.toThrow("missing a prepared query");

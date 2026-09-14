@@ -953,6 +953,9 @@ test("removing the final property removes frontmatter and restores its disclosur
 		expect(editor.state.doc.firstChild?.type.name).toBe("paragraph");
 	});
 	expect(screen.queryByText("Frontmatter")).not.toBeInTheDocument();
+	// Removing frontmatter rebinds the disclosure on the next animation frame.
+	// Wait for that binding before dispatching the pointer event.
+	await screen.findByRole("button", { name: "Add frontmatter" });
 
 	const firstBlock = screen
 		.getByTestId("tiptap-editor")
