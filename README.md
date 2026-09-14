@@ -133,33 +133,6 @@ The optional `fileHref({ path, branchId, commitId })` returns a raw file URL. It
 
 Extension locations use `{ view: "dashboard", state: { filter: "open" } }`. Native links use `href`, so documents remain navigable before JavaScript starts. Optional `slots`, state stores, branch session, and events integrate host controls without exposing a separate workspace runtime.
 
-## Diffs
-
-A review opens a file with two refs: the checkpoint and the working file, or
-the two ends of a checkpoint's span.
-
-A view that can diff its own file type says so in its manifest and is given
-both refs:
-
-```json
-{
-	"apiVersion": 1,
-	"id": "my_view",
-	"name": "My view",
-	"entry": "./index.js",
-	"diff": true
-}
-```
-
-Markdown, CSV and text declare it. Every other view is compared by the shell:
-the same view twice, read-only, the older commit on the left and the newer on
-the right. A file the write created has no left side; one it deleted has no
-right side.
-
-So a view does not have to handle reviews to show one. A view that declares
-`diff` reads the session from `atelier.diff.session`, or the two commits from
-its own view state.
-
 ## Extensions
 
 Extensions load data and render in Atelier's React tree:

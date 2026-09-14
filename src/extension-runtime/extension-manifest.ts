@@ -37,7 +37,6 @@ export function parseExtensionManifest(
 		"fileExtensions",
 		"multiInstance",
 		"placement",
-		"diff",
 	]);
 	const unknownKeys = Object.keys(manifest).filter(
 		(key) => !allowedKeys.has(key),
@@ -85,11 +84,6 @@ export function parseExtensionManifest(
 			`Manifest at ${manifestPath} field "multiInstance" must be a boolean.`,
 		);
 	}
-	if (manifest.diff !== undefined && typeof manifest.diff !== "boolean") {
-		throw new Error(
-			`Manifest at ${manifestPath} field "diff" must be a boolean.`,
-		);
-	}
 	let placement: ("left" | "right" | "main")[] | undefined;
 	if (manifest.placement !== undefined) {
 		if (
@@ -114,7 +108,6 @@ export function parseExtensionManifest(
 		fileExtensions,
 		...(manifest.multiInstance === true ? { multiInstance: true } : {}),
 		...(placement ? { placement } : {}),
-		...(manifest.diff === true ? { diff: true } : {}),
 	};
 }
 

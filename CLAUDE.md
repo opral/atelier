@@ -27,10 +27,7 @@ mode of the Markdown view from the start.
   private, not persisted vs. not.
 - **document** — a file open in the main area.
 - **diff** — two refs and the files between them, in `lix_diff`'s words:
-  `added | modified | removed`. A view that renders its own diff declares
-  `"diff": true` in its manifest and is handed both refs. Every other view is
-  mounted twice, before beside after, by the shell. Which file type is open
-  decides nothing: the shell asks the view, not the path.
+  `added | modified | removed`.
 
 ## The static entry is a promise
 

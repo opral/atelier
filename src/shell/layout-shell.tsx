@@ -89,6 +89,7 @@ import {
 	fileNameFromPath,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
+	CSV_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
@@ -2434,21 +2435,25 @@ function LayoutShellLoadedContentResolved({
 			previousCommitId: string,
 			changeKind: "added" | "modified" | "removed" = "modified",
 		): ExtensionState => {
+			const handler = findFileHandlerExtension(extensionMap.values(), path);
 			const beforeExists = changeKind !== "added";
 			const afterExists = changeKind !== "removed";
 			const sourceCommitId = afterExists ? commitId : previousCommitId;
-			// Every view gets both refs. A view that renders its own diff draws
-			// them; the rest are compared side by side by the shell. Which file
-			// type is open decides nothing here.
-			return {
-				beforeCommitId: previousCommitId,
-				afterCommitId: commitId,
-				beforeExists,
-				afterExists,
-				sourceCommitId,
-			};
+			return handler?.kind === FILE_EXTENSION_KIND ||
+				handler?.kind === CSV_EXTENSION_KIND
+				? {
+						beforeCommitId: previousCommitId,
+						afterCommitId: commitId,
+						beforeExists,
+						afterExists,
+						sourceCommitId,
+					}
+				: {
+						afterCommitId: sourceCommitId,
+						sourceCommitId,
+					};
 		},
-		[],
+		[extensionMap],
 	);
 	// Diff mode covers every surface: entering a historical review converts all
 	// open live file tabs to the review's span in place — each tab keeps its

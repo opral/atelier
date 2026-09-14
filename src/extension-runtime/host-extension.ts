@@ -16,7 +16,6 @@ export function hostExtensionDefinition(
 		multiInstance: registration.multiInstance,
 		placement: registration.placement,
 		hidden: registration.hidden,
-		diff: registration.diff,
 		menuItems: registration.menuItems,
 		load: registration.load,
 		Component: registration.Component as ExtensionDefinition["Component"],

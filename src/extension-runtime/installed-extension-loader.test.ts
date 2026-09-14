@@ -61,25 +61,6 @@ describe("parseManifest", () => {
 		});
 	});
 
-	test("carries a view's claim that it renders its own diff", () => {
-		const path = "/.lix/app_data/atelier/extensions/scene/manifest.json";
-		const base = {
-			apiVersion: 1,
-			id: "scene",
-			name: "Scene",
-			entry: "./index.js",
-		};
-		expect(
-			parseExtensionManifest(path, JSON.stringify({ ...base, diff: true })),
-		).toMatchObject({ diff: true });
-		expect(
-			parseExtensionManifest(path, JSON.stringify(base)).diff,
-		).toBeUndefined();
-		expect(() =>
-			parseExtensionManifest(path, JSON.stringify({ ...base, diff: "yes" })),
-		).toThrow('field "diff" must be a boolean');
-	});
-
 	test("rejects missing versions, coerced values, and unknown fields", () => {
 		const path = "/.lix/app_data/atelier/extensions/example/manifest.json";
 		expect(() =>

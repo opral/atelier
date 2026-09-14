@@ -3,6 +3,5 @@
 	"id": "atelier_file",
 	"name": "File",
 	"entry": "./index.js",
-	"diff": true,
 	"fileExtensions": ["md", "markdown"]
 }

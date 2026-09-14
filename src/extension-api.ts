@@ -22,12 +22,6 @@ export type ExtensionManifest = {
 	 * configuration (a folder view, a pinned home).
 	 */
 	readonly hidden?: boolean;
-	/**
-	 * This view renders its own diff when a file is opened with two refs — a
-	 * review, or a checkpoint's span. Views without it are compared by the
-	 * shell: the same view twice, before on the left and after on the right.
-	 */
-	readonly diff?: boolean;
 };
 
 /** Stable ids for replacing Atelier's bundled extension views. */
@@ -428,8 +422,6 @@ export type AtelierExtensionRegistration = {
 	readonly multiInstance?: boolean;
 	readonly placement?: readonly AtelierArea[];
 	readonly hidden?: boolean;
-	/** This view renders its own diff; see `ExtensionManifest["diff"]`. */
-	readonly diff?: boolean;
 	readonly menuItems?: AtelierExtensionMenuItems;
 	readonly load?: AtelierExtensionLoader;
 	/** Control shown at the trailing end of this view's side-panel header. */

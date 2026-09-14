@@ -29,14 +29,7 @@ import {
 	useExtensionHostRegistry,
 } from "./extension-runtime/extension-host-registry";
 import { DeclarativeExtension } from "./extension-runtime/declarative-extension";
-import type { ExtensionState, ExtensionView } from "./extension-runtime/types";
-import {
-	VIEW_DIFF_SIDE_SEPARATOR,
-	ViewDiffCompare,
-	viewDiffSideRuntime,
-	viewDiffSideState,
-	viewDiffSides,
-} from "./extension-runtime/view-diff-compare";
+import type { ExtensionView } from "./extension-runtime/types";
 import { hostExtensionDefinition } from "./extension-runtime/host-extension";
 import { findFileHandlerExtension } from "./extension-runtime/file-handlers";
 import {
@@ -70,8 +63,6 @@ export type AtelierFileProps = {
 					readonly beforeCommitId: string;
 					readonly afterCommitId: string;
 				};
-				/** In `lix_diff`'s words. A created file has no before side. */
-				readonly changeKind?: "added" | "modified" | "removed";
 			};
 	  }
 );
@@ -191,6 +182,7 @@ function MountedFile(
 	},
 ) {
 	const registry = useExtensionHostRegistry();
+	const element = useRef<HTMLDivElement>(null);
 	const preferences = useMemo(() => new Map<string, AtelierJsonValue>(), []);
 	const { definition, fileId, path, branchId, lix, readOnly, onOpenFile } =
 		props;
@@ -201,22 +193,12 @@ function MountedFile(
 		(props.diff && "baseCommitId" in props.diff
 			? props.diff.baseCommitId
 			: null);
-	const changeKind =
-		props.diff && "workingEpoch" in props.diff
-			? props.diff.changeKind
-			: undefined;
-	const beforeExists =
-		changeKind !== "added" &&
-		!(
-			props.diff &&
-			"baseCommitId" in props.diff &&
-			props.diff.baseCommitId === null
-		);
-	const afterExists = changeKind !== "removed";
-	const afterCommitId =
-		(afterExists ? epoch?.afterCommitId : epoch?.beforeCommitId) ??
-		props.targetCommitId ??
-		null;
+	const afterCommitId = epoch?.afterCommitId ?? props.targetCommitId ?? null;
+	const beforeExists = !(
+		props.diff &&
+		"baseCommitId" in props.diff &&
+		props.diff.baseCommitId === null
+	);
 	const runtime = useMemo<ExtensionRuntime>(
 		() => ({
 			lix,
@@ -268,66 +250,12 @@ function MountedFile(
 			fileId,
 			filePath: path,
 			beforeCommitId,
-			afterCommitId: epoch?.afterCommitId ?? afterCommitId,
-			beforeExists,
-			afterExists,
-			sourceCommitId: afterCommitId,
-		}),
-		[
-			fileId,
-			path,
-			beforeCommitId,
 			afterCommitId,
 			beforeExists,
-			afterExists,
-			epoch?.afterCommitId,
-		],
+			sourceCommitId: afterCommitId,
+		}),
+		[fileId, path, beforeCommitId, afterCommitId, beforeExists],
 	);
-	const paneRuntime = useMemo(() => viewDiffSideRuntime(runtime), [runtime]);
-	const sides = viewDiffSides({ definition, session: null, state });
-	if (sides) {
-		return (
-			<ViewDiffCompare
-				sides={sides}
-				renderSide={({ key, commitId }) => (
-					<FileSurface
-						definition={definition}
-						atelier={paneRuntime}
-						instanceId={`${instanceId}${VIEW_DIFF_SIDE_SEPARATOR}${key}`}
-						state={viewDiffSideState({ state, path: sides.path, commitId })}
-						preferences={preferences}
-					/>
-				)}
-			/>
-		);
-	}
-	return (
-		<FileSurface
-			definition={definition}
-			atelier={runtime}
-			instanceId={instanceId}
-			state={state}
-			preferences={preferences}
-		/>
-	);
-}
-
-/** One mounted view: the file itself, or one side of a comparison. */
-function FileSurface({
-	definition,
-	atelier,
-	instanceId,
-	state,
-	preferences,
-}: {
-	readonly definition: ReturnType<typeof findFileHandlerExtension> & {};
-	readonly atelier: ExtensionRuntime;
-	readonly instanceId: string;
-	readonly state: ExtensionState;
-	readonly preferences: Map<string, AtelierJsonValue>;
-}) {
-	const registry = useExtensionHostRegistry();
-	const element = useRef<HTMLDivElement>(null);
 	const extensionView = useMemo<ExtensionView>(
 		() => ({
 			instanceId,
@@ -353,15 +281,15 @@ function FileSurface({
 		const host = registry.ensureHost({
 			instance: { instance: instanceId, kind: definition.kind, state },
 			view: definition,
-			atelier,
+			atelier: runtime,
 			extensionView,
 		});
 		element.current?.appendChild(host.container);
-	}, [registry, definition, atelier, instanceId, state, extensionView]);
+	}, [registry, definition, runtime, instanceId, state, extensionView]);
 	return definition.Component ? (
 		<DeclarativeExtension
 			definition={definition}
-			atelier={atelier}
+			atelier={runtime}
 			view={extensionView}
 		/>
 	) : (

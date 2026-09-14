@@ -43,7 +43,6 @@ export function createReactExtensionDefinition(args: {
 		icon: args.icon,
 		fileExtensions: normalizeFileExtensions(args.manifest.fileExtensions),
 		placement: args.manifest.placement,
-		diff: args.manifest.diff,
 		menuItems: args.menuItems,
 		load: args.load,
 		Component: args.component,

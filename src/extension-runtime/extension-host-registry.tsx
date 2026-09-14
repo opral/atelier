@@ -7,7 +7,6 @@ import {
 	useRef,
 	type ReactNode,
 } from "react";
-import { VIEW_DIFF_SIDE_SEPARATOR } from "./view-diff-compare";
 import type {
 	ExtensionDefinition,
 	ExtensionInstance,
@@ -146,11 +145,7 @@ export function ExtensionHostRegistryProvider({
 
 	const pruneHosts = useCallback((activeInstances: Set<string>) => {
 		for (const [key, record] of hostsRef.current) {
-			// A diff comparison mounts the view once per side, under its own
-			// instance id ("<instance>#before"). Those panes live as long as the
-			// view instance the shell knows about.
-			const instanceId = key.split(VIEW_DIFF_SIDE_SEPARATOR)[0] ?? key;
-			if (activeInstances.has(key) || activeInstances.has(instanceId)) continue;
+			if (activeInstances.has(key)) continue;
 			// Pruning runs during Atelier's parent render. Nested React roots must
 			// unmount after that commit or React reports a synchronous root race.
 			disposeExtension(record, { defer: true });
