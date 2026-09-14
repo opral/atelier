@@ -43,18 +43,19 @@ const compactMarker: typeof markerCellRenderer = {
 		ctx.restore();
 	},
 };
-export const csvCellRenderers: typeof AllCellRenderers = AllCellRenderers.map((renderer) =>
-	renderer.kind === compactMarker.kind
-		? {
-				...renderer,
-				draw(
-					args: Parameters<typeof renderer.draw>[0],
-					cell: Parameters<typeof renderer.draw>[1],
-				) {
-					if (args.cell.kind === compactMarker.kind) {
-						compactMarker.draw({ ...args, cell: args.cell }, args.cell);
-					} else renderer.draw(args, cell);
-				},
-			}
-		: renderer,
+export const csvCellRenderers: typeof AllCellRenderers = AllCellRenderers.map(
+	(renderer) =>
+		renderer.kind === compactMarker.kind
+			? {
+					...renderer,
+					draw(
+						args: Parameters<typeof renderer.draw>[0],
+						cell: Parameters<typeof renderer.draw>[1],
+					) {
+						if (args.cell.kind === compactMarker.kind) {
+							compactMarker.draw({ ...args, cell: args.cell }, args.cell);
+						} else renderer.draw(args, cell);
+					},
+				}
+			: renderer,
 );

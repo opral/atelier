@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
-import { carriesChange, isCountedLine } from "./render-review-html";
+import { carriesChange, isCountedLine } from "./html";
 
 /**
  * Trims a review document to the parts worth putting in a card.

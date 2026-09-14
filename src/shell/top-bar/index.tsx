@@ -30,7 +30,7 @@ export type TopBarProps = {
 	readonly navbarRepository?: ReactNode;
 	readonly navbarStart?: ReactNode;
 	readonly navbarCenter?: ReactNode;
-	readonly centralTabStrip?: ReactNode;
+	readonly mainTabStrip?: ReactNode;
 	readonly navbarEnd?: ReactNode;
 	/** Host props forwarded to the semantic top-bar header. */
 	readonly rootProps?: AtelierTopBarProps;
@@ -55,7 +55,7 @@ export function TopBar({
 	navbarRepository,
 	navbarStart,
 	navbarCenter,
-	centralTabStrip,
+	mainTabStrip,
 	navbarEnd,
 	rootProps,
 }: TopBarProps) {
@@ -115,7 +115,7 @@ export function TopBar({
 				) : null}
 				{/* Keeps "where you are" (host brand and repository) visually separate
 				    from "what's open" (the document tabs). */}
-				{hasHostIdentitySlots && centralTabStrip ? (
+				{hasHostIdentitySlots && mainTabStrip ? (
 					<span
 						aria-hidden="true"
 						data-atelier-part="top-bar-divider"
@@ -123,12 +123,12 @@ export function TopBar({
 					/>
 				) : null}
 			</div>
-			{centralTabStrip !== undefined && centralTabStrip !== null ? (
+			{mainTabStrip !== undefined && mainTabStrip !== null ? (
 				<div
 					className="flex min-w-0 items-center overflow-hidden"
-					data-slot="central-tab-strip"
+					data-slot="main-tab-strip"
 				>
-					{centralTabStrip}
+					{mainTabStrip}
 					{/* End divider: appears only while tabs overflow to the right,
 					    marking where the scrollable strip ends before the top bar's
 					    right-side controls. */}

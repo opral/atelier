@@ -40,7 +40,7 @@ describe("ExtensionHostRegistryProvider", () => {
 		const extensionView: ExtensionView = {
 			instanceId: instance.instance,
 			state: {},
-			panel: "central",
+			panel: "main",
 			isActive: true,
 			isFocused: true,
 			preferences: { get: () => undefined, set: () => {}, delete: () => {} },
@@ -105,7 +105,7 @@ describe("ExtensionHostRegistryProvider", () => {
 		const extensionView: ExtensionView = {
 			instanceId: instance.instance,
 			state: {},
-			panel: "central",
+			panel: "main",
 			isActive: true,
 			isFocused: true,
 			preferences: { get: () => undefined, set: () => {}, delete: () => {} },

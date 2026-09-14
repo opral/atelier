@@ -7,7 +7,7 @@ import type {
 } from "../extension-runtime/types";
 
 /** Reserved instance id of the pinned home tab. */
-export const CENTRAL_HOME_INSTANCE = "central-home";
+export const CENTRAL_HOME_INSTANCE = "main-home";
 
 type CentralPlaceIntent = {
 	readonly newTab?: boolean;
@@ -15,16 +15,16 @@ type CentralPlaceIntent = {
 };
 
 /**
- * The central island's rules as one cohesive object: browser-style tabs with
+ * The main island's rules as one cohesive object: browser-style tabs with
  * an optional pinned home. All tab-model rules live here so the shell reads
  * `behavior.<rule>` instead of branching on flags at every call site.
  */
 export type CentralSlotBehavior = {
 	/** Extension pinned as the permanent first tab, when configured. */
 	readonly homeKind: ExtensionKind | null;
-	/** Whether the central island can host this view. */
+	/** Whether the main island can host this view. */
 	readonly canHost: (view: ExtensionInstance) => boolean;
-	/** Canonicalizes the central panel state (idempotent, reference-stable). */
+	/** Canonicalizes the main panel state (idempotent, reference-stable). */
 	readonly normalize: (panel: PanelState) => PanelState;
 	/** Places a view following the mode's navigation rules. */
 	readonly place: (
@@ -79,7 +79,7 @@ const ensurePinnedHomeView = (
 };
 
 /**
- * Places a view into a tabbed central panel following the browser-like rules:
+ * Places a view into a tabbed main panel following the browser-like rules:
  * activate an existing instance (merging its state), otherwise navigate the
  * active tab in place; append a new tab when requested or when the pinned
  * home is active.
@@ -137,16 +137,14 @@ const insertCentralTabView = (
 
 export function createCentralSlotBehavior(config: {
 	readonly homeKind: ExtensionKind | null;
-	/** Extension kinds declaring central placement (beyond document editors). */
-	readonly centralKinds: ReadonlySet<ExtensionKind>;
+	/** Extension kinds declaring main placement (beyond document editors). */
+	readonly mainKinds: ReadonlySet<ExtensionKind>;
 }): CentralSlotBehavior {
-	const { homeKind, centralKinds } = config;
-	// The Files view always lives in the sidebar; the central slot hosts
-	// documents, host central views, and (when configured) the pinned home.
+	const { homeKind, mainKinds } = config;
+	// The Files view always lives in the sidebar; the main slot hosts
+	// documents, host main views, and (when configured) the pinned home.
 	const canHost = (view: ExtensionInstance): boolean =>
-		isDocumentView(view) ||
-		view.kind === homeKind ||
-		centralKinds.has(view.kind);
+		isDocumentView(view) || view.kind === homeKind || mainKinds.has(view.kind);
 	return {
 		homeKind,
 		canHost,

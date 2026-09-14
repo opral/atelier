@@ -3,9 +3,5 @@
 	"id": "atelier_files",
 	"name": "File Explorer",
 	"entry": "./index.js",
-	"placement": [
-		"left",
-		"right",
-		"central"
-	]
+	"placement": ["left", "right", "main"]
 }

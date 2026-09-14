@@ -111,7 +111,7 @@ export function PanelV2({
 	onActiveViewInteraction,
 	dropId,
 	viewOverrides,
-	showTabBar = side === "central",
+	showTabBar = side === "main",
 	tabBarExtraContent,
 	customTabStrip,
 	contentVisible = true,
@@ -287,9 +287,9 @@ export function PanelV2({
 	};
 
 	const ContainerElement =
-		side === "central" ? ("section" as const) : ("aside" as const);
+		side === "main" ? ("section" as const) : ("aside" as const);
 	const hostTextClass =
-		side === "central"
+		side === "main"
 			? "text-[var(--color-text-primary)]"
 			: "text-[var(--color-text-secondary)]";
 
@@ -393,7 +393,7 @@ export function PanelV2({
 			/>
 		) : null;
 	const sideSectionPicker =
-		side !== "central" && hasViews ? (
+		side !== "main" && hasViews ? (
 			<div
 				data-atelier-part="section-header"
 				className="flex items-start justify-between gap-2"
@@ -422,7 +422,7 @@ export function PanelV2({
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
 			{sideSectionPicker}
-			{/* Central tabs remain the only document tab strip. Side panels use the
+			{/* Main tabs remain the only document tab strip. Side panels use the
 			    section picker above so their views do not read as documents. */}
 			{showTabBar && customTabStrip !== undefined ? (
 				<div data-atelier-part="custom-tab-strip" className="w-full min-w-0">
@@ -461,7 +461,7 @@ export function PanelV2({
 									panelSide={side}
 									kind={entry.kind}
 									icon={
-										side === "central"
+										side === "main"
 											? (fileGlyphForLabel(label) ?? view.icon)
 											: view.icon
 									}
@@ -484,14 +484,14 @@ export function PanelV2({
 			) : null}
 
 			{/* Every panel body shares the island geometry (rounded corners) so
-			    the sides align with the central editor, but only central is the
+			    the sides align with the main editor, but only main is the
 			    elevated white surface with a border. Side islands are invisible —
 			    the canvas shows through and their views style themselves for
 			    that surface. */}
 			<div
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
-					side === "central"
+					side === "main"
 						? "border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]"
 						: "bg-transparent",
 					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
@@ -605,7 +605,7 @@ function SidebarSectionPicker({
 	onHidePanel,
 	tabLabel,
 }: {
-	readonly side: Exclude<PanelSide, "central">;
+	readonly side: Exclude<PanelSide, "main">;
 	readonly panel: PanelState;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly resolveViewDefinition: (
@@ -777,7 +777,7 @@ function PanelIcon({
 
 /**
  * Renders a panel's tab strip independently from its content island. The
- * workspace uses this for central document tabs in the top bar; it is the
+ * workspace uses this for main document tabs in the top bar; it is the
  * workspace's only tab strip. Side panels use the section picker instead, so
  * their views never read as open documents.
  */
@@ -1034,7 +1034,7 @@ function DefaultPanelEmptyState({
 	const hasAvailableViews = availableViews.length > 0;
 	const illustrationSide = side === "right" ? "right" : "left";
 	const sideLabel =
-		side === "central" ? "This is a panel." : `This is the ${side} sidebar.`;
+		side === "main" ? "This is a panel." : `This is the ${side} sidebar.`;
 
 	return (
 		<div className="@container min-h-0 flex-1 overflow-y-auto">
@@ -1563,7 +1563,7 @@ function SortableTab({
 				isFocused={isFocused}
 				isPending={isPending}
 				isPinned={isPinned}
-				closeOnHoverOnly={panelSide !== "central"}
+				closeOnHoverOnly={panelSide !== "main"}
 				onClick={onClick}
 				onClose={onClose}
 				isDragging={isDragging}
@@ -1585,7 +1585,7 @@ function SortableTab({
 	);
 }
 
-/** Central document tabs show their file-type glyph, like a browser favicon. */
+/** Main document tabs show their file-type glyph, like a browser favicon. */
 const fileGlyphForLabel = (label: string): TabIcon | null => {
 	if (!/\.[a-z0-9]+$/i.test(label)) return null;
 	const FileGlyph = ({ className }: { className?: string }) => (
@@ -1611,7 +1611,7 @@ interface TabBaseProps extends PanelTabPreviewProps {
 	readonly onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
 	readonly onClose?: () => void;
 	/**
-	 * Side-panel chips reveal close as a corner badge on hover; central
+	 * Side-panel chips reveal close as a corner badge on hover; main
 	 * document tabs use an inline X when active and reveal it on hover otherwise.
 	 */
 	readonly closeOnHoverOnly?: boolean;
@@ -1713,7 +1713,7 @@ const TabButtonBase = forwardRef<
 					{label}
 				</span>
 				{/* Side-panel tabs keep their floating hover affordance. Active
-				    central tabs reserve inline space, while inactive central tabs
+				    main tabs reserve inline space, while inactive main tabs
 				    reveal an overlay without changing width. */}
 				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
 					<span

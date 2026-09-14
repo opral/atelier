@@ -8,10 +8,10 @@ import {
 } from "./state-adapters";
 
 const shellState = {
-	focusedPanel: "central" as const,
+	focusedPanel: "main" as const,
 	panels: {
 		left: { views: [], activeInstance: null },
-		central: { views: [], activeInstance: null },
+		main: { views: [], activeInstance: null },
 		right: { views: [], activeInstance: null },
 	},
 };
@@ -31,18 +31,18 @@ test("memory session state publishes changes", () => {
 test("memory preferences coerce and persist changes", async () => {
 	const store = createMemoryPreferencesStore({
 		version: 1,
-		layout: { sizes: { left: 15, central: 70, right: 15 } },
+		layout: { sizes: { left: 15, main: 70, right: 15 } },
 	});
 
 	expect(await store.load()).toEqual({
 		version: 1,
-		layout: { sizes: { left: 15, central: 70, right: 15 } },
+		layout: { sizes: { left: 15, main: 70, right: 15 } },
 		review: { autoAcceptAgentChanges: false },
 	});
 
 	await store.save({
 		version: 1,
-		layout: { sizes: { left: 25, central: 50, right: 25 } },
+		layout: { sizes: { left: 25, main: 50, right: 25 } },
 		review: { autoAcceptAgentChanges: true },
 		extensions: {
 			atelier_files: { showHiddenFiles: true },
@@ -50,7 +50,7 @@ test("memory preferences coerce and persist changes", async () => {
 	});
 	expect(await store.load()).toEqual({
 		version: 1,
-		layout: { sizes: { left: 25, central: 50, right: 25 } },
+		layout: { sizes: { left: 25, main: 50, right: 25 } },
 		review: { autoAcceptAgentChanges: true },
 		extensions: {
 			atelier_files: { showHiddenFiles: true },

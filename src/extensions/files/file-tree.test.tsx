@@ -899,7 +899,7 @@ describe("FileTree", () => {
 			"var(--color-bg-hover-canvas)",
 		);
 
-		// Spacious runs inside the central white island.
+		// Spacious runs inside the main white island.
 		rerender(<FileTree nodes={nodes} variant="spacious" />);
 		expect(host.style.getPropertyValue("--trees-bg-override")).toBe(
 			"var(--color-bg-panel)",

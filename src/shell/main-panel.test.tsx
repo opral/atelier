@@ -2,7 +2,7 @@ import { Suspense, act, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { CentralPanel } from "./central-panel";
+import { MainArea } from "./main-panel";
 import type { PanelState } from "../extension-runtime/types";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
@@ -70,7 +70,7 @@ const createViewContext = () =>
 			})(),
 	);
 
-describe("CentralPanel", () => {
+describe("MainArea", () => {
 	test("renders the document action without desktop agent controls", async () => {
 		const panelState: PanelState = {
 			views: [],
@@ -79,7 +79,7 @@ describe("CentralPanel", () => {
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
+				<MainArea
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
@@ -93,7 +93,7 @@ describe("CentralPanel", () => {
 
 		expect(
 			screen.getByRole("button", { name: /new document/i }),
-		).toHaveAttribute("data-attr", "central-empty-new-document");
+		).toHaveAttribute("data-attr", "main-empty-new-document");
 		expect(
 			screen.queryByRole("button", { name: /ask your agent/i }),
 		).toBeNull();
@@ -108,7 +108,7 @@ describe("CentralPanel", () => {
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
+				<MainArea
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
@@ -137,7 +137,7 @@ describe("CentralPanel", () => {
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
+				<MainArea
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
@@ -153,7 +153,7 @@ describe("CentralPanel", () => {
 	});
 
 	test("renders the active view without a tab strip", async () => {
-		// The central editor hides tabs; files are switched from the left list.
+		// The main editor hides tabs; files are switched from the left list.
 		const panelState: PanelState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
@@ -161,7 +161,7 @@ describe("CentralPanel", () => {
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
+				<MainArea
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
@@ -191,7 +191,7 @@ describe("CentralPanel", () => {
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
+				<MainArea
 					panel={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}

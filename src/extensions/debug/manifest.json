@@ -4,5 +4,5 @@
 	"name": "Debug",
 	"description": "Compare local and remote query results and capture reproductions.",
 	"entry": "./index.js",
-	"placement": ["left", "right", "central"]
+	"placement": ["left", "right", "main"]
 }

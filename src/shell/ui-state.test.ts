@@ -15,19 +15,19 @@ describe("coerceAtelierUiState", () => {
 			FILES_EXTENSION_KIND,
 		]);
 		expect(state.panels.left.activeInstance).toBe("files-default");
-		expect(state.panels.central.views).toEqual([]);
-		expect(state.layout?.sizes).toEqual({ left: 0, central: 100, right: 0 });
+		expect(state.panels.main.views).toEqual([]);
+		expect(state.layout?.sizes).toEqual({ left: 0, main: 100, right: 0 });
 	});
 
 	test("drops a duplicated instance id, keeping the first panel's view", () => {
 		const persistedState: AtelierUiState = {
-			focusedPanel: "central",
+			focusedPanel: "main",
 			panels: {
 				left: {
 					views: [{ instance: "atelier_history-1", kind: "atelier_history" }],
 					activeInstance: "atelier_history-1",
 				},
-				central: { views: [], activeInstance: null },
+				main: { views: [], activeInstance: null },
 				right: {
 					views: [{ instance: "atelier_history-1", kind: "atelier_history" }],
 					activeInstance: "atelier_history-1",
@@ -51,10 +51,10 @@ describe("coerceAtelierUiState", () => {
 
 	test("seeds History into a right panel persisted with no views", () => {
 		const persistedState: AtelierUiState = {
-			focusedPanel: "central",
+			focusedPanel: "main",
 			panels: {
 				left: DEFAULT_ATELIER_UI_STATE.panels.left,
-				central: { views: [], activeInstance: null },
+				main: { views: [], activeInstance: null },
 				right: { views: [], activeInstance: null },
 			},
 			layout: DEFAULT_ATELIER_UI_STATE.layout,
@@ -70,10 +70,10 @@ describe("coerceAtelierUiState", () => {
 
 	test("keeps a right panel that already holds views", () => {
 		const persistedState: AtelierUiState = {
-			focusedPanel: "central",
+			focusedPanel: "main",
 			panels: {
 				left: DEFAULT_ATELIER_UI_STATE.panels.left,
-				central: { views: [], activeInstance: null },
+				main: { views: [], activeInstance: null },
 				right: {
 					views: [{ instance: "sql-right", kind: "sql_explorer" }],
 					activeInstance: "sql-right",
@@ -98,7 +98,7 @@ describe("coerceAtelierUiState", () => {
 					views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
 					activeInstance: "files-left",
 				},
-				central: { views: [], activeInstance: null },
+				main: { views: [], activeInstance: null },
 				right: { views: [], activeInstance: null },
 			},
 			layout: DEFAULT_ATELIER_UI_STATE.layout,
@@ -117,15 +117,36 @@ describe("createInitialAtelierUiState", () => {
 	test("opens requested side panels only for the fresh layout", () => {
 		expect(createInitialAtelierUiState(["right"]).layout?.sizes).toEqual({
 			left: 0,
-			central: 80,
+			main: 80,
 			right: 20,
 		});
 		expect(
 			createInitialAtelierUiState(["left", "right"]).layout?.sizes,
 		).toEqual({
 			left: 20,
-			central: 60,
+			main: 60,
 			right: 20,
 		});
 	});
+});
+
+test("a layout stored before the rename still opens where it was left", () => {
+	const stored = {
+		focusedPanel: "central",
+		panels: {
+			left: { views: [], activeInstance: null },
+			central: {
+				views: [{ instance: "doc-1", extensionId: "atelier_file" }],
+				activeInstance: "doc-1",
+			},
+			right: { views: [], activeInstance: null },
+		},
+		layout: { sizes: { left: 20, central: 55, right: 25 } },
+	};
+
+	const coerced = coerceAtelierUiState(stored);
+
+	expect(coerced.focusedPanel).toBe("main");
+	expect(coerced.panels.main.activeInstance).toBe("doc-1");
+	expect(coerced.layout?.sizes?.main).toBe(55);
 });

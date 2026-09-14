@@ -33,7 +33,7 @@ const TabIcon = ({ className }: { className?: string }) => (
 const homeRegistration: AtelierExtensionRegistration = {
 	id: HOME_EXTENSION_ID,
 	name: "Home",
-	placement: ["central"],
+	placement: ["main"],
 	hidden: true,
 	icon: TabIcon,
 	Component: () => <div data-testid="test-home-view">workspace home</div>,
@@ -41,7 +41,7 @@ const homeRegistration: AtelierExtensionRegistration = {
 const dirRegistration: AtelierExtensionRegistration = {
 	id: DIR_EXTENSION_ID,
 	name: "Folder",
-	placement: ["central"],
+	placement: ["main"],
 	hidden: true,
 	multiInstance: true,
 	icon: TabIcon,
@@ -79,7 +79,7 @@ async function renderTabbedShell(
 		onEvent,
 		extensions,
 		sessionStateStore,
-		centralPanel: {
+		mainArea: {
 			home: { extensionId: HOME_EXTENSION_ID },
 		},
 	});
@@ -133,26 +133,26 @@ async function renderTabbedShell(
 	};
 }
 
-const centralTabButtons = () =>
+const mainTabButtons = () =>
 	Array.from(
 		document.querySelectorAll<HTMLButtonElement>(
-			'header [data-slot="central-tab-strip"] button[data-view-instance]',
+			'header [data-slot="main-tab-strip"] button[data-view-instance]',
 		),
 	);
 
-const centralTabLabels = () =>
-	centralTabButtons().map((button) =>
+const mainTabLabels = () =>
+	mainTabButtons().map((button) =>
 		button.dataset.viewKey === HOME_EXTENSION_ID
 			? "«home»"
 			: (button.textContent ?? ""),
 	);
 
-describe("central tabs with a pinned home", () => {
+describe("main tabs with a pinned home", () => {
 	test("mounts the pinned home as the only tab and shows its view", async () => {
 		const shell = await renderTabbedShell();
 		try {
 			expect(await screen.findByTestId("test-home-view")).toBeVisible();
-			const tabs = centralTabButtons();
+			const tabs = mainTabButtons();
 			expect(tabs).toHaveLength(1);
 			expect(tabs[0]?.dataset.viewKey).toBe(HOME_EXTENSION_ID);
 			expect(tabs[0]?.dataset.pinned).toBe("true");
@@ -174,7 +174,7 @@ describe("central tabs with a pinned home", () => {
 			await waitFor(() => {
 				expect(screen.getByRole("heading", { name: "One" })).toBeVisible();
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
 
 			await act(async () => {
 				await shell.atelier.documents.open("/two.md");
@@ -183,7 +183,7 @@ describe("central tabs with a pinned home", () => {
 				expect(screen.getByRole("heading", { name: "Two" })).toBeVisible(),
 			);
 			// Still one content tab: the label followed the location.
-			expect(centralTabLabels()).toEqual(["«home»", "two.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "two.md"]);
 		} finally {
 			await shell.cleanup();
 		}
@@ -195,7 +195,7 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.open("/one.md");
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
 
 			await act(async () => {
 				await qb(shell.lix)
@@ -206,19 +206,19 @@ describe("central tabs with a pinned home", () => {
 			});
 
 			await waitFor(() => {
-				expect(centralTabLabels()).toEqual(["«home»", "renamed.md"]);
+				expect(mainTabLabels()).toEqual(["«home»", "renamed.md"]);
 			});
 			await waitFor(() => {
 				expect(
 					shell.events
-						.filter((event) => event.type === "central_view_activated")
+						.filter((event) => event.type === "main_view_activated")
 						.at(-1),
 				).toMatchObject({
 					filePath: "/renamed.md",
 				});
 			});
 			expect(
-				shell.sessionStateStore.getSnapshot()?.panels.central.views[1]?.state,
+				shell.sessionStateStore.getSnapshot()?.panels.main.views[1]?.state,
 			).toMatchObject({
 				fileId: fakeUuid("one"),
 				filePath: "/renamed.md",
@@ -233,18 +233,18 @@ describe("central tabs with a pinned home", () => {
 					.execute();
 			});
 			await waitFor(() => {
-				expect(centralTabLabels()).toEqual(["«home»", "renamed.csv"]);
-				const central = shell.sessionStateStore.getSnapshot()?.panels.central;
+				expect(mainTabLabels()).toEqual(["«home»", "renamed.csv"]);
+				const main = shell.sessionStateStore.getSnapshot()?.panels.main;
 				const instance = fileExtensionInstanceForKind(
 					CSV_EXTENSION_KIND,
 					fakeUuid("one"),
 				);
-				expect(central?.views[1]).toMatchObject({
+				expect(main?.views[1]).toMatchObject({
 					kind: CSV_EXTENSION_KIND,
 					instance,
 					state: { filePath: "/renamed.csv" },
 				});
-				expect(central?.activeInstance).toBe(instance);
+				expect(main?.activeInstance).toBe(instance);
 			});
 		} finally {
 			await shell.cleanup();
@@ -256,7 +256,7 @@ describe("central tabs with a pinned home", () => {
 		try {
 			const homeTab = () =>
 				document.querySelector<HTMLButtonElement>(
-					'header [data-slot="central-tab-strip"] button[data-pinned="true"]',
+					'header [data-slot="main-tab-strip"] button[data-pinned="true"]',
 				);
 			const homeLabel = () =>
 				homeTab()?.querySelector<HTMLElement>(
@@ -342,14 +342,14 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.open("/two.md", { newTab: true });
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
 
 			// Reopening an already-open path activates its tab instead of
 			// replacing the active one.
 			await act(async () => {
 				await shell.atelier.documents.open("/one.md");
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
 			await waitFor(() => {
 				expect(screen.getByRole("heading", { name: "One" })).toBeVisible();
 			});
@@ -359,7 +359,7 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.open("/three.md", { newTab: true });
 			});
-			expect(centralTabLabels()).toEqual([
+			expect(mainTabLabels()).toEqual([
 				"«home»",
 				"one.md",
 				"two.md",
@@ -376,11 +376,11 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.open("/one.md");
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
 			await act(async () => {
 				await shell.atelier.documents.closeActive();
 			});
-			expect(centralTabLabels()).toEqual(["«home»"]);
+			expect(mainTabLabels()).toEqual(["«home»"]);
 			expect(await screen.findByTestId("test-home-view")).toBeVisible();
 		} finally {
 			await shell.cleanup();
@@ -397,13 +397,13 @@ describe("central tabs with a pinned home", () => {
 				});
 			});
 			expect(await screen.findByTestId("test-dir-view")).toBeVisible();
-			expect(centralTabLabels()).toEqual(["«home»", "assets"]);
+			expect(mainTabLabels()).toEqual(["«home»", "assets"]);
 
 			// A document opened from the folder replaces it in place.
 			await act(async () => {
 				await shell.atelier.documents.open("/one.md");
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
 
 			// Navigating back to the folder (same identity) replaces in place.
 			await act(async () => {
@@ -412,7 +412,7 @@ describe("central tabs with a pinned home", () => {
 					instanceId: `${DIR_EXTENSION_ID}:/assets`,
 				});
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "assets"]);
+			expect(mainTabLabels()).toEqual(["«home»", "assets"]);
 		} finally {
 			await shell.cleanup();
 		}
@@ -427,7 +427,7 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.open("/two.md", { newTab: true });
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "one.md", "two.md"]);
 			// Activate the middle tab, then close it.
 			await act(async () => {
 				await shell.atelier.documents.open("/one.md");
@@ -435,7 +435,7 @@ describe("central tabs with a pinned home", () => {
 			await act(async () => {
 				await shell.atelier.documents.closeActive();
 			});
-			expect(centralTabLabels()).toEqual(["«home»", "two.md"]);
+			expect(mainTabLabels()).toEqual(["«home»", "two.md"]);
 			await waitFor(() =>
 				expect(screen.getByRole("heading", { name: "Two" })).toBeVisible(),
 			);
@@ -482,7 +482,7 @@ describe("central tabs with a pinned home", () => {
 			);
 			await expect(
 				shell.atelier.views.open(DIR_EXTENSION_ID, {
-					instanceId: "central-home",
+					instanceId: "main-home",
 				}),
 			).rejects.toThrow(/reserved/);
 		} finally {
@@ -493,7 +493,7 @@ describe("central tabs with a pinned home", () => {
 	test("a pinned home keeps Files in the sidebar instead of dropping it", async () => {
 		const shell = await renderTabbedShell();
 		try {
-			// A pinned home owns the central landing; the Files view must
+			// A pinned home owns the main landing; the Files view must
 			// survive in the left panel rather than vanish.
 			await waitFor(() => {
 				const snapshot = shell.sessionStateStore.getSnapshot();
@@ -503,7 +503,7 @@ describe("central tabs with a pinned home", () => {
 					),
 				).toBe(true);
 				expect(
-					snapshot?.panels.central.views.some(
+					snapshot?.panels.main.views.some(
 						(view) => view.kind === "atelier_files",
 					),
 				).toBe(false);
@@ -522,7 +522,7 @@ describe("central tabs with a pinned home", () => {
 			fireEvent.pointerDown(addView, { button: 0, ctrlKey: false });
 
 			// The + is the shared view menu: built-in repository views with
-			// central placement are offered; side-panel-only views are not.
+			// main placement are offered; side-panel-only views are not.
 			const filesItem = await screen.findByRole("menuitem", { name: "Files" });
 			expect(
 				screen.getByRole("menuitem", { name: "SQL Explorer" }),
@@ -535,14 +535,14 @@ describe("central tabs with a pinned home", () => {
 			fireEvent.click(filesItem);
 			await waitFor(() => {
 				expect(
-					centralTabButtons().some(
+					mainTabButtons().some(
 						(tab) => tab.dataset.viewKey === "atelier_files",
 					),
 				).toBe(true);
 			});
 			// Close-focus lands on the new tab, not back on the "+" (which would
 			// paint a stray focus ring there).
-			const addedTab = centralTabButtons().find(
+			const addedTab = mainTabButtons().find(
 				(tab) => tab.dataset.viewKey === "atelier_files",
 			);
 			await waitFor(() => expect(addedTab).toHaveFocus());
@@ -585,7 +585,7 @@ describe("central tabs with a pinned home", () => {
 		let newTab: (() => void) | undefined;
 		const shell = await renderTabbedShell({
 			slots: {
-				centralTabStrip: (context) => {
+				mainTabStrip: (context) => {
 					newTab = context.newTab;
 					return (
 						<div data-testid="host-strip">
@@ -647,14 +647,14 @@ describe("central tabs with a pinned home", () => {
 		}
 	});
 
-	test("emits central_view_activated for every active-view change", async () => {
+	test("emits main_view_activated for every active-view change", async () => {
 		const shell = await renderTabbedShell();
 		try {
 			await waitFor(() => {
 				expect(
 					shell.events.some(
 						(event) =>
-							event.type === "central_view_activated" &&
+							event.type === "main_view_activated" &&
 							event.viewKind === HOME_EXTENSION_ID,
 					),
 				).toBe(true);
@@ -666,7 +666,7 @@ describe("central tabs with a pinned home", () => {
 				expect(
 					shell.events.some(
 						(event) =>
-							event.type === "central_view_activated" &&
+							event.type === "main_view_activated" &&
 							event.filePath === "/one.md",
 					),
 				).toBe(true);
@@ -676,7 +676,7 @@ describe("central tabs with a pinned home", () => {
 			});
 			await waitFor(() => {
 				const activations = shell.events.filter(
-					(event) => event.type === "central_view_activated",
+					(event) => event.type === "main_view_activated",
 				);
 				expect(activations.at(-1)).toMatchObject({
 					viewKind: HOME_EXTENSION_ID,

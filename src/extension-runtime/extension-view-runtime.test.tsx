@@ -40,7 +40,7 @@ describe("useExtensionViewRuntime", () => {
 		const { result, rerender } = renderHook(useExtensionViewRuntime, {
 			initialProps: {
 				panel,
-				panelSide: "central" as const,
+				panelSide: "main" as const,
 				isFocused: true,
 				host,
 			},
@@ -55,7 +55,7 @@ describe("useExtensionViewRuntime", () => {
 
 		rerender({
 			panel: { ...panel, activeInstance: "beta" },
-			panelSide: "central" as const,
+			panelSide: "main" as const,
 			isFocused: true,
 			host,
 		});
@@ -90,7 +90,7 @@ describe("useExtensionViewRuntime", () => {
 		const { result } = renderHook(useExtensionViewRuntime, {
 			initialProps: {
 				panel,
-				panelSide: "central" as const,
+				panelSide: "main" as const,
 				isFocused: true,
 				host,
 			},

@@ -35,8 +35,8 @@ export function reconcileCurrentFileViews(args: {
 			args.currentFilePathsById,
 			args.resolveCurrentFileView,
 		),
-		central: reconcilePanel(
-			args.panels.central,
+		main: reconcilePanel(
+			args.panels.main,
 			args.currentFileIds,
 			args.currentFilePathsById,
 			args.resolveCurrentFileView,
@@ -50,7 +50,7 @@ export function reconcileCurrentFileViews(args: {
 	};
 	const changed =
 		panels.left !== args.panels.left ||
-		panels.central !== args.panels.central ||
+		panels.main !== args.panels.main ||
 		panels.right !== args.panels.right;
 	return changed ? panels : args.panels;
 }

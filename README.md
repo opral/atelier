@@ -1,6 +1,29 @@
 # Atelier
 
-Atelier is an embeddable React workspace for [Lix](https://github.com/opral/lix): files, editors, history, and review in one component.
+**Atelier is a UI toolkit for [Lix](https://github.com/opral/lix): views over a lix, and a shell that arranges them.**
+
+A view shows lix data — a file, the history, a SQL console. Extensions are how
+you add your own. Views mount in an area of the shell, or render on their own
+as HTML for a surface that has no shell in it: a card in a chat, a mail, a page
+rendered on a server.
+
+The split is the one an operating system makes between a toolkit and a shell:
+Atelier ships both, and the shell is *one* arrangement, not the definition. A
+host can replace any bundled view by id, or build its own shell from the views.
+
+Three rules, for anyone adding to this package:
+
+- **The unit is a view, never a file type.** A capability that only works for
+  Markdown is a bug in the capability, not a new export.
+- **A view declares which modes it has.** Mounted (React, interactive) and
+  static (HTML, no DOM) are both optional; a canvas has no static mode, and
+  saying so is part of its contract.
+- **Bundled views are not privileged.** They use the same extension API a host
+  uses (see `ATELIER_BUILTIN_EXTENSION_IDS` for replacing one).
+
+Atelier does not own the Lix handle, the routing, or the product's chrome.
+
+## Mounted
 
 ```tsx
 import { Atelier } from "@opral/atelier";
@@ -10,6 +33,40 @@ import "@opral/atelier/style.css";
 ```
 
 The host owns the Lix handle and closes it after unmount. Atelier owns its UI, subscriptions, extension loading, and editor lifecycle.
+
+## Static
+
+```ts
+import { toHtml } from "@opral/atelier/render";
+
+const view = toHtml({ path: "/README.md", before, after }, { maxBytes: 24_000 });
+if ("html" in view) send(view.html); // else view.skipped says why not
+```
+
+Bytes in, HTML out, for Markdown and CSV today. Which side is missing says what
+happened: no `before` is a file that was created, no `after` one that was
+deleted. The result carries `kind` and `counts` in `lix_diff`'s own vocabulary
+(`added` / `modified` / `removed`, counted in entities), plus `hidden` for what
+a budget left out. A file type with no static view answers `skipped`, never an
+exception.
+
+Pair the HTML with `@opral/atelier/render.css` inside an element with class
+`atelier-render`, or pass `document: true` for a complete file with the styles
+inlined. The palette is `--atelier-*` custom properties generated from the
+app's theme: define your own on any ancestor and the render follows, with no
+theming API.
+
+## Entries
+
+| entry | what it is | guarantees |
+| --- | --- | --- |
+| `@opral/atelier` | the shell, and the extension API | React |
+| `@opral/atelier/render` | views, rendered without a shell | no React, no DOM, closure under 700 kB — enforced by `scripts/render-entry.test.mjs` |
+| `@opral/atelier/render.css` | the static views' stylesheet | generated tokens, no literals in rules |
+| `@opral/atelier/style.css` | the shell's stylesheet | |
+| `@opral/atelier/file-icons` | path → icon | |
+| `@opral/atelier/state-adapters` | the shell's persistence ports | |
+| `@opral/atelier/dev-tools` | tools for working on Atelier | not for shipping |
 
 ## Server rendering
 

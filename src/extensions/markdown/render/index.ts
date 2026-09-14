@@ -1,17 +1,14 @@
 import type { JSONContent } from "@tiptap/core";
-import { parseMarkdown } from "./extensions/markdown/editor/markdown";
-import { astToTiptapDoc } from "./extensions/markdown/editor/tiptap-markdown-bridge/mdwc-to-tiptap";
-import { buildMarkdownReviewDocument } from "./extensions/markdown/review/build-review-document";
-import { pruneToChanges } from "./markdown-diff/prune";
+import { parseMarkdown } from "../editor/markdown";
+import { astToTiptapDoc } from "../editor/tiptap-markdown-bridge/mdwc-to-tiptap";
+import { buildMarkdownReviewDocument } from "../review/build-review-document";
+import { pruneToChanges } from "./prune";
 import {
 	carriesChange,
 	countMarkdownDiff,
 	renderReviewHtml,
 	type MarkdownDiffStats,
-} from "./markdown-diff/render-review-html";
-import { MARKDOWN_DIFF_CSS } from "./markdown-diff/styles";
-
-export { MARKDOWN_DIFF_CSS };
+} from "./html";
 export type { MarkdownDiffStats };
 
 export type MarkdownDiffOptions = {
@@ -48,7 +45,7 @@ export type MarkdownDiff = {
  * This is the review the app shows — the same document builder, the same
  * marks, the same palette — written out for a surface that has no editor in
  * it: a card in a chat, a mail, a page rendered on a server. Pair the HTML
- * with {@link MARKDOWN_DIFF_CSS} and put it inside `<div class="md-diff">`.
+ * with the render stylesheet and put it inside `<div class="md-diff">`.
  */
 export function renderMarkdownDiff(options: MarkdownDiffOptions): MarkdownDiff {
 	const review = buildMarkdownReviewDocument({

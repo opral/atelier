@@ -1,34 +1,18 @@
 /**
- * The diff card's stylesheet, self-contained.
+ * The Markdown view's static styles.
  *
- * The card renders inside someone else's page — a chat client's frame — where
- * none of Atelier's tokens or resets exist, so the values are literal here and
- * every rule is scoped under `.md-diff`. The palette is the app's: the same
- * warm neutrals, the same added/removed grounds, the same dot-hybrid glyph
- * colours, so a change reads the same in the thread as it does in the app.
+ * A render lands inside someone else's page, where none of Atelier's stylesheet
+ * exists, so every rule is scoped under `.md-diff` and every value comes from
+ * an `--atelier-*` token. The tokens themselves are generated from the app's
+ * theme, so the two surfaces cannot drift, and a host that defines its own
+ * values retints the render with no API at all.
  */
-export const MARKDOWN_DIFF_CSS = `
+export const MARKDOWN_CSS = `
 .md-diff {
-	--md-diff-ink: rgb(28, 25, 23);
-	--md-diff-ink-2: rgb(68, 64, 60);
-	--md-diff-ink-3: rgb(120, 113, 108);
-	--md-diff-ink-4: rgb(168, 162, 158);
-	--md-diff-rule: rgb(236, 232, 226);
-	--md-diff-rule-soft: rgb(244, 241, 236);
-	--md-diff-panel: #fff;
-	--md-diff-added-bg: rgb(237, 250, 242);
-	--md-diff-added-ink: rgb(22, 101, 52);
-	--md-diff-added-edge: rgb(21, 128, 61);
-	--md-diff-removed-bg: rgb(254, 243, 243);
-	--md-diff-removed-ink: rgb(153, 27, 27);
-	--md-diff-removed-edge: rgb(185, 28, 28);
-	--md-diff-brand: rgb(234, 88, 12);
-	--md-diff-action: rgb(194, 65, 12);
-	--md-diff-modified-bg: rgb(251, 239, 228);
-	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	font-family: var(--atelier-font-sans);
 	font-size: 14px;
 	line-height: 1.62;
-	color: var(--md-diff-ink);
+	color: var(--atelier-ink);
 	overflow-wrap: anywhere;
 }
 
@@ -71,13 +55,13 @@ export const MARKDOWN_DIFF_CSS = `
 	top: 5px;
 	width: 13px;
 	height: 13px;
-	border: 1.5px solid var(--md-diff-ink-3);
+	border: 1.5px solid var(--atelier-ink-subtle);
 	border-radius: 3px;
 	box-sizing: border-box;
 }
 .md-diff li[data-task="x"]::before {
-	border-color: var(--md-diff-action);
-	background: var(--md-diff-action);
+	border-color: var(--atelier-action);
+	background: var(--atelier-action);
 }
 .md-diff li[data-task="x"]::after {
 	content: "";
@@ -86,16 +70,16 @@ export const MARKDOWN_DIFF_CSS = `
 	top: 8px;
 	width: 6px;
 	height: 3px;
-	border: 1.6px solid #fff;
+	border: 1.6px solid var(--atelier-bg);
 	border-top: 0;
 	border-right: 0;
 	transform: rotate(-45deg);
 }
 /* A done task reads as done, as in the app: dimmed, struck, box filled. */
 .md-diff li[data-task="x"]:not([data-review-status]) > p {
-	color: var(--md-diff-ink-3);
+	color: var(--atelier-ink-subtle);
 	text-decoration: line-through;
-	text-decoration-color: rgba(120, 113, 108, 0.6);
+	text-decoration-color: var(--atelier-ink-subtle);
 }
 /* A line the diff wrote into keeps the dimming and drops the rule: a
    descendant cannot undo an inherited strikethrough, and an added word
@@ -117,18 +101,18 @@ export const MARKDOWN_DIFF_CSS = `
 	margin: 0 0 8px;
 	padding: 10px 12px;
 	border-radius: 8px;
-	background: rgb(250, 250, 249);
-	border: 1px solid var(--md-diff-rule-soft);
+	background: var(--atelier-bg-muted);
+	border: 1px solid var(--atelier-border-subtle);
 	overflow-x: auto;
 }
 .md-diff pre, .md-diff code {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-family: var(--atelier-font-mono);
 	font-size: 12.5px;
 }
 .md-diff :not(pre) > code {
 	padding: 1px 4px;
 	border-radius: 4px;
-	background: color-mix(in srgb, rgb(120, 113, 108) 15%, transparent);
+	background: color-mix(in srgb, var(--atelier-ink-subtle) 15%, transparent);
 }
 .md-diff pre code {
 	background: none;
@@ -136,8 +120,8 @@ export const MARKDOWN_DIFF_CSS = `
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
-.md-diff .md-diff-raw { color: var(--md-diff-ink-3); white-space: pre-wrap; }
-.md-diff .md-diff-missing { color: var(--md-diff-ink-4); font-style: italic; }
+.md-diff .md-diff-raw { color: var(--atelier-ink-subtle); white-space: pre-wrap; }
+.md-diff .md-diff-missing { color: var(--atelier-ink-subtle); font-style: italic; }
 
 /* An image, named rather than loaded. */
 .md-diff .md-diff-image {
@@ -145,16 +129,16 @@ export const MARKDOWN_DIFF_CSS = `
 	align-items: baseline;
 	gap: 5px;
 	padding: 1px 7px 1px 6px;
-	border: 1px solid var(--md-diff-rule);
+	border: 1px solid var(--atelier-border);
 	border-radius: 6px;
-	color: var(--md-diff-ink-2);
+	color: var(--atelier-ink-muted);
 	font-size: 13px;
 }
 .md-diff .md-diff-image::before {
 	content: "▨";
-	color: var(--md-diff-ink-4);
+	color: var(--atelier-ink-subtle);
 }
-.md-diff .md-diff-image-src { color: var(--md-diff-ink-4); font-size: 12px; }
+.md-diff .md-diff-image-src { color: var(--atelier-ink-subtle); font-size: 12px; }
 
 .md-diff a {
 	color: inherit;
@@ -163,7 +147,7 @@ export const MARKDOWN_DIFF_CSS = `
 	text-underline-offset: 2px;
 }
 .md-diff img { max-width: 100%; height: auto; border-radius: 6px; }
-.md-diff hr { margin: 12px 0; border: 0; border-top: 1px solid var(--md-diff-rule); }
+.md-diff hr { margin: 12px 0; border: 0; border-top: 1px solid var(--atelier-border); }
 
 .md-diff table {
 	display: block;
@@ -171,7 +155,7 @@ export const MARKDOWN_DIFF_CSS = `
 	min-width: 100%;
 	max-width: 100%;
 	margin: 0 0 8px;
-	border: 1px solid var(--md-diff-rule);
+	border: 1px solid var(--atelier-border);
 	border-radius: 8px;
 	border-collapse: collapse;
 	overflow-x: auto;
@@ -179,12 +163,12 @@ export const MARKDOWN_DIFF_CSS = `
 .md-diff table > tbody { display: table; width: 100%; }
 .md-diff th, .md-diff td {
 	padding: 7px 9px;
-	border-bottom: 1px solid var(--md-diff-rule-soft);
+	border-bottom: 1px solid var(--atelier-border-subtle);
 	text-align: left;
 	vertical-align: top;
 }
 .md-diff tr:first-child > th, .md-diff tr:first-child > td {
-	background: rgb(250, 250, 249);
+	background: var(--atelier-bg-muted);
 }
 .md-diff tr:last-child > th, .md-diff tr:last-child > td { border-bottom: 0; }
 .md-diff th { font-weight: 600; }
@@ -194,8 +178,8 @@ export const MARKDOWN_DIFF_CSS = `
 /* ── The change itself ───────────────────────────────────────────────── */
 
 .md-diff [data-review-status="added"] {
-	background: var(--md-diff-added-bg);
-	color: var(--md-diff-added-ink);
+	background: var(--atelier-added-bg);
+	color: var(--atelier-added-ink);
 	border-radius: 4px;
 	/* Nothing struck through: an arriving word is not a leaving one, whatever
 	   decoration the line around it carries. */
@@ -205,11 +189,11 @@ export const MARKDOWN_DIFF_CSS = `
 }
 
 .md-diff [data-review-status="removed"] {
-	background: var(--md-diff-removed-bg);
-	color: var(--md-diff-removed-ink);
+	background: var(--atelier-removed-bg);
+	color: var(--atelier-removed-ink);
 	border-radius: 4px;
 	text-decoration: line-through;
-	text-decoration-color: var(--md-diff-removed-edge);
+	text-decoration-color: var(--atelier-removed-edge);
 	box-decoration-break: clone;
 	-webkit-box-decoration-break: clone;
 }
@@ -222,7 +206,7 @@ export const MARKDOWN_DIFF_CSS = `
    colour of the change. */
 .md-diff [data-review-status] code { background: none; color: inherit; }
 
-.md-diff [data-review-status="modified"] { background: var(--md-diff-modified-bg); border-radius: 4px; }
+.md-diff [data-review-status="modified"] { background: var(--atelier-modified-bg); border-radius: 4px; }
 
 /* Block-level marks take the row, so the colour reads as the line's. */
 .md-diff p[data-review-status],
@@ -240,14 +224,14 @@ export const MARKDOWN_DIFF_CSS = `
 /* A code block keeps its own inset and its own ground; the change shows on
    the edge, where it does not turn code into something else. */
 .md-diff pre[data-review-status] {
-	background: rgb(250, 250, 249);
-	box-shadow: inset 3px 0 0 var(--md-diff-brand);
+	background: var(--atelier-bg-muted);
+	box-shadow: inset 3px 0 0 var(--atelier-accent);
 }
 .md-diff pre[data-review-status="added"] {
-	box-shadow: inset 3px 0 0 var(--md-diff-added-edge);
+	box-shadow: inset 3px 0 0 var(--atelier-added-edge);
 }
 .md-diff pre[data-review-status="removed"] {
-	box-shadow: inset 3px 0 0 var(--md-diff-removed-edge);
+	box-shadow: inset 3px 0 0 var(--atelier-removed-edge);
 }
 .md-diff li[data-task="x"][data-review-status="added"]::before,
 .md-diff li[data-task="x"][data-review-status="removed"]::before {
@@ -261,11 +245,11 @@ export const MARKDOWN_DIFF_CSS = `
 	display: block;
 	margin: 4px 0;
 	padding: 2px 0;
-	color: var(--md-diff-ink-3);
+	color: var(--atelier-ink-subtle);
 	font-size: 12px;
 	list-style: none;
 }
 .md-diff li.md-diff-gap { margin-left: -22px; }
 .md-diff tr.md-diff-gap { display: table-row; }
-.md-diff tr.md-diff-gap > td { color: var(--md-diff-ink-3); font-size: 12px; }
+.md-diff tr.md-diff-gap > td { color: var(--atelier-ink-subtle); font-size: 12px; }
 `;

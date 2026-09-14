@@ -78,8 +78,8 @@ describe("selectNewFileDraftHandler", () => {
 
 	test("ignores inactive views and falls back in panel order", () => {
 		const inactiveCentral = {
-			panelSide: "central" as const,
-			viewInstance: "files-central",
+			panelSide: "main" as const,
+			viewInstance: "files-main",
 			isActiveView: false,
 			handler: () => {},
 		};
@@ -90,9 +90,9 @@ describe("selectNewFileDraftHandler", () => {
 			handler: () => {},
 		};
 
-		expect(selectNewFileDraftHandler([inactiveCentral, left], "central")).toBe(
+		expect(selectNewFileDraftHandler([inactiveCentral, left], "main")).toBe(
 			left,
 		);
-		expect(selectNewFileDraftHandler([inactiveCentral], "central")).toBeNull();
+		expect(selectNewFileDraftHandler([inactiveCentral], "main")).toBeNull();
 	});
 });

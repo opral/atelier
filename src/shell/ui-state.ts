@@ -18,10 +18,10 @@ import {
  *   focusedPanel: "left",
  *   panels: {
  *     left: { views: [...], activeInstance: "files-1" },
- *     central: { views: [], activeInstance: null },
+ *     main: { views: [], activeInstance: null },
  *     right: { views: [], activeInstance: null },
  *   },
- *   layout: { sizes: { left: 20, central: 60, right: 20 } },
+ *   layout: { sizes: { left: 20, main: 60, right: 20 } },
  * };
  */
 export type AtelierUiState = {
@@ -62,13 +62,13 @@ export type AtelierUserPreferencesV1 = {
  * Default UI state used when no session snapshot exists.
  */
 export type PanelLayoutSizes = Record<PanelSide, number>;
-export type DefaultOpenPanel = Exclude<PanelSide, "central">;
+export type DefaultOpenPanel = Exclude<PanelSide, "main">;
 
 // A fresh workspace opens on the centered, full-width Files view. Side panels
 // remain available from the top-bar toggles.
 const DEFAULT_LAYOUT_SIZES: PanelLayoutSizes = {
 	left: 0,
-	central: 100,
+	main: 100,
 	right: 0,
 };
 
@@ -85,13 +85,13 @@ function withDefaultRightView(panel: PanelState): PanelState {
 }
 
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
-	focusedPanel: "central",
+	focusedPanel: "main",
 	panels: {
 		left: {
 			views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-default",
 		},
-		central: { views: [], activeInstance: null },
+		main: { views: [], activeInstance: null },
 		right: DEFAULT_RIGHT_PANEL_STATE,
 	},
 	layout: { sizes: { ...DEFAULT_LAYOUT_SIZES } },
@@ -112,7 +112,7 @@ export function createInitialAtelierUiState(
 		if (sizes[side] > 0) continue;
 		const sideSize = 20;
 		sizes[side] = sideSize;
-		sizes.central = Math.max(30, sizes.central - sideSize);
+		sizes.main = Math.max(30, sizes.main - sideSize);
 	}
 	return {
 		...DEFAULT_ATELIER_UI_STATE,
@@ -120,8 +120,22 @@ export function createInitialAtelierUiState(
 	};
 }
 
+/**
+ * Workspaces stored before the middle area was named "main" carry a
+ * "central" key. Read it once here, so a saved layout survives the rename
+ * rather than silently reverting to the default.
+ */
+function withMainArea(value: unknown): Record<string, unknown> {
+	if (!value || typeof value !== "object") return {};
+	const candidate = { ...(value as Record<string, unknown>) };
+	if (candidate.main === undefined && candidate.central !== undefined)
+		candidate.main = candidate.central;
+	delete candidate.central;
+	return candidate;
+}
+
 function isPanelSide(value: unknown): value is PanelSide {
-	return value === "left" || value === "central" || value === "right";
+	return value === "left" || value === "main" || value === "right";
 }
 
 function isViewInstance(value: unknown): value is PanelState["views"][number] {
@@ -166,22 +180,23 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 	}
 
 	const candidate = raw as Record<string, unknown>;
-	const panelsCandidate =
-		candidate.panels && typeof candidate.panels === "object"
-			? (candidate.panels as Record<string, unknown>)
-			: {};
+	const panelsCandidate = withMainArea(candidate.panels);
 	const layoutCandidate =
 		candidate.layout && typeof candidate.layout === "object"
 			? (candidate.layout as Record<string, unknown>)
 			: {};
+	if (layoutCandidate.sizes)
+		layoutCandidate.sizes = withMainArea(layoutCandidate.sizes);
 
-	const focusedPanel = isPanelSide(candidate.focusedPanel)
-		? candidate.focusedPanel
+	const focused =
+		candidate.focusedPanel === "central" ? "main" : candidate.focusedPanel;
+	const focusedPanel = isPanelSide(focused)
+		? focused
 		: DEFAULT_ATELIER_UI_STATE.focusedPanel;
 
 	// One instance id must appear in one panel: duplicates (from the old
 	// per-load id counter) render as a single view, leaving the other panel's
-	// host empty. First occurrence wins, panel order left → central → right.
+	// host empty. First occurrence wins, panel order left → main → right.
 	const seenInstances = new Set<string>();
 	const dedupePanel = (panel: PanelState): PanelState => {
 		const views = panel.views.filter((view) => {
@@ -208,10 +223,10 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 					DEFAULT_ATELIER_UI_STATE.panels.left,
 				),
 			),
-			central: dedupePanel(
+			main: dedupePanel(
 				coercePanelState(
-					panelsCandidate.central,
-					DEFAULT_ATELIER_UI_STATE.panels.central,
+					panelsCandidate.main,
+					DEFAULT_ATELIER_UI_STATE.panels.main,
 				),
 			),
 			right: withDefaultRightView(
@@ -349,7 +364,7 @@ export function normalizeLayoutSizes(
 ): PanelLayoutSizes {
 	return {
 		left: sizes?.left ?? DEFAULT_LAYOUT_SIZES.left,
-		central: sizes?.central ?? DEFAULT_LAYOUT_SIZES.central,
+		main: sizes?.main ?? DEFAULT_LAYOUT_SIZES.main,
 		right: sizes?.right ?? DEFAULT_LAYOUT_SIZES.right,
 	};
 }

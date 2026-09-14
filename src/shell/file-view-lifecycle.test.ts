@@ -19,7 +19,7 @@ describe("reconcileCurrentFileViews", () => {
 		const result = reconcileCurrentFileViews({
 			panels: {
 				left: EMPTY_PANEL,
-				central: {
+				main: {
 					views: [currentView, missingView],
 					activeInstance: missingView.instance,
 				},
@@ -28,7 +28,7 @@ describe("reconcileCurrentFileViews", () => {
 			currentFileIds: new Set(["file_current"]),
 		});
 
-		expect(result.central).toEqual({
+		expect(result.main).toEqual({
 			views: [currentView],
 			activeInstance: currentView.instance,
 		});
@@ -51,7 +51,7 @@ describe("reconcileCurrentFileViews", () => {
 		};
 		const panels = {
 			left: { views: [nonFileView], activeInstance: nonFileView.instance },
-			central: {
+			main: {
 				views: [historicalView],
 				activeInstance: historicalView.instance,
 			},
@@ -79,7 +79,7 @@ describe("reconcileCurrentFileViews", () => {
 		};
 		const panels = {
 			left: EMPTY_PANEL,
-			central: {
+			main: {
 				views: [currentView],
 				activeInstance: currentView.instance,
 			},
@@ -94,7 +94,7 @@ describe("reconcileCurrentFileViews", () => {
 			]),
 		});
 
-		expect(result.central.views[0]?.state).toEqual({
+		expect(result.main.views[0]?.state).toEqual({
 			fileId: "file_current",
 			filePath: "/project-aurora-launch-plan.md",
 			atelier: { label: "project-aurora-launch-plan.md" },
@@ -111,7 +111,7 @@ describe("reconcileCurrentFileViews", () => {
 		const result = reconcileCurrentFileViews({
 			panels: {
 				left: EMPTY_PANEL,
-				central: {
+				main: {
 					views: [currentView],
 					activeInstance: currentView.instance,
 				},
@@ -125,7 +125,7 @@ describe("reconcileCurrentFileViews", () => {
 			}),
 		});
 
-		expect(result.central.views[0]).toMatchObject({
+		expect(result.main.views[0]).toMatchObject({
 			kind: "atelier_csv",
 			instance: "atelier_csv:file_current",
 			state: {
@@ -134,7 +134,7 @@ describe("reconcileCurrentFileViews", () => {
 				atelier: { label: "notes.csv" },
 			},
 		});
-		expect(result.central.activeInstance).toBe("atelier_csv:file_current");
+		expect(result.main.activeInstance).toBe("atelier_csv:file_current");
 	});
 
 	test("re-evaluates renderers after handlers load and coalesces collisions", () => {
@@ -151,7 +151,7 @@ describe("reconcileCurrentFileViews", () => {
 		const result = reconcileCurrentFileViews({
 			panels: {
 				left: EMPTY_PANEL,
-				central: {
+				main: {
 					views: [fallbackView, installedView],
 					activeInstance: fallbackView.instance,
 				},
@@ -165,13 +165,11 @@ describe("reconcileCurrentFileViews", () => {
 			}),
 		});
 
-		expect(result.central.views).toHaveLength(1);
-		expect(result.central.views[0]).toMatchObject({
+		expect(result.main.views).toHaveLength(1);
+		expect(result.main.views[0]).toMatchObject({
 			kind: "installed_renderer",
 			instance: "installed_renderer:file_current",
 		});
-		expect(result.central.activeInstance).toBe(
-			"installed_renderer:file_current",
-		);
+		expect(result.main.activeInstance).toBe("installed_renderer:file_current");
 	});
 });

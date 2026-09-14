@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { createCentralSlotBehavior } from "./central-slot-behavior";
+import { createCentralSlotBehavior } from "./main-slot-behavior";
 
 const behavior = createCentralSlotBehavior({
 	homeKind: null,
-	centralKinds: new Set(),
+	mainKinds: new Set(),
 });
 
 describe("insertCentralTabView revision identity", () => {

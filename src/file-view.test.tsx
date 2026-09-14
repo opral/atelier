@@ -61,7 +61,7 @@ describe("Atelier file locations", () => {
 			id: "custom",
 			name: "Custom",
 			fileExtensions: ["custom"],
-			placement: ["central"],
+			placement: ["main"],
 			icon: File,
 			Component: function Custom({ atelier }) {
 				useEffect(() => () => dispose(), []);

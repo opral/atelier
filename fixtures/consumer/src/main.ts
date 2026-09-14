@@ -6,7 +6,6 @@ import {
 	type AtelierExtensionRegistration,
 	loadAtelier,
 	type AtelierSlots,
-	type AtelierTopBarProps,
 } from "@opral/atelier";
 import { fileIconUrl } from "@opral/atelier/file-icons";
 import "@opral/atelier/style.css";
@@ -20,9 +19,11 @@ export function mountAtelier(lix: Lix): void {
 		navbarStart: null,
 		navbarEnd: null,
 	} satisfies AtelierSlots;
+	// A host types its slot props off the component, rather than importing a
+	// name per slot.
 	const topBarProps = {
 		"data-host-titlebar": true,
-	} satisfies AtelierTopBarProps;
+	} satisfies NonNullable<AtelierProps["topBarProps"]>;
 	createRoot(element).render(
 		createElement(Atelier, { lix, slots, topBarProps }),
 	);

@@ -91,7 +91,9 @@ export function useTitleDrivenFileRename({
 				AUTO_NAME_STEM.test(parts.stem) ||
 				parts.stem === lastDerivedStemRef.current;
 			if (!tracksTitle) return;
-			const firstBlock = editor.isDestroyed ? null : editor.state.doc.firstChild;
+			const firstBlock = editor.isDestroyed
+				? null
+				: editor.state.doc.firstChild;
 			if (!firstBlock || firstBlock.type.name !== "heading") return;
 			const nextStem = fileNameStemFromTitle(firstBlock.textContent);
 			if (!nextStem || nextStem === parts.stem) return;

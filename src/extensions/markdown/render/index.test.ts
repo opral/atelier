@@ -1,9 +1,6 @@
 import { expect, test } from "vitest";
-import {
-	MARKDOWN_DIFF_CSS,
-	renderMarkdownDiff,
-	renderMarkdownDocument,
-} from "./markdown-diff";
+import { MARKDOWN_CSS } from "../../../render/markdown-css";
+import { renderMarkdownDiff, renderMarkdownDocument } from "./index";
 
 const PLAYBOOK = [
 	"## Sales Experiments",
@@ -39,7 +36,7 @@ test("an addition is marked, counted, and left renderable on its own", () => {
 	// Unchanged neighbours stay plain, so the eye lands on the change.
 	expect(diff.html).toContain('<li data-task=" ">');
 	expect(diff.html).not.toContain("<script");
-	expect(MARKDOWN_DIFF_CSS).toContain('[data-review-status="added"]');
+	expect(MARKDOWN_CSS).toContain('[data-review-status="added"]');
 });
 
 test("a removal keeps the line, struck, where it stood", () => {
@@ -51,7 +48,7 @@ test("a removal keeps the line, struck, where it stood", () => {
 	expect(diff.stats).toEqual({ added: 0, removed: 2, modified: 0 });
 	expect(diff.html).toContain('data-review-status="removed"');
 	expect(diff.html).toContain("AI consultants");
-	expect(MARKDOWN_DIFF_CSS).toContain("line-through");
+	expect(MARKDOWN_CSS).toContain("line-through");
 });
 
 test("an edit inside a line marks the words, not the line", () => {
@@ -178,12 +175,12 @@ test("a checked task keeps its box, and a marked one is not struck twice", () =>
 	expect(diff.html).toContain('data-task="x"');
 	// A done task is struck, as in the app; a word the diff marks inside it
 	// takes its own colour, and an added one is never struck.
-	expect(MARKDOWN_DIFF_CSS).toContain(
+	expect(MARKDOWN_CSS).toContain(
 		'li[data-task="x"]:not([data-review-status]) > p',
 	);
 	// A line the diff wrote into drops the rule, so an added word is not
 	// rendered as a deleted one.
-	expect(MARKDOWN_DIFF_CSS).toContain(":has(> p [data-review-status])");
+	expect(MARKDOWN_CSS).toContain(":has(> p [data-review-status])");
 });
 
 test("an image is named, not fetched, unless the caller asks for the tag", () => {
@@ -199,7 +196,7 @@ test("an image is named, not fetched, unless the caller asks for the tag", () =>
 	expect(diff.html).not.toContain("tracker.example/pixel.gif");
 	expect(diff.html).toContain("The funnel");
 	expect(diff.html).toContain("tracker.example");
-	expect(MARKDOWN_DIFF_CSS).toContain(".md-diff-image");
+	expect(MARKDOWN_CSS).toContain(".md-diff-image");
 
 	// A caller that owns the document can ask for the tag.
 	const embedded = renderMarkdownDiff({

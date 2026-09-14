@@ -35,7 +35,7 @@ import {
 	coerceAtelierUserPreferences,
 	createInitialAtelierUiState,
 } from "./shell/ui-state";
-import { CENTRAL_HOME_INSTANCE } from "./shell/central-slot-behavior";
+import { CENTRAL_HOME_INSTANCE } from "./shell/main-slot-behavior";
 
 /** Prepare the actual Atelier shell and its initially visible extension views. */
 export async function loadAtelier(
@@ -146,12 +146,12 @@ async function prepareAtelierState(
 		path: string;
 	}[];
 	const initial = createInitialAtelierUiState(options.defaultOpenPanels);
-	const central: ExtensionInstance[] = [];
-	const homeId = options.centralPanel?.home?.extensionId;
+	const main: ExtensionInstance[] = [];
+	const homeId = options.mainArea?.home?.extensionId;
 	if (homeId) {
 		if (!registry.extensionMap.has(homeId))
 			throw new Error(`Unknown Atelier home extension: ${homeId}`);
-		central.push({
+		main.push({
 			instance: CENTRAL_HOME_INSTANCE,
 			kind: homeId,
 			isPinned: true,
@@ -180,8 +180,8 @@ async function prepareAtelierState(
 				? { state: location.state as Record<string, unknown> }
 				: {}),
 		};
-	} else if (location.path === "/" && central[0]) {
-		target = central[0];
+	} else if (location.path === "/" && main[0]) {
+		target = main[0];
 	} else {
 		const file = files.find((candidate) => candidate.path === location.path);
 		if (file) {
@@ -215,16 +215,16 @@ async function prepareAtelierState(
 			throw error;
 		}
 	}
-	const existingTarget = central.findIndex(
+	const existingTarget = main.findIndex(
 		(view) => view.instance === target.instance,
 	);
-	if (existingTarget < 0) central.push(target);
-	else central[existingTarget] = target;
+	if (existingTarget < 0) main.push(target);
+	else main[existingTarget] = target;
 	const ui = {
-		focusedPanel: "central" as const,
+		focusedPanel: "main" as const,
 		panels: {
 			...initial.panels,
-			central: { views: central, activeInstance: target.instance },
+			main: { views: main, activeInstance: target.instance },
 		},
 	};
 	const preferences = coerceAtelierUserPreferences({

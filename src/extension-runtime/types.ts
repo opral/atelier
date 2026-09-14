@@ -35,7 +35,7 @@ export interface ExtensionInstance {
 	readonly kind: ExtensionKind;
 	readonly isPending?: boolean;
 	/**
-	 * Pinned views (a configured central home) cannot be closed or dragged
+	 * Pinned views (a configured main home) cannot be closed or dragged
 	 * away, and navigation never replaces them.
 	 */
 	readonly isPinned?: boolean;
@@ -149,4 +149,4 @@ export interface PanelState {
  * @example
  * const side: PanelSide = "left";
  */
-export type PanelSide = "left" | "right" | "central";
+export type PanelSide = "left" | "right" | "main";

@@ -90,7 +90,7 @@ function StatefulMultiInstancePanel() {
 	const nextInstance = React.useRef(2);
 	return (
 		<PanelV2
-			side="central"
+			side="main"
 			panel={panel}
 			isFocused={true}
 			onFocusPanel={vi.fn()}
@@ -305,7 +305,7 @@ describe("PanelV2", () => {
 		sortableMock.mockClear();
 		renderWithinProvider(
 			<PanelV2
-				side="central"
+				side="main"
 				panel={singleSearchPanel}
 				isFocused={false}
 				onFocusPanel={vi.fn()}
@@ -321,8 +321,8 @@ describe("PanelV2", () => {
 				id: "search-1",
 				data: expect.objectContaining({
 					instance: "search-1",
-					panel: "central",
-					fromPanel: "central",
+					panel: "main",
+					fromPanel: "main",
 				}),
 			}),
 		);
@@ -331,7 +331,7 @@ describe("PanelV2", () => {
 	test("renders the add-view button when onAddView is provided", () => {
 		renderWithinProvider(
 			<PanelV2
-				side="central"
+				side="main"
 				panel={singleSearchPanel}
 				isFocused={false}
 				onFocusPanel={vi.fn()}

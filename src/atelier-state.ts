@@ -4,8 +4,8 @@ import type {
 	AtelierJsonValue,
 } from "./extension-api";
 import type {
-	AtelierCentralPanelOptions,
-	AtelierSidePanel,
+	AtelierMainAreaOptions,
+	AtelierSideArea,
 } from "./atelier-instance";
 import type {
 	AtelierSessionUiState,
@@ -68,7 +68,7 @@ export type LoadAtelierOptions = {
 	readonly location?: AtelierLocation;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
 	readonly readOnly?: boolean;
-	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
-	readonly centralPanel?: AtelierCentralPanelOptions;
+	readonly defaultOpenPanels?: readonly AtelierSideArea[];
+	readonly mainArea?: AtelierMainAreaOptions;
 	readonly signal?: AbortSignal;
 };

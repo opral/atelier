@@ -868,7 +868,7 @@ function FilesViewContent({
 						normalizedActiveFilePath?.startsWith(sourcePath)
 					) {
 						void context?.openFile?.({
-							panel: "central",
+							panel: "main",
 							fileId: activeFileId,
 							filePath: remapFilePathInDirectory(
 								normalizedActiveFilePath,
@@ -901,7 +901,7 @@ function FilesViewContent({
 				});
 				if (resolvedFileId) {
 					void context?.openFile?.({
-						panel: "central",
+						panel: "main",
 						fileId: resolvedFileId,
 						filePath: destinationPath,
 						focus: false,
@@ -995,7 +995,7 @@ function FilesViewContent({
 						source: "lix",
 					});
 					void context?.openFile?.({
-						panel: "central",
+						panel: "main",
 						fileId: resolvedId,
 						filePath: path,
 						focus: false,
@@ -1020,7 +1020,7 @@ function FilesViewContent({
 				return;
 			}
 			void context?.openFile?.({
-				panel: "central",
+				panel: "main",
 				fileId,
 				filePath: path,
 				focus: false,
@@ -1296,7 +1296,7 @@ function FilesViewContent({
 
 						if (newFile?.id) {
 							context?.openFile?.({
-								panel: "central",
+								panel: "main",
 								fileId: newFile.id as string,
 								filePath,
 							});
@@ -1313,7 +1313,7 @@ function FilesViewContent({
 	const fileTree = (
 		<FileTree
 			nodes={nodes}
-			variant={context?.panelSide === "central" ? "spacious" : "compact"}
+			variant={context?.panelSide === "main" ? "spacious" : "compact"}
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
 			reviewStatuses={reviewStatuses}
@@ -1342,7 +1342,7 @@ function FilesViewContent({
 	return (
 		<div
 			className={
-				context?.panelSide === "central"
+				context?.panelSide === "main"
 					? "relative flex min-h-0 flex-1 flex-col"
 					: // No horizontal padding: the rows' own 8px padding puts row icons
 						// on the same x as the section label's text (its px-2).
@@ -1353,7 +1353,7 @@ function FilesViewContent({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 		>
-			{context?.panelSide === "central" ? (
+			{context?.panelSide === "main" ? (
 				<div
 					className="flex min-h-0 flex-1 flex-col overflow-hidden"
 					data-testid="files-view-wide"
@@ -1389,7 +1389,7 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{/* Compact New row for side-panel use. */}
-			{context?.panelSide !== "central" && !readOnly ? (
+			{context?.panelSide !== "main" && !readOnly ? (
 				<div
 					className={`transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
 				>
@@ -1419,7 +1419,7 @@ function FilesViewContent({
 					</p>
 				</div>
 			)}
-			{context?.panelSide !== "central" ? (
+			{context?.panelSide !== "main" ? (
 				<div
 					data-testid="files-view-tree-scroll"
 					data-attr="file-tree"

@@ -86,7 +86,7 @@ describe("createAtelier", () => {
 		const preference = (left: number) =>
 			({
 				version: 1,
-				layout: { sizes: { left, central: 50, right: 25 } },
+				layout: { sizes: { left, main: 50, right: 25 } },
 			}) as const;
 
 		const first = store.save(preference(25));
