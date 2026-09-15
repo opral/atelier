@@ -83,6 +83,30 @@ describe("SlashCommandMenu", () => {
 		await waitFor(() => expect(editor.getText()).toBe("🚀"));
 	});
 
+	test("offers a footnote under /foot", async () => {
+		const editor = setup();
+		await act(async () => {
+			editor.commands.insertContent("Claim. /foot");
+		});
+		const option = await screen.findByRole("option", {
+			name: "Footnote: Marker here, note at the end",
+		});
+		expect(option).toBeInTheDocument();
+		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+		await waitFor(() =>
+			expect(
+				editor.view.dom.querySelector("[data-footnote-def='1']"),
+			).not.toBeNull(),
+		);
+		expect(
+			editor.view.dom.querySelector("[data-footnote-ref='1']"),
+		).not.toBeNull();
+		// The slash text is gone, the marker follows the claim, and the caret
+		// writes the note.
+		expect(editor.getText()).not.toContain("/foot");
+		expect(editor.view.dom.querySelector("p")?.textContent).toBe("Claim. [1]");
+	});
+
 	test("handles navigation only for key events from its editor", async () => {
 		const editor = setup();
 		await act(async () => {

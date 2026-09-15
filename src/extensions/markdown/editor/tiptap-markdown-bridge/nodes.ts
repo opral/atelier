@@ -6,7 +6,7 @@ import {
 	type Editor,
 } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { codeLanguageLabel } from "./code-language-label";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
@@ -123,6 +123,15 @@ declare module "@tiptap/core" {
 			setFrontmatter: (value?: string | FrontmatterRecord) => ReturnType;
 			unsetFrontmatter: () => ReturnType;
 		};
+		footnote: {
+			/**
+			 * Puts a marker at the caret and its definition with the others (or
+			 * at the end of the document), and moves the caret into the
+			 * definition to write the note. The label is the smallest number
+			 * not already in use; the author can rename it in the source.
+			 */
+			insertFootnote: () => ReturnType;
+		};
 	}
 }
 
@@ -132,6 +141,36 @@ function footnoteLabel(node: any): string {
 	const label = node?.attrs?.label;
 	if (typeof label === "string" && label.length > 0) return label;
 	return String(node?.attrs?.identifier ?? "");
+}
+
+/** The smallest positive integer no marker or definition already uses. */
+function nextFootnoteLabel(doc: any): string {
+	const used = new Set<string>();
+	doc.descendants((node: any) => {
+		if (node.type.name === "footnoteRef" || node.type.name === "footnoteDef") {
+			used.add(footnoteLabel(node));
+		}
+		return true;
+	});
+	let next = 1;
+	while (used.has(String(next))) next += 1;
+	return String(next);
+}
+
+/**
+ * Where a new definition goes: after the last one, so definitions stay
+ * together wherever the author keeps them; otherwise at the end.
+ */
+function footnoteDefinitionInsertPos(doc: any, definitionType: any): number {
+	let after = doc.content.size;
+	let found = false;
+	doc.forEach((node: any, offset: number) => {
+		if (node.type === definitionType) {
+			after = offset + node.nodeSize;
+			found = true;
+		}
+	});
+	return found ? after : doc.content.size;
 }
 
 function diffAttrs(node: any, mode: "words" | "element" = "words"): any {
@@ -678,6 +717,46 @@ export function markdownWcNodes(
 						"↩",
 					],
 				];
+			},
+			addCommands() {
+				const definitionName = this.name;
+				return {
+					insertFootnote:
+						() =>
+						({ state, tr, dispatch }: CommandProps) => {
+							const definitionType = state.schema.nodes[definitionName];
+							const markerType = state.schema.nodes.footnoteRef;
+							if (!definitionType || !markerType) return false;
+							const { $from } = state.selection;
+							// A marker is inline text; there is nowhere to put it in a
+							// code block, and nothing to point at from inside a note.
+							if (!$from.parent.isTextblock || $from.parent.type.spec.code)
+								return false;
+							for (let depth = $from.depth; depth > 0; depth -= 1) {
+								if ($from.node(depth).type === definitionType) return false;
+							}
+							const label = nextFootnoteLabel(state.doc);
+							if (dispatch) {
+								const definition = definitionType.create(
+									{ label, identifier: label },
+									state.schema.nodes.paragraph!.create(),
+								);
+								tr.insert(
+									state.selection.from,
+									markerType.create({ label, identifier: label }),
+								);
+								// Placed after the marker went in, so the position is
+								// already in the document that receives it.
+								const at = footnoteDefinitionInsertPos(tr.doc, definitionType);
+								tr.insert(at, definition);
+								// The caret moves into the empty note: past the definition's
+								// opening and its paragraph's. ↩ brings it back.
+								tr.setSelection(TextSelection.create(tr.doc, at + 2));
+								tr.scrollIntoView();
+							}
+							return true;
+						},
+				};
 			},
 		}),
 		// hard break

@@ -1,6 +1,11 @@
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import {
+	Plugin,
+	PluginKey,
+	TextSelection,
+	type Transaction,
+} from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 /**
@@ -135,17 +140,30 @@ function findFootnote(
 	return found;
 }
 
+/**
+ * Scrolls to the node, tints it, and takes the caret along: into the end of
+ * a note, so it can be edited, or to just after a marker, so the sentence
+ * can go on. Writing a footnote is a round trip — marker, note, back — and
+ * the caret is what makes the way back a way back.
+ */
 function revealNode(view: EditorView, pos: number): void {
 	const dom = view.nodeDOM(pos);
 	if (dom instanceof HTMLElement && typeof dom.scrollIntoView === "function") {
 		dom.scrollIntoView({ block: "center", behavior: "smooth" });
 	}
 	const reveal: FootnoteMeta = { reveal: pos };
-	view.dispatch(
-		view.state.tr
-			.setMeta(footnotePluginKey, reveal)
-			.setMeta("addToHistory", false),
-	);
+	const node = view.state.doc.nodeAt(pos);
+	const tr = view.state.tr
+		.setMeta(footnotePluginKey, reveal)
+		.setMeta("addToHistory", false);
+	if (node) {
+		const caret = node.isInline
+			? TextSelection.create(tr.doc, pos + node.nodeSize)
+			: TextSelection.near(tr.doc.resolve(pos + node.nodeSize - 1), -1);
+		tr.setSelection(caret);
+	}
+	view.dispatch(tr);
+	view.focus();
 	window.setTimeout(() => {
 		if (view.isDestroyed) return;
 		const clear: FootnoteMeta = { clear: true };

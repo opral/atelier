@@ -96,6 +96,10 @@ describe("footnote navigation", () => {
 		const definition = element.querySelector("[data-footnote-def='1']")!;
 		expect(scrolled).toEqual([definition]);
 		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+		// The caret went along, to the end of the note.
+		const { $from } = editor.state.selection;
+		expect($from.node($from.depth - 1).type.name).toBe("footnoteDef");
+		expect($from.parentOffset).toBe("The source.".length);
 		vi.advanceTimersByTime(1500);
 		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(false);
 	});
@@ -106,6 +110,11 @@ describe("footnote navigation", () => {
 		const marker = element.querySelector("[data-footnote-ref='1']")!;
 		expect(scrolled).toEqual([marker]);
 		expect(marker.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+		// The caret is back in the sentence, right after the marker.
+		const { $from } = editor.state.selection;
+		expect($from.parent.type.name).toBe("paragraph");
+		expect($from.nodeBefore?.type.name).toBe("footnoteRef");
+		expect($from.parent.textContent.startsWith("Claim one.")).toBe(true);
 	});
 
 	test("a marker without a definition is drawn as one and goes nowhere", () => {

@@ -865,6 +865,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				);
 				return true;
 			},
+			"Mod-Alt-f": () => this.editor.chain().focus().insertFootnote().run(),
 			"Mod-Shift-7": () =>
 				convertListItem(this.editor, "orderedList", { checked: null }),
 			"Mod-Shift-8": () =>
