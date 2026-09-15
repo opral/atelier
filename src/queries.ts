@@ -149,29 +149,36 @@ function workingFileDiffTable() {
 
 /**
  * Opens one coherent working-review epoch without adding a review-specific SQL
- * surface. executeBatch pins both statements to the same repository snapshot:
- * the first resolves the epoch and the second reads the certified HOT index.
+ * surface. The epoch resolves in the statement that uses it, so the files are
+ * the diff of exactly the two commits reported beside them — not two reads
+ * that agree because a batch pinned them to one snapshot.
+ *
+ * The left join keeps the epoch when nothing changed.
  */
 export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
 	readonly files: readonly FileDiffRow[];
 }> {
-	const { results } = await lix.executeBatch([
-		{
-			sql: `SELECT working_base_commit_id AS before_commit_id,
-			             commit_id AS after_commit_id
-			      FROM lix_branch WHERE id = lix_active_branch_id()`,
-		},
-		{
-			sql: `SELECT id, diff_type,
-			             coalesce(to_path, from_path) AS path,
-			             from_path, to_path
-			      FROM lix_diff('lix_file')
-			      ORDER BY coalesce(to_path, from_path) ASC`,
-		},
-	]);
-	const epoch = results[0]?.rows[0];
+	const result = await lix.execute(
+		`WITH epoch AS (
+		   SELECT working_base_commit_id AS before_commit_id,
+		          commit_id AS after_commit_id
+		   FROM lix_branch WHERE id = lix_active_branch_id()
+		 )
+		 SELECT epoch.before_commit_id, epoch.after_commit_id,
+		        diff.id, diff.diff_type,
+		        coalesce(diff.to_path, diff.from_path) AS path,
+		        diff.from_path, diff.to_path
+		 FROM epoch
+		 LEFT JOIN lix_diff(
+		   'lix_file',
+		   (SELECT before_commit_id FROM epoch),
+		   (SELECT after_commit_id FROM epoch)
+		 ) AS diff ON true
+		 ORDER BY coalesce(diff.to_path, diff.from_path) ASC`,
+	);
+	const epoch = result.rows[0];
 	if (
 		typeof epoch?.before_commit_id !== "string" ||
 		typeof epoch?.after_commit_id !== "string"
@@ -181,7 +188,11 @@ export async function selectWorkingFileDiffSnapshot(lix: Lix): Promise<{
 	return {
 		beforeCommitId: epoch.before_commit_id,
 		afterCommitId: epoch.after_commit_id,
-		files: (results[1]?.rows ?? []) as FileDiffRow[],
+		// The left join answers "no changes" with one row whose diff columns
+		// are null; a real change always carries a file id.
+		files: result.rows.filter(
+			(row) => typeof row.id === "string",
+		) as FileDiffRow[],
 	};
 }
 

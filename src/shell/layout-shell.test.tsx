@@ -554,31 +554,25 @@ describe("diff review navigation", () => {
 					}),
 				).toHaveAttribute("aria-checked", "false");
 			});
-			const reviewOpenExecuteBatch = vi.spyOn(lix, "executeBatch");
+			const reviewOpenExecute = vi.spyOn(lix, "execute");
 			await act(async () => {
 				await openWorkingChangesFromHistory();
 			});
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
-			const reviewBatch = reviewOpenExecuteBatch.mock.calls.find(
-				([statements]) =>
-					statements.some((statement) =>
-						statement.sql.includes("FROM lix_diff('lix_file')"),
-					),
-			)?.[0];
-			expect(reviewBatch).toEqual(
-				expect.arrayContaining([
-					expect.objectContaining({
-						sql: expect.stringContaining(
-							"working_base_commit_id AS before_commit_id",
-						),
-					}),
-					expect.objectContaining({
-						sql: expect.stringContaining("FROM lix_diff('lix_file')"),
-					}),
-				]),
-			);
+			// One statement resolves the epoch and diffs exactly those two
+			// commits, so the files can never belong to a different span than
+			// the one reported beside them.
+			const reviewQuery = reviewOpenExecute.mock.calls
+				.map(([sql]) => String(sql))
+				.find(
+					(sql) =>
+						sql.includes("working_base_commit_id AS before_commit_id") &&
+						sql.includes("lix_diff("),
+				);
+			expect(reviewQuery).toContain("(SELECT before_commit_id FROM epoch)");
+			expect(reviewQuery).toContain("(SELECT after_commit_id FROM epoch)");
 			const reviewFloat = document.querySelector(
 				".external-write-review-actions",
 			);
