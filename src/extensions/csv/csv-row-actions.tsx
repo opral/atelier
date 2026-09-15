@@ -71,6 +71,11 @@ export function CsvRowActions({
 					<Menu.Portal>
 						<Menu.Content
 							className="csv-column-menu csv-bulk-menu"
+							aria-label={
+								column === null
+									? "Edit property"
+									: `Set ${columns[column] ?? "property"} for ${count} selected ${count === 1 ? "row" : "rows"}`
+							}
 							align="start"
 							sideOffset={6}
 							collisionPadding={8}

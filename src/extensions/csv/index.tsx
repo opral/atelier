@@ -2352,6 +2352,12 @@ function CsvTable({
 											: null;
 									if (target) {
 										event.cancel();
+										// cancel() stops Glide's own handling; the browser
+										// still moves focus off the canvas unless the key
+										// itself is taken, which left the selection on a
+										// row the keyboard could no longer reach.
+										event.preventDefault();
+										event.stopPropagation();
 										setGridSelection({
 											columns: CompactSelection.empty(),
 											rows: CompactSelection.empty(),

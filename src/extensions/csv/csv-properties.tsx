@@ -466,6 +466,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					<div
 						className="csv-option-list"
 						role="listbox"
+						aria-label={`${info.header} options`}
 						id={listId}
 						ref={listRef}
 					>
