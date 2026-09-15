@@ -32,7 +32,11 @@ import {
 	createMemorySessionStateStore,
 } from "../state-adapters";
 import { fakeUuid } from "@/test-utils/fake-uuid";
-import type { AtelierEvent } from "@/extension-api";
+import type {
+	AtelierEvent,
+	AtelierExtensionRegistration,
+	AtelierExtensionRuntime,
+} from "@/extension-api";
 
 // History scopes itself to the active file; these flows exercise the
 // repository timeline, so switch back when a file is on screen.
@@ -1525,6 +1529,104 @@ describe("diff review navigation", () => {
 			]);
 			expect(maxActiveCheckpointFileReads).toBe(1);
 			expect(checkpointHistoryStatements.length).toBeGreaterThan(0);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	// The History row chains openFile onto open(). open() resolves before React
+	// commits the session it just set, so the chained call used to reach the
+	// span the click was leaving and re-pin the file to it: the list highlighted
+	// the checkpoint clicked while the pane kept rendering the previous one's
+	// diff. Driving the runtime outside act() keeps that ordering; a fireEvent
+	// click inside act() lets React commit in between and hides it.
+	test("switching checkpoints shows the span that was clicked", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		let runtime: AtelierExtensionRuntime | null = null;
+		const extensions = [
+			{
+				id: "atelier.test.diff-probe",
+				name: "Diff probe",
+				placement: ["left"] as const,
+				Component: ({
+					atelier,
+				}: {
+					readonly atelier: AtelierExtensionRuntime;
+				}) => {
+					runtime = atelier;
+					return <div data-testid="diff-probe" />;
+				},
+			},
+		] as unknown as readonly AtelierExtensionRegistration[];
+		const atelier = createAtelier({ lix, sessionStateStore, extensions });
+		let utils: ReturnType<typeof render> | undefined;
+		const fileId = fakeUuid("checkpoint-switch");
+		const write = async (text: string) =>
+			qb(lix)
+				.updateTable("lix_file")
+				.where("id", "=", fileId)
+				.set({ content: new TextEncoder().encode(text) })
+				.execute();
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fileId,
+					path: "/switch.md",
+					content: new TextEncoder().encode("# one\n"),
+				})
+				.execute();
+			const first = await createCheckpoint(lix);
+			await write("# two\n");
+			const second = await createCheckpoint(lix);
+			await write("# three\n");
+			const third = await createCheckpoint(lix);
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} extensions={extensions} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+			await act(async () => {
+				await atelier.documents.open("/switch.md");
+				await atelier.views.open("atelier.test.diff-probe", { area: "left" });
+			});
+			await screen.findByTestId("diff-probe");
+
+			const activeState = () => {
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				return main?.views.find((view) => view.instance === main.activeInstance)
+					?.state;
+			};
+			// Exactly what the History row does, and outside act() so the
+			// chained openFile runs before React commits, as it does in a browser.
+			const viewCheckpoint = async (base: string, target: string) => {
+				const diff = runtime?.diff;
+				if (!diff) throw new Error("the probe view never received a runtime");
+				await diff
+					.open({ base: { commitId: base }, target: { commitId: target } })
+					.then(() => diff.openFile("/switch.md"));
+				await act(async () => {});
+				await waitFor(
+					() => {
+						expect(activeState()?.afterCommitId).toBe(target);
+						expect(activeState()?.beforeCommitId).toBe(base);
+					},
+					{ timeout: ASYNC_UI_TIMEOUT },
+				);
+			};
+
+			await viewCheckpoint(second.commitId, third.commitId);
+			// The switch that used to lag.
+			await viewCheckpoint(first.commitId, second.commitId);
+			await viewCheckpoint(second.commitId, third.commitId);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

@@ -2638,11 +2638,13 @@ function LayoutShellLoadedContentResolved({
 
 	const openHistoricalCheckpointFile = useCallback(
 		(path: string) => {
-			if (!historicalReview?.range) return;
-			const historicalRange = historicalReview.range;
-			const file = historicalReview.files.find(
-				(candidate) => candidate.path === path,
-			);
+			// Read the session from the ref, not from this render's closure:
+			// the caller may be a continuation of the open() that switched
+			// checkpoints, which runs before React has re-rendered.
+			const session = diffReviewRef.current;
+			if (session?.kind !== "historical" || !session.range) return;
+			const historicalRange = session.range;
+			const file = session.files.find((candidate) => candidate.path === path);
 			if (!file) return;
 			const requestId = ++historicalRequestRef.current;
 			void (async () => {
@@ -2686,12 +2688,7 @@ function LayoutShellLoadedContentResolved({
 				console.warn("[checkpoint] failed to open historical file", error);
 			});
 		},
-		[
-			historicalReview,
-			historicalRevisionStateForPath,
-			lix,
-			openResolvedFileView,
-		],
+		[historicalRevisionStateForPath, lix, openResolvedFileView],
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
@@ -2761,7 +2758,7 @@ function LayoutShellLoadedContentResolved({
 					convertedInstances,
 				);
 			}
-			setDiffReview({
+			const next: DiffReviewState = {
 				kind: "historical",
 				range: {
 					// "" is the beginning-of-repository sentinel: no removed
@@ -2777,7 +2774,14 @@ function LayoutShellLoadedContentResolved({
 				// live-navigation exit guard arms immediately.
 				...(convertedCount > 0 ? { opened: true } : {}),
 				...(createdAt !== undefined ? { createdAt } : {}),
-			});
+			};
+			// Publish the new span before this promise resolves. Callers chain
+			// work onto open() — the History view opens a file next — and that
+			// runs long before React commits the state, so anything reading the
+			// session through the ref would otherwise still see the span this
+			// call is replacing and re-pin the file to it.
+			diffReviewRef.current = next;
+			setDiffReview(next);
 		},
 		[closeHistoricalReviewViews, convertOpenFileTabsToHistorical, lix],
 	);
@@ -4159,16 +4163,16 @@ function LayoutShellLoadedContentResolved({
 		},
 		[handleOpenWorkingChangesReview, handleViewCheckpoint, lix],
 	);
-	const openDiffSessionFile = useCallback(
-		(path: string) => {
-			if (historicalReview) {
-				openHistoricalCheckpointFileRef.current?.(path);
-				return;
-			}
-			openWorkingChangeFileRef.current?.(path);
-		},
-		[historicalReview],
-	);
+	const openDiffSessionFile = useCallback((path: string) => {
+		// Same reason as openHistoricalCheckpointFile: open().then(openFile)
+		// arrives before the render that would tell this closure which kind of
+		// session is now on screen.
+		if (diffReviewRef.current?.kind === "historical") {
+			openHistoricalCheckpointFileRef.current?.(path);
+			return;
+		}
+		openWorkingChangeFileRef.current?.(path);
+	}, []);
 	const resolveDiffSessionFile = useCallback(
 		async (path: string, outcome: "accepted" | "rejected") => {
 			if (diffReviewRef.current?.intent === "review-applied") {
