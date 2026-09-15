@@ -1,6 +1,16 @@
 @scope (.atelier-root) {
 	.csv-view {
 		position: relative;
+		/* A drag across the canvas is a range selection, not a text selection:
+		   without this it painted "New row" and the footer status line blue on
+		   the way past. The editors inside set their own text back. */
+		user-select: none;
+	}
+
+	.csv-view input,
+	.csv-view textarea,
+	.csv-view [contenteditable="true"] {
+		user-select: text;
 	}
 
 	.csv-save-error {

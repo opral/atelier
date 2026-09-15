@@ -1370,6 +1370,52 @@ function CsvTable({
 			hasMenu: editable,
 		}));
 	}, [editable, parsed.columns, widthState, displayInfo]);
+	// Glide reports a widening drag as a header click too, because the pointer
+	// is back over the header when it lifts — so letting go of a column edge
+	// popped the settings menu open. The resize claims that one click; the
+	// next press on the header is a press of its own and opens the menu.
+	const resizedColumnRef = useRef<number | null>(null);
+	// Whether the press that is ending moved far enough to be a drag. Glide
+	// reports the mouse-up that ends a range drag as a click on the cell the
+	// drag started from, which opened that cell's picker under the row the
+	// pointer was released on — and picking a value then changed the wrong row.
+	const draggedRef = useRef(false);
+	useEffect(() => {
+		let origin: { x: number; y: number } | null = null;
+		const press = (event: PointerEvent) => {
+			resizedColumnRef.current = null;
+			draggedRef.current = false;
+			origin = { x: event.clientX, y: event.clientY };
+		};
+		// Enter opens the editor of whatever the drag selected, so a key ends
+		// the press's claim on the cell as surely as the next press does.
+		const key = () => {
+			draggedRef.current = false;
+		};
+		const move = (event: PointerEvent) => {
+			if (!origin) return;
+			if (
+				Math.abs(event.clientX - origin.x) > 3 ||
+				Math.abs(event.clientY - origin.y) > 3
+			)
+				draggedRef.current = true;
+		};
+		// The flag outlives the press: Glide's click runs on the mouse-up that
+		// follows, and the next press clears it.
+		const release = () => {
+			origin = null;
+		};
+		document.addEventListener("pointerdown", press, true);
+		document.addEventListener("pointermove", move, true);
+		document.addEventListener("pointerup", release, true);
+		document.addEventListener("keydown", key, true);
+		return () => {
+			document.removeEventListener("pointerdown", press, true);
+			document.removeEventListener("pointermove", move, true);
+			document.removeEventListener("pointerup", release, true);
+			document.removeEventListener("keydown", key, true);
+		};
+	}, []);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
@@ -1409,7 +1455,11 @@ function CsvTable({
 				kind: GridCellKind.Text,
 				data: value,
 				displayData: value,
-				allowOverlay: editable,
+				// A drag that ends on a cell is not a click on it. Glide would
+				// still activate the cell it started from, opening that row's
+				// editor under the row the pointer was released on; refusing the
+				// overlay for the press that dragged keeps them apart.
+				allowOverlay: editable && !draggedRef.current,
 				// Plain values edit on press, avoiding a selection-only frame
 				// while the pointer is held. Pickers retain click activation.
 				activationBehaviorOverride: !["select", "checkbox", "date"].includes(
@@ -1455,18 +1505,6 @@ function CsvTable({
 		column: number;
 		until: number;
 	} | null>(null);
-	// Glide reports a widening drag as a header click too, because the pointer
-	// is back over the header when it lifts — so letting go of a column edge
-	// popped the settings menu open. The resize claims that one click; the
-	// next press on the header is a press of its own and opens the menu.
-	const resizedColumnRef = useRef<number | null>(null);
-	useEffect(() => {
-		const release = () => {
-			resizedColumnRef.current = null;
-		};
-		document.addEventListener("pointerdown", release, true);
-		return () => document.removeEventListener("pointerdown", release, true);
-	}, []);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
 			resizedColumnRef.current = columnIndex;
@@ -2332,6 +2370,12 @@ function CsvTable({
 								}
 							}}
 							onCellClicked={(cell, event) => {
+								// A drag that happens to end on a cell is not a click on
+								// it; only a press that stayed put opens an editor.
+								if (draggedRef.current) {
+									event.preventDefault();
+									return;
+								}
 								if (
 									!editing ||
 									(!event.isTouch &&
