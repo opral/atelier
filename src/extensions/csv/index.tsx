@@ -1680,7 +1680,12 @@ function CsvTable({
 	// than a cell the user did not pick. So it takes a cell: the one the edit
 	// left where the old selection was, clamped to what is still there.
 	const focusGrid = useCallback((anchor?: readonly [number, number]) => {
-		if (!hasSelection(gridSelectionRef.current)) {
+		// An anchor names the cell to land on outright. The callers that clear
+		// a selection and hand the keyboard back in the same tick cannot ask
+		// whether a selection remains — the ref they would read is assigned on
+		// render and still holds the one they just cleared, which left Glide
+		// focused with nothing selected and every key dead.
+		if (anchor || !hasSelection(gridSelectionRef.current)) {
 			const cell = anchor ?? [0, 0];
 			setGridSelection({
 				columns: CompactSelection.empty(),
@@ -1691,6 +1696,11 @@ function CsvTable({
 					rangeStack: [],
 				},
 			});
+			// Glide reads the selection as it focuses, and this one has not
+			// been committed yet: focusing now would take the keyboard to a
+			// table that still believes nothing is selected.
+			requestAnimationFrame(() => gridRef.current?.focus());
+			return;
 		}
 		gridRef.current?.focus();
 	}, []);
@@ -2053,8 +2063,9 @@ function CsvTable({
 						(event.target as HTMLElement).closest(".csv-row-actions")
 					) {
 						event.preventDefault();
+						const first = selectedRows.length ? Math.min(...selectedRows) : 0;
 						clearSelection();
-						focusGrid();
+						focusGrid([0, Math.max(0, first)]);
 					}
 				}}
 			>
@@ -2088,8 +2099,9 @@ function CsvTable({
 						columnInfo={columnInfo}
 						optionValues={(column) => optionValuesByColumn.get(column) ?? []}
 						onClear={() => {
+							const first = selectedRows.length ? Math.min(...selectedRows) : 0;
 							clearSelection();
-							focusGrid();
+							focusGrid([0, Math.max(0, first)]);
 						}}
 						onDelete={editing ? deleteSelectedRows : undefined}
 						onEdit={

@@ -33,10 +33,12 @@ describe("scrollLeavesEditorBehind", () => {
 		);
 	});
 
-	test("a wheel over the editor closes it, since no grid scroll follows", () => {
+	test("a wheel closes nothing by itself; the grid scroll it causes does", () => {
+		// A flick over an editor used to dismiss it and discard the edit, even
+		// where the table had nowhere to scroll.
 		const node = inEditor(list(200, 200));
 		expect(scrollLeavesEditorBehind({ type: "wheel", target: node })).toBe(
-			true,
+			false,
 		);
 	});
 

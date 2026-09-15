@@ -9,7 +9,13 @@
 
 	.csv-view input,
 	.csv-view textarea,
-	.csv-view [contenteditable="true"] {
+	.csv-view [contenteditable="true"],
+	/* The chrome around the table is prose, and prose is for reading: the
+	   row count, the view's name and a save error can all be selected and
+	   copied. Only the canvas drags as a range. */
+	.csv-toolbar,
+	.csv-save-error,
+	.csv-row-count {
 		user-select: text;
 	}
 

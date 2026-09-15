@@ -287,11 +287,20 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 				? CHECKBOX_OPTIONS
 				: [...CHECKBOX_OPTIONS, { value: committed, color: "gray" }]
 			: selectOptions(info, cell.csvOptionValues ?? []);
+	const matching = (option: string, text: string) =>
+		option.toLowerCase().includes(text.toLowerCase());
 	const [query, setQuery] = useState(typed);
 	const [active, setActive] = useState(() => {
 		// Enter, Enter must leave the cell as it was, so the list opens on the
 		// value the cell already holds rather than on whatever sorts first.
-		const index = options.findIndex((option) => option.value === committed);
+		// The index counts the options the list is actually showing: with the
+		// opening keystroke as the query those are already fewer than the
+		// column's, and an index into the full list pointed at the wrong row —
+		// often at "Create <keystroke>", so one letter and Enter replaced the
+		// cell with that letter and added it to the column for good.
+		const index = options
+			.filter((option) => matching(option.value, typed))
+			.findIndex((option) => option.value === committed);
 		return index < 0 ? 0 : index;
 	});
 	// A date cannot be started from one keystroke, and writing the keystroke
@@ -321,6 +330,8 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const [placement, setPlacement] = useState<
 		{ readonly top: number } | { readonly bottom: number } | null
 	>(null);
+	/** Set when the picker has to scroll because neither side has room. */
+	const [capped, setCapped] = useState<number | null>(null);
 	// The picker is positioned once, so scrolling the table would detach it
 	// from its cell; a scroll closes it instead.
 	useEditorClosesOnGridScroll(onFinishedEditing);
@@ -367,9 +378,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			doc.removeEventListener("focusout", onFocusOut);
 		};
 	}, [onFinishedEditing]);
-	const candidates = options.filter((o) =>
-		o.value.toLowerCase().includes(query.toLowerCase()),
-	);
+	const candidates = options.filter((o) => matching(o.value, query));
 	const newValue = query.trim();
 	const canCreate =
 		info.type === "select" &&
@@ -407,11 +416,22 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 		const height = dialogRef.current?.getBoundingClientRect().height ?? 0;
 		const fitsBelow = below + height <= window.innerHeight - 8;
 		const fitsAbove = target.y - 3 - height >= 8;
-		setPlacement(
-			fitsBelow || !fitsAbove
-				? { top: Math.min(below, Math.max(8, window.innerHeight - height - 8)) }
-				: { bottom: window.innerHeight - target.y + 3 },
-		);
+		if (fitsBelow) setPlacement({ top: below });
+		else if (fitsAbove)
+			setPlacement({ bottom: window.innerHeight - target.y + 3 });
+		else {
+			// Neither side holds the whole list. Take the roomier one and let
+			// the list scroll inside what is there, rather than covering the
+			// very cell being edited.
+			const roomBelow = window.innerHeight - 8 - below;
+			const roomAbove = target.y - 3 - 8;
+			setCapped(Math.max(80, Math.max(roomBelow, roomAbove)));
+			setPlacement(
+				roomBelow >= roomAbove
+					? { top: below }
+					: { bottom: window.innerHeight - target.y + 3 },
+			);
+		}
 	}, [below, placement, target.y]);
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The dialog contains focusable controls and owns Escape; input-only navigation below leaves button activation native.
@@ -425,7 +445,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 				position: "fixed",
 				left: x,
 				width,
-				maxHeight,
+				maxHeight: capped ?? maxHeight,
 				...(placement ?? { top: below }),
 			}}
 			onKeyDown={(e) => {
