@@ -1187,6 +1187,63 @@ describe("MarkdownView", () => {
 		}
 	});
 
+	test("Escape in a frontmatter field name abandons the rename", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_frontmatter_escape");
+		const source = "---\ntitle: Quarterly planning\n---\n\n# Notes\n";
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/escape.md",
+				content: new TextEncoder().encode(source),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/escape.md"
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const name = await screen.findByLabelText(
+				"Frontmatter field name: title",
+			);
+			await act(async () => {
+				fireEvent.change(name, { target: { value: "titleZZZ" } });
+			});
+			// Escape blurs the field, and the blur handler is what commits. It
+			// runs before React has re-rendered with the name Escape put back,
+			// so it used to commit the one the reader was abandoning.
+			await act(async () => {
+				fireEvent.keyDown(name, { key: "Escape" });
+			});
+
+			await waitFor(() =>
+				expect(
+					screen.getByLabelText("Frontmatter field name: title"),
+				).toHaveValue("title"),
+			);
+			expect(
+				screen.queryByLabelText("Frontmatter field name: titleZZZ"),
+			).toBeNull();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("a past revision disables its frontmatter fields and says why", async () => {
 		const lix = await openLix();
 		const fileId = fakeUuid("file_revision_frontmatter");

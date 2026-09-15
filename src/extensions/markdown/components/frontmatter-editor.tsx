@@ -1,5 +1,7 @@
 import {
+	createContext,
 	useCallback,
+	useContext,
 	useEffect,
 	useId,
 	useMemo,
@@ -8,6 +10,7 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import {
 	AlignLeft,
 	Braces,
@@ -115,6 +118,29 @@ function supportsLosslessFieldsSource(
 	);
 }
 
+/**
+ * How a field hands focus back to the document when Escape leaves it. The node
+ * view is the one that knows the editor; the fields are several components
+ * below it.
+ */
+const LeaveFrontmatterContext = createContext<() => void>(() => {});
+
+/**
+ * Escape leaves the field, and the document it interrupted is where it leaves
+ * to. Blurring alone drops focus on `<body>`, where the next key means nothing
+ * at all and the caret the reader had is nowhere to be seen — and handing the
+ * browser the editor's element is not enough either, because the selection it
+ * would restore is the frontmatter block itself, which the next letter would
+ * replace. The caret goes to the first block of the document instead.
+ */
+function useLeaveForTheDocument(): (field: HTMLElement) => void {
+	const leave = useContext(LeaveFrontmatterContext);
+	return (field) => {
+		field.blur();
+		leave();
+	};
+}
+
 function FieldKeyInput({
 	value,
 	ariaLabel,
@@ -125,8 +151,19 @@ function FieldKeyInput({
 	readonly onCommit: (value: string) => void;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
+	const leaveForTheDocument = useLeaveForTheDocument();
 	const [draft, setDraft] = useState(value);
+	// Escape leaves without committing, so the blur it causes must not commit
+	// the draft it has just thrown away. Putting the draft back is not enough:
+	// the blur runs before React has re-rendered with it, so what `commit`
+	// reads is still the name the reader was abandoning.
+	const reverting = useRef(false);
 	const commit = () => {
+		if (reverting.current) {
+			reverting.current = false;
+			setDraft(value);
+			return;
+		}
 		const requested = draft.trim();
 		if (!requested) {
 			setDraft(value);
@@ -149,8 +186,9 @@ function FieldKeyInput({
 				}
 				if (event.key === "Escape") {
 					event.preventDefault();
+					reverting.current = true;
 					setDraft(value);
-					event.currentTarget.blur();
+					leaveForTheDocument(event.currentTarget);
 				}
 			}}
 		/>
@@ -159,9 +197,9 @@ function FieldKeyInput({
 
 /**
  * Escape in a frontmatter field puts back the value the field held when it was
- * entered and hands focus back, which is what Escape has always done in a
- * field's *name*. A value that answered nothing while its name answered
- * Escape was the same field behaving two ways.
+ * entered and hands focus back to the document. Both halves of a row answer it
+ * that way; a value that answered nothing, or a name that kept what Escape
+ * threw away, was one field behaving two ways.
  */
 function useEscapeRevert<T>(
 	current: T,
@@ -171,6 +209,7 @@ function useEscapeRevert<T>(
 	onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
 } {
 	const entryValue = useRef(current);
+	const leaveForTheDocument = useLeaveForTheDocument();
 	return {
 		onFocus: () => {
 			entryValue.current = current;
@@ -179,7 +218,7 @@ function useEscapeRevert<T>(
 			if (event.key !== "Escape") return;
 			event.preventDefault();
 			revert(entryValue.current);
-			event.currentTarget.blur();
+			leaveForTheDocument(event.currentTarget);
 		},
 	};
 }
@@ -233,6 +272,7 @@ function NumberField({
 	readonly onChange: (value: unknown) => void;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
+	const leaveForTheDocument = useLeaveForTheDocument();
 	const [draft, setDraft] = useState(String(value));
 	useEffect(() => setDraft(String(value)), [value]);
 	const parsedDraft = parseEditableNumber(draft);
@@ -255,7 +295,7 @@ function NumberField({
 				event.preventDefault();
 				reverting.current = true;
 				setDraft(String(value));
-				event.currentTarget.blur();
+				leaveForTheDocument(event.currentTarget);
 			}}
 			onBlur={() => {
 				if (reverting.current) {
@@ -490,6 +530,7 @@ function FieldValue({
 export function FrontmatterEditorNodeView({
 	editor,
 	node,
+	getPos,
 	deleteNode,
 	updateAttributes,
 	selected,
@@ -520,6 +561,26 @@ export function FrontmatterEditorNodeView({
 	const focusFirstDocumentBlock = useCallback(() => {
 		window.requestAnimationFrame(() => editor.commands.focus("start"));
 	}, [editor]);
+
+	// Where Escape in a field puts the caret. Not the document's very start:
+	// that is this block, which ProseMirror selects whole and the next letter
+	// would replace. The first text position after it, so the key that follows
+	// types where the reader can see it.
+	const focusPastFrontmatter = useCallback(() => {
+		window.requestAnimationFrame(() => {
+			if (editor.isDestroyed) return;
+			const { doc } = editor.state;
+			const pos = typeof getPos === "function" ? getPos() : undefined;
+			const after =
+				typeof pos === "number" ? pos + node.nodeSize : doc.content.size;
+			const caret = TextSelection.near(
+				doc.resolve(Math.min(after, doc.content.size)),
+				1,
+			);
+			editor.view.dispatch(editor.state.tr.setSelection(caret));
+			editor.view.focus();
+		});
+	}, [editor, getPos, node.nodeSize]);
 
 	// A projection of a diff cannot be serialized back into the file it shows,
 	// so the panel writes the property itself — the edit lands where the same
@@ -631,159 +692,163 @@ export function FrontmatterEditorNodeView({
 	};
 
 	return (
-		<NodeViewWrapper
-			ref={wrapperRef}
-			className="markdown-frontmatter"
-			data-markdown-frontmatter="true"
-			data-selected={selected ? "true" : "false"}
-			data-disabled={disabled ? "true" : "false"}
-			contentEditable={false}
-		>
-			<div className="markdown-frontmatter-header">
-				<div className="markdown-frontmatter-title">
-					<strong>Frontmatter</strong>
-					{disabled ? (
-						<span className="markdown-frontmatter-note">{editing.reason}</span>
-					) : null}
-				</div>
-				<button
-					type="button"
-					className="markdown-frontmatter-mode"
-					disabled={
-						mode === "yaml" && (Boolean(parsed.error) || !fieldsSupported)
-					}
-					onClick={() => {
-						if (
-							mode === "yaml" &&
-							createdEmptyRef.current &&
-							entries.length === 0 &&
-							!parsed.error
-						) {
-							removeFrontmatter();
-							return;
+		<LeaveFrontmatterContext.Provider value={focusPastFrontmatter}>
+			<NodeViewWrapper
+				ref={wrapperRef}
+				className="markdown-frontmatter"
+				data-markdown-frontmatter="true"
+				data-selected={selected ? "true" : "false"}
+				data-disabled={disabled ? "true" : "false"}
+				contentEditable={false}
+			>
+				<div className="markdown-frontmatter-header">
+					<div className="markdown-frontmatter-title">
+						<strong>Frontmatter</strong>
+						{disabled ? (
+							<span className="markdown-frontmatter-note">
+								{editing.reason}
+							</span>
+						) : null}
+					</div>
+					<button
+						type="button"
+						className="markdown-frontmatter-mode"
+						disabled={
+							mode === "yaml" && (Boolean(parsed.error) || !fieldsSupported)
 						}
-						setMode(mode === "fields" ? "yaml" : "fields");
-					}}
-				>
-					{mode === "fields" ? "YAML" : "Fields"}
-				</button>
-			</div>
+						onClick={() => {
+							if (
+								mode === "yaml" &&
+								createdEmptyRef.current &&
+								entries.length === 0 &&
+								!parsed.error
+							) {
+								removeFrontmatter();
+								return;
+							}
+							setMode(mode === "fields" ? "yaml" : "fields");
+						}}
+					>
+						{mode === "fields" ? "YAML" : "Fields"}
+					</button>
+				</div>
 
-			{mode === "fields" && parsed.value ? (
-				<div className="markdown-frontmatter-fields">
-					{entries.map(([key, value], index) => (
-						<div className="markdown-frontmatter-row" key={key}>
-							<div className="markdown-frontmatter-key-cell">
-								<FieldTypeIcon fieldKey={key} value={value} />
-								<FieldKeyInput
-									value={key}
-									ariaLabel={`Frontmatter field name: ${key}`}
-									onCommit={(requested) =>
+				{mode === "fields" && parsed.value ? (
+					<div className="markdown-frontmatter-fields">
+						{entries.map(([key, value], index) => (
+							<div className="markdown-frontmatter-row" key={key}>
+								<div className="markdown-frontmatter-key-cell">
+									<FieldTypeIcon fieldKey={key} value={value} />
+									<FieldKeyInput
+										value={key}
+										ariaLabel={`Frontmatter field name: ${key}`}
+										onCommit={(requested) =>
+											commitRecord(
+												replaceRecordEntry(parsed.value!, index, [
+													availableRenamedFieldName(
+														parsed.value!,
+														index,
+														requested,
+													),
+													value,
+												]),
+											)
+										}
+									/>
+								</div>
+								<FieldValue
+									label={key}
+									value={value}
+									onChange={(next) =>
 										commitRecord(
-											replaceRecordEntry(parsed.value!, index, [
-												availableRenamedFieldName(
-													parsed.value!,
-													index,
-													requested,
-												),
-												value,
-											]),
+											replaceRecordEntry(parsed.value!, index, [key, next]),
 										)
 									}
 								/>
+								<button
+									type="button"
+									className="markdown-frontmatter-remove"
+									disabled={disabled}
+									aria-label={`Remove ${key || "field"}`}
+									onClick={() => removeField(index)}
+								>
+									<X aria-hidden />
+								</button>
 							</div>
-							<FieldValue
-								label={key}
-								value={value}
-								onChange={(next) =>
-									commitRecord(
-										replaceRecordEntry(parsed.value!, index, [key, next]),
-									)
-								}
-							/>
+						))}
+						{addingField ? (
+							<div className="markdown-frontmatter-row markdown-frontmatter-row-adding">
+								<div className="markdown-frontmatter-key-cell">
+									<AlignLeft aria-hidden />
+									<input
+										ref={fieldNameRef}
+										className="markdown-frontmatter-input markdown-frontmatter-key"
+										value={fieldNameDraft}
+										aria-label="New frontmatter property name"
+										placeholder="Property name"
+										onChange={(event) =>
+											setFieldNameDraft(event.currentTarget.value)
+										}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												event.preventDefault();
+												commitFieldName();
+											}
+											if (event.key === "Escape") {
+												event.preventDefault();
+												cancelAddingField();
+											}
+										}}
+										onBlur={commitFieldName}
+									/>
+								</div>
+								<div className="markdown-frontmatter-empty-value">Empty</div>
+							</div>
+						) : disabled ? null : (
 							<button
 								type="button"
-								className="markdown-frontmatter-remove"
-								disabled={disabled}
-								aria-label={`Remove ${key || "field"}`}
-								onClick={() => removeField(index)}
+								className="markdown-frontmatter-add"
+								onClick={() => setAddingField(true)}
 							>
-								<X aria-hidden />
+								<Plus aria-hidden />
+								Add property
 							</button>
-						</div>
-					))}
-					{addingField ? (
-						<div className="markdown-frontmatter-row markdown-frontmatter-row-adding">
-							<div className="markdown-frontmatter-key-cell">
-								<AlignLeft aria-hidden />
-								<input
-									ref={fieldNameRef}
-									className="markdown-frontmatter-input markdown-frontmatter-key"
-									value={fieldNameDraft}
-									aria-label="New frontmatter property name"
-									placeholder="Property name"
-									onChange={(event) =>
-										setFieldNameDraft(event.currentTarget.value)
-									}
-									onKeyDown={(event) => {
-										if (event.key === "Enter") {
-											event.preventDefault();
-											commitFieldName();
-										}
-										if (event.key === "Escape") {
-											event.preventDefault();
-											cancelAddingField();
-										}
-									}}
-									onBlur={commitFieldName}
-								/>
-							</div>
-							<div className="markdown-frontmatter-empty-value">Empty</div>
-						</div>
-					) : disabled ? null : (
-						<button
-							type="button"
-							className="markdown-frontmatter-add"
-							onClick={() => setAddingField(true)}
-						>
-							<Plus aria-hidden />
-							Add property
-						</button>
-					)}
-				</div>
-			) : (
-				<div className="markdown-frontmatter-raw">
-					<textarea
-						className="markdown-frontmatter-yaml"
-						value={rawDraft}
-						aria-label="Raw YAML frontmatter"
-						aria-invalid={parsed.error ? "true" : undefined}
-						aria-describedby={parsed.error ? rawErrorId : undefined}
-						spellCheck={false}
-						readOnly={disabled}
-						onChange={(event) => {
-							const value = event.currentTarget.value;
-							setRawDraft(value);
-							commitSource(value);
-						}}
-						onBlur={() => {
-							if (!disabled && rawDraft.trim().length === 0) {
-								removeFrontmatter();
-							}
-						}}
-					/>
-					{parsed.error ? (
-						<p id={rawErrorId} className="markdown-frontmatter-error">
-							{parsed.error}
-						</p>
-					) : null}
-				</div>
-			)}
-			{writeError ? (
-				<p className="markdown-frontmatter-error" role="alert">
-					{writeError}
-				</p>
-			) : null}
-		</NodeViewWrapper>
+						)}
+					</div>
+				) : (
+					<div className="markdown-frontmatter-raw">
+						<textarea
+							className="markdown-frontmatter-yaml"
+							value={rawDraft}
+							aria-label="Raw YAML frontmatter"
+							aria-invalid={parsed.error ? "true" : undefined}
+							aria-describedby={parsed.error ? rawErrorId : undefined}
+							spellCheck={false}
+							readOnly={disabled}
+							onChange={(event) => {
+								const value = event.currentTarget.value;
+								setRawDraft(value);
+								commitSource(value);
+							}}
+							onBlur={() => {
+								if (!disabled && rawDraft.trim().length === 0) {
+									removeFrontmatter();
+								}
+							}}
+						/>
+						{parsed.error ? (
+							<p id={rawErrorId} className="markdown-frontmatter-error">
+								{parsed.error}
+							</p>
+						) : null}
+					</div>
+				)}
+				{writeError ? (
+					<p className="markdown-frontmatter-error" role="alert">
+						{writeError}
+					</p>
+				) : null}
+			</NodeViewWrapper>
+		</LeaveFrontmatterContext.Provider>
 	);
 }
