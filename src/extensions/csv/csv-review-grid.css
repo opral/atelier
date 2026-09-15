@@ -223,7 +223,7 @@
 	   more. */
 	.csv-review-table .csv-review-band-cell {
 		background: var(--color-bg-panel-muted);
-		border-right: 0;
+		border-bottom: 1px solid var(--color-border-table-grid);
 	}
 	.csv-review-band-button {
 		display: flex;
@@ -270,6 +270,10 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.csv-review-band-action {
+		/* Held against the right edge of what is on screen, so a wide table
+		   scrolled sideways still offers the band its verb. */
+		position: sticky;
+		right: 0;
 		margin-left: auto;
 		padding: 0 12px;
 		opacity: 0;

@@ -623,31 +623,37 @@ function CsvReviewBand({
 				{ "--csv-review-cell-height": `${BAND_HEIGHT}px` } as CSSProperties
 			}
 		>
-			<td className="csv-review-band-cell" colSpan={columns + 1}>
-				<span className="csv-review-cell-box">
-					<button
-						type="button"
-						className="csv-review-band-button"
-						aria-expanded={open}
-						aria-label={`${count}, ${
-							segment.first === segment.last
-								? `row ${segment.first}`
-								: `rows ${segment.first} to ${segment.last}`
-						}`}
-						onClick={() => onToggle(segment.key)}
-					>
-						<span className="csv-review-band-label">
-							<span className="csv-review-band-chevron">
-								<Chevron size={13} aria-hidden="true" />
-							</span>
-							<span className="csv-review-band-count">{count}</span>
-							<span className="csv-review-band-range">{range}</span>
+			{/* No clipping box here, unlike a data row: a band is always exactly a
+			    row tall and never animates, and a box that clips would become the
+			    scrollport its label sticks to, stranding the label off the side of
+			    a table scrolled sideways. */}
+			<td
+				className="csv-review-band-cell"
+				colSpan={columns + 1}
+				style={{ height: BAND_HEIGHT }}
+			>
+				<button
+					type="button"
+					className="csv-review-band-button"
+					aria-expanded={open}
+					aria-label={`${count}, ${
+						segment.first === segment.last
+							? `row ${segment.first}`
+							: `rows ${segment.first} to ${segment.last}`
+					}`}
+					onClick={() => onToggle(segment.key)}
+				>
+					<span className="csv-review-band-label">
+						<span className="csv-review-band-chevron">
+							<Chevron size={13} aria-hidden="true" />
 						</span>
-						<span className="csv-review-band-action" aria-hidden="true">
-							{open ? "Hide" : "Show"}
-						</span>
-					</button>
-				</span>
+						<span className="csv-review-band-count">{count}</span>
+						<span className="csv-review-band-range">{range}</span>
+					</span>
+					<span className="csv-review-band-action" aria-hidden="true">
+						{open ? "Hide" : "Show"}
+					</span>
+				</button>
 			</td>
 		</tr>
 	);
