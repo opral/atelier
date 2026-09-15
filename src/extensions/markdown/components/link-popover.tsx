@@ -109,8 +109,13 @@ export function LinkPopover({
 
 	const close = useCallback(() => {
 		// Closing without applying must not strand focus on the popover: the
-		// caret and selection go back where they were.
-		if (editor && !editor.isDestroyed) editor.chain().focus().run();
+		// caret and selection go back where they were. Only those — focusing
+		// the editor scrolls the caret into view by default, and this is the
+		// close a wheel gesture triggers, so the reader's own scroll was being
+		// rewound to the text they had just scrolled away from.
+		if (editor && !editor.isDestroyed) {
+			editor.chain().focus(null, { scrollIntoView: false }).run();
+		}
 		onOpenChange(false);
 	}, [editor, onOpenChange]);
 

@@ -119,6 +119,30 @@ describe("LinkPopover", () => {
 		expect(editor.isFocused).toBe(true);
 	});
 
+	test("closing hands the caret back without taking the scroll with it", async () => {
+		const { editor, setCaret } = mount();
+		await screen.findByLabelText("Link URL");
+		const scrolled: boolean[] = [];
+		const dispatch = editor.view.dispatch.bind(editor.view);
+		(editor.view as any).dispatch = (tr: any) => {
+			scrolled.push(tr.scrolledIntoView === true);
+			dispatch(tr);
+		};
+
+		// The close a wheel gesture causes. Focusing an editor scrolls its
+		// caret into view, so the close was undoing the very scroll that
+		// triggered it.
+		setCaret({ top: -480, bottom: -460 });
+		await act(async () => {
+			window.dispatchEvent(new Event("scroll"));
+		});
+		await waitFor(() => {
+			expect(screen.queryByLabelText("Link URL")).toBeNull();
+		});
+		expect(editor.isFocused).toBe(true);
+		expect(scrolled).not.toContain(true);
+	});
+
 	test("stays open while the text it is editing is still in view", async () => {
 		const { setCaret } = mount();
 		expect(await screen.findByLabelText("Link URL")).toBeInTheDocument();
