@@ -2342,7 +2342,13 @@ test("fresh mapping: inserted and deleted columns keep surviving property IDs an
 	const fixture = await renderMetadataCsv();
 	try {
 		await configureSelect();
-		const before = readCsvMetadata((await fixture.read()).lixcol_metadata)!;
+		// The grid updates optimistically; capture the persisted column IDs
+		// only after the metadata write has completed.
+		const before = await waitFor(async () => {
+			const metadata = readCsvMetadata((await fixture.read()).lixcol_metadata);
+			expect(metadata?.columns[1]).toMatchObject({ type: "select" });
+			return metadata!;
+		});
 		clickCsvHeader(0);
 		fireEvent.click(
 			await screen.findByRole("menuitem", { name: "Insert column left" }),
@@ -2565,6 +2571,10 @@ test("checkpoint review reveals CSV column additions on a freshly opened surface
 			await screen.findByRole("button", {
 				name: "Latest checkpoint. Review latest checkpoint",
 			}),
+		);
+		// Entering the checkpoint opens nothing; › steps to its changed file.
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Next changed file" }),
 		);
 		await waitFor(() => {
 			expect(

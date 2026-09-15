@@ -93,24 +93,24 @@ describe("resolveLixFileForOpen", () => {
 describe("syncPanelGroupLayout", () => {
 	test("applies a remote canonical layout only when it differs", () => {
 		const group = {
-			getLayout: vi.fn(() => ({ left: 20, central: 60, right: 20 })),
+			getLayout: vi.fn(() => ({ left: 20, main: 60, right: 20 })),
 			setLayout: vi.fn((layout: Record<string, number>) => layout),
 		};
 
-		expect(
-			syncPanelGroupLayout(group, { left: 20, central: 60, right: 20 }),
-		).toBe(false);
+		expect(syncPanelGroupLayout(group, { left: 20, main: 60, right: 20 })).toBe(
+			false,
+		);
 		expect(group.setLayout).not.toHaveBeenCalled();
 
-		group.getLayout.mockReturnValue({ left: 0, central: 100, right: 0 });
-		const remoteLayout = { left: 25, central: 50, right: 25 };
+		group.getLayout.mockReturnValue({ left: 0, main: 100, right: 0 });
+		const remoteLayout = { left: 25, main: 50, right: 25 };
 		expect(syncPanelGroupLayout(group, remoteLayout)).toBe(true);
 		expect(group.setLayout).toHaveBeenCalledWith(remoteLayout);
 	});
 });
 
 describe("extension menu preferences", () => {
-	test("shares the Files hidden-file toggle between the sidebar and central tab", async () => {
+	test("shares the Files hidden-file toggle between the sidebar and main tab", async () => {
 		const lix = await openLix();
 		const preferencesStore = createMemoryPreferencesStore();
 		const atelier = createAtelier({ lix, preferencesStore });
@@ -173,15 +173,15 @@ describe("extension menu preferences", () => {
 
 			await act(async () => {
 				await atelier.views.open(FILES_EXTENSION_KIND, {
-					panel: "central",
+					area: "main",
 					newTab: true,
 				});
 			});
 			const filesTab = await waitFor(() => {
 				const tab = document.querySelector<HTMLButtonElement>(
-					'header [data-slot="central-tab-strip"] button[data-view-key="atelier_files"]',
+					'header [data-slot="main-tab-strip"] button[data-view-key="atelier_files"]',
 				);
-				if (!tab) throw new Error("central Files tab not found");
+				if (!tab) throw new Error("main Files tab not found");
 				return tab;
 			});
 			fireEvent.contextMenu(filesTab);
@@ -201,7 +201,7 @@ describe("extension menu preferences", () => {
 });
 
 describe("open file lifecycle", () => {
-	test("opens documents as central tabs beside the sidebar Files view", async () => {
+	test("opens documents as main tabs beside the sidebar Files view", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
 		const sessionStateStore = createMemorySessionStateStore();
@@ -255,13 +255,13 @@ describe("open file lifecycle", () => {
 			documentOrigin: "existing",
 			viewKind: "atelier_file",
 		});
-		// Files stays in the sidebar; the document is the only central view.
+		// Files stays in the sidebar; the document is the only main view.
 		await waitFor(() => {
 			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.left?.views).toEqual([
+			expect(value?.areas?.left?.views).toEqual([
 				expect.objectContaining({ kind: FILES_EXTENSION_KIND }),
 			]);
-			expect(value?.panels?.central?.views).toEqual([
+			expect(value?.areas?.main?.views).toEqual([
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: fakeUuid("one") }),
 				}),
@@ -275,7 +275,7 @@ describe("open file lifecycle", () => {
 		});
 		await waitFor(() => {
 			const value = sessionStateStore.getSnapshot();
-			expect(value?.panels?.central?.views).toEqual([
+			expect(value?.areas?.main?.views).toEqual([
 				expect.objectContaining({
 					state: expect.objectContaining({ fileId: fakeUuid("two") }),
 				}),
@@ -287,12 +287,12 @@ describe("open file lifecycle", () => {
 			await atelier.documents.open("/one.md", { newTab: true });
 		});
 		await waitFor(() => {
-			expect(
-				sessionStateStore.getSnapshot()?.panels?.central?.views,
-			).toHaveLength(2);
+			expect(sessionStateStore.getSnapshot()?.areas?.main?.views).toHaveLength(
+				2,
+			);
 		});
 
-		// Deleting every open file leaves the central empty state.
+		// Deleting every open file leaves the main empty state.
 		await act(async () => {
 			await qb(lix)
 				.deleteFrom("lix_file")
@@ -306,10 +306,8 @@ describe("open file lifecycle", () => {
 				.execute();
 		});
 		await waitFor(() => {
-			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
-			expect(sessionStateStore.getSnapshot()?.panels?.central?.views).toEqual(
-				[],
-			);
+			expect(screen.getByTestId("main-panel-empty-state")).toBeVisible();
+			expect(sessionStateStore.getSnapshot()?.areas?.main?.views).toEqual([]);
 		});
 
 		await act(async () => utils?.unmount());
@@ -338,10 +336,10 @@ describe("open file lifecycle", () => {
 		});
 		const initialState = {
 			...DEFAULT_ATELIER_UI_STATE,
-			focusedPanel: "right" as const,
-			panels: {
-				...DEFAULT_ATELIER_UI_STATE.panels,
-				central: {
+			focusedArea: "right" as const,
+			areas: {
+				...DEFAULT_ATELIER_UI_STATE.areas,
+				main: {
 					views: [
 						{
 							instance,
@@ -352,7 +350,7 @@ describe("open file lifecycle", () => {
 					activeInstance: instance,
 				},
 			},
-			layout: { sizes: { left: 10, central: 55, right: 35 } },
+			layout: { sizes: { left: 10, main: 55, right: 35 } },
 		};
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore(initialState);
@@ -398,18 +396,18 @@ describe("open file lifecycle", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.getByTestId("central-panel-empty-state")).toBeVisible();
+			expect(screen.getByTestId("main-panel-empty-state")).toBeVisible();
 			expect(screen.queryByRole("img", { name: "photo.jpeg" })).toBeNull();
 		});
 		await waitFor(async () => {
 			const state = sessionStateStore.getSnapshot();
-			expect(state?.panels.central).toEqual({
+			expect(state?.areas.main).toEqual({
 				views: [],
 				activeInstance: null,
 			});
 			expect((await preferencesStore.load())?.layout.sizes).toEqual({
 				left: 10,
-				central: 55,
+				main: 55,
 				right: 35,
 			});
 		});
@@ -471,7 +469,7 @@ describe("diff review navigation", () => {
 		const sessionStateStore = createMemorySessionStateStore();
 		const preferencesStore = createMemoryPreferencesStore({
 			version: 1,
-			layout: { sizes: { left: 20, central: 80, right: 0 } },
+			layout: { sizes: { left: 20, main: 80, right: 0 } },
 			review: { autoAcceptAgentChanges: true },
 		});
 		const atelier = createAtelier({
@@ -515,8 +513,7 @@ describe("diff review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("auto-changed.md"));
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
-						?.fileId,
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 				).toBe(fakeUuid("auto-changed-file"));
 			});
 
@@ -536,7 +533,7 @@ describe("diff review navigation", () => {
 				).toBeVisible();
 			});
 			expect(
-				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state?.fileId,
+				sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 			).toBe(fakeUuid("auto-changed-file"));
 			await waitFor(() => {
 				expect(
@@ -557,31 +554,25 @@ describe("diff review navigation", () => {
 					}),
 				).toHaveAttribute("aria-checked", "false");
 			});
-			const reviewOpenExecuteBatch = vi.spyOn(lix, "executeBatch");
+			const reviewOpenExecute = vi.spyOn(lix, "execute");
 			await act(async () => {
 				await openWorkingChangesFromHistory();
 			});
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
-			const reviewBatch = reviewOpenExecuteBatch.mock.calls.find(
-				([statements]) =>
-					statements.some((statement) =>
-						statement.sql.includes("FROM lix_diff('lix_file')"),
-					),
-			)?.[0];
-			expect(reviewBatch).toEqual(
-				expect.arrayContaining([
-					expect.objectContaining({
-						sql: expect.stringContaining(
-							"working_base_commit_id AS before_commit_id",
-						),
-					}),
-					expect.objectContaining({
-						sql: expect.stringContaining("FROM lix_diff('lix_file')"),
-					}),
-				]),
-			);
+			// One statement resolves the epoch and diffs exactly those two
+			// commits, so the files can never belong to a different span than
+			// the one reported beside them.
+			const reviewQuery = reviewOpenExecute.mock.calls
+				.map(([sql]) => String(sql))
+				.find(
+					(sql) =>
+						sql.includes("working_base_commit_id AS before_commit_id") &&
+						sql.includes("lix_diff("),
+				);
+			expect(reviewQuery).toContain("(SELECT before_commit_id FROM epoch)");
+			expect(reviewQuery).toContain("(SELECT after_commit_id FROM epoch)");
 			const reviewFloat = document.querySelector(
 				".external-write-review-actions",
 			);
@@ -646,8 +637,7 @@ describe("diff review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("auto-stable.md"));
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
-						?.fileId,
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 				).toBe(fakeUuid("auto-stable-file"));
 			});
 			expect(
@@ -664,12 +654,12 @@ describe("diff review navigation", () => {
 				expect(document.querySelector("[data-review-mode='true']")).toBeNull();
 			});
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			let activeHistoryInstance: string | null = null;
 			await waitFor(() => {
-				const leftPanel = sessionStateStore.getSnapshot()?.panels.left;
+				const leftPanel = sessionStateStore.getSnapshot()?.areas.left;
 				const activeView = leftPanel?.views.find(
 					(view) => view.instance === leftPanel.activeInstance,
 				);
@@ -680,18 +670,16 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
-			// An unchanged file was on screen, so the review opens the first
-			// changed file's diff in its place.
+			// A working review shows live documents, never a historical diff.
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()?.panels.central;
-				const activeView = central?.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
-				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-changed-file"));
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
 				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
-			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+			expect(sessionStateStore.getSnapshot()?.areas.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
 			const checkpointList = await screen.findByRole("list", {
@@ -711,19 +699,19 @@ describe("diff review navigation", () => {
 			});
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 						?.beforeCommitId,
 				).toEqual(expect.any(String));
 				expect(
-					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 						?.afterCommitId,
 				).toEqual(expect.any(String));
 			});
 			expect(
-				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+				sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 					?.beforeCommitId,
 			).not.toBe(
-				sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
+				sessionStateStore.getSnapshot()?.areas.main.views[0]?.state
 					?.afterCommitId,
 			);
 			await waitFor(() => {
@@ -742,21 +730,36 @@ describe("diff review navigation", () => {
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.getByRole("button", { name: "Exit" })).toBeVisible();
-			// Returning to "now" releases the snapshot view; the unchanged file
-			// it showed is not the review's scope, so the changed file's diff
-			// opens live in its place.
+			// Returning to "now" releases the snapshot view and restores the live
+			// document it replaced. Opening review is not a navigation, so the
+			// unchanged file stays on screen and the changed one waits in the
+			// float.
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()?.panels.central;
-				const activeView = central?.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
-				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-changed-file"));
+				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-stable-file"));
 				expect(activeView?.state?.afterCommitId).toBeUndefined();
 				expect(activeView?.state?.beforeCommitId).toBeUndefined();
 			});
-			expect(sessionStateStore.getSnapshot()?.panels.left.activeInstance).toBe(
+			expect(sessionStateStore.getSnapshot()?.areas.left.activeInstance).toBe(
 				activeHistoryInstance,
 			);
+			// › opens the changed file, which makes it the checkpoint's scope.
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Next changed file" }),
+				);
+			});
+			await waitFor(() => {
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(fakeUuid("auto-changed-file"));
+				expect(activeView?.state?.afterCommitId).toBeUndefined();
+			});
 			const execute = vi.spyOn(lix, "execute");
 			execute.mockClear();
 			fireEvent.click(
@@ -776,13 +779,13 @@ describe("diff review navigation", () => {
 			});
 			// The idle pill reviews the checkpoint it names, as the History
 			// view would, without switching the side panel to History.
-			const leftBefore = sessionStateStore.getSnapshot()?.panels.left;
+			const leftBefore = sessionStateStore.getSnapshot()?.areas.left;
 			fireEvent.click(idlePill);
 			expect(await screen.findByRole("button", { name: "Exit" })).toBeVisible();
 			expect(
 				await screen.findByRole("list", { name: "Files at this checkpoint" }),
 			).toBeVisible();
-			expect(sessionStateStore.getSnapshot()?.panels.left).toEqual(leftBefore);
+			expect(sessionStateStore.getSnapshot()?.areas.left).toEqual(leftBefore);
 			const closePill = await screen.findByRole("button", {
 				name: "Latest checkpoint. Close review",
 			});
@@ -895,8 +898,7 @@ describe("diff review navigation", () => {
 			fireEvent.click(await findFilesTreeItem("added-active.md"));
 			await waitFor(() => {
 				expect(
-					sessionStateStore.getSnapshot()?.panels.central.views[0]?.state
-						?.fileId,
+					sessionStateStore.getSnapshot()?.areas.main.views[0]?.state?.fileId,
 				).toBe(fileId);
 			});
 
@@ -934,10 +936,15 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("checkpoints only the viewed file by default", async () => {
+	test("checkpointing the viewed file keeps the unticked one under review", async () => {
 		const lix = await openLix();
 		const reviewStatusStore = createMemoryReviewStatusStore();
-		const atelier = createAtelier({ lix, reviewStatusStore });
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({
+			lix,
+			reviewStatusStore,
+			sessionStateStore,
+		});
 		let utils: ReturnType<typeof render> | undefined;
 		try {
 			const selectedFileId = fakeUuid("partial-checkpoint-selected");
@@ -977,11 +984,45 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
+			// Nothing is viewed yet; › steps through the files, and every file
+			// it shows stays ticked. Two steps reach /partial-selected.md with
+			// both ticked, so the pass-through file is unticked by hand.
+			for (let step = 0; step < 2; step += 1) {
+				await act(async () => {
+					fireEvent.click(
+						screen.getByRole("button", { name: "Next changed file" }),
+					);
+				});
+			}
+			await waitFor(() => {
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(selectedFileId);
+			});
+			await act(async () => {
+				fireEvent.click(
+					await screen.findByRole("button", {
+						name: "Working set: 2 of 2 files",
+					}),
+				);
+			});
+			await act(async () => {
+				fireEvent.click(
+					await screen.findByTestId(`diff-scope-file:${remainingFileId}`),
+				);
+			});
 			expect(
 				await screen.findByRole("button", {
 					name: "Working set: 1 of 2 files",
 				}),
 			).toBeVisible();
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+				);
+			});
 
 			const execute = vi.spyOn(lix, "execute");
 
@@ -995,17 +1036,170 @@ describe("diff review navigation", () => {
 					),
 				).toBe(true);
 			});
-			// The verb concludes the session even with unticked files remaining.
-			await waitFor(() => {
-				expect(
-					screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
-				).toBeNull();
+			// Sealing the ticked file does not conclude the review: the unticked
+			// file is still unhandled, so the float stays and moves on to it.
+			// With one file left the float shows no working-set chip and no
+			// stepper — just the verbs — so the review is recognised by those.
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "1 file changed since checkpoint. Close review" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "Checkpoint" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			expect(screen.getByRole("button", { name: "Exit" })).toBeVisible();
+			await waitFor(
+				() => {
+					const main = sessionStateStore.getSnapshot()?.areas.main;
+					const activeView = main?.views.find(
+						(view) => view.instance === main.activeInstance,
+					);
+					expect(activeView?.state?.fileId).toBe(remainingFileId);
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("undoing one of three files keeps the other two under review", async () => {
+		const lix = await openLix();
+		const reviewStatusStore = createMemoryReviewStatusStore();
+		const sessionStateStore = createMemorySessionStateStore();
+		const atelier = createAtelier({
+			lix,
+			reviewStatusStore,
+			sessionStateStore,
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			const ids = ["a", "b", "c"].map((name) => fakeUuid(`undo-three-${name}`));
+			await qb(lix)
+				.insertInto("lix_file")
+				.values(
+					ids.map((id, index) => ({
+						id,
+						path: `/undo-three-${"abc"[index]}.md`,
+						content: new TextEncoder().encode(`# Before ${index}\n`),
+					})),
+				)
+				.execute();
+			await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.where("path", "not like", "/.lix/%")
+				.set({ content: new TextEncoder().encode("# After\n") })
+				.where("id", "in", ids)
+				.execute();
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
 			});
-			// The unticked file's changes survive for the next review.
+			await openWorkingChangesFromHistory();
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
+			// Nothing is viewed on entry; › steps to the first changed file.
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Next changed file" }),
+				);
+			});
+			await waitFor(() => {
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(ids[0]);
+			});
 			expect(
 				await screen.findByRole("button", {
-					name: "1 file changed since checkpoint. Review working changes",
+					name: "Working set: 1 of 3 files",
 				}),
+			).toBeVisible();
+
+			fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+			// One file handled, two to go: the review stays open, the handled
+			// file leaves the list, and the next one takes its place on screen.
+			expect(
+				await screen.findByRole("button", {
+					name: "Working set: 1 of 2 files",
+				}),
+			).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
+			await waitFor(() => {
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBe(ids[1]);
+			});
+			// The handled file is gone from the working set; the other two remain.
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+				);
+			});
+			const rows = await screen.findAllByTestId(/^diff-scope-file:/);
+			expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
+				`diff-scope-file:${ids[1]}`,
+				`diff-scope-file:${ids[2]}`,
+			]);
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+				);
+			});
+
+			// Undo again. The first revert moved the head, so the session must
+			// be reading a fresh epoch by now — this is where the review used
+			// to fail with "the working diff changed while it was being reviewed".
+			fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "1 file changed since checkpoint. Close review" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
+			).toBeVisible();
+			expect(
+				screen.queryByText(
+					/The working diff changed while it was being reviewed/,
+				),
+			).toBeNull();
+			await waitFor(
+				() => {
+					const main = sessionStateStore.getSnapshot()?.areas.main;
+					const activeView = main?.views.find(
+						(view) => view.instance === main.activeInstance,
+					);
+					expect(activeView?.state?.fileId).toBe(ids[2]);
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			expect(
+				await screen.findByRole(
+					"button",
+					{ name: "Undo" },
+					{ timeout: ASYNC_UI_TIMEOUT },
+				),
 			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
@@ -1013,7 +1207,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("enters review mode on the first changed file when nothing is open; files open on explicit selection", async () => {
+	test("enters review mode without opening a file; files open on explicit selection", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const atelier = createAtelier({ lix, sessionStateStore });
@@ -1046,7 +1240,7 @@ describe("diff review navigation", () => {
 				);
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
-			const initialCentral = sessionStateStore.getSnapshot()?.panels.central;
+			const initialCentral = sessionStateStore.getSnapshot()?.areas.main;
 			const initialActiveView = initialCentral?.views.find(
 				(view) => view.instance === initialCentral.activeInstance,
 			);
@@ -1058,7 +1252,7 @@ describe("diff review navigation", () => {
 					.where("path", "not like", "/.lix/%")
 					.set({ content: new TextEncoder().encode("# After\n") })
 					.execute();
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const workingChanges = await screen.findByRole("button", {
@@ -1067,21 +1261,16 @@ describe("diff review navigation", () => {
 			await waitFor(() => expect(workingChanges).toBeEnabled());
 			fireEvent.click(workingChanges);
 
-			// Nothing was on screen, so review mode opens the first changed
-			// file's diff: the float never names a file that isn't visible.
+			// Review mode is entered, and nothing is opened for the user: the
+			// changed files wait in the float, to be stepped through or chosen.
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
-			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()?.panels.central;
-				const activeView = central?.views.find(
-					(view) => view.instance === central.activeInstance,
-				);
-				expect(activeView?.state?.fileId).toBe(
-					fakeUuid("empty-state-working-change-a"),
-				);
-			});
-			expect(screen.getAllByText("1 of 2").length).toBeGreaterThan(0);
+			const stillEmpty = sessionStateStore.getSnapshot()?.areas.main;
+			const stillEmptyView = stillEmpty?.views.find(
+				(view) => view.instance === stillEmpty.activeInstance,
+			);
+			expect(stillEmptyView?.state?.fileId).toBeUndefined();
 			const workingFiles = await screen.findByRole("list", {
 				name: "Files in working changes",
 			});
@@ -1101,9 +1290,9 @@ describe("diff review navigation", () => {
 				),
 			).toHaveTextContent("After");
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()?.panels.central;
-				const activeView = central?.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
 				expect(activeView?.state?.fileId).toBe(
 					fakeUuid("empty-state-working-change-z"),
@@ -1125,7 +1314,7 @@ describe("diff review navigation", () => {
 		let atelier!: ReturnType<typeof createAtelier>;
 		const onEvent = (event: AtelierEvent) => {
 			if (
-				event.type === "central_view_activated" &&
+				event.type === "main_view_activated" &&
 				event.filePath &&
 				typeof event.state?.afterCommitId === "string"
 			) {
@@ -1173,7 +1362,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 
@@ -1229,32 +1418,29 @@ describe("diff review navigation", () => {
 				"a-checkpoint.md",
 				"z-checkpoint.md",
 			]);
-			// Nothing was on screen, so the first changed file opens on entry:
-			// the float never names a file that isn't visible.
-			await waitFor(
-				() => {
-					const central = sessionStateStore.getSnapshot()?.panels.central;
-					const activeView = central?.views.find(
-						(view) => view.instance === central.activeInstance,
-					);
-					expect(activeView?.state?.afterCommitId).toEqual(expect.any(String));
-					expect(activeView?.state?.filePath).toBe("/a-checkpoint.md");
-				},
-				{ timeout: ASYNC_UI_TIMEOUT },
-			);
-			await waitFor(() => expect(routeEchoes).toHaveLength(1));
-			await act(async () => {
-				await Promise.all(routeEchoes);
-			});
+			// Entering the checkpoint opens nothing: the changed files wait in
+			// the list until one is chosen, so no route is echoed yet.
+			{
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				expect(activeView?.state?.afterCommitId).toBeUndefined();
+			}
+			expect(routeEchoes).toHaveLength(0);
 
 			await act(async () => {
 				fireEvent.click(fileButtons[1]!);
 			});
+			await waitFor(() => expect(routeEchoes).toHaveLength(1));
+			await act(async () => {
+				await Promise.all(routeEchoes);
+			});
 			await waitFor(
 				() => {
-					const central = sessionStateStore.getSnapshot()?.panels.central;
-					const activeView = central?.views.find(
-						(view) => view.instance === central.activeInstance,
+					const main = sessionStateStore.getSnapshot()?.areas.main;
+					const activeView = main?.views.find(
+						(view) => view.instance === main.activeInstance,
 					);
 					expect(activeView?.state?.filePath).toBe("/z-checkpoint.md");
 					expect(activeView?.state?.afterCommitId).toEqual(expect.any(String));
@@ -1371,7 +1557,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const checkpointList = await screen.findByRole("list", {
@@ -1403,9 +1589,9 @@ describe("diff review navigation", () => {
 				);
 			});
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()!.panels.central;
-				const active = central.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()!.areas.main;
+				const active = main.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
 				expect(active?.state?.filePath).toBe("/historical-name.md");
 			});
@@ -1418,9 +1604,9 @@ describe("diff review navigation", () => {
 				);
 			});
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()!.panels.central;
-				const active = central.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()!.areas.main;
+				const active = main.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
 				expect(active?.state?.filePath).toBe("/historical-delete.md");
 			});
@@ -1465,7 +1651,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const checkpointList = await screen.findByRole("list", {
@@ -1515,7 +1701,7 @@ describe("diff review navigation", () => {
 				expect(
 					sessionStateStore
 						.getSnapshot()
-						?.panels.central.views.some(
+						?.areas.main.views.some(
 							(view) =>
 								typeof view.state?.afterCommitId === "string" ||
 								typeof view.state?.beforeCommitId === "string",
@@ -1590,7 +1776,7 @@ describe("diff review navigation", () => {
 			});
 			await screen.findByRole("heading", { name: "Start writing" });
 			await act(async () => {
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const originalExecute = lix.execute.bind(lix);
@@ -1626,9 +1812,9 @@ describe("diff review navigation", () => {
 				);
 			});
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()!.panels.central;
-				const activeView = central.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()!.areas.main;
+				const activeView = main.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
 				expect(activeView?.state).toMatchObject({
 					fileId: addedFileId,
@@ -1655,7 +1841,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("opens a removed file when working changes contains only deletions", async () => {
+	test("a deletions-only review opens the removed file only when it is chosen", async () => {
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore();
 		const atelier = createAtelier({ lix, sessionStateStore });
@@ -1685,7 +1871,7 @@ describe("diff review navigation", () => {
 
 			await act(async () => {
 				await qb(lix).deleteFrom("lix_file").where("id", "=", fileId).execute();
-				await atelier.views.open(HISTORY_EXTENSION_KIND, { panel: "left" });
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
 				await showRepositoryHistory();
 			});
 			const workingChanges = await screen.findByRole("button", {
@@ -1699,12 +1885,22 @@ describe("diff review navigation", () => {
 			});
 			const removedFileButton = within(workingFiles).getByRole("button");
 			expect(removedFileButton).toHaveTextContent("removed-working-change.md");
-			// Nothing was on screen, so the removed file's diff opens from
-			// history on entry.
+			// Entering review opened nothing; choosing the removed file opens
+			// its diff from history.
+			{
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				expect(activeView?.state?.fileId).toBeUndefined();
+			}
+			await act(async () => {
+				fireEvent.click(removedFileButton);
+			});
 			await waitFor(() => {
-				const central = sessionStateStore.getSnapshot()?.panels.central;
-				const activeView = central?.views.find(
-					(view) => view.instance === central.activeInstance,
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				const activeView = main?.views.find(
+					(view) => view.instance === main.activeInstance,
 				);
 				expect(activeView?.state?.fileId).toBe(fileId);
 				expect(activeView?.state?.beforeCommitId).toEqual(expect.any(String));
@@ -1809,8 +2005,8 @@ describe("installed extension lifecycle", () => {
 
 		const staleSessionState = {
 			...DEFAULT_ATELIER_UI_STATE,
-			panels: {
-				...DEFAULT_ATELIER_UI_STATE.panels,
+			areas: {
+				...DEFAULT_ATELIER_UI_STATE.areas,
 				left: {
 					views: [{ instance: extensionInstance, kind: extensionKind }],
 					activeInstance: extensionInstance,
@@ -1834,7 +2030,7 @@ describe("installed extension lifecycle", () => {
 
 			await waitFor(() => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.panels.left.views).toEqual([]);
+				expect(state?.areas.left.views).toEqual([]);
 			});
 
 			// A stale snapshot can also arrive after extension discovery has settled.
@@ -1842,7 +2038,7 @@ describe("installed extension lifecycle", () => {
 			act(() => sessionStateStore.setSnapshot(staleSessionState));
 			await waitFor(() => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.panels.left.views).toEqual([]);
+				expect(state?.areas.left.views).toEqual([]);
 			});
 
 			await act(async () => {
@@ -1892,7 +2088,7 @@ describe("installed extension lifecycle", () => {
 				await screen.findByText("Recovered extension content"),
 			).toBeInTheDocument();
 			const restoredState = sessionStateStore.getSnapshot();
-			const restoredEntry = restoredState?.panels.left.views.find(
+			const restoredEntry = restoredState?.areas.left.views.find(
 				(entry) => entry.kind === extensionKind,
 			);
 			expect(restoredEntry?.instance).toBeDefined();
@@ -1929,13 +2125,13 @@ describe("canonical UI state", () => {
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
 		const initialState = {
 			...DEFAULT_ATELIER_UI_STATE,
-			focusedPanel: "central" as const,
-			panels: {
+			focusedArea: "main" as const,
+			areas: {
 				left: {
 					views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
 					activeInstance: "files-default",
 				},
-				central: {
+				main: {
 					views: [
 						{
 							instance: documentInstance,
@@ -1947,7 +2143,7 @@ describe("canonical UI state", () => {
 				},
 				right: { views: [], activeInstance: null },
 			},
-			layout: { sizes: { left: 20, central: 80, right: 0 } },
+			layout: { sizes: { left: 20, main: 80, right: 0 } },
 		};
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore(initialState);
@@ -1988,11 +2184,11 @@ describe("canonical UI state", () => {
 
 			await waitFor(async () => {
 				const state = sessionStateStore.getSnapshot();
-				expect(state?.focusedPanel).toBe("left");
+				expect(state?.focusedArea).toBe("left");
 				// The empty right panel gains its History default at coerce time;
 				// everything else persists exactly as it was.
-				expect(state?.panels).toEqual({
-					...initialState.panels,
+				expect(state?.areas).toEqual({
+					...initialState.areas,
 					right: {
 						views: [{ instance: "history-default", kind: "atelier_history" }],
 						activeInstance: "history-default",
@@ -2002,6 +2198,82 @@ describe("canonical UI state", () => {
 					initialState.layout.sizes,
 				);
 			});
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+});
+
+describe("a file the view cannot diff in place", () => {
+	test("shows the checkpoint beside the working file", async () => {
+		const lix = await openLix();
+		Object.defineProperty(URL, "createObjectURL", {
+			configurable: true,
+			value: vi.fn(() => "blob:atelier-image"),
+		});
+		Object.defineProperty(URL, "revokeObjectURL", {
+			configurable: true,
+			value: vi.fn(),
+		});
+		const atelier = createAtelier({
+			lix,
+			reviewStatusStore: createMemoryReviewStatusStore(),
+			sessionStateStore: createMemorySessionStateStore(),
+		});
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("review-shot"),
+					path: "/shot.png",
+					content: new Uint8Array([137, 80, 78, 71, 1]),
+				})
+				.execute();
+			await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.where("id", "=", fakeUuid("review-shot"))
+				.set({ content: new Uint8Array([137, 80, 78, 71, 2]) })
+				.execute();
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await openWorkingChangesFromHistory();
+			await act(async () => {
+				fireEvent.click(
+					await screen.findByRole("button", { name: "Next changed file" }),
+				);
+			});
+
+			// The image view draws both revisions itself: checkpoint left,
+			// working file right.
+			await waitFor(
+				() =>
+					expect(
+						utils!.container.querySelectorAll("[data-diff-side]"),
+					).toHaveLength(2),
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			await waitFor(() => {
+				expect(
+					utils!.container.querySelector("[data-diff-side='before'] img"),
+				).not.toBeNull();
+				expect(
+					utils!.container.querySelector("[data-diff-side='after'] img"),
+				).not.toBeNull();
+			});
+			// The review keeps its verbs while the comparison is on screen.
+			expect(
+				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

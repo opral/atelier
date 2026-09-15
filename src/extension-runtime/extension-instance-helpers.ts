@@ -46,7 +46,7 @@ export function buildFileExtensionProps(args: {
 		: { fileId: args.fileId, atelier: { label } };
 }
 
-/** A central document editor bound to a workspace file. */
+/** A main document editor bound to a workspace file. */
 export const isDocumentView = (
 	view: ExtensionInstance | null | undefined,
 ): boolean => {

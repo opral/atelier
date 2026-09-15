@@ -255,9 +255,7 @@ describe("SqlExplorerView", () => {
 		expect(
 			document.querySelector("[data-attr='sql-table-description']"),
 		).toHaveTextContent(/^A file in the repository/);
-		expect(
-			screen.getByRole("columnheader", { name: /^path/ }),
-		).toHaveAttribute(
+		expect(screen.getByRole("columnheader", { name: /^path/ })).toHaveAttribute(
 			"title",
 			"Absolute path from the repository root, ending in the file's name.",
 		);

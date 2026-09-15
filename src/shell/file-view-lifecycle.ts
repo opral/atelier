@@ -5,11 +5,11 @@ import {
 import { hasHistoricalEditorRevisionState } from "@/extension-runtime/editor-revision-state";
 import type {
 	ExtensionInstance,
-	PanelSide,
-	PanelState,
+	Area,
+	AreaState,
 } from "@/extension-runtime/types";
 
-export type FileViewPanels = Record<PanelSide, PanelState>;
+export type FileViewPanels = Record<Area, AreaState>;
 
 export type ResolveCurrentFileView = (args: {
 	readonly view: ExtensionInstance;
@@ -23,46 +23,46 @@ function currentFileIdFromView(view: ExtensionInstance): string | null {
 }
 
 export function reconcileCurrentFileViews(args: {
-	readonly panels: FileViewPanels;
+	readonly areas: FileViewPanels;
 	readonly currentFileIds: ReadonlySet<string>;
 	readonly currentFilePathsById?: ReadonlyMap<string, string>;
 	readonly resolveCurrentFileView?: ResolveCurrentFileView;
 }): FileViewPanels {
-	const panels: FileViewPanels = {
+	const areas: FileViewPanels = {
 		left: reconcilePanel(
-			args.panels.left,
+			args.areas.left,
 			args.currentFileIds,
 			args.currentFilePathsById,
 			args.resolveCurrentFileView,
 		),
-		central: reconcilePanel(
-			args.panels.central,
+		main: reconcilePanel(
+			args.areas.main,
 			args.currentFileIds,
 			args.currentFilePathsById,
 			args.resolveCurrentFileView,
 		),
 		right: reconcilePanel(
-			args.panels.right,
+			args.areas.right,
 			args.currentFileIds,
 			args.currentFilePathsById,
 			args.resolveCurrentFileView,
 		),
 	};
 	const changed =
-		panels.left !== args.panels.left ||
-		panels.central !== args.panels.central ||
-		panels.right !== args.panels.right;
-	return changed ? panels : args.panels;
+		areas.left !== args.areas.left ||
+		areas.main !== args.areas.main ||
+		areas.right !== args.areas.right;
+	return changed ? areas : args.areas;
 }
 
 export function reconcileCurrentFileViewPanel(
-	panel: PanelState,
+	area: AreaState,
 	currentFileIds: ReadonlySet<string>,
 	currentFilePathsById?: ReadonlyMap<string, string>,
 	resolveCurrentFileView?: ResolveCurrentFileView,
-): PanelState {
+): AreaState {
 	return reconcilePanel(
-		panel,
+		area,
 		currentFileIds,
 		currentFilePathsById,
 		resolveCurrentFileView,
@@ -70,13 +70,13 @@ export function reconcileCurrentFileViewPanel(
 }
 
 function reconcilePanel(
-	panel: PanelState,
+	area: AreaState,
 	currentFileIds: ReadonlySet<string>,
 	currentFilePathsById?: ReadonlyMap<string, string>,
 	resolveCurrentFileView?: ResolveCurrentFileView,
-): PanelState {
-	let activeInstance = panel.activeInstance;
-	const views = panel.views.flatMap((view) => {
+): AreaState {
+	let activeInstance = area.activeInstance;
+	const views = area.views.flatMap((view) => {
 		const fileId = currentFileIdFromView(view);
 		if (fileId === null) return [view];
 		if (!currentFileIds.has(fileId)) return [];
@@ -117,10 +117,10 @@ function reconcilePanel(
 		return true;
 	});
 	if (
-		uniqueViews.length === panel.views.length &&
-		uniqueViews.every((view, index) => view === panel.views[index])
+		uniqueViews.length === area.views.length &&
+		uniqueViews.every((view, index) => view === area.views[index])
 	) {
-		return panel;
+		return area;
 	}
 	activeInstance = uniqueViews.some((view) => view.instance === activeInstance)
 		? activeInstance

@@ -120,7 +120,7 @@ describe("Atelier instance file controller", () => {
 		const homeRegistration: AtelierExtensionRegistration = {
 			id: HOME_EXTENSION_ID,
 			name: "Home",
-			placement: ["central"],
+			placement: ["main"],
 			hidden: true,
 			icon: ({ className }: { className?: string }) => (
 				<svg className={className} aria-hidden="true" />
@@ -131,7 +131,7 @@ describe("Atelier instance file controller", () => {
 			lix,
 			sessionStateStore,
 			extensions: [homeRegistration],
-			centralPanel: { home: { extensionId: HOME_EXTENSION_ID } },
+			mainArea: { home: { extensionId: HOME_EXTENSION_ID } },
 		});
 		let rendered: ReturnType<typeof render> | undefined;
 		try {
@@ -167,10 +167,8 @@ describe("Atelier instance file controller", () => {
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
 			).toBeVisible();
 			expect(screen.getByTestId("test-pill-home")).toBeVisible();
-			const central = sessionStateStore.getSnapshot()?.panels.central;
-			expect(central?.views.map((view) => view.kind)).toEqual([
-				HOME_EXTENSION_ID,
-			]);
+			const main = sessionStateStore.getSnapshot()?.areas.main;
+			expect(main?.views.map((view) => view.kind)).toEqual([HOME_EXTENSION_ID]);
 			expect(screen.queryByText("Reviewing home-pill-working.md")).toBeNull();
 
 			await act(async () => {
@@ -244,7 +242,7 @@ describe("Atelier instance file controller", () => {
 		}
 	});
 
-	test("keeps panels collapsed when the host does not open them by default", async () => {
+	test("keeps areas collapsed when the host does not open them by default", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -369,13 +367,13 @@ describe("Atelier instance file controller", () => {
 		const documentInstance = fileExtensionInstanceForKind(documentKind, fileId);
 		const lix = await openLix();
 		const sessionStateStore = createMemorySessionStateStore({
-			focusedPanel: "central",
-			panels: {
+			focusedArea: "main",
+			areas: {
 				left: {
 					views: [{ instance: "files-left", kind: FILES_EXTENSION_KIND }],
 					activeInstance: "files-left",
 				},
-				central: {
+				main: {
 					views: [
 						{
 							instance: documentInstance,
@@ -390,7 +388,7 @@ describe("Atelier instance file controller", () => {
 		});
 		const preferencesStore = createMemoryPreferencesStore({
 			version: 1,
-			layout: { sizes: { left: 0, central: 100, right: 0 } },
+			layout: { sizes: { left: 0, main: 100, right: 0 } },
 		});
 		await qb(lix)
 			.insertInto("lix_file")
@@ -430,7 +428,7 @@ describe("Atelier instance file controller", () => {
 		}
 	});
 
-	test("closes every central document when the workspace root takes control", async () => {
+	test("closes every main document when the workspace root takes control", async () => {
 		const lix = await openLix();
 		await qb(lix)
 			.insertInto("lix_file")
@@ -465,10 +463,10 @@ describe("Atelier instance file controller", () => {
 			await act(async () => atelier.documents.closeAll());
 
 			await waitFor(() => {
-				const centralViews =
-					sessionStateStore.getSnapshot()?.panels.central.views ?? [];
+				const mainViews =
+					sessionStateStore.getSnapshot()?.areas.main.views ?? [];
 				expect(
-					centralViews.filter((view) => typeof view.state?.fileId === "string"),
+					mainViews.filter((view) => typeof view.state?.fileId === "string"),
 				).toEqual([]);
 			});
 		} finally {
@@ -512,9 +510,9 @@ describe("Atelier instance file controller", () => {
 			await act(async () => atelier.documents.close("/first.md"));
 
 			await waitFor(() => {
-				const centralViews =
-					sessionStateStore.getSnapshot()?.panels.central.views ?? [];
-				const documentPaths = centralViews
+				const mainViews =
+					sessionStateStore.getSnapshot()?.areas.main.views ?? [];
+				const documentPaths = mainViews
 					.map((view) => view.state?.filePath)
 					.filter((path): path is string => typeof path === "string");
 				expect(documentPaths).toEqual(["/second.md"]);

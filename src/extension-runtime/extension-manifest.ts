@@ -84,20 +84,20 @@ export function parseExtensionManifest(
 			`Manifest at ${manifestPath} field "multiInstance" must be a boolean.`,
 		);
 	}
-	let placement: ("left" | "right" | "central")[] | undefined;
+	let placement: ("left" | "right" | "main")[] | undefined;
 	if (manifest.placement !== undefined) {
 		if (
 			!Array.isArray(manifest.placement) ||
 			manifest.placement.length === 0 ||
 			!manifest.placement.every(
-				(value) => value === "left" || value === "right" || value === "central",
+				(value) => value === "left" || value === "right" || value === "main",
 			)
 		) {
 			throw new Error(
-				`Manifest at ${manifestPath} field "placement" must be a non-empty array of "left" | "right" | "central".`,
+				`Manifest at ${manifestPath} field "placement" must be a non-empty array of "left" | "right" | "main".`,
 			);
 		}
-		placement = manifest.placement as ("left" | "right" | "central")[];
+		placement = manifest.placement as ("left" | "right" | "main")[];
 	}
 	return {
 		apiVersion: 1,

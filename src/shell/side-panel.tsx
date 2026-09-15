@@ -1,6 +1,6 @@
 import type {
-	PanelSide,
-	PanelState,
+	Area,
+	AreaState,
 	ExtensionKind,
 	ExtensionHostContext,
 	ExtensionState,
@@ -9,9 +9,9 @@ import type { ReactNode } from "react";
 import { PanelV2 } from "./panel-v2";
 
 interface SidePanelProps {
-	readonly side: PanelSide;
+	readonly side: Area;
 	readonly title: string;
-	readonly panel: PanelState;
+	readonly area: AreaState;
 	readonly onSelectView: (key: string) => void;
 	readonly onAddView: (toolId: ExtensionKind, state?: ExtensionState) => void;
 	readonly onRemoveView: (key: string) => void;
@@ -19,7 +19,7 @@ interface SidePanelProps {
 	readonly onHidePanel?: () => void;
 	readonly viewContext: ExtensionHostContext;
 	readonly isFocused: boolean;
-	readonly onFocusPanel: (side: PanelSide) => void;
+	readonly onFocusArea: (side: Area) => void;
 	readonly emptyState?: ReactNode;
 	readonly contentVisible?: boolean;
 }
@@ -33,14 +33,14 @@ interface SidePanelProps {
 export function SidePanel({
 	side,
 	title,
-	panel,
+	area,
 	onSelectView,
 	onAddView,
 	onRemoveView,
 	onHidePanel,
 	viewContext,
 	isFocused,
-	onFocusPanel,
+	onFocusArea,
 	emptyState: emptyStateOverride,
 	contentVisible = true,
 }: SidePanelProps) {
@@ -48,9 +48,9 @@ export function SidePanel({
 		<PanelV2
 			side={side}
 			ariaLabel={title}
-			panel={panel}
+			area={area}
 			isFocused={isFocused}
-			onFocusPanel={onFocusPanel}
+			onFocusArea={onFocusArea}
 			onSelectView={onSelectView}
 			onRemoveView={onRemoveView}
 			onAddView={onAddView}

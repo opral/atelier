@@ -165,3 +165,50 @@ it("refreshes changed media while preserving playback across unrelated commits a
 	expect(video?.getAttribute("src")).toBe("/raw/movie.mp4?commit=historical");
 	await act(async () => root.unmount());
 });
+
+describe("a surface whose view is about to show a comparison", () => {
+	const node = (diff: boolean) => (
+		<AtelierRenderContext value={{ hydrated: true, connected: true }}>
+			<PreparedMediaSurface
+				data={{
+					id: "shot",
+					path: "/shot.png",
+					src: "data:image/png;base64,/9j/2Q==",
+					size: 4,
+				}}
+				kind="image"
+				readySelector="img[data-interactive]"
+				diff={diff}
+			>
+				<p>the comparison, still loading</p>
+			</PreparedMediaSurface>
+		</AtelierRenderContext>
+	);
+
+	it("waits instead of painting one revision first", async () => {
+		const container = document.createElement("div");
+		let root: ReturnType<typeof hydrateRoot>;
+		container.innerHTML = renderToString(node(true));
+		await act(async () => {
+			root = hydrateRoot(container, node(true));
+		});
+		const held = container.querySelector("[data-atelier-initial-content]");
+		expect(held).not.toBeNull();
+		expect(held).toHaveAttribute("data-atelier-awaiting-diff", "true");
+		// The single revision would be the wrong picture, so nothing is drawn
+		// until the comparison is ready.
+		expect(container.querySelector("img")).toBeNull();
+		await act(async () => root.unmount());
+	});
+
+	it("still shows the prepared file when the view is not comparing", async () => {
+		const container = document.createElement("div");
+		let root: ReturnType<typeof hydrateRoot>;
+		container.innerHTML = renderToString(node(false));
+		await act(async () => {
+			root = hydrateRoot(container, node(false));
+		});
+		expect(container.querySelector("img")).not.toBeNull();
+		await act(async () => root.unmount());
+	});
+});

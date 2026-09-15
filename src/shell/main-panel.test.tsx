@@ -2,8 +2,8 @@ import { Suspense, act, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { CentralPanel } from "./central-panel";
-import type { PanelState } from "../extension-runtime/types";
+import { MainArea } from "./main-panel";
+import type { AreaState } from "../extension-runtime/types";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
 import { createExtensionHostContext } from "@/test-utils/extension-host-context";
@@ -70,22 +70,22 @@ const createViewContext = () =>
 			})(),
 	);
 
-describe("CentralPanel", () => {
+describe("MainArea", () => {
 	test("renders the document action without desktop agent controls", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [],
 			activeInstance: null,
 		};
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
-					panel={panelState}
+				<MainArea
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onCreateNewFile={vi.fn()}
 				/>
 			</DndContext>,
@@ -93,7 +93,7 @@ describe("CentralPanel", () => {
 
 		expect(
 			screen.getByRole("button", { name: /new document/i }),
-		).toHaveAttribute("data-attr", "central-empty-new-document");
+		).toHaveAttribute("data-attr", "main-empty-new-document");
 		expect(
 			screen.queryByRole("button", { name: /ask your agent/i }),
 		).toBeNull();
@@ -101,20 +101,20 @@ describe("CentralPanel", () => {
 
 	test("renders the shared add-view action in the tab strip", async () => {
 		const onAddView = vi.fn();
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [],
 			activeInstance: null,
 		};
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
-					panel={panelState}
+				<MainArea
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onAddView={onAddView}
 					showTabBar
 				/>
@@ -130,20 +130,20 @@ describe("CentralPanel", () => {
 	});
 
 	test("does not render an add-view action when view creation is unavailable", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
 		};
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
-					panel={panelState}
+				<MainArea
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					showTabBar
 				/>
 			</DndContext>,
@@ -153,21 +153,21 @@ describe("CentralPanel", () => {
 	});
 
 	test("renders the active view without a tab strip", async () => {
-		// The central editor hides tabs; files are switched from the left list.
-		const panelState: PanelState = {
+		// The main editor hides tabs; files are switched from the left list.
+		const panelState: AreaState = {
 			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
 			activeInstance: "search-1",
 		};
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
-					panel={panelState}
+				<MainArea
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 				/>
 			</DndContext>,
 		);
@@ -177,7 +177,7 @@ describe("CentralPanel", () => {
 	});
 
 	test("finalizes pending view when interacting with content", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [
 				{
 					instance: "search-1",
@@ -191,13 +191,13 @@ describe("CentralPanel", () => {
 
 		await renderWithProviders(
 			<DndContext>
-				<CentralPanel
-					panel={panelState}
+				<MainArea
+					area={panelState}
 					onSelectView={() => {}}
 					onRemoveView={() => {}}
 					viewContext={createViewContext()}
 					isFocused={true}
-					onFocusPanel={vi.fn()}
+					onFocusArea={vi.fn()}
 					onFinalizePendingView={handleFinalize}
 				/>
 			</DndContext>,

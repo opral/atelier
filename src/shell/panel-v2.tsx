@@ -56,8 +56,8 @@ import {
 } from "../extension-runtime/extension-menu-items";
 import { panelShortcutHint } from "@/lib/platform";
 import type {
-	PanelSide,
-	PanelState,
+	Area,
+	AreaState,
 	ExtensionDefinition,
 	ExtensionHostContext,
 	ExtensionInstance,
@@ -97,9 +97,9 @@ import {
 export function PanelV2({
 	side,
 	ariaLabel,
-	panel,
+	area,
 	isFocused,
-	onFocusPanel,
+	onFocusArea,
 	onSelectView,
 	onRemoveView,
 	onAddView,
@@ -111,7 +111,7 @@ export function PanelV2({
 	onActiveViewInteraction,
 	dropId,
 	viewOverrides,
-	showTabBar = side === "central",
+	showTabBar = side === "main",
 	tabBarExtraContent,
 	customTabStrip,
 	contentVisible = true,
@@ -119,13 +119,13 @@ export function PanelV2({
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
 	const { setNodeRef, isOver } = useDroppable({
 		id: dropId ?? `${side}-panel`,
-		data: { panel: side },
+		data: { area: side },
 	});
 
-	const activeEntry = panel.activeInstance
-		? (panel.views.find((entry) => entry.instance === panel.activeInstance) ??
+	const activeEntry = area.activeInstance
+		? (area.views.find((entry) => entry.instance === area.activeInstance) ??
 			null)
-		: (panel.views[0] ?? null);
+		: (area.views[0] ?? null);
 
 	const resolveViewDefinition = useCallback(
 		(kind: ExtensionKind): ExtensionDefinition | null => {
@@ -137,7 +137,7 @@ export function PanelV2({
 		[viewOverrides, extensionMap],
 	);
 
-	const hasViews = panel.views.length > 0;
+	const hasViews = area.views.length > 0;
 	const activeInstance = activeEntry?.instance ?? null;
 	const [mountedInstances, setMountedInstances] = useState<ReadonlySet<string>>(
 		() => new Set(),
@@ -156,20 +156,20 @@ export function PanelV2({
 		});
 	}, [activeInstance, contentVisible, mountedInstances]);
 	const availableViews = useMemo(
-		() => availableExtensionsForPanel(visibleExtensions, panel, side),
-		[panel, side, visibleExtensions],
+		() => availableExtensionsForPanel(visibleExtensions, area, side),
+		[area, side, visibleExtensions],
 	);
 	const panelElementRef = useRef<HTMLElement | null>(null);
 	const pendingAddedViewRef = useRef<{
 		readonly kind: ExtensionKind;
 		readonly focusAfterMenuClose: boolean;
 		readonly previousInstances: ReadonlySet<string>;
-		readonly previousViews: PanelState["views"];
+		readonly previousViews: AreaState["views"];
 		readonly previousActiveInstance: string | null;
 	} | null>(null);
 	const pendingRemovalFocusRef = useRef<{
 		readonly instance: string;
-		readonly previousViews: PanelState["views"];
+		readonly previousViews: AreaState["views"];
 		readonly previousActiveInstance: string | null;
 	} | null>(null);
 	const setPanelElementRef = useCallback(
@@ -189,9 +189,9 @@ export function PanelV2({
 			const pendingAddedView = {
 				kind,
 				focusAfterMenuClose,
-				previousInstances: new Set(panel.views.map((entry) => entry.instance)),
-				previousViews: panel.views,
-				previousActiveInstance: panel.activeInstance,
+				previousInstances: new Set(area.views.map((entry) => entry.instance)),
+				previousViews: area.views,
+				previousActiveInstance: area.activeInstance,
 			};
 			pendingAddedViewRef.current = pendingAddedView;
 			if (state === undefined) {
@@ -207,7 +207,7 @@ export function PanelV2({
 				}, 0);
 			}
 		},
-		[onAddView, panel.activeInstance, panel.views],
+		[onAddView, area.activeInstance, area.views],
 	);
 	const handleMenuAddView = useCallback(
 		(kind: ExtensionKind, state?: ExtensionState) => {
@@ -244,8 +244,8 @@ export function PanelV2({
 		(instance: string) => {
 			const pendingRemovalFocus = {
 				instance,
-				previousViews: panel.views,
-				previousActiveInstance: panel.activeInstance,
+				previousViews: area.views,
+				previousActiveInstance: area.activeInstance,
 			};
 			pendingRemovalFocusRef.current = pendingRemovalFocus;
 			onRemoveView(instance);
@@ -255,22 +255,22 @@ export function PanelV2({
 				}
 			}, 0);
 		},
-		[onRemoveView, panel.activeInstance, panel.views],
+		[onRemoveView, area.activeInstance, area.views],
 	);
 	const { makeRuntime } = useExtensionViewRuntime({
-		panel,
-		panelSide: side,
+		areaState: area,
+		area: side,
 		isFocused,
 		host: viewContext,
 	});
 
 	const viewContexts = useMemo(() => {
 		const map = new Map<string, ReturnType<typeof makeRuntime>>();
-		for (const entry of panel.views) {
+		for (const entry of area.views) {
 			map.set(entry.instance, makeRuntime(entry));
 		}
 		return map;
-	}, [panel.views, makeRuntime]);
+	}, [area.views, makeRuntime]);
 
 	const handleInteraction = (event: { target: EventTarget | null }) => {
 		if (!onActiveViewInteraction || !activeInstance) return;
@@ -287,9 +287,9 @@ export function PanelV2({
 	};
 
 	const ContainerElement =
-		side === "central" ? ("section" as const) : ("aside" as const);
+		side === "main" ? ("section" as const) : ("aside" as const);
 	const hostTextClass =
-		side === "central"
+		side === "main"
 			? "text-[var(--color-text-primary)]"
 			: "text-[var(--color-text-secondary)]";
 
@@ -313,7 +313,7 @@ export function PanelV2({
 
 		const pendingAddedView = pendingAddedViewRef.current;
 		if (pendingAddedView) {
-			const addedEntry = panel.views.find(
+			const addedEntry = area.views.find(
 				(entry) =>
 					entry.kind === pendingAddedView.kind &&
 					!pendingAddedView.previousInstances.has(entry.instance),
@@ -325,8 +325,8 @@ export function PanelV2({
 				return;
 			}
 			if (
-				panel.views !== pendingAddedView.previousViews ||
-				panel.activeInstance !== pendingAddedView.previousActiveInstance
+				area.views !== pendingAddedView.previousViews ||
+				area.activeInstance !== pendingAddedView.previousActiveInstance
 			) {
 				pendingAddedViewRef.current = null;
 			}
@@ -335,13 +335,13 @@ export function PanelV2({
 		const pendingRemovalFocus = pendingRemovalFocusRef.current;
 		if (!pendingRemovalFocus) return;
 		if (
-			panel.views.some(
+			area.views.some(
 				(entry) => entry.instance === pendingRemovalFocus.instance,
 			)
 		) {
 			if (
-				panel.views !== pendingRemovalFocus.previousViews ||
-				panel.activeInstance !== pendingRemovalFocus.previousActiveInstance
+				area.views !== pendingRemovalFocus.previousViews ||
+				area.activeInstance !== pendingRemovalFocus.previousActiveInstance
 			) {
 				pendingRemovalFocusRef.current = null;
 			}
@@ -360,7 +360,7 @@ export function PanelV2({
 					'[data-attr="panel-add-view"]',
 				));
 		nextTarget?.focus({ preventScroll: true });
-	}, [activeInstance, panel.activeInstance, panel.views]);
+	}, [activeInstance, area.activeInstance, area.views]);
 
 	const resolvedEmptyState =
 		emptyStatePlaceholder === undefined && onAddView ? (
@@ -375,8 +375,8 @@ export function PanelV2({
 	// The active section may contribute a control at the header's trailing
 	// end (a scope switch); it renders with that view's own runtime.
 	const activeSectionEntry =
-		panel.views.find((entry) => entry.instance === panel.activeInstance) ??
-		panel.views[0] ??
+		area.views.find((entry) => entry.instance === area.activeInstance) ??
+		area.views[0] ??
 		null;
 	const activeSectionDefinition = activeSectionEntry
 		? resolveViewDefinition(activeSectionEntry.kind)
@@ -393,14 +393,14 @@ export function PanelV2({
 			/>
 		) : null;
 	const sideSectionPicker =
-		side !== "central" && hasViews ? (
+		side !== "main" && hasViews ? (
 			<div
 				data-atelier-part="section-header"
 				className="flex items-start justify-between gap-2"
 			>
 				<SidebarSectionPicker
 					side={side}
-					panel={panel}
+					area={area}
 					availableViews={availableViews}
 					resolveViewDefinition={resolveViewDefinition}
 					preferencesFor={viewContext.preferencesFor}
@@ -418,11 +418,11 @@ export function PanelV2({
 		<ContainerElement
 			ref={setPanelElementRef}
 			aria-label={ariaLabel}
-			onClickCapture={() => onFocusPanel(side)}
+			onClickCapture={() => onFocusArea(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
 			{sideSectionPicker}
-			{/* Central tabs remain the only document tab strip. Side panels use the
+			{/* Main tabs remain the only document tab strip. Side areas use the
 			    section picker above so their views do not read as documents. */}
 			{showTabBar && customTabStrip !== undefined ? (
 				<div data-atelier-part="custom-tab-strip" className="w-full min-w-0">
@@ -446,10 +446,10 @@ export function PanelV2({
 				>
 					<SortableContext
 						id={`panel-${side}`}
-						items={panel.views.map((entry) => entry.instance)}
+						items={area.views.map((entry) => entry.instance)}
 						strategy={horizontalListSortingStrategy}
 					>
-						{panel.views.map((entry) => {
+						{area.views.map((entry) => {
 							const view = resolveViewDefinition(entry.kind);
 							if (!view) return null;
 							const isActive = activeInstance === entry.instance;
@@ -458,10 +458,10 @@ export function PanelV2({
 								<SortableTab
 									key={entry.instance}
 									instance={entry.instance}
-									panelSide={side}
+									area={side}
 									kind={entry.kind}
 									icon={
-										side === "central"
+										side === "main"
 											? (fileGlyphForLabel(label) ?? view.icon)
 											: view.icon
 									}
@@ -484,14 +484,14 @@ export function PanelV2({
 			) : null}
 
 			{/* Every panel body shares the island geometry (rounded corners) so
-			    the sides align with the central editor, but only central is the
+			    the sides align with the main editor, but only main is the
 			    elevated white surface with a border. Side islands are invisible —
 			    the canvas shows through and their views style themselves for
 			    that surface. */}
 			<div
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
-					side === "central"
+					side === "main"
 						? "border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]"
 						: "bg-transparent",
 					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
@@ -499,7 +499,7 @@ export function PanelV2({
 			>
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
-						{panel.views.map((entry) => {
+						{area.views.map((entry) => {
 							const isActive = activeInstance === entry.instance;
 							if (
 								!(contentVisible && isActive) &&
@@ -538,11 +538,11 @@ export function PanelV2({
 }
 
 export type PanelV2Props = {
-	readonly side: PanelSide;
+	readonly side: Area;
 	readonly ariaLabel?: string;
-	readonly panel: PanelState;
+	readonly area: AreaState;
 	readonly isFocused: boolean;
-	readonly onFocusPanel: (side: PanelSide) => void;
+	readonly onFocusArea: (side: Area) => void;
 	readonly onSelectView: (instance: string) => void;
 	readonly onRemoveView: (instance: string) => void;
 	/** Enables the "+" add-view menu in the tab row. */
@@ -565,7 +565,7 @@ export type PanelV2Props = {
 	readonly viewOverrides?: ExtensionDefinition[];
 	/**
 	 * Renders a tab strip inside the panel body. The workspace never sets this:
-	 * document tabs live in the top bar (`PanelTabStrip`) and side panels use
+	 * document tabs live in the top bar (`PanelTabStrip`) and side areas use
 	 * the section picker, so the workspace has exactly one tab strip.
 	 */
 	readonly showTabBar?: boolean;
@@ -596,7 +596,7 @@ const EMPTY_EXTENSION_PREFERENCES: AtelierExtensionPreferences = {
  */
 function SidebarSectionPicker({
 	side,
-	panel,
+	area,
 	availableViews,
 	resolveViewDefinition,
 	preferencesFor,
@@ -605,8 +605,8 @@ function SidebarSectionPicker({
 	onHidePanel,
 	tabLabel,
 }: {
-	readonly side: Exclude<PanelSide, "central">;
-	readonly panel: PanelState;
+	readonly side: Exclude<Area, "main">;
+	readonly area: AreaState;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly resolveViewDefinition: (
 		kind: ExtensionKind,
@@ -621,8 +621,8 @@ function SidebarSectionPicker({
 	readonly tabTooltip?: PanelV2Props["tabTooltip"];
 }) {
 	const activeEntry =
-		panel.views.find((entry) => entry.instance === panel.activeInstance) ??
-		panel.views[0] ??
+		area.views.find((entry) => entry.instance === area.activeInstance) ??
+		area.views[0] ??
 		null;
 	const activeDefinition = activeEntry
 		? resolveViewDefinition(activeEntry.kind)
@@ -674,7 +674,7 @@ function SidebarSectionPicker({
 			>
 				{/* Open views and openable views read as one list: the picker answers
 				    "what is this sidebar showing?", not "what is already loaded?". */}
-				{panel.views.map((entry) => {
+				{area.views.map((entry) => {
 					const definition = resolveViewDefinition(entry.kind);
 					if (!definition) return null;
 					const label = resolveLabel(definition, entry, tabLabel);
@@ -777,13 +777,13 @@ function PanelIcon({
 
 /**
  * Renders a panel's tab strip independently from its content island. The
- * workspace uses this for central document tabs in the top bar; it is the
- * workspace's only tab strip. Side panels use the section picker instead, so
+ * workspace uses this for main document tabs in the top bar; it is the
+ * workspace's only tab strip. Side areas use the section picker instead, so
  * their views never read as open documents.
  */
 export function PanelTabStrip({
 	side,
-	panel,
+	area,
 	visibleExtensions,
 	extensionMap,
 	isFocused,
@@ -794,8 +794,8 @@ export function PanelTabStrip({
 	tabTooltip,
 	preferencesFor,
 }: {
-	readonly side: PanelSide;
-	readonly panel: PanelState;
+	readonly side: Area;
+	readonly area: AreaState;
 	readonly visibleExtensions: readonly ExtensionDefinition[];
 	readonly extensionMap: ReadonlyMap<ExtensionKind, ExtensionDefinition>;
 	readonly isFocused: boolean;
@@ -809,11 +809,10 @@ export function PanelTabStrip({
 		extensionId: ExtensionKind,
 	) => AtelierExtensionPreferences;
 }) {
-	const activeInstance =
-		panel.activeInstance ?? panel.views[0]?.instance ?? null;
+	const activeInstance = area.activeInstance ?? area.views[0]?.instance ?? null;
 	const availableViews = availableExtensionsForPanel(
 		visibleExtensions,
-		panel,
+		area,
 		side,
 	);
 	const resolveViewDefinition = (kind: ExtensionKind) =>
@@ -828,7 +827,7 @@ export function PanelTabStrip({
 	const previousInstancesRef = useRef<ReadonlySet<string> | null>(null);
 	const handleMenuAddView = (kind: ExtensionKind, state?: ExtensionState) => {
 		previousInstancesRef.current = new Set(
-			panel.views.map((entry) => entry.instance),
+			area.views.map((entry) => entry.instance),
 		);
 		onAddView?.(kind, state);
 	};
@@ -870,18 +869,18 @@ export function PanelTabStrip({
 		>
 			<SortableContext
 				id={`panel-${side}`}
-				items={panel.views.map((entry) => entry.instance)}
+				items={area.views.map((entry) => entry.instance)}
 				strategy={horizontalListSortingStrategy}
 			>
-				{panel.views.map((entry, index) => {
+				{area.views.map((entry, index) => {
 					const view = resolveViewDefinition(entry.kind);
 					if (!view) return null;
 					const label = resolveLabel(view, entry, tabLabel);
-					const closableOthers = panel.views.filter(
+					const closableOthers = area.views.filter(
 						(sibling) =>
 							!sibling.isPinned && sibling.instance !== entry.instance,
 					);
-					const closableRight = panel.views
+					const closableRight = area.views
 						.slice(index + 1)
 						.filter((sibling) => !sibling.isPinned);
 					const extensionMenuItems = resolveExtensionMenuItems(
@@ -892,7 +891,7 @@ export function PanelTabStrip({
 						<SortableTab
 							key={entry.instance}
 							instance={entry.instance}
-							panelSide={side}
+							area={side}
 							kind={entry.kind}
 							icon={fileGlyphForLabel(label) ?? view.icon}
 							label={label}
@@ -944,7 +943,7 @@ function AddViewMenu({
 	onAddView,
 	onSelectedViewSettled,
 }: {
-	readonly side: PanelSide;
+	readonly side: Area;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly onSelectedViewSettled: () => boolean;
@@ -1007,14 +1006,14 @@ function AddViewMenu({
 
 export function availableExtensionsForPanel(
 	visibleExtensions: readonly ExtensionDefinition[],
-	panel: PanelState,
-	side?: PanelSide,
+	area: AreaState,
+	side?: Area,
 ): ExtensionDefinition[] {
-	const openKinds = new Set(panel.views.map((entry) => entry.kind));
+	const openKinds = new Set(area.views.map((entry) => entry.kind));
 	return visibleExtensions.filter(
 		(view) =>
 			(view.multiInstance || !openKinds.has(view.kind)) &&
-			// Manifest placement gates the menus; the default is side panels only.
+			// Manifest placement gates the menus; the default is side areas only.
 			(side === undefined ||
 				view.placement === undefined ||
 				view.placement.includes(side)),
@@ -1026,7 +1025,7 @@ function DefaultPanelEmptyState({
 	availableViews,
 	onAddView,
 }: {
-	readonly side: PanelSide;
+	readonly side: Area;
 	readonly availableViews: readonly ExtensionDefinition[];
 	readonly onAddView: (kind: ExtensionKind, state?: ExtensionState) => void;
 }) {
@@ -1034,7 +1033,7 @@ function DefaultPanelEmptyState({
 	const hasAvailableViews = availableViews.length > 0;
 	const illustrationSide = side === "right" ? "right" : "left";
 	const sideLabel =
-		side === "central" ? "This is a panel." : `This is the ${side} sidebar.`;
+		side === "main" ? "This is a panel." : `This is the ${side} sidebar.`;
 
 	return (
 		<div className="@container min-h-0 flex-1 overflow-y-auto">
@@ -1042,7 +1041,7 @@ function DefaultPanelEmptyState({
 				<section
 					aria-labelledby={headingId}
 					data-attr="panel-empty-state"
-					data-panel-side={side}
+					data-area-side={side}
 					className="flex w-full max-w-64 flex-col items-center pb-10 text-center @max-[300px]:max-w-56 @max-[300px]:pb-4"
 				>
 					<SidebarIllustration
@@ -1369,7 +1368,7 @@ function ViewRenderer({
 	instance: ExtensionInstance;
 	atelier: ExtensionRuntime;
 	extensionView: ExtensionView;
-	side: PanelSide;
+	side: Area;
 	isActive: boolean;
 }) {
 	const registry = useExtensionHostRegistry();
@@ -1404,7 +1403,7 @@ function ViewRenderer({
 			data-testid={`atelier-view:${instance.instance}`}
 			data-view-instance={instance.instance}
 			data-view-key={instance.kind}
-			data-panel-side={side}
+			data-area-side={side}
 			data-active={isActive ? "true" : undefined}
 			className="flex min-h-0 flex-1 flex-col overflow-hidden"
 		>
@@ -1421,7 +1420,7 @@ function ViewRenderer({
 
 interface SortableTabProps extends PanelTabPreviewProps {
 	readonly instance: string;
-	readonly panelSide: PanelSide;
+	readonly area: Area;
 	readonly kind: ExtensionKind;
 	readonly onClick?: () => void;
 	readonly onClose?: () => void;
@@ -1508,7 +1507,7 @@ function TabContextMenu({
 
 function SortableTab({
 	instance,
-	panelSide,
+	area,
 	kind,
 	icon,
 	label,
@@ -1535,10 +1534,10 @@ function SortableTab({
 		disabled: isPinned,
 		data: {
 			type: "panel-tab",
-			panel: panelSide,
+			area: area,
 			instance,
 			kind,
-			fromPanel: panelSide,
+			fromPanel: area,
 		},
 	});
 
@@ -1563,7 +1562,7 @@ function SortableTab({
 				isFocused={isFocused}
 				isPending={isPending}
 				isPinned={isPinned}
-				closeOnHoverOnly={panelSide !== "central"}
+				closeOnHoverOnly={area !== "main"}
 				onClick={onClick}
 				onClose={onClose}
 				isDragging={isDragging}
@@ -1585,7 +1584,7 @@ function SortableTab({
 	);
 }
 
-/** Central document tabs show their file-type glyph, like a browser favicon. */
+/** Main document tabs show their file-type glyph, like a browser favicon. */
 const fileGlyphForLabel = (label: string): TabIcon | null => {
 	if (!/\.[a-z0-9]+$/i.test(label)) return null;
 	const FileGlyph = ({ className }: { className?: string }) => (
@@ -1611,7 +1610,7 @@ interface TabBaseProps extends PanelTabPreviewProps {
 	readonly onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
 	readonly onClose?: () => void;
 	/**
-	 * Side-panel chips reveal close as a corner badge on hover; central
+	 * Side-panel chips reveal close as a corner badge on hover; main
 	 * document tabs use an inline X when active and reveal it on hover otherwise.
 	 */
 	readonly closeOnHoverOnly?: boolean;
@@ -1713,7 +1712,7 @@ const TabButtonBase = forwardRef<
 					{label}
 				</span>
 				{/* Side-panel tabs keep their floating hover affordance. Active
-				    central tabs reserve inline space, while inactive central tabs
+				    main tabs reserve inline space, while inactive main tabs
 				    reveal an overlay without changing width. */}
 				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
 					<span

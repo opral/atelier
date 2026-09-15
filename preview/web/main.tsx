@@ -1,11 +1,8 @@
 import { openLix } from "@lix-js/sdk";
 import type { Lix } from "@lix-js/sdk";
 import { OpfsStorage } from "@lix-js/storage-opfs";
-import {
-	Atelier,
-	AtelierDeveloperTools,
-	createLixBranchSession,
-} from "@opral/atelier";
+import { Atelier, createLixBranchSession } from "@opral/atelier";
+import { AtelierDeveloperTools } from "@opral/atelier/dev-tools";
 import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";

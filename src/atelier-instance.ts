@@ -7,7 +7,7 @@ import type {
 	AtelierExtensionRegistration,
 	AtelierExtensionRuntime,
 	AtelierFilesViewOptions,
-	AtelierPanelSide,
+	AtelierArea,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
 } from "./extension-api";
@@ -22,17 +22,17 @@ import {
 	type AtelierSessionStateStore,
 } from "./state-adapters";
 
-export type { AtelierPanelSide } from "./extension-api";
-export type AtelierSidePanel = Exclude<AtelierPanelSide, "central">;
+export type { AtelierArea } from "./extension-api";
+export type AtelierSideArea = Exclude<AtelierArea, "main">;
 
 /**
- * The central island is browser-style tabs — the one UX primitive. `home`
- * pins an extension (registered with `placement` including "central") as the
+ * The main island is browser-style tabs — the one UX primitive. `home`
+ * pins an extension (registered with `placement` including "main") as the
  * permanent first tab: it cannot be closed, navigation never replaces it,
  * and closing the last content tab lands on it. Without a home, the Files
  * landing view is the first tab.
  */
-export type AtelierCentralPanelOptions = {
+export type AtelierMainAreaOptions = {
 	readonly home?: { readonly extensionId: string };
 };
 
@@ -48,7 +48,7 @@ export type AtelierOptions = {
 	readonly extensions?: readonly AtelierExtensionRegistration[];
 	/** The host's file URLs; see `AtelierDocumentLinks`. */
 	readonly documentLinks?: AtelierDocumentLinks;
-	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
+	readonly defaultOpenPanels?: readonly AtelierSideArea[];
 	readonly onEvent?: (event: AtelierEvent) => void;
 	/** Per-tab shell state. Hosts should normally back this with sessionStorage. */
 	readonly sessionStateStore?: AtelierSessionStateStore;
@@ -64,8 +64,8 @@ export type AtelierOptions = {
 	 * view (e.g. disk files surfaced by filesystem watchers).
 	 */
 	readonly filesView?: AtelierFilesViewOptions;
-	/** Central tabs configuration (e.g. the pinned home). */
-	readonly centralPanel?: AtelierCentralPanelOptions;
+	/** Main tabs configuration (e.g. the pinned home). */
+	readonly mainArea?: AtelierMainAreaOptions;
 };
 
 export type AtelierInstance = {
@@ -112,7 +112,7 @@ type QueuedAtelierDocumentsCommand = {
 export type AtelierDocumentsRuntimeState = {
 	readonly activePath: string | null;
 	readonly openPaths: readonly string[];
-	/** Instance id of the active central view (documents and host views). */
+	/** Instance id of the active main view (documents and host views). */
 	readonly activeViewInstance: string | null;
 };
 
@@ -257,9 +257,7 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		...(options.filesView !== undefined
 			? { filesView: options.filesView }
 			: {}),
-		...(options.centralPanel !== undefined
-			? { centralPanel: options.centralPanel }
-			: {}),
+		...(options.mainArea !== undefined ? { mainArea: options.mainArea } : {}),
 	};
 	Object.defineProperty(instance, CONFIGURATION, {
 		configurable: false,
@@ -462,7 +460,7 @@ function waitForAtelierDocumentsCompletion(
 
 	return new Promise<void>((resolve, reject) => {
 		// A command's completion can be stolen after it executes — e.g. a
-		// session-state restore replacing the panels right after an open-view
+		// session-state restore replacing the areas right after an open-view
 		// added its tab. Without a deadline that wait never settles and, worse,
 		// deadlocks the whole command queue behind it. The command itself DID
 		// run; resolving on the deadline is the safe outcome.

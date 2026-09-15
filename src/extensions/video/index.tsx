@@ -9,10 +9,12 @@ import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import type { AtelierDiffSession } from "@/extension-api";
 import { selectFilesStateAt } from "@/queries";
+import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
 import {
-	useWorkingFileData,
-	workingReviewFile,
-} from "@/shell/external-write-review-history";
+	DiffSides,
+	useWorkingDiffSides,
+	viewShowsDiff,
+} from "@/extension-runtime/diff-sides";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -29,6 +31,11 @@ type VideoViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
 	readonly sourceCommitId?: string;
+	/** Both set for a checkpoint's span: the view shows before beside after. */
+	readonly beforeCommitId?: string | null;
+	readonly afterCommitId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
 	readonly diffSession?: AtelierDiffSession | null;
 };
 
@@ -38,10 +45,15 @@ type VideoFileRow = {
 	readonly content: unknown;
 };
 
-/** Read-only player for the current video stored in the Lix workspace. */
+/**
+ * Read-only player for the current video stored in the Lix workspace.
+ *
+ * The dark stage belongs to the player, not to the view: a comparison puts two
+ * of them side by side, and the panel around them stays the panel.
+ */
 export function VideoView(props: VideoViewProps) {
 	return (
-		<div className="atelier-video-view" data-testid="video-viewer">
+		<div className="flex min-h-0 flex-1 flex-col">
 			<Suspense fallback={<VideoLoadingState />}>
 				<VideoViewContent {...props} />
 			</Suspense>
@@ -53,16 +65,14 @@ function VideoViewContent({
 	fileId,
 	filePath,
 	sourceCommitId,
+	beforeCommitId,
+	afterCommitId,
+	beforeExists,
+	afterExists,
 	diffSession,
 }: VideoViewProps) {
 	assertFileId(fileId);
-	const reviewFile = workingReviewFile(diffSession, fileId);
-	const epoch = reviewFile?.workingEpoch;
-	const reviewData = useWorkingFileData(
-		epoch ? fileId : null,
-		epoch?.beforeCommitId,
-		epoch?.afterCommitId,
-	);
+	const review = useWorkingDiffSides(fileId, diffSession);
 	const fileResult = useQueryResult<VideoFileRow>(
 		(lix) =>
 			sourceCommitId
@@ -76,23 +86,67 @@ function VideoViewContent({
 						.limit(1),
 		{ subscribe: !sourceCommitId },
 	);
+	// A video cannot be diffed in place, so the review shows both revisions:
+	// the checkpoint on the left, the working file on the right.
+	if (review.reviewing) {
+		if (review.status === "loading") return <VideoLoadingState />;
+		if (review.status === "unavailable") return <VideoReviewUnavailable />;
+		const path = review.path || filePath || "video";
+		return (
+			<DiffSides
+				filePath={path}
+				beforeCommitId={review.beforeCommitId}
+				afterCommitId={review.afterCommitId}
+				before={
+					review.beforeData ? (
+						<VideoPreview data={review.beforeData} filePath={path} />
+					) : null
+				}
+				after={
+					review.afterData ? (
+						<VideoPreview data={review.afterData} filePath={path} />
+					) : null
+				}
+			/>
+		);
+	}
+	// The same two sides for a checkpoint's span, read from history.
+	if (beforeCommitId && afterCommitId) {
+		return (
+			<FileSnapshotsAtCommits
+				fileId={fileId}
+				beforeCommitId={beforeCommitId}
+				afterCommitId={afterCommitId}
+				beforeExists={beforeExists}
+				afterExists={afterExists}
+			>
+				{({ beforeSnapshot, afterSnapshot }) => {
+					const path =
+						afterSnapshot?.path ?? beforeSnapshot?.path ?? filePath ?? "video";
+					return (
+						<DiffSides
+							filePath={path}
+							beforeCommitId={beforeCommitId}
+							afterCommitId={afterCommitId}
+							before={
+								beforeSnapshot ? (
+									<VideoPreview data={beforeSnapshot.content} filePath={path} />
+								) : null
+							}
+							after={
+								afterSnapshot ? (
+									<VideoPreview data={afterSnapshot.content} filePath={path} />
+								) : null
+							}
+						/>
+					);
+				}}
+			</FileSnapshotsAtCommits>
+		);
+	}
 	if (fileResult.status === "pending") return <VideoLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
-	const resolvedReviewData = reviewData.loading ? null : reviewData;
-	if (epoch && !resolvedReviewData) return <VideoLoadingState />;
-	if (epoch && resolvedReviewData?.error) return <VideoReviewUnavailable />;
-	const observed = fileResult.rows[0];
-	const pinnedContent =
-		resolvedReviewData?.afterData ?? resolvedReviewData?.data;
-	const fileRow = epoch
-		? pinnedContent
-			? {
-					id: fileId,
-					path: reviewFile?.path ?? observed?.path ?? filePath ?? `/${fileId}`,
-					content: pinnedContent,
-				}
-			: undefined
-		: observed;
+	const fileRow = fileResult.rows[0];
 
 	if (!fileRow) {
 		return (
@@ -151,7 +205,7 @@ export function VideoPreview({
 		return <VideoErrorState filePath={filePath} />;
 	}
 	return (
-		<>
+		<div className="atelier-video-view" data-testid="video-viewer">
 			{/* React never renders children here — the imperative player owns it. */}
 			<div className="h-full min-h-0" ref={containerRef} />
 			{!objectUrl ? (
@@ -159,7 +213,7 @@ export function VideoPreview({
 					<VideoLoadingState />
 				</div>
 			) : null}
-		</>
+		</div>
 	);
 }
 
@@ -245,6 +299,10 @@ export const extension = createReactExtensionDefinition({
 	icon: Film,
 	load: loadMediaFile,
 	component: ({ atelier, view, data }) => {
+		const showsDiff = viewShowsDiff({
+			session: atelier.diff.session,
+			state: view.state,
+		});
 		return (
 			<PreparedMediaSurface
 				key={view.instanceId}
@@ -258,11 +316,18 @@ export const extension = createReactExtensionDefinition({
 						view.state.beforeCommitId) as string | undefined
 				}
 				allowNative={!atelier.diff.session}
+				diff={showsDiff}
 			>
 				<VideoView
 					fileId={view.state.fileId as string}
 					filePath={view.state.filePath as string | undefined}
 					sourceCommitId={view.state.sourceCommitId as string | undefined}
+					beforeCommitId={
+						view.state.beforeCommitId as string | null | undefined
+					}
+					afterCommitId={view.state.afterCommitId as string | null | undefined}
+					beforeExists={view.state.beforeExists !== false}
+					afterExists={view.state.afterExists !== false}
 					diffSession={atelier.diff.session}
 				/>
 			</PreparedMediaSurface>

@@ -1524,7 +1524,7 @@ function treeHostStyle(
 	variant: "compact" | "spacious",
 ) {
 	const isSpacious = variant === "spacious";
-	// The tree names the surface it sits on: spacious runs inside the central
+	// The tree names the surface it sits on: spacious runs inside the main
 	// white island, compact runs bare on the app canvas in a sidebar. Getting
 	// this wrong paints a white card into the sidebar.
 	const surface = isSpacious ? "--color-bg-panel" : "--color-bg-app";

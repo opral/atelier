@@ -42,7 +42,7 @@ import type {
 	AtelierFilesViewOptions,
 	AtelierWatchedEntry,
 } from "@/extension-api";
-import type { PanelSide } from "../../extension-runtime/types";
+import type { Area } from "../../extension-runtime/types";
 import {
 	FileTree,
 	type FileTreeCreateRequest,
@@ -64,7 +64,7 @@ import type { Lix } from "@lix-js/sdk";
 
 type FilesViewContext = {
 	readonly openFile?: (args: {
-		readonly panel: PanelSide;
+		readonly area: Area;
 		readonly fileId: string;
 		readonly filePath: string;
 		readonly focus?: boolean;
@@ -92,7 +92,7 @@ type FilesViewContext = {
 	}[];
 	readonly reviewModeActive?: boolean;
 	readonly isPanelFocused?: boolean;
-	readonly panelSide?: PanelSide;
+	readonly area?: Area;
 	readonly viewInstance?: string;
 	readonly isActiveView?: boolean;
 	/** Hides every file mutation affordance for read-only hosts. */
@@ -106,7 +106,7 @@ type FilesViewContext = {
 	/** Imports a watched path to a canonical lix file before an interaction. */
 	readonly resolveFileForInteraction?: AtelierFilesViewOptions["resolveFileForInteraction"];
 	readonly registerNewFileDraftHandler?: (registration: {
-		readonly panelSide: PanelSide;
+		readonly area: Area;
 		readonly viewInstance: string;
 		readonly isActiveView: boolean;
 		readonly handler: () => Promise<void> | void;
@@ -177,20 +177,20 @@ export function FilesView({ context }: FilesViewProps) {
 		[],
 	);
 	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
-	const panelSide = context?.panelSide;
+	const area = context?.area;
 	const viewInstance = context?.viewInstance;
 	const isActiveView = context?.isActiveView === true;
 	useLayoutEffect(() => {
-		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) return;
+		if (!registerNewFileDraftHandler || !area || !viewInstance) return;
 		return registerNewFileDraftHandler({
-			panelSide,
+			area,
 			viewInstance,
 			isActiveView,
 			handler: requestNewFileDraft,
 		});
 	}, [
 		isActiveView,
-		panelSide,
+		area,
 		registerNewFileDraftHandler,
 		requestNewFileDraft,
 		viewInstance,
@@ -570,7 +570,7 @@ function FilesViewContent({
 	const isMacPlatform = useMemo(() => detectMacPlatform(), []);
 	const isPanelFocused = context?.isPanelFocused ?? false;
 	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
-	const panelSide = context?.panelSide;
+	const area = context?.area;
 	const viewInstance = context?.viewInstance;
 	const isActiveView = context?.isActiveView === true;
 	const shouldHandleGlobalShortcuts =
@@ -868,7 +868,7 @@ function FilesViewContent({
 						normalizedActiveFilePath?.startsWith(sourcePath)
 					) {
 						void context?.openFile?.({
-							panel: "central",
+							area: "main",
 							fileId: activeFileId,
 							filePath: remapFilePathInDirectory(
 								normalizedActiveFilePath,
@@ -901,7 +901,7 @@ function FilesViewContent({
 				});
 				if (resolvedFileId) {
 					void context?.openFile?.({
-						panel: "central",
+						area: "main",
 						fileId: resolvedFileId,
 						filePath: destinationPath,
 						focus: false,
@@ -957,11 +957,11 @@ function FilesViewContent({
 	);
 
 	useEffect(() => {
-		if (!registerNewFileDraftHandler || !panelSide || !viewInstance) {
+		if (!registerNewFileDraftHandler || !area || !viewInstance) {
 			return;
 		}
 		return registerNewFileDraftHandler({
-			panelSide,
+			area,
 			viewInstance,
 			isActiveView,
 			// The host-level document command keeps its established Markdown
@@ -970,7 +970,7 @@ function FilesViewContent({
 		});
 	}, [
 		isActiveView,
-		panelSide,
+		area,
 		registerNewFileDraftHandler,
 		requestNewMarkdownDraft,
 		viewInstance,
@@ -995,7 +995,7 @@ function FilesViewContent({
 						source: "lix",
 					});
 					void context?.openFile?.({
-						panel: "central",
+						area: "main",
 						fileId: resolvedId,
 						filePath: path,
 						focus: false,
@@ -1020,7 +1020,7 @@ function FilesViewContent({
 				return;
 			}
 			void context?.openFile?.({
-				panel: "central",
+				area: "main",
 				fileId,
 				filePath: path,
 				focus: false,
@@ -1296,7 +1296,7 @@ function FilesViewContent({
 
 						if (newFile?.id) {
 							context?.openFile?.({
-								panel: "central",
+								area: "main",
 								fileId: newFile.id as string,
 								filePath,
 							});
@@ -1313,7 +1313,7 @@ function FilesViewContent({
 	const fileTree = (
 		<FileTree
 			nodes={nodes}
-			variant={context?.panelSide === "central" ? "spacious" : "compact"}
+			variant={context?.area === "main" ? "spacious" : "compact"}
 			openFileView={handleOpenFile}
 			reviewPaths={pendingReviewPaths}
 			reviewStatuses={reviewStatuses}
@@ -1342,7 +1342,7 @@ function FilesViewContent({
 	return (
 		<div
 			className={
-				context?.panelSide === "central"
+				context?.area === "main"
 					? "relative flex min-h-0 flex-1 flex-col"
 					: // No horizontal padding: the rows' own 8px padding puts row icons
 						// on the same x as the section label's text (its px-2).
@@ -1353,7 +1353,7 @@ function FilesViewContent({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 		>
-			{context?.panelSide === "central" ? (
+			{context?.area === "main" ? (
 				<div
 					className="flex min-h-0 flex-1 flex-col overflow-hidden"
 					data-testid="files-view-wide"
@@ -1389,7 +1389,7 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{/* Compact New row for side-panel use. */}
-			{context?.panelSide !== "central" && !readOnly ? (
+			{context?.area !== "main" && !readOnly ? (
 				<div
 					className={`transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
 				>
@@ -1419,7 +1419,7 @@ function FilesViewContent({
 					</p>
 				</div>
 			)}
-			{context?.panelSide !== "central" ? (
+			{context?.area !== "main" ? (
 				<div
 					data-testid="files-view-tree-scroll"
 					data-attr="file-tree"
@@ -1627,7 +1627,7 @@ export const extension = createReactExtensionDefinition({
 	component: ({ atelier, view }) => (
 		<FilesView
 			context={{
-				openFile: ({ panel: _panel, fileId: _fileId, filePath, focus }) =>
+				openFile: ({ area: _panel, fileId: _fileId, filePath, focus }) =>
 					atelier.documents.open(filePath, {
 						...(focus !== undefined ? { focus } : {}),
 					}),
@@ -1652,7 +1652,7 @@ export const extension = createReactExtensionDefinition({
 				sessionFiles: atelier.diff.session?.files,
 				openDiffFile: atelier.diff.openFile,
 				isPanelFocused: view.isFocused,
-				panelSide: view.panel,
+				area: view.area,
 				viewInstance: view.instanceId,
 				isActiveView: view.isActive,
 				// The past is immutable: historical sessions hide mutations.

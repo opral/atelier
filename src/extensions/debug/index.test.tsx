@@ -192,6 +192,7 @@ function successResult(rows: Array<Record<string, unknown>>) {
 			rows,
 			rowsAffected: 0,
 			notices: [],
+			commit: null,
 		},
 	};
 }
@@ -207,6 +208,7 @@ function queryLix(
 			rows,
 			rowsAffected: 0,
 			notices: [],
+			commit: null,
 		})),
 	} as unknown as Lix;
 }

@@ -4,8 +4,8 @@ import type {
 	AtelierJsonValue,
 } from "./extension-api";
 import type {
-	AtelierCentralPanelOptions,
-	AtelierSidePanel,
+	AtelierMainAreaOptions,
+	AtelierSideArea,
 } from "./atelier-instance";
 import type {
 	AtelierSessionUiState,
@@ -14,9 +14,9 @@ import type {
 import type { ExtensionInstance } from "./extension-runtime/types";
 
 export type AtelierPreparedUiState = {
-	readonly focusedPanel: AtelierSessionUiState["focusedPanel"];
-	readonly panels: Record<
-		AtelierSessionUiState["focusedPanel"],
+	readonly focusedArea: AtelierSessionUiState["focusedArea"];
+	readonly areas: Record<
+		AtelierSessionUiState["focusedArea"],
 		{
 			readonly activeInstance: string | null;
 			readonly views: (Omit<ExtensionInstance, "state"> & {
@@ -68,7 +68,7 @@ export type LoadAtelierOptions = {
 	readonly location?: AtelierLocation;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
 	readonly readOnly?: boolean;
-	readonly defaultOpenPanels?: readonly AtelierSidePanel[];
-	readonly centralPanel?: AtelierCentralPanelOptions;
+	readonly defaultOpenPanels?: readonly AtelierSideArea[];
+	readonly mainArea?: AtelierMainAreaOptions;
 	readonly signal?: AbortSignal;
 };

@@ -1,3 +1,4 @@
+import { act, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { findFileHandlerExtension } from "@/extension-runtime/file-handlers";
 import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builtin-extension-registry";
@@ -8,7 +9,14 @@ import {
 	isExcalidrawFilePath,
 	parseExcalidrawScene,
 } from "./scene";
-import { extension } from "./index";
+import { LixProvider } from "@/lib/lix-react";
+import { qb } from "@/lib/lix-kysely";
+import { openLix } from "@/test-utils/node-lix-sdk";
+import { fakeUuid } from "@/test-utils/fake-uuid";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
+import type { ExtensionRuntime } from "@/extension-runtime/types";
+import { ExcalidrawView, extension } from "./index";
 
 describe("Excalidraw extension routing", () => {
 	test.each(["/drawings/wireframe.excalidraw", "/UPPER.EXCALIDRAW"])(
@@ -123,5 +131,119 @@ describe("isExcalidrawFilePath", () => {
 		["/a/b/sketch.svg", false],
 	])("%s → %s", (path, expected) => {
 		expect(isExcalidrawFilePath(path)).toBe(expected);
+	});
+});
+
+describe("ExcalidrawView under review", () => {
+	test("draws the scene at each end of the review", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("review-scene");
+		const path = "/drawings/plan.excalidraw";
+		let view: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fileId,
+					path,
+					content: new TextEncoder().encode(NEW_EXCALIDRAW_FILE_CONTENT),
+				})
+				.execute();
+			const checkpoint = await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.set({
+					content: new TextEncoder().encode(
+						JSON.stringify({
+							type: "excalidraw",
+							version: 2,
+							elements: [],
+							appState: {},
+							files: {},
+						}),
+					),
+				})
+				.where("id", "=", fileId)
+				.execute();
+			const snapshot = await selectWorkingFileDiffSnapshot(lix);
+			const atelier = {
+				lix,
+				readOnly: false,
+				events: { emit: () => {} },
+				documents: {
+					open: () => Promise.resolve(),
+					startNew: () => Promise.resolve(),
+					closeActive: () => {},
+					close: () => {},
+					closeAll: () => {},
+					activeFileId: fileId,
+					activeFilePath: path,
+				},
+				views: { open: () => {} },
+				preferences: { get: () => undefined },
+				icons: { fileUrl: () => "" },
+				branches: { activeId: await lix.activeBranchId() },
+				diff: {
+					session: {
+						base: { commitId: checkpoint.commitId },
+						target: { working: true },
+						files: [
+							{
+								id: fileId,
+								path,
+								changeKind: "modified",
+								workingEpoch: {
+									beforeCommitId: snapshot.beforeCommitId,
+									afterCommitId: snapshot.afterCommitId,
+								},
+								review: { id: "review-scene", status: "pending" },
+							},
+						],
+						activePath: path,
+						capabilities: { checkpoint: true, undo: true, restore: false },
+					},
+					autoAccept: false,
+					open: () => Promise.resolve(),
+					openFile: () => {},
+					exit: () => {},
+					accept: () => Promise.resolve(),
+					reject: () => Promise.resolve(),
+					resolve: () => Promise.resolve(),
+					checkpointAll: () => Promise.resolve(),
+				},
+			} as unknown as ExtensionRuntime;
+
+			await act(async () => {
+				view = render(
+					<div className="atelier-root">
+						<LixProvider lix={lix}>
+							<ExcalidrawView
+								atelier={atelier}
+								fileId={fileId}
+								filePath={path}
+							/>
+						</LixProvider>
+					</div>,
+				);
+			});
+
+			// Two scenes, one per end of the review; the canvas itself loads
+			// lazily inside each side.
+			await waitFor(() =>
+				expect(
+					view!.container.querySelectorAll("[data-diff-side]"),
+				).toHaveLength(2),
+			);
+			expect(
+				view!.container.querySelector<HTMLElement>("[data-diff-side='before']"),
+			).toHaveAccessibleName("Before: plan.excalidraw");
+			// The editor is not mounted while the review is open.
+			expect(
+				view!.container.querySelector(".atelier-excalidraw-save-error"),
+			).toBeNull();
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
 	});
 });

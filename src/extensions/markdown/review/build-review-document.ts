@@ -1,6 +1,8 @@
 import type { JSONContent } from "@tiptap/core";
 import { parseMarkdown, parseMarkdownSource } from "../editor/markdown";
-import { astToTiptapDoc } from "../editor/tiptap-markdown-bridge";
+// The concrete module, not the barrel: the barrel also carries the editor
+// extensions, and this file is used where no editor exists.
+import { astToTiptapDoc } from "../editor/tiptap-markdown-bridge/mdwc-to-tiptap";
 import type { MarkdownBlockSnapshot, MarkdownReviewDiff } from "../review-diff";
 
 const REVIEW_MARK_NAME = "markdownReviewDiff";

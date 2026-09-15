@@ -13,7 +13,13 @@ import {
 import { useQuery, useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import type { AtelierDiffSession } from "@/extension-api";
-import { workingReviewFile } from "@/shell/external-write-review-history";
+import { selectFilesStateAt } from "@/queries";
+import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
+import {
+	DiffSides,
+	useWorkingDiffSides,
+	viewShowsDiff,
+} from "@/extension-runtime/diff-sides";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
@@ -25,6 +31,11 @@ type HtmlViewProps = {
 	readonly fileId: string;
 	readonly filePath?: string;
 	readonly sourceCommitId?: string;
+	/** Both set for a checkpoint's span: the view shows before beside after. */
+	readonly beforeCommitId?: string | null;
+	readonly afterCommitId?: string | null;
+	readonly beforeExists?: boolean;
+	readonly afterExists?: boolean;
 	readonly diffSession?: AtelierDiffSession | null;
 };
 
@@ -57,38 +68,130 @@ export const HTML_ARTIFACT_CSP = [
 
 /** Read-only renderer for an HTML artifact stored in the Lix workspace. */
 
-function HtmlView({
+export function HtmlView({
 	fileId,
 	filePath,
 	sourceCommitId,
+	beforeCommitId,
+	afterCommitId,
+	beforeExists,
+	afterExists,
 	diffSession,
 }: HtmlViewProps) {
-	if (sourceCommitId || workingReviewFile(diffSession, fileId)) {
+	assertFileId(fileId);
+	const review = useWorkingDiffSides(fileId, diffSession);
+	// An artifact cannot be diffed in place, so both revisions are rendered:
+	// the checkpoint on the left, the working file on the right. Each side
+	// reads its own assets from its own commit.
+	if (review.reviewing) {
+		if (review.status === "loading") return <HtmlLoadingState />;
+		if (review.status === "unavailable") return <HtmlReviewUnavailable />;
+		const path = review.path || filePath || "artifact.html";
 		return (
-			<div
-				className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
-				role="status"
-			>
-				HTML previews are disabled in review mode because workspace assets
-				cannot yet be pinned to one repository epoch.
-			</div>
+			<DiffSides
+				filePath={path}
+				beforeCommitId={review.beforeCommitId}
+				afterCommitId={review.afterCommitId}
+				before={
+					review.beforeData ? (
+						<HtmlWorkspacePreview
+							fileRow={{ id: fileId, path, content: review.beforeData }}
+							filePath={path}
+							commitId={review.beforeCommitId}
+						/>
+					) : null
+				}
+				after={
+					review.afterData ? (
+						<HtmlWorkspacePreview
+							fileRow={{ id: fileId, path, content: review.afterData }}
+							filePath={path}
+							commitId={review.afterCommitId}
+						/>
+					) : null
+				}
+			/>
+		);
+	}
+	if (beforeCommitId && afterCommitId) {
+		return (
+			<Suspense fallback={<HtmlLoadingState />}>
+				<FileSnapshotsAtCommits
+					fileId={fileId}
+					beforeCommitId={beforeCommitId}
+					afterCommitId={afterCommitId}
+					beforeExists={beforeExists}
+					afterExists={afterExists}
+				>
+					{({ beforeSnapshot, afterSnapshot }) => {
+						const path =
+							afterSnapshot?.path ??
+							beforeSnapshot?.path ??
+							filePath ??
+							"artifact.html";
+						return (
+							<DiffSides
+								filePath={path}
+								beforeCommitId={beforeCommitId}
+								afterCommitId={afterCommitId}
+								before={
+									beforeSnapshot ? (
+										<HtmlWorkspacePreview
+											fileRow={{
+												id: fileId,
+												path,
+												content: beforeSnapshot.content,
+											}}
+											filePath={path}
+											commitId={beforeCommitId}
+										/>
+									) : null
+								}
+								after={
+									afterSnapshot ? (
+										<HtmlWorkspacePreview
+											fileRow={{
+												id: fileId,
+												path,
+												content: afterSnapshot.content,
+											}}
+											filePath={path}
+											commitId={afterCommitId}
+										/>
+									) : null
+								}
+							/>
+						);
+					}}
+				</FileSnapshotsAtCommits>
+			</Suspense>
 		);
 	}
 	return (
 		<Suspense fallback={<HtmlLoadingState />}>
-			<HtmlViewContent fileId={fileId} filePath={filePath} />
+			<HtmlViewContent
+				fileId={fileId}
+				filePath={filePath}
+				sourceCommitId={sourceCommitId}
+			/>
 		</Suspense>
 	);
 }
 
-function HtmlViewContent({ fileId, filePath }: HtmlViewProps) {
+function HtmlViewContent({ fileId, filePath, sourceCommitId }: HtmlViewProps) {
 	assertFileId(fileId);
-	const fileResult = useQueryResult<HtmlFileRow>((lix) =>
-		qb(lix)
-			.selectFrom("lix_file")
-			.select(["id", "path", "content"])
-			.where("id", "=", fileId)
-			.limit(1),
+	const fileResult = useQueryResult<HtmlFileRow>(
+		(lix) =>
+			sourceCommitId
+				? selectFilesStateAt(lix, sourceCommitId)
+						.select(["id", "path", "content"])
+						.where("id", "=", fileId)
+				: qb(lix)
+						.selectFrom("lix_file")
+						.select(["id", "path", "content"])
+						.where("id", "=", fileId)
+						.limit(1),
+		{ subscribe: !sourceCommitId },
 	);
 	if (fileResult.status === "pending") return <HtmlLoadingState />;
 	if (fileResult.status === "error") throw fileResult.error;
@@ -102,15 +205,39 @@ function HtmlViewContent({ fileId, filePath }: HtmlViewProps) {
 		);
 	}
 
-	return <HtmlWorkspacePreview fileRow={fileRow} filePath={filePath} />;
+	return (
+		<HtmlWorkspacePreview
+			fileRow={fileRow}
+			filePath={filePath}
+			commitId={sourceCommitId ?? null}
+		/>
+	);
+}
+
+function HtmlReviewUnavailable() {
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			role="alert"
+		>
+			The working artifact changed while it was being reviewed. Reopen the
+			review.
+		</div>
+	);
 }
 
 function HtmlWorkspacePreview({
 	fileRow,
 	filePath,
+	commitId = null,
 }: {
 	readonly fileRow: HtmlFileRow;
 	readonly filePath?: string;
+	/**
+	 * The commit this revision belongs to. The artifact's images are read at
+	 * the same commit, so a checkpoint is never drawn with today's assets.
+	 */
+	readonly commitId?: string | null;
 }) {
 	const resolvedFilePath = fileRow.path || filePath || "artifact.html";
 	const source = useMemo(
@@ -123,11 +250,15 @@ function HtmlWorkspacePreview({
 	);
 	const imageFiles = useQuery<HtmlImageFileRow>(
 		(lix) =>
-			qb(lix)
-				.selectFrom("lix_file")
-				.select(["path", "content"])
-				.where("path", "in", imagePaths),
-		{ enabled: imagePaths.length > 0 },
+			commitId
+				? selectFilesStateAt(lix, commitId)
+						.select(["path", "content"])
+						.where("path", "in", imagePaths)
+				: qb(lix)
+						.selectFrom("lix_file")
+						.select(["path", "content"])
+						.where("path", "in", imagePaths),
+		{ enabled: imagePaths.length > 0, subscribe: !commitId },
 	);
 
 	return (
@@ -447,6 +578,10 @@ export const extension = createReactExtensionDefinition({
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
 				readySelector="iframe"
+				diff={viewShowsDiff({
+					session: atelier.diff.session,
+					state: view.state,
+				})}
 				initial={
 					file ? (
 						<iframe
@@ -464,6 +599,12 @@ export const extension = createReactExtensionDefinition({
 					fileId={view.state.fileId as string}
 					filePath={view.state.filePath as string | undefined}
 					sourceCommitId={view.state.sourceCommitId as string | undefined}
+					beforeCommitId={
+						view.state.beforeCommitId as string | null | undefined
+					}
+					afterCommitId={view.state.afterCommitId as string | null | undefined}
+					beforeExists={view.state.beforeExists !== false}
+					afterExists={view.state.afterExists !== false}
 					diffSession={atelier.diff.session}
 				/>
 			</PreparedFileSurface>

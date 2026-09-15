@@ -42,10 +42,10 @@ describe("Atelier server rendering", () => {
 		}
 		try {
 			const extensions = [{ id: "connection-test", Component: ConnectionView }];
-			const centralPanel = { home: { extensionId: "connection-test" } };
+			const mainArea = { home: { extensionId: "connection-test" } };
 			const initialState = await loadAtelier({
 				lix,
-				centralPanel,
+				mainArea,
 				extensions,
 				location: { view: "connection-test" },
 			});
@@ -68,7 +68,7 @@ describe("Atelier server rendering", () => {
 					<Atelier
 						lix={delayed}
 						initialState={initialState}
-						centralPanel={centralPanel}
+						mainArea={mainArea}
 						extensions={extensions}
 					/>,
 				),

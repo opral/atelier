@@ -311,9 +311,12 @@ export function CsvReviewGrid({
 										data-diff-status={cell.status}
 										style={{ height }}
 									>
-										{cell.status !== "unchanged" ? (
+										{cell.status === "modified" ? (
+											// Only a changed value has two sides worth a popover. An
+											// added or removed cell's before is "not present" by
+											// definition; its row colour already says so.
 											<CsvReviewTrigger
-												label={`${column.title}, row ${(row.afterIndex ?? row.beforeIndex ?? position) + 1}: ${cell.status === "modified" ? "changed" : cell.status}`}
+												label={`${column.title}, row ${(row.afterIndex ?? row.beforeIndex ?? position) + 1}: changed`}
 												title={`${column.title} · ${row.cells[0]?.value || `Row ${position + 1}`}`}
 												details={[
 													{

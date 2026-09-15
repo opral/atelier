@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import type { PanelState } from "@/extension-runtime/types";
+import type { AreaState } from "@/extension-runtime/types";
 import { reconcileCurrentFileViews } from "./file-view-lifecycle";
 
-const EMPTY_PANEL: PanelState = { views: [], activeInstance: null };
+const EMPTY_PANEL: AreaState = { views: [], activeInstance: null };
 
 describe("reconcileCurrentFileViews", () => {
 	test("removes missing current file views regardless of renderer kind", () => {
@@ -17,9 +17,9 @@ describe("reconcileCurrentFileViews", () => {
 			state: { fileId: "file_missing", filePath: "/asset.other" },
 		};
 		const result = reconcileCurrentFileViews({
-			panels: {
+			areas: {
 				left: EMPTY_PANEL,
-				central: {
+				main: {
 					views: [currentView, missingView],
 					activeInstance: missingView.instance,
 				},
@@ -28,7 +28,7 @@ describe("reconcileCurrentFileViews", () => {
 			currentFileIds: new Set(["file_current"]),
 		});
 
-		expect(result.central).toEqual({
+		expect(result.main).toEqual({
 			views: [currentView],
 			activeInstance: currentView.instance,
 		});
@@ -49,9 +49,9 @@ describe("reconcileCurrentFileViews", () => {
 			kind: "search",
 			state: { fileId: "incidental-metadata" },
 		};
-		const panels = {
+		const areas = {
 			left: { views: [nonFileView], activeInstance: nonFileView.instance },
-			central: {
+			main: {
 				views: [historicalView],
 				activeInstance: historicalView.instance,
 			},
@@ -59,11 +59,11 @@ describe("reconcileCurrentFileViews", () => {
 		};
 
 		const result = reconcileCurrentFileViews({
-			panels,
+			areas,
 			currentFileIds: new Set(),
 		});
 
-		expect(result).toBe(panels);
+		expect(result).toBe(areas);
 	});
 
 	test("refreshes current file paths and generated tab labels", () => {
@@ -77,9 +77,9 @@ describe("reconcileCurrentFileViews", () => {
 				customState: true,
 			},
 		};
-		const panels = {
+		const areas = {
 			left: EMPTY_PANEL,
-			central: {
+			main: {
 				views: [currentView],
 				activeInstance: currentView.instance,
 			},
@@ -87,14 +87,14 @@ describe("reconcileCurrentFileViews", () => {
 		};
 
 		const result = reconcileCurrentFileViews({
-			panels,
+			areas,
 			currentFileIds: new Set(["file_current"]),
 			currentFilePathsById: new Map([
 				["file_current", "/project-aurora-launch-plan.md"],
 			]),
 		});
 
-		expect(result.central.views[0]?.state).toEqual({
+		expect(result.main.views[0]?.state).toEqual({
 			fileId: "file_current",
 			filePath: "/project-aurora-launch-plan.md",
 			atelier: { label: "project-aurora-launch-plan.md" },
@@ -109,9 +109,9 @@ describe("reconcileCurrentFileViews", () => {
 			state: { fileId: "file_current", filePath: "/notes.md" },
 		};
 		const result = reconcileCurrentFileViews({
-			panels: {
+			areas: {
 				left: EMPTY_PANEL,
-				central: {
+				main: {
 					views: [currentView],
 					activeInstance: currentView.instance,
 				},
@@ -125,7 +125,7 @@ describe("reconcileCurrentFileViews", () => {
 			}),
 		});
 
-		expect(result.central.views[0]).toMatchObject({
+		expect(result.main.views[0]).toMatchObject({
 			kind: "atelier_csv",
 			instance: "atelier_csv:file_current",
 			state: {
@@ -134,7 +134,7 @@ describe("reconcileCurrentFileViews", () => {
 				atelier: { label: "notes.csv" },
 			},
 		});
-		expect(result.central.activeInstance).toBe("atelier_csv:file_current");
+		expect(result.main.activeInstance).toBe("atelier_csv:file_current");
 	});
 
 	test("re-evaluates renderers after handlers load and coalesces collisions", () => {
@@ -149,9 +149,9 @@ describe("reconcileCurrentFileViews", () => {
 			state: { fileId: "file_current", filePath: "/notes.custom" },
 		};
 		const result = reconcileCurrentFileViews({
-			panels: {
+			areas: {
 				left: EMPTY_PANEL,
-				central: {
+				main: {
 					views: [fallbackView, installedView],
 					activeInstance: fallbackView.instance,
 				},
@@ -165,13 +165,11 @@ describe("reconcileCurrentFileViews", () => {
 			}),
 		});
 
-		expect(result.central.views).toHaveLength(1);
-		expect(result.central.views[0]).toMatchObject({
+		expect(result.main.views).toHaveLength(1);
+		expect(result.main.views[0]).toMatchObject({
 			kind: "installed_renderer",
 			instance: "installed_renderer:file_current",
 		});
-		expect(result.central.activeInstance).toBe(
-			"installed_renderer:file_current",
-		);
+		expect(result.main.activeInstance).toBe("installed_renderer:file_current");
 	});
 });

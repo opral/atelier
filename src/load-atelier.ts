@@ -1,4 +1,4 @@
-import type { ExecuteResult, Lix, SqlParam } from "@lix-js/sdk";
+import type { StatementResult, Lix, SqlParam } from "@lix-js/sdk";
 import type {
 	AtelierInitialState,
 	AtelierLocation,
@@ -35,7 +35,7 @@ import {
 	coerceAtelierUserPreferences,
 	createInitialAtelierUiState,
 } from "./shell/ui-state";
-import { CENTRAL_HOME_INSTANCE } from "./shell/central-slot-behavior";
+import { CENTRAL_HOME_INSTANCE } from "./shell/main-slot-behavior";
 
 /** Prepare the actual Atelier shell and its initially visible extension views. */
 export async function loadAtelier(
@@ -82,7 +82,7 @@ async function prepareAtelierState(
 	const capture = (
 		sql: string,
 		params: readonly unknown[],
-		result: ExecuteResult,
+		result: StatementResult,
 	) => {
 		queries.set(atelierQueryKey(sql, params), {
 			sql,
@@ -106,12 +106,16 @@ async function prepareAtelierState(
 					statements: readonly { sql: string; params?: readonly SqlParam[] }[],
 				) => {
 					signal.throwIfAborted();
-					const results = await target.executeBatch(statements);
+					const batch = await target.executeBatch(statements);
 					signal.throwIfAborted();
 					statements.forEach((statement, index) =>
-						capture(statement.sql, statement.params ?? [], results[index]!),
+						capture(
+							statement.sql,
+							statement.params ?? [],
+							batch.results[index]!,
+						),
 					);
-					return results;
+					return batch;
 				};
 			const value = Reflect.get(target, property, target);
 			return typeof value === "function" ? value.bind(target) : value;
@@ -130,7 +134,7 @@ async function prepareAtelierState(
 		const compiled = builder.compile();
 		return { sql: compiled.sql, params: compiled.parameters as SqlParam[] };
 	});
-	const results = await lix.executeBatch([
+	const { results } = await lix.executeBatch([
 		{ sql: "SELECT lix_active_branch_commit_id() AS commit_id" },
 		...statements,
 		{ sql: "SELECT value FROM lix_key_value WHERE key = 'lix_id'" },
@@ -146,12 +150,12 @@ async function prepareAtelierState(
 		path: string;
 	}[];
 	const initial = createInitialAtelierUiState(options.defaultOpenPanels);
-	const central: ExtensionInstance[] = [];
-	const homeId = options.centralPanel?.home?.extensionId;
+	const main: ExtensionInstance[] = [];
+	const homeId = options.mainArea?.home?.extensionId;
 	if (homeId) {
 		if (!registry.extensionMap.has(homeId))
 			throw new Error(`Unknown Atelier home extension: ${homeId}`);
-		central.push({
+		main.push({
 			instance: CENTRAL_HOME_INSTANCE,
 			kind: homeId,
 			isPinned: true,
@@ -180,8 +184,8 @@ async function prepareAtelierState(
 				? { state: location.state as Record<string, unknown> }
 				: {}),
 		};
-	} else if (location.path === "/" && central[0]) {
-		target = central[0];
+	} else if (location.path === "/" && main[0]) {
+		target = main[0];
 	} else {
 		const file = files.find((candidate) => candidate.path === location.path);
 		if (file) {
@@ -215,16 +219,16 @@ async function prepareAtelierState(
 			throw error;
 		}
 	}
-	const existingTarget = central.findIndex(
+	const existingTarget = main.findIndex(
 		(view) => view.instance === target.instance,
 	);
-	if (existingTarget < 0) central.push(target);
-	else central[existingTarget] = target;
+	if (existingTarget < 0) main.push(target);
+	else main[existingTarget] = target;
 	const ui = {
-		focusedPanel: "central" as const,
-		panels: {
-			...initial.panels,
-			central: { views: central, activeInstance: target.instance },
+		focusedArea: "main" as const,
+		areas: {
+			...initial.areas,
+			main: { views: main, activeInstance: target.instance },
 		},
 	};
 	const preferences = coerceAtelierUserPreferences({
@@ -233,9 +237,9 @@ async function prepareAtelierState(
 	});
 	const visible = [target];
 	for (const side of options.defaultOpenPanels ?? []) {
-		const panel = ui.panels[side];
-		const active = panel.views.find(
-			(view) => view.instance === panel.activeInstance,
+		const area = ui.areas[side];
+		const active = area.views.find(
+			(view) => view.instance === area.activeInstance,
 		);
 		if (active) visible.push(active);
 	}

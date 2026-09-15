@@ -20,7 +20,7 @@ describe("loadAtelier", () => {
 			const extensions = [
 				{
 					id: "company-home",
-					placement: ["central" as const],
+					placement: ["main" as const],
 					load: async () => ({ title: "Repository README" }),
 					Component: ({
 						data,
@@ -29,19 +29,17 @@ describe("loadAtelier", () => {
 					}) => createElement("h1", null, (data as { title: string }).title),
 				},
 			];
-			const centralPanel = { home: { extensionId: "company-home" } };
+			const mainArea = { home: { extensionId: "company-home" } };
 			const initialState = await loadAtelier({
 				lix,
 				extensions,
-				centralPanel,
+				mainArea,
 				location: { view: "company-home" },
 			});
-			expect(initialState.ui.panels.central.activeInstance).toBe(
-				"central-home",
-			);
-			expect(initialState.ui.panels.central.views).toHaveLength(1);
+			expect(initialState.ui.areas.main.activeInstance).toBe("main-home");
+			expect(initialState.ui.areas.main.views).toHaveLength(1);
 			const html = renderToString(
-				createElement(Atelier, { initialState, extensions, centralPanel }),
+				createElement(Atelier, { initialState, extensions, mainArea }),
 			);
 			expect(html).toContain("Repository README");
 		} finally {
@@ -68,7 +66,7 @@ describe("loadAtelier", () => {
 			await lix.close();
 		}
 		const transferred: AtelierInitialState = JSON.parse(JSON.stringify(state));
-		const active = transferred.ui.panels.central.activeInstance!;
+		const active = transferred.ui.areas.main.activeInstance!;
 		expect(transferred.views[active]?.extensionId).toBe("atelier_file");
 		expect(transferred.views[active]?.data).toMatchObject({
 			path: "/README.md",
@@ -86,6 +84,23 @@ describe("loadAtelier", () => {
 			expect(
 				(await source.lix.execute(query.sql, query.params as never[])).rows,
 			).toEqual(query.rows);
+			const batch = await source.lix.executeBatch([
+				{ sql: query.sql, params: query.params as never[], label: "" },
+				{ sql: query.sql, params: query.params as never[], label: "repeat" },
+			]);
+			expect(batch.commit).toBeNull();
+			expect(batch.results).toHaveLength(2);
+			expect(batch.results[0]).toMatchObject({
+				statementIndex: 0,
+				label: "",
+				rows: query.rows,
+			});
+			expect(batch.results[1]).toMatchObject({
+				statementIndex: 1,
+				label: "repeat",
+				rows: query.rows,
+			});
+			expect(batch.results.every((result) => !("commit" in result))).toBe(true);
 			await expect(
 				source.lix.execute("SELECT 'not prepared' AS value"),
 			).rejects.toThrow("missing a prepared query");
@@ -104,9 +119,7 @@ describe("loadAtelier", () => {
 			const home = await loadAtelier({ lix });
 			const file = await loadAtelier({ lix, location: { path: "/notes.txt" } });
 			expect(home.identity).toBe(file.identity);
-			expect(file.ui.panels.central.views[0]?.state?.filePath).toBe(
-				"/notes.txt",
-			);
+			expect(file.ui.areas.main.views[0]?.state?.filePath).toBe("/notes.txt");
 			await expect(
 				loadAtelier({ lix, location: { path: "/missing" } }),
 			).rejects.toMatchObject({ name: "AtelierLocationNotFoundError" });
@@ -177,7 +190,7 @@ describe("loadAtelier", () => {
 				extensions: [
 					{
 						id: "redacted",
-						placement: ["central"],
+						placement: ["main"],
 						Component: () => null,
 						load: async ({ lix: reader }) => {
 							await reader.execute(

@@ -5,7 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { FilesystemEntryRow } from "@/queries";
 import { SidePanel } from "./side-panel";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
-import type { PanelState } from "../extension-runtime/types";
+import type { AreaState } from "../extension-runtime/types";
 import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
 import type { Lix } from "@lix-js/sdk";
 import { createExtensionHostContext } from "@/test-utils/extension-host-context";
@@ -110,7 +110,7 @@ const createViewContext = (
 ) => createExtensionHostContext(mockLix, { openDocument });
 
 function StatefulSidePanel() {
-	const [panel, setPanel] = useState<PanelState>({
+	const [area, setPanel] = useState<AreaState>({
 		views: [],
 		activeInstance: null,
 	});
@@ -118,7 +118,7 @@ function StatefulSidePanel() {
 		<SidePanel
 			side="left"
 			title="Navigator"
-			panel={panel}
+			area={area}
 			onSelectView={(instance) =>
 				setPanel((current) => ({ ...current, activeInstance: instance }))
 			}
@@ -131,14 +131,14 @@ function StatefulSidePanel() {
 			onRemoveView={() => setPanel({ views: [], activeInstance: null })}
 			viewContext={createViewContext()}
 			isFocused={true}
-			onFocusPanel={() => {}}
+			onFocusArea={() => {}}
 		/>
 	);
 }
 
 describe("SidePanel", () => {
 	test("renders the empty state CTA and opens its view picker", async () => {
-		const emptyPanel: PanelState = { views: [], activeInstance: null };
+		const emptyPanel: AreaState = { views: [], activeInstance: null };
 		const handleAdd = vi.fn();
 
 		render(
@@ -147,13 +147,13 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="left"
 						title="Navigator"
-						panel={emptyPanel}
+						area={emptyPanel}
 						onSelectView={() => {}}
 						onAddView={handleAdd}
 						onRemoveView={() => {}}
 						viewContext={createViewContext()}
 						isFocused={false}
-						onFocusPanel={vi.fn()}
+						onFocusArea={vi.fn()}
 					/>
 				</DndContext>
 			</ExtensionHostRegistryProvider>,
@@ -218,7 +218,7 @@ describe("SidePanel", () => {
 
 	test("hides the sidebar from the section picker", async () => {
 		const handleHide = vi.fn();
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-1",
 		};
@@ -229,14 +229,14 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="left"
 						title="Navigator"
-						panel={panelState}
+						area={panelState}
 						onSelectView={() => {}}
 						onAddView={() => {}}
 						onRemoveView={() => {}}
 						onHidePanel={handleHide}
 						viewContext={createViewContext()}
 						isFocused={false}
-						onFocusPanel={() => {}}
+						onFocusArea={() => {}}
 					/>
 				</DndContext>
 			</ExtensionHostRegistryProvider>,
@@ -253,7 +253,7 @@ describe("SidePanel", () => {
 	});
 
 	test("omits Hide sidebar when the host cannot collapse the panel", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-1",
 		};
@@ -264,13 +264,13 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="left"
 						title="Navigator"
-						panel={panelState}
+						area={panelState}
 						onSelectView={() => {}}
 						onAddView={() => {}}
 						onRemoveView={() => {}}
 						viewContext={createViewContext()}
 						isFocused={false}
-						onFocusPanel={() => {}}
+						onFocusArea={() => {}}
 					/>
 				</DndContext>
 			</ExtensionHostRegistryProvider>,
@@ -287,7 +287,7 @@ describe("SidePanel", () => {
 	});
 
 	test("renders a host-provided empty state", () => {
-		const emptyPanel: PanelState = { views: [], activeInstance: null };
+		const emptyPanel: AreaState = { views: [], activeInstance: null };
 
 		render(
 			<ExtensionHostRegistryProvider>
@@ -295,13 +295,13 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="right"
 						title="Secondary"
-						panel={emptyPanel}
+						area={emptyPanel}
 						onSelectView={() => {}}
 						onAddView={() => {}}
 						onRemoveView={() => {}}
 						viewContext={createViewContext()}
 						isFocused={false}
-						onFocusPanel={vi.fn()}
+						onFocusArea={vi.fn()}
 						emptyState={<button type="button">Start agent</button>}
 					/>
 				</DndContext>
@@ -324,13 +324,13 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="right"
 						title="Secondary"
-						panel={{ views: [], activeInstance: null }}
+						area={{ views: [], activeInstance: null }}
 						onSelectView={() => {}}
 						onAddView={() => {}}
 						onRemoveView={() => {}}
 						viewContext={createViewContext()}
 						isFocused={false}
-						onFocusPanel={() => {}}
+						onFocusArea={() => {}}
 						emptyState={null}
 					/>
 				</DndContext>
@@ -345,7 +345,7 @@ describe("SidePanel", () => {
 	});
 
 	test("renders the active view and forwards interactions", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-1",
 		};
@@ -361,13 +361,13 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="left"
 						title="Navigator"
-						panel={panelState}
+						area={panelState}
 						onSelectView={handleSelect}
 						onAddView={handleAdd}
 						onRemoveView={handleRemove}
 						viewContext={viewContext}
 						isFocused={true}
-						onFocusPanel={vi.fn()}
+						onFocusArea={vi.fn()}
 					/>
 				</DndContext>
 			</ExtensionHostRegistryProvider>,
@@ -398,7 +398,7 @@ describe("SidePanel", () => {
 	});
 
 	test("removes focus flag when panel not focused", async () => {
-		const panelState: PanelState = {
+		const panelState: AreaState = {
 			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-1",
 		};
@@ -409,13 +409,13 @@ describe("SidePanel", () => {
 					<SidePanel
 						side="left"
 						title="Navigator"
-						panel={panelState}
+						area={panelState}
 						onSelectView={() => {}}
 						onAddView={() => {}}
 						onRemoveView={() => {}}
 						viewContext={createViewContext()}
 						isFocused={false}
-						onFocusPanel={vi.fn()}
+						onFocusArea={vi.fn()}
 					/>
 				</DndContext>
 			</ExtensionHostRegistryProvider>,

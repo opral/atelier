@@ -1,6 +1,31 @@
 # Atelier
 
-Atelier is an embeddable React workspace for [Lix](https://github.com/opral/lix): files, editors, history, and review in one component.
+**Atelier is a UI toolkit for [Lix](https://github.com/opral/lix).** It gives
+you views over a lix, and a shell that arranges them.
+
+A view shows lix data: a file, the history, a SQL console. You add your own
+views through extensions. Each view can run in two modes:
+
+- **Mounted** — React, interactive, placed in an area of the shell.
+- **Static** — HTML, no React and no DOM. For a server, a chat card, an email.
+
+A view does not have to support both. A canvas view has no static mode, and it
+says so. The shell is one arrangement of views, not the definition of Atelier:
+a host can replace any bundled view by id, or build its own shell from the
+views.
+
+### Rules for adding to this package
+
+1. **The unit is a view, not a file type.** A capability that only works for
+   Markdown belongs inside the Markdown view. It is not a new export.
+2. **A view declares its modes.** Mounted and static are both optional.
+3. **Bundled views are not special.** They use the same extension API a host
+   uses. `ATELIER_BUILTIN_EXTENSION_IDS` lists the ids you can replace.
+
+The host owns the Lix handle, the routing, the authentication, and the
+product's chrome. Atelier owns none of those.
+
+## Mounted
 
 ```tsx
 import { Atelier } from "@opral/atelier";
@@ -9,7 +34,58 @@ import "@opral/atelier/style.css";
 <Atelier lix={lix} location={{ path: "/README.md" }} />;
 ```
 
-The host owns the Lix handle and closes it after unmount. Atelier owns its UI, subscriptions, extension loading, and editor lifecycle.
+The host opens the Lix handle and closes it after unmount. Atelier owns its
+UI, subscriptions, extension loading, and editor lifecycle.
+
+## Static
+
+```ts
+import { toHtml } from "@opral/atelier/render";
+
+const view = toHtml({ path: "/README.md", before, after }, { maxBytes: 24_000 });
+if ("html" in view) send(view.html);
+else console.log(view.skipped); // why there is no view
+```
+
+Bytes in, HTML out. Markdown and CSV have static views today.
+
+Which side is missing says what happened:
+
+| input | `kind` |
+| --- | --- |
+| `after` only | `added` |
+| `before` and `after` | `modified` |
+| `before` only | `removed` |
+
+`kind`, and the `counts` of entities added, modified and removed, use the same
+words as `lix_diff`. `hidden` is how many entities the size budget left out.
+
+A file type with no static view returns `{ skipped: "unsupported" }`. Other
+reasons are `unchanged`, `empty`, `too-large` and `failed`. `toHtml` does not
+throw.
+
+### Styling a static view
+
+Put the HTML inside an element with class `atelier-render` and load
+`@opral/atelier/render.css`. Or pass `document: true` to get a complete HTML
+file with the styles inlined.
+
+Colours are `--atelier-*` custom properties, generated from the app's theme and
+declared on `:root`. To change them, define your own on any ancestor of the
+render. There is no theming API. Dark mode needs more than an override today,
+because the diff backgrounds are mixed over white when they are generated.
+
+## Entries
+
+| entry | what it is | guarantees |
+| --- | --- | --- |
+| `@opral/atelier` | the shell, and the extension API | React |
+| `@opral/atelier/render` | views, without a shell | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
+| `@opral/atelier/render.css` | styles for static views | generated tokens, no colour literals in rules |
+| `@opral/atelier/style.css` | styles for the shell | |
+| `@opral/atelier/file-icons` | path → icon | no React, no DOM |
+| `@opral/atelier/state-adapters` | the shell's persistence ports | |
+| `@opral/atelier/dev-tools` | tools for working on Atelier | not for shipping |
 
 ## Server rendering
 
@@ -56,6 +132,25 @@ A location identifies a repository path or an extension view:
 The optional `fileHref({ path, branchId, commitId })` returns a raw file URL. It enables repository-relative Markdown images and native image, PDF, and video rendering during SSR, including files too large to inline. After hydration PDFs progressively enhance to the existing PDF.js canvas, page controls, and accessible page text using the raw URL and bounded range requests; no browser Lix connection or full-blob database read is required. A download link remains available if rendering fails. Serve the requested revision with the correct media content type and support HTTP ranges for large media. File revisions keep native playback stable when unrelated files change.
 
 Extension locations use `{ view: "dashboard", state: { filter: "open" } }`. Native links use `href`, so documents remain navigable before JavaScript starts. Optional `slots`, state stores, branch session, and events integrate host controls without exposing a separate workspace runtime.
+
+## Diffs
+
+A review opens a file with two refs: the checkpoint and the working file, or
+the two ends of a checkpoint's span. Every view renders that diff itself.
+
+Markdown, CSV and text diff in place — marked words, changed cells, a unified
+diff. An image, a PDF, a video, a drawing or an HTML artifact cannot be diffed
+in place, so those views draw both revisions side by side: the older one on the
+left, the newer on the right. A file the write created has no left side; one it
+deleted has no right side. Each side reads its own commit, assets included: an
+artifact's images come from the commit the artifact belongs to, so a checkpoint
+is never drawn with today's files.
+
+A view reads the working review from `atelier.diff.session`, and a checkpoint's
+span from `beforeCommitId` and `afterCommitId` in its own view state. The shell
+hands both refs to every view and decides nothing by file type. A view that is
+about to compare says so, and the prepared document waits: one revision painted
+first would only be replaced a moment later.
 
 ## Extensions
 

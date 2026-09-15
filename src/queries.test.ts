@@ -214,13 +214,13 @@ describe("checkpoint queries", () => {
 		// Metadata-only changes do not count: the file-tier diff sees only
 		// file changes, never the workspace's own key-value writes.
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 0, file_count: 0 },
+			{ file_count: 0 },
 		]);
 
 		const checkpoint = await createCheckpoint(lix);
 
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 0, file_count: 0 },
+			{ file_count: 0 },
 		]);
 		const checkpoints = await selectCheckpoints(lix).execute();
 		expect(checkpoints).toHaveLength(2);
@@ -269,16 +269,41 @@ describe("checkpoint queries", () => {
 		expect(new TextDecoder().decode(content.to_content as Uint8Array)).toBe(
 			"draft",
 		);
-		// The file's descriptor and content rows count; the workspace's own
-		// key-value write does not.
+		// Count the logical file once, regardless of its internal tracked rows.
 		expect(await selectWorkingChangeCount(lix).execute()).toEqual([
-			{ change_count: 2, file_count: 1 },
+			{ file_count: 1 },
 		]);
 
 		await createCheckpoint(lix);
 		expect(await selectWorkingFileDiffs(lix).execute()).toEqual([]);
 
 		await lix.close();
+	});
+
+	test("counts a file changed only by moving its ancestor directory", async () => {
+		const lix = await openLix();
+		try {
+			await lix.execute(
+				"INSERT INTO lix_file (path, content) VALUES ($1, $2)",
+				["/docs/nested/file.txt", new TextEncoder().encode("unchanged")],
+			);
+			await createCheckpoint(lix);
+			await lix.execute(
+				"UPDATE lix_directory SET path = '/moved' WHERE path = '/docs'",
+			);
+			expect(await selectWorkingChangeCount(lix).execute()).toEqual([
+				{ file_count: 1 },
+			]);
+			expect(await selectWorkingFileDiffs(lix).execute()).toEqual([
+				expect.objectContaining({
+					from_path: "/docs/nested/file.txt",
+					to_path: "/moved/nested/file.txt",
+					diff_type: "modified",
+				}),
+			]);
+		} finally {
+			await lix.close();
+		}
 	});
 
 	test("returns files removed since the latest checkpoint", async () => {

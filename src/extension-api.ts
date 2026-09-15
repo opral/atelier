@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type { Lix } from "@lix-js/sdk";
 
-export type AtelierPanelSide = "left" | "central" | "right";
+export type AtelierArea = "left" | "main" | "right";
 
 /** Metadata for an already-loaded host extension entry. */
 export type ExtensionManifest = {
@@ -12,10 +12,10 @@ export type ExtensionManifest = {
 	readonly fileExtensions?: readonly string[];
 	readonly multiInstance?: boolean;
 	/**
-	 * Panel sides this view may occupy. Defaults to the side panels; central
+	 * Panel sides this view may occupy. Defaults to the side areas; main
 	 * placement is reserved for document editors unless declared here.
 	 */
-	readonly placement?: readonly AtelierPanelSide[];
+	readonly placement?: readonly AtelierArea[];
 	/**
 	 * Excludes the view from the add-view menus. Hidden views stay mountable
 	 * programmatically — right for views opened only through navigation or
@@ -143,8 +143,8 @@ export type AtelierDocumentOpenOptions = {
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;
 	/**
-	 * Appends a new central tab instead of navigating the active tab in place.
-	 * Appends a new central tab instead of navigating the active tab.
+	 * Appends a new main tab instead of navigating the active tab in place.
+	 * Appends a new main tab instead of navigating the active tab.
 	 */
 	readonly newTab?: boolean;
 };
@@ -157,14 +157,14 @@ export type AtelierViewOpenOptions = {
 	 * activated (and its state updated) instead of opening a duplicate.
 	 */
 	readonly instanceId?: string;
-	/** Appends a new central tab instead of navigating the active tab in place. */
+	/** Appends a new main tab instead of navigating the active tab in place. */
 	readonly newTab?: boolean;
 	readonly focus?: boolean;
 	/**
-	 * Target panel. Defaults to "central". Side panels follow the add-view
+	 * Target panel. Defaults to "main". Side areas follow the add-view
 	 * rules instead of the tab rules: `instanceId` and `newTab` are ignored.
 	 */
-	readonly panel?: AtelierPanelSide;
+	readonly area?: AtelierArea;
 };
 
 export type AtelierViewsApi = {
@@ -181,7 +181,7 @@ export type AtelierDocumentsApi = {
 	closeActive(): Promise<void>;
 	/** Closes every view showing the document at the workspace path. */
 	close(path: string): Promise<void>;
-	/** Closes every document in the central panel. */
+	/** Closes every document in the main panel. */
 	closeAll(): Promise<void>;
 };
 
@@ -213,14 +213,14 @@ export type AtelierEvent =
 	| {
 			type: "extension_opened";
 			extensionId: string;
-			panel: AtelierPanelSide;
+			area: AtelierArea;
 	  }
 	| {
 			/**
-			 * The active central view changed (open, tab click, close, restore).
+			 * The active main view changed (open, tab click, close, restore).
 			 * Hosts that own routing map this to a URL.
 			 */
-			type: "central_view_activated";
+			type: "main_view_activated";
 			viewKind: string;
 			instanceId: string;
 			/** Set when the active view is a document editor. */
@@ -303,9 +303,9 @@ export type AtelierDiffApi = {
 		readonly base?: AtelierDiffRef | null;
 		readonly target: AtelierDiffRef;
 		/**
-		 * Always open the first changed file. By default the session keeps a
-		 * changed file that is already on screen and reveals the first changed
-		 * file only when nothing (or an unchanged file) is showing.
+		 * Also open the first changed file. By default opening a review is not
+		 * a navigation: whatever is on screen stays, and the user steps through
+		 * the changed files from the review float.
 		 */
 		readonly reveal?: boolean;
 	}) => Promise<void>;
@@ -402,7 +402,7 @@ export type AtelierExtensionRuntime = {
 export type AtelierExtensionView = {
 	readonly instanceId: string;
 	readonly state: AtelierExtensionState;
-	readonly panel: AtelierPanelSide;
+	readonly area: AtelierArea;
 	readonly isActive: boolean;
 	readonly isFocused: boolean;
 	/** Preferences shared by every instance of this extension. */
@@ -420,7 +420,7 @@ export type AtelierExtensionRegistration = {
 	readonly icon?: ComponentType<{ className?: string }>;
 	readonly fileExtensions?: readonly string[];
 	readonly multiInstance?: boolean;
-	readonly placement?: readonly AtelierPanelSide[];
+	readonly placement?: readonly AtelierArea[];
 	readonly hidden?: boolean;
 	readonly menuItems?: AtelierExtensionMenuItems;
 	readonly load?: AtelierExtensionLoader;

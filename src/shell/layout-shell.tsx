@@ -28,7 +28,7 @@ import {
 import { useLix, useQueryResult } from "@/lib/lix-react";
 import type { Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
-import { CentralPanel } from "./central-panel";
+import { MainArea } from "./main-panel";
 import { TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import { AtelierAutosaveHint } from "./autosave-hint";
@@ -65,8 +65,8 @@ import {
 	useExtensionHostRegistry,
 } from "../extension-runtime/extension-host-registry";
 import type {
-	PanelSide,
-	PanelState,
+	Area,
+	AreaState,
 	ExtensionInstance,
 	ExtensionKind,
 	ExtensionState,
@@ -89,7 +89,6 @@ import {
 	fileNameFromPath,
 	fileExtensionInstanceForKind,
 	FILE_EXTENSION_KIND,
-	CSV_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
@@ -99,7 +98,7 @@ import {
 	CENTRAL_HOME_INSTANCE,
 	createCentralSlotBehavior,
 	type CentralSlotBehavior,
-} from "./central-slot-behavior";
+} from "./main-slot-behavior";
 import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
 import {
 	coerceAtelierUiState,
@@ -109,8 +108,8 @@ import {
 	normalizeLayoutSizes,
 	type AtelierUiState,
 	type AtelierUserPreferencesV1,
-	type PanelLayoutSizes,
-	type DefaultOpenPanel,
+	type AreaSizes,
+	type DefaultOpenArea,
 } from "./ui-state";
 import {
 	activatePanelExtension,
@@ -125,8 +124,8 @@ import {
 	getWorkingFileData,
 } from "./external-write-review-history";
 import type {
-	AtelierEmptyPanelSlot,
-	AtelierPanelSide,
+	AtelierEmptyAreaSlot,
+	AtelierArea,
 	AtelierSlots,
 	AtelierTabStripContext,
 	AtelierTabStripTab,
@@ -160,7 +159,7 @@ import {
 } from "./file-view-lifecycle";
 
 type NewFileDraftHandlerRegistration = {
-	readonly panelSide: PanelSide;
+	readonly area: Area;
 	readonly viewInstance: string;
 	readonly isActiveView: boolean;
 	readonly handler: () => Promise<void> | void;
@@ -240,19 +239,18 @@ function withoutDocumentIdentity(
 	return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
-const activeEntryFromPanel = (panel: PanelState): ExtensionInstance | null => {
-	const activeInstance =
-		panel.activeInstance ?? panel.views[0]?.instance ?? null;
+const activeEntryFromPanel = (area: AreaState): ExtensionInstance | null => {
+	const activeInstance = area.activeInstance ?? area.views[0]?.instance ?? null;
 	if (!activeInstance) return null;
-	return panel.views.find((entry) => entry.instance === activeInstance) ?? null;
+	return area.views.find((entry) => entry.instance === activeInstance) ?? null;
 };
 
 const openDocumentPathsFromPanels = (
-	panels: readonly PanelState[],
+	areas: readonly AreaState[],
 ): readonly string[] => {
 	const paths = new Set<string>();
-	for (const panel of panels) {
-		for (const view of panel.views) {
+	for (const area of areas) {
+		for (const view of area.views) {
 			const path = documentPathFromView(view);
 			if (path) paths.add(path);
 		}
@@ -262,68 +260,68 @@ const openDocumentPathsFromPanels = (
 
 const canPlaceViewInPanel = (
 	view: ExtensionInstance,
-	side: PanelSide,
+	side: Area,
 	behavior: CentralSlotBehavior,
 ): boolean =>
-	side === "central"
+	side === "main"
 		? behavior.canHost(view)
 		: !isDocumentView(view) && !view.isPinned;
 
-const normalizePanel = (
-	side: PanelSide,
-	panel: PanelState,
+const normalizeArea = (
+	side: Area,
+	area: AreaState,
 	behavior: CentralSlotBehavior,
-): PanelState => {
-	if (side === "central") {
-		return behavior.normalize(panel);
+): AreaState => {
+	if (side === "main") {
+		return behavior.normalize(area);
 	}
-	const views = panel.views.filter(
+	const views = area.views.filter(
 		(view) => !isDocumentView(view) && !view.isPinned,
 	);
 	const activeInstance = views.some(
-		(view) => view.instance === panel.activeInstance,
+		(view) => view.instance === area.activeInstance,
 	)
-		? panel.activeInstance
+		? area.activeInstance
 		: (views[views.length - 1]?.instance ?? null);
 	if (
-		views.length === panel.views.length &&
-		activeInstance === panel.activeInstance
+		views.length === area.views.length &&
+		activeInstance === area.activeInstance
 	) {
-		return panel;
+		return area;
 	}
 	return { views, activeInstance };
 };
 
-const normalizePanels = (
-	panels: Record<PanelSide, PanelState>,
+const normalizeAreas = (
+	areas: Record<Area, AreaState>,
 	behavior: CentralSlotBehavior,
-): Record<PanelSide, PanelState> => ({
-	left: normalizePanel("left", panels.left, behavior),
-	central: normalizePanel("central", panels.central, behavior),
-	right: normalizePanel("right", panels.right, behavior),
+): Record<Area, AreaState> => ({
+	left: normalizeArea("left", areas.left, behavior),
+	main: normalizeArea("main", areas.main, behavior),
+	right: normalizeArea("right", areas.right, behavior),
 });
 
 const newFileDraftHandlerKey = (
 	registration: NewFileDraftHandlerRegistration,
-): string => `${registration.panelSide}:${registration.viewInstance}`;
+): string => `${registration.area}:${registration.viewInstance}`;
 
 /** @internal */
 export const selectNewFileDraftHandler = (
 	registrations: Iterable<NewFileDraftHandlerRegistration>,
-	focusedPanel: PanelSide,
+	focusedArea: Area,
 ): NewFileDraftHandlerRegistration | null => {
 	const panelPreference = [
-		focusedPanel,
+		focusedArea,
 		"left" as const,
-		"central" as const,
+		"main" as const,
 		"right" as const,
 	].filter((side, index, sides) => sides.indexOf(side) === index);
 	const registered = [...registrations].filter(
 		(registration) => registration.isActiveView,
 	);
-	for (const panelSide of panelPreference) {
+	for (const area of panelPreference) {
 		const registration = registered.find(
-			(candidate) => candidate.panelSide === panelSide,
+			(candidate) => candidate.area === area,
 		);
 		if (registration) return registration;
 	}
@@ -331,24 +329,24 @@ export const selectNewFileDraftHandler = (
 };
 
 const sanitizePanels = (
-	panels: Record<PanelSide, PanelState>,
+	areas: Record<Area, AreaState>,
 	behavior: CentralSlotBehavior,
-): Record<PanelSide, PanelState> => {
-	const sanitizePanel = (panel: PanelState): PanelState => {
-		const views = panel.views.map(sanitizeExtensionInstanceForPersistence);
+): Record<Area, AreaState> => {
+	const sanitizePanel = (area: AreaState): AreaState => {
+		const views = area.views.map(sanitizeExtensionInstanceForPersistence);
 		const activeInstance = views.some(
-			(view) => view.instance === panel.activeInstance,
+			(view) => view.instance === area.activeInstance,
 		)
-			? panel.activeInstance
+			? area.activeInstance
 			: (views[views.length - 1]?.instance ?? null);
 		return { views, activeInstance };
 	};
 	return {
-		...normalizePanels(
+		...normalizeAreas(
 			{
-				left: sanitizePanel(panels.left),
-				central: sanitizePanel(panels.central),
-				right: sanitizePanel(panels.right),
+				left: sanitizePanel(areas.left),
+				main: sanitizePanel(areas.main),
+				right: sanitizePanel(areas.right),
 			},
 			behavior,
 		),
@@ -356,11 +354,11 @@ const sanitizePanels = (
 };
 
 const reconcilePanelExtensionViews = (
-	panel: PanelState,
+	area: AreaState,
 	extensionMap: Map<ExtensionKind, ExtensionDefinition>,
 	options: { preserveUnknownKinds?: boolean } = {},
-): PanelState => {
-	const views = panel.views
+): AreaState => {
+	const views = area.views
 		// Drop unknown view keys that might linger in persisted UI state.
 		.filter(
 			(view) => options.preserveUnknownKinds || extensionMap.has(view.kind),
@@ -369,41 +367,41 @@ const reconcilePanelExtensionViews = (
 		return { views, activeInstance: null };
 	}
 	const fallbackActive = views[0]?.instance ?? null;
-	const hasDesiredActive = panel.activeInstance
-		? views.some((view) => view.instance === panel.activeInstance)
+	const hasDesiredActive = area.activeInstance
+		? views.some((view) => view.instance === area.activeInstance)
 		: false;
 	return {
 		views,
-		activeInstance: hasDesiredActive ? panel.activeInstance : fallbackActive,
+		activeInstance: hasDesiredActive ? area.activeInstance : fallbackActive,
 	};
 };
 
 export const reconcilePersistedExtensionViews = reconcilePanelExtensionViews;
 
 const reconcileAndNormalizePanel = (
-	side: PanelSide,
-	panel: PanelState,
+	side: Area,
+	area: AreaState,
 	extensionMap: Map<ExtensionKind, ExtensionDefinition>,
 	options: { preserveUnknownKinds?: boolean },
 	behavior: CentralSlotBehavior,
-): PanelState =>
-	normalizePanel(
+): AreaState =>
+	normalizeArea(
 		side,
-		reconcilePanelExtensionViews(panel, extensionMap, options),
+		reconcilePanelExtensionViews(area, extensionMap, options),
 		behavior,
 	);
 
 const reconcilePanelsWithEnvironment = ({
-	panels,
+	areas,
 	currentFileIds,
 	currentFilePathsById,
 	preserveUnknownFiles,
 	resolveCurrentFileView,
 	extensionMap,
 	preserveUnknownExtensionKinds,
-	centralBehavior,
+	mainBehavior,
 }: {
-	readonly panels: Record<PanelSide, PanelState>;
+	readonly areas: Record<Area, AreaState>;
 	readonly currentFileIds: ReadonlySet<string>;
 	readonly currentFilePathsById: ReadonlyMap<string, string>;
 	readonly preserveUnknownFiles: boolean;
@@ -414,13 +412,13 @@ const reconcilePanelsWithEnvironment = ({
 	}) => Pick<ExtensionInstance, "instance" | "kind">;
 	readonly extensionMap: Map<ExtensionKind, ExtensionDefinition>;
 	readonly preserveUnknownExtensionKinds: boolean;
-	readonly centralBehavior: CentralSlotBehavior;
-}): Record<PanelSide, PanelState> => {
-	const sanitizedPanels = sanitizePanels(panels, centralBehavior);
+	readonly mainBehavior: CentralSlotBehavior;
+}): Record<Area, AreaState> => {
+	const sanitizedPanels = sanitizePanels(areas, mainBehavior);
 	const currentPanels = preserveUnknownFiles
 		? sanitizedPanels
 		: reconcileCurrentFileViews({
-				panels: sanitizedPanels,
+				areas: sanitizedPanels,
 				currentFileIds,
 				currentFilePathsById,
 				resolveCurrentFileView,
@@ -434,28 +432,28 @@ const reconcilePanelsWithEnvironment = ({
 			currentPanels.left,
 			extensionMap,
 			options,
-			centralBehavior,
+			mainBehavior,
 		),
-		central: reconcileAndNormalizePanel(
-			"central",
-			currentPanels.central,
+		main: reconcileAndNormalizePanel(
+			"main",
+			currentPanels.main,
 			extensionMap,
 			options,
-			centralBehavior,
+			mainBehavior,
 		),
 		right: reconcileAndNormalizePanel(
 			"right",
 			currentPanels.right,
 			extensionMap,
 			options,
-			centralBehavior,
+			mainBehavior,
 		),
 	};
 };
 
 const panelsStructurallyEqual = (
-	left: Record<PanelSide, PanelState>,
-	right: Record<PanelSide, PanelState>,
+	left: Record<Area, AreaState>,
+	right: Record<Area, AreaState>,
 ): boolean => {
 	try {
 		return JSON.stringify(left) === JSON.stringify(right);
@@ -466,9 +464,9 @@ const panelsStructurallyEqual = (
 
 const panelLayoutsEqual = (
 	current: Readonly<Record<string, number>>,
-	expected: PanelLayoutSizes,
+	expected: AreaSizes,
 ): boolean =>
-	(["left", "central", "right"] as const).every(
+	(["left", "main", "right"] as const).every(
 		(side) =>
 			typeof current[side] === "number" &&
 			Math.abs(current[side] - expected[side]) < 0.01,
@@ -476,7 +474,7 @@ const panelLayoutsEqual = (
 
 export const syncPanelGroupLayout = (
 	group: Pick<GroupImperativeHandle, "getLayout" | "setLayout">,
-	expected: PanelLayoutSizes,
+	expected: AreaSizes,
 ): boolean => {
 	if (panelLayoutsEqual(group.getLayout(), expected)) return false;
 	group.setLayout(expected);
@@ -485,11 +483,11 @@ export const syncPanelGroupLayout = (
 
 const DEFAULT_PANEL_FALLBACK_SIZES = {
 	left: 20,
-	central: 60,
+	main: 60,
 	right: 20,
 };
 const EMPTY_ATELIER_EXTENSIONS: readonly AtelierExtensionRegistration[] = [];
-const EMPTY_DEFAULT_OPEN_PANELS: readonly DefaultOpenPanel[] = [];
+const EMPTY_DEFAULT_OPEN_PANELS: readonly DefaultOpenArea[] = [];
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
 function deriveUntitledMarkdownPathForSuffix(suffix: number | null): string {
@@ -544,7 +542,7 @@ export function V2LayoutShell({
 	readonly slots?: AtelierSlots;
 	readonly topBarProps?: AtelierTopBarProps;
 	readonly extensions?: readonly AtelierExtensionRegistration[];
-	readonly defaultOpenPanels?: readonly DefaultOpenPanel[];
+	readonly defaultOpenPanels?: readonly DefaultOpenArea[];
 	readonly onEvent?: (event: AtelierEvent) => void;
 }) {
 	const hostExtensions = useMemo(
@@ -570,13 +568,13 @@ type LayoutShellContentProps = {
 	readonly atelierInstance?: AtelierInstance;
 	readonly slots?: AtelierSlots;
 	readonly topBarProps?: AtelierTopBarProps;
-	readonly defaultOpenPanels: readonly DefaultOpenPanel[];
+	readonly defaultOpenPanels: readonly DefaultOpenArea[];
 	readonly onEvent?: (event: AtelierEvent) => void;
 };
 
-type WorkspacePanelState = {
-	readonly panels: Record<PanelSide, PanelState>;
-	readonly focusedPanel: PanelSide;
+type WorkspaceAreaState = {
+	readonly areas: Record<Area, AreaState>;
+	readonly focusedArea: Area;
 };
 
 type LayoutShellLoadedContentProps = LayoutShellContentProps & {
@@ -611,6 +609,27 @@ type LixFileForOpen = {
 		readonly afterCommitId: string;
 	};
 };
+
+/**
+ * The file that takes a handled one's place on screen.
+ *
+ * When the files just handled include the one at the front of the handled
+ * run, the review moves to whatever now sits at that position — the next
+ * unhandled file, or the last one when the run was at the end. Returns null
+ * when nothing was removed ahead of the remaining files, so a review that
+ * handled files elsewhere in the list stays where it is.
+ */
+function nextReviewFile<T extends { readonly id: string }>(
+	before: readonly T[],
+	remaining: readonly T[],
+	removed: ReadonlySet<string>,
+): T | null {
+	const removedIndex = before.findIndex((file) => removed.has(file.id));
+	if (removedIndex === -1 || remaining.length === 0) return null;
+	return (
+		remaining[Math.min(Math.max(removedIndex, 0), remaining.length - 1)] ?? null
+	);
+}
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
 
@@ -876,23 +895,23 @@ function LayoutShellStateLoader(
 	const activeBranchId = useAtelierStoreSnapshot(configuration.branchSession);
 	// Homeless hosts that configured nothing get the left panel open on
 	// first run, so the sidebar Files view is visible.
-	const resolvedDefaultOpenPanels = useMemo<readonly DefaultOpenPanel[]>(() => {
+	const resolvedDefaultOpenAreas = useMemo<readonly DefaultOpenArea[]>(() => {
 		if (props.defaultOpenPanels.length > 0) return props.defaultOpenPanels;
 		if (
 			configuration.defaultOpenPanels === undefined &&
-			configuration.centralPanel?.home === undefined
+			configuration.mainArea?.home === undefined
 		) {
 			return ["left"];
 		}
 		return props.defaultOpenPanels;
 	}, [
-		configuration.centralPanel?.home,
+		configuration.mainArea?.home,
 		configuration.defaultOpenPanels,
 		props.defaultOpenPanels,
 	]);
 	const initialUiState = useMemo(
-		() => createInitialAtelierUiState(resolvedDefaultOpenPanels),
-		[resolvedDefaultOpenPanels],
+		() => createInitialAtelierUiState(resolvedDefaultOpenAreas),
+		[resolvedDefaultOpenAreas],
 	);
 	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(
 		() =>
@@ -1074,7 +1093,7 @@ function LayoutShellStateLoader(
 	return (
 		<LayoutShellLoadedContent
 			{...props}
-			defaultOpenPanels={resolvedDefaultOpenPanels}
+			defaultOpenPanels={resolvedDefaultOpenAreas}
 			uiStateKV={uiStateKV}
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
@@ -1195,19 +1214,19 @@ function LayoutShellLoadedContentResolved({
 	const preserveUnknownExtensionKinds =
 		installedExtensionLoad.status !== "ready";
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
-	const centralPanelOptions = configuration.centralPanel;
-	const centralBehavior = useMemo<CentralSlotBehavior>(() => {
-		const centralKinds = new Set<ExtensionKind>();
+	const mainAreaOptions = configuration.mainArea;
+	const mainBehavior = useMemo<CentralSlotBehavior>(() => {
+		const mainKinds = new Set<ExtensionKind>();
 		for (const definition of extensionMap.values()) {
-			if (definition.placement?.includes("central")) {
-				centralKinds.add(definition.kind);
+			if (definition.placement?.includes("main")) {
+				mainKinds.add(definition.kind);
 			}
 		}
 		return createCentralSlotBehavior({
-			homeKind: centralPanelOptions?.home?.extensionId ?? null,
-			centralKinds,
+			homeKind: mainAreaOptions?.home?.extensionId ?? null,
+			mainKinds,
 		});
-	}, [centralPanelOptions, extensionMap]);
+	}, [mainAreaOptions, extensionMap]);
 	const resolveCurrentFileView = useCallback(
 		({
 			view,
@@ -1231,9 +1250,9 @@ function LayoutShellLoadedContentResolved({
 		[extensionMap, preserveUnknownExtensionKinds],
 	);
 	// Side placement respects manifest declarations; the default is the side
-	// panels only (document editors are central-only regardless).
+	// areas only (document editors are main-only regardless).
 	const canPlaceKindInSidePanel = useCallback(
-		(kind: ExtensionKind, side: Exclude<PanelSide, "central">): boolean => {
+		(kind: ExtensionKind, side: Exclude<Area, "main">): boolean => {
 			const placement = extensionMap.get(kind)?.placement;
 			return placement === undefined || placement.includes(side);
 		},
@@ -1253,31 +1272,30 @@ function LayoutShellLoadedContentResolved({
 		() => coerceAtelierUiState(uiStateKV ?? initialUiState),
 		[initialUiState, uiStateKV],
 	);
-	// Stored sizes always win; fresh state opens panels via initialUiState.
+	// Stored sizes always win; fresh state opens areas via initialUiState.
 	const panelSizes = normalizeLayoutSizes(uiState.layout?.sizes);
 	const canonicalizeWorkspace = useCallback(
 		(state: AtelierUiState) => {
-			const panels = reconcilePanelsWithEnvironment({
-				panels: state.panels,
+			const areas = reconcilePanelsWithEnvironment({
+				areas: state.areas,
 				currentFileIds: getCurrentFileIdsForReconciliation(),
 				currentFilePathsById,
 				preserveUnknownFiles: !currentFilesReady,
 				resolveCurrentFileView,
 				extensionMap,
 				preserveUnknownExtensionKinds,
-				centralBehavior,
+				mainBehavior,
 			});
 			const sizes = normalizeLayoutSizes(state.layout?.sizes);
-			const focusedPanel =
-				(state.focusedPanel === "left" &&
+			const focusedArea =
+				(state.focusedArea === "left" &&
 					sizes.left <= MIN_VISIBLE_PANEL_SIZE) ||
-				(state.focusedPanel === "right" &&
-					sizes.right <= MIN_VISIBLE_PANEL_SIZE)
-					? "central"
-					: state.focusedPanel;
-			const reconciledWorkspace: WorkspacePanelState = {
-				panels,
-				focusedPanel,
+				(state.focusedArea === "right" && sizes.right <= MIN_VISIBLE_PANEL_SIZE)
+					? "main"
+					: state.focusedArea;
+			const reconciledWorkspace: WorkspaceAreaState = {
+				areas,
+				focusedArea,
 			};
 			return {
 				state: reconciledWorkspace,
@@ -1287,7 +1305,7 @@ function LayoutShellLoadedContentResolved({
 			};
 		},
 		[
-			centralBehavior,
+			mainBehavior,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
 			currentFilePathsById,
@@ -1301,10 +1319,10 @@ function LayoutShellLoadedContentResolved({
 		[canonicalizeWorkspace, uiState],
 	);
 	const effectiveWorkspace = effectiveWorkspaceTransition.state;
-	const leftPanel = effectiveWorkspace.panels.left;
-	const centralPanel = effectiveWorkspace.panels.central;
-	const rightPanel = effectiveWorkspace.panels.right;
-	const focusedPanel = effectiveWorkspace.focusedPanel;
+	const leftPanel = effectiveWorkspace.areas.left;
+	const mainArea = effectiveWorkspace.areas.main;
+	const rightPanel = effectiveWorkspace.areas.right;
+	const focusedArea = effectiveWorkspace.focusedArea;
 	const isLeftCollapsed = panelSizes.left <= MIN_VISIBLE_PANEL_SIZE;
 	const isRightCollapsed = panelSizes.right <= MIN_VISIBLE_PANEL_SIZE;
 	const [sidePanelRevealIntent, setSidePanelRevealIntent] = useState({
@@ -1329,7 +1347,7 @@ function LayoutShellLoadedContentResolved({
 		sidePanelRevealIntent.right,
 	]);
 	const [workspaceUiIntent, setWorkspaceUiIntent] = useState<{
-		collapseSide: Exclude<PanelSide, "central"> | null;
+		collapseSide: Exclude<Area, "main"> | null;
 		focusCentral: boolean;
 	} | null>(null);
 	const newFileDraftHandlersRef = useRef(
@@ -1361,10 +1379,10 @@ function LayoutShellLoadedContentResolved({
 		if (!group) return;
 		syncPanelGroupLayout(group, {
 			left: panelSizes.left,
-			central: panelSizes.central,
+			main: panelSizes.main,
 			right: panelSizes.right,
 		});
-	}, [panelSizes.left, panelSizes.central, panelSizes.right]);
+	}, [panelSizes.left, panelSizes.main, panelSizes.right]);
 	const [privateResolvedReviewIds, setPrivateResolvedReviewIds] =
 		useState<readonly string[]>(resolvedReviewIds);
 	const resolvedReviewIdsRef = useRef(new Set<string>(resolvedReviewIds));
@@ -1386,10 +1404,16 @@ function LayoutShellLoadedContentResolved({
 		null,
 	);
 	const handleCloseViewRef = useRef<
-		((args: { panel?: PanelSide; instance?: string }) => void) | null
+		((args: { area?: Area; instance?: string }) => void) | null
 	>(null);
 	const openHistoricalCheckpointFileRef = useRef<
 		((path: string) => void) | null
+	>(null);
+	// Checkpointing part of a review moves the working base; the handler that
+	// does it is defined before the one that opens a review, so it reaches it
+	// through here.
+	const reopenWorkingReviewRef = useRef<
+		((options?: { readonly revealPath?: string }) => Promise<boolean>) | null
 	>(null);
 	// Covers the commit gap between placing a historical document and the panel
 	// ref observing its revision state. Hosts may echo the route synchronously.
@@ -1397,14 +1421,14 @@ function LayoutShellLoadedContentResolved({
 	const historicalRequestRef = useRef(0);
 	const closeHistoricalReviewViews = useCallback(
 		(commitId: string, skipInstances?: ReadonlySet<string>) => {
-			for (const view of panelStatesRef.current.central.views) {
+			for (const view of panelStatesRef.current.main.views) {
 				if (skipInstances?.has(view.instance)) continue;
 				if (
 					view.state?.afterCommitId === commitId ||
 					view.state?.beforeCommitId === commitId
 				) {
 					handleCloseViewRef.current?.({
-						panel: "central",
+						area: "main",
 						instance: view.instance,
 					});
 				}
@@ -1438,7 +1462,7 @@ function LayoutShellLoadedContentResolved({
 				const remembered = preHistoricalDocumentsRef.current;
 				preHistoricalDocumentsRef.current = [];
 				const openInstances = new Set(
-					panelStatesRef.current.central.views.map((view) => view.instance),
+					panelStatesRef.current.main.views.map((view) => view.instance),
 				);
 				const surviving = remembered.filter((doc) =>
 					openInstances.has(doc.instance),
@@ -1467,7 +1491,7 @@ function LayoutShellLoadedContentResolved({
 	>(null);
 	const panelStatesRef = useRef({
 		left: leftPanel,
-		central: centralPanel,
+		main: mainArea,
 		right: rightPanel,
 	});
 	const viewHostRegistry = useExtensionHostRegistry();
@@ -1483,10 +1507,10 @@ function LayoutShellLoadedContentResolved({
 	useEffect(() => {
 		panelStatesRef.current = {
 			left: leftPanel,
-			central: centralPanel,
+			main: mainArea,
 			right: rightPanel,
 		};
-	}, [leftPanel, centralPanel, rightPanel]);
+	}, [leftPanel, mainArea, rightPanel]);
 
 	const claimDiffReviewResolution = useCallback(
 		(review: ExternalWriteReview) => {
@@ -1596,21 +1620,35 @@ function LayoutShellLoadedContentResolved({
 				selected.has(review.fileId),
 			);
 			if (!session.range) return;
+			const range = session.range;
 			const checkpoint = await createCheckpointForFiles(
 				lix,
 				selectedFileIds,
-				session.range,
+				range,
 			);
 			if (!checkpoint) {
 				throw new Error("The selected files have no working changes.");
 			}
-			// The verb ends the session: checkpointing the selection is the
-			// review's conclusion, even when unticked files keep their changes
-			// (reopening shows them again).
-			exitDiffReview();
 			// Consume only the reviews that were already known when the workspace
 			// review opened. Checkpoint creation never discovers reviews via history.
 			void retireAcceptedReviews(selectedReviews);
+			const remaining = session.files.filter((file) => !selected.has(file.id));
+			if (remaining.length === 0) {
+				// Nothing left to review: the session concludes.
+				exitDiffReview();
+				return;
+			}
+			// The unticked files keep their changes, but sealing the others moved
+			// the working base, so the session's range is no longer theirs.
+			// Reopen from the live snapshot rather than pruning a stale one, and
+			// let the reopen show the next file with the range it just computed.
+			const next = nextReviewFile(session.files, remaining, selected);
+			const reopened = await reopenWorkingReviewRef.current?.(
+				next ? { revealPath: next.path } : undefined,
+			);
+			// The reopen reports its own outcome: the session ref is synced on
+			// render, so it cannot be read back here to tell.
+			if (!reopened) exitDiffReview();
 		},
 		[exitDiffReview, lix, retireAcceptedReviews],
 	);
@@ -1660,6 +1698,14 @@ function LayoutShellLoadedContentResolved({
 					? { ...current, files: remainingFiles }
 					: current,
 			);
+			// The restored file leaves the list; if it was the one on screen,
+			// the next remaining one takes its place.
+			const next = nextReviewFile(
+				historicalReview.files,
+				remainingFiles,
+				selected,
+			);
+			if (next) openHistoricalCheckpointFileRef.current?.(next.path);
 		},
 		[exitDiffReview, historicalReview, lix],
 	);
@@ -1692,10 +1738,10 @@ function LayoutShellLoadedContentResolved({
 	const activeInstances = useMemo(() => {
 		const keys = new Set<string>();
 		for (const view of leftPanel.views) keys.add(view.instance);
-		for (const view of centralPanel.views) keys.add(view.instance);
+		for (const view of mainArea.views) keys.add(view.instance);
 		for (const view of rightPanel.views) keys.add(view.instance);
 		return keys;
-	}, [leftPanel.views, centralPanel.views, rightPanel.views]);
+	}, [leftPanel.views, mainArea.views, rightPanel.views]);
 
 	useEffect(() => {
 		viewHostRegistry.pruneHosts(activeInstances);
@@ -1708,26 +1754,26 @@ function LayoutShellLoadedContentResolved({
 				const next = reducer(current);
 				return {
 					...next,
-					panels: sanitizePanels(next.panels, centralBehavior),
+					areas: sanitizePanels(next.areas, mainBehavior),
 				};
 			});
 		},
-		[centralBehavior, initialUiState, setUiStateKV],
+		[mainBehavior, initialUiState, setUiStateKV],
 	);
 	const updateSidePanelSize = useCallback(
-		(side: Exclude<PanelSide, "central">, size: number) => {
+		(side: Exclude<Area, "main">, size: number) => {
 			updateUiState((current) => {
 				const sizes = normalizeLayoutSizes(current.layout?.sizes);
 				if (sizes[side] === size) return current;
-				const central = Math.max(
+				const main = Math.max(
 					0,
-					Math.min(100, sizes.central + sizes[side] - size),
+					Math.min(100, sizes.main + sizes[side] - size),
 				);
 				return {
 					...current,
 					layout: {
 						...current.layout,
-						sizes: { ...sizes, [side]: size, central },
+						sizes: { ...sizes, [side]: size, main },
 					},
 				};
 			});
@@ -1735,14 +1781,14 @@ function LayoutShellLoadedContentResolved({
 		[updateUiState],
 	);
 	const updateWorkspace = useCallback(
-		(reducer: (current: WorkspacePanelState) => WorkspacePanelState) => {
+		(reducer: (current: WorkspaceAreaState) => WorkspaceAreaState) => {
 			updateUiState((current) => {
 				const canonical = canonicalizeWorkspace(current).state;
 				const next = reducer(canonical);
 				return {
 					...current,
-					panels: next.panels,
-					focusedPanel: next.focusedPanel,
+					areas: next.areas,
+					focusedArea: next.focusedArea,
 				};
 			});
 		},
@@ -1759,31 +1805,31 @@ function LayoutShellLoadedContentResolved({
 				collapseSide: effectiveWorkspaceTransition.sourceBecameEmpty
 					? effectiveWorkspaceTransition.restoredFilesFrom
 					: null,
-				focusCentral: effectiveWorkspace.focusedPanel === "central",
+				focusCentral: effectiveWorkspace.focusedArea === "main",
 			});
 		}
 	}, [effectiveWorkspace, effectiveWorkspaceTransition, updateWorkspace]);
 
 	const reconcilePanelForUpdate = useCallback(
-		(side: PanelSide, panel: PanelState): PanelState => {
+		(side: Area, area: AreaState): AreaState => {
 			const currentPanel = currentFilesReady
 				? reconcileCurrentFileViewPanel(
-						panel,
+						area,
 						getCurrentFileIdsForReconciliation(),
 						currentFilePathsById,
 						resolveCurrentFileView,
 					)
-				: panel;
+				: area;
 			return reconcileAndNormalizePanel(
 				side,
 				currentPanel,
 				extensionMap,
 				{ preserveUnknownKinds: preserveUnknownExtensionKinds },
-				centralBehavior,
+				mainBehavior,
 			);
 		},
 		[
-			centralBehavior,
+			mainBehavior,
 			currentFilesReady,
 			extensionMap,
 			getCurrentFileIdsForReconciliation,
@@ -1793,38 +1839,35 @@ function LayoutShellLoadedContentResolved({
 		],
 	);
 
-	const setPanelState = useCallback(
+	const setAreaState = useCallback(
 		(
-			side: PanelSide,
-			reducer: (state: PanelState) => PanelState,
+			side: Area,
+			reducer: (state: AreaState) => AreaState,
 			options: { focus?: boolean } = {},
 		) => {
 			updateWorkspace((current) => {
-				const currentPanel = reconcilePanelForUpdate(
-					side,
-					current.panels[side],
-				);
+				const currentPanel = reconcilePanelForUpdate(side, current.areas[side]);
 				const next = reconcilePanelExtensionViews(
 					reducer(currentPanel),
 					extensionMap,
 					{ preserveUnknownKinds: preserveUnknownExtensionKinds },
 				);
-				const panels = {
-					...current.panels,
-					[side]: normalizePanel(side, next, centralBehavior),
+				const areas = {
+					...current.areas,
+					[side]: normalizeArea(side, next, mainBehavior),
 				};
-				const nextFocusedPanel = options.focus ? side : current.focusedPanel;
+				const nextFocusedPanel = options.focus ? side : current.focusedArea;
 				if (
-					nextFocusedPanel === current.focusedPanel &&
-					panelsStructurallyEqual(current.panels, panels)
+					nextFocusedPanel === current.focusedArea &&
+					panelsStructurallyEqual(current.areas, areas)
 				) {
 					return current;
 				}
-				return { focusedPanel: nextFocusedPanel, panels };
+				return { focusedArea: nextFocusedPanel, areas };
 			});
 		},
 		[
-			centralBehavior,
+			mainBehavior,
 			extensionMap,
 			preserveUnknownExtensionKinds,
 			reconcilePanelForUpdate,
@@ -1833,8 +1876,8 @@ function LayoutShellLoadedContentResolved({
 	);
 
 	const ensurePanelExpanded = useCallback(
-		(side: PanelSide) => {
-			if (side === "central") return;
+		(side: Area) => {
+			if (side === "main") return;
 			const panelRef =
 				side === "left" ? leftPanelRef.current : rightPanelRef.current;
 			const isCollapsed = side === "left" ? isLeftCollapsed : isRightCollapsed;
@@ -1872,13 +1915,13 @@ function LayoutShellLoadedContentResolved({
 
 	useEffect(() => {
 		if (!workspaceUiIntent) return;
-		const landingView = centralPanel.views.find(
+		const landingView = mainArea.views.find(
 			(view) => view.kind === FILES_EXTENSION_KIND,
 		);
 		const isCurrentLanding =
-			centralPanel.views.length === 1 &&
+			mainArea.views.length === 1 &&
 			landingView !== undefined &&
-			centralPanel.activeInstance === landingView.instance;
+			mainArea.activeInstance === landingView.instance;
 		if (
 			isCurrentLanding &&
 			workspaceUiIntent.collapseSide === "left" &&
@@ -1900,7 +1943,7 @@ function LayoutShellLoadedContentResolved({
 		if (
 			isCurrentLanding &&
 			workspaceUiIntent.focusCentral &&
-			focusedPanel === "central" &&
+			focusedArea === "main" &&
 			(!document.activeElement || document.activeElement === document.body)
 		) {
 			document
@@ -1909,9 +1952,9 @@ function LayoutShellLoadedContentResolved({
 		}
 		setWorkspaceUiIntent(null);
 	}, [
-		centralPanel.activeInstance,
-		centralPanel.views,
-		focusedPanel,
+		mainArea.activeInstance,
+		mainArea.views,
+		focusedArea,
 		isLeftCollapsed,
 		isRightCollapsed,
 		leftPanel.views.length,
@@ -1922,36 +1965,36 @@ function LayoutShellLoadedContentResolved({
 
 	const handleOpenView = useCallback(
 		({
-			panel,
+			area,
 			kind,
 			state,
 			focus = true,
 			instance,
 			pending = false,
 		}: {
-			panel: PanelSide;
+			area: Area;
 			kind: ExtensionKind;
 			state?: ExtensionState;
 			focus?: boolean;
 			instance?: string;
 			pending?: boolean;
 		}) => {
-			if (panel === "central") {
+			if (area === "main") {
 				const candidate: ExtensionInstance = {
 					instance: instance ?? "",
 					kind,
 					state,
 					isPending: pending || undefined,
 				};
-				if (!centralBehavior.canHost(candidate)) {
+				if (!mainBehavior.canHost(candidate)) {
 					return;
 				}
-			} else if (!canPlaceKindInSidePanel(kind, panel)) {
+			} else if (!canPlaceKindInSidePanel(kind, area)) {
 				return;
 			}
-			ensurePanelExpanded(panel);
-			setPanelState(
-				panel,
+			ensurePanelExpanded(area);
+			setAreaState(
+				area,
 				(current) => {
 					if (pending) {
 						const targetInstance = instance ?? createExtensionInstanceId(kind);
@@ -2011,17 +2054,12 @@ function LayoutShellLoadedContentResolved({
 				{ focus },
 			);
 		},
-		[
-			canPlaceKindInSidePanel,
-			centralBehavior,
-			ensurePanelExpanded,
-			setPanelState,
-		],
+		[canPlaceKindInSidePanel, mainBehavior, ensurePanelExpanded, setAreaState],
 	);
 
 	const openResolvedFileView = useCallback(
 		({
-			panel: _requestedPanel,
+			area: _requestedPanel,
 			fileId,
 			filePath,
 			instance,
@@ -2031,7 +2069,7 @@ function LayoutShellLoadedContentResolved({
 			documentOrigin = "existing",
 			newTab,
 		}: {
-			panel: PanelSide;
+			area: Area;
 			fileId: string;
 			filePath: string;
 			instance?: string;
@@ -2069,26 +2107,26 @@ function LayoutShellLoadedContentResolved({
 				...(pending ? { isPending: true } : {}),
 			};
 			updateWorkspace((current) => {
-				const panels = current.panels;
-				const central = centralBehavior.place(panels.central, documentView, {
+				const areas = current.areas;
+				const main = mainBehavior.place(areas.main, documentView, {
 					newTab,
 					documentOrigin,
 				});
 				return {
-					panels: {
-						...panels,
-						central,
+					areas: {
+						...areas,
+						main,
 					},
-					focusedPanel: focus ? "central" : current.focusedPanel,
+					focusedArea: focus ? "main" : current.focusedArea,
 				};
 			});
 		},
-		[centralBehavior, emitEvent, extensionMap, updateWorkspace],
+		[mainBehavior, emitEvent, extensionMap, updateWorkspace],
 	);
 	const openAutoRevealedFile = useCallback(
 		(file: { fileId: string; filePath: string }) => {
 			openResolvedFileView({
-				panel: "central",
+				area: "main",
 				fileId: file.fileId,
 				filePath: file.filePath,
 				focus: true,
@@ -2107,7 +2145,7 @@ function LayoutShellLoadedContentResolved({
 			// A silent exit (the user already navigated somewhere live) leaves
 			// those documents alone.
 			const openInstances = new Set(
-				panelStatesRef.current.central.views.map((view) => view.instance),
+				panelStatesRef.current.main.views.map((view) => view.instance),
 			);
 			const surviving = documents.filter((doc) =>
 				openInstances.has(doc.instance),
@@ -2116,7 +2154,7 @@ function LayoutShellLoadedContentResolved({
 				for (const doc of documents) {
 					if (openInstances.has(doc.instance)) continue;
 					openResolvedFileView({
-						panel: "central",
+						area: "main",
 						fileId: doc.fileId,
 						filePath: doc.filePath,
 						focus: doc.wasActive,
@@ -2129,8 +2167,8 @@ function LayoutShellLoadedContentResolved({
 				surviving.map((doc) => [doc.instance, doc] as const),
 			);
 			updateWorkspace((current) => {
-				const central = current.panels.central;
-				const views = central.views.map((view) => {
+				const main = current.areas.main;
+				const views = main.views.map((view) => {
 					const doc = byInstance.get(view.instance);
 					if (!doc) return view;
 					const state = view.state ? { ...view.state } : {};
@@ -2154,24 +2192,24 @@ function LayoutShellLoadedContentResolved({
 						)
 					: undefined;
 				return {
-					panels: {
-						...current.panels,
-						central: {
+					areas: {
+						...current.areas,
+						main: {
 							views,
 							activeInstance: activeDocument
 								? activeDocument.instance
-								: central.activeInstance,
+								: main.activeInstance,
 						},
 					},
-					focusedPanel: activeDocument ? "central" : current.focusedPanel,
+					focusedArea: activeDocument ? "main" : current.focusedArea,
 				};
 			});
 		},
 		[openResolvedFileView, updateWorkspace],
 	);
 	restoreLiveDocumentsRef.current = restoreLiveDocuments;
-	const navigationActiveView = centralPanel.views.find(
-		(view) => view.instance === centralPanel.activeInstance,
+	const navigationActiveView = mainArea.views.find(
+		(view) => view.instance === mainArea.activeInstance,
 	);
 	const navigationActiveFileId = navigationActiveView
 		? activeFileIdFromExtensionInstance(navigationActiveView)
@@ -2185,8 +2223,8 @@ function LayoutShellLoadedContentResolved({
 	navigationActivePathRef.current = navigationActivePath;
 	const homeViewActive =
 		navigationActiveView !== undefined &&
-		centralBehavior.homeKind !== null &&
-		navigationActiveView.kind === centralBehavior.homeKind;
+		mainBehavior.homeKind !== null &&
+		navigationActiveView.kind === mainBehavior.homeKind;
 	const homeViewActiveRef = useRef(homeViewActive);
 	homeViewActiveRef.current = homeViewActive;
 	const pendingReviewFiles = historicalReview
@@ -2258,13 +2296,13 @@ function LayoutShellLoadedContentResolved({
 	// where to go.
 	useEffect(() => {
 		if (!historicalReview?.opened) return;
-		const activeView = centralPanel.views.find(
-			(view) => view.instance === centralPanel.activeInstance,
+		const activeView = mainArea.views.find(
+			(view) => view.instance === mainArea.activeInstance,
 		);
 		if (!activeView || !isDocumentView(activeView)) return;
 		if (hasHistoricalEditorRevisionState(activeView.state)) return;
 		exitDiffReview({ restoreLiveDocument: false });
-	}, [centralPanel, exitDiffReview, historicalReview]);
+	}, [mainArea, exitDiffReview, historicalReview]);
 
 	// Diff mode's headline: what is being compared, shown in the top bar.
 	const reviewFileCountLabel =
@@ -2288,7 +2326,7 @@ function LayoutShellLoadedContentResolved({
 
 	const resolveAndOpenFile = useCallback(
 		async ({
-			panel,
+			area,
 			filePath,
 			state,
 			focus,
@@ -2296,7 +2334,7 @@ function LayoutShellLoadedContentResolved({
 			documentOrigin,
 			newTab,
 		}: {
-			panel: PanelSide;
+			area: Area;
 			filePath: string;
 			state?: ExtensionState;
 			focus?: boolean;
@@ -2313,7 +2351,7 @@ function LayoutShellLoadedContentResolved({
 				openingFileIdsRef.current.add(resolvedFile.id);
 			}
 			openResolvedFileView({
-				panel,
+				area,
 				fileId: resolvedFile.id,
 				filePath: resolvedFile.path,
 				state,
@@ -2337,7 +2375,7 @@ function LayoutShellLoadedContentResolved({
 				throw new Error(`Invalid repository file path: ${filePath}`);
 			}
 			const state = withoutDocumentIdentity(options.state);
-			const activeView = activeEntryFromPanel(panelStatesRef.current.central);
+			const activeView = activeEntryFromPanel(panelStatesRef.current.main);
 			if (
 				!options.newTab &&
 				!hasHistoricalEditorRevisionState(state) &&
@@ -2366,7 +2404,7 @@ function LayoutShellLoadedContentResolved({
 				);
 				if (!historicalFile) continue;
 				openResolvedFileView({
-					panel: "central",
+					area: "main",
 					fileId: historicalFile.id,
 					filePath: historicalFile.path,
 					state,
@@ -2378,7 +2416,7 @@ function LayoutShellLoadedContentResolved({
 			}
 
 			return resolveAndOpenFile({
-				panel: "central",
+				area: "main",
 				filePath: normalizedPath,
 				state,
 				focus: options.focus ?? true,
@@ -2396,25 +2434,22 @@ function LayoutShellLoadedContentResolved({
 			previousCommitId: string,
 			changeKind: "added" | "modified" | "removed" = "modified",
 		): ExtensionState => {
-			const handler = findFileHandlerExtension(extensionMap.values(), path);
 			const beforeExists = changeKind !== "added";
 			const afterExists = changeKind !== "removed";
 			const sourceCommitId = afterExists ? commitId : previousCommitId;
-			return handler?.kind === FILE_EXTENSION_KIND ||
-				handler?.kind === CSV_EXTENSION_KIND
-				? {
-						beforeCommitId: previousCommitId,
-						afterCommitId: commitId,
-						beforeExists,
-						afterExists,
-						sourceCommitId,
-					}
-				: {
-						afterCommitId: sourceCommitId,
-						sourceCommitId,
-					};
+			// Every view gets both ends of the span. Each one renders its own
+			// diff — text and tables in place, images, PDFs, videos and scenes
+			// as before beside after — so which file type is open decides
+			// nothing here.
+			return {
+				beforeCommitId: previousCommitId,
+				afterCommitId: commitId,
+				beforeExists,
+				afterExists,
+				sourceCommitId,
+			};
 		},
-		[extensionMap],
+		[],
 	);
 	// Diff mode covers every surface: entering a historical review converts all
 	// open live file tabs to the review's span in place — each tab keeps its
@@ -2429,14 +2464,14 @@ function LayoutShellLoadedContentResolved({
 			files: readonly LixFileForOpen[],
 			convertedInstances: ReadonlySet<string>,
 		): Promise<number> => {
-			const central = panelStatesRef.current.central;
+			const main = panelStatesRef.current.main;
 			const changeKinds = new Map(
 				files.map((file) => [
 					file.id,
 					file.checkpointChangeKind ?? ("modified" as const),
 				]),
 			);
-			const candidates = central.views.flatMap((view) => {
+			const candidates = main.views.flatMap((view) => {
 				const fileId = activeFileIdFromExtensionInstance(view);
 				const filePath = documentPathFromView(view);
 				if (!fileId || !filePath) return [];
@@ -2490,7 +2525,7 @@ function LayoutShellLoadedContentResolved({
 				}),
 			);
 			updateWorkspace((current) => {
-				const currentCentral = current.panels.central;
+				const currentCentral = current.areas.main;
 				const views = currentCentral.views.map((view) => {
 					const nextState = conversions.get(view.instance);
 					if (!nextState) return view;
@@ -2501,14 +2536,14 @@ function LayoutShellLoadedContentResolved({
 					return { ...view, state: { ...state, ...nextState } };
 				});
 				return {
-					panels: {
-						...current.panels,
-						central: {
+					areas: {
+						...current.areas,
+						main: {
 							views,
 							activeInstance: currentCentral.activeInstance,
 						},
 					},
-					focusedPanel: current.focusedPanel,
+					focusedArea: current.focusedArea,
 				};
 			});
 			return candidates.length;
@@ -2611,7 +2646,7 @@ function LayoutShellLoadedContentResolved({
 				if (!historicalPath) return;
 				historicalOpenPathRef.current = historicalPath;
 				openResolvedFileView({
-					panel: "central",
+					area: "main",
 					fileId: file.id,
 					filePath: historicalPath,
 					state: historicalRevisionStateForPath(
@@ -2648,24 +2683,6 @@ function LayoutShellLoadedContentResolved({
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
-	// Entering the past with nothing (or an unchanged file) on screen opens
-	// the first changed file's diff, once per target, so the float never
-	// names a file that isn't visible. A changed file already converted in
-	// place is the scope and stays put.
-	const autoRevealedCommitRef = useRef<string | null>(null);
-	useEffect(() => {
-		const commitId = historicalReview?.range?.afterCommitId ?? null;
-		if (!commitId) {
-			autoRevealedCommitRef.current = null;
-			return;
-		}
-		if (autoRevealedCommitRef.current === commitId) return;
-		autoRevealedCommitRef.current = commitId;
-		if (activeReviewFileIndex !== -1) return;
-		const firstFile = historicalReview?.files[0];
-		if (firstFile) openHistoricalCheckpointFile(firstFile.path);
-	}, [activeReviewFileIndex, historicalReview, openHistoricalCheckpointFile]);
-
 	// Selecting a checkpoint reveals its changed files without eagerly reading
 	// either file snapshot. Historical content is immutable and potentially
 	// cold; load it only when the user chooses a file from the disclosure.
@@ -2689,8 +2706,8 @@ function LayoutShellLoadedContentResolved({
 			if (diffReviewRef.current?.kind !== "historical") {
 				// Entering the past: remember every live file tab this review
 				// converts so Exit can bring each one back in place.
-				const central = panelStatesRef.current.central;
-				preHistoricalDocumentsRef.current = central.views.flatMap((view) => {
+				const main = panelStatesRef.current.main;
+				preHistoricalDocumentsRef.current = main.views.flatMap((view) => {
 					const fileId = activeFileIdFromExtensionInstance(view);
 					const filePath = documentPathFromView(view);
 					if (
@@ -2705,7 +2722,7 @@ function LayoutShellLoadedContentResolved({
 							instance: view.instance,
 							fileId,
 							filePath,
-							wasActive: view.instance === central.activeInstance,
+							wasActive: view.instance === main.activeInstance,
 						},
 					];
 				});
@@ -2939,7 +2956,9 @@ function LayoutShellLoadedContentResolved({
 	const handleUndoReviews = useCallback(
 		async (
 			selectedFileIds: readonly string[],
-			options?: { readonly scope?: DiffFloatUndoScope },
+			// The float says which scope it resolved ("file", "selection", "all");
+			// the ids already carry that, and every scope concludes the same way.
+			_options?: { readonly scope?: DiffFloatUndoScope },
 		) => {
 			if (!workingChangesReviewOpen || selectedFileIds.length === 0) return;
 			const selected = new Set(selectedFileIds);
@@ -2951,39 +2970,21 @@ function LayoutShellLoadedContentResolved({
 			const range = session.range;
 			if (!range) return;
 			await revertWorkingChangesForFiles(lix, selectedFileIds, range);
-			if (options?.scope === "file") {
-				// "Undo only this file" keeps the session open: the file leaves
-				// the list and the next one takes its place on screen.
-				const remaining = session.files.filter(
-					(file) => !selected.has(file.id),
-				);
-				if (remaining.length === 0) {
-					exitDiffReview();
-				} else {
-					const removedIndex = session.files.findIndex((file) =>
-						selected.has(file.id),
-					);
-					const next =
-						remaining[
-							Math.min(Math.max(removedIndex, 0), remaining.length - 1)
-						];
-					setDiffReview((current) =>
-						current?.kind === "working" && current.range === range
-							? {
-									...current,
-									files: remaining,
-									externalWriteReviews: current.externalWriteReviews.filter(
-										(review) => !selected.has(review.fileId),
-									),
-									diffFileId: next?.id ?? null,
-								}
-							: current,
-					);
-					if (next) openWorkingChangeFileAtRange(next, range);
-				}
-			} else {
-				// Same conclusion semantics as Checkpoint: the verb ends the session.
+			// A review concludes when nothing is left to review, not when a
+			// verb is used. A revert publishes a commit, so the session's
+			// range — the epoch every file view reads both sides from — is
+			// stale the moment it lands; the remaining files are reopened from
+			// the live snapshot rather than kept on a range that no longer
+			// names the head.
+			const remaining = session.files.filter((file) => !selected.has(file.id));
+			if (remaining.length === 0) {
 				exitDiffReview();
+			} else {
+				const next = nextReviewFile(session.files, remaining, selected);
+				const reopened = await reopenWorkingReviewRef.current?.(
+					next ? { revealPath: next.path } : undefined,
+				);
+				if (!reopened) exitDiffReview();
 			}
 			for (const review of selectedReviews) {
 				try {
@@ -3001,7 +3002,6 @@ function LayoutShellLoadedContentResolved({
 		[
 			exitDiffReview,
 			lix,
-			openWorkingChangeFileAtRange,
 			persistReviewResolution,
 			runDiffReviewResolution,
 			workingChangesReviewOpen,
@@ -3073,12 +3073,12 @@ function LayoutShellLoadedContentResolved({
 
 	const handleCloseView = useCallback(
 		({
-			panel,
+			area,
 			instance,
 			kind,
 			focus = false,
 		}: {
-			panel?: PanelSide;
+			area?: Area;
 			instance?: string;
 			kind?: ExtensionKind;
 			focus?: boolean;
@@ -3089,16 +3089,12 @@ function LayoutShellLoadedContentResolved({
 				if (kind) return entry.kind === kind;
 				return false;
 			};
-			const targetPanels: PanelSide[] = panel
-				? [panel]
-				: (["central", "left", "right"] as PanelSide[]);
+			const targetPanels: Area[] = area
+				? [area]
+				: (["main", "left", "right"] as Area[]);
 			for (const side of targetPanels) {
 				const currentPanel =
-					side === "left"
-						? leftPanel
-						: side === "central"
-							? centralPanel
-							: rightPanel;
+					side === "left" ? leftPanel : side === "main" ? mainArea : rightPanel;
 				const removedIndex = currentPanel.views.findIndex(predicate);
 				const removedView =
 					removedIndex === -1 ? undefined : currentPanel.views[removedIndex];
@@ -3107,19 +3103,19 @@ function LayoutShellLoadedContentResolved({
 				// Chips remove views; removing the last one also closes the
 				// island (re-expanding via the toggle shows the empty state
 				// with the add-view affordance).
-				if (side !== "central" && currentPanel.views.length === 1) {
+				if (side !== "main" && currentPanel.views.length === 1) {
 					updateSidePanelSize(side, 0);
 					(side === "left" ? leftPanelRef : rightPanelRef).current?.collapse();
 				}
 				const wasActiveCentralDocument =
-					side === "central" &&
+					side === "main" &&
 					currentPanel.activeInstance === removedView.instance &&
 					documentPathFromView(removedView) !== null;
 				const remainingViews = currentPanel.views.filter(
 					(entry) => entry.instance !== removedView.instance,
 				);
 				const nextActiveCentralInstance = wasActiveCentralDocument
-					? centralBehavior.closeFallback(remainingViews, removedIndex)
+					? mainBehavior.closeFallback(remainingViews, removedIndex)
 					: null;
 				const nextCentralDocument = wasActiveCentralDocument
 					? documentPathFromView(
@@ -3128,7 +3124,7 @@ function LayoutShellLoadedContentResolved({
 							),
 						)
 					: null;
-				setPanelState(
+				setAreaState(
 					side,
 					(current) => {
 						const index = current.views.findIndex(predicate);
@@ -3137,8 +3133,8 @@ function LayoutShellLoadedContentResolved({
 						if (removedEntry?.isPinned) return current;
 						const views = current.views.filter((_, idx) => idx !== index);
 						const fallbackActive =
-							side === "central"
-								? centralBehavior.closeFallback(views, index)
+							side === "main"
+								? mainBehavior.closeFallback(views, index)
 								: (views[views.length - 1]?.instance ?? null);
 						const activeInstance =
 							current.activeInstance === removedEntry?.instance
@@ -3159,22 +3155,22 @@ function LayoutShellLoadedContentResolved({
 			}
 		},
 		[
-			centralBehavior,
-			centralPanel,
+			mainBehavior,
+			mainArea,
 			emitEvent,
 			leftPanel,
 			rightPanel,
-			setPanelState,
+			setAreaState,
 			updateSidePanelSize,
 		],
 	);
 	handleCloseViewRef.current = handleCloseView;
 
 	const activeCentralEntry = useMemo(() => {
-		return activeEntryFromPanel(centralPanel);
-	}, [centralPanel]);
+		return activeEntryFromPanel(mainArea);
+	}, [mainArea]);
 
-	// Hosts that own routing subscribe to the active central view — every
+	// Hosts that own routing subscribe to the active main view — every
 	// open, tab click, close, and restore lands here exactly once.
 	const lastActivatedCentralViewRef = useRef<string | null>(null);
 	useEffect(() => {
@@ -3190,7 +3186,7 @@ function LayoutShellLoadedContentResolved({
 		if (lastActivatedCentralViewRef.current === signature) return;
 		lastActivatedCentralViewRef.current = signature;
 		emitEvent({
-			type: "central_view_activated",
+			type: "main_view_activated",
 			viewKind: entry.kind,
 			instanceId: entry.instance,
 			filePath: filePath || null,
@@ -3199,10 +3195,10 @@ function LayoutShellLoadedContentResolved({
 	}, [activeCentralEntry, emitEvent]);
 
 	const handleAddView = useCallback(
-		(side: PanelSide, kind: ExtensionKind, state?: ExtensionState) => {
-			emitEvent({ type: "extension_opened", extensionId: kind, panel: side });
+		(side: Area, kind: ExtensionKind, state?: ExtensionState) => {
+			emitEvent({ type: "extension_opened", extensionId: kind, area: side });
 			handleOpenView({
-				panel: side,
+				area: side,
 				kind,
 				state,
 				instance: extensionMap.get(kind)?.multiInstance
@@ -3214,7 +3210,7 @@ function LayoutShellLoadedContentResolved({
 	);
 
 	const renderEmptyPanelSlot = useCallback(
-		(side: AtelierPanelSide, slot: AtelierEmptyPanelSlot | undefined) => {
+		(side: AtelierArea, slot: AtelierEmptyAreaSlot | undefined) => {
 			if (typeof slot !== "function") return slot;
 			return slot({
 				side,
@@ -3226,11 +3222,11 @@ function LayoutShellLoadedContentResolved({
 	);
 
 	const focusPanel = useCallback(
-		(side: PanelSide) => {
+		(side: Area) => {
 			updateWorkspace((current) =>
-				current.focusedPanel === side
+				current.focusedArea === side
 					? current
-					: { ...current, focusedPanel: side },
+					: { ...current, focusedArea: side },
 			);
 		},
 		[updateWorkspace],
@@ -3250,7 +3246,7 @@ function LayoutShellLoadedContentResolved({
 	);
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const hydratedLeft = leftPanel;
-	const hydratedCentral = centralPanel;
+	const hydratedCentral = mainArea;
 	const hydratedRight = rightPanel;
 
 	const pointerSensorOptions = useMemo(
@@ -3264,21 +3260,21 @@ function LayoutShellLoadedContentResolved({
 		(sizes: Record<string, number>) => {
 			if (
 				typeof sizes.left !== "number" ||
-				typeof sizes.central !== "number" ||
+				typeof sizes.main !== "number" ||
 				typeof sizes.right !== "number"
 			) {
 				return;
 			}
 			const next = {
 				left: sizes.left,
-				central: sizes.central,
+				main: sizes.main,
 				right: sizes.right,
 			};
 			updateUiState((current) => {
 				const previous = normalizeLayoutSizes(current.layout?.sizes);
 				if (
 					previous.left === next.left &&
-					previous.central === next.central &&
+					previous.main === next.main &&
 					previous.right === next.right
 				) {
 					return current;
@@ -3301,11 +3297,11 @@ function LayoutShellLoadedContentResolved({
 			if (!over) return;
 
 			const dragData = active.data.current as
-				| { instance: string; kind: ExtensionKind; fromPanel: PanelSide }
+				| { instance: string; kind: ExtensionKind; fromPanel: Area }
 				| undefined;
 			const dropData = over.data.current as
 				| {
-						panel?: PanelSide;
+						area?: Area;
 						instance?: string;
 						sortable?: { index: number };
 				  }
@@ -3317,31 +3313,31 @@ function LayoutShellLoadedContentResolved({
 			if (!dragData || !dropData) return;
 
 			const { instance, kind: _kind, fromPanel } = dragData;
-			const toPanel = dropData.panel ?? fromPanel;
+			const toPanel = dropData.area ?? fromPanel;
 			const targetInstance = dropData.instance;
 
 			if (toPanel === fromPanel) {
-				setPanelState(
+				setAreaState(
 					fromPanel,
-					(panel) => {
-						const fromIndex = panel.views.findIndex(
+					(area) => {
+						const fromIndex = area.views.findIndex(
 							(entry) => entry.instance === instance,
 						);
-						if (fromIndex === -1) return panel;
+						if (fromIndex === -1) return area;
 						let toIndex: number | null = null;
 						if (overSortable?.index != null) {
 							toIndex = overSortable.index;
 						} else if (targetInstance) {
-							toIndex = panel.views.findIndex(
+							toIndex = area.views.findIndex(
 								(entry) => entry.instance === targetInstance,
 							);
 						} else {
-							toIndex = panel.views.length - 1;
+							toIndex = area.views.length - 1;
 						}
 						if (toIndex == null || toIndex === -1) {
-							return panel;
+							return area;
 						}
-						return reorderPanelExtensionsByIndex(panel, fromIndex, toIndex);
+						return reorderPanelExtensionsByIndex(area, fromIndex, toIndex);
 					},
 					{ focus: true },
 				);
@@ -3351,14 +3347,14 @@ function LayoutShellLoadedContentResolved({
 			updateWorkspace((current) => {
 				const sourcePanel = reconcilePanelForUpdate(
 					fromPanel,
-					current.panels[fromPanel],
+					current.areas[fromPanel],
 				);
 				const movedView = cloneExtensionInstance(sourcePanel, instance);
 				if (
 					!movedView ||
 					movedView.isPinned ||
-					!canPlaceViewInPanel(movedView, toPanel, centralBehavior) ||
-					(toPanel !== "central" &&
+					!canPlaceViewInPanel(movedView, toPanel, mainBehavior) ||
+					(toPanel !== "main" &&
 						!canPlaceKindInSidePanel(movedView.kind, toPanel))
 				) {
 					return current;
@@ -3366,12 +3362,12 @@ function LayoutShellLoadedContentResolved({
 
 				const targetPanel = reconcilePanelForUpdate(
 					toPanel,
-					current.panels[toPanel],
+					current.areas[toPanel],
 				);
 				const remaining = sourcePanel.views.filter(
 					(entry) => entry.instance !== instance,
 				);
-				const nextSource = normalizePanel(
+				const nextSource = normalizeArea(
 					fromPanel,
 					{
 						views: remaining,
@@ -3380,7 +3376,7 @@ function LayoutShellLoadedContentResolved({
 								? (remaining[remaining.length - 1]?.instance ?? null)
 								: sourcePanel.activeInstance,
 					},
-					centralBehavior,
+					mainBehavior,
 				);
 
 				const targetViews = [...targetPanel.views];
@@ -3394,30 +3390,30 @@ function LayoutShellLoadedContentResolved({
 					if (targetIndex !== -1) insertIndex = targetIndex;
 				}
 				targetViews.splice(insertIndex, 0, movedView);
-				const nextTarget = normalizePanel(
+				const nextTarget = normalizeArea(
 					toPanel,
 					{
 						views: targetViews,
 						activeInstance: movedView.instance,
 					},
-					centralBehavior,
+					mainBehavior,
 				);
-				const panels = {
-					...current.panels,
+				const areas = {
+					...current.areas,
 					[fromPanel]: nextSource,
 					[toPanel]: nextTarget,
 				};
 				return {
-					focusedPanel: toPanel,
-					panels,
+					focusedArea: toPanel,
+					areas,
 				};
 			});
 		},
 		[
 			canPlaceKindInSidePanel,
-			centralBehavior,
+			mainBehavior,
 			reconcilePanelForUpdate,
-			setPanelState,
+			setAreaState,
 			updateWorkspace,
 		],
 	);
@@ -3444,7 +3440,7 @@ function LayoutShellLoadedContentResolved({
 			})
 			.execute();
 		return resolveAndOpenFile({
-			panel: "central",
+			area: "main",
 			filePath: path,
 			state: { focusOnLoad: true, defaultBlock: "heading1" },
 			focus: true,
@@ -3457,40 +3453,40 @@ function LayoutShellLoadedContentResolved({
 		const selectVisibleDraftHandler = () => {
 			const visibleDraftHandlers = [...newFileDraftHandlersRef.current.values()]
 				.filter((registration) => {
-					if (registration.panelSide === "left") return !isLeftCollapsed;
-					if (registration.panelSide === "right") return !isRightCollapsed;
+					if (registration.area === "left") return !isLeftCollapsed;
+					if (registration.area === "right") return !isRightCollapsed;
 					return true;
 				})
 				.map((registration) => {
 					const activeInstance =
-						registration.panelSide === "left"
+						registration.area === "left"
 							? leftPanel.activeInstance
-							: registration.panelSide === "right"
+							: registration.area === "right"
 								? rightPanel.activeInstance
-								: centralPanel.activeInstance;
+								: mainArea.activeInstance;
 					return {
 						...registration,
 						isActiveView: registration.viewInstance === activeInstance,
 					};
 				});
-			return selectNewFileDraftHandler(visibleDraftHandlers, focusedPanel);
+			return selectNewFileDraftHandler(visibleDraftHandlers, focusedArea);
 		};
 		const filesViewHandler = selectVisibleDraftHandler();
 		if (filesViewHandler) {
-			focusPanel(filesViewHandler.panelSide);
+			focusPanel(filesViewHandler.area);
 			await filesViewHandler.handler();
 			return null;
 		}
 		return handleCreateNewFile();
 	}, [
 		focusPanel,
-		focusedPanel,
+		focusedArea,
 		handleCreateNewFile,
 		isHostReadOnly,
 		isLeftCollapsed,
 		isRightCollapsed,
 		leftPanel,
-		centralPanel,
+		mainArea,
 		rightPanel,
 	]);
 
@@ -3517,15 +3513,15 @@ function LayoutShellLoadedContentResolved({
 		[activeCentralEntry],
 	);
 	const openDocumentPaths = useMemo(
-		() => openDocumentPathsFromPanels([leftPanel, centralPanel, rightPanel]),
-		[leftPanel, centralPanel, rightPanel],
+		() => openDocumentPathsFromPanels([leftPanel, mainArea, rightPanel]),
+		[leftPanel, mainArea, rightPanel],
 	);
 	const handleCloseActiveDocument = useCallback(() => {
 		if (!activeCentralEntry || !isDocumentView(activeCentralEntry)) return null;
 		const closingPath = documentPathFromView(activeCentralEntry);
 		if (!closingPath) return null;
 		handleCloseView({
-			panel: "central",
+			area: "main",
 			instance: activeCentralEntry.instance,
 			focus: true,
 		});
@@ -3535,33 +3531,33 @@ function LayoutShellLoadedContentResolved({
 		(path: string) => {
 			const targetPath = normalizeLixFileOpenPath(path);
 			if (!targetPath) return [];
-			const matchingViews = centralPanel.views.filter(
+			const matchingViews = mainArea.views.filter(
 				(view) => documentPathFromView(view) === targetPath,
 			);
 			if (matchingViews.length === 0) return [];
 			const wasActive = matchingViews.some(
-				(view) => view.instance === centralPanel.activeInstance,
+				(view) => view.instance === mainArea.activeInstance,
 			);
 			for (const view of matchingViews) {
 				handleCloseView({
-					panel: "central",
+					area: "main",
 					instance: view.instance,
 					focus: wasActive,
 				});
 			}
 			return [targetPath];
 		},
-		[centralPanel.activeInstance, centralPanel.views, handleCloseView],
+		[mainArea.activeInstance, mainArea.views, handleCloseView],
 	);
 	const handleCloseAllDocuments = useCallback(() => {
-		const documentViews = centralPanel.views.filter(isDocumentView);
+		const documentViews = mainArea.views.filter(isDocumentView);
 		if (documentViews.length === 0) return [];
 		const closedPaths = documentViews
 			.map(documentPathFromView)
 			.filter((path): path is string => path !== null);
 		const activePath = documentPathFromView(activeCentralEntry);
-		setPanelState(
-			"central",
+		setAreaState(
+			"main",
 			(current) => {
 				const views = current.views.filter((view) => !isDocumentView(view));
 				const activeInstance = views.some(
@@ -3581,7 +3577,7 @@ function LayoutShellLoadedContentResolved({
 			});
 		}
 		return closedPaths;
-	}, [activeCentralEntry, centralPanel.views, emitEvent, setPanelState]);
+	}, [activeCentralEntry, mainArea.views, emitEvent, setAreaState]);
 	const handleOpenExtensionView = useCallback(
 		(
 			extensionId: string,
@@ -3591,12 +3587,12 @@ function LayoutShellLoadedContentResolved({
 			if (!definition) {
 				throw new Error(`Unknown Atelier extension: ${extensionId}`);
 			}
-			const panel = options.panel ?? "central";
-			if (panel !== "central") {
-				handleAddView(panel, extensionId, options.state);
+			const area = options.area ?? "main";
+			if (area !== "main") {
+				handleAddView(area, extensionId, options.state);
 				return undefined;
 			}
-			const isHome = centralBehavior.homeKind === extensionId;
+			const isHome = mainBehavior.homeKind === extensionId;
 			if (!isHome && options.instanceId === CENTRAL_HOME_INSTANCE) {
 				throw new Error(
 					`The instance id "${CENTRAL_HOME_INSTANCE}" is reserved for the configured home extension.`,
@@ -3614,37 +3610,39 @@ function LayoutShellLoadedContentResolved({
 				...(isHome ? { isPinned: true } : {}),
 				...(options.state ? { state: options.state } : {}),
 			};
-			if (!centralBehavior.canHost(view)) {
+			if (!mainBehavior.canHost(view)) {
 				throw new Error(
-					`Extension "${extensionId}" cannot be placed in the central panel.`,
+					`Extension "${extensionId}" cannot be placed in the main panel.`,
 				);
 			}
 			// A resync of the already-active view is a no-op, not an "open".
-			if (panelStatesRef.current.central.activeInstance !== instanceId) {
+			if (panelStatesRef.current.main.activeInstance !== instanceId) {
 				emitEvent({
 					type: "extension_opened",
 					extensionId,
-					panel: "central",
+					area: "main",
 				});
 			}
-			setPanelState(
-				"central",
+			setAreaState(
+				"main",
 				(current) =>
-					centralBehavior.place(current, view, { newTab: options.newTab }),
+					mainBehavior.place(current, view, { newTab: options.newTab }),
 				{ focus: options.focus ?? true },
 			);
 			return instanceId;
 		},
-		[centralBehavior, emitEvent, extensionMap, handleAddView, setPanelState],
+		[mainBehavior, emitEvent, extensionMap, handleAddView, setAreaState],
 	);
 	const revealHistory = useCallback(() => {
 		handleOpenExtensionView(HISTORY_EXTENSION_KIND, {
-			panel: "left",
+			area: "left",
 		});
 	}, [handleOpenExtensionView]);
 	const handleOpenWorkingChangesReview = useCallback(
 		(openOptions?: {
 			readonly reveal?: boolean;
+			/** Open this changed file once the session is set, with its range. */
+			readonly revealPath?: string;
 			readonly appliedRange?: { beforeCommitId: string; afterCommitId: string };
 		}) => {
 			// Read-only / anonymous must never look like a clickable no-op. History
@@ -3668,7 +3666,7 @@ function LayoutShellLoadedContentResolved({
 							openOptions.appliedRange.afterCommitId,
 						)
 					: await selectWorkingFileDiffSnapshot(lix);
-				if (workingDiffs.length === 0) return;
+				if (workingDiffs.length === 0) return false;
 				// Every changed file joins the review — kinds without a content
 				// diff (drawings, images, pdfs) still review, checkpoint, and
 				// revert at file granularity. Filtering them out strands their
@@ -3710,7 +3708,7 @@ function LayoutShellLoadedContentResolved({
 				if (!firstChangedFile) {
 					// Nothing reviewable: opening review mode is a quiet no-op rather
 					// than a surprise navigation to the History panel.
-					return;
+					return false;
 				}
 				if (historicalReview) {
 					// Working changes and a historical checkpoint are two targets of
@@ -3734,22 +3732,16 @@ function LayoutShellLoadedContentResolved({
 							afterCommitId: reviewRange.afterCommitId,
 						}))
 					: [];
-				// A changed file already on screen is the review's scope. With
-				// nothing (or an unchanged file) on screen the first changed
-				// file's diff opens instead, so the float never names a file
-				// that isn't visible. Hosts can force the reveal.
-				const activeFileId = navigationActiveFileIdRef.current;
-				const activePath = navigationActivePathRef.current;
-				const changedFileOnScreen = checkpointFiles.some(
-					(file) => file.id === activeFileId || file.path === activePath,
-				);
-				// The host's home view is a review-aware listing: with it on
-				// screen the user picks the file from the list, so opening
-				// review must not navigate away from it.
-				const homeOnScreen = homeViewActiveRef.current;
-				const revealFirstFile =
-					openOptions?.reveal === true ||
-					(!changedFileOnScreen && !homeOnScreen);
+				// Opening review mode is not a navigation. Whatever is on screen
+				// stays there — a changed file is the review's scope, anything
+				// else leaves the float naming no file — and the user steps
+				// through the changes from the float. A caller can still name a
+				// file to open, or ask for the first one explicitly.
+				const revealFile = openOptions?.revealPath
+					? checkpointFiles.find((file) => file.path === openOptions.revealPath)
+					: openOptions?.reveal === true
+						? firstChangedFile
+						: undefined;
 				setDiffReview({
 					kind: "working",
 					...(openOptions?.appliedRange
@@ -3757,27 +3749,29 @@ function LayoutShellLoadedContentResolved({
 						: {}),
 					range: reviewRange,
 					files: checkpointFiles,
-					diffFileId: revealFirstFile ? firstChangedFile.id : null,
+					diffFileId: revealFile?.id ?? null,
 					externalWriteReviews: sessionReviews,
 				});
-				if (revealFirstFile) {
+				if (revealFile) {
 					if (reviewRange) {
-						openWorkingChangeFileAtRange(firstChangedFile, reviewRange);
+						openWorkingChangeFileAtRange(revealFile, reviewRange);
 					} else {
 						openAutoRevealedFile({
-							fileId: firstChangedFile.id,
-							filePath: firstChangedFile.path,
+							fileId: revealFile.id,
+							filePath: revealFile.path,
 						});
 					}
 				}
+				return true;
 			})()
-				.catch((error: unknown) => {
+				.catch((error: unknown): false => {
 					if (openOptions?.appliedRange) throw error;
 					if (!isHostReadOnly) revealHistory();
 					console.warn(
 						"[checkpoint] failed to open working changes review",
 						error,
 					);
+					return false;
 				})
 				.finally(() => {
 					workingReviewOpeningRef.current = false;
@@ -3793,6 +3787,9 @@ function LayoutShellLoadedContentResolved({
 			revealHistory,
 		],
 	);
+
+	reopenWorkingReviewRef.current = (options) =>
+		handleOpenWorkingChangesReview(options);
 
 	const atelierDocumentsActionsRef =
 		useRef<AtelierDocumentsRuntimeBinding | null>(null);
@@ -3881,7 +3878,7 @@ function LayoutShellLoadedContentResolved({
 
 	const addViewOnCentral = useCallback(
 		(type: ExtensionKind, state?: ExtensionState) =>
-			handleAddView("central", type, state),
+			handleAddView("main", type, state),
 		[handleAddView],
 	);
 
@@ -3893,51 +3890,51 @@ function LayoutShellLoadedContentResolved({
 
 	const handleSelectLeftView = useCallback(
 		(key: string) =>
-			setPanelState(
+			setAreaState(
 				"left",
-				(panel) => ({
-					views: panel.views,
+				(area) => ({
+					views: area.views,
 					activeInstance: key,
 				}),
 				{ focus: true },
 			),
-		[setPanelState],
+		[setAreaState],
 	);
 
 	const handleSelectCentralView = useCallback(
 		(key: string) =>
-			setPanelState("central", (panel) => activatePanelExtension(panel, key), {
+			setAreaState("main", (area) => activatePanelExtension(area, key), {
 				focus: true,
 			}),
-		[setPanelState],
+		[setAreaState],
 	);
 
 	const handleSelectRightView = useCallback(
 		(key: string) =>
-			setPanelState(
+			setAreaState(
 				"right",
-				(panel) => ({
-					views: panel.views,
+				(area) => ({
+					views: area.views,
 					activeInstance: key,
 				}),
 				{ focus: true },
 			),
-		[setPanelState],
+		[setAreaState],
 	);
 
 	const handleRemoveView = useCallback(
-		(side: PanelSide, instance: string) =>
-			handleCloseView({ panel: side, instance, focus: true }),
+		(side: Area, instance: string) =>
+			handleCloseView({ area: side, instance, focus: true }),
 		[handleCloseView],
 	);
 
-	// Headless context for a host-rendered central tab strip: the host owns
+	// Headless context for a host-rendered main tab strip: the host owns
 	// the chips, Atelier keeps the tab rules (pinning, selection, closing).
-	const centralTabStripContext = useMemo<AtelierTabStripContext | null>(() => {
-		if (!slots?.centralTabStrip) return null;
+	const mainTabStripContext = useMemo<AtelierTabStripContext | null>(() => {
+		if (!slots?.mainTabStrip) return null;
 		const activeInstance =
-			centralPanel.activeInstance ?? centralPanel.views[0]?.instance ?? null;
-		const tabs = centralPanel.views.flatMap((entry): AtelierTabStripTab[] => {
+			mainArea.activeInstance ?? mainArea.views[0]?.instance ?? null;
+		const tabs = mainArea.views.flatMap((entry): AtelierTabStripTab[] => {
 			const definition = extensionMap.get(entry.kind);
 			if (!definition) return [];
 			return [
@@ -3957,7 +3954,7 @@ function LayoutShellLoadedContentResolved({
 						: {
 								close: () =>
 									handleCloseView({
-										panel: "central",
+										area: "main",
 										instance: entry.instance,
 										focus: true,
 									}),
@@ -3970,22 +3967,22 @@ function LayoutShellLoadedContentResolved({
 			...(isHostReadOnly ? {} : { newTab: () => void handleCreateNewFile() }),
 		};
 	}, [
-		centralPanel,
+		mainArea,
 		extensionMap,
 		handleCloseView,
 		handleCreateNewFile,
 		handleSelectCentralView,
 		isHostReadOnly,
-		slots?.centralTabStrip,
+		slots?.mainTabStrip,
 	]);
 	// Read off `slots` here: hosts pass an inline object literal, so depending on
 	// `slots` itself would rebuild the strip on every render.
-	const renderHostTabStrip = slots?.centralTabStrip;
+	const renderHostTabStrip = slots?.mainTabStrip;
 	// Rendered even with zero tabs so the "+" add-view affordance is always
 	// available in the top bar.
-	const centralTabStrip = useMemo(() => {
-		if (centralTabStripContext && renderHostTabStrip) {
-			return renderHostTabStrip(centralTabStripContext);
+	const mainTabStrip = useMemo(() => {
+		if (mainTabStripContext && renderHostTabStrip) {
+			return renderHostTabStrip(mainTabStripContext);
 		}
 		return (
 			<PanelTabStrip
@@ -3995,23 +3992,23 @@ function LayoutShellLoadedContentResolved({
 						? currentFilePathsById.get(fileId)
 						: undefined;
 				}}
-				side="central"
-				panel={centralPanel}
+				side="main"
+				area={mainArea}
 				visibleExtensions={visibleExtensions}
 				extensionMap={extensionMap}
-				isFocused={focusedPanel === "central"}
+				isFocused={focusedArea === "main"}
 				onSelectView={handleSelectCentralView}
-				onRemoveView={(instance) => handleRemoveView("central", instance)}
+				onRemoveView={(instance) => handleRemoveView("main", instance)}
 				onAddView={addViewOnCentral}
 				preferencesFor={preferencesFor}
 			/>
 		);
 	}, [
 		addViewOnCentral,
-		centralPanel,
-		centralTabStripContext,
+		mainArea,
+		mainTabStripContext,
 		extensionMap,
-		focusedPanel,
+		focusedArea,
 		handleRemoveView,
 		handleSelectCentralView,
 		renderHostTabStrip,
@@ -4371,8 +4368,8 @@ function LayoutShellLoadedContentResolved({
 	);
 
 	const toggleLeftSidebar = useCallback(() => {
-		const panel = leftPanelRef.current;
-		if (!panel) return;
+		const area = leftPanelRef.current;
+		if (!area) return;
 		if (isLeftCollapsed) {
 			const desiredSize =
 				lastNonZeroSizesRef.current.left > MIN_VISIBLE_PANEL_SIZE
@@ -4383,17 +4380,17 @@ function LayoutShellLoadedContentResolved({
 					? desiredSize
 					: DEFAULT_PANEL_FALLBACK_SIZES.left;
 			updateSidePanelSize("left", target);
-			panel.resize(`${target}%`);
+			area.resize(`${target}%`);
 		} else {
 			setSidePanelRevealIntent((current) => ({ ...current, left: false }));
 			updateSidePanelSize("left", 0);
-			panel.collapse();
+			area.collapse();
 		}
 	}, [isLeftCollapsed, panelSizes.left, updateSidePanelSize]);
 
 	const toggleRightSidebar = useCallback(() => {
-		const panel = rightPanelRef.current;
-		if (!panel) return;
+		const area = rightPanelRef.current;
+		if (!area) return;
 		if (isRightCollapsed) {
 			const desiredSize =
 				lastNonZeroSizesRef.current.right > MIN_VISIBLE_PANEL_SIZE
@@ -4405,11 +4402,11 @@ function LayoutShellLoadedContentResolved({
 					: DEFAULT_PANEL_FALLBACK_SIZES.right;
 			target = Math.max(target, MIN_UNCOLLAPSED_RIGHT_SIZE);
 			updateSidePanelSize("right", target);
-			panel.resize(`${target}%`);
+			area.resize(`${target}%`);
 		} else {
 			setSidePanelRevealIntent((current) => ({ ...current, right: false }));
 			updateSidePanelSize("right", 0);
-			panel.collapse();
+			area.collapse();
 		}
 	}, [isRightCollapsed, panelSizes.right, updateSidePanelSize]);
 
@@ -4469,7 +4466,7 @@ function LayoutShellLoadedContentResolved({
 					navbarRepository={slots?.navbarRepository}
 					navbarStart={slots?.navbarStart}
 					navbarCenter={slots?.navbarCenter}
-					centralTabStrip={centralTabStrip}
+					mainTabStrip={mainTabStrip}
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
@@ -4492,10 +4489,10 @@ function LayoutShellLoadedContentResolved({
 							<SidePanel
 								side="left"
 								title="Navigator"
-								panel={leftPanel}
-								isFocused={!isLeftCollapsed && focusedPanel === "left"}
+								area={leftPanel}
+								isFocused={!isLeftCollapsed && focusedArea === "left"}
 								contentVisible={!isLeftCollapsed || sidePanelRevealIntent.left}
-								onFocusPanel={focusPanel}
+								onFocusArea={focusPanel}
 								onSelectView={handleSelectLeftView}
 								onAddView={addViewOnLeft}
 								onRemoveView={(key) => handleRemoveView("left", key)}
@@ -4513,27 +4510,23 @@ function LayoutShellLoadedContentResolved({
 						>
 							{/* Wider invisible hit zone keeps the thin gutter grabbable. */}
 							<div className="absolute inset-y-0 -left-1 -right-1" />
-							{/* The drag indicator rides the central island's own border,
+							{/* The drag indicator rides the main island's own border,
 							    not the middle of the gutter. */}
 							<div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-icon-brand)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
-						<Panel
-							id="central"
-							defaultSize={`${panelSizes.central}%`}
-							minSize="30%"
-						>
+						<Panel id="main" defaultSize={`${panelSizes.main}%`} minSize="30%">
 							<div className="h-full min-h-0">
-								<CentralPanel
-									panel={centralPanel}
+								<MainArea
+									area={mainArea}
 									showTabBar={false}
-									isFocused={focusedPanel === "central"}
-									onFocusPanel={focusPanel}
+									isFocused={focusedArea === "main"}
+									onFocusArea={focusPanel}
 									onSelectView={handleSelectCentralView}
-									onRemoveView={(key) => handleRemoveView("central", key)}
+									onRemoveView={(key) => handleRemoveView("main", key)}
 									onFinalizePendingView={(key) =>
-										setPanelState(
-											"central",
-											(panel) => activatePanelExtension(panel, key),
+										setAreaState(
+											"main",
+											(area) => activatePanelExtension(area, key),
 											{ focus: true },
 										)
 									}
@@ -4554,8 +4547,8 @@ function LayoutShellLoadedContentResolved({
 										? {}
 										: { onCreateNewFile: () => void handleCreateNewFile() })}
 									emptyState={renderEmptyPanelSlot(
-										"central",
-										slots?.centralPanelEmpty,
+										"main",
+										slots?.mainAreaEmpty,
 									)}
 								/>
 							</div>
@@ -4581,12 +4574,12 @@ function LayoutShellLoadedContentResolved({
 							<SidePanel
 								side="right"
 								title="Secondary"
-								panel={rightPanel}
-								isFocused={!isRightCollapsed && focusedPanel === "right"}
+								area={rightPanel}
+								isFocused={!isRightCollapsed && focusedArea === "right"}
 								contentVisible={
 									!isRightCollapsed || sidePanelRevealIntent.right
 								}
-								onFocusPanel={focusPanel}
+								onFocusArea={focusPanel}
 								onSelectView={handleSelectRightView}
 								onAddView={addViewOnRight}
 								onRemoveView={(key) => handleRemoveView("right", key)}

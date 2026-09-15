@@ -146,3 +146,13 @@
 		}
 	}
 }
+
+@scope (.atelier-root) {
+	.atelier-text-diff {
+		min-height: 0;
+		flex: 1 1 auto;
+		overflow: auto;
+		background: var(--color-bg-panel);
+		font-size: 12px;
+	}
+}

@@ -54,6 +54,33 @@ describe("inline CSV review", () => {
 		);
 	});
 
+	test("only a changed cell opens details; added and removed cells have nothing to compare", () => {
+		grid(
+			model(
+				"Name,Notes\nAlex,Before text\nRemoved,Gone\n",
+				"Name,Notes\nAlex,After text\nAdded,New\n",
+			),
+		);
+		// A changed value has two sides worth a popover.
+		expect(
+			screen.getByRole("button", { name: "Notes, row 1: changed" }),
+		).toBeVisible();
+		// An added or removed cell's other side is "not present" by definition:
+		// the row colour already says so, and there is no trigger to click.
+		expect(
+			screen.queryByRole("button", { name: /Notes, row \d+: added/ }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: /Name, row \d+: added/ }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: /row \d+: removed/ }),
+		).toBeNull();
+		const table = screen.getByRole("table", { name: "CSV changes" });
+		expect(within(table).getByText("New")).toBeVisible();
+		expect(within(table).getByText("Gone")).toBeVisible();
+	});
+
 	test("details preserve the original row and header nodes and show exact before and after", () => {
 		grid(
 			model("Name,Notes\nAlex,Before text\n", "Name,Notes\nAlex,After text\n"),

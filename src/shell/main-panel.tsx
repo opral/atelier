@@ -1,8 +1,8 @@
 import { useCallback, type ReactNode } from "react";
 import { FilePlus } from "lucide-react";
 import type {
-	PanelState,
-	PanelSide,
+	AreaState,
+	Area,
 	ExtensionHostContext,
 	ExtensionDefinition,
 	ExtensionKind,
@@ -11,46 +11,46 @@ import type {
 } from "../extension-runtime/types";
 import { PanelV2 } from "./panel-v2";
 
-type CentralPanelProps = {
+type MainAreaProps = {
 	/** Hover text for a document tab: the file's full path. */
 	readonly tabTooltip?: (
 		view: ExtensionDefinition,
 		instance: ExtensionInstance,
 	) => string | undefined;
-	readonly panel: PanelState;
+	readonly area: AreaState;
 	readonly onSelectView: (key: string) => void;
 	readonly onRemoveView: (key: string) => void;
 	readonly viewContext: ExtensionHostContext;
 	readonly onCreateNewFile?: () => void | Promise<void>;
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly isFocused: boolean;
-	readonly onFocusPanel: (side: PanelSide) => void;
+	readonly onFocusArea: (side: Area) => void;
 	readonly onFinalizePendingView?: (key: string) => void;
 	readonly emptyState?: ReactNode;
-	/** Renders the central tab strip (browser-style tabs mode). */
+	/** Renders the main tab strip (browser-style tabs mode). */
 	readonly showTabBar?: boolean;
 	/** Host-rendered strip replacing the built-in tab row. */
 	readonly customTabStrip?: ReactNode;
 };
 
 /**
- * Central panel - the main content area between left and right panels.
+ * Main panel - the main content area between left and right areas.
  *
  * @example
- * <CentralPanel
- *   panel={centralPanel}
+ * <MainArea
+ *   panel={mainArea}
  *   onSelectView={handleSelect}
  *   onRemoveView={handleRemove}
  *   onCreateNewFile={() => console.log("create")}
  * />
  */
-export function CentralPanel({
-	panel,
+export function MainArea({
+	area,
 	onSelectView,
 	onRemoveView,
 	viewContext,
 	isFocused,
-	onFocusPanel,
+	onFocusArea,
 	onFinalizePendingView,
 	onCreateNewFile,
 	onAddView,
@@ -58,16 +58,16 @@ export function CentralPanel({
 	showTabBar = false,
 	customTabStrip,
 	tabTooltip,
-}: CentralPanelProps) {
+}: MainAreaProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
 			if (!onFinalizePendingView) return;
-			const entry = panel.views.find((view) => view.instance === key);
+			const entry = area.views.find((view) => view.instance === key);
 			if (entry?.isPending) {
 				onFinalizePendingView(key);
 			}
 		},
-		[onFinalizePendingView, panel.views],
+		[onFinalizePendingView, area.views],
 	);
 
 	const emptyState =
@@ -78,17 +78,17 @@ export function CentralPanel({
 		);
 
 	const labelResolver = useCallback(
-		(view: ExtensionDefinition, entry: (typeof panel.views)[number]) =>
+		(view: ExtensionDefinition, entry: (typeof area.views)[number]) =>
 			(entry.state?.atelier?.label as string | undefined) ?? view.label,
 		[],
 	);
 
 	return (
 		<PanelV2
-			side="central"
-			panel={panel}
+			side="main"
+			area={area}
 			isFocused={isFocused}
-			onFocusPanel={onFocusPanel}
+			onFocusArea={onFocusArea}
 			onSelectView={onSelectView}
 			onRemoveView={onRemoveView}
 			viewContext={viewContext}
@@ -97,7 +97,7 @@ export function CentralPanel({
 			onActiveViewInteraction={finalizePendingIfNeeded}
 			onAddView={onAddView}
 			emptyStatePlaceholder={emptyState}
-			dropId="central-panel"
+			dropId="main-panel"
 			showTabBar={showTabBar}
 			customTabStrip={customTabStrip}
 		/>
@@ -116,7 +116,7 @@ function EmptyStateContent({
 	return (
 		<div
 			className="flex h-full flex-col items-center justify-center p-10 text-center"
-			data-testid="central-panel-empty-state"
+			data-testid="main-panel-empty-state"
 		>
 			<FilePlus
 				className="size-8 text-[var(--color-icon-tertiary)]"
@@ -133,7 +133,7 @@ function EmptyStateContent({
 				<button
 					type="button"
 					onClick={() => void onCreateNewFile()}
-					data-attr="central-empty-new-document"
+					data-attr="main-empty-new-document"
 					className="mt-6 flex items-center gap-2 rounded-[10px] bg-[var(--color-bg-action-primary)] px-6 py-2.75 text-sm font-bold text-[var(--color-text-on-action-primary)] shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[var(--color-bg-action-primary-hover)]"
 				>
 					New document

@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { useExtensionViewRuntime } from "./extension-view-runtime";
-import type { PanelState } from "./types";
+import type { AreaState } from "./types";
 import type { Lix } from "@lix-js/sdk";
 import { createExtensionHostContext } from "@/test-utils/extension-host-context";
 
@@ -9,28 +9,28 @@ const host = createExtensionHostContext({} as Lix);
 
 describe("useExtensionViewRuntime", () => {
 	test("includes panel, instance, and focus metadata", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "files-default", kind: "atelier_files" }],
 			activeInstance: "files-default",
 		};
 		const { result } = renderHook(useExtensionViewRuntime, {
 			initialProps: {
-				panel,
-				panelSide: "left" as const,
+				areaState: area,
+				area: "left" as const,
 				isFocused: true,
 				host,
 			},
 		});
 
-		const runtime = result.current.makeRuntime(panel.views[0]!);
-		expect(runtime.view.panel).toBe("left");
+		const runtime = result.current.makeRuntime(area.views[0]!);
+		expect(runtime.view.area).toBe("left");
 		expect(runtime.view.instanceId).toBe("files-default");
 		expect(runtime.view.isFocused).toBe(true);
 		expect(runtime.view.isActive).toBe(true);
 	});
 
 	test("marks only the active view as active", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [
 				{ instance: "alpha", kind: "custom" },
 				{ instance: "beta", kind: "custom" },
@@ -39,36 +39,32 @@ describe("useExtensionViewRuntime", () => {
 		};
 		const { result, rerender } = renderHook(useExtensionViewRuntime, {
 			initialProps: {
-				panel,
-				panelSide: "central" as const,
+				areaState: area,
+				area: "main" as const,
 				isFocused: true,
 				host,
 			},
 		});
 
-		expect(result.current.makeRuntime(panel.views[0]!).view.isActive).toBe(
-			true,
-		);
-		expect(result.current.makeRuntime(panel.views[1]!).view.isActive).toBe(
+		expect(result.current.makeRuntime(area.views[0]!).view.isActive).toBe(true);
+		expect(result.current.makeRuntime(area.views[1]!).view.isActive).toBe(
 			false,
 		);
 
 		rerender({
-			panel: { ...panel, activeInstance: "beta" },
-			panelSide: "central" as const,
+			areaState: { ...area, activeInstance: "beta" },
+			area: "main" as const,
 			isFocused: true,
 			host,
 		});
-		expect(result.current.makeRuntime(panel.views[0]!).view.isActive).toBe(
+		expect(result.current.makeRuntime(area.views[0]!).view.isActive).toBe(
 			false,
 		);
-		expect(result.current.makeRuntime(panel.views[1]!).view.isActive).toBe(
-			true,
-		);
+		expect(result.current.makeRuntime(area.views[1]!).view.isActive).toBe(true);
 	});
 
 	test("exposes one effective read-only signal for historical views", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [
 				{
 					instance: "live",
@@ -89,17 +85,17 @@ describe("useExtensionViewRuntime", () => {
 		};
 		const { result } = renderHook(useExtensionViewRuntime, {
 			initialProps: {
-				panel,
-				panelSide: "central" as const,
+				areaState: area,
+				area: "main" as const,
 				isFocused: true,
 				host,
 			},
 		});
 
-		expect(result.current.makeRuntime(panel.views[0]!).atelier.readOnly).toBe(
+		expect(result.current.makeRuntime(area.views[0]!).atelier.readOnly).toBe(
 			false,
 		);
-		expect(result.current.makeRuntime(panel.views[1]!).atelier.readOnly).toBe(
+		expect(result.current.makeRuntime(area.views[1]!).atelier.readOnly).toBe(
 			true,
 		);
 		expect(host.atelier.readOnly).toBe(false);

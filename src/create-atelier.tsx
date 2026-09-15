@@ -35,10 +35,10 @@ import {
 	createAtelier,
 	type AtelierOptions,
 	type AtelierInstance,
-	type AtelierPanelSide,
+	type AtelierArea,
 } from "./atelier-instance";
 
-export type { AtelierPanelSide } from "./atelier-instance";
+export type { AtelierArea } from "./atelier-instance";
 
 export type AtelierTopBarProps = Omit<
 	ComponentPropsWithRef<"header">,
@@ -47,9 +47,9 @@ export type AtelierTopBarProps = Omit<
 	readonly [attribute: `data-${string}`]: string | number | boolean | undefined;
 };
 
-export type AtelierEmptyPanelSlotContext = {
+export type AtelierEmptyAreaSlotContext = {
 	/** The panel whose empty state is being rendered. */
-	readonly side: AtelierPanelSide;
+	readonly side: AtelierArea;
 	/** Open a registered extension in this panel. */
 	readonly openExtension: (
 		extensionId: string,
@@ -57,11 +57,11 @@ export type AtelierEmptyPanelSlotContext = {
 	) => void;
 };
 
-export type AtelierEmptyPanelSlot =
+export type AtelierEmptyAreaSlot =
 	| ReactNode
-	| ((context: AtelierEmptyPanelSlotContext) => ReactNode);
+	| ((context: AtelierEmptyAreaSlotContext) => ReactNode);
 
-/** One central tab, headless: Atelier owns the rules, the host the pixels. */
+/** One main tab, headless: Atelier owns the rules, the host the pixels. */
 export type AtelierTabStripTab = {
 	readonly instanceId: string;
 	readonly kind: string;
@@ -93,17 +93,17 @@ export type AtelierSlots = {
 	/** Host-owned top-bar center, replacing the built-in view title. */
 	readonly navbarCenter?: ReactNode;
 	/**
-	 * Host-rendered central tab strip (tabs mode only). Selection, closing,
+	 * Host-rendered main tab strip (tabs mode only). Selection, closing,
 	 * pinning, and navigation rules stay in Atelier; the host renders the
 	 * chips. Custom strips forgo the built-in drag-reorder.
 	 */
-	readonly centralTabStrip?: (context: AtelierTabStripContext) => ReactNode;
+	readonly mainTabStrip?: (context: AtelierTabStripContext) => ReactNode;
 	/** Host-owned content rendered when the left panel has no open views. */
-	readonly leftPanelEmpty?: AtelierEmptyPanelSlot;
-	/** Host-owned content rendered when the central panel has no open views. */
-	readonly centralPanelEmpty?: AtelierEmptyPanelSlot;
+	readonly leftPanelEmpty?: AtelierEmptyAreaSlot;
+	/** Host-owned content rendered when the main panel has no open views. */
+	readonly mainAreaEmpty?: AtelierEmptyAreaSlot;
 	/** Host-owned content rendered when the right panel has no open views. */
-	readonly rightPanelEmpty?: AtelierEmptyPanelSlot;
+	readonly rightPanelEmpty?: AtelierEmptyAreaSlot;
 };
 
 export type {
@@ -229,7 +229,7 @@ function PreparedAtelierRuntime(
 				createMemoryPreferencesStore(props.prepared.preferences),
 			onEvent: (event) => {
 				current.current.onEvent?.(event);
-				if (event.type !== "central_view_activated" || applyingLocation.current)
+				if (event.type !== "main_view_activated" || applyingLocation.current)
 					return;
 				const branchId =
 					source.branchSession.getSnapshot() ?? props.prepared.branchId;
@@ -262,24 +262,24 @@ function PreparedAtelierRuntime(
 			const visible = configuration.sessionStateStore.getSnapshot();
 			const saved = props.sessionStateStore.getSnapshot();
 			if (visible) {
-				const central = visible.panels.central;
+				const main = visible.areas.main;
 				props.sessionStateStore.setSnapshot(
 					saved
 						? {
 								...saved,
-								focusedPanel: visible.focusedPanel,
-								panels: {
-									...saved.panels,
-									central: {
-										...central,
+								focusedArea: visible.focusedArea,
+								areas: {
+									...saved.areas,
+									main: {
+										...main,
 										views: [
-											...saved.panels.central.views.filter(
+											...saved.areas.main.views.filter(
 												(view) =>
-													!central.views.some(
+													!main.views.some(
 														(item) => item.instance === view.instance,
 													),
 											),
-											...central.views,
+											...main.views,
 										],
 									},
 								},
@@ -390,24 +390,24 @@ function PreparedAtelierRuntime(
 					runtime.instance,
 				).sessionStateStore;
 				const previous = store.getSnapshot();
-				const central = next.ui.panels.central;
+				const main = next.ui.areas.main;
 				store.setSnapshot(
 					previous
 						? {
 								...previous,
-								focusedPanel: "central",
-								panels: {
-									...previous.panels,
-									central: {
-										...central,
+								focusedArea: "main",
+								areas: {
+									...previous.areas,
+									main: {
+										...main,
 										views: [
-											...previous.panels.central.views.filter(
+											...previous.areas.main.views.filter(
 												(view) =>
-													!central.views.some(
+													!main.views.some(
 														(item) => item.instance === view.instance,
 													),
 											),
-											...central.views,
+											...main.views,
 										],
 									},
 								},

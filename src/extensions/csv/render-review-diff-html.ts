@@ -71,7 +71,7 @@ function renderStaticCsvTable(
 	const header = parsed.columns
 		.map(
 			(column, index) =>
-				`<th data-diff-key="header:${index}" data-diff-mode="words" data-diff-show-when-removed="true">${escapeHtml(
+				`<th data-diff-key="header:${index}"${diffMode(column)} data-diff-show-when-removed="true">${escapeHtml(
 					column,
 				)}</th>`,
 		)
@@ -82,7 +82,7 @@ function renderStaticCsvTable(
 				const value = row.cells[index] ?? "";
 				return `<td data-diff-key="${escapeAttribute(
 					row.diffKey,
-				)}:cell:${index}" data-diff-mode="words" data-diff-show-when-removed="true">${escapeHtml(
+				)}:cell:${index}"${diffMode(value)} data-diff-show-when-removed="true">${escapeHtml(
 					value,
 				)}</td>`;
 			}).join("");
@@ -95,6 +95,18 @@ function renderStaticCsvTable(
 	// inside it; without one they fall to the document root, and the browser
 	// re-parents the orphan <tr> into stray text after the table.
 	return `<table><thead><tr>${header}</tr></thead><tbody data-diff-key="rows">${body}</tbody></table>`;
+}
+
+/**
+ * Whether this value can be compared word by word.
+ *
+ * The word differ splits on ASCII word boundaries, so a script that has none
+ * — Arabic, Hebrew, Japanese — comes back split per character, and the two
+ * versions interleave into something no reader can read. Those cells are
+ * compared whole instead: the cell is marked changed rather than dissected.
+ */
+function diffMode(value: string): string {
+	return /^[\p{ASCII}]*$/u.test(value) ? ' data-diff-mode="words"' : "";
 }
 
 function csvRowIdentity(row: CsvRow): string {

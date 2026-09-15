@@ -1,14 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { createCentralSlotBehavior } from "./central-slot-behavior";
+import { createCentralSlotBehavior } from "./main-slot-behavior";
 
 const behavior = createCentralSlotBehavior({
 	homeKind: null,
-	centralKinds: new Set(),
+	mainKinds: new Set(),
 });
 
 describe("insertCentralTabView revision identity", () => {
 	test("re-opening a document live drops the tab's stale snapshot keys", () => {
-		const panel = {
+		const area = {
 			views: [
 				{
 					kind: "atelier_file",
@@ -24,7 +24,7 @@ describe("insertCentralTabView revision identity", () => {
 			activeInstance: "file:one",
 		};
 
-		const next = behavior.place(panel, {
+		const next = behavior.place(area, {
 			kind: "atelier_file",
 			instance: "file:one",
 			state: { fileId: "one", filePath: "/a.md" },
@@ -39,7 +39,7 @@ describe("insertCentralTabView revision identity", () => {
 	});
 
 	test("opening a historical revision into an existing tab keeps its keys", () => {
-		const panel = {
+		const area = {
 			views: [
 				{
 					kind: "atelier_file",
@@ -50,7 +50,7 @@ describe("insertCentralTabView revision identity", () => {
 			activeInstance: "file:one",
 		};
 
-		const next = behavior.place(panel, {
+		const next = behavior.place(area, {
 			kind: "atelier_file",
 			instance: "file:one",
 			state: {

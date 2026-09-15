@@ -3,7 +3,7 @@ import {
 	activatePanelExtension,
 	upsertPendingExtension,
 } from "./pending-extension";
-import type { PanelState } from "./types";
+import type { AreaState } from "./types";
 import {
 	FILES_EXTENSION_KIND,
 	FILE_EXTENSION_KIND,
@@ -11,7 +11,7 @@ import {
 
 describe("pending view helpers", () => {
 	test("upsertPendingExtension replaces the existing pending slot", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [
 				{ instance: "files-1", kind: FILES_EXTENSION_KIND },
 				{ instance: "preview-1", kind: FILE_EXTENSION_KIND, isPending: true },
@@ -19,7 +19,7 @@ describe("pending view helpers", () => {
 			activeInstance: "files-1",
 		};
 
-		const next = upsertPendingExtension(panel, {
+		const next = upsertPendingExtension(area, {
 			instance: "preview-2",
 			kind: FILE_EXTENSION_KIND,
 			isPending: true,
@@ -36,7 +36,7 @@ describe("pending view helpers", () => {
 	});
 
 	test("activatePanelExtension finalizes pending status and focuses the tab", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [
 				{ instance: "files-1", kind: FILES_EXTENSION_KIND },
 				{ instance: "preview-1", kind: FILE_EXTENSION_KIND, isPending: true },
@@ -44,7 +44,7 @@ describe("pending view helpers", () => {
 			activeInstance: "files-1",
 		};
 
-		const next = activatePanelExtension(panel, "preview-1");
+		const next = activatePanelExtension(area, "preview-1");
 
 		expect(next.activeInstance).toBe("preview-1");
 		expect(next.views[1]).toMatchObject({
@@ -54,13 +54,13 @@ describe("pending view helpers", () => {
 	});
 
 	test("activatePanelExtension returns the original panel when the view is missing", () => {
-		const panel: PanelState = {
+		const area: AreaState = {
 			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
 			activeInstance: "files-1",
 		};
 
-		const next = activatePanelExtension(panel, "missing");
+		const next = activatePanelExtension(area, "missing");
 
-		expect(next).toBe(panel);
+		expect(next).toBe(area);
 	});
 });

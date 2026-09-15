@@ -26,16 +26,22 @@
 		},
 		"./style.css": "./dist/atelier.css",
 		"./package.json": "./package.json",
-		"./markdown": {
-			"types": "./dist/types/extensions/markdown/markdown-content.d.ts",
-			"import": "./dist/markdown.js",
-			"default": "./dist/markdown.js"
+		"./render": {
+			"types": "./dist/types/render.d.ts",
+			"import": "./dist/render.js",
+			"default": "./dist/render.js"
+		},
+		"./render.css": "./dist/render.css",
+		"./dev-tools": {
+			"types": "./dist/types/dev-tools.d.ts",
+			"import": "./dist/dev-tools.js",
+			"default": "./dist/dev-tools.js"
 		}
 	},
 	"packageManager": "pnpm@10.34.5",
 	"scripts": {
 		"dev": "pnpm --dir preview/web dev",
-		"build": "vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs",
+		"build": "node scripts/generate-render-tokens.mjs --check && vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs && node scripts/emit-render-css.mjs",
 		"build:lix": "node scripts/build-vendored-lix.mjs",
 		"prebuild:preview": "git submodule update --init --recursive && pnpm run build:lix --browser-only",
 		"build:preview": "pnpm --dir preview/web build && node scripts/compress-preview-wasm.mjs",
@@ -47,8 +53,9 @@
 		"lint:fix": "oxlint --tsconfig ./tsconfig.json --ignore-path .gitignore --ignore-pattern \"vendor/**\" --fix .",
 		"test": "vitest run",
 		"test:consumer": "pnpm run build && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
-		"ci": "pnpm run test:build-scripts && pnpm run build:lix && pnpm run build && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
-		"test:build-scripts": "node --test scripts/*.test.mjs"
+		"ci": "pnpm run build:lix && pnpm run build && pnpm run test:build-scripts && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
+		"test:build-scripts": "node --test scripts/*.test.mjs",
+		"tokens": "node scripts/generate-render-tokens.mjs"
 	},
 	"peerDependencies": {
 		"@lix-js/sdk": ">=0.16.0 <0.17.0",
@@ -58,12 +65,12 @@
 	"dependencies": {
 		"@base-ui/react": "^1.6.0",
 		"@codemirror/autocomplete": "^6.20.3",
-		"@codemirror/lang-sql": "^6.10.0",
 		"@codemirror/commands": "^6.10.4",
 		"@codemirror/lang-css": "^6.3.1",
 		"@codemirror/lang-javascript": "^6.2.5",
 		"@codemirror/lang-json": "^6.0.2",
 		"@codemirror/lang-python": "^6.2.1",
+		"@codemirror/lang-sql": "^6.10.0",
 		"@codemirror/language": "^6.12.4",
 		"@codemirror/search": "^6.7.1",
 		"@codemirror/state": "^6.7.1",
@@ -75,6 +82,7 @@
 		"@glideapps/glide-data-grid": "^6.0.3",
 		"@lezer/highlight": "^1.2.3",
 		"@lix-js/html-diff": "^0.1.0",
+		"@pierre/diffs": "1.4.1",
 		"@pierre/trees": "1.0.0-beta.5",
 		"@radix-ui/react-context-menu": "^2.3.7",
 		"@radix-ui/react-dropdown-menu": "^2.1.20",
@@ -97,10 +105,10 @@
 		"micromark-extension-frontmatter": "^2.0.0",
 		"micromark-extension-gfm": "^3.0.0",
 		"papaparse": "^5.5.4",
-		"perfect-freehand": "1.2.0",
-		"roughjs": "4.6.6",
 		"pdfjs-dist": "5.4.624",
+		"perfect-freehand": "1.2.0",
 		"react-resizable-panels": "^4.12.1",
+		"roughjs": "4.6.6",
 		"tailwind-merge": "^3.6.0",
 		"unicode-emoji-json": "0.9.0",
 		"use-sync-external-store": "^1.6.0",

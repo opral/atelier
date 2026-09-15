@@ -4,6 +4,7 @@ import {
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
 import {
+	lazy,
 	Suspense,
 	useEffect,
 	useLayoutEffect,
@@ -19,7 +20,8 @@ import {
 } from "@/extension-runtime/editor-revision-state";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
-import { decodeFileDataToText } from "@/lib/decode-file-data";
+import { decodeFileDataToText, fileText } from "@/lib/decode-file-data";
+import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
 import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -29,9 +31,12 @@ import {
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
+import { viewShowsDiff } from "@/extension-runtime/diff-sides";
 import { createTextEditor, type TextEditorController } from "./editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
+
+const TextDiffSurface = lazy(() => import("./diff-surface"));
 
 type TextFileRow = {
 	readonly id: string;
@@ -60,6 +65,40 @@ export function TextView(props: TextViewProps) {
 function TextViewContent({ fileId, ...props }: TextViewProps) {
 	assertFileId(fileId);
 	const revision = normalizeEditorRevisionState(props);
+	// The shell owns review detection: this file is under review whenever the
+	// working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file. A deleted file has no live row, so
+	// the review is answered before the workspace is read.
+	const reviewFile = workingReviewFile(props.atelier.diff.session, fileId);
+	const epoch =
+		reviewFile?.review?.status === "pending"
+			? reviewFile.workingEpoch
+			: undefined;
+	if (epoch) {
+		return (
+			<WorkingTextDiff
+				{...props}
+				fileId={fileId}
+				filePath={reviewFile?.path ?? props.filePath}
+				beforeCommitId={epoch.beforeCommitId}
+				afterCommitId={epoch.afterCommitId}
+			/>
+		);
+	}
+	// A checkpoint's span is a diff too, read from history instead of the
+	// review's epoch.
+	if (revision.beforeCommitId && revision.afterCommitId) {
+		return (
+			<HistoricalTextDiff
+				{...props}
+				fileId={fileId}
+				beforeCommitId={revision.beforeCommitId}
+				afterCommitId={revision.afterCommitId}
+				beforeExists={revision.beforeExists}
+				afterExists={revision.afterExists}
+			/>
+		);
+	}
 	if (editorRevisionMode(revision) !== "editor") {
 		return (
 			<HistoricalTextView
@@ -71,6 +110,109 @@ function TextViewContent({ fileId, ...props }: TextViewProps) {
 		);
 	}
 	return <LiveTextViewContent fileId={fileId} {...props} />;
+}
+
+/** The file at each end of a checkpoint's span, as one unified diff. */
+function HistoricalTextDiff({
+	fileId,
+	filePath,
+	beforeCommitId,
+	afterCommitId,
+	beforeExists,
+	afterExists,
+	...props
+}: TextViewProps & {
+	readonly beforeCommitId: string;
+	readonly afterCommitId: string;
+	readonly beforeExists: boolean;
+	readonly afterExists: boolean;
+}) {
+	return (
+		<FileSnapshotsAtCommits
+			fileId={fileId}
+			beforeCommitId={beforeCommitId}
+			afterCommitId={afterCommitId}
+			beforeExists={beforeExists}
+			afterExists={afterExists}
+		>
+			{({ beforeSnapshot, afterSnapshot }) => {
+				const path =
+					afterSnapshot?.path ??
+					beforeSnapshot?.path ??
+					filePath ??
+					`/${fileId}.txt`;
+				const sides = textDiffSides(
+					beforeSnapshot?.content,
+					afterSnapshot?.content,
+				);
+				if (!sides) {
+					return (
+						<HistoricalTextView
+							{...props}
+							fileRow={undefined}
+							fileId={fileId}
+							filePath={path}
+							commitId={afterExists ? afterCommitId : beforeCommitId}
+						/>
+					);
+				}
+				return (
+					<Suspense fallback={<TextLoadingState />}>
+						<TextDiffSurface
+							key={`${beforeCommitId}:${afterCommitId}`}
+							path={path}
+							before={sides.before}
+							after={sides.after}
+						/>
+					</Suspense>
+				);
+			}}
+		</FileSnapshotsAtCommits>
+	);
+}
+
+/** The file under review: both sides of the write's epoch, as one diff. */
+function WorkingTextDiff({
+	fileId,
+	filePath,
+	beforeCommitId,
+	afterCommitId,
+	...props
+}: TextViewProps & {
+	readonly beforeCommitId: string;
+	readonly afterCommitId: string;
+}) {
+	const data = useWorkingFileData(fileId, beforeCommitId, afterCommitId);
+	if (data.loading) return <TextLoadingState />;
+	if (data.error) return <TextReviewUnavailable />;
+	const path = filePath || `/${fileId}.txt`;
+	// A deleted file has no after side; its last content is still readable as
+	// an all-removed diff.
+	const sides = textDiffSides(data.data, data.afterData);
+	if (sides) {
+		return (
+			<Suspense fallback={<TextLoadingState />}>
+				<TextDiffSurface
+					key={fileId}
+					path={path}
+					before={sides.before}
+					after={sides.after}
+				/>
+			</Suspense>
+		);
+	}
+	// Nothing to compare: bytes that are not text, or two sides that read the
+	// same. The read-only editor shows the side that exists.
+	if (data.afterData == null) return <TextReviewUnavailable />;
+	return (
+		<EditableTextViewResolved
+			{...props}
+			fileId={fileId}
+			filePath={path}
+			fileRow={{ id: fileId, path, content: data.afterData }}
+			isReviewing
+		/>
+	);
 }
 
 function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
@@ -85,9 +227,6 @@ function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
 	);
 
 	if (!fileRow) {
-		if (workingReviewFile(props.atelier.diff.session, fileId)) {
-			return <TextReviewUnavailable />;
-		}
 		return (
 			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
 				File not found in the workspace.
@@ -95,62 +234,15 @@ function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
 		);
 	}
 
+	// A file under review never reaches the editor: the comparison above
+	// replaces it while the review is open.
 	return (
-		<EditableTextView
+		<EditableTextViewResolved
 			key={fileId}
 			{...props}
 			fileId={fileId}
 			fileRow={fileRow}
-		/>
-	);
-}
-
-function EditableTextView({
-	atelier,
-	fileId,
-	filePath,
-	fileRow,
-	isActiveView = true,
-	isPanelFocused = true,
-}: Omit<TextViewProps, "beforeCommitId" | "afterCommitId"> & {
-	readonly fileRow: TextFileRow;
-}) {
-	// The shell owns review detection: this file is under review whenever the
-	// working diff session marks it pending — diff mode covers every open
-	// surface, not just the revealed file.
-	const diffSession = atelier.diff.session;
-	const reviewFile = workingReviewFile(diffSession, fileId);
-	const isReviewing = reviewFile?.review?.status === "pending";
-	const epoch = isReviewing ? reviewFile?.workingEpoch : undefined;
-	const reviewData = useWorkingFileData(
-		epoch ? fileId : null,
-		epoch?.beforeCommitId,
-		epoch?.afterCommitId,
-	);
-	const resolvedReviewData = reviewData.loading ? null : reviewData;
-	if (isReviewing && !resolvedReviewData) return <TextLoadingState />;
-	if (
-		isReviewing &&
-		(resolvedReviewData?.error || resolvedReviewData?.afterData === null)
-	) {
-		return <TextReviewUnavailable />;
-	}
-	const effectiveFileRow = isReviewing
-		? {
-				...fileRow,
-				path: reviewFile?.path ?? fileRow.path,
-				content: resolvedReviewData?.afterData ?? new Uint8Array(),
-			}
-		: fileRow;
-	return (
-		<EditableTextViewResolved
-			atelier={atelier}
-			fileId={fileId}
-			filePath={filePath}
-			fileRow={effectiveFileRow}
-			isActiveView={isActiveView}
-			isPanelFocused={isPanelFocused}
-			isReviewing={isReviewing}
+			isReviewing={false}
 		/>
 	);
 }
@@ -168,7 +260,7 @@ function EditableTextViewResolved({
 	readonly isReviewing: boolean;
 }) {
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
-	const fileText = useMemo(
+	const initialText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
@@ -181,7 +273,7 @@ function EditableTextViewResolved({
 		persist: persistUserEdit,
 	} = useSyncedTextFile({
 		fileId,
-		initialText: fileText,
+		initialText,
 		reviewText: null,
 		reviewing: isReviewing,
 		readOnly: atelier.readOnly,
@@ -202,6 +294,29 @@ function EditableTextViewResolved({
 			/>
 		</div>
 	);
+}
+
+/**
+ * Both sides of a comparison as text, or `null` when the diff view cannot show
+ * them: bytes that are not UTF-8, or two sides that read the same (the change
+ * was metadata, or an empty file was created). The read-only editor shows the
+ * side that exists in those cases.
+ *
+ * A side is `null` where the file has none: a created file has no before, a
+ * deleted one no after.
+ */
+function textDiffSides(
+	beforeData: unknown,
+	afterData: unknown,
+): { readonly before: string | null; readonly after: string | null } | null {
+	const before = beforeData == null ? null : fileText(beforeData);
+	const after = afterData == null ? null : fileText(afterData);
+	if (beforeData != null && before === null) return null;
+	if (afterData != null && after === null) return null;
+	if (before === null && after === null) return null;
+	if (before === null) return after === "" ? null : { before, after };
+	if (after === null) return before === "" ? null : { before, after };
+	return before === after ? null : { before, after };
 }
 
 function TextReviewUnavailable() {
@@ -463,7 +578,11 @@ export const extension = createReactExtensionDefinition({
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
-				readySelector=".cm-editor"
+				readySelector=".cm-editor, .atelier-text-diff"
+				diff={viewShowsDiff({
+					session: atelier.diff.session,
+					state: view.state,
+				})}
 				initial={
 					file ? (
 						<pre className="whitespace-pre-wrap p-4 font-mono text-sm">
