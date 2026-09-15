@@ -649,6 +649,29 @@ describe("diff review navigation", () => {
 					name: "1 file changed since checkpoint. Review working changes",
 				}),
 			).toBeVisible();
+
+			// The pill opens and closes the same review. Pressed twice with no
+			// pause, the second press has to close what the first started — the
+			// state it reads has not flipped yet, because the open is still
+			// reading the repository.
+			const reviewPill = screen.getByRole("button", {
+				name: "1 file changed since checkpoint. Review working changes",
+			});
+			await act(async () => {
+				fireEvent.click(reviewPill);
+				fireEvent.click(reviewPill);
+			});
+			// Asserting that nothing opens means giving it the chance to: the
+			// read of the repository resolves after the close that called it off.
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			});
+			expect(
+				screen.queryByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+			).toBeNull();
+			expect(document.querySelector("[data-review-mode='true']")).toBeNull();
+
+			// A called-off open leaves nothing behind: the next press opens.
 			await openWorkingChangesFromHistory();
 			expect(
 				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),

@@ -1395,7 +1395,15 @@ function LayoutShellLoadedContentResolved({
 	const [diffReview, setDiffReview] = useState<DiffReviewState | null>(null);
 	const diffReviewRef = useRef(diffReview);
 	diffReviewRef.current = diffReview;
+	// An open reads the repository before it has a session to show, so the
+	// control that started it has to know one is on its way — and be able to
+	// call it off, since the state it would flip has not flipped yet.
 	const workingReviewOpeningRef = useRef(false);
+	const workingReviewOpenTokenRef = useRef(0);
+	const cancelWorkingChangesReviewOpen = useCallback(() => {
+		workingReviewOpenTokenRef.current += 1;
+		workingReviewOpeningRef.current = false;
+	}, []);
 	// Both diff-mode targets are views over the same state: "working" reviews
 	// the mutable head, "historical" a read-only checkpoint (verb: Restore).
 	const workingReview = diffReview?.kind === "working" ? diffReview : null;
@@ -3655,6 +3663,7 @@ function LayoutShellLoadedContentResolved({
 				revealHistory();
 			}
 			workingReviewOpeningRef.current = true;
+			const openToken = workingReviewOpenTokenRef.current;
 			return (async () => {
 				// The batch pins the existing coordinate functions and the one-argument
 				// HOT diff to one repository snapshot. No review-only SQL surface is
@@ -3746,6 +3755,10 @@ function LayoutShellLoadedContentResolved({
 					: openOptions?.reveal === true
 						? firstChangedFile
 						: undefined;
+				// Called off while the repository was being read: the session
+				// that was asked for is no longer wanted, and opening it now
+				// would undo the close that called it off.
+				if (openToken !== workingReviewOpenTokenRef.current) return false;
 				setDiffReview({
 					kind: "working",
 					...(openOptions?.appliedRange
@@ -4633,8 +4646,13 @@ function LayoutShellLoadedContentResolved({
 					reviewingWorkingChanges={workingChangesReviewOpen}
 					reviewingLatestCheckpoint={historicalReview !== null}
 					onReviewWorkingChanges={() => {
-						// The same control opens and closes the review.
-						if (workingChangesReviewOpen) {
+						// The same control opens and closes the review. A second
+						// press that lands before the first one's read of the
+						// repository comes back closes what it started: the flag
+						// it would otherwise read has not flipped yet, and the
+						// press would open a second session on top of the first.
+						if (workingChangesReviewOpen || workingReviewOpeningRef.current) {
+							cancelWorkingChangesReviewOpen();
 							exitDiffReview();
 							return;
 						}
