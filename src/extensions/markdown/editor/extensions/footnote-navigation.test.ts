@@ -140,6 +140,29 @@ describe("footnote navigation", () => {
 		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(false);
 	});
 
+	test("the way back keeps its own tint, not what is left of the way in", () => {
+		const marker = element.querySelector("[data-footnote-ref='1'] a")!;
+		click(marker);
+		const definition = element.querySelector("[data-footnote-def='1']")!;
+		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+
+		// A round trip: a second later, back to the marker. The tint the way
+		// in started used to be the one that timed out, and it took the way
+		// back's tint with it a second and a half early.
+		vi.advanceTimersByTime(1000);
+		const backref = element.querySelector("[data-footnote-backref='1']")!;
+		click(backref);
+		const markerRow = element.querySelector("[data-footnote-ref='1']")!;
+		expect(markerRow.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+
+		// Where the first jump's timer would have fired.
+		vi.advanceTimersByTime(1500);
+		expect(markerRow.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+		// And this jump's own, a full span after it landed.
+		vi.advanceTimersByTime(1000);
+		expect(markerRow.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(false);
+	});
+
 	test("the way back lands on the first marker", () => {
 		const backref = element.querySelector("[data-footnote-backref='1']")!;
 		click(backref);

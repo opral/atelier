@@ -45,6 +45,8 @@ export const FootnoteNavigationExtension = Extension.create({
 					editorView.dom.addEventListener("keydown", onKeyDown, true);
 					return {
 						destroy: () => {
+							window.clearTimeout(fadeTimers.get(editorView));
+							fadeTimers.delete(editorView);
 							editorView.dom.removeEventListener("click", onClick, true);
 							editorView.dom.removeEventListener("keydown", onKeyDown, true);
 						},
@@ -75,6 +77,16 @@ type FootnoteState = {
 type FootnoteMeta = { readonly reveal: number } | { readonly clear: true };
 
 const footnotePluginKey = new PluginKey<FootnoteState>("markdownFootnotes");
+
+/**
+ * The timer that takes a tint away again, one per editor. A jump that lands
+ * while an earlier one is still tinted takes the earlier one's timer over
+ * instead of being cut short by it: a round trip — marker, note, and back — is
+ * two jumps about a second apart, and the way back was losing two thirds of
+ * its tint to the timer the way in had started, often before the scroll it was
+ * meant to outlive had even settled.
+ */
+const fadeTimers = new WeakMap<EditorView, number>();
 
 function applyFootnoteTransaction(
 	tr: Transaction,
@@ -234,15 +246,20 @@ function revealNode(view: EditorView, pos: number): void {
 	}
 	view.dispatch(tr);
 	view.focus();
-	window.setTimeout(() => {
-		if (view.isDestroyed) return;
-		const clear: FootnoteMeta = { clear: true };
-		view.dispatch(
-			view.state.tr
-				.setMeta(footnotePluginKey, clear)
-				.setMeta("addToHistory", false),
-		);
-	}, FOOTNOTE_TARGET_MS);
+	window.clearTimeout(fadeTimers.get(view));
+	fadeTimers.set(
+		view,
+		window.setTimeout(() => {
+			fadeTimers.delete(view);
+			if (view.isDestroyed) return;
+			const clear: FootnoteMeta = { clear: true };
+			view.dispatch(
+				view.state.tr
+					.setMeta(footnotePluginKey, clear)
+					.setMeta("addToHistory", false),
+			);
+		}, FOOTNOTE_TARGET_MS),
+	);
 }
 
 /** Markers whose label has no definition in the document. */
