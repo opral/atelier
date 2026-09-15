@@ -255,18 +255,36 @@ export function SlashCommandMenu() {
 		}
 	}, [selectedIndex]);
 
-	// Close menu when clicking outside
+	// Close the menu when the user goes somewhere else.
 	useEffect(() => {
 		if (!slashState.active || !editor) return;
 
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+		const isInside = (node: EventTarget | null) =>
+			node instanceof Node &&
+			(menuRef.current?.contains(node) === true ||
+				editor.view.dom.contains(node));
+
+		const closeFromOutside = (event: Event) => {
+			if (!isInside(event.target)) {
 				(editor.commands as any).closeSlashMenu?.();
 			}
 		};
 
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
+		// Capture phase, and pointerdown as well as mousedown: the tab strip's
+		// "Add view" trigger swallows the bubbling mousedown a listener on the
+		// document would otherwise wait for, which left the palette stranded
+		// on screen behind the menu that button opened.
+		document.addEventListener("pointerdown", closeFromOutside, true);
+		document.addEventListener("mousedown", closeFromOutside, true);
+		// And focus moving out of the editor ends it too. The palette's own
+		// Escape lives on the editor's keymap, so once another control holds
+		// focus there is no key left that could dismiss it.
+		document.addEventListener("focusin", closeFromOutside, true);
+		return () => {
+			document.removeEventListener("pointerdown", closeFromOutside, true);
+			document.removeEventListener("mousedown", closeFromOutside, true);
+			document.removeEventListener("focusin", closeFromOutside, true);
+		};
 	}, [slashState.active, editor]);
 
 	if (

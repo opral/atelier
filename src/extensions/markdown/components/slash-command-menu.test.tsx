@@ -250,6 +250,58 @@ describe("SlashCommandMenu", () => {
 		expect(editor.getText()).toContain("/head");
 	});
 
+	test("a chrome control that swallows mousedown still dismisses the menu", async () => {
+		const editor = setup();
+		// The tab strip's "Add view" trigger: it stops the event a listener on
+		// the document would have been waiting for in the bubble phase.
+		const trigger = document.createElement("button");
+		trigger.addEventListener("mousedown", (event) => event.stopPropagation());
+		trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+		document.body.appendChild(trigger);
+
+		await act(async () => {
+			editor.commands.insertContent("/head");
+		});
+		expect(
+			await screen.findByRole("listbox", { name: "Slash commands" }),
+		).toBeInTheDocument();
+
+		await act(async () => {
+			trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("listbox", { name: "Slash commands" }),
+			).toBeNull();
+		});
+		trigger.remove();
+	});
+
+	test("focus leaving the editor closes the menu", async () => {
+		const editor = setup();
+		const elsewhere = document.createElement("input");
+		document.body.appendChild(elsewhere);
+
+		await act(async () => {
+			editor.commands.insertContent("/head");
+		});
+		expect(
+			await screen.findByRole("listbox", { name: "Slash commands" }),
+		).toBeInTheDocument();
+
+		// The palette's own Escape is on the editor's keymap, so once focus is
+		// gone there is no key left that would dismiss it.
+		await act(async () => {
+			elsewhere.focus();
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("listbox", { name: "Slash commands" }),
+			).toBeNull();
+		});
+		elsewhere.remove();
+	});
+
 	test("does not block Enter when the query has no results", async () => {
 		const editor = setup();
 		await act(async () => {
