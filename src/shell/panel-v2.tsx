@@ -1731,7 +1731,12 @@ const TabButtonBase = forwardRef<
 		return (
 			<button
 				type="button"
-				aria-label={isCompact ? label : undefined}
+				// Named outright, not from its contents: the close control inside
+				// carries a label of its own, and a name built from content would
+				// read "one.md Close one.md".
+				aria-label={label}
+				// Which document is open was conveyed by colour alone.
+				aria-current={isActive ? "true" : undefined}
 				title={isCompact ? (tooltip ?? label) : undefined}
 				onClick={(event) => {
 					dragOnClick?.(event);
@@ -1786,7 +1791,10 @@ const TabButtonBase = forwardRef<
 				    main tabs reserve inline space, while inactive main tabs
 				    reveal an overlay without changing width. */}
 				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
+					// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all.
 					<span
+						role="button"
+						aria-label={`Close ${label}`}
 						className="absolute -top-1 -right-1 z-10 hidden size-3.5 items-center justify-center rounded-full border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-icon-tertiary)] shadow-sm transition-colors group-hover:flex group-focus-visible:flex hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)]"
 						onClick={(event) => {
 							event.stopPropagation();
@@ -1796,7 +1804,10 @@ const TabButtonBase = forwardRef<
 						<X data-attr="panel-tab-close" className="size-[9px]" />
 					</span>
 				) : isActive ? (
+					// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all.
 					<span
+						role="button"
+						aria-label={`Close ${label}`}
 						className="ml-0.5 flex size-4 flex-none items-center justify-center rounded-[4px] text-[var(--color-icon-tertiary)] transition-colors hover:text-[var(--color-icon-secondary)]"
 						onClick={(event) => {
 							event.stopPropagation();
@@ -1812,7 +1823,10 @@ const TabButtonBase = forwardRef<
 							data-attr="panel-tab-close-fade"
 							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--color-bg-hover-canvas)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
 						/>
+						{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all. */}
 						<span
+							role="button"
+							aria-label={`Close ${label}`}
 							className="pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-[5px] bg-[var(--color-bg-hover-canvas)] text-[var(--color-icon-tertiary)] opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:opacity-100 hover:text-[var(--color-icon-secondary)]"
 							onClick={(event) => {
 								event.stopPropagation();
