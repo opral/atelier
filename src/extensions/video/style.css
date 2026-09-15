@@ -23,6 +23,39 @@
 		outline: none;
 	}
 
+	/*
+	 * The player takes focus — from a click on its controls as much as from
+	 * Tab — and while it holds it the keyboard is the player's, not the
+	 * document's. A focused player that looks exactly like an unfocused one is
+	 * what makes that silent: keys pressed at the video go nowhere the reader
+	 * can see, and nothing on screen says why.
+	 *
+	 * `:focus-within` covers the frame and its buttons alike. The ring is
+	 * drawn inside, because both the standalone view and the Markdown embed
+	 * clip their overflow, and it is laid over a dark band so that a hairline
+	 * of it survives on either side — a brand-coloured ring on its own
+	 * disappears into a bright frame of video.
+	 */
+	.atelier-video-player:focus-within {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: -3px;
+	}
+
+	.atelier-video-player:focus-within::after {
+		content: "";
+		position: absolute;
+		z-index: 2;
+		inset: 0;
+		box-shadow: inset 0 0 0 4px rgb(0 0 0 / 60%);
+		pointer-events: none;
+	}
+
+	/* Inside the ring, which control has the keyboard. */
+	.atelier-video-player button:focus-visible {
+		outline: 2px solid var(--color-ring-focus-visible);
+		outline-offset: 2px;
+	}
+
 	.atelier-video-player[data-idle="true"] {
 		cursor: none;
 	}
