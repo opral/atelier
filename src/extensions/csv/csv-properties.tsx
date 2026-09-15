@@ -307,8 +307,8 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 		const onFocusOut = () => {
 			requestAnimationFrame(() => {
 				if (!dialog.isConnected) return;
-				const active = doc.activeElement;
-				if (active === null || active === doc.body) inputRef.current?.focus();
+				const focused = doc.activeElement;
+				if (focused === null || focused === doc.body) inputRef.current?.focus();
 			});
 		};
 		doc.addEventListener("keydown", onKeyDown, true);
