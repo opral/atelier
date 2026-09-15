@@ -1175,9 +1175,23 @@ function LayoutShellLoadedContentResolved({
 	readonly installedExtensionsReady: boolean;
 }) {
 	const effectiveAtelierInstance = atelierInstance;
+	const workingChangesReviewOpenRef = useRef(false);
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
+			// An edit the reviewer makes inside an open review — a property in
+			// the frontmatter panel — advances the working tip, which would
+			// otherwise declare their own review behind the file and refuse the
+			// checkpoint. The review follows the edit instead. An external write
+			// emits nothing here, so it still raises the notice: nobody has
+			// their content swapped for someone else's mid-read.
+			if (
+				event.type === "document_modified" &&
+				workingChangesReviewOpenRef.current
+			)
+				void reopenWorkingReviewRef.current?.({
+					revealPath: event.filePath,
+				});
 		},
 		[onEvent],
 	);
@@ -1410,6 +1424,8 @@ function LayoutShellLoadedContentResolved({
 	const historicalReview =
 		diffReview?.kind === "historical" ? diffReview : null;
 	const workingChangesReviewOpen = workingReview !== null;
+	// Read from emitEvent, which is built before this line.
+	workingChangesReviewOpenRef.current = workingChangesReviewOpen;
 	const workingChangeReviewFiles =
 		workingReview?.files ?? EMPTY_LIX_FILES_FOR_OPEN;
 	const workingChangeReviewRange = workingReview?.range ?? null;

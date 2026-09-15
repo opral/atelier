@@ -5,7 +5,7 @@ import {
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
 import { Suspense, useEffect } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { FileText, Loader2 } from "lucide-react";
@@ -432,7 +432,7 @@ function MarkdownLiveViewLoaded({
 		() => createMarkdownEditorOriginKey(),
 		[],
 	);
-	const writeFrontmatter = useMemo(
+	const writeFrontmatterToFile = useMemo(
 		() =>
 			createMarkdownFrontmatterWriter({
 				lix,
@@ -440,6 +440,17 @@ function MarkdownLiveViewLoaded({
 				originKey: frontmatterOriginKey,
 			}),
 		[fileId, frontmatterOriginKey, lix],
+	);
+	// A property written from here is an edit to the document like any other,
+	// and the surfaces watching for one — the review the panel may be sitting
+	// inside — are told so. Without it the reviewer's own edit read as someone
+	// else moving the file underneath them.
+	const writeFrontmatter = useCallback(
+		async (source: string) => {
+			await writeFrontmatterToFile(source);
+			if (effectiveFileRow?.path) onDocumentModified?.(effectiveFileRow.path);
+		},
+		[effectiveFileRow?.path, onDocumentModified, writeFrontmatterToFile],
 	);
 	// Frontmatter is a property panel, and a property panel keeps what it is
 	// given. Under a review the document on screen is a diff projection that
