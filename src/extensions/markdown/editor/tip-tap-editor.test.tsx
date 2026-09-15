@@ -751,6 +751,39 @@ test("numeric fields commit safe values and reject unsafe or invalid drafts", as
 	expect(typeof frontmatterValue()?.count).toBe("number");
 });
 
+test("the toolbar's Footnote button puts a marker at the caret and opens the note", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: fakeUuid("file_footnote_toolbar"),
+		markdown: "Claim.",
+		withToolbar: true,
+	});
+	let endOfClaim = 1;
+	editor.state.doc.descendants((node, pos) => {
+		if (node.isText && node.text === "Claim.") endOfClaim = pos + 6;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(endOfClaim);
+	});
+	const button = await screen.findByRole("button", { name: "Footnote" });
+	await act(async () => {
+		fireEvent.click(button);
+	});
+	await waitFor(() => {
+		expect(
+			editor.view.dom.querySelector("[data-footnote-ref='1']"),
+		).not.toBeNull();
+		expect(
+			editor.view.dom.querySelector("[data-footnote-def='1']"),
+		).not.toBeNull();
+	});
+	await act(async () => {
+		editor.commands.insertContent("The note.");
+	});
+	expect(buildNormalizedMarkdownFromEditor(editor)).toBe(
+		"Claim.[^1]\n\n[^1]: The note.\n",
+	);
+});
+
 test("deactivates and restores the toolbar around real frontmatter focus", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
 		fileId: fakeUuid("file_frontmatter_toolbar_focus"),

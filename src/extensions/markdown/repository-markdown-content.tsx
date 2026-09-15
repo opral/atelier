@@ -1,20 +1,111 @@
+import { useEffect, useState } from "react";
+import { useLix } from "../../lib/lix-react";
+import {
+	loadMarkdownAsset,
+	type LoadedMarkdownAsset,
+} from "./editor/markdown-asset";
+import { parseMarkdown } from "./editor/markdown";
+import { astToTiptapDoc } from "./editor/tiptap-markdown-bridge/mdwc-to-tiptap";
 import { useAtelierRenderContext } from "../../atelier-render-context";
 import { documentLinkPath } from "./editor/document-links";
 import { MarkdownContent } from "./markdown-content";
 
-export function RepositoryMarkdownContent({
-	content,
-	path,
-	branchId,
-	commitId,
-	className,
-}: {
+type Props = {
 	readonly content: string;
 	readonly path: string;
 	readonly branchId: string;
 	readonly commitId?: string;
 	readonly className?: string;
-}) {
+};
+
+export function RepositoryMarkdownContent(props: Props) {
+	const { connected, navigation } = useAtelierRenderContext();
+	return connected && !navigation?.fileHref ? (
+		<ConnectedMarkdownContent {...props} />
+	) : (
+		<RepositoryMarkdownBody {...props} />
+	);
+}
+
+/** A standalone AtelierFile has a client, but no host-provided media URLs.
+ * Resolve its images with the same loader used by the interactive editor. */
+function ConnectedMarkdownContent(props: Props) {
+	const lix = useLix();
+	const { content, path, branchId, commitId } = props;
+	const key = JSON.stringify([content, path, branchId, commitId]);
+	const [assets, setAssets] = useState<{
+		key: string;
+		sources: Record<string, string>;
+	}>();
+	useEffect(() => {
+		let active = true;
+		const owned: LoadedMarkdownAsset[] = [];
+		const sources = new Set<string>();
+		const visit = (node: {
+			type: string;
+			attrs?: Record<string, unknown>;
+			content?: readonly unknown[];
+		}) => {
+			if (
+				(node.type === "image" || node.type === "imageBlock") &&
+				typeof node.attrs?.src === "string" &&
+				!/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(node.attrs.src)
+			)
+				sources.add(node.attrs.src);
+			for (const child of node.content ?? [])
+				visit(child as Parameters<typeof visit>[0]);
+		};
+		visit(astToTiptapDoc(parseMarkdown(content)));
+		void Promise.all(
+			[...sources].map(async (src) => {
+				try {
+					const asset = await loadMarkdownAsset({
+						lix,
+						sourceFilePath: path,
+						sourceCommitId: commitId,
+						src,
+					});
+					if (!asset) return null;
+					if (!active) {
+						asset.dispose?.();
+						return null;
+					}
+					owned.push(asset);
+					return [src, asset.src] as const;
+				} catch {
+					return null;
+				}
+			}),
+		).then((entries) => {
+			if (active)
+				setAssets({
+					key,
+					sources: Object.fromEntries(
+						entries.filter((entry) => entry !== null),
+					),
+				});
+		});
+		return () => {
+			active = false;
+			for (const asset of owned) asset.dispose?.();
+		};
+	}, [lix, content, path, commitId, key]);
+	return (
+		<RepositoryMarkdownBody
+			{...props}
+			assetSources={assets?.key === key ? assets.sources : undefined}
+		/>
+	);
+}
+
+function RepositoryMarkdownBody({
+	content,
+	path,
+	branchId,
+	commitId,
+	className,
+	assetSources,
+}: Props & { assetSources?: Record<string, string> }) {
 	const { navigation, initialState } = useAtelierRenderContext();
 	// A prepared document may remain visible while another tab or revision
 	// loads. Only borrow the snapshot epoch if it contains this exact document.
@@ -43,7 +134,7 @@ export function RepositoryMarkdownContent({
 			src={(src) => {
 				if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(src)) return src;
 				const target = documentLinkPath(src, path);
-				if (!target || !navigation?.fileHref) return undefined;
+				if (!target || !navigation?.fileHref) return assetSources?.[src];
 				const destination = navigation.fileHref({
 					path: target,
 					branchId,

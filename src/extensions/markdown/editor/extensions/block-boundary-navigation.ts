@@ -12,7 +12,9 @@ function isAtomicOnlyTextblock(node: any): boolean {
 		if (
 			!child.isInline ||
 			!child.isAtom ||
-			(child.type.name !== "image" && child.type.name !== "markdownInlineHtml")
+			(child.type.name !== "image" &&
+				child.type.name !== "footnoteRef" &&
+				child.type.name !== "markdownInlineHtml")
 		) {
 			return false;
 		}

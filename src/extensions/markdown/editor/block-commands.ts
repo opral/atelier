@@ -11,6 +11,7 @@ import {
 	Paperclip,
 	Pilcrow,
 	Smile,
+	Superscript,
 	Table,
 	TextQuote,
 } from "lucide-react";
@@ -246,6 +247,17 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 				editor.chain().focus().wrapIn("blockquote").run();
 			}
 		},
+	},
+	{
+		id: "footnote",
+		label: "Footnote",
+		description: "Marker here, note at the end",
+		icon: Superscript,
+		keywords: ["footnote", "note", "citation", "source", "reference", "[^"],
+		insert: (editor) => {
+			editor.chain().focus().insertFootnote().run();
+		},
+		isAvailable: (editor) => editor.can().insertFootnote(),
 	},
 	{
 		id: "horizontalRule",

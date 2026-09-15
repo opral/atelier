@@ -33,6 +33,7 @@ const SHORTCUT_KEY_LABELS = {
 	orderedList: "⇧7",
 	bulletList: "⇧8",
 	taskList: "⇧9",
+	footnote: "⌥F",
 } as const;
 
 export type ToolbarShortcut = keyof typeof SHORTCUT_KEY_LABELS;

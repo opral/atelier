@@ -9,6 +9,7 @@ import type {
 import type { PdfPreviewRenderer } from "@/extensions/pdf/pdf-preview";
 import { BlockBoundaryNavigationExtension } from "../extensions/block-boundary-navigation";
 import { MarkdownDropIndicatorExtension } from "../extensions/markdown-drop-indicator";
+import { FootnoteNavigationExtension } from "../extensions/footnote-navigation";
 
 export type MarkdownWcOptions = {
 	readonly idProvider?: () => string;
@@ -67,5 +68,6 @@ export function MarkdownWc(opts?: MarkdownWcOptions): Extensions {
 		MarkdownWcShortcuts,
 		BlockBoundaryNavigationExtension,
 		MarkdownDropIndicatorExtension,
+		FootnoteNavigationExtension,
 	];
 }

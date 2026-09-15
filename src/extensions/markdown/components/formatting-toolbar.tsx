@@ -21,6 +21,7 @@ import {
 	ListChecks,
 	ListOrdered,
 	Strikethrough,
+	Superscript,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
@@ -252,6 +253,10 @@ export function FormattingToolbar({
 		editor.chain().focus().toggleMark("strike").run();
 	}, [editor]);
 
+	const handleInsertFootnote = useCallback(() => {
+		if (!editor) return;
+		editor.chain().focus().insertFootnote().run();
+	}, [editor]);
 	const handleToggleCode = useCallback(() => {
 		if (!editor) return;
 		editor.chain().focus().toggleMark("code").run();
@@ -485,6 +490,17 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								triggerDataAttr="markdown-format-link"
 							/>
+
+							<ToolbarIconButton
+								label="Footnote"
+								tooltip="Insert footnote"
+								shortcut="footnote"
+								onClick={handleInsertFootnote}
+								portalContainer={portalContainer}
+								data-attr="markdown-format-footnote"
+							>
+								<Superscript className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
 
 							<ToolbarSeparator />
 

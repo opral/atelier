@@ -121,6 +121,17 @@ test("a document renders without a diff for the read side", () => {
 	expect(html).toBe("<h1>Acme</h1><p>One company. One shared repository.</p>");
 });
 
+test("a footnote is a marker and a definition, not raw source", () => {
+	const html = renderMarkdownDocument(
+		"Claim.[^1]\n\n[^1]: Guru. [Knowledge platform](https://www.getguru.com/). Undated.\n",
+	);
+	expect(html).toContain('<sup class="md-footnote-ref">[1]</sup>');
+	expect(html).toContain('<span class="md-footnote-def-label">[1]</span>');
+	expect(html).toContain("Knowledge platform</a>. Undated.");
+	expect(html).not.toContain("[^1]");
+	expect(html).not.toContain("md-diff-raw");
+});
+
 test("markup in a document is text, and only navigable links survive", () => {
 	const diff = renderMarkdownDiff({
 		beforeMarkdown: "Plain.\n",
