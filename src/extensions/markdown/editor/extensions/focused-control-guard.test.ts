@@ -102,6 +102,15 @@ describe("focused control guard", () => {
 		}
 	});
 
+	test("the clipboard is refused at a control too", () => {
+		const editor = mountEditor("A paragraph worth keeping.\n");
+		focusControlInside(editor);
+		for (const name of ["paste", "cut"]) {
+			const event = new Event(name, { bubbles: true, cancelable: true });
+			expect(offerToTheEditor(editor, event)).toBe(true);
+		}
+	});
+
 	test("undo and the app's own chords still pass through", () => {
 		const editor = mountEditor("A paragraph worth keeping.\n");
 		focusControlInside(editor);

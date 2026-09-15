@@ -22,9 +22,9 @@ export const FocusedControlGuardExtension = Extension.create({
 				props: {
 					// These run before ProseMirror's own handlers for the same
 					// events and, by answering true, take their place. Stopping
-					// the keydown is what matters: it is also what keeps the
-					// browser from raising the keypress that ProseMirror writes
-					// the character from.
+					// the keydown is what matters most: it is also what keeps
+					// the browser from raising the keypress that ProseMirror
+					// writes the character from.
 					handleDOMEvents: {
 						keydown: (view, event) => {
 							if (!focusIsOnEditorControl(view)) return false;
@@ -42,6 +42,12 @@ export const FocusedControlGuardExtension = Extension.create({
 							focusIsOnEditorControl(view) && editsTheDocument(event),
 						beforeinput: (view, event) =>
 							focusIsOnEditorControl(view) && rewritesTheDocument(event),
+						// The clipboard is the same key pressed at the same
+						// control: a paste aimed at a video landed in the
+						// document at a caret nobody could see, and a cut took
+						// from there.
+						paste: (view) => focusIsOnEditorControl(view),
+						cut: (view) => focusIsOnEditorControl(view),
 					},
 				},
 			}),
