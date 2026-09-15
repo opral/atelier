@@ -930,6 +930,104 @@ describe("ExternalWriteReviewControls", () => {
 		expect(exit).toHaveBeenCalledOnce();
 	});
 
+	test("an open menu takes the keyboard: focus, arrows, Escape back to the trigger", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3 }}
+				files={THREE_FILES}
+				onUndo={vi.fn(async () => {})}
+				onPrimary={vi.fn(async () => {})}
+			/>,
+		);
+		const trigger = screen.getByRole("button", { name: "More undo options" });
+		fireEvent.click(trigger);
+
+		const menu = screen.getByRole("menu", { name: "Undo options" });
+		const items = screen.getAllByRole("menuitem");
+		expect(items).toHaveLength(2);
+		// Opening moves the keyboard in, and Tab cannot wander into the items:
+		// they sit before the whole button row in the DOM.
+		expect(items[0]).toHaveFocus();
+		for (const item of items) expect(item).toHaveAttribute("tabindex", "-1");
+
+		fireEvent.keyDown(menu, { key: "ArrowDown" });
+		expect(items[1]).toHaveFocus();
+		fireEvent.keyDown(menu, { key: "Home" });
+		expect(items[0]).toHaveFocus();
+		fireEvent.keyDown(menu, { key: "End" });
+		expect(items[1]).toHaveFocus();
+		fireEvent.keyDown(menu, { key: "ArrowUp" });
+		expect(items[0]).toHaveFocus();
+
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("menu")).toBeNull();
+		expect(trigger).toHaveFocus();
+	});
+
+	test("focus leaving an open menu closes it", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3 }}
+				files={THREE_FILES}
+				onPrimary={vi.fn(async () => {})}
+			/>,
+		);
+		const trigger = screen.getByRole("button", {
+			name: "More checkpoint options",
+		});
+		fireEvent.click(trigger);
+		const menu = screen.getByRole("menu", { name: "Checkpoint options" });
+		const elsewhere = screen.getByRole("button", { name: "Checkpoint" });
+
+		// Focus landing back on the trigger is the trigger's own click; the
+		// menu must survive it long enough for the toggle to decide.
+		fireEvent.blur(menu, { relatedTarget: trigger });
+		expect(
+			screen.getByRole("menu", { name: "Checkpoint options" }),
+		).toBeVisible();
+
+		fireEvent.blur(menu, { relatedTarget: elsewhere });
+		expect(screen.queryByRole("menu")).toBeNull();
+	});
+
+	test("an open menu follows its trigger when the float is resized", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3 }}
+				files={THREE_FILES}
+				onPrimary={vi.fn(async () => {})}
+			/>,
+		);
+		// jsdom reports zero-sized rects, so drive the geometry directly: the
+		// trigger's split moves 120px right, and the menu must follow.
+		const root = document.querySelector(
+			".external-write-review-actions",
+		) as HTMLElement;
+		const split = document.querySelector(
+			".external-write-review-split-accept",
+		) as HTMLElement;
+		const rect = (left: number, right: number) =>
+			({ left, right, width: right - left }) as DOMRect;
+		root.getBoundingClientRect = () => rect(0, 600);
+		split.getBoundingClientRect = () => rect(400, 500);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "More checkpoint options" }),
+		);
+		const menu = screen.getByRole("menu", { name: "Checkpoint options" });
+		expect(menu.style.marginLeft).toBe("500px");
+
+		split.getBoundingClientRect = () => rect(280, 380);
+		fireEvent(window, new Event("resize"));
+		expect(menu.style.marginLeft).toBe("380px");
+	});
+
 	test("a shell-level Escape fallback stands down while the float owns the key", () => {
 		const exit = vi.fn();
 		const fallback = vi.fn();

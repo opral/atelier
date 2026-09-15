@@ -7,6 +7,8 @@ import {
 	useRef,
 	useState,
 	type CSSProperties,
+	type FocusEvent as ReactFocusEvent,
+	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
 } from "react";
 import {
@@ -166,7 +168,33 @@ export function ExternalWriteReviewControls({
 	const chipRef = useRef<HTMLButtonElement | null>(null);
 	const primarySplitRef = useRef<HTMLDivElement | null>(null);
 	const undoSplitRef = useRef<HTMLDivElement | null>(null);
+	const primaryMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+	const undoMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 	const menuRef = useRef<HTMLDivElement | null>(null);
+	// The control a menu belongs to: what opened it, and where Escape puts
+	// the keyboard back.
+	const menuTrigger = useCallback(
+		(menu: OpenMenu): HTMLButtonElement | null =>
+			menu === "list"
+				? chipRef.current
+				: menu === "primary"
+					? primaryMenuButtonRef.current
+					: menu === "undo"
+						? undoMenuButtonRef.current
+						: null,
+		[],
+	);
+	const menuItems = useCallback(
+		(): readonly HTMLButtonElement[] =>
+			menuRef.current
+				? Array.from(
+						menuRef.current.querySelectorAll<HTMLButtonElement>(
+							"button:not([disabled])",
+						),
+					)
+				: [],
+		[],
+	);
 
 	// The file on screen joins the seen set; nothing ever leaves it.
 	useEffect(() => {
@@ -372,9 +400,12 @@ export function ExternalWriteReviewControls({
 			event.stopPropagation();
 			event.stopImmediatePropagation();
 			// The chip still shows the selection after the list closes, so
-			// closing does not reset it — no hidden state either way.
+			// closing does not reset it — no hidden state either way. The
+			// keyboard goes back to the control the menu belongs to.
 			if (openMenu) {
+				const trigger = menuTrigger(openMenu);
 				setOpenMenu(null);
+				trigger?.focus({ preventScroll: true });
 				return;
 			}
 			onExit?.();
@@ -403,7 +434,7 @@ export function ExternalWriteReviewControls({
 			window.removeEventListener("keydown", handleKeyDown, { capture: true });
 			window.removeEventListener("keydown", handleEscape);
 		};
-	}, [isActive, onExit, openMenu, runPrimary, runUndo, showUndo]);
+	}, [isActive, menuTrigger, onExit, openMenu, runPrimary, runUndo, showUndo]);
 
 	useEffect(() => {
 		if (!openMenu) return;
@@ -417,9 +448,54 @@ export function ExternalWriteReviewControls({
 		};
 	}, [openMenu]);
 
+	// An open menu takes the keyboard, the way a menu owes it: focus lands on
+	// the first item it can act on, so ↑ ↓ Home End have somewhere to move
+	// from and Escape somewhere to return to. A menu whose items are all
+	// disabled still takes focus, so letting it go still closes it.
+	useEffect(() => {
+		if (!openMenu) return;
+		const [firstItem] = menuItems();
+		(firstItem ?? menuRef.current)?.focus({ preventScroll: true });
+	}, [menuItems, openMenu]);
+
+	const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (event.defaultPrevented || event.metaKey || event.ctrlKey) return;
+		const items = menuItems();
+		if (items.length === 0) return;
+		const focused = (document.activeElement ??
+			(event.target as HTMLElement)) as HTMLElement;
+		const current = items.indexOf(
+			focused.closest("button") as HTMLButtonElement,
+		);
+		const focusItem = (index: number) => {
+			event.preventDefault();
+			event.stopPropagation();
+			items[(index + items.length) % items.length]?.focus({
+				preventScroll: true,
+			});
+		};
+		if (event.key === "ArrowDown") focusItem(current + 1);
+		else if (event.key === "ArrowUp") focusItem(current - 1);
+		else if (event.key === "Home") focusItem(0);
+		else if (event.key === "End") focusItem(items.length - 1);
+	};
+
+	// Focus leaving for anywhere but the menu's own trigger closes it: Tab
+	// must not walk off and leave a menu hanging over the workspace. The
+	// trigger is spared because clicking it focuses it before its own toggle
+	// runs, and a close here would turn that click into a reopen.
+	const handleMenuFocusOut = (event: ReactFocusEvent<HTMLDivElement>) => {
+		const next = event.relatedTarget as Node | null;
+		if (next && menuRef.current?.contains(next)) return;
+		if (next && menuTrigger(openMenu)?.contains(next)) return;
+		setOpenMenu(null);
+	};
+
 	// Each menu belongs to its control: the checklist shares the chip's left
-	// edge, a verb menu shares its split button's right edge.
-	useLayoutEffect(() => {
+	// edge, a verb menu shares its split button's right edge. The float is
+	// centred and its button row re-lays out at container breakpoints, so a
+	// resize moves the trigger out from under a menu that is already open.
+	const positionMenu = useCallback(() => {
 		if (!openMenu) return;
 		const menu = menuRef.current;
 		const root = rootRef.current;
@@ -438,6 +514,25 @@ export function ExternalWriteReviewControls({
 				: anchorRect.right - rootLeft - menu.getBoundingClientRect().width;
 		menu.style.marginLeft = `${Math.max(offset, 0)}px`;
 	}, [openMenu]);
+
+	useLayoutEffect(() => {
+		if (!openMenu) return;
+		positionMenu();
+		const root = rootRef.current;
+		// The window's own resize is not the whole story: the float's button
+		// row answers container queries, so the trigger also moves when the
+		// float itself changes width.
+		const observer =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(() => positionMenu());
+		if (root) observer?.observe(root);
+		window.addEventListener("resize", positionMenu);
+		return () => {
+			observer?.disconnect();
+			window.removeEventListener("resize", positionMenu);
+		};
+	}, [openMenu, positionMenu]);
 
 	const verb = PRIMARY_VERBS[mode];
 	const fileCount = navigation?.fileCount ?? listFiles.length;
@@ -502,16 +597,21 @@ export function ExternalWriteReviewControls({
 			tabIndex={-1}
 		>
 			{openMenu === "list" && hasScopeChip ? (
+				// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The picker owns arrow navigation over the checkboxes it groups, the way the two verb menus do; activation stays native to each row.
 				<div
 					id={listId}
 					ref={menuRef}
 					role="group"
 					aria-label="Files in the working set"
 					className="external-write-review-menu"
+					tabIndex={-1}
+					onKeyDown={handleMenuKeyDown}
+					onBlur={handleMenuFocusOut}
 				>
 					<button
 						type="button"
 						role="checkbox"
+						tabIndex={-1}
 						aria-checked={
 							allTicked ? "true" : tickedFiles.length > 0 ? "mixed" : "false"
 						}
@@ -544,6 +644,7 @@ export function ExternalWriteReviewControls({
 								key={file.id}
 								type="button"
 								role="checkbox"
+								tabIndex={-1}
 								data-testid={`diff-scope-file:${file.id}`}
 								data-file-id={file.id}
 								aria-checked={ticked}
@@ -588,10 +689,14 @@ export function ExternalWriteReviewControls({
 					role="menu"
 					aria-label={`${verb.label} options`}
 					className="external-write-review-menu external-write-review-verb-menu"
+					tabIndex={-1}
+					onKeyDown={handleMenuKeyDown}
+					onBlur={handleMenuFocusOut}
 				>
 					<button
 						type="button"
 						role="menuitem"
+						tabIndex={-1}
 						data-attr="diff-primary-all"
 						disabled={readOnly || isCommitting}
 						onClick={() => void runPrimary("all")}
@@ -611,10 +716,14 @@ export function ExternalWriteReviewControls({
 					role="menu"
 					aria-label="Undo options"
 					className="external-write-review-menu external-write-review-verb-menu"
+					tabIndex={-1}
+					onKeyDown={handleMenuKeyDown}
+					onBlur={handleMenuFocusOut}
 				>
 					<button
 						type="button"
 						role="menuitem"
+						tabIndex={-1}
 						data-attr="diff-undo-file"
 						disabled={readOnly || isCommitting || !activeFileId}
 						onClick={() => void runUndo("file")}
@@ -627,6 +736,7 @@ export function ExternalWriteReviewControls({
 					<button
 						type="button"
 						role="menuitem"
+						tabIndex={-1}
 						data-attr="diff-undo-all"
 						disabled={readOnly || isCommitting}
 						onClick={() => void runUndo("all")}
@@ -789,6 +899,7 @@ export function ExternalWriteReviewControls({
 						{showVerbArrows ? (
 							<button
 								type="button"
+								ref={undoMenuButtonRef}
 								className="external-write-review-split-arrow"
 								aria-label="More undo options"
 								aria-haspopup="menu"
@@ -836,6 +947,7 @@ export function ExternalWriteReviewControls({
 						{showVerbArrows ? (
 							<button
 								type="button"
+								ref={primaryMenuButtonRef}
 								className="external-write-review-split-arrow"
 								aria-label={`More ${verb.label.toLowerCase()} options`}
 								aria-haspopup="menu"
