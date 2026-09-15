@@ -31,7 +31,18 @@ import {
 	TipTapEditor,
 } from "@/extensions/markdown/editor/tip-tap-editor";
 import { EditorContent } from "@tiptap/react";
-import { createEditor } from "@/extensions/markdown/editor/create-editor";
+import {
+	createEditor,
+	createMarkdownEditorOriginKey,
+} from "@/extensions/markdown/editor/create-editor";
+import {
+	createMarkdownFrontmatterWriter,
+	differsOnlyInFrontmatter,
+} from "@/extensions/markdown/editor/frontmatter-file";
+import {
+	MarkdownFrontmatterEditingContext,
+	type MarkdownFrontmatterEditing,
+} from "@/extensions/markdown/editor/frontmatter-editing-context";
 import { useTitleDrivenFileRename } from "@/extensions/markdown/editor/use-title-driven-rename";
 import type { EmptyMarkdownDefaultBlock } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
 import { MarkdownReviewEditor } from "./review/review-editor";
@@ -106,6 +117,11 @@ type HistoricalMarkdownFile = {
 };
 
 const EMPTY_FILE_DATA = new Uint8Array();
+
+const PAST_REVISION_FRONTMATTER: MarkdownFrontmatterEditing = {
+	kind: "readOnly",
+	reason: "Past revision — read-only",
+};
 
 /**
  * Embeds the shared TipTap editor to render Markdown documents.
@@ -349,16 +365,30 @@ function MarkdownLiveViewLoaded({
 				}
 			: null;
 	const isReviewing = review !== null;
-	// Both sides come from the certified working epoch, never from a newer live row.
+	const epochAfterMarkdown =
+		!reviewBase.loading && reviewBase.afterData
+			? decodeFileDataToText(reviewBase.afterData)
+			: "";
+	const liveMarkdown =
+		reviewing && fileRow ? decodeFileDataToText(fileRow.content) : "";
+	// Both sides come from the certified working epoch, never from a newer live
+	// row — except in the frontmatter, which this surface writes to the file
+	// while the review is open. The epoch froze the property the panel has
+	// since replaced, and a diff must never show a value no revision holds.
+	const afterMarkdown = useMemo(
+		() =>
+			differsOnlyInFrontmatter(epochAfterMarkdown, liveMarkdown)
+				? liveMarkdown
+				: epochAfterMarkdown,
+		[epochAfterMarkdown, liveMarkdown],
+	);
 	const reviewDiff: MarkdownReviewDiff | null =
 		review && effectiveFileRow && !reviewBase.loading && !reviewBase.error
 			? {
 					beforeMarkdown: reviewBase.data
 						? decodeFileDataToText(reviewBase.data)
 						: "",
-					afterMarkdown: reviewBase.afterData
-						? decodeFileDataToText(reviewBase.afterData)
-						: "",
+					afterMarkdown,
 				}
 			: null;
 	const [liveEditorState, setLiveEditorState] = useState<{
@@ -398,6 +428,27 @@ function MarkdownLiveViewLoaded({
 		};
 	}
 	const editorSourcePath = editorPathRef.current.path;
+	const frontmatterOriginKey = useMemo(
+		() => createMarkdownEditorOriginKey(),
+		[],
+	);
+	const writeFrontmatter = useMemo(
+		() =>
+			createMarkdownFrontmatterWriter({
+				lix,
+				fileId,
+				originKey: frontmatterOriginKey,
+			}),
+		[fileId, frontmatterOriginKey, lix],
+	);
+	// Frontmatter is a property panel, and a property panel keeps what it is
+	// given. Under a review the document on screen is a diff projection that
+	// cannot be serialized back, so the property goes to the file directly.
+	const frontmatterEditing = useMemo<MarkdownFrontmatterEditing>(() => {
+		if (readOnly) return { kind: "readOnly", reason: "Read-only" };
+		if (!reviewLocked) return { kind: "document" };
+		return { kind: "file", write: writeFrontmatter };
+	}, [readOnly, reviewLocked, writeFrontmatter]);
 	useTitleDrivenFileRename({
 		lix,
 		fileId: effectiveFileRow?.id,
@@ -424,91 +475,96 @@ function MarkdownLiveViewLoaded({
 		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
 	} else {
 		content = (
-			<EditorProvider>
-				<div
-					className={`markdown-view flex h-full flex-col bg-background ${
-						reviewLocked ? "markdown-review" : ""
-					}`}
-				>
-					{!readOnly && <FormattingToolbar disabled={editorReadOnly} />}
-					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
-						<TipTapEditor
-							className="h-full"
-							fileId={effectiveFileRow.id}
-							activeBranchId={activeBranchId}
-							filePath={editorSourcePath ?? effectiveFileRow.path}
-							isActiveView={isActiveView}
-							focusOnLoad={focusOnLoad}
-							defaultBlock={defaultBlock}
-							readOnly={editorReadOnly}
-							suspendExternalSync={reviewLocked}
-							additionalExtensions={MarkdownReviewExtensions}
-							onReady={(editor) => {
-								setLiveEditorState({ fileId: effectiveFileRow.id, editor });
-							}}
-							onDispose={(editor) => {
-								setLiveEditorState((current) =>
-									current?.editor === editor ? null : current,
-								);
-							}}
-							openWorkspaceFile={openWorkspaceFile}
-							onPersist={({ filePath: persistedPath }) => {
-								const resolvedPath = persistedPath ?? effectiveFileRow.path;
-								onDocumentModified?.(resolvedPath);
-							}}
-						/>
-						{!readOnly && review && reviewDiff && liveEditor ? (
-							<MarkdownLiveReviewController
+			<MarkdownFrontmatterEditingContext.Provider value={frontmatterEditing}>
+				<EditorProvider>
+					<div
+						className={`markdown-view flex h-full flex-col bg-background ${
+							reviewLocked ? "markdown-review" : ""
+						}`}
+					>
+						{!readOnly && <FormattingToolbar disabled={editorReadOnly} />}
+						<div
+							className="relative min-h-0 flex-1"
+							data-attr="markdown-editor"
+						>
+							<TipTapEditor
+								className="h-full"
 								fileId={effectiveFileRow.id}
-								sourceFilePath={effectiveFileRow.path}
-								editor={liveEditor}
-								review={review}
-								reviewDiff={reviewDiff}
-								reviewId={review.reviewId}
-								beforeCommitId={review.beforeCommitId}
-								afterCommitId={review.afterCommitId}
+								activeBranchId={activeBranchId}
+								filePath={editorSourcePath ?? effectiveFileRow.path}
+								isActiveView={isActiveView}
+								focusOnLoad={focusOnLoad}
+								defaultBlock={defaultBlock}
+								readOnly={editorReadOnly}
+								suspendExternalSync={reviewLocked}
+								additionalExtensions={MarkdownReviewExtensions}
+								onReady={(editor) => {
+									setLiveEditorState({ fileId: effectiveFileRow.id, editor });
+								}}
+								onDispose={(editor) => {
+									setLiveEditorState((current) =>
+										current?.editor === editor ? null : current,
+									);
+								}}
 								openWorkspaceFile={openWorkspaceFile}
-								isActive={isActiveView && isPanelFocused}
-								onDiffAccept={onDiffAccept}
-								onDiffReject={onDiffReject}
-								onDiffResolve={onDiffResolve}
-								autoAccept={autoAcceptReviews}
-								onCompletionStart={() => {
-									setFinishingReview({
-										fileId: effectiveFileRow.id,
-										reviewId: review.reviewId,
-										review,
-									});
-								}}
-								onCompletionSuccess={(markdown) => {
-									hydrateMarkdownEditorAuthoritativeMarkdown(
-										liveEditor,
-										markdown,
-										defaultBlock,
-									);
-									setFinishingReview((current) =>
-										current?.reviewId === review.reviewId ? null : current,
-									);
-								}}
-								onCompletionFailure={() => {
-									setFinishingReview((current) =>
-										current?.reviewId === review.reviewId ? null : current,
-									);
+								onPersist={({ filePath: persistedPath }) => {
+									const resolvedPath = persistedPath ?? effectiveFileRow.path;
+									onDocumentModified?.(resolvedPath);
 								}}
 							/>
-						) : null}
+							{!readOnly && review && reviewDiff && liveEditor ? (
+								<MarkdownLiveReviewController
+									fileId={effectiveFileRow.id}
+									sourceFilePath={effectiveFileRow.path}
+									editor={liveEditor}
+									review={review}
+									reviewDiff={reviewDiff}
+									reviewId={review.reviewId}
+									beforeCommitId={review.beforeCommitId}
+									afterCommitId={review.afterCommitId}
+									openWorkspaceFile={openWorkspaceFile}
+									isActive={isActiveView && isPanelFocused}
+									onDiffAccept={onDiffAccept}
+									onDiffReject={onDiffReject}
+									onDiffResolve={onDiffResolve}
+									autoAccept={autoAcceptReviews}
+									onCompletionStart={() => {
+										setFinishingReview({
+											fileId: effectiveFileRow.id,
+											reviewId: review.reviewId,
+											review,
+										});
+									}}
+									onCompletionSuccess={(markdown) => {
+										hydrateMarkdownEditorAuthoritativeMarkdown(
+											liveEditor,
+											markdown,
+											defaultBlock,
+										);
+										setFinishingReview((current) =>
+											current?.reviewId === review.reviewId ? null : current,
+										);
+									}}
+									onCompletionFailure={() => {
+										setFinishingReview((current) =>
+											current?.reviewId === review.reviewId ? null : current,
+										);
+									}}
+								/>
+							) : null}
+						</div>
+						{editorReadOnly ? null : (
+							<>
+								<SelectionToolbar />
+								<SlashCommandMenu />
+								<EmojiPickerMenu />
+								<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
+								<MentionMenu sourceFilePath={effectiveFileRow.path} />
+							</>
+						)}
 					</div>
-					{editorReadOnly ? null : (
-						<>
-							<SelectionToolbar />
-							<SlashCommandMenu />
-							<EmojiPickerMenu />
-							<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
-							<MentionMenu sourceFilePath={effectiveFileRow.path} />
-						</>
-					)}
-				</div>
-			</EditorProvider>
+				</EditorProvider>
+			</MarkdownFrontmatterEditingContext.Provider>
 		);
 	}
 
@@ -780,7 +836,15 @@ function MarkdownHistoricalViewResolved({
 		);
 	}
 
-	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
+	// Every document here is a past commit: a property panel that took an edit
+	// would be writing to a revision nothing can write.
+	return (
+		<MarkdownFrontmatterEditingContext.Provider
+			value={PAST_REVISION_FRONTMATTER}
+		>
+			<div className="flex min-h-0 flex-1 flex-col">{content}</div>
+		</MarkdownFrontmatterEditingContext.Provider>
+	);
 }
 
 function MarkdownSnapshotView({

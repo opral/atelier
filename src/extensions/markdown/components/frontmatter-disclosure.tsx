@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { Editor } from "@tiptap/core";
 import { PanelTopDashed } from "lucide-react";
+import { useMarkdownFrontmatterDisabled } from "../editor/frontmatter-editing-context";
 
 type DisclosurePosition = {
 	readonly left: number;
@@ -20,6 +21,7 @@ export function FrontmatterDisclosure({
 	readonly editor: Editor;
 	readonly surfaceRef: RefObject<HTMLDivElement | null>;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const [position, setPosition] = useState<DisclosurePosition | null>(null);
 	const [visible, setVisible] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -157,7 +159,9 @@ export function FrontmatterDisclosure({
 		};
 	}, [cancelHide, editor, hideSoon, show, surfaceRef]);
 
-	if (!position) return null;
+	// A surface that keeps no property edit has no business offering to start
+	// one: the block it added would exist on screen and in no revision.
+	if (!position || disabled) return null;
 
 	return (
 		<button

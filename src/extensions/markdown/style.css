@@ -743,12 +743,50 @@
 		line-height: 1.35;
 	}
 
+	/* A revision takes no edits, and its fields read as fields, not as inputs:
+	   no hover affordance, no caret, and the values still plainly legible. */
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-input:disabled,
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-tag:disabled {
+		color: var(--color-text-secondary);
+		-webkit-text-fill-color: var(--color-text-secondary);
+		cursor: default;
+		opacity: 1;
+	}
+
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-key-cell:hover,
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-value:hover,
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-boolean:hover,
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tags:hover,
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-nested:hover {
+		background: transparent;
+	}
+
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tag svg {
+		width: 0;
+		opacity: 0;
+	}
+
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-remove {
+		display: none;
+	}
+
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-yaml {
+		cursor: default;
+	}
+
 	@media (max-width: 700px) {
 		.markdown-frontmatter-header {
 			align-items: flex-start;
 		}
 
-		.markdown-frontmatter-title span {
+		/* The note that says why a field cannot be edited stays; it is the
+		   answer to the question a disabled field asks. */
+		.markdown-frontmatter-title span:not(.markdown-frontmatter-note) {
 			display: none;
 		}
 
@@ -1057,7 +1095,10 @@
 		text-underline-offset: 2px;
 	}
 
-	.markdown-view .ProseMirror .markdown-footnote-ref--orphan .markdown-footnote-ref-link {
+	.markdown-view
+		.ProseMirror
+		.markdown-footnote-ref--orphan
+		.markdown-footnote-ref-link {
 		color: var(--color-text-tertiary);
 		text-decoration: underline dashed;
 		text-underline-offset: 2px;
@@ -1112,7 +1153,11 @@
 	   deepening as the scroll came to rest, which cost most of the moment the
 	   tint exists for. */
 	.markdown-view .ProseMirror .markdown-footnote-target {
-		background-color: color-mix(in srgb, var(--color-text-link) 14%, transparent);
+		background-color: color-mix(
+			in srgb,
+			var(--color-text-link) 14%,
+			transparent
+		);
 		transition-duration: 120ms;
 		transition-timing-function: ease-out;
 	}

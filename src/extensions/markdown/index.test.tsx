@@ -1,5 +1,12 @@
 import { Suspense } from "react";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
@@ -1072,6 +1079,167 @@ describe("MarkdownView", () => {
 			expect(await screen.findByText(/file not found/i)).toBeInTheDocument();
 			expect(screen.queryByText(/unable to render atelier/i)).toBeNull();
 			expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("a frontmatter property edited in a working review reaches the file and is still there on the way back", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		const fileId = fakeUuid("file_review_frontmatter");
+		const before = "---\ntitle: Fixture\n---\n\n# Fixture\n\nBody.\n";
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/properties.md",
+				content: new TextEncoder().encode(before),
+			})
+			.execute();
+		await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({
+				content: new TextEncoder().encode(before.replace("Body.", "Edited.")),
+			})
+			.where("id", "=", fileId)
+			.execute();
+		const epoch = await selectWorkingFileDiffSnapshot(lix);
+		const fileMarkdown = async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirstOrThrow();
+			return new TextDecoder().decode(row.content as Uint8Array);
+		};
+		const reviewingMarkdown = () => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath="/properties.md"
+						activeBranchId={activeBranchId}
+						diffSession={{
+							base: { commitId: epoch.beforeCommitId },
+							target: { working: true },
+							files: [
+								{
+									id: fileId,
+									path: "/properties.md",
+									changeKind: "modified",
+									workingEpoch: {
+										beforeCommitId: epoch.beforeCommitId,
+										afterCommitId: epoch.afterCommitId,
+									},
+									review: { id: "review-properties", status: "pending" },
+								},
+							],
+							activePath: "/properties.md",
+							capabilities: { checkpoint: true, undo: true, restore: false },
+						}}
+						autoAcceptReviews
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(reviewingMarkdown());
+			});
+
+			const title = await screen.findByLabelText("title value");
+			// The document is read-only, the property panel is not.
+			expect(
+				screen.getByTestId("tiptap-editor").querySelector(".ProseMirror"),
+			).toHaveAttribute("contenteditable", "false");
+			expect(title).toBeEnabled();
+
+			await act(async () => {
+				fireEvent.change(title, { target: { value: "Renamed in review" } });
+			});
+			await waitFor(async () => {
+				expect(await fileMarkdown()).toContain("title: Renamed in review");
+			});
+			// The edit is a property edit: the body under it is untouched.
+			expect(await fileMarkdown()).toContain("Edited.");
+
+			// Leave the file and come back. The review epoch froze the property
+			// before the write, so the panel must read the file, not the freeze.
+			await act(async () => utils?.unmount());
+			await act(async () => {
+				utils = render(reviewingMarkdown());
+			});
+			await waitFor(() =>
+				expect(screen.getByLabelText("title value")).toHaveValue(
+					"Renamed in review",
+				),
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("a past revision disables its frontmatter fields and says why", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_revision_frontmatter");
+		const snapshot = "---\ntitle: Fixture\n---\n\n# Fixture\n";
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/revision.md",
+				content: new TextEncoder().encode(snapshot),
+			})
+			.execute();
+		const snapshotCommitId = await activeCommitId(lix);
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/revision.md"
+								afterCommitId={snapshotCommitId}
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const title = await screen.findByLabelText("title value");
+			expect(title).toBeDisabled();
+			expect(
+				screen.getByLabelText("Frontmatter field name: title"),
+			).toBeDisabled();
+			expect(
+				screen.queryByRole("button", { name: /add property/i }),
+			).not.toBeInTheDocument();
+			expect(utils!.container).toHaveTextContent("Past revision — read-only");
+
+			await act(async () => {
+				fireEvent.change(title, { target: { value: "Nowhere to land" } });
+			});
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirstOrThrow();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				snapshot,
+			);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

@@ -25,6 +25,10 @@ import {
 	stringifyFrontmatterValue,
 	type FrontmatterRecord,
 } from "../editor/frontmatter-value";
+import {
+	useMarkdownFrontmatterDisabled,
+	useMarkdownFrontmatterEditing,
+} from "../editor/frontmatter-editing-context";
 
 type FrontmatterMode = "fields" | "yaml";
 
@@ -120,6 +124,7 @@ function FieldKeyInput({
 	readonly ariaLabel: string;
 	readonly onCommit: (value: string) => void;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const [draft, setDraft] = useState(value);
 	const commit = () => {
 		const requested = draft.trim();
@@ -133,6 +138,7 @@ function FieldKeyInput({
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-key"
 			value={draft}
+			disabled={disabled}
 			aria-label={ariaLabel}
 			onChange={(event) => setDraft(event.currentTarget.value)}
 			onBlur={commit}
@@ -226,6 +232,7 @@ function NumberField({
 	readonly value: number;
 	readonly onChange: (value: unknown) => void;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const [draft, setDraft] = useState(String(value));
 	useEffect(() => setDraft(String(value)), [value]);
 	const parsedDraft = parseEditableNumber(draft);
@@ -238,6 +245,7 @@ function NumberField({
 			className="markdown-frontmatter-input markdown-frontmatter-value"
 			type="number"
 			value={draft}
+			disabled={disabled}
 			placeholder="Empty"
 			aria-label={`${label} value`}
 			aria-invalid={invalidDraft ? "true" : undefined}
@@ -293,6 +301,7 @@ function BooleanField({
 	readonly value: boolean;
 	readonly onChange: (value: unknown) => void;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const escape = useEscapeRevert(value, onChange);
 	return (
 		<label className="markdown-frontmatter-boolean">
@@ -300,6 +309,7 @@ function BooleanField({
 				type="checkbox"
 				aria-label={`${label} value`}
 				checked={value}
+				disabled={disabled}
 				onFocus={escape.onFocus}
 				onKeyDown={escape.onKeyDown}
 				onChange={(event) => onChange(event.currentTarget.checked)}
@@ -317,6 +327,7 @@ function TextField({
 	readonly value: unknown;
 	readonly onChange: (value: unknown) => void;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const text = value === null || value === undefined ? "" : String(value);
 	const isDate = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 	// This field writes as you type, so what Escape puts back is the value it
@@ -327,6 +338,7 @@ function TextField({
 			className="markdown-frontmatter-input markdown-frontmatter-value"
 			type={isDate ? "date" : "text"}
 			value={text}
+			disabled={disabled}
 			placeholder="Empty"
 			aria-label={`${label} value`}
 			onFocus={escape.onFocus}
@@ -345,6 +357,7 @@ function ArrayField({
 	readonly value: unknown[];
 	readonly onChange: (value: unknown[]) => void;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const [draft, setDraft] = useState("");
 	const [adding, setAdding] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
@@ -366,6 +379,7 @@ function ArrayField({
 					type="button"
 					className="markdown-frontmatter-tag"
 					title="Remove value"
+					disabled={disabled}
 					aria-label={`Remove ${String(item)} from ${label}`}
 					onClick={() =>
 						onChange(value.filter((_, itemIndex) => itemIndex !== index))
@@ -396,7 +410,7 @@ function ArrayField({
 					}}
 					onBlur={addItem}
 				/>
-			) : (
+			) : disabled ? null : (
 				<button
 					type="button"
 					className="markdown-frontmatter-tag-add"
@@ -480,6 +494,9 @@ export function FrontmatterEditorNodeView({
 	updateAttributes,
 	selected,
 }: NodeViewProps) {
+	const editing = useMarkdownFrontmatterEditing();
+	const disabled = editing.kind === "readOnly";
+	const [writeError, setWriteError] = useState<string | null>(null);
 	const source = String(node.attrs.value ?? "");
 	const parsed = useMemo(() => parseFrontmatterSource(source), [source]);
 	const entries = parsed.value ? Object.entries(parsed.value) : [];
@@ -504,10 +521,44 @@ export function FrontmatterEditorNodeView({
 		window.requestAnimationFrame(() => editor.commands.focus("start"));
 	}, [editor]);
 
+	// A projection of a diff cannot be serialized back into the file it shows,
+	// so the panel writes the property itself — the edit lands where the same
+	// edit lands outside a review, and nothing on screen is a value the file
+	// does not have.
+	const writeThrough = useCallback(
+		(value: string) => {
+			if (editing.kind !== "file") return;
+			editing.write(value).then(
+				() => setWriteError(null),
+				(cause: unknown) =>
+					setWriteError(
+						cause instanceof Error
+							? cause.message
+							: "Could not save this property.",
+					),
+			);
+		},
+		[editing],
+	);
+
+	// A revision keeps nothing, so it is not offered the document either: a
+	// disabled field that still moved the projection would be the same lie in
+	// a quieter place.
+	const commitSource = useCallback(
+		(value: string) => {
+			if (editing.kind === "readOnly") return;
+			updateAttributes({ value });
+			writeThrough(value);
+		},
+		[editing.kind, updateAttributes, writeThrough],
+	);
+
 	const removeFrontmatter = useCallback(() => {
+		if (editing.kind === "readOnly") return;
 		deleteNode();
+		writeThrough("");
 		focusFirstDocumentBlock();
-	}, [deleteNode, focusFirstDocumentBlock]);
+	}, [deleteNode, editing.kind, focusFirstDocumentBlock, writeThrough]);
 
 	useEffect(() => setRawDraft(source), [source]);
 	useEffect(() => {
@@ -542,7 +593,7 @@ export function FrontmatterEditorNodeView({
 		return () => window.cancelAnimationFrame(frame);
 	}, [addingField]);
 	const commitRecord = (value: FrontmatterRecord) => {
-		updateAttributes({ value: stringifyFrontmatterValue(value) });
+		commitSource(stringifyFrontmatterValue(value));
 	};
 	const cancelAddingField = () => {
 		setFieldNameDraft("");
@@ -585,11 +636,15 @@ export function FrontmatterEditorNodeView({
 			className="markdown-frontmatter"
 			data-markdown-frontmatter="true"
 			data-selected={selected ? "true" : "false"}
+			data-disabled={disabled ? "true" : "false"}
 			contentEditable={false}
 		>
 			<div className="markdown-frontmatter-header">
 				<div className="markdown-frontmatter-title">
 					<strong>Frontmatter</strong>
+					{disabled ? (
+						<span className="markdown-frontmatter-note">{editing.reason}</span>
+					) : null}
 				</div>
 				<button
 					type="button"
@@ -649,6 +704,7 @@ export function FrontmatterEditorNodeView({
 							<button
 								type="button"
 								className="markdown-frontmatter-remove"
+								disabled={disabled}
 								aria-label={`Remove ${key || "field"}`}
 								onClick={() => removeField(index)}
 							>
@@ -684,7 +740,7 @@ export function FrontmatterEditorNodeView({
 							</div>
 							<div className="markdown-frontmatter-empty-value">Empty</div>
 						</div>
-					) : (
+					) : disabled ? null : (
 						<button
 							type="button"
 							className="markdown-frontmatter-add"
@@ -704,13 +760,16 @@ export function FrontmatterEditorNodeView({
 						aria-invalid={parsed.error ? "true" : undefined}
 						aria-describedby={parsed.error ? rawErrorId : undefined}
 						spellCheck={false}
+						readOnly={disabled}
 						onChange={(event) => {
 							const value = event.currentTarget.value;
 							setRawDraft(value);
-							updateAttributes({ value });
+							commitSource(value);
 						}}
 						onBlur={() => {
-							if (rawDraft.trim().length === 0) removeFrontmatter();
+							if (!disabled && rawDraft.trim().length === 0) {
+								removeFrontmatter();
+							}
 						}}
 					/>
 					{parsed.error ? (
@@ -720,6 +779,11 @@ export function FrontmatterEditorNodeView({
 					) : null}
 				</div>
 			)}
+			{writeError ? (
+				<p className="markdown-frontmatter-error" role="alert">
+					{writeError}
+				</p>
+			) : null}
 		</NodeViewWrapper>
 	);
 }
