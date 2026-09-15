@@ -363,6 +363,25 @@
 		height: 0.875rem;
 	}
 
+	/* A moved file takes the icon's slot: the glyph says what happened and the
+	   hint says where from, because the document itself shows no diff. */
+	.external-write-review-navigation .external-write-review-moved {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		gap: 0.25rem;
+		color: var(--color-text-inverse-tertiary);
+		font-size: 0.625rem;
+		font-weight: 500;
+	}
+
+	.external-write-review-navigation .external-write-review-moved small {
+		max-width: 8rem;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
 	.external-write-review-navigation .external-write-review-file-icon {
 		width: 0.875rem;
 		height: 0.875rem;
@@ -604,6 +623,10 @@
 		}
 
 		.external-write-review-navigation strong,
+		.external-write-review-navigation .external-write-review-moved small {
+			display: none;
+		}
+
 		.external-write-review-navigation .external-write-review-file-icon {
 			display: none;
 		}

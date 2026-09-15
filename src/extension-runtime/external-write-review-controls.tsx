@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { PathLabel, pathLabelText } from "../components/path-label";
 import { fileIconUrl } from "@/file-icons";
+import { DiffGlyph, movedFromHint } from "@/components/diff-glyph";
 import { shortcutHint } from "@/lib/platform";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
@@ -33,6 +34,8 @@ export type DiffFloatMode = "working-changes" | "historical" | "review-applied";
 export type DiffFloatFile = {
 	readonly id: string;
 	readonly path: string;
+	/** Set when the file's two sides sit at different paths: a move or rename. */
+	readonly movedFromPath?: string;
 };
 
 /** What a verb acts on: the ticked seen set, or every changed file. */
@@ -549,6 +552,15 @@ export function ExternalWriteReviewControls({
 			? pathLabelText(navigation.filePath)
 			: (navigation?.fileName ?? ""),
 	);
+	// The file on screen, when its path changed between the two sides.
+	const activeMovedFrom = (() => {
+		const file = listFiles.find((candidate) => candidate.id === activeFileId);
+		if (!file?.movedFromPath) return null;
+		return {
+			from: file.movedFromPath,
+			hint: movedFromHint(file.movedFromPath, file.path),
+		};
+	})();
 	const hasVisibleFile =
 		navigation !== undefined && navigation.activeIndex !== null;
 	// With no changed file on screen the arrows are the way to one.
@@ -671,6 +683,14 @@ export function ExternalWriteReviewControls({
 										parentClassName="external-write-review-path-parent"
 									/>
 								</span>
+								{file.movedFromPath ? (
+									<small
+										className="external-write-review-menu-tag"
+										title={`Moved from ${file.movedFromPath}`}
+									>
+										moved
+									</small>
+								) : null}
 								{viewing ? (
 									<small className="external-write-review-menu-tag">
 										viewing
@@ -784,11 +804,24 @@ export function ExternalWriteReviewControls({
 						) : null}
 						{navigation.fileName !== null && navigation.activeIndex !== null ? (
 							<>
-								<img
-									src={fileIconUrl(navigation.fileName)}
-									alt=""
-									className="external-write-review-file-icon"
-								/>
+								{activeMovedFrom ? (
+									// A file whose only change is its path renders content
+									// identical on both sides — no diff marks anywhere, and
+									// nothing else on screen says what happened to it.
+									<span
+										className="external-write-review-moved"
+										title={`Moved from ${activeMovedFrom.from}`}
+									>
+										<DiffGlyph kind="moved" size={12} />
+										<small>{activeMovedFrom.hint}</small>
+									</span>
+								) : (
+									<img
+										src={fileIconUrl(navigation.fileName)}
+										alt=""
+										className="external-write-review-file-icon"
+									/>
+								)}
 								<span title={navigation.filePath ?? navigation.fileName}>
 									<strong className="external-write-review-stable">
 										<span

@@ -1086,3 +1086,54 @@ describe("ExternalWriteReviewControls", () => {
 		expect(fallback).toHaveBeenCalledOnce();
 	});
 });
+
+describe("a moved file", () => {
+	const MOVED_FILES = [
+		{
+			id: "file-tiktok",
+			path: "/posts/TikTok.md",
+			movedFromPath: "/drafts/TikTok.md",
+		},
+		{ id: "file-launch", path: "/launch-post.md" },
+	] as const;
+
+	test("says where it moved from, since its content shows no diff", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "TikTok.md",
+					filePath: "/posts/TikTok.md",
+				}}
+				files={MOVED_FILES}
+				onExit={vi.fn()}
+			/>,
+		);
+		// The old directory, as the History list says it.
+		expect(screen.getByTitle("Moved from /drafts/TikTok.md")).toHaveTextContent(
+			"drafts/",
+		);
+		expect(screen.getByLabelText("Moved")).toBeInTheDocument();
+	});
+
+	test("marks the moved file in the list, and leaves the others alone", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "TikTok.md",
+					filePath: "/posts/TikTok.md",
+				}}
+				files={MOVED_FILES}
+				onExit={vi.fn()}
+			/>,
+		);
+		fireEvent.click(chip("Working set: 1 of 2 files"));
+		expect(scopeRow("file-tiktok")).toHaveTextContent("moved");
+		expect(scopeRow("file-launch")).not.toHaveTextContent("moved");
+	});
+});
