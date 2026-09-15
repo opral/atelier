@@ -57,7 +57,14 @@ export const FootnoteNavigationExtension = Extension.create({
 
 /** The class a jump target wears for a moment, so the eye lands with it. */
 export const FOOTNOTE_TARGET_CLASS = "markdown-footnote-target";
-const FOOTNOTE_TARGET_MS = 1200;
+/**
+ * Long enough to still be there once the eye is. A smooth scroll down a README
+ * puts the definition in view around 650ms and settles around 950ms, and the
+ * tint has to outlive the arrival, not race it — at 1200ms it was gone about a
+ * quarter of a second after the page stopped moving, and on a longer document
+ * it expired before the scroll ended.
+ */
+const FOOTNOTE_TARGET_MS = 2400;
 
 type FootnoteState = {
 	/** Position of the node the last jump landed on, while it is still tinted. */

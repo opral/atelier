@@ -1107,8 +1107,14 @@
 		background: var(--color-bg-hover);
 	}
 
+	/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
+	   and the definition is the fade *out*; on the way in it was still
+	   deepening as the scroll came to rest, which cost most of the moment the
+	   tint exists for. */
 	.markdown-view .ProseMirror .markdown-footnote-target {
 		background-color: color-mix(in srgb, var(--color-text-link) 14%, transparent);
+		transition-duration: 120ms;
+		transition-timing-function: ease-out;
 	}
 
 	/* Unsupported blocks (raw HTML): a labelled, dashed container that reads

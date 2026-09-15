@@ -131,6 +131,11 @@ describe("footnote navigation", () => {
 		const { $from } = editor.state.selection;
 		expect($from.node($from.depth - 1).type.name).toBe("footnoteDef");
 		expect($from.parentOffset).toBe("The source.".length);
+		// A smooth scroll settles around 950ms. The tint has to be there once
+		// the eye is, so it is still on well past that …
+		vi.advanceTimersByTime(1500);
+		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+		// … and gone before it turns into decoration.
 		vi.advanceTimersByTime(1500);
 		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(false);
 	});
