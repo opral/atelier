@@ -142,7 +142,12 @@ import {
 } from "./csv-document";
 import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
 import { buildCsvReviewModel } from "./csv-review-model";
-import { CsvReviewGrid, CsvReviewSummary } from "./csv-review-grid";
+import {
+	CsvReviewFoldAction,
+	CsvReviewGrid,
+	CsvReviewSummary,
+	useCsvReviewFolds,
+} from "./csv-review-grid";
 import "./style.css";
 
 type CsvViewProps = {
@@ -1100,6 +1105,9 @@ function CsvTable({
 		retained?.filter ?? EMPTY_CSV_FILTER,
 	);
 	const activeFilterCount = filter.rules.filter(isActiveCsvFilterRule).length;
+	// The toolbar's "Show all N rows" and the grid's bands are one state: the
+	// count in the sentence is the count the table would show.
+	const reviewFolds = useCsvReviewFolds(reviewModel, { search, filter, sort });
 	const [toolbarMenu, setToolbarMenu] = useState<"sort" | "filter" | null>(
 		null,
 	);
@@ -2137,7 +2145,10 @@ function CsvTable({
 				)}
 				<span className="csv-row-count">
 					{reviewModel ? (
-						<CsvReviewSummary model={reviewModel} />
+						<>
+							<CsvReviewSummary model={reviewModel} />
+							<CsvReviewFoldAction folds={reviewFolds} />
+						</>
 					) : (
 						<>
 							{rowMap.length}
@@ -2348,6 +2359,7 @@ function CsvTable({
 						search={search}
 						filter={filter}
 						sort={sort}
+						folds={reviewFolds}
 					/>
 				) : (
 					<>

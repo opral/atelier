@@ -2560,6 +2560,65 @@ test("pressing the blank surface around the table clears the selection", async (
 	await waitFor(() => expect(selection().gridSelection.rows.length).toBe(0));
 });
 
+// The toolbar slot after "Default view" reads "N changes · Show all N rows" in
+// review, and that link is the same state the bands are: it opens all of them.
+test("the review toolbar offers to show every row, and opens the bands when it is used", async () => {
+	const lix = await openLix();
+	const rows = (note: (index: number) => string) =>
+		new TextEncoder().encode(
+			`name,note\n${Array.from(
+				{ length: 10 },
+				(_, index) => `Row ${index + 1},${note(index + 1)}`,
+			).join("\n")}\n`,
+		);
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			"/folded.csv",
+			rows(String),
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute("UPDATE lix_file SET content = $1 WHERE path = $2", [
+			rows((index) => (index === 5 ? "changed" : String(index))),
+			"/folded.csv",
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		const observe = vi.spyOn(lix, "observe");
+		utils = render(<Atelier lix={lix} />);
+		await waitFor(() => expect(observe).toHaveBeenCalled());
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Latest checkpoint. Review latest checkpoint",
+			}),
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Next changed file" }),
+		);
+		const action = await screen.findByRole("button", {
+			name: "Show all 10 rows",
+		});
+		// The action sits in the count's slot, beside the summary, not in the
+		// right-hand cluster of controls.
+		const slot = document.querySelector(".csv-row-count");
+		expect(slot?.contains(action)).toBe(true);
+		expect(slot?.textContent).toBe("1 change·Show all 10 rows");
+		const numbered = () =>
+			document.querySelectorAll(
+				".csv-review-table tbody tr:not(.csv-review-band)",
+			).length;
+		expect(numbered()).toBe(3);
+		fireEvent.click(action);
+		await waitFor(() => expect(numbered()).toBe(10));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Show changes only" }),
+		);
+		await waitFor(() => expect(numbered()).toBe(3));
+	} finally {
+		utils?.unmount();
+		await lix.close();
+	}
+});
+
 test("checkpoint review reveals CSV column additions on a freshly opened surface", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
