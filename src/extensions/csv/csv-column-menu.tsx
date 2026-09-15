@@ -1,4 +1,5 @@
 import { CsvOptionDetails } from "./csv-option-details";
+import { useEditorClosesOnGridScroll } from "./csv-editor-overlay";
 import type { CsvOptionEdit } from "./csv-option-edit";
 import {
 	createContext,
@@ -202,6 +203,10 @@ export function CsvColumnMenu({
 	const commitRef = useRef(commit);
 	commitRef.current = commit;
 	useEffect(() => () => commitRef.current(), []);
+	// The menu is placed once, at its header's screen position. Scroll the
+	// table sideways and it would stay put, naming one column while sitting
+	// over another; it closes instead.
+	useEditorClosesOnGridScroll(onClose);
 	return (
 		<Menu.Root
 			open

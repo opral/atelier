@@ -1051,6 +1051,11 @@ async function renderMetadataCsv(
 }
 
 function clickCsvHeader(column: number, isDoubleClick = false) {
+	// A real header click starts with a press, which is what tells the view
+	// this is a click of its own rather than the end of a resize drag.
+	act(() => {
+		document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+	});
 	act(() =>
 		latestDataEditorProps.current?.onHeaderClicked?.(column, {
 			isDoubleClick,

@@ -146,12 +146,6 @@
 		}
 	}
 
-	.csv-grid-menu-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 39;
-	}
-
 	.csv-grid-menu {
 		position: fixed;
 		z-index: 40;

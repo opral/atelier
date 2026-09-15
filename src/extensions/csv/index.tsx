@@ -13,7 +13,10 @@ import {
 } from "./csv-text-wrap";
 import { CsvViewMenu } from "./csv-view-menu";
 import { CsvOverlayScrollbars } from "./csv-overlay-scrollbars";
-import { useGlideOverlayPortal } from "./csv-editor-overlay";
+import {
+	useEditorClosesOnGridScroll,
+	useGlideOverlayPortal,
+} from "./csv-editor-overlay";
 import {
 	captureCsvView,
 	restoreCsvView,
@@ -1444,8 +1447,29 @@ function CsvTable({
 			titleColor,
 		],
 	);
+	// A press on the header of the open menu closes the menu (Radix sees an
+	// outside press) and then reaches Glide as a header click; without this
+	// the click would reopen what it just closed and the menu could never be
+	// toggled from its header.
+	const suppressHeaderOpenRef = useRef<{
+		column: number;
+		until: number;
+	} | null>(null);
+	// Glide reports a widening drag as a header click too, because the pointer
+	// is back over the header when it lifts — so letting go of a column edge
+	// popped the settings menu open. The resize claims that one click; the
+	// next press on the header is a press of its own and opens the menu.
+	const resizedColumnRef = useRef<number | null>(null);
+	useEffect(() => {
+		const release = () => {
+			resizedColumnRef.current = null;
+		};
+		document.addEventListener("pointerdown", release, true);
+		return () => document.removeEventListener("pointerdown", release, true);
+	}, []);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
+			resizedColumnRef.current = columnIndex;
 			setColumnWidthState((current) =>
 				current.key === columnsKey
 					? {
@@ -1522,6 +1546,21 @@ function CsvTable({
 		selection.current !== undefined ||
 		selection.rows.length > 0 ||
 		selection.columns.length > 0;
+	// Hands the keyboard back to the table. Glide's own focus() invents a
+	// selection — it takes the first cell — when nothing is selected, so after
+	// a delete the canvas takes the focus instead: the keys work again and the
+	// table chooses nothing on the user's behalf.
+	const focusGrid = useCallback(() => {
+		if (hasSelection(gridSelectionRef.current)) {
+			gridRef.current?.focus();
+			return;
+		}
+		containerRef.current
+			?.querySelector<HTMLCanvasElement>(
+				'canvas[data-testid="data-grid-canvas"]',
+			)
+			?.focus();
+	}, []);
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => {
 		setMenu(null);
@@ -1531,17 +1570,15 @@ function CsvTable({
 			while (active?.shadowRoot?.activeElement)
 				active = active.shadowRoot.activeElement;
 			// Outside clicks may already have focused another control or opened a
-			// menu. Focusing Glide with nothing selected makes it select the first
-			// cell, so only hand focus back when there is a selection to return to.
+			// menu; those keep the focus they took.
 			if (
-				(!active ||
-					active === doc?.body ||
-					containerRef.current?.contains(active)) &&
-				hasSelection(gridSelectionRef.current)
+				!active ||
+				active === doc?.body ||
+				containerRef.current?.contains(active)
 			)
-				gridRef.current?.focus();
+				focusGrid();
 		});
-	}, []);
+	}, [focusGrid]);
 	const clearSelection = useCallback(() => {
 		setGridSelection({
 			columns: CompactSelection.empty(),
@@ -1756,17 +1793,10 @@ function CsvTable({
 		},
 		[editing],
 	);
-	// A press on the header of the open menu closes the menu (Radix sees an
-	// outside press) and then reaches Glide as a header click; without this
-	// the click would reopen what it just closed and the menu could never be
-	// toggled from its header.
-	const suppressHeaderOpenRef = useRef<{
-		column: number;
-		until: number;
-	} | null>(null);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
 			if (!editing) return;
+			if (resizedColumnRef.current === columnIndex) return;
 			const suppress = suppressHeaderOpenRef.current;
 			if (suppress) {
 				suppressHeaderOpenRef.current = null;
@@ -1828,8 +1858,11 @@ function CsvTable({
 			closeMenu();
 			clearSelection();
 			action();
+			// The edit rebuilds the table around the dismissed menu, which leaves
+			// the keyboard on the body; the table takes it back.
+			requestAnimationFrame(() => focusGrid());
 		},
-		[clearSelection, closeMenu],
+		[clearSelection, closeMenu, focusGrid],
 	);
 
 	const contentWidth =
@@ -1879,6 +1912,7 @@ function CsvTable({
 					) {
 						event.preventDefault();
 						clearSelection();
+						focusGrid();
 					}
 				}}
 			>
@@ -1913,7 +1947,7 @@ function CsvTable({
 						optionValues={(column) => optionValuesByColumn.get(column) ?? []}
 						onClear={() => {
 							clearSelection();
-							gridRef.current?.focus();
+							focusGrid();
 						}}
 						onDelete={editing ? deleteSelectedRows : undefined}
 						onEdit={
@@ -2007,6 +2041,7 @@ function CsvTable({
 								else {
 									clearSelection();
 									e.currentTarget.blur();
+									focusGrid();
 								}
 							}}
 						/>
@@ -2601,6 +2636,26 @@ function CsvGridMenu({
 			window.removeEventListener("resize", update);
 		};
 	}, [menu]);
+	// A press outside dismisses the menu and then lands where it was aimed. A
+	// backdrop would have swallowed it, so every control outside the menu
+	// needed a second click to answer.
+	useEffect(() => {
+		const outside = (event: Event) =>
+			!menuRef.current?.contains(event.target as Node);
+		const dismiss = (event: Event) => {
+			if (outside(event)) onClose();
+		};
+		const doc = document;
+		doc.addEventListener("pointerdown", dismiss, true);
+		doc.addEventListener("contextmenu", dismiss, true);
+		return () => {
+			doc.removeEventListener("pointerdown", dismiss, true);
+			doc.removeEventListener("contextmenu", dismiss, true);
+		};
+	}, [onClose]);
+	// The menu is placed once, against the table as it stood; a scroll moves
+	// the row out from under it.
+	useEditorClosesOnGridScroll(onClose);
 
 	const items = [
 		{
@@ -2624,15 +2679,6 @@ function CsvGridMenu({
 
 	return (
 		<>
-			<div
-				role="presentation"
-				className="csv-grid-menu-backdrop"
-				onMouseDown={onClose}
-				onContextMenu={(event) => {
-					event.preventDefault();
-					onClose();
-				}}
-			/>
 			<div
 				ref={menuRef}
 				onKeyDown={(event) => {

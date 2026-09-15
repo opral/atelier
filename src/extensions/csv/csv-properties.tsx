@@ -6,7 +6,7 @@ import {
 } from "./csv-text-wrap";
 import { createPortal } from "react-dom";
 import { useEditorClosesOnGridScroll } from "./csv-editor-overlay";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
 	CaseSensitive,
 	CalendarDays,
@@ -260,18 +260,55 @@ export function drawPropertyCell(
 const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	value,
 	onFinishedEditing,
+	initialValue,
 	target,
 }) => {
 	const cell = value as PropertyCell;
 	const info = cell.csvInfo!;
-	const [query, setQuery] = useState("");
-	const [active, setActive] = useState(0);
-	const [draft, setDraft] = useState(cell.data);
+	// Typing on a selected cell opens the editor with that keystroke, and Glide
+	// has already put it in the cell's data — so the cell only holds the
+	// committed value when the editor was opened without one. The keystroke is
+	// the start of a search; the committed value is what the list points at.
+	const typed = initialValue ?? "";
+	const committed = typed ? "" : cell.data;
+	const options =
+		info.type === "checkbox"
+			? [
+					{ value: "yes", color: "blue" },
+					{ value: "no", color: "gray" },
+				]
+			: selectOptions(info, cell.csvOptionValues ?? []);
+	const [query, setQuery] = useState(typed);
+	const [active, setActive] = useState(() => {
+		// Enter, Enter must leave the cell as it was, so the list opens on the
+		// value the cell already holds rather than on whatever sorts first.
+		const index = options.findIndex((option) => option.value === committed);
+		return index < 0 ? 0 : index;
+	});
+	// A date cannot be started from one keystroke, and writing the keystroke
+	// itself would replace the date with a stray character.
+	const [draft, setDraft] = useState(
+		info.type === "date" && typed ? "" : cell.data,
+	);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const activeOptionRef = useRef<HTMLButtonElement>(null);
 	const listId = useId();
 	const dialogRef = useRef<HTMLDivElement>(null);
+	const [measured, setMeasured] = useState<number | null>(null);
+	// The list's height decides which side of the cell the picker sits on, and
+	// it changes as the query filters it — so measure it after every paint.
+	// The guard keeps the update from chaining into another render.
+	const remeasure = () => {
+		const height = dialogRef.current?.getBoundingClientRect().height;
+		if (height !== undefined)
+			setMeasured((previous) => (previous === height ? previous : height));
+	};
+	const remeasureRef = useRef(remeasure);
+	remeasureRef.current = remeasure;
+	useLayoutEffect(() => {
+		remeasureRef.current();
+	});
 	// The picker is positioned once, so scrolling the table would detach it
 	// from its cell; a scroll closes it instead.
 	useEditorClosesOnGridScroll(onFinishedEditing);
@@ -318,13 +355,6 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			doc.removeEventListener("focusout", onFocusOut);
 		};
 	}, [onFinishedEditing]);
-	const options =
-		info.type === "checkbox"
-			? [
-					{ value: "yes", color: "blue" },
-					{ value: "no", color: "gray" },
-				]
-			: selectOptions(info, cell.csvOptionValues ?? []);
 	const candidates = options.filter((o) =>
 		o.value.toLowerCase().includes(query.toLowerCase()),
 	);
@@ -354,12 +384,21 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			...(create ? { csvNewOption: text } : {}),
 		});
 	const width = Math.max(260, Math.min(330, window.innerWidth - 24));
-	const height = Math.min(350, window.innerHeight - 24);
+	const maxHeight = Math.min(350, window.innerHeight - 24);
 	const x = Math.max(8, Math.min(target.x, window.innerWidth - width - 8));
-	const y = Math.max(
-		8,
-		Math.min(target.y + target.height + 3, window.innerHeight - height - 8),
-	);
+	// A short list is much shorter than the cap, and clamping against the cap
+	// pushed the picker up over the very cell it edits. Place it under the
+	// cell when its measured height fits, above the cell when it does not, and
+	// only fall back to the screen's edge when neither side has room.
+	const height = measured ?? maxHeight;
+	const below = target.y + target.height + 3;
+	const above = target.y - 3 - height;
+	const y =
+		below + height <= window.innerHeight - 8
+			? below
+			: above >= 8
+				? above
+				: Math.max(8, window.innerHeight - height - 8);
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The dialog contains focusable controls and owns Escape; input-only navigation below leaves button activation native.
 		<div
@@ -368,7 +407,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			role="dialog"
 			aria-label={`${info.header} value`}
 			tabIndex={-1}
-			style={{ position: "fixed", left: x, top: y, width, maxHeight: height }}
+			style={{ position: "fixed", left: x, top: y, width, maxHeight }}
 			onKeyDown={(e) => {
 				e.stopPropagation();
 				// Enter/Escape belong to the IME while a candidate is composing.
@@ -434,7 +473,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 							<button
 								type="button"
 								role="option"
-								aria-selected={cell.data === o.value}
+								aria-selected={committed === o.value}
 								id={`${listId}-option-${i}`}
 								ref={active === i ? activeOptionRef : undefined}
 								className={`csv-option-row ${active === i ? "is-active" : ""}`}
@@ -443,7 +482,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 								onClick={() => choose(o.value)}
 							>
 								<CsvPill {...o} />
-								{cell.data === o.value && <Check size={14} />}
+								{committed === o.value && <Check size={14} />}
 							</button>
 						))}
 						{canCreate && (
@@ -488,7 +527,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					<button type="submit">Save</button>
 				</form>
 			)}
-			{cell.data && (
+			{committed && (
 				<button
 					type="button"
 					className="csv-option-clear"

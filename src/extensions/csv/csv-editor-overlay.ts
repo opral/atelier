@@ -29,9 +29,14 @@ export function useGlideOverlayPortal(): void {
 	}, []);
 }
 
-/** The open editor: Glide's overlay, or one of our own cell popovers. */
-const EDITOR = ".csv-property-popover, .gdg-style";
-/** The lists inside an editor that scroll on their own. */
+/**
+ * An overlay anchored to a cell or a header: Glide's own editor, our cell
+ * pickers, and the row and column menus. Each is positioned once, against the
+ * table as it stood when it opened.
+ */
+const EDITOR =
+	".csv-property-popover, .gdg-style, .csv-column-menu, .csv-grid-menu";
+/** The lists inside one of those that scroll on their own. */
 const EDITOR_LIST = ".csv-option-list, .gdg-clip-region";
 /** Glide's scroller: the element that carries the table under the editor. */
 const GRID_SCROLLER = ".dvn-scroller";
@@ -60,11 +65,11 @@ export function scrollLeavesEditorBehind(
 }
 
 /**
- * An open cell editor belongs to the cell underneath it. Once the grid
- * scrolls, that cell has moved, and an editor that slides along with it — or
- * stays behind showing a value that now sits three rows up — reads as a bug.
- * Scrolling closes the editor instead, keeping whatever was typed, the way a
- * scroll dismisses an open cell in Notion.
+ * An open cell editor or menu belongs to the cell or header underneath it.
+ * Once the grid scrolls, that anchor has moved, and an overlay that slides
+ * along with it — or stays behind, naming a column now three columns over —
+ * reads as a bug. Scrolling closes it instead, keeping whatever was typed,
+ * the way a scroll dismisses an open cell in Notion.
  */
 export function useEditorClosesOnGridScroll(close: () => void): void {
 	const dismiss = useRef(close);
