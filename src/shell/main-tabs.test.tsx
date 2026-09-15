@@ -333,6 +333,33 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("closing a tab leaves the keyboard on the tab that takes over", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+			const survivor = screen.getByRole("button", { name: "one.md" });
+			const closing = screen.getByRole("button", { name: "two.md" });
+			closing.focus();
+
+			await act(async () => {
+				fireEvent.click(
+					closing.querySelector('[data-attr="panel-tab-close"]')
+						?.parentElement as HTMLElement,
+				);
+			});
+
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
+			// Not <body>: the next Tab carries on from the strip instead of
+			// restarting at the top of the page.
+			expect(survivor).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("newTab appends at the end of the strip; open activates an existing tab", async () => {
 		const shell = await renderTabbedShell();
 		try {

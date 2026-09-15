@@ -78,6 +78,104 @@ import {
 	type ExtensionHostRecord,
 } from "../extension-runtime/extension-host-registry";
 
+/** Where a panel puts the keyboard when its last view closes. */
+const PANEL_REMOVAL_FOCUS_FALLBACKS = [
+	'[data-attr="panel-empty-open-view"]',
+	'[data-attr="panel-section-picker"]',
+	'[data-attr="panel-add-view"]',
+] as const;
+
+/**
+ * Keeps the keyboard somewhere after a tab closes.
+ *
+ * The removal is a state change an area above owns, so what to focus is only
+ * known once the area comes back without the removed view: the tab that took
+ * over, or the strip's own affordance when the last one goes. Without this the
+ * closed tab's button leaves the document with focus on it, and focus falls to
+ * `<body>` — the next Tab then restarts at the top of the page.
+ *
+ * @example
+ * const removeView = useTabRemovalFocus({ area, activeInstance, containerRef, onRemoveView });
+ */
+function useTabRemovalFocus({
+	area,
+	activeInstance,
+	containerRef,
+	onRemoveView,
+	fallbackSelectors = [],
+}: {
+	readonly area: AreaState;
+	readonly activeInstance: string | null;
+	readonly containerRef: RefObject<HTMLElement | null>;
+	readonly onRemoveView: (instance: string) => void;
+	/** Where the keyboard goes when the last tab closes, in order of preference. */
+	readonly fallbackSelectors?: readonly string[];
+}): (instance: string) => void {
+	const pendingRef = useRef<{
+		readonly instance: string;
+		readonly previousViews: AreaState["views"];
+		readonly previousActiveInstance: string | null;
+	} | null>(null);
+	const removeView = useCallback(
+		(instance: string) => {
+			const pending = {
+				instance,
+				previousViews: area.views,
+				previousActiveInstance: area.activeInstance,
+			};
+			pendingRef.current = pending;
+			onRemoveView(instance);
+			// A removal the area declines leaves the claim behind; drop it
+			// rather than move focus on the next unrelated change.
+			window.setTimeout(() => {
+				if (pendingRef.current === pending) pendingRef.current = null;
+			}, 0);
+		},
+		[area.activeInstance, area.views, onRemoveView],
+	);
+	const fallbacks = fallbackSelectors.join(",");
+	useLayoutEffect(() => {
+		const container = containerRef.current;
+		const pending = pendingRef.current;
+		if (!container || !pending) return;
+		if (area.views.some((entry) => entry.instance === pending.instance)) {
+			if (
+				area.views !== pending.previousViews ||
+				area.activeInstance !== pending.previousActiveInstance
+			) {
+				pendingRef.current = null;
+			}
+			return;
+		}
+		pendingRef.current = null;
+		const nextTab = activeInstance
+			? (Array.from(
+					container.querySelectorAll<HTMLButtonElement>(
+						"button[data-view-instance]",
+					),
+				).find((button) => button.dataset.viewInstance === activeInstance) ??
+				null)
+			: null;
+		// The fallbacks are in order of preference, not document order.
+		const fallback = fallbacks
+			.split(",")
+			.filter(Boolean)
+			.reduce<HTMLButtonElement | null>(
+				(found, selector) =>
+					found ?? container.querySelector<HTMLButtonElement>(selector),
+				null,
+			);
+		(nextTab ?? fallback)?.focus({ preventScroll: true });
+	}, [
+		activeInstance,
+		area.activeInstance,
+		area.views,
+		containerRef,
+		fallbacks,
+	]);
+	return removeView;
+}
+
 /**
  * Unified panel host that renders the shared tab strip and body layout for any side.
  *
@@ -167,11 +265,6 @@ export function PanelV2({
 		readonly previousViews: AreaState["views"];
 		readonly previousActiveInstance: string | null;
 	} | null>(null);
-	const pendingRemovalFocusRef = useRef<{
-		readonly instance: string;
-		readonly previousViews: AreaState["views"];
-		readonly previousActiveInstance: string | null;
-	} | null>(null);
 	const setPanelElementRef = useCallback(
 		(node: HTMLElement | null) => {
 			panelElementRef.current = node;
@@ -240,23 +333,13 @@ export function PanelV2({
 		nextTab.focus({ preventScroll: true });
 		return true;
 	}, [findPendingAddedTab]);
-	const handleRemoveView = useCallback(
-		(instance: string) => {
-			const pendingRemovalFocus = {
-				instance,
-				previousViews: area.views,
-				previousActiveInstance: area.activeInstance,
-			};
-			pendingRemovalFocusRef.current = pendingRemovalFocus;
-			onRemoveView(instance);
-			window.setTimeout(() => {
-				if (pendingRemovalFocusRef.current === pendingRemovalFocus) {
-					pendingRemovalFocusRef.current = null;
-				}
-			}, 0);
-		},
-		[onRemoveView, area.activeInstance, area.views],
-	);
+	const handleRemoveView = useTabRemovalFocus({
+		area,
+		activeInstance,
+		containerRef: panelElementRef,
+		onRemoveView,
+		fallbackSelectors: PANEL_REMOVAL_FOCUS_FALLBACKS,
+	});
 	const { makeRuntime } = useExtensionViewRuntime({
 		areaState: area,
 		area: side,
@@ -331,35 +414,6 @@ export function PanelV2({
 				pendingAddedViewRef.current = null;
 			}
 		}
-
-		const pendingRemovalFocus = pendingRemovalFocusRef.current;
-		if (!pendingRemovalFocus) return;
-		if (
-			area.views.some(
-				(entry) => entry.instance === pendingRemovalFocus.instance,
-			)
-		) {
-			if (
-				area.views !== pendingRemovalFocus.previousViews ||
-				area.activeInstance !== pendingRemovalFocus.previousActiveInstance
-			) {
-				pendingRemovalFocusRef.current = null;
-			}
-			return;
-		}
-		pendingRemovalFocusRef.current = null;
-		const nextTarget = activeInstance
-			? findTab(activeInstance)
-			: (panelElement.querySelector<HTMLButtonElement>(
-					'[data-attr="panel-empty-open-view"]',
-				) ??
-				panelElement.querySelector<HTMLButtonElement>(
-					'[data-attr="panel-section-picker"]',
-				) ??
-				panelElement.querySelector<HTMLButtonElement>(
-					'[data-attr="panel-add-view"]',
-				));
-		nextTarget?.focus({ preventScroll: true });
 	}, [activeInstance, area.activeInstance, area.views]);
 
 	const resolvedEmptyState =
@@ -829,6 +883,16 @@ export function PanelTabStrip({
 	// the menu's close-focus lands back on the "+" and paints a stray
 	// focus-visible ring there.
 	const stripRef = useRef<HTMLDivElement | null>(null);
+	// Closing a tab is the same act here as in a panel, so it keeps the
+	// keyboard the same way: on the tab that takes over, or on "+" when the
+	// strip empties.
+	const handleRemoveView = useTabRemovalFocus({
+		area,
+		activeInstance,
+		containerRef: stripRef,
+		onRemoveView,
+		fallbackSelectors: PANEL_REMOVAL_FOCUS_FALLBACKS,
+	});
 	const previousInstancesRef = useRef<ReadonlySet<string> | null>(null);
 	const handleMenuAddView = (kind: ExtensionKind, state?: ExtensionState) => {
 		previousInstancesRef.current = new Set(
@@ -912,13 +976,15 @@ export function PanelTabStrip({
 							isPinned={entry.isPinned}
 							onClick={() => onSelectView(entry.instance)}
 							onClose={
-								entry.isPinned ? undefined : () => onRemoveView(entry.instance)
+								entry.isPinned
+									? undefined
+									: () => handleRemoveView(entry.instance)
 							}
 							onCloseOthers={
 								closableOthers.length > 0
 									? () => {
 											for (const sibling of closableOthers) {
-												onRemoveView(sibling.instance);
+												handleRemoveView(sibling.instance);
 											}
 										}
 									: undefined
@@ -927,7 +993,7 @@ export function PanelTabStrip({
 								closableRight.length > 0
 									? () => {
 											for (const sibling of closableRight) {
-												onRemoveView(sibling.instance);
+												handleRemoveView(sibling.instance);
 											}
 										}
 									: undefined
