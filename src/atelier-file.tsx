@@ -1,3 +1,4 @@
+import { DocumentLoading } from "./components/document-loading";
 import type { Lix } from "@lix-js/sdk";
 import {
 	Suspense,
@@ -8,6 +9,7 @@ import {
 	type ReactNode,
 } from "react";
 import type {
+	AtelierDocumentLinks,
 	AtelierExtensionRegistration,
 	AtelierJsonValue,
 } from "./extension-api";
@@ -50,6 +52,12 @@ export type AtelierFileProps = {
 	readonly className?: string;
 	readonly fallback?: ReactNode;
 	readonly onOpenFile?: (path: string) => void | Promise<void>;
+	/**
+	 * The host's file URLs. Without them a link to a file of this workspace is
+	 * an ordinary external link: no file icon, and a click leaves for a new
+	 * browser tab. See `AtelierDocumentLinks`.
+	 */
+	readonly documentLinks?: AtelierDocumentLinks;
 } & (
 	| { readonly targetCommitId?: null; readonly diff?: null }
 	| {
@@ -68,7 +76,7 @@ export type AtelierFileProps = {
 );
 
 const EMPTY_EXTENSIONS: readonly AtelierExtensionRegistration[] = [];
-const loading = <div role="status">Opening file…</div>;
+const loading = <DocumentLoading />;
 const lixKeys = new WeakMap<Lix, number>();
 let nextLixKey = 0;
 function lixKey(lix: Lix) {
@@ -184,8 +192,16 @@ function MountedFile(
 	const registry = useExtensionHostRegistry();
 	const element = useRef<HTMLDivElement>(null);
 	const preferences = useMemo(() => new Map<string, AtelierJsonValue>(), []);
-	const { definition, fileId, path, branchId, lix, readOnly, onOpenFile } =
-		props;
+	const {
+		definition,
+		fileId,
+		path,
+		branchId,
+		lix,
+		readOnly,
+		onOpenFile,
+		documentLinks,
+	} = props;
 	const epoch =
 		props.diff && "workingEpoch" in props.diff ? props.diff.workingEpoch : null;
 	const beforeCommitId =
@@ -204,6 +220,7 @@ function MountedFile(
 			lix,
 			readOnly: Boolean(readOnly || beforeCommitId || afterCommitId),
 			branches: { activeId: branchId },
+			...(documentLinks ? { documentLinks } : {}),
 			icons: { fileUrl: fileIconUrl },
 			events: { emit: () => {} },
 			preferences: { get: (_id, key) => preferences.get(key) },
@@ -241,6 +258,7 @@ function MountedFile(
 			fileId,
 			path,
 			onOpenFile,
+			documentLinks,
 		],
 	);
 	useEffect(() => () => registry.pruneHosts(new Set()), [registry, fileId]);

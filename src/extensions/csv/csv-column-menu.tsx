@@ -1,4 +1,5 @@
 import { CsvOptionDetails } from "./csv-option-details";
+import { useEditorClosesOnGridScroll } from "./csv-editor-overlay";
 import type { CsvOptionEdit } from "./csv-option-edit";
 import {
 	createContext,
@@ -10,6 +11,7 @@ import {
 	useRef,
 	useState,
 	type ComponentProps,
+	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
 	type RefObject,
 } from "react";
@@ -93,6 +95,46 @@ function CsvSub({ children }: { children: ReactNode }) {
 		</SubmenuContext.Provider>
 	);
 }
+const MENU_ITEM =
+	'[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]';
+
+/**
+ * Radix walks its own items with the arrow keys and traps Tab, so a field
+ * inside a menu — the column's name at the top, the one that adds an option
+ * at the bottom — could be seen but never reached from the keyboard. Arrowing
+ * off the end of the items steps into the field sitting there.
+ */
+function arrowIntoMenuField(event: ReactKeyboardEvent<HTMLElement>): void {
+	if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+	const content = event.currentTarget;
+	const items = [...content.querySelectorAll<HTMLElement>(MENU_ITEM)];
+	const index = items.indexOf(
+		content.ownerDocument.activeElement as HTMLElement,
+	);
+	if (index < 0 || items.length === 0) return;
+	const edge =
+		event.key === "ArrowUp"
+			? index === 0
+				? items[0]!
+				: null
+			: index === items.length - 1
+				? items[items.length - 1]!
+				: null;
+	if (!edge) return;
+	const wanted =
+		event.key === "ArrowUp"
+			? Node.DOCUMENT_POSITION_FOLLOWING
+			: Node.DOCUMENT_POSITION_PRECEDING;
+	const field = [...content.querySelectorAll<HTMLInputElement>("input")].find(
+		(candidate) => (candidate.compareDocumentPosition(edge) & wanted) !== 0,
+	);
+	if (!field) return;
+	event.preventDefault();
+	event.stopPropagation();
+	field.focus();
+	field.select();
+}
+
 function CsvSubTrigger(props: ComponentProps<typeof Menu.SubTrigger>) {
 	const context = useContext(SubmenuContext)!;
 	return <Menu.SubTrigger {...props} ref={context.trigger} />;
@@ -104,6 +146,7 @@ function CsvSubContent(props: ComponentProps<typeof Menu.SubContent>) {
 		<Menu.SubContent
 			{...props}
 			{...clamped}
+			onKeyDown={arrowIntoMenuField}
 			onFocusOutside={(event) => {
 				// Crossing an overlapping pane briefly focuses the parent menu itself.
 				// Keep the submenu open until focus reaches another actionable item.
@@ -202,6 +245,10 @@ export function CsvColumnMenu({
 	const commitRef = useRef(commit);
 	commitRef.current = commit;
 	useEffect(() => () => commitRef.current(), []);
+	// The menu is placed once, at its header's screen position. Scroll the
+	// table sideways and it would stay put, naming one column while sitting
+	// over another; it closes instead.
+	useEditorClosesOnGridScroll(onClose);
 	return (
 		<Menu.Root
 			open
@@ -250,6 +297,7 @@ export function CsvColumnMenu({
 					sideOffset={0}
 					collisionPadding={8}
 					aria-label="Column settings"
+					onKeyDown={arrowIntoMenuField}
 					onCloseAutoFocus={(e) => e.preventDefault()}
 					onFocusOutside={(e) => {
 						if (opening.current) e.preventDefault();
@@ -474,6 +522,13 @@ export function CsvColumnMenu({
 											placeholder="Add an option…"
 											onKeyDown={(e) => {
 												if (e.key !== "Escape") e.stopPropagation();
+												if (e.key === "ArrowUp") {
+													e.preventDefault();
+													const items = e.currentTarget
+														.closest('[role="menu"]')
+														?.querySelectorAll<HTMLElement>(MENU_ITEM);
+													items?.[items.length - 1]?.focus();
+												}
 											}}
 										/>
 										<button type="submit" aria-label="Create option">

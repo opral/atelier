@@ -1,43 +1,73 @@
 import { describe, expect, test } from "vitest";
-import { editorOverlayFollow } from "./csv-editor-overlay";
+import { scrollLeavesEditorBehind } from "./csv-editor-overlay";
 
-const viewport = { left: 100, top: 50, right: 700, bottom: 450 };
+/** A stand-in for the list inside an editor, scrollable or not. */
+function list(scrollHeight: number, clientHeight: number): Element {
+	const node = document.createElement("div");
+	node.className = "csv-option-list";
+	Object.defineProperty(node, "scrollHeight", { value: scrollHeight });
+	Object.defineProperty(node, "clientHeight", { value: clientHeight });
+	return node;
+}
 
-describe("editorOverlayFollow", () => {
-	test("stays put and clips to the viewport before any scroll", () => {
-		expect(
-			editorOverlayFollow({
-				origin: { x: 0, y: 0 },
-				scroll: { x: 0, y: 0 },
-				viewport,
-			}),
-		).toEqual({
-			transform: "",
-			clipPath: "polygon(100px 50px, 700px 50px, 700px 450px, 100px 450px)",
-		});
-	});
+function inEditor(child: Element): Element {
+	const editor = document.createElement("div");
+	editor.className = "csv-property-popover";
+	editor.append(child);
+	return child;
+}
 
-	test("moves opposite to the scroll and keeps the clip on screen", () => {
-		const follow = editorOverlayFollow({
-			origin: { x: 20, y: 300 },
-			scroll: { x: 50, y: 420 },
-			viewport,
-		});
-		expect(follow.transform).toBe("translate(-30px, -120px)");
-		// The clip is expressed in the translated box's own coordinates, so
-		// it lands on the same screen rectangle after the transform.
-		expect(follow.clipPath).toBe(
-			"polygon(130px 170px, 730px 170px, 730px 570px, 130px 570px)",
+describe("scrollLeavesEditorBehind", () => {
+	test("the grid scrolling under the editor leaves it behind", () => {
+		const scroller = document.createElement("div");
+		scroller.className = "dvn-scroller";
+		expect(scrollLeavesEditorBehind({ type: "scroll", target: scroller })).toBe(
+			true,
 		);
 	});
 
-	test("returns to rest when the scroller comes back to where it opened", () => {
-		expect(
-			editorOverlayFollow({
-				origin: { x: 40, y: 80 },
-				scroll: { x: 40, y: 80 },
-				viewport,
-			}).transform,
-		).toBe("");
+	test("an option list scrolling inside the editor does not", () => {
+		const node = inEditor(list(400, 200));
+		expect(scrollLeavesEditorBehind({ type: "scroll", target: node })).toBe(
+			false,
+		);
+	});
+
+	test("a wheel closes nothing by itself; the grid scroll it causes does", () => {
+		// A flick over an editor used to dismiss it and discard the edit, even
+		// where the table had nowhere to scroll.
+		const node = inEditor(list(200, 200));
+		expect(scrollLeavesEditorBehind({ type: "wheel", target: node })).toBe(
+			false,
+		);
+	});
+
+	test("a wheel a scrollable list can still use is left to the list", () => {
+		const node = inEditor(list(400, 200));
+		expect(scrollLeavesEditorBehind({ type: "wheel", target: node })).toBe(
+			false,
+		);
+	});
+
+	test("a panel scrolling elsewhere leaves the editor where it is", () => {
+		const aside = document.createElement("div");
+		aside.className = "atelier-files-list";
+		expect(scrollLeavesEditorBehind({ type: "scroll", target: aside })).toBe(
+			false,
+		);
+	});
+
+	test("the page itself scrolling leaves the editor behind", () => {
+		expect(scrollLeavesEditorBehind({ type: "scroll", target: document })).toBe(
+			true,
+		);
+	});
+
+	test("a wheel over the grid waits for the scroll it causes", () => {
+		const scroller = document.createElement("div");
+		scroller.className = "dvn-scroller";
+		expect(scrollLeavesEditorBehind({ type: "wheel", target: scroller })).toBe(
+			false,
+		);
 	});
 });

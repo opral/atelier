@@ -5,7 +5,8 @@ import {
 	type CsvTextLine,
 } from "./csv-text-wrap";
 import { createPortal } from "react-dom";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEditorClosesOnGridScroll } from "./csv-editor-overlay";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
 	CaseSensitive,
 	CalendarDays,
@@ -259,36 +260,81 @@ export function drawPropertyCell(
 const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	value,
 	onFinishedEditing,
+	initialValue,
 	target,
 }) => {
 	const cell = value as PropertyCell;
 	const info = cell.csvInfo!;
-	const [query, setQuery] = useState("");
-	const [active, setActive] = useState(0);
-	const [draft, setDraft] = useState(cell.data);
+	// Typing on a selected cell opens the editor with that keystroke, and Glide
+	// has already put it in the cell's data. It leaves displayData alone,
+	// though, so that is where the committed value still is. The keystroke is
+	// the start of a search; the committed value is what the list ticks, and
+	// what Clear has to offer to clear.
+	const typed = initialValue ?? "";
+	const committed = typed ? (cell.displayData ?? "") : cell.data;
+	const CHECKBOX_OPTIONS = [
+		{ value: "yes", color: "blue" },
+		{ value: "no", color: "gray" },
+	];
+	// A checkbox column can hold a value that is neither: an import, an agent,
+	// a column retyped over prose. Listing only yes and no left the picker
+	// pointing at nothing and the cell's own value nowhere on screen — the
+	// select picker has always merged what it finds, and this one does too.
+	const options =
+		info.type === "checkbox"
+			? CHECKBOX_OPTIONS.some((option) => option.value === committed) ||
+				!committed
+				? CHECKBOX_OPTIONS
+				: [...CHECKBOX_OPTIONS, { value: committed, color: "gray" }]
+			: selectOptions(info, cell.csvOptionValues ?? []);
+	const matching = (option: string, text: string) =>
+		option.toLowerCase().includes(text.toLowerCase());
+	const [query, setQuery] = useState(typed);
+	const [active, setActive] = useState(() => {
+		// Enter, Enter must leave the cell as it was, so the list opens on the
+		// value the cell already holds rather than on whatever sorts first.
+		// The index counts the options the list is actually showing: with the
+		// opening keystroke as the query those are already fewer than the
+		// column's, and an index into the full list pointed at the wrong row —
+		// often at "Create <keystroke>", so one letter and Enter replaced the
+		// cell with that letter and added it to the column for good.
+		const index = options
+			.filter((option) => matching(option.value, typed))
+			.findIndex((option) => option.value === committed);
+		return index < 0 ? 0 : index;
+	});
+	// A date cannot be started from one keystroke, and writing the keystroke
+	// itself would replace the date with a stray character.
+	const initialDraft = info.type === "date" && typed ? "" : cell.data;
+	const [draft, setDraft] = useState(initialDraft);
+	/**
+	 * Whether this date cell opens on a value a date input can show. Decided
+	 * once: switching an input's type under a caret mid-word would throw the
+	 * caret away the moment a typed date became well formed.
+	 */
+	const [showsDate] = useState(
+		() =>
+			info.type === "date" &&
+			(initialDraft === "" || /^\d{4}-\d{2}-\d{2}$/.test(initialDraft)),
+	);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const activeOptionRef = useRef<HTMLButtonElement>(null);
 	const listId = useId();
 	const dialogRef = useRef<HTMLDivElement>(null);
+	// Which side of the cell the picker sits on, decided from its real height
+	// once and then left alone: re-deciding on every render had the whole
+	// popover jump as the query filtered the list, sliding the option the
+	// pointer was aimed at out from under it. Above the cell it hangs from its
+	// bottom edge, so filtering moves the list and not the box.
+	const [placement, setPlacement] = useState<
+		{ readonly top: number } | { readonly bottom: number } | null
+	>(null);
+	/** Set when the picker has to scroll because neither side has room. */
+	const [capped, setCapped] = useState<number | null>(null);
 	// The picker is positioned once, so scrolling the table would detach it
-	// from its cell; scrolling anything outside the picker closes it instead.
-	useEffect(() => {
-		const onScroll = (event: Event) => {
-			if (
-				event.target instanceof Node &&
-				dialogRef.current?.contains(event.target)
-			)
-				return;
-			onFinishedEditing();
-		};
-		document.addEventListener("scroll", onScroll, {
-			capture: true,
-			passive: true,
-		});
-		return () =>
-			document.removeEventListener("scroll", onScroll, { capture: true });
-	}, [onFinishedEditing]);
+	// from its cell; a scroll closes it instead.
+	useEditorClosesOnGridScroll(onFinishedEditing);
 	useEffect(() => {
 		// Glide restores canvas focus after an edit closes. A double-click can
 		// reopen immediately, so focus the new editor after that restoration.
@@ -301,16 +347,38 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			cancelAnimationFrame(inner);
 		};
 	}, []);
-	const options =
-		info.type === "checkbox"
-			? [
-					{ value: "yes", color: "blue" },
-					{ value: "no", color: "gray" },
-				]
-			: selectOptions(info, cell.csvOptionValues ?? []);
-	const candidates = options.filter((o) =>
-		o.value.toLowerCase().includes(query.toLowerCase()),
-	);
+	useEffect(() => {
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+		const doc = dialog.ownerDocument;
+		// Clicking the open cell again has Glide close and reopen the editor in
+		// place, which leaves focus on nothing at all. Escape then had no
+		// element to travel up from and the picker sat there. Own Escape for
+		// the whole document while the picker is open, and take focus back when
+		// it lands nowhere so typing and the arrow keys keep working too.
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			if (event.isComposing || event.keyCode === 229) return;
+			if (dialog.contains(event.target as Node)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			onFinishedEditing();
+		};
+		const onFocusOut = () => {
+			requestAnimationFrame(() => {
+				if (!dialog.isConnected) return;
+				const focused = doc.activeElement;
+				if (focused === null || focused === doc.body) inputRef.current?.focus();
+			});
+		};
+		doc.addEventListener("keydown", onKeyDown, true);
+		doc.addEventListener("focusout", onFocusOut);
+		return () => {
+			doc.removeEventListener("keydown", onKeyDown, true);
+			doc.removeEventListener("focusout", onFocusOut);
+		};
+	}, [onFinishedEditing]);
+	const candidates = options.filter((o) => matching(o.value, query));
 	const newValue = query.trim();
 	const canCreate =
 		info.type === "select" &&
@@ -337,12 +405,34 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			...(create ? { csvNewOption: text } : {}),
 		});
 	const width = Math.max(260, Math.min(330, window.innerWidth - 24));
-	const height = Math.min(350, window.innerHeight - 24);
+	const maxHeight = Math.min(350, window.innerHeight - 24);
 	const x = Math.max(8, Math.min(target.x, window.innerWidth - width - 8));
-	const y = Math.max(
-		8,
-		Math.min(target.y + target.height + 3, window.innerHeight - height - 8),
-	);
+	const below = target.y + target.height + 3;
+	useLayoutEffect(() => {
+		// Runs before the first paint, so the flip is never visible. A short
+		// list is much shorter than the cap, and clamping against the cap
+		// pushed the picker up over the very cell it edits.
+		if (placement) return;
+		const height = dialogRef.current?.getBoundingClientRect().height ?? 0;
+		const fitsBelow = below + height <= window.innerHeight - 8;
+		const fitsAbove = target.y - 3 - height >= 8;
+		if (fitsBelow) setPlacement({ top: below });
+		else if (fitsAbove)
+			setPlacement({ bottom: window.innerHeight - target.y + 3 });
+		else {
+			// Neither side holds the whole list. Take the roomier one and let
+			// the list scroll inside what is there, rather than covering the
+			// very cell being edited.
+			const roomBelow = window.innerHeight - 8 - below;
+			const roomAbove = target.y - 3 - 8;
+			setCapped(Math.max(80, Math.max(roomBelow, roomAbove)));
+			setPlacement(
+				roomBelow >= roomAbove
+					? { top: below }
+					: { bottom: window.innerHeight - target.y + 3 },
+			);
+		}
+	}, [below, placement, target.y]);
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The dialog contains focusable controls and owns Escape; input-only navigation below leaves button activation native.
 		<div
@@ -351,7 +441,13 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			role="dialog"
 			aria-label={`${info.header} value`}
 			tabIndex={-1}
-			style={{ position: "fixed", left: x, top: y, width, maxHeight: height }}
+			style={{
+				position: "fixed",
+				left: x,
+				width,
+				maxHeight: capped ?? maxHeight,
+				...(placement ?? { top: below }),
+			}}
 			onKeyDown={(e) => {
 				e.stopPropagation();
 				// Enter/Escape belong to the IME while a candidate is composing.
@@ -410,6 +506,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					<div
 						className="csv-option-list"
 						role="listbox"
+						aria-label={`${info.header} options`}
 						id={listId}
 						ref={listRef}
 					>
@@ -417,7 +514,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 							<button
 								type="button"
 								role="option"
-								aria-selected={cell.data === o.value}
+								aria-selected={committed === o.value}
 								id={`${listId}-option-${i}`}
 								ref={active === i ? activeOptionRef : undefined}
 								className={`csv-option-row ${active === i ? "is-active" : ""}`}
@@ -426,7 +523,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 								onClick={() => choose(o.value)}
 							>
 								<CsvPill {...o} />
-								{cell.data === o.value && <Check size={14} />}
+								{committed === o.value && <Check size={14} />}
 							</button>
 						))}
 						{canCreate && (
@@ -460,10 +557,20 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					}}
 					className="csv-value-form"
 				>
-					<label>{info.type === "date" ? "Choose a date" : "Edit value"}</label>
+					<label>
+						{info.type !== "date"
+							? "Edit value"
+							: showsDate
+								? "Choose a date"
+								: "Not a date yet"}
+					</label>
 					<input
 						ref={inputRef}
-						type={info.type === "date" ? "date" : "text"}
+						// A date input renders nothing for a value it cannot parse, so
+						// the cell's own value was invisible and Save looked like
+						// Cancel. Text keeps it on screen and lets it be corrected.
+						type={showsDate ? "date" : "text"}
+						{...(showsDate ? {} : { placeholder: "YYYY-MM-DD" })}
 						aria-label="Cell value"
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
@@ -471,7 +578,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					<button type="submit">Save</button>
 				</form>
 			)}
-			{cell.data && (
+			{committed && (
 				<button
 					type="button"
 					className="csv-option-clear"
@@ -488,9 +595,15 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 const TextEditor: ProvideEditorComponent<GridCell> = ({
 	value,
 	onChange,
+	onFinishedEditing,
 	validatedSelection,
 	target,
 }) => {
+	const typed = useRef(value);
+	typed.current = value;
+	// Scrolling the table moves the cell out from under the editor; keep what
+	// was typed and close, rather than leaving a value floating over the grid.
+	useEditorClosesOnGridScroll(() => onFinishedEditing(typed.current));
 	if (value.kind !== GridCellKind.Text) return null;
 	const entry = (
 		<TextCellEntry
@@ -503,7 +616,7 @@ const TextEditor: ProvideEditorComponent<GridCell> = ({
 		/>
 	);
 	return value.allowWrapping ? (
-		<div style={{ width: Math.max(40, target.width - 2) }}>{entry}</div>
+		<div style={{ width: Math.max(40, target.width) }}>{entry}</div>
 	) : (
 		entry
 	);

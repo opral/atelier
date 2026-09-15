@@ -1051,6 +1051,11 @@ async function renderMetadataCsv(
 }
 
 function clickCsvHeader(column: number, isDoubleClick = false) {
+	// A real header click starts with a press, which is what tells the view
+	// this is a click of its own rather than the end of a resize drag.
+	act(() => {
+		document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+	});
 	act(() =>
 		latestDataEditorProps.current?.onHeaderClicked?.(column, {
 			isDoubleClick,
@@ -1836,8 +1841,17 @@ test("compound filters keep source row mapping correct when sorted cells are edi
 				screen.getByRole("button", { name: "Filter column 2" }),
 			).toHaveFocus(),
 		);
-		fireEvent.change(screen.getByRole("textbox", { name: "Filter value 2" }), {
-			target: { value: "yes" },
+		// "contacted" holds yes/no, which reads as a checkbox column — and now
+		// that saving metadata keeps what the table was already showing, the
+		// rule offers checked/unchecked rather than a text box.
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value 2" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemcheckbox", { name: "Checked" }),
+		);
+		fireEvent.keyDown(screen.getByRole("menu", { name: "Filter value 2" }), {
+			key: "Escape",
 		});
 		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(2));
 		fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -2546,6 +2560,65 @@ test("pressing the blank surface around the table clears the selection", async (
 	await waitFor(() => expect(selection().gridSelection.rows.length).toBe(0));
 });
 
+// The toolbar slot after "Default view" reads "N changes · Show all N rows" in
+// review, and that link is the same state the bands are: it opens all of them.
+test("the review toolbar offers to show every row, and opens the bands when it is used", async () => {
+	const lix = await openLix();
+	const rows = (note: (index: number) => string) =>
+		new TextEncoder().encode(
+			`name,note\n${Array.from(
+				{ length: 10 },
+				(_, index) => `Row ${index + 1},${note(index + 1)}`,
+			).join("\n")}\n`,
+		);
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			"/folded.csv",
+			rows(String),
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute("UPDATE lix_file SET content = $1 WHERE path = $2", [
+			rows((index) => (index === 5 ? "changed" : String(index))),
+			"/folded.csv",
+		]);
+		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		const observe = vi.spyOn(lix, "observe");
+		utils = render(<Atelier lix={lix} />);
+		await waitFor(() => expect(observe).toHaveBeenCalled());
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Latest checkpoint. Review latest checkpoint",
+			}),
+		);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Next changed file" }),
+		);
+		const action = await screen.findByRole("button", {
+			name: "Show all 10 rows",
+		});
+		// The action sits in the count's slot, beside the summary, not in the
+		// right-hand cluster of controls.
+		const slot = document.querySelector(".csv-row-count");
+		expect(slot?.contains(action)).toBe(true);
+		expect(slot?.textContent).toBe("1 change·Show all 10 rows");
+		const numbered = () =>
+			document.querySelectorAll(
+				".csv-review-table tbody tr:not(.csv-review-band)",
+			).length;
+		expect(numbered()).toBe(3);
+		fireEvent.click(action);
+		await waitFor(() => expect(numbered()).toBe(10));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Show changes only" }),
+		);
+		await waitFor(() => expect(numbered()).toBe(3));
+	} finally {
+		utils?.unmount();
+		await lix.close();
+	}
+});
+
 test("checkpoint review reveals CSV column additions on a freshly opened surface", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
@@ -2593,6 +2666,103 @@ test("checkpoint review reveals CSV column additions on a freshly opened surface
 		expect(
 			utils.container.querySelector("[data-atelier-initial-content]"),
 		).toBeNull();
+	} finally {
+		utils?.unmount();
+		await lix.close();
+	}
+});
+
+// A removed row is not in the live document, so the wrapped layout — measured
+// from what is on screen now — had no height for it and it fell back to one
+// flat row. Its value was then cut off at the first line, with the ellipsis
+// that would have hinted at the rest inert under pre-wrap.
+test("a removed row keeps the height its wrapped value needs", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("file_csv_removed_wrapped");
+	const longNote =
+		"plus a much longer tail so that this note definitely needs several visual lines to display in full inside the review grid";
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/wrapped-removed.csv",
+				content: new TextEncoder().encode(
+					`name,notes\nKept,short\nGone,"${longNote}"\n`,
+				),
+			})
+			.execute();
+		await lix.execute(
+			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
+			[
+				{
+					atelier_csv: {
+						version: 1,
+						columns: [
+							{
+								id: "notes",
+								header: "notes",
+								index: 1,
+								type: "text",
+								wrap: true,
+							},
+						],
+					},
+				},
+				fileId,
+			],
+		);
+		const beforeCommitId = await activeCommitId(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,notes\nKept,short\n") })
+			.where("id", "=", fileId)
+			.execute();
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView
+							fileId={fileId}
+							filePath="/wrapped-removed.csv"
+							beforeCommitId={beforeCommitId}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const removedRow = await waitFor(() => {
+			const row = utils!.container.querySelector<HTMLTableRowElement>(
+				'tr[data-diff-status="removed"]',
+			);
+			expect(row).toBeTruthy();
+			return row!;
+		});
+		// A row states its height once, on the row: every cell's box reads it, and
+		// a fold animates it.
+		const heightOf = (row: HTMLTableRowElement) =>
+			Number.parseFloat(
+				row.style.getPropertyValue("--csv-review-cell-height") || "0",
+			);
+		const keptRow = utils!.container.querySelector<HTMLTableRowElement>(
+			'tr[data-diff-status="unchanged"]',
+		);
+		expect(keptRow).toBeTruthy();
+		// The long note needs several lines; the short one needs a single row.
+		expect(heightOf(removedRow)).toBeGreaterThan(heightOf(keptRow!));
+		// Nothing of the value is left outside the cell that holds it.
+		const value = removedRow.querySelector<HTMLElement>(
+			"td:last-child .csv-review-clipped-value",
+		);
+		expect(value).toBeTruthy();
+		expect(Number.parseFloat(value!.style.maxHeight)).toBe(
+			heightOf(removedRow) - 20,
+		);
 	} finally {
 		utils?.unmount();
 		await lix.close();

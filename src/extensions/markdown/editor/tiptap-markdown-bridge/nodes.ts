@@ -664,6 +664,11 @@ export function markdownWcNodes(
 						{
 							class: "markdown-footnote-ref-link",
 							role: "button",
+							// It is announced as a button, so it has to be one:
+							// focusable, and answering Enter and Space where it
+							// stands. Without this a screen reader named a control
+							// its user could neither reach nor press.
+							tabindex: "0",
 							"aria-label": `Go to footnote ${label}`,
 						},
 						`[${label}]`,

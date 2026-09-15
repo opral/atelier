@@ -10,6 +10,7 @@ import type {
 	ExtensionInstance,
 } from "../extension-runtime/types";
 import { PanelV2 } from "./panel-v2";
+import { shortcutHint } from "@/lib/platform";
 
 type MainAreaProps = {
 	/** Hover text for a document tab: the file's full path. */
@@ -137,7 +138,9 @@ function EmptyStateContent({
 					className="mt-6 flex items-center gap-2 rounded-[10px] bg-[var(--color-bg-action-primary)] px-6 py-2.75 text-sm font-bold text-[var(--color-text-on-action-primary)] shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[var(--color-bg-action-primary-hover)]"
 				>
 					New document
-					<span className="text-[11.5px] font-semibold opacity-75">⌘.</span>
+					<span className="text-[11.5px] font-semibold opacity-75">
+						{shortcutHint("⌘.")}
+					</span>
 				</button>
 			) : null}
 		</div>

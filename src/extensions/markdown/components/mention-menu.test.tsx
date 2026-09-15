@@ -241,4 +241,32 @@ describe("MentionMenu", () => {
 			.execute();
 		expect(created).toHaveLength(1);
 	});
+
+	test("a chrome control that swallows mousedown still dismisses the menu", async () => {
+		const { editor } = await setup();
+		// The tab strip's "Add view" trigger stops the bubbling mousedown that
+		// a plain document listener waits for, which left the menu stranded on
+		// screen behind the menu that button opened, with no key left to
+		// dismiss it — its Escape lives on the editor's keymap.
+		const trigger = document.createElement("button");
+		trigger.addEventListener("mousedown", (event) => event.stopPropagation());
+		trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+		document.body.appendChild(trigger);
+
+		await act(async () => {
+			editor.commands.focus("end");
+			editor.commands.insertContent("Leads are in @");
+		});
+		await screen.findByRole("listbox", { name: "Mention a file" });
+
+		await act(async () => {
+			trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("listbox", { name: "Mention a file" }),
+			).toBeNull();
+		});
+		trigger.remove();
+	});
 });

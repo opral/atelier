@@ -1,42 +1,4 @@
-import { useEffect, type RefObject } from "react";
-
-/**
- * Glide opens its cell editor in a body-level portal at the cell's screen
- * position and never moves it again, so the grid scrolled away underneath
- * while the editor stayed put. This follows the scroller: the editor moves
- * with its cell and is clipped to the grid's viewport, under the header and
- * row markers, as an editor inside the scroller would be.
- */
-
-export type EditorOverlayFollow = {
-	readonly transform: string;
-	readonly clipPath: string;
-};
-
-/**
- * The editor's offset for how far the scroller moved since it opened, and
- * the viewport rectangle it stays clipped to, in the overlay's own
- * (translated) coordinates.
- */
-export function editorOverlayFollow(input: {
-	readonly origin: { readonly x: number; readonly y: number };
-	readonly scroll: { readonly x: number; readonly y: number };
-	readonly viewport: {
-		readonly left: number;
-		readonly top: number;
-		readonly right: number;
-		readonly bottom: number;
-	};
-}): EditorOverlayFollow {
-	const dx = input.origin.x - input.scroll.x;
-	const dy = input.origin.y - input.scroll.y;
-	const { left, top, right, bottom } = input.viewport;
-	const point = (x: number, y: number) => `${x - dx}px ${y - dy}px`;
-	return {
-		transform: dx === 0 && dy === 0 ? "" : `translate(${dx}px, ${dy}px)`,
-		clipPath: `polygon(${point(left, top)}, ${point(right, top)}, ${point(right, bottom)}, ${point(left, bottom)})`,
-	};
-}
+import { useEffect, useRef } from "react";
 
 /**
  * Glide's overlay editor mounts into a hardcoded `document.getElementById("portal")`
@@ -60,97 +22,134 @@ export function ensureGlideOverlayPortal(): HTMLElement | null {
 	return portal;
 }
 
-type Tracked = {
-	readonly node: HTMLElement;
-	readonly scroller: HTMLElement;
-	readonly origin: { readonly x: number; readonly y: number };
-};
+/** Puts the portal in place before the first cell editor asks for it. */
+export function useGlideOverlayPortal(): void {
+	useEffect(() => {
+		ensureGlideOverlayPortal();
+	}, []);
+}
 
 /**
- * Keeps an open cell editor on its cell while the grid inside `containerRef`
- * scrolls. `inset` is the header height and row-marker width the editor is
- * clipped beneath.
+ * An overlay anchored to a cell or a header: Glide's own editor, our cell
+ * pickers, and the row and column menus. Each is positioned once, against the
+ * table as it stood when it opened.
  */
-export function useEditorOverlayFollowsScroll(
-	containerRef: RefObject<HTMLElement | null>,
-	inset: { readonly top: number; readonly left: number },
-	enabled: boolean,
-): void {
-	const { top: insetTop, left: insetLeft } = inset;
-	useEffect(() => {
-		const container = containerRef.current;
-		if (!enabled || !container) return;
-		const portal = ensureGlideOverlayPortal();
-		if (!portal || typeof MutationObserver === "undefined") return;
-		let tracked: Tracked | null = null;
-		const apply = () => {
-			if (!tracked) return;
-			const { node, scroller, origin } = tracked;
+const EDITOR =
+	".csv-property-popover, .gdg-style, .csv-column-menu, .csv-grid-menu";
+/**
+ * The parts of one of those that scroll on their own — including a menu that
+ * is taller than the window, which scrolls its own items. A wheel there was
+ * closing the menu instead, so the items below the fold could not be reached
+ * with the wheel at all.
+ */
+const EDITOR_LIST =
+	".csv-option-list, .gdg-clip-region, .csv-column-menu, .csv-grid-menu";
+/** Glide's scroller: the element that carries the table under the editor. */
+const GRID_SCROLLER = ".dvn-scroller";
+
+function closest(target: EventTarget | null, selector: string): Element | null {
+	return target instanceof Element ? target.closest(selector) : null;
+}
+
+/**
+ * Whether a scroll leaves an open editor stranded: a list inside the editor
+ * that can still move is scrolling itself, everything else is the grid moving
+ * out from under the editor.
+ *
+ * A wheel is not a scroll. It was treated as one — an editor swallows the
+ * wheel, so the grid never moves and no scroll event follows — but that closed
+ * an editor on any flick over it, discarding the edit even when the table had
+ * nowhere to go. The wheel is handed to the grid instead, and the scroll it
+ * causes does the closing; a table that cannot move keeps its editor.
+ */
+export function scrollLeavesEditorBehind(
+	event: Pick<Event, "type" | "target">,
+): boolean {
+	if (event.type === "wheel") return false;
+	const list = closest(event.target, EDITOR_LIST);
+	if (list && list.scrollHeight > list.clientHeight) return false;
+	// The page moving counts; a sidebar or some other panel scrolling on its
+	// own leaves the cell exactly where the editor left it.
+	if (!(event.target instanceof Element)) return true;
+	return event.target.closest(GRID_SCROLLER) !== null;
+}
+
+/**
+ * The grid under an open overlay: the scroller whose box the overlay sits over,
+ * or the only one on the page. The overlay is portalled to the body, so it
+ * cannot be found by walking up from it.
+ */
+function gridScrollerUnder(node: Element): HTMLElement | null {
+	const scrollers = [
+		...node.ownerDocument.querySelectorAll<HTMLElement>(GRID_SCROLLER),
+	];
+	if (scrollers.length <= 1) return scrollers[0] ?? null;
+	const box = node.getBoundingClientRect();
+	return (
+		scrollers.find((scroller) => {
 			const rect = scroller.getBoundingClientRect();
-			const follow = editorOverlayFollow({
-				origin,
-				scroll: { x: scroller.scrollLeft, y: scroller.scrollTop },
-				viewport: {
-					left: rect.left + insetLeft,
-					top: rect.top + insetTop,
-					right: rect.right,
-					bottom: rect.bottom,
-				},
+			return (
+				box.left < rect.right &&
+				box.right > rect.left &&
+				box.top < rect.bottom &&
+				box.bottom > rect.top
+			);
+		}) ?? null
+	);
+}
+
+/**
+ * A wheel over an open overlay moves the table beneath it, as it would were
+ * the overlay a cell inside the scroller. The scroll that follows is what
+ * closes the overlay, so a table with nowhere to go keeps it.
+ */
+function wheelReachesTheGrid(event: WheelEvent): void {
+	const over = closest(event.target, EDITOR);
+	if (!over) return;
+	const list = closest(event.target, EDITOR_LIST);
+	// A list with room left consumes its own wheel.
+	if (list && list.scrollHeight > list.clientHeight) return;
+	const scroller = gridScrollerUnder(over);
+	if (!scroller) return;
+	scroller.scrollBy(event.deltaX, event.deltaY);
+	event.preventDefault();
+}
+
+/**
+ * An open cell editor or menu belongs to the cell or header underneath it.
+ * Once the grid scrolls, that anchor has moved, and an overlay that slides
+ * along with it — or stays behind, naming a column now three columns over —
+ * reads as a bug. Scrolling closes it instead, keeping whatever was typed,
+ * the way a scroll dismisses an open cell in Notion.
+ */
+export function useEditorClosesOnGridScroll(close: () => void): void {
+	const dismiss = useRef(close);
+	dismiss.current = close;
+	useEffect(() => {
+		if (typeof document === "undefined") return;
+		// Opening an editor can scroll its own cell into view; arm only once
+		// that settles, so the editor does not close on the way there.
+		let armed = false;
+		let closed = false;
+		const outer = requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				armed = true;
 			});
-			node.style.transform = follow.transform;
-			node.style.clipPath = follow.clipPath;
-		};
-		const track = (node: HTMLElement) => {
-			const scroller = container.querySelector<HTMLElement>(".dvn-scroller");
-			const editor = node.firstElementChild;
-			if (!scroller || !(editor instanceof HTMLElement)) return;
-			// Only an editor opened over this grid; the portal is shared.
-			const box = editor.getBoundingClientRect();
-			const grid = scroller.getBoundingClientRect();
-			if (
-				box.right < grid.left ||
-				box.left > grid.right ||
-				box.bottom < grid.top ||
-				box.top > grid.bottom
-			)
-				return;
-			tracked = {
-				node,
-				scroller,
-				origin: { x: scroller.scrollLeft, y: scroller.scrollTop },
-			};
-			apply();
-		};
-		for (const child of portal.children)
-			if (child instanceof HTMLElement) track(child);
-		const observer = new MutationObserver((records) => {
-			for (const record of records) {
-				for (const node of record.removedNodes)
-					if (tracked?.node === node) tracked = null;
-				for (const node of record.addedNodes)
-					if (node instanceof HTMLElement) track(node);
-			}
 		});
-		observer.observe(portal, { childList: true });
 		const onScroll = (event: Event) => {
-			if (tracked && event.target === tracked.scroller) apply();
+			if (!armed || closed || !scrollLeavesEditorBehind(event)) return;
+			closed = true;
+			dismiss.current();
 		};
-		container.addEventListener("scroll", onScroll, true);
-		// A wheel over the editor scrolls the grid it sits on, as it would
-		// were the editor inside the scroller.
-		const onWheel = (event: WheelEvent) => {
-			if (!tracked || !(event.target instanceof Node)) return;
-			if (!tracked.node.contains(event.target)) return;
-			const region = tracked.node.querySelector(".gdg-clip-region");
-			if (region && region.scrollHeight > region.clientHeight) return;
-			tracked.scroller.scrollBy(event.deltaX, event.deltaY);
-			event.preventDefault();
-		};
-		portal.addEventListener("wheel", onWheel, { passive: false });
+		document.addEventListener("scroll", onScroll, true);
+		document.addEventListener("wheel", wheelReachesTheGrid, {
+			capture: true,
+			passive: false,
+		});
 		return () => {
-			observer.disconnect();
-			container.removeEventListener("scroll", onScroll, true);
-			portal.removeEventListener("wheel", onWheel);
+			cancelAnimationFrame(outer);
+			document.removeEventListener("scroll", onScroll, true);
+			document.removeEventListener("wheel", wheelReachesTheGrid, true);
 		};
-	}, [containerRef, enabled, insetLeft, insetTop]);
+	}, []);
 }

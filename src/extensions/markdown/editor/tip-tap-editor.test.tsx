@@ -751,6 +751,59 @@ test("numeric fields commit safe values and reject unsafe or invalid drafts", as
 	expect(typeof frontmatterValue()?.count).toBe("number");
 });
 
+test("Escape in a frontmatter value puts it back, the way it does in a name", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: fakeUuid("file_frontmatter_escape"),
+		markdown: "---\ntitle: Demo\ncount: 3\ndraft: true\n---\n\nHello",
+	});
+	const frontmatterValue = () =>
+		parseFrontmatterSource(
+			String(editor.state.doc.firstChild?.attrs.value ?? ""),
+		).value;
+
+	// A text value holds what is being typed and writes it when the field is
+	// left, so Escape puts back both the field's text and the value the
+	// document has been left holding.
+	const title = await screen.findByRole("textbox", { name: "title value" });
+	title.focus();
+	await act(async () => {
+		fireEvent.change(title, { target: { value: "Demo rewritten" } });
+	});
+	expect(title).toHaveValue("Demo rewritten");
+	await act(async () => {
+		fireEvent.keyDown(title, { key: "Escape" });
+	});
+	expect(frontmatterValue()?.title).toBe("Demo");
+	expect(title).toHaveValue("Demo");
+	expect(title).not.toHaveFocus();
+
+	// A number keeps a draft and commits it on blur; the blur Escape causes
+	// must not commit the draft Escape just threw away.
+	const count = screen.getByRole("spinbutton", { name: "count value" });
+	count.focus();
+	await act(async () => {
+		fireEvent.change(count, { target: { value: "42" } });
+	});
+	await act(async () => {
+		fireEvent.keyDown(count, { key: "Escape" });
+	});
+	expect(count).toHaveValue(3);
+	expect(frontmatterValue()?.count).toBe(3);
+	expect(count).not.toHaveFocus();
+
+	// And a checkbox goes back to the state it was in too.
+	const draft = screen.getByRole("checkbox", { name: "draft value" });
+	draft.focus();
+	await act(async () => {
+		fireEvent.click(draft);
+	});
+	expect(frontmatterValue()?.draft).toBe(false);
+	await act(async () => {
+		fireEvent.keyDown(draft, { key: "Escape" });
+	});
+	expect(frontmatterValue()?.draft).toBe(true);
+});
+
 test("the toolbar's Footnote button puts a marker at the caret and opens the note", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
 		fileId: fakeUuid("file_footnote_toolbar"),

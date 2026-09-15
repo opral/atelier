@@ -1019,6 +1019,9 @@
 	margin-top: 0;
 }
 .gdg-growing-entry > .csv-wrapped-text-entry {
+	/* The padding belongs inside the cell's width, as it does on the canvas;
+	   without this the editor wraps 17px wider and the lines break elsewhere. */
+	box-sizing: border-box;
 	padding: 10px 8.5px;
 	line-height: 20px;
 	white-space: pre-wrap;

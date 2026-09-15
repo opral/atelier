@@ -14,7 +14,7 @@ import type {
 	AtelierExtensionPreferences,
 	AtelierJsonValue,
 } from "../../extension-api";
-import { DiffGlyph, WorkingDot } from "@/components/diff-glyph";
+import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
 import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
@@ -901,23 +901,6 @@ function ChangeKindDot({
 			className={`ml-auto shrink-0 ${className}`}
 		/>
 	);
-}
-
-/**
- * Where the file came from: the old directory for a cross-directory move,
- * the old name for a rename in place.
- */
-function movedFromHint(movedFromPath: string, path: string): string {
-	const fromSegments = movedFromPath.split("/").filter(Boolean);
-	const toSegments = path.split("/").filter(Boolean);
-	const fromName = fromSegments.pop() ?? movedFromPath;
-	toSegments.pop();
-	const fromDir = fromSegments.join("/");
-	const toDir = toSegments.join("/");
-	if (fromDir !== toDir) {
-		return fromDir.length > 0 ? `${fromDir}/` : "/";
-	}
-	return fromName;
 }
 
 function FilledFlag() {

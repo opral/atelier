@@ -344,6 +344,60 @@ export function buildCsvReviewModel(input: {
 	};
 }
 
+/**
+ * Everything the review has to report, and how many things that is.
+ *
+ * The toolbar reads the count twice: once to print "4 changes", and once to
+ * decide whether there is anything to fold at all. A review with no changes has
+ * nothing to hide, so it keeps every row and offers no action.
+ */
+export function csvReviewChanges(model: CsvReviewModel): {
+	count: number;
+	details: CsvReviewDetail[];
+} {
+	const addedRows = model.rows.filter((r) => r.status === "added").length;
+	const removedRows = model.rows.filter((r) => r.status === "removed").length;
+	const editedCells = model.rows
+		.flatMap((r) => r.cells)
+		.filter((c) => c.status === "modified").length;
+	const movedRows = model.rows.filter((r) => r.details.length > 0);
+	const changedColumns = model.columns.filter((c) => c.status !== "unchanged");
+	return {
+		count:
+			addedRows +
+			movedRows.length +
+			removedRows +
+			editedCells +
+			changedColumns.length +
+			model.settingsDetails.length,
+		details: [
+			...(addedRows ? [{ label: "Rows added", after: String(addedRows) }] : []),
+			...(removedRows
+				? [{ label: "Rows removed", before: String(removedRows) }]
+				: []),
+			...(editedCells
+				? [
+						{
+							label: "Cells edited",
+							before: "Previous values",
+							after: `${editedCells} updated ${editedCells === 1 ? "cell" : "cells"}`,
+						},
+					]
+				: []),
+			...changedColumns.flatMap((c) =>
+				c.details.map((d) => ({ ...d, label: `${c.title} · ${d.label}` })),
+			),
+			...movedRows.flatMap((row) =>
+				row.details.map((moved) => ({
+					...moved,
+					label: `${row.cells[0]?.value || "Row"} · ${moved.label}`,
+				})),
+			),
+			...model.settingsDetails,
+		],
+	};
+}
+
 /** Use the current order, anchoring a removal before its next surviving neighbor. */
 function unionPairs(
 	beforeCount: number,

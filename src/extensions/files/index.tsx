@@ -24,6 +24,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLix, useQueryResult } from "@/lib/lix-react";
+import { isMacPlatform, shortcutHint } from "@/lib/platform";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
@@ -567,7 +568,9 @@ function FilesViewContent({
 			return changed ? next : prev;
 		});
 	}, [activeSelectionPath, createRequest, hasCurrentSelectionOverride]);
-	const isMacPlatform = useMemo(() => detectMacPlatform(), []);
+	// The hint the New menu prints and the modifier this handler waits
+	// for have to agree on what a Mac is, so both read the same check.
+	const isMac = useMemo(() => isMacPlatform(), []);
 	const isPanelFocused = context?.isPanelFocused ?? false;
 	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
 	const area = context?.area;
@@ -1146,7 +1149,7 @@ function FilesViewContent({
 		if (!shouldHandleGlobalShortcuts) return;
 		const listener = (event: KeyboardEvent) => {
 			if (event.repeat) return;
-			const usesPrimaryModifier = isMacPlatform
+			const usesPrimaryModifier = isMac
 				? event.metaKey && !event.ctrlKey
 				: event.ctrlKey && !event.metaKey;
 			if (!usesPrimaryModifier || event.altKey) return;
@@ -1193,7 +1196,7 @@ function FilesViewContent({
 	}, [
 		handleCreateShortcut,
 		handleDeleteSelection,
-		isMacPlatform,
+		isMac,
 		selectedKind,
 		selectedPath,
 		selectedSource,
@@ -1516,14 +1519,14 @@ function UnifiedNewMenu({
 					dataAttr="file-new-file"
 					iconUrl={fileNewIconUrl}
 					label="New file"
-					shortcut="⌘ ."
+					shortcut={shortcutHint("⌘ .")}
 					onSelect={onNewFile}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-folder"
 					iconUrl={folderBlueIconUrl}
 					label="New folder"
-					shortcut="⇧⌘ ."
+					shortcut={shortcutHint("⇧⌘ .")}
 					onSelect={onNewFolder}
 				/>
 				<DropdownMenuSeparator className="my-1.5" />
@@ -1691,17 +1694,6 @@ function isInteractiveEventTarget(event: Event): boolean {
 
 function isExternalFileDrag(dataTransfer: DataTransfer | null): boolean {
 	return dataTransfer?.types.includes("Files") ?? false;
-}
-
-function detectMacPlatform(): boolean {
-	if (typeof navigator === "undefined") return false;
-	const platformCandidates = [
-		((navigator as any).userAgentData?.platform as string | undefined) ?? null,
-		navigator.platform ?? null,
-		navigator.userAgent ?? null,
-	].filter(Boolean) as string[];
-	const combined = platformCandidates.join(" ").toLowerCase();
-	return /mac|iphone|ipad|ipod/.test(combined);
 }
 
 export function deriveMarkdownPathFromStem(

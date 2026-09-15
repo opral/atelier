@@ -120,3 +120,20 @@ export function WorkingDot({
 		/>
 	);
 }
+
+/**
+ * Where a moved file came from, said as briefly as it can be: the old
+ * directory for a cross-directory move, the old name for a rename in place.
+ */
+export function movedFromHint(movedFromPath: string, path: string): string {
+	const fromSegments = movedFromPath.split("/").filter(Boolean);
+	const toSegments = path.split("/").filter(Boolean);
+	const fromName = fromSegments.pop() ?? movedFromPath;
+	toSegments.pop();
+	const fromDir = fromSegments.join("/");
+	const toDir = toSegments.join("/");
+	if (fromDir !== toDir) {
+		return fromDir.length > 0 ? `${fromDir}/` : "/";
+	}
+	return fromName;
+}

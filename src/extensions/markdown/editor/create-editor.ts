@@ -20,6 +20,7 @@ import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { MentionCommandsExtension } from "./extensions/mention-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
+import { FocusedControlGuardExtension } from "./extensions/focused-control-guard";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
 import type { AtelierDocumentLinks } from "@/extension-api";
@@ -433,6 +434,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				onStateChange: () => {},
 			}),
 			TableNavigationExtension,
+			FocusedControlGuardExtension,
 		],
 		editable,
 		content:

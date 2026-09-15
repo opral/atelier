@@ -174,7 +174,6 @@ describe("createVideoPlayer (embed)", () => {
 		const player = createVideoPlayer({ variant: "embed" });
 		const root = player.element;
 		expect(root.dataset.variant).toBe("embed");
-		expect(root.tabIndex).not.toBe(0);
 		expect(root.querySelector(".atelier-video-chip--file")).toBeNull();
 		expect(root.querySelector(".atelier-video-chip--specs")).toBeNull();
 		expect(root.querySelector(".atelier-video-track-knob")).toBeNull();
@@ -184,5 +183,146 @@ describe("createVideoPlayer (embed)", () => {
 		expect(root.querySelector(".atelier-video-fullscreen")).not.toBeNull();
 		expect(root.querySelector(".atelier-video-puck")).not.toBeNull();
 		player.destroy();
+	});
+
+	test("takes focus from a click on its controls", () => {
+		const host = document.createElement("div");
+		document.body.append(host);
+		const player = createVideoPlayer({ variant: "embed" });
+		host.append(player.element);
+		expect(player.element.tabIndex).toBe(0);
+
+		const puck = player.element.querySelector(".atelier-video-puck")!;
+		puck.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+		expect(document.activeElement).toBe(player.element);
+
+		player.destroy();
+		host.remove();
+	});
+
+	test("answers Space and the seek keys instead of passing them up", () => {
+		const host = document.createElement("div");
+		document.body.append(host);
+		const player = createVideoPlayer({ variant: "embed" });
+		host.append(player.element);
+		player.setSource("blob:video");
+		const play = vi
+			.spyOn(player.video, "play")
+			.mockImplementation(() => Promise.resolve());
+		Object.defineProperty(player.video, "duration", { value: 60 });
+		const escaped: string[] = [];
+		host.addEventListener("keydown", (event) => escaped.push(event.key));
+
+		const press = (key: string) => {
+			const event = new KeyboardEvent("keydown", {
+				key,
+				bubbles: true,
+				cancelable: true,
+			});
+			player.element.dispatchEvent(event);
+			return event;
+		};
+
+		expect(press(" ").defaultPrevented).toBe(true);
+		expect(play).toHaveBeenCalledTimes(1);
+		expect(press("k").defaultPrevented).toBe(true);
+		expect(play).toHaveBeenCalledTimes(2);
+
+		player.video.currentTime = 20;
+		press("ArrowRight");
+		expect(player.video.currentTime).toBe(25);
+		press("ArrowLeft");
+		expect(player.video.currentTime).toBe(20);
+
+		// Nothing the player used reached the host that mounts it.
+		expect(escaped).toEqual([]);
+
+		player.destroy();
+		host.remove();
+	});
+
+	test("swallows the keys that would type over the video in an editor", () => {
+		const host = document.createElement("div");
+		document.body.append(host);
+		const player = createVideoPlayer({ variant: "embed" });
+		host.append(player.element);
+		const escaped: string[] = [];
+		host.addEventListener("keydown", (event) => escaped.push(event.key));
+
+		const press = (key: string, init: KeyboardEventInit = {}) => {
+			player.element.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					key,
+					bubbles: true,
+					cancelable: true,
+					...init,
+				}),
+			);
+		};
+
+		for (const key of ["a", "Z", "1", "Backspace", "Delete", "Enter"]) {
+			press(key);
+		}
+		expect(escaped).toEqual([]);
+
+		// Chords and navigation are the host's business, not the player's.
+		press("s", { metaKey: true });
+		press("Tab");
+		press("Escape");
+		expect(escaped).toEqual(["s", "Tab", "Escape"]);
+
+		player.destroy();
+		host.remove();
+	});
+
+	test("cancels a typing key outright, so no keypress follows it up", () => {
+		const host = document.createElement("div");
+		document.body.append(host);
+		const player = createVideoPlayer({ variant: "embed" });
+		host.append(player.element);
+
+		const press = (key: string) => {
+			const event = new KeyboardEvent("keydown", {
+				key,
+				bubbles: true,
+				cancelable: true,
+			});
+			player.element.dispatchEvent(event);
+			return event;
+		};
+
+		// Stopping the key from travelling is not enough: an uncancelled
+		// keydown still raises a keypress, which reaches the editor on its own
+		// and writes the character over whatever the document has selected.
+		for (const key of ["h", "Z", "1", "Backspace", "Delete", "Enter"]) {
+			expect(press(key).defaultPrevented).toBe(true);
+		}
+
+		player.destroy();
+		host.remove();
+	});
+
+	test("a focused control keeps its own activation, and still shields the host", () => {
+		const host = document.createElement("div");
+		document.body.append(host);
+		const player = createVideoPlayer({ variant: "embed" });
+		host.append(player.element);
+		const escaped: string[] = [];
+		host.addEventListener("keydown", (event) => escaped.push(event.key));
+
+		const toggle = player.element.querySelector(".atelier-video-toggle")!;
+		const space = new KeyboardEvent("keydown", {
+			key: " ",
+			bubbles: true,
+			cancelable: true,
+		});
+		toggle.dispatchEvent(space);
+		// The button's native Space activation survives …
+		expect(space.defaultPrevented).toBe(false);
+		// … and the editor above never sees the key.
+		expect(escaped).toEqual([]);
+
+		player.destroy();
+		host.remove();
 	});
 });

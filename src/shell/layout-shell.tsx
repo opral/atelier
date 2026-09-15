@@ -41,6 +41,7 @@ import {
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
 	ExternalWriteReviewControls,
+	reviewFloatHandlesEscape,
 	type DiffFloatUndoScope,
 } from "@/extension-runtime/external-write-review-controls";
 import { isMacPlatform } from "@/lib/platform";
@@ -1174,12 +1175,43 @@ function LayoutShellLoadedContentResolved({
 	readonly installedExtensionsReady: boolean;
 }) {
 	const effectiveAtelierInstance = atelierInstance;
+	const workingChangesReviewOpenRef = useRef(false);
+	// True from a reviewer's own edit until the review has caught up with it.
+	const [reviewCatchingUp, setReviewCatchingUp] = useState(false);
+	const catchUpTimerRef = useRef<number | undefined>(undefined);
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
+			// An edit the reviewer makes inside an open review — a property in
+			// the frontmatter panel — advances the working tip, which would
+			// otherwise declare their own review behind the file and refuse the
+			// checkpoint. The review follows the edit instead. An external write
+			// emits nothing here, so it still raises the notice: nobody has
+			// their content swapped for someone else's mid-read.
+			//
+			// It follows once the typing settles, not once per keystroke.
+			// Reopening mints a new epoch, and the file's projection re-renders
+			// from before the edit while that epoch loads — so a reopen between
+			// two keystrokes put the old value back under the caret and the
+			// next letters landed on it, writing "Frontmatter fixturee pangte"
+			// where the reviewer typed a sentence.
+			if (
+				event.type !== "document_modified" ||
+				!workingChangesReviewOpenRef.current
+			)
+				return;
+			const { filePath } = event;
+			setReviewCatchingUp(true);
+			window.clearTimeout(catchUpTimerRef.current);
+			catchUpTimerRef.current = window.setTimeout(() => {
+				void Promise.resolve(
+					reopenWorkingReviewRef.current?.({ revealPath: filePath }),
+				).finally(() => setReviewCatchingUp(false));
+			}, 400);
 		},
 		[onEvent],
 	);
+	useEffect(() => () => window.clearTimeout(catchUpTimerRef.current), []);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
 	const preferencesFor = useCallback(
 		(extensionId: string): AtelierExtensionPreferences => ({
@@ -1394,13 +1426,23 @@ function LayoutShellLoadedContentResolved({
 	const [diffReview, setDiffReview] = useState<DiffReviewState | null>(null);
 	const diffReviewRef = useRef(diffReview);
 	diffReviewRef.current = diffReview;
+	// An open reads the repository before it has a session to show, so the
+	// control that started it has to know one is on its way — and be able to
+	// call it off, since the state it would flip has not flipped yet.
 	const workingReviewOpeningRef = useRef(false);
+	const workingReviewOpenTokenRef = useRef(0);
+	const cancelWorkingChangesReviewOpen = useCallback(() => {
+		workingReviewOpenTokenRef.current += 1;
+		workingReviewOpeningRef.current = false;
+	}, []);
 	// Both diff-mode targets are views over the same state: "working" reviews
 	// the mutable head, "historical" a read-only checkpoint (verb: Restore).
 	const workingReview = diffReview?.kind === "working" ? diffReview : null;
 	const historicalReview =
 		diffReview?.kind === "historical" ? diffReview : null;
 	const workingChangesReviewOpen = workingReview !== null;
+	// Read from emitEvent, which is built before this line.
+	workingChangesReviewOpenRef.current = workingChangesReviewOpen;
 	const workingChangeReviewFiles =
 		workingReview?.files ?? EMPTY_LIX_FILES_FOR_OPEN;
 	const workingChangeReviewRange = workingReview?.range ?? null;
@@ -1721,20 +1763,19 @@ function LayoutShellLoadedContentResolved({
 	const isReviewMode = workingChangesReviewOpen || historicalReview !== null;
 
 	// Fallback when no review float consumes Escape. Nested dialogs receive the
-	// event first; deferring the final check also lets a float registered later
-	// on window consume it without depending on listener registration order.
+	// event first, so a key they already claimed is left alone. The float is
+	// asked whether it owns the key: it and this listener both sit on `window`
+	// in the bubble phase, and deferring the check only moves it between the
+	// two listeners, where the float's own handler may not have run yet.
 	useEffect(() => {
 		if (!isReviewMode) return;
-		let active = true;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
-			queueMicrotask(() => {
-				if (active && !event.defaultPrevented) exitDiffReview();
-			});
+			if (reviewFloatHandlesEscape()) return;
+			exitDiffReview();
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => {
-			active = false;
 			window.removeEventListener("keydown", handleKeyDown);
 		};
 	}, [exitDiffReview, isReviewMode]);
@@ -2630,11 +2671,13 @@ function LayoutShellLoadedContentResolved({
 
 	const openHistoricalCheckpointFile = useCallback(
 		(path: string) => {
-			if (!historicalReview?.range) return;
-			const historicalRange = historicalReview.range;
-			const file = historicalReview.files.find(
-				(candidate) => candidate.path === path,
-			);
+			// Read the session from the ref, not from this render's closure:
+			// the caller may be a continuation of the open() that switched
+			// checkpoints, which runs before React has re-rendered.
+			const session = diffReviewRef.current;
+			if (session?.kind !== "historical" || !session.range) return;
+			const historicalRange = session.range;
+			const file = session.files.find((candidate) => candidate.path === path);
 			if (!file) return;
 			const requestId = ++historicalRequestRef.current;
 			void (async () => {
@@ -2678,12 +2721,7 @@ function LayoutShellLoadedContentResolved({
 				console.warn("[checkpoint] failed to open historical file", error);
 			});
 		},
-		[
-			historicalReview,
-			historicalRevisionStateForPath,
-			lix,
-			openResolvedFileView,
-		],
+		[historicalRevisionStateForPath, lix, openResolvedFileView],
 	);
 	openHistoricalCheckpointFileRef.current = openHistoricalCheckpointFile;
 
@@ -2753,7 +2791,7 @@ function LayoutShellLoadedContentResolved({
 					convertedInstances,
 				);
 			}
-			setDiffReview({
+			const next: DiffReviewState = {
 				kind: "historical",
 				range: {
 					// "" is the beginning-of-repository sentinel: no removed
@@ -2769,7 +2807,14 @@ function LayoutShellLoadedContentResolved({
 				// live-navigation exit guard arms immediately.
 				...(convertedCount > 0 ? { opened: true } : {}),
 				...(createdAt !== undefined ? { createdAt } : {}),
-			});
+			};
+			// Publish the new span before this promise resolves. Callers chain
+			// work onto open() — the History view opens a file next — and that
+			// runs long before React commits the state, so anything reading the
+			// session through the ref would otherwise still see the span this
+			// call is replacing and re-pin the file to it.
+			diffReviewRef.current = next;
+			setDiffReview(next);
 		},
 		[closeHistoricalReviewViews, convertOpenFileTabsToHistorical, lix],
 	);
@@ -3655,6 +3700,7 @@ function LayoutShellLoadedContentResolved({
 				revealHistory();
 			}
 			workingReviewOpeningRef.current = true;
+			const openToken = workingReviewOpenTokenRef.current;
 			return (async () => {
 				// The batch pins the existing coordinate functions and the one-argument
 				// HOT diff to one repository snapshot. No review-only SQL surface is
@@ -3746,6 +3792,10 @@ function LayoutShellLoadedContentResolved({
 					: openOptions?.reveal === true
 						? firstChangedFile
 						: undefined;
+				// Called off while the repository was being read: the session
+				// that was asked for is no longer wanted, and opening it now
+				// would undo the close that called it off.
+				if (openToken !== workingReviewOpenTokenRef.current) return false;
 				setDiffReview({
 					kind: "working",
 					...(openOptions?.appliedRange
@@ -4146,16 +4196,16 @@ function LayoutShellLoadedContentResolved({
 		},
 		[handleOpenWorkingChangesReview, handleViewCheckpoint, lix],
 	);
-	const openDiffSessionFile = useCallback(
-		(path: string) => {
-			if (historicalReview) {
-				openHistoricalCheckpointFileRef.current?.(path);
-				return;
-			}
-			openWorkingChangeFileRef.current?.(path);
-		},
-		[historicalReview],
-	);
+	const openDiffSessionFile = useCallback((path: string) => {
+		// Same reason as openHistoricalCheckpointFile: open().then(openFile)
+		// arrives before the render that would tell this closure which kind of
+		// session is now on screen.
+		if (diffReviewRef.current?.kind === "historical") {
+			openHistoricalCheckpointFileRef.current?.(path);
+			return;
+		}
+		openWorkingChangeFileRef.current?.(path);
+	}, []);
 	const resolveDiffSessionFile = useCallback(
 		async (path: string, outcome: "accepted" | "rejected") => {
 			if (diffReviewRef.current?.intent === "review-applied") {
@@ -4508,6 +4558,12 @@ function LayoutShellLoadedContentResolved({
 						{/* A collapsed panel gives its space back — no residual gutter,
 						    the strip aligns with the top-bar mark. */}
 						<Separator
+							// A collapsed panel's gutter is zero pixels wide, and a
+							// zero-pixel separator still answered Tab and the arrow
+							// keys: focus landed on nothing, and arrowing dragged open
+							// a sidebar the user could not see they were dragging.
+							{...(isLeftCollapsed ? { tabIndex: -1 } : {})}
+							aria-label="Resize the left area"
 							className={`group relative z-10 flex items-center justify-center ${
 								isLeftCollapsed ? "w-0" : "w-1"
 							}`}
@@ -4558,6 +4614,8 @@ function LayoutShellLoadedContentResolved({
 							</div>
 						</Panel>
 						<Separator
+							{...(isRightCollapsed ? { tabIndex: -1 } : {})}
+							aria-label="Resize the right area"
 							className={`group relative z-10 flex items-center justify-center ${
 								isRightCollapsed ? "w-0" : "w-1"
 							}`}
@@ -4632,9 +4690,30 @@ function LayoutShellLoadedContentResolved({
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
 					reviewingWorkingChanges={workingChangesReviewOpen}
 					reviewingLatestCheckpoint={historicalReview !== null}
+					// An applied review is pinned to a span the host chose, not to
+					// the working epoch, and refreshing would drop that span. Only
+					// a review of the working changes can be behind them.
+					reviewCatchingUp={reviewCatchingUp}
+					reviewedEpoch={
+						workingReview?.intent ? null : workingChangeReviewRange
+					}
+					onRefreshWorkingReview={() => {
+						// Reopen on the current epoch, keeping the file on screen
+						// where it is still one of the changed ones.
+						void reopenWorkingReviewRef.current?.(
+							navigationActivePath
+								? { revealPath: navigationActivePath }
+								: undefined,
+						);
+					}}
 					onReviewWorkingChanges={() => {
-						// The same control opens and closes the review.
-						if (workingChangesReviewOpen) {
+						// The same control opens and closes the review. A second
+						// press that lands before the first one's read of the
+						// repository comes back closes what it started: the flag
+						// it would otherwise read has not flipped yet, and the
+						// press would open a second session on top of the first.
+						if (workingChangesReviewOpen || workingReviewOpeningRef.current) {
+							cancelWorkingChangesReviewOpen();
 							exitDiffReview();
 							return;
 						}

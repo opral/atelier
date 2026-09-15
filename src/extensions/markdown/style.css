@@ -33,11 +33,16 @@
    gutter lives on the editor body wrapper instead. */
 	.markdown-view {
 		--markdown-radius: 4px;
-		/* Notion's default column, and one gap between blocks so a document
-		   reads as a steady rhythm rather than a set of unrelated margins. */
-		--markdown-content-width: 708px;
+		/* A measure a little past Notion's default column — the extra line
+		   length reads as more document and less frame — and one gap between
+		   blocks so a document reads as a steady rhythm rather than a set of
+		   unrelated margins. */
+		--markdown-content-width: 768px;
 		--markdown-block-gap: 0.5rem;
+		/* How wide a table may grow when the panel has room to give it. */
 		--markdown-table-max-width: 1040px;
+		/* The document's own margin, which an outset block never eats into. */
+		--markdown-gutter-min: 2rem;
 		flex: 1 1 auto;
 		min-height: 0;
 	}
@@ -213,7 +218,11 @@
 		line-height: 1.5;
 		min-height: 100%;
 		padding: clamp(2.25rem, 5vw, 4rem)
-			max(2rem, calc((100% - var(--markdown-content-width)) / 2)) 6rem;
+			max(
+				var(--markdown-gutter-min),
+				calc((100% - var(--markdown-content-width)) / 2)
+			)
+			6rem;
 		caret-color: currentColor;
 		cursor: auto;
 		width: 100%;
@@ -743,12 +752,50 @@
 		line-height: 1.35;
 	}
 
+	/* A revision takes no edits, and its fields read as fields, not as inputs:
+	   no hover affordance, no caret, and the values still plainly legible. */
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-input:disabled,
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-tag:disabled {
+		color: var(--color-text-secondary);
+		-webkit-text-fill-color: var(--color-text-secondary);
+		cursor: default;
+		opacity: 1;
+	}
+
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-key-cell:hover,
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-value:hover,
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-boolean:hover,
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tags:hover,
+	.markdown-frontmatter[data-disabled="true"]
+		.markdown-frontmatter-nested:hover {
+		background: transparent;
+	}
+
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tag svg {
+		width: 0;
+		opacity: 0;
+	}
+
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-remove {
+		display: none;
+	}
+
+	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-yaml {
+		cursor: default;
+	}
+
 	@media (max-width: 700px) {
 		.markdown-frontmatter-header {
 			align-items: flex-start;
 		}
 
-		.markdown-frontmatter-title span {
+		/* The note that says why a field cannot be edited stays; it is the
+		   answer to the question a disabled field asks. */
+		.markdown-frontmatter-title span:not(.markdown-frontmatter-note) {
 			display: none;
 		}
 
@@ -879,10 +926,26 @@
 	}
 
 	/* Tables */
-	/* Tables stay inside the column and scroll sideways when wider, rather
-	   than bleeding past the text on both sides. Hairlines, 14px cells,
-	   a tinted plain-case header row: Notion's simple table. */
+	/* A table is read across, not down a measure, so it earns more room than
+	   the prose around it: it reaches back into the gutter on both sides, as
+	   far as the panel can spare while keeping the document's own margin, and
+	   no further than the table's cap. In a panel with no gutter to give it
+	   sits in the column like everything else and scrolls sideways.
+	   Hairlines, 14px cells, a tinted plain-case header row: Notion's simple
+	   table. */
 	.markdown-view .ProseMirror table {
+		--markdown-table-outset: max(
+			0px,
+			min(
+				calc(
+					(var(--markdown-table-max-width) - var(--markdown-content-width)) / 2
+				),
+				calc(
+					(100cqw - var(--markdown-content-width)) / 2 -
+						var(--markdown-gutter-min)
+				)
+			)
+		);
 		display: block;
 		border: 1px solid var(--color-border-panel);
 		border-collapse: separate;
@@ -890,10 +953,11 @@
 		border-spacing: 0;
 		box-shadow: none;
 		width: max-content;
-		min-width: 100%;
-		max-width: 100%;
+		min-width: calc(100% + 2 * var(--markdown-table-outset));
+		max-width: calc(100% + 2 * var(--markdown-table-outset));
 		margin-top: var(--markdown-block-gap);
 		margin-bottom: var(--markdown-block-gap);
+		margin-inline: calc(-1 * var(--markdown-table-outset));
 		overflow-x: auto;
 		font-size: 14px;
 	}
@@ -1057,7 +1121,10 @@
 		text-underline-offset: 2px;
 	}
 
-	.markdown-view .ProseMirror .markdown-footnote-ref--orphan .markdown-footnote-ref-link {
+	.markdown-view
+		.ProseMirror
+		.markdown-footnote-ref--orphan
+		.markdown-footnote-ref-link {
 		color: var(--color-text-tertiary);
 		text-decoration: underline dashed;
 		text-underline-offset: 2px;
@@ -1107,8 +1174,18 @@
 		background: var(--color-bg-hover);
 	}
 
+	/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
+	   and the definition is the fade *out*; on the way in it was still
+	   deepening as the scroll came to rest, which cost most of the moment the
+	   tint exists for. */
 	.markdown-view .ProseMirror .markdown-footnote-target {
-		background-color: color-mix(in srgb, var(--color-text-link) 14%, transparent);
+		background-color: color-mix(
+			in srgb,
+			var(--color-text-link) 14%,
+			transparent
+		);
+		transition-duration: 120ms;
+		transition-timing-function: ease-out;
 	}
 
 	/* Unsupported blocks (raw HTML): a labelled, dashed container that reads

@@ -51,6 +51,27 @@ const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
 const SEEK_STEP_SECONDS = 5;
 const CONTROLS_IDLE_HIDE_MS = 2500;
 
+/** The player answers this key; nothing above it should see it as well. */
+function consumeKey(event: KeyboardEvent): void {
+	event.preventDefault();
+	event.stopPropagation();
+}
+
+/**
+ * Keys a text editor would write with. The embed player is mounted inside the
+ * Markdown editor, where the video is a single selectable atom: any of these
+ * reaching the editor replaces the video with what was typed.
+ */
+function editsSurroundingText(event: KeyboardEvent): boolean {
+	if (event.ctrlKey || event.metaKey || event.altKey) return false;
+	return (
+		event.key === "Backspace" ||
+		event.key === "Delete" ||
+		event.key === "Enter" ||
+		event.key.length === 1
+	);
+}
+
 export type VideoPlayerVariant = "standalone" | "embed";
 
 export type VideoPlayerOptions = {
@@ -295,7 +316,10 @@ export function createVideoPlayer(
 	errorState.textContent = "This video could not be played.";
 	root.append(errorState);
 
-	if (isStandalone) root.tabIndex = 0;
+	// Both variants are focusable. A player you can click to play has to be
+	// able to answer the keys that control it, and the embed only receives a
+	// key event at all once focus is inside it.
+	root.tabIndex = 0;
 
 	let destroyed = false;
 	let currentSource: string | null = null;
@@ -452,35 +476,61 @@ export function createVideoPlayer(
 
 	const handleKeydown = (event: KeyboardEvent) => {
 		// Let focused buttons keep their native Space/Enter activation.
-		if (
+		const onButton =
 			event.target instanceof HTMLElement &&
-			event.target.closest("button") !== null
-		) {
-			return;
+			event.target.closest("button") !== null;
+		if (!onButton) {
+			switch (event.key) {
+				case " ":
+				case "k":
+					consumeKey(event);
+					togglePlayback();
+					return;
+				case "ArrowLeft":
+					consumeKey(event);
+					seekBy(-SEEK_STEP_SECONDS);
+					return;
+				case "ArrowRight":
+					consumeKey(event);
+					seekBy(SEEK_STEP_SECONDS);
+					return;
+				case "f":
+					consumeKey(event);
+					toggleFullscreen();
+					return;
+				case "m":
+					consumeKey(event);
+					toggleMute();
+					return;
+			}
 		}
-		switch (event.key) {
-			case " ":
-			case "k":
-				event.preventDefault();
-				togglePlayback();
-				break;
-			case "ArrowLeft":
-				event.preventDefault();
-				seekBy(-SEEK_STEP_SECONDS);
-				break;
-			case "ArrowRight":
-				event.preventDefault();
-				seekBy(SEEK_STEP_SECONDS);
-				break;
-			case "f":
-				event.preventDefault();
-				toggleFullscreen();
-				break;
-			case "m":
-				event.preventDefault();
-				toggleMute();
-				break;
+		// A key the player itself does not use still belongs to the player
+		// while focus is inside it. The embed variant is mounted in the
+		// Markdown editor as one atom, so a key that reaches the editor from
+		// here is typed over the video the viewer is watching.
+		//
+		// Stopping the key from propagating is not enough on its own: it keeps
+		// the editor's keymap from seeing the `keydown`, but the browser still
+		// fires the `keypress` that follows, and that one reaches the editor
+		// by itself and writes the character over whatever the document has
+		// selected. Cancelling the `keydown` is what stops the `keypress` from
+		// existing at all.
+		if (editsSurroundingText(event)) {
+			event.stopPropagation();
+			// A focused button still activates on its own Space or Enter.
+			const activatesButton =
+				onButton && (event.key === " " || event.key === "Enter");
+			if (!activatesButton) event.preventDefault();
 		}
+	};
+
+	// Clicking a control has to put focus in the player. The Markdown embed
+	// suppresses the browser's own mousedown handling on its controls so
+	// ProseMirror cannot select the node, which also suppresses the focus
+	// that would otherwise come with the click.
+	const focusPlayer = () => {
+		if (destroyed) return;
+		root.focus({ preventScroll: true });
 	};
 
 	video.addEventListener("play", refreshPlaybackState);
@@ -502,7 +552,8 @@ export function createVideoPlayer(
 	track.addEventListener("pointercancel", endScrub);
 	root.addEventListener("pointermove", wakeControls);
 	root.addEventListener("pointerdown", wakeControls);
-	if (isStandalone) root.addEventListener("keydown", handleKeydown);
+	root.addEventListener("pointerdown", focusPlayer);
+	root.addEventListener("keydown", handleKeydown);
 
 	return {
 		element: root,
@@ -546,7 +597,8 @@ export function createVideoPlayer(
 			track.removeEventListener("pointercancel", endScrub);
 			root.removeEventListener("pointermove", wakeControls);
 			root.removeEventListener("pointerdown", wakeControls);
-			if (isStandalone) root.removeEventListener("keydown", handleKeydown);
+			root.removeEventListener("pointerdown", focusPlayer);
+			root.removeEventListener("keydown", handleKeydown);
 			video.pause?.();
 			video.removeAttribute("src");
 			video.load?.();

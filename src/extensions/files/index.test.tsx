@@ -271,8 +271,9 @@ describe("FilesView", () => {
 		expect(
 			screen.getByRole("menuitem", { name: /New CSV \(.csv\)/ }),
 		).toBeVisible();
-		expect(screen.getByText("⌘ .")).toBeVisible();
-		expect(screen.getByText("⇧⌘ .")).toBeVisible();
+		// Linux/jsdom: the hints are spelled out, not left as macOS glyphs.
+		expect(screen.getByText("Ctrl+.")).toBeVisible();
+		expect(screen.getByText("Shift+Ctrl+.")).toBeVisible();
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -304,8 +305,9 @@ describe("FilesView", () => {
 		expect(
 			screen.getByRole("menuitem", { name: /New CSV \(.csv\)/ }),
 		).toBeVisible();
-		expect(screen.getByText("⌘ .")).toBeVisible();
-		expect(screen.getByText("⇧⌘ .")).toBeVisible();
+		// Linux/jsdom: the hints are spelled out, not left as macOS glyphs.
+		expect(screen.getByText("Ctrl+.")).toBeVisible();
+		expect(screen.getByText("Shift+Ctrl+.")).toBeVisible();
 
 		await act(async () => view?.unmount());
 		await lix.close();
@@ -608,7 +610,7 @@ describe("FilesView", () => {
 			clientY: 24,
 		});
 		const menu = await getFilesTreeContextMenu();
-		expect(menu).toHaveTextContent("⌘⌫");
+		expect(menu).toHaveTextContent("Ctrl+Backspace");
 		fireEvent.click(getFilesTreeContextMenuButton(menu, "Delete"));
 
 		await waitFor(async () => {

@@ -18,6 +18,12 @@ import {
 } from "../editor/extensions/embed-file-commands";
 import { relativeMarkdownAssetSrc } from "../editor/markdown-asset";
 import {
+	clampLeft,
+	clampToClipRect,
+	getClipRect,
+	isAnchorClipped,
+} from "./clip-rect";
+import {
 	storeUploadedWorkspaceFile,
 	UploadedWorkspaceFileError,
 } from "../editor/store-uploaded-file";
@@ -30,6 +36,7 @@ import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileIconUrl } from "@/extensions/files/file-icons";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
+import { useMenuDismissal } from "./menu-dismissal";
 
 const INACTIVE_EMBED_FILE_STATE: EmbedFileCommandState = {
 	active: false,
@@ -154,8 +161,11 @@ export function EmbedFilePickerMenu({
 					: INACTIVE_EMBED_FILE_STATE,
 		}) ?? INACTIVE_EMBED_FILE_STATE;
 	const [position, setPosition] = useState<{
-		top: number;
+		top: number | null;
+		bottom: number | null;
 		left: number;
+		maxHeight: number;
+		hidden: boolean;
 	} | null>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
@@ -172,18 +182,27 @@ export function EmbedFilePickerMenu({
 			const editorRect = editor.view.dom.getBoundingClientRect();
 			const gap = 8;
 			const menuWidth = 304;
-			const menuHeight = 356;
-			const spaceBelow = window.innerHeight - coords.bottom - gap;
-			const spaceAbove = coords.top - gap;
-			const top =
-				spaceBelow >= menuHeight || spaceBelow >= spaceAbove
-					? coords.bottom + gap
-					: Math.max(gap, coords.top - gap - Math.min(menuHeight, spaceAbove));
-			let left = Math.max(coords.left, editorRect.left);
-			if (left + menuWidth > window.innerWidth) {
-				left = Math.max(gap, window.innerWidth - menuWidth - gap);
-			}
-			setPosition({ top, left });
+			// Clipped to the editor's scroll viewport, so the picker cannot
+			// come to rest on top of the toolbar or the tab strip.
+			const clip = getClipRect(editor.view.dom);
+			const placed = clampToClipRect({
+				coords,
+				clip,
+				preferredHeight: 356,
+				gap,
+			});
+			setPosition({
+				top: placed.top,
+				bottom: placed.bottom,
+				left: clampLeft({
+					left: Math.max(coords.left, editorRect.left),
+					width: menuWidth,
+					clip,
+					gap,
+				}),
+				maxHeight: placed.maxHeight,
+				hidden: isAnchorClipped(coords, clip),
+			});
 		};
 
 		updatePosition();
@@ -195,18 +214,18 @@ export function EmbedFilePickerMenu({
 		};
 	}, [embedState.active, embedState.pos, editor]);
 
-	useEffect(() => {
-		if (!embedState.active || !editor) return;
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				editor.commands.closeEmbedFileMenu();
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, [embedState.active, editor]);
+	useMenuDismissal({
+		active: embedState.active,
+		editor,
+		menuRef,
+		close: () => editor?.commands.closeEmbedFileMenu(),
+	});
 
-	if (!embedState.active || !position || !editor) return null;
+	// Scrolled out of the editor's viewport it is neither readable nor
+	// clickable, and the list it owns the keyboard for goes with it.
+	if (!embedState.active || !position || position.hidden || !editor) {
+		return null;
+	}
 
 	const portalTarget =
 		editor.view.dom.closest(".atelier-root") ?? document.body;
@@ -215,7 +234,13 @@ export function EmbedFilePickerMenu({
 		<div
 			ref={menuRef}
 			className="markdown-slash-menu markdown-embed-file-menu"
-			style={{ position: "fixed", top: position.top, left: position.left }}
+			style={{
+				position: "fixed",
+				top: position.top ?? undefined,
+				bottom: position.bottom ?? undefined,
+				left: position.left,
+				maxHeight: position.maxHeight,
+			}}
 			role="dialog"
 			aria-label="Embed file picker"
 			tabIndex={-1}

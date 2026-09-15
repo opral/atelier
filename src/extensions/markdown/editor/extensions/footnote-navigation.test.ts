@@ -39,6 +39,37 @@ function mountEditor(source: string) {
 	return { editor, element };
 }
 
+/** First node of `typeName` carrying `label`, with its position. */
+function findNode(editor: Editor, typeName: string, label: string) {
+	let found: { pos: number; node: any } | null = null;
+	editor.state.doc.descendants((node, pos) => {
+		if (found) return false;
+		if (node.type.name === typeName && node.attrs.label === label) {
+			found = { pos, node };
+			return false;
+		}
+		return true;
+	});
+	if (!found) throw new Error(`no ${typeName} for ${label}`);
+	return found as { pos: number; node: any };
+}
+
+/** Tab the way the editor's keymap sees it. */
+function sendTab(editor: Editor): boolean {
+	return (
+		editor.view.someProp("handleKeyDown", (handler) =>
+			handler(
+				editor.view,
+				new KeyboardEvent("keydown", {
+					key: "Tab",
+					bubbles: true,
+					cancelable: true,
+				}),
+			),
+		) === true
+	);
+}
+
 function click(target: Element) {
 	target.dispatchEvent(
 		new MouseEvent("mousedown", { bubbles: true, button: 0 }),
@@ -100,8 +131,36 @@ describe("footnote navigation", () => {
 		const { $from } = editor.state.selection;
 		expect($from.node($from.depth - 1).type.name).toBe("footnoteDef");
 		expect($from.parentOffset).toBe("The source.".length);
+		// A smooth scroll settles around 950ms. The tint has to be there once
+		// the eye is, so it is still on well past that …
+		vi.advanceTimersByTime(1500);
+		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+		// … and gone before it turns into decoration.
 		vi.advanceTimersByTime(1500);
 		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(false);
+	});
+
+	test("the way back keeps its own tint, not what is left of the way in", () => {
+		const marker = element.querySelector("[data-footnote-ref='1'] a")!;
+		click(marker);
+		const definition = element.querySelector("[data-footnote-def='1']")!;
+		expect(definition.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+
+		// A round trip: a second later, back to the marker. The tint the way
+		// in started used to be the one that timed out, and it took the way
+		// back's tint with it a second and a half early.
+		vi.advanceTimersByTime(1000);
+		const backref = element.querySelector("[data-footnote-backref='1']")!;
+		click(backref);
+		const markerRow = element.querySelector("[data-footnote-ref='1']")!;
+		expect(markerRow.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+
+		// Where the first jump's timer would have fired.
+		vi.advanceTimersByTime(1500);
+		expect(markerRow.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(true);
+		// And this jump's own, a full span after it landed.
+		vi.advanceTimersByTime(1000);
+		expect(markerRow.classList.contains(FOOTNOTE_TARGET_CLASS)).toBe(false);
 	});
 
 	test("the way back lands on the first marker", () => {
@@ -115,6 +174,93 @@ describe("footnote navigation", () => {
 		expect($from.parent.type.name).toBe("paragraph");
 		expect($from.nodeBefore?.type.name).toBe("footnoteRef");
 		expect($from.parent.textContent.startsWith("Claim one.")).toBe(true);
+	});
+
+	test("the marker is the button it says it is", () => {
+		const link = element.querySelector<HTMLElement>(
+			"[data-footnote-ref='1'] a",
+		)!;
+		expect(link).toHaveAttribute("role", "button");
+		expect(link).toHaveAttribute("tabindex", "0");
+
+		link.focus();
+		expect(element.ownerDocument.activeElement).toBe(link);
+
+		// Enter on it jumps, exactly as a click does, and does not fall through
+		// to the editor to split the paragraph the marker sits in.
+		const blocks = editor.state.doc.childCount;
+		const enter = new KeyboardEvent("keydown", {
+			key: "Enter",
+			bubbles: true,
+			cancelable: true,
+		});
+		link.dispatchEvent(enter);
+		expect(enter.defaultPrevented).toBe(true);
+		expect(editor.state.doc.childCount).toBe(blocks);
+		expect(scrolled).toEqual([
+			element.querySelector("[data-footnote-def='1']"),
+		]);
+	});
+
+	test("Tab beside a marker reaches it, and Tab in a note reaches the way back", () => {
+		// Caret straight after the first marker. Tab has nothing to indent
+		// there, so it hands focus to the marker instead of doing nothing.
+		const marker = findNode(editor, "footnoteRef", "1");
+		editor.commands.setTextSelection(marker.pos + marker.node.nodeSize);
+		sendTab(editor);
+		expect(element.ownerDocument.activeElement).toBe(
+			element.querySelector("[data-footnote-ref='1'] a"),
+		);
+
+		// Activating the marker jumps to the note and hands focus back to the
+		// document, which is where the next Tab is asked from.
+		editor.view.focus();
+
+		// Space on the way back returns to the marker: the round trip closes
+		// without ever needing the mouse.
+		const definition = findNode(editor, "footnoteDef", "1");
+		editor.commands.setTextSelection(definition.pos + 2);
+		sendTab(editor);
+		const backref = element.querySelector("[data-footnote-backref='1']");
+		expect(element.ownerDocument.activeElement).toBe(backref);
+
+		scrolled.length = 0;
+		backref!.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: " ",
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		expect(scrolled).toEqual([
+			element.querySelector("[data-footnote-ref='1']"),
+		]);
+	});
+
+	test("Tab leaves a control it has already reached", () => {
+		const marker = findNode(editor, "footnoteRef", "1");
+		editor.commands.setTextSelection(marker.pos + marker.node.nodeSize);
+		sendTab(editor);
+		const link = element.querySelector<HTMLElement>(
+			"[data-footnote-ref='1'] a",
+		)!;
+		expect(element.ownerDocument.activeElement).toBe(link);
+
+		// Tab belongs to the document while the document has the caret. Here
+		// it does not, and the editor keeping the key anyway made every
+		// control it hands focus to a dead end — nothing further to Tab to,
+		// and no way out but backwards.
+		expect(sendTab(editor)).toBe(false);
+	});
+
+	test("Tab is still swallowed in plain prose", () => {
+		editor.commands.setTextSelection(3);
+		const before = editor.state.doc.toJSON();
+		expect(sendTab(editor)).toBe(true);
+		expect(editor.state.doc.toJSON()).toEqual(before);
+		expect(element.ownerDocument.activeElement).not.toHaveAttribute(
+			"data-footnote-backref",
+		);
 	});
 
 	test("a marker without a definition is drawn as one and goes nowhere", () => {

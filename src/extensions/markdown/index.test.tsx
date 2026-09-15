@@ -1,5 +1,12 @@
 import { Suspense } from "react";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
@@ -1072,6 +1079,350 @@ describe("MarkdownView", () => {
 			expect(await screen.findByText(/file not found/i)).toBeInTheDocument();
 			expect(screen.queryByText(/unable to render atelier/i)).toBeNull();
 			expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("a frontmatter property edited in a working review reaches the file and is still there on the way back", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		const fileId = fakeUuid("file_review_frontmatter");
+		const before = "---\ntitle: Fixture\n---\n\n# Fixture\n\nBody.\n";
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/properties.md",
+				content: new TextEncoder().encode(before),
+			})
+			.execute();
+		await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({
+				content: new TextEncoder().encode(before.replace("Body.", "Edited.")),
+			})
+			.where("id", "=", fileId)
+			.execute();
+		const epoch = await selectWorkingFileDiffSnapshot(lix);
+		const fileMarkdown = async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirstOrThrow();
+			return new TextDecoder().decode(row.content as Uint8Array);
+		};
+		const reviewingMarkdown = () => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath="/properties.md"
+						activeBranchId={activeBranchId}
+						diffSession={{
+							base: { commitId: epoch.beforeCommitId },
+							target: { working: true },
+							files: [
+								{
+									id: fileId,
+									path: "/properties.md",
+									changeKind: "modified",
+									workingEpoch: {
+										beforeCommitId: epoch.beforeCommitId,
+										afterCommitId: epoch.afterCommitId,
+									},
+									review: { id: "review-properties", status: "pending" },
+								},
+							],
+							activePath: "/properties.md",
+							capabilities: { checkpoint: true, undo: true, restore: false },
+						}}
+						autoAcceptReviews
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(reviewingMarkdown());
+			});
+
+			const title = await screen.findByLabelText("title value");
+			// The document is read-only, the property panel is not.
+			expect(
+				screen.getByTestId("tiptap-editor").querySelector(".ProseMirror"),
+			).toHaveAttribute("contenteditable", "false");
+			expect(title).toBeEnabled();
+
+			await act(async () => {
+				fireEvent.change(title, { target: { value: "Renamed in review" } });
+			});
+			await waitFor(async () => {
+				expect(await fileMarkdown()).toContain("title: Renamed in review");
+			});
+			// The edit is a property edit: the body under it is untouched.
+			expect(await fileMarkdown()).toContain("Edited.");
+
+			// Leave the file and come back. The review epoch froze the property
+			// before the write, so the panel must read the file, not the freeze.
+			await act(async () => utils?.unmount());
+			await act(async () => {
+				utils = render(reviewingMarkdown());
+			});
+			await waitFor(() =>
+				expect(screen.getByLabelText("title value")).toHaveValue(
+					"Renamed in review",
+				),
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("the first click on a property's box toggles it", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_frontmatter_boolean");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/boolean.md",
+				content: new TextEncoder().encode(
+					"---\npublished: true\n---\n\n# Notes\n",
+				),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/boolean.md"
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const box = (await screen.findByLabelText(
+				"published value",
+			)) as HTMLInputElement;
+			expect(box.checked).toBe(true);
+
+			// The panel re-renders while the click is still being dispatched —
+			// the first click into the editor always does — and the box goes
+			// back the way it was before React compares it with what it last
+			// saw. React then concludes nothing changed and drops the click.
+			const putItBack = () => {
+				box.checked = true;
+			};
+			document.addEventListener("click", putItBack, true);
+			try {
+				await act(async () => {
+					fireEvent.click(box);
+				});
+			} finally {
+				document.removeEventListener("click", putItBack, true);
+			}
+
+			await waitFor(() =>
+				expect(
+					(screen.getByLabelText("published value") as HTMLInputElement)
+						.checked,
+				).toBe(false),
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("a property holds what is being typed and writes it when the field is left", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_frontmatter_typing");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/typing.md",
+				content: new TextEncoder().encode(
+					"---\ntitle: Fixture\n---\n\n# Notes\n",
+				),
+			})
+			.execute();
+		const fileMarkdown = async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirstOrThrow();
+			return new TextDecoder().decode(row.content as Uint8Array);
+		};
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/typing.md"
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const title = await screen.findByLabelText("title value");
+			await act(async () => {
+				fireEvent.change(title, { target: { value: "Quarterly" } });
+				fireEvent.change(title, { target: { value: "Quarterly planning" } });
+			});
+
+			// Not written yet. Writing every keystroke is what let the document
+			// re-render the old value under the caret between two of them.
+			expect(await fileMarkdown()).toContain("title: Fixture");
+			expect(title).toHaveValue("Quarterly planning");
+
+			await act(async () => {
+				fireEvent.blur(title);
+			});
+			await waitFor(async () =>
+				expect(await fileMarkdown()).toContain("title: Quarterly planning"),
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("Escape in a frontmatter field name abandons the rename", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_frontmatter_escape");
+		const source = "---\ntitle: Quarterly planning\n---\n\n# Notes\n";
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/escape.md",
+				content: new TextEncoder().encode(source),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/escape.md"
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const name = await screen.findByLabelText(
+				"Frontmatter field name: title",
+			);
+			await act(async () => {
+				fireEvent.change(name, { target: { value: "titleZZZ" } });
+			});
+			// Escape blurs the field, and the blur handler is what commits. It
+			// runs before React has re-rendered with the name Escape put back,
+			// so it used to commit the one the reader was abandoning.
+			await act(async () => {
+				fireEvent.keyDown(name, { key: "Escape" });
+			});
+
+			await waitFor(() =>
+				expect(
+					screen.getByLabelText("Frontmatter field name: title"),
+				).toHaveValue("title"),
+			);
+			expect(
+				screen.queryByLabelText("Frontmatter field name: titleZZZ"),
+			).toBeNull();
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("a past revision disables its frontmatter fields and says why", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_revision_frontmatter");
+		const snapshot = "---\ntitle: Fixture\n---\n\n# Fixture\n";
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/revision.md",
+				content: new TextEncoder().encode(snapshot),
+			})
+			.execute();
+		const snapshotCommitId = await activeCommitId(lix);
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/revision.md"
+								afterCommitId={snapshotCommitId}
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const title = await screen.findByLabelText("title value");
+			expect(title).toBeDisabled();
+			expect(
+				screen.getByLabelText("Frontmatter field name: title"),
+			).toBeDisabled();
+			expect(
+				screen.queryByRole("button", { name: /add property/i }),
+			).not.toBeInTheDocument();
+			expect(utils!.container).toHaveTextContent("Past revision — read-only");
+
+			await act(async () => {
+				fireEvent.change(title, { target: { value: "Nowhere to land" } });
+			});
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirstOrThrow();
+			expect(new TextDecoder().decode(row.content as Uint8Array)).toBe(
+				snapshot,
+			);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
