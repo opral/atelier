@@ -127,6 +127,13 @@ declare module "@tiptap/core" {
 }
 
 // Minimal schema-only nodes and marks for MarkdownWc
+/** The label as the author wrote it, falling back to the normalized form. */
+function footnoteLabel(node: any): string {
+	const label = node?.attrs?.label;
+	if (typeof label === "string" && label.length > 0) return label;
+	return String(node?.attrs?.identifier ?? "");
+}
+
 function diffAttrs(node: any, mode: "words" | "element" = "words"): any {
 	const id = node?.attrs?.data?.id;
 	if (typeof id !== "string" || id.length === 0) return {};
@@ -585,6 +592,91 @@ export function markdownWcNodes(
 						...diffAttrs(node, "element"),
 					},
 					["code", (node as any).attrs?.value ?? ""],
+				];
+			},
+		}),
+		// Footnote marker: `[^label]` in the text. One atom, so it is one token
+		// to select or delete. The label shows as written; the numbering is the
+		// author's, not ours.
+		Node.create({
+			name: "footnoteRef",
+			group: "inline",
+			inline: true,
+			atom: true,
+			selectable: true,
+			addAttributes() {
+				return {
+					label: { default: "" },
+					identifier: { default: "" },
+					data: { default: null },
+				};
+			},
+			renderHTML({ node }) {
+				const label = footnoteLabel(node);
+				return [
+					"sup",
+					{
+						class: "markdown-footnote-ref",
+						"data-footnote-ref": label,
+						...diffAttrs(node, "element"),
+					},
+					[
+						"a",
+						{
+							class: "markdown-footnote-ref-link",
+							role: "button",
+							"aria-label": `Go to footnote ${label}`,
+						},
+						`[${label}]`,
+					],
+				];
+			},
+		}),
+		// Footnote definition: `[^label]: body`. The label is fixed; the body is
+		// ordinary block content, edited like any paragraph. It stays wherever
+		// it is in the file.
+		Node.create({
+			name: "footnoteDef",
+			group: "block",
+			content: "block+",
+			defining: true,
+			addAttributes() {
+				return {
+					label: { default: "" },
+					identifier: { default: "" },
+					data: { default: null },
+				};
+			},
+			renderHTML({ node }) {
+				const label = footnoteLabel(node);
+				return [
+					"div",
+					{
+						class: "markdown-footnote-def",
+						"data-footnote-def": label,
+						...diffAttrs(node, "element"),
+					},
+					[
+						"span",
+						{
+							class: "markdown-footnote-def-label",
+							contenteditable: "false",
+							"aria-label": `Footnote ${label}`,
+						},
+						`[${label}]`,
+					],
+					["div", { class: "markdown-footnote-def-body" }, 0],
+					[
+						"button",
+						{
+							type: "button",
+							class: "markdown-footnote-backref",
+							contenteditable: "false",
+							"data-footnote-backref": label,
+							"aria-label": `Back to the text for footnote ${label}`,
+						},
+						"↩",
+					],
 				];
 			},
 		}),

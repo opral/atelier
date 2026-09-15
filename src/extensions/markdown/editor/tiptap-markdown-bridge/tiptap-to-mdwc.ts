@@ -187,6 +187,17 @@ function pmBlockToAst(
 			return out;
 		}
 
+		case "footnoteDef": {
+			const footnoteData = extractNodeData(node.attrs);
+			const label = String(node.attrs?.label ?? node.attrs?.identifier ?? "");
+			return {
+				type: "footnoteDefinition",
+				identifier: String(node.attrs?.identifier ?? label),
+				label,
+				data: footnoteData.data,
+				children: (node.content || []).map((child) => pmBlockToAst(child)),
+			};
+		}
 		case "blockquote":
 			const blockquoteData = extractNodeData(node.attrs);
 			return {
@@ -298,6 +309,15 @@ function pmInlineToMd(
 					: { type: "break" };
 			if (n.attrs?.data != null) br.data = n.attrs.data;
 			out.push(br as any);
+		} else if (n.type === "footnoteRef") {
+			const label = String(n.attrs?.label ?? n.attrs?.identifier ?? "");
+			const reference: any = {
+				type: "footnoteReference",
+				identifier: String(n.attrs?.identifier ?? label),
+				label,
+			};
+			if (n.attrs?.data != null) reference.data = n.attrs.data;
+			out.push(applyMarksToInline(reference, n.marks || []));
 		} else if (n.type === "markdownInlineHtml") {
 			const htmlValue = (n.attrs?.value ?? "") as string;
 			const htmlData = n.attrs?.data ?? null;
@@ -392,6 +412,7 @@ function isInline(n: PMNode) {
 		!n.content &&
 		(n.text != null ||
 			n.type === "hardBreak" ||
+			n.type === "footnoteRef" ||
 			n.type === "markdownInlineHtml")
 	);
 }

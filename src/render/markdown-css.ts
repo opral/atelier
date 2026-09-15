@@ -115,6 +115,11 @@ export const MARKDOWN_CSS = `
 	overflow-wrap: anywhere;
 }
 .md-diff .md-diff-raw { color: var(--atelier-ink-subtle); white-space: pre-wrap; }
+.md-diff .md-footnote-ref { font-size: 0.75em; line-height: 0; vertical-align: super; color: var(--atelier-accent); }
+.md-diff .md-footnote-def { display: grid; grid-template-columns: 3rem minmax(0, 1fr); column-gap: 0.5rem; align-items: baseline; margin: 0.5em 0; }
+.md-diff .md-footnote-def-label { color: var(--atelier-accent); font-size: 0.9em; }
+.md-diff .md-footnote-def-body > :first-child { margin-top: 0; }
+.md-diff .md-footnote-def-body > :last-child { margin-bottom: 0; }
 .md-diff .md-diff-missing { color: var(--atelier-ink-subtle); font-style: italic; }
 
 /* An image, named rather than loaded. */

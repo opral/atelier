@@ -304,6 +304,14 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 			const tag = inList ? "li" : "div";
 			return `<${tag} class="md-diff-gap">⋯ ${escapeHtml(label)}</${tag}>`;
 		}
+		case "footnoteRef": {
+			const label = footnoteLabel(node);
+			return `<sup class="md-footnote-ref"${attributes(node)}>[${escapeHtml(label)}]</sup>`;
+		}
+		case "footnoteDef": {
+			const label = footnoteLabel(node);
+			return `<div class="md-footnote-def"${attributes(node)}><span class="md-footnote-def-label">[${escapeHtml(label)}]</span><div class="md-footnote-def-body">${renderChildren(node, options)}</div></div>`;
+		}
 		case "markdownUnsupported":
 		case "markdownFrontmatter":
 		case "markdownInlineHtml": {
@@ -317,6 +325,12 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 				? ""
 				: `<div${attributes(node)}>${renderChildren(node, options)}</div>`;
 	}
+}
+
+function footnoteLabel(node: JSONContent): string {
+	const label = node.attrs?.label;
+	if (typeof label === "string" && label.length > 0) return label;
+	return String(node.attrs?.identifier ?? "");
 }
 
 function renderCodeText(node: JSONContent, options: RenderOptions): string {

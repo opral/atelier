@@ -1033,8 +1033,86 @@
 		font-size: 0.8em;
 	}
 
-	/* Unsupported blocks (raw HTML, footnote definitions): a labelled,
-	   dashed container that reads as source, sized like a note. */
+	/* Footnotes. The marker is the label as written, in the link ink, small
+	   and raised; a marker with no definition is drawn dashed and goes
+	   nowhere. The definition is a row: fixed label, an ordinary editable
+	   body, and a way back. A jump target tints for a moment. */
+	.markdown-view .ProseMirror .markdown-footnote-ref {
+		font-size: 0.75em;
+		line-height: 0;
+		vertical-align: super;
+		border-radius: 2px;
+		transition: background-color 400ms ease;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-ref-link {
+		color: var(--color-text-link);
+		text-decoration: none;
+		cursor: pointer;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-ref-link:hover {
+		color: var(--color-text-link-hover);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-ref--orphan .markdown-footnote-ref-link {
+		color: var(--color-text-tertiary);
+		text-decoration: underline dashed;
+		text-underline-offset: 2px;
+		cursor: default;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-def {
+		display: grid;
+		grid-template-columns: 3rem minmax(0, 1fr) auto;
+		align-items: baseline;
+		column-gap: 0.5rem;
+		margin: var(--markdown-block-gap) 0;
+		border-radius: var(--markdown-radius);
+		transition: background-color 400ms ease;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-def-label {
+		color: var(--color-text-link);
+		font-size: 0.9em;
+		user-select: none;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-def-body {
+		min-width: 0;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-def-body > :first-child {
+		margin-top: 0;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-def-body > :last-child {
+		margin-bottom: 0;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-backref {
+		border: 0;
+		background: transparent;
+		padding: 0 0.25rem;
+		color: var(--color-text-tertiary);
+		font: inherit;
+		cursor: pointer;
+		border-radius: 2px;
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-backref:hover {
+		color: var(--color-text-link);
+		background: var(--color-bg-hover);
+	}
+
+	.markdown-view .ProseMirror .markdown-footnote-target {
+		background-color: color-mix(in srgb, var(--color-text-link) 14%, transparent);
+	}
+
+	/* Unsupported blocks (raw HTML): a labelled, dashed container that reads
+	   as source, sized like a note. */
 	.markdown-view .ProseMirror .markdown-wc-unsupported-block {
 		margin: var(--markdown-block-gap) 0;
 		border: 1px dashed var(--color-border-strong);

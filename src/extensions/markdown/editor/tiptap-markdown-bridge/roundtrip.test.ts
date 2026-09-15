@@ -1490,3 +1490,131 @@ describe("inline", () => {
 		expect(canonicalAst(output)).toEqual(canonicalAst(input));
 	});
 });
+
+describe("footnotes", () => {
+	const markdown = [
+		"The wedge is contested.[^1][^note]",
+		"",
+		"## Sources",
+		"",
+		"[^1]: Guru. [Knowledge platform](https://www.getguru.com/). Undated.",
+		"",
+		"[^note]: First paragraph of a longer note.",
+		"",
+		"    A second paragraph, still the same note.",
+		"",
+	].join("\n");
+
+	test("a marker is one inline atom and a definition an editable block", () => {
+		const pmDoc = astToTiptapDoc(parseMarkdown(markdown));
+		const paragraph = pmDoc.content?.[0];
+		expect(paragraph?.content?.map((node: any) => node.type)).toEqual([
+			"text",
+			"footnoteRef",
+			"footnoteRef",
+		]);
+		expect(paragraph?.content?.[1]?.attrs).toMatchObject({
+			label: "1",
+			identifier: "1",
+		});
+		expect(paragraph?.content?.[2]?.attrs).toMatchObject({
+			label: "note",
+			identifier: "note",
+		});
+
+		const definitions = (pmDoc.content ?? []).filter(
+			(node: any) => node.type === "footnoteDef",
+		);
+		expect(definitions.map((node: any) => node.attrs.label)).toEqual([
+			"1",
+			"note",
+		]);
+		// The body is ordinary block content: a link renders as a link, and
+		// a longer note keeps its paragraphs.
+		expect(definitions[0]?.content?.[0]?.type).toBe("paragraph");
+		expect(
+			definitions[0]?.content?.[0]?.content?.some((node: any) =>
+				node.marks?.some((mark: any) => mark.type === "link"),
+			),
+		).toBe(true);
+		expect(definitions[1]?.content?.map((node: any) => node.type)).toEqual([
+			"paragraph",
+			"paragraph",
+		]);
+		// Nothing falls back to read-only source any more.
+		expect(JSON.stringify(pmDoc)).not.toContain("markdownUnsupported");
+		expect(JSON.stringify(pmDoc)).not.toContain("markdownInlineHtml");
+	});
+
+	test("the source round-trips through the editor unchanged", () => {
+		expect(roundtripMarkdownThroughEditor(markdown)).toBe(markdown);
+	});
+
+	test("a marker keeps the label as written, and the marks around it", () => {
+		const styled = "Read *this*[^Note-A] now.\n\n[^Note-A]: The note.\n";
+		expect(roundtripMarkdownThroughEditor(styled)).toBe(styled);
+		const bold = "**Bold[^1]**\n\n[^1]: Under bold.\n";
+		expect(roundtripMarkdownThroughEditor(bold)).toBe(bold);
+	});
+
+	test("a marker whose definition is not in the source is plain text", () => {
+		// GFM only reads `[^9]` as a footnote when `[^9]:` exists somewhere;
+		// otherwise it is the characters themselves, and they stay that way.
+		const orphan = "Claim.[^9]\n";
+		const pmDoc = astToTiptapDoc(parseMarkdown(orphan));
+		expect(pmDoc.content?.[0]?.content).toEqual([
+			{ type: "text", text: "Claim.[^9]" },
+		]);
+		// The serializer escapes the bracket so a later definition cannot turn
+		// the text into a footnote behind the author's back; the document
+		// reads the same.
+		expect(
+			canonicalAst(parseMarkdown(roundtripMarkdownThroughEditor(orphan))),
+		).toEqual(canonicalAst(parseMarkdown(orphan)));
+	});
+
+	test("an empty definition still has a paragraph to type into", () => {
+		const pmDoc = astToTiptapDoc({
+			type: "root",
+			children: [
+				{
+					type: "footnoteDefinition",
+					identifier: "todo",
+					label: "todo",
+					children: [],
+				},
+			],
+		});
+		expect(pmDoc.content?.[0]).toMatchObject({
+			type: "footnoteDef",
+			content: [{ type: "paragraph" }],
+		});
+	});
+
+	test("the definition's body is edited like any paragraph", () => {
+		const pmDoc = astToTiptapDoc(parseMarkdown(markdown));
+		const editor = new Editor({ extensions: MarkdownWc(), content: pmDoc });
+		try {
+			// Find the first definition and append to its text.
+			let definitionPos: number | null = null;
+			editor.state.doc.descendants((node, pos) => {
+				if (definitionPos !== null) return false;
+				if (node.type.name === "footnoteDef") definitionPos = pos;
+				return definitionPos === null;
+			});
+			expect(definitionPos).not.toBeNull();
+			const definition = editor.state.doc.nodeAt(definitionPos!)!;
+			const endOfBody = definitionPos! + definition.nodeSize - 2;
+			editor.commands.insertContentAt(endOfBody, " Accessed today.");
+			const out = serializeAst(tiptapDocToAst(editor.getJSON() as any));
+			expect(out).toContain(
+				"[^1]: Guru. [Knowledge platform](https://www.getguru.com/). Undated. Accessed today.",
+			);
+			// The other footnote and the markers are untouched.
+			expect(out).toContain("[^1][^note]");
+			expect(out).toContain("[^note]: First paragraph");
+		} finally {
+			editor.destroy();
+		}
+	});
+});
