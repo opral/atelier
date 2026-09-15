@@ -36,8 +36,14 @@ export function useGlideOverlayPortal(): void {
  */
 const EDITOR =
 	".csv-property-popover, .gdg-style, .csv-column-menu, .csv-grid-menu";
-/** The lists inside one of those that scroll on their own. */
-const EDITOR_LIST = ".csv-option-list, .gdg-clip-region";
+/**
+ * The parts of one of those that scroll on their own — including a menu that
+ * is taller than the window, which scrolls its own items. A wheel there was
+ * closing the menu instead, so the items below the fold could not be reached
+ * with the wheel at all.
+ */
+const EDITOR_LIST =
+	".csv-option-list, .gdg-clip-region, .csv-column-menu, .csv-grid-menu";
 /** Glide's scroller: the element that carries the table under the editor. */
 const GRID_SCROLLER = ".dvn-scroller";
 

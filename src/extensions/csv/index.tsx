@@ -1375,44 +1375,28 @@ function CsvTable({
 	// popped the settings menu open. The resize claims that one click; the
 	// next press on the header is a press of its own and opens the menu.
 	const resizedColumnRef = useRef<number | null>(null);
-	// Whether the press that is ending moved far enough to be a drag. Glide
-	// reports the mouse-up that ends a range drag as a click on the cell the
-	// drag started from, which opened that cell's picker under the row the
-	// pointer was released on — and picking a value then changed the wrong row.
-	const draggedRef = useRef(false);
+	// Whether the press that is ending landed on the cell it started from.
+	// Glide reports the mouse-up that ends a range drag as a click on the
+	// drag's anchor cell, which opened that cell's picker under the row the
+	// pointer was released on — and picking a value then changed the wrong
+	// row. Glide only calls onCellClicked when a press began and ended on one
+	// cell, so that call is the signal; measuring the pointer's travel instead
+	// threw away clicks that merely wobbled a few pixels.
+	const activatesCellRef = useRef(true);
 	useEffect(() => {
-		let origin: { x: number; y: number } | null = null;
-		const press = (event: PointerEvent) => {
+		const press = () => {
 			resizedColumnRef.current = null;
-			draggedRef.current = false;
-			origin = { x: event.clientX, y: event.clientY };
+			// Withheld until Glide confirms the press stayed on its cell.
+			activatesCellRef.current = false;
 		};
-		// Enter opens the editor of whatever the drag selected, so a key ends
-		// the press's claim on the cell as surely as the next press does.
+		// A key activates the selected cell with no press to confirm.
 		const key = () => {
-			draggedRef.current = false;
-		};
-		const move = (event: PointerEvent) => {
-			if (!origin) return;
-			if (
-				Math.abs(event.clientX - origin.x) > 3 ||
-				Math.abs(event.clientY - origin.y) > 3
-			)
-				draggedRef.current = true;
-		};
-		// The flag outlives the press: Glide's click runs on the mouse-up that
-		// follows, and the next press clears it.
-		const release = () => {
-			origin = null;
+			activatesCellRef.current = true;
 		};
 		document.addEventListener("pointerdown", press, true);
-		document.addEventListener("pointermove", move, true);
-		document.addEventListener("pointerup", release, true);
 		document.addEventListener("keydown", key, true);
 		return () => {
 			document.removeEventListener("pointerdown", press, true);
-			document.removeEventListener("pointermove", move, true);
-			document.removeEventListener("pointerup", release, true);
 			document.removeEventListener("keydown", key, true);
 		};
 	}, []);
@@ -1455,11 +1439,9 @@ function CsvTable({
 				kind: GridCellKind.Text,
 				data: value,
 				displayData: value,
-				// A drag that ends on a cell is not a click on it. Glide would
-				// still activate the cell it started from, opening that row's
-				// editor under the row the pointer was released on; refusing the
-				// overlay for the press that dragged keeps them apart.
-				allowOverlay: editable && !draggedRef.current,
+				// A drag that ends on a cell is not a click on it; only a press
+				// Glide reports as a click on this very cell opens an editor.
+				allowOverlay: editable && activatesCellRef.current,
 				// Plain values edit on press, avoiding a selection-only frame
 				// while the pointer is held. Pickers retain click activation.
 				activationBehaviorOverride: !["select", "checkbox", "date"].includes(
@@ -1584,20 +1566,25 @@ function CsvTable({
 		selection.current !== undefined ||
 		selection.rows.length > 0 ||
 		selection.columns.length > 0;
-	// Hands the keyboard back to the table. Glide's own focus() invents a
-	// selection — it takes the first cell — when nothing is selected, so after
-	// a delete the canvas takes the focus instead: the keys work again and the
-	// table chooses nothing on the user's behalf.
-	const focusGrid = useCallback(() => {
-		if (hasSelection(gridSelectionRef.current)) {
-			gridRef.current?.focus();
-			return;
+	// Hands the keyboard back to the table. Focusing the bare canvas leaves
+	// the table choosing nothing, but Glide answers no key at all without a
+	// selection — the arrows, Enter and Escape all did nothing, which is worse
+	// than a cell the user did not pick. So it takes a cell: the one the edit
+	// left where the old selection was, clamped to what is still there.
+	const focusGrid = useCallback((anchor?: readonly [number, number]) => {
+		if (!hasSelection(gridSelectionRef.current)) {
+			const cell = anchor ?? [0, 0];
+			setGridSelection({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.empty(),
+				current: {
+					cell: [cell[0], cell[1]],
+					range: { x: cell[0], y: cell[1], width: 1, height: 1 },
+					rangeStack: [],
+				},
+			});
 		}
-		containerRef.current
-			?.querySelector<HTMLCanvasElement>(
-				'canvas[data-testid="data-grid-canvas"]',
-			)
-			?.focus();
+		gridRef.current?.focus();
 	}, []);
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => {
@@ -1660,9 +1647,14 @@ function CsvTable({
 		.toArray()
 		.filter((row) => row < rowMap.length);
 	const deleteSelectedRows = () => {
+		const first = selectedRows.length ? Math.min(...selectedRows) : 0;
 		editing?.onDeleteRows(selectedRows.map(sourceRowIndex));
 		clearSelection();
-		gridRef.current?.focus();
+		// Glide answers no key without a selection, so the table takes the row
+		// that moved up into the first deleted one's place.
+		requestAnimationFrame(() =>
+			requestAnimationFrame(() => focusGrid([0, Math.max(0, first)])),
+		);
 	};
 
 	// Preserve view predicates on rename; reset when column identities/positions change.
@@ -1892,13 +1884,17 @@ function CsvTable({
 	}, [gridSelection.columns, menu]);
 
 	const runStructuralEdit = useCallback(
-		(action: () => void) => {
+		(action: () => void, anchor?: readonly [number, number]) => {
 			closeMenu();
 			clearSelection();
 			action();
-			// The edit rebuilds the table around the dismissed menu, which leaves
-			// the keyboard on the body; the table takes it back.
-			requestAnimationFrame(() => focusGrid());
+			// The edit rebuilds the table, and Glide replaces its canvas on the
+			// way — one frame too late for closeMenu's own restore, which then
+			// left the keyboard on the body wherever it had started outside the
+			// grid. Take it back once the new canvas is there.
+			requestAnimationFrame(() =>
+				requestAnimationFrame(() => focusGrid(anchor)),
+			);
 		},
 		[clearSelection, closeMenu, focusGrid],
 	);
@@ -2376,12 +2372,9 @@ function CsvTable({
 								}
 							}}
 							onCellClicked={(cell, event) => {
-								// A drag that happens to end on a cell is not a click on
-								// it; only a press that stayed put opens an editor.
-								if (draggedRef.current) {
-									event.preventDefault();
-									return;
-								}
+								// Glide calls this only when the press began and ended on
+								// the same cell, which is exactly what a click is.
+								activatesCellRef.current = true;
 								if (
 									!editing ||
 									(!event.isTouch &&
@@ -2602,13 +2595,16 @@ function CsvTable({
 							menuRows={menuRows}
 							onClose={closeMenu}
 							onInsertRow={(atRow) =>
-								runStructuralEdit(() =>
-									editing.onInsertRow(sourceRowIndex(atRow)),
+								runStructuralEdit(
+									() => editing.onInsertRow(sourceRowIndex(atRow)),
+									[0, atRow],
 								)
 							}
 							onDeleteRows={(rows) =>
-								runStructuralEdit(() =>
-									editing.onDeleteRows(rows.map(sourceRowIndex)),
+								runStructuralEdit(
+									() => editing.onDeleteRows(rows.map(sourceRowIndex)),
+									// The row that takes the first deleted one's place.
+									[0, Math.max(0, Math.min(...rows))],
 								)
 							}
 						/>

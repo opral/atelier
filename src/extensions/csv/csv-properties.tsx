@@ -266,11 +266,12 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const cell = value as PropertyCell;
 	const info = cell.csvInfo!;
 	// Typing on a selected cell opens the editor with that keystroke, and Glide
-	// has already put it in the cell's data — so the cell only holds the
-	// committed value when the editor was opened without one. The keystroke is
-	// the start of a search; the committed value is what the list points at.
+	// has already put it in the cell's data. It leaves displayData alone,
+	// though, so that is where the committed value still is. The keystroke is
+	// the start of a search; the committed value is what the list ticks, and
+	// what Clear has to offer to clear.
 	const typed = initialValue ?? "";
-	const committed = typed ? "" : cell.data;
+	const committed = typed ? (cell.displayData ?? "") : cell.data;
 	const options =
 		info.type === "checkbox"
 			? [
@@ -295,20 +296,14 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const activeOptionRef = useRef<HTMLButtonElement>(null);
 	const listId = useId();
 	const dialogRef = useRef<HTMLDivElement>(null);
-	const [measured, setMeasured] = useState<number | null>(null);
-	// The list's height decides which side of the cell the picker sits on, and
-	// it changes as the query filters it — so measure it after every paint.
-	// The guard keeps the update from chaining into another render.
-	const remeasure = () => {
-		const height = dialogRef.current?.getBoundingClientRect().height;
-		if (height !== undefined)
-			setMeasured((previous) => (previous === height ? previous : height));
-	};
-	const remeasureRef = useRef(remeasure);
-	remeasureRef.current = remeasure;
-	useLayoutEffect(() => {
-		remeasureRef.current();
-	});
+	// Which side of the cell the picker sits on, decided from its real height
+	// once and then left alone: re-deciding on every render had the whole
+	// popover jump as the query filtered the list, sliding the option the
+	// pointer was aimed at out from under it. Above the cell it hangs from its
+	// bottom edge, so filtering moves the list and not the box.
+	const [placement, setPlacement] = useState<
+		{ readonly top: number } | { readonly bottom: number } | null
+	>(null);
 	// The picker is positioned once, so scrolling the table would detach it
 	// from its cell; a scroll closes it instead.
 	useEditorClosesOnGridScroll(onFinishedEditing);
@@ -386,19 +381,21 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const width = Math.max(260, Math.min(330, window.innerWidth - 24));
 	const maxHeight = Math.min(350, window.innerHeight - 24);
 	const x = Math.max(8, Math.min(target.x, window.innerWidth - width - 8));
-	// A short list is much shorter than the cap, and clamping against the cap
-	// pushed the picker up over the very cell it edits. Place it under the
-	// cell when its measured height fits, above the cell when it does not, and
-	// only fall back to the screen's edge when neither side has room.
-	const height = measured ?? maxHeight;
 	const below = target.y + target.height + 3;
-	const above = target.y - 3 - height;
-	const y =
-		below + height <= window.innerHeight - 8
-			? below
-			: above >= 8
-				? above
-				: Math.max(8, window.innerHeight - height - 8);
+	useLayoutEffect(() => {
+		// Runs before the first paint, so the flip is never visible. A short
+		// list is much shorter than the cap, and clamping against the cap
+		// pushed the picker up over the very cell it edits.
+		if (placement) return;
+		const height = dialogRef.current?.getBoundingClientRect().height ?? 0;
+		const fitsBelow = below + height <= window.innerHeight - 8;
+		const fitsAbove = target.y - 3 - height >= 8;
+		setPlacement(
+			fitsBelow || !fitsAbove
+				? { top: Math.min(below, Math.max(8, window.innerHeight - height - 8)) }
+				: { bottom: window.innerHeight - target.y + 3 },
+		);
+	}, [below, placement, target.y]);
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The dialog contains focusable controls and owns Escape; input-only navigation below leaves button activation native.
 		<div
@@ -407,7 +404,13 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			role="dialog"
 			aria-label={`${info.header} value`}
 			tabIndex={-1}
-			style={{ position: "fixed", left: x, top: y, width, maxHeight }}
+			style={{
+				position: "fixed",
+				left: x,
+				width,
+				maxHeight,
+				...(placement ?? { top: below }),
+			}}
 			onKeyDown={(e) => {
 				e.stopPropagation();
 				// Enter/Escape belong to the IME while a candidate is composing.
