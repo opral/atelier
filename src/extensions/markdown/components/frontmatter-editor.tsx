@@ -5,6 +5,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import {
@@ -150,6 +151,33 @@ function FieldKeyInput({
 	);
 }
 
+/**
+ * Escape in a frontmatter field puts back the value the field held when it was
+ * entered and hands focus back, which is what Escape has always done in a
+ * field's *name*. A value that answered nothing while its name answered
+ * Escape was the same field behaving two ways.
+ */
+function useEscapeRevert<T>(
+	current: T,
+	revert: (entryValue: T) => void,
+): {
+	onFocus: () => void;
+	onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+} {
+	const entryValue = useRef(current);
+	return {
+		onFocus: () => {
+			entryValue.current = current;
+		},
+		onKeyDown: (event) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			revert(entryValue.current);
+			event.currentTarget.blur();
+		},
+	};
+}
+
 function FieldTypeIcon({
 	fieldKey,
 	value,
@@ -202,6 +230,9 @@ function NumberField({
 	useEffect(() => setDraft(String(value)), [value]);
 	const parsedDraft = parseEditableNumber(draft);
 	const invalidDraft = draft.trim() !== "" && parsedDraft === null;
+	// Escape leaves without committing, so the blur it causes must not commit
+	// the draft it just threw away.
+	const reverting = useRef(false);
 	return (
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-value"
@@ -211,7 +242,19 @@ function NumberField({
 			aria-label={`${label} value`}
 			aria-invalid={invalidDraft ? "true" : undefined}
 			onChange={(event) => setDraft(event.currentTarget.value)}
+			onKeyDown={(event) => {
+				if (event.key !== "Escape") return;
+				event.preventDefault();
+				reverting.current = true;
+				setDraft(String(value));
+				event.currentTarget.blur();
+			}}
 			onBlur={() => {
+				if (reverting.current) {
+					reverting.current = false;
+					setDraft(String(value));
+					return;
+				}
 				if (parsedDraft === null) {
 					setDraft(String(value));
 					return;
@@ -236,20 +279,49 @@ function ScalarField({
 		return <NumberField label={label} value={value} onChange={onChange} />;
 	}
 	if (typeof value === "boolean") {
-		return (
-			<label className="markdown-frontmatter-boolean">
-				<input
-					type="checkbox"
-					aria-label={`${label} value`}
-					checked={value}
-					onChange={(event) => onChange(event.currentTarget.checked)}
-				/>
-			</label>
-		);
+		return <BooleanField label={label} value={value} onChange={onChange} />;
 	}
+	return <TextField label={label} value={value} onChange={onChange} />;
+}
 
+function BooleanField({
+	label,
+	value,
+	onChange,
+}: {
+	readonly label: string;
+	readonly value: boolean;
+	readonly onChange: (value: unknown) => void;
+}) {
+	const escape = useEscapeRevert(value, onChange);
+	return (
+		<label className="markdown-frontmatter-boolean">
+			<input
+				type="checkbox"
+				aria-label={`${label} value`}
+				checked={value}
+				onFocus={escape.onFocus}
+				onKeyDown={escape.onKeyDown}
+				onChange={(event) => onChange(event.currentTarget.checked)}
+			/>
+		</label>
+	);
+}
+
+function TextField({
+	label,
+	value,
+	onChange,
+}: {
+	readonly label: string;
+	readonly value: unknown;
+	readonly onChange: (value: unknown) => void;
+}) {
 	const text = value === null || value === undefined ? "" : String(value);
 	const isDate = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+	// This field writes as you type, so what Escape puts back is the value it
+	// held when you got here, not a draft it never kept.
+	const escape = useEscapeRevert(text, onChange);
 	return (
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-value"
@@ -257,6 +329,8 @@ function ScalarField({
 			value={text}
 			placeholder="Empty"
 			aria-label={`${label} value`}
+			onFocus={escape.onFocus}
+			onKeyDown={escape.onKeyDown}
 			onChange={(event) => onChange(event.currentTarget.value)}
 		/>
 	);
