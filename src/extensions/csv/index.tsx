@@ -1526,10 +1526,21 @@ function CsvTable({
 			}
 			// Editable cells are plain text so the overlay edits the raw
 			// value; URL/email link affordances stay in read-only views.
+			// A value with a newline draws only its first line in an unwrapped
+			// column, and drew it as if that were all there was. The ellipsis
+			// says the rest is there; the cell's own data keeps every line, so
+			// editing and copying are untouched. Pickers read displayData as
+			// the committed value, so only plain text carries the mark.
+			const hidesLines =
+				!wrappedColumns[columnIndex] &&
+				!["select", "checkbox", "date"].includes(propertyType) &&
+				/[\r\n]/.test(value);
 			return {
 				kind: GridCellKind.Text,
 				data: value,
-				displayData: value,
+				displayData: hidesLines
+					? `${value.split(/\r\n|\r|\n/, 1)[0] ?? ""} …`
+					: value,
 				// A drag that ends on a cell is not a click on it; only a press
 				// Glide reports as a click on this very cell opens an editor.
 				allowOverlay: editable && activatesCellRef.current,

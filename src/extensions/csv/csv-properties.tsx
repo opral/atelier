@@ -272,12 +272,20 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	// what Clear has to offer to clear.
 	const typed = initialValue ?? "";
 	const committed = typed ? (cell.displayData ?? "") : cell.data;
+	const CHECKBOX_OPTIONS = [
+		{ value: "yes", color: "blue" },
+		{ value: "no", color: "gray" },
+	];
+	// A checkbox column can hold a value that is neither: an import, an agent,
+	// a column retyped over prose. Listing only yes and no left the picker
+	// pointing at nothing and the cell's own value nowhere on screen — the
+	// select picker has always merged what it finds, and this one does too.
 	const options =
 		info.type === "checkbox"
-			? [
-					{ value: "yes", color: "blue" },
-					{ value: "no", color: "gray" },
-				]
+			? CHECKBOX_OPTIONS.some((option) => option.value === committed) ||
+				!committed
+				? CHECKBOX_OPTIONS
+				: [...CHECKBOX_OPTIONS, { value: committed, color: "gray" }]
 			: selectOptions(info, cell.csvOptionValues ?? []);
 	const [query, setQuery] = useState(typed);
 	const [active, setActive] = useState(() => {
@@ -288,8 +296,17 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	});
 	// A date cannot be started from one keystroke, and writing the keystroke
 	// itself would replace the date with a stray character.
-	const [draft, setDraft] = useState(
-		info.type === "date" && typed ? "" : cell.data,
+	const initialDraft = info.type === "date" && typed ? "" : cell.data;
+	const [draft, setDraft] = useState(initialDraft);
+	/**
+	 * Whether this date cell opens on a value a date input can show. Decided
+	 * once: switching an input's type under a caret mid-word would throw the
+	 * caret away the moment a typed date became well formed.
+	 */
+	const [showsDate] = useState(
+		() =>
+			info.type === "date" &&
+			(initialDraft === "" || /^\d{4}-\d{2}-\d{2}$/.test(initialDraft)),
 	);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
@@ -520,10 +537,20 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 					}}
 					className="csv-value-form"
 				>
-					<label>{info.type === "date" ? "Choose a date" : "Edit value"}</label>
+					<label>
+						{info.type !== "date"
+							? "Edit value"
+							: showsDate
+								? "Choose a date"
+								: "Not a date yet"}
+					</label>
 					<input
 						ref={inputRef}
-						type={info.type === "date" ? "date" : "text"}
+						// A date input renders nothing for a value it cannot parse, so
+						// the cell's own value was invisible and Save looked like
+						// Cancel. Text keeps it on screen and lets it be corrected.
+						type={showsDate ? "date" : "text"}
+						{...(showsDate ? {} : { placeholder: "YYYY-MM-DD" })}
 						aria-label="Cell value"
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
