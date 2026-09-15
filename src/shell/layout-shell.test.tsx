@@ -1182,6 +1182,24 @@ describe("diff review navigation", () => {
 				`diff-scope-file:${ids[1]}`,
 				`diff-scope-file:${ids[2]}`,
 			]);
+			// Escape on the picker closes the picker only. The session — and
+			// with it the working set the picker is showing — stays.
+			await act(async () => {
+				fireEvent.keyDown(window, { key: "Escape" });
+			});
+			expect(screen.queryAllByTestId(/^diff-scope-file:/)).toHaveLength(0);
+			expect(
+				screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+			).toBeVisible();
+			expect(
+				document.querySelector("[data-review-mode='true']"),
+			).not.toBeNull();
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+				);
+			});
+			await screen.findAllByTestId(/^diff-scope-file:/);
 			await act(async () => {
 				fireEvent.click(
 					screen.getByRole("button", { name: "Working set: 1 of 2 files" }),

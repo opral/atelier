@@ -40,6 +40,24 @@ export type DiffFloatUndoScope = DiffFloatScope | "file";
 const EMPTY_FILES: readonly DiffFloatFile[] = [];
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
+/** How many mounted floats are currently consuming Escape. */
+let escapeHandlerCount = 0;
+
+/**
+ * True while a mounted, active float is handling Escape itself — closing its
+ * open menu, or ending the session when none is open.
+ *
+ * The shell keeps a fallback for the moments no float is there to consume the
+ * key. Both listen on `window` in the bubble phase, where the only tie-break
+ * is registration order, and React re-registers either one whenever its
+ * dependencies change — so the shell asks who owns the key instead of
+ * inferring it from a deferred `defaultPrevented` read that lands between the
+ * two listeners.
+ */
+export function reviewFloatHandlesEscape(): boolean {
+	return escapeHandlerCount > 0;
+}
+
 type OpenMenu = "list" | "primary" | "undo" | null;
 
 type ExternalWriteReviewControlsProps = {
@@ -333,6 +351,17 @@ export function ExternalWriteReviewControls({
 	);
 
 	const showUndo = mode !== "historical" && Boolean(onUndo);
+
+	// Claimed for as long as the float is active, not for as long as the
+	// listener below happens to be registered: that one is rebuilt whenever a
+	// menu opens, and the claim must not blink while it is.
+	useEffect(() => {
+		if (!isActive) return;
+		escapeHandlerCount += 1;
+		return () => {
+			escapeHandlerCount -= 1;
+		};
+	}, [isActive]);
 
 	useEffect(() => {
 		if (!isActive) return;

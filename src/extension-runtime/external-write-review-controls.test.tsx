@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { CsvReviewTrigger } from "../extensions/csv/csv-review-popover";
-import { ExternalWriteReviewControls } from "./external-write-review-controls";
+import {
+	ExternalWriteReviewControls,
+	reviewFloatHandlesEscape,
+} from "./external-write-review-controls";
 
 const NAVIGATION = {
 	fileName: "TikTok.md",
@@ -924,5 +928,63 @@ describe("ExternalWriteReviewControls", () => {
 
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(exit).toHaveBeenCalledOnce();
+	});
+
+	test("a shell-level Escape fallback stands down while the float owns the key", () => {
+		const exit = vi.fn();
+		const fallback = vi.fn();
+		// The shell's own fallback, wired the way layout-shell wires it: a
+		// window listener registered after the float's, which is what happens
+		// as soon as opening a menu rebuilds the float's listener.
+		function ShellFallback() {
+			useEffect(() => {
+				const handleKeyDown = (event: KeyboardEvent) => {
+					if (event.key !== "Escape" || event.defaultPrevented) return;
+					if (reviewFloatHandlesEscape()) return;
+					fallback();
+				};
+				window.addEventListener("keydown", handleKeyDown);
+				return () => window.removeEventListener("keydown", handleKeyDown);
+			}, []);
+			return null;
+		}
+		const { rerender } = render(
+			<>
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={NAVIGATION}
+					files={FILES}
+					onPrimary={vi.fn(async () => {})}
+					onExit={exit}
+				/>
+				<ShellFallback />
+			</>,
+		);
+
+		fireEvent.click(chip("Working set: 1 of 2 files"));
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("checkbox")).toBeNull();
+		expect(exit).not.toHaveBeenCalled();
+		expect(fallback).not.toHaveBeenCalled();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "More checkpoint options" }),
+		);
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("menu")).toBeNull();
+		expect(exit).not.toHaveBeenCalled();
+		expect(fallback).not.toHaveBeenCalled();
+
+		// No menu left to close: the float ends the session itself, and the
+		// fallback still keeps out of it.
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(exit).toHaveBeenCalledOnce();
+		expect(fallback).not.toHaveBeenCalled();
+
+		// Once the float is gone the fallback is the only listener left.
+		rerender(<ShellFallback />);
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(fallback).toHaveBeenCalledOnce();
 	});
 });

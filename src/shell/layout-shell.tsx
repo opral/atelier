@@ -41,6 +41,7 @@ import {
 import type { ExternalWriteReview } from "@/extension-runtime/external-write-review";
 import {
 	ExternalWriteReviewControls,
+	reviewFloatHandlesEscape,
 	type DiffFloatUndoScope,
 } from "@/extension-runtime/external-write-review-controls";
 import { isMacPlatform } from "@/lib/platform";
@@ -1721,20 +1722,19 @@ function LayoutShellLoadedContentResolved({
 	const isReviewMode = workingChangesReviewOpen || historicalReview !== null;
 
 	// Fallback when no review float consumes Escape. Nested dialogs receive the
-	// event first; deferring the final check also lets a float registered later
-	// on window consume it without depending on listener registration order.
+	// event first, so a key they already claimed is left alone. The float is
+	// asked whether it owns the key: it and this listener both sit on `window`
+	// in the bubble phase, and deferring the check only moves it between the
+	// two listeners, where the float's own handler may not have run yet.
 	useEffect(() => {
 		if (!isReviewMode) return;
-		let active = true;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
-			queueMicrotask(() => {
-				if (active && !event.defaultPrevented) exitDiffReview();
-			});
+			if (reviewFloatHandlesEscape()) return;
+			exitDiffReview();
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => {
-			active = false;
 			window.removeEventListener("keydown", handleKeyDown);
 		};
 	}, [exitDiffReview, isReviewMode]);
