@@ -33,7 +33,7 @@ import {
 	type CsvFilterGroup,
 } from "./csv-filter";
 import { useCsvTheme } from "./use-csv-theme";
-import { inferColumnInfo, type CsvDisplayColumnInfo } from "./csv-infer";
+import { inferColumnInfo } from "./csv-infer";
 import {
 	Suspense,
 	createContext,
@@ -481,12 +481,12 @@ function EditableCsvView({
 	// of that off the moment anything saved: a view, a wrap toggle, one
 	// column's type. The pills, ticks and dates were then gone for good.
 	const materializeColumns = useCallback(() => {
-		const view = csvDocumentView(documentRef.current);
-		const headers = view.columns.map(
+		const table = csvDocumentView(documentRef.current);
+		const headers = table.columns.map(
 			(_, i) => documentRef.current.records[0]?.cells[i] ?? "",
 		);
 		const resolved = resolveColumnInfo(metadataRef.current, headers);
-		const shown = inferColumnInfo(headers, view.rows, resolved);
+		const shown = inferColumnInfo(headers, table.rows, resolved);
 		return headers.map((header, index) => {
 			const known = resolved[index];
 			const seen = known ? undefined : shown[index];
