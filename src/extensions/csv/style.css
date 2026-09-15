@@ -202,25 +202,27 @@
 }
 
 /* Glide's cell editor lives in a body-level portal, outside the shell's
-   scope. It sits exactly on the cell it edits, its text where the canvas
-   drew it, keeps the cell's width (long text wraps and grows it downward,
-   as a document table's cell would) and lifts on a soft shadow instead of
-   the accent ring. */
+   scope. It covers exactly the cell it edits, its text where the canvas drew
+   it, keeps the cell's width (long text wraps and grows it downward, as a
+   document table's cell would) and wears the same ring the selected cell
+   wears: the cell turns editable in place rather than popping out of the
+   table. */
 .atelier-csv-portal .gdg-style {
 	/* min-width carries the cell's width; never grow to the content. */
 	width: 0;
 	max-width: none;
-	border-radius: 4px;
-	box-shadow:
-		0 0 0 1px color-mix(in srgb, var(--gdg-text-dark) 16%, transparent),
-		0 1px 2px color-mix(in srgb, var(--gdg-text-dark) 8%, transparent),
-		0 6px 16px color-mix(in srgb, var(--gdg-text-dark) 12%, transparent);
+	border-radius: 3px;
+	box-shadow: 0 0 0 1px var(--gdg-accent-color);
+	animation: none;
 }
 .atelier-csv-portal .gdg-style.gdg-pad {
-	/* One pixel of bloom, then 12 + 16 line + 2 + 10 = the 40px row: the
-	   text stays where the cell drew it. */
-	padding: 13px calc(var(--gdg-cell-horizontal-padding, 8px) + 1px) 11px;
+	/* 12 above the line, as the canvas centres it, and the rest of the row
+	   below; Glide's own floor would stand the box a pixel proud of the cell. */
+	min-height: 0;
+	padding: 12px var(--gdg-cell-horizontal-padding, 8px) 10px;
 }
 .atelier-csv-portal .gdg-style.gdg-pad .gdg-growing-entry {
 	margin-top: 0;
+	/* The canvas's own line, so the box fills the row and no more. */
+	line-height: 16px;
 }

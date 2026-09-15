@@ -5,6 +5,7 @@ import {
 	type CsvTextLine,
 } from "./csv-text-wrap";
 import { createPortal } from "react-dom";
+import { useEditorClosesOnGridScroll } from "./csv-editor-overlay";
 import { useEffect, useId, useRef, useState } from "react";
 import {
 	CaseSensitive,
@@ -272,23 +273,8 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 	const listId = useId();
 	const dialogRef = useRef<HTMLDivElement>(null);
 	// The picker is positioned once, so scrolling the table would detach it
-	// from its cell; scrolling anything outside the picker closes it instead.
-	useEffect(() => {
-		const onScroll = (event: Event) => {
-			if (
-				event.target instanceof Node &&
-				dialogRef.current?.contains(event.target)
-			)
-				return;
-			onFinishedEditing();
-		};
-		document.addEventListener("scroll", onScroll, {
-			capture: true,
-			passive: true,
-		});
-		return () =>
-			document.removeEventListener("scroll", onScroll, { capture: true });
-	}, [onFinishedEditing]);
+	// from its cell; a scroll closes it instead.
+	useEditorClosesOnGridScroll(onFinishedEditing);
 	useEffect(() => {
 		// Glide restores canvas focus after an edit closes. A double-click can
 		// reopen immediately, so focus the new editor after that restoration.
@@ -301,6 +287,37 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 			cancelAnimationFrame(inner);
 		};
 	}, []);
+	useEffect(() => {
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+		const doc = dialog.ownerDocument;
+		// Clicking the open cell again has Glide close and reopen the editor in
+		// place, which leaves focus on nothing at all. Escape then had no
+		// element to travel up from and the picker sat there. Own Escape for
+		// the whole document while the picker is open, and take focus back when
+		// it lands nowhere so typing and the arrow keys keep working too.
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			if (event.isComposing || event.keyCode === 229) return;
+			if (dialog.contains(event.target as Node)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			onFinishedEditing();
+		};
+		const onFocusOut = () => {
+			requestAnimationFrame(() => {
+				if (!dialog.isConnected) return;
+				const active = doc.activeElement;
+				if (active === null || active === doc.body) inputRef.current?.focus();
+			});
+		};
+		doc.addEventListener("keydown", onKeyDown, true);
+		doc.addEventListener("focusout", onFocusOut);
+		return () => {
+			doc.removeEventListener("keydown", onKeyDown, true);
+			doc.removeEventListener("focusout", onFocusOut);
+		};
+	}, [onFinishedEditing]);
 	const options =
 		info.type === "checkbox"
 			? [
@@ -488,9 +505,15 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 const TextEditor: ProvideEditorComponent<GridCell> = ({
 	value,
 	onChange,
+	onFinishedEditing,
 	validatedSelection,
 	target,
 }) => {
+	const typed = useRef(value);
+	typed.current = value;
+	// Scrolling the table moves the cell out from under the editor; keep what
+	// was typed and close, rather than leaving a value floating over the grid.
+	useEditorClosesOnGridScroll(() => onFinishedEditing(typed.current));
 	if (value.kind !== GridCellKind.Text) return null;
 	const entry = (
 		<TextCellEntry
@@ -503,7 +526,7 @@ const TextEditor: ProvideEditorComponent<GridCell> = ({
 		/>
 	);
 	return value.allowWrapping ? (
-		<div style={{ width: Math.max(40, target.width - 2) }}>{entry}</div>
+		<div style={{ width: Math.max(40, target.width) }}>{entry}</div>
 	) : (
 		entry
 	);

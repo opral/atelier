@@ -13,7 +13,7 @@ import {
 } from "./csv-text-wrap";
 import { CsvViewMenu } from "./csv-view-menu";
 import { CsvOverlayScrollbars } from "./csv-overlay-scrollbars";
-import { useEditorOverlayFollowsScroll } from "./csv-editor-overlay";
+import { useGlideOverlayPortal } from "./csv-editor-overlay";
 import {
 	captureCsvView,
 	restoreCsvView,
@@ -165,11 +165,6 @@ const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 40;
 /** The cell editor stays clipped beneath the header and the row markers. */
-const EDITOR_OVERLAY_INSET = {
-	top: HEADER_HEIGHT,
-	left: ROW_MARKER_WIDTH,
-} as const;
-
 type CsvFileRow = {
 	readonly id: string;
 	readonly path: string;
@@ -1340,7 +1335,7 @@ function CsvTable({
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [isActiveView]);
-	useEditorOverlayFollowsScroll(containerRef, EDITOR_OVERLAY_INSET, editable);
+	useGlideOverlayPortal();
 	// Apple Numbers-style sizing: the grid canvas is only as large as the
 	// table itself (capped by the container), so no phantom cells or grid
 	// lines render beyond the last column and the trailing row.
@@ -2314,10 +2309,9 @@ function CsvTable({
 								if (toggleCheckbox(cell[0], cell[1])) event.preventDefault();
 							}}
 							cellActivationBehavior="single-click"
-							// The editor sits on its cell, one pixel over its edges so
-							// the focus ring stays under it; the styling in style.css
-							// keeps it the cell's width and lifts it.
-							editorBloom={[1, 1]}
+							// The editor covers exactly its cell — no growth past the
+							// row — and style.css rings it like the selected cell.
+							editorBloom={[0, 0]}
 							headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
 							columns={columns}
 							rows={parsed.rows.length}
