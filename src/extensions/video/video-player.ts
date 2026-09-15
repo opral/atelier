@@ -508,7 +508,20 @@ export function createVideoPlayer(
 		// while focus is inside it. The embed variant is mounted in the
 		// Markdown editor as one atom, so a key that reaches the editor from
 		// here is typed over the video the viewer is watching.
-		if (editsSurroundingText(event)) event.stopPropagation();
+		//
+		// Stopping the key from propagating is not enough on its own: it keeps
+		// the editor's keymap from seeing the `keydown`, but the browser still
+		// fires the `keypress` that follows, and that one reaches the editor
+		// by itself and writes the character over whatever the document has
+		// selected. Cancelling the `keydown` is what stops the `keypress` from
+		// existing at all.
+		if (editsSurroundingText(event)) {
+			event.stopPropagation();
+			// A focused button still activates on its own Space or Enter.
+			const activatesButton =
+				onButton && (event.key === " " || event.key === "Enter");
+			if (!activatesButton) event.preventDefault();
+		}
 	};
 
 	// Clicking a control has to put focus in the player. The Markdown embed

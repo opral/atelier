@@ -275,6 +275,33 @@ describe("createVideoPlayer (embed)", () => {
 		host.remove();
 	});
 
+	test("cancels a typing key outright, so no keypress follows it up", () => {
+		const host = document.createElement("div");
+		document.body.append(host);
+		const player = createVideoPlayer({ variant: "embed" });
+		host.append(player.element);
+
+		const press = (key: string) => {
+			const event = new KeyboardEvent("keydown", {
+				key,
+				bubbles: true,
+				cancelable: true,
+			});
+			player.element.dispatchEvent(event);
+			return event;
+		};
+
+		// Stopping the key from travelling is not enough: an uncancelled
+		// keydown still raises a keypress, which reaches the editor on its own
+		// and writes the character over whatever the document has selected.
+		for (const key of ["h", "Z", "1", "Backspace", "Delete", "Enter"]) {
+			expect(press(key).defaultPrevented).toBe(true);
+		}
+
+		player.destroy();
+		host.remove();
+	});
+
 	test("a focused control keeps its own activation, and still shields the host", () => {
 		const host = document.createElement("div");
 		document.body.append(host);
