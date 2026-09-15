@@ -12,6 +12,7 @@ import { normalizeUrl } from "../normalize-url";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
+import { focusIsOnEditorControl } from "../focused-control";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
@@ -878,6 +879,14 @@ export const MarkdownWcShortcuts = Extension.create({
 			"Ctrl-Backspace": deletePreviousWord,
 
 			Tab: () => {
+				// Tab is the document's only while the document has the caret.
+				// Focus can also be on one of the editor's own controls — a
+				// video player, a footnote's way back — and there the key is
+				// the browser's. Swallowing it there made those controls a dead
+				// end: the player's own Play and Fullscreen buttons could never
+				// be reached, and focus had nowhere to go but backwards, out of
+				// the editor entirely.
+				if (focusIsOnEditorControl(this.editor.view)) return false;
 				const { state } = this.editor;
 				const $from: any = state.selection.$from;
 				// A code block indents, as in Notion (tab-size 2 in the view).

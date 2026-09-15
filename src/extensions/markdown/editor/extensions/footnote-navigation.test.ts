@@ -212,6 +212,10 @@ describe("footnote navigation", () => {
 			element.querySelector("[data-footnote-ref='1'] a"),
 		);
 
+		// Activating the marker jumps to the note and hands focus back to the
+		// document, which is where the next Tab is asked from.
+		editor.view.focus();
+
 		// Space on the way back returns to the marker: the round trip closes
 		// without ever needing the mouse.
 		const definition = findNode(editor, "footnoteDef", "1");
@@ -231,6 +235,22 @@ describe("footnote navigation", () => {
 		expect(scrolled).toEqual([
 			element.querySelector("[data-footnote-ref='1']"),
 		]);
+	});
+
+	test("Tab leaves a control it has already reached", () => {
+		const marker = findNode(editor, "footnoteRef", "1");
+		editor.commands.setTextSelection(marker.pos + marker.node.nodeSize);
+		sendTab(editor);
+		const link = element.querySelector<HTMLElement>(
+			"[data-footnote-ref='1'] a",
+		)!;
+		expect(element.ownerDocument.activeElement).toBe(link);
+
+		// Tab belongs to the document while the document has the caret. Here
+		// it does not, and the editor keeping the key anyway made every
+		// control it hands focus to a dead end — nothing further to Tab to,
+		// and no way out but backwards.
+		expect(sendTab(editor)).toBe(false);
 	});
 
 	test("Tab is still swallowed in plain prose", () => {
