@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { isMacPlatform, panelShortcutHint, shortcutHint } from "./platform";
+import {
+	ariaKeyShortcut,
+	isMacPlatform,
+	panelShortcutHint,
+	shortcutHint,
+	spokenShortcut,
+} from "./platform";
 
 const onPlatform = (platform: string) => {
 	vi.stubGlobal("navigator", {
@@ -20,7 +26,10 @@ describe("shortcut hints", () => {
 		expect(shortcutHint("⌘.")).toBe("⌘.");
 		expect(shortcutHint("⌘ .")).toBe("⌘ .");
 		expect(shortcutHint("⇧⌘ .")).toBe("⇧⌘ .");
+		expect(shortcutHint("⌘⌫")).toBe("⌘⌫");
 		expect(panelShortcutHint("left")).toBe("⌘1");
+		expect(ariaKeyShortcut("⌘⌫")).toBe("Meta+Backspace");
+		expect(spokenShortcut("⌘⌫")).toBe("Command Backspace");
 	});
 
 	test("every other platform spells the modifiers out", () => {
@@ -30,7 +39,14 @@ describe("shortcut hints", () => {
 		// The glyph's breathing space would read as part of the key.
 		expect(shortcutHint("⌘ .")).toBe("Ctrl+.");
 		expect(shortcutHint("⇧⌘ .")).toBe("Shift+Ctrl+.");
-		expect(shortcutHint("⇧⌘⌫")).toBe("Shift+Ctrl+⌫");
+		// A key with a glyph of its own is spelled out too: "Ctrl+⌫" names a
+		// modifier this platform has and a key it does not write that way.
+		expect(shortcutHint("⇧⌘⌫")).toBe("Shift+Ctrl+Backspace");
+		expect(shortcutHint("⌘⌫")).toBe("Ctrl+Backspace");
 		expect(panelShortcutHint("right")).toBe("Ctrl+2");
+		// aria-keyshortcuts is read out as the authoritative binding, so it
+		// names the modifier this platform's handler actually gates on.
+		expect(ariaKeyShortcut("⌘⌫")).toBe("Control+Backspace");
+		expect(spokenShortcut("⌘⌫")).toBe("Control Backspace");
 	});
 });

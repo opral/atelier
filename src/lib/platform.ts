@@ -44,5 +44,43 @@ export function shortcutHint(keys: string): string {
 		.replace("⇧", "Shift+")
 		.replace("⌥", "Alt+")
 		.replace("⌘", "Ctrl+")
+		.replace("⌫", "Backspace")
+		.replace("⌦", "Delete")
 		.replace(/\+\s+/g, "+");
+}
+
+/**
+ * The same shortcut in the names `aria-keyshortcuts` is defined in terms of,
+ * which assistive technology reads out as the authoritative binding. Pass the
+ * macOS spelling, as with {@link shortcutHint}.
+ *
+ * @example
+ * ariaKeyShortcut("⌘⌫") // "Meta+Backspace" on macOS, "Control+Backspace" off it
+ */
+export function ariaKeyShortcut(keys: string): string {
+	return keys
+		.replace("⇧", "Shift+")
+		.replace("⌥", "Alt+")
+		.replace("⌘", isMacPlatform() ? "Meta+" : "Control+")
+		.replace("⌫", "Backspace")
+		.replace("⌦", "Delete")
+		.replace(/\+\s+/g, "+");
+}
+
+/**
+ * The shortcut spoken aloud, for the label on a `kbd` whose glyphs a screen
+ * reader would otherwise spell out one symbol at a time.
+ *
+ * @example
+ * spokenShortcut("⌘⌫") // "Command Backspace" on macOS, "Control Backspace" off it
+ */
+export function spokenShortcut(keys: string): string {
+	return keys
+		.replace("⇧", "Shift ")
+		.replace("⌥", isMacPlatform() ? "Option " : "Alt ")
+		.replace("⌘", isMacPlatform() ? "Command " : "Control ")
+		.replace("⌫", "Backspace")
+		.replace("⌦", "Delete")
+		.replace(/\s+/g, " ")
+		.trim();
 }

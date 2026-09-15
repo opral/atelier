@@ -610,7 +610,7 @@ describe("FilesView", () => {
 			clientY: 24,
 		});
 		const menu = await getFilesTreeContextMenu();
-		expect(menu).toHaveTextContent("⌘⌫");
+		expect(menu).toHaveTextContent("Ctrl+Backspace");
 		fireEvent.click(getFilesTreeContextMenuButton(menu, "Delete"));
 
 		await waitFor(async () => {
