@@ -35,6 +35,7 @@ import {
 
 type FrontmatterMode = "fields" | "yaml";
 
+
 function replaceRecordEntry(
 	record: FrontmatterRecord,
 	index: number,
@@ -139,6 +140,71 @@ function useLeaveForTheDocument(): (field: HTMLElement) => void {
 		field.blur();
 		leave();
 	};
+}
+
+/**
+ * How long a field waits, after the last keystroke, before it writes. The panel
+ * has no save button — an edit lands on its own — but landing every letter is
+ * what let the document re-render under the caret between two of them.
+ */
+const SETTLE_MS = 300;
+
+/**
+ * A field that writes as you type, without writing once per keystroke.
+ *
+ * While the field is being typed in, what it shows is what was typed: the
+ * value arriving from the document cannot replace it. That is the whole point.
+ * A review re-renders the property from before the edit while it catches up,
+ * and with no draft of its own the field put that stale string back under the
+ * caret — "Quarterly planning notes" was written to the file as "Frontmatter
+ * fixturee pangte". The draft is handed over when the field is left, or when
+ * the typing has settled.
+ */
+function useSettlingDraft(
+	value: string,
+	commit: (next: string) => void,
+): {
+	readonly text: string;
+	readonly type: (next: string) => void;
+	readonly leave: () => string;
+	readonly abandon: () => void;
+} {
+	const [draft, setDraft] = useState<string | null>(null);
+	const pending = useRef<string | null>(null);
+	const timer = useRef<number | undefined>(undefined);
+	const commitRef = useRef(commit);
+	useEffect(() => {
+		commitRef.current = commit;
+	});
+	useEffect(() => () => window.clearTimeout(timer.current), []);
+
+	const type = useCallback((next: string) => {
+		setDraft(next);
+		pending.current = next;
+		window.clearTimeout(timer.current);
+		timer.current = window.setTimeout(() => {
+			const settled = pending.current;
+			pending.current = null;
+			if (settled !== null) commitRef.current(settled);
+		}, SETTLE_MS);
+	}, []);
+
+	const leave = useCallback(() => {
+		window.clearTimeout(timer.current);
+		const settled = pending.current;
+		pending.current = null;
+		setDraft(null);
+		if (settled !== null) commitRef.current(settled);
+		return settled ?? value;
+	}, [value]);
+
+	const abandon = useCallback(() => {
+		window.clearTimeout(timer.current);
+		pending.current = null;
+		setDraft(null);
+	}, []);
+
+	return { text: draft ?? value, type, leave, abandon };
 }
 
 function FieldKeyInput({
@@ -368,22 +434,38 @@ function TextField({
 	readonly onChange: (value: unknown) => void;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
+	const leaveForTheDocument = useLeaveForTheDocument();
 	const text = value === null || value === undefined ? "" : String(value);
 	const isDate = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
-	// This field writes as you type, so what Escape puts back is the value it
-	// held when you got here, not a draft it never kept.
-	const escape = useEscapeRevert(text, onChange);
+	const field = useSettlingDraft(text, onChange);
+	// What Escape puts back is the value the field held when you got here.
+	const entryValue = useRef(text);
 	return (
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-value"
 			type={isDate ? "date" : "text"}
-			value={text}
+			value={field.text}
 			disabled={disabled}
 			placeholder="Empty"
 			aria-label={`${label} value`}
-			onFocus={escape.onFocus}
-			onKeyDown={escape.onKeyDown}
-			onChange={(event) => onChange(event.currentTarget.value)}
+			onFocus={() => {
+				entryValue.current = text;
+			}}
+			onChange={(event) => field.type(event.currentTarget.value)}
+			onBlur={field.leave}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") {
+					event.preventDefault();
+					field.leave();
+					event.currentTarget.blur();
+					return;
+				}
+				if (event.key !== "Escape") return;
+				event.preventDefault();
+				field.abandon();
+				onChange(entryValue.current);
+				leaveForTheDocument(event.currentTarget);
+			}}
 		/>
 	);
 }
@@ -545,7 +627,7 @@ export function FrontmatterEditorNodeView({
 	const [mode, setMode] = useState<FrontmatterMode>(
 		parsed.error || !fieldsSupported ? "yaml" : "fields",
 	);
-	const [rawDraft, setRawDraft] = useState(source);
+
 	const [addingField, setAddingField] = useState(
 		Boolean(node.attrs.autofocus && entries.length === 0),
 	);
@@ -614,6 +696,10 @@ export function FrontmatterEditorNodeView({
 		[editing.kind, updateAttributes, writeThrough],
 	);
 
+	// The YAML box writes as you type too, and had the same problem: a review
+	// catching up re-rendered the source under the caret mid-word.
+	const rawField = useSettlingDraft(source, commitSource);
+
 	const removeFrontmatter = useCallback(() => {
 		if (editing.kind === "readOnly") return;
 		deleteNode();
@@ -621,7 +707,6 @@ export function FrontmatterEditorNodeView({
 		focusFirstDocumentBlock();
 	}, [deleteNode, editing.kind, focusFirstDocumentBlock, writeThrough]);
 
-	useEffect(() => setRawDraft(source), [source]);
 	useEffect(() => {
 		if (entries.length > 0) createdEmptyRef.current = false;
 	}, [entries.length]);
@@ -819,19 +904,16 @@ export function FrontmatterEditorNodeView({
 					<div className="markdown-frontmatter-raw">
 						<textarea
 							className="markdown-frontmatter-yaml"
-							value={rawDraft}
+							value={rawField.text}
 							aria-label="Raw YAML frontmatter"
 							aria-invalid={parsed.error ? "true" : undefined}
 							aria-describedby={parsed.error ? rawErrorId : undefined}
 							spellCheck={false}
 							readOnly={disabled}
-							onChange={(event) => {
-								const value = event.currentTarget.value;
-								setRawDraft(value);
-								commitSource(value);
-							}}
+							onChange={(event) => rawField.type(event.currentTarget.value)}
 							onBlur={() => {
-								if (!disabled && rawDraft.trim().length === 0) {
+								const settled = rawField.leave();
+								if (!disabled && settled.trim().length === 0) {
 									removeFrontmatter();
 								}
 							}}

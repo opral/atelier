@@ -761,18 +761,20 @@ test("Escape in a frontmatter value puts it back, the way it does in a name", as
 			String(editor.state.doc.firstChild?.attrs.value ?? ""),
 		).value;
 
-	// A text value writes as you type, so Escape has to put back the value the
-	// field held when it was entered.
+	// A text value holds what is being typed and writes it when the field is
+	// left, so Escape puts back both the field's text and the value the
+	// document has been left holding.
 	const title = await screen.findByRole("textbox", { name: "title value" });
 	title.focus();
 	await act(async () => {
 		fireEvent.change(title, { target: { value: "Demo rewritten" } });
 	});
-	expect(frontmatterValue()?.title).toBe("Demo rewritten");
+	expect(title).toHaveValue("Demo rewritten");
 	await act(async () => {
 		fireEvent.keyDown(title, { key: "Escape" });
 	});
 	expect(frontmatterValue()?.title).toBe("Demo");
+	expect(title).toHaveValue("Demo");
 	expect(title).not.toHaveFocus();
 
 	// A number keeps a draft and commits it on blur; the blur Escape causes

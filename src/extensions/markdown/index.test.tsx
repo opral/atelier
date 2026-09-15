@@ -1187,6 +1187,68 @@ describe("MarkdownView", () => {
 		}
 	});
 
+	test("a property holds what is being typed and writes it when the field is left", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_frontmatter_typing");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/typing.md",
+				content: new TextEncoder().encode(
+					"---\ntitle: Fixture\n---\n\n# Notes\n",
+				),
+			})
+			.execute();
+		const fileMarkdown = async () => {
+			const row = await qb(lix)
+				.selectFrom("lix_file")
+				.select("content")
+				.where("id", "=", fileId)
+				.executeTakeFirstOrThrow();
+			return new TextDecoder().decode(row.content as Uint8Array);
+		};
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/typing.md"
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const title = await screen.findByLabelText("title value");
+			await act(async () => {
+				fireEvent.change(title, { target: { value: "Quarterly" } });
+				fireEvent.change(title, { target: { value: "Quarterly planning" } });
+			});
+
+			// Not written yet. Writing every keystroke is what let the document
+			// re-render the old value under the caret between two of them.
+			expect(await fileMarkdown()).toContain("title: Fixture");
+			expect(title).toHaveValue("Quarterly planning");
+
+			await act(async () => {
+				fireEvent.blur(title);
+			});
+			await waitFor(async () =>
+				expect(await fileMarkdown()).toContain("title: Quarterly planning"),
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("Escape in a frontmatter field name abandons the rename", async () => {
 		const lix = await openLix();
 		const fileId = fakeUuid("file_frontmatter_escape");
