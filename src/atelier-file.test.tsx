@@ -54,3 +54,67 @@ test("inline file uses the declarative renderer without workspace chrome and sta
 		await lix.close();
 	}
 });
+
+test("a host URL for a file of this workspace opens in place, not in a browser tab", async () => {
+	const lix = await openLix();
+	let view: ReturnType<typeof render> | undefined;
+	const browserTabs: string[] = [];
+	const realOpen = window.open;
+	window.open = ((url?: string | URL) => {
+		browserTabs.push(String(url));
+		return null;
+	}) as typeof window.open;
+	const opened: string[] = [];
+	try {
+		await lix.execute(
+			"INSERT INTO lix_file (path, content) VALUES ('/target.md', $1)",
+			[new TextEncoder().encode("# Target")],
+		);
+		await lix.execute(
+			"INSERT INTO lix_file (path, content) VALUES ('/readme.md', $1)",
+			[
+				new TextEncoder().encode(
+					"[Target](https://example.test/@who/what/file/abc/target.md)",
+				),
+			],
+		);
+		const result = await lix.execute(
+			"SELECT id FROM lix_file WHERE path = '/readme.md'",
+		);
+		const fileId = result.rows[0]!.id as string;
+		view = render(
+			<AtelierFile
+				lix={lix}
+				fileId={fileId}
+				filePath="/readme.md"
+				readOnly
+				documentLinks={{
+					resolve: (href) =>
+						href.startsWith("https://example.test/")
+							? { path: "/target.md" }
+							: null,
+				}}
+				onOpenFile={(path) => {
+					opened.push(path);
+				}}
+			/>,
+		);
+		// The link wears the file-type icon that marks a file of this repository.
+		await waitFor(() =>
+			expect(
+				view!.container.querySelector(".markdown-document-link-icon"),
+			).not.toBeNull(),
+		);
+		// The editor replaces its DOM as it loads, so read the anchor now.
+		const link = view.container.querySelector("a[href]") as HTMLAnchorElement;
+		link.dispatchEvent(
+			new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
+		);
+		await waitFor(() => expect(opened).toEqual(["/target.md"]));
+		expect(browserTabs).toEqual([]);
+	} finally {
+		window.open = realOpen;
+		view?.unmount();
+		await lix.close();
+	}
+});
