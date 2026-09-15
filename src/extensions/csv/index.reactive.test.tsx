@@ -2612,3 +2612,98 @@ test("checkpoint review reveals CSV column additions on a freshly opened surface
 		await lix.close();
 	}
 });
+
+// A removed row is not in the live document, so the wrapped layout — measured
+// from what is on screen now — had no height for it and it fell back to one
+// flat row. Its value was then cut off at the first line, with the ellipsis
+// that would have hinted at the rest inert under pre-wrap.
+test("a removed row keeps the height its wrapped value needs", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("file_csv_removed_wrapped");
+	const longNote =
+		"plus a much longer tail so that this note definitely needs several visual lines to display in full inside the review grid";
+	let utils: ReturnType<typeof render> | undefined;
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/wrapped-removed.csv",
+				content: new TextEncoder().encode(
+					`name,notes\nKept,short\nGone,"${longNote}"\n`,
+				),
+			})
+			.execute();
+		await lix.execute(
+			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
+			[
+				{
+					atelier_csv: {
+						version: 1,
+						columns: [
+							{
+								id: "notes",
+								header: "notes",
+								index: 1,
+								type: "text",
+								wrap: true,
+							},
+						],
+					},
+				},
+				fileId,
+			],
+		);
+		const beforeCommitId = await activeCommitId(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,notes\nKept,short\n") })
+			.where("id", "=", fileId)
+			.execute();
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView
+							fileId={fileId}
+							filePath="/wrapped-removed.csv"
+							beforeCommitId={beforeCommitId}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		const removedRow = await waitFor(() => {
+			const row = utils!.container.querySelector<HTMLTableRowElement>(
+				'tr[data-diff-status="removed"]',
+			);
+			expect(row).toBeTruthy();
+			return row!;
+		});
+		const heightOf = (row: HTMLTableRowElement) =>
+			Number.parseFloat(
+				row.querySelector<HTMLTableCellElement>("td")?.style.height ?? "0",
+			);
+		const keptRow = utils!.container.querySelector<HTMLTableRowElement>(
+			'tr[data-diff-status="unchanged"]',
+		);
+		expect(keptRow).toBeTruthy();
+		// The long note needs several lines; the short one needs a single row.
+		expect(heightOf(removedRow)).toBeGreaterThan(heightOf(keptRow!));
+		// Nothing of the value is left outside the cell that holds it.
+		const value = removedRow.querySelector<HTMLElement>(
+			"td:last-child .csv-review-clipped-value",
+		);
+		expect(value).toBeTruthy();
+		expect(Number.parseFloat(value!.style.maxHeight)).toBe(
+			heightOf(removedRow) - 20,
+		);
+	} finally {
+		utils?.unmount();
+		await lix.close();
+	}
+});

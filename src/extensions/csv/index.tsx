@@ -1272,6 +1272,78 @@ function CsvTable({
 		(row: number) => wrappedLayout?.[row]?.height ?? ROW_HEIGHT,
 		[wrappedLayout],
 	);
+	// The review grid's columns are the union of both sides. Resolve its widths
+	// and wrap flags once: the cells render at these numbers, and the removed
+	// rows below have to be measured against the same ones.
+	const reviewWidths = useMemo(
+		() =>
+			reviewModel?.columns.map((column) =>
+				column.afterIndex !== null
+					? (widthState.overrides[column.afterIndex] ??
+						widthState.initial[column.afterIndex] ??
+						COLUMN_MIN_WIDTH)
+					: (retained?.widths[`id:${column.beforeInfo?.id}`] ??
+						retained?.widths[`header:${column.beforeTitle ?? column.title}`] ??
+						measureColumnWidth(
+							column.title,
+							reviewModel.rows.map((row, index) => ({
+								rowNumber: index + 1,
+								cells: row.cells.map((cell) => cell.value),
+							})),
+							reviewModel.columns.indexOf(column),
+						)),
+			),
+		[reviewModel, retained, widthState],
+	);
+	const reviewWrapped = useMemo(
+		() =>
+			reviewModel?.columns.map((column) =>
+				column.afterIndex !== null
+					? (wrappedColumns[column.afterIndex] ?? false)
+					: (column.beforeInfo?.wrap ?? false),
+			),
+		[reviewModel, wrappedColumns],
+	);
+	// A removed row is gone from the live document, so the wrapped layout above
+	// — which measures what is on screen now — has no height for it. Measure it
+	// from the values the review shows, in the same wrapped columns at the same
+	// widths, or it renders one line tall and hides the rest of its value.
+	const removedRowHeights = useMemo(() => {
+		if (!reviewModel || !reviewWidths || !reviewWrapped?.some(Boolean)) {
+			return null;
+		}
+		const measure = (text: string) =>
+			measureContext?.measureText(text).width ?? text.length * 7;
+		const heights = new Map<string, number>();
+		for (const row of reviewModel.rows) {
+			if (row.afterIndex !== null) continue;
+			let lineCount = 1;
+			reviewWrapped.forEach((wrapped, column) => {
+				if (!wrapped) return;
+				// The title column draws semibold, so it measures semibold.
+				if (measureContext)
+					measureContext.font = `${column === 0 ? "600 " : ""}${gridTheme.baseFontStyle} ${gridTheme.fontFamily}`;
+				lineCount = Math.max(
+					lineCount,
+					wrapCsvText(
+						row.cells[column]?.value ?? "",
+						(reviewWidths[column] ?? COLUMN_MIN_WIDTH) -
+							CSV_TEXT_HORIZONTAL_PADDING * 2,
+						measure,
+					).length,
+				);
+			});
+			heights.set(row.key, csvWrappedRowHeight(lineCount));
+		}
+		return heights;
+	}, [
+		reviewModel,
+		reviewWidths,
+		reviewWrapped,
+		gridTheme.baseFontStyle,
+		gridTheme.fontFamily,
+		measureContext,
+	]);
 	const [activeViewId, setActiveViewId] = useState<string | null>(
 		retained?.activeViewId ?? null,
 	);
@@ -2241,32 +2313,13 @@ function CsvTable({
 					<CsvReviewGrid
 						model={reviewModel}
 						initialScroll={retained?.scroll}
-						widths={reviewModel.columns.map((column) =>
-							column.afterIndex !== null
-								? (widthState.overrides[column.afterIndex] ??
-									widthState.initial[column.afterIndex] ??
-									COLUMN_MIN_WIDTH)
-								: (retained?.widths[`id:${column.beforeInfo?.id}`] ??
-									retained?.widths[
-										`header:${column.beforeTitle ?? column.title}`
-									] ??
-									measureColumnWidth(
-										column.title,
-										reviewModel.rows.map((row, index) => ({
-											rowNumber: index + 1,
-											cells: row.cells.map((cell) => cell.value),
-										})),
-										reviewModel.columns.indexOf(column),
-									)),
-						)}
-						wrapped={reviewModel.columns.map((column) =>
-							column.afterIndex !== null
-								? (wrappedColumns[column.afterIndex] ?? false)
-								: (column.beforeInfo?.wrap ?? false),
-						)}
+						widths={reviewWidths ?? []}
+						wrapped={reviewWrapped ?? []}
 						rowHeight={(row) => {
-							const visibleIndex =
-								row.afterIndex === null ? -1 : rowMap.indexOf(row.afterIndex);
+							if (row.afterIndex === null) {
+								return removedRowHeights?.get(row.key) ?? ROW_HEIGHT;
+							}
+							const visibleIndex = rowMap.indexOf(row.afterIndex);
 							return visibleIndex < 0 ? ROW_HEIGHT : getRowHeight(visibleIndex);
 						}}
 						search={search}
