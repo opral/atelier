@@ -35,10 +35,19 @@ export const FootnoteNavigationExtension = Extension.create({
 					const onClick = (event: MouseEvent) => {
 						handleFootnoteClick(editorView, event);
 					};
+					// The marker and the way back are buttons, and a button you
+					// can only click is not a button. Enter and Space on the
+					// focused one do exactly what the mouse does.
+					const onKeyDown = (event: KeyboardEvent) => {
+						handleFootnoteKey(editorView, event);
+					};
 					editorView.dom.addEventListener("click", onClick, true);
+					editorView.dom.addEventListener("keydown", onKeyDown, true);
 					return {
-						destroy: () =>
-							editorView.dom.removeEventListener("click", onClick, true),
+						destroy: () => {
+							editorView.dom.removeEventListener("click", onClick, true);
+							editorView.dom.removeEventListener("keydown", onKeyDown, true);
+						},
 					};
 				},
 			}),
@@ -103,8 +112,32 @@ function footnoteState(
 
 function handleFootnoteClick(view: EditorView, event: MouseEvent): boolean {
 	const target = event.target instanceof Element ? event.target : null;
-	if (!target) return false;
-	const marker = target.closest("[data-footnote-ref]");
+	return target ? followFootnote(view, target) : false;
+}
+
+/**
+ * Enter or Space on the focused marker or way back. The editor swallows Tab
+ * in prose on purpose, so the keyboard reaches these two through the caret
+ * (see the Tab case in the bridge's shortcuts) and through a screen reader,
+ * not through the tab order of the whole document.
+ */
+function handleFootnoteKey(view: EditorView, event: KeyboardEvent): boolean {
+	if (event.key !== "Enter" && event.key !== " ") return false;
+	const active = view.dom.ownerDocument.activeElement;
+	if (!(active instanceof Element) || !view.dom.contains(active)) return false;
+	if (!active.closest("[data-footnote-ref], [data-footnote-backref]")) {
+		return false;
+	}
+	// The marker is an atom in the document: an Enter that fell through would
+	// split the paragraph it sits in.
+	event.preventDefault();
+	event.stopPropagation();
+	return followFootnote(view, active);
+}
+
+/** Marker to definition, or definition back to its first marker. */
+function followFootnote(view: EditorView, from: Element): boolean {
+	const marker = from.closest("[data-footnote-ref]");
 	if (marker) {
 		const label = marker.getAttribute("data-footnote-ref") ?? "";
 		const definition = findFootnote(view.state.doc, "footnoteDef", label);
@@ -112,7 +145,7 @@ function handleFootnoteClick(view: EditorView, event: MouseEvent): boolean {
 		if (definition !== null) revealNode(view, definition);
 		return true;
 	}
-	const backref = target.closest("[data-footnote-backref]");
+	const backref = from.closest("[data-footnote-backref]");
 	if (backref) {
 		const label = backref.getAttribute("data-footnote-backref") ?? "";
 		const reference = findFootnote(view.state.doc, "footnoteRef", label);
@@ -120,6 +153,36 @@ function handleFootnoteClick(view: EditorView, event: MouseEvent): boolean {
 		return true;
 	}
 	return false;
+}
+
+/**
+ * The control a Tab in prose should hand focus to, if any: the marker the
+ * caret has just passed, or the way out of the definition the caret is in.
+ * Tab does nothing at all in prose otherwise — the editor swallows it to keep
+ * focus in the document — so this fights nothing and gives the one keyboard
+ * route into the footnote round trip.
+ */
+export function footnoteTabTarget(view: EditorView): HTMLElement | null {
+	const { $from } = view.state.selection;
+	const before = $from.nodeBefore;
+	if (before?.type.name === "footnoteRef") {
+		const dom = view.nodeDOM($from.pos - before.nodeSize);
+		const link =
+			dom instanceof HTMLElement
+				? dom.querySelector<HTMLElement>(".markdown-footnote-ref-link")
+				: null;
+		if (link) return link;
+	}
+	for (let depth = $from.depth; depth > 0; depth--) {
+		if ($from.node(depth).type.name !== "footnoteDef") continue;
+		const dom = view.nodeDOM($from.before(depth));
+		const backref =
+			dom instanceof HTMLElement
+				? dom.querySelector<HTMLElement>("[data-footnote-backref]")
+				: null;
+		if (backref) return backref;
+	}
+	return null;
 }
 
 /** Position of the first node of `typeName` carrying `label`, or null. */

@@ -9,6 +9,7 @@ import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
+import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
 
@@ -891,6 +892,16 @@ export const MarkdownWcShortcuts = Extension.create({
 					}
 					// Cells hand Tab to the table's own navigation.
 					if (name === "tableCell" || name === "tableHeader") return false;
+				}
+				// Nothing to indent — but beside a footnote marker, or inside a
+				// footnote's own note, there is somewhere to go. The marker is
+				// announced as a button and the note carries the way back, and
+				// this is the only key that reaches either of them: focus goes
+				// there, and Enter or Space makes the jump.
+				const footnoteControl = footnoteTabTarget(this.editor.view);
+				if (footnoteControl) {
+					footnoteControl.focus();
+					return true;
 				}
 				// Anywhere else there is nothing to indent; swallowing the key
 				// keeps focus in the document instead of jumping to the next
