@@ -402,7 +402,10 @@ function TipTapEditorLoadedContent({
 			if (!editor || readOnly) return;
 			const target = event.target as HTMLElement | null;
 			const insideContent = target?.closest(".ProseMirror");
-			if (insideContent) return;
+			const insideFrontmatterDisclosure = target?.closest(
+				".markdown-frontmatter-disclosure",
+			);
+			if (insideContent || insideFrontmatterDisclosure) return;
 			event.preventDefault();
 			if (editor.isEmpty) {
 				editor.commands.focus("start");

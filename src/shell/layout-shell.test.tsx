@@ -13,6 +13,7 @@ import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import {
+	isPanelShortcutBlockedTarget,
 	resolveLixFileForOpen,
 	selectCheckpointFiles,
 	syncPanelGroupLayout,
@@ -62,6 +63,25 @@ async function openWorkingChangesFromHistory() {
 }
 
 const ASYNC_UI_TIMEOUT = 10_000;
+
+describe("panel shortcut target guard", () => {
+	test("blocks shortcuts in form controls nested inside the editor", () => {
+		const editor = document.createElement("div");
+		editor.className = "ProseMirror";
+		const input = document.createElement("input");
+		const textarea = document.createElement("textarea");
+		editor.append(input, textarea);
+		document.body.append(editor);
+
+		try {
+			expect(isPanelShortcutBlockedTarget(input)).toBe(true);
+			expect(isPanelShortcutBlockedTarget(textarea)).toBe(true);
+			expect(isPanelShortcutBlockedTarget(editor)).toBe(false);
+		} finally {
+			editor.remove();
+		}
+	});
+});
 
 describe("resolveLixFileForOpen", () => {
 	test("resolves normalized paths from Lix", async () => {

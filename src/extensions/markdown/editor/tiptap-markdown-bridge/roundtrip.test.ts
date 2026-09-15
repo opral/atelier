@@ -1130,6 +1130,238 @@ describe("inline", () => {
 		editor.destroy();
 	});
 
+	test("preserves the text selection before opening a workspace video", async () => {
+		const openWorkspaceFile = vi.fn();
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:workspace-video",
+					preview: "auto" as const,
+					workspaceFile: {
+						fileId: "video-1",
+						filePath: "/assets/kickoff.mp4",
+					},
+					dispose: vi.fn(),
+				}),
+				openWorkspaceFile,
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown(
+					"Before the video.\n\n![Kickoff recording](assets/kickoff.mp4)",
+				),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		let paragraphPosition = -1;
+		editor.state.doc.descendants((node, position) => {
+			if (
+				node.type.name === "paragraph" &&
+				node.textContent.startsWith("Before")
+			) {
+				paragraphPosition = position;
+			}
+		});
+		expect(paragraphPosition).toBeGreaterThanOrEqual(0);
+		editor.commands.setTextSelection(paragraphPosition + 4);
+		const before = editor.state.selection.from;
+		const open = editor.view.dom.querySelector<HTMLAnchorElement>(
+			".markdown-video-open",
+		);
+		expect(open).not.toBeNull();
+
+		const mouseDown = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		});
+		open?.dispatchEvent(mouseDown);
+
+		expect(mouseDown.defaultPrevented).toBe(true);
+		expect(editor.state.selection.from).toBe(before);
+		expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+
+		const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+		open?.dispatchEvent(click);
+		expect(openWorkspaceFile).toHaveBeenCalledWith({
+			filePath: "/assets/kickoff.mp4",
+		});
+		editor.destroy();
+	});
+
+	test("preserves the text selection before opening a PDF embed", () => {
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(
+				parseMarkdown("Before the PDF.\n\n![Brief](docs/brief.pdf)"),
+			),
+		});
+
+		let paragraphPosition = -1;
+		editor.state.doc.descendants((node, position) => {
+			if (
+				node.type.name === "paragraph" &&
+				node.textContent.startsWith("Before")
+			) {
+				paragraphPosition = position;
+			}
+		});
+		expect(paragraphPosition).toBeGreaterThanOrEqual(0);
+		editor.commands.setTextSelection(paragraphPosition + 4);
+		const before = editor.state.selection.from;
+		const open =
+			editor.view.dom.querySelector<HTMLAnchorElement>(".markdown-pdf-open");
+		expect(open).not.toBeNull();
+
+		const mouseDown = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		});
+		open?.dispatchEvent(mouseDown);
+
+		expect(mouseDown.defaultPrevented).toBe(true);
+		expect(editor.state.selection.from).toBe(before);
+		expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+		editor.destroy();
+	});
+
+	test("preserves the text selection before previewing a PDF embed", () => {
+		const editor = new Editor({
+			extensions: MarkdownWc(),
+			content: astToTiptapDoc(
+				parseMarkdown("Before the PDF.\n\n![Brief](docs/brief.pdf)"),
+			),
+		});
+
+		let paragraphPosition = -1;
+		editor.state.doc.descendants((node, position) => {
+			if (
+				node.type.name === "paragraph" &&
+				node.textContent.startsWith("Before")
+			) {
+				paragraphPosition = position;
+			}
+		});
+		expect(paragraphPosition).toBeGreaterThanOrEqual(0);
+		editor.commands.setTextSelection(paragraphPosition + 4);
+		const before = editor.state.selection.from;
+		const preview = editor.view.dom.querySelector<HTMLButtonElement>(
+			".markdown-pdf-preview-action",
+		);
+		expect(preview).not.toBeNull();
+
+		const mouseDown = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		});
+		preview?.dispatchEvent(mouseDown);
+
+		expect(mouseDown.defaultPrevented).toBe(true);
+		expect(editor.state.selection.from).toBe(before);
+		expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+		editor.destroy();
+	});
+
+	test("preserves the text selection when using a video control", async () => {
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:workspace-video",
+					preview: "auto" as const,
+					dispose: vi.fn(),
+				}),
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown(
+					"Before the video.\n\n![Kickoff recording](assets/kickoff.mp4)",
+				),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		let paragraphPosition = -1;
+		editor.state.doc.descendants((node, position) => {
+			if (
+				node.type.name === "paragraph" &&
+				node.textContent.startsWith("Before")
+			) {
+				paragraphPosition = position;
+			}
+		});
+		expect(paragraphPosition).toBeGreaterThanOrEqual(0);
+		editor.commands.setTextSelection(paragraphPosition + 4);
+		const before = editor.state.selection.from;
+		const toggle = editor.view.dom.querySelector<HTMLButtonElement>(
+			".atelier-video-toggle",
+		);
+		expect(toggle).not.toBeNull();
+
+		const mouseDown = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		});
+		toggle?.dispatchEvent(mouseDown);
+
+		expect(mouseDown.defaultPrevented).toBe(true);
+		expect(editor.state.selection.from).toBe(before);
+		expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+		editor.destroy();
+	});
+
+	test("keeps a block video draggable from its video surface", async () => {
+		const editor = new Editor({
+			extensions: MarkdownWc({
+				loadAsset: async () => ({
+					src: "blob:workspace-video",
+					preview: "auto" as const,
+					dispose: vi.fn(),
+				}),
+			}),
+			content: astToTiptapDoc(
+				parseMarkdown(
+					"Before the video.\n\n![Kickoff recording](assets/kickoff.mp4)",
+				),
+			),
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		let paragraphPosition = -1;
+		editor.state.doc.descendants((node, position) => {
+			if (
+				node.type.name === "paragraph" &&
+				node.textContent.startsWith("Before")
+			) {
+				paragraphPosition = position;
+			}
+		});
+		expect(paragraphPosition).toBeGreaterThanOrEqual(0);
+		editor.commands.setTextSelection(paragraphPosition + 4);
+		const before = editor.state.selection.from;
+		const block = editor.view.dom.querySelector<HTMLElement>(
+			".markdown-video-embed.markdown-image-block",
+		);
+		const video = block?.querySelector<HTMLVideoElement>(
+			".atelier-video-surface",
+		);
+		expect(block).toHaveAttribute("draggable", "true");
+		expect(video).not.toBeNull();
+
+		const mouseDown = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		});
+		video?.dispatchEvent(mouseDown);
+
+		expect(mouseDown.defaultPrevented).toBe(false);
+		expect(editor.state.selection.from).toBe(before);
+		expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+		editor.destroy();
+	});
+
 	test("marks a video embed unavailable when the workspace file is missing", async () => {
 		const editor = new Editor({
 			extensions: MarkdownWc({

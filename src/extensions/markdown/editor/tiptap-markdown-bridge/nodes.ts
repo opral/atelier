@@ -811,6 +811,21 @@ function createMarkdownMediaNodeView(args: {
 	return createMarkdownAssetNodeView(args);
 }
 
+function suppressMarkdownMediaControlSelection(event: Event): void {
+	if (!(event.target instanceof Element)) return;
+	const control = event.target.closest(
+		"a, button, input, textarea, select, video, [role='slider']",
+	);
+	if (control === null) {
+		return;
+	}
+	// Block video nodes are draggable from their video surface. Keep the
+	// browser's default pointer behavior there so dragstart can fire, while
+	// still shielding the editor from selecting the atom on the way through.
+	if (!control.matches("video")) event.preventDefault();
+	event.stopPropagation();
+}
+
 function pdfRenderSpec({
 	src,
 	label,
@@ -956,6 +971,8 @@ function createMarkdownVideoNodeView({
 	dom.className = "markdown-video-embed";
 	dom.dataset.markdownVideo = "";
 	dom.contentEditable = "false";
+	dom.addEventListener("pointerdown", suppressMarkdownMediaControlSelection);
+	dom.addEventListener("mousedown", suppressMarkdownMediaControlSelection);
 	if (nodeTypeName === "imageBlock") {
 		dom.classList.add("markdown-image-block");
 		dom.dataset.markdownImageBlock = "";
@@ -1172,6 +1189,14 @@ function createMarkdownVideoNodeView({
 		destroy: () => {
 			disposed = true;
 			generation += 1;
+			dom.removeEventListener(
+				"pointerdown",
+				suppressMarkdownMediaControlSelection,
+			);
+			dom.removeEventListener(
+				"mousedown",
+				suppressMarkdownMediaControlSelection,
+			);
 			openAction.removeEventListener("click", handleOpenWorkspaceFile);
 			deleteAction?.removeEventListener("pointerdown", handleDeletePointerDown);
 			deleteAction?.removeEventListener("click", handleDelete);
@@ -1218,6 +1243,8 @@ function createMarkdownAssetNodeView({
 	const originalSrc = String(node.attrs?.src ?? "");
 	const rendersPdf = isPdfAssetSrc(originalSrc);
 	const dom = rendersPdf ? createPdfEmbedDom(node) : createImageDom(node);
+	dom.addEventListener("pointerdown", suppressMarkdownMediaControlSelection);
+	dom.addEventListener("mousedown", suppressMarkdownMediaControlSelection);
 	let disposed = false;
 	let generation = 0;
 	let loadedAsset: LoadedMarkdownAsset | null = null;
@@ -1559,6 +1586,14 @@ function createMarkdownAssetNodeView({
 			disposed = true;
 			generation += 1;
 			visibilityObserver?.disconnect();
+			dom.removeEventListener(
+				"pointerdown",
+				suppressMarkdownMediaControlSelection,
+			);
+			dom.removeEventListener(
+				"mousedown",
+				suppressMarkdownMediaControlSelection,
+			);
 			previewAction?.removeEventListener("click", handlePreviewAction);
 			openAction?.removeEventListener("click", handleOpenWorkspaceFile);
 			deleteAction?.removeEventListener("pointerdown", handleDeletePointerDown);
