@@ -27,6 +27,7 @@ describe("shortcut hints", () => {
 		expect(shortcutHint("⌘ .")).toBe("⌘ .");
 		expect(shortcutHint("⇧⌘ .")).toBe("⇧⌘ .");
 		expect(shortcutHint("⌘⌫")).toBe("⌘⌫");
+		expect(shortcutHint("⇧⌘⏎")).toBe("⇧⌘⏎");
 		expect(panelShortcutHint("left")).toBe("⌘1");
 		expect(ariaKeyShortcut("⌘⌫")).toBe("Meta+Backspace");
 		expect(spokenShortcut("⌘⌫")).toBe("Command Backspace");
@@ -43,6 +44,8 @@ describe("shortcut hints", () => {
 		// modifier this platform has and a key it does not write that way.
 		expect(shortcutHint("⇧⌘⌫")).toBe("Shift+Ctrl+Backspace");
 		expect(shortcutHint("⌘⌫")).toBe("Ctrl+Backspace");
+		// The review float writes Checkpoint's chord with this one.
+		expect(shortcutHint("⇧⌘⏎")).toBe("Shift+Ctrl+Enter");
 		expect(panelShortcutHint("right")).toBe("Ctrl+2");
 		// aria-keyshortcuts is read out as the authoritative binding, so it
 		// names the modifier this platform's handler actually gates on.

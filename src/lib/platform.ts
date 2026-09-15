@@ -46,6 +46,7 @@ export function shortcutHint(keys: string): string {
 		.replace("⌘", "Ctrl+")
 		.replace("⌫", "Backspace")
 		.replace("⌦", "Delete")
+		.replace("⏎", "Enter")
 		.replace(/\+\s+/g, "+");
 }
 
@@ -64,6 +65,7 @@ export function ariaKeyShortcut(keys: string): string {
 		.replace("⌘", isMacPlatform() ? "Meta+" : "Control+")
 		.replace("⌫", "Backspace")
 		.replace("⌦", "Delete")
+		.replace("⏎", "Enter")
 		.replace(/\+\s+/g, "+");
 }
 
@@ -81,6 +83,7 @@ export function spokenShortcut(keys: string): string {
 		.replace("⌘", isMacPlatform() ? "Command " : "Control ")
 		.replace("⌫", "Backspace")
 		.replace("⌦", "Delete")
+		.replace("⏎", "Enter")
 		.replace(/\s+/g, " ")
 		.trim();
 }

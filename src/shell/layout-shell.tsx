@@ -1176,6 +1176,9 @@ function LayoutShellLoadedContentResolved({
 }) {
 	const effectiveAtelierInstance = atelierInstance;
 	const workingChangesReviewOpenRef = useRef(false);
+	// True from a reviewer's own edit until the review has caught up with it.
+	const [reviewCatchingUp, setReviewCatchingUp] = useState(false);
+	const catchUpTimerRef = useRef<number | undefined>(undefined);
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
@@ -1185,16 +1188,30 @@ function LayoutShellLoadedContentResolved({
 			// checkpoint. The review follows the edit instead. An external write
 			// emits nothing here, so it still raises the notice: nobody has
 			// their content swapped for someone else's mid-read.
+			//
+			// It follows once the typing settles, not once per keystroke.
+			// Reopening mints a new epoch, and the file's projection re-renders
+			// from before the edit while that epoch loads — so a reopen between
+			// two keystrokes put the old value back under the caret and the
+			// next letters landed on it, writing "Frontmatter fixturee pangte"
+			// where the reviewer typed a sentence.
 			if (
-				event.type === "document_modified" &&
-				workingChangesReviewOpenRef.current
+				event.type !== "document_modified" ||
+				!workingChangesReviewOpenRef.current
 			)
-				void reopenWorkingReviewRef.current?.({
-					revealPath: event.filePath,
-				});
+				return;
+			const { filePath } = event;
+			setReviewCatchingUp(true);
+			window.clearTimeout(catchUpTimerRef.current);
+			catchUpTimerRef.current = window.setTimeout(() => {
+				void Promise.resolve(
+					reopenWorkingReviewRef.current?.({ revealPath: filePath }),
+				).finally(() => setReviewCatchingUp(false));
+			}, 400);
 		},
 		[onEvent],
 	);
+	useEffect(() => () => window.clearTimeout(catchUpTimerRef.current), []);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
 	const preferencesFor = useCallback(
 		(extensionId: string): AtelierExtensionPreferences => ({
@@ -4541,6 +4558,12 @@ function LayoutShellLoadedContentResolved({
 						{/* A collapsed panel gives its space back — no residual gutter,
 						    the strip aligns with the top-bar mark. */}
 						<Separator
+							// A collapsed panel's gutter is zero pixels wide, and a
+							// zero-pixel separator still answered Tab and the arrow
+							// keys: focus landed on nothing, and arrowing dragged open
+							// a sidebar the user could not see they were dragging.
+							{...(isLeftCollapsed ? { tabIndex: -1 } : {})}
+							aria-label="Resize the left area"
 							className={`group relative z-10 flex items-center justify-center ${
 								isLeftCollapsed ? "w-0" : "w-1"
 							}`}
@@ -4591,6 +4614,8 @@ function LayoutShellLoadedContentResolved({
 							</div>
 						</Panel>
 						<Separator
+							{...(isRightCollapsed ? { tabIndex: -1 } : {})}
+							aria-label="Resize the right area"
 							className={`group relative z-10 flex items-center justify-center ${
 								isRightCollapsed ? "w-0" : "w-1"
 							}`}
@@ -4668,6 +4693,7 @@ function LayoutShellLoadedContentResolved({
 					// An applied review is pinned to a span the host chose, not to
 					// the working epoch, and refreshing would drop that span. Only
 					// a review of the working changes can be behind them.
+					reviewCatchingUp={reviewCatchingUp}
 					reviewedEpoch={
 						workingReview?.intent ? null : workingChangeReviewRange
 					}
