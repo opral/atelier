@@ -33,11 +33,16 @@
    gutter lives on the editor body wrapper instead. */
 	.markdown-view {
 		--markdown-radius: 4px;
-		/* Notion's default column, and one gap between blocks so a document
-		   reads as a steady rhythm rather than a set of unrelated margins. */
-		--markdown-content-width: 708px;
+		/* A measure a little past Notion's default column — the extra line
+		   length reads as more document and less frame — and one gap between
+		   blocks so a document reads as a steady rhythm rather than a set of
+		   unrelated margins. */
+		--markdown-content-width: 768px;
 		--markdown-block-gap: 0.5rem;
+		/* How wide a table may grow when the panel has room to give it. */
 		--markdown-table-max-width: 1040px;
+		/* The document's own margin, which an outset block never eats into. */
+		--markdown-gutter-min: 2rem;
 		flex: 1 1 auto;
 		min-height: 0;
 	}
@@ -213,7 +218,11 @@
 		line-height: 1.5;
 		min-height: 100%;
 		padding: clamp(2.25rem, 5vw, 4rem)
-			max(2rem, calc((100% - var(--markdown-content-width)) / 2)) 6rem;
+			max(
+				var(--markdown-gutter-min),
+				calc((100% - var(--markdown-content-width)) / 2)
+			)
+			6rem;
 		caret-color: currentColor;
 		cursor: auto;
 		width: 100%;
@@ -917,10 +926,26 @@
 	}
 
 	/* Tables */
-	/* Tables stay inside the column and scroll sideways when wider, rather
-	   than bleeding past the text on both sides. Hairlines, 14px cells,
-	   a tinted plain-case header row: Notion's simple table. */
+	/* A table is read across, not down a measure, so it earns more room than
+	   the prose around it: it reaches back into the gutter on both sides, as
+	   far as the panel can spare while keeping the document's own margin, and
+	   no further than the table's cap. In a panel with no gutter to give it
+	   sits in the column like everything else and scrolls sideways.
+	   Hairlines, 14px cells, a tinted plain-case header row: Notion's simple
+	   table. */
 	.markdown-view .ProseMirror table {
+		--markdown-table-outset: max(
+			0px,
+			min(
+				calc(
+					(var(--markdown-table-max-width) - var(--markdown-content-width)) / 2
+				),
+				calc(
+					(100cqw - var(--markdown-content-width)) / 2 -
+						var(--markdown-gutter-min)
+				)
+			)
+		);
 		display: block;
 		border: 1px solid var(--color-border-panel);
 		border-collapse: separate;
@@ -928,10 +953,11 @@
 		border-spacing: 0;
 		box-shadow: none;
 		width: max-content;
-		min-width: 100%;
-		max-width: 100%;
+		min-width: calc(100% + 2 * var(--markdown-table-outset));
+		max-width: calc(100% + 2 * var(--markdown-table-outset));
 		margin-top: var(--markdown-block-gap);
 		margin-bottom: var(--markdown-block-gap);
+		margin-inline: calc(-1 * var(--markdown-table-outset));
 		overflow-x: auto;
 		font-size: 14px;
 	}
