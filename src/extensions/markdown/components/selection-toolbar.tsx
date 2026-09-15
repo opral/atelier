@@ -22,6 +22,7 @@ import {
 	type SelectionBlockType,
 	getSelectionBlockType,
 } from "../editor/block-commands";
+import { getClipRect, isAnchorClipped } from "./clip-rect";
 import { LinkPopover } from "./link-popover";
 import {
 	TOOLBAR_TOOLTIP_DELAY,
@@ -95,32 +96,6 @@ function readSelectionState(editor: Editor): SelectionToolbarState {
 	};
 }
 
-/**
- * The rectangle a fixed panel must stay inside: the viewport, narrowed by
- * every scrolling ancestor of the editor that reports a real size.
- */
-function getClipRect(element: HTMLElement) {
-	let top = 0;
-	let left = 0;
-	let bottom = window.innerHeight;
-	let right = window.innerWidth;
-	let node = element.parentElement;
-	while (node) {
-		const style = window.getComputedStyle(node);
-		if (/(auto|scroll|hidden)/.test(`${style.overflowY} ${style.overflowX}`)) {
-			const rect = node.getBoundingClientRect();
-			if (rect.width > 0 && rect.height > 0) {
-				top = Math.max(top, rect.top);
-				left = Math.max(left, rect.left);
-				bottom = Math.min(bottom, rect.bottom);
-				right = Math.min(right, rect.right);
-			}
-		}
-		node = node.parentElement;
-	}
-	return { top, left, bottom, right };
-}
-
 function computePanelPosition(
 	editor: Editor,
 	from: number,
@@ -138,7 +113,7 @@ function computePanelPosition(
 	const editorRect = view.dom.getBoundingClientRect();
 	const clip = getClipRect(view.dom);
 
-	const hidden = start.bottom < clip.top || start.top > clip.bottom;
+	const hidden = isAnchorClipped(start, clip);
 	const roomAbove = start.top - GAP - Math.max(clip.top, 0);
 	const placement: PanelPosition["placement"] =
 		roomAbove >= PANEL_HEIGHT ? "above" : "below";

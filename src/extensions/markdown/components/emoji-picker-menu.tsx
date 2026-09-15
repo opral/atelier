@@ -12,6 +12,12 @@ import {
 	popularEmojiCatalog,
 	type EmojiCatalogItem,
 } from "./emoji-catalog";
+import {
+	clampLeft,
+	clampToClipRect,
+	getClipRect,
+	isAnchorClipped,
+} from "./clip-rect";
 
 const INACTIVE_EMOJI_STATE: EmojiCommandState = {
 	active: false,
@@ -39,8 +45,11 @@ export function EmojiPickerMenu() {
 		useState<readonly EmojiCatalogItem[]>(popularEmojiCatalog);
 	const [selection, setSelection] = useState({ query: "", index: 0 });
 	const [position, setPosition] = useState<{
-		top: number;
+		top: number | null;
+		bottom: number | null;
 		left: number;
+		maxHeight: number;
+		hidden: boolean;
 	} | null>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
@@ -75,18 +84,27 @@ export function EmojiPickerMenu() {
 			const editorRect = editor.view.dom.getBoundingClientRect();
 			const gap = 8;
 			const menuWidth = 304;
-			const menuHeight = 356;
-			const spaceBelow = window.innerHeight - coords.bottom - gap;
-			const spaceAbove = coords.top - gap;
-			const top =
-				spaceBelow >= menuHeight || spaceBelow >= spaceAbove
-					? coords.bottom + gap
-					: Math.max(gap, coords.top - gap - Math.min(menuHeight, spaceAbove));
-			let left = Math.max(coords.left, editorRect.left);
-			if (left + menuWidth > window.innerWidth) {
-				left = Math.max(gap, window.innerWidth - menuWidth - gap);
-			}
-			setPosition({ top, left });
+			// Clipped to the editor's scroll viewport, so the picker cannot
+			// come to rest on top of the toolbar or the tab strip.
+			const clip = getClipRect(editor.view.dom);
+			const placed = clampToClipRect({
+				coords,
+				clip,
+				preferredHeight: 356,
+				gap,
+			});
+			setPosition({
+				top: placed.top,
+				bottom: placed.bottom,
+				left: clampLeft({
+					left: Math.max(coords.left, editorRect.left),
+					width: menuWidth,
+					clip,
+					gap,
+				}),
+				maxHeight: placed.maxHeight,
+				hidden: isAnchorClipped(coords, clip),
+			});
 		};
 
 		updatePosition();
@@ -107,8 +125,12 @@ export function EmojiPickerMenu() {
 		[editor],
 	);
 
+	// Out of the editor's viewport the picker is not a picker: it stops being
+	// drawn, and stops answering the arrows and Enter along with it.
+	const suppressed = !position || position.hidden;
+
 	useEffect(() => {
-		if (!emojiState.active || !editor) return;
+		if (!emojiState.active || !editor || suppressed) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (filteredEmoji.length === 0) return;
 			if (event.key === "ArrowDown") {
@@ -144,6 +166,7 @@ export function EmojiPickerMenu() {
 		emojiState.active,
 		emojiState.query,
 		editor,
+		suppressed,
 		filteredEmoji,
 		insertEmoji,
 		selectedIndex,
@@ -167,7 +190,7 @@ export function EmojiPickerMenu() {
 		return () => document.removeEventListener("mousedown", handleClickOutside);
 	}, [emojiState.active, editor]);
 
-	if (!emojiState.active || !position) return null;
+	if (!emojiState.active || !position || suppressed) return null;
 
 	const selectedEmoji = filteredEmoji[selectedIndex];
 	const selectedOptionId = selectedEmoji
@@ -180,7 +203,13 @@ export function EmojiPickerMenu() {
 		<div
 			ref={menuRef}
 			className="markdown-slash-menu markdown-emoji-menu"
-			style={{ position: "fixed", top: position.top, left: position.left }}
+			style={{
+				position: "fixed",
+				top: position.top ?? undefined,
+				bottom: position.bottom ?? undefined,
+				left: position.left,
+				maxHeight: position.maxHeight,
+			}}
 			role="listbox"
 			aria-label="Emoji picker"
 			aria-activedescendant={selectedOptionId}
