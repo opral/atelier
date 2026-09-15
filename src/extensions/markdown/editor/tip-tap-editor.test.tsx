@@ -870,6 +870,37 @@ test("adds frontmatter from the first Markdown block disclosure", async () => {
 	expect(screen.getByPlaceholderText("Empty")).toHaveFocus();
 });
 
+test("keeps the editor selection when adding frontmatter", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: fakeUuid("file_frontmatter_selection"),
+		markdown: "Hello",
+	});
+	await setEditorText(editor, "Hello");
+	await act(async () => {
+		editor.commands.focus("start");
+	});
+	const before = editor.state.selection.from;
+	const firstBlock = screen
+		.getByTestId("tiptap-editor")
+		.querySelector(".ProseMirror > p");
+	expect(firstBlock).not.toBeNull();
+	await act(async () => {
+		hoverAboveFirstBlock(firstBlock!);
+	});
+	const button = screen.getByRole("button", { name: "Add frontmatter" });
+	await act(async () => {
+		fireEvent.mouseDown(button);
+		fireEvent.mouseUp(button);
+		fireEvent.click(button);
+	});
+
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.type.name).toBe("markdownFrontmatter");
+	});
+	expect(editor.state.selection.from).toBe(before + 1);
+	expect(editor.state.selection.$from.parent.textContent).toBe("Hello");
+});
+
 test("preserves newly created frontmatter after it has held a property", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
 		fileId: fakeUuid("file_frontmatter_created_then_emptied"),
