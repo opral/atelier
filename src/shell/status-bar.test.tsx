@@ -250,6 +250,68 @@ describe("CheckpointStatusBar", () => {
 		await lix.close();
 	});
 
+	// The review is pinned to the epoch it opened at. A further write leaves it
+	// showing a past state of the file, and every decision it offers is refused
+	// against the epoch it was taken on, so the status bar says so.
+	test("says an open review is behind once the file changes again", async () => {
+		const lix = await openLix();
+		const epoch = async () => {
+			const result = await lix.execute(
+				"SELECT working_base_commit_id, commit_id FROM lix_branch WHERE id = lix_active_branch_id()",
+			);
+			const row = result.rows[0];
+			return {
+				beforeCommitId: String(row?.working_base_commit_id),
+				afterCommitId: String(row?.commit_id),
+			};
+		};
+		const write = (id: string, text: string) =>
+			lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[fakeUuid(id), `/${id}.md`, new TextEncoder().encode(text)],
+			);
+		const refresh = vi.fn();
+		let view: ReturnType<typeof render> | undefined;
+		try {
+			await write("review-behind", "# Reviewed\n");
+			const openedAt = await epoch();
+			await act(async () => {
+				view = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<CheckpointStatusBar
+								reviewingWorkingChanges
+								reviewedEpoch={openedAt}
+								onRefreshWorkingReview={refresh}
+								onReviewWorkingChanges={() => {}}
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("button", {
+				name: "1 file changed since checkpoint. Close review",
+			});
+			expect(
+				screen.queryByRole("button", {
+					name: "This review is behind the file. Refresh the review",
+				}),
+			).toBeNull();
+
+			await act(async () => {
+				await write("review-behind-second", "# Written after\n");
+			});
+			const notice = await screen.findByRole("button", {
+				name: "This review is behind the file. Refresh the review",
+			});
+			fireEvent.click(notice);
+			expect(refresh).toHaveBeenCalledOnce();
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("keeps checkpoint creation out of read-only workspaces", async () => {
 		const lix = await openLix();
 		let view: ReturnType<typeof render> | undefined;

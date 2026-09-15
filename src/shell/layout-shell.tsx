@@ -4649,6 +4649,21 @@ function LayoutShellLoadedContentResolved({
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
 					reviewingWorkingChanges={workingChangesReviewOpen}
 					reviewingLatestCheckpoint={historicalReview !== null}
+					// An applied review is pinned to a span the host chose, not to
+					// the working epoch, and refreshing would drop that span. Only
+					// a review of the working changes can be behind them.
+					reviewedEpoch={
+						workingReview?.intent ? null : workingChangeReviewRange
+					}
+					onRefreshWorkingReview={() => {
+						// Reopen on the current epoch, keeping the file on screen
+						// where it is still one of the changed ones.
+						void reopenWorkingReviewRef.current?.(
+							navigationActivePath
+								? { revealPath: navigationActivePath }
+								: undefined,
+						);
+					}}
 					onReviewWorkingChanges={() => {
 						// The same control opens and closes the review. A second
 						// press that lands before the first one's read of the

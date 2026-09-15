@@ -15,6 +15,12 @@ export type WorkingChangeCountRow = {
 	file_count: number;
 };
 
+/** The two commits a working review spans: working base → branch head. */
+export type WorkingReviewEpochRow = {
+	before_commit_id: string;
+	after_commit_id: string;
+};
+
 /** One changed file from the certified HOT working diff. */
 export type FileDiffRow = {
 	/** The file relation's typed primary key, projected by lix_diff. */
@@ -141,6 +147,23 @@ export function selectWorkingChangeCount(lix: Lix) {
 		.selectFrom(workingFileDiffTable().as("lix_diff"))
 		.select((eb) => [eb.fn.countAll<number>().as("file_count")])
 		.$castTo<WorkingChangeCountRow>();
+}
+
+/**
+ * The epoch a working review would open at right now.
+ *
+ * An open review is pinned to the epoch it opened at, so comparing it with
+ * this one answers whether what is on screen is still the working diff.
+ */
+export function selectWorkingReviewEpoch(lix: Lix) {
+	return qb(lix)
+		.selectFrom(sql<any>`lix_branch`.as("branch"))
+		.select([
+			sql<string>`working_base_commit_id`.as("before_commit_id"),
+			sql<string>`commit_id`.as("after_commit_id"),
+		])
+		.where(sql<string>`id`, "=", sql<string>`lix_active_branch_id()`)
+		.$castTo<WorkingReviewEpochRow>();
 }
 
 function workingFileDiffTable() {
