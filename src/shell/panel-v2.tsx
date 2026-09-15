@@ -392,8 +392,13 @@ export function PanelV2({
 				view={activeSectionContext.view}
 			/>
 		) : null;
+	// A collapsed panel is 0 wide and shows nothing, so its header leaves with
+	// its content: a section picker inside it was still tabbable and still in
+	// the accessibility tree, and opening it floated a menu over the main area
+	// for a sidebar that is not on screen — "Hide sidebar" included, which from
+	// there would have shown it.
 	const sideSectionPicker =
-		side !== "main" && hasViews ? (
+		side !== "main" && hasViews && contentVisible ? (
 			<div
 				data-atelier-part="section-header"
 				className="flex items-start justify-between gap-2"

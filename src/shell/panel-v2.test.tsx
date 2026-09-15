@@ -255,6 +255,46 @@ describe("PanelV2", () => {
 		expect(screen.getAllByPlaceholderText("Search project...")).toHaveLength(1);
 	});
 
+	test("a collapsed panel keeps its section header out of the tab ring", () => {
+		const area: AreaState = {
+			views: [{ instance: "search-1", kind: TEST_SEARCH_EXTENSION_KIND }],
+			activeInstance: "search-1",
+		};
+		const panel = (contentVisible: boolean) => (
+			<PanelV2
+				side="left"
+				area={area}
+				contentVisible={contentVisible}
+				isFocused={false}
+				onFocusArea={vi.fn()}
+				onSelectView={vi.fn()}
+				onRemoveView={vi.fn()}
+				onHidePanel={vi.fn()}
+				viewContext={createViewContext()}
+				viewOverrides={[searchViewOverride]}
+			/>
+		);
+		const rendered = renderWithinProvider(panel(false));
+		// Collapsed: nothing of the header is focusable or announced, so the
+		// picker cannot float a menu — "Hide sidebar" included — over a
+		// sidebar that is not on screen.
+		expect(
+			document.querySelector('[data-attr="panel-section-picker"]'),
+		).toBeNull();
+		expect(
+			document.querySelector('[data-atelier-part="section-header"]'),
+		).toBeNull();
+
+		rendered.rerender(
+			<ExtensionHostRegistryProvider>
+				{panel(true)}
+			</ExtensionHostRegistryProvider>,
+		);
+		expect(
+			screen.getByRole("button", { name: /panel view menu$/ }),
+		).toBeVisible();
+	});
+
 	test("registers the panel container as a droppable target", () => {
 		const droppableMock = vi.mocked(useDroppable);
 		droppableMock.mockClear();
