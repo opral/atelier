@@ -1187,6 +1187,70 @@ describe("MarkdownView", () => {
 		}
 	});
 
+	test("the first click on a property's box toggles it", async () => {
+		const lix = await openLix();
+		const fileId = fakeUuid("file_frontmatter_boolean");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/boolean.md",
+				content: new TextEncoder().encode(
+					"---\npublished: true\n---\n\n# Notes\n",
+				),
+			})
+			.execute();
+
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView
+								fileId={fileId}
+								filePath="/boolean.md"
+								isActiveView
+								isPanelFocused
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+
+			const box = (await screen.findByLabelText(
+				"published value",
+			)) as HTMLInputElement;
+			expect(box.checked).toBe(true);
+
+			// The panel re-renders while the click is still being dispatched —
+			// the first click into the editor always does — and the box goes
+			// back the way it was before React compares it with what it last
+			// saw. React then concludes nothing changed and drops the click.
+			const putItBack = () => {
+				box.checked = true;
+			};
+			document.addEventListener("click", putItBack, true);
+			try {
+				await act(async () => {
+					fireEvent.click(box);
+				});
+			} finally {
+				document.removeEventListener("click", putItBack, true);
+			}
+
+			await waitFor(() =>
+				expect(
+					(screen.getByLabelText("published value") as HTMLInputElement)
+						.checked,
+				).toBe(false),
+			);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("a property holds what is being typed and writes it when the field is left", async () => {
 		const lix = await openLix();
 		const fileId = fakeUuid("file_frontmatter_typing");

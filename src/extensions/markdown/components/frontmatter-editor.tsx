@@ -35,6 +35,8 @@ import {
 
 type FrontmatterMode = "fields" | "yaml";
 
+/** React asks a controlled box for one; this box answers on the click instead. */
+const noChangeHandlerNeeded = () => {};
 
 function replaceRecordEntry(
 	record: FrontmatterRecord,
@@ -418,7 +420,15 @@ function BooleanField({
 				disabled={disabled}
 				onFocus={escape.onFocus}
 				onKeyDown={escape.onKeyDown}
-				onChange={(event) => onChange(event.currentTarget.checked)}
+				// A click on a box means "the other one", and which one that is
+				// comes from the property rather than from the box itself. The
+				// panel re-renders while the click is still being dispatched —
+				// the first click into the editor always does — and that puts
+				// the box back the way it was before React compares it with
+				// what it last saw, so React concludes nothing changed and the
+				// click is lost. Every first click on a property was.
+				onClick={() => onChange(!value)}
+				onChange={noChangeHandlerNeeded}
 			/>
 		</label>
 	);
