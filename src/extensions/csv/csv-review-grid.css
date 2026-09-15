@@ -191,6 +191,11 @@
 	}
 	.csv-toolbar .csv-review-summary {
 		display: inline-flex;
+		/* The count and the word are separate flex items, so the space between
+		   them in the markup collapses away. The changed label is a button and
+		   takes the toolbar's button gap; the zero label is a span and would
+		   take nothing, which paints it as "0changes". Space both here. */
+		gap: 6px;
 		padding: 0;
 		font-size: 12px;
 		line-height: 20px;

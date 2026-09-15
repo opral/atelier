@@ -159,4 +159,28 @@ describe("inline CSV review", () => {
 		expect(screen.getByLabelText("No changes")).toBeVisible();
 		expect(screen.queryByRole("button")).toBeNull();
 	});
+
+	// Both labels are one flex row of a count and a word, and the toolbar
+	// spaces those two items itself: the space between them in the markup is
+	// collapsed away, whichever branch rendered it.
+	test("counts and their word are the same two parts whether or not there are changes", () => {
+		const changed = render(
+			<CsvReviewSummary model={model("Name\nAlex\n", "Name\nAlexa\n")} />,
+		);
+		const changedLabel = screen.getByRole("button", { name: "Review changes" });
+		expect(changedLabel).toHaveClass("csv-review-summary");
+		expect(changedLabel.textContent).toBe("2 changes");
+		expect(
+			changedLabel.querySelector(".csv-review-summary-word")?.textContent,
+		).toBe(" changes");
+		changed.unmount();
+
+		render(<CsvReviewSummary model={model("Name\nAlex\n", "Name\nAlex\n")} />);
+		const zeroLabel = screen.getByLabelText("No changes");
+		expect(zeroLabel).toHaveClass("csv-review-summary");
+		expect(zeroLabel.textContent).toBe("0 changes");
+		expect(
+			zeroLabel.querySelector(".csv-review-summary-word")?.textContent,
+		).toBe(" changes");
+	});
 });
