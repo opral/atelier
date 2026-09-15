@@ -18,6 +18,7 @@ import {
 	getClipRect,
 	isAnchorClipped,
 } from "./clip-rect";
+import { useMenuDismissal } from "./menu-dismissal";
 
 const INACTIVE_EMOJI_STATE: EmojiCommandState = {
 	active: false,
@@ -179,16 +180,12 @@ export function EmojiPickerMenu() {
 		selected?.scrollIntoView({ block: "nearest" });
 	}, [selectedIndex]);
 
-	useEffect(() => {
-		if (!emojiState.active || !editor) return;
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				editor.commands.closeEmojiMenu();
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, [emojiState.active, editor]);
+	useMenuDismissal({
+		active: emojiState.active,
+		editor,
+		menuRef,
+		close: () => editor?.commands.closeEmojiMenu(),
+	});
 
 	if (!emojiState.active || !position || suppressed) return null;
 

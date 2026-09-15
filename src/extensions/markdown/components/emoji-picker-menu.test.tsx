@@ -203,4 +203,34 @@ describe("EmojiPickerMenu", () => {
 		});
 		expect(editor.getText()).not.toContain("🚀");
 	});
+
+	test("a chrome control that swallows mousedown still dismisses the picker", async () => {
+		const editor = setup();
+		// The tab strip's "Add view" trigger stops the bubbling mousedown that
+		// a plain document listener waits for, which left the picker stranded
+		// on screen behind the menu that button opened, with no key left to
+		// dismiss it — its Escape lives on the editor's keymap.
+		const trigger = document.createElement("button");
+		trigger.addEventListener("mousedown", (event) => event.stopPropagation());
+		trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+		document.body.appendChild(trigger);
+
+		await act(async () => {
+			editor.commands.openEmojiMenu();
+			editor.commands.insertContent("rocket");
+		});
+		expect(
+			await screen.findByRole("listbox", { name: "Emoji picker" }),
+		).toBeInTheDocument();
+
+		await act(async () => {
+			trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("listbox", { name: "Emoji picker" }),
+			).toBeNull();
+		});
+		trigger.remove();
+	});
 });

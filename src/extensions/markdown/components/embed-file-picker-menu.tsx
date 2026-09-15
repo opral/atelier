@@ -36,6 +36,7 @@ import { qb } from "@/lib/lix-kysely";
 import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileIconUrl } from "@/extensions/files/file-icons";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
+import { useMenuDismissal } from "./menu-dismissal";
 
 const INACTIVE_EMBED_FILE_STATE: EmbedFileCommandState = {
 	active: false,
@@ -213,16 +214,12 @@ export function EmbedFilePickerMenu({
 		};
 	}, [embedState.active, embedState.pos, editor]);
 
-	useEffect(() => {
-		if (!embedState.active || !editor) return;
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				editor.commands.closeEmbedFileMenu();
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, [embedState.active, editor]);
+	useMenuDismissal({
+		active: embedState.active,
+		editor,
+		menuRef,
+		close: () => editor?.commands.closeEmbedFileMenu(),
+	});
 
 	// Scrolled out of the editor's viewport it is neither readable nor
 	// clickable, and the list it owns the keyboard for goes with it.

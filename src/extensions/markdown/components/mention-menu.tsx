@@ -27,6 +27,7 @@ import {
 	getClipRect,
 	isAnchorClipped,
 } from "./clip-rect";
+import { useMenuDismissal } from "./menu-dismissal";
 
 const INACTIVE_MENTION_STATE: MentionCommandState = {
 	active: false,
@@ -215,16 +216,12 @@ export function MentionMenu({
 		};
 	}, [mentionState.active, mentionState.range, editor]);
 
-	useEffect(() => {
-		if (!mentionState.active || !editor) return;
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				editor.commands.closeMentionMenu();
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, [mentionState.active, editor]);
+	useMenuDismissal({
+		active: mentionState.active,
+		editor,
+		menuRef,
+		close: () => editor?.commands.closeMentionMenu(),
+	});
 
 	// Scrolled out of the editor's viewport it is neither readable nor
 	// clickable, and its list — which owns the arrow keys and Enter — goes
