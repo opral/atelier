@@ -28,3 +28,21 @@ export function panelShortcutHint(side: "left" | "right"): string {
 	const digit = side === "left" ? "1" : "2";
 	return isMacPlatform() ? `⌘${digit}` : `Ctrl+${digit}`;
 }
+
+/**
+ * A shortcut written the way the platform writes it. Pass the macOS spelling:
+ * it is kept verbatim there, and spelled out everywhere else, where the
+ * modifier names carry their own separator and the glyph's breathing space
+ * around the key would read as part of it (`⌘ .` → `Ctrl+.`).
+ *
+ * @example
+ * shortcutHint("⇧⌘.") // "Shift+Ctrl+." off macOS
+ */
+export function shortcutHint(keys: string): string {
+	if (isMacPlatform()) return keys;
+	return keys
+		.replace("⇧", "Shift+")
+		.replace("⌥", "Alt+")
+		.replace("⌘", "Ctrl+")
+		.replace(/\+\s+/g, "+");
+}

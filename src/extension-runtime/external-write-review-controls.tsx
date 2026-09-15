@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { PathLabel, pathLabelText } from "../components/path-label";
 import { fileIconUrl } from "@/file-icons";
+import { shortcutHint } from "@/lib/platform";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
 
@@ -574,8 +575,6 @@ export function ExternalWriteReviewControls({
 	const ringStyle = {
 		"--ring-ticked": `${(tickedFiles.length / Math.max(totalCount, 1)) * 360}deg`,
 	} as CSSProperties;
-	const shortcut = (keys: string) =>
-		isMacPlatform() ? keys : keys.replace("⌘", "Ctrl+").replace("⇧", "Shift+");
 
 	return (
 		<div
@@ -705,7 +704,7 @@ export function ExternalWriteReviewControls({
 						<span className="external-write-review-menu-name">
 							{verb.label} all {totalCount} files
 						</span>
-						<kbd>{shortcut("⇧⌘⏎")}</kbd>
+						<kbd>{shortcutHint("⇧⌘⏎")}</kbd>
 					</button>
 				</div>
 			) : null}
@@ -745,7 +744,7 @@ export function ExternalWriteReviewControls({
 						<span className="external-write-review-menu-name">
 							Undo all {totalCount} files
 						</span>
-						<kbd>{shortcut("⇧⌘⌫")}</kbd>
+						<kbd>{shortcutHint("⇧⌘⌫")}</kbd>
 					</button>
 				</div>
 			) : null}
@@ -941,7 +940,7 @@ export function ExternalWriteReviewControls({
 							)}
 							<span>{isCommitting ? verb.busyLabel : verb.label}</span>
 							<kbd className="external-write-review-shortcut">
-								{shortcut("⌘⏎")}
+								{shortcutHint("⌘⏎")}
 							</kbd>
 						</button>
 						{showVerbArrows ? (
@@ -1042,11 +1041,6 @@ function PrimaryVerbStackIcon({
 		return <StackedIcon name="flag-stack" paths={FLAG_PATHS} />;
 	}
 	return <UndoStackIcon />;
-}
-
-function isMacPlatform(): boolean {
-	if (typeof navigator === "undefined") return true;
-	return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 }
 
 /**
