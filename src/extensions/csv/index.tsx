@@ -33,7 +33,7 @@ import {
 	type CsvFilterGroup,
 } from "./csv-filter";
 import { useCsvTheme } from "./use-csv-theme";
-import { inferColumnInfo } from "./csv-infer";
+import { inferColumnInfo, type CsvDisplayColumnInfo } from "./csv-infer";
 import {
 	Suspense,
 	createContext,
@@ -475,21 +475,31 @@ function EditableCsvView({
 	useEffect(() => {
 		metadataRef.current = metadata;
 	}, [metadata]);
+	// Writing metadata starts from what the table is already showing. A file
+	// with no metadata renders its columns from their values — stages as
+	// pills, dates as dates — and writing "text" for each of them turned all
+	// of that off the moment anything saved: a view, a wrap toggle, one
+	// column's type. The pills, ticks and dates were then gone for good.
 	const materializeColumns = useCallback(() => {
-		const headers = csvDocumentView(documentRef.current).columns.map(
+		const view = csvDocumentView(documentRef.current);
+		const headers = view.columns.map(
 			(_, i) => documentRef.current.records[0]?.cells[i] ?? "",
 		);
 		const resolved = resolveColumnInfo(metadataRef.current, headers);
-		return headers.map(
-			(header, index) =>
-				({
-					...resolved[index],
-					id: resolved[index]?.id ?? crypto.randomUUID(),
-					header,
-					index,
-					type: resolved[index]?.type ?? "text",
-				}) as CsvColumnInfo,
-		);
+		const shown = inferColumnInfo(headers, view.rows, resolved);
+		return headers.map((header, index) => {
+			const known = resolved[index];
+			const seen = known ? undefined : shown[index];
+			return {
+				...(seen?.options ? { options: seen.options } : {}),
+				...(seen?.wrap ? { wrap: seen.wrap } : {}),
+				...known,
+				id: known?.id ?? crypto.randomUUID(),
+				header,
+				index,
+				type: known?.type ?? seen?.type ?? "text",
+			} as CsvColumnInfo;
+		});
 	}, []);
 	const applyDocumentEdit = useCallback(
 		(
@@ -1105,7 +1115,7 @@ function CsvTable({
 						row.cells.some((c) =>
 							c.toLowerCase().includes(search.toLowerCase()),
 						)) &&
-					matchesCsvFilterGroup(row.cells, filter, columnInfo)
+					matchesCsvFilterGroup(row.cells, filter, displayInfo)
 				);
 			});
 		if (sort)
@@ -1117,13 +1127,13 @@ function CsvTable({
 					compareCsvValues(
 						av,
 						bv,
-						columnInfo[sort.column]?.type,
-						columnInfo[sort.column]?.options,
+						displayInfo[sort.column]?.type,
+						displayInfo[sort.column]?.options,
 					)
 				);
 			});
 		return rows;
-	}, [sourceParsed.rows, search, sort, filter, columnInfo]);
+	}, [sourceParsed.rows, search, sort, filter, displayInfo]);
 	const parsed = {
 		...sourceParsed,
 		rows: rowMap.map((i) => sourceParsed.rows[i]!),
@@ -1134,6 +1144,15 @@ function CsvTable({
 			sourceParsed.rows.length + Math.max(0, row - rowMap.length),
 		[rowMap, sourceParsed.rows.length],
 	);
+	// A row added while a filter or a search is on can match neither, so it
+	// would be written into the file and then be invisible — "Insert row
+	// below" looked like it had done nothing at all. Both are lifted for it.
+	// The sort stays: an empty row sorts somewhere, and throwing away an
+	// ordering the user chose was never part of adding a row.
+	const revealNewRow = useCallback(() => {
+		setSearch("");
+		setFilter(EMPTY_CSV_FILTER);
+	}, []);
 	// Flips a checkbox cell between its own yes/no encoding. Returns false when
 	// the cell is not a boolean-shaped checkbox so callers fall through.
 	const toggleCheckbox = (col: number, row: number): boolean => {
@@ -1538,15 +1557,21 @@ function CsvTable({
 		(target: Item, values: readonly (readonly string[])[]) => {
 			if (!editing) return false;
 			const [startColumn, startRow] = target;
+			// A block wider than the table used to lose its overflow columns
+			// without a word — and there is no undo to get them back. The table
+			// grows to hold what was pasted, as a spreadsheet does.
+			const widest = values.reduce(
+				(max, rowValues) => Math.max(max, rowValues.length),
+				0,
+			);
+			for (let column = columnCount; column < startColumn + widest; column++)
+				editing.onInsertColumn(column);
 			const edits: CsvCellEdit[] = [];
 			values.forEach((rowValues, rowOffset) => {
 				rowValues.forEach((value, columnOffset) => {
-					const column = startColumn + columnOffset;
-					// Pasting can extend rows but not add columns (yet).
-					if (column >= columnCount) return;
 					edits.push({
 						row: sourceRowIndex(startRow + rowOffset),
-						column,
+						column: startColumn + columnOffset,
 						value,
 					});
 				});
@@ -2116,7 +2141,11 @@ function CsvTable({
 							<CsvFilterRules
 								group={filter}
 								columns={parsed.columns}
-								columnInfo={columnInfo}
+								// A file with no metadata still shows numbers, dates and
+								// pills; a rule on one of those offered only the text
+								// operators, and the column menu called it Text while the
+								// header icon said otherwise.
+								columnInfo={displayInfo}
 								rows={sourceParsed.rows}
 								onChange={setFilter}
 							/>
@@ -2128,7 +2157,7 @@ function CsvTable({
 									options={parsed.columns.map((label, index) => {
 										const Icon = CSV_TYPES.find(
 											(type) =>
-												type.type === (columnInfo[index]?.type ?? "text"),
+												type.type === (displayInfo[index]?.type ?? "text"),
 										)!.icon;
 										return {
 											value: String(index),
@@ -2490,9 +2519,7 @@ function CsvTable({
 							title="Add row"
 							aria-label="Add row"
 							onClick={() => {
-								setSearch("");
-								setFilter(EMPTY_CSV_FILTER);
-								setSort(null);
+								revealNewRow();
 								pendingAppend.current = true;
 								editing.onRowAppended();
 							}}
@@ -2527,7 +2554,7 @@ function CsvTable({
 								}
 							}}
 							info={
-								columnInfo[menu.column] ?? {
+								displayInfo[menu.column] ?? {
 									id: "",
 									header: parsed.columns[menu.column] ?? "",
 									index: menu.column,
@@ -2594,12 +2621,20 @@ function CsvTable({
 							menu={menu}
 							menuRows={menuRows}
 							onClose={closeMenu}
-							onInsertRow={(atRow) =>
+							onInsertRow={(atRow) => {
+								// "Below" means after the row that was clicked, which under
+								// a filter is not the source line before the next visible
+								// one — that landed four lines further down.
+								const source =
+									atRow > menu.row
+										? sourceRowIndex(menu.row) + 1
+										: sourceRowIndex(atRow);
+								revealNewRow();
 								runStructuralEdit(
-									() => editing.onInsertRow(sourceRowIndex(atRow)),
+									() => editing.onInsertRow(source),
 									[0, atRow],
-								)
-							}
+								);
+							}}
 							onDeleteRows={(rows) =>
 								runStructuralEdit(
 									() => editing.onDeleteRows(rows.map(sourceRowIndex)),
@@ -2794,7 +2829,16 @@ function CsvEmptyState({
 	readonly onCreateTable?: () => void;
 }) {
 	return (
-		<div className="flex h-full items-center justify-center px-6 py-8 text-center">
+		// The shell keeps a file's surface hidden until it renders something it
+		// recognises — a canvas, a review table, or an alert. This state is
+		// none of those, so an empty file opened as a blank, dead pane: the
+		// message and the button were in the DOM at zero opacity, and Create
+		// table could not be clicked. Deleting a table's last column writes an
+		// empty file, so the grid could put a file into that state itself.
+		<div
+			role="alert"
+			className="flex h-full items-center justify-center px-6 py-8 text-center"
+		>
 			<div className="max-w-sm space-y-2 text-sm text-[var(--color-text-secondary)]">
 				<p className="font-medium text-[var(--color-text-primary)]">
 					No CSV rows to display.

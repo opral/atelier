@@ -1841,8 +1841,17 @@ test("compound filters keep source row mapping correct when sorted cells are edi
 				screen.getByRole("button", { name: "Filter column 2" }),
 			).toHaveFocus(),
 		);
-		fireEvent.change(screen.getByRole("textbox", { name: "Filter value 2" }), {
-			target: { value: "yes" },
+		// "contacted" holds yes/no, which reads as a checkbox column — and now
+		// that saving metadata keeps what the table was already showing, the
+		// rule offers checked/unchecked rather than a text box.
+		fireEvent.keyDown(screen.getByRole("button", { name: "Filter value 2" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(
+			await screen.findByRole("menuitemcheckbox", { name: "Checked" }),
+		);
+		fireEvent.keyDown(screen.getByRole("menu", { name: "Filter value 2" }), {
+			key: "Escape",
 		});
 		await waitFor(() => expect(latestDataEditorProps.current?.rows).toBe(2));
 		fireEvent.click(screen.getByRole("button", { name: "Close" }));
