@@ -844,19 +844,23 @@ export async function resolveLixFileForOpen({
 	return selectLixFileForOpen(lix, normalizedPath);
 }
 
-function isPanelShortcutBlockedTarget(target: EventTarget | null): boolean {
+export function isPanelShortcutBlockedTarget(
+	target: EventTarget | null,
+): boolean {
 	if (!target || !(target instanceof HTMLElement)) {
 		return false;
 	}
-	if (target.closest(".ProseMirror")) {
-		return false;
-	}
+	const editorRoot = target.closest(".ProseMirror");
+	if (editorRoot === target) return false;
 	if (target.isContentEditable) return true;
 	const tagName = target.tagName;
 	if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") {
 		return true;
 	}
-	return Boolean(target.closest("input, textarea, select, [contenteditable]"));
+	const interactiveTarget = target.closest(
+		"input, textarea, select, [contenteditable]",
+	);
+	return interactiveTarget !== null && interactiveTarget !== editorRoot;
 }
 
 /**
