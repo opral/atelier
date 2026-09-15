@@ -2684,9 +2684,11 @@ test("a removed row keeps the height its wrapped value needs", async () => {
 			expect(row).toBeTruthy();
 			return row!;
 		});
+		// A row states its height once, on the row: every cell's box reads it, and
+		// a fold animates it.
 		const heightOf = (row: HTMLTableRowElement) =>
 			Number.parseFloat(
-				row.querySelector<HTMLTableCellElement>("td")?.style.height ?? "0",
+				row.style.getPropertyValue("--csv-review-cell-height") || "0",
 			);
 		const keptRow = utils!.container.querySelector<HTMLTableRowElement>(
 			'tr[data-diff-status="unchanged"]',
