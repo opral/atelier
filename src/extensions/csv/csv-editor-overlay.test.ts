@@ -33,13 +33,6 @@ describe("scrollLeavesEditorBehind", () => {
 		);
 	});
 
-	test("a list with nothing left to scroll still counts as the grid", () => {
-		const node = inEditor(list(200, 200));
-		expect(scrollLeavesEditorBehind({ type: "scroll", target: node })).toBe(
-			true,
-		);
-	});
-
 	test("a wheel over the editor closes it, since no grid scroll follows", () => {
 		const node = inEditor(list(200, 200));
 		expect(scrollLeavesEditorBehind({ type: "wheel", target: node })).toBe(
@@ -51,6 +44,20 @@ describe("scrollLeavesEditorBehind", () => {
 		const node = inEditor(list(400, 200));
 		expect(scrollLeavesEditorBehind({ type: "wheel", target: node })).toBe(
 			false,
+		);
+	});
+
+	test("a panel scrolling elsewhere leaves the editor where it is", () => {
+		const aside = document.createElement("div");
+		aside.className = "atelier-files-list";
+		expect(scrollLeavesEditorBehind({ type: "scroll", target: aside })).toBe(
+			false,
+		);
+	});
+
+	test("the page itself scrolling leaves the editor behind", () => {
+		expect(scrollLeavesEditorBehind({ type: "scroll", target: document })).toBe(
+			true,
 		);
 	});
 

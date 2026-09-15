@@ -33,6 +33,8 @@ export function useGlideOverlayPortal(): void {
 const EDITOR = ".csv-property-popover, .gdg-style";
 /** The lists inside an editor that scroll on their own. */
 const EDITOR_LIST = ".csv-option-list, .gdg-clip-region";
+/** Glide's scroller: the element that carries the table under the editor. */
+const GRID_SCROLLER = ".dvn-scroller";
 
 function closest(target: EventTarget | null, selector: string): Element | null {
 	return target instanceof Element ? target.closest(selector) : null;
@@ -51,7 +53,10 @@ export function scrollLeavesEditorBehind(
 	// A wheel over the editor itself never reaches the grid, so nothing would
 	// scroll and no scroll event would follow; close on the wheel instead.
 	if (event.type === "wheel") return closest(event.target, EDITOR) !== null;
-	return true;
+	// The page moving counts; a sidebar or some other panel scrolling on its
+	// own leaves the cell exactly where the editor left it.
+	if (!(event.target instanceof Element)) return true;
+	return event.target.closest(GRID_SCROLLER) !== null;
 }
 
 /**
