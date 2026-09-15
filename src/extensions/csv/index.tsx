@@ -1,3 +1,4 @@
+import { DocumentLoading } from "../../components/document-loading";
 import { CsvContent } from "./csv-content";
 import {
 	loadTextFile,
@@ -2956,9 +2957,9 @@ function CsvEmptyState({
  *  paint and the grid appears beneath it without the rows moving. */
 function CsvLoadingSpinner() {
 	return (
-		<div className="flex h-full flex-col" role="status">
+		<div className="flex h-full flex-col">
 			<div className="csv-toolbar" aria-hidden="true" />
-			<span className="sr-only">Loading CSV…</span>
+			<DocumentLoading />
 		</div>
 	);
 }

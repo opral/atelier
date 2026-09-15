@@ -1,3 +1,4 @@
+import { DocumentLoading } from "../components/document-loading";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { AtelierJsonValue } from "../extension-api";
 import type { AtelierLocation } from "../atelier-state";
@@ -54,33 +55,52 @@ export function DeclarativeExtension({
 				? initialData
 				: undefined;
 
+	const opening = useMemo(
+		() => ({ key, startedAt: performance.now(), reported: false }),
+		[key],
+	);
+
 	useEffect(() => {
 		if (!context.connected || !context.hydrated || !definition.load) return;
 		let disposed = false;
-		let generation = 0;
+		let loading = false;
+		let dirty = false;
 		let controller: AbortController | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const reload = async () => {
-			const current = ++generation;
-			controller?.abort();
-			const request = new AbortController();
-			controller = request;
+			dirty = true;
+			if (loading) return;
+			loading = true;
 			try {
-				const next = await definition.load!({
-					lix: atelier.lix,
-					location,
-					signal: request.signal,
-				});
-				if (disposed || current !== generation) return;
-				setLoaded({ key, data: next });
-				setError(null);
-			} catch (cause) {
-				if (!disposed && current === generation && !request.signal.aborted)
-					setError(cause instanceof Error ? cause : new Error(String(cause)));
+				do {
+					if (disposed) return;
+					dirty = false;
+					const request = new AbortController();
+					controller = request;
+					try {
+						const next = await definition.load!({
+							lix: atelier.lix,
+							location,
+							signal: request.signal,
+						});
+						if (disposed) return;
+						setLoaded({ key, data: next });
+						setError(null);
+					} catch (cause) {
+						if (!disposed && !request.signal.aborted)
+							setError(
+								cause instanceof Error ? cause : new Error(String(cause)),
+							);
+					}
+				} while (dirty);
+			} finally {
+				loading = false;
 			}
 		};
 		// Subscribe before reading to avoid losing writes between the load and its
-		// observer's first frame. A tiny branch query invalidates derived view data.
+		// observer's first frame. That initial frame starts the first load; starting
+		// another load here would fetch the same content twice. Changes during a
+		// fetch coalesce into one follow-up without discarding the completed read.
 		const events = atelier.lix.observe(
 			"SELECT lix_active_branch_commit_id() AS commit_id",
 		);
@@ -99,7 +119,6 @@ export function DeclarativeExtension({
 					setError(cause instanceof Error ? cause : new Error(String(cause)));
 			}
 		})();
-		void reload();
 		return () => {
 			disposed = true;
 			controller?.abort();
@@ -118,7 +137,7 @@ export function DeclarativeExtension({
 	const Component = definition.Component!;
 	return (
 		<AtelierErrorBoundary>
-			<Suspense fallback={<LoadingSurface label={definition.label} />}>
+			<Suspense fallback={<DocumentLoading />}>
 				<LixProvider lix={atelier.lix}>
 					{error && data !== undefined ? (
 						<div role="alert">
@@ -128,9 +147,19 @@ export function DeclarativeExtension({
 					{error && data === undefined ? (
 						<div role="alert">{error.message}</div>
 					) : definition.load && data === undefined ? (
-						<LoadingSurface label={definition.label} />
+						<DocumentLoading />
 					) : (
-						<Component data={data ?? null} atelier={atelier} view={view} />
+						<>
+							<Component data={data ?? null} atelier={atelier} view={view} />
+							{data !== undefined && typeof view.state.filePath === "string" ? (
+								<DocumentLoaded
+									opening={opening}
+									atelier={atelier}
+									filePath={view.state.filePath}
+									viewKind={definition.kind}
+								/>
+							) : null}
+						</>
 					)}
 				</LixProvider>
 			</Suspense>
@@ -138,15 +167,31 @@ export function DeclarativeExtension({
 	);
 }
 
-/**
- * The view's ground while its data is on the way: nothing to read, so a
- * file opening never flashes a line of text before its content. Screen
- * readers still get the status.
- */
-function LoadingSurface({ label }: { readonly label: string }) {
-	return (
-		<div role="status" className="min-h-0 flex-1">
-			<span className="sr-only">Loading {label}…</span>
-		</div>
-	);
+/** Runs only once the content subtree commits, never while Suspense shows loading. */
+function DocumentLoaded({
+	opening,
+	atelier,
+	filePath,
+	viewKind,
+}: {
+	readonly opening: { startedAt: number; reported: boolean };
+	readonly atelier: ExtensionRuntime;
+	readonly filePath: string;
+	readonly viewKind: string;
+}) {
+	useEffect(() => {
+		if (opening.reported) return;
+		opening.reported = true;
+		try {
+			atelier.events?.emit({
+				type: "document_loaded",
+				filePath,
+				viewKind,
+				durationMs: performance.now() - opening.startedAt,
+			});
+		} catch {
+			/* Telemetry must not interrupt successful document loading. */
+		}
+	}, [atelier.events, opening, filePath, viewKind]);
+	return null;
 }

@@ -1,3 +1,4 @@
+import { DocumentLoading } from "../../components/document-loading";
 import { RepositoryMarkdownContent } from "./repository-markdown-content";
 import {
 	loadTextFile,
@@ -1128,7 +1129,7 @@ function MarkdownLoadingSpinner(): ReactNode {
 				aria-hidden="true"
 				className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
 			/>
-			<div className="min-h-0 flex-1" />
+			<DocumentLoading />
 		</div>
 	);
 }

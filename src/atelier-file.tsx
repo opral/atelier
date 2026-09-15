@@ -1,3 +1,4 @@
+import { DocumentLoading } from "./components/document-loading";
 import type { Lix } from "@lix-js/sdk";
 import {
 	Suspense,
@@ -75,7 +76,7 @@ export type AtelierFileProps = {
 );
 
 const EMPTY_EXTENSIONS: readonly AtelierExtensionRegistration[] = [];
-const loading = <div role="status">Opening file…</div>;
+const loading = <DocumentLoading />;
 const lixKeys = new WeakMap<Lix, number>();
 let nextLixKey = 0;
 function lixKey(lix: Lix) {

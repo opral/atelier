@@ -201,6 +201,13 @@ export type AtelierEvent =
 			viewKind: string;
 	  }
 	| {
+			/** The first document data has rendered; excludes subsequent refreshes. */
+			type: "document_loaded";
+			filePath: string;
+			viewKind: string;
+			durationMs: number;
+	  }
+	| {
 			type: "document_closed";
 			filePath: string;
 			nextFilePath: string | null;
