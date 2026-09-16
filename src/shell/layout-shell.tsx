@@ -610,6 +610,12 @@ type LixFileForOpen = {
 		readonly beforeCommitId: string;
 		readonly afterCommitId: string;
 	};
+	/**
+	 * Sealed by a checkpoint this review session made. The file keeps its
+	 * place in the list — the session was opened over it — but has nothing
+	 * left to checkpoint or undo.
+	 */
+	readonly checkpointed?: true;
 };
 
 /**
@@ -634,6 +640,41 @@ function nextReviewFile<T extends { readonly id: string }>(
 }
 
 const EMPTY_LIX_FILES_FOR_OPEN: readonly LixFileForOpen[] = [];
+
+/**
+ * A session's file list, handed to the reopen that follows a checkpoint of
+ * part of it. The session was opened over these files and goes on covering
+ * them: the ones the snapshot still finds changed take their fresh epoch, and
+ * the ones just sealed stay in place, marked checkpointed.
+ */
+type WorkingReviewCarry = {
+	readonly files: readonly LixFileForOpen[];
+	readonly checkpointedFileIds: ReadonlySet<string>;
+};
+
+/**
+ * The reopened session's files: the carried list in its own order, then any
+ * file the snapshot found changed since. A carried file the snapshot no
+ * longer lists is kept only when this session checkpointed it — anything
+ * else that left the working diff was somebody else's doing, and a file
+ * with no change and no checkpoint of ours has nothing to say.
+ */
+function carryReviewFiles(
+	carry: WorkingReviewCarry,
+	snapshot: readonly LixFileForOpen[],
+): LixFileForOpen[] {
+	const byId = new Map(snapshot.map((file) => [file.id, file]));
+	const carried = carry.files.flatMap((file): LixFileForOpen[] => {
+		const fresh = byId.get(file.id);
+		if (fresh) return [fresh];
+		if (!carry.checkpointedFileIds.has(file.id) && !file.checkpointed) {
+			return [];
+		}
+		return [{ ...file, checkpointed: true }];
+	});
+	const carriedIds = new Set(carried.map((file) => file.id));
+	return [...carried, ...snapshot.filter((file) => !carriedIds.has(file.id))];
+}
 
 /** The newest checkpoint on the head's first-parent chain, and what it follows. */
 const LATEST_CHECKPOINT_SQL =
@@ -1508,7 +1549,11 @@ function LayoutShellLoadedContentResolved({
 	// does it is defined before the one that opens a review, so it reaches it
 	// through here.
 	const reopenWorkingReviewRef = useRef<
-		((options?: { readonly revealPath?: string }) => Promise<boolean>) | null
+		| ((options?: {
+				readonly revealPath?: string;
+				readonly carry?: WorkingReviewCarry;
+		  }) => Promise<boolean>)
+		| null
 	>(null);
 	// Covers the commit gap between placing a historical document and the panel
 	// ref observing its revision state. Hosts may echo the route synchronously.
@@ -1727,7 +1772,9 @@ function LayoutShellLoadedContentResolved({
 			// Consume only the reviews that were already known when the workspace
 			// review opened. Checkpoint creation never discovers reviews via history.
 			void retireAcceptedReviews(selectedReviews);
-			const remaining = session.files.filter((file) => !selected.has(file.id));
+			const remaining = session.files.filter(
+				(file) => !selected.has(file.id) && !file.checkpointed,
+			);
 			if (remaining.length === 0) {
 				// Nothing left to review: the session concludes.
 				exitDiffReview();
@@ -1735,12 +1782,14 @@ function LayoutShellLoadedContentResolved({
 			}
 			// The unticked files keep their changes, but sealing the others moved
 			// the working base, so the session's range is no longer theirs.
-			// Reopen from the live snapshot rather than pruning a stale one, and
-			// let the reopen show the next file with the range it just computed.
-			const next = nextReviewFile(session.files, remaining, selected);
-			const reopened = await reopenWorkingReviewRef.current?.(
-				next ? { revealPath: next.path } : undefined,
-			);
+			// Reopen from the live snapshot rather than pruning a stale one —
+			// over the list this session opened on, not the shorter one the
+			// snapshot now finds. A checkpoint is not a navigation: the file
+			// the reviewer sealed stays on screen, marked checkpointed, and
+			// they step on when they choose.
+			const reopened = await reopenWorkingReviewRef.current?.({
+				carry: { files: session.files, checkpointedFileIds: selected },
+			});
 			// The reopen reports its own outcome: the session ref is synced on
 			// render, so it cannot be read back here to tell.
 			if (!reopened) exitDiffReview();
@@ -3742,6 +3791,8 @@ function LayoutShellLoadedContentResolved({
 			/** Open this changed file once the session is set, with its range. */
 			readonly revealPath?: string;
 			readonly appliedRange?: { beforeCommitId: string; afterCommitId: string };
+			/** Keep an open session's list across the reopen a checkpoint forces. */
+			readonly carry?: WorkingReviewCarry;
 		}) => {
 			// Read-only / anonymous must never look like a clickable no-op. History
 			// is always reachable even when the review query finds no files.
@@ -3771,7 +3822,7 @@ function LayoutShellLoadedContentResolved({
 				// revert at file granularity. Filtering them out strands their
 				// changes outside every checkpoint: the status bar counts raw
 				// diffs and would report them as changed forever.
-				const checkpointFiles = workingDiffs
+				const snapshotFiles = workingDiffs
 					.filter(
 						(file) =>
 							!openOptions?.appliedRange ||
@@ -3793,12 +3844,23 @@ function LayoutShellLoadedContentResolved({
 							...(movedFromPath ? { movedFromPath } : {}),
 						};
 					});
+				const checkpointFiles = openOptions?.carry
+					? carryReviewFiles(openOptions.carry, snapshotFiles)
+					: snapshotFiles;
 				const firstChangedFile = checkpointFiles[0];
-				const removedFileIds: ReadonlySet<string> = new Set(
-					workingDiffs
+				// A sealed deletion is still shown as the deletion it was, not
+				// looked for as a live file.
+				const removedFileIds: ReadonlySet<string> = new Set([
+					...workingDiffs
 						.filter((change) => change.diff_type === "removed")
 						.map((change) => change.id),
-				);
+					...checkpointFiles
+						.filter(
+							(file) =>
+								file.checkpointed && file.checkpointChangeKind === "removed",
+						)
+						.map((file) => file.id),
+				]);
 				const reviewRange = {
 					beforeCommitId,
 					afterCommitId: headCommitId,
@@ -3819,7 +3881,7 @@ function LayoutShellLoadedContentResolved({
 				// checkpoint-to-head window. Their ids are deterministic, so
 				// persisted resolutions keep matching across reopens.
 				const sessionReviews: ExternalWriteReview[] = reviewRange
-					? checkpointFiles.map((file) => ({
+					? snapshotFiles.map((file) => ({
 							fileId: file.id,
 							path: file.path,
 							reviewId: externalWriteReviewId(

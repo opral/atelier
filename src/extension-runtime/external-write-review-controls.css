@@ -199,6 +199,18 @@
 			stroke-width: 3.2;
 		}
 
+		/* A file this session checkpointed is done: its tick is filled in the
+		   float's own grey, not the accent, and the row cannot be ticked. */
+		.external-write-review-menu-tick[data-checkpointed] {
+			border-color: var(--atelier-overlay-border-strong);
+			background: var(--atelier-overlay-border-strong);
+		}
+
+		.external-write-review-menu > button[data-state="checkpointed"] {
+			cursor: default;
+			color: var(--atelier-overlay-fg-subtle);
+		}
+
 		/* Same box as the tick beside it — the glyph's inner padding otherwise
 		   makes it read smaller. */
 		.external-write-review-menu-file-icon {
@@ -383,6 +395,19 @@
 			overflow: hidden;
 			white-space: nowrap;
 			text-overflow: ellipsis;
+		}
+
+		/* The file on screen has been checkpointed in this session: the flag
+		   says so beside its name, since the document now shows no diff. */
+		.external-write-review-navigation .external-write-review-checkpointed {
+			display: inline-flex;
+			flex: none;
+			align-items: center;
+			gap: 0.25rem;
+			color: var(--atelier-overlay-fg-subtle);
+			font-size: 0.625rem;
+			font-weight: 500;
+			white-space: nowrap;
 		}
 
 		.external-write-review-navigation .external-write-review-file-icon {
@@ -625,7 +650,10 @@
 			}
 
 			.external-write-review-navigation strong,
-			.external-write-review-navigation .external-write-review-moved small {
+			.external-write-review-navigation .external-write-review-moved small,
+			.external-write-review-navigation
+				.external-write-review-checkpointed
+				small {
 				display: none;
 			}
 
