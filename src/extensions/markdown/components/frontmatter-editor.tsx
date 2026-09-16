@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 	type KeyboardEvent as ReactKeyboardEvent,
+	type RefObject,
 } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
@@ -32,11 +33,48 @@ import {
 	useMarkdownFrontmatterDisabled,
 	useMarkdownFrontmatterEditing,
 } from "../editor/frontmatter-editing-context";
+import { registerUnsettledEdit } from "@/lib/unsettled-edits";
 
 type FrontmatterMode = "fields" | "yaml";
 
 /** React asks a controlled box for one; this box answers on the click instead. */
 const noChangeHandlerNeeded = () => {};
+
+/**
+ * Records a property in a read-only document without taking the caret out of
+ * the field the reader is typing in.
+ *
+ * A view that is not editable — which is what a review shows — considers the
+ * document's selection its own whenever nothing inside it has focus, and puts
+ * that selection back into the document on every transaction it is given.
+ * Between clicking out of one property and into the next, focus is on nothing
+ * for an instant, and the commit the first field makes as it is left lands in
+ * exactly that instant. The field the reader clicked into came up focused with
+ * no caret in it: every letter typed next went nowhere, and nothing on screen
+ * said why. A second property edited within a moment of the first was simply
+ * never typed.
+ *
+ * So there the document's copy of the property waits until focus has landed
+ * somewhere. The write to the file does not wait — only the projection does,
+ * and only for as long as the click takes. An editable view leaves the
+ * selection where it found it and needs none of this.
+ */
+function recordWhenFocusHasLanded(
+	panel: RefObject<HTMLElement | null>,
+	record: () => void,
+): void {
+	const caret = document.activeElement;
+	if (caret && panel.current?.contains(caret)) {
+		record();
+		return;
+	}
+	window.setTimeout(() => {
+		// The panel can be gone by then — a checkpoint taken from a field
+		// concludes the review the panel was part of. There is no projection
+		// left to record the property in, and the file already has it.
+		if (panel.current) record();
+	}, 0);
+}
 
 function replaceRecordEntry(
 	record: FrontmatterRecord,
@@ -156,15 +194,17 @@ const SETTLE_MS = 300;
  *
  * While the field is being typed in, what it shows is what was typed: the
  * value arriving from the document cannot replace it. That is the whole point.
- * A review re-renders the property from before the edit while it catches up,
- * and with no draft of its own the field put that stale string back under the
- * caret — "Quarterly planning notes" was written to the file as "Frontmatter
- * fixturee pangte". The draft is handed over when the field is left, or when
- * the typing has settled.
+ * The document re-renders the property from whatever revision it is showing,
+ * and with no draft of its own the field put that string back under the caret
+ * between two keystrokes — "Quarterly planning notes" was written to the file
+ * as "Frontmatter fixturee pangte". The draft is handed over when the field is
+ * left, when the typing has settled, when a command asks every surface to
+ * settle what it is holding — and, whatever else happens, when the field goes
+ * away.
  */
 function useSettlingDraft(
 	value: string,
-	commit: (next: string) => void,
+	commit: (next: string) => void | PromiseLike<void>,
 ): {
 	readonly text: string;
 	readonly type: (next: string) => void;
@@ -178,27 +218,39 @@ function useSettlingDraft(
 	useEffect(() => {
 		commitRef.current = commit;
 	});
-	useEffect(() => () => window.clearTimeout(timer.current), []);
-
-	const type = useCallback((next: string) => {
-		setDraft(next);
-		pending.current = next;
-		window.clearTimeout(timer.current);
-		timer.current = window.setTimeout(() => {
-			const settled = pending.current;
-			pending.current = null;
-			if (settled !== null) commitRef.current(settled);
-		}, SETTLE_MS);
-	}, []);
-
-	const leave = useCallback(() => {
+	// Hands over whatever is still being held, without touching the draft on
+	// screen: the value it writes is the value the field is showing, so there
+	// is nothing to put back.
+	const settle = useCallback((): void | PromiseLike<void> => {
 		window.clearTimeout(timer.current);
 		const settled = pending.current;
 		pending.current = null;
+		if (settled === null) return;
+		return commitRef.current(settled);
+	}, []);
+	// A checkpoint taken mid-word unmounts this field. Dropping the timer here
+	// dropped the word with it: the checkpoint closed over a file that never
+	// received the letters the reader had just typed, and they were nowhere
+	// afterwards. Leaving is not abandoning — only Escape abandons.
+	useEffect(() => () => void settle(), [settle]);
+	useEffect(() => registerUnsettledEdit(settle), [settle]);
+
+	const type = useCallback(
+		(next: string) => {
+			setDraft(next);
+			pending.current = next;
+			window.clearTimeout(timer.current);
+			timer.current = window.setTimeout(() => void settle(), SETTLE_MS);
+		},
+		[settle],
+	);
+
+	const leave = useCallback(() => {
+		const settled = pending.current;
 		setDraft(null);
-		if (settled !== null) commitRef.current(settled);
+		void settle();
 		return settled ?? value;
-	}, [value]);
+	}, [settle, value]);
 
 	const abandon = useCallback(() => {
 		window.clearTimeout(timer.current);
@@ -337,7 +389,7 @@ function NumberField({
 }: {
 	readonly label: string;
 	readonly value: number;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
 	const leaveForTheDocument = useLeaveForTheDocument();
@@ -389,7 +441,7 @@ function ScalarField({
 }: {
 	readonly label: string;
 	readonly value: unknown;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	if (typeof value === "number") {
 		return <NumberField label={label} value={value} onChange={onChange} />;
@@ -407,7 +459,7 @@ function BooleanField({
 }: {
 	readonly label: string;
 	readonly value: boolean;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
 	const escape = useEscapeRevert(value, onChange);
@@ -441,7 +493,7 @@ function TextField({
 }: {
 	readonly label: string;
 	readonly value: unknown;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
 	const leaveForTheDocument = useLeaveForTheDocument();
@@ -487,7 +539,7 @@ function ArrayField({
 }: {
 	readonly label: string;
 	readonly value: unknown[];
-	readonly onChange: (value: unknown[]) => void;
+	readonly onChange: (value: unknown[]) => void | PromiseLike<void>;
 }) {
 	const disabled = useMarkdownFrontmatterDisabled();
 	const [draft, setDraft] = useState("");
@@ -564,7 +616,7 @@ function ObjectField({
 }: {
 	readonly label: string;
 	readonly value: FrontmatterRecord;
-	readonly onChange: (value: FrontmatterRecord) => void;
+	readonly onChange: (value: FrontmatterRecord) => void | PromiseLike<void>;
 }) {
 	return (
 		<div className="markdown-frontmatter-nested">
@@ -602,7 +654,7 @@ function FieldValue({
 }: {
 	readonly label: string;
 	readonly value: unknown;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	if (Array.isArray(value)) {
 		return <ArrayField label={label} value={value} onChange={onChange} />;
@@ -678,10 +730,17 @@ export function FrontmatterEditorNodeView({
 	// so the panel writes the property itself — the edit lands where the same
 	// edit lands outside a review, and nothing on screen is a value the file
 	// does not have.
+	// The write a field has already sent but that has not landed yet. A
+	// command settles what the surfaces are holding before it acts; a property
+	// handed over a moment earlier — by clicking from the field onto the
+	// button — is not being held any more, and would otherwise land after the
+	// decision that was meant to include it.
+	const inFlightWriteRef = useRef<Promise<void> | undefined>(undefined);
+	useEffect(() => registerUnsettledEdit(() => inFlightWriteRef.current), []);
 	const writeThrough = useCallback(
-		(value: string) => {
+		(value: string, base: string) => {
 			if (editing.kind !== "file") return;
-			editing.write(value).then(
+			const written = editing.write(value, base).then(
 				() => setWriteError(null),
 				(cause: unknown) =>
 					setWriteError(
@@ -690,30 +749,44 @@ export function FrontmatterEditorNodeView({
 							: "Could not save this property.",
 					),
 			);
+			inFlightWriteRef.current = written;
+			return written;
 		},
 		[editing],
 	);
 
+	// What the fields were rendered from, which is what this edit is a change
+	// to. The write needs it to tell the properties this edit touched from the
+	// ones it is only carrying along — the latter belong to the file, not to
+	// the projection the panel is showing.
+	const sourceRef = useRef(source);
+	sourceRef.current = source;
 	// A revision keeps nothing, so it is not offered the document either: a
 	// disabled field that still moved the projection would be the same lie in
 	// a quieter place.
 	const commitSource = useCallback(
 		(value: string) => {
 			if (editing.kind === "readOnly") return;
-			updateAttributes({ value });
-			writeThrough(value);
+			const base = sourceRef.current;
+			const record = () => updateAttributes({ value });
+			// Writing through to the file is what a review's panel does, and a
+			// review's document is the read-only one that claims the selection.
+			if (editing.kind === "file") recordWhenFocusHasLanded(wrapperRef, record);
+			else record();
+			return writeThrough(value, base);
 		},
 		[editing.kind, updateAttributes, writeThrough],
 	);
 
-	// The YAML box writes as you type too, and had the same problem: a review
-	// catching up re-rendered the source under the caret mid-word.
+	// The YAML box writes as you type too, and had the same problem: the
+	// document re-rendered the source under the caret mid-word.
 	const rawField = useSettlingDraft(source, commitSource);
 
 	const removeFrontmatter = useCallback(() => {
 		if (editing.kind === "readOnly") return;
+		const base = sourceRef.current;
 		deleteNode();
-		writeThrough("");
+		void writeThrough("", base);
 		focusFirstDocumentBlock();
 	}, [deleteNode, editing.kind, focusFirstDocumentBlock, writeThrough]);
 
@@ -748,9 +821,10 @@ export function FrontmatterEditorNodeView({
 		);
 		return () => window.cancelAnimationFrame(frame);
 	}, [addingField]);
-	const commitRecord = (value: FrontmatterRecord) => {
+	// The promise goes back up to whoever asked for the write: a command that
+	// settles the panel before acting waits for it.
+	const commitRecord = (value: FrontmatterRecord) =>
 		commitSource(stringifyFrontmatterValue(value));
-	};
 	const cancelAddingField = () => {
 		setFieldNameDraft("");
 		setAddingField(false);

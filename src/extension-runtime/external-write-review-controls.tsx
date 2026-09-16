@@ -25,6 +25,7 @@ import {
 import { PathLabel, pathLabelText } from "../components/path-label";
 import { fileIconUrl } from "@/file-icons";
 import { DiffGlyph, movedFromHint } from "@/components/diff-glyph";
+import { settleUnsettledEdits } from "@/lib/unsettled-edits";
 import { shortcutHint } from "@/lib/platform";
 import type { ExternalWriteReviewNavigation } from "./external-write-review";
 import "./external-write-review-controls.css";
@@ -332,6 +333,11 @@ export function ExternalWriteReviewControls({
 			setCommitError(null);
 			setIsCommitting(true);
 			try {
+				// A property typed a moment ago is part of the document this
+				// decision is about. Write it before reading the workspace, or
+				// the checkpoint closes over a file without it.
+				const settling = settleUnsettledEdits();
+				if (settling) await settling;
 				await onPrimary(fileIds, { scope });
 				setOpenMenu(null);
 				// The verb concludes the session: the next one starts over.
@@ -356,6 +362,8 @@ export function ExternalWriteReviewControls({
 			setCommitError(null);
 			setIsCommitting(true);
 			try {
+				const settling = settleUnsettledEdits();
+				if (settling) await settling;
 				await onUndo(fileIds, { scope });
 				setOpenMenu(null);
 				if (scope === "file") {
