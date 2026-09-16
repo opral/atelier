@@ -179,6 +179,15 @@ export function HistoryScopeSwitch({
 const PARENT_HINT_MIN_WIDTH = 240;
 const ShowPathParentsContext = createContext(true);
 
+/**
+ * Every row is the chip the section header is: the header's label sits 6px
+ * inside the panel (`px-1.5` on the picker in panel-v2), so a row's glyph
+ * column starts there too, and its hover background starts on the panel's
+ * edge as the header's does. The row's 1px transparent border carries the
+ * sixth pixel, which is why the padding here is five.
+ */
+const ROW_INSET = "px-1.25";
+
 function HistoryFilePath({ path }: { readonly path: string }) {
 	const showParents = useContext(ShowPathParentsContext);
 	return showParents ? (
@@ -224,12 +233,10 @@ export function HistoryView({
 			ref={containerRef}
 			aria-label="Checkpoint history"
 			data-layout={wide ? "wide" : "compact"}
-			className="min-h-0 flex-1 overflow-y-auto px-1 py-2"
+			className="min-h-0 flex-1 overflow-y-auto py-2 pr-1"
 		>
 			<ShowPathParentsContext.Provider value={showParents}>
-				<div
-					className={wide ? "mx-auto w-full max-w-[60rem] px-5 py-4" : "w-full"}
-				>
+				<div className={wide ? "w-full max-w-[60rem] py-4 pr-5" : "w-full"}>
 					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
 					<CheckpointList atelier={atelier} wide={wide} file={file} />
 				</div>
@@ -306,7 +313,7 @@ function WorkingChangesRow({
 					onClick={toggleWorkingChanges}
 					onMouseDown={(event) => event.preventDefault()}
 					data-attr="history-working-changes"
-					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
+					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
 				>
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
 						<WorkingDot className="ring-3 ring-[var(--color-bg-brand-soft)]" />
@@ -426,7 +433,7 @@ function CheckpointList({
 		return (
 			<p
 				role="status"
-				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+				className="px-1.5 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
 			>
 				No checkpoint includes this file yet.
 			</p>
@@ -591,7 +598,7 @@ function CheckpointItem({
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${
+				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
 					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
 				}`}
 			>

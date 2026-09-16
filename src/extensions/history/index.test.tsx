@@ -147,6 +147,56 @@ describe("HistoryView", () => {
 		await lix.close();
 	});
 
+	// The section header's label is a chip with `px-1.5`, so it sits six pixels
+	// inside the panel. Rows read as that same column, and a stray gutter on
+	// any wrapper between them is exactly what breaks it.
+	const HEADER_LABEL_INSET = 6;
+	const leftInset = (node: HTMLElement, root: Element): number => {
+		let total = 0;
+		for (
+			let step: HTMLElement | null = node;
+			step !== null && root.contains(step);
+			step = step.parentElement
+		) {
+			for (const token of step.className.split(/\s+/)) {
+				const padding = /^p[xl]-(\d+(?:\.\d+)?)$/.exec(token);
+				if (padding) total += Number(padding[1]) * 4;
+				if (token === "border") total += 1;
+			}
+		}
+		return total;
+	};
+
+	test("rows start on the column the section header's label starts on", async () => {
+		const resize = mockHistoryWidth();
+		const lix = await openLix();
+		await createCheckpoint(lix);
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fakeUuid("inset"), "/inset.md", new TextEncoder().encode("edited")],
+		);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub()} />
+			</LixProvider>,
+		);
+		const section = view.container.querySelector(
+			'[aria-label="Checkpoint history"]',
+		);
+		if (!section) throw new Error("history section missing");
+		for (const width of [320, 900]) {
+			resize(width);
+			const checkpoint = await screen.findByRole("button", {
+				name: /checkpoint/i,
+			});
+			const working = screen.getByRole("button", { name: "Working changes" });
+			expect(leftInset(checkpoint, section)).toBe(HEADER_LABEL_INSET);
+			expect(leftInset(working, section)).toBe(HEADER_LABEL_INSET);
+		}
+		view.unmount();
+		await lix.close();
+	});
+
 	test("previews checkpoint and working files before selection only when the panel is wide", async () => {
 		const resize = mockHistoryWidth();
 		// No intersection API means render all rows (e.g. non-browser hosts).
