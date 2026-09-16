@@ -4612,7 +4612,14 @@ function LayoutShellLoadedContentResolved({
 							// zero-pixel separator still answered Tab and the arrow
 							// keys: focus landed on nothing, and arrowing dragged open
 							// a sidebar the user could not see they were dragging.
-							{...(isLeftCollapsed ? { tabIndex: -1 } : {})}
+							//
+							// Handing it tabIndex did nothing — the library spreads
+							// what it is given and then sets tabIndex itself, so the
+							// value that reaches the DOM is always its own. Its own
+							// value is what has to change, and `disabled` is what
+							// changes it: a disabled separator is given no tabIndex
+							// at all, and nothing to resize with either.
+							disabled={isLeftCollapsed}
 							aria-label="Resize the left area"
 							className={`group relative z-10 flex items-center justify-center ${
 								isLeftCollapsed ? "w-0" : "w-1"
@@ -4664,7 +4671,7 @@ function LayoutShellLoadedContentResolved({
 							</div>
 						</Panel>
 						<Separator
-							{...(isRightCollapsed ? { tabIndex: -1 } : {})}
+							disabled={isRightCollapsed}
 							aria-label="Resize the right area"
 							className={`group relative z-10 flex items-center justify-center ${
 								isRightCollapsed ? "w-0" : "w-1"
