@@ -55,3 +55,21 @@ export type { DiffGlyphKind } from "./components/diff-glyph";
 
 export { AtelierFile } from "./atelier-file";
 export type { AtelierFileProps } from "./atelier-file";
+
+/**
+ * Atelier's New menu and the rule behind its default folders, for a host that
+ * creates files from a surface of its own.
+ */
+export { NewFileMenu } from "./extensions/files";
+export type { NewFileMenuProps } from "./extensions/files";
+export { useDefaultFolders } from "./extensions/files/use-default-folders";
+export {
+	pickerFolders,
+	resolveCreateDirectory,
+	ensureDirectoryPath,
+} from "./extensions/files/default-folder";
+export type {
+	DefaultFolderFileType,
+	DefaultFolders,
+	PickerFolder,
+} from "./extensions/files/default-folder";

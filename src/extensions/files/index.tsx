@@ -44,9 +44,9 @@ import type {
 	AtelierJsonValue,
 	AtelierWatchedEntry,
 } from "@/extension-api";
+import { useStableDefaultFolders } from "./use-default-folders";
 import {
 	DEFAULT_FOLDERS_PREFERENCE_KEY,
-	defaultFoldersKey,
 	ensureDirectoryPath,
 	parseDefaultFolders,
 	pickerFolders,
@@ -1478,7 +1478,7 @@ function FilesViewContent({
 								{createRequest ? (
 									<WideNewButton disabled />
 								) : (
-									<UnifiedNewMenu
+									<NewFileMenu
 										onNewCsv={handleNewCsv}
 										onNewExcalidraw={handleNewExcalidraw}
 										onNewFile={handleNewFile}
@@ -1493,7 +1493,7 @@ function FilesViewContent({
 										onCreateFolder={createFolderAtPath}
 									>
 										<WideNewButton />
-									</UnifiedNewMenu>
+									</NewFileMenu>
 								)}
 							</div>
 						)}
@@ -1515,7 +1515,7 @@ function FilesViewContent({
 					{createRequest ? (
 						<CompactNewButton disabled />
 					) : (
-						<UnifiedNewMenu
+						<NewFileMenu
 							onNewCsv={handleNewCsv}
 							onNewExcalidraw={handleNewExcalidraw}
 							onNewFile={handleNewFile}
@@ -1530,7 +1530,7 @@ function FilesViewContent({
 							onCreateFolder={createFolderAtPath}
 						>
 							<CompactNewButton />
-						</UnifiedNewMenu>
+						</NewFileMenu>
 					)}
 				</div>
 			) : null}
@@ -1614,7 +1614,8 @@ const CompactNewButton = forwardRef<
 	);
 });
 
-type UnifiedNewMenuProps = {
+export type NewFileMenuProps = {
+	/** The trigger. It is rendered as the menu's button, unchanged. */
 	readonly children: ReactNode;
 	readonly onNewCsv: () => void;
 	readonly onNewExcalidraw: () => void;
@@ -1636,7 +1637,13 @@ type UnifiedNewMenuProps = {
 	) => Promise<string | null>;
 };
 
-function UnifiedNewMenu({
+/**
+ * Atelier's New menu: the rows that create, and on each one the slot that
+ * says — and sets — the folder that row creates in. Exported whole so a host
+ * surface with a New button of its own offers the same menu rather than a
+ * lookalike that drifts from it.
+ */
+export function NewFileMenu({
 	children,
 	onNewCsv,
 	onNewExcalidraw,
@@ -1650,7 +1657,7 @@ function UnifiedNewMenu({
 	onSetDefaultFolder,
 	onCreateHereOnce,
 	onCreateFolder,
-}: UnifiedNewMenuProps) {
+}: NewFileMenuProps) {
 	// A row's disclosure needs somewhere to persist the choice. Without a
 	// preference store the menu is exactly today's menu, slot and all.
 	const slotFor = (fileType: DefaultFolderFileType, dataAttr: string) =>
@@ -1796,25 +1803,6 @@ function NewMenuItem({
 			) : null}
 		</div>
 	);
-}
-
-/**
- * The stored default folders, with an identity that changes only when they do.
- * The preference value is re-read on every render and the rule is wired into
- * callbacks and effects, which would otherwise be rebuilt on every render.
- */
-function useStableDefaultFolders(
-	raw: AtelierJsonValue | undefined,
-): DefaultFolders {
-	const parsed = parseDefaultFolders(raw);
-	const key = defaultFoldersKey(parsed);
-	const stableRef = useRef(parsed);
-	const keyRef = useRef(key);
-	if (keyRef.current !== key) {
-		keyRef.current = key;
-		stableRef.current = parsed;
-	}
-	return stableRef.current;
 }
 
 function sameStringArray(

@@ -223,7 +223,13 @@ function MountedFile(
 			...(documentLinks ? { documentLinks } : {}),
 			icons: { fileUrl: fileIconUrl },
 			events: { emit: () => {} },
-			preferences: { get: (_id, key) => preferences.get(key) },
+			preferences: {
+				get: (_id, key) => preferences.get(key),
+				set: (_id, key, value) => {
+					if (value === undefined) preferences.delete(key);
+					else preferences.set(key, value);
+				},
+			},
 			documents: {
 				activeFileId: fileId,
 				activeFilePath: path,

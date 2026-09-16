@@ -392,15 +392,22 @@ export type AtelierExtensionRuntime = {
 	};
 	readonly views: AtelierViewsApi;
 	/**
-	 * Read another extension's current preference without taking ownership of
-	 * its default or mutation behavior. This lets host surfaces mirror a
-	 * bundled extension while that extension remains the sole writer.
+	 * Read and write another extension's preference without taking ownership
+	 * of its defaults. A host surface that mirrors a bundled extension reads
+	 * through this; one that offers the same control the extension offers —
+	 * its own New menu, say — writes through it too, because a second copy of
+	 * the same setting is two answers to one question.
 	 */
 	readonly preferences: {
 		readonly get: (
 			extensionId: string,
 			key: string,
 		) => AtelierJsonValue | undefined;
+		readonly set: (
+			extensionId: string,
+			key: string,
+			value: AtelierJsonValue | undefined,
+		) => void;
 	};
 	/** Canonical Atelier iconography, shared by views, floats, and lists. */
 	readonly icons: {

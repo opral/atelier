@@ -4438,6 +4438,17 @@ function LayoutShellLoadedContentResolved({
 			preferences: {
 				get: (extensionId: string, key: string) =>
 					preferencesFor(extensionId).get(key),
+				// Clearing is a write of nothing, so a host surface that removes a
+				// setting reaches the same delete the owning extension would.
+				set: (
+					extensionId: string,
+					key: string,
+					value: AtelierJsonValue | undefined,
+				) => {
+					const preference = preferencesFor(extensionId);
+					if (value === undefined) preference.delete(key);
+					else preference.set(key, value);
+				},
 			},
 			icons: ATELIER_RUNTIME_ICONS,
 			branches: {

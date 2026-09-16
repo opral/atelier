@@ -604,7 +604,7 @@ async function createRuntime(
 		views: {
 			open: vi.fn(),
 		},
-		preferences: { get: () => undefined },
+		preferences: { get: () => undefined, set: () => {} },
 		icons: { fileUrl: () => "" },
 		branches: {
 			activeId: activeBranchId,
