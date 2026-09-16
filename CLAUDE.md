@@ -45,7 +45,12 @@ frame, use non-suspending reads (`useQueryResult`, effects) and hold the
 last document until the next one is ready; where the region has nothing yet,
 it stays quiet in the frame. The text view (`src/extensions/text`) is the
 reference: one `TextFrame` owns the toolbar and the one CodeMirror instance,
-and documents are handed to it in place.
+and documents are handed to it in place. A view whose editor cannot take
+another document in place — Markdown, CSV — uses the document region
+(`src/extension-runtime/document-region.tsx`): readers hand the frame a
+document element, the region keeps the one on screen and lays the next out
+over it, invisible, until that one says it is ready (`useDocumentReady`),
+and the toolbar reads from, or is rendered into, the frame.
 
 ## The static entry is a promise
 
