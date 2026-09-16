@@ -60,8 +60,8 @@ export type { AtelierFileProps } from "./atelier-file";
  * Atelier's New menu and the rule behind its default folders, for a host that
  * creates files from a surface of its own.
  */
-export { NewFileMenu } from "./extensions/files";
-export type { NewFileMenuProps } from "./extensions/files";
+export { NewFileMenu } from "./extensions/files/new-file-menu";
+export type { NewFileMenuProps } from "./extensions/files/new-file-menu";
 export { useDefaultFolders } from "./extensions/files/use-default-folders";
 export {
 	pickerFolders,
