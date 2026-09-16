@@ -139,3 +139,33 @@ describe("folding a review's unchanged runs", () => {
 		]);
 	});
 });
+
+describe("a band's range", () => {
+	const before = "id,name\n1,a\n2,b\n3,c\n4,d\n5,CHANGED\n";
+	const after = "id,name\n1,a\n2,b\n3,c\n4,d\n5,edited\n";
+
+	test("names the span when the run is one", () => {
+		const review = rows(before, after);
+		const folds = csvReviewSegments(review.rows).filter(
+			(segment) => segment.type === "fold",
+		);
+		expect(folds).toHaveLength(1);
+		expect(folds[0]!.contiguous).toBe(true);
+		expect(csvReviewFoldRangeLabel(folds[0]!.first, folds[0]!.last)).toBe(
+			"1–3",
+		);
+	});
+
+	test("says nothing of a span when a sort has taken the rows apart", () => {
+		const review = rows(before, after);
+		// What a reordering leaves: rows that sit together on screen without
+		// being together in the table. A range invented from the first and the
+		// last would name rows the band does not hold — and count backwards.
+		const reordered = [...review.rows].reverse();
+		const folds = csvReviewSegments(reordered).filter(
+			(segment) => segment.type === "fold",
+		);
+		expect(folds.length).toBeGreaterThan(0);
+		expect(folds.every((fold) => fold.contiguous)).toBe(false);
+	});
+});

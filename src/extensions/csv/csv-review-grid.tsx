@@ -92,7 +92,7 @@ export function CsvReviewFoldAction({ folds }: { folds: CsvReviewFolds }) {
 						Show all
 						<span className="csv-review-fold-action-word">
 							{" "}
-							{folds.rowCount} rows
+							{folds.rowCount} {folds.rowCount === 1 ? "row" : "rows"}
 						</span>
 					</>
 				)}
@@ -233,7 +233,19 @@ export function CsvReviewGrid({
 		scrollRef.current.scrollLeft = startingScroll.current.x;
 		scrollRef.current.scrollTop = startingScroll.current.y;
 	}, []);
+	// Seeded at a guess and corrected as soon as the scroller exists: the
+	// virtual window is sized from this, so a window taller than the guess
+	// painted a blank strip below the last row until the first scroll.
 	const [viewportHeight, setViewportHeight] = useState(900);
+	useLayoutEffect(() => {
+		const scroller = scrollRef.current;
+		if (!scroller || typeof ResizeObserver === "undefined") return;
+		const measure = () => setViewportHeight(scroller.clientHeight);
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(scroller);
+		return () => observer.disconnect();
+	}, []);
 	// A grid rendered on its own still folds; a grid the toolbar drives shares
 	// that toolbar's state instead.
 	const ownFolds = useCsvReviewFolds(model, { search, filter, sort });
@@ -609,7 +621,9 @@ function CsvReviewBand({
 	onToggle: (key: string) => void;
 }) {
 	const count = csvReviewFoldCountLabel(segment.rows.length);
-	const range = csvReviewFoldRangeLabel(segment.first, segment.last);
+	const range = segment.contiguous
+		? csvReviewFoldRangeLabel(segment.first, segment.last)
+		: null;
 	const Chevron = open ? ChevronsDownUp : ChevronsUpDown;
 	return (
 		<tr
@@ -636,11 +650,13 @@ function CsvReviewBand({
 					type="button"
 					className="csv-review-band-button"
 					aria-expanded={open}
-					aria-label={`${count}, ${
-						segment.first === segment.last
-							? `row ${segment.first}`
-							: `rows ${segment.first} to ${segment.last}`
-					}`}
+					aria-label={
+						!segment.contiguous
+							? count
+							: segment.first === segment.last
+								? `${count}, row ${segment.first}`
+								: `${count}, rows ${segment.first} to ${segment.last}`
+					}
 					onClick={() => onToggle(segment.key)}
 				>
 					<span className="csv-review-band-label">

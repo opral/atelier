@@ -1,6 +1,11 @@
 .csv-property-popover {
 	box-sizing: border-box;
 	z-index: 10001;
+	/* The list is the part that gives: in a window too short for the picker,
+	   capping the popover alone simply cut the last options off, reachable by
+	   neither mouse nor arrow key. */
+	display: flex;
+	flex-direction: column;
 	overflow: hidden;
 	border: 1px solid var(--color-border-panel);
 	border-radius: var(--radius-panel);
@@ -68,8 +73,16 @@
 }
 .csv-option-list {
 	padding: 2px 5px 6px;
+	min-height: 0;
 	max-height: 225px;
 	overflow-y: auto;
+}
+
+/* Where the popover itself is capped, the list takes what is left of it
+   rather than keeping a height the popover cannot show. */
+.csv-property-popover[data-capped="true"] .csv-option-list {
+	flex: 1 1 auto;
+	max-height: none;
 }
 .csv-option-row {
 	display: flex;

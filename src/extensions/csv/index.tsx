@@ -1774,7 +1774,13 @@ function CsvTable({
 		.toArray()
 		.filter((row) => row < rowMap.length);
 	const deleteSelectedRows = () => {
-		const first = selectedRows.length ? Math.min(...selectedRows) : 0;
+		// The row that moves up into the first deleted one's place — or the
+		// last row left, when the deletion ran to the end of the table.
+		const remaining = parsed.rows.length - selectedRows.length;
+		const first = Math.min(
+			selectedRows.length ? Math.min(...selectedRows) : 0,
+			Math.max(0, remaining - 1),
+		);
 		editing?.onDeleteRows(selectedRows.map(sourceRowIndex));
 		clearSelection();
 		// Glide answers no key without a selection, so the table takes the row
@@ -2072,7 +2078,13 @@ function CsvTable({
 						(event.target as HTMLElement).closest(".csv-row-actions")
 					) {
 						event.preventDefault();
-						const first = selectedRows.length ? Math.min(...selectedRows) : 0;
+						// The row that moves up into the first deleted one's place — or the
+						// last row left, when the deletion ran to the end of the table.
+						const remaining = parsed.rows.length - selectedRows.length;
+						const first = Math.min(
+							selectedRows.length ? Math.min(...selectedRows) : 0,
+							Math.max(0, remaining - 1),
+						);
 						clearSelection();
 						focusGrid([0, Math.max(0, first)]);
 					}
@@ -2108,7 +2120,13 @@ function CsvTable({
 						columnInfo={columnInfo}
 						optionValues={(column) => optionValuesByColumn.get(column) ?? []}
 						onClear={() => {
-							const first = selectedRows.length ? Math.min(...selectedRows) : 0;
+							// The row that moves up into the first deleted one's place — or the
+							// last row left, when the deletion ran to the end of the table.
+							const remaining = parsed.rows.length - selectedRows.length;
+							const first = Math.min(
+								selectedRows.length ? Math.min(...selectedRows) : 0,
+								Math.max(0, remaining - 1),
+							);
 							clearSelection();
 							focusGrid([0, Math.max(0, first)]);
 						}}

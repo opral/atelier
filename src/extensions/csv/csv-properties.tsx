@@ -438,6 +438,7 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 		<div
 			ref={dialogRef}
 			className="csv-property-popover click-outside-ignore"
+			data-capped={capped === null ? undefined : "true"}
 			role="dialog"
 			aria-label={`${info.header} value`}
 			tabIndex={-1}

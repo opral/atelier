@@ -71,6 +71,8 @@ export type CsvReviewSegment =
 			readonly rows: readonly CsvReviewRow[];
 			readonly first: number;
 			readonly last: number;
+			/** Whether the run is one unbroken span of the table's own rows. */
+			readonly contiguous: boolean;
 	  };
 
 /**
@@ -118,6 +120,16 @@ export function csvReviewSegments(
 			rows: run,
 			first: csvReviewRowNumber(run[0]!, start),
 			last: csvReviewRowNumber(run[run.length - 1]!, index),
+			// A range is only true of a run the reader could read as one span.
+			// Under a sort, a filter or a search the run is whichever rows
+			// happen to sit together on screen, and "1–13" then named ten rows
+			// it does not hold — or counted backwards, "30–17". The count is
+			// always true, so where the span is not, the count stands alone.
+			contiguous: run.every(
+				(row, offset) =>
+					csvReviewRowNumber(row, start + offset) ===
+					csvReviewRowNumber(run[0]!, start) + offset,
+			),
 		});
 	}
 	return segments;
