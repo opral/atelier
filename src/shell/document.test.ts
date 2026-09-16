@@ -125,7 +125,8 @@ function documentRules(css: string): Entry[] {
 				entries.push([
 					normalize(selector),
 					declaration.prop,
-					declaration.value.replace(/\s+/g, " "),
+					// The render's copy is compacted; the value is the same value.
+					declaration.value.replace(/\s+/g, " ").replace(/\s*([,/])\s*/g, "$1"),
 				]);
 			});
 		}
@@ -157,6 +158,7 @@ test("the render adds no document rule to document.css's", () => {
 });
 
 test("the render sets its density with one declaration, not a second scale", () => {
-	expect(RENDER_CSS).toContain("--atelier-doc-font-size: 14px;");
-	expect(RENDER_CSS).toContain("font-size: var(--atelier-doc-font-size, 16px)");
+	const compact = RENDER_CSS.replace(/\s+/g, "");
+	expect(compact).toContain("--atelier-doc-font-size:14px;");
+	expect(compact).toContain("font-size:var(--atelier-doc-font-size,16px)");
 });

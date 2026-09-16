@@ -9,6 +9,8 @@ const publicDeclarations = new Set([
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
 	"render.d.ts",
+	// render.d.ts re-exports RENDER_CSS from here; pruned, the export is `any`.
+	"render/styles.d.ts",
 	"dev-tools.d.ts",
 	"render/types.d.ts",
 	"components/diff-glyph.d.ts",
