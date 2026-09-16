@@ -186,10 +186,20 @@ describe("HistoryView", () => {
 		if (!section) throw new Error("history section missing");
 		for (const width of [320, 900]) {
 			resize(width);
-			const checkpoint = await screen.findByRole("button", {
-				name: /checkpoint/i,
+			// By attribute, not by name: in the wide layout the rows grow file
+			// previews whose buttons also say "checkpoint", and a name query
+			// then finds several.
+			const checkpoint = await waitFor(() => {
+				const row = section.querySelector<HTMLElement>(
+					'[data-attr="history-view-checkpoint"]',
+				);
+				if (!row) throw new Error("checkpoint row not rendered yet");
+				return row;
 			});
-			const working = screen.getByRole("button", { name: "Working changes" });
+			const working = section.querySelector<HTMLElement>(
+				'[data-attr="history-working-changes"]',
+			);
+			if (!working) throw new Error("working row missing");
 			expect(leftInset(checkpoint, section)).toBe(HEADER_LABEL_INSET);
 			expect(leftInset(working, section)).toBe(HEADER_LABEL_INSET);
 		}
