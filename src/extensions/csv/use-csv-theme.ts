@@ -67,10 +67,24 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 	useLayoutEffect(() => {
 		const element = ref.current;
 		if (!element) return;
+		// A custom property's computed value is its token stream, so a token
+		// written as `light-dark(a, b)` reads back as that text, which no canvas
+		// fillStyle or gradient stop accepts. Assigning it to a real colour
+		// property on a child of the table resolves it under the table's own
+		// colour scheme, and the computed colour is what the canvas gets.
+		const probe = element.ownerDocument.createElement("span");
+		probe.hidden = true;
+		element.append(probe);
 		const update = () => {
 			const styles = getComputedStyle(element);
-			const read = (token: string, fallback: string) =>
-				styles.getPropertyValue(token).trim() || fallback;
+			const read = (token: string, fallback: string) => {
+				const raw = styles.getPropertyValue(token).trim();
+				if (!raw) return fallback;
+				probe.style.color = "";
+				probe.style.color = raw;
+				if (!probe.style.color) return fallback;
+				return getComputedStyle(probe).color || raw;
+			};
 			setAppearance((previous) => {
 				const theme = { ...DEFAULT_APPEARANCE.theme };
 				for (const [key, token] of Object.entries(colorTokens)) {
@@ -120,6 +134,7 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 		return () => {
 			observer.disconnect();
 			scheme.removeEventListener("change", update);
+			probe.remove();
 		};
 	}, [ref]);
 	return appearance;
