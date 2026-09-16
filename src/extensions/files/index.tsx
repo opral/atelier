@@ -1617,6 +1617,12 @@ const CompactNewButton = forwardRef<
 export type NewFileMenuProps = {
 	/** The trigger. It is rendered as the menu's button, unchanged. */
 	readonly children: ReactNode;
+	/**
+	 * Which edge of the trigger the menu hangs from. The Files view's button
+	 * starts a column, so the menu starts where it does; a button at the end
+	 * of a header would push a start-aligned menu off its own column.
+	 */
+	readonly align?: "start" | "end";
 	readonly onNewCsv: () => void;
 	readonly onNewExcalidraw: () => void;
 	readonly onNewFile: () => void;
@@ -1645,6 +1651,7 @@ export type NewFileMenuProps = {
  */
 export function NewFileMenu({
 	children,
+	align = "start",
 	onNewCsv,
 	onNewExcalidraw,
 	onNewFile,
@@ -1679,7 +1686,7 @@ export function NewFileMenu({
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
 			<DropdownMenuContent
-				align="start"
+				align={align}
 				aria-label="Create"
 				className="w-72 p-1.5 text-xs"
 				sideOffset={3}
