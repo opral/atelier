@@ -3,6 +3,7 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 @import "./shell/theme.css";
+@import "./shell/document.css";
 @import "./shell/tailwind.css";
 
 @source "./";

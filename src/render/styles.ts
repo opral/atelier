@@ -1,21 +1,30 @@
+import { DOCUMENT_CSS } from "../shell/document.generated";
 import { THEME_CSS } from "../shell/theme.generated";
-import { MARKDOWN_CSS } from "./markdown-css";
 
 /**
  * Everything a static render needs to look like Atelier.
  *
- * The palette is the app's own theme.css, copied verbatim by
- * scripts/tokens/emit-theme.mjs (the build checks the copy), so the two
- * cannot drift, and a host that
- * redefines an `--at-*` token on any ancestor retints the render through the
- * cascade: no theming API, no configuration. Comments are stripped so the
- * tokens block is the first thing in the sheet.
+ * The palette is the app's own theme.css and the document rules are the
+ * app's own document.css, both copied verbatim by scripts/tokens/emit-css.mjs
+ * (the build checks the copies), so a card cannot disagree with the editor
+ * about a colour or a heading size; and a host that redefines an `--at-*`
+ * token on any ancestor retints the render through the cascade: no theming
+ * API, no configuration. Comments are stripped so the tokens block is the
+ * first thing in the sheet.
  */
-const THEME_TOKENS = THEME_CSS.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+const uncommented = (css: string): string =>
+	css.replace(/\/\*[\s\S]*?\*\//g, "").trim();
 
-/** Shared frame: the scope, the type, and the diff colours both views use. */
+const THEME_TOKENS = uncommented(THEME_CSS);
+const DOCUMENT = uncommented(DOCUMENT_CSS);
+
+/**
+ * Shared frame: the scope, the type, and the density. A card is denser than
+ * the app: the one declaration below sets the document's whole scale.
+ */
 const BASE_CSS = `
 .atelier-render {
+	--atelier-doc-font-size: 14px;
 	font-family: var(--at-font-sans);
 	font-size: 14px;
 	line-height: 1.62;
@@ -24,6 +33,43 @@ const BASE_CSS = `
 .atelier-render *, .atelier-render *::before, .atelier-render *::after {
 	box-sizing: border-box;
 }
+`;
+
+/**
+ * What only a static render has: no editor, so nothing here restyles an
+ * element document.css already styles — only the chrome the render adds.
+ */
+const MARKDOWN_CSS = `
+/* A card is narrow, and a word it cannot break would push the change off
+   it; the editor scrolls instead. */
+.md-diff { overflow-wrap: anywhere; }
+.md-diff pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A card has no page around it: the document starts and ends flush. */
+.md-diff > *:first-child { margin-top: 0; }
+.md-diff > *:last-child { margin-bottom: 0; }
+
+/* Raw source (frontmatter, inline HTML) is shown as source, quietly. */
+.md-diff .md-diff-raw { color: var(--at-fg-subtle); white-space: pre-wrap; }
+.md-diff .md-diff-missing { color: var(--at-fg-subtle); font-style: italic; }
+
+/* An image, named rather than loaded. */
+.md-diff .md-diff-image {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 5px;
+	margin: 0 4px 6px 0;
+	padding: 1px 7px 1px 6px;
+	border: 1px solid var(--at-border);
+	border-radius: 6px;
+	color: var(--at-fg-muted);
+	font-size: 0.93em;
+}
+.md-diff .md-diff-image::before {
+	content: "▨";
+	color: var(--at-fg-subtle);
+}
+.md-diff .md-diff-image-src { color: var(--at-fg-subtle); font-size: 0.86em; }
 `;
 
 /** CSV renders through html-diff, which marks status with its own attribute. */
@@ -94,6 +140,12 @@ const CSV_CSS = `
 }
 `;
 
-export const RENDER_CSS = [THEME_TOKENS, BASE_CSS, MARKDOWN_CSS, CSV_CSS]
+export const RENDER_CSS = [
+	THEME_TOKENS,
+	BASE_CSS,
+	DOCUMENT,
+	MARKDOWN_CSS,
+	CSV_CSS,
+]
 	.join("\n")
 	.trim();

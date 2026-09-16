@@ -38,12 +38,13 @@
 			"default": "./dist/dev-tools.js"
 		},
 		"./theme.css": "./src/shell/theme.css",
+		"./document.css": "./src/shell/document.css",
 		"./tailwind.css": "./src/shell/tailwind.css"
 	},
 	"packageManager": "pnpm@10.34.5",
 	"scripts": {
 		"dev": "pnpm --dir preview/web dev",
-		"build": "node scripts/tokens/check-tokens.mjs && node scripts/tokens/emit-theme.mjs --check && vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs && node scripts/emit-render-css.mjs",
+		"build": "node scripts/tokens/check-tokens.mjs && node scripts/tokens/emit-css.mjs --check && vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs && node scripts/emit-render-css.mjs",
 		"build:lix": "node scripts/build-vendored-lix.mjs",
 		"prebuild:preview": "git submodule update --init --recursive && pnpm run build:lix --browser-only",
 		"build:preview": "pnpm --dir preview/web build && node scripts/compress-preview-wasm.mjs",
@@ -58,7 +59,7 @@
 		"ci": "pnpm run build:lix && pnpm run build && pnpm run test:build-scripts && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
 		"test:build-scripts": "node --test scripts/*.test.mjs",
 		"tokens:check": "node scripts/tokens/check-tokens.mjs",
-		"tokens": "node scripts/tokens/emit-theme.mjs"
+		"tokens": "node scripts/tokens/emit-css.mjs"
 	},
 	"peerDependencies": {
 		"@lix-js/sdk": ">=0.16.0 <0.17.0",
@@ -134,6 +135,7 @@
 		"jsdom": "^29.1.1",
 		"oxfmt": "^0.58.0",
 		"oxlint": "^1.73.0",
+		"postcss": "^8.5.16",
 		"react": "^19.2.7",
 		"react-dom": "^19.2.7",
 		"seedrandom": "^3.0.5",

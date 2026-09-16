@@ -30,7 +30,7 @@ export type MarkdownDiffOptions = {
 };
 
 export type MarkdownDiff = {
-	/** The document, marked, ready to drop inside an element with class `md-diff`. */
+	/** The document, marked, ready to drop inside an element with class `md-diff atelier-document`. */
 	readonly html: string;
 	readonly stats: MarkdownDiffStats;
 	/** Lines the trim left out; zero when the card shows everything. */
@@ -45,7 +45,7 @@ export type MarkdownDiff = {
  * This is the review the app shows — the same document builder, the same
  * marks, the same palette — written out for a surface that has no editor in
  * it: a card in a chat, a mail, a page rendered on a server. Pair the HTML
- * with the render stylesheet and put it inside `<div class="md-diff">`.
+ * with the render stylesheet and put it inside `<div class="md-diff atelier-document">`.
  */
 export function renderMarkdownDiff(options: MarkdownDiffOptions): MarkdownDiff {
 	const review = buildMarkdownReviewDocument({

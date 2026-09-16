@@ -81,7 +81,9 @@ export const markdownStaticRenderer: StaticRenderer = {
 
 /** The view's own scope, so a caller never has to know its class name. */
 function scoped(html: string): string {
-	return `<div class="md-diff">${html}</div>`;
+	// `atelier-document` is the stylesheet's scope, shared with the editor;
+	// `md-diff` is the render's own chrome.
+	return `<div class="md-diff atelier-document">${html}</div>`;
 }
 
 function imageOption(options: RenderOptions): {

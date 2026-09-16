@@ -81,10 +81,17 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
   A host rebrands by redeclaring tokens on `:root`; it never overrides
   component classes.
 
-`src/shell/theme.generated.ts` is a verbatim copy of `theme.css` for the
-DOM-free render entry, made by `pnpm run tokens`; the build fails if it is
-stale. The tokens sit on `:root` on purpose: declared on `.atelier-render`
-they would beat anything a host sets on an ancestor.
+`src/shell/document.css` is the one document stylesheet: how a Markdown
+document looks, scoped to `.atelier-document`, which the editor's ProseMirror
+root and the static render's wrapper both carry. The editor's own sheet never
+restates a rule from it; the card sets its density with one declaration,
+`--atelier-doc-font-size: 14px`, and every size in the sheet is an em of it.
+
+`src/shell/theme.generated.ts` and `document.generated.ts` are verbatim copies
+of `theme.css` and `document.css` for the DOM-free render entry, made by
+`pnpm run tokens`; the build fails if either is stale. The tokens sit on
+`:root` on purpose: declared on `.atelier-render` they would beat anything a
+host sets on an ancestor.
 
 ## One strict reader for "is this text?"
 

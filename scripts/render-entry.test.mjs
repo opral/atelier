@@ -53,9 +53,11 @@ test("the render entry needs no browser and no React", () => {
 		.join("\n");
 	assert.doesNotMatch(source, /from\s*"react/, "React reached the entry");
 	// Any property access on the browser globals, whatever it is called, plus
-	// the constructors a parser reaches for when it thinks it has a DOM.
-	assert.doesNotMatch(source, /\bdocument\s*\.\s*\w/);
-	assert.doesNotMatch(source, /\bwindow\s*\.\s*\w/);
+	// the constructors a parser reaches for when it thinks it has a DOM. A
+	// hyphenated name (`.atelier-document .md-diff-gap`, in the inlined
+	// stylesheet) is a class, not the global.
+	assert.doesNotMatch(source, /(?<![\w-])document\s*\.\s*\w/);
+	assert.doesNotMatch(source, /(?<![\w-])window\s*\.\s*\w/);
 	assert.doesNotMatch(source, /\b(DOMParser|XMLSerializer|HTMLElement)\b/);
 	assert.doesNotMatch(source, /globalThis\s*\.\s*(document|window)\b/);
 	const bytes = files.reduce((total, file) => total + statSync(file).size, 0);

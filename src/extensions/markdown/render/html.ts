@@ -241,7 +241,13 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 				checked === true || checked === false
 					? [`data-task="${checked ? "x" : " "}"`]
 					: [];
-			return `<li${attributes(node, task)}>${renderChildren(node, options)}</li>`;
+			// The box is the same element the editor draws, inert: one rule in
+			// document.css styles both.
+			const box =
+				task.length > 0
+					? `<input type="checkbox" disabled${checked ? " checked" : ""}>`
+					: "";
+			return `<li${attributes(node, task)}>${box}${renderChildren(node, options)}</li>`;
 		}
 		case "blockquote":
 			return `<blockquote${attributes(node)}>${renderChildren(node, options)}</blockquote>`;
@@ -306,11 +312,11 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 		}
 		case "footnoteRef": {
 			const label = footnoteLabel(node);
-			return `<sup class="md-footnote-ref"${attributes(node)}>[${escapeHtml(label)}]</sup>`;
+			return `<sup class="markdown-footnote-ref"${attributes(node)}>[${escapeHtml(label)}]</sup>`;
 		}
 		case "footnoteDef": {
 			const label = footnoteLabel(node);
-			return `<div class="md-footnote-def"${attributes(node)}><span class="md-footnote-def-label">[${escapeHtml(label)}]</span><div class="md-footnote-def-body">${renderChildren(node, options)}</div></div>`;
+			return `<div class="markdown-footnote-def"${attributes(node)}><span class="markdown-footnote-def-label">[${escapeHtml(label)}]</span><div class="markdown-footnote-def-body">${renderChildren(node, options)}</div></div>`;
 		}
 		case "markdownUnsupported":
 		case "markdownFrontmatter":

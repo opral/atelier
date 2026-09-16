@@ -220,6 +220,9 @@ importers:
       oxlint:
         specifier: ^1.73.0
         version: 1.73.0
+      postcss:
+        specifier: 8.5.16
+        version: 8.5.16
       react:
         specifier: ^19.2.7
         version: 19.2.7
