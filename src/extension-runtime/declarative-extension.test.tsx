@@ -201,11 +201,17 @@ describe("declarative extension hydration", () => {
 				"Live document again",
 			);
 
-			// Another document is another page: it waits for its own read.
+			// Another document in the same view — a review stepping to its
+			// next file — keeps the page it has until its own read lands, then
+			// swaps in one commit: no loading state in between.
 			mounted.rerender(tree({ fileId: "file-2", filePath: "/other.md" }));
-			expect(mounted.getByRole("status")).toHaveTextContent(
-				"Opening document…",
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(4));
+			expect(mounted.queryByRole("status")).toBeNull();
+			expect(mounted.getByRole("heading")).toHaveTextContent(
+				"Live document again",
 			);
+			await act(async () => completions[3]!("Other document"));
+			expect(mounted.getByRole("heading")).toHaveTextContent("Other document");
 		} finally {
 			await act(async () => mounted.unmount());
 			await lix.close();

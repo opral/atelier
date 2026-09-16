@@ -354,6 +354,23 @@ export function PanelV2({
 		}
 		return map;
 	}, [area.views, makeRuntime]);
+	// A review steps through its files by navigating the tab in place. The
+	// document it lands on keeps the mounted view when the same extension
+	// shows it; otherwise the view leaving stays on screen until the one
+	// arriving has its document.
+	const { keys: viewSlots, handover: pendingHandover } = useViewSlots(
+		area.views,
+		viewContext.atelier.diff?.session != null,
+	);
+	const [shownInstance, setShownInstance] = useState<string | null>(null);
+	const handover =
+		pendingHandover && shownInstance !== pendingHandover.incoming
+			? pendingHandover
+			: null;
+	const outgoingContext = useMemo(
+		() => (handover ? makeRuntime(handover.outgoing) : null),
+		[handover, makeRuntime],
+	);
 
 	const handleInteraction = (event: { target: EventTarget | null }) => {
 		if (!onActiveViewInteraction || !activeInstance) return;
@@ -553,23 +570,56 @@ export function PanelV2({
 			>
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
-						{area.views.map((entry) => {
+						{area.views.flatMap((entry) => {
 							const isActive = activeInstance === entry.instance;
 							if (
 								!(contentVisible && isActive) &&
 								!mountedInstances.has(entry.instance)
 							) {
-								return null;
+								return [];
 							}
 							const view = resolveViewDefinition(entry.kind);
-							if (!view) return null;
+							if (!view) return [];
 							const context = viewContexts.get(entry.instance);
-							if (!context) return null;
-							return (
+							if (!context) return [];
+							// The view arriving in a hand-over is laid out in the same
+							// box as the one leaving, out of sight, so it can read its
+							// document and take its measurements before it is shown.
+							// Both are siblings under their own keys, so the leaving
+							// view's node is the one it always was.
+							const arriving = handover?.incoming === entry.instance;
+							const outgoing =
+								arriving && handover && outgoingContext
+									? resolveViewDefinition(handover.outgoing.kind)
+									: null;
+							return [
+								outgoing && handover && outgoingContext ? (
+									<div
+										key={handover.outgoingKey}
+										className="contents"
+										data-atelier-view-leaving=""
+									>
+										<ViewRenderer
+											view={outgoing}
+											instance={handover.outgoing}
+											atelier={outgoingContext.atelier}
+											extensionView={outgoingContext.view}
+											side={side}
+											isActive={false}
+										/>
+									</div>
+								) : null,
 								<div
-									key={entry.instance}
-									className={isActive ? "contents" : "hidden"}
-									aria-hidden={isActive ? undefined : true}
+									key={viewSlots.get(entry.instance) ?? entry.instance}
+									className={
+										arriving
+											? "pointer-events-none absolute inset-0 flex min-h-0 flex-col opacity-0"
+											: isActive
+												? "contents"
+												: "hidden"
+									}
+									aria-hidden={isActive && !arriving ? undefined : true}
+									data-atelier-view-arriving={arriving || undefined}
 								>
 									<ViewRenderer
 										view={view}
@@ -578,9 +628,10 @@ export function PanelV2({
 										extensionView={context.view}
 										side={side}
 										isActive={isActive}
+										onShown={() => setShownInstance(entry.instance)}
 									/>
-								</div>
-							);
+								</div>,
+							];
 						})}
 					</PanelContent>
 				) : (
@@ -1397,6 +1448,93 @@ function TabBar({
 	);
 }
 
+/**
+ * The mounted view each tab renders into, by tab instance.
+ *
+ * A view's identity in an area is its slot, not the document it shows. A tab
+ * that navigates in place — the active tab replaced by another document,
+ * which is how a review steps from one changed file to the next — keeps its
+ * slot when the next document is handled by the same extension, so the
+ * mounted view receives the new document as props instead of being torn
+ * down around the shell's loading state and mounted again: its frame,
+ * toolbar and layout stay where they are. Slot keys are opaque, so a
+ * document reopened in a tab of its own never collides with the slot that
+ * once showed it. The hand-over is limited to a diff session for now; plain
+ * navigation still mounts every document fresh.
+ */
+type ViewHandover = {
+	/** The tab instance arriving in the slot. */
+	readonly incoming: string;
+	/** The view it replaces, kept on screen until the arriving one has shown. */
+	readonly outgoing: ExtensionInstance;
+	readonly outgoingKey: string;
+};
+
+type ViewSlots = {
+	readonly keys: ReadonlyMap<string, string>;
+	/**
+	 * A navigation in place to another extension: the leaving view has no
+	 * successor to hand its document to, so it stays until the arriving one
+	 * has read its own. Null when nothing is being handed over.
+	 */
+	readonly handover: ViewHandover | null;
+};
+
+function useViewSlots(
+	views: readonly ExtensionInstance[],
+	retainAcrossNavigation: boolean,
+): ViewSlots {
+	const memory = useRef<{
+		views: readonly ExtensionInstance[];
+		slots: ViewSlots;
+		next: number;
+	}>({ views: [], slots: { keys: new Map(), handover: null }, next: 0 });
+	return useMemo(() => {
+		const previous = memory.current;
+		if (previous.views === views) return previous.slots;
+		const keys = new Map<string, string>();
+		let next = previous.next;
+		let handover: ViewHandover | null = previous.slots.handover;
+		const stillOpen = (instance: string) =>
+			views.some((candidate) => candidate.instance === instance);
+		if (
+			handover &&
+			(!stillOpen(handover.incoming) || stillOpen(handover.outgoing.instance))
+		) {
+			handover = null;
+		}
+		views.forEach((entry, index) => {
+			const known = previous.slots.keys.get(entry.instance);
+			if (known !== undefined) {
+				keys.set(entry.instance, known);
+				return;
+			}
+			const replaced = previous.views[index];
+			const replacedKey =
+				retainAcrossNavigation &&
+				replaced !== undefined &&
+				!stillOpen(replaced.instance)
+					? previous.slots.keys.get(replaced.instance)
+					: undefined;
+			if (replacedKey !== undefined && replaced?.kind === entry.kind) {
+				keys.set(entry.instance, replacedKey);
+				return;
+			}
+			keys.set(entry.instance, `view-slot-${(next += 1)}`);
+			if (replacedKey !== undefined && replaced) {
+				handover = {
+					incoming: entry.instance,
+					outgoing: replaced,
+					outgoingKey: replacedKey,
+				};
+			}
+		});
+		const slots = { keys, handover };
+		memory.current = { views, slots, next };
+		return slots;
+	}, [retainAcrossNavigation, views]);
+}
+
 interface PanelContentProps extends HTMLAttributes<HTMLDivElement> {
 	readonly children: ReactNode;
 }
@@ -1409,7 +1547,7 @@ function PanelContent({
 	return (
 		<div
 			className={clsx(
-				"flex min-h-0 flex-1 flex-col overflow-hidden",
+				"relative flex min-h-0 flex-1 flex-col overflow-hidden",
 				className,
 			)}
 			{...rest}
@@ -1426,6 +1564,7 @@ function ViewRenderer({
 	extensionView,
 	side,
 	isActive,
+	onShown,
 }: {
 	view: ExtensionDefinition;
 	instance: ExtensionInstance;
@@ -1433,6 +1572,8 @@ function ViewRenderer({
 	extensionView: ExtensionView;
 	side: Area;
 	isActive: boolean;
+	/** The view has its document on screen (or its error): a hand-over may end. */
+	onShown?: () => void;
 }) {
 	const registry = useExtensionHostRegistry();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1475,6 +1616,7 @@ function ViewRenderer({
 					definition={view}
 					atelier={atelier}
 					view={extensionView}
+					onShown={onShown}
 				/>
 			) : null}
 		</div>

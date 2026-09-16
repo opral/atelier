@@ -1226,7 +1226,7 @@ export const extension = createReactExtensionDefinition({
 				"pending";
 		return (
 			<PreparedFileSurface
-				key={file?.id ?? view.instanceId}
+				documentKey={file?.id ?? view.instanceId}
 				readySelector=".tiptap.ProseMirror"
 				initial={
 					file ? (

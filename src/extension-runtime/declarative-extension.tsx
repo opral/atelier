@@ -1,5 +1,12 @@
 import { DocumentLoading } from "../components/document-loading";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Suspense,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { AtelierJsonValue } from "../extension-api";
 import type { AtelierLocation } from "../atelier-state";
 import { useAtelierRenderContext } from "../atelier-render-context";
@@ -8,6 +15,7 @@ import { LixProvider } from "../lib/lix-react";
 import type {
 	ExtensionDefinition,
 	ExtensionRuntime,
+	ExtensionState,
 	ExtensionView,
 } from "./types";
 
@@ -16,10 +24,16 @@ export function DeclarativeExtension({
 	definition,
 	atelier,
 	view,
+	onShown,
 }: {
 	readonly definition: ExtensionDefinition;
 	readonly atelier: ExtensionRuntime;
 	readonly view: ExtensionView;
+	/**
+	 * The view shows the document its state names — or the error reading
+	 * it — rather than a loading state or the document it showed before.
+	 */
+	readonly onShown?: () => void;
 }) {
 	const context = useAtelierRenderContext();
 	const prepared = context.initialState?.views[view.instanceId];
@@ -29,6 +43,8 @@ export function DeclarativeExtension({
 		key: string;
 		fileKey: string;
 		data: AtelierJsonValue;
+		instanceId: string;
+		state: ExtensionState;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
 	const destination: AtelierLocation =
@@ -54,19 +70,47 @@ export function DeclarativeExtension({
 		view.state.fileId ?? view.state.filePath ?? null,
 	]);
 	const initialKey = useRef(key);
-	// A revision change — entering or leaving a review — is a new location and
-	// so a new read, but the same document. Keep the view mounted on the data
-	// it has until the read comes back: unmounting it would tear down the
-	// editor and repaint the page from a static placeholder, and the view has
-	// its own way of holding the previous revision while the next one loads.
-	const data =
+	// The state the running load belongs to: a read is answered together with
+	// the state that asked for it, so the view is never handed one document's
+	// bytes under another document's name.
+	const viewStateRef = useRef({
+		instanceId: view.instanceId,
+		state: view.state,
+	});
+	viewStateRef.current = { instanceId: view.instanceId, state: view.state };
+	// The view stays mounted on what it has until the next read comes back:
+	// unmounting it would tear down the editor and repaint the page from a
+	// static placeholder. A revision change — entering or leaving a review —
+	// is a new read of the same document, and the view has its own way of
+	// holding the previous revision while the next one loads, so it sees the
+	// new state at once. Another document — a review stepping from one file
+	// to the next in the same view — is held whole, state and data together,
+	// and swapped in one commit when its read lands.
+	const shown:
+		| {
+				readonly data: AtelierJsonValue | undefined;
+				readonly view: ExtensionView;
+				readonly held: boolean;
+		  }
+		| undefined =
 		loaded?.key === key
-			? loaded.data
+			? { data: loaded.data, view, held: false }
 			: key === initialKey.current && initialData !== undefined
-				? initialData
+				? { data: initialData, view, held: false }
 				: loaded?.fileKey === fileKey
-					? loaded.data
-					: undefined;
+					? { data: loaded.data, view, held: false }
+					: loaded
+						? {
+								data: loaded.data,
+								view: {
+									...view,
+									instanceId: loaded.instanceId,
+									state: loaded.state,
+								},
+								held: true,
+							}
+						: undefined;
+	const data = shown?.data;
 
 	const opening = useMemo(
 		() => ({ key, startedAt: performance.now(), reported: false }),
@@ -97,7 +141,7 @@ export function DeclarativeExtension({
 							signal: request.signal,
 						});
 						if (disposed) return;
-						setLoaded({ key, fileKey, data: next });
+						setLoaded({ key, fileKey, data: next, ...viewStateRef.current });
 						setError(null);
 					} catch (cause) {
 						if (!disposed && !request.signal.aborted)
@@ -149,23 +193,34 @@ export function DeclarativeExtension({
 	]);
 
 	const Component = definition.Component!;
+	const settled =
+		error !== null ||
+		!definition.load ||
+		(shown !== undefined && !shown.held && data !== undefined);
 	return (
 		<AtelierErrorBoundary>
 			<Suspense fallback={<DocumentLoading />}>
 				<LixProvider lix={atelier.lix}>
-					{error && data !== undefined ? (
+					{error && data !== undefined && !shown?.held ? (
 						<div role="alert">
 							Could not refresh {definition.label}: {error.message}
 						</div>
 					) : null}
-					{error && data === undefined ? (
+					{settled ? <DocumentShown key={key} onShown={onShown} /> : null}
+					{error && (data === undefined || shown?.held) ? (
 						<div role="alert">{error.message}</div>
-					) : definition.load && data === undefined ? (
+					) : definition.load && (shown === undefined || data === undefined) ? (
 						<DocumentLoading />
 					) : (
 						<>
-							<Component data={data ?? null} atelier={atelier} view={view} />
-							{data !== undefined && typeof view.state.filePath === "string" ? (
+							<Component
+								data={data ?? null}
+								atelier={atelier}
+								view={shown?.view ?? view}
+							/>
+							{data !== undefined &&
+							!shown?.held &&
+							typeof view.state.filePath === "string" ? (
 								<DocumentLoaded
 									opening={opening}
 									atelier={atelier}
@@ -179,6 +234,19 @@ export function DeclarativeExtension({
 			</Suspense>
 		</AtelierErrorBoundary>
 	);
+}
+
+/**
+ * Tells the host the document is on screen. Inside the Suspense boundary, so
+ * it commits with the content and never while the fallback shows.
+ */
+function DocumentShown({ onShown }: { readonly onShown?: () => void }) {
+	const callback = useRef(onShown);
+	callback.current = onShown;
+	useLayoutEffect(() => {
+		callback.current?.();
+	}, []);
+	return null;
 }
 
 /** Runs only once the content subtree commits, never while Suspense shows loading. */

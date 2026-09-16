@@ -3181,7 +3181,7 @@ export const extension = createReactExtensionDefinition({
 				"pending";
 		return (
 			<PreparedFileSurface
-				key={file?.id ?? view.instanceId}
+				documentKey={file?.id ?? view.instanceId}
 				readySelector="canvas, .csv-review-table"
 				initial={
 					file ? (
