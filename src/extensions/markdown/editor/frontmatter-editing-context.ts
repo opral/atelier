@@ -11,13 +11,18 @@ import { createContext, useContext } from "react";
  *   persists that document as it persists any other edit.
  * - `file` — the document on screen is a projection of a diff, which cannot
  *   be serialized back. The field writes straight to the file the projection
- *   is of, which is the same file the live editor would have written.
+ *   is of, which is the same file the live editor would have written. The
+ *   write carries the YAML the field was edited from, so the file keeps any
+ *   property the projection never saw changed.
  * - `readOnly` — a past commit, or a workspace nobody may write. The fields
  *   say why rather than taking an edit that has nowhere to land.
  */
 export type MarkdownFrontmatterEditing =
 	| { readonly kind: "document" }
-	| { readonly kind: "file"; readonly write: (source: string) => Promise<void> }
+	| {
+			readonly kind: "file";
+			readonly write: (source: string, baseSource: string) => Promise<void>;
+	  }
 	| { readonly kind: "readOnly"; readonly reason: string };
 
 export const MarkdownFrontmatterEditingContext =

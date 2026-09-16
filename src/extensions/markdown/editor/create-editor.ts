@@ -4,7 +4,7 @@ import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
-import type { Lix } from "@lix-js/sdk";
+import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
@@ -64,7 +64,12 @@ type CreateEditorArgs = {
 	/** The host's file URLs; absolute links to them behave like relative ones. */
 	documentLinks?: AtelierDocumentLinks;
 	originKey?: string;
-	onPersist?: (args: { fileId: string; filePath?: string }) => void;
+	onPersist?: (args: {
+		fileId: string;
+		filePath?: string;
+		/** The transition this save produced, for surfaces tracking their own writes. */
+		commit?: CommitSpan | null;
+	}) => void;
 	onPersistenceError?: (error: Error | null) => void;
 	onImagePasteStatus?: (status: MarkdownImagePasteStatus) => void;
 };
@@ -301,13 +306,13 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			return revision;
 		}
 		const observationGeneration = persistenceBaseline.observationGeneration;
-		const didPersist = await upsertMarkdownFile({
+		const receipt = await upsertMarkdownFile({
 			lix,
 			fileId: fileId!,
 			markdown,
 			originKey,
 		});
-		if (!didPersist)
+		if (!receipt.written)
 			throw new Error(
 				"Could not save because the file no longer exists. Your draft is still in this editor.",
 			);
@@ -322,7 +327,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			pendingPersistenceSnapshot = null;
 		}
 		onPersistenceError?.(null);
-		onPersist?.({ fileId: fileId!, filePath: sourceFilePath });
+		onPersist?.({
+			fileId: fileId!,
+			filePath: sourceFilePath,
+			commit: receipt.commit,
+		});
 		return revision;
 	};
 	const runPersist = (): Promise<void> => {

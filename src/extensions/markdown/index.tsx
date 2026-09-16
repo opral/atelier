@@ -68,6 +68,7 @@ import type {
 	ExternalWriteReview,
 	ExternalWriteReviewData,
 } from "@/extension-runtime/external-write-review";
+import type { CommitSpan } from "@lix-js/sdk";
 import type { AtelierDiffFile, AtelierDiffSession } from "@/extension-api";
 import {
 	editorRevisionMode,
@@ -102,7 +103,10 @@ type MarkdownViewProps = {
 	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAcceptReviews?: boolean;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
-	readonly onDocumentModified?: (filePath: string) => void;
+	readonly onDocumentModified?: (
+		filePath: string,
+		commit?: CommitSpan | null,
+	) => void;
 };
 
 type MarkdownFileRow = {
@@ -447,9 +451,11 @@ function MarkdownLiveViewLoaded({
 	// inside — are told so. Without it the reviewer's own edit read as someone
 	// else moving the file underneath them.
 	const writeFrontmatter = useCallback(
-		async (source: string) => {
-			await writeFrontmatterToFile(source);
-			if (effectiveFileRow?.path) onDocumentModified?.(effectiveFileRow.path);
+		async (source: string, baseSource: string) => {
+			const commit = await writeFrontmatterToFile(source, baseSource);
+			if (effectiveFileRow?.path) {
+				onDocumentModified?.(effectiveFileRow.path, commit);
+			}
 		},
 		[effectiveFileRow?.path, onDocumentModified, writeFrontmatterToFile],
 	);
@@ -519,9 +525,9 @@ function MarkdownLiveViewLoaded({
 									);
 								}}
 								openWorkspaceFile={openWorkspaceFile}
-								onPersist={({ filePath: persistedPath }) => {
+								onPersist={({ filePath: persistedPath, commit }) => {
 									const resolvedPath = persistedPath ?? effectiveFileRow.path;
-									onDocumentModified?.(resolvedPath);
+									onDocumentModified?.(resolvedPath, commit);
 								}}
 							/>
 							{!readOnly && review && reviewDiff && liveEditor ? (
@@ -1235,11 +1241,12 @@ export const extension = createReactExtensionDefinition({
 								...(args.focus !== undefined ? { focus: args.focus } : {}),
 							})
 						}
-						onDocumentModified={(filePath) =>
+						onDocumentModified={(filePath, commit) =>
 							atelier.events.emit({
 								type: "document_modified",
 								filePath,
 								modifiedBy: "user",
+								...(commit !== undefined ? { commit } : {}),
 							})
 						}
 					/>

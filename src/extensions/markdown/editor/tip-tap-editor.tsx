@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import { EditorContent, useEditorState } from "@tiptap/react";
+import type { CommitSpan } from "@lix-js/sdk";
 import type { Editor, Extensions } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
 import { useDocumentLinks } from "./document-links-context";
@@ -61,7 +62,12 @@ type TipTapEditorProps = {
 	additionalExtensions?: Extensions;
 	originKey?: string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
-	onPersist?: (args: { fileId: string; filePath?: string }) => void;
+	onPersist?: (args: {
+		fileId: string;
+		filePath?: string;
+		/** The transition this save produced, for surfaces tracking their own writes. */
+		commit?: CommitSpan | null;
+	}) => void;
 };
 
 export type MarkdownFileDelivery = {
