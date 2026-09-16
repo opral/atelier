@@ -1,4 +1,3 @@
-import { DocumentLoading } from "../../components/document-loading";
 import { CsvContent } from "./csv-content";
 import {
 	loadTextFile,
@@ -46,7 +45,18 @@ import {
 	useRef,
 	useState,
 	type PointerEvent as ReactPointerEvent,
+	type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+import {
+	DocumentRegionProvider,
+	DocumentSlots,
+	HandDocument,
+	useDocumentHidden,
+	useDocumentReady,
+	useDocumentRegion,
+} from "@/extension-runtime/document-region";
+import { viewShowsDiff } from "@/extension-runtime/diff-sides";
 import {
 	AlertTriangle,
 	ArrowDownToLine,
@@ -111,7 +121,6 @@ import { CsvRowActions } from "./csv-row-actions";
 import { csvCellRenderers } from "./csv-grid-renderers";
 import { Search, ListFilter, ArrowUpDown, X } from "lucide-react";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
-import { useDeferredRevisionProps } from "@/extension-runtime/use-deferred-revision-props";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
@@ -247,12 +256,32 @@ const CsvLayoutContext = createContext<{
 } | null>(null);
 const EMPTY_FILE_DATA = new Uint8Array();
 
+type CsvRetainedLayoutRef = { current: CsvRetainedLayout | null };
+
+type CsvFrameHandle = {
+	/** The toolbar strip a table renders its controls into. */
+	readonly toolbarNode: HTMLDivElement | null;
+	/** A document with no table hides the strip while `hidden`. */
+	readonly setToolbarHidden: (hidden: boolean) => void;
+};
+
+const CsvFrameContext = createContext<CsvFrameHandle | null>(null);
+
+/**
+ * The CSV view is a frame and a document. The frame — the toolbar strip,
+ * the grid region, the panel background — is rendered from props that are
+ * always there, so it is on screen from the first paint and stays put
+ * through every change of document, revision or review. Which table goes in
+ * the region, and when, is decided by headless readers under the frame:
+ * they read the row, the checkpoint's sides or the review's epoch and hand
+ * the frame a document; until the next one is ready the region keeps
+ * showing the one it has, and the table's controls stay in the strip.
+ */
 export function CsvView({
 	fileId,
 	diffSession,
 	filePath,
 	isActiveView = true,
-	isPanelFocused = true,
 	readOnly = false,
 	beforeCommitId,
 	afterCommitId,
@@ -262,13 +291,13 @@ export function CsvView({
 	afterExists,
 }: CsvViewProps) {
 	assertFileId(fileId);
-	const retainedLayout = useMemo<{
-		current: CsvRetainedLayout | null;
-		fileId: string;
-	}>(() => ({ current: null, fileId }), [fileId]);
-	// Deferred so revision switches keep the previous table mounted while the
-	// next revision's reads suspend, instead of flashing the fallback.
-	const revision = useDeferredRevisionProps({
+	// Local presentation — widths, scroll, filter — outlives the document
+	// components, so a file's review lands in the layout its live grid had.
+	const retainedLayout = useMemo<CsvRetainedLayoutRef & { fileId: string }>(
+		() => ({ current: null, fileId }),
+		[fileId],
+	);
+	const revision = normalizeEditorRevisionState({
 		beforeCommitId,
 		afterCommitId,
 		beforeFileId,
@@ -276,51 +305,137 @@ export function CsvView({
 		beforeExists,
 		afterExists,
 	});
+	const reviewFile = workingReviewFile(diffSession, fileId);
+	// A checkpoint's span, or the working epoch of a file under review, is
+	// read from history; a span that ends at the live file reads the row.
+	const historical =
+		editorRevisionMode(revision) !== "editor" &&
+		(revision.afterCommitId !== null || Boolean(reviewFile?.workingEpoch));
+	const reader = {
+		fileId,
+		filePath,
+		diffSession,
+		readOnly,
+		isActiveView,
+		revision,
+		retainedLayout,
+	};
 	return (
-		<CsvLayoutContext.Provider value={retainedLayout}>
-			<Suspense fallback={<CsvLoadingSpinner />}>
-				<CsvViewContent
-					fileId={fileId}
-					diffSession={diffSession}
-					filePath={filePath}
-					isActiveView={isActiveView}
-					isPanelFocused={isPanelFocused}
-					readOnly={readOnly}
-					beforeCommitId={revision.beforeCommitId}
-					afterCommitId={revision.afterCommitId}
-					beforeFileId={revision.beforeFileId}
-					afterFileId={revision.afterFileId}
-					beforeExists={revision.beforeExists}
-					afterExists={revision.afterExists}
-				/>
+		<CsvFrame>
+			{/* The readers below render no DOM of their own, so a read that
+			    suspends here hides nothing: the frame and the previous table
+			    stay on screen. */}
+			<Suspense fallback={null}>
+				{historical ? (
+					<CsvHistoricalReader {...reader} fileRow={undefined} />
+				) : (
+					<CsvLiveReader {...reader} />
+				)}
 			</Suspense>
-		</CsvLayoutContext.Provider>
+		</CsvFrame>
 	);
 }
 
-function CsvViewContent({ fileId, ...props }: CsvViewProps) {
-	assertFileId(fileId);
-	const editorRevision = normalizeEditorRevisionState(props);
-	const reviewFile = workingReviewFile(props.diffSession, fileId);
-	if (
-		editorRevisionMode(editorRevision) !== "editor" &&
-		(editorRevision.afterCommitId !== null || reviewFile?.workingEpoch)
-	) {
-		return (
-			<CsvHistoricalViewData
-				fileId={fileId}
-				filePath={props.filePath}
-				fileRow={undefined}
-				editorRevision={editorRevision}
-				diffSession={props.diffSession}
-				{...props}
-			/>
-		);
-	}
-	return <CsvLiveViewContent fileId={fileId} {...props} />;
+/**
+ * The view's frame: the toolbar strip, the grid region and whatever stands
+ * in the region instead of a table. The table on screen renders its
+ * controls into the strip, so the strip is one node for the frame's life;
+ * the region holds that table and, while the next one loads, that one out
+ * of sight.
+ */
+function CsvFrame({ children }: { readonly children: ReactNode }) {
+	const { shown, next, handle } = useDocumentRegion();
+	const [toolbarNode, setToolbarNode] = useState<HTMLDivElement | null>(null);
+	const [toolbarHidden, setToolbarHidden] = useState(0);
+	const frame = useMemo<CsvFrameHandle>(
+		() => ({
+			toolbarNode,
+			setToolbarHidden: (hidden) => {
+				setToolbarHidden((count) => count + (hidden ? 1 : -1));
+			},
+		}),
+		[toolbarNode],
+	);
+	return (
+		<CsvFrameContext.Provider value={frame}>
+			<DocumentRegionProvider handle={handle}>
+				<div
+					className="csv-view flex min-h-0 flex-1 flex-col bg-panel"
+					data-document={shown ? "" : undefined}
+					aria-busy={shown ? undefined : "true"}
+				>
+					<div
+						ref={setToolbarNode}
+						className={`csv-toolbar ${toolbarHidden > 0 ? "hidden" : ""}`}
+						role="group"
+						aria-label="Table controls"
+					/>
+					<div
+						className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+						data-attr="csv-grid"
+						// A table is on its way, out of sight: nothing it paints
+						// meanwhile is the picture the reviewer stepped to.
+						data-review-pending={next ? "true" : undefined}
+					>
+						<DocumentSlots
+							shown={shown}
+							next={next}
+							handle={handle}
+							attribute="data-csv-document"
+						/>
+					</div>
+					{children}
+				</div>
+			</DocumentRegionProvider>
+		</CsvFrameContext.Provider>
+	);
 }
 
-function CsvLiveViewContent({ fileId, ...props }: CsvViewProps) {
+/** What the region says instead of a table. */
+function CsvMessage({
+	role,
+	children,
+}: {
+	readonly role?: "alert";
+	readonly children: ReactNode;
+}) {
+	useDocumentReady(true);
+	useCsvToolbarHidden(true);
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			role={role}
+		>
+			{children}
+		</div>
+	);
+}
+
+/** A document without a table takes the toolbar strip with it. */
+function useCsvToolbarHidden(hidden: boolean) {
+	const frame = useContext(CsvFrameContext);
+	const outOfSight = useDocumentHidden();
+	const applies = hidden && !outOfSight;
+	useLayoutEffect(() => {
+		if (!frame || !applies) return;
+		frame.setToolbarHidden(true);
+		return () => frame.setToolbarHidden(false);
+	}, [frame, applies]);
+}
+
+type CsvReaderProps = {
+	readonly fileId: string;
+	readonly filePath?: string;
+	readonly diffSession?: AtelierDiffSession | null;
+	readonly readOnly: boolean;
+	readonly isActiveView: boolean;
+	readonly revision: EditorRevisionState;
+	readonly retainedLayout: CsvRetainedLayoutRef;
+};
+
+/** The live row, as the region shows it. */
+function CsvLiveReader(props: CsvReaderProps) {
+	const { fileId, retainedLayout } = props;
 	const fileResult = useQueryResult<CsvFileRow>((lix) =>
 		qb(lix)
 			.selectFrom("lix_file")
@@ -328,66 +443,50 @@ function CsvLiveViewContent({ fileId, ...props }: CsvViewProps) {
 			.where("id", "=", fileId)
 			.limit(1),
 	);
-	// The last table delivered. A view handed another file — a review
-	// stepping from one table to the next — keeps showing this one, toolbar
-	// and grid in place, until the next one's row lands; only a view that
-	// has shown nothing yet waits in its frame.
-	const delivered = useRef<{
-		readonly fileId: string;
-		readonly filePath: string | undefined;
-		readonly fileRow: CsvFileRow | undefined;
-	} | null>(null);
-	if (fileResult.status === "success") {
-		delivered.current = {
-			fileId,
-			filePath: props.filePath,
-			fileRow: fileResult.rows[0],
-		};
-	}
 	if (fileResult.status === "error") throw fileResult.error;
-	if (fileResult.status === "pending") {
-		if (!delivered.current) return <CsvLoadingSpinner />;
-		return (
-			<CsvLiveViewData
-				{...props}
-				fileId={delivered.current.fileId}
-				filePath={delivered.current.filePath}
-				fileRow={delivered.current.fileRow}
-			/>
-		);
-	}
+	// The row is on its way: the region keeps what it shows — the table
+	// stepped from, or nothing yet — rather than a loading state.
+	if (fileResult.status === "pending") return null;
 	const fileRow = fileResult.rows[0];
-	const editorRevision = normalizeEditorRevisionState(props);
-	if (editorRevisionMode(editorRevision) !== "editor") {
-		return (
-			<CsvHistoricalViewData
-				fileId={fileId}
-				filePath={props.filePath}
-				fileRow={fileRow}
-				editorRevision={editorRevision}
-				diffSession={props.diffSession}
-				{...props}
-			/>
-		);
+	if (editorRevisionMode(props.revision) !== "editor") {
+		return <CsvHistoricalReader {...props} fileRow={fileRow} />;
 	}
-	return <CsvLiveViewData fileId={fileId} fileRow={fileRow} {...props} />;
+	return (
+		<HandDocument
+			documentKey={`live:${fileId}`}
+			element={
+				<CsvLayoutContext.Provider value={retainedLayout}>
+					<CsvLiveDocument
+						fileId={fileId}
+						fileRow={fileRow}
+						diffSession={props.diffSession}
+						readOnly={props.readOnly}
+						isActiveView={props.isActiveView}
+					/>
+				</CsvLayoutContext.Provider>
+			}
+		/>
+	);
 }
 
-function CsvLiveViewData({
+function CsvLiveDocument({
 	fileId,
 	fileRow,
 	diffSession,
-	readOnly = false,
-	isActiveView = true,
-}: Omit<CsvViewProps, "fileId"> & {
-	readonly fileId?: string;
-	readonly fileRow?: CsvFileRow | undefined;
+	readOnly,
+	isActiveView,
+}: {
+	readonly fileId: string;
+	readonly fileRow: CsvFileRow | undefined;
+	readonly diffSession?: AtelierDiffSession | null;
+	readonly readOnly: boolean;
+	readonly isActiveView: boolean;
 }) {
 	// The shell owns review detection: this file is under review whenever the
 	// working diff session marks it pending — diff mode covers every open
 	// surface, not just the revealed file.
 	const session = diffSession ?? null;
-	const sessionFile = workingReviewFile(session, fileId ?? "");
+	const sessionFile = workingReviewFile(session, fileId);
 	const isReviewing = sessionFile?.review?.status === "pending";
 	// An added file has no base to fetch: its history is absent, so its before
 	// side is empty by definition.
@@ -395,13 +494,11 @@ function CsvLiveViewData({
 
 	if (!fileRow) {
 		return (
-			<CsvWorkingReviewUnavailable
-				message={
-					isReviewing
-						? "This file changed or was removed after the review opened. Reopen the review."
-						: "File not found in the workspace."
-				}
-			/>
+			<CsvMessage role="alert">
+				{isReviewing
+					? "This file changed or was removed after the review opened. Reopen the review."
+					: "File not found in the workspace."}
+			</CsvMessage>
 		);
 	}
 
@@ -818,9 +915,9 @@ function EditableCsvView({
 	);
 
 	return reviewUnavailableMessage ? (
-		<CsvWorkingReviewUnavailable message={reviewUnavailableMessage} />
+		<CsvMessage role="alert">{reviewUnavailableMessage}</CsvMessage>
 	) : (
-		<CsvViewLoaded
+		<CsvDocument
 			fileRow={
 				isReviewing
 					? effectiveFileRow
@@ -841,30 +938,14 @@ function EditableCsvView({
 	);
 }
 
-function CsvWorkingReviewUnavailable({
-	message,
-}: {
-	readonly message: string;
-}) {
-	return (
-		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
-			role="alert"
-		>
-			{message}
-		</div>
-	);
-}
-
-function CsvHistoricalViewData({
+/** The file at each end of a span, read from history. */
+function CsvHistoricalReader({
 	fileId,
-	editorRevision,
+	revision,
 	diffSession,
 	...props
-}: Omit<CsvViewProps, "fileId"> & {
-	readonly fileId: string;
-	readonly fileRow?: CsvFileRow | undefined;
-	readonly editorRevision: EditorRevisionState;
+}: CsvReaderProps & {
+	readonly fileRow: CsvFileRow | undefined;
 }) {
 	const workingFile =
 		diffSession && "working" in diffSession.target
@@ -872,10 +953,10 @@ function CsvHistoricalViewData({
 			: undefined;
 	if (workingFile?.workingEpoch) {
 		return (
-			<CsvWorkingHistoricalView
+			<CsvWorkingHistoricalReader
 				{...props}
 				fileId={fileId}
-				editorRevision={editorRevision}
+				revision={revision}
 				workingFile={workingFile}
 			/>
 		);
@@ -883,35 +964,41 @@ function CsvHistoricalViewData({
 	return (
 		<FileSnapshotsAtCommits
 			fileId={fileId}
-			beforeCommitId={editorRevision.beforeCommitId}
-			afterCommitId={editorRevision.afterCommitId}
-			beforeFileId={editorRevision.beforeFileId}
-			afterFileId={editorRevision.afterFileId}
-			beforeExists={editorRevision.beforeExists}
-			afterExists={editorRevision.afterExists}
+			beforeCommitId={revision.beforeCommitId}
+			afterCommitId={revision.afterCommitId}
+			beforeFileId={revision.beforeFileId}
+			afterFileId={revision.afterFileId}
+			beforeExists={revision.beforeExists}
+			afterExists={revision.afterExists}
 		>
 			{({ beforeSnapshot, afterSnapshot }) => (
-				<CsvHistoricalViewResolved
-					{...props}
-					fileId={fileId}
-					editorRevision={editorRevision}
-					beforeSnapshot={beforeSnapshot}
-					afterSnapshot={afterSnapshot}
+				<HandDocument
+					documentKey={`history:${fileId}`}
+					element={
+						<CsvLayoutContext.Provider value={props.retainedLayout}>
+							<CsvHistoricalDocument
+								{...props}
+								fileId={fileId}
+								revision={revision}
+								beforeSnapshot={beforeSnapshot}
+								afterSnapshot={afterSnapshot}
+							/>
+						</CsvLayoutContext.Provider>
+					}
 				/>
 			)}
 		</FileSnapshotsAtCommits>
 	);
 }
 
-function CsvWorkingHistoricalView({
+/** The working epoch of a file under review, read as a span. */
+function CsvWorkingHistoricalReader({
 	fileId,
-	editorRevision,
+	revision,
 	workingFile,
 	...props
-}: Omit<CsvViewProps, "fileId"> & {
-	readonly fileId: string;
-	readonly fileRow?: CsvFileRow | undefined;
-	readonly editorRevision: EditorRevisionState;
+}: Omit<CsvReaderProps, "diffSession"> & {
+	readonly fileRow: CsvFileRow | undefined;
 	readonly workingFile: AtelierDiffFile;
 }) {
 	const epoch = workingFile.workingEpoch!;
@@ -920,12 +1007,22 @@ function CsvWorkingHistoricalView({
 		epoch.beforeCommitId,
 		epoch.afterCommitId,
 	);
+	const documentKey = `history:${fileId}`;
 	if (!before.loading && before.error) {
 		return (
-			<CsvWorkingReviewUnavailable message="The working diff changed while it was being reviewed. Reopen the review." />
+			<HandDocument
+				documentKey={documentKey}
+				element={
+					<CsvMessage role="alert">
+						The working diff changed while it was being reviewed. Reopen the
+						review.
+					</CsvMessage>
+				}
+			/>
 		);
 	}
-	if (before.loading) return <CsvLoadingSpinner />;
+	// The sides are on their way: the region keeps what it shows.
+	if (before.loading) return null;
 	const beforeSnapshot = before.data
 		? {
 				id: fileId,
@@ -935,37 +1032,43 @@ function CsvWorkingHistoricalView({
 			}
 		: undefined;
 	return (
-		<CsvHistoricalViewResolved
-			{...props}
-			fileId={fileId}
-			editorRevision={editorRevision}
-			beforeSnapshot={beforeSnapshot}
-			afterSnapshot={
-				before.afterData
-					? {
-							id: fileId,
-							path: workingFile.path,
-							content: before.afterData,
-							lixcol_metadata: before.afterMetadata,
+		<HandDocument
+			documentKey={documentKey}
+			element={
+				<CsvLayoutContext.Provider value={props.retainedLayout}>
+					<CsvHistoricalDocument
+						{...props}
+						fileId={fileId}
+						revision={revision}
+						beforeSnapshot={beforeSnapshot}
+						afterSnapshot={
+							before.afterData
+								? {
+										id: fileId,
+										path: workingFile.path,
+										content: before.afterData,
+										lixcol_metadata: before.afterMetadata,
+									}
+								: undefined
 						}
-					: undefined
+					/>
+				</CsvLayoutContext.Provider>
 			}
 		/>
 	);
 }
 
-function CsvHistoricalViewResolved({
+/** One revision of the table, or the diff of a span, as the region shows it. */
+function CsvHistoricalDocument({
 	fileId,
 	filePath,
 	fileRow,
-	editorRevision,
+	revision,
 	beforeSnapshot,
 	afterSnapshot,
-	...props
-}: Omit<CsvViewProps, "fileId"> & {
-	readonly fileId: string;
-	readonly fileRow?: CsvFileRow | undefined;
-	readonly editorRevision: EditorRevisionState;
+	isActiveView,
+}: Omit<CsvReaderProps, "diffSession" | "readOnly" | "retainedLayout"> & {
+	readonly fileRow: CsvFileRow | undefined;
 	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
 	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
 }) {
@@ -975,33 +1078,36 @@ function CsvHistoricalViewResolved({
 				fileId,
 				filePath,
 				fileRow,
-				revision: editorRevision,
+				revision,
 				beforeSnapshot,
 				afterSnapshot,
 			}),
-		[beforeSnapshot, editorRevision, fileId, filePath, fileRow, afterSnapshot],
+		[beforeSnapshot, revision, fileId, filePath, fileRow, afterSnapshot],
 	);
 
 	if (!historicalFile?.fileRow) {
 		// No version at either side of the span: the absence is temporal.
 		return (
-			<CheckpointAbsentFile
-				filePath={filePath}
-				commitId={editorRevision.afterCommitId ?? editorRevision.beforeCommitId}
-			/>
+			<CsvMessage>
+				<CheckpointAbsentFile
+					filePath={filePath}
+					commitId={revision.afterCommitId ?? revision.beforeCommitId}
+				/>
+			</CsvMessage>
 		);
 	}
 
 	return (
-		<CsvViewLoaded
+		<CsvDocument
 			fileRow={historicalFile.fileRow}
 			reviewData={historicalFile.reviewData ?? null}
-			isActiveView={props.isActiveView}
+			isActiveView={isActiveView}
 		/>
 	);
 }
 
-function CsvViewLoaded({
+/** A table in the frame's region: its rows, its review, its warnings. */
+function CsvDocument({
 	fileRow,
 	parsedOverride,
 	editing,
@@ -1034,28 +1140,20 @@ function CsvViewLoaded({
 	}, [fileRow.content, fileRow.lixcol_metadata, parsed.columns]);
 
 	return (
-		<div className="csv-view flex min-h-0 flex-1 flex-col bg-panel">
+		<>
 			{parsed.warnings.length > 0 ? (
 				<div className="mx-5 mt-3 flex shrink-0 items-start gap-2 rounded-[8px] border border-warning-border bg-warning-subtle px-3 py-2 text-xs text-warning">
 					<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
 					<span className="min-w-0 truncate">{parsed.warnings[0]}</span>
 				</div>
 			) : null}
-			<div
-				className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
-				data-review-pending={reviewPending || undefined}
-			>
+			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
 				{parsed.columns.length === 0 && !reviewData ? (
-					<div
-						className={`flex min-h-0 flex-1 flex-col ${
-							reviewPending ? "invisible" : ""
-						}`}
-					>
-						<CsvEmptyState
-							filePath={fileRow.path}
-							onCreateTable={onCreateTable}
-						/>
-					</div>
+					<CsvEmptyState
+						filePath={fileRow.path}
+						onCreateTable={onCreateTable}
+						reviewPending={reviewPending}
+					/>
 				) : (
 					<CsvTable
 						parsed={parsed}
@@ -1074,7 +1172,7 @@ function CsvViewLoaded({
 					</div>
 				) : null}
 			</div>
-		</div>
+		</>
 	);
 }
 
@@ -1105,6 +1203,13 @@ function CsvTable({
 		() => (reviewData ? buildCsvReviewModel(reviewData) : null),
 		[reviewData],
 	);
+	// The table is on screen once it has something to paint: its grid, or
+	// its review once the sides are read.
+	useDocumentReady(!reviewPending);
+	// The table's controls go into the frame's strip — the table on screen
+	// only; one out of sight, on its way, keeps its controls to itself.
+	const frame = useContext(CsvFrameContext);
+	const toolbarNode = useDocumentHidden() ? null : frame?.toolbarNode;
 	const gridRef = useRef<DataEditorRef>(null);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const {
@@ -2121,13 +2226,11 @@ function CsvTable({
 			)
 		: "100%";
 
-	return (
+	const toolbar = (
 		<>
 			{/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Handles bubbled Escape from child controls. */}
 			<div
-				className="csv-toolbar"
-				role="group"
-				aria-label="Table controls"
+				className="csv-toolbar-content"
 				onPointerDown={deselectOnBlankPress}
 				onKeyDown={(event) => {
 					if (
@@ -2389,6 +2492,12 @@ function CsvTable({
 					</CsvDismissiblePopover>
 				)}
 			</div>
+		</>
+	);
+
+	return (
+		<>
+			{toolbarNode ? createPortal(toolbar, toolbarNode) : null}
 			<div
 				ref={containerRef}
 				onScrollCapture={(event) => {
@@ -2415,9 +2524,7 @@ function CsvTable({
 								? "columns"
 								: "none"
 				}
-				className={`ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-panel ${
-					reviewPending ? "invisible" : ""
-				}`}
+				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-panel"
 			>
 				<CsvOverlayScrollbars
 					containerRef={containerRef}
@@ -2992,10 +3099,16 @@ function editedCellText(value: EditableGridCell): string | null {
 function CsvEmptyState({
 	filePath,
 	onCreateTable,
+	reviewPending = false,
 }: {
 	readonly filePath: string;
 	readonly onCreateTable?: () => void;
+	/** The review's sides are still being read: the empty file is not the picture. */
+	readonly reviewPending?: boolean;
 }) {
+	useDocumentReady(!reviewPending);
+	// No table, no controls: the strip goes with it.
+	useCsvToolbarHidden(true);
 	return (
 		// The shell keeps a file's surface hidden until it renders something it
 		// recognises — a canvas, a review table, or an alert. This state is
@@ -3026,17 +3139,6 @@ function CsvEmptyState({
 					</button>
 				) : null}
 			</div>
-		</div>
-	);
-}
-
-/** The table's own chrome, empty, so the toolbar row is there from the first
- *  paint and the grid appears beneath it without the rows moving. */
-function CsvLoadingSpinner() {
-	return (
-		<div className="flex h-full flex-col">
-			<div className="csv-toolbar" aria-hidden="true" />
-			<DocumentLoading />
 		</div>
 	);
 }
@@ -3201,6 +3303,26 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 	}
 }
 
+/**
+ * The frame with no table in it: what the prepared surface shows until the
+ * live frame has its table. The same strip, in the same place, so the swap
+ * moves nothing; the region holds the prepared table, or nothing when a
+ * comparison is on its way.
+ */
+function CsvPreparedFrame({ children }: { readonly children?: ReactNode }) {
+	return (
+		<div
+			className="csv-view flex min-h-0 flex-1 flex-col bg-panel"
+			aria-busy="true"
+		>
+			<div className="csv-toolbar" aria-hidden="true" />
+			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+				{children}
+			</div>
+		</div>
+	);
+}
+
 export const extension = createReactExtensionDefinition({
 	manifest: parseExtensionManifest(
 		"bundled:atelier_csv/manifest.json",
@@ -3212,21 +3334,24 @@ export const extension = createReactExtensionDefinition({
 	load: loadTextFile,
 	component: ({ atelier, view, data }) => {
 		const file = preparedFile(data);
-		// A file under review is opened for its diff: the placeholder paints
-		// no live table in the meantime.
+		// A file under review, or stepped to inside a checkpoint, is opened for
+		// its diff: the prepared table is one revision, the wrong picture. The
+		// placeholder keeps the frame — toolbar strip, region — and paints no
+		// table in it.
 		const underReview =
 			file !== null &&
-			workingReviewFile(atelier.diff.session, file.id)?.review?.status ===
-				"pending";
+			viewShowsDiff({ session: atelier.diff.session, state: view.state });
 		return (
 			<PreparedFileSurface
 				documentKey={file?.id ?? view.instanceId}
-				readySelector="canvas, .csv-review-table"
+				// The frame is up before its table; the surface waits for the
+				// table, and keeps a table already shown across a step.
+				readySelector=".csv-view[data-document]"
 				initial={
 					file ? (
-						underReview ? null : (
-							<CsvContent content={file.content} />
-						)
+						<CsvPreparedFrame>
+							{underReview ? null : <CsvContent content={file.content} />}
+						</CsvPreparedFrame>
 					) : (
 						<p>File not found in the workspace.</p>
 					)

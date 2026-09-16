@@ -149,13 +149,13 @@
 		padding: 6px;
 	}
 	@scope (.atelier-root) {
+		/* The strip is the frame's: one node for the view's life. The table
+		   on screen renders its controls into it as one row. */
 		.csv-toolbar {
 			--csv-toolbar-inset: 0px;
 			container-type: inline-size;
 			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: 16px;
+			align-items: stretch;
 			position: relative;
 			min-height: var(--atelier-panel-header-height);
 			padding: 0 var(--csv-toolbar-inset);
@@ -164,6 +164,14 @@
 			flex-shrink: 0;
 			font-size: 12.5px;
 			line-height: 16px;
+		}
+		.csv-toolbar-content {
+			display: flex;
+			flex: 1 1 auto;
+			min-width: 0;
+			align-items: center;
+			justify-content: space-between;
+			gap: 16px;
 		}
 		.csv-row-count {
 			font-variant-numeric: tabular-nums;
@@ -310,6 +318,8 @@
 		@media (max-width: 600px) {
 			.csv-toolbar {
 				padding: 0 var(--csv-toolbar-inset);
+			}
+			.csv-toolbar-content {
 				gap: 4px;
 			}
 			.csv-toolbar-actions {
@@ -556,8 +566,8 @@
 			color: var(--atelier-danger);
 			background: var(--atelier-danger-subtle);
 		}
-		.csv-toolbar:has(.csv-row-actions) > .csv-view-switcher,
-		.csv-toolbar:has(.csv-row-actions) > .csv-row-count {
+		.csv-toolbar-content:has(.csv-row-actions) > .csv-view-switcher,
+		.csv-toolbar-content:has(.csv-row-actions) > .csv-row-count {
 			visibility: hidden;
 		}
 		@container (max-width: 540px) {
@@ -940,7 +950,7 @@
 			overflow: hidden;
 			text-overflow: ellipsis;
 		}
-		.csv-toolbar > .csv-row-count {
+		.csv-toolbar-content > .csv-row-count {
 			margin-right: auto;
 			font-weight: 400;
 		}
@@ -1024,10 +1034,12 @@
 		}
 		@media (max-width: 700px) {
 			.csv-toolbar {
-				flex-wrap: wrap;
-				gap: 4px 10px;
 				padding-top: 5px;
 				padding-bottom: 5px;
+			}
+			.csv-toolbar-content {
+				flex-wrap: wrap;
+				gap: 4px 10px;
 			}
 			.csv-view-name {
 				max-width: 140px;

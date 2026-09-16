@@ -1113,6 +1113,8 @@ test("stepping to another table keeps the toolbar mounted and visible", async ()
 			);
 		});
 		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		const toolbar = host.querySelector(".csv-toolbar");
+		const region = host.querySelector('[data-attr="csv-grid"]');
 
 		observer.observe(host, {
 			childList: true,
@@ -1122,18 +1124,126 @@ test("stepping to another table keeps the toolbar mounted and visible", async ()
 		await act(async () => {
 			utils!.rerender(view(second, "/step-second.csv"));
 		});
-		// The step: the first table stays until the second one's row lands.
+		// The step: the first table stays until the second one's row lands,
+		// under the same strip, in the same region.
 		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(shownReviewTable(host)?.textContent).toContain("first");
 		await waitFor(() => {
-			expect(host.querySelector(".csv-review-table")?.textContent).toContain(
-				"second",
-			);
+			expect(shownReviewTable(host)?.textContent).toContain("second");
 		});
 		observer.disconnect();
 		expect(host.querySelector("[data-review-pending]")).toBeNull();
 		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
 		expect(frames.length).toBeGreaterThan(0);
 		expect(frames.every((frame) => frame.toolbar && frame.visible)).toBe(true);
+	} finally {
+		observer.disconnect();
+		if (utils) {
+			await act(async () => {
+				utils!.unmount();
+			});
+		}
+		host.remove();
+		await lix.close();
+	}
+});
+
+test("stepping a checkpoint review keeps the frame's nodes and the previous table until the next one is in", async () => {
+	const lix = await openLix();
+	let utils:
+		| {
+				unmount: () => void;
+				rerender: (ui: Parameters<typeof render>[0]) => void;
+		  }
+		| undefined;
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const first = fakeUuid("file_csv_checkpoint_step_first");
+	const second = fakeUuid("file_csv_checkpoint_step_second");
+	// Every frame from the step until the second table is on screen keeps a
+	// table in view: the first, then the second, never nothing.
+	const frames: string[] = [];
+	const observer = new MutationObserver(() => {
+		frames.push(shownReviewTable(host)?.textContent ?? "");
+	});
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/checkpoint-first.csv",
+					content: new TextEncoder().encode("name,value\nfirst,1"),
+				},
+				{
+					id: second,
+					path: "/checkpoint-second.csv",
+					content: new TextEncoder().encode("name,value\nsecond,1"),
+				},
+			])
+			.execute();
+		const base = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nfirst,2") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nsecond,2") })
+			.where("id", "=", second)
+			.execute();
+		const target = await createCheckpoint(lix);
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<CsvView
+						fileId={fileId}
+						filePath={filePath}
+						beforeCommitId={base.commitId}
+						afterCommitId={target.commitId}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		await act(async () => {
+			utils = render(view(first, "/checkpoint-first.csv"), { container: host });
+		});
+		await waitFor(() => {
+			expect(shownReviewTable(host)?.textContent).toContain("first");
+		});
+		const toolbar = host.querySelector(".csv-toolbar");
+		const region = host.querySelector('[data-attr="csv-grid"]');
+		expect(toolbar).not.toBeNull();
+		expect(toolbar!.querySelector(".csv-row-count")).not.toBeNull();
+
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		await act(async () => {
+			utils!.rerender(view(second, "/checkpoint-second.csv"));
+		});
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(shownReviewTable(host)?.textContent).toContain("first");
+		await waitFor(() => {
+			expect(shownReviewTable(host)?.textContent).toContain("second");
+		});
+		observer.disconnect();
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(host.querySelector("[data-review-pending]")).toBeNull();
+		expect(toolbar!.querySelector(".csv-row-count")).not.toBeNull();
+		expect(frames.length).toBeGreaterThan(0);
+		expect(frames.every((text) => /first|second/.test(text))).toBe(true);
 	} finally {
 		observer.disconnect();
 		if (utils) {
@@ -1235,6 +1345,13 @@ test("a table opened inside a review never paints as its live self", async () =>
 		await lix.close();
 	}
 });
+
+/** The table the frame shows: the one in the slot that is not out of sight. */
+function shownReviewTable(container: HTMLElement): HTMLElement | null {
+	return container.querySelector<HTMLElement>(
+		"[data-csv-document]:not([aria-hidden]) .csv-review-table",
+	);
+}
 
 async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
 	const result = await lix.execute(
@@ -2773,7 +2890,8 @@ test("pressing the blank surface around the table clears the selection", async (
 		expect(selection().gridSelection.current).toBeUndefined(),
 	);
 
-	// Rows too, via the toolbar background.
+	// Rows too, via the toolbar background: the table's row of controls,
+	// which fills the frame's strip.
 	await act(async () => {
 		selection().onGridSelectionChange?.({
 			columns: CompactSelection.empty(),
@@ -2782,7 +2900,7 @@ test("pressing the blank surface around the table clears the selection", async (
 	});
 	expect(selection().gridSelection.rows.length).toBe(1);
 	await act(async () => {
-		fireEvent.pointerDown(document.querySelector(".csv-toolbar")!, {
+		fireEvent.pointerDown(document.querySelector(".csv-toolbar-content")!, {
 			button: 0,
 		});
 	});
