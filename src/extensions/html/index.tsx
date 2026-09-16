@@ -92,8 +92,9 @@ export function HtmlView({
 	// An artifact cannot be diffed in place, so both revisions are rendered:
 	// the checkpoint on the left, the working file on the right. Each side
 	// reads its own assets from its own commit.
-	if (review.reviewing) {
-		if (review.status === "loading") return <HtmlLoadingState />;
+	// Both sides arrive together. Until they do, the revision already on
+	// screen stays there: a placeholder would empty the view for the wait.
+	if (review.reviewing && review.status !== "loading") {
 		if (review.status === "unavailable") return <HtmlReviewUnavailable />;
 		const path = review.path || filePath || "artifact.html";
 		return (
