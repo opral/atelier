@@ -97,7 +97,8 @@ function sortChildren(nodes: FilesystemTreeNode[]): void {
 	}
 }
 
-function hasDotPrefixedSegment(path: string): boolean {
+/** The tree's "hidden" rule, shared with the default-folder picker. */
+export function hasDotPrefixedSegment(path: string): boolean {
 	return path.split("/").some((segment) => segment.startsWith("."));
 }
 
