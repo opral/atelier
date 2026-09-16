@@ -672,6 +672,125 @@ describe("TextView under review", () => {
 		await lix.close();
 	});
 
+	test("stepping to another document keeps the toolbar node mounted and visible", async () => {
+		const lix = await openLix();
+		// Two files change in one working epoch: the review steps between them.
+		const first = fakeUuid("review:/src/first.py");
+		const second = fakeUuid("review:/src/second.py");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/src/first.py",
+					content: new TextEncoder().encode("first = 1\n"),
+				},
+				{
+					id: second,
+					path: "/src/second.py",
+					content: new TextEncoder().encode("second = 1\n"),
+				},
+			])
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("first = 2\n") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("second = 2\n") })
+			.where("id", "=", second)
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+		const session: AtelierDiffSession = {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true },
+			files: [
+				{
+					id: first,
+					path: "/src/first.py",
+					changeKind: "modified",
+					workingEpoch,
+					review: { id: "review:first", status: "pending" },
+				},
+				{
+					id: second,
+					path: "/src/second.py",
+					changeKind: "modified",
+					workingEpoch,
+					review: { id: "review:second", status: "pending" },
+				},
+			],
+			activePath: "/src/first.py",
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		};
+		const atelier = await createRuntime(lix, session);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, atelier, first, "/src/first.py");
+		});
+		const view = await screen.findByTestId("text-editor-view");
+		await waitFor(() => {
+			expect(editorText(utils!.container)).toContain("first = 2");
+		});
+		const toolbar = screen.getByRole("toolbar", {
+			name: "Text editor toolbar",
+		});
+		const editor = utils!.container.querySelector(".cm-editor");
+		expect(editor).not.toBeNull();
+		expect(view).toHaveAttribute("data-document");
+
+		// The step: the same view is handed the next file. Until its sides
+		// are read, the frame and the first file's diff stay exactly where
+		// they were — no loading state, no empty frame.
+		await act(async () => {
+			utils!.rerender(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={atelier}
+								fileId={second}
+								filePath="/src/second.py"
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+		expect(screen.getByTestId("text-editor-view")).toBe(view);
+		expect(screen.getByRole("toolbar", { name: "Text editor toolbar" })).toBe(
+			toolbar,
+		);
+		expect(utils!.container.querySelector(".cm-editor")).toBe(editor);
+		expect(view).toHaveAttribute("data-document");
+		expect(screen.queryByRole("status")).toBeNull();
+		expect(editorText(utils!.container)).toMatch(/first = 2|second = 2/);
+
+		await waitFor(() => {
+			expect(editorText(utils!.container)).toContain("second = 2");
+			expect(removedText(utils!.container)).toContain("second = 1");
+		});
+		expect(screen.getByTestId("text-editor-view")).toBe(view);
+		expect(screen.getByRole("toolbar", { name: "Text editor toolbar" })).toBe(
+			toolbar,
+		);
+		expect(utils!.container.querySelector(".cm-editor")).toBe(editor);
+		expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+		expect(editorText(utils!.container)).not.toContain("first");
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
 	test("bytes that are not text fall back to the read-only editor", async () => {
 		const lix = await openLix();
 		const { fileId, atelier } = await reviewedFile(

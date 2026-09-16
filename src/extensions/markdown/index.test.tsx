@@ -892,6 +892,128 @@ describe("MarkdownView", () => {
 		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
 	});
 
+	test("stepping to another document keeps the toolbar node mounted and visible", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		const first = fakeUuid("file_md_step_first");
+		const second = fakeUuid("file_md_step_second");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/step-first.md",
+					content: new TextEncoder().encode("# First before"),
+				},
+				{
+					id: second,
+					path: "/step-second.md",
+					content: new TextEncoder().encode("# Second before"),
+				},
+			])
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# First after") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# Second after") })
+			.where("id", "=", second)
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+		const diffSession = {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true as const },
+			files: [
+				{
+					id: first,
+					path: "/step-first.md",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-md-step-first", status: "pending" as const },
+				},
+				{
+					id: second,
+					path: "/step-second.md",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-md-step-second", status: "pending" as const },
+				},
+			],
+			activePath: "/step-first.md",
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		};
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath={filePath}
+						activeBranchId={activeBranchId}
+						diffSession={diffSession}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(view(first, "/step-first.md"));
+		});
+		await screen.findByRole("button", { name: /keep/i });
+		// The review draws the change as a word diff: both words are on
+		// screen, and the file's own name says which document this is.
+		await waitFor(() => {
+			expect(utils!.container.querySelector(".ProseMirror")).toHaveTextContent(
+				/First/,
+			);
+		});
+		const toolbar = screen.getByRole("toolbar", { name: "Formatting toolbar" });
+
+		// The step: the same view is handed the next file. The first document
+		// stays, toolbar and all, until the second one's row lands; then the
+		// toolbar stays where it is while the second one's diff is read.
+		await act(async () => {
+			utils!.rerender(view(second, "/step-second.md"));
+		});
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			toolbar,
+		);
+		expect(screen.queryByRole("status")).toBeNull();
+		await waitFor(() => {
+			expect(utils!.container.querySelector(".ProseMirror")).toHaveTextContent(
+				/Second/,
+			);
+			expect(
+				utils!.container.querySelector("[data-review-change-id]"),
+			).not.toBeNull();
+		});
+		expect(
+			utils!.container.querySelector(".ProseMirror"),
+		).not.toHaveTextContent(/First/);
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			toolbar,
+		);
+		expect(
+			utils!.container.querySelector<HTMLElement>(
+				'[data-attr="markdown-editor"]',
+			)?.dataset.reviewPending,
+		).toBeUndefined();
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		await lix.close();
+	});
+
 	test("a document opened inside a review never paints as its live self", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();

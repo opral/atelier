@@ -87,6 +87,25 @@
 			overflow: hidden;
 		}
 
+		/* The frame is up before its document: the editor keeps its box and
+		   paints nothing until there is something to show, so the toolbar
+		   above it never moves. */
+		.atelier-text-editor-host[data-empty] {
+			visibility: hidden;
+		}
+
+		/* What the document region says instead of a document: a file the
+		   workspace no longer has, a revision that does not exist yet, a
+		   review that changed under the reader. */
+		.atelier-text-message {
+			display: grid;
+			min-height: 0;
+			flex: 1 1 auto;
+			place-items: center;
+			padding: 0 24px;
+			text-align: center;
+		}
+
 		.atelier-text-editor-host > .cm-editor {
 			height: 100%;
 		}

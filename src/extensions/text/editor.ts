@@ -40,6 +40,13 @@ import { tags } from "@lezer/highlight";
 
 export type TextEditorController = {
 	readonly view: EditorView;
+	/**
+	 * Show another file in the same view: a fresh state — document, history,
+	 * panels, language — in the editor element already on the page, so the
+	 * frame around it never moves. `setDocument` is for the same file's next
+	 * revision.
+	 */
+	readonly openDocument: (args: TextEditorDocument) => void;
 	readonly setDocument: (text: string) => void;
 	readonly setReadOnly: (readOnly: boolean) => void;
 	/**
@@ -59,13 +66,16 @@ type TextCursorPosition = {
 	readonly column: number;
 };
 
-type CreateTextEditorArgs = {
-	readonly parent: HTMLElement;
+export type TextEditorDocument = {
 	readonly document: string;
 	readonly filePath: string;
 	readonly readOnly?: boolean;
-	/** The before side of a comparison the view opens with, if any. */
+	/** The before side of a comparison the document opens with, if any. */
 	readonly original?: string | null;
+};
+
+type CreateTextEditorArgs = TextEditorDocument & {
+	readonly parent: HTMLElement;
 	readonly wrapping?: boolean;
 	readonly onChange?: (text: string) => void;
 	readonly onCursorChange?: (position: TextCursorPosition) => void;
@@ -305,6 +315,8 @@ export function createTextEditor({
 	const wrappingCompartment = new Compartment();
 	const comparisonCompartment = new Compartment();
 	let destroyed = false;
+	let currentWrapping = wrapping;
+	let languageRequest = 0;
 
 	const reportCursor = (state: EditorState) => {
 		if (!onCursorChange) return;
@@ -313,56 +325,59 @@ export function createTextEditor({
 		onCursorChange({ line: line.number, column: head - line.from + 1 });
 	};
 
-	const extensions: Extension[] = [
-		lineNumbers(),
-		highlightActiveLineGutter(),
-		highlightSpecialChars(),
-		history(),
-		drawSelection(),
-		dropCursor(),
-		EditorState.allowMultipleSelections.of(true),
-		rectangularSelection(),
-		crosshairCursor(),
-		highlightActiveLine(),
-		keymap.of([
-			...defaultKeymap,
-			...historyKeymap,
-			...searchKeymap,
-			indentWithTab,
-		]),
-		syntaxHighlighting(atelierHighlightStyle),
-		syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-		atelierEditorTheme,
-		languageCompartment.of([]),
-		readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
-		editableCompartment.of(EditorView.editable.of(!readOnly)),
-		wrappingCompartment.of(wrapping ? EditorView.lineWrapping : []),
-		comparisonCompartment.of(comparisonExtension(original)),
-		EditorView.updateListener.of((update) => {
-			if (
-				update.docChanged &&
-				!update.transactions.some((transaction) =>
-					transaction.annotation(externalDocumentUpdate),
-				)
-			) {
-				onChange?.(update.state.doc.toString());
-			}
-			if (update.selectionSet || update.docChanged) reportCursor(update.state);
-		}),
-	];
+	const createState = (args: TextEditorDocument): EditorState => {
+		const readOnly = args.readOnly ?? false;
+		const extensions: Extension[] = [
+			lineNumbers(),
+			highlightActiveLineGutter(),
+			highlightSpecialChars(),
+			history(),
+			drawSelection(),
+			dropCursor(),
+			EditorState.allowMultipleSelections.of(true),
+			rectangularSelection(),
+			crosshairCursor(),
+			highlightActiveLine(),
+			keymap.of([
+				...defaultKeymap,
+				...historyKeymap,
+				...searchKeymap,
+				indentWithTab,
+			]),
+			syntaxHighlighting(atelierHighlightStyle),
+			syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+			atelierEditorTheme,
+			languageCompartment.of([]),
+			readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
+			editableCompartment.of(EditorView.editable.of(!readOnly)),
+			wrappingCompartment.of(currentWrapping ? EditorView.lineWrapping : []),
+			comparisonCompartment.of(comparisonExtension(args.original ?? null)),
+			EditorView.updateListener.of((update) => {
+				if (
+					update.docChanged &&
+					!update.transactions.some((transaction) =>
+						transaction.annotation(externalDocumentUpdate),
+					)
+				) {
+					onChange?.(update.state.doc.toString());
+				}
+				if (update.selectionSet || update.docChanged)
+					reportCursor(update.state);
+			}),
+		];
+		return EditorState.create({ doc: args.document, extensions });
+	};
 
-	const view = new EditorView({
-		parent,
-		state: EditorState.create({ doc: document, extensions }),
-	});
-	reportCursor(view.state);
-
-	const language = languageDescriptionForPath(filePath);
-	if (language) {
+	// The language arrives asynchronously; a document opened in the meantime
+	// keeps its own, not the one requested for the file before it.
+	const loadLanguage = (path: string) => {
+		const request = ++languageRequest;
+		const language = languageDescriptionForPath(path);
+		if (!language) return;
 		void language
 			.load()
 			.then((support) => {
-				if (destroyed) return;
+				if (destroyed || request !== languageRequest) return;
 				view.dispatch({
 					effects: languageCompartment.reconfigure(support),
 				});
@@ -370,10 +385,22 @@ export function createTextEditor({
 			.catch(() => {
 				// Syntax highlighting is optional; plain text remains usable.
 			});
-	}
+	};
+
+	const view = new EditorView({
+		parent,
+		state: createState({ document, filePath, readOnly, original }),
+	});
+	reportCursor(view.state);
+	loadLanguage(filePath);
 
 	return {
 		view,
+		openDocument: (args) => {
+			view.setState(createState(args));
+			reportCursor(view.state);
+			loadLanguage(args.filePath);
+		},
 		setDocument: (text) => {
 			const current = view.state.doc.toString();
 			if (current === text) return;
@@ -408,6 +435,7 @@ export function createTextEditor({
 			});
 		},
 		setWrapping: (enabled) => {
+			currentWrapping = enabled;
 			view.dispatch({
 				effects: wrappingCompartment.reconfigure(
 					enabled ? EditorView.lineWrapping : [],

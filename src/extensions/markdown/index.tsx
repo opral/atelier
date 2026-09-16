@@ -171,9 +171,13 @@ export function MarkdownView({
 		beforeExists,
 		afterExists,
 	});
-	if (!resolvedActiveBranchId) return <MarkdownLoadingSpinner />;
+	if (!resolvedActiveBranchId) {
+		return <MarkdownLoadingSpinner readOnly={readOnly ?? false} />;
+	}
 	return (
-		<Suspense fallback={<MarkdownLoadingSpinner />}>
+		<Suspense
+			fallback={<MarkdownLoadingSpinner readOnly={readOnly ?? false} />}
+		>
 			<MarkdownViewContent
 				fileId={fileId}
 				filePath={filePath}
@@ -263,8 +267,36 @@ function MarkdownLiveDelivery({
 			subscribe: ownsLiveFileDelivery || comparesAgainstCurrentFile,
 		},
 	);
-	if (fileResult.status === "pending") return <MarkdownLoadingSpinner />;
+	// The last document delivered. A view handed another document — a review
+	// stepping from one file to the next — keeps showing this one, toolbar
+	// and editor in place, until the next one's row lands; only a view that
+	// has shown nothing yet waits in its frame.
+	const delivered = useRef<{
+		readonly fileId: string;
+		readonly filePath: string | undefined;
+		readonly fileRow: MarkdownFileRow | undefined;
+	} | null>(null);
+	if (fileResult.status === "success") {
+		delivered.current = {
+			fileId,
+			filePath: props.filePath,
+			fileRow: fileResult.rows[0],
+		};
+	}
 	if (fileResult.status === "error") throw fileResult.error;
+	if (fileResult.status === "pending") {
+		if (!delivered.current) {
+			return <MarkdownLoadingSpinner readOnly={props.readOnly ?? false} />;
+		}
+		return (
+			<MarkdownViewLoaded
+				{...props}
+				fileId={delivered.current.fileId}
+				filePath={delivered.current.filePath}
+				fileRow={delivered.current.fileRow}
+			/>
+		);
+	}
 	const fileRow = fileResult.rows[0];
 
 	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
@@ -789,7 +821,9 @@ function MarkdownWorkingHistoricalView({
 			<WorkingMarkdownReviewUnavailable message="The working diff changed while it was being reviewed. Reopen the review." />
 		);
 	}
-	if (before.loading) return <MarkdownLoadingSpinner />;
+	if (before.loading) {
+		return <MarkdownLoadingSpinner readOnly={props.readOnly} />;
+	}
 	const beforeSnapshot = before.data
 		? { id: fileId, path: workingFile.path, content: before.data }
 		: undefined;
@@ -1181,18 +1215,23 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 
 /**
  * While a document's rows are on their way the view shows the same white
- * surface the editor paints, with the toolbar's strip of chrome above it,
- * so opening a file never flashes a spinner between two pages.
+ * surface the editor paints, with the same toolbar above it — disabled, it
+ * has no editor yet — so opening a file never flashes a spinner between two
+ * pages and nothing moves when the document lands. The toolbar is the
+ * host's call, not the document's, so it is known before any row is.
  */
-function MarkdownLoadingSpinner(): ReactNode {
+function MarkdownLoadingSpinner({
+	readOnly,
+}: {
+	readonly readOnly: boolean;
+}): ReactNode {
 	return (
-		<div className="markdown-view flex h-full flex-col bg-panel">
-			<div
-				aria-hidden="true"
-				className="h-10 shrink-0 border-b border-border-subtle"
-			/>
-			<DocumentLoading />
-		</div>
+		<EditorProvider>
+			<div className="markdown-view flex h-full flex-col bg-panel">
+				{!readOnly && <FormattingToolbar disabled />}
+				<DocumentLoading />
+			</div>
+		</EditorProvider>
 	);
 }
 

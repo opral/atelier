@@ -328,8 +328,34 @@ function CsvLiveViewContent({ fileId, ...props }: CsvViewProps) {
 			.where("id", "=", fileId)
 			.limit(1),
 	);
-	if (fileResult.status === "pending") return <CsvLoadingSpinner />;
+	// The last table delivered. A view handed another file — a review
+	// stepping from one table to the next — keeps showing this one, toolbar
+	// and grid in place, until the next one's row lands; only a view that
+	// has shown nothing yet waits in its frame.
+	const delivered = useRef<{
+		readonly fileId: string;
+		readonly filePath: string | undefined;
+		readonly fileRow: CsvFileRow | undefined;
+	} | null>(null);
+	if (fileResult.status === "success") {
+		delivered.current = {
+			fileId,
+			filePath: props.filePath,
+			fileRow: fileResult.rows[0],
+		};
+	}
 	if (fileResult.status === "error") throw fileResult.error;
+	if (fileResult.status === "pending") {
+		if (!delivered.current) return <CsvLoadingSpinner />;
+		return (
+			<CsvLiveViewData
+				{...props}
+				fileId={delivered.current.fileId}
+				filePath={delivered.current.filePath}
+				fileRow={delivered.current.fileRow}
+			/>
+		);
+	}
 	const fileRow = fileResult.rows[0];
 	const editorRevision = normalizeEditorRevisionState(props);
 	if (editorRevisionMode(editorRevision) !== "editor") {
@@ -1016,16 +1042,20 @@ function CsvViewLoaded({
 				</div>
 			) : null}
 			<div
-				className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${
-					reviewPending ? "invisible" : ""
-				}`}
+				className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
 				data-review-pending={reviewPending || undefined}
 			>
 				{parsed.columns.length === 0 && !reviewData ? (
-					<CsvEmptyState
-						filePath={fileRow.path}
-						onCreateTable={onCreateTable}
-					/>
+					<div
+						className={`flex min-h-0 flex-1 flex-col ${
+							reviewPending ? "invisible" : ""
+						}`}
+					>
+						<CsvEmptyState
+							filePath={fileRow.path}
+							onCreateTable={onCreateTable}
+						/>
+					</div>
 				) : (
 					<CsvTable
 						parsed={parsed}
@@ -1034,6 +1064,7 @@ function CsvViewLoaded({
 						isActiveView={isActiveView}
 						editing={reviewData ? undefined : editing}
 						reviewData={reviewData}
+						reviewPending={reviewPending}
 					/>
 				)}
 				{saveError ? (
@@ -1054,6 +1085,7 @@ function CsvTable({
 	savedViews,
 	isActiveView,
 	editing,
+	reviewPending = false,
 }: {
 	readonly parsed: CsvParseResult;
 	readonly reviewData?: CsvReviewData | null;
@@ -1061,6 +1093,11 @@ function CsvTable({
 	readonly columnInfo: readonly (CsvColumnInfo | undefined)[];
 	readonly isActiveView: boolean;
 	readonly editing?: CsvTableEditing;
+	/**
+	 * The review's sides are still being read: the grid paints nothing live
+	 * meanwhile, while the toolbar above it — the table's frame — stays.
+	 */
+	readonly reviewPending?: boolean;
 }) {
 	const retainedLayout = useContext(CsvLayoutContext);
 	const retained = retainedLayout?.current;
@@ -2378,7 +2415,9 @@ function CsvTable({
 								? "columns"
 								: "none"
 				}
-				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-panel"
+				className={`ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-panel ${
+					reviewPending ? "invisible" : ""
+				}`}
 			>
 				<CsvOverlayScrollbars
 					containerRef={containerRef}

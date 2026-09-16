@@ -131,4 +131,46 @@ describe("text editor", () => {
 		expect(controller.view.state.doc.toString()).toBe("a\nc\n");
 		controller.destroy();
 	});
+
+	test("opens another file in the same view, with a fresh state", () => {
+		const parent = document.createElement("div");
+		document.body.append(parent);
+		const onChange = vi.fn();
+		const controller = createTextEditor({
+			parent,
+			document: "first",
+			filePath: "/first.txt",
+			onChange,
+		});
+		const editor = parent.querySelector(".cm-editor");
+		controller.view.dispatch({
+			changes: { from: 5, insert: " edited" },
+		});
+		expect(onChange).toHaveBeenCalledTimes(1);
+		controller.openSearch();
+		expect(parent.querySelector(".cm-search")).toBeInTheDocument();
+
+		controller.openDocument({
+			document: "second",
+			filePath: "/second.txt",
+			readOnly: true,
+			original: "first",
+		});
+		// The element on the page is the same one; what is in it is another
+		// file: its own document and comparison, no history from the file
+		// before it, and no panel left open over it.
+		expect(parent.querySelector(".cm-editor")).toBe(editor);
+		expect(controller.view.state.doc.toString()).toBe("second");
+		expect(editor).toHaveClass("cm-merge-b");
+		expect(parent.querySelector(".cm-content")).toHaveAttribute(
+			"contenteditable",
+			"false",
+		);
+		expect(parent.querySelector(".cm-search")).toBeNull();
+		undo(controller.view);
+		expect(controller.view.state.doc.toString()).toBe("second");
+		// Opening a document is not an edit.
+		expect(onChange).toHaveBeenCalledTimes(1);
+		controller.destroy();
+	});
 });

@@ -33,6 +33,20 @@ mode of the Markdown view from the start.
   assets included. The shell hands both refs to every view and decides nothing
   by file type.
 
+## A view's frame is rendered from props; only the document region may wait
+
+A view's frame — toolbar, gutters, background — is rendered from props that
+are always available; only the document region may wait. A `Suspense`
+boundary, or a branch that returns a loading component, above the toolbar
+replaces the whole view with its fallback on every read, and a review that
+steps from one file to the next reads on every step: the toolbar vanished
+and came back with each file. Keep the reads in headless children under the
+frame, use non-suspending reads (`useQueryResult`, effects) and hold the
+last document until the next one is ready; where the region has nothing yet,
+it stays quiet in the frame. The text view (`src/extensions/text`) is the
+reference: one `TextFrame` owns the toolbar and the one CodeMirror instance,
+and documents are handed to it in place.
+
 ## The static entry is a promise
 
 `@opral/atelier/render` runs where there is no DOM: a Cloudflare Worker, a node

@@ -1009,6 +1009,143 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 	}
 });
 
+test("stepping to another table keeps the toolbar mounted and visible", async () => {
+	const lix = await openLix();
+	let utils:
+		| {
+				unmount: () => void;
+				rerender: (ui: Parameters<typeof render>[0]) => void;
+		  }
+		| undefined;
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const first = fakeUuid("file_csv_step_first");
+	const second = fakeUuid("file_csv_step_second");
+	// Every frame from the step until the next table is on screen keeps the
+	// table's frame — the toolbar — in view; only the grid may wait.
+	const frames: { toolbar: boolean; visible: boolean }[] = [];
+	const toolbarVisible = () => {
+		const toolbar = host.querySelector<HTMLElement>(".csv-toolbar");
+		return {
+			toolbar: toolbar !== null,
+			visible:
+				toolbar !== null &&
+				toolbar.closest(".invisible") === null &&
+				toolbar.closest("[hidden]") === null,
+		};
+	};
+	const observer = new MutationObserver(() => {
+		frames.push(toolbarVisible());
+	});
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/step-first.csv",
+					content: new TextEncoder().encode("name,value\nfirst,1"),
+				},
+				{
+					id: second,
+					path: "/step-second.csv",
+					content: new TextEncoder().encode("name,value\nsecond,1"),
+				},
+			])
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nfirst,2") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nsecond,2") })
+			.where("id", "=", second)
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+		const diffSession = {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true as const },
+			files: [
+				{
+					id: first,
+					path: "/step-first.csv",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-csv-step-first", status: "pending" as const },
+				},
+				{
+					id: second,
+					path: "/step-second.csv",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-csv-step-second", status: "pending" as const },
+				},
+			],
+			activePath: "/step-first.csv",
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		};
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<CsvView
+						fileId={fileId}
+						filePath={filePath}
+						diffSession={diffSession}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		await act(async () => {
+			utils = render(view(first, "/step-first.csv"), { container: host });
+		});
+		await waitFor(() => {
+			expect(host.querySelector(".csv-review-table")?.textContent).toContain(
+				"first",
+			);
+		});
+		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		await act(async () => {
+			utils!.rerender(view(second, "/step-second.csv"));
+		});
+		// The step: the first table stays until the second one's row lands.
+		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		await waitFor(() => {
+			expect(host.querySelector(".csv-review-table")?.textContent).toContain(
+				"second",
+			);
+		});
+		observer.disconnect();
+		expect(host.querySelector("[data-review-pending]")).toBeNull();
+		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		expect(frames.length).toBeGreaterThan(0);
+		expect(frames.every((frame) => frame.toolbar && frame.visible)).toBe(true);
+	} finally {
+		observer.disconnect();
+		if (utils) {
+			await act(async () => {
+				utils!.unmount();
+			});
+		}
+		host.remove();
+		await lix.close();
+	}
+});
+
 test("a table opened inside a review never paints as its live self", async () => {
 	const lix = await openLix();
 	let utils: { unmount: () => void } | undefined;
