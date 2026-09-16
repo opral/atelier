@@ -359,6 +359,20 @@
 		padding: 0;
 	}
 
+	/* ProseMirror replaces a selected node with whatever is typed next, and
+	   this panel is one node. Every other block says when it is selected; this
+	   one said nothing at all, so a click on its chrome and one letter could
+	   replace every property in the file with that letter, unannounced. */
+	.markdown-view
+		.ProseMirror
+		:is(
+			.markdown-frontmatter[data-selected="true"],
+			.markdown-frontmatter.ProseMirror-selectednode
+		) {
+		border-radius: var(--markdown-radius);
+		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+	}
+
 	.markdown-frontmatter-header {
 		display: flex;
 		min-height: 2.125rem;
@@ -930,10 +944,13 @@
 	   the prose around it: it reaches back into the gutter on both sides, as
 	   far as the panel can spare while keeping the document's own margin, and
 	   no further than the table's cap. In a panel with no gutter to give it
-	   sits in the column like everything else and scrolls sideways.
+	   sits in the column like everything else and scrolls sideways. Only a
+	   table the document holds directly: the gutter belongs to the document,
+	   and a table inside a list or a quote reaching for it hung out of the
+	   block it belongs to, with the quote's own rule cutting across it.
 	   Hairlines, 14px cells, a tinted plain-case header row: Notion's simple
 	   table. */
-	.markdown-view .ProseMirror table {
+	.markdown-view .ProseMirror > table {
 		--markdown-table-outset: max(
 			0px,
 			min(
