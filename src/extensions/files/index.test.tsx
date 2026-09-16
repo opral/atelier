@@ -1250,6 +1250,412 @@ describe("FilesView", () => {
 	});
 });
 
+describe("the default folder rule, through the view", () => {
+	test("a type row creates in its default folder from anywhere", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { excalidraw: "/drawings/" },
+				setDefaultFolder: () => {},
+			});
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		await chooseNewMenuItem("New Drawing (.excalidraw)");
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "sketch.excalidraw" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/drawings/sketch.excalidraw")
+					.execute(),
+			).toHaveLength(1);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("a row with no default still creates here", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { excalidraw: "/drawings/" },
+				setDefaultFolder: () => {},
+			});
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		await chooseNewMenuItem("New CSV (.csv)");
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "budget.csv" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/src/budget.csv")
+					.execute(),
+			).toHaveLength(1);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("a default folder that no longer exists falls back to here", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { excalidraw: "/sketches/" },
+				setDefaultFolder: () => {},
+			});
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		await chooseNewMenuItem("New Drawing (.excalidraw)");
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "stranded.excalidraw" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/src/stranded.excalidraw")
+					.execute(),
+			).toHaveLength(1);
+		});
+		expect(
+			await qb(lix)
+				.selectFrom("lix_file")
+				.select("path")
+				.where("path", "=", "/sketches/stranded.excalidraw")
+				.executeTakeFirst(),
+		).toBeUndefined();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("the quick-create shortcut follows the New file row's default", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { generic: "/drawings/" },
+				setDefaultFolder: () => {},
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		fireCreateShortcut();
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "scratch" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/drawings/scratch")
+					.execute(),
+			).toHaveLength(1);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("the New folder shortcut keeps creating here", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { generic: "/drawings/" },
+				setDefaultFolder: () => {},
+				isActiveView: true,
+				isPanelFocused: true,
+			});
+		});
+		await screen.findByRole("button", { name: "New" });
+
+		fireEvent.keyDown(window, {
+			code: "Period",
+			key: ".",
+			shiftKey: true,
+			...primaryModifier(),
+		});
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "planning" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/src/planning")
+					.execute(),
+			).toHaveLength(1);
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("the trailing slot is absent at rest, and absent inside the default folder", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { excalidraw: "/drawings/" },
+				setDefaultFolder: () => {},
+			});
+		});
+		const trigger = await screen.findByRole("button", { name: "New" });
+
+		// Nothing is in the menu until it is opened, and the slot is never in
+		// the row's flow: the row is exactly today's row.
+		openNewMenu(trigger);
+		await waitFor(() => {
+			expect(
+				document.querySelector("[data-attr='file-new-excalidraw']"),
+			).not.toBeNull();
+		});
+		const slot = document.querySelector(
+			"[data-attr='file-new-excalidraw-default-folder']",
+		);
+		expect(slot).not.toBeNull();
+		expect(
+			document.querySelector("[data-attr='file-new-excalidraw-row']")
+				?.firstElementChild,
+		).toHaveAttribute("data-attr", "file-new-excalidraw");
+
+		await act(async () => view?.unmount());
+
+		// Sitting in /drawings/ there is nothing to say, so nothing is said.
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/drawings/existing.excalidraw",
+				defaultFolders: { excalidraw: "/drawings/" },
+				setDefaultFolder: () => {},
+			});
+		});
+		const insideTrigger = await screen.findByRole("button", { name: "New" });
+		openNewMenu(insideTrigger);
+		await waitFor(() => {
+			expect(
+				document.querySelector("[data-attr='file-new-excalidraw']"),
+			).not.toBeNull();
+		});
+		expect(
+			document.querySelector(
+				"[data-attr='file-new-excalidraw-default-folder']",
+			),
+		).toBeNull();
+		// A type with no default still offers its glyph.
+		expect(
+			document.querySelector("[data-attr='file-new-csv-default-folder']"),
+		).not.toBeNull();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("the label never creates: its menu changes, one-offs, and removal", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+		const setDefaultFolder = vi.fn();
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				defaultFolders: { excalidraw: "/drawings/" },
+				setDefaultFolder,
+			});
+		});
+		const trigger = await screen.findByRole("button", { name: "New" });
+		openNewMenu(trigger);
+		const slot = await findDefaultFolderSlot("file-new-excalidraw");
+
+		// Opening the label's menu is not a creation.
+		openDefaultFolderSlot(slot);
+		await findMenuAction("default-folder-change");
+		expect(queryFilesTreeRenameInput()).toBeNull();
+		expect(setDefaultFolder).not.toHaveBeenCalled();
+
+		// `Create here this time` creates here and leaves the default alone.
+		fireEvent.click(await findMenuAction("default-folder-create-here"));
+		const input = await waitFor(getFilesTreeRenameInput);
+		fireEvent.input(input, { target: { value: "just-here.excalidraw" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_file")
+					.select("path")
+					.where("path", "=", "/src/just-here.excalidraw")
+					.execute(),
+			).toHaveLength(1);
+		});
+		expect(setDefaultFolder).not.toHaveBeenCalled();
+
+		// `Remove default` clears this type's default and nothing else.
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "New" })).not.toBeDisabled();
+		});
+		openNewMenu(screen.getByRole("button", { name: "New" }));
+		openDefaultFolderSlot(await findDefaultFolderSlot("file-new-excalidraw"));
+		fireEvent.click(await findMenuAction("default-folder-remove"));
+		expect(setDefaultFolder).toHaveBeenCalledWith("excalidraw", null);
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("the glyph opens the picker and picking one sets the default", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+		const setDefaultFolder = vi.fn();
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, {
+				activeFilePath: "/src/notes.md",
+				setDefaultFolder,
+			});
+		});
+		const trigger = await screen.findByRole("button", { name: "New" });
+		openNewMenu(trigger);
+		const slot = await findDefaultFolderSlot("file-new-csv");
+		expect(slot).toHaveAttribute("title", "Set default folder for CSV files");
+
+		openDefaultFolderSlot(slot);
+		await waitFor(() => {
+			expect(
+				document.querySelector("[data-attr='default-folder-search']"),
+			).not.toBeNull();
+		});
+		expect(
+			[...document.querySelectorAll("[data-attr='default-folder-option']")].map(
+				(option) => option.getAttribute("data-folder-path"),
+			),
+		).toEqual(["/", "/drawings/", "/src/"]);
+
+		fireEvent.click(
+			document.querySelector(
+				"[data-attr='default-folder-option'][data-folder-path='/drawings/']",
+			)!,
+		);
+		expect(setDefaultFolder).toHaveBeenCalledWith("csv", "/drawings/");
+		expect(queryFilesTreeRenameInput()).toBeNull();
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("without a preference store the menu is exactly today's menu", async () => {
+		const lix = await openLix();
+		await seedDefaultFolderWorkspace(lix);
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, { activeFilePath: "/src/notes.md" });
+		});
+		const trigger = await screen.findByRole("button", { name: "New" });
+		openNewMenu(trigger);
+		await waitFor(() => {
+			expect(
+				document.querySelector("[data-attr='file-new-excalidraw']"),
+			).not.toBeNull();
+		});
+		expect(
+			document.querySelectorAll("[data-attr$='-default-folder']"),
+		).toHaveLength(0);
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+});
+
+async function findDefaultFolderSlot(rowAttr: string): Promise<HTMLElement> {
+	return waitFor(() => {
+		const slot = document.querySelector(
+			`[data-attr='${rowAttr}-default-folder']`,
+		);
+		if (!(slot instanceof HTMLElement)) {
+			throw new Error(`default folder slot not found for ${rowAttr}`);
+		}
+		return slot;
+	});
+}
+
+/** A press, then a click: the slot opens on intent, never on a hover. */
+function openDefaultFolderSlot(slot: HTMLElement): void {
+	fireEvent.pointerDown(slot, { button: 0, ctrlKey: false });
+	fireEvent.click(slot);
+}
+
+async function findMenuAction(dataAttr: string): Promise<HTMLElement> {
+	return waitFor(() => {
+		const item = document.querySelector(`[data-attr='${dataAttr}']`);
+		if (!(item instanceof HTMLElement)) {
+			throw new Error(`menu action '${dataAttr}' was not rendered`);
+		}
+		return item;
+	});
+}
+
+async function seedDefaultFolderWorkspace(lix: Lix): Promise<void> {
+	await qb(lix)
+		.insertInto("lix_directory")
+		.values([
+			{ id: fakeUuid("src-dir"), path: "/src" },
+			{ id: fakeUuid("drawings-dir"), path: "/drawings" },
+		] as never)
+		.execute();
+	await insertFile(lix, fakeUuid("src-notes"), "/src/notes.md", "notes");
+	await insertFile(
+		lix,
+		fakeUuid("existing-drawing"),
+		"/drawings/existing.excalidraw",
+		"{}",
+	);
+}
+
 type TestFilesViewContext = NonNullable<
 	Parameters<typeof FilesView>[0]["context"]
 >;
@@ -1333,6 +1739,7 @@ async function chooseNewMenuItem(name: string) {
 		"New folder": "file-new-folder",
 		"New Markdown (.md)": "file-new-markdown",
 		"New CSV (.csv)": "file-new-csv",
+		"New Drawing (.excalidraw)": "file-new-excalidraw",
 	};
 	const dataAttr = dataAttrByName[name];
 	if (!dataAttr) throw new Error(`Unknown New menu item '${name}'`);
