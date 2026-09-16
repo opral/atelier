@@ -208,11 +208,16 @@ export function DefaultFolderSlot({
 				onPointerEnter={() => setHovered(true)}
 				onFocus={() => setHovered(true)}
 				onBlur={() => setHovered(false)}
-				onPointerLeave={(event) => {
-					// Radix closes a submenu when the pointer wanders off its
-					// trigger. This one holds a search field; it closes on Escape,
-					// on a pick, or on a press outside.
-					event.preventDefault();
+				onPointerLeave={() => {
+					// Radix's own leave handler is wanted here: with the panel open
+					// it records where the pointer left and which way the panel
+					// lies, and for the next moment treats the rows it crosses on
+					// the way there as passed over, not entered. Cancelling it
+					// dropped that grace, so the first row under the pointer took
+					// focus and the panel closed before it could be reached. Leaving
+					// the trigger closes nothing by itself: the panel closes on
+					// Escape, on a pick, on a press outside, or on another row
+					// taking focus.
 					setHovered(false);
 				}}
 				onKeyDown={(event) => {

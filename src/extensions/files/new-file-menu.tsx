@@ -161,10 +161,14 @@ function NewMenuItem({
 	return (
 		// The row's hover fill lives on the wrapper so the row stays lit while
 		// the pointer is on the control at its trailing edge — and so the
-		// control has one colour to sit on rather than two.
+		// control has one colour to sit on rather than two. It stays lit while
+		// the control's panel is open, too: the pointer leaves the row to reach
+		// the panel, and the row must not change under it on the way.
 		<div
 			className={`group/row relative rounded-sm${
-				trailing ? " hover:bg-bg-hover focus-within:bg-bg-hover" : ""
+				trailing
+					? " hover:bg-bg-hover focus-within:bg-bg-hover has-data-[state=open]:bg-bg-hover"
+					: ""
 			}`}
 			data-attr={`${dataAttr}-row`}
 		>
@@ -189,7 +193,7 @@ function NewMenuItem({
 					<kbd
 						className={`ml-3 text-[10px] font-semibold text-fg-subtle${
 							trailing
-								? " transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0"
+								? " transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0 group-has-data-[state=open]/row:opacity-0"
 								: ""
 						}`}
 					>
@@ -201,8 +205,17 @@ function NewMenuItem({
 				// Out of flow on purpose. At rest the row is exactly today's row,
 				// and nothing in it moves or changes width when the control
 				// appears under the cursor or under the arrow keys.
+				//
+				// It reaches the row's edge and pads the control in from there,
+				// rather than stopping short of it: the control's panel opens a
+				// few pixels beyond the control, and the pointer crosses that
+				// strip to reach it. Owned by this wrapper the strip is inert;
+				// owned by the row's menu item beneath, Radix would focus that
+				// item as the pointer passed and close the panel for it. For the
+				// same reason the wrapper stays visible and clickable while the
+				// panel is open, not only while the row is hovered.
 				<div
-					className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center rounded-r-sm pl-4 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100"
+					className="pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-r-sm pr-1.5 pl-4 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 group-has-data-[state=open]/row:pointer-events-auto group-has-data-[state=open]/row:opacity-100"
 					// The label's tail passes under the control rather than being
 					// squeezed by it: the row must not reflow when the control
 					// appears, so the control fades the row's own fill over it.
