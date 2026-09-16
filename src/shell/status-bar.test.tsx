@@ -263,6 +263,7 @@ describe("CheckpointStatusBar", () => {
 			return {
 				beforeCommitId: String(row?.working_base_commit_id),
 				afterCommitId: String(row?.commit_id),
+				heldAfterCommitIds: [String(row?.commit_id)],
 			};
 		};
 		const write = (id: string, text: string) =>
@@ -306,6 +307,74 @@ describe("CheckpointStatusBar", () => {
 			});
 			fireEvent.click(notice);
 			expect(refresh).toHaveBeenCalledOnce();
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
+	});
+
+	// The reviewer's own write moves the review onto the commit it produced,
+	// and the review knows that commit before the query watching the workspace
+	// does. Holding both keeps the notice off in that gap, without it ever
+	// staying off once someone else has written.
+	test("stays silent about a commit the review has already moved onto", async () => {
+		const lix = await openLix();
+		const epoch = async () => {
+			const result = await lix.execute(
+				"SELECT working_base_commit_id, commit_id FROM lix_branch WHERE id = lix_active_branch_id()",
+			);
+			const row = result.rows[0];
+			return {
+				before: String(row?.working_base_commit_id),
+				after: String(row?.commit_id),
+			};
+		};
+		const write = (id: string, text: string) =>
+			lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[fakeUuid(id), `/${id}.md`, new TextEncoder().encode(text)],
+			);
+		let view: ReturnType<typeof render> | undefined;
+		try {
+			await write("own-write-first", "# Reviewed\n");
+			const openedAt = await epoch();
+			await write("own-write-second", "# Typed by the reviewer\n");
+			const adopted = await epoch();
+			await act(async () => {
+				view = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<CheckpointStatusBar
+								reviewingWorkingChanges
+								reviewedEpoch={{
+									beforeCommitId: openedAt.before,
+									afterCommitId: adopted.after,
+									heldAfterCommitIds: [openedAt.after, adopted.after],
+								}}
+								onRefreshWorkingReview={() => {}}
+								onReviewWorkingChanges={() => {}}
+							/>
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("button", {
+				name: "2 files changed since checkpoint. Close review",
+			});
+			expect(
+				screen.queryByRole("button", {
+					name: "This review is behind the file. Refresh the review",
+				}),
+			).toBeNull();
+
+			await act(async () => {
+				await write("own-write-someone-else", "# Written by somebody else\n");
+			});
+			expect(
+				await screen.findByRole("button", {
+					name: "This review is behind the file. Refresh the review",
+				}),
+			).toBeVisible();
 		} finally {
 			await act(async () => view?.unmount());
 			await lix.close();

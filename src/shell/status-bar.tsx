@@ -3,6 +3,10 @@ import { Flag, RefreshCw } from "lucide-react";
 import { WorkingDot } from "@/components/diff-glyph";
 import { useQueryResult } from "@/lib/lix-react";
 import { selectWorkingChangeCount, selectWorkingReviewEpoch } from "@/queries";
+import {
+	reviewIsBehindWorkspace,
+	type WorkingReviewEpoch,
+} from "./working-review-epoch";
 
 // Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
 // the status bar can consume the real title without changing its presentation.
@@ -37,7 +41,6 @@ export function CheckpointStatusBar({
 	onReviewLatestCheckpoint,
 	onReviewWorkingChanges,
 	onRefreshWorkingReview,
-	reviewCatchingUp = false,
 	reviewedEpoch = null,
 	reviewingWorkingChanges = false,
 	reviewingLatestCheckpoint = false,
@@ -50,13 +53,8 @@ export function CheckpointStatusBar({
 	readonly onReviewWorkingChanges?: () => void;
 	/** Reopens the working review at the epoch the workspace is on now. */
 	readonly onRefreshWorkingReview?: () => void;
-	/** The reviewer's own edit is landing and the review is following it. */
-	readonly reviewCatchingUp?: boolean;
-	/** The epoch the open working review is pinned to, if one is open. */
-	readonly reviewedEpoch?: {
-		readonly beforeCommitId: string;
-		readonly afterCommitId: string;
-	} | null;
+	/** The epoch an open working review holds, if one is open. */
+	readonly reviewedEpoch?: WorkingReviewEpoch | null;
 	/** The working review is open; the same control now closes it. */
 	readonly reviewingWorkingChanges?: boolean;
 	/** A checkpoint review is open; the same control now closes it. */
@@ -74,21 +72,19 @@ export function CheckpointStatusBar({
 	);
 	if (liveEpoch.status === "error") throw liveEpoch.error;
 	const liveEpochRow = liveEpoch.rows[0];
-	// A review holds the epoch it opened at. Once the workspace has moved past
-	// it, the diff on screen is a past state of the file — and every decision
-	// the review offers is refused against the epoch it was taken on, so say
-	// so here rather than letting Checkpoint be the one to break the news.
+	// The diff on screen is a past state of the file once somebody else has
+	// written, and every decision the review offers is refused against the
+	// epoch it was taken on — so say so here rather than letting Checkpoint be
+	// the one to break the news.
 	const reviewIsBehind =
 		reviewingWorkingChanges &&
-		// The reviewer's own edit is still settling; the review is on its way
-		// to it. Saying they are behind their own typing, once per keystroke,
-		// made the notice read as permanently on while they wrote.
-		!reviewCatchingUp &&
 		reviewedEpoch !== null &&
 		liveEpoch.status !== "pending" &&
 		liveEpochRow !== undefined &&
-		(liveEpochRow.before_commit_id !== reviewedEpoch.beforeCommitId ||
-			liveEpochRow.after_commit_id !== reviewedEpoch.afterCommitId);
+		reviewIsBehindWorkspace(reviewedEpoch, {
+			beforeCommitId: liveEpochRow.before_commit_id,
+			afterCommitId: liveEpochRow.after_commit_id,
+		});
 
 	const historyStatus =
 		workingChangeCount.status === "pending" ? null : fileCount === 0 ? (

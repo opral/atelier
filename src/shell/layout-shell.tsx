@@ -26,7 +26,7 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { useLix, useQueryResult } from "@/lib/lix-react";
-import type { Lix } from "@lix-js/sdk";
+import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { MainArea } from "./main-panel";
 import { TopBar } from "./top-bar";
@@ -61,6 +61,7 @@ import {
 	selectWorkingFileDiffSnapshot,
 	selectAppliedFileDiffSnapshot,
 } from "@/queries";
+import { epochAfterOwnWrite } from "./working-review-epoch";
 import {
 	ExtensionHostRegistryProvider,
 	useExtensionHostRegistry,
@@ -656,6 +657,14 @@ type DiffReviewState = {
 		readonly removedFileIds: ReadonlySet<string>;
 	} | null;
 	readonly files: readonly LixFileForOpen[];
+	/**
+	 * Every commit this working review has been pinned to: the one it opened
+	 * at, then each one a write of the reviewer's own carried it to. The
+	 * workspace being on any of them means the review is current — the last is
+	 * what is on screen, and an earlier one only means the query that watches
+	 * the workspace has not caught up with a write the review already adopted.
+	 */
+	readonly heldAfterCommitIds?: readonly string[];
 	/** The file diff mode revealed; null keeps the user's own document. */
 	readonly diffFileId: string | null;
 	/** Shell-synthesized per-file reviews (working reviews only). */
@@ -1175,43 +1184,35 @@ function LayoutShellLoadedContentResolved({
 	readonly installedExtensionsReady: boolean;
 }) {
 	const effectiveAtelierInstance = atelierInstance;
-	const workingChangesReviewOpenRef = useRef(false);
-	// True from a reviewer's own edit until the review has caught up with it.
-	const [reviewCatchingUp, setReviewCatchingUp] = useState(false);
-	const catchUpTimerRef = useRef<number | undefined>(undefined);
+	// Set below, once there is a review to move.
+	const adoptOwnWriteRef = useRef<((commit: CommitSpan) => void) | null>(null);
 	const emitEvent = useCallback(
 		(event: AtelierEvent) => {
 			onEvent?.(event);
 			// An edit the reviewer makes inside an open review — a property in
 			// the frontmatter panel — advances the working tip, which would
 			// otherwise declare their own review behind the file and refuse the
-			// checkpoint. The review follows the edit instead. An external write
-			// emits nothing here, so it still raises the notice: nobody has
-			// their content swapped for someone else's mid-read.
+			// checkpoint. The review moves with the write instead.
 			//
-			// It follows once the typing settles, not once per keystroke.
-			// Reopening mints a new epoch, and the file's projection re-renders
-			// from before the edit while that epoch loads — so a reopen between
-			// two keystrokes put the old value back under the caret and the
-			// next letters landed on it, writing "Frontmatter fixturee pangte"
-			// where the reviewer typed a sentence.
-			if (
-				event.type !== "document_modified" ||
-				!workingChangesReviewOpenRef.current
-			)
-				return;
-			const { filePath } = event;
-			setReviewCatchingUp(true);
-			window.clearTimeout(catchUpTimerRef.current);
-			catchUpTimerRef.current = window.setTimeout(() => {
-				void Promise.resolve(
-					reopenWorkingReviewRef.current?.({ revealPath: filePath }),
-				).finally(() => setReviewCatchingUp(false));
-			}, 400);
+			// It moves on the write's own receipt, which names the commit the
+			// write produced and the commit the workspace was on before it. The
+			// review adopts that commit when, and only when, it was pinned to
+			// the commit the write started from: then this write is the only
+			// thing that has landed, and following it cannot pull anybody
+			// else's change into the review. If the workspace had already moved
+			// on, somebody else wrote too — the pin stays where it is and the
+			// status bar says the review is behind the file, which is what it
+			// is for.
+			//
+			// Nothing here is timed, so there is no window in which a decision
+			// is taken against one epoch while the review is on its way to
+			// another, and nothing is reopened, so the panel the reviewer is
+			// typing in is never remounted under them.
+			if (event.type !== "document_modified" || !event.commit) return;
+			adoptOwnWriteRef.current?.(event.commit);
 		},
 		[onEvent],
 	);
-	useEffect(() => () => window.clearTimeout(catchUpTimerRef.current), []);
 	const configuration = getAtelierConfiguration(effectiveAtelierInstance);
 	const preferencesFor = useCallback(
 		(extensionId: string): AtelierExtensionPreferences => ({
@@ -1426,6 +1427,56 @@ function LayoutShellLoadedContentResolved({
 	const [diffReview, setDiffReview] = useState<DiffReviewState | null>(null);
 	const diffReviewRef = useRef(diffReview);
 	diffReviewRef.current = diffReview;
+	// Moves an open working review onto the commit one of the reviewer's own
+	// writes just produced, when {@link epochAfterOwnWrite} says it may.
+	//
+	// The review's scope stays the set of files it opened on. A write to a
+	// file outside that set moves the epoch without pulling the file into the
+	// session — the reviewer keeps typing in it rather than having it lock
+	// into a diff under them — and the status bar goes on counting it.
+	adoptOwnWriteRef.current = (commit: CommitSpan) => {
+		const current = diffReviewRef.current;
+		if (current?.kind !== "working" || current.intent || !current.range) {
+			return;
+		}
+		const epoch = epochAfterOwnWrite(
+			{
+				beforeCommitId: current.range.beforeCommitId,
+				afterCommitId: current.range.afterCommitId,
+				heldAfterCommitIds: current.heldAfterCommitIds ?? [
+					current.range.afterCommitId,
+				],
+			},
+			commit,
+		);
+		if (!epoch) return;
+		const afterCommitId = epoch.afterCommitId;
+		const next: DiffReviewState = {
+			...current,
+			range: { ...current.range, afterCommitId },
+			files: current.files.map((file) =>
+				file.workingEpoch
+					? {
+							...file,
+							workingEpoch: { ...file.workingEpoch, afterCommitId },
+						}
+					: file,
+			),
+			// The decisions each per-file review offers are taken against the
+			// epoch, so they move with it. Its id does not: it is the identity
+			// a resolution was persisted under, and a reviewer's own typing
+			// must not un-approve what they have already approved.
+			externalWriteReviews: current.externalWriteReviews.map((review) => ({
+				...review,
+				afterCommitId,
+			})),
+			heldAfterCommitIds: epoch.heldAfterCommitIds,
+		};
+		// Publish before React commits: a second write can land on the first
+		// one's heels, and it has to see the epoch this one moved to.
+		diffReviewRef.current = next;
+		setDiffReview(next);
+	};
 	// An open reads the repository before it has a session to show, so the
 	// control that started it has to know one is on its way — and be able to
 	// call it off, since the state it would flip has not flipped yet.
@@ -1441,8 +1492,6 @@ function LayoutShellLoadedContentResolved({
 	const historicalReview =
 		diffReview?.kind === "historical" ? diffReview : null;
 	const workingChangesReviewOpen = workingReview !== null;
-	// Read from emitEvent, which is built before this line.
-	workingChangesReviewOpenRef.current = workingChangesReviewOpen;
 	const workingChangeReviewFiles =
 		workingReview?.files ?? EMPTY_LIX_FILES_FOR_OPEN;
 	const workingChangeReviewRange = workingReview?.range ?? null;
@@ -3803,6 +3852,7 @@ function LayoutShellLoadedContentResolved({
 						: {}),
 					range: reviewRange,
 					files: checkpointFiles,
+					heldAfterCommitIds: [reviewRange.afterCommitId],
 					diffFileId: revealFile?.id ?? null,
 					externalWriteReviews: sessionReviews,
 				});
@@ -4693,9 +4743,16 @@ function LayoutShellLoadedContentResolved({
 					// An applied review is pinned to a span the host chose, not to
 					// the working epoch, and refreshing would drop that span. Only
 					// a review of the working changes can be behind them.
-					reviewCatchingUp={reviewCatchingUp}
 					reviewedEpoch={
-						workingReview?.intent ? null : workingChangeReviewRange
+						workingReview && !workingReview.intent && workingReview.range
+							? {
+									beforeCommitId: workingReview.range.beforeCommitId,
+									afterCommitId: workingReview.range.afterCommitId,
+									heldAfterCommitIds: workingReview.heldAfterCommitIds ?? [
+										workingReview.range.afterCommitId,
+									],
+								}
+							: null
 					}
 					onRefreshWorkingReview={() => {
 						// Reopen on the current epoch, keeping the file on screen
