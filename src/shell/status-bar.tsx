@@ -190,7 +190,7 @@ function AutoAcceptToggle({
 			>
 				<span
 					aria-hidden="true"
-					className={`absolute top-px left-px size-2 rounded-full bg-white shadow-sm transition-transform ${
+					className={`absolute top-px left-px size-2 rounded-full bg-panel shadow-sm transition-transform ${
 						checked ? "translate-x-2" : "translate-x-0"
 					}`}
 				/>
