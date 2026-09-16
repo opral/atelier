@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import type { AtelierDiffSession } from "../extension-api";
 import type { ExtensionState } from "./types";
 import {
@@ -14,37 +14,56 @@ import "./diff-sides.css";
  *
  * A side is `null` where the file has no version at all: a created file has
  * no before, a deleted one has no after.
+ *
+ * A `pending` comparison is one whose sides are still being read: the frame
+ * — both columns and their headers — is drawn with quiet bodies, so a view
+ * that steps from one file's comparison to the next keeps its shape while
+ * the sides arrive, instead of collapsing to a spinner and back.
  */
-export function DiffSides({
-	filePath,
-	before,
-	after,
-	beforeCommitId = null,
-	afterCommitId = null,
-}: {
-	readonly filePath: string;
-	readonly before: ReactNode | null;
-	readonly after: ReactNode | null;
-	readonly beforeCommitId?: string | null;
-	readonly afterCommitId?: string | null;
-}) {
+export function DiffSides(
+	props: {
+		readonly filePath: string;
+		readonly beforeCommitId?: string | null;
+		readonly afterCommitId?: string | null;
+	} & (
+		| {
+				readonly pending: true;
+				readonly before?: undefined;
+				readonly after?: undefined;
+		  }
+		| {
+				readonly pending?: false;
+				readonly before: ReactNode | null;
+				readonly after: ReactNode | null;
+		  }
+	),
+) {
+	const { filePath, beforeCommitId = null, afterCommitId = null } = props;
+	const pending = props.pending === true;
 	return (
-		<div className="atelier-diff-sides" data-testid="diff-sides">
+		<div
+			className="atelier-diff-sides"
+			data-testid="diff-sides"
+			data-atelier-diff-pending={pending || undefined}
+			aria-busy={pending || undefined}
+		>
 			<DiffSide
 				side="before"
 				label="Before"
 				filePath={filePath}
 				commitId={beforeCommitId}
+				pending={pending}
 			>
-				{before}
+				{pending ? null : props.before}
 			</DiffSide>
 			<DiffSide
 				side="after"
 				label="After"
 				filePath={filePath}
 				commitId={afterCommitId}
+				pending={pending}
 			>
-				{after}
+				{pending ? null : props.after}
 			</DiffSide>
 		</div>
 	);
@@ -55,12 +74,14 @@ function DiffSide({
 	label,
 	filePath,
 	commitId,
+	pending,
 	children,
 }: {
 	readonly side: "before" | "after";
 	readonly label: string;
 	readonly filePath: string;
 	readonly commitId: string | null;
+	readonly pending: boolean;
 	readonly children: ReactNode | null;
 }) {
 	const fileName = filePath.split("/").filter(Boolean).at(-1);
@@ -72,12 +93,40 @@ function DiffSide({
 		>
 			<header className="atelier-diff-side-header">{label}</header>
 			<div className="atelier-diff-side-body">
-				{children ?? (
-					<CheckpointAbsentFile filePath={filePath} commitId={commitId} />
-				)}
+				{pending
+					? null
+					: (children ?? (
+							<CheckpointAbsentFile filePath={filePath} commitId={commitId} />
+						))}
 			</div>
 		</section>
 	);
+}
+
+/**
+ * Whether this document arrived in the view while its review was already
+ * open — a reviewer stepped to it for its comparison — as opposed to a
+ * document that was on screen when its review opened.
+ *
+ * The two wait differently for the comparison's sides. A document opened
+ * for its review must never paint as its live self, so it waits in the
+ * comparison's empty frame; a document that was already on screen keeps
+ * its live revision until the comparison replaces it, so nothing
+ * disappears only to come back. The answer is fixed when the document
+ * arrives and holds for as long as the view shows it.
+ */
+export function useOpenedUnderReview(
+	fileId: string,
+	reviewing: boolean,
+): boolean {
+	const opened = useRef<{ readonly fileId: string; readonly value: boolean }>({
+		fileId,
+		value: reviewing,
+	});
+	if (opened.current.fileId !== fileId) {
+		opened.current = { fileId, value: reviewing };
+	}
+	return opened.current.value;
 }
 
 /**

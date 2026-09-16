@@ -34,6 +34,7 @@ import { selectFilesStateAt } from "@/queries";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
 import {
 	DiffSides,
+	useOpenedUnderReview,
 	useWorkingDiffSides,
 	viewShowsDiff,
 } from "@/extension-runtime/diff-sides";
@@ -117,6 +118,7 @@ function ImageViewContent({
 }: ImageViewProps) {
 	assertFileId(fileId);
 	const review = useWorkingDiffSides(fileId, diffSession);
+	const openedUnderReview = useOpenedUnderReview(fileId, review.reviewing);
 	const fileResult = useQueryResult<ImageFileRow>(
 		(lix) =>
 			sourceCommitId
@@ -132,8 +134,13 @@ function ImageViewContent({
 	);
 	// An image cannot be diffed in place, so the review shows both revisions:
 	// the checkpoint on the left, the working file on the right.
-	// Both sides arrive together. Until they do, the revision already on
-	// screen stays there: a placeholder would empty the view for the wait.
+	// Both sides arrive together. Until they do, a document the reviewer
+	// stepped to waits in the comparison's empty frame, and a document that
+	// was already on screen keeps its revision there: a placeholder would
+	// empty the view for the wait.
+	if (review.reviewing && review.status === "loading" && openedUnderReview) {
+		return <DiffSides pending filePath={filePath ?? "image"} />;
+	}
 	if (review.reviewing && review.status !== "loading") {
 		if (review.status === "unavailable") return <ImageReviewUnavailable />;
 		const path = review.path || filePath || "image";
@@ -529,7 +536,11 @@ export const extension = createReactExtensionDefinition({
 		});
 		return (
 			<PreparedMediaSurface
-				key={view.instanceId}
+				documentKey={
+					typeof view.state.fileId === "string"
+						? view.state.fileId
+						: view.instanceId
+				}
 				readySelector="img[src]"
 				kind="image"
 				data={data}

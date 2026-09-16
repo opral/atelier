@@ -17,6 +17,7 @@ import { selectFilesStateAt } from "@/queries";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
 import {
 	DiffSides,
+	useOpenedUnderReview,
 	useWorkingDiffSides,
 	viewShowsDiff,
 } from "@/extension-runtime/diff-sides";
@@ -89,11 +90,17 @@ export function HtmlView({
 }: HtmlViewProps) {
 	assertFileId(fileId);
 	const review = useWorkingDiffSides(fileId, diffSession);
+	const openedUnderReview = useOpenedUnderReview(fileId, review.reviewing);
 	// An artifact cannot be diffed in place, so both revisions are rendered:
 	// the checkpoint on the left, the working file on the right. Each side
 	// reads its own assets from its own commit.
-	// Both sides arrive together. Until they do, the revision already on
-	// screen stays there: a placeholder would empty the view for the wait.
+	// Both sides arrive together. Until they do, a document the reviewer
+	// stepped to waits in the comparison's empty frame, and a document that
+	// was already on screen keeps its revision there: a placeholder would
+	// empty the view for the wait.
+	if (review.reviewing && review.status === "loading" && openedUnderReview) {
+		return <DiffSides pending filePath={filePath ?? "artifact.html"} />;
+	}
 	if (review.reviewing && review.status !== "loading") {
 		if (review.status === "unavailable") return <HtmlReviewUnavailable />;
 		const path = review.path || filePath || "artifact.html";
@@ -598,7 +605,7 @@ export const extension = createReactExtensionDefinition({
 		const file = preparedFile(data);
 		return (
 			<PreparedFileSurface
-				key={file?.id ?? view.instanceId}
+				documentKey={file?.id ?? view.instanceId}
 				readySelector="iframe"
 				diff={viewShowsDiff({
 					session: atelier.diff.session,

@@ -30,7 +30,10 @@ import {
 } from "@/shell/external-write-review-history";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
-import { viewShowsDiff } from "@/extension-runtime/diff-sides";
+import {
+	useOpenedUnderReview,
+	viewShowsDiff,
+} from "@/extension-runtime/diff-sides";
 import { createTextEditor, type TextEditorController } from "./editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
@@ -227,6 +230,7 @@ function LiveTextView({
 		review?.beforeCommitId,
 		review?.afterCommitId,
 	);
+	const openedUnderReview = useOpenedUnderReview(fileId, review !== null);
 	const reviewState: TextReviewState | null = useMemo(() => {
 		if (!review) return null;
 		if (working.loading) return { status: "loading" };
@@ -252,6 +256,12 @@ function LiveTextView({
 	}, [review, working]);
 
 	if (reviewState?.status === "unavailable") return <TextReviewUnavailable />;
+	// A file the reviewer stepped to is opened for its comparison, so it must
+	// never paint as its live self: its frame waits for the sides. A file
+	// already on screen when its review opened keeps its live text instead.
+	if (reviewState?.status === "loading" && openedUnderReview) {
+		return <TextPendingFrame />;
+	}
 	const path = review?.path || fileRow?.path || props.filePath;
 	if (!fileRow) {
 		// Only a review can show a file the workspace no longer has.
@@ -601,6 +611,23 @@ function TextEditorSurface({
 	);
 }
 
+/** The editor's frame — toolbar strip and empty host — while a review's sides load. */
+function TextPendingFrame() {
+	return (
+		<div
+			className="atelier-text-view"
+			data-testid="text-editor-pending"
+			data-atelier-diff-pending=""
+			aria-busy="true"
+		>
+			<div className="atelier-text-surface">
+				<div className="atelier-text-toolbar" aria-hidden="true" />
+				<div className="atelier-text-editor-host" />
+			</div>
+		</div>
+	);
+}
+
 function TextLoadingState() {
 	return (
 		<div
@@ -638,16 +665,20 @@ export const extension = createReactExtensionDefinition({
 	load: loadTextFile,
 	component: ({ atelier, view, data }) => {
 		const file = preparedFile(data);
+		// A comparison is on its way: the prepared text is one revision, the
+		// wrong picture, so the editor's empty frame holds the place instead.
+		const showsDiff = viewShowsDiff({
+			session: atelier.diff.session,
+			state: view.state,
+		});
 		return (
 			<PreparedFileSurface
-				key={file?.id ?? view.instanceId}
+				documentKey={file?.id ?? view.instanceId}
 				readySelector=".cm-editor"
-				diff={viewShowsDiff({
-					session: atelier.diff.session,
-					state: view.state,
-				})}
 				initial={
-					file ? (
+					showsDiff ? (
+						<TextPendingFrame />
+					) : file ? (
 						<pre className="whitespace-pre-wrap p-4 font-mono text-sm">
 							{file.content}
 						</pre>

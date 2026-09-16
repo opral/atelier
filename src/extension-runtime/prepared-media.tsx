@@ -63,6 +63,7 @@ export function PreparedMediaSurface({
 	commitId,
 	children,
 	readySelector,
+	documentKey,
 	allowNative = true,
 	diff = false,
 }: {
@@ -72,6 +73,8 @@ export function PreparedMediaSurface({
 	commitId?: string;
 	children: ReactNode;
 	readySelector: string;
+	/** Which document the surface shows; a change starts the wait again. */
+	documentKey?: string;
 	allowNative?: boolean;
 	/** The view shows two revisions; one of them is not a preview of it. */
 	diff?: boolean;
@@ -109,6 +112,7 @@ export function PreparedMediaSurface({
 		<PreparedFileSurface
 			initial={initial}
 			readySelector={readySelector}
+			documentKey={documentKey}
 			diff={diff}
 		>
 			{children}

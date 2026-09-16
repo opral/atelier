@@ -117,3 +117,27 @@ test("both sides are labelled, and a missing one says when the file did not exis
 		await lix.close();
 	}
 });
+
+test("a pending comparison keeps both columns, with nothing in them yet", () => {
+	const utils = render(
+		<div className="atelier-root">
+			<DiffSides pending filePath="/assets/shot.png" />
+		</div>,
+	);
+	try {
+		const sides = utils.getByTestId("diff-sides");
+		expect(sides).toHaveAttribute("data-atelier-diff-pending");
+		expect(sides).toHaveAttribute("aria-busy", "true");
+		const before = screen.getByRole("region", { name: "Before: shot.png" });
+		const after = screen.getByRole("region", { name: "After: shot.png" });
+		expect(before).toHaveTextContent("Before");
+		expect(after).toHaveTextContent("After");
+		// Neither the absent-file notice nor a spinner: the frame waits quietly.
+		expect(
+			sides.querySelector("[data-attr='checkpoint-absent-file']"),
+		).toBeNull();
+		expect(screen.queryByRole("status")).toBeNull();
+	} finally {
+		utils.unmount();
+	}
+});

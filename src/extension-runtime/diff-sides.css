@@ -42,5 +42,10 @@
 			flex-direction: column;
 			overflow: hidden;
 		}
+
+		/* The sides are still being read: the frame holds its shape, quietly. */
+		.atelier-diff-sides[data-atelier-diff-pending] .atelier-diff-side-body {
+			background: var(--atelier-bg-subtle);
+		}
 	}
 }

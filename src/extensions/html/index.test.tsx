@@ -342,4 +342,127 @@ describe("HtmlView under review", () => {
 			await lix.close();
 		}
 	});
+
+	test("keeps the comparison's frame while the next file's sides load", async () => {
+		const lix = await openLix();
+		const firstId = fakeUuid("review-artifact-first");
+		const secondId = fakeUuid("review-artifact-second");
+		let view: ReturnType<typeof render> | undefined;
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: firstId,
+						path: "/artifacts/first.html",
+						content: new TextEncoder().encode(
+							"<html><body>first</body></html>",
+						),
+					},
+					{
+						id: secondId,
+						path: "/artifacts/second.html",
+						content: new TextEncoder().encode(
+							"<html><body>second</body></html>",
+						),
+					},
+				])
+				.execute();
+			const checkpoint = await createCheckpoint(lix);
+			for (const [id, body] of [
+				[firstId, "first, changed"],
+				[secondId, "second, changed"],
+			] as const) {
+				await qb(lix)
+					.updateTable("lix_file")
+					.set({
+						content: new TextEncoder().encode(
+							`<html><body>${body}</body></html>`,
+						),
+					})
+					.where("id", "=", id)
+					.execute();
+			}
+			const snapshot = await selectWorkingFileDiffSnapshot(lix);
+			const workingEpoch = {
+				beforeCommitId: snapshot.beforeCommitId,
+				afterCommitId: snapshot.afterCommitId,
+			};
+			const session: AtelierDiffSession = {
+				base: { commitId: checkpoint.commitId },
+				target: { working: true },
+				files: [
+					{
+						id: firstId,
+						path: "/artifacts/first.html",
+						changeKind: "modified",
+						workingEpoch,
+						review: { id: "review-first", status: "pending" },
+					},
+					{
+						id: secondId,
+						path: "/artifacts/second.html",
+						changeKind: "modified",
+						workingEpoch,
+						review: { id: "review-second", status: "pending" },
+					},
+				],
+				activePath: "/artifacts/first.html",
+				capabilities: { checkpoint: true, undo: true, restore: false },
+			};
+			const tree = (fileId: string, filePath: string) => (
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<HtmlView
+							fileId={fileId}
+							filePath={filePath}
+							diffSession={session}
+						/>
+					</LixProvider>
+				</div>
+			);
+			await act(async () => {
+				view = render(tree(firstId, "/artifacts/first.html"));
+			});
+			await waitFor(() =>
+				expect(
+					view!.container.querySelectorAll("[data-diff-side] iframe"),
+				).toHaveLength(2),
+			);
+
+			// The reviewer steps to the next artifact in the same mounted view.
+			// Its sides are not read yet: the two columns stay, empty, and no
+			// live preview or spinner takes their place.
+			view!.rerender(tree(secondId, "/artifacts/second.html"));
+			const sides = screen.getByTestId("diff-sides");
+			expect(sides).toHaveAttribute("data-atelier-diff-pending");
+			expect(
+				screen.getByRole("region", { name: "Before: second.html" }),
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole("region", { name: "After: second.html" }),
+			).toBeInTheDocument();
+			expect(view!.container.querySelector("iframe")).toBeNull();
+			expect(screen.queryByRole("status")).toBeNull();
+
+			await waitFor(() =>
+				expect(
+					view!.container.querySelectorAll("[data-diff-side] iframe"),
+				).toHaveLength(2),
+			);
+			expect(screen.getByTestId("diff-sides")).not.toHaveAttribute(
+				"data-atelier-diff-pending",
+			);
+			const frames = [
+				...view!.container.querySelectorAll("[data-diff-side] iframe"),
+			];
+			expect(frames[0]!.getAttribute("srcdoc")).toContain("second</body>");
+			expect(frames[1]!.getAttribute("srcdoc")).toContain(
+				"second, changed</body>",
+			);
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
+	});
 });
