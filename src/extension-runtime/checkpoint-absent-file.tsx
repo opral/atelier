@@ -1,5 +1,5 @@
 import { qb } from "@/lib/lix-kysely";
-import { useQueryTakeFirst } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import { formatCheckpointCreatedAt } from "@/lib/checkpoint-format";
 
 /**
@@ -16,7 +16,10 @@ export function CheckpointAbsentFile({
 	/** The commit the view is pinned to; names the checkpoint when it is one. */
 	readonly commitId: string | null;
 }) {
-	const checkpoint = useQueryTakeFirst<{ created_at: string }>(
+	// The date is a detail that may arrive late. A read that suspends here
+	// would reach the view's own boundary and hide the whole comparison, the
+	// present side included, until one row came back.
+	const checkpointResult = useQueryResult<{ created_at: string }>(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_commit")
@@ -26,6 +29,10 @@ export function CheckpointAbsentFile({
 				.limit(1),
 		{ subscribe: false },
 	);
+	const checkpoint =
+		checkpointResult.status === "success"
+			? checkpointResult.rows[0]
+			: undefined;
 	const fileName = filePath?.split("/").filter(Boolean).at(-1);
 	return (
 		<div
