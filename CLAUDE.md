@@ -77,7 +77,9 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
   value, and do not alias without saying why.
 - A component's own variables (`--markdown-*`, `--csv-*`) are declared on its
   root and reference tokens; they are never a place to hide a colour.
-- Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else.
+- Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else —
+  and it is off for now: `theme.css` pins `color-scheme: light` until the
+  dark palette has been designed. Keep writing dark values in `light-dark()`.
   A host rebrands by redeclaring tokens on `:root`; it never overrides
   component classes.
 - Cascade layers are the override contract: `src/index.css` orders

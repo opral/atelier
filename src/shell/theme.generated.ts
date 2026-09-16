@@ -2,7 +2,7 @@
 /** The token sheet, compacted, for a render with no DOM to link it into. */
 export const THEME_CSS = `:root,
 :host {
-color-scheme: light dark;
+color-scheme: light;
 --atelier-bg: light-dark(
 rgb(244 242 239),
 rgb(22 20 18)

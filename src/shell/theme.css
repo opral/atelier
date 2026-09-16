@@ -9,15 +9,18 @@
  * `panel` is an island on the `bg` canvas; `subtle` is a tint, `strong` a
  * heavier edge. Each token says, at the end of its line, when to use it.
  *
- * Dark values ride along in light-dark(): a host flips the whole set with
- * `color-scheme: dark` on any ancestor, and nothing is declared twice.
+ * Dark values ride along in light-dark(), but the scheme is pinned to light:
+ * the dark palette is a first pass nobody has designed yet, so no operating
+ * system preference may turn it on. When it is ready, this line becomes
+ * `color-scheme: light dark` and `.dark { color-scheme: dark }` (index.css)
+ * is the only switch a host needs; nothing else changes.
  *
  * A second name for the same role is not a token, it is a future bug. The few
  * aliases below say why they exist.
  */
 :root,
 :host {
-	color-scheme: light dark;
+	color-scheme: light;
 
 	/* ── Surfaces ─────────────────────────────────────────────────────── */
 	--atelier-bg: light-dark(
