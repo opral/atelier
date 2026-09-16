@@ -1672,7 +1672,7 @@ function UnifiedNewMenu({
 			<DropdownMenuContent
 				align="start"
 				aria-label="Create"
-				className="w-56 p-1.5 text-xs"
+				className="w-72 p-1.5 text-xs"
 				sideOffset={3}
 			>
 				<NewMenuItem
