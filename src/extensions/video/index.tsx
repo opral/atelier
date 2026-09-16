@@ -88,8 +88,9 @@ function VideoViewContent({
 	);
 	// A video cannot be diffed in place, so the review shows both revisions:
 	// the checkpoint on the left, the working file on the right.
-	if (review.reviewing) {
-		if (review.status === "loading") return <VideoLoadingState />;
+	// Both sides arrive together. Until they do, the revision already on
+	// screen stays there: a placeholder would empty the view for the wait.
+	if (review.reviewing && review.status !== "loading") {
 		if (review.status === "unavailable") return <VideoReviewUnavailable />;
 		const path = review.path || filePath || "video";
 		return (
