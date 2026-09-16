@@ -1698,21 +1698,21 @@ function UnifiedNewMenu({
 				<NewMenuItem
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
-					label="New Markdown (.md)"
+					label="New Markdown"
 					onSelect={onNewMarkdown}
 					trailing={slotFor("markdown", "file-new-markdown")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
-					label="New CSV (.csv)"
+					label="New CSV"
 					onSelect={onNewCsv}
 					trailing={slotFor("csv", "file-new-csv")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-excalidraw"
 					iconUrl={fileExcalidrawIconUrl}
-					label="New Drawing (.excalidraw)"
+					label="New Drawing"
 					onSelect={onNewExcalidraw}
 					trailing={slotFor("excalidraw", "file-new-excalidraw")}
 				/>

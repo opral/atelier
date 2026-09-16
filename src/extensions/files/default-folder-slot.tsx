@@ -7,13 +7,16 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import {
 	Check,
 	ChevronDown,
 	Folder,
 	FolderPlus,
+	Plus,
 	RotateCcw,
+	Search,
 	Trash2,
 } from "lucide-react";
 import {
@@ -21,6 +24,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
+import folderBlueIconUrl from "./assets/folder-blue.svg";
 import {
 	defaultFolderState,
 	fileTypeNoun,
@@ -124,6 +128,7 @@ export function DefaultFolderSlot({
 		[defaultFolder, existingDirectories, hereDirectory],
 	);
 	const [open, setOpen] = useState(false);
+	const [hovered, setHovered] = useState(false);
 	const [mode, setMode] = useState<SlotMode>("picker");
 	const triggerRef = useRef<HTMLDivElement>(null);
 	// Where `New folder…` will put the folder: whichever option the picker was
@@ -170,21 +175,30 @@ export function DefaultFolderSlot({
 
 	return (
 		<Menu.Sub open={open} onOpenChange={handleOpenChange}>
+			<SlotTooltip
+				anchorRef={triggerRef}
+				label={triggerTitle(state, noun)}
+				// Only where the slot cannot say it itself: a glyph with no default
+				// behind it, or a default whose folder is gone. A named folder is
+				// already the sentence, and the panel replaces the tooltip
+				// outright — over an open picker it would name what the picker
+				// is already showing.
+				show={hovered && !open && state.kind !== "set"}
+			/>
 			<Menu.SubTrigger
 				ref={triggerRef}
 				data-attr={`${dataAttr}-default-folder`}
-				title={triggerTitle(state, noun)}
 				aria-label={triggerTitle(state, noun)}
 				className={
 					// A broken default gets the room to say so; the folder's name is
 					// the half of that sentence the user needs.
 					(state.kind === "missing" ? "max-w-[176px] " : "max-w-[128px] ") +
-					"flex h-5 cursor-default items-center gap-1 rounded-control border px-1.5 text-[11px] outline-hidden select-none " +
-					// A drawn boundary, always, while the slot is visible: the row
-					// creates and this does not, so where one ends and the other
-					// begins must never be a guess.
-					"border-[var(--color-border-subtle)] bg-[var(--color-bg-panel)] " +
-					"data-[highlighted]:border-[var(--color-border-strong)] data-[highlighted]:bg-[var(--color-bg-control)] " +
+					"flex h-5 cursor-default items-center gap-1 rounded-control border border-transparent px-1.5 text-[11px] outline-hidden select-none " +
+					// At rest it is a caption on the row: it says where the row
+					// creates. It draws its boundary once the pointer or the arrow
+					// keys reach it, which is the same moment it can be pressed —
+					// so a thing that looks pressable always is.
+					"data-[highlighted]:border-[var(--color-border-subtle)] data-[highlighted]:bg-[var(--color-bg-control)] " +
 					"data-[state=open]:border-[var(--color-border-strong)] data-[state=open]:bg-[var(--color-bg-control)] " +
 					(state.kind === "missing"
 						? "text-[var(--color-text-status-warning)]"
@@ -193,11 +207,15 @@ export function DefaultFolderSlot({
 				onPointerDown={() => {
 					intentRef.current = true;
 				}}
+				onPointerEnter={() => setHovered(true)}
+				onFocus={() => setHovered(true)}
+				onBlur={() => setHovered(false)}
 				onPointerLeave={(event) => {
 					// Radix closes a submenu when the pointer wanders off its
 					// trigger. This one holds a search field; it closes on Escape,
 					// on a pick, or on a press outside.
 					event.preventDefault();
+					setHovered(false);
 				}}
 				onKeyDown={(event) => {
 					if (
@@ -221,7 +239,20 @@ export function DefaultFolderSlot({
 				{state.kind === "set" ? (
 					<span className="shrink-0 opacity-80">in</span>
 				) : null}
-				<Folder aria-hidden="true" className="size-3 shrink-0" />
+				{state.kind === "unset" ? (
+					// Nothing is set, so there is no folder to name and nothing to
+					// disclose: one glyph that says what pressing it would do.
+					<FolderPlus aria-hidden="true" className="size-3.5 shrink-0" />
+				) : state.kind === "missing" ? (
+					<Folder aria-hidden="true" className="size-3 shrink-0" />
+				) : (
+					<img
+						src={folderBlueIconUrl}
+						alt=""
+						aria-hidden="true"
+						className="size-3.5 shrink-0"
+					/>
+				)}
 				{state.kind === "unset" ? null : (
 					<span className="min-w-0 truncate">
 						{folderDisplayName(state.folder)}
@@ -230,7 +261,9 @@ export function DefaultFolderSlot({
 				{state.kind === "missing" ? (
 					<span className="shrink-0 opacity-90">· missing</span>
 				) : null}
-				<ChevronDown aria-hidden="true" className="size-2.5 shrink-0" />
+				{state.kind === "unset" ? null : (
+					<ChevronDown aria-hidden="true" className="size-2.5 shrink-0" />
+				)}
 			</Menu.SubTrigger>
 			<Menu.Portal>
 				<DropdownMenuSubContent
@@ -296,6 +329,53 @@ export function DefaultFolderSlot({
 				</DropdownMenuSubContent>
 			</Menu.Portal>
 		</Menu.Sub>
+	);
+}
+
+/** How long a pointer rests on the glyph before it is named. */
+const TOOLTIP_DELAY_MS = 350;
+
+/**
+ * The glyph says nothing on its own, so it is named where it is looked at.
+ *
+ * Not Radix's tooltip: that is a dismissable layer, and a layer over an open
+ * menu takes the first Escape for itself, leaving the menu to need a second.
+ * This is a label and nothing else — portalled, because the menu scrolls its
+ * own contents and would clip it.
+ */
+function SlotTooltip({
+	anchorRef,
+	label,
+	show,
+}: {
+	readonly anchorRef: { readonly current: HTMLElement | null };
+	readonly label: string;
+	readonly show: boolean;
+}) {
+	const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+	useEffect(() => {
+		if (!show) {
+			setAt(null);
+			return;
+		}
+		const timer = setTimeout(() => {
+			const rect = anchorRef.current?.getBoundingClientRect();
+			if (rect)
+				setAt({ left: rect.left + rect.width / 2, top: rect.bottom + 6 });
+		}, TOOLTIP_DELAY_MS);
+		return () => clearTimeout(timer);
+	}, [anchorRef, show]);
+	if (at === null || typeof document === "undefined") return null;
+	return createPortal(
+		<div
+			role="tooltip"
+			data-attr="default-folder-tooltip"
+			className="atelier-portal pointer-events-none fixed z-50 max-w-64 -translate-x-1/2 rounded-md bg-[var(--color-bg-tooltip)] px-3 py-1.5 font-sans text-xs text-balance text-[var(--color-text-tooltip)] shadow-md"
+			style={{ left: at.left, top: at.top }}
+		>
+			{label}
+		</div>,
+		document.body,
 	);
 }
 
@@ -423,7 +503,11 @@ function FolderPicker({
 	return (
 		<>
 			<PanelHeading>Default folder for {noun}</PanelHeading>
-			<div className="px-0.5 pb-1.5">
+			<div className="relative px-0.5 pb-1.5">
+				<Search
+					aria-hidden="true"
+					className="pointer-events-none absolute top-3.5 left-2.5 size-3 -translate-y-1/2 text-[var(--color-icon-tertiary)]"
+				/>
 				<input
 					ref={searchRef}
 					type="text"
@@ -431,7 +515,7 @@ function FolderPicker({
 					placeholder="Search folders"
 					aria-label="Search folders"
 					data-attr="default-folder-search"
-					className="h-7 w-full rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-control)] px-2 text-xs text-[var(--color-text-primary)] outline-hidden placeholder:text-[var(--color-text-quaternary)] focus-visible:border-[var(--color-border-strong)]"
+					className="h-7 w-full rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-control)] pr-2 pl-7 text-xs text-[var(--color-text-primary)] outline-hidden placeholder:text-[var(--color-text-quaternary)] focus-visible:border-[var(--color-border-strong)]"
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={(event) => {
 						// Radix runs typeahead on every character typed inside its
@@ -494,7 +578,9 @@ function FolderPicker({
 								onPick(folder.path);
 							}}
 						>
-							<Folder
+							<img
+								src={folderBlueIconUrl}
+								alt=""
 								aria-hidden="true"
 								className={`size-3.5 shrink-0${folder.context ? " opacity-40" : ""}`}
 							/>
@@ -522,7 +608,7 @@ function FolderPicker({
 					onNewFolder();
 				}}
 			>
-				<FolderPlus aria-hidden="true" className="size-3.5 shrink-0" />
+				<Plus aria-hidden="true" className="size-3.5 shrink-0" />
 				<span className="min-w-0 flex-1 truncate">New folder…</span>
 			</DropdownMenuItem>
 		</>

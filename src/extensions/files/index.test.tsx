@@ -216,7 +216,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		await chooseNewMenuItem("New Markdown (.md)");
+		await chooseNewMenuItem("New Markdown");
 		const input = await waitFor(() => {
 			const draft = getFilesTreeRenameInput();
 			expect(draft).toHaveValue(".md");
@@ -266,11 +266,9 @@ describe("FilesView", () => {
 		expect(screen.getByRole("menuitem", { name: /New file/ })).toBeVisible();
 		expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeVisible();
 		expect(
-			screen.getByRole("menuitem", { name: /New Markdown \(.md\)/ }),
+			screen.getByRole("menuitem", { name: /New Markdown/ }),
 		).toBeVisible();
-		expect(
-			screen.getByRole("menuitem", { name: /New CSV \(.csv\)/ }),
-		).toBeVisible();
+		expect(screen.getByRole("menuitem", { name: /New CSV/ })).toBeVisible();
 		// Linux/jsdom: the hints are spelled out, not left as macOS glyphs.
 		expect(screen.getByText("Ctrl+.")).toBeVisible();
 		expect(screen.getByText("Shift+Ctrl+.")).toBeVisible();
@@ -300,11 +298,9 @@ describe("FilesView", () => {
 		expect(screen.getByRole("menuitem", { name: /New file/ })).toBeVisible();
 		expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeVisible();
 		expect(
-			screen.getByRole("menuitem", { name: /New Markdown \(.md\)/ }),
+			screen.getByRole("menuitem", { name: /New Markdown/ }),
 		).toBeVisible();
-		expect(
-			screen.getByRole("menuitem", { name: /New CSV \(.csv\)/ }),
-		).toBeVisible();
+		expect(screen.getByRole("menuitem", { name: /New CSV/ })).toBeVisible();
 		// Linux/jsdom: the hints are spelled out, not left as macOS glyphs.
 		expect(screen.getByText("Ctrl+.")).toBeVisible();
 		expect(screen.getByText("Shift+Ctrl+.")).toBeVisible();
@@ -368,7 +364,7 @@ describe("FilesView", () => {
 			).toHaveLength(1);
 		});
 
-		await chooseNewMenuItem("New CSV (.csv)");
+		await chooseNewMenuItem("New CSV");
 		const csvInput = await waitFor(() => {
 			const draft = getFilesTreeRenameInput();
 			expect(draft).toHaveValue(".csv");
@@ -407,7 +403,7 @@ describe("FilesView", () => {
 			);
 		});
 
-		await chooseNewMenuItem("New Markdown (.md)");
+		await chooseNewMenuItem("New Markdown");
 		const input = await waitFor(() => getFilesTreeRenameInput());
 		act(() => {
 			input.dispatchEvent(
@@ -1265,7 +1261,7 @@ describe("the default folder rule, through the view", () => {
 		});
 		await screen.findByRole("button", { name: "New" });
 
-		await chooseNewMenuItem("New Drawing (.excalidraw)");
+		await chooseNewMenuItem("New Drawing");
 		const input = await waitFor(getFilesTreeRenameInput);
 		fireEvent.input(input, { target: { value: "sketch.excalidraw" } });
 		fireEvent.keyDown(input, { key: "Enter" });
@@ -1298,7 +1294,7 @@ describe("the default folder rule, through the view", () => {
 		});
 		await screen.findByRole("button", { name: "New" });
 
-		await chooseNewMenuItem("New CSV (.csv)");
+		await chooseNewMenuItem("New CSV");
 		const input = await waitFor(getFilesTreeRenameInput);
 		fireEvent.input(input, { target: { value: "budget.csv" } });
 		fireEvent.keyDown(input, { key: "Enter" });
@@ -1331,7 +1327,7 @@ describe("the default folder rule, through the view", () => {
 		});
 		await screen.findByRole("button", { name: "New" });
 
-		await chooseNewMenuItem("New Drawing (.excalidraw)");
+		await chooseNewMenuItem("New Drawing");
 		const input = await waitFor(getFilesTreeRenameInput);
 		fireEvent.input(input, { target: { value: "stranded.excalidraw" } });
 		fireEvent.keyDown(input, { key: "Enter" });
@@ -1561,7 +1557,10 @@ describe("the default folder rule, through the view", () => {
 		const trigger = await screen.findByRole("button", { name: "New" });
 		openNewMenu(trigger);
 		const slot = await findDefaultFolderSlot("file-new-csv");
-		expect(slot).toHaveAttribute("title", "Set default folder for CSV files");
+		expect(slot).toHaveAttribute(
+			"aria-label",
+			"Set default folder for CSV files",
+		);
 
 		openDefaultFolderSlot(slot);
 		await waitFor(() => {
@@ -1737,9 +1736,9 @@ async function chooseNewMenuItem(name: string) {
 	const dataAttrByName: Record<string, string> = {
 		"New file": "file-new-file",
 		"New folder": "file-new-folder",
-		"New Markdown (.md)": "file-new-markdown",
-		"New CSV (.csv)": "file-new-csv",
-		"New Drawing (.excalidraw)": "file-new-excalidraw",
+		"New Markdown": "file-new-markdown",
+		"New CSV": "file-new-csv",
+		"New Drawing": "file-new-excalidraw",
 	};
 	const dataAttr = dataAttrByName[name];
 	if (!dataAttr) throw new Error(`Unknown New menu item '${name}'`);
