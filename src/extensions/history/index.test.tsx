@@ -109,6 +109,70 @@ function mockHistoryWidth() {
 describe("HistoryView", () => {
 	afterEach(() => vi.unstubAllGlobals());
 
+	test.each([false, true])(
+		"shows pending file history and settles (failure=%s)",
+		async (fail) => {
+			const lix = await openLix();
+			const id = fakeUuid("pending-history");
+			await lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[id, "/pending.txt", new TextEncoder().encode("hello")],
+			);
+			await createCheckpoint(lix);
+			let release!: () => void;
+			const pending = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const observe = lix.observe.bind(lix);
+			vi.spyOn(lix, "observe").mockImplementation((...args) => {
+				const stream = observe(...args);
+				if (String(args[0]).includes("lix_history('lix_file'")) {
+					const next = stream.next.bind(stream);
+					vi.spyOn(stream, "next").mockImplementation(async () => {
+						await pending;
+						if (fail) throw new Error("history unavailable");
+						return next();
+					});
+				}
+				return stream;
+			});
+			const view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={<div>Opening history…</div>}>
+						<HistoryView
+							atelier={atelierStub({
+								activeFile: { id, path: "/pending.txt" },
+							})}
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+			try {
+				expect(
+					await screen.findByText("Loading file history…"),
+				).toHaveAttribute("role", "status");
+				expect(
+					screen.queryByText("No checkpoint includes this file yet."),
+				).toBeNull();
+				await act(async () => {
+					release();
+				});
+				if (fail)
+					expect(await screen.findByRole("alert")).toHaveTextContent(
+						"Could not load file history.",
+					);
+				else await screen.findByRole("list", { name: "Checkpoints" });
+				await waitFor(() =>
+					expect(screen.queryByText("Loading file history…")).toBeNull(),
+				);
+			} finally {
+				release();
+				view.unmount();
+				await lix.close();
+			}
+		},
+	);
+
 	test("shows working changes after edits and removes the row after checkpointing", async () => {
 		const lix = await openLix();
 		await createCheckpoint(lix);
