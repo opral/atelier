@@ -27,6 +27,7 @@ export function DeclarativeExtension({
 		prepared?.extensionId === definition.kind ? prepared.data : undefined;
 	const [loaded, setLoaded] = useState<{
 		key: string;
+		fileKey: string;
 		data: AtelierJsonValue;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
@@ -47,13 +48,25 @@ export function DeclarativeExtension({
 		[locationKey],
 	);
 	const key = JSON.stringify([definition.kind, locationKey]);
+	// The document this view shows, whatever revision of it the state names.
+	const fileKey = JSON.stringify([
+		definition.kind,
+		view.state.fileId ?? view.state.filePath ?? null,
+	]);
 	const initialKey = useRef(key);
+	// A revision change — entering or leaving a review — is a new location and
+	// so a new read, but the same document. Keep the view mounted on the data
+	// it has until the read comes back: unmounting it would tear down the
+	// editor and repaint the page from a static placeholder, and the view has
+	// its own way of holding the previous revision while the next one loads.
 	const data =
 		loaded?.key === key
 			? loaded.data
-			: key === initialKey.current
+			: key === initialKey.current && initialData !== undefined
 				? initialData
-				: undefined;
+				: loaded?.fileKey === fileKey
+					? loaded.data
+					: undefined;
 
 	const opening = useMemo(
 		() => ({ key, startedAt: performance.now(), reported: false }),
@@ -84,7 +97,7 @@ export function DeclarativeExtension({
 							signal: request.signal,
 						});
 						if (disposed) return;
-						setLoaded({ key, data: next });
+						setLoaded({ key, fileKey, data: next });
 						setError(null);
 					} catch (cause) {
 						if (!disposed && !request.signal.aborted)
@@ -130,6 +143,7 @@ export function DeclarativeExtension({
 		context.connected,
 		context.hydrated,
 		definition,
+		fileKey,
 		key,
 		location,
 	]);

@@ -73,6 +73,7 @@ import type { AtelierDiffFile, AtelierDiffSession } from "@/extension-api";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
+	hasHistoricalEditorRevisionState,
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
@@ -223,6 +224,7 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 				fileId={fileId}
 				filePath={props.filePath}
 				fileRow={undefined}
+				readOnly={props.readOnly ?? false}
 				isActiveView={props.isActiveView ?? true}
 				isPanelFocused={props.isPanelFocused ?? true}
 				editorRevision={editorRevision}
@@ -277,6 +279,7 @@ function MarkdownViewLoaded(
 		fileId,
 		filePath,
 		fileRow,
+		readOnly = false,
 		isActiveView = true,
 		isPanelFocused = true,
 		beforeCommitId,
@@ -299,6 +302,7 @@ function MarkdownViewLoaded(
 				fileId={fileId}
 				filePath={filePath}
 				fileRow={fileRow}
+				readOnly={readOnly}
 				isActiveView={isActiveView}
 				isPanelFocused={isPanelFocused}
 				editorRevision={editorRevision}
@@ -679,6 +683,8 @@ function MarkdownHistoricalViewLoaded({
 	readonly fileId: string;
 	readonly filePath: string | undefined;
 	readonly fileRow: MarkdownFileRow | undefined;
+	/** The host allows no editing at all; only then is there no toolbar. */
+	readonly readOnly: boolean;
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
 	readonly editorRevision: EditorRevisionState;
@@ -731,6 +737,7 @@ function MarkdownWorkingHistoricalView({
 	readonly fileId: string;
 	readonly filePath: string | undefined;
 	readonly fileRow: MarkdownFileRow | undefined;
+	readonly readOnly: boolean;
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
 	readonly editorRevision: EditorRevisionState;
@@ -767,6 +774,7 @@ function MarkdownHistoricalViewResolved({
 	fileId,
 	filePath,
 	fileRow,
+	readOnly,
 	isActiveView,
 	isPanelFocused,
 	editorRevision,
@@ -777,6 +785,7 @@ function MarkdownHistoricalViewResolved({
 	readonly fileId: string;
 	readonly filePath: string | undefined;
 	readonly fileRow: MarkdownFileRow | undefined;
+	readonly readOnly: boolean;
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
 	readonly editorRevision: EditorRevisionState;
@@ -825,12 +834,17 @@ function MarkdownHistoricalViewResolved({
 				markdown={decodeFileDataToText(effectiveFileRow.content)}
 				sourceCommitId={editorRevision.afterCommitId ?? undefined}
 				openWorkspaceFile={openWorkspaceFile}
+				readOnly={readOnly}
 			/>
 		);
 	} else {
 		content = (
 			<EditorProvider>
 				<div className="markdown-view markdown-review flex h-full flex-col bg-panel">
+					{/* The same toolbar the editor has, only disabled: a past
+					    revision takes no formatting, but the page must not move
+					    when the review opens over the document. */}
+					{!readOnly && <FormattingToolbar disabled />}
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						{reviewDiff && review ? (
 							<MarkdownReviewOverlay
@@ -870,11 +884,13 @@ function MarkdownSnapshotView({
 	markdown,
 	sourceCommitId,
 	openWorkspaceFile,
+	readOnly,
 }: {
 	readonly filePath: string;
 	readonly markdown: string;
 	readonly sourceCommitId?: string;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+	readonly readOnly: boolean;
 }) {
 	const lix = useLix();
 	const editor = useMemo(
@@ -894,12 +910,18 @@ function MarkdownSnapshotView({
 
 	return (
 		<EditorProvider>
-			<MarkdownSnapshotEditor editor={editor} />
+			<MarkdownSnapshotEditor editor={editor} readOnly={readOnly} />
 		</EditorProvider>
 	);
 }
 
-function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
+function MarkdownSnapshotEditor({
+	editor,
+	readOnly,
+}: {
+	readonly editor: Editor;
+	readonly readOnly: boolean;
+}) {
 	const { setEditor } = useEditorCtx();
 	useEffect(() => {
 		setEditor(editor);
@@ -910,6 +932,7 @@ function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
 
 	return (
 		<div className="markdown-view flex h-full flex-col bg-panel">
+			{!readOnly && <FormattingToolbar disabled />}
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
 					<EditorContent editor={editor} className="tiptap mx-auto w-full" />
@@ -1154,6 +1177,12 @@ export const extension = createReactExtensionDefinition({
 	load: loadTextFile,
 	component: ({ atelier, view, data }) => {
 		const file = preparedFile(data);
+		// The runtime folds "this is a past revision" into `readOnly`. The
+		// toolbar is the host's call, not the revision's: over a checkpoint or
+		// a review it stays where it is, disabled, so nothing on the page moves
+		// when a review opens or closes.
+		const hostReadOnly =
+			atelier.readOnly && !hasHistoricalEditorRevisionState(view.state);
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
@@ -1161,10 +1190,11 @@ export const extension = createReactExtensionDefinition({
 				initial={
 					file ? (
 						// Laid out exactly like the editor that replaces it (toolbar
-						// strip, container, the ProseMirror column), so the swap to
-						// the live editor moves nothing on screen.
+						// strip, container, the ProseMirror column with the
+						// document's type), so the swap to the live editor moves
+						// nothing on screen.
 						<div className="markdown-view flex h-full flex-col bg-panel">
-							{atelier.readOnly ? null : (
+							{hostReadOnly ? null : (
 								<div
 									aria-hidden="true"
 									className="h-10 shrink-0 border-b border-border-subtle"
@@ -1172,7 +1202,7 @@ export const extension = createReactExtensionDefinition({
 							)}
 							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-panel">
 								<RepositoryMarkdownContent
-									className="ProseMirror"
+									className="ProseMirror atelier-document"
 									content={file.content}
 									path={file.path}
 									branchId={atelier.branches.activeId}
@@ -1193,7 +1223,7 @@ export const extension = createReactExtensionDefinition({
 					<MarkdownView
 						fileId={view.state.fileId as string}
 						filePath={view.state.filePath as string | undefined}
-						readOnly={atelier.readOnly}
+						readOnly={hostReadOnly}
 						isActiveView={view.isActive}
 						isPanelFocused={view.isFocused}
 						focusOnLoad={Boolean(view.state.focusOnLoad)}

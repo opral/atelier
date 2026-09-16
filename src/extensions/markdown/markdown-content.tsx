@@ -21,12 +21,17 @@ export function MarkdownContent({
 	readonly href?: (href: string) => string;
 	/** Resolve repository assets; undefined omits images without a usable URL. */
 	readonly src?: (src: string) => string | undefined;
-	/** Extra root classes, e.g. "ProseMirror" to take the editor's own layout. */
+	/**
+	 * Extra root classes, e.g. "ProseMirror atelier-document" to take the
+	 * editor's own column and type. The root carries no padding of its own:
+	 * a utility here would beat the layered `.markdown-view .ProseMirror`
+	 * gutter and put the placeholder somewhere the editor is not.
+	 */
 	readonly className?: string;
 }) {
 	return (
 		<article
-			className={`tiptap mx-auto w-full px-6 py-5 ${className ?? ""} [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border-subtle [&_th]:bg-bg-hover [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-border-subtle [&_td]:px-3 [&_td]:py-2`}
+			className={`tiptap mx-auto w-full ${className ?? ""} [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border-subtle [&_th]:bg-bg-hover [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-border-subtle [&_td]:px-3 [&_td]:py-2`}
 			data-atelier-markdown-content=""
 		>
 			{renderNode(astToTiptapDoc(parseMarkdown(content)), 0, href, src)}

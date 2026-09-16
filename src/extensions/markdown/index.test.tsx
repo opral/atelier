@@ -292,12 +292,11 @@ describe("MarkdownView", () => {
 		});
 		expect(utils!.container).not.toHaveTextContent("Head version");
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("button", { name: "Bold" }),
-		).not.toBeInTheDocument();
+		// The toolbar keeps its place over a past revision so the page does not
+		// move when the revision opens; only its controls are off.
+		const toolbar = screen.getByRole("toolbar", { name: "Formatting toolbar" });
+		expect(toolbar).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		await waitFor(() => {
@@ -375,11 +374,9 @@ describe("MarkdownView", () => {
 			reviewEditor.querySelector('[data-review-active="true"]'),
 		).toBeNull();
 		expect(
-			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("button", { name: "Bold" }),
-		).not.toBeInTheDocument();
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();
