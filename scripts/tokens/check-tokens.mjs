@@ -64,7 +64,9 @@ const files = [];
 })(root);
 
 // color-mix() and light-dark() over tokens are fine; a literal inside them is caught on its own.
-const LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/g;
+// `_rgba(` inside a Tailwind arbitrary value is a literal too; \b would not see it.
+const LITERAL =
+	/#[0-9a-fA-F]{3,8}\b|(?<![A-Za-z-])(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/g;
 const VAR = /var\(\s*(--[a-zA-Z0-9-]+)/g;
 const ARBITRARY =
 	/\b(?:bg|text|border|ring|fill|stroke|outline|shadow|from|to|via|divide|placeholder|caret|decoration|accent|ring-offset)-\[(?:var\(--[^)]+\)|#[0-9a-fA-F]{3,8}|(?:rgba?|hsla?|oklch)\([^\]]*)\]/g;

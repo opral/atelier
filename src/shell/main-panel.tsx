@@ -132,7 +132,7 @@ function EmptyStateContent({
 					type="button"
 					onClick={() => void onCreateNewFile()}
 					data-attr="main-empty-new-document"
-					className="mt-6 flex items-center gap-2 rounded-[10px] bg-bg-hover px-6 py-2.75 text-sm font-bold text-accent-on shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover"
+					className="mt-6 flex items-center gap-2 rounded-[10px] bg-accent px-6 py-2.75 text-sm font-bold text-accent-on shadow-accent hover:bg-accent-hover"
 				>
 					New document
 					<span className="text-[11.5px] font-semibold opacity-75">

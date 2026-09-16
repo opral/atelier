@@ -224,7 +224,7 @@ export function LinkPopover({
 						className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
 						data-attr="markdown-link-popover"
 					>
-						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-border-subtle bg-bg-subtle px-2 text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-accent-border focus-within:bg-panel focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--atelier-accent-subtle)]">
+						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-border-subtle bg-bg-subtle px-2 text-fg shadow-md transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-accent-border focus-within:bg-panel focus-within:shadow-md">
 							<LinkIcon
 								className="size-3.5 shrink-0 text-fg-subtle"
 								aria-hidden
@@ -259,7 +259,7 @@ export function LinkPopover({
 							<button
 								type="button"
 								onClick={handleApply}
-								className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-bg-hover px-3 text-[12.5px] font-semibold text-accent-on shadow-[0_1px_2px_rgba(194,65,12,0.18)] transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
+								className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-accent px-3 text-[12.5px] font-semibold text-accent-on shadow-accent transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
 								data-attr="markdown-link-apply"
 							>
 								<Check className="size-3.5" aria-hidden />
