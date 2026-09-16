@@ -14,7 +14,9 @@ import {
 } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { LixProvider } from "@/lib/lix-react";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { CsvView } from "./index";
@@ -1003,6 +1005,96 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 				utils!.unmount();
 			});
 		}
+		await lix.close();
+	}
+});
+
+test("a table opened inside a review never paints as its live self", async () => {
+	const lix = await openLix();
+	let utils: { unmount: () => void } | undefined;
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	// The reviewer stepped to this file: the session already lists it when
+	// the view mounts. Every frame that holds the live grid without the
+	// review table must hold it out of sight.
+	const frames: { pending: boolean; review: boolean }[] = [];
+	const observer = new MutationObserver(() => {
+		if (!host.querySelector("[data-testid=csv-data-grid], .csv-review-table"))
+			return;
+		frames.push({
+			pending: host.querySelector("[data-review-pending]") !== null,
+			review: host.querySelector(".csv-review-table") !== null,
+		});
+	});
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("file_csv_stepped"),
+				path: "/stepped.csv",
+				content: new TextEncoder().encode("name,value\nbefore,1"),
+			})
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nafter,2") })
+			.where("id", "=", fakeUuid("file_csv_stepped"))
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView
+							fileId={fakeUuid("file_csv_stepped")}
+							filePath="/stepped.csv"
+							diffSession={{
+								base: { commitId: checkpoint.commitId },
+								target: { working: true },
+								files: [
+									{
+										id: fakeUuid("file_csv_stepped"),
+										path: "/stepped.csv",
+										changeKind: "modified",
+										workingEpoch: {
+											beforeCommitId: snapshot.beforeCommitId,
+											afterCommitId: snapshot.afterCommitId,
+										},
+										review: { id: "review-csv-stepped", status: "pending" },
+									},
+								],
+								activePath: "/stepped.csv",
+								capabilities: { checkpoint: true, undo: true, restore: false },
+							}}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+				{ container: host },
+			);
+		});
+		await waitFor(() => {
+			expect(host.querySelector(".csv-review-table")).toBeTruthy();
+		});
+		observer.disconnect();
+		expect(host.querySelector("[data-review-pending]")).toBeNull();
+		expect(frames.some((frame) => frame.pending && !frame.review)).toBe(true);
+		expect(frames.every((frame) => frame.review || frame.pending)).toBe(true);
+	} finally {
+		observer.disconnect();
+		if (utils) {
+			await act(async () => {
+				utils!.unmount();
+			});
+		}
+		host.remove();
 		await lix.close();
 	}
 });

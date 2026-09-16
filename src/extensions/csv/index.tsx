@@ -449,6 +449,16 @@ function EditableCsvView({
 			: null;
 	const isReviewing = reviewing;
 	const isReadOnly = isReviewing || readOnly;
+	// A table opened while its review is active must never paint as its live
+	// self: the reviewer stepped to it for the diff. The surface stays out of
+	// sight until both sides are read. A table already on screen when its
+	// review opened keeps its live frame until then instead.
+	const [openedUnderReview] = useState(reviewing);
+	const reviewPending =
+		openedUnderReview &&
+		isReviewing &&
+		reviewData === null &&
+		reviewUnavailableMessage === null;
 	const originKey = useMemo(() => createCsvEditorOriginKey(), []);
 	const {
 		text: syncedText,
@@ -799,6 +809,7 @@ function EditableCsvView({
 			onCreateTable={isReadOnly ? undefined : handleCreateTable}
 			saveError={saveError}
 			reviewData={reviewData}
+			reviewPending={reviewPending}
 			isActiveView={isActiveView}
 		/>
 	);
@@ -971,6 +982,7 @@ function CsvViewLoaded({
 	onCreateTable,
 	saveError = null,
 	reviewData = null,
+	reviewPending = false,
 	isActiveView = true,
 }: {
 	readonly fileRow: CsvFileRow;
@@ -979,6 +991,8 @@ function CsvViewLoaded({
 	readonly onCreateTable?: () => void;
 	readonly saveError?: string | null;
 	readonly reviewData?: CsvReviewData | null;
+	/** The review's sides are still being read: paint nothing live meanwhile. */
+	readonly reviewPending?: boolean;
 	readonly isActiveView?: boolean;
 }) {
 	const parsed = useMemo<CsvParseResult>(() => {
@@ -1001,7 +1015,12 @@ function CsvViewLoaded({
 					<span className="min-w-0 truncate">{parsed.warnings[0]}</span>
 				</div>
 			) : null}
-			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div
+				className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${
+					reviewPending ? "invisible" : ""
+				}`}
+				data-review-pending={reviewPending || undefined}
+			>
 				{parsed.columns.length === 0 && !reviewData ? (
 					<CsvEmptyState
 						filePath={fileRow.path}
@@ -3154,13 +3173,21 @@ export const extension = createReactExtensionDefinition({
 	load: loadTextFile,
 	component: ({ atelier, view, data }) => {
 		const file = preparedFile(data);
+		// A file under review is opened for its diff: the placeholder paints
+		// no live table in the meantime.
+		const underReview =
+			file !== null &&
+			workingReviewFile(atelier.diff.session, file.id)?.review?.status ===
+				"pending";
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
 				readySelector="canvas, .csv-review-table"
 				initial={
 					file ? (
-						<CsvContent content={file.content} />
+						underReview ? null : (
+							<CsvContent content={file.content} />
+						)
 					) : (
 						<p>File not found in the workspace.</p>
 					)

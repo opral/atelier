@@ -418,6 +418,33 @@ function MarkdownLiveViewLoaded({
 	const reviewLocked =
 		isReviewing || finishingReview?.fileId === effectiveFileRow?.id;
 	const editorReadOnly = readOnly || reviewLocked;
+	// A document opened while its review is active must never paint as its
+	// live self: the reviewer stepped to it for the diff. The editor mounts
+	// out of sight and shows on the frame the review document lands in it.
+	// A document that was already on screen when its review opened keeps its
+	// live frame instead — the marks arrive on it in place — so nothing
+	// disappears only to come back.
+	const openedUnderReviewRef = useRef<{
+		readonly fileId: string;
+		readonly value: boolean;
+	} | null>(null);
+	if (openedUnderReviewRef.current?.fileId !== fileId) {
+		openedUnderReviewRef.current = { fileId, value: reviewing };
+	}
+	const reviewKey = review
+		? `${review.reviewId}:${review.beforeCommitId}:${review.afterCommitId}`
+		: null;
+	const [appliedReviewKey, setAppliedReviewKey] = useState<string | null>(null);
+	const reviewPending =
+		openedUnderReviewRef.current.value &&
+		reviewing &&
+		!readOnly &&
+		// A no-op diff has nothing to land: the document is its own review.
+		!(
+			reviewDiff !== null &&
+			reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown
+		) &&
+		(reviewKey === null || appliedReviewKey !== reviewKey);
 	const lix = useLix();
 	// The editor recreates when its source path prop changes, which would drop
 	// the caret on every title-driven rename. Only a directory change (a real
@@ -506,8 +533,11 @@ function MarkdownLiveViewLoaded({
 					>
 						{!readOnly && <FormattingToolbar disabled={editorReadOnly} />}
 						<div
-							className="relative min-h-0 flex-1"
+							className={`relative min-h-0 flex-1 ${
+								reviewPending ? "invisible" : ""
+							}`}
 							data-attr="markdown-editor"
+							data-review-pending={reviewPending || undefined}
 						>
 							<TipTapEditor
 								className="h-full"
@@ -550,6 +580,7 @@ function MarkdownLiveViewLoaded({
 									onDiffReject={onDiffReject}
 									onDiffResolve={onDiffResolve}
 									autoAccept={autoAcceptReviews}
+									onDocumentApplied={() => setAppliedReviewKey(reviewKey)}
 									onCompletionStart={() => {
 										setFinishingReview({
 											fileId: effectiveFileRow.id,
@@ -624,6 +655,7 @@ function MarkdownLiveReviewController({
 	onCompletionSuccess,
 	onCompletionFailure,
 	autoAccept = false,
+	onDocumentApplied,
 }: MarkdownReviewOverlayProps & {
 	readonly editor: Editor;
 	readonly onCompletionStart: (markdown: string) => void;
@@ -652,6 +684,7 @@ function MarkdownLiveReviewController({
 				afterCommitId={afterCommitId}
 				openWorkspaceFile={openWorkspaceFile}
 				isActive={isActive}
+				onDocumentApplied={onDocumentApplied}
 			/>
 		);
 	}
@@ -670,6 +703,7 @@ function MarkdownLiveReviewController({
 			onCompletionStart={onCompletionStart}
 			onCompletionSuccess={onCompletionSuccess}
 			onCompletionFailure={onCompletionFailure}
+			onDocumentApplied={onDocumentApplied}
 		/>
 	);
 }
@@ -957,6 +991,7 @@ type MarkdownReviewOverlayProps = {
 	readonly onDiffReject?: (path: string) => Promise<void>;
 	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAccept?: boolean;
+	readonly onDocumentApplied?: () => void;
 };
 
 function MarkdownReviewOverlay({
@@ -1183,6 +1218,12 @@ export const extension = createReactExtensionDefinition({
 		// when a review opens or closes.
 		const hostReadOnly =
 			atelier.readOnly && !hasHistoricalEditorRevisionState(view.state);
+		// A file under review is opened for its diff. The placeholder keeps the
+		// frame — toolbar strip, column — and paints no live document in it.
+		const underReview =
+			file !== null &&
+			workingReviewFile(atelier.diff.session, file.id)?.review?.status ===
+				"pending";
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
@@ -1201,17 +1242,21 @@ export const extension = createReactExtensionDefinition({
 								/>
 							)}
 							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-panel">
-								<RepositoryMarkdownContent
-									className="ProseMirror atelier-document"
-									content={file.content}
-									path={file.path}
-									branchId={atelier.branches.activeId}
-									commitId={[
-										view.state.sourceCommitId,
-										view.state.afterCommitId,
-										view.state.beforeCommitId,
-									].find((value): value is string => typeof value === "string")}
-								/>
+								{underReview ? null : (
+									<RepositoryMarkdownContent
+										className="ProseMirror atelier-document"
+										content={file.content}
+										path={file.path}
+										branchId={atelier.branches.activeId}
+										commitId={[
+											view.state.sourceCommitId,
+											view.state.afterCommitId,
+											view.state.beforeCommitId,
+										].find(
+											(value): value is string => typeof value === "string",
+										)}
+									/>
+								)}
 							</div>
 						</div>
 					) : (

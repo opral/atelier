@@ -892,6 +892,99 @@ describe("MarkdownView", () => {
 		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
 	});
 
+	test("a document opened inside a review never paints as its live self", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("file_review_stepped"),
+				path: "/review-stepped.md",
+				content: new TextEncoder().encode("# Before"),
+			})
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# After") })
+			.where("id", "=", fakeUuid("file_review_stepped"))
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+
+		// The reviewer stepped to this file: the session already lists it when
+		// the view mounts. Every frame that holds an editor without the diff
+		// must hold it out of sight.
+		const frames: { pending: boolean; diff: boolean }[] = [];
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		const observer = new MutationObserver(() => {
+			const surface = host.querySelector<HTMLElement>(
+				'[data-attr="markdown-editor"]',
+			);
+			if (!surface?.querySelector(".ProseMirror")) return;
+			frames.push({
+				pending: surface.dataset.reviewPending === "true",
+				diff: surface.querySelector("[data-review-change-id]") !== null,
+			});
+		});
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		let utils: { unmount: () => void } | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId={fakeUuid("file_review_stepped")}
+							filePath="/review-stepped.md"
+							activeBranchId={activeBranchId}
+							diffSession={{
+								base: { commitId: checkpoint.commitId },
+								target: { working: true },
+								files: [
+									{
+										id: fakeUuid("file_review_stepped"),
+										path: "/review-stepped.md",
+										changeKind: "modified",
+										workingEpoch,
+										review: { id: "review-stepped", status: "pending" },
+									},
+								],
+								activePath: "/review-stepped.md",
+								capabilities: { checkpoint: true, undo: true, restore: false },
+							}}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+				{ container: host },
+			);
+		});
+
+		await screen.findByRole("button", { name: /keep/i });
+		observer.disconnect();
+		const surface = host.querySelector<HTMLElement>(
+			'[data-attr="markdown-editor"]',
+		)!;
+		expect(surface.dataset.reviewPending).toBeUndefined();
+		expect(surface.querySelector("[data-review-change-id]")).not.toBeNull();
+		expect(frames.some((frame) => frame.pending && !frame.diff)).toBe(true);
+		expect(frames.every((frame) => frame.diff || frame.pending)).toBe(true);
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		host.remove();
+	});
+
 	test("renders historical deleted-file raw snapshots without review controls", async () => {
 		const lix = await openLix();
 		let utils: ReturnType<typeof render> | undefined;
