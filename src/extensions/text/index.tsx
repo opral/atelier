@@ -4,7 +4,6 @@ import {
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
 import {
-	lazy,
 	Suspense,
 	useEffect,
 	useLayoutEffect,
@@ -35,8 +34,6 @@ import { viewShowsDiff } from "@/extension-runtime/diff-sides";
 import { createTextEditor, type TextEditorController } from "./editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
-
-const TextDiffSurface = lazy(() => import("./diff-surface"));
 
 type TextFileRow = {
 	readonly id: string;
@@ -74,42 +71,50 @@ function TextViewContent({ fileId, ...props }: TextViewProps) {
 		reviewFile?.review?.status === "pending"
 			? reviewFile.workingEpoch
 			: undefined;
-	if (epoch) {
-		return (
-			<WorkingTextDiff
-				{...props}
-				fileId={fileId}
-				filePath={reviewFile?.path ?? props.filePath}
-				beforeCommitId={epoch.beforeCommitId}
-				afterCommitId={epoch.afterCommitId}
-			/>
-		);
+	if (!epoch) {
+		// A checkpoint's span is a diff too, read from history instead of the
+		// review's epoch.
+		if (revision.beforeCommitId && revision.afterCommitId) {
+			return (
+				<HistoricalTextDiff
+					{...props}
+					fileId={fileId}
+					beforeCommitId={revision.beforeCommitId}
+					afterCommitId={revision.afterCommitId}
+					beforeExists={revision.beforeExists}
+					afterExists={revision.afterExists}
+				/>
+			);
+		}
+		if (editorRevisionMode(revision) !== "editor") {
+			return (
+				<HistoricalTextView
+					{...props}
+					fileRow={undefined}
+					fileId={fileId}
+					commitId={revision.afterCommitId ?? revision.beforeCommitId}
+				/>
+			);
+		}
 	}
-	// A checkpoint's span is a diff too, read from history instead of the
-	// review's epoch.
-	if (revision.beforeCommitId && revision.afterCommitId) {
-		return (
-			<HistoricalTextDiff
-				{...props}
-				fileId={fileId}
-				beforeCommitId={revision.beforeCommitId}
-				afterCommitId={revision.afterCommitId}
-				beforeExists={revision.beforeExists}
-				afterExists={revision.afterExists}
-			/>
-		);
-	}
-	if (editorRevisionMode(revision) !== "editor") {
-		return (
-			<HistoricalTextView
-				{...props}
-				fileRow={undefined}
-				fileId={fileId}
-				commitId={revision.afterCommitId ?? revision.beforeCommitId}
-			/>
-		);
-	}
-	return <LiveTextViewContent fileId={fileId} {...props} />;
+	// The editor and its review are one component at one position: opening or
+	// closing the review changes its props, never its identity, so the mounted
+	// view is reconfigured in place and nothing on screen is replaced.
+	return (
+		<LiveTextView
+			{...props}
+			fileId={fileId}
+			review={
+				epoch
+					? {
+							beforeCommitId: epoch.beforeCommitId,
+							afterCommitId: epoch.afterCommitId,
+							path: reviewFile?.path ?? props.filePath,
+						}
+					: null
+			}
+		/>
+	);
 }
 
 /** The file at each end of a checkpoint's span, as one unified diff. */
@@ -157,65 +162,57 @@ function HistoricalTextDiff({
 					);
 				}
 				return (
-					<Suspense fallback={<TextLoadingState />}>
-						<TextDiffSurface
+					<div
+						className="atelier-text-view"
+						data-testid="text-editor-view"
+						data-comparison=""
+					>
+						<TextEditorSurface
 							key={`${beforeCommitId}:${afterCommitId}`}
-							path={path}
-							before={sides.before}
-							after={sides.after}
+							filePath={path}
+							text={sides.after ?? ""}
+							original={sides.before ?? ""}
+							readOnly
+							toolbarDisabled
+							isActive={props.isActiveView ?? true}
+							isPanelFocused={props.isPanelFocused ?? true}
+							onChange={() => {}}
 						/>
-					</Suspense>
+					</div>
 				);
 			}}
 		</FileSnapshotsAtCommits>
 	);
 }
 
-/** The file under review: both sides of the write's epoch, as one diff. */
-function WorkingTextDiff({
-	fileId,
-	filePath,
-	beforeCommitId,
-	afterCommitId,
-	...props
-}: TextViewProps & {
+type LiveTextReview = {
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
-}) {
-	const data = useWorkingFileData(fileId, beforeCommitId, afterCommitId);
-	if (data.loading) return <TextLoadingState />;
-	if (data.error) return <TextReviewUnavailable />;
-	const path = filePath || `/${fileId}.txt`;
-	// A deleted file has no after side; its last content is still readable as
-	// an all-removed diff.
-	const sides = textDiffSides(data.data, data.afterData);
-	if (sides) {
-		return (
-			<Suspense fallback={<TextLoadingState />}>
-				<TextDiffSurface
-					key={fileId}
-					path={path}
-					before={sides.before}
-					after={sides.after}
-				/>
-			</Suspense>
-		);
-	}
-	// Nothing to compare: bytes that are not text, or two sides that read the
-	// same. The read-only editor shows the side that exists.
-	if (data.afterData == null) return <TextReviewUnavailable />;
-	return (
-		<EditableTextViewResolved
-			{...props}
-			fileId={fileId}
-			filePath={path}
-			fileRow={{ id: fileId, path, content: data.afterData }}
-			isReviewing
-		/>
-	);
-}
+	readonly path: string | undefined;
+};
 
-function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
+/** What the editor shows of a review, once the epoch's two sides are read. */
+type TextReviewState =
+	| { readonly status: "loading" }
+	| { readonly status: "unavailable" }
+	| {
+			readonly status: "ready";
+			/** The before side, or `null` when the two sides cannot be diffed. */
+			readonly original: string | null;
+			/** The after side; empty for a deleted file. */
+			readonly text: string;
+	  };
+
+/**
+ * The live file, and its review when the shell opens one. Both sides of the
+ * write's epoch are read here, alongside the workspace row, so the surface
+ * below keeps its place while they load.
+ */
+function LiveTextView({
+	fileId,
+	review,
+	...props
+}: TextViewProps & { readonly review: LiveTextReview | null }) {
 	const fileRow = useQueryTakeFirst<TextFileRow>(
 		(lix) =>
 			qb(lix)
@@ -225,24 +222,62 @@ function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
 				.limit(1),
 		{ subscribe: false },
 	);
+	const working = useWorkingFileData(
+		review ? fileId : null,
+		review?.beforeCommitId,
+		review?.afterCommitId,
+	);
+	const reviewState: TextReviewState | null = useMemo(() => {
+		if (!review) return null;
+		if (working.loading) return { status: "loading" };
+		if (working.error) return { status: "unavailable" };
+		// A deleted file has no after side; its last content is still readable
+		// as an all-removed diff.
+		const sides = textDiffSides(working.data, working.afterData);
+		if (sides) {
+			return {
+				status: "ready",
+				original: sides.before ?? "",
+				text: sides.after ?? "",
+			};
+		}
+		// Nothing to compare: bytes that are not text, or two sides that read
+		// the same. The read-only editor shows the side that exists.
+		if (working.afterData == null) return { status: "unavailable" };
+		return {
+			status: "ready",
+			original: null,
+			text: decodeFileDataToText(working.afterData),
+		};
+	}, [review, working]);
 
+	if (reviewState?.status === "unavailable") return <TextReviewUnavailable />;
+	const path = review?.path || fileRow?.path || props.filePath;
 	if (!fileRow) {
-		return (
-			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
-				File not found in the workspace.
-			</div>
-		);
+		// Only a review can show a file the workspace no longer has.
+		if (!reviewState) {
+			return (
+				<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
+					File not found in the workspace.
+				</div>
+			);
+		}
+		if (reviewState.status === "loading") return <TextLoadingState />;
 	}
-
-	// A file under review never reaches the editor: the comparison above
-	// replaces it while the review is open.
 	return (
 		<EditableTextViewResolved
 			key={fileId}
 			{...props}
 			fileId={fileId}
-			fileRow={fileRow}
-			isReviewing={false}
+			filePath={path}
+			fileRow={
+				fileRow ?? {
+					id: fileId,
+					path: path ?? `/${fileId}.txt`,
+					content: new Uint8Array(),
+				}
+			}
+			review={reviewState}
 		/>
 	);
 }
@@ -254,16 +289,17 @@ function EditableTextViewResolved({
 	fileRow,
 	isActiveView = true,
 	isPanelFocused = true,
-	isReviewing,
+	review,
 }: Omit<TextViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: TextFileRow;
-	readonly isReviewing: boolean;
+	readonly review: TextReviewState | null;
 }) {
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
 	const initialText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
+	const isReviewing = review !== null;
 	const isReadOnly = isReviewing || atelier.readOnly;
 
 	const originKey = useMemo(() => createTextEditorOriginKey(), []);
@@ -274,19 +310,29 @@ function EditableTextViewResolved({
 	} = useSyncedTextFile({
 		fileId,
 		initialText,
-		reviewText: null,
+		// Under review the document is the epoch's after side, never a newer
+		// live row; while the sides load, the live text stays on screen.
+		reviewText: review?.status === "ready" ? review.text : null,
 		reviewing: isReviewing,
 		readOnly: atelier.readOnly,
 		originKey,
 	});
+	const original = review?.status === "ready" ? review.original : null;
 
 	return (
-		<div className="atelier-text-view" data-testid="text-editor-view">
+		<div
+			className="atelier-text-view"
+			data-testid="text-editor-view"
+			data-reviewing={isReviewing || undefined}
+			data-comparison={original === null ? undefined : ""}
+		>
 			<TextEditorSurface
 				key={fileId}
 				filePath={resolvedPath}
 				text={editorText}
+				original={original}
 				readOnly={isReadOnly}
+				toolbarDisabled={isReviewing}
 				isActive={isActiveView}
 				isPanelFocused={isPanelFocused}
 				onChange={persistUserEdit}
@@ -408,7 +454,9 @@ function HistoricalTextView({
 function TextEditorSurface({
 	filePath,
 	text,
+	original = null,
 	readOnly,
+	toolbarDisabled = false,
 	isActive,
 	isPanelFocused,
 	onChange,
@@ -416,7 +464,14 @@ function TextEditorSurface({
 }: {
 	readonly filePath: string;
 	readonly text: string;
+	/** The before side of a comparison to draw `text` against, if any. */
+	readonly original?: string | null;
 	readonly readOnly: boolean;
+	/**
+	 * The toolbar stays where it is over a comparison, disabled, so nothing
+	 * on the page moves when a review opens or closes.
+	 */
+	readonly toolbarDisabled?: boolean;
 	readonly isActive: boolean;
 	readonly isPanelFocused: boolean;
 	readonly onChange: (text: string) => void;
@@ -449,6 +504,7 @@ function TextEditorSurface({
 			document: text,
 			filePath,
 			readOnly,
+			original,
 			onChange: (nextText) => onChangeRef.current(nextText),
 		});
 		controllerRef.current = controller;
@@ -463,6 +519,10 @@ function TextEditorSurface({
 	useEffect(() => {
 		controllerRef.current?.setDocument(text);
 	}, [text]);
+
+	useEffect(() => {
+		controllerRef.current?.setComparison(original);
+	}, [original]);
 
 	useEffect(() => {
 		controllerRef.current?.setReadOnly(readOnly);
@@ -499,12 +559,14 @@ function TextEditorSurface({
 				className="atelier-text-toolbar"
 				role="toolbar"
 				aria-label="Text editor toolbar"
+				aria-disabled={toolbarDisabled || undefined}
 			>
 				<button
 					type="button"
 					className="atelier-text-toolbar-button"
 					onClick={() => controllerRef.current?.openSearch()}
 					title="Find in file"
+					disabled={toolbarDisabled}
 				>
 					<Search aria-hidden="true" size={16} />
 					<span>Search</span>
@@ -525,6 +587,7 @@ function TextEditorSurface({
 					onClick={() => void copyText()}
 					aria-label={copied ? "Copied file contents" : "Copy file contents"}
 					title={copied ? "Copied" : "Copy file contents"}
+					disabled={toolbarDisabled}
 				>
 					{copied ? (
 						<Check aria-hidden="true" size={16} />
@@ -578,7 +641,7 @@ export const extension = createReactExtensionDefinition({
 		return (
 			<PreparedFileSurface
 				key={file?.id ?? view.instanceId}
-				readySelector=".cm-editor, .atelier-text-diff"
+				readySelector=".cm-editor"
 				diff={viewShowsDiff({
 					session: atelier.diff.session,
 					state: view.state,

@@ -23,9 +23,11 @@ import {
 	Transaction,
 	type Extension,
 } from "@codemirror/state";
+import { unifiedMergeView } from "@codemirror/merge";
 import {
 	EditorView,
 	crosshairCursor,
+	drawSelection,
 	dropCursor,
 	highlightActiveLine,
 	highlightActiveLineGutter,
@@ -40,6 +42,12 @@ export type TextEditorController = {
 	readonly view: EditorView;
 	readonly setDocument: (text: string) => void;
 	readonly setReadOnly: (readOnly: boolean) => void;
+	/**
+	 * Show the document as a unified diff against `original`, in place: the
+	 * same view, with removed lines drawn above the lines that replaced them.
+	 * `null` returns the view to plain editing.
+	 */
+	readonly setComparison: (original: string | null) => void;
 	readonly setWrapping: (enabled: boolean) => void;
 	readonly openSearch: () => void;
 	readonly closeSearch: () => void;
@@ -56,6 +64,8 @@ type CreateTextEditorArgs = {
 	readonly document: string;
 	readonly filePath: string;
 	readonly readOnly?: boolean;
+	/** The before side of a comparison the view opens with, if any. */
+	readonly original?: string | null;
 	readonly wrapping?: boolean;
 	readonly onChange?: (text: string) => void;
 	readonly onCursorChange?: (position: TextCursorPosition) => void;
@@ -130,6 +140,13 @@ const atelierEditorTheme = EditorView.theme({
 		borderLeftColor: "var(--atelier-fg)",
 		borderLeftWidth: "1.5px",
 	},
+	// `drawSelection` paints the selection as its own layer, in every range of
+	// a multiple selection and whether or not the view has focus; the token is
+	// read from the cascade, so a host's override reaches it.
+	".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+		{
+			backgroundColor: "var(--atelier-bg-selection)",
+		},
 	".cm-content ::selection, &.cm-focused .cm-content ::selection": {
 		backgroundColor: "var(--atelier-bg-selection)",
 		color: "var(--atelier-fg)",
@@ -170,7 +187,48 @@ const atelierEditorTheme = EditorView.theme({
 		backgroundColor: "var(--atelier-accent-border)",
 		outlineColor: "var(--atelier-link)",
 	},
+	// The comparison: the unified merge view marks the editor `cm-merge-b`.
+	// Its own theme paints with literals, so every class it adds is restated
+	// here in the diff tokens.
+	"&.cm-merge-b .cm-changedLine, &.cm-merge-b .cm-inlineChangedLine": {
+		backgroundColor: "var(--atelier-diff-added-subtle)",
+	},
+	"&.cm-merge-b .cm-changedText": {
+		background: "none",
+		backgroundColor:
+			"color-mix(in srgb, var(--atelier-diff-added) 18%, transparent)",
+	},
+	".cm-deletedChunk": {
+		backgroundColor: "var(--atelier-diff-removed-subtle)",
+		color: "var(--atelier-fg-muted)",
+		padding: "0 20px 0 8px",
+	},
+	".cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-deletedText": {
+		background: "none",
+		backgroundColor:
+			"color-mix(in srgb, var(--atelier-diff-removed) 16%, transparent)",
+	},
+	"&.cm-merge-b .cm-changedLineGutter": {
+		backgroundColor: "var(--atelier-diff-added)",
+	},
+	".cm-deletedLineGutter": {
+		backgroundColor: "var(--atelier-diff-removed)",
+	},
+	".cm-inlineChangedLineGutter": {
+		backgroundColor: "var(--atelier-diff-modified)",
+	},
 });
+
+/** The comparison as an extension: the review's before side, or nothing. */
+function comparisonExtension(original: string | null): Extension {
+	if (original === null) return [];
+	return unifiedMergeView({
+		original,
+		mergeControls: false,
+		highlightChanges: true,
+		gutter: true,
+	});
+}
 
 const externalDocumentUpdate = Annotation.define<boolean>();
 
@@ -236,6 +294,7 @@ export function createTextEditor({
 	document,
 	filePath,
 	readOnly = false,
+	original = null,
 	wrapping = true,
 	onChange,
 	onCursorChange,
@@ -244,6 +303,7 @@ export function createTextEditor({
 	const readOnlyCompartment = new Compartment();
 	const editableCompartment = new Compartment();
 	const wrappingCompartment = new Compartment();
+	const comparisonCompartment = new Compartment();
 	let destroyed = false;
 
 	const reportCursor = (state: EditorState) => {
@@ -258,6 +318,7 @@ export function createTextEditor({
 		highlightActiveLineGutter(),
 		highlightSpecialChars(),
 		history(),
+		drawSelection(),
 		dropCursor(),
 		EditorState.allowMultipleSelections.of(true),
 		rectangularSelection(),
@@ -276,6 +337,7 @@ export function createTextEditor({
 		readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
 		editableCompartment.of(EditorView.editable.of(!readOnly)),
 		wrappingCompartment.of(wrapping ? EditorView.lineWrapping : []),
+		comparisonCompartment.of(comparisonExtension(original)),
 		EditorView.updateListener.of((update) => {
 			if (
 				update.docChanged &&
@@ -336,6 +398,13 @@ export function createTextEditor({
 						EditorView.editable.of(!nextReadOnly),
 					),
 				],
+			});
+		},
+		setComparison: (nextOriginal) => {
+			view.dispatch({
+				effects: comparisonCompartment.reconfigure(
+					comparisonExtension(nextOriginal),
+				),
 			});
 		},
 		setWrapping: (enabled) => {
