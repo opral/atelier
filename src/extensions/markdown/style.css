@@ -320,8 +320,12 @@
 		/* ProseMirror replaces a selected node with whatever is typed next, and
 		   this panel is one node. Every other block says when it is selected; this
 		   one said nothing at all, so a click on its chrome and one letter could
-		   replace every property in the file with that letter, unannounced. */
-		.markdown-view
+		   replace every property in the file with that letter, unannounced.
+		   Not in a review: the editor cannot be typed into there, and the diff
+		   document opens with its selection on this first node, so the warning
+		   would ring every frontmatter in every diff. The panel's fields carry
+		   their own added, removed and modified marks. */
+		.markdown-view:not(.markdown-review)
 			.ProseMirror
 			:is(
 				.markdown-frontmatter[data-selected="true"],
