@@ -983,7 +983,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("checkpointing the viewed file keeps the unticked one under review", async () => {
+	test("checkpointing the viewed file keeps the review on it, and the unticked one under review", async () => {
 		const lix = await openLix();
 		const reviewStatusStore = createMemoryReviewStatusStore();
 		const sessionStateStore = createMemorySessionStateStore();
@@ -1083,10 +1083,10 @@ describe("diff review navigation", () => {
 					),
 				).toBe(true);
 			});
-			// Sealing the ticked file does not conclude the review: the unticked
-			// file is still unhandled, so the float stays and moves on to it.
-			// With one file left the float shows no working-set chip and no
-			// stepper — just the verbs — so the review is recognised by those.
+			// Sealing the ticked file does not conclude the review, and it is
+			// not a navigation either: the reader stays on the file they
+			// sealed, the session still lists both files with this one marked
+			// done, and the workspace counts the one still changed.
 			expect(
 				await screen.findByRole(
 					"button",
@@ -1097,21 +1097,36 @@ describe("diff review navigation", () => {
 			expect(
 				await screen.findByRole(
 					"button",
-					{ name: "Checkpoint" },
+					{ name: "Checkpointed" },
 					{ timeout: ASYNC_UI_TIMEOUT },
 				),
-			).toBeVisible();
+			).toBeDisabled();
 			expect(screen.getByRole("button", { name: "Exit" })).toBeVisible();
-			await waitFor(
-				() => {
-					const main = sessionStateStore.getSnapshot()?.areas.main;
-					const activeView = main?.views.find(
-						(view) => view.instance === main.activeInstance,
-					);
-					expect(activeView?.state?.fileId).toBe(remainingFileId);
-				},
-				{ timeout: ASYNC_UI_TIMEOUT },
-			);
+			const activeFileId = () => {
+				const main = sessionStateStore.getSnapshot()?.areas.main;
+				return main?.views.find((view) => view.instance === main.activeInstance)
+					?.state?.fileId;
+			};
+			expect(activeFileId()).toBe(selectedFileId);
+			expect(screen.getByLabelText("File 2 of 2")).toBeVisible();
+			expect(
+				screen.getByRole("button", { name: "Working set: 0 of 2 files" }),
+			).toBeVisible();
+			// › walks on to the file still open, and the verb is Checkpoint again.
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Next changed file" }),
+				);
+			});
+			await waitFor(() => expect(activeFileId()).toBe(remainingFileId), {
+				timeout: ASYNC_UI_TIMEOUT,
+			});
+			expect(
+				await screen.findByRole("button", { name: "Checkpoint" }),
+			).toBeEnabled();
+			expect(
+				screen.getByRole("button", { name: "Working set: 1 of 2 files" }),
+			).toBeVisible();
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

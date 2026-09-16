@@ -32,6 +32,11 @@ export function createExtensionHostContext(
 			preferences: {
 				get: (extensionId, key) =>
 					extensionPreferences.get(`${extensionId}\0${key}`),
+				set: (extensionId, key, value) => {
+					if (value === undefined)
+						extensionPreferences.delete(`${extensionId}\0${key}`);
+					else extensionPreferences.set(`${extensionId}\0${key}`, value);
+				},
 			},
 			icons: { fileUrl: () => "" },
 			branches: {

@@ -389,27 +389,27 @@ export function SelectionToolbar() {
 							alignItemWithTrigger={false}
 						>
 							<Select.Popup
-								className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100"
+								className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100"
 								data-attr="markdown-selection-block-menu"
 								onMouseEnter={cancelHoverClose}
 								onMouseLeave={closeBlockMenuFromHover}
 							>
-								<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
+								<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-fg-subtle">
 									Turn into
 								</div>
 								{SELECTION_BLOCK_OPTIONS.map((option) => (
 									<Select.Item
 										key={option.value}
 										value={option.value}
-										className="group flex h-8 cursor-default items-center gap-2 rounded-[7px] px-2 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-[var(--color-bg-hover)] data-[highlighted]:text-[var(--color-text-primary)]"
+										className="group flex h-8 cursor-default items-center gap-2 rounded-[7px] px-2 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-bg-hover data-[highlighted]:text-fg"
 									>
-										<span className="flex size-4.5 items-center justify-center text-[var(--color-icon-tertiary)] group-data-[highlighted]:text-[var(--color-text-secondary)] [&_svg]:stroke-[1.8]">
+										<span className="flex size-4.5 items-center justify-center text-fg-subtle group-data-[highlighted]:text-fg-muted [&_svg]:stroke-[1.8]">
 											<option.icon className="h-3.5 w-3.5" aria-hidden />
 										</span>
-										<span className="flex-1 font-medium leading-4 text-[var(--color-text-primary)]">
+										<span className="flex-1 font-medium leading-4 text-fg">
 											{option.label}
 										</span>
-										<Select.ItemIndicator className="text-[var(--color-text-link-hover)]">
+										<Select.ItemIndicator className="text-link-hover">
 											<Check className="h-3.5 w-3.5 stroke-[2]" aria-hidden />
 										</Select.ItemIndicator>
 									</Select.Item>

@@ -37,6 +37,11 @@ export type DiffFloatFile = {
 	readonly path: string;
 	/** Set when the file's two sides sit at different paths: a move or rename. */
 	readonly movedFromPath?: string;
+	/**
+	 * Sealed by a checkpoint made in this session. The file keeps its place
+	 * in the stepper, but no verb acts on it and no row can tick it.
+	 */
+	readonly checkpointed?: boolean;
 };
 
 /** What a verb acts on: the ticked seen set, or every changed file. */
@@ -267,13 +272,18 @@ export function ExternalWriteReviewControls({
 		root.addEventListener("keydown", handleKeyDown);
 		return () => root.removeEventListener("keydown", handleKeyDown);
 	}, [isActive, navigation]);
-	const seenFiles = listFiles.filter((file) => seenFileIds.has(file.id));
-	const unseenFiles = listFiles.filter((file) => !seenFileIds.has(file.id));
+	// The files a verb can still act on: a checkpointed one is listed and
+	// stepped through, but it is done.
+	const openFiles = listFiles.filter((file) => !file.checkpointed);
+	const seenFiles = openFiles.filter((file) => seenFileIds.has(file.id));
+	const unseenFiles = openFiles.filter((file) => !seenFileIds.has(file.id));
 	const isTicked = (file: DiffFloatFile) =>
-		seenFileIds.has(file.id)
-			? !leftOutFileIds.has(file.id)
-			: pickedFileIds.has(file.id);
-	const tickedFiles = listFiles.filter(isTicked);
+		file.checkpointed
+			? false
+			: seenFileIds.has(file.id)
+				? !leftOutFileIds.has(file.id)
+				: pickedFileIds.has(file.id);
+	const tickedFiles = openFiles.filter(isTicked);
 	const hasScopeChip = listFiles.length > 1;
 
 	const toggleIn = (current: ReadonlySet<string>, fileId: string) => {
@@ -296,10 +306,10 @@ export function ExternalWriteReviewControls({
 		[seenFileIds],
 	);
 
-	// The master row: every file ticked → clear the lot; anything less →
-	// tick every file, seen or not.
+	// The master row: every open file ticked → clear the lot; anything less
+	// → tick every open file, seen or not.
 	const allTicked =
-		listFiles.length > 0 && tickedFiles.length === listFiles.length;
+		openFiles.length > 0 && tickedFiles.length === openFiles.length;
 	const toggleAll = useCallback(() => {
 		if (allTicked) {
 			setLeftOutFileIds(new Set(seenFiles.map((file) => file.id)));
@@ -310,19 +320,22 @@ export function ExternalWriteReviewControls({
 		}
 	}, [allTicked, seenFiles, unseenFiles]);
 
-	const allFileIds = listFiles.map((file) => file.id);
+	const allFileIds = openFiles.map((file) => file.id);
 	const selectionIds = hasScopeChip
 		? tickedFiles.map((file) => file.id)
 		: allFileIds;
 	const hasSelection = selectionIds.length > 0;
+	const activeFile = listFiles.find((file) => file.id === activeFileId);
+	const activeCheckpointed = activeFile?.checkpointed === true;
 
 	const idsForScope = useCallback(
 		(scope: DiffFloatUndoScope): readonly string[] => {
 			if (scope === "all") return allFileIds;
-			if (scope === "file") return activeFileId ? [activeFileId] : [];
+			if (scope === "file")
+				return activeFileId && !activeCheckpointed ? [activeFileId] : [];
 			return selectionIds;
 		},
-		[activeFileId, allFileIds, selectionIds],
+		[activeCheckpointed, activeFileId, allFileIds, selectionIds],
 	);
 
 	const runPrimary = useCallback(
@@ -562,11 +575,10 @@ export function ExternalWriteReviewControls({
 	);
 	// The file on screen, when its path changed between the two sides.
 	const activeMovedFrom = (() => {
-		const file = listFiles.find((candidate) => candidate.id === activeFileId);
-		if (!file?.movedFromPath) return null;
+		if (!activeFile?.movedFromPath) return null;
 		return {
-			from: file.movedFromPath,
-			hint: movedFromHint(file.movedFromPath, file.path),
+			from: activeFile.movedFromPath,
+			hint: movedFromHint(activeFile.movedFromPath, activeFile.path),
 		};
 	})();
 	const hasVisibleFile =
@@ -589,9 +601,18 @@ export function ExternalWriteReviewControls({
 			: undefined;
 	};
 	const showVerbArrows = listFiles.length > 1;
+	// The list this session opened on. A checkpoint made here does not
+	// shorten it: the chip goes on reading "of 25" with a sealed file in it.
 	const totalCount = listFiles.length;
+	const openCount = openFiles.length;
 	// "1 of 180": the count every verb acts on, over the whole list.
 	const chipLabel = `${tickedFiles.length} of ${totalCount}`;
+	// With the sealed file on screen and nothing else ticked, the verb says
+	// what has already happened to it rather than offering it again.
+	const primaryLabel =
+		mode === "working-changes" && activeCheckpointed && !hasSelection
+			? "Checkpointed"
+			: verb.label;
 	const ringStyle = {
 		"--ring-ticked": `${(tickedFiles.length / Math.max(totalCount, 1)) * 360}deg`,
 	} as CSSProperties;
@@ -658,6 +679,7 @@ export function ExternalWriteReviewControls({
 					{listFiles.map((file) => {
 						const ticked = isTicked(file);
 						const viewing = file.id === activeFileId;
+						const checkpointed = file.checkpointed === true;
 						return (
 							<button
 								key={file.id}
@@ -667,18 +689,22 @@ export function ExternalWriteReviewControls({
 								data-testid={`diff-scope-file:${file.id}`}
 								data-file-id={file.id}
 								aria-checked={ticked}
+								aria-disabled={checkpointed || undefined}
 								data-attr="diff-scope-file"
-								data-state={ticked ? "ticked" : "unticked"}
+								data-state={
+									checkpointed ? "checkpointed" : ticked ? "ticked" : "unticked"
+								}
 								data-ticked={ticked ? "true" : undefined}
 								data-viewing={viewing ? "true" : undefined}
-								onClick={() => toggleFile(file.id)}
+								onClick={checkpointed ? undefined : () => toggleFile(file.id)}
 							>
 								<span
 									aria-hidden="true"
 									className="external-write-review-menu-tick"
 									data-ticked={ticked ? "true" : undefined}
+									data-checkpointed={checkpointed ? "true" : undefined}
 								>
-									{ticked ? <Check /> : null}
+									{ticked || checkpointed ? <Check /> : null}
 								</span>
 								<img
 									src={fileIconUrl(file.path)}
@@ -697,6 +723,11 @@ export function ExternalWriteReviewControls({
 										title={`Moved from ${file.movedFromPath}`}
 									>
 										moved
+									</small>
+								) : null}
+								{checkpointed ? (
+									<small className="external-write-review-menu-tag">
+										checkpointed
 									</small>
 								) : null}
 								{viewing ? (
@@ -730,7 +761,7 @@ export function ExternalWriteReviewControls({
 					>
 						<PrimaryVerbStackIcon mode={mode} />
 						<span className="external-write-review-menu-name">
-							{verb.label} all {totalCount} files
+							{verb.label} all {openCount} files
 						</span>
 						<kbd>{shortcutHint("⇧⌘⏎")}</kbd>
 					</button>
@@ -752,7 +783,9 @@ export function ExternalWriteReviewControls({
 						role="menuitem"
 						tabIndex={-1}
 						data-attr="diff-undo-file"
-						disabled={readOnly || isCommitting || !activeFileId}
+						disabled={
+							readOnly || isCommitting || !activeFileId || activeCheckpointed
+						}
 						onClick={() => void runUndo("file")}
 					>
 						<RotateCcw aria-hidden="true" />
@@ -770,7 +803,7 @@ export function ExternalWriteReviewControls({
 					>
 						<UndoStackIcon />
 						<span className="external-write-review-menu-name">
-							Undo all {totalCount} files
+							Undo all {openCount} files
 						</span>
 						<kbd>{shortcutHint("⇧⌘⌫")}</kbd>
 					</button>
@@ -857,6 +890,15 @@ export function ExternalWriteReviewControls({
 										/>
 									) : null}
 								</span>
+								{activeCheckpointed ? (
+									<span
+										className="external-write-review-checkpointed"
+										data-attr="diff-checkpointed"
+									>
+										<Flag aria-hidden="true" />
+										<small>Checkpointed</small>
+									</span>
+								) : null}
 							</>
 						) : (
 							<span data-attr="diff-no-file">
@@ -966,7 +1008,7 @@ export function ExternalWriteReviewControls({
 							className="external-write-review-button external-write-review-button-accept"
 							onClick={() => void runPrimary("selection")}
 							disabled={readOnly || isCommitting || !hasSelection}
-							aria-label={isCommitting ? verb.busyLabel : verb.label}
+							aria-label={isCommitting ? verb.busyLabel : primaryLabel}
 							data-attr="diff-primary"
 							title={
 								readOnly
@@ -979,7 +1021,7 @@ export function ExternalWriteReviewControls({
 							) : (
 								<PrimaryVerbIcon mode={mode} />
 							)}
-							<span>{isCommitting ? verb.busyLabel : verb.label}</span>
+							<span>{isCommitting ? verb.busyLabel : primaryLabel}</span>
 							<kbd className="external-write-review-shortcut">
 								{shortcutHint("⌘⏎")}
 							</kbd>

@@ -4,13 +4,15 @@ import {
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
 import {
-	lazy,
+	createContext,
 	Suspense,
+	useContext,
 	useEffect,
 	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
+	type ReactNode,
 } from "react";
 import { Check, Copy, FileCode2, Search } from "lucide-react";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
@@ -22,7 +24,7 @@ import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import { decodeFileDataToText, fileText } from "@/lib/decode-file-data";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
-import { useLix, useQueryTakeFirst } from "@/lib/lix-react";
+import { useLix, useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
 	getFileDataAtCommit,
@@ -35,8 +37,6 @@ import { viewShowsDiff } from "@/extension-runtime/diff-sides";
 import { createTextEditor, type TextEditorController } from "./editor";
 import manifestJson from "./manifest.json";
 import "./style.css";
-
-const TextDiffSurface = lazy(() => import("./diff-surface"));
 
 type TextFileRow = {
 	readonly id: string;
@@ -54,15 +54,16 @@ export type TextViewProps = {
 	readonly afterCommitId?: string | null;
 };
 
+/**
+ * The text view is a frame and a document. The frame — toolbar, editor box,
+ * background — is rendered from props that are always there, so it is on
+ * screen from the first paint and stays put through every change of
+ * document, revision or review. What the document is, and when it arrives,
+ * is decided by a headless child that reads it and hands it to the frame's
+ * editor; until then the editor keeps showing what it showed.
+ */
 export function TextView(props: TextViewProps) {
-	return (
-		<Suspense fallback={<TextLoadingState />}>
-			<TextViewContent {...props} />
-		</Suspense>
-	);
-}
-
-function TextViewContent({ fileId, ...props }: TextViewProps) {
+	const { fileId } = props;
 	assertFileId(fileId);
 	const revision = normalizeEditorRevisionState(props);
 	// The shell owns review detection: this file is under review whenever the
@@ -74,42 +75,409 @@ function TextViewContent({ fileId, ...props }: TextViewProps) {
 		reviewFile?.review?.status === "pending"
 			? reviewFile.workingEpoch
 			: undefined;
-	if (epoch) {
-		return (
-			<WorkingTextDiff
-				{...props}
-				fileId={fileId}
-				filePath={reviewFile?.path ?? props.filePath}
-				beforeCommitId={epoch.beforeCommitId}
-				afterCommitId={epoch.afterCommitId}
-			/>
-		);
-	}
+	const review: LiveTextReview | null = epoch
+		? {
+				beforeCommitId: epoch.beforeCommitId,
+				afterCommitId: epoch.afterCommitId,
+				path: reviewFile?.path ?? props.filePath,
+			}
+		: null;
 	// A checkpoint's span is a diff too, read from history instead of the
 	// review's epoch.
-	if (revision.beforeCommitId && revision.afterCommitId) {
-		return (
-			<HistoricalTextDiff
-				{...props}
-				fileId={fileId}
-				beforeCommitId={revision.beforeCommitId}
-				afterCommitId={revision.afterCommitId}
-				beforeExists={revision.beforeExists}
-				afterExists={revision.afterExists}
-			/>
+	const historicalDiff =
+		review === null &&
+		revision.beforeCommitId !== null &&
+		revision.afterCommitId !== null;
+	const historical =
+		review === null &&
+		!historicalDiff &&
+		editorRevisionMode(revision) !== "editor";
+	return (
+		<TextFrame
+			reviewing={review !== null}
+			// The toolbar stays where it is over a comparison, disabled, so
+			// nothing on the page moves when a review opens or closes.
+			toolbarDisabled={review !== null || historicalDiff}
+			isActive={props.isActiveView ?? true}
+			isPanelFocused={props.isPanelFocused ?? true}
+		>
+			{/* The documents below render no DOM of their own, so a read that
+			    suspends here hides nothing: the frame and the previous document
+			    stay on screen. */}
+			<Suspense fallback={null}>
+				{historicalDiff ? (
+					<HistoricalTextDiff
+						fileId={fileId}
+						filePath={props.filePath}
+						beforeCommitId={revision.beforeCommitId!}
+						afterCommitId={revision.afterCommitId!}
+						beforeExists={revision.beforeExists}
+						afterExists={revision.afterExists}
+					/>
+				) : historical ? (
+					<HistoricalTextDocument
+						fileId={fileId}
+						filePath={props.filePath}
+						commitId={revision.afterCommitId ?? revision.beforeCommitId}
+					/>
+				) : (
+					<LiveTextDocument
+						atelier={props.atelier}
+						fileId={fileId}
+						filePath={props.filePath}
+						review={review}
+					/>
+				)}
+			</Suspense>
+		</TextFrame>
+	);
+}
+
+/** A document as the frame's editor shows it. */
+type TextDocument = {
+	readonly fileId: string;
+	readonly filePath: string;
+	readonly text: string;
+	/** The before side of a comparison to draw `text` against, if any. */
+	readonly original: string | null;
+	readonly readOnly: boolean;
+	readonly saveError: string | null;
+};
+
+type TextFrameHandle = {
+	/**
+	 * Put a document in the editor. Another file replaces the one shown with
+	 * a fresh state; the same file is reconfigured in place. With
+	 * `onlyIfShown`, a file that is not the one on screen is left for later
+	 * and the region keeps what it has.
+	 */
+	readonly show: (
+		document: TextDocument,
+		onChange: (text: string) => void,
+		options?: { readonly onlyIfShown?: boolean },
+	) => void;
+	/** The document's owner is gone; its edits have nowhere to go. */
+	readonly release: (fileId: string) => void;
+	/** A message stands in the document region while `shown`. */
+	readonly setMessage: (shown: boolean) => void;
+};
+
+const TextFrameContext = createContext<TextFrameHandle | null>(null);
+
+function ignoreChange() {}
+
+/**
+ * The view's frame: toolbar, editor box and whatever the document region
+ * says instead of a document. It owns the one CodeMirror view, created with
+ * the frame and kept for its life; documents come and go inside it.
+ */
+function TextFrame({
+	reviewing,
+	toolbarDisabled,
+	isActive,
+	isPanelFocused,
+	children,
+}: {
+	readonly reviewing: boolean;
+	readonly toolbarDisabled: boolean;
+	readonly isActive: boolean;
+	readonly isPanelFocused: boolean;
+	readonly children: ReactNode;
+}) {
+	const hostRef = useRef<HTMLDivElement>(null);
+	const controllerRef = useRef<TextEditorController | null>(null);
+	const currentRef = useRef<
+		(TextDocument & { readonly onChange: (text: string) => void }) | null
+	>(null);
+	const [shown, setShown] = useState<{
+		readonly fileId: string;
+		readonly comparison: boolean;
+		readonly readOnly: boolean;
+		readonly saveError: string | null;
+	} | null>(null);
+	const [messages, setMessages] = useState(0);
+	const [copied, setCopied] = useState(false);
+	const [copyError, setCopyError] = useState(false);
+	const copyTimerRef = useRef<number | null>(null);
+
+	const handle = useMemo<
+		TextFrameHandle & { readonly mount: () => void }
+	>(() => {
+		// Created on first use: a document's layout effect runs before the
+		// frame's own, and the host element is already attached by then.
+		const controller = () => {
+			if (controllerRef.current) return controllerRef.current;
+			const parent = hostRef.current;
+			if (!parent) throw new Error("The text editor host is not mounted.");
+			controllerRef.current = createTextEditor({
+				parent,
+				document: "",
+				filePath: "",
+				readOnly: true,
+				onChange: (text) => currentRef.current?.onChange(text),
+			});
+			return controllerRef.current;
+		};
+		return {
+			mount: () => {
+				controller();
+			},
+			show: (document, onChange, options) => {
+				const current = currentRef.current;
+				if (options?.onlyIfShown && current?.fileId !== document.fileId) return;
+				const editor = controller();
+				if (
+					!current ||
+					current.fileId !== document.fileId ||
+					current.filePath !== document.filePath
+				) {
+					editor.openDocument({
+						document: document.text,
+						filePath: document.filePath,
+						readOnly: document.readOnly,
+						original: document.original,
+					});
+				} else {
+					if (current.text !== document.text) editor.setDocument(document.text);
+					if (current.original !== document.original)
+						editor.setComparison(document.original);
+					if (current.readOnly !== document.readOnly)
+						editor.setReadOnly(document.readOnly);
+				}
+				currentRef.current = { ...document, onChange };
+				setShown({
+					fileId: document.fileId,
+					comparison: document.original !== null,
+					readOnly: document.readOnly,
+					saveError: document.saveError,
+				});
+			},
+			release: (fileId) => {
+				const current = currentRef.current;
+				if (current?.fileId === fileId)
+					currentRef.current = { ...current, onChange: ignoreChange };
+			},
+			setMessage: (visible) => {
+				setMessages((count) => count + (visible ? 1 : -1));
+			},
+		};
+	}, []);
+
+	useLayoutEffect(() => {
+		handle.mount();
+		return () => {
+			controllerRef.current?.destroy();
+			controllerRef.current = null;
+			currentRef.current = null;
+		};
+	}, [handle]);
+
+	useEffect(
+		() => () => {
+			if (copyTimerRef.current !== null)
+				window.clearTimeout(copyTimerRef.current);
+		},
+		[],
+	);
+
+	useEffect(() => {
+		if (isActive && isPanelFocused) {
+			controllerRef.current?.view.focus();
+		}
+	}, [isActive, isPanelFocused, shown?.fileId, shown?.readOnly]);
+
+	const copyText = async () => {
+		const currentText = controllerRef.current?.view.state.doc.toString() ?? "";
+		try {
+			await navigator.clipboard.writeText(currentText);
+			setCopyError(false);
+			setCopied(true);
+		} catch {
+			setCopied(false);
+			setCopyError(true);
+		}
+		if (copyTimerRef.current !== null)
+			window.clearTimeout(copyTimerRef.current);
+		copyTimerRef.current = window.setTimeout(() => {
+			setCopied(false);
+			setCopyError(false);
+		}, 1400);
+	};
+
+	const saveError = shown?.saveError ?? null;
+	return (
+		<TextFrameContext.Provider value={handle}>
+			<div
+				className="atelier-text-view"
+				data-testid="text-editor-view"
+				data-reviewing={reviewing || undefined}
+				data-comparison={shown?.comparison ? "" : undefined}
+				data-document={shown ? "" : undefined}
+				aria-busy={!shown && messages === 0 ? "true" : undefined}
+			>
+				<div className="atelier-text-surface">
+					<TextToolbar
+						disabled={toolbarDisabled}
+						copied={copied}
+						status={
+							saveError
+								? `Save failed: ${saveError}`
+								: copyError
+									? "Copy failed"
+									: copied
+										? "Copied"
+										: null
+						}
+						onSearch={() => controllerRef.current?.openSearch()}
+						onCopy={() => void copyText()}
+					/>
+					<div
+						className="atelier-text-editor-host"
+						ref={hostRef}
+						hidden={messages > 0 || undefined}
+						data-empty={shown ? undefined : ""}
+					/>
+					{children}
+				</div>
+			</div>
+		</TextFrameContext.Provider>
+	);
+}
+
+function TextToolbar({
+	disabled,
+	copied = false,
+	status = null,
+	onSearch,
+	onCopy,
+	hidden = false,
+}: {
+	readonly disabled: boolean;
+	readonly copied?: boolean;
+	readonly status?: string | null;
+	readonly onSearch?: () => void;
+	readonly onCopy?: () => void;
+	/** The prepared frame's toolbar: the shape of the live one, not a control. */
+	readonly hidden?: boolean;
+}) {
+	return (
+		<div
+			className="atelier-text-toolbar"
+			role="toolbar"
+			aria-label="Text editor toolbar"
+			aria-disabled={disabled || undefined}
+			aria-hidden={hidden || undefined}
+		>
+			<button
+				type="button"
+				className="atelier-text-toolbar-button"
+				onClick={onSearch}
+				title="Find in file"
+				disabled={disabled}
+			>
+				<Search aria-hidden="true" size={16} />
+				<span>Search</span>
+			</button>
+			<span className="atelier-text-toolbar-spacer" />
+			<span className="atelier-text-toolbar-status" aria-live="polite">
+				{status}
+			</span>
+			<button
+				type="button"
+				className="atelier-text-toolbar-icon-button"
+				onClick={onCopy}
+				aria-label={copied ? "Copied file contents" : "Copy file contents"}
+				title={copied ? "Copied" : "Copy file contents"}
+				disabled={disabled}
+			>
+				{copied ? (
+					<Check aria-hidden="true" size={16} />
+				) : (
+					<Copy aria-hidden="true" size={16} />
+				)}
+			</button>
+		</div>
+	);
+}
+
+/**
+ * Hands a document to the frame's editor as soon as it is known, before the
+ * browser paints. `null` hands over nothing: the editor keeps what it shows.
+ */
+function useShownDocument(
+	document: TextDocument | null,
+	onChange: (text: string) => void = ignoreChange,
+	options?: { readonly onlyIfShown?: boolean },
+) {
+	const frame = useContext(TextFrameContext);
+	if (!frame) throw new Error("A text document renders inside TextFrame.");
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+	const onlyIfShown = options?.onlyIfShown ?? false;
+	const fileId = document?.fileId;
+	const filePath = document?.filePath;
+	const text = document?.text;
+	const original = document?.original;
+	const readOnly = document?.readOnly;
+	const saveError = document?.saveError;
+	useLayoutEffect(() => {
+		if (
+			fileId === undefined ||
+			filePath === undefined ||
+			text === undefined ||
+			original === undefined ||
+			readOnly === undefined ||
+			saveError === undefined
+		)
+			return;
+		frame.show(
+			{ fileId, filePath, text, original, readOnly, saveError },
+			(next) => onChangeRef.current(next),
+			{ onlyIfShown },
 		);
-	}
-	if (editorRevisionMode(revision) !== "editor") {
-		return (
-			<HistoricalTextView
-				{...props}
-				fileRow={undefined}
-				fileId={fileId}
-				commitId={revision.afterCommitId ?? revision.beforeCommitId}
-			/>
-		);
-	}
-	return <LiveTextViewContent fileId={fileId} {...props} />;
+	}, [
+		frame,
+		fileId,
+		filePath,
+		text,
+		original,
+		readOnly,
+		saveError,
+		onlyIfShown,
+	]);
+	useLayoutEffect(() => {
+		if (fileId === undefined) return;
+		return () => frame.release(fileId);
+	}, [frame, fileId]);
+}
+
+function ShownDocument({
+	document,
+}: {
+	readonly document: TextDocument | null;
+}) {
+	useShownDocument(document);
+	return null;
+}
+
+/** What the document region says instead of a document. */
+function TextMessage({
+	role,
+	children,
+}: {
+	readonly role?: "alert";
+	readonly children: ReactNode;
+}) {
+	const frame = useContext(TextFrameContext);
+	useLayoutEffect(() => {
+		frame?.setMessage(true);
+		return () => frame?.setMessage(false);
+	}, [frame]);
+	return (
+		<div className="atelier-text-message text-sm text-fg-subtle" role={role}>
+			{children}
+		</div>
+	);
 }
 
 /** The file at each end of a checkpoint's span, as one unified diff. */
@@ -120,8 +488,9 @@ function HistoricalTextDiff({
 	afterCommitId,
 	beforeExists,
 	afterExists,
-	...props
-}: TextViewProps & {
+}: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
 	readonly beforeExists: boolean;
@@ -147,9 +516,7 @@ function HistoricalTextDiff({
 				);
 				if (!sides) {
 					return (
-						<HistoricalTextView
-							{...props}
-							fileRow={undefined}
+						<HistoricalTextDocument
 							fileId={fileId}
 							filePath={path}
 							commitId={afterExists ? afterCommitId : beforeCommitId}
@@ -157,66 +524,57 @@ function HistoricalTextDiff({
 					);
 				}
 				return (
-					<Suspense fallback={<TextLoadingState />}>
-						<TextDiffSurface
-							key={`${beforeCommitId}:${afterCommitId}`}
-							path={path}
-							before={sides.before}
-							after={sides.after}
-						/>
-					</Suspense>
+					<ShownDocument
+						document={{
+							fileId,
+							filePath: path,
+							text: sides.after ?? "",
+							original: sides.before ?? "",
+							readOnly: true,
+							saveError: null,
+						}}
+					/>
 				);
 			}}
 		</FileSnapshotsAtCommits>
 	);
 }
 
-/** The file under review: both sides of the write's epoch, as one diff. */
-function WorkingTextDiff({
-	fileId,
-	filePath,
-	beforeCommitId,
-	afterCommitId,
-	...props
-}: TextViewProps & {
+type LiveTextReview = {
 	readonly beforeCommitId: string;
 	readonly afterCommitId: string;
-}) {
-	const data = useWorkingFileData(fileId, beforeCommitId, afterCommitId);
-	if (data.loading) return <TextLoadingState />;
-	if (data.error) return <TextReviewUnavailable />;
-	const path = filePath || `/${fileId}.txt`;
-	// A deleted file has no after side; its last content is still readable as
-	// an all-removed diff.
-	const sides = textDiffSides(data.data, data.afterData);
-	if (sides) {
-		return (
-			<Suspense fallback={<TextLoadingState />}>
-				<TextDiffSurface
-					key={fileId}
-					path={path}
-					before={sides.before}
-					after={sides.after}
-				/>
-			</Suspense>
-		);
-	}
-	// Nothing to compare: bytes that are not text, or two sides that read the
-	// same. The read-only editor shows the side that exists.
-	if (data.afterData == null) return <TextReviewUnavailable />;
-	return (
-		<EditableTextViewResolved
-			{...props}
-			fileId={fileId}
-			filePath={path}
-			fileRow={{ id: fileId, path, content: data.afterData }}
-			isReviewing
-		/>
-	);
-}
+	readonly path: string | undefined;
+};
 
-function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
-	const fileRow = useQueryTakeFirst<TextFileRow>(
+/** What the editor shows of a review, once the epoch's two sides are read. */
+type TextReviewState =
+	| { readonly status: "loading" }
+	| { readonly status: "unavailable" }
+	| {
+			readonly status: "ready";
+			/** The before side, or `null` when the two sides cannot be diffed. */
+			readonly original: string | null;
+			/** The after side; empty for a deleted file. */
+			readonly text: string;
+	  };
+
+/**
+ * The live file, and its review when the shell opens one. Both sides of the
+ * write's epoch are read here, alongside the workspace row; neither read
+ * suspends, and until they land the frame keeps showing what it has.
+ */
+function LiveTextDocument({
+	atelier,
+	fileId,
+	filePath,
+	review,
+}: {
+	readonly atelier: ExtensionRuntime;
+	readonly fileId: string;
+	readonly filePath: string | undefined;
+	readonly review: LiveTextReview | null;
+}) {
+	const fileResult = useQueryResult<TextFileRow>(
 		(lix) =>
 			qb(lix)
 				.selectFrom("lix_file")
@@ -225,45 +583,92 @@ function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
 				.limit(1),
 		{ subscribe: false },
 	);
+	const working = useWorkingFileData(
+		review ? fileId : null,
+		review?.beforeCommitId,
+		review?.afterCommitId,
+	);
+	const reviewState: TextReviewState | null = useMemo(() => {
+		if (!review) return null;
+		if (working.loading) return { status: "loading" };
+		if (working.error) return { status: "unavailable" };
+		// A deleted file has no after side; its last content is still readable
+		// as an all-removed diff.
+		const sides = textDiffSides(working.data, working.afterData);
+		if (sides) {
+			return {
+				status: "ready",
+				original: sides.before ?? "",
+				text: sides.after ?? "",
+			};
+		}
+		// Nothing to compare: bytes that are not text, or two sides that read
+		// the same. The read-only editor shows the side that exists.
+		if (working.afterData == null) return { status: "unavailable" };
+		return {
+			status: "ready",
+			original: null,
+			text: decodeFileDataToText(working.afterData),
+		};
+	}, [review, working]);
 
-	if (!fileRow) {
+	if (fileResult.status === "error") throw fileResult.error;
+	if (reviewState?.status === "unavailable") {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
-				File not found in the workspace.
-			</div>
+			<TextMessage role="alert">
+				The working diff changed while it was being reviewed. Reopen the review.
+			</TextMessage>
 		);
 	}
-
-	// A file under review never reaches the editor: the comparison above
-	// replaces it while the review is open.
+	// The row is on its way: the region keeps what it shows — the document
+	// stepped from, or nothing yet — rather than a loading state.
+	if (fileResult.status === "pending") return null;
+	const fileRow = fileResult.rows[0];
+	const path = review?.path || fileRow?.path || filePath;
+	if (!fileRow) {
+		// Only a review can show a file the workspace no longer has.
+		if (!reviewState) {
+			return <TextMessage>File not found in the workspace.</TextMessage>;
+		}
+		if (reviewState.status === "loading") return null;
+	}
 	return (
-		<EditableTextViewResolved
+		<EditableTextDocument
 			key={fileId}
-			{...props}
+			atelier={atelier}
 			fileId={fileId}
-			fileRow={fileRow}
-			isReviewing={false}
+			filePath={path}
+			fileRow={
+				fileRow ?? {
+					id: fileId,
+					path: path ?? `/${fileId}.txt`,
+					content: new Uint8Array(),
+				}
+			}
+			review={reviewState}
 		/>
 	);
 }
 
-function EditableTextViewResolved({
+function EditableTextDocument({
 	atelier,
 	fileId,
 	filePath,
 	fileRow,
-	isActiveView = true,
-	isPanelFocused = true,
-	isReviewing,
-}: Omit<TextViewProps, "beforeCommitId" | "afterCommitId"> & {
+	review,
+}: {
+	readonly atelier: ExtensionRuntime;
+	readonly fileId: string;
+	readonly filePath: string | undefined;
 	readonly fileRow: TextFileRow;
-	readonly isReviewing: boolean;
+	readonly review: TextReviewState | null;
 }) {
 	const resolvedPath = fileRow.path || filePath || `/${fileId}.txt`;
 	const initialText = useMemo(
 		() => decodeFileDataToText(fileRow.content),
 		[fileRow.content],
 	);
+	const isReviewing = review !== null;
 	const isReadOnly = isReviewing || atelier.readOnly;
 
 	const originKey = useMemo(() => createTextEditorOriginKey(), []);
@@ -274,26 +679,31 @@ function EditableTextViewResolved({
 	} = useSyncedTextFile({
 		fileId,
 		initialText,
-		reviewText: null,
+		// Under review the document is the epoch's after side, never a newer
+		// live row; while the sides load, the live text stays on screen.
+		reviewText: review?.status === "ready" ? review.text : null,
 		reviewing: isReviewing,
 		readOnly: atelier.readOnly,
 		originKey,
 	});
-
-	return (
-		<div className="atelier-text-view" data-testid="text-editor-view">
-			<TextEditorSurface
-				key={fileId}
-				filePath={resolvedPath}
-				text={editorText}
-				readOnly={isReadOnly}
-				isActive={isActiveView}
-				isPanelFocused={isPanelFocused}
-				onChange={persistUserEdit}
-				saveError={saveError}
-			/>
-		</div>
+	const original = review?.status === "ready" ? review.original : null;
+	// A file the reviewer stepped to is opened for its comparison, so it must
+	// never paint as its live self: while the sides load, only a file already
+	// on screen is touched — locked, its live text kept — and any other
+	// document stays as it is.
+	useShownDocument(
+		{
+			fileId,
+			filePath: resolvedPath,
+			text: editorText,
+			original,
+			readOnly: isReadOnly,
+			saveError,
+		},
+		persistUserEdit,
+		{ onlyIfShown: review?.status === "loading" },
 	);
+	return null;
 }
 
 /**
@@ -319,33 +729,20 @@ function textDiffSides(
 	return before === after ? null : { before, after };
 }
 
-function TextReviewUnavailable() {
-	return (
-		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
-			role="alert"
-		>
-			The working diff changed while it was being reviewed. Reopen the review.
-		</div>
-	);
-}
-
-function HistoricalTextView({
-	fileRow,
+/** One revision of the file, read from a commit. */
+function HistoricalTextDocument({
 	fileId,
 	filePath,
 	commitId,
-	isActiveView = true,
-	isPanelFocused = true,
-}: Omit<TextViewProps, "atelier"> & {
-	readonly fileRow: TextFileRow | undefined;
+}: {
+	readonly fileId: string;
+	readonly filePath: string | undefined;
 	readonly commitId: string | null;
 }) {
 	const lix = useLix();
 	const [snapshotText, setSnapshotText] = useState<string | null>(null);
 	const [absentAtCommit, setAbsentAtCommit] = useState(false);
 	const [loadError, setLoadError] = useState(false);
-	const liveContent = fileRow?.content;
 	useEffect(() => {
 		let cancelled = false;
 		// The previous snapshot stays visible while the next commit loads, so
@@ -353,7 +750,7 @@ function HistoricalTextView({
 		setAbsentAtCommit(false);
 		setLoadError(false);
 		if (!commitId) {
-			setSnapshotText(liveContent ? decodeFileDataToText(liveContent) : "");
+			setSnapshotText("");
 			return;
 		}
 		void getFileDataAtCommit(lix, fileId, commitId)
@@ -370,181 +767,55 @@ function HistoricalTextView({
 		return () => {
 			cancelled = true;
 		};
-	}, [commitId, fileId, liveContent, lix]);
+	}, [commitId, fileId, lix]);
 
 	if (loadError) {
 		return (
-			<div
-				className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]"
-				role="alert"
-			>
-				Could not load this file revision.
-			</div>
+			<TextMessage role="alert">Could not load this file revision.</TextMessage>
 		);
 	}
 	if (absentAtCommit) {
 		return (
-			<CheckpointAbsentFile
-				filePath={fileRow?.path || filePath}
-				commitId={commitId}
-			/>
+			<TextMessage>
+				<CheckpointAbsentFile filePath={filePath} commitId={commitId} />
+			</TextMessage>
 		);
 	}
-	if (snapshotText === null) return <TextLoadingState />;
 	return (
-		<div className="atelier-text-view" data-testid="text-editor-view">
-			<TextEditorSurface
-				filePath={fileRow?.path || filePath || `/${fileId}.txt`}
-				text={snapshotText}
-				readOnly
-				isActive={isActiveView}
-				isPanelFocused={isPanelFocused}
-				onChange={() => {}}
-			/>
-		</div>
+		<ShownDocument
+			document={
+				snapshotText === null
+					? null
+					: {
+							fileId,
+							filePath: filePath || `/${fileId}.txt`,
+							text: snapshotText,
+							original: null,
+							readOnly: true,
+							saveError: null,
+						}
+			}
+		/>
 	);
 }
 
-function TextEditorSurface({
-	filePath,
-	text,
-	readOnly,
-	isActive,
-	isPanelFocused,
-	onChange,
-	saveError = null,
-}: {
-	readonly filePath: string;
-	readonly text: string;
-	readonly readOnly: boolean;
-	readonly isActive: boolean;
-	readonly isPanelFocused: boolean;
-	readonly onChange: (text: string) => void;
-	readonly saveError?: string | null;
-}) {
-	const editorHostRef = useRef<HTMLDivElement>(null);
-	const controllerRef = useRef<TextEditorController | null>(null);
-	const onChangeRef = useRef(onChange);
-	const [copied, setCopied] = useState(false);
-	const [copyError, setCopyError] = useState(false);
-	const copyTimerRef = useRef<number | null>(null);
-
-	useEffect(() => {
-		onChangeRef.current = onChange;
-	}, [onChange]);
-
-	useEffect(
-		() => () => {
-			if (copyTimerRef.current !== null)
-				window.clearTimeout(copyTimerRef.current);
-		},
-		[],
-	);
-
-	useLayoutEffect(() => {
-		const parent = editorHostRef.current;
-		if (!parent) return;
-		const controller = createTextEditor({
-			parent,
-			document: text,
-			filePath,
-			readOnly,
-			onChange: (nextText) => onChangeRef.current(nextText),
-		});
-		controllerRef.current = controller;
-		return () => {
-			controllerRef.current = null;
-			controller.destroy();
-		};
-		// The view is recreated only when a different file is mounted.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [filePath]);
-
-	useEffect(() => {
-		controllerRef.current?.setDocument(text);
-	}, [text]);
-
-	useEffect(() => {
-		controllerRef.current?.setReadOnly(readOnly);
-	}, [readOnly]);
-
-	useEffect(() => {
-		if (isActive && isPanelFocused) {
-			controllerRef.current?.view.focus();
-		}
-	}, [isActive, isPanelFocused, readOnly]);
-
-	const copyText = async () => {
-		const currentText =
-			controllerRef.current?.view.state.doc.toString() ?? text;
-		try {
-			await navigator.clipboard.writeText(currentText);
-			setCopyError(false);
-			setCopied(true);
-		} catch {
-			setCopied(false);
-			setCopyError(true);
-		}
-		if (copyTimerRef.current !== null)
-			window.clearTimeout(copyTimerRef.current);
-		copyTimerRef.current = window.setTimeout(() => {
-			setCopied(false);
-			setCopyError(false);
-		}, 1400);
-	};
-
-	return (
-		<div className="atelier-text-surface">
-			<div
-				className="atelier-text-toolbar"
-				role="toolbar"
-				aria-label="Text editor toolbar"
-			>
-				<button
-					type="button"
-					className="atelier-text-toolbar-button"
-					onClick={() => controllerRef.current?.openSearch()}
-					title="Find in file"
-				>
-					<Search aria-hidden="true" size={16} />
-					<span>Search</span>
-				</button>
-				<span className="atelier-text-toolbar-spacer" />
-				<span className="atelier-text-toolbar-status" aria-live="polite">
-					{saveError
-						? `Save failed: ${saveError}`
-						: copyError
-							? "Copy failed"
-							: copied
-								? "Copied"
-								: null}
-				</span>
-				<button
-					type="button"
-					className="atelier-text-toolbar-icon-button"
-					onClick={() => void copyText()}
-					aria-label={copied ? "Copied file contents" : "Copy file contents"}
-					title={copied ? "Copied" : "Copy file contents"}
-				>
-					{copied ? (
-						<Check aria-hidden="true" size={16} />
-					) : (
-						<Copy aria-hidden="true" size={16} />
-					)}
-				</button>
-			</div>
-			<div className="atelier-text-editor-host" ref={editorHostRef} />
-		</div>
-	);
-}
-
-function TextLoadingState() {
+/**
+ * The frame with no document in it: what the prepared surface shows until
+ * the live frame has its document. The same toolbar, in the same place, so
+ * the swap moves nothing; the region holds the prepared text, or nothing
+ * when a comparison is on its way.
+ */
+function TextPreparedFrame({ children }: { readonly children?: ReactNode }) {
 	return (
 		<div
-			className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]"
-			role="status"
+			className="atelier-text-view"
+			data-testid="text-editor-prepared"
+			aria-busy="true"
 		>
-			Loading text…
+			<div className="atelier-text-surface">
+				<TextToolbar disabled hidden />
+				{children ?? <div className="atelier-text-editor-host" data-empty="" />}
+			</div>
 		</div>
 	);
 }
@@ -575,19 +846,27 @@ export const extension = createReactExtensionDefinition({
 	load: loadTextFile,
 	component: ({ atelier, view, data }) => {
 		const file = preparedFile(data);
+		// A comparison is on its way: the prepared text is one revision, the
+		// wrong picture, so the frame holds the place empty instead.
+		const showsDiff = viewShowsDiff({
+			session: atelier.diff.session,
+			state: view.state,
+		});
 		return (
 			<PreparedFileSurface
-				key={file?.id ?? view.instanceId}
-				readySelector=".cm-editor, .atelier-text-diff"
-				diff={viewShowsDiff({
-					session: atelier.diff.session,
-					state: view.state,
-				})}
+				documentKey={file?.id ?? view.instanceId}
+				// The frame is up before its document; the surface waits for the
+				// document, and keeps a document already shown across a step.
+				readySelector=".atelier-text-view[data-document]"
 				initial={
-					file ? (
-						<pre className="whitespace-pre-wrap p-4 font-mono text-sm">
-							{file.content}
-						</pre>
+					showsDiff ? (
+						<TextPreparedFrame />
+					) : file ? (
+						<TextPreparedFrame>
+							<pre className="whitespace-pre-wrap p-4 font-mono text-sm">
+								{file.content}
+							</pre>
+						</TextPreparedFrame>
 					) : (
 						<p>File not found in the workspace.</p>
 					)

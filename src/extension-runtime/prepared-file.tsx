@@ -1,5 +1,5 @@
 import { DocumentLoading } from "../components/document-loading";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type {
 	AtelierExtensionLoader,
 	AtelierJsonValue,
@@ -82,16 +82,26 @@ export function preparedFile(
 		: null;
 }
 
-/** Retain the formatted document until the interactive surface is populated. */
+/**
+ * Retain the formatted document until the interactive surface is populated.
+ *
+ * The surface outlives the document it shows: a mounted view handed the next
+ * document names it in `documentKey`, and the surface returns to the prepared
+ * picture of that document until the interactive one is populated again,
+ * without the frame around it moving.
+ */
 export function PreparedFileSurface({
 	initial,
 	children,
 	readySelector,
+	documentKey = "",
 	diff = false,
 }: {
 	readonly initial: ReactNode;
 	readonly children: ReactNode;
 	readonly readySelector: string;
+	/** Which document the surface shows; a change starts the wait again. */
+	readonly documentKey?: string;
 	/**
 	 * The interactive surface is a comparison, so the prepared document — one
 	 * revision of the file — is the wrong picture. Wait for the comparison
@@ -100,18 +110,25 @@ export function PreparedFileSurface({
 	readonly diff?: boolean;
 }) {
 	const { connected, hydrated } = useAtelierRenderContext();
-	const [ready, setReady] = useState(false);
+	const [readyFor, setReadyFor] = useState<string | null>(null);
 	const editor = useRef<HTMLDivElement>(null);
-	const interactive = ready && connected && hydrated;
-	useEffect(() => {
+	const interactive = readyFor === documentKey && connected && hydrated;
+	// A layout effect, so a surface that is populated in the same commit — a
+	// comparison's frame waiting for its sides — is shown before the browser
+	// paints, never the prepared picture for one frame first.
+	useLayoutEffect(() => {
 		if (!connected || !hydrated || !editor.current) {
-			setReady(false);
+			setReadyFor(null);
 			return;
 		}
 		const element = editor.current;
 		const check = () => {
-			if (element.querySelector(`${readySelector}, [role="alert"]`))
-				setReady(true);
+			if (
+				element.querySelector(
+					`${readySelector}, [role="alert"], [data-atelier-diff-pending]`,
+				)
+			)
+				setReadyFor(documentKey);
 		};
 		const observer = new MutationObserver(check);
 		observer.observe(element, {
@@ -121,7 +138,7 @@ export function PreparedFileSurface({
 		});
 		check();
 		return () => observer.disconnect();
-	}, [connected, hydrated, readySelector]);
+	}, [connected, hydrated, documentKey, readySelector]);
 	return (
 		<div
 			className="relative flex min-h-0 flex-1 flex-col overflow-hidden"

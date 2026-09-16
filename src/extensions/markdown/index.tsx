@@ -1,15 +1,20 @@
-import { DocumentLoading } from "../../components/document-loading";
 import { RepositoryMarkdownContent } from "./repository-markdown-content";
 import {
 	loadTextFile,
 	preparedFile,
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
-import { Suspense, useEffect } from "react";
+import {
+	createContext,
+	Suspense,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+} from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText } from "lucide-react";
 import {
 	useLix,
 	useQueryResult,
@@ -21,7 +26,13 @@ import {
 } from "@/hooks/use-file-snapshots-at-commits";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
-import { useDeferredRevisionProps } from "@/extension-runtime/use-deferred-revision-props";
+import {
+	DocumentRegionProvider,
+	DocumentSlots,
+	HandDocument,
+	useDocumentReady,
+	useDocumentRegion,
+} from "@/extension-runtime/document-region";
 import {
 	EditorProvider,
 	useEditorCtx,
@@ -59,6 +70,7 @@ import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
 import { MentionMenu } from "./components/mention-menu";
 import { DocumentLinksContext } from "./editor/document-links-context";
+import { viewShowsDiff } from "@/extension-runtime/diff-sides";
 import type { MarkdownReviewDiff } from "./review-diff";
 import {
 	decodeFileDataToBytes,
@@ -73,6 +85,7 @@ import type { AtelierDiffFile, AtelierDiffSession } from "@/extension-api";
 import {
 	editorRevisionMode,
 	editorRevisionReviewId,
+	hasHistoricalEditorRevisionState,
 	normalizeEditorRevisionState,
 	type EditorRevisionState,
 } from "@/extension-runtime/editor-revision-state";
@@ -129,80 +142,25 @@ const PAST_REVISION_FRONTMATTER: MarkdownFrontmatterEditing = {
 };
 
 /**
- * Embeds the shared TipTap editor to render Markdown documents.
+ * The Markdown view is a frame and a document. The frame — the formatting
+ * toolbar, the document column, the panel background — is rendered from
+ * props that are always there, so it is on screen from the first paint and
+ * stays put through every change of document, revision or review. Which
+ * document goes in the column, and when, is decided by headless readers
+ * under the frame: they read the row, the checkpoint's sides or the review's
+ * epoch and hand the frame a document; until the next one is ready the
+ * column keeps showing the one it has.
  *
  * @example
  * <MarkdownView fileId="file-123" filePath="/docs/guide.md" isActiveView />
  */
-export function MarkdownView({
-	fileId,
-	filePath,
-	readOnly,
-	isActiveView = true,
-	isPanelFocused = true,
-	focusOnLoad = false,
-	defaultBlock,
-	activeBranchId,
-	diffSession,
-	beforeCommitId,
-	afterCommitId,
-	beforeFileId,
-	afterFileId,
-	beforeExists,
-	afterExists,
-	onDiffAccept,
-	onDiffReject,
-	onDiffResolve,
-	autoAcceptReviews,
-
-	openWorkspaceFile,
-	onDocumentModified,
-}: MarkdownViewProps) {
+export function MarkdownView(props: MarkdownViewProps) {
+	const { fileId, readOnly = false, diffSession } = props;
 	assertFileId(fileId);
-	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
-	// Deferred so revision switches keep the previous document mounted while
-	// the next revision's reads suspend, instead of flashing the fallback.
-	const revision = useDeferredRevisionProps({
-		beforeCommitId,
-		afterCommitId,
-		beforeFileId,
-		afterFileId,
-		beforeExists,
-		afterExists,
-	});
-	if (!resolvedActiveBranchId) return <MarkdownLoadingSpinner />;
-	return (
-		<Suspense fallback={<MarkdownLoadingSpinner />}>
-			<MarkdownViewContent
-				fileId={fileId}
-				filePath={filePath}
-				readOnly={readOnly}
-				isActiveView={isActiveView}
-				isPanelFocused={isPanelFocused}
-				focusOnLoad={focusOnLoad}
-				defaultBlock={defaultBlock}
-				activeBranchId={resolvedActiveBranchId}
-				diffSession={diffSession}
-				beforeCommitId={revision.beforeCommitId}
-				afterCommitId={revision.afterCommitId}
-				beforeFileId={revision.beforeFileId}
-				afterFileId={revision.afterFileId}
-				beforeExists={revision.beforeExists}
-				afterExists={revision.afterExists}
-				onDiffAccept={onDiffAccept}
-				onDiffReject={onDiffReject}
-				onDiffResolve={onDiffResolve}
-				autoAcceptReviews={autoAcceptReviews}
-				openWorkspaceFile={openWorkspaceFile}
-				onDocumentModified={onDocumentModified}
-			/>
-		</Suspense>
+	const resolvedActiveBranchId = useResolvedActiveBranchId(
+		props.activeBranchId,
 	);
-}
-
-function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
-	assertFileId(fileId);
-	const editorRevision = normalizeEditorRevisionState({
+	const revision = normalizeEditorRevisionState({
 		beforeCommitId: props.beforeCommitId,
 		afterCommitId: props.afterCommitId,
 		beforeFileId: props.beforeFileId,
@@ -210,108 +168,220 @@ function MarkdownViewContent({ fileId, ...props }: MarkdownViewProps) {
 		beforeExists: props.beforeExists,
 		afterExists: props.afterExists,
 	});
+	const mode = editorRevisionMode(revision);
+	// The shell owns review detection: this document is under review whenever
+	// the working diff session marks it pending — diff mode covers every open
+	// surface, not just the revealed file.
+	const workingFile = workingReviewFile(diffSession, fileId);
+	const reviewing = workingFile?.review?.status === "pending";
+	// A checkpoint's span, or the working epoch of a file under review, is
+	// read from history; a span that ends at the live file reads the row.
+	const historical =
+		mode !== "editor" &&
+		(revision.afterCommitId !== null || Boolean(workingFile?.workingEpoch));
+	return (
+		<MarkdownFrame
+			// The host allows no editing at all; only then is there no toolbar.
+			toolbar={!readOnly}
+			// A past revision and a review take no formatting, but the toolbar
+			// stays where it is, disabled, so nothing on the page moves when a
+			// review opens or closes.
+			toolbarDisabled={reviewing || mode !== "editor"}
+			review={reviewing || mode === "diff"}
+		>
+			{/* The readers below render no DOM of their own, so a read that
+			    suspends here hides nothing: the frame and the previous document
+			    stay on screen. */}
+			<Suspense fallback={null}>
+				{!resolvedActiveBranchId ? null : historical ? (
+					<MarkdownHistoricalReader
+						fileId={fileId}
+						filePath={props.filePath}
+						fileRow={undefined}
+						revision={revision}
+						diffSession={diffSession}
+						readOnly={readOnly}
+						isActiveView={props.isActiveView ?? true}
+						isPanelFocused={props.isPanelFocused ?? true}
+						openWorkspaceFile={props.openWorkspaceFile}
+					/>
+				) : (
+					<MarkdownLiveReader
+						{...props}
+						fileId={fileId}
+						activeBranchId={resolvedActiveBranchId}
+						revision={revision}
+					/>
+				)}
+			</Suspense>
+		</MarkdownFrame>
+	);
+}
+
+type MarkdownFrameHandle = {
+	/**
+	 * A document holds the frame in review while `locked`: the toolbar
+	 * disabled, the column laid out for a diff.
+	 */
+	readonly lock: (locked: boolean) => void;
+};
+
+const MarkdownFrameContext = createContext<MarkdownFrameHandle | null>(null);
+
+/**
+ * The view's frame: toolbar, document column and whatever stands in the
+ * column instead of a document. It owns one editor context for the toolbar
+ * and the menus, and the column's two document slots: the one on screen
+ * and, while the next document loads, the one out of sight.
+ */
+function MarkdownFrame({
+	toolbar,
+	toolbarDisabled,
+	review,
+	children,
+}: {
+	readonly toolbar: boolean;
+	readonly toolbarDisabled: boolean;
+	readonly review: boolean;
+	readonly children: ReactNode;
+}) {
+	const { shown, next, handle } = useDocumentRegion();
+	const [locks, setLocks] = useState(0);
+	const frame = useMemo<MarkdownFrameHandle>(
+		() => ({
+			lock: (locked) => {
+				setLocks((count) => count + (locked ? 1 : -1));
+			},
+		}),
+		[],
+	);
+	return (
+		<MarkdownFrameContext.Provider value={frame}>
+			<DocumentRegionProvider handle={handle}>
+				<EditorProvider>
+					<div
+						className={`markdown-view flex h-full flex-col bg-panel ${
+							review || locks > 0 ? "markdown-review" : ""
+						}`}
+						data-document={shown ? "" : undefined}
+						aria-busy={shown ? undefined : "true"}
+					>
+						{toolbar ? (
+							<FormattingToolbar disabled={toolbarDisabled || locks > 0} />
+						) : null}
+						<div
+							className="relative min-h-0 flex-1"
+							data-attr="markdown-editor"
+							// A document is on its way, out of sight: nothing it paints
+							// meanwhile is the picture the reviewer stepped to.
+							data-review-pending={next ? "true" : undefined}
+						>
+							<DocumentSlots
+								shown={shown}
+								next={next}
+								handle={handle}
+								attribute="data-markdown-document"
+							/>
+						</div>
+						{children}
+					</div>
+				</EditorProvider>
+			</DocumentRegionProvider>
+		</MarkdownFrameContext.Provider>
+	);
+}
+
+function useReviewLock(locked: boolean) {
+	const frame = useContext(MarkdownFrameContext);
+	useLayoutEffect(() => {
+		if (!frame || !locked) return;
+		frame.lock(true);
+		return () => frame.lock(false);
+	}, [frame, locked]);
+}
+
+/** What the column says instead of a document. */
+function MarkdownMessage({
+	role,
+	children,
+}: {
+	readonly role?: "alert";
+	readonly children: ReactNode;
+}) {
+	useDocumentReady(true);
+	return (
+		<div
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			role={role}
+		>
+			{children}
+		</div>
+	);
+}
+
+/**
+ * The live row. A file whose span ends at the live file is compared from
+ * the row; every other revision state is the editor's.
+ */
+function MarkdownLiveReader({
+	fileId,
+	activeBranchId,
+	revision,
+	...props
+}: MarkdownViewProps & {
+	readonly fileId: string;
+	readonly activeBranchId: string;
+	readonly revision: EditorRevisionState;
+}) {
+	const mode = editorRevisionMode(revision);
 	const comparesAgainstCurrentFile =
-		editorRevision.beforeCommitId !== null &&
-		editorRevision.afterCommitId === null;
-	const workingFile = workingReviewFile(props.diffSession, fileId);
-	if (
-		editorRevisionMode(editorRevision) !== "editor" &&
-		(editorRevision.afterCommitId !== null || workingFile?.workingEpoch)
-	) {
+		revision.beforeCommitId !== null && revision.afterCommitId === null;
+	const fileResult = useQueryResult<MarkdownFileRow>(
+		(lix) => selectMarkdownFileDelivery(lix, activeBranchId, fileId),
+		{ subscribe: mode === "editor" || comparesAgainstCurrentFile },
+	);
+	if (fileResult.status === "error") throw fileResult.error;
+	// The row is on its way: the column keeps what it shows — the document
+	// stepped from, or nothing yet — rather than a loading state.
+	if (fileResult.status === "pending") return null;
+	const fileRow = fileResult.rows[0];
+	if (mode !== "editor") {
 		return (
-			<MarkdownHistoricalViewLoaded
+			<MarkdownHistoricalReader
 				fileId={fileId}
 				filePath={props.filePath}
-				fileRow={undefined}
+				fileRow={fileRow}
+				revision={revision}
+				diffSession={props.diffSession}
+				readOnly={props.readOnly ?? false}
 				isActiveView={props.isActiveView ?? true}
 				isPanelFocused={props.isPanelFocused ?? true}
-				editorRevision={editorRevision}
 				openWorkspaceFile={props.openWorkspaceFile}
-				diffSession={props.diffSession}
 			/>
 		);
 	}
 	return (
-		<MarkdownLiveDelivery
-			fileId={fileId}
-			comparesAgainstCurrentFile={comparesAgainstCurrentFile}
-			{...props}
+		<HandDocument
+			documentKey={`live:${fileId}`}
+			element={
+				<MarkdownLiveDocument
+					{...props}
+					fileId={fileId}
+					activeBranchId={activeBranchId}
+					fileRow={fileRow}
+				/>
+			}
 		/>
 	);
 }
 
-function MarkdownLiveDelivery({
-	fileId,
-	comparesAgainstCurrentFile,
-	...props
-}: MarkdownViewProps & { readonly comparesAgainstCurrentFile: boolean }) {
-	const editorRevision = normalizeEditorRevisionState({
-		beforeCommitId: props.beforeCommitId,
-		afterCommitId: props.afterCommitId,
-		beforeFileId: props.beforeFileId,
-		afterFileId: props.afterFileId,
-		beforeExists: props.beforeExists,
-		afterExists: props.afterExists,
-	});
-	const ownsLiveFileDelivery = editorRevisionMode(editorRevision) === "editor";
-	const fileResult = useQueryResult<MarkdownFileRow>(
-		(lix) =>
-			selectMarkdownFileDelivery(lix, props.activeBranchId ?? "", fileId),
-		{
-			subscribe: ownsLiveFileDelivery || comparesAgainstCurrentFile,
-		},
-	);
-	if (fileResult.status === "pending") return <MarkdownLoadingSpinner />;
-	if (fileResult.status === "error") throw fileResult.error;
-	const fileRow = fileResult.rows[0];
-
-	return <MarkdownViewLoaded fileId={fileId} fileRow={fileRow} {...props} />;
-}
-
-function MarkdownViewLoaded(
-	props: MarkdownViewProps & {
-		readonly fileRow: MarkdownFileRow | undefined;
-	},
-) {
-	const {
-		fileId,
-		filePath,
-		fileRow,
-		isActiveView = true,
-		isPanelFocused = true,
-		beforeCommitId,
-		afterCommitId,
-		openWorkspaceFile,
-	} = props;
-	const editorRevision = normalizeEditorRevisionState({
-		beforeCommitId,
-		afterCommitId,
-		beforeFileId: props.beforeFileId,
-		afterFileId: props.afterFileId,
-		beforeExists: props.beforeExists,
-		afterExists: props.afterExists,
-	});
-	const revisionMode = editorRevisionMode(editorRevision);
-
-	if (revisionMode !== "editor") {
-		return (
-			<MarkdownHistoricalViewLoaded
-				fileId={fileId}
-				filePath={filePath}
-				fileRow={fileRow}
-				isActiveView={isActiveView}
-				isPanelFocused={isPanelFocused}
-				editorRevision={editorRevision}
-				openWorkspaceFile={openWorkspaceFile}
-				diffSession={props.diffSession}
-			/>
-		);
-	}
-
-	return <MarkdownLiveViewLoaded {...props} />;
-}
-
-function MarkdownLiveViewLoaded({
+/**
+ * The live document and, when the shell opens one, its review. Both sides
+ * of the write's epoch are read here; until they land a document already
+ * on screen keeps its live frame — the marks arrive on it in place — and a
+ * document opened for the review stays out of sight.
+ */
+function MarkdownLiveDocument({
 	fileId,
 	fileRow,
 	readOnly = false,
@@ -330,9 +400,6 @@ function MarkdownLiveViewLoaded({
 }: MarkdownViewProps & {
 	readonly fileRow: MarkdownFileRow | undefined;
 }) {
-	// The shell owns review detection: this document is under review whenever
-	// the working diff session marks it pending — diff mode covers every open
-	// surface, not just the revealed file.
 	const session = diffSession ?? null;
 	const sessionFile = workingReviewFile(session, fileId);
 	const sessionReview = sessionFile?.review;
@@ -411,9 +478,33 @@ function MarkdownLiveViewLoaded({
 		readonly reviewId: string;
 		readonly review: ExternalWriteReview;
 	} | null>(null);
-	const reviewLocked =
-		isReviewing || finishingReview?.fileId === effectiveFileRow?.id;
+	const finishing = finishingReview?.fileId === effectiveFileRow?.id;
+	const reviewLocked = isReviewing || finishing;
 	const editorReadOnly = readOnly || reviewLocked;
+	// The review's completion is saving: the toolbar stays disabled until
+	// the authoritative document is back in the editor.
+	useReviewLock(finishing && !isReviewing);
+	// A document opened while its review is active must never paint as its
+	// live self: the reviewer stepped to it for the diff. It stays out of
+	// sight until the review document lands in its editor. A document that
+	// was already on screen when its review opened keeps its live frame
+	// instead — the marks arrive on it in place — so nothing disappears only
+	// to come back.
+	const [openedUnderReview] = useState(reviewing);
+	const reviewKey = review
+		? `${review.reviewId}:${review.beforeCommitId}:${review.afterCommitId}`
+		: null;
+	const [appliedReviewKey, setAppliedReviewKey] = useState<string | null>(null);
+	const reviewPending =
+		openedUnderReview &&
+		reviewing &&
+		!readOnly &&
+		// A no-op diff has nothing to land: the document is its own review.
+		!(
+			reviewDiff !== null &&
+			reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown
+		) &&
+		(reviewKey === null || appliedReviewKey !== reviewKey);
 	const lix = useLix();
 	// The editor recreates when its source path prop changes, which would drop
 	// the caret on every title-driven rename. Only a directory change (a real
@@ -476,131 +567,103 @@ function MarkdownLiveViewLoaded({
 			!editorReadOnly &&
 			Boolean(effectiveFileRow && isMarkdownFilePath(effectiveFileRow.path)),
 	});
-
-	let content: ReactNode;
+	const showsDocument =
+		reviewUnavailableMessage === null &&
+		effectiveFileRow !== undefined &&
+		isMarkdownFilePath(effectiveFileRow.path);
+	// The document is on screen once its editor is up and, under a review it
+	// was opened for, once the review document is in that editor.
+	useDocumentReady(showsDocument && liveEditor !== null && !reviewPending);
 
 	if (reviewUnavailableMessage) {
-		content = (
-			<WorkingMarkdownReviewUnavailable message={reviewUnavailableMessage} />
-		);
-	} else if (!effectiveFileRow) {
-		content = (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
-				File not found in the workspace.
-			</div>
-		);
-	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {
-		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
-	} else {
-		content = (
-			<MarkdownFrontmatterEditingContext.Provider value={frontmatterEditing}>
-				<EditorProvider>
-					<div
-						className={`markdown-view flex h-full flex-col bg-background ${
-							reviewLocked ? "markdown-review" : ""
-						}`}
-					>
-						{!readOnly && <FormattingToolbar disabled={editorReadOnly} />}
-						<div
-							className="relative min-h-0 flex-1"
-							data-attr="markdown-editor"
-						>
-							<TipTapEditor
-								className="h-full"
-								fileId={effectiveFileRow.id}
-								activeBranchId={activeBranchId}
-								filePath={editorSourcePath ?? effectiveFileRow.path}
-								isActiveView={isActiveView}
-								focusOnLoad={focusOnLoad}
-								defaultBlock={defaultBlock}
-								readOnly={editorReadOnly}
-								suspendExternalSync={reviewLocked}
-								additionalExtensions={MarkdownReviewExtensions}
-								onReady={(editor) => {
-									setLiveEditorState({ fileId: effectiveFileRow.id, editor });
-								}}
-								onDispose={(editor) => {
-									setLiveEditorState((current) =>
-										current?.editor === editor ? null : current,
-									);
-								}}
-								openWorkspaceFile={openWorkspaceFile}
-								onPersist={({ filePath: persistedPath, commit }) => {
-									const resolvedPath = persistedPath ?? effectiveFileRow.path;
-									onDocumentModified?.(resolvedPath, commit);
-								}}
-							/>
-							{!readOnly && review && reviewDiff && liveEditor ? (
-								<MarkdownLiveReviewController
-									fileId={effectiveFileRow.id}
-									sourceFilePath={effectiveFileRow.path}
-									editor={liveEditor}
-									review={review}
-									reviewDiff={reviewDiff}
-									reviewId={review.reviewId}
-									beforeCommitId={review.beforeCommitId}
-									afterCommitId={review.afterCommitId}
-									openWorkspaceFile={openWorkspaceFile}
-									isActive={isActiveView && isPanelFocused}
-									onDiffAccept={onDiffAccept}
-									onDiffReject={onDiffReject}
-									onDiffResolve={onDiffResolve}
-									autoAccept={autoAcceptReviews}
-									onCompletionStart={() => {
-										setFinishingReview({
-											fileId: effectiveFileRow.id,
-											reviewId: review.reviewId,
-											review,
-										});
-									}}
-									onCompletionSuccess={(markdown) => {
-										hydrateMarkdownEditorAuthoritativeMarkdown(
-											liveEditor,
-											markdown,
-											defaultBlock,
-										);
-										setFinishingReview((current) =>
-											current?.reviewId === review.reviewId ? null : current,
-										);
-									}}
-									onCompletionFailure={() => {
-										setFinishingReview((current) =>
-											current?.reviewId === review.reviewId ? null : current,
-										);
-									}}
-								/>
-							) : null}
-						</div>
-						{editorReadOnly ? null : (
-							<>
-								<SelectionToolbar />
-								<SlashCommandMenu />
-								<EmojiPickerMenu />
-								<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
-								<MentionMenu sourceFilePath={effectiveFileRow.path} />
-							</>
-						)}
-					</div>
-				</EditorProvider>
-			</MarkdownFrontmatterEditingContext.Provider>
+		return (
+			<MarkdownMessage role="alert">{reviewUnavailableMessage}</MarkdownMessage>
 		);
 	}
-
-	return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
-}
-
-function WorkingMarkdownReviewUnavailable({
-	message,
-}: {
-	readonly message: string;
-}) {
+	if (!effectiveFileRow) {
+		return <MarkdownMessage>File not found in the workspace.</MarkdownMessage>;
+	}
+	if (!isMarkdownFilePath(effectiveFileRow.path)) {
+		return <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
+	}
 	return (
-		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
-			role="alert"
-		>
-			{message}
-		</div>
+		<MarkdownFrontmatterEditingContext.Provider value={frontmatterEditing}>
+			<TipTapEditor
+				className="h-full"
+				fileId={effectiveFileRow.id}
+				activeBranchId={activeBranchId}
+				filePath={editorSourcePath ?? effectiveFileRow.path}
+				isActiveView={isActiveView}
+				focusOnLoad={focusOnLoad}
+				defaultBlock={defaultBlock}
+				readOnly={editorReadOnly}
+				suspendExternalSync={reviewLocked}
+				additionalExtensions={MarkdownReviewExtensions}
+				onReady={(editor) => {
+					setLiveEditorState({ fileId: effectiveFileRow.id, editor });
+				}}
+				onDispose={(editor) => {
+					setLiveEditorState((current) =>
+						current?.editor === editor ? null : current,
+					);
+				}}
+				openWorkspaceFile={openWorkspaceFile}
+				onPersist={({ filePath: persistedPath, commit }) => {
+					const resolvedPath = persistedPath ?? effectiveFileRow.path;
+					onDocumentModified?.(resolvedPath, commit);
+				}}
+			/>
+			{!readOnly && review && reviewDiff && liveEditor ? (
+				<MarkdownLiveReviewController
+					fileId={effectiveFileRow.id}
+					sourceFilePath={effectiveFileRow.path}
+					editor={liveEditor}
+					review={review}
+					reviewDiff={reviewDiff}
+					reviewId={review.reviewId}
+					beforeCommitId={review.beforeCommitId}
+					afterCommitId={review.afterCommitId}
+					openWorkspaceFile={openWorkspaceFile}
+					isActive={isActiveView && isPanelFocused}
+					onDiffAccept={onDiffAccept}
+					onDiffReject={onDiffReject}
+					onDiffResolve={onDiffResolve}
+					autoAccept={autoAcceptReviews}
+					onDocumentApplied={() => setAppliedReviewKey(reviewKey)}
+					onCompletionStart={() => {
+						setFinishingReview({
+							fileId: effectiveFileRow.id,
+							reviewId: review.reviewId,
+							review,
+						});
+					}}
+					onCompletionSuccess={(markdown) => {
+						hydrateMarkdownEditorAuthoritativeMarkdown(
+							liveEditor,
+							markdown,
+							defaultBlock,
+						);
+						setFinishingReview((current) =>
+							current?.reviewId === review.reviewId ? null : current,
+						);
+					}}
+					onCompletionFailure={() => {
+						setFinishingReview((current) =>
+							current?.reviewId === review.reviewId ? null : current,
+						);
+					}}
+				/>
+			) : null}
+			{editorReadOnly ? null : (
+				<>
+					<SelectionToolbar />
+					<SlashCommandMenu />
+					<EmojiPickerMenu />
+					<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
+					<MentionMenu sourceFilePath={effectiveFileRow.path} />
+				</>
+			)}
+		</MarkdownFrontmatterEditingContext.Provider>
 	);
 }
 
@@ -620,6 +683,7 @@ function MarkdownLiveReviewController({
 	onCompletionSuccess,
 	onCompletionFailure,
 	autoAccept = false,
+	onDocumentApplied,
 }: MarkdownReviewOverlayProps & {
 	readonly editor: Editor;
 	readonly onCompletionStart: (markdown: string) => void;
@@ -648,6 +712,7 @@ function MarkdownLiveReviewController({
 				afterCommitId={afterCommitId}
 				openWorkspaceFile={openWorkspaceFile}
 				isActive={isActive}
+				onDocumentApplied={onDocumentApplied}
 			/>
 		);
 	}
@@ -666,35 +731,42 @@ function MarkdownLiveReviewController({
 			onCompletionStart={onCompletionStart}
 			onCompletionSuccess={onCompletionSuccess}
 			onCompletionFailure={onCompletionFailure}
+			onDocumentApplied={onDocumentApplied}
 		/>
 	);
 }
 
-function MarkdownHistoricalViewLoaded({
-	fileId,
-	editorRevision,
-	diffSession,
-	...props
-}: {
+type MarkdownHistoricalReaderProps = {
 	readonly fileId: string;
 	readonly filePath: string | undefined;
 	readonly fileRow: MarkdownFileRow | undefined;
+	/** The host allows no editing at all; only then is there no toolbar. */
+	readonly readOnly: boolean;
 	readonly isActiveView: boolean;
 	readonly isPanelFocused: boolean;
-	readonly editorRevision: EditorRevisionState;
+	readonly revision: EditorRevisionState;
 	readonly diffSession?: AtelierDiffSession | null;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
-}) {
+};
+
+/** The file at each end of a span, read from history. */
+function MarkdownHistoricalReader({
+	fileId,
+	revision,
+	diffSession,
+	readOnly: _readOnly,
+	...props
+}: MarkdownHistoricalReaderProps) {
 	const workingFile =
 		diffSession && "working" in diffSession.target
 			? diffSession.files.find((file) => file.id === fileId)
 			: undefined;
 	if (workingFile?.workingEpoch) {
 		return (
-			<MarkdownWorkingHistoricalView
+			<MarkdownWorkingHistoricalReader
 				{...props}
 				fileId={fileId}
-				editorRevision={editorRevision}
+				revision={revision}
 				workingFile={workingFile}
 			/>
 		);
@@ -702,39 +774,38 @@ function MarkdownHistoricalViewLoaded({
 	return (
 		<FileSnapshotsAtCommits
 			fileId={fileId}
-			beforeCommitId={editorRevision.beforeCommitId}
-			afterCommitId={editorRevision.afterCommitId}
-			beforeFileId={editorRevision.beforeFileId}
-			afterFileId={editorRevision.afterFileId}
-			beforeExists={editorRevision.beforeExists}
-			afterExists={editorRevision.afterExists}
+			beforeCommitId={revision.beforeCommitId}
+			afterCommitId={revision.afterCommitId}
+			beforeFileId={revision.beforeFileId}
+			afterFileId={revision.afterFileId}
+			beforeExists={revision.beforeExists}
+			afterExists={revision.afterExists}
 		>
 			{({ beforeSnapshot, afterSnapshot }) => (
-				<MarkdownHistoricalViewResolved
-					{...props}
-					fileId={fileId}
-					editorRevision={editorRevision}
-					beforeSnapshot={beforeSnapshot}
-					afterSnapshot={afterSnapshot}
+				<HandDocument
+					documentKey={`history:${fileId}`}
+					element={
+						<MarkdownHistoricalDocument
+							{...props}
+							fileId={fileId}
+							revision={revision}
+							beforeSnapshot={beforeSnapshot}
+							afterSnapshot={afterSnapshot}
+						/>
+					}
 				/>
 			)}
 		</FileSnapshotsAtCommits>
 	);
 }
 
-function MarkdownWorkingHistoricalView({
+/** The working epoch of a file under review, read as a span. */
+function MarkdownWorkingHistoricalReader({
 	fileId,
-	editorRevision,
+	revision,
 	workingFile,
 	...props
-}: {
-	readonly fileId: string;
-	readonly filePath: string | undefined;
-	readonly fileRow: MarkdownFileRow | undefined;
-	readonly isActiveView: boolean;
-	readonly isPanelFocused: boolean;
-	readonly editorRevision: EditorRevisionState;
-	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+}: Omit<MarkdownHistoricalReaderProps, "diffSession" | "readOnly"> & {
 	readonly workingFile: AtelierDiffFile;
 }) {
 	const epoch = workingFile.workingEpoch!;
@@ -743,59 +814,68 @@ function MarkdownWorkingHistoricalView({
 		epoch.beforeCommitId,
 		epoch.afterCommitId,
 	);
+	const documentKey = `history:${fileId}`;
 	if (!before.loading && before.error) {
 		return (
-			<WorkingMarkdownReviewUnavailable message="The working diff changed while it was being reviewed. Reopen the review." />
+			<HandDocument
+				documentKey={documentKey}
+				element={
+					<MarkdownMessage role="alert">
+						The working diff changed while it was being reviewed. Reopen the
+						review.
+					</MarkdownMessage>
+				}
+			/>
 		);
 	}
-	if (before.loading) return <MarkdownLoadingSpinner />;
+	// The sides are on their way: the column keeps what it shows.
+	if (before.loading) return null;
 	const beforeSnapshot = before.data
 		? { id: fileId, path: workingFile.path, content: before.data }
 		: undefined;
 	return (
-		<MarkdownHistoricalViewResolved
-			{...props}
-			fileId={fileId}
-			editorRevision={editorRevision}
-			beforeSnapshot={beforeSnapshot}
-			afterSnapshot={undefined}
+		<HandDocument
+			documentKey={documentKey}
+			element={
+				<MarkdownHistoricalDocument
+					{...props}
+					fileId={fileId}
+					revision={revision}
+					beforeSnapshot={beforeSnapshot}
+					afterSnapshot={undefined}
+				/>
+			}
 		/>
 	);
 }
 
-function MarkdownHistoricalViewResolved({
+/** One revision of the file, or the diff of a span, as the column shows it. */
+function MarkdownHistoricalDocument({
 	fileId,
 	filePath,
 	fileRow,
 	isActiveView,
 	isPanelFocused,
-	editorRevision,
+	revision,
 	openWorkspaceFile,
 	beforeSnapshot,
 	afterSnapshot,
-}: {
-	readonly fileId: string;
-	readonly filePath: string | undefined;
-	readonly fileRow: MarkdownFileRow | undefined;
-	readonly isActiveView: boolean;
-	readonly isPanelFocused: boolean;
-	readonly editorRevision: EditorRevisionState;
-	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
+}: Omit<MarkdownHistoricalReaderProps, "diffSession" | "readOnly"> & {
 	readonly beforeSnapshot: HistoricalFileSnapshot | undefined;
 	readonly afterSnapshot: HistoricalFileSnapshot | undefined;
 }) {
-	const revisionMode = editorRevisionMode(editorRevision);
+	const revisionMode = editorRevisionMode(revision);
 	const historicalFile = useMemo(
 		() =>
 			buildHistoricalMarkdownFile({
 				fileId,
 				filePath,
 				fileRow,
-				revision: editorRevision,
+				revision,
 				beforeSnapshot,
 				afterSnapshot,
 			}),
-		[beforeSnapshot, editorRevision, fileId, filePath, fileRow, afterSnapshot],
+		[beforeSnapshot, revision, fileId, filePath, fileRow, afterSnapshot],
 	);
 	const effectiveFileRow = historicalFile?.fileRow;
 	const review = historicalFile?.review ?? null;
@@ -811,47 +891,41 @@ function MarkdownHistoricalViewResolved({
 	if (!effectiveFileRow) {
 		// No version at either side of the span: the absence is temporal.
 		content = (
-			<CheckpointAbsentFile
-				filePath={filePath}
-				commitId={editorRevision.afterCommitId ?? editorRevision.beforeCommitId}
-			/>
+			<MarkdownMessage>
+				<CheckpointAbsentFile
+					filePath={filePath}
+					commitId={revision.afterCommitId ?? revision.beforeCommitId}
+				/>
+			</MarkdownMessage>
 		);
 	} else if (!isMarkdownFilePath(effectiveFileRow.path)) {
 		content = <UnsupportedFilePlaceholder filePath={effectiveFileRow.path} />;
 	} else if (revisionMode === "snapshot") {
 		content = (
-			<MarkdownSnapshotView
+			<MarkdownSnapshotDocument
 				filePath={effectiveFileRow.path}
 				markdown={decodeFileDataToText(effectiveFileRow.content)}
-				sourceCommitId={editorRevision.afterCommitId ?? undefined}
+				sourceCommitId={revision.afterCommitId ?? undefined}
 				openWorkspaceFile={openWorkspaceFile}
 			/>
 		);
-	} else {
+	} else if (reviewDiff && review) {
 		content = (
-			<EditorProvider>
-				<div className="markdown-view markdown-review flex h-full flex-col bg-background">
-					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
-						{reviewDiff && review ? (
-							<MarkdownReviewOverlay
-								fileId={effectiveFileRow.id}
-								sourceFilePath={effectiveFileRow.path}
-								review={review}
-								reviewDiff={reviewDiff}
-								reviewId={review.reviewId}
-								beforeCommitId={review.beforeCommitId}
-								afterCommitId={review.afterCommitId}
-								openWorkspaceFile={openWorkspaceFile}
-								isActive={isActiveView && isPanelFocused}
-								controls="none"
-							/>
-						) : (
-							<MarkdownReviewOverlayFallback />
-						)}
-					</div>
-				</div>
-			</EditorProvider>
+			<MarkdownReviewOverlay
+				fileId={effectiveFileRow.id}
+				sourceFilePath={effectiveFileRow.path}
+				review={review}
+				reviewDiff={reviewDiff}
+				reviewId={review.reviewId}
+				beforeCommitId={review.beforeCommitId}
+				afterCommitId={review.afterCommitId}
+				openWorkspaceFile={openWorkspaceFile}
+				isActive={isActiveView && isPanelFocused}
+				controls="none"
+			/>
 		);
+	} else {
+		content = null;
 	}
 
 	// Every document here is a past commit: a property panel that took an edit
@@ -860,12 +934,12 @@ function MarkdownHistoricalViewResolved({
 		<MarkdownFrontmatterEditingContext.Provider
 			value={PAST_REVISION_FRONTMATTER}
 		>
-			<div className="flex min-h-0 flex-1 flex-col">{content}</div>
+			{content}
 		</MarkdownFrontmatterEditingContext.Provider>
 	);
 }
 
-function MarkdownSnapshotView({
+function MarkdownSnapshotDocument({
 	filePath,
 	markdown,
 	sourceCommitId,
@@ -891,15 +965,6 @@ function MarkdownSnapshotView({
 		[filePath, lix, markdown, openWorkspaceFile, sourceCommitId],
 	);
 	useEffect(() => () => editor.destroy(), [editor]);
-
-	return (
-		<EditorProvider>
-			<MarkdownSnapshotEditor editor={editor} />
-		</EditorProvider>
-	);
-}
-
-function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
 	const { setEditor } = useEditorCtx();
 	useEffect(() => {
 		setEditor(editor);
@@ -907,14 +972,13 @@ function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
 			setEditor((current) => (current === editor ? null : current));
 		};
 	}, [editor, setEditor]);
+	// The editor is created with its document: the snapshot is on screen as
+	// soon as it is mounted.
+	useDocumentReady(true);
 
 	return (
-		<div className="markdown-view flex h-full flex-col bg-background">
-			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
-				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
-					<EditorContent editor={editor} className="tiptap mx-auto w-full" />
-				</div>
-			</div>
+		<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
+			<EditorContent editor={editor} className="tiptap mx-auto w-full" />
 		</div>
 	);
 }
@@ -934,6 +998,7 @@ type MarkdownReviewOverlayProps = {
 	readonly onDiffReject?: (path: string) => Promise<void>;
 	readonly onDiffResolve?: (path: string, data: Uint8Array) => Promise<void>;
 	readonly autoAccept?: boolean;
+	readonly onDocumentApplied?: () => void;
 };
 
 function MarkdownReviewOverlay({
@@ -956,6 +1021,12 @@ function MarkdownReviewOverlay({
 		onDiffReject,
 		onDiffResolve,
 	});
+	// The review editor is on screen once the diff is in it.
+	const [applied, setApplied] = useState(false);
+	useDocumentReady(applied);
+	// The column is laid out for a diff as long as this one is in it — past
+	// the review's end, until the live document takes its place.
+	useReviewLock(true);
 
 	return (
 		<div className="markdown-review-overlay">
@@ -969,6 +1040,7 @@ function MarkdownReviewOverlay({
 					reviewEnabled={controls === "review"}
 					isActive={isActive}
 					onComplete={completeReview}
+					onDocumentApplied={() => setApplied(true)}
 				/>
 			</div>
 		</div>
@@ -1000,17 +1072,6 @@ function createCompleteMarkdownReview({
 		}
 		throw new Error("Mixed review decisions require a review resolver.");
 	};
-}
-
-function MarkdownReviewOverlayFallback() {
-	return (
-		<div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
-			<div className="inline-flex items-center rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] px-2.5 py-1.5 text-xs text-[var(--color-text-secondary)] shadow-sm">
-				<Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" aria-hidden />
-				<span>Loading review…</span>
-			</div>
-		</div>
-	);
 }
 
 function buildHistoricalMarkdownFile(args: {
@@ -1099,17 +1160,16 @@ function UnsupportedFilePlaceholder({
 }: {
 	readonly filePath: string;
 }): ReactNode {
+	useDocumentReady(true);
 	return (
 		<div className="flex h-full items-center justify-center px-6 py-8 text-center">
-			<div className="max-w-sm space-y-2 text-sm text-[var(--color-text-secondary)]">
-				<p className="font-medium text-[var(--color-text-primary)]">
+			<div className="max-w-sm space-y-2 text-sm text-fg-muted">
+				<p className="font-medium text-fg">
 					This file type is not supported yet.
 				</p>
 				<p>
 					Atelier only opens markdown files in this editor, so{" "}
-					<span className="font-mono text-xs text-[var(--color-text-secondary)]">
-						{filePath}
-					</span>{" "}
+					<span className="font-mono text-xs text-fg-muted">{filePath}</span>{" "}
 					was left blank to avoid damaging its formatting.
 				</p>
 			</div>
@@ -1123,29 +1183,6 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 	}
 }
 
-/**
- * While a document's rows are on their way the view shows the same white
- * surface the editor paints, with the toolbar's strip of chrome above it,
- * so opening a file never flashes a spinner between two pages.
- */
-function MarkdownLoadingSpinner(): ReactNode {
-	return (
-		<div className="markdown-view flex h-full flex-col bg-background">
-			<div
-				aria-hidden="true"
-				className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
-			/>
-			<DocumentLoading />
-		</div>
-	);
-}
-
-/**
- * Markdown content view definition used by the registry.
- *
- * @example
- * import { extension as markdownView } from "@/extensions/markdown";
- */
 export const extension = createReactExtensionDefinition({
 	manifest: parseExtensionManifest(
 		"bundled:atelier_file/manifest.json",
@@ -1156,34 +1193,54 @@ export const extension = createReactExtensionDefinition({
 	load: loadTextFile,
 	component: ({ atelier, view, data }) => {
 		const file = preparedFile(data);
+		// The runtime folds "this is a past revision" into `readOnly`. The
+		// toolbar is the host's call, not the revision's: over a checkpoint or
+		// a review it stays where it is, disabled, so nothing on the page moves
+		// when a review opens or closes.
+		const hostReadOnly =
+			atelier.readOnly && !hasHistoricalEditorRevisionState(view.state);
+		// A file under review, or stepped to inside a checkpoint, is opened for
+		// its diff: the prepared text is one revision, the wrong picture. The
+		// placeholder keeps the frame — toolbar strip, column — and paints no
+		// document in it.
+		const underReview =
+			file !== null &&
+			viewShowsDiff({ session: atelier.diff.session, state: view.state });
 		return (
 			<PreparedFileSurface
-				key={file?.id ?? view.instanceId}
-				readySelector=".tiptap.ProseMirror"
+				documentKey={file?.id ?? view.instanceId}
+				// The frame is up before its document; the surface waits for the
+				// document, and keeps a document already shown across a step.
+				readySelector=".markdown-view[data-document]"
 				initial={
 					file ? (
 						// Laid out exactly like the editor that replaces it (toolbar
-						// strip, container, the ProseMirror column), so the swap to
-						// the live editor moves nothing on screen.
-						<div className="markdown-view flex h-full flex-col bg-background">
-							{atelier.readOnly ? null : (
+						// strip, container, the ProseMirror column with the
+						// document's type), so the swap to the live editor moves
+						// nothing on screen.
+						<div className="markdown-view flex h-full flex-col bg-panel">
+							{hostReadOnly ? null : (
 								<div
 									aria-hidden="true"
-									className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
+									className="h-10 shrink-0 border-b border-border-subtle"
 								/>
 							)}
-							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-background">
-								<RepositoryMarkdownContent
-									className="ProseMirror"
-									content={file.content}
-									path={file.path}
-									branchId={atelier.branches.activeId}
-									commitId={[
-										view.state.sourceCommitId,
-										view.state.afterCommitId,
-										view.state.beforeCommitId,
-									].find((value): value is string => typeof value === "string")}
-								/>
+							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-panel">
+								{underReview ? null : (
+									<RepositoryMarkdownContent
+										className="ProseMirror atelier-document"
+										content={file.content}
+										path={file.path}
+										branchId={atelier.branches.activeId}
+										commitId={[
+											view.state.sourceCommitId,
+											view.state.afterCommitId,
+											view.state.beforeCommitId,
+										].find(
+											(value): value is string => typeof value === "string",
+										)}
+									/>
+								)}
 							</div>
 						</div>
 					) : (
@@ -1195,7 +1252,7 @@ export const extension = createReactExtensionDefinition({
 					<MarkdownView
 						fileId={view.state.fileId as string}
 						filePath={view.state.filePath as string | undefined}
-						readOnly={atelier.readOnly}
+						readOnly={hostReadOnly}
 						isActiveView={view.isActive}
 						isPanelFocused={view.isFocused}
 						focusOnLoad={Boolean(view.state.focusOnLoad)}

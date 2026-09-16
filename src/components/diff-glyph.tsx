@@ -31,11 +31,11 @@ export type DiffGlyphKind =
 	| "conflict";
 
 const GLYPH_FILL: Record<DiffGlyphKind, string> = {
-	added: "var(--color-border-diff-added)",
-	modified: "var(--color-icon-brand)",
-	removed: "var(--color-border-diff-removed)",
-	moved: "var(--color-icon-diff-moved)",
-	conflict: "var(--color-icon-diff-conflict)",
+	added: "var(--atelier-diff-added)",
+	modified: "var(--atelier-link)",
+	removed: "var(--atelier-diff-removed)",
+	moved: "var(--atelier-diff-moved)",
+	conflict: "var(--atelier-diff-conflict)",
 };
 
 const GLYPH_TITLE: Record<DiffGlyphKind, string> = {
@@ -58,9 +58,9 @@ export function DiffGlyph({
 	readonly dimmed?: boolean;
 	readonly className?: string;
 }) {
-	const fill = dimmed ? "var(--color-icon-quaternary)" : GLYPH_FILL[kind];
+	const fill = dimmed ? "var(--atelier-fg-faint)" : GLYPH_FILL[kind];
 	// The knockout is the panel ground showing through the dot.
-	const knockout = "var(--color-bg-panel)";
+	const knockout = "var(--atelier-panel)";
 	return (
 		<span
 			title={GLYPH_TITLE[kind]}
@@ -116,7 +116,7 @@ export function WorkingDot({
 	return (
 		<span
 			aria-hidden="true"
-			className={`inline-block size-[7px] shrink-0 rounded-full bg-[var(--color-icon-brand)] ${className}`}
+			className={`inline-block size-[7px] shrink-0 rounded-full bg-link ${className}`}
 		/>
 	);
 }

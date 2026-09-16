@@ -137,6 +137,87 @@ describe("declarative extension hydration", () => {
 		}
 	});
 
+	test("keeps the document mounted while a revision change loads again", async () => {
+		const lix = await openLix();
+		const completions: Array<(data: string) => void> = [];
+		const load = vi.fn(
+			() => new Promise<string>((resolve) => completions.push(resolve)),
+		);
+		const atelier = {
+			lix,
+			branches: { activeId: await lix.activeBranchId() },
+		} as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			load,
+			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+		};
+		const live = { fileId: "file-1", filePath: "/private/document.md" };
+		const revision = {
+			...live,
+			beforeCommitId: "commit-before",
+			afterCommitId: "commit-after",
+		};
+		const tree = (state: Record<string, string>) => (
+			<AtelierRenderContext.Provider
+				value={{ connected: true, hydrated: true }}
+			>
+				<DeclarativeExtension
+					definition={definition}
+					atelier={atelier}
+					view={{ ...view, state }}
+				/>
+			</AtelierRenderContext.Provider>
+		);
+		const mounted = render(tree(live));
+		try {
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+			await act(async () => completions[0]!("Live document"));
+			expect(mounted.getByRole("heading")).toHaveTextContent("Live document");
+
+			// Entering a review reads the file at its revision. Until that read
+			// lands the view stays on what it has: no loading state, no remount.
+			mounted.rerender(tree(revision));
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+			expect(mounted.queryByRole("status")).toBeNull();
+			expect(mounted.getByRole("heading")).toHaveTextContent("Live document");
+			await act(async () => completions[1]!("Revision document"));
+			expect(mounted.getByRole("heading")).toHaveTextContent(
+				"Revision document",
+			);
+
+			// Leaving it is the same in reverse, back to the first location.
+			mounted.rerender(tree(live));
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
+			expect(mounted.queryByRole("status")).toBeNull();
+			expect(mounted.getByRole("heading")).toHaveTextContent(
+				"Revision document",
+			);
+			await act(async () => completions[2]!("Live document again"));
+			expect(mounted.getByRole("heading")).toHaveTextContent(
+				"Live document again",
+			);
+
+			// Another document in the same view — a review stepping to its
+			// next file — keeps the page it has until its own read lands, then
+			// swaps in one commit: no loading state in between.
+			mounted.rerender(tree({ fileId: "file-2", filePath: "/other.md" }));
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(4));
+			expect(mounted.queryByRole("status")).toBeNull();
+			expect(mounted.getByRole("heading")).toHaveTextContent(
+				"Live document again",
+			);
+			await act(async () => completions[3]!("Other document"));
+			expect(mounted.getByRole("heading")).toHaveTextContent("Other document");
+		} finally {
+			await act(async () => mounted.unmount());
+			await lix.close();
+		}
+	});
+
 	test("does not report a loaded document while its renderer is suspended", async () => {
 		let ready = false;
 		let resolve!: () => void;

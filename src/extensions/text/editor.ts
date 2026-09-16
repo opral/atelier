@@ -23,9 +23,11 @@ import {
 	Transaction,
 	type Extension,
 } from "@codemirror/state";
+import { unifiedMergeView } from "@codemirror/merge";
 import {
 	EditorView,
 	crosshairCursor,
+	drawSelection,
 	dropCursor,
 	highlightActiveLine,
 	highlightActiveLineGutter,
@@ -38,8 +40,21 @@ import { tags } from "@lezer/highlight";
 
 export type TextEditorController = {
 	readonly view: EditorView;
+	/**
+	 * Show another file in the same view: a fresh state — document, history,
+	 * panels, language — in the editor element already on the page, so the
+	 * frame around it never moves. `setDocument` is for the same file's next
+	 * revision.
+	 */
+	readonly openDocument: (args: TextEditorDocument) => void;
 	readonly setDocument: (text: string) => void;
 	readonly setReadOnly: (readOnly: boolean) => void;
+	/**
+	 * Show the document as a unified diff against `original`, in place: the
+	 * same view, with removed lines drawn above the lines that replaced them.
+	 * `null` returns the view to plain editing.
+	 */
+	readonly setComparison: (original: string | null) => void;
 	readonly setWrapping: (enabled: boolean) => void;
 	readonly openSearch: () => void;
 	readonly closeSearch: () => void;
@@ -51,11 +66,16 @@ type TextCursorPosition = {
 	readonly column: number;
 };
 
-type CreateTextEditorArgs = {
-	readonly parent: HTMLElement;
+export type TextEditorDocument = {
 	readonly document: string;
 	readonly filePath: string;
 	readonly readOnly?: boolean;
+	/** The before side of a comparison the document opens with, if any. */
+	readonly original?: string | null;
+};
+
+type CreateTextEditorArgs = TextEditorDocument & {
+	readonly parent: HTMLElement;
 	readonly wrapping?: boolean;
 	readonly onChange?: (text: string) => void;
 	readonly onCursorChange?: (position: TextCursorPosition) => void;
@@ -69,7 +89,7 @@ const atelierHighlightStyle = HighlightStyle.define([
 			tags.definitionKeyword,
 			tags.modifier,
 		],
-		color: "var(--color-syntax-keyword)",
+		color: "var(--atelier-syntax-keyword)",
 	},
 	{
 		tag: [
@@ -79,28 +99,28 @@ const atelierHighlightStyle = HighlightStyle.define([
 			tags.function(tags.variableName),
 			tags.standard(tags.variableName),
 		],
-		color: "var(--color-syntax-type)",
+		color: "var(--atelier-syntax-type)",
 	},
 	{
 		tag: [tags.string, tags.special(tags.string), tags.regexp],
-		color: "var(--color-syntax-string)",
+		color: "var(--atelier-syntax-string)",
 	},
 	{
 		tag: [tags.bool, tags.null, tags.number, tags.integer, tags.float],
-		color: "var(--color-syntax-number)",
+		color: "var(--atelier-syntax-number)",
 	},
 	{
 		tag: [tags.comment, tags.meta],
-		color: "var(--color-syntax-comment)",
+		color: "var(--atelier-syntax-comment)",
 		fontStyle: "italic",
 	},
 	{
 		tag: [tags.propertyName, tags.attributeName],
-		color: "var(--color-syntax-property)",
+		color: "var(--atelier-syntax-property)",
 	},
 	{
 		tag: [tags.invalid],
-		color: "var(--color-syntax-invalid)",
+		color: "var(--atelier-syntax-invalid)",
 		textDecoration: "underline wavy",
 	},
 ]);
@@ -108,8 +128,8 @@ const atelierHighlightStyle = HighlightStyle.define([
 const atelierEditorTheme = EditorView.theme({
 	"&": {
 		height: "100%",
-		backgroundColor: "var(--color-bg-panel)",
-		color: "var(--color-text-primary)",
+		backgroundColor: "var(--atelier-panel)",
+		color: "var(--atelier-fg)",
 		fontSize: "14px",
 	},
 	"&.cm-focused": { outline: "none" },
@@ -122,26 +142,33 @@ const atelierEditorTheme = EditorView.theme({
 		paddingTop: "12px",
 	},
 	".cm-content": {
-		caretColor: "var(--color-text-primary)",
+		caretColor: "var(--atelier-fg)",
 		padding: "0 0 16px",
 	},
 	".cm-line": { padding: "0 20px 0 8px" },
 	".cm-cursor, .cm-dropCursor": {
-		borderLeftColor: "var(--color-text-primary)",
+		borderLeftColor: "var(--atelier-fg)",
 		borderLeftWidth: "1.5px",
 	},
+	// `drawSelection` paints the selection as its own layer, in every range of
+	// a multiple selection and whether or not the view has focus; the token is
+	// read from the cascade, so a host's override reaches it.
+	".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+		{
+			backgroundColor: "var(--atelier-bg-selection)",
+		},
 	".cm-content ::selection, &.cm-focused .cm-content ::selection": {
-		backgroundColor: "var(--atelier-text-selection-bg)",
-		color: "var(--atelier-text-selection-fg)",
+		backgroundColor: "var(--atelier-bg-selection)",
+		color: "var(--atelier-fg)",
 	},
 	".cm-activeLine": {
 		backgroundColor:
-			"color-mix(in srgb, var(--color-bg-brand-soft) 28%, transparent)",
+			"color-mix(in srgb, var(--atelier-accent-subtle) 28%, transparent)",
 	},
 	".cm-gutters": {
 		minWidth: "38px",
-		backgroundColor: "var(--color-bg-panel)",
-		color: "color-mix(in srgb, var(--color-text-tertiary) 58%, transparent)",
+		backgroundColor: "var(--atelier-panel)",
+		color: "color-mix(in srgb, var(--atelier-fg-subtle) 58%, transparent)",
 		border: "none",
 		fontSize: "12px",
 	},
@@ -152,25 +179,66 @@ const atelierEditorTheme = EditorView.theme({
 	},
 	".cm-activeLineGutter": {
 		backgroundColor:
-			"color-mix(in srgb, var(--color-bg-brand-soft) 28%, transparent)",
-		color: "var(--color-text-tertiary)",
+			"color-mix(in srgb, var(--atelier-accent-subtle) 28%, transparent)",
+		color: "var(--atelier-fg-subtle)",
 	},
 	".cm-panels": {
-		backgroundColor: "var(--color-bg-panel-muted)",
-		color: "var(--color-text-secondary)",
+		backgroundColor: "var(--atelier-bg-subtle)",
+		color: "var(--atelier-fg-muted)",
 	},
 	".cm-panels.cm-panels-top": {
-		borderBottom: "1px solid var(--color-border-subtle)",
+		borderBottom: "1px solid var(--atelier-border-subtle)",
 	},
 	".cm-searchMatch": {
-		backgroundColor: "var(--color-bg-selection-current)",
-		outline: "1px solid var(--color-border-selection-current)",
+		backgroundColor: "var(--atelier-accent-subtle)",
+		outline: "1px solid var(--atelier-accent-border)",
 	},
 	".cm-searchMatch.cm-searchMatch-selected": {
-		backgroundColor: "var(--color-brand-100)",
-		outlineColor: "var(--color-brand-500)",
+		backgroundColor: "var(--atelier-accent-border)",
+		outlineColor: "var(--atelier-link)",
+	},
+	// The comparison: the unified merge view marks the editor `cm-merge-b`.
+	// Its own theme paints with literals, so every class it adds is restated
+	// here in the diff tokens.
+	"&.cm-merge-b .cm-changedLine, &.cm-merge-b .cm-inlineChangedLine": {
+		backgroundColor: "var(--atelier-diff-added-subtle)",
+	},
+	"&.cm-merge-b .cm-changedText": {
+		background: "none",
+		backgroundColor:
+			"color-mix(in srgb, var(--atelier-diff-added) 18%, transparent)",
+	},
+	".cm-deletedChunk": {
+		backgroundColor: "var(--atelier-diff-removed-subtle)",
+		color: "var(--atelier-fg-muted)",
+		padding: "0 20px 0 8px",
+	},
+	".cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-deletedText": {
+		background: "none",
+		backgroundColor:
+			"color-mix(in srgb, var(--atelier-diff-removed) 16%, transparent)",
+	},
+	"&.cm-merge-b .cm-changedLineGutter": {
+		backgroundColor: "var(--atelier-diff-added)",
+	},
+	".cm-deletedLineGutter": {
+		backgroundColor: "var(--atelier-diff-removed)",
+	},
+	".cm-inlineChangedLineGutter": {
+		backgroundColor: "var(--atelier-diff-modified)",
 	},
 });
+
+/** The comparison as an extension: the review's before side, or nothing. */
+function comparisonExtension(original: string | null): Extension {
+	if (original === null) return [];
+	return unifiedMergeView({
+		original,
+		mergeControls: false,
+		highlightChanges: true,
+		gutter: true,
+	});
+}
 
 const externalDocumentUpdate = Annotation.define<boolean>();
 
@@ -236,6 +304,7 @@ export function createTextEditor({
 	document,
 	filePath,
 	readOnly = false,
+	original = null,
 	wrapping = true,
 	onChange,
 	onCursorChange,
@@ -244,7 +313,10 @@ export function createTextEditor({
 	const readOnlyCompartment = new Compartment();
 	const editableCompartment = new Compartment();
 	const wrappingCompartment = new Compartment();
+	const comparisonCompartment = new Compartment();
 	let destroyed = false;
+	let currentWrapping = wrapping;
+	let languageRequest = 0;
 
 	const reportCursor = (state: EditorState) => {
 		if (!onCursorChange) return;
@@ -253,54 +325,59 @@ export function createTextEditor({
 		onCursorChange({ line: line.number, column: head - line.from + 1 });
 	};
 
-	const extensions: Extension[] = [
-		lineNumbers(),
-		highlightActiveLineGutter(),
-		highlightSpecialChars(),
-		history(),
-		dropCursor(),
-		EditorState.allowMultipleSelections.of(true),
-		rectangularSelection(),
-		crosshairCursor(),
-		highlightActiveLine(),
-		keymap.of([
-			...defaultKeymap,
-			...historyKeymap,
-			...searchKeymap,
-			indentWithTab,
-		]),
-		syntaxHighlighting(atelierHighlightStyle),
-		syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-		atelierEditorTheme,
-		languageCompartment.of([]),
-		readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
-		editableCompartment.of(EditorView.editable.of(!readOnly)),
-		wrappingCompartment.of(wrapping ? EditorView.lineWrapping : []),
-		EditorView.updateListener.of((update) => {
-			if (
-				update.docChanged &&
-				!update.transactions.some((transaction) =>
-					transaction.annotation(externalDocumentUpdate),
-				)
-			) {
-				onChange?.(update.state.doc.toString());
-			}
-			if (update.selectionSet || update.docChanged) reportCursor(update.state);
-		}),
-	];
+	const createState = (args: TextEditorDocument): EditorState => {
+		const readOnly = args.readOnly ?? false;
+		const extensions: Extension[] = [
+			lineNumbers(),
+			highlightActiveLineGutter(),
+			highlightSpecialChars(),
+			history(),
+			drawSelection(),
+			dropCursor(),
+			EditorState.allowMultipleSelections.of(true),
+			rectangularSelection(),
+			crosshairCursor(),
+			highlightActiveLine(),
+			keymap.of([
+				...defaultKeymap,
+				...historyKeymap,
+				...searchKeymap,
+				indentWithTab,
+			]),
+			syntaxHighlighting(atelierHighlightStyle),
+			syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+			atelierEditorTheme,
+			languageCompartment.of([]),
+			readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
+			editableCompartment.of(EditorView.editable.of(!readOnly)),
+			wrappingCompartment.of(currentWrapping ? EditorView.lineWrapping : []),
+			comparisonCompartment.of(comparisonExtension(args.original ?? null)),
+			EditorView.updateListener.of((update) => {
+				if (
+					update.docChanged &&
+					!update.transactions.some((transaction) =>
+						transaction.annotation(externalDocumentUpdate),
+					)
+				) {
+					onChange?.(update.state.doc.toString());
+				}
+				if (update.selectionSet || update.docChanged)
+					reportCursor(update.state);
+			}),
+		];
+		return EditorState.create({ doc: args.document, extensions });
+	};
 
-	const view = new EditorView({
-		parent,
-		state: EditorState.create({ doc: document, extensions }),
-	});
-	reportCursor(view.state);
-
-	const language = languageDescriptionForPath(filePath);
-	if (language) {
+	// The language arrives asynchronously; a document opened in the meantime
+	// keeps its own, not the one requested for the file before it.
+	const loadLanguage = (path: string) => {
+		const request = ++languageRequest;
+		const language = languageDescriptionForPath(path);
+		if (!language) return;
 		void language
 			.load()
 			.then((support) => {
-				if (destroyed) return;
+				if (destroyed || request !== languageRequest) return;
 				view.dispatch({
 					effects: languageCompartment.reconfigure(support),
 				});
@@ -308,10 +385,22 @@ export function createTextEditor({
 			.catch(() => {
 				// Syntax highlighting is optional; plain text remains usable.
 			});
-	}
+	};
+
+	const view = new EditorView({
+		parent,
+		state: createState({ document, filePath, readOnly, original }),
+	});
+	reportCursor(view.state);
+	loadLanguage(filePath);
 
 	return {
 		view,
+		openDocument: (args) => {
+			view.setState(createState(args));
+			reportCursor(view.state);
+			loadLanguage(args.filePath);
+		},
 		setDocument: (text) => {
 			const current = view.state.doc.toString();
 			if (current === text) return;
@@ -338,7 +427,15 @@ export function createTextEditor({
 				],
 			});
 		},
+		setComparison: (nextOriginal) => {
+			view.dispatch({
+				effects: comparisonCompartment.reconfigure(
+					comparisonExtension(nextOriginal),
+				),
+			});
+		},
 		setWrapping: (enabled) => {
+			currentWrapping = enabled;
 			view.dispatch({
 				effects: wrappingCompartment.reconfigure(
 					enabled ? EditorView.lineWrapping : [],

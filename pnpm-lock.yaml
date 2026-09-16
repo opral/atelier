@@ -48,6 +48,9 @@ importers:
       '@codemirror/language':
         specifier: ^6.12.4
         version: 6.12.4
+      '@codemirror/merge':
+        specifier: ^6.12.2
+        version: 6.12.2
       '@codemirror/search':
         specifier: ^6.7.1
         version: 6.7.1
@@ -78,12 +81,9 @@ importers:
       '@lix-js/html-diff':
         specifier: ^0.1.0
         version: 0.1.0
-      '@pierre/diffs':
-        specifier: 1.4.1
-        version: 1.4.1(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@pierre/trees':
         specifier: 1.0.0-beta.5
-        version: 1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
+        version: 1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
       '@radix-ui/react-context-menu':
         specifier: ^2.3.7
         version: 2.3.7(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -220,6 +220,9 @@ importers:
       oxlint:
         specifier: ^1.73.0
         version: 1.73.0
+      postcss:
+        specifier: ^8.5.16
+        version: 8.5.16
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -601,6 +604,9 @@ packages:
 
   '@codemirror/lint@6.9.7':
     resolution: {integrity: sha512-28/+iWLYxKxsvGYhSYL7zaCZqLz5+FFFDq9tVsvGv9kv8RY4fFAchJ5WX9M3YrrRlTIsECjsXPqeNgnSmNP2dg==}
+
+  '@codemirror/merge@6.12.2':
+    resolution: {integrity: sha512-V8JvyAPjHbPupqP7BeMcsdsYCbyPij74jxIbaIJDORI+VZzW44zFmon8bF+oxGWvOKhcRmkiUMXd8MxHr3YA2w==}
 
   '@codemirror/search@6.7.1':
     resolution: {integrity: sha512-uMe5UO6PamJtSHrXhhHOzSX3ReWtiJrva6GnPMwSOrZtiExb5X5eExhr2OUZQVvdxPsKpY3Ro2mFbQadpPWmHA==}
@@ -1723,45 +1729,10 @@ packages:
     resolution: {integrity: sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==}
     engines: {node: '>= 10.0.0'}
 
-  '@pierre/diffs@1.4.1':
-    resolution: {integrity: sha512-rzvY9FeeYdGtVcErjNsW6tnrjpMb0DvGtgCFNuMoYT8wufE+gO1ZXAzKAc2VPRBS3Rl5HELEQ38WDlis4qZHkQ==}
-    peerDependencies:
-      react: ^18.3.1 || ^19.0.0
-      react-dom: ^18.3.1 || ^19.0.0
-    peerDependenciesMeta:
-      react:
-        optional: true
-      react-dom:
-        optional: true
-
-  '@pierre/theme@2.0.0':
-    resolution: {integrity: sha512-yNDd9GYLQl1mEUJR8AneJ5e4ohLIHQd/wZLWr4fagt78vS2RwwZNW530vVgHqXFAyFVcFlRmGUD5ramXH46OXw==}
-    engines: {vscode: ^1.0.0}
-
   '@pierre/theming@0.0.2':
     resolution: {integrity: sha512-QM1M4stXfnzfaE8I8YbjXSApV8c+2dBsXJj8eYg9WTpBR/cTmCZIcfGnN4p13iRrYu2Br/R/OJfEL7uR8Qjctw==}
     peerDependencies:
       '@pierre/theme': ^1.1.0
-      '@shikijs/themes': ^3.0.0 || ^4.0.0
-      react: ^18.3.1 || ^19.0.0
-      react-dom: ^18.3.1 || ^19.0.0
-      shiki: ^3.0.0 || ^4.0.0
-    peerDependenciesMeta:
-      '@pierre/theme':
-        optional: true
-      '@shikijs/themes':
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
-      shiki:
-        optional: true
-
-  '@pierre/theming@1.0.1':
-    resolution: {integrity: sha512-WCI5Qd7iprDpISL9fBYOLe8RV53+b7mFNA3bPzl60/2CKCSrsKN8zEcep6Y3BAzvARlmca50zGjDodqPGiTUKA==}
-    peerDependencies:
-      '@pierre/theme': ^1.1.0 || ^2.0.0
       '@shikijs/themes': ^3.0.0 || ^4.0.0
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -2758,10 +2729,6 @@ packages:
     resolution: {integrity: sha512-w8UHjeUnIR965KMWJHUPXOc2mNJUnK3vpVLYLvw5IYU2mnTTJ89E24OrJDBNiJDQ0qzb0tc4l7mrIXx5cFeIyw==}
     engines: {node: '>=20'}
 
-  '@shikijs/transformers@4.4.3':
-    resolution: {integrity: sha512-oJSARV6NaWd+rnNJbtnpAdj3Zg0ZVyzsnMgb3vi3HA+35y8lBWUCpOnWsmyiXZIikY+x1BDqrQUgmxfzWh7Jvw==}
-    engines: {node: '>=20'}
-
   '@shikijs/types@4.4.3':
     resolution: {integrity: sha512-UEJxmRR++MAGR6hugn0vgVS2W/6lWAts84FFSrnlH9sP0LNol7E5+NQ792pH8liWUhyMyjhTgSUH3k7iD7tc5g==}
     engines: {node: '>=20'}
@@ -3679,10 +3646,6 @@ packages:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
     engines: {node: '>=0.3.1'}
 
-  diff@9.0.0:
-    resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
-    engines: {node: '>=0.3.1'}
-
   dom-accessibility-api@0.5.16:
     resolution: {integrity: sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==}
 
@@ -4085,9 +4048,6 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
-
-  lru_map@0.4.1:
-    resolution: {integrity: sha512-I+lBvqMMFfqaV8CJCISjI3wbjmwVu/VyOoU7+qtu9d7ioW5klMgsTTiUOUp+DJvfTTzKXoPbyC6YfgkNcyPSOg==}
 
   lucide-react@1.24.0:
     resolution: {integrity: sha512-YT6mBD8lGKkg4nM39enlm94/sfJIiW0YKUT60fBy4YK8tai31ylg1VhGNWxkpSKHo9UagfnZqwIff3HTDQwXeA==}
@@ -5596,6 +5556,14 @@ snapshots:
       '@codemirror/view': 6.43.6
       crelt: 1.0.7
 
+  '@codemirror/merge@6.12.2':
+    dependencies:
+      '@codemirror/language': 6.12.4
+      '@codemirror/state': 6.7.1
+      '@codemirror/view': 6.43.6
+      '@lezer/highlight': 1.2.3
+      style-mod: 4.1.3
+
   '@codemirror/search@6.7.1':
     dependencies:
       '@codemirror/state': 6.7.1
@@ -6417,42 +6385,16 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.1
     optional: true
 
-  '@pierre/diffs@1.4.1(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@pierre/theme': 2.0.0
-      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
-      '@shikijs/transformers': 4.4.3
-      diff: 9.0.0
-      hast-util-to-html: 9.0.5
-      lru_map: 0.4.1
-      shiki: 4.4.3
+  '@pierre/theming@0.0.2(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)':
     optionalDependencies:
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-    transitivePeerDependencies:
-      - '@shikijs/themes'
-
-  '@pierre/theme@2.0.0': {}
-
-  '@pierre/theming@0.0.2(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)':
-    optionalDependencies:
-      '@pierre/theme': 2.0.0
       '@shikijs/themes': 4.4.3
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       shiki: 4.4.3
 
-  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)':
-    optionalDependencies:
-      '@pierre/theme': 2.0.0
-      '@shikijs/themes': 4.4.3
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-      shiki: 4.4.3
-
-  '@pierre/trees@1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)':
+  '@pierre/trees@1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)':
     dependencies:
-      '@pierre/theming': 0.0.2(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
+      '@pierre/theming': 0.0.2(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
       preact: 11.0.0-beta.0
       preact-render-to-string: 6.6.5(preact@11.0.0-beta.0)
       react: 19.2.7
@@ -7323,43 +7265,46 @@ snapshots:
       '@shikijs/vscode-textmate': 10.0.2
       '@types/hast': 3.0.5
       hast-util-to-html: 9.0.5
+    optional: true
 
   '@shikijs/engine-javascript@4.4.3':
     dependencies:
       '@shikijs/types': 4.4.3
       '@shikijs/vscode-textmate': 10.0.2
       oniguruma-to-es: 4.3.6
+    optional: true
 
   '@shikijs/engine-oniguruma@4.4.3':
     dependencies:
       '@shikijs/types': 4.4.3
       '@shikijs/vscode-textmate': 10.0.2
+    optional: true
 
   '@shikijs/langs@4.4.3':
     dependencies:
       '@shikijs/types': 4.4.3
+    optional: true
 
   '@shikijs/primitive@4.4.3':
     dependencies:
       '@shikijs/types': 4.4.3
       '@shikijs/vscode-textmate': 10.0.2
       '@types/hast': 3.0.5
+    optional: true
 
   '@shikijs/themes@4.4.3':
     dependencies:
       '@shikijs/types': 4.4.3
-
-  '@shikijs/transformers@4.4.3':
-    dependencies:
-      '@shikijs/core': 4.4.3
-      '@shikijs/types': 4.4.3
+    optional: true
 
   '@shikijs/types@4.4.3':
     dependencies:
       '@shikijs/vscode-textmate': 10.0.2
       '@types/hast': 3.0.5
+    optional: true
 
-  '@shikijs/vscode-textmate@10.0.2': {}
+  '@shikijs/vscode-textmate@10.0.2':
+    optional: true
 
   '@sindresorhus/is@7.2.0': {}
 
@@ -7671,6 +7616,7 @@ snapshots:
   '@types/hast@3.0.5':
     dependencies:
       '@types/unist': 3.0.3
+    optional: true
 
   '@types/mdast@4.0.4':
     dependencies:
@@ -7769,7 +7715,8 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@ungap/structured-clone@1.4.0': {}
+  '@ungap/structured-clone@1.4.0':
+    optional: true
 
   '@upsetjs/venn.js@2.0.0':
     optionalDependencies:
@@ -7940,9 +7887,11 @@ snapshots:
 
   chai@6.2.2: {}
 
-  character-entities-html4@2.1.0: {}
+  character-entities-html4@2.1.0:
+    optional: true
 
-  character-entities-legacy@3.0.0: {}
+  character-entities-legacy@3.0.0:
+    optional: true
 
   character-entities@2.0.2: {}
 
@@ -7990,7 +7939,8 @@ snapshots:
   colorjs.io@0.5.2:
     optional: true
 
-  comma-separated-tokens@2.0.3: {}
+  comma-separated-tokens@2.0.3:
+    optional: true
 
   commander@2.20.3:
     optional: true
@@ -8258,8 +8208,6 @@ snapshots:
 
   diff@8.0.4: {}
 
-  diff@9.0.0: {}
-
   dom-accessibility-api@0.5.16: {}
 
   dom-accessibility-api@0.6.3: {}
@@ -8439,10 +8387,12 @@ snapshots:
       space-separated-tokens: 2.0.2
       stringify-entities: 4.0.4
       zwitch: 2.0.4
+    optional: true
 
   hast-util-whitespace@3.0.0:
     dependencies:
       '@types/hast': 3.0.5
+    optional: true
 
   html-element-attributes@1.3.1: {}
 
@@ -8452,7 +8402,8 @@ snapshots:
     transitivePeerDependencies:
       - '@noble/hashes'
 
-  html-void-elements@3.0.0: {}
+  html-void-elements@3.0.0:
+    optional: true
 
   iconv-lite@0.6.3:
     dependencies:
@@ -8644,8 +8595,6 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lru_map@0.4.1: {}
-
   lucide-react@1.24.0(react@19.2.7):
     dependencies:
       react: 19.2.7
@@ -8768,6 +8717,7 @@ snapshots:
       unist-util-position: 5.0.0
       unist-util-visit: 5.1.0
       vfile: 6.0.3
+    optional: true
 
   mdast-util-to-markdown@2.1.2:
     dependencies:
@@ -9067,13 +9017,15 @@ snapshots:
 
   obug@2.1.1: {}
 
-  oniguruma-parser@0.12.2: {}
+  oniguruma-parser@0.12.2:
+    optional: true
 
   oniguruma-to-es@4.3.6:
     dependencies:
       oniguruma-parser: 0.12.2
       regex: 6.1.0
       regex-recursion: 6.0.2
+    optional: true
 
   open-color@1.9.1: {}
 
@@ -9235,7 +9187,8 @@ snapshots:
       object-assign: 4.1.1
       react-is: 16.13.1
 
-  property-information@7.2.0: {}
+  property-information@7.2.0:
+    optional: true
 
   prosemirror-changeset@2.4.1:
     dependencies:
@@ -9392,12 +9345,15 @@ snapshots:
   regex-recursion@6.0.2:
     dependencies:
       regex-utilities: 2.3.0
+    optional: true
 
-  regex-utilities@2.3.0: {}
+  regex-utilities@2.3.0:
+    optional: true
 
   regex@6.1.0:
     dependencies:
       regex-utilities: 2.3.0
+    optional: true
 
   require-from-string@2.0.2: {}
 
@@ -9617,6 +9573,7 @@ snapshots:
       '@shikijs/types': 4.4.3
       '@shikijs/vscode-textmate': 10.0.2
       '@types/hast': 3.0.5
+    optional: true
 
   siginfo@2.0.0: {}
 
@@ -9640,7 +9597,8 @@ snapshots:
   source-map@0.6.1:
     optional: true
 
-  space-separated-tokens@2.0.2: {}
+  space-separated-tokens@2.0.2:
+    optional: true
 
   stackback@0.0.2: {}
 
@@ -9650,6 +9608,7 @@ snapshots:
     dependencies:
       character-entities-html4: 2.1.0
       character-entities-legacy: 3.0.0
+    optional: true
 
   strip-indent@3.0.0:
     dependencies:
@@ -9724,7 +9683,8 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  trim-lines@3.0.1: {}
+  trim-lines@3.0.1:
+    optional: true
 
   ts-dedent@2.3.0: {}
 
@@ -9792,6 +9752,7 @@ snapshots:
   unist-util-position@5.0.0:
     dependencies:
       '@types/unist': 3.0.3
+    optional: true
 
   unist-util-stringify-position@4.0.0:
     dependencies:
@@ -9842,11 +9803,13 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
       unist-util-stringify-position: 4.0.0
+    optional: true
 
   vfile@6.0.3:
     dependencies:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
+    optional: true
 
   vite@8.1.4(@types/node@24.10.15)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.97.1)(sass@1.97.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:

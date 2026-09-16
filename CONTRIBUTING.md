@@ -23,15 +23,21 @@
 
 ### Design tokens
 
-`src/shell/theme.css` is the only place that may hold a literal color, shadow, radius, size, or duration. Components and extension stylesheets consume tokens; they do not restate values.
+The rules live in `CLAUDE.md` ("Design tokens: one vocabulary, plain CSS") and
+are enforced by `pnpm tokens:check`. In short: colours only in
+`src/shell/theme.css`; `var(--atelier-…)` in CSS and the adapter's names in
+`className`; one name per role; dark mode is `color-scheme`, never a second
+set of names.
 
-- **Semantic over primitive.** Use role tokens (`--color-text-tertiary`, `--color-bg-action-primary`, `--color-ring-focus-visible`) rather than palette steps (`--color-neutral-500`, `--color-brand-700`). Palette steps appear outside `theme.css` only where a third-party library needs its own variables bridged (Excalidraw). If no role token fits, add one to `theme.css` instead of reaching for a step.
-- **No fallbacks in `var()`.** `var(--color-x, #hex)` hides a missing token; `theme.css` is always loaded under `.atelier-root`, so reference the token bare.
-- **Dark chrome uses the inverse set.** Anything floating dark over the light UI (review pill, media frames, player controls) uses `--color-bg-inverse*`, `--color-text-inverse-*`, `--color-border-inverse*`, and `--shadow-inverse`. Do not hand-mix warm grays.
-- **Code uses the syntax set.** Text editor and markdown code blocks share `--color-syntax-*`.
-- **Scales.** Radii: `--radius-tag` (3px) inside controls, `--radius-control` (7px) for buttons, inputs, menu items, `--radius-panel` (8px) for popovers and panels; Tailwind exposes them as `rounded-tag`, `rounded-control`, `rounded-panel`. UI type: `text-ui-xs` (11px), `text-ui-sm` (11.5px), `text-ui` (12.5px), `text-ui-lg` (13px), each with its line height; document typography in the markdown extension keeps its own editorial scale. Motion: `--duration-fast`, `--duration-base`, `--duration-slow`. Control rows follow `--atelier-panel-header-height`.
-- **Focus.** `outline: 2px solid var(--color-ring-focus-visible)` with `outline-offset: 1px` (or `-2px` inside clipped containers). Avoid box-shadow rings.
-- **There is no dark theme.** Semantic tokens have light values only; nothing toggles `.dark`. Adding dark support means giving the semantic tokens dark values in `theme.css`, not overriding component styles.
+- **Focus.** `outline: 2px solid var(--atelier-ring)` with `outline-offset: 1px`
+  (or `-2px` inside clipped containers). Avoid box-shadow rings.
+- **Dark chrome** floating over the UI (review pill, media frames, player
+  controls) uses the `--atelier-overlay-*` set and `--atelier-shadow-overlay`; it stays
+  dark in both schemes.
+- **Code** uses `--atelier-syntax-*`; numbers, strings, keywords and constants
+  each have their own hue.
+- **No fallbacks in `var()`.** `theme.css` is always loaded; a fallback hides
+  a missing token from the check.
 
 ### Opening a PR
 

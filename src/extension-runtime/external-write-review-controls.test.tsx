@@ -580,6 +580,65 @@ describe("ExternalWriteReviewControls", () => {
 		expect(chip("Working set: 2 of 2 files")).toHaveTextContent("2 of 2");
 	});
 
+	test("a file checkpointed in this session stays listed as done and out of every verb's reach", async () => {
+		const primary = vi.fn(async () => {});
+		const undo = vi.fn(async () => {});
+		const sealed = [
+			{ ...THREE_FILES[0], checkpointed: true },
+			THREE_FILES[1],
+			THREE_FILES[2],
+		];
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "icp.md",
+					activeIndex: 0,
+					fileCount: 3,
+				}}
+				files={sealed}
+				onUndo={undo}
+				onPrimary={primary}
+			/>,
+		);
+		// The sealed file is on screen: it is not in the working set, and the
+		// verb says what already happened to it. The denominator is still the
+		// list this session opened on.
+		expect(
+			screen.getByText("Checkpointed", { selector: "small" }),
+		).toBeVisible();
+		expect(screen.getByRole("button", { name: "Checkpointed" })).toBeDisabled();
+		expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+		expect(chip("Working set: 0 of 3 files")).toHaveTextContent("0 of 3");
+		fireEvent.click(screen.getByRole("button", { name: "More undo options" }));
+		expect(
+			screen.getByRole("menuitem", { name: "Undo only icp.md" }),
+		).toBeDisabled();
+		expect(
+			screen.getByRole("menuitem", { name: /Undo all 2 files/ }),
+		).toBeVisible();
+		fireEvent.keyDown(window, { key: "Escape" });
+
+		// Its row reads as done and cannot be ticked; the master row ticks
+		// only the files still open, and "all" counts only those.
+		fireEvent.click(chip("Working set: 0 of 3 files"));
+		expect(scopeRow("file-icp")).toHaveAttribute("data-state", "checkpointed");
+		fireEvent.click(scopeRow("file-icp"));
+		expect(chip("Working set: 0 of 3 files")).toHaveTextContent("0 of 3");
+		fireEvent.click(screen.getByRole("checkbox", { name: "All files" }));
+		expect(chip("Working set: 2 of 3 files")).toHaveTextContent("2 of 3");
+		expect(screen.getByRole("checkbox", { name: "All files" })).toBeChecked();
+		fireEvent.keyDown(window, { key: "Escape" });
+		// With other files ticked the verb is Checkpoint again, for them.
+		fireEvent.click(screen.getByRole("button", { name: "Checkpoint" }));
+		await waitFor(() => expect(primary).toHaveBeenCalled());
+		expect(primary).toHaveBeenCalledWith(["file-leads", "file-readme"], {
+			scope: "selection",
+		});
+	});
+
 	test("a file joining the list mid-review arrives unticked; the selection is kept", () => {
 		const { rerender } = render(
 			<ExternalWriteReviewControls

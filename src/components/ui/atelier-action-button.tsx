@@ -34,11 +34,11 @@ const AtelierActionButton = forwardRef<
 			data-slot="atelier-action-button"
 			data-variant={variant}
 			className={cn(
-				"inline-flex items-center justify-center gap-2 rounded-[9px] px-4 py-2.25 text-[13.5px] font-bold transition-[background-color,border-color,color,box-shadow,filter,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-2",
+				"inline-flex items-center justify-center gap-2 rounded-[9px] px-4 py-2.25 text-[13.5px] font-bold transition-[background-color,border-color,color,box-shadow,filter,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
 				fullWidth && "w-full",
 				variant === "primary"
-					? "bg-[linear-gradient(180deg,var(--color-bg-action-primary-start)_0%,var(--color-bg-action-primary-end)_100%)] text-[var(--color-text-on-action-primary)] shadow-[var(--shadow-action-primary)] hover:brightness-105 active:translate-y-px"
-					: "border border-[var(--color-border-action-secondary)] bg-[var(--color-bg-action-secondary)] text-[var(--color-text-on-action-secondary)] shadow-[var(--shadow-action-secondary)] hover:bg-[var(--color-bg-action-secondary-hover)] hover:text-[var(--color-text-on-action-secondary-hover)] active:translate-y-px",
+					? "bg-[linear-gradient(180deg,var(--atelier-link)_0%,var(--atelier-link)_100%)] text-accent-on shadow-accent hover:brightness-105 active:translate-y-px"
+					: "border border-border-strong bg-panel text-fg-muted shadow-sm hover:bg-bg-hover hover:text-fg active:translate-y-px",
 				className,
 			)}
 			{...props}

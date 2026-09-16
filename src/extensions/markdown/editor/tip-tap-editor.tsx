@@ -784,8 +784,8 @@ function TipTapEditorLoadedContent({
 	if (!activeFileId) {
 		return (
 			<div className={className ?? undefined}>
-				<div className="flex h-full min-h-[200px] items-center justify-center bg-background px-3 py-12">
-					<p className="text-sm text-muted-foreground">
+				<div className="flex h-full min-h-[200px] items-center justify-center bg-panel px-3 py-12">
+					<p className="text-sm text-fg-subtle">
 						Select a file to start writing.
 					</p>
 				</div>
@@ -803,7 +803,7 @@ function TipTapEditorLoadedContent({
 			<div
 				ref={scrollContainerRef}
 				role="presentation"
-				className="ph-mask tiptap-container relative w-full h-full bg-background cursor-text overflow-y-auto"
+				className="ph-mask tiptap-container relative w-full h-full bg-panel cursor-text overflow-y-auto"
 				data-editor-focused={isEditorFocused ? "true" : "false"}
 				onMouseDown={handleSurfacePointerDown}
 				onDragOver={handleSurfaceDragOver}
@@ -899,7 +899,7 @@ function TipTapEditorLoadingState({
 	// spinner or a skeleton flashing in between.
 	return (
 		<div className={className ?? undefined}>
-			<div className="h-full w-full bg-background" />
+			<div className="h-full w-full bg-panel" />
 		</div>
 	);
 }

@@ -26,7 +26,6 @@ import {
 	type CheckpointFilePreviewRow,
 	type FileCheckpointChangeRow,
 	selectFileCheckpointChanges,
-	selectWorkingFileDiff,
 	selectWorkingFileDiffs,
 	selectWorkingChangeCount,
 	type CheckpointRow,
@@ -137,7 +136,7 @@ export function HistoryScopeSwitch({
 			<span
 				data-attr="history-scope-label"
 				aria-label="Showing the repository"
-				className="mr-1.5 flex h-6 shrink-0 items-center self-start px-1.5 text-[11.5px] font-medium text-[var(--color-text-quaternary)]"
+				className="mr-1.5 flex h-6 shrink-0 items-center self-start px-1.5 text-[11.5px] font-medium text-fg-faint"
 			>
 				Repository
 			</span>
@@ -152,12 +151,12 @@ export function HistoryScopeSwitch({
 			title={`Switch to ${other === "file" ? "this file" : "the repository"}`}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={() => setScope(other)}
-			className="group/scope mr-1.5 flex h-6 shrink-0 items-center gap-1 self-start rounded-[5px] px-1.5 text-[11.5px] font-medium text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="group/scope mr-1.5 flex h-6 shrink-0 items-center gap-1 self-start rounded-[5px] px-1.5 text-[11.5px] font-medium text-fg-faint transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			<span>{scope === "file" ? "This file" : "Repository"}</span>
 			<ArrowLeftRight
 				aria-hidden="true"
-				className="size-2.5 text-[var(--color-icon-quaternary)] transition-colors group-hover/scope:text-[var(--color-icon-secondary)]"
+				className="size-2.5 text-fg-faint transition-colors group-hover/scope:text-fg-muted"
 				strokeWidth={2}
 			/>
 		</button>
@@ -178,6 +177,15 @@ export function HistoryScopeSwitch({
  */
 const PARENT_HINT_MIN_WIDTH = 240;
 const ShowPathParentsContext = createContext(true);
+
+/**
+ * Every row is the chip the section header is: the header's label sits 6px
+ * inside the panel (`px-1.5` on the picker in panel-v2), so a row's glyph
+ * column starts there too, and its hover background starts on the panel's
+ * edge as the header's does. The row's 1px transparent border carries the
+ * sixth pixel, which is why the padding here is five.
+ */
+const ROW_INSET = "px-1.25";
 
 function HistoryFilePath({ path }: { readonly path: string }) {
 	const showParents = useContext(ShowPathParentsContext);
@@ -224,12 +232,10 @@ export function HistoryView({
 			ref={containerRef}
 			aria-label="Checkpoint history"
 			data-layout={wide ? "wide" : "compact"}
-			className="min-h-0 flex-1 overflow-y-auto px-1 py-2"
+			className="min-h-0 flex-1 overflow-y-auto py-2 pr-1"
 		>
 			<ShowPathParentsContext.Provider value={showParents}>
-				<div
-					className={wide ? "mx-auto w-full max-w-[60rem] px-5 py-4" : "w-full"}
-				>
+				<div className={wide ? "w-full max-w-[60rem] py-4 pr-5" : "w-full"}>
 					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
 					<CheckpointList atelier={atelier} wide={wide} file={file} />
 				</div>
@@ -263,12 +269,16 @@ function WorkingChangesRow({
 		(queryLix) => selectWorkingChangeCount(queryLix),
 		{ enabled: file === null },
 	);
-	const fileDiff = useQueryResult(
-		(queryLix) => selectWorkingFileDiff(queryLix, file?.id ?? ""),
-		{ enabled: file !== null },
+	// File scope reads every working diff once: the row's own label comes from
+	// the active file's entry, and the preview lists the rest beside it.
+	const workingDiffs = useQueryResult(
+		(queryLix) => selectWorkingFileDiffs(queryLix),
+		{ enabled: file !== null || wide },
 	);
 	const fileCount = workingChangeCount.rows[0]?.file_count ?? 0;
-	const fileChange = file ? (fileDiff.rows[0] ?? null) : null;
+	const fileChange = file
+		? (workingDiffs.rows.find((row) => row.id === file.id) ?? null)
+		: null;
 	const workingCountLabel = file
 		? fileChange
 			? FILE_CHANGE_LABEL[fileChange.diff_type]
@@ -294,7 +304,7 @@ function WorkingChangesRow({
 			aria-current={isViewing ? "true" : undefined}
 			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
-					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
+					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
 			}`}
 		>
@@ -306,42 +316,64 @@ function WorkingChangesRow({
 					onClick={toggleWorkingChanges}
 					onMouseDown={(event) => event.preventDefault()}
 					data-attr="history-working-changes"
-					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
+					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
 				>
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-						<WorkingDot className="ring-3 ring-[var(--color-bg-brand-soft)]" />
+						<WorkingDot className="ring-3 ring-accent-subtle" />
 					</span>
 					<span
 						className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
 					>
-						<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
+						<span className="block truncate text-[13px] leading-4 font-semibold text-fg">
 							Working changes
 						</span>
-						<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
+						<span className="block text-[11.5px] leading-4 text-fg-subtle">
 							{`now · ${workingCountLabel}`}
 						</span>
 					</span>
-					{file ? null : wide ? (
-						<WorkingFilePreview
+					{wide ? (
+						<InlineFilePreview
 							atelier={atelier}
+							result={workingDiffs}
 							descriptionId={filesDescriptionId}
+							activeFileId={file?.id ?? null}
 						/>
 					) : null}
 				</button>
 			</div>
-			{!wide && !file ? (
+			{!wide ? (
 				<AnimatedHistoryDisclosure open={isViewing}>
-					<WorkingChangeFileList atelier={atelier} />
+					<WorkingChangeFileList
+						atelier={atelier}
+						activeFileId={file?.id ?? null}
+					/>
 				</AnimatedHistoryDisclosure>
 			) : null}
 		</div>
 	);
 }
 
+/**
+ * File scope puts the active file first: it is the one the reader came for,
+ * and the wide preview truncates after two names. Everything else keeps its
+ * order.
+ */
+function activeFileFirst<T extends { readonly id: string }>(
+	files: readonly T[],
+	activeFileId: string | null,
+): readonly T[] {
+	if (!activeFileId) return files;
+	const active = files.filter((file) => file.id === activeFileId);
+	if (active.length === 0) return files;
+	return [...active, ...files.filter((file) => file.id !== activeFileId)];
+}
+
 function WorkingChangeFileList({
 	atelier,
+	activeFileId,
 }: {
 	readonly atelier: HistoryRuntime;
+	readonly activeFileId: string | null;
 }) {
 	const session = atelier.diff.session;
 	const sessionFiles =
@@ -354,43 +386,73 @@ function WorkingChangeFileList({
 		lastFilesRef.current = sessionFiles;
 	}
 	const files = sessionFiles ?? lastFilesRef.current;
-	const openWorkingChangeFile = atelier.diff.openFile;
-	if (files.length === 0) return null;
-
 	return (
-		<ul aria-label="Files in working changes" className="px-2 pb-2 pl-7">
-			{files.map((file) => (
-				<li key={file.id}>
-					<button
-						type="button"
-						disabled={!openWorkingChangeFile}
-						onClick={(event) => {
-							event.stopPropagation();
-							openWorkingChangeFile?.(file.path);
-						}}
-						data-attr="history-open-working-change-file"
-						title={file.path}
-						onMouseDown={(event) => event.preventDefault()}
-						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-					>
-						<img
-							src={atelier.icons.fileUrl(file.path)}
-							alt=""
-							className="h-3.5 w-3.5 shrink-0"
-						/>
-						<HistoryFilePath path={file.path} />
-						{file.movedFromPath ? (
-							<span className="truncate text-[var(--color-text-quaternary)]">
-								· {movedFromHint(file.movedFromPath, file.path)}
-							</span>
-						) : null}
-						<ChangeKindDot
-							changeKind={file.changeKind}
-							moved={Boolean(file.movedFromPath)}
-						/>
-					</button>
-				</li>
-			))}
+		<ReviewFileList
+			atelier={atelier}
+			label="Files in working changes"
+			attr="history-open-working-change-file"
+			files={files}
+			activeFileId={activeFileId}
+		/>
+	);
+}
+
+/** The compact layout's disclosure: every file of the reviewed span. */
+function ReviewFileList({
+	atelier,
+	label,
+	attr,
+	files,
+	activeFileId,
+}: {
+	readonly atelier: HistoryRuntime;
+	readonly label: string;
+	readonly attr: string;
+	readonly files: AtelierDiffSession["files"];
+	readonly activeFileId: string | null;
+}) {
+	const openReviewFile = atelier.diff.openFile;
+	if (files.length === 0) return null;
+	return (
+		<ul aria-label={label} className="px-2 pb-2 pl-7">
+			{activeFileFirst(files, activeFileId).map((file) => {
+				const isActive = file.id === activeFileId;
+				return (
+					<li key={file.id}>
+						<button
+							type="button"
+							disabled={!openReviewFile}
+							onClick={(event) => {
+								event.stopPropagation();
+								openReviewFile?.(file.path);
+							}}
+							data-attr={attr}
+							data-active-file={isActive ? "true" : undefined}
+							title={file.path}
+							onMouseDown={(event) => event.preventDefault()}
+							className={`flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+								isActive ? "font-semibold text-fg" : "font-medium text-fg-muted"
+							}`}
+						>
+							<img
+								src={atelier.icons.fileUrl(file.path)}
+								alt=""
+								className="h-3.5 w-3.5 shrink-0"
+							/>
+							<HistoryFilePath path={file.path} />
+							{file.movedFromPath ? (
+								<span className="truncate text-fg-faint">
+									· {movedFromHint(file.movedFromPath, file.path)}
+								</span>
+							) : null}
+							<ChangeKindDot
+								changeKind={file.changeKind}
+								moved={Boolean(file.movedFromPath)}
+							/>
+						</button>
+					</li>
+				);
+			})}
 		</ul>
 	);
 }
@@ -447,7 +509,7 @@ function CheckpointList({
 		return (
 			<p
 				role="status"
-				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+				className="px-1.5 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
 				No checkpoint includes this file yet.
 			</p>
@@ -509,7 +571,7 @@ function CheckpointPage({
 				lix,
 				checkpoints.map((checkpoint) => checkpoint.commit_id),
 			),
-		{ subscribe: false, enabled: visible && wide && file === null },
+		{ subscribe: false, enabled: visible && wide },
 	);
 	return (
 		<>
@@ -537,6 +599,7 @@ function CheckpointPage({
 								(row) => row.commit_id === checkpoint.commit_id,
 							),
 						}}
+						activeFileId={file?.id ?? null}
 						onPreviewVisible={() => setVisible(true)}
 					/>
 				);
@@ -553,6 +616,7 @@ function CheckpointItem({
 	count,
 	fileChange,
 	preview,
+	activeFileId,
 	onPreviewVisible,
 }: {
 	readonly atelier: HistoryRuntime;
@@ -566,6 +630,8 @@ function CheckpointItem({
 		readonly path: string | null;
 	} | null;
 	readonly preview: PreviewResult;
+	/** File scope: the file the rows are filtered by, marked in the previews. */
+	readonly activeFileId: string | null;
 	readonly onPreviewVisible: () => void;
 }) {
 	const previousCommitId = checkpoint.parent_commit_id;
@@ -588,7 +654,7 @@ function CheckpointItem({
 			aria-current={isViewing ? "true" : undefined}
 			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
-					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
+					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
 			}`}
 		>
@@ -612,15 +678,13 @@ function CheckpointItem({
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center px-2" : "items-start px-0"} ${
-					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
+				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
+					isViewing ? "" : "hover:bg-bg-hover-strong"
 				}`}
 			>
 				<span
 					className={`flex h-5 w-4 shrink-0 items-center justify-center ${
-						isViewing
-							? "text-[var(--color-icon-brand)]"
-							: "text-[var(--color-icon-quaternary)]"
+						isViewing ? "text-link" : "text-fg-faint"
 					}`}
 				>
 					<FilledFlag />
@@ -628,10 +692,10 @@ function CheckpointItem({
 				<span
 					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
 				>
-					<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
+					<span className="block truncate text-[13px] leading-4 font-semibold text-fg">
 						{label}
 					</span>
-					<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
+					<span className="block text-[11.5px] leading-4 text-fg-subtle">
 						<time
 							dateTime={checkpoint.created_at}
 							title={checkpoint.created_at}
@@ -643,20 +707,22 @@ function CheckpointItem({
 							: null}
 					</span>
 				</span>
-				{fileChange ? null : wide ? (
+				{wide ? (
 					<CheckpointFilePreview
 						descriptionId={filesDescriptionId}
 						atelier={atelier}
 						result={preview}
+						activeFileId={activeFileId}
 						onVisible={onPreviewVisible}
 					/>
 				) : null}
 			</button>
-			{!wide && !fileChange ? (
+			{!wide ? (
 				<AnimatedHistoryDisclosure open={isViewing}>
 					<CheckpointFileList
 						atelier={atelier}
 						commitId={checkpoint.commit_id}
+						activeFileId={activeFileId}
 					/>
 				</AnimatedHistoryDisclosure>
 			) : null}
@@ -664,32 +730,17 @@ function CheckpointItem({
 	);
 }
 
-function WorkingFilePreview({
-	atelier,
-	descriptionId,
-}: {
-	readonly atelier: HistoryRuntime;
-	readonly descriptionId: string;
-}) {
-	const result = useQueryResult((lix) => selectWorkingFileDiffs(lix));
-	return (
-		<InlineFilePreview
-			atelier={atelier}
-			result={result}
-			descriptionId={descriptionId}
-		/>
-	);
-}
-
 function CheckpointFilePreview({
 	atelier,
 	descriptionId,
 	result,
+	activeFileId,
 	onVisible,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly descriptionId: string;
 	readonly result: PreviewResult;
+	readonly activeFileId: string | null;
 	readonly onVisible: () => void;
 }) {
 	const previewRef = useRef<HTMLSpanElement>(null);
@@ -723,6 +774,7 @@ function CheckpointFilePreview({
 				atelier={atelier}
 				result={result}
 				descriptionId={descriptionId}
+				activeFileId={activeFileId}
 			/>
 		</span>
 	);
@@ -732,6 +784,7 @@ function InlineFilePreview({
 	atelier,
 	descriptionId,
 	result,
+	activeFileId,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly descriptionId: string;
@@ -739,18 +792,19 @@ function InlineFilePreview({
 		readonly status: "pending" | "success" | "error";
 		readonly rows: readonly { readonly id: string; readonly path: string }[];
 	};
+	readonly activeFileId: string | null;
 }) {
 	if (result.status !== "success") {
 		return (
 			<span
 				id={descriptionId}
-				className="ml-auto truncate pl-4 text-[11.5px] text-[var(--color-text-tertiary)]"
+				className="ml-auto truncate pl-4 text-[11.5px] text-fg-subtle"
 			>
 				{result.status === "error" ? "Files unavailable" : "Loading files…"}
 			</span>
 		);
 	}
-	const files = result.rows;
+	const files = activeFileFirst(result.rows, activeFileId);
 	if (files.length === 0) return null;
 	const remaining = files.length - 2;
 	return (
@@ -764,10 +818,16 @@ function InlineFilePreview({
 				data-attr="history-inline-files"
 				aria-hidden="true"
 				title={files.map((file) => file.path).join("\n")}
-				className="ml-auto flex min-w-0 items-center justify-end gap-4 pl-4 text-[11.5px] text-[var(--color-text-tertiary)]"
+				className="ml-auto flex min-w-0 items-center justify-end gap-4 pl-4 text-[11.5px] text-fg-subtle"
 			>
 				{files.slice(0, 2).map((file) => (
-					<span key={file.id} className="flex min-w-0 items-center gap-1.5">
+					<span
+						key={file.id}
+						data-active-file={file.id === activeFileId ? "true" : undefined}
+						className={`flex min-w-0 items-center gap-1.5 ${
+							file.id === activeFileId ? "font-semibold text-fg" : ""
+						}`}
+					>
 						<img
 							src={atelier.icons.fileUrl(file.path)}
 							alt=""
@@ -843,9 +903,11 @@ function AnimatedHistoryDisclosure({
 function CheckpointFileList({
 	atelier,
 	commitId,
+	activeFileId,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly commitId: string;
+	readonly activeFileId: string | null;
 }) {
 	const session = atelier.diff.session;
 	const sessionFiles =
@@ -861,44 +923,14 @@ function CheckpointFileList({
 		lastFilesRef.current = sessionFiles;
 	}
 	const files = sessionFiles ?? lastFilesRef.current;
-	const openCheckpointFile = atelier.diff.openFile;
-
-	if (files.length === 0) return null;
 	return (
-		<ul aria-label="Files at this checkpoint" className="px-2 pb-2 pl-7">
-			{files.map((file) => (
-				<li key={file.id}>
-					<button
-						type="button"
-						disabled={!openCheckpointFile}
-						onClick={(event) => {
-							event.stopPropagation();
-							openCheckpointFile?.(file.path);
-						}}
-						data-attr="history-open-checkpoint-file"
-						title={file.path}
-						onMouseDown={(event) => event.preventDefault()}
-						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
-					>
-						<img
-							src={atelier.icons.fileUrl(file.path)}
-							alt=""
-							className="h-3.5 w-3.5 shrink-0"
-						/>
-						<HistoryFilePath path={file.path} />
-						{file.movedFromPath ? (
-							<span className="truncate text-[var(--color-text-quaternary)]">
-								· {movedFromHint(file.movedFromPath, file.path)}
-							</span>
-						) : null}
-						<ChangeKindDot
-							changeKind={file.changeKind}
-							moved={Boolean(file.movedFromPath)}
-						/>
-					</button>
-				</li>
-			))}
-		</ul>
+		<ReviewFileList
+			atelier={atelier}
+			label="Files at this checkpoint"
+			attr="history-open-checkpoint-file"
+			files={files}
+			activeFileId={activeFileId}
+		/>
 	);
 }
 

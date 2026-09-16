@@ -292,12 +292,11 @@ describe("MarkdownView", () => {
 		});
 		expect(utils!.container).not.toHaveTextContent("Head version");
 		expect(screen.queryByTestId("tiptap-editor")).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("button", { name: "Bold" }),
-		).not.toBeInTheDocument();
+		// The toolbar keeps its place over a past revision so the page does not
+		// move when the revision opens; only its controls are off.
+		const toolbar = screen.getByRole("toolbar", { name: "Formatting toolbar" });
+		expect(toolbar).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
 		expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
 		await waitFor(() => {
@@ -375,11 +374,9 @@ describe("MarkdownView", () => {
 			reviewEditor.querySelector('[data-review-active="true"]'),
 		).toBeNull();
 		expect(
-			screen.queryByRole("toolbar", { name: "Formatting toolbar" }),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByRole("button", { name: "Bold" }),
-		).not.toBeInTheDocument();
+			screen.getByRole("toolbar", { name: "Formatting toolbar" }),
+		).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
 		await waitFor(() => {
 			expect(screen.getByText("Before")).toBeInTheDocument();
 			expect(screen.getByText("Head")).toBeInTheDocument();
@@ -893,6 +890,341 @@ describe("MarkdownView", () => {
 			.where("id", "=", fakeUuid("file_review_startup"))
 			.executeTakeFirstOrThrow();
 		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
+	});
+
+	test("stepping to another document keeps the toolbar node mounted and visible", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		const first = fakeUuid("file_md_step_first");
+		const second = fakeUuid("file_md_step_second");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/step-first.md",
+					content: new TextEncoder().encode("# First before"),
+				},
+				{
+					id: second,
+					path: "/step-second.md",
+					content: new TextEncoder().encode("# Second before"),
+				},
+			])
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# First after") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# Second after") })
+			.where("id", "=", second)
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+		const diffSession = {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true as const },
+			files: [
+				{
+					id: first,
+					path: "/step-first.md",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-md-step-first", status: "pending" as const },
+				},
+				{
+					id: second,
+					path: "/step-second.md",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-md-step-second", status: "pending" as const },
+				},
+			],
+			activePath: "/step-first.md",
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		};
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath={filePath}
+						activeBranchId={activeBranchId}
+						diffSession={diffSession}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(view(first, "/step-first.md"));
+		});
+		await screen.findByRole("button", { name: /keep/i });
+		// The review draws the change as a word diff: both words are on
+		// screen, and the file's own name says which document this is.
+		await waitFor(() => {
+			expect(utils!.container.querySelector(".ProseMirror")).toHaveTextContent(
+				/First/,
+			);
+		});
+		const toolbar = screen.getByRole("toolbar", { name: "Formatting toolbar" });
+		const column = utils!.container.querySelector(
+			'[data-attr="markdown-editor"]',
+		);
+
+		// The step: the same view is handed the next file. The first document
+		// stays, toolbar and all, until the second one's row lands; then the
+		// toolbar stays where it is while the second one's diff is read.
+		await act(async () => {
+			utils!.rerender(view(second, "/step-second.md"));
+		});
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			toolbar,
+		);
+		expect(
+			utils!.container.querySelector('[data-attr="markdown-editor"]'),
+		).toBe(column);
+		expect(screen.queryByRole("status")).toBeNull();
+		expect(shownProseMirror(utils!.container)).toHaveTextContent(/First/);
+		await waitFor(() => {
+			expect(utils!.container.querySelector(".ProseMirror")).toHaveTextContent(
+				/Second/,
+			);
+			expect(
+				utils!.container.querySelector("[data-review-change-id]"),
+			).not.toBeNull();
+		});
+		expect(
+			utils!.container.querySelector(".ProseMirror"),
+		).not.toHaveTextContent(/First/);
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			toolbar,
+		);
+		expect(
+			utils!.container.querySelector('[data-attr="markdown-editor"]'),
+		).toBe(column);
+		expect(
+			utils!.container.querySelector<HTMLElement>(
+				'[data-attr="markdown-editor"]',
+			)?.dataset.reviewPending,
+		).toBeUndefined();
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		await lix.close();
+	});
+
+	test("stepping a checkpoint review keeps the frame's nodes and the previous diff until the next one is in", async () => {
+		const lix = await openLix();
+		const first = fakeUuid("file_md_checkpoint_step_first");
+		const second = fakeUuid("file_md_checkpoint_step_second");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/checkpoint-first.md",
+					content: new TextEncoder().encode("# First before"),
+				},
+				{
+					id: second,
+					path: "/checkpoint-second.md",
+					content: new TextEncoder().encode("# Second before"),
+				},
+			])
+			.execute();
+		const base = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# First after") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# Second after") })
+			.where("id", "=", second)
+			.execute();
+		const target = await createCheckpoint(lix);
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath={filePath}
+						beforeCommitId={base.commitId}
+						afterCommitId={target.commitId}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		let utils:
+			| {
+					unmount: () => void;
+					rerender: (ui: Parameters<typeof render>[0]) => void;
+			  }
+			| undefined;
+		await act(async () => {
+			utils = render(view(first, "/checkpoint-first.md"), { container: host });
+		});
+		await waitFor(() => {
+			expect(shownProseMirror(host)).toHaveTextContent(/First/);
+			expect(
+				shownProseMirror(host)!.querySelector("[data-review-change-id]"),
+			).not.toBeNull();
+		});
+		const toolbar = screen.getByRole("toolbar", { name: "Formatting toolbar" });
+		const column = host.querySelector('[data-attr="markdown-editor"]');
+		// Every frame from the step until the second diff is on screen keeps a
+		// document in view: the first diff, then the second, never nothing.
+		const frames: string[] = [];
+		const observer = new MutationObserver(() => {
+			frames.push(shownProseMirror(host)?.textContent ?? "");
+		});
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+
+		await act(async () => {
+			utils!.rerender(view(second, "/checkpoint-second.md"));
+		});
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			toolbar,
+		);
+		expect(host.querySelector('[data-attr="markdown-editor"]')).toBe(column);
+		expect(shownProseMirror(host)).toHaveTextContent(/First/);
+		expect(screen.queryByRole("status")).toBeNull();
+		await waitFor(() => {
+			expect(shownProseMirror(host)).toHaveTextContent(/Second/);
+			expect(
+				shownProseMirror(host)!.querySelector("[data-review-change-id]"),
+			).not.toBeNull();
+		});
+		observer.disconnect();
+		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
+			toolbar,
+		);
+		expect(host.querySelector('[data-attr="markdown-editor"]')).toBe(column);
+		expect(
+			host.querySelector<HTMLElement>('[data-attr="markdown-editor"]')?.dataset
+				.reviewPending,
+		).toBeUndefined();
+		expect(frames.length).toBeGreaterThan(0);
+		expect(frames.every((text) => /First|Second/.test(text))).toBe(true);
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		host.remove();
+		await lix.close();
+	});
+
+	test("a document opened inside a review never paints as its live self", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("file_review_stepped"),
+				path: "/review-stepped.md",
+				content: new TextEncoder().encode("# Before"),
+			})
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# After") })
+			.where("id", "=", fakeUuid("file_review_stepped"))
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+
+		// The reviewer stepped to this file: the session already lists it when
+		// the view mounts. Every frame that holds an editor without the diff
+		// must hold it out of sight.
+		const frames: { pending: boolean; diff: boolean }[] = [];
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		const observer = new MutationObserver(() => {
+			const surface = host.querySelector<HTMLElement>(
+				'[data-attr="markdown-editor"]',
+			);
+			if (!surface?.querySelector(".ProseMirror")) return;
+			frames.push({
+				pending: surface.dataset.reviewPending === "true",
+				diff: surface.querySelector("[data-review-change-id]") !== null,
+			});
+		});
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		let utils: { unmount: () => void } | undefined;
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId={fakeUuid("file_review_stepped")}
+							filePath="/review-stepped.md"
+							activeBranchId={activeBranchId}
+							diffSession={{
+								base: { commitId: checkpoint.commitId },
+								target: { working: true },
+								files: [
+									{
+										id: fakeUuid("file_review_stepped"),
+										path: "/review-stepped.md",
+										changeKind: "modified",
+										workingEpoch,
+										review: { id: "review-stepped", status: "pending" },
+									},
+								],
+								activePath: "/review-stepped.md",
+								capabilities: { checkpoint: true, undo: true, restore: false },
+							}}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+				{ container: host },
+			);
+		});
+
+		await screen.findByRole("button", { name: /keep/i });
+		observer.disconnect();
+		const surface = host.querySelector<HTMLElement>(
+			'[data-attr="markdown-editor"]',
+		)!;
+		expect(surface.dataset.reviewPending).toBeUndefined();
+		expect(surface.querySelector("[data-review-change-id]")).not.toBeNull();
+		expect(frames.some((frame) => frame.pending && !frame.diff)).toBe(true);
+		expect(frames.every((frame) => frame.diff || frame.pending)).toBe(true);
+
+		await act(async () => {
+			utils?.unmount();
+		});
+		host.remove();
 	});
 
 	test("renders historical deleted-file raw snapshots without review controls", async () => {
@@ -1429,6 +1761,13 @@ describe("MarkdownView", () => {
 		}
 	});
 });
+
+/** The document the frame shows: the one in the slot that is not out of sight. */
+function shownProseMirror(container: HTMLElement): HTMLElement | null {
+	return container.querySelector<HTMLElement>(
+		"[data-markdown-document]:not([aria-hidden]) .ProseMirror",
+	);
+}
 
 async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
 	const result = await lix.execute(

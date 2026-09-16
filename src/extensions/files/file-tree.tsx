@@ -158,7 +158,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-type='item'][data-item-type='folder'] > [data-item-section='icon'] {
-		color: var(--color-icon-folder);
+		color: var(--atelier-folder);
 	}
 
 	[data-type='item'][data-item-type='folder']
@@ -207,7 +207,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	   modified shares the glyph's brand orange (see the git-modified
 	   override), so a changed file reads without hunting for its dot. */
 	[data-item-git-status='modified'] > [data-item-section='git'] {
-		color: var(--color-icon-brand);
+		color: var(--atelier-link);
 		font-size: 0;
 	}
 
@@ -251,13 +251,13 @@ const FILE_TREE_UNSAFE_CSS = `
 	}
 
 	[data-item-git-status='added'] > [data-item-section='git'] > span {
-		background: var(--color-border-diff-added);
+		background: var(--atelier-diff-added);
 		-webkit-mask-image: ${diffGlyphMaskDataUri("added")};
 		mask-image: ${diffGlyphMaskDataUri("added")};
 	}
 
 	[data-item-git-status='deleted'] > [data-item-section='git'] > span {
-		background: var(--color-border-diff-removed);
+		background: var(--atelier-diff-removed);
 		-webkit-mask-image: ${diffGlyphMaskDataUri("removed")};
 		mask-image: ${diffGlyphMaskDataUri("removed")};
 	}
@@ -276,12 +276,12 @@ const FILE_TREE_UNSAFE_CSS = `
 	   status (a fully-added folder reads solid green like its files). */
 	[data-item-contains-git-change='true']:not([data-item-git-status])
 		> [data-item-section='git'] {
-		color: var(--color-icon-brand);
+		color: var(--atelier-link);
 		opacity: 0.75;
 	}
 
 	[data-type='context-menu-trigger'] {
-		color: var(--color-icon-tertiary);
+		color: var(--atelier-fg-subtle);
 	}
 
 	/* Finder-style reveal: visible and interactive, but clearly hidden. */
@@ -335,12 +335,12 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	[data-type='item'][data-item-selected='true'][data-item-type='folder']
 		> [data-item-section='icon'] {
-		color: var(--color-icon-secondary);
+		color: var(--atelier-fg-muted);
 	}
 
 	[data-type='item'][data-item-selected='true'][data-item-type='file']
 		> [data-item-section='icon'] {
-		color: var(--color-icon-secondary);
+		color: var(--atelier-fg-muted);
 	}
 
 	:host([data-suppress-item-focus-ring='true'])
@@ -353,19 +353,19 @@ const FILE_TREE_UNSAFE_CSS = `
 	   no accent ring. */
 	[data-item-rename-input] {
 		height: calc(var(--trees-row-height) - 6px);
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--atelier-border);
 		border-radius: 6px;
-		background: var(--color-bg-panel);
-		box-shadow: var(--shadow-action-secondary);
-		color: var(--color-text-primary);
-		caret-color: var(--color-text-primary);
+		background: var(--atelier-panel);
+		box-shadow: var(--atelier-shadow-sm);
+		color: var(--atelier-fg);
+		caret-color: var(--atelier-fg);
 		padding-inline: 6px;
 		outline: none;
 	}
 
 	[data-item-rename-input]::selection {
-		background: var(--color-bg-selection-current);
-		color: var(--color-text-primary);
+		background: var(--atelier-accent-subtle);
+		color: var(--atelier-fg);
 	}
 `;
 
@@ -986,7 +986,7 @@ function TreeItemContextMenu({
 	return (
 		<div
 			aria-label={`Actions for ${item.name}`}
-			className="z-50 min-w-44 rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 font-sans text-xs text-[var(--color-text-primary)] shadow-md"
+			className="z-50 min-w-44 rounded-md border border-border bg-panel p-1 font-sans text-xs text-fg shadow-md"
 			data-file-tree-context-menu-root="true"
 			role="menu"
 			style={style}
@@ -1025,10 +1025,7 @@ function TreeItemContextMenu({
 					>
 						New folder
 					</TreeItemContextMenuButton>
-					<div
-						aria-hidden="true"
-						className="my-1 h-px bg-[var(--color-border-panel)]"
-					/>
+					<div aria-hidden="true" className="my-1 h-px bg-border" />
 				</>
 			) : null}
 			{canRename ? (
@@ -1036,7 +1033,7 @@ function TreeItemContextMenu({
 					icon={
 						<PenLine
 							aria-hidden="true"
-							className="size-4 shrink-0 text-[var(--color-icon-secondary)]"
+							className="size-4 shrink-0 text-fg-muted"
 							data-attr="file-tree-menu-rename-icon"
 							strokeWidth={1.7}
 						/>
@@ -1047,10 +1044,7 @@ function TreeItemContextMenu({
 				</TreeItemContextMenuButton>
 			) : null}
 			{canDelete && canRename ? (
-				<div
-					aria-hidden="true"
-					className="my-1 h-px bg-[var(--color-border-panel)]"
-				/>
+				<div aria-hidden="true" className="my-1 h-px bg-border" />
 			) : null}
 			{canDelete ? (
 				<TreeItemContextMenuButton
@@ -1097,10 +1091,10 @@ function TreeItemContextMenuButton({
 			type="button"
 			role="menuitem"
 			aria-keyshortcuts={ariaKeyShortcuts}
-			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 				destructive
-					? "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-status-danger)] hover:text-[var(--color-text-status-danger)] focus-visible:bg-[var(--color-bg-status-danger)] focus-visible:text-[var(--color-text-status-danger)]"
-					: "hover:bg-[var(--color-bg-hover)] focus-visible:bg-[var(--color-bg-hover)]"
+					? "text-fg-muted hover:bg-danger-subtle hover:text-danger focus-visible:bg-danger-subtle focus-visible:text-danger"
+					: "hover:bg-bg-hover focus-visible:bg-bg-hover"
 			}`}
 			onClick={onClick}
 		>
@@ -1113,7 +1107,7 @@ function TreeItemContextMenuButton({
 			{shortcut ? (
 				<kbd
 					aria-label={shortcutLabel}
-					className="ml-auto inline-flex items-center gap-0.5 text-[10px] leading-none font-semibold text-[var(--color-icon-tertiary)]"
+					className="ml-auto inline-flex items-center gap-0.5 text-[10px] leading-none font-semibold text-fg-subtle"
 				>
 					{shortcut}
 				</kbd>
@@ -1530,10 +1524,10 @@ function treeHostStyle(
 	// The tree names the surface it sits on: spacious runs inside the main
 	// white island, compact runs bare on the app canvas in a sidebar. Getting
 	// this wrong paints a white card into the sidebar.
-	const surface = isSpacious ? "--color-bg-panel" : "--color-bg-app";
+	const surface = isSpacious ? "--atelier-panel" : "--atelier-bg";
 	const surfaceHover = isSpacious
-		? "--color-bg-hover"
-		: "--color-bg-hover-canvas";
+		? "--atelier-bg-hover"
+		: "--atelier-bg-hover-strong";
 	return {
 		// Must be opaque (not transparent): the truncation ellipsis paints this
 		// over clipped label text to hide half-cut glyphs.
@@ -1544,14 +1538,14 @@ function treeHostStyle(
 		...(isSpacious
 			? {}
 			: { "--trees-context-menu-trigger-inline-offset": "2.5px" }),
-		"--trees-fg-muted-override": "var(--color-text-tertiary)",
-		"--trees-fg-override": "var(--color-text-secondary)",
-		"--trees-focus-ring-color-override": "var(--color-ring-focus-visible)",
+		"--trees-fg-muted-override": "var(--atelier-fg-subtle)",
+		"--trees-fg-override": "var(--atelier-fg-muted)",
+		"--trees-focus-ring-color-override": "var(--atelier-ring)",
 		"--trees-font-family-override": "inherit",
 		"--trees-font-size-override": isSpacious ? "15px" : "13px",
-		"--trees-git-modified-color-override": "var(--color-icon-brand)",
-		"--trees-git-added-color-override": "var(--color-text-diff-added)",
-		"--trees-git-deleted-color-override": "var(--color-text-diff-removed)",
+		"--trees-git-modified-color-override": "var(--atelier-link)",
+		"--trees-git-added-color-override": "var(--atelier-diff-added)",
+		"--trees-git-deleted-color-override": "var(--atelier-diff-removed)",
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",
 		"--trees-input-bg-override": "transparent",
 		"--trees-item-margin-x-override": "0px",
@@ -1573,12 +1567,12 @@ function treeHostStyle(
 		// Selection is a quiet neutral fill (no accent border); losing panel
 		// focus dims it to the plain hover tint.
 		"--trees-selected-bg-override": isPanelFocused
-			? "var(--color-bg-selection-row)"
+			? "var(--atelier-bg-active)"
 			: `var(${surfaceHover})`,
 		"--trees-selected-focused-border-color-override": "transparent",
 		"--trees-selected-fg-override": isPanelFocused
-			? "var(--color-text-primary)"
-			: "var(--color-text-secondary)",
+			? "var(--atelier-fg)"
+			: "var(--atelier-fg-muted)",
 		height: "100%",
 		minHeight: 0,
 		width: "100%",

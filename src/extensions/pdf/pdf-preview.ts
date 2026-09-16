@@ -171,7 +171,7 @@ export const renderPdfPreview: PdfPreviewRenderer = async ({
 			viewport: pageViewport,
 			transform:
 				pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
-			background: "rgb(255, 255, 255)",
+			background: "rgb(255, 255, 255)", // token-literal: the page's paper stays white in either scheme; the ink is the author's
 		});
 		try {
 			await renderTask.promise;

@@ -9,6 +9,8 @@ const publicDeclarations = new Set([
 	"create-atelier.d.ts",
 	"extension-api.d.ts",
 	"render.d.ts",
+	// render.d.ts re-exports RENDER_CSS from here; pruned, the export is `any`.
+	"render/styles.d.ts",
 	"dev-tools.d.ts",
 	"render/types.d.ts",
 	"components/diff-glyph.d.ts",
@@ -22,6 +24,12 @@ const publicDeclarations = new Set([
 	"atelier-render-context.d.ts",
 	"extensions/markdown/markdown-content.d.ts",
 	"extensions/history/index.d.ts",
+	// The New menu, for a host with a New button of its own, and the rule it
+	// obeys. Each of these is reachable from the package's own exports, so a
+	// declaration pruned from under one is a broken import in a consumer.
+	"extensions/files/new-file-menu.d.ts",
+	"extensions/files/use-default-folders.d.ts",
+	"extensions/files/default-folder.d.ts",
 	"lib/workspace-file-ops.d.ts",
 	"state-adapters.d.ts",
 	"dev-tools/developer-tools-menu.d.ts",

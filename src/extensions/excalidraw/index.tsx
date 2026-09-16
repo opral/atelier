@@ -157,7 +157,7 @@ function LiveExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 			return <ExcalidrawReviewUnavailable />;
 		}
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -237,7 +237,7 @@ function EditableExcalidrawView({
 function ExcalidrawReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			The working diff changed while it was being reviewed. Reopen the review.
@@ -288,7 +288,7 @@ function HistoricalExcalidrawView({
 	if (loadError) {
 		return (
 			<div
-				className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]"
+				className="flex h-full items-center justify-center text-sm text-fg-subtle"
 				role="alert"
 			>
 				Could not load this file revision.
@@ -340,13 +340,13 @@ function InvalidSceneState({
 		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
 			<PenTool
 				aria-hidden="true"
-				className="size-7 text-[var(--color-icon-tertiary)]"
+				className="size-7 text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-[var(--color-text-primary)]">
+			<p className="mt-3 text-sm font-medium text-fg">
 				This file cannot be opened as an Excalidraw scene.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
 				<span className="ph-mask">
 					{fileNameFromPath(filePath) ?? filePath}
 				</span>
@@ -360,7 +360,7 @@ function ExcalidrawLoadingState() {
 	return (
 		<div
 			aria-live="polite"
-			className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-[var(--color-text-tertiary)]"
+			className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle"
 			role="status"
 		>
 			<div className="flex items-center gap-2 text-sm">

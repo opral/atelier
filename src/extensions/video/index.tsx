@@ -12,6 +12,7 @@ import { selectFilesStateAt } from "@/queries";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
 import {
 	DiffSides,
+	useOpenedUnderReview,
 	useWorkingDiffSides,
 	viewShowsDiff,
 } from "@/extension-runtime/diff-sides";
@@ -73,6 +74,7 @@ function VideoViewContent({
 }: VideoViewProps) {
 	assertFileId(fileId);
 	const review = useWorkingDiffSides(fileId, diffSession);
+	const openedUnderReview = useOpenedUnderReview(fileId, review.reviewing);
 	const fileResult = useQueryResult<VideoFileRow>(
 		(lix) =>
 			sourceCommitId
@@ -88,8 +90,14 @@ function VideoViewContent({
 	);
 	// A video cannot be diffed in place, so the review shows both revisions:
 	// the checkpoint on the left, the working file on the right.
-	if (review.reviewing) {
-		if (review.status === "loading") return <VideoLoadingState />;
+	// Both sides arrive together. Until they do, a document the reviewer
+	// stepped to waits in the comparison's empty frame, and a document that
+	// was already on screen keeps its revision there: a placeholder would
+	// empty the view for the wait.
+	if (review.reviewing && review.status === "loading" && openedUnderReview) {
+		return <DiffSides pending filePath={filePath ?? "video"} />;
+	}
+	if (review.reviewing && review.status !== "loading") {
 		if (review.status === "unavailable") return <VideoReviewUnavailable />;
 		const path = review.path || filePath || "video";
 		return (
@@ -150,7 +158,7 @@ function VideoViewContent({
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -167,7 +175,7 @@ function VideoViewContent({
 function VideoReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			The working video changed while it was being reviewed. Reopen the review.
@@ -259,13 +267,13 @@ function VideoErrorState({ filePath }: { readonly filePath: string }) {
 		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
 			<VideoOff
 				aria-hidden="true"
-				className="size-7 text-[var(--color-icon-tertiary)]"
+				className="size-7 text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-[var(--color-text-primary)]">
+			<p className="mt-3 text-sm font-medium text-fg">
 				This video could not be played.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} may be damaged or use an
 				unsupported video format.
 			</p>
@@ -275,7 +283,7 @@ function VideoErrorState({ filePath }: { readonly filePath: string }) {
 
 function VideoLoadingState() {
 	return (
-		<div className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-[var(--color-text-tertiary)]">
+		<div className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle">
 			<div className="flex items-center gap-2 text-sm">
 				<AnimatedZap size={13} tone="muted" className="shrink-0" />
 				<span>Loading video…</span>
@@ -305,7 +313,11 @@ export const extension = createReactExtensionDefinition({
 		});
 		return (
 			<PreparedMediaSurface
-				key={view.instanceId}
+				documentKey={
+					typeof view.state.fileId === "string"
+						? view.state.fileId
+						: view.instanceId
+				}
 				readySelector="video[src]"
 				kind="video"
 				data={data}

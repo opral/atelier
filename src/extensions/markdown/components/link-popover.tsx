@@ -221,12 +221,12 @@ export function LinkPopover({
 				>
 					<Popover.Popup
 						initialFocus={inputRef}
-						className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+						className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
 						data-attr="markdown-link-popover"
 					>
-						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-2 text-[var(--color-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-[var(--color-border-brand-soft)] focus-within:bg-[var(--color-bg-panel)] focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--color-bg-brand-soft)]">
+						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-border-subtle bg-bg-subtle px-2 text-fg shadow-md transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-accent-border focus-within:bg-panel focus-within:shadow-md">
 							<LinkIcon
-								className="size-3.5 shrink-0 text-[var(--color-icon-tertiary)]"
+								className="size-3.5 shrink-0 text-fg-subtle"
 								aria-hidden
 							/>
 							<input
@@ -236,7 +236,7 @@ export function LinkPopover({
 								onKeyDown={handleKeyDown}
 								aria-label="Link URL"
 								placeholder="https://… or ./document.md"
-								className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-[var(--color-text-primary)] outline-none placeholder:font-normal placeholder:text-[var(--color-text-tertiary)]"
+								className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-fg outline-none placeholder:font-normal placeholder:text-fg-subtle"
 								data-attr="markdown-link-input"
 							/>
 						</div>
@@ -245,21 +245,21 @@ export function LinkPopover({
 								<button
 									type="button"
 									onClick={handleRemove}
-									className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-status-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+									className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] font-medium text-fg-subtle transition-colors hover:bg-bg-hover hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									data-attr="markdown-link-remove"
 								>
 									<Unlink className="size-3.5" aria-hidden />
 									Remove
 								</button>
 							)}
-							<Popover.Close className="ml-auto inline-flex h-7 items-center gap-1 rounded-[7px] px-2.5 text-[12.5px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]">
+							<Popover.Close className="ml-auto inline-flex h-7 items-center gap-1 rounded-[7px] px-2.5 text-[12.5px] font-medium text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
 								<X className="size-3.5" aria-hidden />
 								Cancel
 							</Popover.Close>
 							<button
 								type="button"
 								onClick={handleApply}
-								className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-[var(--color-bg-action-primary)] px-3 text-[12.5px] font-semibold text-[var(--color-text-on-action-primary)] shadow-[0_1px_2px_rgba(194,65,12,0.18)] transition-colors hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+								className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-accent px-3 text-[12.5px] font-semibold text-accent-on shadow-accent transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
 								data-attr="markdown-link-apply"
 							>
 								<Check className="size-3.5" aria-hidden />

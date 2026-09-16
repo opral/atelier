@@ -325,7 +325,7 @@ describe("TextView under review", () => {
 				.execute();
 		}
 		const snapshot = await selectWorkingFileDiffSnapshot(lix);
-		const atelier = await createRuntime(lix, {
+		const session: AtelierDiffSession = {
 			base: { commitId: checkpoint.commitId },
 			target: { working: true },
 			files: [
@@ -342,13 +342,19 @@ describe("TextView under review", () => {
 			],
 			activePath: path,
 			capabilities: { checkpoint: true, undo: true, restore: false },
-		});
-		return { fileId, atelier };
+		};
+		return { fileId, session, atelier: await createRuntime(lix, session) };
 	}
 
-	/** The diff renders inside the `diffs-container` shadow root. */
-	function diffText(diff: HTMLElement): string {
-		return diff.querySelector("diffs-container")?.shadowRoot?.textContent ?? "";
+	/** The lines the diff shows as removed: the before side, drawn in place. */
+	function removedText(container: HTMLElement): string {
+		return Array.from(container.querySelectorAll(".cm-deletedChunk"))
+			.map((chunk) => chunk.textContent)
+			.join("\n");
+	}
+
+	function editorText(container: HTMLElement): string {
+		return container.querySelector(".cm-content")?.textContent ?? "";
 	}
 
 	function renderReview(
@@ -389,15 +395,23 @@ describe("TextView under review", () => {
 			utils = renderReview(lix, atelier, fileId, "/src/session.py");
 		});
 
-		const diff = await screen.findByTestId("text-diff-view");
+		// The diff is the editor itself, drawn as a comparison: the after side
+		// is its document, the removed line sits above the lines that replaced
+		// it, and nothing is editable while the file is under review.
+		const view = await screen.findByTestId("text-editor-view");
 		await waitFor(() => {
-			expect(diffText(diff)).toContain("def close(self):");
+			expect(view).toHaveAttribute("data-comparison");
+			expect(editorText(utils!.container)).toContain("def close(self):");
 		});
-		// The removed line is still readable in the diff, and nothing is
-		// editable while the file is under review.
-		expect(diffText(diff)).toContain("pass");
-		expect(screen.queryByTestId("text-editor-view")).toBeNull();
-		expect(utils!.container.querySelector(".cm-content")).toBeNull();
+		expect(removedText(utils!.container)).toContain("pass");
+		expect(utils!.container.querySelector(".cm-content")).toHaveAttribute(
+			"contenteditable",
+			"false",
+		);
+		expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Copy file contents" }),
+		).toBeDisabled();
 
 		await act(async () => utils?.unmount());
 		await lix.close();
@@ -447,14 +461,15 @@ describe("TextView under review", () => {
 
 		// The server-rendered text stays on top until the interactive surface
 		// is populated. A diff, not only an editor, counts as populated.
-		const diff = await screen.findByTestId("text-diff-view");
+		const view = await screen.findByTestId("text-editor-view");
 		await waitFor(() => {
-			expect(diffText(diff)).toContain("x = 2");
+			expect(view).toHaveAttribute("data-comparison");
+			expect(editorText(utils!.container)).toContain("x = 2");
 			expect(
 				utils!.container.querySelector("[data-atelier-initial-content]"),
 			).toBeNull();
 		});
-		expect(diff.closest("[aria-hidden='true']")).toBeNull();
+		expect(view.closest("[aria-hidden='true']")).toBeNull();
 
 		await act(async () => utils?.unmount());
 		await lix.close();
@@ -473,10 +488,14 @@ describe("TextView under review", () => {
 			utils = renderReview(lix, atelier, fileId, "/src/new.ts");
 		});
 
-		const diff = await screen.findByTestId("text-diff-view");
+		const view = await screen.findByTestId("text-editor-view");
 		await waitFor(() => {
-			expect(diffText(diff)).toContain("export const created = true;");
+			expect(view).toHaveAttribute("data-comparison");
+			expect(
+				utils!.container.querySelector(".cm-changedLine")?.textContent,
+			).toContain("export const created = true;");
 		});
+		expect(removedText(utils!.container)).toBe("");
 
 		await act(async () => utils?.unmount());
 		await lix.close();
@@ -495,9 +514,10 @@ describe("TextView under review", () => {
 			utils = renderReview(lix, atelier, fileId, "/src/gone.py");
 		});
 
-		const diff = await screen.findByTestId("text-diff-view");
+		const view = await screen.findByTestId("text-editor-view");
 		await waitFor(() => {
-			expect(diffText(diff)).toContain("def gone():");
+			expect(view).toHaveAttribute("data-comparison");
+			expect(removedText(utils!.container)).toContain("def gone():");
 		});
 		// Not the stale-epoch error: the file is gone on purpose.
 		expect(screen.queryByRole("alert")).toBeNull();
@@ -546,11 +566,226 @@ describe("TextView under review", () => {
 			);
 		});
 
-		const diff = await screen.findByTestId("text-diff-view");
+		const view = await screen.findByTestId("text-editor-view");
 		await waitFor(() => {
-			expect(diffText(diff)).toContain("x = 2");
-			expect(diffText(diff)).toContain("x = 1");
+			expect(view).toHaveAttribute("data-comparison");
+			expect(editorText(utils!.container)).toContain("x = 2");
+			expect(removedText(utils!.container)).toContain("x = 1");
 		});
+		expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("opening and closing the review keeps the editor and its toolbar mounted", async () => {
+		const lix = await openLix();
+		const { fileId, session } = await reviewedFile(
+			lix,
+			"/src/session.py",
+			new TextEncoder().encode("class AgentSession:\n    pass\n"),
+			new TextEncoder().encode(
+				"class AgentSession:\n    def close(self):\n        pass\n",
+			),
+		);
+		const editing = await createRuntime(lix);
+		const reviewing = await createRuntime(lix, session);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, editing, fileId, "/src/session.py");
+		});
+		const view = await screen.findByTestId("text-editor-view");
+		const toolbar = screen.getByRole("toolbar", {
+			name: "Text editor toolbar",
+		});
+		const editor = await waitFor(() => {
+			const element = utils!.container.querySelector(".cm-editor");
+			if (!element) throw new Error("Editor not mounted");
+			return element;
+		});
+		expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
+
+		// The review opens: the same nodes, now a comparison, and the toolbar
+		// where it was, disabled, so nothing above the text moves.
+		await act(async () => {
+			utils!.rerender(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={reviewing}
+								fileId={fileId}
+								filePath="/src/session.py"
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+		await waitFor(() => {
+			expect(utils!.container.querySelector(".cm-merge-b")).toBe(editor);
+			expect(removedText(utils!.container)).toContain("pass");
+		});
+		expect(screen.getByTestId("text-editor-view")).toBe(view);
+		expect(screen.getByRole("toolbar", { name: "Text editor toolbar" })).toBe(
+			toolbar,
+		);
+		expect(toolbar).toHaveAttribute("aria-disabled", "true");
+		expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+		expect(screen.queryByRole("status")).toBeNull();
+
+		// The review closes: still the same editor, editable again.
+		await act(async () => {
+			utils!.rerender(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={editing}
+								fileId={fileId}
+								filePath="/src/session.py"
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+		await waitFor(() => {
+			expect(utils!.container.querySelector(".cm-merge-b")).toBeNull();
+			expect(utils!.container.querySelector(".cm-content")).toHaveAttribute(
+				"contenteditable",
+				"true",
+			);
+		});
+		expect(utils!.container.querySelector(".cm-editor")).toBe(editor);
+		expect(screen.getByRole("toolbar", { name: "Text editor toolbar" })).toBe(
+			toolbar,
+		);
+		expect(toolbar).not.toHaveAttribute("aria-disabled");
+		expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("stepping to another document keeps the toolbar node mounted and visible", async () => {
+		const lix = await openLix();
+		// Two files change in one working epoch: the review steps between them.
+		const first = fakeUuid("review:/src/first.py");
+		const second = fakeUuid("review:/src/second.py");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/src/first.py",
+					content: new TextEncoder().encode("first = 1\n"),
+				},
+				{
+					id: second,
+					path: "/src/second.py",
+					content: new TextEncoder().encode("second = 1\n"),
+				},
+			])
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("first = 2\n") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("second = 2\n") })
+			.where("id", "=", second)
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+		const session: AtelierDiffSession = {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true },
+			files: [
+				{
+					id: first,
+					path: "/src/first.py",
+					changeKind: "modified",
+					workingEpoch,
+					review: { id: "review:first", status: "pending" },
+				},
+				{
+					id: second,
+					path: "/src/second.py",
+					changeKind: "modified",
+					workingEpoch,
+					review: { id: "review:second", status: "pending" },
+				},
+			],
+			activePath: "/src/first.py",
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		};
+		const atelier = await createRuntime(lix, session);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = renderReview(lix, atelier, first, "/src/first.py");
+		});
+		const view = await screen.findByTestId("text-editor-view");
+		await waitFor(() => {
+			expect(editorText(utils!.container)).toContain("first = 2");
+		});
+		const toolbar = screen.getByRole("toolbar", {
+			name: "Text editor toolbar",
+		});
+		const editor = utils!.container.querySelector(".cm-editor");
+		expect(editor).not.toBeNull();
+		expect(view).toHaveAttribute("data-document");
+
+		// The step: the same view is handed the next file. Until its sides
+		// are read, the frame and the first file's diff stay exactly where
+		// they were — no loading state, no empty frame.
+		await act(async () => {
+			utils!.rerender(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={atelier}
+								fileId={second}
+								filePath="/src/second.py"
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+		expect(screen.getByTestId("text-editor-view")).toBe(view);
+		expect(screen.getByRole("toolbar", { name: "Text editor toolbar" })).toBe(
+			toolbar,
+		);
+		expect(utils!.container.querySelector(".cm-editor")).toBe(editor);
+		expect(view).toHaveAttribute("data-document");
+		expect(screen.queryByRole("status")).toBeNull();
+		expect(editorText(utils!.container)).toMatch(/first = 2|second = 2/);
+
+		await waitFor(() => {
+			expect(editorText(utils!.container)).toContain("second = 2");
+			expect(removedText(utils!.container)).toContain("second = 1");
+		});
+		expect(screen.getByTestId("text-editor-view")).toBe(view);
+		expect(screen.getByRole("toolbar", { name: "Text editor toolbar" })).toBe(
+			toolbar,
+		);
+		expect(utils!.container.querySelector(".cm-editor")).toBe(editor);
+		expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+		expect(editorText(utils!.container)).not.toContain("first");
 
 		await act(async () => utils?.unmount());
 		await lix.close();
@@ -569,10 +804,10 @@ describe("TextView under review", () => {
 			utils = renderReview(lix, atelier, fileId, "/blob.log");
 		});
 
-		expect(await screen.findByTestId("text-editor-view")).toHaveTextContent(
-			"ok",
-		);
-		expect(screen.queryByTestId("text-diff-view")).toBeNull();
+		const view = await screen.findByTestId("text-editor-view");
+		await waitFor(() => expect(view).toHaveTextContent("ok"));
+		expect(view).not.toHaveAttribute("data-comparison");
+		expect(utils!.container.querySelector(".cm-merge-b")).toBeNull();
 		expect(utils!.container.querySelector(".cm-content")).toHaveAttribute(
 			"contenteditable",
 			"false",
@@ -604,7 +839,7 @@ async function createRuntime(
 		views: {
 			open: vi.fn(),
 		},
-		preferences: { get: () => undefined },
+		preferences: { get: () => undefined, set: () => {} },
 		icons: { fileUrl: () => "" },
 		branches: {
 			activeId: activeBranchId,

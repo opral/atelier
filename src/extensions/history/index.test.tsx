@@ -211,6 +211,66 @@ describe("HistoryView", () => {
 		await lix.close();
 	});
 
+	// The section header's label is a chip with `px-1.5`, so it sits six pixels
+	// inside the panel. Rows read as that same column, and a stray gutter on
+	// any wrapper between them is exactly what breaks it.
+	const HEADER_LABEL_INSET = 6;
+	const leftInset = (node: HTMLElement, root: Element): number => {
+		let total = 0;
+		for (
+			let step: HTMLElement | null = node;
+			step !== null && root.contains(step);
+			step = step.parentElement
+		) {
+			for (const token of step.className.split(/\s+/)) {
+				const padding = /^p[xl]-(\d+(?:\.\d+)?)$/.exec(token);
+				if (padding) total += Number(padding[1]) * 4;
+				if (token === "border") total += 1;
+			}
+		}
+		return total;
+	};
+
+	test("rows start on the column the section header's label starts on", async () => {
+		const resize = mockHistoryWidth();
+		const lix = await openLix();
+		await createCheckpoint(lix);
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fakeUuid("inset"), "/inset.md", new TextEncoder().encode("edited")],
+		);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub()} />
+			</LixProvider>,
+		);
+		const section = view.container.querySelector(
+			'[aria-label="Checkpoint history"]',
+		);
+		if (!section) throw new Error("history section missing");
+		for (const width of [320, 900]) {
+			resize(width);
+			// By attribute, not by name: in the wide layout the rows grow file
+			// previews whose buttons also say "checkpoint", and a name query
+			// then finds several.
+			const checkpoint = await waitFor(() => {
+				const row = section.querySelector<HTMLElement>(
+					'[data-attr="history-view-checkpoint"]',
+				);
+				if (!row) throw new Error("checkpoint row not rendered yet");
+				return row;
+			});
+			const working = section.querySelector<HTMLElement>(
+				'[data-attr="history-working-changes"]',
+			);
+			if (!working) throw new Error("working row missing");
+			expect(leftInset(checkpoint, section)).toBe(HEADER_LABEL_INSET);
+			expect(leftInset(working, section)).toBe(HEADER_LABEL_INSET);
+		}
+		view.unmount();
+		await lix.close();
+	});
+
 	test("previews checkpoint and working files before selection only when the panel is wide", async () => {
 		const resize = mockHistoryWidth();
 		// No intersection API means render all rows (e.g. non-browser hosts).
@@ -718,10 +778,13 @@ describe("history scope", () => {
 	});
 
 	test("file scope lists only the checkpoints that touched the file, with what happened", async () => {
+		const resize = mockHistoryWidth();
+		vi.stubGlobal("IntersectionObserver", undefined);
 		const lix = await openLix();
 		await createCheckpoint(lix);
 		const fileA = fakeUuid("scope-file-a");
 		const fileB = fakeUuid("scope-file-b");
+		const fileC = fakeUuid("scope-file-c");
 		await lix.execute(
 			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
 			[fileA, "/a.md", new TextEncoder().encode("one")],
@@ -732,10 +795,20 @@ describe("history scope", () => {
 			[fileB, "/b.md", new TextEncoder().encode("other")],
 		);
 		await createCheckpoint(lix);
+		// The last checkpoint edits the file alongside two others whose names
+		// sort before it — the preview still leads with the file.
 		await lix.execute("UPDATE lix_file SET content = $2 WHERE id = $1", [
 			fileA,
 			new TextEncoder().encode("two"),
 		]);
+		await lix.execute("UPDATE lix_file SET content = $2 WHERE id = $1", [
+			fileB,
+			new TextEncoder().encode("other two"),
+		]);
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[fileC, "/0.md", new TextEncoder().encode("zero")],
+		);
 		await createCheckpoint(lix);
 		const view = render(
 			<LixProvider lix={lix}>
@@ -755,6 +828,83 @@ describe("history scope", () => {
 		expect(
 			screen.queryByRole("button", { name: "Working changes" }),
 		).toBeNull();
+		// Compact: the filter holds, and no names beyond the row's own label.
+		expect(within(items[0]!).queryByText("b.md")).toBeNull();
+
+		// Wide: the row previews every file of the checkpoint, the active file
+		// first and marked, so it is not the one hidden behind "+N".
+		resize(900);
+		const latest = within(items[0]!).getByRole("button", {
+			name: /Latest checkpoint/,
+		});
+		expect(await within(latest).findByText("a.md")).toBeVisible();
+		expect(within(latest).getByText("0.md")).toBeVisible();
+		expect(within(latest).getByText("+1")).toBeVisible();
+		expect(latest).toHaveAccessibleDescription(
+			"Changed files: /a.md, /0.md, /b.md",
+		);
+		const shown = latest.querySelectorAll(
+			'[data-attr="history-inline-files"] > span',
+		);
+		expect(shown[0]).toHaveAttribute("data-active-file", "true");
+		expect(shown[0]).toHaveTextContent("a.md");
+		expect(shown[1]).not.toHaveAttribute("data-active-file");
+		// The earlier checkpoint only added the file: its preview is the file.
+		const added = within(items[1]!).getByRole("button", {
+			name: /Checkpoint/,
+		});
+		expect(await within(added).findByText("a.md")).toBeVisible();
+		expect(added).toHaveAccessibleDescription("Changed files: /a.md");
+		expect(added).toHaveTextContent("· added");
+		view.unmount();
+		await lix.close();
+	});
+
+	test("file scope's compact disclosure lists every file, the active one first and marked", async () => {
+		const lix = await openLix();
+		await createCheckpoint(lix);
+		const fileA = fakeUuid("scope-disclosure-a");
+		const fileB = fakeUuid("scope-disclosure-b");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3), ($4, $5, $6)",
+			[
+				fileA,
+				"/b.md",
+				new TextEncoder().encode("one"),
+				fileB,
+				"/a.md",
+				new TextEncoder().encode("other"),
+			],
+		);
+		const checkpoint = await createCheckpoint(lix);
+		const openFile = vi.fn();
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({
+						activeFile: { id: fileA, path: "/b.md" },
+						historicalCommitId: checkpoint.commitId,
+						historicalFiles: [
+							{ id: fileB, path: "/a.md" },
+							{ id: fileA, path: "/b.md" },
+						],
+						openFile,
+					})}
+				/>
+			</LixProvider>,
+		);
+		const fileList = await screen.findByRole("list", {
+			name: "Files at this checkpoint",
+		});
+		const buttons = within(fileList).getAllByRole("button");
+		expect(buttons.map((button) => button.textContent)).toEqual([
+			"b.md",
+			"a.md",
+		]);
+		expect(buttons[0]).toHaveAttribute("data-active-file", "true");
+		expect(buttons[1]).not.toHaveAttribute("data-active-file");
+		fireEvent.click(buttons[1]!);
+		expect(openFile).toHaveBeenCalledWith("/a.md");
 		view.unmount();
 		await lix.close();
 	});
@@ -859,6 +1009,7 @@ describe("history scope", () => {
 	});
 
 	test("file scope shows the file's own working change and hides other files' changes", async () => {
+		const resize = mockHistoryWidth();
 		const lix = await openLix();
 		await createCheckpoint(lix);
 		const fileA = fakeUuid("scope-working-a");
@@ -893,6 +1044,14 @@ describe("history scope", () => {
 		});
 		const row = await screen.findByRole("button", { name: "Working changes" });
 		expect(row).toHaveTextContent("now · edited");
+		// Wide: the other files' changes join the preview, after the file.
+		resize(900);
+		expect(await within(row).findByText("a.md")).toBeVisible();
+		expect(within(row).getByText("b.md")).toBeVisible();
+		expect(row).toHaveAccessibleDescription("Changed files: /a.md, /b.md");
+		expect(
+			row.querySelector('[data-attr="history-inline-files"] > span'),
+		).toHaveAttribute("data-active-file", "true");
 		view.unmount();
 		await lix.close();
 	});

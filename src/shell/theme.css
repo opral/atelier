@@ -1,254 +1,278 @@
-/**
- * Based on the semantic color guidance from Subframe:
- * https://www.subframe.com/blog/how-to-setup-semantic-tailwind-colors
-*/
+/*
+ * Atelier design tokens. Plain CSS: no build step, no framework. Every colour,
+ * radius, size, shadow and duration the workspace uses is named here, and only
+ * here — nowhere else in this package, or in a host, or in an extension, is a
+ * colour written as a literal. Consumers say `var(--atelier-…)`; Tailwind users get
+ * the same names as utilities through ./tailwind.css.
+ *
+ * Naming: property → role → emphasis → state. `fg` is text and icons alike;
+ * `panel` is an island on the `bg` canvas; `subtle` is a tint, `strong` a
+ * heavier edge. Each token says, at the end of its line, when to use it.
+ *
+ * Dark values ride along in light-dark(), but the scheme is pinned to light:
+ * the dark palette is a first pass nobody has designed yet, so no operating
+ * system preference may turn it on. When it is ready, this line becomes
+ * `color-scheme: light dark` and `.dark { color-scheme: dark }` (index.css)
+ * is the only switch a host needs; nothing else changes.
+ *
+ * A second name for the same role is not a token, it is a future bug. The few
+ * aliases below say why they exist.
+ */
+:root,
+:host {
+	color-scheme: light;
 
-@theme {
-	/* Colors */
-	--color-brand-50: rgb(255, 247, 237);
-	--color-brand-100: rgb(255, 237, 213);
-	--color-brand-200: rgb(254, 215, 170);
-	--color-brand-300: rgb(253, 186, 116);
-	--color-brand-400: rgb(251, 146, 60);
-	--color-brand-500: rgb(249, 115, 22);
-	--color-brand-600: rgb(234, 88, 12);
-	--color-brand-700: rgb(194, 65, 12);
-	--color-brand-800: rgb(154, 52, 18);
-	--color-brand-900: rgb(124, 45, 18);
-	/* Warm neutral (Tailwind stone) — the app uses a warm gray throughout. */
-	--color-neutral-0: rgb(255, 255, 255);
-	--color-neutral-50: rgb(250, 250, 249);
-	--color-neutral-100: rgb(245, 245, 244);
-	--color-neutral-200: rgb(231, 229, 228);
-	--color-neutral-300: rgb(214, 211, 209);
-	--color-neutral-400: rgb(168, 162, 158);
-	--color-neutral-500: rgb(120, 113, 108);
-	--color-neutral-600: rgb(87, 83, 78);
-	--color-neutral-700: rgb(68, 64, 60);
-	--color-neutral-800: rgb(41, 37, 36);
-	--color-neutral-900: rgb(28, 25, 23);
-	--color-neutral-950: rgb(12, 10, 9);
-
-	/* Atelier semantic aliases. Named by role, prominence, and state. */
-	--color-bg-app: rgb(244, 242, 239);
-	--color-bg-panel: var(--color-neutral-0);
-	--color-bg-panel-muted: var(--color-neutral-50);
-	--color-bg-hover: rgb(245, 242, 237);
-	/* Hover for controls sitting on the canvas (bg-app), not inside islands. */
-	--color-bg-hover-canvas: rgb(236, 231, 223);
-	/* Pressed/tonal fill for quiet chips (12f "or start yourself"). */
-	--color-bg-active: rgb(239, 232, 221);
-	/* Selected row sitting directly on the canvas (sidebar file tree). */
-	--color-bg-selection-row: rgb(233, 231, 225);
-	--color-border-panel: rgb(236, 232, 226);
-	--color-border-subtle: rgb(244, 241, 236);
-	--color-text-primary: var(--color-neutral-900);
-	--color-text-secondary: var(--color-neutral-700);
-	--color-text-tertiary: var(--color-neutral-500);
-	--color-text-quaternary: var(--color-neutral-400);
-	--color-icon-secondary: var(--color-neutral-600);
-	--color-icon-tertiary: var(--color-neutral-500);
-	--color-icon-quaternary: var(--color-neutral-400);
-	--color-icon-brand: var(--color-brand-600);
-	--color-bg-brand-soft: var(--color-brand-50);
-	--color-border-brand-soft: var(--color-brand-100);
-	--color-text-link: var(--color-brand-600);
-	--color-text-link-hover: var(--color-brand-700);
-	--color-bg-tooltip: var(--color-neutral-900);
-	--color-text-tooltip: var(--color-neutral-0);
-	--color-bg-selection-current: rgb(251, 239, 228);
-	--color-border-selection-current: rgb(243, 216, 190);
-	--color-icon-selection-current: var(--color-brand-700);
-	--color-action-selection-current: var(--color-icon-selection-current);
-	--color-ring-focus-visible: var(--color-brand-700);
-	--color-bg-action-primary: var(--color-brand-700);
-	--color-bg-action-primary-hover: var(--color-brand-800);
-	--color-text-on-action-primary: var(--color-neutral-0);
-	/* Shared workspace action recipes. */
-	--color-bg-action-primary-start: var(--color-brand-500);
-	--color-bg-action-primary-end: var(--color-brand-600);
-	--shadow-action-primary:
-		0 4px 16px rgba(232, 89, 12, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-	--color-bg-action-secondary: var(--color-bg-panel);
-	--color-bg-action-secondary-hover: var(--color-bg-hover);
-	--color-border-action-secondary: rgb(221, 214, 203);
-	--color-text-on-action-secondary: var(--color-text-secondary);
-	--color-text-on-action-secondary-hover: var(--color-text-primary);
-	--shadow-action-secondary: 0 1px 2px rgba(28, 25, 23, 0.05);
-	--color-bg-notice-neutral: var(--color-bg-hover);
-	--color-border-notice-neutral: transparent;
-	--color-icon-notice-neutral: var(--color-icon-secondary);
-	--color-text-notice-neutral: var(--color-text-primary);
-	--color-bg-notice-warning: var(--color-warning-50);
-	--color-border-notice-warning: var(--color-warning-200);
-	--color-text-notice-warning: var(--color-warning-900);
-	--color-text-status-danger: var(--color-error-600);
-	--color-text-status-success: var(--color-success-600);
-	--color-bg-control-selected: var(--color-bg-hover);
-	--color-border-control-selected: var(--color-border-panel);
-	--color-icon-control-selected: var(--color-icon-secondary);
-	--color-bg-diff-added: color-mix(
-		in srgb,
-		var(--color-success-500) 8%,
-		transparent
+	/* ── Surfaces ─────────────────────────────────────────────────────── */
+	--atelier-bg: light-dark(
+		rgb(244 242 239),
+		rgb(22 20 18)
+	); /* the app canvas behind panels */
+	--atelier-panel: light-dark(
+		rgb(255 255 255),
+		rgb(28 25 23)
+	); /* islands: panels, cards, popovers, the document */
+	--atelier-bg-subtle: light-dark(
+		rgb(250 250 249),
+		rgb(35 31 28)
+	); /* wells inside a panel: code blocks, muted rows */
+	--atelier-bg-hover: light-dark(
+		rgb(245 242 237),
+		rgb(41 37 34)
+	); /* hovered row or control inside a panel */
+	--atelier-bg-hover-strong: light-dark(
+		rgb(236 231 223),
+		rgb(52 47 42)
+	); /* hovered control sitting on the canvas */
+	--atelier-bg-active: light-dark(
+		rgb(233 231 225),
+		rgb(58 53 47)
+	); /* pressed control, selected row, chosen chip */
+	--atelier-bg-selection: light-dark(
+		rgb(224 216 207),
+		rgb(74 62 50)
+	); /* text selection in editors */
+	--atelier-highlight: light-dark(
+		rgb(254 240 138),
+		rgb(113 63 18)
+	); /* the current search match */
+	--atelier-scrollbar: light-dark(
+		rgb(120 113 108 / 0.6),
+		rgb(140 133 124 / 0.6)
 	);
-	--color-text-diff-added: var(--color-success-800);
-	--color-border-diff-added: var(--color-success-700);
-	--color-bg-diff-removed: color-mix(
-		in srgb,
-		var(--color-error-500) 7%,
-		transparent
+
+	/* ── Foreground: text and icons share one scale ───────────────────── */
+	--atelier-fg: light-dark(
+		rgb(28 25 23),
+		rgb(245 242 237)
+	); /* body text, primary icons */
+	--atelier-fg-muted: light-dark(
+		rgb(68 64 60),
+		rgb(190 183 175)
+	); /* secondary text, labels, most icons */
+	--atelier-fg-subtle: light-dark(
+		rgb(120 113 108),
+		rgb(140 133 124)
+	); /* hints, timestamps, placeholders, quiet icons */
+	--atelier-fg-faint: light-dark(
+		rgb(168 162 158),
+		rgb(100 94 88)
+	); /* disabled, decorative, the least a thing can say */
+
+	/* ── Edges ────────────────────────────────────────────────────────── */
+	--atelier-border: light-dark(
+		rgb(236 232 226),
+		rgb(54 49 45)
+	); /* panels, inputs, dividers */
+	--atelier-border-subtle: light-dark(
+		rgb(244 241 236),
+		rgb(41 37 34)
+	); /* hairlines inside a panel: table grid, list rows */
+	--atelier-border-strong: light-dark(
+		rgb(214 211 209),
+		rgb(87 83 78)
+	); /* emphasised edges, control tracks */
+	--atelier-ring: var(--atelier-accent); /* :focus-visible only */
+
+	/* ── Accent: the brand ────────────────────────────────────────────── */
+	--atelier-accent: light-dark(
+		rgb(194 65 12),
+		rgb(251 146 60)
+	); /* solid fills, brand-toned text, the focus ring */
+	--atelier-accent-hover: light-dark(rgb(154 52 18), rgb(253 186 116));
+	--atelier-accent-on: light-dark(
+		rgb(255 255 255),
+		rgb(28 25 23)
+	); /* text on a solid accent */
+	--atelier-accent-subtle: light-dark(
+		rgb(251 239 228),
+		rgb(58 38 24)
+	); /* tint behind accent text; the current item */
+	--atelier-accent-border: light-dark(
+		rgb(243 216 190),
+		rgb(120 66 30)
+	); /* edge of an accent-subtle surface */
+	--atelier-link: light-dark(
+		rgb(234 88 12),
+		rgb(253 186 116)
+	); /* links and brand icons, a step lighter than accent */
+	--atelier-link-hover: var(--atelier-accent);
+	--atelier-accent-gradient: linear-gradient(
+		180deg,
+		rgb(249 115 22) 0%,
+		rgb(234 88 12) 100%
+	); /* the primary action */
+	--atelier-shadow-accent:
+		0 4px 16px rgb(232 89 12 / 0.38), inset 0 1px 0 rgb(255 255 255 / 0.25);
+
+	/* ── Status: solid, subtle background, border ─────────────────────── */
+	--atelier-danger: light-dark(
+		rgb(220 38 38),
+		rgb(248 113 113)
+	); /* text, icons, solid fills */
+	--atelier-danger-subtle: light-dark(rgb(254 242 242), rgb(59 18 18));
+	--atelier-danger-border: light-dark(rgb(185 28 28), rgb(153 27 27));
+	--atelier-success: light-dark(rgb(22 163 74), rgb(74 222 128));
+	--atelier-success-subtle: light-dark(rgb(240 253 244), rgb(18 48 28));
+	--atelier-success-border: light-dark(rgb(21 128 61), rgb(22 101 52));
+	--atelier-warning: light-dark(rgb(161 98 7), rgb(250 204 21));
+	--atelier-warning-subtle: light-dark(rgb(254 252 232), rgb(48 42 8));
+	--atelier-warning-border: light-dark(rgb(254 240 138), rgb(133 77 14));
+
+	/* ── Diff: added, removed, modified, and the glyphs beyond the triad ── */
+	--atelier-diff-added: light-dark(
+		rgb(22 101 52),
+		rgb(134 239 172)
+	); /* text and edge */
+	--atelier-diff-added-subtle: light-dark(
+		rgb(34 197 94 / 0.08),
+		rgb(34 197 94 / 0.16)
+	); /* the changed run's ground */
+	--atelier-diff-removed: light-dark(rgb(153 27 27), rgb(252 165 165));
+	--atelier-diff-removed-subtle: light-dark(
+		rgb(239 68 68 / 0.07),
+		rgb(239 68 68 / 0.16)
 	);
-	--color-text-diff-removed: var(--color-error-800);
-	--color-border-diff-removed: var(--color-error-700);
-	/* Diff glyphs beyond the add/edit/remove triad (design 23d). */
-	--color-icon-diff-moved: rgb(68, 112, 157);
-	--color-icon-diff-conflict: rgb(125, 78, 158);
-	--color-bg-diff-modified: color-mix(
-		in srgb,
-		var(--color-warning-400) 11%,
-		transparent
+	--atelier-diff-modified: light-dark(rgb(133 77 14), rgb(253 224 71));
+	--atelier-diff-modified-subtle: light-dark(
+		rgb(250 204 21 / 0.11),
+		rgb(250 204 21 / 0.16)
 	);
-	--color-text-diff-modified: var(--color-warning-800);
-	--color-border-diff-modified: var(--color-warning-700);
-	--color-border-table-grid: var(--color-border-subtle);
-	--color-bg-table-row-hover: rgb(250, 246, 240);
+	--atelier-diff-moved: light-dark(rgb(68 112 157), rgb(125 170 220));
+	--atelier-diff-conflict: light-dark(rgb(125 78 158), rgb(180 140 210));
 
-	/* Controls. */
-	--color-bg-control: var(--color-neutral-300);
-	--color-bg-control-checked: var(--color-brand-600);
-	--color-border-drop-target: var(--color-brand-500);
-	/* Plain-text editor selection (the browser default is too blue for the warm UI). */
-	--color-bg-selection-text: rgb(224, 216, 207);
-	/* Brand-toned text that is not a link (labels, chips, review titles). */
-	--color-text-brand: var(--color-brand-700);
-	--color-border-strong: var(--color-neutral-300);
-	--color-bg-brand-subtle: var(--color-bg-brand-soft);
-	/* Status fills pair with the text-status-* colors above. */
-	--color-bg-status-danger: var(--color-error-50);
-	--color-bg-status-success: var(--color-success-50);
-	--color-text-status-warning: var(--color-warning-700);
-	--color-scrollbar-thumb: color-mix(
-		in srgb,
-		var(--color-neutral-500) 60%,
-		transparent
+	/* ── Overlay: dark chrome that floats over the UI in either scheme ──── */
+	/* Review pill, media frames, player controls, tooltips. Its own scale
+	   because it stays dark on a light page and is not the page's inverse. */
+	--atelier-overlay: rgb(28 25 23);
+	--atelier-overlay-raised: rgb(42 38 32);
+	--atelier-overlay-hover: rgb(58 53 47);
+	--atelier-overlay-hairline: rgb(
+		255 255 255 / 0.09
+	); /* translucent fill or edge on the overlay */
+	--atelier-overlay-hairline-strong: rgb(255 255 255 / 0.16);
+	--atelier-overlay-border: rgb(58 53 47);
+	--atelier-overlay-border-strong: rgb(87 83 78);
+	--atelier-overlay-fg: rgb(231 226 218);
+	--atelier-overlay-fg-muted: rgb(201 194 184);
+	--atelier-overlay-fg-subtle: rgb(140 133 124);
+	--atelier-overlay-accent: rgb(232 168 124);
+	--atelier-overlay-danger: rgb(235 165 156);
+	--atelier-overlay-danger-border: rgb(90 58 58);
+	--atelier-overlay-success: rgb(167 217 180);
+	--atelier-scrim: rgb(20 16 10 / 0.55); /* dims what an overlay covers */
+	--atelier-shadow-overlay: 0 14px 32px rgb(28 25 23 / 0.42);
+
+	/* ── Code syntax ──────────────────────────────────────────────────── */
+	--atelier-syntax-keyword: light-dark(
+		oklch(0.5 0.14 245),
+		oklch(0.78 0.12 245)
 	);
-	--color-icon-folder: rgb(96, 165, 250);
+	--atelier-syntax-string: light-dark(
+		oklch(0.49 0.11 155),
+		oklch(0.8 0.13 155)
+	);
+	--atelier-syntax-number: light-dark(
+		oklch(0.52 0.13 55),
+		oklch(0.82 0.13 70)
+	); /* numbers are not strings */
+	--atelier-syntax-constant: light-dark(
+		oklch(0.5 0.14 300),
+		oklch(0.78 0.12 300)
+	); /* true, false, null */
+	--atelier-syntax-comment: var(
+		--atelier-fg-subtle
+	); /* alias, on purpose: a comment reads as a hint */
+	--atelier-syntax-type: var(
+		--atelier-fg
+	); /* alias, on purpose: types read as text */
+	--atelier-syntax-property: var(--atelier-fg-muted); /* alias, on purpose */
+	--atelier-syntax-invalid: var(--atelier-danger-border);
 
-	/* Inverse surface: dark chrome floating over the light UI (review pill,
-	   media frames, player controls). Prominence follows the light set. */
-	--color-bg-inverse: var(--color-neutral-900);
-	--color-bg-inverse-raised: rgb(42, 38, 32);
-	--color-bg-inverse-hover: rgb(58, 53, 47);
-	--color-bg-inverse-media: rgb(23, 20, 15);
-	--color-bg-inverse-overlay: rgba(255, 255, 255, 0.09);
-	--color-bg-inverse-overlay-strong: rgba(255, 255, 255, 0.16);
-	--color-bg-inverse-scrim: rgba(20, 16, 10, 0.55);
-	--color-border-inverse: rgb(58, 53, 47);
-	--color-border-inverse-strong: rgb(87, 83, 78);
-	--color-border-inverse-hairline: rgba(255, 255, 255, 0.09);
-	--color-text-inverse-primary: rgb(231, 226, 218);
-	--color-text-inverse-secondary: rgb(201, 194, 184);
-	--color-text-inverse-tertiary: rgb(140, 133, 124);
-	--color-text-inverse-brand: rgb(232, 168, 124);
-	--color-text-inverse-danger: rgb(235, 165, 156);
-	--color-text-inverse-danger-hover: rgb(244, 198, 191);
-	--color-border-inverse-danger: rgb(90, 58, 58);
-	--color-text-inverse-success: rgb(167, 217, 180);
-	--shadow-inverse: 0 14px 32px rgba(28, 25, 23, 0.42);
+	/* ── Categorical tags: independent of status meaning ──────────────── */
+	--atelier-tag-gray: light-dark(#e9e7e4, #3a3633);
+	--atelier-tag-gray-fg: light-dark(#44403c, #d6d3d1);
+	--atelier-tag-brown: light-dark(#eee3da, #4a382c);
+	--atelier-tag-brown-fg: light-dark(#60432e, #e3c9b5);
+	--atelier-tag-orange: light-dark(#fae8d4, #5a3a1c);
+	--atelier-tag-orange-fg: light-dark(#783d10, #f6c9a0);
+	--atelier-tag-yellow: light-dark(#f6efc9, #4d4410);
+	--atelier-tag-yellow-fg: light-dark(#604900, #efe2a0);
+	--atelier-tag-green: light-dark(#dfece3, #22402c);
+	--atelier-tag-green-fg: light-dark(#285238, #b7dcc4);
+	--atelier-tag-blue: light-dark(#deebf7, #203a52);
+	--atelier-tag-blue-fg: light-dark(#294d69, #b6d3ea);
+	--atelier-tag-purple: light-dark(#ebe2f3, #3d2c4e);
+	--atelier-tag-purple-fg: light-dark(#583c70, #d3c2e6);
+	--atelier-tag-pink: light-dark(#f5e0ec, #4e2c40);
+	--atelier-tag-pink-fg: light-dark(#693b53, #e6c3d7);
+	--atelier-tag-red: light-dark(#f8e0de, #4f2a28);
+	--atelier-tag-red-fg: light-dark(#7b332f, #efbfba);
+	--atelier-folder: light-dark(
+		rgb(96 165 250),
+		rgb(125 180 255)
+	); /* the folder glyph, everywhere a folder is drawn */
 
-	/* Code syntax. One restrained palette for the text editor and markdown
-	   code blocks: keywords and literals carry a hue, the rest reads as text. */
-	--color-syntax-keyword: oklch(0.5 0.14 245);
-	--color-syntax-string: oklch(0.49 0.11 155);
-	--color-syntax-number: var(--color-syntax-string);
-	--color-syntax-comment: var(--color-text-tertiary);
-	--color-syntax-type: var(--color-text-primary);
-	--color-syntax-property: var(--color-text-secondary);
-	--color-syntax-invalid: var(--color-error-700);
+	/* ── Shell ────────────────────────────────────────────────────────── */
+	--atelier-panel-header-height: 40px; /* every panel's header row, so tabs and toolbars align across panels */
 
-	--color-error-50: rgb(254, 242, 242);
-	--color-error-100: rgb(254, 226, 226);
-	--color-error-200: rgb(254, 202, 202);
-	--color-error-300: rgb(252, 165, 165);
-	--color-error-400: rgb(248, 113, 113);
-	--color-error-500: rgb(239, 68, 68);
-	--color-error-600: rgb(220, 38, 38);
-	--color-error-700: rgb(185, 28, 28);
-	--color-error-800: rgb(153, 27, 27);
-	--color-error-900: rgb(127, 29, 29);
-	--color-warning-50: rgb(254, 252, 232);
-	--color-warning-100: rgb(254, 249, 195);
-	--color-warning-200: rgb(254, 240, 138);
-	--color-warning-300: rgb(253, 224, 71);
-	--color-warning-400: rgb(250, 204, 21);
-	--color-warning-500: rgb(234, 179, 8);
-	--color-warning-600: rgb(202, 138, 4);
-	--color-warning-700: rgb(161, 98, 7);
-	--color-warning-800: rgb(133, 77, 14);
-	--color-warning-900: rgb(113, 63, 18);
-	--color-success-50: rgb(240, 253, 244);
-	--color-success-100: rgb(220, 252, 231);
-	--color-success-200: rgb(187, 247, 208);
-	--color-success-300: rgb(134, 239, 172);
-	--color-success-400: rgb(74, 222, 128);
-	--color-success-500: rgb(34, 197, 94);
-	--color-success-600: rgb(22, 163, 74);
-	--color-success-700: rgb(21, 128, 61);
-	--color-success-800: rgb(22, 101, 52);
-	--color-success-900: rgb(20, 83, 45);
+	/* ── Shape ────────────────────────────────────────────────────────── */
+	--atelier-radius-tag: 3px; /* tags and chips, which sit inside controls */
+	--atelier-radius-control: 7px; /* controls, which sit inside panels */
+	--atelier-radius-panel: 8px; /* panels, cards, popovers */
+	--atelier-radius-full: 9999px;
 
-	/* Box shadows */
-	--shadow-md:
-		0px 4px 16px -2px rgba(0, 0, 0, 0.08), 0px 2px 4px -1px rgba(0, 0, 0, 0.08);
-	--shadow-lg:
-		0px 12px 32px -4px rgba(0, 0, 0, 0.08), 0px 4px 8px -2px rgba(0, 0, 0, 0.08);
+	/* ── Space ────────────────────────────────────────────────────────── */
+	--atelier-space-1: 4px;
+	--atelier-space-2: 8px;
+	--atelier-space-3: 12px;
+	--atelier-space-4: 16px;
+	--atelier-space-5: 24px;
+	--atelier-space-6: 32px;
 
-	/* Border radiuses. Tags sit inside controls, controls inside panels. */
-	--radius-tag: 3px;
-	--radius-control: 7px;
-	--radius-panel: 8px;
-	--radius-full: 9999px;
+	/* ── UI type. Documents keep their own editorial scale in document.css. */
+	--atelier-text-ui-xs: 11px;
+	--atelier-text-ui-xs-lh: 16px;
+	--atelier-text-ui-sm: 11.5px;
+	--atelier-text-ui-sm-lh: 16px;
+	--atelier-text-ui-md: 12.5px;
+	--atelier-text-ui-md-lh: 16px;
+	--atelier-text-ui-lg: 13px;
+	--atelier-text-ui-lg-lh: 20px;
+	--atelier-font-sans:
+		ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+		"Segoe UI Symbol", "Noto Color Emoji";
+	--atelier-font-mono:
+		ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-	/* UI type scale. Document typography (markdown) keeps its own editorial
-	   scale; everything else picks from these. Each size carries its line
-	   height as a Tailwind text-* utility. */
-	--text-ui-xs: 11px;
-	--text-ui-xs--line-height: 16px;
-	--text-ui-sm: 11.5px;
-	--text-ui-sm--line-height: 16px;
-	--text-ui: 12.5px;
-	--text-ui--line-height: 16px;
-	--text-ui-lg: 13px;
-	--text-ui-lg--line-height: 20px;
+	/* ── Elevation ────────────────────────────────────────────────────── */
+	--atelier-shadow-sm: 0 1px 2px rgb(28 25 23 / 0.05); /* a control lifting off its panel */
+	--atelier-shadow-md:
+		0 4px 16px -2px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.08); /* popovers */
+	--atelier-shadow-lg:
+		0 12px 32px -4px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08); /* dialogs, floating panels */
 
-	/* Motion. */
-	--duration-fast: 100ms;
-	--duration-base: 120ms;
-	--duration-slow: 160ms;
-}
-
-@custom-variant mobile (@media (max-width: 767px));
-
-/* Categorical labels are independent of success/error status semantics. */
-@theme static {
-	--color-bg-tag-gray: #e9e7e4;
-	--color-text-tag-gray: #44403c;
-	--color-bg-tag-brown: #eee3da;
-	--color-text-tag-brown: #60432e;
-	--color-bg-tag-orange: #fae8d4;
-	--color-text-tag-orange: #783d10;
-	--color-bg-tag-yellow: #f6efc9;
-	--color-text-tag-yellow: #604900;
-	--color-bg-tag-green: #dfece3;
-	--color-text-tag-green: #285238;
-	--color-bg-tag-blue: #deebf7;
-	--color-text-tag-blue: #294d69;
-	--color-bg-tag-purple: #ebe2f3;
-	--color-text-tag-purple: #583c70;
-	--color-bg-tag-pink: #f5e0ec;
-	--color-text-tag-pink: #693b53;
-	--color-bg-tag-red: #f8e0de;
-	--color-text-tag-red: #7b332f;
-	--color-bg-search-match: var(--color-warning-200);
+	/* ── Motion ───────────────────────────────────────────────────────── */
+	--atelier-duration-fast: 100ms;
+	--atelier-duration: 120ms;
+	--atelier-duration-slow: 160ms;
 }

@@ -7,24 +7,12 @@ import {
 	useRef,
 	useState,
 	type ButtonHTMLAttributes,
-	type ReactNode,
 } from "react";
 import { ChevronDown, Eye, Files, FileUp, Plus } from "lucide-react";
 import fileNewIconUrl from "./assets/file-new.svg";
-import folderBlueIconUrl from "./assets/folder-blue.svg";
-import fileCsvIconUrl from "./assets/file-csv.svg";
-import fileExcalidrawIconUrl from "./assets/file-excalidraw.svg";
-import fileMdIconUrl from "./assets/file-md.svg";
 import { AtelierActionButton } from "@/components/ui/atelier-action-button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useLix, useQueryResult } from "@/lib/lix-react";
-import { isMacPlatform, shortcutHint } from "@/lib/platform";
+import { isMacPlatform } from "@/lib/platform";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
@@ -44,22 +32,17 @@ import type {
 	AtelierJsonValue,
 	AtelierWatchedEntry,
 } from "@/extension-api";
+import { NewFileMenu } from "./new-file-menu";
+import { useStableDefaultFolders } from "./use-default-folders";
 import {
 	DEFAULT_FOLDERS_PREFERENCE_KEY,
-	defaultFoldersKey,
 	ensureDirectoryPath,
 	parseDefaultFolders,
 	pickerFolders,
 	resolveCreateDirectory as resolveCreateDirectoryForType,
 	withDefaultFolder,
 	type DefaultFolderFileType,
-	type DefaultFolders,
-	type PickerFolder,
 } from "./default-folder";
-import {
-	DefaultFolderSlot,
-	focusRowTrailingControl,
-} from "./default-folder-slot";
 import type { Area } from "../../extension-runtime/types";
 import {
 	FileTree,
@@ -301,7 +284,7 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		return (
 			<div
 				role="status"
-				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
+				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-fg-subtle"
 				data-atelier-extension-suspended=""
 			>
 				Loading Files…
@@ -1478,7 +1461,7 @@ function FilesViewContent({
 								{createRequest ? (
 									<WideNewButton disabled />
 								) : (
-									<UnifiedNewMenu
+									<NewFileMenu
 										onNewCsv={handleNewCsv}
 										onNewExcalidraw={handleNewExcalidraw}
 										onNewFile={handleNewFile}
@@ -1493,7 +1476,7 @@ function FilesViewContent({
 										onCreateFolder={createFolderAtPath}
 									>
 										<WideNewButton />
-									</UnifiedNewMenu>
+									</NewFileMenu>
 								)}
 							</div>
 						)}
@@ -1515,7 +1498,7 @@ function FilesViewContent({
 					{createRequest ? (
 						<CompactNewButton disabled />
 					) : (
-						<UnifiedNewMenu
+						<NewFileMenu
 							onNewCsv={handleNewCsv}
 							onNewExcalidraw={handleNewExcalidraw}
 							onNewFile={handleNewFile}
@@ -1530,17 +1513,17 @@ function FilesViewContent({
 							onCreateFolder={createFolderAtPath}
 						>
 							<CompactNewButton />
-						</UnifiedNewMenu>
+						</NewFileMenu>
 					)}
 				</div>
 			) : null}
 			{isDraggingOver && (
-				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">
-					<FileUp className="h-12 w-12 text-foreground" />
-					<p className="mt-3 text-center text-sm font-medium text-foreground">
+				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-warning-border bg-[color-mix(in_srgb,var(--atelier-warning-subtle)_50%,transparent)] backdrop-blur-sm pointer-events-none">
+					<FileUp className="h-12 w-12 text-fg" />
+					<p className="mt-3 text-center text-sm font-medium text-fg">
 						Drop markdown files here
 					</p>
-					<p className="mt-1 text-center text-xs text-muted-foreground">
+					<p className="mt-1 text-center text-xs text-fg-subtle">
 						Only .md and .markdown files supported
 					</p>
 				</div>
@@ -1595,7 +1578,7 @@ const CompactNewButton = forwardRef<
 		<button
 			ref={ref}
 			type="button"
-			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-control px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-control px-1.5 text-left text-[13px] text-fg-muted transition-colors hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			data-attr="file-new"
 			onMouseDown={(event) => event.preventDefault()}
 			disabled={disabled}
@@ -1613,209 +1596,6 @@ const CompactNewButton = forwardRef<
 		</button>
 	);
 });
-
-type UnifiedNewMenuProps = {
-	readonly children: ReactNode;
-	readonly onNewCsv: () => void;
-	readonly onNewExcalidraw: () => void;
-	readonly onNewFile: () => void;
-	readonly onNewFolder: () => void;
-	readonly onNewMarkdown: () => void;
-	readonly defaultFolders: DefaultFolders;
-	readonly folderOptions: readonly PickerFolder[];
-	readonly hereDirectory: string;
-	readonly existingDirectories: ReadonlySet<string>;
-	readonly onSetDefaultFolder?: (
-		fileType: DefaultFolderFileType,
-		folder: string | null,
-	) => void;
-	readonly onCreateHereOnce: (fileType: DefaultFolderFileType) => void;
-	readonly onCreateFolder: (
-		parentDirectory: string,
-		name: string,
-	) => Promise<string | null>;
-};
-
-function UnifiedNewMenu({
-	children,
-	onNewCsv,
-	onNewExcalidraw,
-	onNewFile,
-	onNewFolder,
-	onNewMarkdown,
-	defaultFolders,
-	folderOptions,
-	hereDirectory,
-	existingDirectories,
-	onSetDefaultFolder,
-	onCreateHereOnce,
-	onCreateFolder,
-}: UnifiedNewMenuProps) {
-	// A row's disclosure needs somewhere to persist the choice. Without a
-	// preference store the menu is exactly today's menu, slot and all.
-	const slotFor = (fileType: DefaultFolderFileType, dataAttr: string) =>
-		onSetDefaultFolder ? (
-			<DefaultFolderSlot
-				fileType={fileType}
-				dataAttr={dataAttr}
-				folders={folderOptions}
-				hereDirectory={hereDirectory}
-				existingDirectories={existingDirectories}
-				defaultFolder={defaultFolders[fileType]}
-				onPick={(folder) => onSetDefaultFolder(fileType, folder)}
-				onRemove={() => onSetDefaultFolder(fileType, null)}
-				onCreateHereOnce={() => onCreateHereOnce(fileType)}
-				onCreateFolder={onCreateFolder}
-			/>
-		) : null;
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-			<DropdownMenuContent
-				align="start"
-				aria-label="Create"
-				className="w-72 p-1.5 text-xs"
-				sideOffset={3}
-			>
-				<NewMenuItem
-					dataAttr="file-new-file"
-					iconUrl={fileNewIconUrl}
-					label="New file"
-					shortcut={shortcutHint("⌘ .")}
-					onSelect={onNewFile}
-					trailing={slotFor("generic", "file-new-file")}
-				/>
-				{/* No default folder for New folder: a folder is not a file type,
-				    and "always nest one level in" is not a thing anyone wants. */}
-				<NewMenuItem
-					dataAttr="file-new-folder"
-					iconUrl={folderBlueIconUrl}
-					label="New folder"
-					shortcut={shortcutHint("⇧⌘ .")}
-					onSelect={onNewFolder}
-				/>
-				<DropdownMenuSeparator className="my-1.5" />
-				<NewMenuItem
-					dataAttr="file-new-markdown"
-					iconUrl={fileMdIconUrl}
-					label="New Markdown (.md)"
-					onSelect={onNewMarkdown}
-					trailing={slotFor("markdown", "file-new-markdown")}
-				/>
-				<NewMenuItem
-					dataAttr="file-new-csv"
-					iconUrl={fileCsvIconUrl}
-					label="New CSV (.csv)"
-					onSelect={onNewCsv}
-					trailing={slotFor("csv", "file-new-csv")}
-				/>
-				<NewMenuItem
-					dataAttr="file-new-excalidraw"
-					iconUrl={fileExcalidrawIconUrl}
-					label="New Drawing (.excalidraw)"
-					onSelect={onNewExcalidraw}
-					trailing={slotFor("excalidraw", "file-new-excalidraw")}
-				/>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
-
-function NewMenuItem({
-	dataAttr,
-	iconUrl,
-	label,
-	shortcut,
-	onSelect,
-	trailing,
-}: {
-	readonly dataAttr: string;
-	readonly iconUrl: string;
-	readonly label: string;
-	readonly shortcut?: string;
-	readonly onSelect: () => void;
-	readonly trailing?: ReactNode;
-}) {
-	return (
-		// The row's hover fill lives on the wrapper so the row stays lit while
-		// the pointer is on the control at its trailing edge — and so the
-		// control has one colour to sit on rather than two.
-		<div
-			className={`group/row relative rounded-sm${
-				trailing
-					? " hover:bg-[var(--color-bg-hover)] focus-within:bg-[var(--color-bg-hover)]"
-					: ""
-			}`}
-			data-attr={`${dataAttr}-row`}
-		>
-			<DropdownMenuItem
-				className="gap-2 py-1.75 text-xs"
-				data-attr={dataAttr}
-				onSelect={onSelect}
-				{...(trailing ? { onKeyDown: focusRowTrailingControl } : {})}
-			>
-				<img
-					src={iconUrl}
-					alt=""
-					aria-hidden="true"
-					className="size-3.5 shrink-0"
-				/>
-				<span className="min-w-0 flex-1 truncate">{label}</span>
-				{shortcut ? (
-					// The trailing slot is one slot. On a row that has a disclosure
-					// the shortcut hint is what sits in it at rest, and it fades as
-					// the disclosure fades in — neither is in flow beside the other,
-					// so the row's text never shifts.
-					<kbd
-						className={`ml-3 text-[10px] font-semibold text-[var(--color-icon-tertiary)]${
-							trailing
-								? " transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0"
-								: ""
-						}`}
-					>
-						{shortcut}
-					</kbd>
-				) : null}
-			</DropdownMenuItem>
-			{trailing ? (
-				// Out of flow on purpose. At rest the row is exactly today's row,
-				// and nothing in it moves or changes width when the control
-				// appears under the cursor or under the arrow keys.
-				<div
-					className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center rounded-r-sm pl-4 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100"
-					// The label's tail passes under the control rather than being
-					// squeezed by it: the row must not reflow when the control
-					// appears, so the control fades the row's own fill over it.
-					style={{
-						background:
-							"linear-gradient(to right, transparent 0, var(--color-bg-hover) 14px)",
-					}}
-				>
-					{trailing}
-				</div>
-			) : null}
-		</div>
-	);
-}
-
-/**
- * The stored default folders, with an identity that changes only when they do.
- * The preference value is re-read on every render and the rule is wired into
- * callbacks and effects, which would otherwise be rebuilt on every render.
- */
-function useStableDefaultFolders(
-	raw: AtelierJsonValue | undefined,
-): DefaultFolders {
-	const parsed = parseDefaultFolders(raw);
-	const key = defaultFoldersKey(parsed);
-	const stableRef = useRef(parsed);
-	const keyRef = useRef(key);
-	if (keyRef.current !== key) {
-		keyRef.current = key;
-		stableRef.current = parsed;
-	}
-	return stableRef.current;
-}
 
 function sameStringArray(
 	left: readonly string[],

@@ -1,0 +1,130 @@
+/*
+ * Tailwind v4 adapter for the Atelier tokens. Optional: a host that writes
+ * plain CSS never needs it. `@theme inline` emits no variables of its own —
+ * every utility below reads the `--atelier-*` value from theme.css, so there is one
+ * source and nothing to keep in step. The stock palette is hidden, so
+ * `bg-red-500` is not a class here and `bg-danger` is.
+ *
+ * Utilities carry the token's name without its prefix: `bg-panel`, `text-fg-muted`,
+ * `border-border-strong`, `rounded-control`, `text-ui-sm`, `shadow-md`.
+ *
+ * Only the colour palette is hidden. Tailwind's own type and radius scales stay
+ * as they are — `text-sm` is 14px here as everywhere else — and Atelier's UI
+ * scales sit beside them under their role names: `text-ui-xs|sm|md|lg` for
+ * chrome, `rounded-tag|control|panel` for the three nesting levels. A stock
+ * name that meant something else here would be a trap for anyone who knows
+ * Tailwind, which is everyone.
+ */
+@theme inline {
+	--color-*: initial;
+	--color-bg: var(--atelier-bg);
+	--color-panel: var(--atelier-panel);
+	--color-bg-subtle: var(--atelier-bg-subtle);
+	--color-bg-hover: var(--atelier-bg-hover);
+	--color-bg-hover-strong: var(--atelier-bg-hover-strong);
+	--color-bg-active: var(--atelier-bg-active);
+	--color-bg-selection: var(--atelier-bg-selection);
+	--color-highlight: var(--atelier-highlight);
+	--color-scrollbar: var(--atelier-scrollbar);
+	--color-fg: var(--atelier-fg);
+	--color-fg-muted: var(--atelier-fg-muted);
+	--color-fg-subtle: var(--atelier-fg-subtle);
+	--color-fg-faint: var(--atelier-fg-faint);
+	--color-border: var(--atelier-border);
+	--color-border-subtle: var(--atelier-border-subtle);
+	--color-border-strong: var(--atelier-border-strong);
+	--color-ring: var(--atelier-ring);
+	--color-accent: var(--atelier-accent);
+	--color-accent-hover: var(--atelier-accent-hover);
+	--color-accent-on: var(--atelier-accent-on);
+	--color-accent-subtle: var(--atelier-accent-subtle);
+	--color-accent-border: var(--atelier-accent-border);
+	--color-link: var(--atelier-link);
+	--color-link-hover: var(--atelier-link-hover);
+	--color-danger: var(--atelier-danger);
+	--color-danger-subtle: var(--atelier-danger-subtle);
+	--color-danger-border: var(--atelier-danger-border);
+	--color-success: var(--atelier-success);
+	--color-success-subtle: var(--atelier-success-subtle);
+	--color-success-border: var(--atelier-success-border);
+	--color-warning: var(--atelier-warning);
+	--color-warning-subtle: var(--atelier-warning-subtle);
+	--color-warning-border: var(--atelier-warning-border);
+	--color-diff-added: var(--atelier-diff-added);
+	--color-diff-added-subtle: var(--atelier-diff-added-subtle);
+	--color-diff-removed: var(--atelier-diff-removed);
+	--color-diff-removed-subtle: var(--atelier-diff-removed-subtle);
+	--color-diff-modified: var(--atelier-diff-modified);
+	--color-diff-modified-subtle: var(--atelier-diff-modified-subtle);
+	--color-diff-moved: var(--atelier-diff-moved);
+	--color-diff-conflict: var(--atelier-diff-conflict);
+	--color-overlay: var(--atelier-overlay);
+	--color-overlay-raised: var(--atelier-overlay-raised);
+	--color-overlay-hover: var(--atelier-overlay-hover);
+	--color-overlay-hairline: var(--atelier-overlay-hairline);
+	--color-overlay-hairline-strong: var(--atelier-overlay-hairline-strong);
+	--color-overlay-border: var(--atelier-overlay-border);
+	--color-overlay-border-strong: var(--atelier-overlay-border-strong);
+	--color-overlay-fg: var(--atelier-overlay-fg);
+	--color-overlay-fg-muted: var(--atelier-overlay-fg-muted);
+	--color-overlay-fg-subtle: var(--atelier-overlay-fg-subtle);
+	--color-overlay-accent: var(--atelier-overlay-accent);
+	--color-overlay-danger: var(--atelier-overlay-danger);
+	--color-overlay-danger-border: var(--atelier-overlay-danger-border);
+	--color-overlay-success: var(--atelier-overlay-success);
+	--color-scrim: var(--atelier-scrim);
+	--color-syntax-keyword: var(--atelier-syntax-keyword);
+	--color-syntax-string: var(--atelier-syntax-string);
+	--color-syntax-number: var(--atelier-syntax-number);
+	--color-syntax-constant: var(--atelier-syntax-constant);
+	--color-syntax-comment: var(--atelier-syntax-comment);
+	--color-syntax-type: var(--atelier-syntax-type);
+	--color-syntax-property: var(--atelier-syntax-property);
+	--color-syntax-invalid: var(--atelier-syntax-invalid);
+	--color-tag-gray: var(--atelier-tag-gray);
+	--color-tag-gray-fg: var(--atelier-tag-gray-fg);
+	--color-tag-brown: var(--atelier-tag-brown);
+	--color-tag-brown-fg: var(--atelier-tag-brown-fg);
+	--color-tag-orange: var(--atelier-tag-orange);
+	--color-tag-orange-fg: var(--atelier-tag-orange-fg);
+	--color-tag-yellow: var(--atelier-tag-yellow);
+	--color-tag-yellow-fg: var(--atelier-tag-yellow-fg);
+	--color-tag-green: var(--atelier-tag-green);
+	--color-tag-green-fg: var(--atelier-tag-green-fg);
+	--color-tag-blue: var(--atelier-tag-blue);
+	--color-tag-blue-fg: var(--atelier-tag-blue-fg);
+	--color-tag-purple: var(--atelier-tag-purple);
+	--color-tag-purple-fg: var(--atelier-tag-purple-fg);
+	--color-tag-pink: var(--atelier-tag-pink);
+	--color-tag-pink-fg: var(--atelier-tag-pink-fg);
+	--color-tag-red: var(--atelier-tag-red);
+	--color-tag-red-fg: var(--atelier-tag-red-fg);
+	--color-folder: var(--atelier-folder);
+
+	--radius-tag: var(--atelier-radius-tag);
+	--radius-control: var(--atelier-radius-control);
+	--radius-panel: var(--atelier-radius-panel);
+
+	--text-ui-xs: var(--atelier-text-ui-xs);
+	--text-ui-xs--line-height: var(--atelier-text-ui-xs-lh);
+	--text-ui-sm: var(--atelier-text-ui-sm);
+	--text-ui-sm--line-height: var(--atelier-text-ui-sm-lh);
+	--text-ui: var(--atelier-text-ui-md);
+	--text-ui--line-height: var(--atelier-text-ui-md-lh);
+	--text-ui-lg: var(--atelier-text-ui-lg);
+	--text-ui-lg--line-height: var(--atelier-text-ui-lg-lh);
+	--font-sans: var(--atelier-font-sans);
+	--font-mono: var(--atelier-font-mono);
+
+	--shadow-sm: var(--atelier-shadow-sm);
+	--shadow-md: var(--atelier-shadow-md);
+	--shadow-lg: var(--atelier-shadow-lg);
+	--shadow-overlay: var(--atelier-shadow-overlay);
+	--shadow-accent: var(--atelier-shadow-accent);
+
+	--duration-fast: var(--atelier-duration-fast);
+	--duration: var(--atelier-duration);
+	--duration-slow: var(--atelier-duration-slow);
+}
+
+@custom-variant mobile (@media (max-width: 767px));

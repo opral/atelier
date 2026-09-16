@@ -1,158 +1,176 @@
-@scope (.atelier-root) {
-	.atelier-text-view,
-	.atelier-text-surface {
-		--atelier-text-selection-bg: var(--color-bg-selection-text);
-		--atelier-text-selection-fg: var(--color-text-primary);
-		position: relative;
-		display: flex;
-		min-height: 0;
-		flex: 1 1 auto;
-		flex-direction: column;
-		background: var(--color-bg-panel);
-	}
+@import "../../shell/layers.css";
 
-	.atelier-text-toolbar-status {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		color: var(--color-text-tertiary);
-		font-size: 11px;
-	}
+@layer atelier {
+	@scope (.atelier-root) {
+		.atelier-text-view,
+		.atelier-text-surface {
+			position: relative;
+			display: flex;
+			min-height: 0;
+			flex: 1 1 auto;
+			flex-direction: column;
+			background: var(--atelier-panel);
+		}
 
-	.atelier-text-toolbar {
-		display: flex;
-		height: var(--atelier-panel-header-height);
-		flex: 0 0 var(--atelier-panel-header-height);
-		align-items: center;
-		gap: 4px;
-		border-bottom: 1px solid var(--color-border-subtle);
-		padding: 0 10px;
-	}
+		.atelier-text-toolbar-status {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			color: var(--atelier-fg-subtle);
+			font-size: 11px;
+		}
 
-	.atelier-text-toolbar-button,
-	.atelier-text-toolbar-icon-button {
-		display: inline-flex;
-		height: 32px;
-		align-items: center;
-		justify-content: center;
-		gap: 7px;
-		border: 0;
-		border-radius: 7px;
-		background: transparent;
-		color: var(--color-text-secondary);
-		font-size: 13px;
-		font-weight: 500;
-		line-height: 1;
-		transition:
-			background-color 120ms ease,
-			color 120ms ease;
-	}
-
-	.atelier-text-toolbar-button {
-		padding: 0 8px;
-	}
-
-	.atelier-text-toolbar-icon-button {
-		width: 32px;
-		padding: 0;
-	}
-
-	.atelier-text-toolbar-button:hover,
-	.atelier-text-toolbar-icon-button:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-	}
-
-	.atelier-text-toolbar-button:focus-visible,
-	.atelier-text-toolbar-icon-button:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
-		outline-offset: 1px;
-	}
-
-	.atelier-text-toolbar-spacer {
-		flex: 1 1 auto;
-	}
-
-	.atelier-text-editor-host {
-		min-height: 0;
-		flex: 1 1 auto;
-		overflow: hidden;
-	}
-
-	.atelier-text-editor-host > .cm-editor {
-		height: 100%;
-	}
-
-	.atelier-text-editor-host .cm-scroller {
-		scrollbar-color: var(--color-bg-control) transparent;
-		scrollbar-width: thin;
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search {
-		display: flex;
-		min-height: 42px;
-		align-items: center;
-		gap: 6px;
-		padding: 6px 12px;
-		font-size: 12px;
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search input,
-	.atelier-text-editor-host .cm-panel.cm-search button,
-	.atelier-text-editor-host .cm-panel.cm-search label {
-		font: inherit;
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search input {
-		height: 28px;
-		border: 1px solid var(--color-border-panel);
-		border-radius: 6px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
-		padding: 0 8px;
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search input:focus {
-		border-color: var(--color-ring-focus-visible);
-		outline: none;
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search button {
-		height: 28px;
-		border: 0;
-		border-radius: 6px;
-		background: transparent;
-		color: var(--color-text-secondary);
-		padding: 0 8px;
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search button:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-	}
-
-	.atelier-text-editor-host .cm-panel.cm-search button[name="close"] {
-		position: static;
-		margin-left: auto;
-	}
-
-	@media (max-width: 767px) {
 		.atelier-text-toolbar {
-			padding-inline: 8px;
+			display: flex;
+			height: var(--atelier-panel-header-height);
+			flex: 0 0 var(--atelier-panel-header-height);
+			align-items: center;
+			gap: 4px;
+			border-bottom: 1px solid var(--atelier-border-subtle);
+			padding: 0 10px;
 		}
 
-		.atelier-text-editor-host .cm-line {
-			padding-right: 12px;
+		.atelier-text-toolbar-button,
+		.atelier-text-toolbar-icon-button {
+			display: inline-flex;
+			height: 32px;
+			align-items: center;
+			justify-content: center;
+			gap: 7px;
+			border: 0;
+			border-radius: 7px;
+			background: transparent;
+			color: var(--atelier-fg-muted);
+			font-size: 13px;
+			font-weight: 500;
+			line-height: 1;
+			transition:
+				background-color 120ms ease,
+				color 120ms ease;
 		}
-	}
-}
 
-@scope (.atelier-root) {
-	.atelier-text-diff {
-		min-height: 0;
-		flex: 1 1 auto;
-		overflow: auto;
-		background: var(--color-bg-panel);
-		font-size: 12px;
+		.atelier-text-toolbar-button {
+			padding: 0 8px;
+		}
+
+		.atelier-text-toolbar-icon-button {
+			width: 32px;
+			padding: 0;
+		}
+
+		.atelier-text-toolbar-button:hover,
+		.atelier-text-toolbar-icon-button:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		.atelier-text-toolbar-button:disabled,
+		.atelier-text-toolbar-icon-button:disabled {
+			background: transparent;
+			color: var(--atelier-fg-faint);
+			cursor: default;
+		}
+
+		.atelier-text-toolbar-button:focus-visible,
+		.atelier-text-toolbar-icon-button:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 1px;
+		}
+
+		.atelier-text-toolbar-spacer {
+			flex: 1 1 auto;
+		}
+
+		.atelier-text-editor-host {
+			min-height: 0;
+			flex: 1 1 auto;
+			overflow: hidden;
+		}
+
+		/* The frame is up before its document: the editor keeps its box and
+		   paints nothing until there is something to show, so the toolbar
+		   above it never moves. */
+		.atelier-text-editor-host[data-empty] {
+			visibility: hidden;
+		}
+
+		/* What the document region says instead of a document: a file the
+		   workspace no longer has, a revision that does not exist yet, a
+		   review that changed under the reader. */
+		.atelier-text-message {
+			display: grid;
+			min-height: 0;
+			flex: 1 1 auto;
+			place-items: center;
+			padding: 0 24px;
+			text-align: center;
+		}
+
+		.atelier-text-editor-host > .cm-editor {
+			height: 100%;
+		}
+
+		.atelier-text-editor-host .cm-scroller {
+			scrollbar-color: var(--atelier-border-strong) transparent;
+			scrollbar-width: thin;
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search {
+			display: flex;
+			min-height: 42px;
+			align-items: center;
+			gap: 6px;
+			padding: 6px 12px;
+			font-size: 12px;
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search input,
+		.atelier-text-editor-host .cm-panel.cm-search button,
+		.atelier-text-editor-host .cm-panel.cm-search label {
+			font: inherit;
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search input {
+			height: 28px;
+			border: 1px solid var(--atelier-border);
+			border-radius: 6px;
+			background: var(--atelier-panel);
+			color: var(--atelier-fg);
+			padding: 0 8px;
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search input:focus {
+			border-color: var(--atelier-ring);
+			outline: none;
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search button {
+			height: 28px;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--atelier-fg-muted);
+			padding: 0 8px;
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search button:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		.atelier-text-editor-host .cm-panel.cm-search button[name="close"] {
+			position: static;
+			margin-left: auto;
+		}
+
+		@media (max-width: 767px) {
+			.atelier-text-toolbar {
+				padding-inline: 8px;
+			}
+
+			.atelier-text-editor-host .cm-line {
+				padding-right: 12px;
+			}
+		}
 	}
 }

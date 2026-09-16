@@ -1,2787 +1,2298 @@
-@scope (.atelier-root) {
-	.atelier-markdown-link-card {
-		position: fixed;
-		z-index: 100;
-		max-width: min(360px, calc(100vw - 16px));
-		padding: 12px 14px;
-		border: 1px solid var(--color-border-panel);
-		border-radius: 10px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-secondary);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
-		font-size: 12px;
-		line-height: 1.5;
-		pointer-events: auto;
-	}
-	.atelier-markdown-link-card strong {
-		color: var(--color-text-primary);
-	}
-	.atelier-markdown-link-path {
-		margin: 4px 0;
-		overflow-wrap: anywhere;
-	}
-	/* Markdown view scoped styles */
+@import "../../shell/layers.css";
 
-	/* Remove focus outline */
-	.markdown-view .ProseMirror:focus,
-	.markdown-view .ProseMirror:focus-visible {
-		outline: none;
-	}
-
-	/* Base markdown view container.
-   No horizontal padding: the toolbar is a full-bleed header and the document
-   gutter lives on the editor body wrapper instead. */
-	.markdown-view {
-		--markdown-radius: 4px;
-		/* A measure a little past Notion's default column — the extra line
-		   length reads as more document and less frame — and one gap between
-		   blocks so a document reads as a steady rhythm rather than a set of
-		   unrelated margins. */
-		--markdown-content-width: 768px;
-		--markdown-block-gap: 0.5rem;
-		/* How wide a table may grow when the panel has room to give it. */
-		--markdown-table-max-width: 1040px;
-		/* The document's own margin, which an outset block never eats into. */
-		--markdown-gutter-min: 2rem;
-		flex: 1 1 auto;
-		min-height: 0;
-	}
-
-	/* Keep formatting on one predictable row. The main controls scroll while
-	   the document-level copy action remains pinned at the trailing edge. */
-	.markdown-format-toolbar-scroll {
-		scrollbar-width: none;
-		-webkit-overflow-scrolling: touch;
-	}
-
-	.markdown-format-toolbar-scroll::-webkit-scrollbar {
-		display: none;
-	}
-
-	.markdown-format-toolbar-overflow-indicator {
-		position: absolute;
-		inset-block: 0;
-		z-index: 1;
-		width: 1.25rem;
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 120ms ease-out;
-	}
-
-	.markdown-format-toolbar-overflow-indicator[data-visible="true"] {
-		opacity: 1;
-	}
-
-	.markdown-format-toolbar-overflow-indicator-left {
-		left: 0;
-		background: linear-gradient(
-			to right,
-			var(--color-bg-panel) 20%,
-			transparent
-		);
-	}
-
-	.markdown-format-toolbar-overflow-indicator-right {
-		right: 0;
-		background: linear-gradient(
-			to left,
-			var(--color-bg-panel) 20%,
-			transparent
-		);
-	}
-
-	/* Hide the native scrollbar; a lightweight overlay thumb mirrors scroll
-   position so fade behavior is reliable across Chromium repaints. */
-	.markdown-view .tiptap-container {
-		overflow-x: clip;
-		scrollbar-width: none;
-	}
-	.markdown-view .tiptap-container::-webkit-scrollbar {
-		width: 0;
-		height: 0;
-	}
-
-	.markdown-view .tiptap-scrollbar-thumb {
-		position: absolute;
-		top: 0;
-		right: 4px;
-		z-index: 10;
-		width: 6px;
-		min-height: 36px;
-		background-color: var(--color-scrollbar-thumb);
-		border-radius: 9999px;
-		opacity: 0;
-		pointer-events: none;
-		will-change: transform, height, opacity;
-		transition: opacity 320ms ease-in;
-	}
-
-	.markdown-view .tiptap-scrollbar-thumb[data-scrollable="false"] {
-		display: none;
-	}
-
-	.markdown-view .tiptap-scrollbar-thumb[data-visible="true"] {
-		opacity: 1;
-		transition-duration: 120ms;
-		transition-timing-function: ease-out;
-	}
-
-	.markdown-image-paste-hint {
-		position: absolute;
-		right: 1rem;
-		bottom: 1rem;
-		z-index: 20;
-		display: inline-flex;
-		max-width: min(32rem, calc(100% - 2rem));
-		min-height: 1.75rem;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.5625rem;
-		border: 0;
-		border-radius: 7px;
-		background: var(--color-bg-notice-neutral);
-		box-shadow: inset 0 0 0 1px var(--color-border-notice-neutral);
-		color: var(--color-text-notice-neutral);
-		font-size: 0.75rem;
-		font-weight: 500;
-		line-height: 1rem;
-		pointer-events: none;
-		animation: markdown-image-paste-hint-in 160ms ease-out;
-	}
-
-	.markdown-image-paste-hint[data-state="error"] {
-		background: var(--color-bg-status-danger);
-		box-shadow: inset 0 0 0 1px var(--color-error-200);
-		color: var(--color-error-800);
-	}
-
-	.markdown-image-paste-hint strong {
-		font-weight: 650;
-	}
-
-	.markdown-image-paste-hint-icon {
-		display: inline-flex;
-		flex: 0 0 auto;
-		align-items: center;
-		justify-content: center;
-		color: var(--color-icon-notice-neutral);
-	}
-
-	.markdown-image-paste-hint[data-state="error"]
-		.markdown-image-paste-hint-icon {
-		color: var(--color-error-500);
-	}
-
-	.markdown-image-paste-hint-icon svg {
-		width: 0.8125rem;
-		height: 0.8125rem;
-		stroke-width: 2;
-	}
-
-	@keyframes markdown-image-paste-hint-in {
-		from {
-			opacity: 0;
-			transform: translateY(0.35rem);
+@layer atelier {
+	@scope (.atelier-root) {
+		.atelier-markdown-link-card {
+			position: fixed;
+			z-index: 100;
+			max-width: min(360px, calc(100vw - 16px));
+			padding: 12px 14px;
+			border: 1px solid var(--atelier-border);
+			border-radius: 10px;
+			background: var(--atelier-panel);
+			color: var(--atelier-fg-muted);
+			box-shadow: var(--atelier-shadow-md);
+			font-size: 12px;
+			line-height: 1.5;
+			pointer-events: auto;
 		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
+		.atelier-markdown-link-card strong {
+			color: var(--atelier-fg);
 		}
-	}
-
-	.markdown-view .tiptap {
-		/* Exactly fill the viewport (border-box includes padding-bottom) so a short
-	   document does not force a scrollbar; longer content overflows normally. */
-		min-height: 100%;
-		max-width: none;
-	}
-
-	/* EditorContent and ProseMirror both receive TipTap's class. The outer
-	   wrapper owns the panel-width query used by full-bleed document elements. */
-	.markdown-view .tiptap:not(.ProseMirror) {
-		container-type: inline-size;
-	}
-
-	.markdown-view .ProseMirror {
-		box-sizing: border-box;
-		/* Full-strength ink: Notion sets body text near-black, not a tint. */
-		color: var(--color-text-primary);
-		font-family:
-			ui-sans-serif,
-			-apple-system,
-			BlinkMacSystemFont,
-			"Segoe UI",
-			sans-serif;
-		font-size: 16px;
-		font-variant-numeric: normal;
-		letter-spacing: 0;
-		line-height: 1.5;
-		min-height: 100%;
-		padding: clamp(2.25rem, 5vw, 4rem)
-			max(
-				var(--markdown-gutter-min),
-				calc((100% - var(--markdown-content-width)) / 2)
-			)
-			6rem;
-		caret-color: currentColor;
-		cursor: auto;
-		width: 100%;
-	}
-
-	/* Selection tints; the text keeps its colour instead of turning white. */
-	.markdown-view .ProseMirror ::selection {
-		background-color: var(--color-bg-selection-text);
-		color: inherit;
-	}
-
-	/* Editorial heading scale: every level has its own rhythm and voice. */
-	/* Heading scale after Notion: 30/24/20/17, line-height 1.3, no
-	   tracking, a 4px seat below, and room above that grows with the level.
-	   h5 and h6 stay body-size and plain; small caps read as labels. */
-	.markdown-view .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
-		color: var(--color-text-primary);
-		font-weight: 600;
-		letter-spacing: 0;
-		line-height: 1.3;
-		margin-bottom: 0.25rem;
-		text-wrap: pretty;
-	}
-
-	.markdown-view .ProseMirror h1 {
-		font-size: 30px;
-		margin-top: 2em;
-	}
-
-	.markdown-view .ProseMirror > h1:first-child,
-	.markdown-view .ProseMirror > .markdown-frontmatter + h1 {
-		margin-top: 0;
-	}
-
-	.markdown-view .ProseMirror h2 {
-		font-size: 24px;
-		margin-top: 1.4em;
-	}
-
-	.markdown-view .ProseMirror h3 {
-		font-size: 20px;
-		margin-top: 1em;
-	}
-
-	.markdown-view .ProseMirror h4 {
-		font-size: 17px;
-		margin-top: 1em;
-	}
-
-	.markdown-view .ProseMirror h5 {
-		font-size: 16px;
-		margin-top: 0.75em;
-	}
-
-	.markdown-view .ProseMirror h6 {
-		color: var(--color-text-secondary);
-		font-size: 16px;
-		margin-top: 0.75em;
-	}
-
-	/* A soft source newline renders as the space CommonMark gives it. */
-	.markdown-view .ProseMirror [data-soft-break]::after {
-		content: " ";
-		white-space: pre-wrap;
-	}
-
-	/* Paragraphs */
-	.markdown-view .ProseMirror p {
-		margin-top: var(--markdown-block-gap);
-		margin-bottom: var(--markdown-block-gap);
-		text-wrap: pretty;
-	}
-
-	.markdown-frontmatter-disclosure {
-		position: absolute;
-		z-index: 5;
-		display: inline-flex;
-		height: 1.75rem;
-		align-items: center;
-		gap: 0.375rem;
-		border: 0;
-		border-radius: 7px;
-		background: transparent;
-		color: var(--color-text-tertiary);
-		font-size: 0.78rem;
-		font-weight: 600;
-		line-height: 1;
-		margin-left: -0.5rem;
-		opacity: 0;
-		padding: 0 0.5rem;
-		pointer-events: none;
-		transform: translateY(0.2rem);
-		transition:
-			opacity 120ms ease-out,
-			transform 120ms ease-out,
-			background-color 100ms ease-out,
-			color 100ms ease-out;
-	}
-
-	.markdown-frontmatter-disclosure[data-visible="true"] {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateY(0);
-	}
-
-	.markdown-frontmatter-disclosure:hover,
-	.markdown-frontmatter-disclosure:focus-visible {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-		outline: none;
-	}
-
-	.markdown-frontmatter-disclosure:focus-visible {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateY(0);
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
-	}
-
-	.markdown-frontmatter-disclosure svg {
-		width: 0.94rem;
-		height: 0.94rem;
-		stroke-width: 1.8;
-	}
-
-	.markdown-view .ProseMirror > .markdown-frontmatter {
-		margin: 0 0 2.25rem;
-	}
-
-	.markdown-frontmatter {
-		position: relative;
-		border: 0;
-		background: transparent;
-		padding: 0;
-	}
-
-	/* ProseMirror replaces a selected node with whatever is typed next, and
-	   this panel is one node. Every other block says when it is selected; this
-	   one said nothing at all, so a click on its chrome and one letter could
-	   replace every property in the file with that letter, unannounced. */
-	.markdown-view
-		.ProseMirror
-		:is(
-			.markdown-frontmatter[data-selected="true"],
-			.markdown-frontmatter.ProseMirror-selectednode
-		) {
-		border-radius: var(--markdown-radius);
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
-	}
-
-	.markdown-frontmatter-header {
-		display: flex;
-		min-height: 2.125rem;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0 0 0.25rem;
-	}
-
-	.markdown-frontmatter-title {
-		display: flex;
-		min-width: 0;
-		align-items: center;
-		gap: 0.35rem;
-	}
-
-	.markdown-frontmatter-title svg {
-		width: 0.95rem;
-		height: 0.95rem;
-		flex: 0 0 auto;
-		color: var(--color-icon-secondary);
-		stroke-width: 1.8;
-	}
-
-	.markdown-frontmatter-title strong {
-		color: var(--color-text-tertiary);
-		font-size: 0.78rem;
-		font-weight: 600;
-	}
-
-	.markdown-frontmatter-title span {
-		overflow: hidden;
-		color: var(--color-text-tertiary);
-		font-size: 0.73rem;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.markdown-frontmatter-mode {
-		display: inline-flex;
-		height: 1.75rem;
-		flex: 0 0 auto;
-		align-items: center;
-		border: 0;
-		border-radius: 5px;
-		background: transparent;
-		color: var(--color-text-tertiary);
-		font-size: 0.71rem;
-		font-weight: 550;
-		opacity: 0;
-		padding: 0 0.45rem;
-		transition:
-			opacity 100ms ease-out,
-			background-color 100ms ease-out,
-			color 100ms ease-out;
-	}
-
-	.markdown-frontmatter:hover .markdown-frontmatter-mode,
-	.markdown-frontmatter:focus-within .markdown-frontmatter-mode,
-	.markdown-frontmatter-mode:focus-visible {
-		opacity: 1;
-	}
-
-	.markdown-frontmatter-mode:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-	}
-
-	.markdown-frontmatter-mode:focus-visible {
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
-		outline: none;
-	}
-
-	.markdown-frontmatter-mode:disabled {
-		cursor: not-allowed;
-		opacity: 0.4;
-	}
-
-	@media (hover: none) {
-		.markdown-frontmatter-mode {
-			opacity: 1;
+		.atelier-markdown-link-path {
+			margin: 4px 0;
+			overflow-wrap: anywhere;
 		}
-	}
+		/* Markdown view scoped styles */
 
-	.markdown-frontmatter-fields {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.markdown-frontmatter-row {
-		display: grid;
-		min-height: 2rem;
-		grid-template-columns: 10.5rem minmax(0, 1fr) 1.65rem;
-		align-items: start;
-		gap: 0;
-		padding: 0;
-	}
-
-	.markdown-frontmatter-key-cell {
-		display: flex;
-		min-width: 0;
-		height: 2rem;
-		align-items: center;
-		gap: 0.5rem;
-		border-radius: 6px;
-		color: var(--color-icon-tertiary);
-		margin-left: -0.5rem;
-		padding: 0 0.5rem;
-	}
-
-	.markdown-frontmatter-key-cell:hover,
-	.markdown-frontmatter-key-cell:focus-within,
-	.markdown-frontmatter-row-adding .markdown-frontmatter-key-cell {
-		background: var(--color-bg-control-selected);
-		color: var(--color-text-secondary);
-	}
-
-	.markdown-frontmatter-key-cell > svg {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex: 0 0 auto;
-		opacity: 0.75;
-		stroke-width: 1.8;
-	}
-
-	.markdown-frontmatter-input {
-		width: 100%;
-		min-width: 0;
-		height: 2rem;
-		border: 0;
-		border-radius: 6px;
-		background: transparent;
-		color: var(--color-text-primary);
-		font-family: inherit;
-		font-size: 0.84rem;
-		line-height: 1.25rem;
-		outline: none;
-		padding: 0.3rem 0.5rem;
-	}
-
-	.markdown-frontmatter-input:focus-visible {
-		box-shadow: none;
-	}
-
-	.markdown-frontmatter-value:not(:focus) {
-		text-overflow: ellipsis;
-	}
-
-	.markdown-frontmatter-key {
-		height: auto;
-		border-radius: 0;
-		color: var(--color-text-secondary);
-		font-size: 0.83rem;
-		font-weight: 500;
-		padding: 0;
-	}
-
-	.markdown-frontmatter-value:hover,
-	.markdown-frontmatter-value:focus,
-	.markdown-frontmatter-boolean:hover,
-	.markdown-frontmatter-boolean:focus-within,
-	.markdown-frontmatter-tags:hover,
-	.markdown-frontmatter-tags:focus-within,
-	.markdown-frontmatter-nested:hover,
-	.markdown-frontmatter-nested:focus-within {
-		background: var(--color-bg-panel-muted);
-	}
-
-	.markdown-frontmatter-boolean {
-		display: inline-flex;
-		min-height: 2rem;
-		align-items: center;
-		gap: 0.5rem;
-		color: var(--color-text-primary);
-		font-size: 0.84rem;
-		border-radius: 6px;
-		padding-inline: 0.5rem;
-	}
-
-	.markdown-frontmatter-boolean input {
-		width: 1rem;
-		height: 1rem;
-		accent-color: var(--color-text-secondary);
-	}
-
-	.markdown-frontmatter-value[type="date"]::-webkit-calendar-picker-indicator {
-		opacity: 0;
-	}
-
-	.markdown-frontmatter-row:hover
-		.markdown-frontmatter-value[type="date"]::-webkit-calendar-picker-indicator,
-	.markdown-frontmatter-value[type="date"]:focus::-webkit-calendar-picker-indicator {
-		opacity: 0.72;
-	}
-
-	.markdown-frontmatter-tags {
-		display: flex;
-		min-height: 2rem;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.25rem;
-		border-radius: 6px;
-		padding: 0.18rem 0.5rem;
-	}
-
-	.markdown-frontmatter-tag {
-		display: inline-flex;
-		height: 1.45rem;
-		align-items: center;
-		gap: 0.2rem;
-		border: 0;
-		border-radius: 5px;
-		background: color-mix(
-			in srgb,
-			var(--color-bg-control-selected) 70%,
-			var(--color-bg-panel)
-		);
-		color: var(--color-text-secondary);
-		font-size: 0.72rem;
-		padding: 0 0.38rem;
-	}
-
-	.markdown-frontmatter-tag svg {
-		width: 0;
-		height: 0.68rem;
-		opacity: 0;
-		stroke-width: 2;
-		transition:
-			width 100ms ease-out,
-			opacity 100ms ease-out;
-	}
-
-	.markdown-frontmatter-tag:hover svg,
-	.markdown-frontmatter-tag:focus-visible svg {
-		width: 0.68rem;
-		opacity: 1;
-	}
-
-	.markdown-frontmatter-tag-input {
-		min-width: 5rem;
-		flex: 1 1 5rem;
-		height: 1.65rem;
-		border: 0;
-		background: transparent;
-		color: var(--color-text-primary);
-		font: inherit;
-		font-size: 0.78rem;
-		outline: none;
-	}
-
-	.markdown-frontmatter-tag-add {
-		display: inline-flex;
-		height: 1.5rem;
-		align-items: center;
-		gap: 0.2rem;
-		border: 0;
-		border-radius: 5px;
-		background: transparent;
-		color: var(--color-text-tertiary);
-		font-size: 0.72rem;
-		opacity: 0;
-		padding: 0 0.4rem;
-	}
-
-	.markdown-frontmatter-tags:hover .markdown-frontmatter-tag-add,
-	.markdown-frontmatter-tags:focus-within .markdown-frontmatter-tag-add,
-	.markdown-frontmatter-tag-add:focus-visible {
-		opacity: 1;
-	}
-
-	.markdown-frontmatter-tag-add:hover {
-		background: var(--color-bg-control-selected);
-		color: var(--color-text-secondary);
-	}
-
-	.markdown-frontmatter-tag-add svg {
-		width: 0.65rem;
-		height: 0.65rem;
-	}
-
-	.markdown-frontmatter-nested {
-		display: flex;
-		flex-direction: column;
-		border-radius: 6px;
-		padding: 0.12rem 0.5rem;
-	}
-
-	.markdown-frontmatter-nested-row {
-		display: grid;
-		grid-template-columns: 5.5rem minmax(0, 1fr);
-		gap: 0.25rem;
-	}
-
-	.markdown-frontmatter-remove {
-		display: inline-flex;
-		width: 1.65rem;
-		height: 1.65rem;
-		align-items: center;
-		justify-content: center;
-		align-self: start;
-		border: 0;
-		border-radius: 6px;
-		background: transparent;
-		color: var(--color-icon-tertiary);
-		margin-top: 0.175rem;
-		opacity: 0;
-	}
-
-	.markdown-frontmatter-row:hover .markdown-frontmatter-remove,
-	.markdown-frontmatter-remove:focus-visible {
-		opacity: 1;
-	}
-
-	.markdown-frontmatter-remove:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-	}
-
-	.markdown-frontmatter-remove svg {
-		width: 0.85rem;
-		height: 0.85rem;
-	}
-
-	.markdown-frontmatter-add {
-		display: inline-flex;
-		height: 1.85rem;
-		align-items: center;
-		align-self: flex-start;
-		gap: 0.35rem;
-		border: 0;
-		border-radius: 6px;
-		background: transparent;
-		color: var(--color-text-tertiary);
-		font-size: 0.75rem;
-		font-weight: 500;
-		margin: 0.15rem 0 0 -0.5rem;
-		padding: 0 0.55rem;
-	}
-
-	.markdown-frontmatter-add:hover {
-		background: var(--color-bg-control-selected);
-		color: var(--color-text-primary);
-	}
-
-	.markdown-frontmatter-add:focus-visible {
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
-		outline: none;
-	}
-
-	.markdown-frontmatter-add svg {
-		width: 0.78rem;
-		height: 0.78rem;
-		stroke-width: 1.9;
-	}
-
-	.markdown-frontmatter-empty-value {
-		height: 2rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.84rem;
-		line-height: 1.25rem;
-		padding: 0.36rem 0.5rem;
-	}
-
-	.markdown-frontmatter-raw {
-		padding: 0.15rem 0.2rem 0;
-	}
-
-	.markdown-frontmatter-yaml {
-		width: 100%;
-		min-height: 10rem;
-		resize: vertical;
-		border: 0;
-		border-radius: 5px;
-		background: var(--color-bg-panel-muted);
-		color: var(--color-text-primary);
-		font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-		font-size: 0.78rem;
-		line-height: 1.55;
-		outline: none;
-		padding: 0.75rem;
-	}
-
-	.markdown-frontmatter-yaml:focus {
-		box-shadow: inset 0 0 0 1px var(--color-text-secondary);
-	}
-
-	.markdown-frontmatter-error {
-		margin: 0.4rem 0 0;
-		color: var(--color-text-status-danger);
-		font-size: 0.72rem;
-		line-height: 1.35;
-	}
-
-	/* A revision takes no edits, and its fields read as fields, not as inputs:
-	   no hover affordance, no caret, and the values still plainly legible. */
-	.markdown-frontmatter[data-disabled="true"]
-		.markdown-frontmatter-input:disabled,
-	.markdown-frontmatter[data-disabled="true"]
-		.markdown-frontmatter-tag:disabled {
-		color: var(--color-text-secondary);
-		-webkit-text-fill-color: var(--color-text-secondary);
-		cursor: default;
-		opacity: 1;
-	}
-
-	.markdown-frontmatter[data-disabled="true"]
-		.markdown-frontmatter-key-cell:hover,
-	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-value:hover,
-	.markdown-frontmatter[data-disabled="true"]
-		.markdown-frontmatter-boolean:hover,
-	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tags:hover,
-	.markdown-frontmatter[data-disabled="true"]
-		.markdown-frontmatter-nested:hover {
-		background: transparent;
-	}
-
-	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tag svg {
-		width: 0;
-		opacity: 0;
-	}
-
-	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-remove {
-		display: none;
-	}
-
-	.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-yaml {
-		cursor: default;
-	}
-
-	@media (max-width: 700px) {
-		.markdown-frontmatter-header {
-			align-items: flex-start;
+		/* Remove focus outline */
+		.markdown-view .ProseMirror:focus,
+		.markdown-view .ProseMirror:focus-visible {
+			outline: none;
 		}
 
-		/* The note that says why a field cannot be edited stays; it is the
-		   answer to the question a disabled field asks. */
-		.markdown-frontmatter-title span:not(.markdown-frontmatter-note) {
+		/* Base markdown view container.
+	   No horizontal padding: the toolbar is a full-bleed header and the document
+	   gutter lives on the editor body wrapper instead. */
+		.markdown-view {
+			--markdown-radius: 4px;
+			/* A measure a little past Notion's default column — the extra line
+			   length reads as more document and less frame — and one gap between
+			   blocks so a document reads as a steady rhythm rather than a set of
+			   unrelated margins. */
+			--markdown-content-width: 768px;
+			--markdown-block-gap: 0.5rem;
+			/* How wide a table may grow when the panel has room to give it. */
+			--markdown-table-max-width: 1040px;
+			/* The document's own margin, which an outset block never eats into. */
+			--markdown-gutter-min: 2rem;
+			flex: 1 1 auto;
+			min-height: 0;
+		}
+
+		/* Keep formatting on one predictable row. The main controls scroll while
+		   the document-level copy action remains pinned at the trailing edge. */
+		.markdown-format-toolbar-scroll {
+			scrollbar-width: none;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.markdown-format-toolbar-scroll::-webkit-scrollbar {
 			display: none;
 		}
 
-		.markdown-frontmatter-row {
-			grid-template-columns: 8rem minmax(0, 1fr) 1.65rem;
-		}
-	}
-
-	@media (max-width: 520px) {
-		.markdown-frontmatter-row {
-			position: relative;
-			grid-template-columns: minmax(0, 1fr);
-			gap: 0;
-			padding-block: 0.18rem 0.3rem;
-		}
-
-		.markdown-frontmatter-key-cell {
-			width: fit-content;
-			min-width: min(10.5rem, 100%);
-			margin-left: 0;
-		}
-
-		.markdown-frontmatter-remove {
+		.markdown-format-toolbar-overflow-indicator {
 			position: absolute;
-			top: 0.2rem;
-			right: 0.2rem;
+			inset-block: 0;
+			z-index: 1;
+			width: 1.25rem;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 120ms ease-out;
+		}
+
+		.markdown-format-toolbar-overflow-indicator[data-visible="true"] {
+			opacity: 1;
+		}
+
+		.markdown-format-toolbar-overflow-indicator-left {
+			left: 0;
+			background: linear-gradient(
+				to right,
+				var(--atelier-panel) 20%,
+				transparent
+			);
+		}
+
+		.markdown-format-toolbar-overflow-indicator-right {
+			right: 0;
+			background: linear-gradient(
+				to left,
+				var(--atelier-panel) 20%,
+				transparent
+			);
+		}
+
+		/* Hide the native scrollbar; a lightweight overlay thumb mirrors scroll
+	   position so fade behavior is reliable across Chromium repaints. */
+		.markdown-view .tiptap-container {
+			overflow-x: clip;
+			scrollbar-width: none;
+		}
+		.markdown-view .tiptap-container::-webkit-scrollbar {
+			width: 0;
+			height: 0;
+		}
+
+		.markdown-view .tiptap-scrollbar-thumb {
+			position: absolute;
+			top: 0;
+			right: 4px;
+			z-index: 10;
+			width: 6px;
+			min-height: 36px;
+			background-color: var(--atelier-scrollbar);
+			border-radius: 9999px;
+			opacity: 0;
+			pointer-events: none;
+			will-change: transform, height, opacity;
+			transition: opacity 320ms ease-in;
+		}
+
+		.markdown-view .tiptap-scrollbar-thumb[data-scrollable="false"] {
+			display: none;
+		}
+
+		.markdown-view .tiptap-scrollbar-thumb[data-visible="true"] {
+			opacity: 1;
+			transition-duration: 120ms;
+			transition-timing-function: ease-out;
+		}
+
+		.markdown-image-paste-hint {
+			position: absolute;
+			right: 1rem;
+			bottom: 1rem;
+			z-index: 20;
+			display: inline-flex;
+			max-width: min(32rem, calc(100% - 2rem));
+			min-height: 1.75rem;
+			align-items: center;
+			gap: 0.375rem;
+			padding: 0.375rem 0.5625rem;
+			border: 0;
+			border-radius: 7px;
+			background: var(--atelier-bg-hover);
+			box-shadow: inset 0 0 0 1px var(--atelier-border);
+			color: var(--atelier-fg);
+			font-size: 0.75rem;
+			font-weight: 500;
+			line-height: 1rem;
+			pointer-events: none;
+			animation: markdown-image-paste-hint-in 160ms ease-out;
+		}
+
+		.markdown-image-paste-hint[data-state="error"] {
+			background: var(--atelier-danger-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-danger-subtle);
+			color: var(--atelier-diff-removed);
+		}
+
+		.markdown-image-paste-hint strong {
+			font-weight: 650;
+		}
+
+		.markdown-image-paste-hint-icon {
+			display: inline-flex;
+			flex: 0 0 auto;
+			align-items: center;
+			justify-content: center;
+			color: var(--atelier-fg-muted);
+		}
+
+		.markdown-image-paste-hint[data-state="error"]
+			.markdown-image-paste-hint-icon {
+			color: var(--atelier-danger);
+		}
+
+		.markdown-image-paste-hint-icon svg {
+			width: 0.8125rem;
+			height: 0.8125rem;
+			stroke-width: 2;
+		}
+
+		@keyframes markdown-image-paste-hint-in {
+			from {
+				opacity: 0;
+				transform: translateY(0.35rem);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		.markdown-view .tiptap {
+			/* Exactly fill the viewport (border-box includes padding-bottom) so a short
+		   document does not force a scrollbar; longer content overflows normally. */
+			min-height: 100%;
+			max-width: none;
+		}
+
+		/* EditorContent and ProseMirror both receive TipTap's class. The outer
+		   wrapper owns the panel-width query used by full-bleed document elements. */
+		.markdown-view .tiptap:not(.ProseMirror) {
+			container-type: inline-size;
+		}
+
+		/* The document's type is document.css's (the root carries
+		   `atelier-document`); this is the column it sits in. */
+		.markdown-view .ProseMirror {
+			/* How far a wide table may reach into the gutter on each side: as far
+			   as the panel can spare while keeping the document's own margin, and
+			   no further than the table's cap. document.css spends it. */
+			--atelier-doc-gutter: max(
+				0px,
+				min(
+					calc(
+						(var(--markdown-table-max-width) - var(--markdown-content-width)) /
+							2
+					),
+					calc(
+						(100cqw - var(--markdown-content-width)) / 2 -
+							var(--markdown-gutter-min)
+					)
+				)
+			);
+			box-sizing: border-box;
+			min-height: 100%;
+			padding: clamp(2.25rem, 5vw, 4rem)
+				max(
+					var(--markdown-gutter-min),
+					calc((100% - var(--markdown-content-width)) / 2)
+				)
+				6rem;
+			caret-color: currentColor;
+			cursor: auto;
+			width: 100%;
+		}
+
+		/* Selection tints; the text keeps its colour instead of turning white. */
+		.markdown-view .ProseMirror ::selection {
+			background-color: var(--atelier-bg-selection);
+			color: inherit;
+		}
+
+		/* A title after the frontmatter panel is the document's first line. */
+		.markdown-view .ProseMirror > .markdown-frontmatter + h1 {
 			margin-top: 0;
 		}
 
-		.markdown-frontmatter-nested-row {
-			grid-template-columns: 3.75rem minmax(0, 1fr);
+		/* A soft source newline renders as the space CommonMark gives it. */
+		.markdown-view .ProseMirror [data-soft-break]::after {
+			content: " ";
+			white-space: pre-wrap;
 		}
-	}
 
-	/* Bold at 600 next to 400 body: emphasis without shouting. */
-	.markdown-view .ProseMirror strong {
-		font-weight: 600;
-	}
-
-	/* Links keep the ink and carry a quiet underline, like Notion: prose
-	   stays one colour and the underline says "goes somewhere". */
-	.markdown-view .ProseMirror a {
-		color: inherit;
-		text-decoration: underline;
-		text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
-		text-decoration-thickness: 1px;
-		text-underline-offset: 2px;
-		border-radius: 2px;
-		cursor: pointer;
-		transition:
-			background-color 120ms ease,
-			text-decoration-color 120ms ease;
-	}
-
-	.markdown-view .ProseMirror a:hover {
-		background-color: var(--color-bg-hover);
-		text-decoration-color: currentColor;
-	}
-
-	/* Lists */
-	/* One 1.5rem column per level, whatever the list kind, so bullets,
-	   numbers, and task boxes all put their text on the same x. */
-	.markdown-view .ProseMirror ul,
-	.markdown-view .ProseMirror ol {
-		padding-left: 1.5rem;
-		margin-top: var(--markdown-block-gap);
-		margin-bottom: var(--markdown-block-gap);
-		list-style-position: outside;
-	}
-
-	.markdown-view .ProseMirror li > div > :is(ul, ol) {
-		margin-top: 0;
-		margin-bottom: 0;
-		padding-left: 1.5rem;
-	}
-
-	.markdown-view .ProseMirror ul {
-		list-style-type: disc;
-	}
-
-	.markdown-view .ProseMirror ol {
-		list-style-type: decimal;
-	}
-
-	.markdown-view .ProseMirror ul ul {
-		list-style-type: circle;
-	}
-
-	.markdown-view .ProseMirror ul ul ul {
-		list-style-type: square;
-	}
-
-	.markdown-view .ProseMirror ul ul ul ul {
-		list-style-type: disc;
-	}
-
-	.markdown-view .ProseMirror ul ul ul ul ul {
-		list-style-type: circle;
-	}
-
-	/* Markers in the body ink at body size: the list reads as one voice. */
-	.markdown-view .ProseMirror li::marker {
-		color: var(--color-text-primary);
-		font-size: 1em;
-	}
-
-	.markdown-view .ProseMirror ol > li::marker {
-		color: var(--color-text-primary);
-		font-size: 1em;
-		font-variant-numeric: tabular-nums;
-		font-weight: 400;
-	}
-
-	/* Items sit 6px apart (3px each side), Notion's block pitch. */
-	.markdown-view .ProseMirror li {
-		margin-top: 0;
-		margin-bottom: 0;
-		padding: 3px 0;
-	}
-
-	.markdown-view .ProseMirror li p {
-		margin-top: 0;
-		margin-bottom: 0;
-	}
-
-	.markdown-view .ProseMirror li p + p {
-		margin-top: 0.35rem;
-	}
-
-	/* Tables */
-	/* A table is read across, not down a measure, so it earns more room than
-	   the prose around it: it reaches back into the gutter on both sides, as
-	   far as the panel can spare while keeping the document's own margin, and
-	   no further than the table's cap. In a panel with no gutter to give it
-	   sits in the column like everything else and scrolls sideways. Only a
-	   table the document holds directly: the gutter belongs to the document,
-	   and a table inside a list or a quote reaching for it hung out of the
-	   block it belongs to, with the quote's own rule cutting across it.
-	   Hairlines, 14px cells, a tinted plain-case header row: Notion's simple
-	   table. */
-	.markdown-view .ProseMirror > table {
-		--markdown-table-outset: max(
-			0px,
-			min(
-				calc(
-					(var(--markdown-table-max-width) - var(--markdown-content-width)) / 2
-				),
-				calc(
-					(100cqw - var(--markdown-content-width)) / 2 -
-						var(--markdown-gutter-min)
-				)
-			)
-		);
-		display: block;
-		border: 1px solid var(--color-border-panel);
-		border-collapse: separate;
-		border-radius: var(--markdown-radius);
-		border-spacing: 0;
-		box-shadow: none;
-		width: max-content;
-		min-width: calc(100% + 2 * var(--markdown-table-outset));
-		max-width: calc(100% + 2 * var(--markdown-table-outset));
-		margin-top: var(--markdown-block-gap);
-		margin-bottom: var(--markdown-block-gap);
-		margin-inline: calc(-1 * var(--markdown-table-outset));
-		overflow-x: auto;
-		font-size: 14px;
-	}
-
-	/* The scrolling block is the table element; its row group is the table
-	   proper and fills the block, so cells stretch to the column's width. */
-	.markdown-view .ProseMirror table > tbody {
-		display: table;
-		width: 100%;
-	}
-
-	.markdown-view .ProseMirror table tr:first-child {
-		background-color: var(--color-neutral-100);
-	}
-
-	.markdown-view .ProseMirror table th,
-	.markdown-view .ProseMirror table td {
-		border-right: 1px solid var(--color-border-panel);
-		border-bottom: 1px solid var(--color-border-panel);
-		padding: 7px 9px;
-		text-align: left;
-		vertical-align: top;
-	}
-
-	.markdown-view .ProseMirror table th {
-		color: var(--color-text-primary);
-		font-weight: 600;
-	}
-
-	.markdown-view .ProseMirror table :is(th, td)[data-align="center"] {
-		text-align: center;
-	}
-
-	.markdown-view .ProseMirror table :is(th, td)[data-align="right"] {
-		text-align: right;
-	}
-
-	.markdown-view .ProseMirror table :is(th, td)[data-align="left"] {
-		text-align: left;
-	}
-
-	.markdown-view .ProseMirror table :is(th, td):last-child {
-		border-right: 0;
-	}
-
-	.markdown-view .ProseMirror table tbody tr:last-child :is(th, td) {
-		border-bottom: 0;
-	}
-
-	.markdown-view .ProseMirror table tbody tr:hover {
-		background: color-mix(in srgb, var(--color-bg-hover) 68%, transparent);
-	}
-
-	/* Blockquote */
-	/* A quote is a rule and an indent in the same ink, not a tinted box. */
-	.markdown-view .ProseMirror blockquote {
-		border-left: 3px solid currentColor;
-		border-radius: 0;
-		padding: 0.1875rem 0 0.1875rem 0.9em;
-		background: transparent;
-		color: inherit;
-		margin: var(--markdown-block-gap) 0;
-	}
-
-	/* GitHub alerts (> [!NOTE] …) are Notion-style callouts: a soft tinted
-	   box in the alert's hue. The marker line stays in the text, as GitHub
-	   keeps it in the source. */
-	.markdown-view .ProseMirror blockquote[data-alert] {
-		border-left: 0;
-		border-radius: var(--markdown-radius);
-		padding: 1rem 1rem 1rem 0.75rem;
-		background: var(--color-bg-tag-gray);
-	}
-
-	.markdown-view .ProseMirror blockquote[data-alert="note"] {
-		background: var(--color-bg-tag-blue);
-	}
-
-	.markdown-view .ProseMirror blockquote[data-alert="tip"] {
-		background: var(--color-bg-tag-green);
-	}
-
-	.markdown-view .ProseMirror blockquote[data-alert="important"] {
-		background: var(--color-bg-tag-purple);
-	}
-
-	.markdown-view .ProseMirror blockquote[data-alert="warning"] {
-		background: var(--color-bg-tag-yellow);
-	}
-
-	.markdown-view .ProseMirror blockquote[data-alert="caution"] {
-		background: var(--color-bg-tag-red);
-	}
-
-	.markdown-view .ProseMirror blockquote p {
-		margin-top: 0;
-		margin-bottom: 0;
-	}
-
-	.markdown-view .ProseMirror blockquote blockquote {
-		border-left: 3px solid color-mix(in srgb, currentColor 40%, transparent);
-		margin: var(--markdown-block-gap) 0 0;
-		padding: 0 0 0 0.9em;
-	}
-
-	.markdown-view .ProseMirror blockquote :is(ul, ol) {
-		margin-top: 0.25rem;
-		margin-bottom: 0.25rem;
-	}
-
-	/* Inline code */
-	/* Inline code: a neutral tint, no border, 85% size, and a line-height
-	   that never grows the line box. */
-	.markdown-view .ProseMirror :not(pre) > code {
-		background-color: color-mix(
-			in srgb,
-			var(--color-text-tertiary) 15%,
-			transparent
-		);
-		color: var(--color-text-primary);
-		line-height: 1.25;
-		font-family:
-			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-			"Courier New", monospace;
-		font-size: 0.85em;
-		border: 0;
-		border-radius: var(--markdown-radius);
-		padding: 0.2em 0.4em;
-	}
-
-	/* Raw inline HTML (<kbd>, <sub>…) is shown as quiet source, not as a
-	   code chip that looks like real code. */
-	.markdown-view .ProseMirror .markdown-wc-inline-html > code {
-		background: transparent;
-		color: var(--color-text-tertiary);
-		padding: 0;
-		font-size: 0.8em;
-	}
-
-	/* Footnotes. The marker is the label as written, in the link ink, small
-	   and raised; a marker with no definition is drawn dashed and goes
-	   nowhere. The definition is a row: fixed label, an ordinary editable
-	   body, and a way back. A jump target tints for a moment. */
-	.markdown-view .ProseMirror .markdown-footnote-ref {
-		font-size: 0.75em;
-		line-height: 0;
-		vertical-align: super;
-		border-radius: 2px;
-		transition: background-color 400ms ease;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-ref-link {
-		color: var(--color-text-link);
-		text-decoration: none;
-		cursor: pointer;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-ref-link:hover {
-		color: var(--color-text-link-hover);
-		text-decoration: underline;
-		text-underline-offset: 2px;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-footnote-ref--orphan
-		.markdown-footnote-ref-link {
-		color: var(--color-text-tertiary);
-		text-decoration: underline dashed;
-		text-underline-offset: 2px;
-		cursor: default;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-def {
-		display: grid;
-		grid-template-columns: 3rem minmax(0, 1fr) auto;
-		align-items: baseline;
-		column-gap: 0.5rem;
-		margin: var(--markdown-block-gap) 0;
-		border-radius: var(--markdown-radius);
-		transition: background-color 400ms ease;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-def-label {
-		color: var(--color-text-link);
-		font-size: 0.9em;
-		user-select: none;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-def-body {
-		min-width: 0;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-def-body > :first-child {
-		margin-top: 0;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-def-body > :last-child {
-		margin-bottom: 0;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-backref {
-		border: 0;
-		background: transparent;
-		padding: 0 0.25rem;
-		color: var(--color-text-tertiary);
-		font: inherit;
-		cursor: pointer;
-		border-radius: 2px;
-	}
-
-	.markdown-view .ProseMirror .markdown-footnote-backref:hover {
-		color: var(--color-text-link);
-		background: var(--color-bg-hover);
-	}
-
-	/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
-	   and the definition is the fade *out*; on the way in it was still
-	   deepening as the scroll came to rest, which cost most of the moment the
-	   tint exists for. */
-	.markdown-view .ProseMirror .markdown-footnote-target {
-		background-color: color-mix(
-			in srgb,
-			var(--color-text-link) 14%,
-			transparent
-		);
-		transition-duration: 120ms;
-		transition-timing-function: ease-out;
-	}
-
-	/* Unsupported blocks (raw HTML): a labelled, dashed container that reads
-	   as source, sized like a note. */
-	.markdown-view .ProseMirror .markdown-wc-unsupported-block {
-		margin: var(--markdown-block-gap) 0;
-		border: 1px dashed var(--color-border-strong);
-		border-radius: var(--markdown-radius);
-		padding: 0.5rem 0.75rem;
-	}
-
-	.markdown-view .ProseMirror .markdown-wc-unsupported-block > strong {
-		display: block;
-		margin-bottom: 0.25rem;
-		color: var(--color-text-tertiary);
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-
-	.markdown-view .ProseMirror .markdown-wc-unsupported-block > pre {
-		margin: 0;
-		padding: 0;
-		border: 0;
-		background: transparent;
-	}
-
-	.markdown-view .ProseMirror .markdown-wc-unsupported-block > pre code {
-		font-size: 13px;
-		line-height: 1.45;
-	}
-
-	/* Code blocks */
-	/* Code blocks: a flat muted ground, no border, generous padding with
-	   room for the language label in the top corner. */
-	.markdown-view .ProseMirror pre {
-		position: relative;
-		background: var(--color-bg-panel-muted);
-		border: 0;
-		border-radius: var(--markdown-radius);
-		box-shadow: none;
-		padding: 1.25rem 1rem;
-		overflow-x: auto;
-		margin-top: var(--markdown-block-gap);
-		margin-bottom: var(--markdown-block-gap);
-		tab-size: 2;
-	}
-
-	.markdown-view .ProseMirror pre[data-language] {
-		padding-top: 1.5rem;
-	}
-
-	.markdown-view .ProseMirror .markdown-code-language {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		z-index: 1;
-		border: 1px solid var(--color-border-subtle);
-		border-radius: var(--markdown-radius);
-		background: color-mix(in srgb, var(--color-bg-panel) 88%, transparent);
-		color: var(--color-text-tertiary);
-		font-family:
-			ui-sans-serif,
-			-apple-system,
-			BlinkMacSystemFont,
-			"Segoe UI",
-			sans-serif;
-		font-size: 11px;
-		font-weight: 500;
-		letter-spacing: 0;
-		line-height: 1.25;
-		opacity: 0.6;
-		padding: 0.18rem 0.38rem;
-		pointer-events: none;
-		transition: opacity 120ms ease;
-	}
-
-	.markdown-view .ProseMirror pre:hover .markdown-code-language,
-	.markdown-view .ProseMirror pre:focus-within .markdown-code-language {
-		opacity: 1;
-	}
-
-	.markdown-view .ProseMirror pre code {
-		background-color: transparent;
-		padding: 0;
-		font-family:
-			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-			"Courier New", monospace;
-		font-size: 13.5px;
-		font-variant-ligatures: none;
-		font-variant-numeric: tabular-nums;
-		letter-spacing: 0;
-		line-height: 1.5;
-	}
-
-	.markdown-view .ProseMirror .syntax-comment {
-		color: var(--color-syntax-comment);
-		font-style: italic;
-	}
-
-	.markdown-view .ProseMirror .syntax-keyword {
-		color: var(--color-syntax-keyword);
-		font-weight: 400;
-	}
-
-	.markdown-view .ProseMirror .syntax-literal,
-	.markdown-view .ProseMirror .syntax-number {
-		color: var(--color-syntax-number);
-	}
-
-	.markdown-view .ProseMirror .syntax-string {
-		color: var(--color-syntax-string);
-	}
-
-	.markdown-view .ProseMirror .syntax-property {
-		color: inherit;
-	}
-
-	.markdown-view .ProseMirror .syntax-type {
-		color: inherit;
-		font-weight: 400;
-	}
-
-	/* Media: the image itself, no frame or shadow. */
-	.markdown-view .ProseMirror img {
-		border: 0;
-		border-radius: var(--markdown-radius);
-		box-shadow: none;
-		height: auto;
-		margin: var(--markdown-block-gap) auto;
-		max-width: 100%;
-	}
-
-	/* A divider is a visible hairline in a short block, not 80px of air. */
-	.markdown-view .ProseMirror hr {
-		border: 0;
-		border-top: 1px solid
-			color-mix(in srgb, var(--color-text-primary) 16%, transparent);
-		margin: 0.75rem 0;
-	}
-
-	/* A dragged block gets a landing rail instead of relying on source selection
-	   alone. ProseMirror positions this at the resolved drop point, so it
-	   previews exactly where an image, PDF, or later embed will land. */
-	.markdown-view .atelier-markdown-drop-indicator {
-		border-radius: 999px;
-		background: var(--color-border-drop-target);
-		box-shadow: 0 0 0 1px var(--color-bg-panel);
-		animation: markdown-drop-indicator-in 100ms ease-out;
-	}
-
-	@keyframes markdown-drop-indicator-in {
-		from {
+		.markdown-frontmatter-disclosure {
+			position: absolute;
+			z-index: 5;
+			display: inline-flex;
+			height: 1.75rem;
+			align-items: center;
+			gap: 0.375rem;
+			border: 0;
+			border-radius: 7px;
+			background: transparent;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.78rem;
+			font-weight: 600;
+			line-height: 1;
+			margin-left: -0.5rem;
 			opacity: 0;
-			transform: scaleX(0.94);
+			padding: 0 0.5rem;
+			pointer-events: none;
+			transform: translateY(0.2rem);
+			transition:
+				opacity 120ms ease-out,
+				transform 120ms ease-out,
+				background-color 100ms ease-out,
+				color 100ms ease-out;
 		}
-		to {
+
+		.markdown-frontmatter-disclosure[data-visible="true"] {
 			opacity: 1;
-			transform: scaleX(1);
+			pointer-events: auto;
+			transform: translateY(0);
 		}
-	}
 
-	/* Standalone media is selectable and movable. Selection reuses the embed's
-	   existing edge; hover reveals a compact, undoable delete action. */
-	.markdown-view .ProseMirror [data-markdown-image-block] {
-		display: block;
-		position: relative;
-		cursor: grab;
-		user-select: none;
-		transition:
-			box-shadow 120ms ease-out,
-			border-color 120ms ease-out;
-	}
+		.markdown-frontmatter-disclosure:hover,
+		.markdown-frontmatter-disclosure:focus-visible {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+			outline: none;
+		}
 
-	.markdown-view .ProseMirror .markdown-image-embed {
-		width: fit-content;
-		max-width: 100%;
-		margin: 1.35rem auto 1.75rem;
-		line-height: 0;
-	}
+		.markdown-frontmatter-disclosure:focus-visible {
+			opacity: 1;
+			pointer-events: auto;
+			transform: translateY(0);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-image-embed
-		> .markdown-image-block-content {
-		display: block;
-		margin: 0;
-		transition:
-			box-shadow 120ms ease-out,
-			border-color 120ms ease-out;
-	}
+		.markdown-frontmatter-disclosure svg {
+			width: 0.94rem;
+			height: 0.94rem;
+			stroke-width: 1.8;
+		}
 
-	.markdown-view
-		.ProseMirror
-		[data-markdown-image-block]:is(img, .markdown-pdf-embed):hover:not(
-			.ProseMirror-selectednode
-		) {
-		box-shadow:
-			0 0 0 2px
-				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
-			0 12px 30px rgba(28, 25, 23, 0.09);
-	}
+		.markdown-view .ProseMirror > .markdown-frontmatter {
+			margin: 0 0 2.25rem;
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-image-embed:hover:not(.ProseMirror-selectednode)
-		> .markdown-image-block-content {
-		box-shadow:
-			0 0 0 2px
-				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
-			0 12px 30px rgba(28, 25, 23, 0.09);
-	}
+		.markdown-frontmatter {
+			position: relative;
+			border: 0;
+			background: transparent;
+			padding: 0;
+		}
 
-	.markdown-view
-		.ProseMirror
-		[data-markdown-image-block].ProseMirror-selectednode {
-		outline: none;
-	}
+		/* ProseMirror replaces a selected node with whatever is typed next, and
+		   this panel is one node. Every other block says when it is selected; this
+		   one said nothing at all, so a click on its chrome and one letter could
+		   replace every property in the file with that letter, unannounced.
+		   Not in a review: the editor cannot be typed into there, and the diff
+		   document opens with its selection on this first node, so the warning
+		   would ring every frontmatter in every diff. The panel's fields carry
+		   their own added, removed and modified marks. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			:is(
+				.markdown-frontmatter[data-selected="true"],
+				.markdown-frontmatter.ProseMirror-selectednode
+			) {
+			border-radius: var(--markdown-radius);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+		}
 
-	.markdown-view
-		.ProseMirror
-		[data-markdown-image-block].ProseMirror-selectednode:is(
-			img,
-			.markdown-pdf-embed
-		) {
-		border-color: var(--color-ring-focus-visible);
-	}
+		.markdown-frontmatter-header {
+			display: flex;
+			min-height: 2.125rem;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.75rem;
+			padding: 0 0 0.25rem;
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-image-embed.ProseMirror-selectednode
-		> .markdown-image-block-content {
-		border-color: var(--color-ring-focus-visible);
-	}
+		.markdown-frontmatter-title {
+			display: flex;
+			min-width: 0;
+			align-items: center;
+			gap: 0.35rem;
+		}
 
-	.markdown-view
-		.ProseMirror[data-markdown-media-dragging]
-		[data-markdown-image-block].ProseMirror-selectednode {
-		cursor: grabbing;
-	}
+		.markdown-frontmatter-title svg {
+			width: 0.95rem;
+			height: 0.95rem;
+			flex: 0 0 auto;
+			color: var(--atelier-fg-muted);
+			stroke-width: 1.8;
+		}
 
-	.markdown-view .ProseMirror .markdown-asset-delete {
-		display: inline-flex;
-		width: 1.75rem;
-		height: 1.75rem;
-		flex: 0 0 auto;
-		align-items: center;
-		justify-content: center;
-		padding: 0;
-		color: var(--color-text-tertiary);
-		cursor: pointer;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
-		border-radius: 0.375rem;
-		opacity: 0;
-		pointer-events: none;
-		transform: translateY(-2px);
-		transition:
-			opacity 100ms ease-out,
-			transform 100ms ease-out,
-			color 100ms ease-out,
-			background-color 100ms ease-out;
-	}
+		.markdown-frontmatter-title strong {
+			color: var(--atelier-fg-subtle);
+			font-size: 0.78rem;
+			font-weight: 600;
+		}
 
-	.markdown-view
-		.ProseMirror:not([contenteditable="true"])
-		.markdown-asset-delete {
-		display: none;
-	}
+		.markdown-frontmatter-title span {
+			overflow: hidden;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.73rem;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
 
-	.markdown-view .ProseMirror .markdown-asset-delete > svg {
-		width: 0.875rem;
-		height: 0.875rem;
-	}
+		.markdown-frontmatter-mode {
+			display: inline-flex;
+			height: 1.75rem;
+			flex: 0 0 auto;
+			align-items: center;
+			border: 0;
+			border-radius: 5px;
+			background: transparent;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.71rem;
+			font-weight: 550;
+			opacity: 0;
+			padding: 0 0.45rem;
+			transition:
+				opacity 100ms ease-out,
+				background-color 100ms ease-out,
+				color 100ms ease-out;
+		}
 
-	.markdown-view
-		.ProseMirror
-		[data-markdown-image-block]:hover
-		.markdown-asset-delete,
-	.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateY(0);
-	}
+		.markdown-frontmatter:hover .markdown-frontmatter-mode,
+		.markdown-frontmatter:focus-within .markdown-frontmatter-mode,
+		.markdown-frontmatter-mode:focus-visible {
+			opacity: 1;
+		}
 
-	.markdown-view .ProseMirror .markdown-asset-delete:hover {
-		color: var(--color-text-status-danger);
-		background: var(--color-bg-hover);
-	}
+		.markdown-frontmatter-mode:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
 
-	.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
-		outline-offset: 1px;
-	}
+		.markdown-frontmatter-mode:focus-visible {
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+			outline: none;
+		}
 
-	.markdown-view .ProseMirror .markdown-image-embed > .markdown-asset-delete {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		z-index: 2;
-		box-shadow: 0 1px 2px
-			color-mix(in srgb, var(--color-text-primary) 10%, transparent);
-	}
+		.markdown-frontmatter-mode:disabled {
+			cursor: not-allowed;
+			opacity: 0.4;
+		}
 
-	.markdown-view
-		.ProseMirror
-		[data-markdown-image-block][data-asset-state="loading"] {
-		cursor: progress;
-	}
+		@media (hover: none) {
+			.markdown-frontmatter-mode {
+				opacity: 1;
+			}
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-embed {
-		display: flex;
-		width: 100%;
-		height: 10rem;
-		min-height: 10rem;
-		flex-direction: column;
-		margin: 1.25rem 0;
-		overflow: hidden;
-		vertical-align: top;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
-		border-radius: 0.5rem;
-		box-shadow: 0 1px 2px
-			color-mix(in srgb, var(--color-text-primary) 6%, transparent);
-	}
+		.markdown-frontmatter-fields {
+			display: flex;
+			flex-direction: column;
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed:is(
-			[data-asset-state="loading"],
-			[data-asset-state="ready"]
-		) {
-		height: clamp(28rem, 68vh, 48rem);
-		min-height: 0;
-	}
+		.markdown-frontmatter-row {
+			display: grid;
+			min-height: 2rem;
+			grid-template-columns: 10.5rem minmax(0, 1fr) 1.65rem;
+			align-items: start;
+			gap: 0;
+			padding: 0;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-toolbar {
-		display: flex;
-		min-height: 2.5rem;
-		flex: 0 0 auto;
-		align-items: center;
-		gap: 0.625rem;
-		padding: 0 0.75rem;
-		background: var(--color-bg-panel-muted);
-		border-bottom: 1px solid var(--color-border-panel);
-	}
+		.markdown-frontmatter-key-cell {
+			display: flex;
+			min-width: 0;
+			height: 2rem;
+			align-items: center;
+			gap: 0.5rem;
+			border-radius: 6px;
+			color: var(--atelier-fg-subtle);
+			margin-left: -0.5rem;
+			padding: 0 0.5rem;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-icon {
-		display: inline-flex;
-		width: 1.5rem;
-		height: 1.75rem;
-		flex: 0 0 auto;
-		align-items: center;
-		justify-content: center;
-		color: var(--color-icon-brand);
-		background: var(--color-bg-brand-subtle);
-		border: 1px solid var(--color-border-brand-soft);
-		border-radius: 0.25rem;
-	}
+		.markdown-frontmatter-key-cell:hover,
+		.markdown-frontmatter-key-cell:focus-within,
+		.markdown-frontmatter-row-adding .markdown-frontmatter-key-cell {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-icon::after {
-		content: "PDF";
-		font-size: 0.5rem;
-		font-weight: 750;
-		letter-spacing: 0.02em;
-		line-height: 1;
-	}
+		.markdown-frontmatter-key-cell > svg {
+			width: 0.875rem;
+			height: 0.875rem;
+			flex: 0 0 auto;
+			opacity: 0.75;
+			stroke-width: 1.8;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-label {
-		min-width: 0;
-		flex: 1 1 auto;
-		overflow: hidden;
-		color: var(--color-text-primary);
-		font-size: 0.8125rem;
-		font-weight: 600;
-		line-height: 1.25rem;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
+		.markdown-frontmatter-input {
+			width: 100%;
+			min-width: 0;
+			height: 2rem;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--atelier-fg);
+			font-family: inherit;
+			font-size: 0.84rem;
+			line-height: 1.25rem;
+			outline: none;
+			padding: 0.3rem 0.5rem;
+		}
 
-	.markdown-view .ProseMirror a.markdown-pdf-open {
-		display: inline-flex;
-		height: 1.75rem;
-		flex: 0 0 auto;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.625rem;
-		color: var(--color-text-secondary);
-		font-size: 0.75rem;
-		font-weight: 600;
-		line-height: 1;
-		text-decoration: none;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
-		border-radius: 0.375rem;
-	}
+		.markdown-frontmatter-input:focus-visible {
+			box-shadow: none;
+		}
 
-	.markdown-view .ProseMirror a.markdown-pdf-open:hover {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
-	}
+		.markdown-frontmatter-value:not(:focus) {
+			text-overflow: ellipsis;
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="loading"]
-		a.markdown-pdf-open,
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="unavailable"]
-		a.markdown-pdf-open {
-		color: var(--color-text-tertiary);
-		pointer-events: none;
-	}
+		.markdown-frontmatter-key {
+			height: auto;
+			border-radius: 0;
+			color: var(--atelier-fg-muted);
+			font-size: 0.83rem;
+			font-weight: 500;
+			padding: 0;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-surface {
-		position: relative;
-		display: flex;
-		min-height: 7.5rem;
-		flex: 1 1 auto;
-		background: var(--color-bg-panel-muted);
-	}
+		.markdown-frontmatter-value:hover,
+		.markdown-frontmatter-value:focus,
+		.markdown-frontmatter-boolean:hover,
+		.markdown-frontmatter-boolean:focus-within,
+		.markdown-frontmatter-tags:hover,
+		.markdown-frontmatter-tags:focus-within,
+		.markdown-frontmatter-nested:hover,
+		.markdown-frontmatter-nested:focus-within {
+			background: var(--atelier-bg-subtle);
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-preview {
-		position: relative;
-		display: block;
-		width: 100%;
-		height: 100%;
-		overflow: hidden;
-		background: color-mix(
-			in srgb,
-			var(--color-text-primary) 72%,
-			var(--color-bg-panel)
-		);
-	}
+		.markdown-frontmatter-boolean {
+			display: inline-flex;
+			min-height: 2rem;
+			align-items: center;
+			gap: 0.5rem;
+			color: var(--atelier-fg);
+			font-size: 0.84rem;
+			border-radius: 6px;
+			padding-inline: 0.5rem;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-canvas-scroll {
-		display: block;
-		height: 100%;
-		overflow: auto;
-		padding: 0 0 3.75rem;
-	}
+		.markdown-frontmatter-boolean input {
+			width: 1rem;
+			height: 1rem;
+			accent-color: var(--atelier-fg-muted);
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-preview-mount {
-		display: block;
-		width: 100%;
-		height: 100%;
-	}
+		.markdown-frontmatter-value[type="date"]::-webkit-calendar-picker-indicator {
+			opacity: 0;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-canvas {
-		display: block;
-		max-width: 100%;
-		height: auto;
-		margin: 0 auto;
-		background: white;
-		box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 28%);
-	}
+		.markdown-frontmatter-row:hover
+			.markdown-frontmatter-value[type="date"]::-webkit-calendar-picker-indicator,
+		.markdown-frontmatter-value[type="date"]:focus::-webkit-calendar-picker-indicator {
+			opacity: 0.72;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-sr-page-text {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-		border: 0;
-	}
+		.markdown-frontmatter-tags {
+			display: flex;
+			min-height: 2rem;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 0.25rem;
+			border-radius: 6px;
+			padding: 0.18rem 0.5rem;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-page-controls {
-		position: absolute;
-		bottom: 0.875rem;
-		left: 50%;
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem;
-		color: var(--color-text-primary);
-		background: color-mix(in srgb, var(--color-bg-panel) 94%, transparent);
-		border: 1px solid var(--color-border-panel);
-		border-radius: 0.5rem;
-		box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 20%);
-		transform: translateX(-50%);
-	}
+		.markdown-frontmatter-tag {
+			display: inline-flex;
+			height: 1.45rem;
+			align-items: center;
+			gap: 0.2rem;
+			border: 0;
+			border-radius: 5px;
+			background: color-mix(
+				in srgb,
+				var(--atelier-bg-hover) 70%,
+				var(--atelier-panel)
+			);
+			color: var(--atelier-fg-muted);
+			font-size: 0.72rem;
+			padding: 0 0.38rem;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-page-button {
-		display: inline-flex;
-		height: 1.75rem;
-		align-items: center;
-		padding: 0 0.625rem;
-		color: var(--color-text-secondary);
-		font: inherit;
-		font-size: 0.6875rem;
-		font-weight: 600;
-		background: transparent;
-		border: 0;
-		border-radius: 0.25rem;
-		cursor: pointer;
-	}
+		.markdown-frontmatter-tag svg {
+			width: 0;
+			height: 0.68rem;
+			opacity: 0;
+			stroke-width: 2;
+			transition:
+				width 100ms ease-out,
+				opacity 100ms ease-out;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-page-button:hover:not(:disabled) {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
-	}
+		.markdown-frontmatter-tag:hover svg,
+		.markdown-frontmatter-tag:focus-visible svg {
+			width: 0.68rem;
+			opacity: 1;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-page-button:disabled {
-		color: var(--color-text-tertiary);
-		cursor: default;
-		opacity: 0.55;
-	}
+		.markdown-frontmatter-tag-input {
+			min-width: 5rem;
+			flex: 1 1 5rem;
+			height: 1.65rem;
+			border: 0;
+			background: transparent;
+			color: var(--atelier-fg);
+			font: inherit;
+			font-size: 0.78rem;
+			outline: none;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-page-button:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
-		outline-offset: 1px;
-	}
+		.markdown-frontmatter-tag-add {
+			display: inline-flex;
+			height: 1.5rem;
+			align-items: center;
+			gap: 0.2rem;
+			border: 0;
+			border-radius: 5px;
+			background: transparent;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.72rem;
+			opacity: 0;
+			padding: 0 0.4rem;
+		}
 
-	.markdown-view .ProseMirror .atelier-pdf-page-label {
-		min-width: 3.5rem;
-		color: var(--color-text-secondary);
-		font-size: 0.6875rem;
-		font-variant-numeric: tabular-nums;
-		font-weight: 600;
-		text-align: center;
-	}
+		.markdown-frontmatter-tags:hover .markdown-frontmatter-tag-add,
+		.markdown-frontmatter-tags:focus-within .markdown-frontmatter-tag-add,
+		.markdown-frontmatter-tag-add:focus-visible {
+			opacity: 1;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-status {
-		position: absolute;
-		inset: 0;
-		z-index: 1;
-		display: none;
-		align-items: center;
-		justify-content: center;
-		flex-direction: column;
-		gap: 0.75rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.8125rem;
-		line-height: 1.25rem;
-		background: var(--color-bg-panel-muted);
-	}
+		.markdown-frontmatter-tag-add:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="loading"]
-		.markdown-pdf-status,
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="unavailable"]
-		.markdown-pdf-status,
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="manual"]
-		.markdown-pdf-status,
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="open-only"]
-		.markdown-pdf-status {
-		display: flex;
-	}
+		.markdown-frontmatter-tag-add svg {
+			width: 0.65rem;
+			height: 0.65rem;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-preview-action {
-		display: none;
-		height: 1.875rem;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.75rem;
-		color: var(--color-text-on-action-primary);
-		font: inherit;
-		font-size: 0.75rem;
-		font-weight: 600;
-		line-height: 1;
-		background: var(--color-bg-action-primary);
-		border: 0;
-		border-radius: 0.375rem;
-		cursor: pointer;
-	}
+		.markdown-frontmatter-nested {
+			display: flex;
+			flex-direction: column;
+			border-radius: 6px;
+			padding: 0.12rem 0.5rem;
+		}
 
-	.markdown-view
-		.ProseMirror
-		.markdown-pdf-embed[data-asset-state="manual"]
-		.markdown-pdf-preview-action {
-		display: inline-flex;
-	}
+		.markdown-frontmatter-nested-row {
+			display: grid;
+			grid-template-columns: 5.5rem minmax(0, 1fr);
+			gap: 0.25rem;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-preview-action:hover {
-		background: var(--color-bg-action-primary-hover);
-	}
+		.markdown-frontmatter-remove {
+			display: inline-flex;
+			width: 1.65rem;
+			height: 1.65rem;
+			align-items: center;
+			justify-content: center;
+			align-self: start;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--atelier-fg-subtle);
+			margin-top: 0.175rem;
+			opacity: 0;
+		}
 
-	.markdown-view .ProseMirror .markdown-pdf-preview-action:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
-		outline-offset: 2px;
-	}
+		.markdown-frontmatter-row:hover .markdown-frontmatter-remove,
+		.markdown-frontmatter-remove:focus-visible {
+			opacity: 1;
+		}
 
-	@media (max-width: 640px) {
+		.markdown-frontmatter-remove:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		.markdown-frontmatter-remove svg {
+			width: 0.85rem;
+			height: 0.85rem;
+		}
+
+		.markdown-frontmatter-add {
+			display: inline-flex;
+			height: 1.85rem;
+			align-items: center;
+			align-self: flex-start;
+			gap: 0.35rem;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.75rem;
+			font-weight: 500;
+			margin: 0.15rem 0 0 -0.5rem;
+			padding: 0 0.55rem;
+		}
+
+		.markdown-frontmatter-add:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		.markdown-frontmatter-add:focus-visible {
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+			outline: none;
+		}
+
+		.markdown-frontmatter-add svg {
+			width: 0.78rem;
+			height: 0.78rem;
+			stroke-width: 1.9;
+		}
+
+		.markdown-frontmatter-empty-value {
+			height: 2rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.84rem;
+			line-height: 1.25rem;
+			padding: 0.36rem 0.5rem;
+		}
+
+		.markdown-frontmatter-raw {
+			padding: 0.15rem 0.2rem 0;
+		}
+
+		.markdown-frontmatter-yaml {
+			width: 100%;
+			min-height: 10rem;
+			resize: vertical;
+			border: 0;
+			border-radius: 5px;
+			background: var(--atelier-bg-subtle);
+			color: var(--atelier-fg);
+			font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+			font-size: 0.78rem;
+			line-height: 1.55;
+			outline: none;
+			padding: 0.75rem;
+		}
+
+		.markdown-frontmatter-yaml:focus {
+			box-shadow: inset 0 0 0 1px var(--atelier-fg-muted);
+		}
+
+		.markdown-frontmatter-error {
+			margin: 0.4rem 0 0;
+			color: var(--atelier-danger);
+			font-size: 0.72rem;
+			line-height: 1.35;
+		}
+
+		/* A revision takes no edits, and its fields read as fields, not as inputs:
+		   no hover affordance, no caret, and the values still plainly legible. */
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-input:disabled,
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-tag:disabled {
+			color: var(--atelier-fg-muted);
+			-webkit-text-fill-color: var(--atelier-fg-muted);
+			cursor: default;
+			opacity: 1;
+		}
+
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-key-cell:hover,
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-value:hover,
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-boolean:hover,
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-tags:hover,
+		.markdown-frontmatter[data-disabled="true"]
+			.markdown-frontmatter-nested:hover {
+			background: transparent;
+		}
+
+		.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-tag svg {
+			width: 0;
+			opacity: 0;
+		}
+
+		.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-remove {
+			display: none;
+		}
+
+		.markdown-frontmatter[data-disabled="true"] .markdown-frontmatter-yaml {
+			cursor: default;
+		}
+
+		@media (max-width: 700px) {
+			.markdown-frontmatter-header {
+				align-items: flex-start;
+			}
+
+			/* The note that says why a field cannot be edited stays; it is the
+			   answer to the question a disabled field asks. */
+			.markdown-frontmatter-title span:not(.markdown-frontmatter-note) {
+				display: none;
+			}
+
+			.markdown-frontmatter-row {
+				grid-template-columns: 8rem minmax(0, 1fr) 1.65rem;
+			}
+		}
+
+		@media (max-width: 520px) {
+			.markdown-frontmatter-row {
+				position: relative;
+				grid-template-columns: minmax(0, 1fr);
+				gap: 0;
+				padding-block: 0.18rem 0.3rem;
+			}
+
+			.markdown-frontmatter-key-cell {
+				width: fit-content;
+				min-width: min(10.5rem, 100%);
+				margin-left: 0;
+			}
+
+			.markdown-frontmatter-remove {
+				position: absolute;
+				top: 0.2rem;
+				right: 0.2rem;
+				margin-top: 0;
+			}
+
+			.markdown-frontmatter-nested-row {
+				grid-template-columns: 3.75rem minmax(0, 1fr);
+			}
+		}
+
+		/* Raw inline HTML (<kbd>, <sub>…) is shown as quiet source, not as a
+		   code chip that looks like real code. */
+		.markdown-view .ProseMirror .markdown-wc-inline-html > code {
+			background: transparent;
+			color: var(--atelier-fg-subtle);
+			padding: 0;
+			font-size: 0.8em;
+		}
+
+		/* Footnotes are laid out by document.css. Here: the marker is a link, a
+		   marker with no definition is drawn dashed and goes nowhere, the
+		   definition has a way back, and a jump target tints for a moment. */
+		.markdown-view .ProseMirror .markdown-footnote-ref {
+			transition: background-color 400ms ease;
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-ref-link {
+			color: var(--atelier-link);
+			text-decoration: none;
+			cursor: pointer;
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-ref-link:hover {
+			color: var(--atelier-link-hover);
+			text-decoration: underline;
+			text-underline-offset: 2px;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-footnote-ref--orphan
+			.markdown-footnote-ref-link {
+			color: var(--atelier-fg-subtle);
+			text-decoration: underline dashed;
+			text-underline-offset: 2px;
+			cursor: default;
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-def {
+			transition: background-color 400ms ease;
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-backref {
+			border: 0;
+			background: transparent;
+			padding: 0 0.25rem;
+			color: var(--atelier-fg-subtle);
+			font: inherit;
+			cursor: pointer;
+			border-radius: 2px;
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-backref:hover {
+			color: var(--atelier-link);
+			background: var(--atelier-bg-hover);
+		}
+
+		/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
+		   and the definition is the fade *out*; on the way in it was still
+		   deepening as the scroll came to rest, which cost most of the moment the
+		   tint exists for. */
+		.markdown-view .ProseMirror .markdown-footnote-target {
+			background-color: color-mix(
+				in srgb,
+				var(--atelier-link) 14%,
+				transparent
+			);
+			transition-duration: 120ms;
+			transition-timing-function: ease-out;
+		}
+
+		/* Unsupported blocks (raw HTML): a labelled, dashed container that reads
+		   as source, sized like a note. */
+		.markdown-view .ProseMirror .markdown-wc-unsupported-block {
+			margin: var(--markdown-block-gap) 0;
+			border: 1px dashed var(--atelier-border-strong);
+			border-radius: var(--markdown-radius);
+			padding: 0.5rem 0.75rem;
+		}
+
+		.markdown-view .ProseMirror .markdown-wc-unsupported-block > strong {
+			display: block;
+			margin-bottom: 0.25rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 11px;
+			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+
+		.markdown-view .ProseMirror .markdown-wc-unsupported-block > pre {
+			margin: 0;
+			padding: 0;
+			border: 0;
+			background: transparent;
+		}
+
+		.markdown-view .ProseMirror .markdown-wc-unsupported-block > pre code {
+			font-size: 13px;
+			line-height: 1.45;
+		}
+
+		/* The language label in a code block's top corner. */
+		.markdown-view .ProseMirror .markdown-code-language {
+			position: absolute;
+			top: 0.5rem;
+			right: 0.5rem;
+			z-index: 1;
+			border: 1px solid var(--atelier-border-subtle);
+			border-radius: var(--markdown-radius);
+			background: color-mix(in srgb, var(--atelier-panel) 88%, transparent);
+			color: var(--atelier-fg-subtle);
+			font-family:
+				ui-sans-serif,
+				-apple-system,
+				BlinkMacSystemFont,
+				"Segoe UI",
+				sans-serif;
+			font-size: 11px;
+			font-weight: 500;
+			letter-spacing: 0;
+			line-height: 1.25;
+			opacity: 0.6;
+			padding: 0.18rem 0.38rem;
+			pointer-events: none;
+			transition: opacity 120ms ease;
+		}
+
+		.markdown-view .ProseMirror pre:hover .markdown-code-language,
+		.markdown-view .ProseMirror pre:focus-within .markdown-code-language {
+			opacity: 1;
+		}
+
+		.markdown-view .ProseMirror .syntax-comment {
+			color: var(--atelier-syntax-comment);
+			font-style: italic;
+		}
+
+		.markdown-view .ProseMirror .syntax-keyword {
+			color: var(--atelier-syntax-keyword);
+			font-weight: 400;
+		}
+
+		.markdown-view .ProseMirror .syntax-literal,
+		.markdown-view .ProseMirror .syntax-number {
+			color: var(--atelier-syntax-number);
+		}
+
+		.markdown-view .ProseMirror .syntax-string {
+			color: var(--atelier-syntax-string);
+		}
+
+		.markdown-view .ProseMirror .syntax-property {
+			color: inherit;
+		}
+
+		.markdown-view .ProseMirror .syntax-type {
+			color: inherit;
+			font-weight: 400;
+		}
+
+		/* A dragged block gets a landing rail instead of relying on source selection
+		   alone. ProseMirror positions this at the resolved drop point, so it
+		   previews exactly where an image, PDF, or later embed will land. */
+		.markdown-view .atelier-markdown-drop-indicator {
+			border-radius: 999px;
+			background: var(--atelier-accent);
+			box-shadow: 0 0 0 1px var(--atelier-panel);
+			animation: markdown-drop-indicator-in 100ms ease-out;
+		}
+
+		@keyframes markdown-drop-indicator-in {
+			from {
+				opacity: 0;
+				transform: scaleX(0.94);
+			}
+			to {
+				opacity: 1;
+				transform: scaleX(1);
+			}
+		}
+
+		/* Standalone media is selectable and movable. Selection reuses the embed's
+		   existing edge; hover reveals a compact, undoable delete action. */
+		.markdown-view .ProseMirror [data-markdown-image-block] {
+			display: block;
+			position: relative;
+			cursor: grab;
+			user-select: none;
+			transition:
+				box-shadow 120ms ease-out,
+				border-color 120ms ease-out;
+		}
+
+		.markdown-view .ProseMirror .markdown-image-embed {
+			width: fit-content;
+			max-width: 100%;
+			margin: 1.35rem auto 1.75rem;
+			line-height: 0;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-image-embed
+			> .markdown-image-block-content {
+			display: block;
+			margin: 0;
+			transition:
+				box-shadow 120ms ease-out,
+				border-color 120ms ease-out;
+		}
+
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block]:is(img, .markdown-pdf-embed):hover:not(
+				.ProseMirror-selectednode
+			) {
+			box-shadow:
+				0 0 0 2px color-mix(in srgb, var(--atelier-ring) 36%, transparent),
+				var(--atelier-shadow-lg);
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-image-embed:hover:not(.ProseMirror-selectednode)
+			> .markdown-image-block-content {
+			box-shadow:
+				0 0 0 2px color-mix(in srgb, var(--atelier-ring) 36%, transparent),
+				var(--atelier-shadow-lg);
+		}
+
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block].ProseMirror-selectednode {
+			outline: none;
+		}
+
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block].ProseMirror-selectednode:is(
+				img,
+				.markdown-pdf-embed
+			) {
+			border-color: var(--atelier-ring);
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-image-embed.ProseMirror-selectednode
+			> .markdown-image-block-content {
+			border-color: var(--atelier-ring);
+		}
+
+		.markdown-view
+			.ProseMirror[data-markdown-media-dragging]
+			[data-markdown-image-block].ProseMirror-selectednode {
+			cursor: grabbing;
+		}
+
+		.markdown-view .ProseMirror .markdown-asset-delete {
+			display: inline-flex;
+			width: 1.75rem;
+			height: 1.75rem;
+			flex: 0 0 auto;
+			align-items: center;
+			justify-content: center;
+			padding: 0;
+			color: var(--atelier-fg-subtle);
+			cursor: pointer;
+			background: var(--atelier-panel);
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.375rem;
+			opacity: 0;
+			pointer-events: none;
+			transform: translateY(-2px);
+			transition:
+				opacity 100ms ease-out,
+				transform 100ms ease-out,
+				color 100ms ease-out,
+				background-color 100ms ease-out;
+		}
+
+		.markdown-view
+			.ProseMirror:not([contenteditable="true"])
+			.markdown-asset-delete {
+			display: none;
+		}
+
+		.markdown-view .ProseMirror .markdown-asset-delete > svg {
+			width: 0.875rem;
+			height: 0.875rem;
+		}
+
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block]:hover
+			.markdown-asset-delete,
+		.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
+			opacity: 1;
+			pointer-events: auto;
+			transform: translateY(0);
+		}
+
+		.markdown-view .ProseMirror .markdown-asset-delete:hover {
+			color: var(--atelier-danger);
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 1px;
+		}
+
+		.markdown-view .ProseMirror .markdown-image-embed > .markdown-asset-delete {
+			position: absolute;
+			top: 0.5rem;
+			right: 0.5rem;
+			z-index: 2;
+			box-shadow: 0 1px 2px
+				color-mix(in srgb, var(--atelier-fg) 10%, transparent);
+		}
+
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block][data-asset-state="loading"] {
+			cursor: progress;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-embed {
+			display: flex;
+			width: 100%;
+			height: 10rem;
+			min-height: 10rem;
+			flex-direction: column;
+			margin: 1.25rem 0;
+			overflow: hidden;
+			vertical-align: top;
+			background: var(--atelier-panel);
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.5rem;
+			box-shadow: 0 1px 2px
+				color-mix(in srgb, var(--atelier-fg) 6%, transparent);
+		}
+
 		.markdown-view
 			.ProseMirror
 			.markdown-pdf-embed:is(
 				[data-asset-state="loading"],
 				[data-asset-state="ready"]
 			) {
-			height: min(34rem, 70vh);
+			height: clamp(28rem, 68vh, 48rem);
+			min-height: 0;
 		}
-	}
-
-	/* Video embeds */
-	.markdown-view .ProseMirror .markdown-video-embed {
-		display: flex;
-		width: 100%;
-		flex-direction: column;
-		gap: 0.375rem;
-		margin: 1.125rem 0 0.25rem;
-		vertical-align: top;
-	}
-
-	.markdown-view .ProseMirror .markdown-video-frame {
-		position: relative;
-		display: block;
-		width: 100%;
-		aspect-ratio: 16 / 9;
-		overflow: hidden;
-		background: var(--color-bg-inverse-media);
-		border-radius: 0.625rem;
-		transition: box-shadow 120ms ease-out;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-embed:hover:not(.ProseMirror-selectednode)
-		> .markdown-video-frame {
-		box-shadow:
-			0 0 0 2px
-				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
-			0 12px 30px rgba(28, 25, 23, 0.09);
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-embed.ProseMirror-selectednode
-		> .markdown-video-frame {
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
-	}
-
-	.markdown-view .ProseMirror .markdown-video-frame .atelier-video-player {
-		position: absolute;
-		inset: 0;
-		height: 100%;
-	}
-
-	.markdown-view .ProseMirror .markdown-video-surface {
-		display: block;
-		width: 100%;
-		height: 100%;
-		background: var(--color-bg-inverse-media);
-	}
-
-	.markdown-view .ProseMirror .markdown-video-toolbar {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		z-index: 2;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.125rem;
-		padding: 0.1875rem 0.25rem;
-		background: color-mix(in srgb, var(--color-bg-inverse) 82%, transparent);
-		border-radius: 0.5rem;
-		font-size: 0.6563rem;
-		font-weight: 600;
-		line-height: 1;
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 100ms ease-out;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-embed:hover
-		.markdown-video-toolbar,
-	.markdown-view .ProseMirror .markdown-video-toolbar:has(:focus-visible) {
-		opacity: 1;
-		pointer-events: auto;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-toolbar[data-open-available="false"]
-		.markdown-video-open {
-		display: none;
-	}
-
-	.markdown-view .ProseMirror .markdown-video-open {
-		padding: 0.25rem 0.4375rem;
-		color: var(--color-text-inverse-primary);
-		cursor: pointer;
-		text-decoration: none;
-	}
-
-	.markdown-view .ProseMirror .markdown-video-open:hover {
-		color: var(--color-text-inverse-primary);
-	}
-
-	.markdown-view .ProseMirror .markdown-video-toolbar-divider {
-		width: 1px;
-		height: 0.75rem;
-		background: var(--color-border-inverse);
-	}
-
-	/* The shared delete button sits inside the dark toolbar chip — restyle it
-	   to match instead of the floating light card used over images. */
-	.markdown-view .ProseMirror .markdown-video-toolbar .markdown-asset-delete {
-		width: auto;
-		height: auto;
-		padding: 0.25rem 0.4375rem;
-		color: var(--color-text-inverse-secondary);
-		background: none;
-		border: none;
-		opacity: 1;
-		pointer-events: auto;
-		transform: none;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-toolbar
-		.markdown-asset-delete:hover {
-		color: var(--color-text-inverse-danger);
-		background: none;
-	}
-
-	.markdown-view .ProseMirror .markdown-video-status {
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		display: none;
-		padding: 0.375rem 0.75rem;
-		color: var(--color-text-inverse-tertiary);
-		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
-		font-size: 0.6875rem;
-		transform: translate(-50%, -50%);
-		white-space: nowrap;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-embed:is(
-			[data-asset-state="loading"],
-			[data-asset-state="unavailable"]
-		)
-		.markdown-video-status {
-		display: block;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-video-embed:is(
-			[data-asset-state="loading"],
-			[data-asset-state="unavailable"]
-		)
-		.atelier-video-player {
-		visibility: hidden;
-	}
-
-	.markdown-view .ProseMirror .markdown-video-caption {
-		display: block;
-		color: var(--color-text-tertiary);
-		font-size: 0.75rem;
-		line-height: 1.4;
-	}
-
-	/* Mermaid diagrams */
-	.markdown-view .ProseMirror .markdown-mermaid-block {
-		margin-top: 0.75rem;
-		margin-bottom: 0.75rem;
-	}
-
-	.markdown-view .ProseMirror .markdown-mermaid-preview {
-		display: flex;
-		justify-content: center;
-		padding: 0.75rem;
-		background-color: var(--muted);
-		border: 1px solid var(--border);
-		border-radius: 0.375rem;
-		overflow-x: auto;
-	}
-
-	.markdown-view .ProseMirror .markdown-mermaid-preview svg {
-		max-width: 100%;
-		height: auto;
-	}
-
-	.markdown-view .ProseMirror .markdown-mermaid-error {
-		background-color: color-mix(in srgb, var(--destructive) 8%, var(--muted));
-		border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--border));
-		border-radius: 0.375rem;
-		padding: 0.75rem;
-		color: var(--destructive);
-		font-family:
-			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-			"Courier New", monospace;
-		font-size: 13px;
-		white-space: pre-wrap;
-	}
-
-	.markdown-view .ProseMirror .markdown-mermaid-source {
-		background-color: var(--muted);
-		border: 1px solid var(--border);
-		border-radius: 0.375rem;
-		padding: 0.75rem;
-		overflow-x: auto;
-		margin: 0;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-mermaid-block[data-editing="false"]
-		.markdown-mermaid-source {
-		display: none;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-mermaid-block[data-editing="true"]
-		.markdown-mermaid-preview,
-	.markdown-view
-		.ProseMirror
-		.markdown-mermaid-block[data-editing="true"]
-		.markdown-mermaid-error {
-		display: none;
-	}
-
-	.markdown-view .ProseMirror .markdown-mermaid-sr-description {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-		white-space: nowrap;
-		border: 0;
-	}
-
-	.markdown-view
-		.ProseMirror
-		.markdown-mermaid-block[data-editing="true"]
-		.markdown-mermaid-sr-description {
-		display: none;
-	}
-
-	/* Links to workspace files carry the file's icon, Notion's page mention. */
-	.markdown-view .ProseMirror .markdown-document-link-icon {
-		display: inline-block;
-		width: 1em;
-		height: 1em;
-		margin: 0 0.3em 0 0;
-		border-radius: 0;
-		vertical-align: -0.2em;
-		user-select: none;
-	}
-
-	/* A link to a path that does not exist: the underline turns dashed. */
-	.markdown-view .ProseMirror .markdown-document-link-missing {
-		text-decoration-style: dashed;
-		text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
-	}
-
-	/* Task lists. The box takes the bullet's place: a 1rem square, then a
-	   0.5rem gap, so the text lands on the same column as bullet text. */
-	.markdown-view .ProseMirror li[data-task] {
-		display: grid;
-		grid-template-columns: 1rem minmax(0, 1fr);
-		column-gap: 0.5rem;
-		align-items: start;
-		margin: 0 0 0 -1.5rem;
-		padding: 3px 0;
-		list-style: none;
-	}
-
-	/* Done text dims with everything in it, code chips included. */
-	.markdown-view .ProseMirror li[data-task="x"] > div > p code {
-		color: inherit;
-		opacity: 0.7;
-		text-decoration: inherit;
-	}
-
-	/* A done task reads as done: dimmed and struck, like Notion. Only its
-	   own text: nested tasks carry their own state. */
-	.markdown-view .ProseMirror li[data-task="x"] > div > p {
-		color: var(--color-text-tertiary);
-		text-decoration: line-through;
-		text-decoration-color: color-mix(
-			in srgb,
-			var(--color-text-tertiary) 60%,
-			transparent
-		);
-	}
-
-	.markdown-view .ProseMirror li[data-task] > input[type="checkbox"] {
-		appearance: none;
-		grid-column: 1;
-		width: 1rem;
-		height: 1rem;
-		/* Centred on the first line box (line-height 1.5). */
-		margin: calc((1.5em - 1rem) / 2) 0 0;
-		justify-self: start;
-		border: 1.5px solid var(--color-icon-tertiary);
-		border-radius: var(--markdown-radius);
-		background-color: var(--color-bg-panel);
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-		cursor: pointer;
-		transition:
-			background-color 120ms ease,
-			border-color 120ms ease,
-			box-shadow 120ms ease;
-	}
-
-	.markdown-view
-		.ProseMirror
-		li[data-task]
-		> input[type="checkbox"]:hover:not(:checked) {
-		border-color: var(--color-text-secondary);
-		background-color: var(--color-bg-hover);
-	}
-
-	.markdown-view
-		.ProseMirror
-		li[data-task]
-		> input[type="checkbox"]:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
-		outline-offset: 2px;
-	}
-
-	.markdown-view .ProseMirror li[data-task] > input[type="checkbox"]:checked {
-		border-color: var(--color-bg-action-primary);
-		background-color: var(--color-bg-action-primary);
-		background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6.2 5 8.1 9 3.8' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-		background-position: center;
-		background-repeat: no-repeat;
-		background-size: 0.75rem 0.75rem;
-		box-shadow: 0 1px 2px rgba(194, 65, 12, 0.18);
-	}
-
-	.markdown-view .ProseMirror li[data-task] > div {
-		grid-column: 2;
-		flex: 1 1 auto;
-		min-width: 0;
-	}
-
-	.markdown-view .ProseMirror li[data-task] p {
-		margin-top: 0;
-		margin-bottom: 0;
-	}
-
-	/* Slash command palette. It is portaled into .atelier-root so it keeps the
-	   same typography, theme tokens, and sizing model as the editor shell. */
-	.markdown-slash-menu {
-		z-index: 50;
-		display: flex;
-		width: 19rem;
-		max-height: min(26.25rem, calc(100vh - 1.5rem));
-		flex-direction: column;
-		overflow: hidden;
-		border: 1px solid
-			color-mix(in srgb, var(--color-border-panel) 92%, transparent);
-		border-radius: 10px;
-		background: color-mix(in srgb, var(--color-bg-panel) 97%, transparent);
-		color: var(--color-text-primary);
-		font-family:
-			ui-sans-serif,
-			-apple-system,
-			BlinkMacSystemFont,
-			"Segoe UI",
-			sans-serif;
-		box-shadow:
-			0 18px 50px rgba(28, 25, 23, 0.14),
-			0 5px 16px rgba(28, 25, 23, 0.08),
-			0 1px 2px rgba(28, 25, 23, 0.08);
-		backdrop-filter: blur(16px);
-	}
-
-	.markdown-slash-menu-scroll {
-		min-height: 0;
-		overflow-y: auto;
-		padding: 0.38rem;
-		scrollbar-color: var(--color-border-panel) transparent;
-		scrollbar-width: thin;
-	}
-
-	.markdown-slash-group + .markdown-slash-group {
-		margin-top: 0.28rem;
-		padding-top: 0.28rem;
-		border-top: 1px solid var(--color-border-subtle);
-	}
-
-	.markdown-slash-group-label {
-		padding: 0.42rem 0.55rem 0.26rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.66rem;
-		font-weight: 650;
-		letter-spacing: 0.075em;
-		line-height: 1;
-		text-transform: uppercase;
-	}
-
-	.markdown-slash-option {
-		display: grid;
-		grid-template-columns: 2rem minmax(0, 1fr);
-		min-height: 3rem;
-		align-items: center;
-		gap: 0.62rem;
-		padding: 0.36rem 0.5rem;
-		border-radius: 7px;
-		cursor: pointer;
-		user-select: none;
-		transition:
-			background-color 100ms ease,
-			box-shadow 100ms ease;
-	}
-
-	.markdown-slash-option:hover {
-		background: color-mix(in srgb, var(--color-bg-hover) 72%, transparent);
-	}
-
-	.markdown-slash-option[data-selected="true"] {
-		background: var(--color-bg-selection-current);
-		box-shadow: inset 0 0 0 1px var(--color-border-selection-current);
-	}
-
-	.markdown-slash-option-icon {
-		display: inline-flex;
-		width: 2rem;
-		height: 2rem;
-		align-items: center;
-		justify-content: center;
-		border: 1px solid var(--color-border-subtle);
-		border-radius: 7px;
-		background: color-mix(
-			in srgb,
-			var(--color-bg-panel-muted) 72%,
-			transparent
-		);
-		color: var(--color-icon-secondary);
-	}
-
-	.markdown-slash-option-icon svg {
-		width: 1rem;
-		height: 1rem;
-		stroke-width: 1.8;
-	}
-
-	.markdown-slash-option[data-selected="true"] .markdown-slash-option-icon {
-		border-color: color-mix(
-			in srgb,
-			var(--color-border-selection-current) 82%,
-			var(--color-bg-panel)
-		);
-		background: color-mix(in srgb, var(--color-bg-panel) 82%, transparent);
-		color: var(--color-icon-brand);
-	}
-
-	.markdown-slash-option-copy {
-		display: flex;
-		min-width: 0;
-		flex-direction: column;
-		gap: 0.12rem;
-	}
-
-	.markdown-slash-option-label {
-		overflow: hidden;
-		color: var(--color-text-primary);
-		font-size: 0.84rem;
-		font-weight: 600;
-		letter-spacing: -0.005em;
-		line-height: 1.2;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.markdown-slash-option-description {
-		overflow: hidden;
-		color: var(--color-text-tertiary);
-		font-size: 0.71rem;
-		font-weight: 450;
-		line-height: 1.25;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.markdown-slash-menu-footer {
-		display: flex;
-		flex: 0 0 auto;
-		align-items: center;
-		gap: 0.72rem;
-		border-top: 1px solid var(--color-border-subtle);
-		background: color-mix(
-			in srgb,
-			var(--color-bg-panel-muted) 52%,
-			transparent
-		);
-		padding: 0.46rem 0.8rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.64rem;
-		font-weight: 550;
-		line-height: 1;
-	}
-
-	/* Slash-command emoji search reuses the command palette's shell and row
-	   language so the handoff from /emoji feels like one continuous flow. */
-	.markdown-emoji-menu {
-		max-height: min(22.25rem, calc(100vh - 1.5rem));
-	}
-
-	.markdown-emoji-option {
-		min-height: 2.75rem;
-	}
-
-	.markdown-emoji-option-glyph {
-		font-family:
-			"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-		font-size: 1.28rem;
-		line-height: 1;
-	}
-
-	.markdown-emoji-empty {
-		padding: 1.35rem 0.75rem 1.55rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.78rem;
-		line-height: 1.35;
-		text-align: center;
-	}
-
-	.markdown-embed-file-search {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin: 0.5rem 0.5rem 0.25rem;
-		padding: 0 0.625rem;
-		border: 1px solid var(--color-border-panel);
-		border-radius: 0.5rem;
-		background: var(--color-bg-panel-muted);
-	}
-
-	.markdown-embed-file-search svg {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex-shrink: 0;
-		color: var(--color-icon-tertiary);
-	}
-
-	.markdown-embed-file-search input {
-		width: 100%;
-		height: 2rem;
-		border: none;
-		background: none;
-		color: var(--color-text-primary);
-		font: inherit;
-		font-size: 0.8125rem;
-		outline: none;
-	}
-
-	.markdown-embed-file-search input::placeholder {
-		color: var(--color-text-tertiary);
-	}
-
-	.markdown-embed-file-option-icon img {
-		width: 1.05rem;
-		height: 1.05rem;
-	}
-
-	.markdown-embed-file-option .markdown-slash-option-description {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	/* The upload action lives outside the scrolling file list, pinned above
-	   the footer behind its own hairline. */
-	.markdown-embed-file-upload-section {
-		flex-shrink: 0;
-		padding: 0.375rem 0.5rem;
-		border-top: 1px solid var(--color-border-panel);
-	}
-
-	.markdown-embed-file-upload {
-		width: 100%;
-		border: none;
-		background: none;
-		font: inherit;
-		text-align: left;
-	}
-
-	.markdown-embed-file-upload .markdown-embed-file-upload-icon {
-		border-style: dashed;
-	}
-
-	.markdown-embed-file-upload-icon svg {
-		width: 0.875rem;
-		height: 0.875rem;
-	}
-
-	.markdown-embed-file-error {
-		padding: 0.375rem 0.75rem 0.5rem;
-		color: var(--color-text-status-danger);
-		font-size: 0.75rem;
-		line-height: 1.35;
-	}
-
-	/* The @ menu reuses the palette; only the matched characters and the
-	   "more results" hint are its own. */
-	.markdown-mention-match {
-		background: transparent;
-		color: var(--color-text-brand);
-	}
-
-	.markdown-mention-more {
-		padding: 0.3rem 0.55rem 0.4rem 3.12rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.71rem;
-		font-weight: 450;
-	}
-
-	.markdown-embed-file-empty {
-		padding: 1.35rem 0.75rem 1.55rem;
-		color: var(--color-text-tertiary);
-		font-size: 0.78rem;
-		line-height: 1.35;
-		text-align: center;
-	}
-
-	.markdown-review {
-		position: relative;
-		container-type: inline-size;
-	}
-
-	.markdown-review-overlay {
-		position: absolute;
-		inset: 0;
-		z-index: 15;
-		display: flex;
-		min-height: 0;
-		flex-direction: column;
-		background: var(--background);
-	}
-
-	.markdown-review .markdown-review-surface {
-		position: relative;
-		flex: 1 1 auto;
-		height: 100%;
-		min-height: 0;
-	}
-
-	.markdown-review .ProseMirror {
-		cursor: default;
-		user-select: text;
-	}
-
-	.markdown-review .ProseMirror [data-review-status="added"] {
-		background-color: var(--color-bg-diff-added);
-		box-decoration-break: clone;
-		-webkit-box-decoration-break: clone;
-		border-radius: 0.25rem;
-		color: var(--color-text-diff-added);
-		text-decoration: none;
-	}
-
-	.markdown-review .ProseMirror [data-review-status="removed"] {
-		background-color: var(--color-bg-diff-removed);
-		box-decoration-break: clone;
-		-webkit-box-decoration-break: clone;
-		border-radius: 0.25rem;
-		color: var(--color-text-diff-removed);
-		text-decoration: line-through;
-		text-decoration-color: var(--color-border-diff-removed);
-	}
-
-	/* Formatting-only changes sit in the sentence as small monospace glyphs:
-	   the source the block lost, struck; the source it gained, bold. Grey
-	   ground, so they read as notes rather than as errors. */
-	.markdown-review .ProseMirror .markdown-review-format-glyph {
-		display: inline-block;
-		margin: 0 1px;
-		padding: 1px 3px;
-		border-radius: 3px;
-		background: var(--color-bg-hover-canvas);
-		color: var(--color-text-secondary);
-		font-family:
-			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-		font-size: 0.72em;
-		line-height: 1;
-		vertical-align: 0.18em;
-		user-select: none;
-		cursor: pointer;
-	}
-
-	.markdown-review .ProseMirror .markdown-review-format-glyph > s {
-		color: var(--color-text-diff-removed);
-		text-decoration: line-through;
-		text-decoration-color: currentColor;
-	}
-
-	.markdown-review .ProseMirror .markdown-review-format-glyph > s + b {
-		margin-left: 3px;
-	}
-
-	.markdown-review .ProseMirror .markdown-review-format-glyph > b {
-		color: var(--color-text-primary);
-		font-weight: 700;
-	}
-
-	.markdown-review
-		.ProseMirror
-		.markdown-review-format-glyph[data-review-active="true"] {
-		box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
-	}
-
-	/* A node whose attributes changed (a ticked task, a re-levelled heading)
-	   stays in place with a soft brand tint; its text is not a diff. */
-	.markdown-review .ProseMirror [data-review-status="modified"] {
-		background-color: var(--color-bg-selection-current);
-		box-decoration-break: clone;
-		-webkit-box-decoration-break: clone;
-		border-radius: 0.25rem;
-	}
-
-	/* Inside a marked task item the diff colour wins over done-task dimming. */
-	.markdown-review
-		.ProseMirror
-		li[data-review-status][data-task="x"]
-		> div
-		> p {
-		color: inherit;
-		text-decoration: inherit;
-	}
-
-	/* Empty paragraphs are serialized as an invisible `<span></span>` anchor.
-	   Keep the review metadata for undo/keep and click targeting, but do not
-	   paint the invisible placeholder as if it were visible Markdown content. */
-	.markdown-review .ProseMirror [data-review-empty="true"] {
-		background-color: transparent;
-		color: inherit;
-		text-decoration: none;
-	}
-
-	.markdown-review .ProseMirror [data-review-change-id] {
-		cursor: pointer;
-		transition:
-			background-color 120ms ease,
-			box-shadow 120ms ease;
-	}
-
-	.markdown-review .ProseMirror [data-review-active="true"] {
-		box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
-		box-decoration-break: clone;
-		-webkit-box-decoration-break: clone;
-	}
-
-	.markdown-review
-		.ProseMirror
-		[data-review-empty="true"][data-review-active="true"] {
-		box-shadow: none;
-	}
-
-	/* Selection toolbar: the Notion-style panel floating over a text
-	   selection. Portaled into .atelier-root like the slash menu so it shares
-	   the theme tokens and font stack. */
-	.markdown-selection-toolbar {
-		z-index: 50;
-		display: flex;
-		width: 13rem;
-		flex-direction: column;
-		padding: 4px;
-		border: 1px solid var(--color-border-panel);
-		border-radius: 10px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
-		font-family:
-			ui-sans-serif,
-			-apple-system,
-			BlinkMacSystemFont,
-			"Segoe UI",
-			sans-serif;
-		box-shadow:
-			0 18px 50px rgba(28, 25, 23, 0.14),
-			0 5px 16px rgba(28, 25, 23, 0.08),
-			0 1px 2px rgba(28, 25, 23, 0.08);
-		/* Fades in on appearance and out from where it stood on dismissal. */
-		animation: markdown-selection-toolbar-in 140ms ease;
-		transition:
-			opacity 140ms ease,
-			transform 140ms ease;
-	}
-
-	.markdown-selection-toolbar[data-state="closing"] {
-		opacity: 0;
-		transform: translateY(4px);
-		pointer-events: none;
-	}
-
-	@keyframes markdown-selection-toolbar-in {
-		from {
+
+		.markdown-view .ProseMirror .markdown-pdf-toolbar {
+			display: flex;
+			min-height: 2.5rem;
+			flex: 0 0 auto;
+			align-items: center;
+			gap: 0.625rem;
+			padding: 0 0.75rem;
+			background: var(--atelier-bg-subtle);
+			border-bottom: 1px solid var(--atelier-border);
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-icon {
+			display: inline-flex;
+			width: 1.5rem;
+			height: 1.75rem;
+			flex: 0 0 auto;
+			align-items: center;
+			justify-content: center;
+			color: var(--atelier-link);
+			background: var(--atelier-accent-subtle);
+			border: 1px solid var(--atelier-accent-border);
+			border-radius: 0.25rem;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-icon::after {
+			content: "PDF";
+			font-size: 0.5rem;
+			font-weight: 750;
+			letter-spacing: 0.02em;
+			line-height: 1;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-label {
+			min-width: 0;
+			flex: 1 1 auto;
+			overflow: hidden;
+			color: var(--atelier-fg);
+			font-size: 0.8125rem;
+			font-weight: 600;
+			line-height: 1.25rem;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-view .ProseMirror a.markdown-pdf-open {
+			display: inline-flex;
+			height: 1.75rem;
+			flex: 0 0 auto;
+			align-items: center;
+			justify-content: center;
+			padding: 0 0.625rem;
+			color: var(--atelier-fg-muted);
+			font-size: 0.75rem;
+			font-weight: 600;
+			line-height: 1;
+			text-decoration: none;
+			background: var(--atelier-panel);
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.375rem;
+		}
+
+		.markdown-view .ProseMirror a.markdown-pdf-open:hover {
+			color: var(--atelier-fg);
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="loading"]
+			a.markdown-pdf-open,
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="unavailable"]
+			a.markdown-pdf-open {
+			color: var(--atelier-fg-subtle);
+			pointer-events: none;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-surface {
+			position: relative;
+			display: flex;
+			min-height: 7.5rem;
+			flex: 1 1 auto;
+			background: var(--atelier-bg-subtle);
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-preview {
+			position: relative;
+			display: block;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			background: color-mix(
+				in srgb,
+				var(--atelier-fg) 72%,
+				var(--atelier-panel)
+			);
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-canvas-scroll {
+			display: block;
+			height: 100%;
+			overflow: auto;
+			padding: 0 0 3.75rem;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-preview-mount {
+			display: block;
+			width: 100%;
+			height: 100%;
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-canvas {
+			display: block;
+			max-width: 100%;
+			height: auto;
+			margin: 0 auto;
+			background: white;
+			box-shadow: var(--atelier-shadow-lg);
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-sr-page-text {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+			border: 0;
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-page-controls {
+			position: absolute;
+			bottom: 0.875rem;
+			left: 50%;
+			display: flex;
+			align-items: center;
+			gap: 0.25rem;
+			padding: 0.25rem;
+			color: var(--atelier-fg);
+			background: color-mix(in srgb, var(--atelier-panel) 94%, transparent);
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.5rem;
+			box-shadow: var(--atelier-shadow-md);
+			transform: translateX(-50%);
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-page-button {
+			display: inline-flex;
+			height: 1.75rem;
+			align-items: center;
+			padding: 0 0.625rem;
+			color: var(--atelier-fg-muted);
+			font: inherit;
+			font-size: 0.6875rem;
+			font-weight: 600;
+			background: transparent;
+			border: 0;
+			border-radius: 0.25rem;
+			cursor: pointer;
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-page-button:hover:not(:disabled) {
+			color: var(--atelier-fg);
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-page-button:disabled {
+			color: var(--atelier-fg-subtle);
+			cursor: default;
+			opacity: 0.55;
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-page-button:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 1px;
+		}
+
+		.markdown-view .ProseMirror .atelier-pdf-page-label {
+			min-width: 3.5rem;
+			color: var(--atelier-fg-muted);
+			font-size: 0.6875rem;
+			font-variant-numeric: tabular-nums;
+			font-weight: 600;
+			text-align: center;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-status {
+			position: absolute;
+			inset: 0;
+			z-index: 1;
+			display: none;
+			align-items: center;
+			justify-content: center;
+			flex-direction: column;
+			gap: 0.75rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.8125rem;
+			line-height: 1.25rem;
+			background: var(--atelier-bg-subtle);
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="loading"]
+			.markdown-pdf-status,
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="unavailable"]
+			.markdown-pdf-status,
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="manual"]
+			.markdown-pdf-status,
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="open-only"]
+			.markdown-pdf-status {
+			display: flex;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-preview-action {
+			display: none;
+			height: 1.875rem;
+			align-items: center;
+			justify-content: center;
+			padding: 0 0.75rem;
+			color: var(--atelier-accent-on);
+			font: inherit;
+			font-size: 0.75rem;
+			font-weight: 600;
+			line-height: 1;
+			background: var(--atelier-accent);
+			border: 0;
+			border-radius: 0.375rem;
+			cursor: pointer;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-pdf-embed[data-asset-state="manual"]
+			.markdown-pdf-preview-action {
+			display: inline-flex;
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-preview-action:hover {
+			background: var(--atelier-accent-hover);
+		}
+
+		.markdown-view .ProseMirror .markdown-pdf-preview-action:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 2px;
+		}
+
+		@media (max-width: 640px) {
+			.markdown-view
+				.ProseMirror
+				.markdown-pdf-embed:is(
+					[data-asset-state="loading"],
+					[data-asset-state="ready"]
+				) {
+				height: min(34rem, 70vh);
+			}
+		}
+
+		/* Video embeds */
+		.markdown-view .ProseMirror .markdown-video-embed {
+			display: flex;
+			width: 100%;
+			flex-direction: column;
+			gap: 0.375rem;
+			margin: 1.125rem 0 0.25rem;
+			vertical-align: top;
+		}
+
+		.markdown-view .ProseMirror .markdown-video-frame {
+			position: relative;
+			display: block;
+			width: 100%;
+			aspect-ratio: 16 / 9;
+			overflow: hidden;
+			background: var(--atelier-overlay);
+			border-radius: 0.625rem;
+			transition: box-shadow 120ms ease-out;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed:hover:not(.ProseMirror-selectednode)
+			> .markdown-video-frame {
+			box-shadow:
+				0 0 0 2px color-mix(in srgb, var(--atelier-ring) 36%, transparent),
+				var(--atelier-shadow-lg);
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed.ProseMirror-selectednode
+			> .markdown-video-frame {
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+		}
+
+		.markdown-view .ProseMirror .markdown-video-frame .atelier-video-player {
+			position: absolute;
+			inset: 0;
+			height: 100%;
+		}
+
+		.markdown-view .ProseMirror .markdown-video-surface {
+			display: block;
+			width: 100%;
+			height: 100%;
+			background: var(--atelier-overlay);
+		}
+
+		.markdown-view .ProseMirror .markdown-video-toolbar {
+			position: absolute;
+			top: 0.5rem;
+			right: 0.5rem;
+			z-index: 2;
+			display: inline-flex;
+			align-items: center;
+			gap: 0.125rem;
+			padding: 0.1875rem 0.25rem;
+			background: color-mix(in srgb, var(--atelier-overlay) 82%, transparent);
+			border-radius: 0.5rem;
+			font-size: 0.6563rem;
+			font-weight: 600;
+			line-height: 1;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 100ms ease-out;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed:hover
+			.markdown-video-toolbar,
+		.markdown-view .ProseMirror .markdown-video-toolbar:has(:focus-visible) {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-toolbar[data-open-available="false"]
+			.markdown-video-open {
+			display: none;
+		}
+
+		.markdown-view .ProseMirror .markdown-video-open {
+			padding: 0.25rem 0.4375rem;
+			color: var(--atelier-overlay-fg);
+			cursor: pointer;
+			text-decoration: none;
+		}
+
+		.markdown-view .ProseMirror .markdown-video-open:hover {
+			color: var(--atelier-overlay-fg);
+		}
+
+		.markdown-view .ProseMirror .markdown-video-toolbar-divider {
+			width: 1px;
+			height: 0.75rem;
+			background: var(--atelier-overlay-border);
+		}
+
+		/* The shared delete button sits inside the dark toolbar chip — restyle it
+		   to match instead of the floating light card used over images. */
+		.markdown-view .ProseMirror .markdown-video-toolbar .markdown-asset-delete {
+			width: auto;
+			height: auto;
+			padding: 0.25rem 0.4375rem;
+			color: var(--atelier-overlay-fg-muted);
+			background: none;
+			border: none;
+			opacity: 1;
+			pointer-events: auto;
+			transform: none;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-toolbar
+			.markdown-asset-delete:hover {
+			color: var(--atelier-overlay-danger);
+			background: none;
+		}
+
+		.markdown-view .ProseMirror .markdown-video-status {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			display: none;
+			padding: 0.375rem 0.75rem;
+			color: var(--atelier-overlay-fg-subtle);
+			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+			font-size: 0.6875rem;
+			transform: translate(-50%, -50%);
+			white-space: nowrap;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed:is(
+				[data-asset-state="loading"],
+				[data-asset-state="unavailable"]
+			)
+			.markdown-video-status {
+			display: block;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed:is(
+				[data-asset-state="loading"],
+				[data-asset-state="unavailable"]
+			)
+			.atelier-video-player {
+			visibility: hidden;
+		}
+
+		.markdown-view .ProseMirror .markdown-video-caption {
+			display: block;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.75rem;
+			line-height: 1.4;
+		}
+
+		/* Mermaid diagrams */
+		.markdown-view .ProseMirror .markdown-mermaid-block {
+			margin-top: 0.75rem;
+			margin-bottom: 0.75rem;
+		}
+
+		.markdown-view .ProseMirror .markdown-mermaid-preview {
+			display: flex;
+			justify-content: center;
+			padding: 0.75rem;
+			background-color: var(--atelier-bg-subtle);
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.375rem;
+			overflow-x: auto;
+		}
+
+		.markdown-view .ProseMirror .markdown-mermaid-preview svg {
+			max-width: 100%;
+			height: auto;
+		}
+
+		.markdown-view .ProseMirror .markdown-mermaid-error {
+			background-color: color-mix(
+				in srgb,
+				var(--atelier-danger) 8%,
+				var(--atelier-bg-subtle)
+			);
+			border: 1px solid
+				color-mix(in srgb, var(--atelier-danger) 30%, var(--atelier-border));
+			border-radius: 0.375rem;
+			padding: 0.75rem;
+			color: var(--atelier-danger);
+			font-family:
+				ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+				"Liberation Mono", "Courier New", monospace;
+			font-size: 13px;
+			white-space: pre-wrap;
+		}
+
+		.markdown-view .ProseMirror .markdown-mermaid-source {
+			background-color: var(--atelier-bg-subtle);
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.375rem;
+			padding: 0.75rem;
+			overflow-x: auto;
+			margin: 0;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-mermaid-block[data-editing="false"]
+			.markdown-mermaid-source {
+			display: none;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-mermaid-block[data-editing="true"]
+			.markdown-mermaid-preview,
+		.markdown-view
+			.ProseMirror
+			.markdown-mermaid-block[data-editing="true"]
+			.markdown-mermaid-error {
+			display: none;
+		}
+
+		.markdown-view .ProseMirror .markdown-mermaid-sr-description {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+			border: 0;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-mermaid-block[data-editing="true"]
+			.markdown-mermaid-sr-description {
+			display: none;
+		}
+
+		/* Links to workspace files carry the file's icon, Notion's page mention. */
+		.markdown-view .ProseMirror .markdown-document-link-icon {
+			display: inline-block;
+			width: 1em;
+			height: 1em;
+			margin: 0 0.3em 0 0;
+			border-radius: 0;
+			vertical-align: -0.2em;
+			user-select: none;
+		}
+
+		/* A link to a path that does not exist: the underline turns dashed. */
+		.markdown-view .ProseMirror .markdown-document-link-missing {
+			text-decoration-style: dashed;
+			text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+		}
+
+		/* Task boxes are drawn by document.css; in the editor they are also
+		   controls. */
+		.markdown-view .ProseMirror li[data-task] > input[type="checkbox"] {
+			cursor: pointer;
+			transition:
+				background-color 120ms ease,
+				border-color 120ms ease,
+				box-shadow 120ms ease;
+		}
+
+		.markdown-view
+			.ProseMirror
+			li[data-task]
+			> input[type="checkbox"]:hover:not(:checked) {
+			border-color: var(--atelier-fg-muted);
+			background-color: var(--atelier-bg-hover);
+		}
+
+		.markdown-view
+			.ProseMirror
+			li[data-task]
+			> input[type="checkbox"]:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 2px;
+		}
+
+		/* Slash command palette. It is portaled into .atelier-root so it keeps the
+		   same typography, theme tokens, and sizing model as the editor shell. */
+		.markdown-slash-menu {
+			z-index: 50;
+			display: flex;
+			width: 19rem;
+			max-height: min(26.25rem, calc(100vh - 1.5rem));
+			flex-direction: column;
+			overflow: hidden;
+			border: 1px solid
+				color-mix(in srgb, var(--atelier-border) 92%, transparent);
+			border-radius: 10px;
+			background: color-mix(in srgb, var(--atelier-panel) 97%, transparent);
+			color: var(--atelier-fg);
+			font-family:
+				ui-sans-serif,
+				-apple-system,
+				BlinkMacSystemFont,
+				"Segoe UI",
+				sans-serif;
+			box-shadow: var(--atelier-shadow-lg);
+			backdrop-filter: blur(16px);
+		}
+
+		.markdown-slash-menu-scroll {
+			min-height: 0;
+			overflow-y: auto;
+			padding: 0.38rem;
+			scrollbar-color: var(--atelier-border) transparent;
+			scrollbar-width: thin;
+		}
+
+		.markdown-slash-group + .markdown-slash-group {
+			margin-top: 0.28rem;
+			padding-top: 0.28rem;
+			border-top: 1px solid var(--atelier-border-subtle);
+		}
+
+		.markdown-slash-group-label {
+			padding: 0.42rem 0.55rem 0.26rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.66rem;
+			font-weight: 650;
+			letter-spacing: 0.075em;
+			line-height: 1;
+			text-transform: uppercase;
+		}
+
+		.markdown-slash-option {
+			display: grid;
+			grid-template-columns: 2rem minmax(0, 1fr);
+			min-height: 3rem;
+			align-items: center;
+			gap: 0.62rem;
+			padding: 0.36rem 0.5rem;
+			border-radius: 7px;
+			cursor: pointer;
+			user-select: none;
+			transition:
+				background-color 100ms ease,
+				box-shadow 100ms ease;
+		}
+
+		.markdown-slash-option:hover {
+			background: color-mix(in srgb, var(--atelier-bg-hover) 72%, transparent);
+		}
+
+		.markdown-slash-option[data-selected="true"] {
+			background: var(--atelier-accent-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-accent-border);
+		}
+
+		.markdown-slash-option-icon {
+			display: inline-flex;
+			width: 2rem;
+			height: 2rem;
+			align-items: center;
+			justify-content: center;
+			border: 1px solid var(--atelier-border-subtle);
+			border-radius: 7px;
+			background: color-mix(in srgb, var(--atelier-bg-subtle) 72%, transparent);
+			color: var(--atelier-fg-muted);
+		}
+
+		.markdown-slash-option-icon svg {
+			width: 1rem;
+			height: 1rem;
+			stroke-width: 1.8;
+		}
+
+		.markdown-slash-option[data-selected="true"] .markdown-slash-option-icon {
+			border-color: color-mix(
+				in srgb,
+				var(--atelier-accent-border) 82%,
+				var(--atelier-panel)
+			);
+			background: color-mix(in srgb, var(--atelier-panel) 82%, transparent);
+			color: var(--atelier-link);
+		}
+
+		.markdown-slash-option-copy {
+			display: flex;
+			min-width: 0;
+			flex-direction: column;
+			gap: 0.12rem;
+		}
+
+		.markdown-slash-option-label {
+			overflow: hidden;
+			color: var(--atelier-fg);
+			font-size: 0.84rem;
+			font-weight: 600;
+			letter-spacing: -0.005em;
+			line-height: 1.2;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-slash-option-description {
+			overflow: hidden;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.71rem;
+			font-weight: 450;
+			line-height: 1.25;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-slash-menu-footer {
+			display: flex;
+			flex: 0 0 auto;
+			align-items: center;
+			gap: 0.72rem;
+			border-top: 1px solid var(--atelier-border-subtle);
+			background: color-mix(in srgb, var(--atelier-bg-subtle) 52%, transparent);
+			padding: 0.46rem 0.8rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.64rem;
+			font-weight: 550;
+			line-height: 1;
+		}
+
+		/* Slash-command emoji search reuses the command palette's shell and row
+		   language so the handoff from /emoji feels like one continuous flow. */
+		.markdown-emoji-menu {
+			max-height: min(22.25rem, calc(100vh - 1.5rem));
+		}
+
+		.markdown-emoji-option {
+			min-height: 2.75rem;
+		}
+
+		.markdown-emoji-option-glyph {
+			font-family:
+				"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+			font-size: 1.28rem;
+			line-height: 1;
+		}
+
+		.markdown-emoji-empty {
+			padding: 1.35rem 0.75rem 1.55rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.78rem;
+			line-height: 1.35;
+			text-align: center;
+		}
+
+		.markdown-embed-file-search {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			margin: 0.5rem 0.5rem 0.25rem;
+			padding: 0 0.625rem;
+			border: 1px solid var(--atelier-border);
+			border-radius: 0.5rem;
+			background: var(--atelier-bg-subtle);
+		}
+
+		.markdown-embed-file-search svg {
+			width: 0.875rem;
+			height: 0.875rem;
+			flex-shrink: 0;
+			color: var(--atelier-fg-subtle);
+		}
+
+		.markdown-embed-file-search input {
+			width: 100%;
+			height: 2rem;
+			border: none;
+			background: none;
+			color: var(--atelier-fg);
+			font: inherit;
+			font-size: 0.8125rem;
+			outline: none;
+		}
+
+		.markdown-embed-file-search input::placeholder {
+			color: var(--atelier-fg-subtle);
+		}
+
+		.markdown-embed-file-option-icon img {
+			width: 1.05rem;
+			height: 1.05rem;
+		}
+
+		.markdown-embed-file-option .markdown-slash-option-description {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		/* The upload action lives outside the scrolling file list, pinned above
+		   the footer behind its own hairline. */
+		.markdown-embed-file-upload-section {
+			flex-shrink: 0;
+			padding: 0.375rem 0.5rem;
+			border-top: 1px solid var(--atelier-border);
+		}
+
+		.markdown-embed-file-upload {
+			width: 100%;
+			border: none;
+			background: none;
+			font: inherit;
+			text-align: left;
+		}
+
+		.markdown-embed-file-upload .markdown-embed-file-upload-icon {
+			border-style: dashed;
+		}
+
+		.markdown-embed-file-upload-icon svg {
+			width: 0.875rem;
+			height: 0.875rem;
+		}
+
+		.markdown-embed-file-error {
+			padding: 0.375rem 0.75rem 0.5rem;
+			color: var(--atelier-danger);
+			font-size: 0.75rem;
+			line-height: 1.35;
+		}
+
+		/* The @ menu reuses the palette; only the matched characters and the
+		   "more results" hint are its own. */
+		.markdown-mention-match {
+			background: transparent;
+			color: var(--atelier-accent);
+		}
+
+		.markdown-mention-more {
+			padding: 0.3rem 0.55rem 0.4rem 3.12rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.71rem;
+			font-weight: 450;
+		}
+
+		.markdown-embed-file-empty {
+			padding: 1.35rem 0.75rem 1.55rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.78rem;
+			line-height: 1.35;
+			text-align: center;
+		}
+
+		.markdown-review {
+			position: relative;
+			container-type: inline-size;
+		}
+
+		.markdown-review-overlay {
+			position: absolute;
+			inset: 0;
+			z-index: 15;
+			display: flex;
+			min-height: 0;
+			flex-direction: column;
+			background: var(--atelier-panel);
+		}
+
+		.markdown-review .markdown-review-surface {
+			position: relative;
+			flex: 1 1 auto;
+			height: 100%;
+			min-height: 0;
+		}
+
+		.markdown-review .ProseMirror {
+			cursor: default;
+			user-select: text;
+		}
+
+		/* The marks themselves — added, removed, modified — are document.css's.
+		   Formatting-only changes sit in the sentence as small monospace glyphs:
+		   the source the block lost, struck; the source it gained, bold. Grey
+		   ground, so they read as notes rather than as errors. */
+		.markdown-review .ProseMirror .markdown-review-format-glyph {
+			display: inline-block;
+			margin: 0 1px;
+			padding: 1px 3px;
+			border-radius: 3px;
+			background: var(--atelier-bg-hover-strong);
+			color: var(--atelier-fg-muted);
+			font-family:
+				ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+			font-size: 0.72em;
+			line-height: 1;
+			vertical-align: 0.18em;
+			user-select: none;
+			cursor: pointer;
+		}
+
+		.markdown-review .ProseMirror .markdown-review-format-glyph > s {
+			color: var(--atelier-diff-removed);
+			text-decoration: line-through;
+			text-decoration-color: currentColor;
+		}
+
+		.markdown-review .ProseMirror .markdown-review-format-glyph > s + b {
+			margin-left: 3px;
+		}
+
+		.markdown-review .ProseMirror .markdown-review-format-glyph > b {
+			color: var(--atelier-fg);
+			font-weight: 700;
+		}
+
+		.markdown-review
+			.ProseMirror
+			.markdown-review-format-glyph[data-review-active="true"] {
+			box-shadow: 0 0 0 1px var(--atelier-ring);
+		}
+
+		/* Empty paragraphs are serialized as an invisible `<span></span>` anchor.
+		   Keep the review metadata for undo/keep and click targeting, but do not
+		   paint the invisible placeholder as if it were visible Markdown content. */
+		.markdown-review .ProseMirror [data-review-empty="true"] {
+			background-color: transparent;
+			color: inherit;
+			text-decoration: none;
+		}
+
+		.markdown-review .ProseMirror [data-review-change-id] {
+			cursor: pointer;
+			transition:
+				background-color 120ms ease,
+				box-shadow 120ms ease;
+		}
+
+		.markdown-review .ProseMirror [data-review-active="true"] {
+			box-shadow: 0 0 0 1px var(--atelier-ring);
+			box-decoration-break: clone;
+			-webkit-box-decoration-break: clone;
+		}
+
+		.markdown-review
+			.ProseMirror
+			[data-review-empty="true"][data-review-active="true"] {
+			box-shadow: none;
+		}
+
+		/* Selection toolbar: the Notion-style panel floating over a text
+		   selection. Portaled into .atelier-root like the slash menu so it shares
+		   the theme tokens and font stack. */
+		.markdown-selection-toolbar {
+			z-index: 50;
+			display: flex;
+			width: 13rem;
+			flex-direction: column;
+			padding: 4px;
+			border: 1px solid var(--atelier-border);
+			border-radius: 10px;
+			background: var(--atelier-panel);
+			color: var(--atelier-fg);
+			font-family:
+				ui-sans-serif,
+				-apple-system,
+				BlinkMacSystemFont,
+				"Segoe UI",
+				sans-serif;
+			box-shadow: var(--atelier-shadow-lg);
+			/* Fades in on appearance and out from where it stood on dismissal. */
+			animation: markdown-selection-toolbar-in 140ms ease;
+			transition:
+				opacity 140ms ease,
+				transform 140ms ease;
+		}
+
+		.markdown-selection-toolbar[data-state="closing"] {
 			opacity: 0;
 			transform: translateY(4px);
+			pointer-events: none;
+		}
+
+		@keyframes markdown-selection-toolbar-in {
+			from {
+				opacity: 0;
+				transform: translateY(4px);
+			}
+		}
+
+		.markdown-selection-toolbar-trigger {
+			display: flex;
+			width: 100%;
+			height: 32px;
+			align-items: center;
+			gap: 6px;
+			padding: 0 6px 0 8px;
+			border-radius: 7px;
+			color: var(--atelier-fg);
+			font-size: 12.5px;
+			font-weight: 600;
+			line-height: 1;
+			user-select: none;
+			transition:
+				background-color 100ms ease-out,
+				color 100ms ease-out;
+		}
+
+		.markdown-selection-toolbar-trigger:hover,
+		.markdown-selection-toolbar-trigger-open {
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-selection-toolbar-trigger:focus-visible {
+			outline: none;
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+		}
+
+		.markdown-selection-toolbar-trigger-icon {
+			width: 14px;
+			height: 14px;
+			flex: 0 0 auto;
+			color: var(--atelier-fg-muted);
+			stroke-width: 1.9;
+		}
+
+		.markdown-selection-toolbar-trigger-label {
+			min-width: 0;
+			flex: 1 1 auto;
+			overflow: hidden;
+			text-align: left;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-selection-toolbar-trigger-chevron {
+			display: inline-flex;
+			flex: 0 0 auto;
+			color: var(--atelier-fg-subtle);
+		}
+
+		.markdown-selection-toolbar-divider {
+			height: 1px;
+			margin: 4px 2px;
+			background: var(--atelier-border-subtle);
+		}
+
+		.markdown-selection-toolbar-row {
+			display: flex;
+			align-items: center;
+			gap: 2px;
+		}
+
+		/* Pending link target: the native selection paint disappears once the
+		   link popover's input takes focus, so the range keeps its own tint. */
+		.ProseMirror .markdown-link-target {
+			background: color-mix(in srgb, var(--atelier-ring) 18%, transparent);
+			border-radius: 2px;
 		}
 	}
 
-	.markdown-selection-toolbar-trigger {
+	/* The inline review chip portals to document.body (fixed positioning must
+	   escape transformed panel ancestors), so it lives outside the @scope. */
+	.markdown-inline-review-chip {
+		position: fixed;
+		z-index: 60;
 		display: flex;
-		width: 100%;
-		height: 32px;
 		align-items: center;
-		gap: 6px;
-		padding: 0 6px 0 8px;
-		border-radius: 7px;
-		color: var(--color-text-primary);
-		font-size: 12.5px;
-		font-weight: 600;
+		gap: 0.1rem;
+		padding: 0.18rem 0.24rem;
+		border: 1px solid var(--atelier-overlay-hairline);
+		border-radius: 0.5rem;
+		background: var(--atelier-overlay);
+		box-shadow:
+			var(--atelier-shadow-overlay),
+			0 1px 0 var(--atelier-overlay-hairline) inset;
+		font-size: 0.66rem;
+		font-weight: 620;
 		line-height: 1;
-		user-select: none;
-		transition:
-			background-color 100ms ease-out,
-			color 100ms ease-out;
 	}
 
-	.markdown-selection-toolbar-trigger:hover,
-	.markdown-selection-toolbar-trigger-open {
-		background: var(--color-bg-hover);
-	}
-
-	.markdown-selection-toolbar-trigger:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
-	}
-
-	.markdown-selection-toolbar-trigger-icon {
-		width: 14px;
-		height: 14px;
-		flex: 0 0 auto;
-		color: var(--color-icon-secondary);
-		stroke-width: 1.9;
-	}
-
-	.markdown-selection-toolbar-trigger-label {
-		min-width: 0;
-		flex: 1 1 auto;
-		overflow: hidden;
-		text-align: left;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.markdown-selection-toolbar-trigger-chevron {
+	.markdown-inline-review-chip > button {
 		display: inline-flex;
-		flex: 0 0 auto;
-		color: var(--color-icon-tertiary);
-	}
-
-	.markdown-selection-toolbar-divider {
-		height: 1px;
-		margin: 4px 2px;
-		background: var(--color-border-subtle);
-	}
-
-	.markdown-selection-toolbar-row {
-		display: flex;
 		align-items: center;
-		gap: 2px;
+		gap: 0.26rem;
+		padding: 0.26rem 0.45rem;
+		border-radius: 0.34rem;
+		color: var(--atelier-overlay-danger);
+		cursor: pointer;
 	}
 
-	/* Pending link target: the native selection paint disappears once the
-	   link popover's input takes focus, so the range keeps its own tint. */
-	.ProseMirror .markdown-link-target {
-		background: color-mix(
-			in srgb,
-			var(--color-ring-focus-visible) 18%,
-			transparent
-		);
-		border-radius: 2px;
+	.markdown-inline-review-chip > button:hover:not(:disabled) {
+		background: var(--atelier-overlay-hairline);
 	}
-}
 
-/* The inline review chip portals to document.body (fixed positioning must
-   escape transformed panel ancestors), so it lives outside the @scope. */
-.markdown-inline-review-chip {
-	position: fixed;
-	z-index: 60;
-	display: flex;
-	align-items: center;
-	gap: 0.1rem;
-	padding: 0.18rem 0.24rem;
-	border: 1px solid var(--color-border-inverse-hairline);
-	border-radius: 0.5rem;
-	background: var(--color-bg-inverse);
-	box-shadow:
-		0 6px 16px rgba(28, 25, 23, 0.35),
-		0 1px 0 var(--color-border-inverse-hairline) inset;
-	font-size: 0.66rem;
-	font-weight: 620;
-	line-height: 1;
-}
+	.markdown-inline-review-chip > button:disabled {
+		cursor: default;
+		opacity: 0.6;
+	}
 
-.markdown-inline-review-chip > button {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.26rem;
-	padding: 0.26rem 0.45rem;
-	border-radius: 0.34rem;
-	color: var(--color-text-inverse-danger);
-	cursor: pointer;
-}
+	.markdown-inline-review-chip > button:focus-visible {
+		outline: 2px solid var(--atelier-overlay-fg);
+		outline-offset: 1px;
+	}
 
-.markdown-inline-review-chip > button:hover:not(:disabled) {
-	background: var(--color-bg-inverse-overlay);
-}
+	.markdown-inline-review-chip > button > svg {
+		width: 0.62rem;
+		height: 0.62rem;
+	}
 
-.markdown-inline-review-chip > button:disabled {
-	cursor: default;
-	opacity: 0.6;
-}
+	.markdown-inline-review-chip > .markdown-inline-review-chip-keep {
+		color: var(--atelier-overlay-success);
+	}
 
-.markdown-inline-review-chip > button:focus-visible {
-	outline: 2px solid var(--color-text-inverse-primary);
-	outline-offset: 1px;
-}
+	.markdown-inline-review-chip-divider {
+		width: 1px;
+		height: 0.75rem;
+		background: var(--atelier-overlay-hairline);
+	}
 
-.markdown-inline-review-chip > button > svg {
-	width: 0.62rem;
-	height: 0.62rem;
-}
+	.markdown-inline-review-chip-error {
+		position: absolute;
+		right: 0;
+		top: calc(100% + 0.3rem);
+		width: max-content;
+		max-width: 16rem;
+		border-radius: 0.4rem;
+		background: var(--atelier-diff-removed);
+		color: var(--atelier-danger-subtle);
+		padding: 0.28rem 0.45rem;
+		font-size: 0.66rem;
+		font-weight: 500;
+		line-height: 1.35;
+	}
 
-.markdown-inline-review-chip-keep {
-	color: var(--color-text-inverse-success) !important;
-}
+	/* Embedded host preview (e.g. the repository home's README): the host owns
+	   spacing and scrolling, so the document renders flush — no editor gutters,
+	   no viewport-filling minimums, no inner scroll container. */
+	.atelier-file-view .markdown-view .tiptap-container {
+		height: auto;
+		overflow-y: visible;
+	}
 
-.markdown-inline-review-chip-divider {
-	width: 1px;
-	height: 0.75rem;
-	background: var(--color-border-inverse-hairline);
-}
+	/* Diffs must contribute their full height to the embedded document, too.
+	   An absolute overlay leaves the host at its minimum height and clips long
+	   reviews inside the extension host's overflow boundary. */
+	.atelier-file-view .markdown-review-overlay {
+		position: relative;
+		inset: auto;
+	}
 
-.markdown-inline-review-chip-error {
-	position: absolute;
-	right: 0;
-	top: calc(100% + 0.3rem);
-	width: max-content;
-	max-width: 16rem;
-	border-radius: 0.4rem;
-	background: var(--color-error-900);
-	color: var(--color-error-100);
-	padding: 0.28rem 0.45rem;
-	font-size: 0.66rem;
-	font-weight: 500;
-	line-height: 1.35;
-}
+	.atelier-file-view .markdown-review .markdown-review-surface {
+		height: auto;
+	}
 
-/* Embedded host preview (e.g. the repository home's README): the host owns
-   spacing and scrolling, so the document renders flush — no editor gutters,
-   no viewport-filling minimums, no inner scroll container. */
-.atelier-file-view .markdown-view .tiptap-container {
-	height: auto;
-	overflow-y: visible;
-}
+	.atelier-file-view .markdown-view .tiptap {
+		min-height: 0;
+	}
 
-/* Diffs must contribute their full height to the embedded document, too.
-   An absolute overlay leaves the host at its minimum height and clips long
-   reviews inside the extension host's overflow boundary. */
-.atelier-file-view .markdown-review-overlay {
-	position: relative;
-	inset: auto;
-}
-
-.atelier-file-view .markdown-review .markdown-review-surface {
-	height: auto;
-}
-
-.atelier-file-view .markdown-view .tiptap {
-	min-height: 0;
-}
-
-.atelier-file-view .markdown-view .ProseMirror {
-	min-height: 0;
-	padding: 0;
+	.atelier-file-view .markdown-view .ProseMirror {
+		min-height: 0;
+		padding: 0;
+	}
 }

@@ -15,8 +15,11 @@ test("a change renders in the file type's own view", () => {
 	expect(markdown.counts).toEqual({ added: 1, modified: 0, removed: 0 });
 	expect(markdown.html).toContain('data-review-status="added"');
 	// A view carries its own scope class: a caller inlines the HTML and the
-	// stylesheet, and never has to know what either is called.
-	expect(markdown.html.startsWith('<div class="md-diff">')).toBe(true);
+	// stylesheet, and never has to know what either is called. The document
+	// class is the editor's too: one stylesheet for both.
+	expect(
+		markdown.html.startsWith('<div class="md-diff atelier-document">'),
+	).toBe(true);
 
 	const csv = toHtml({
 		path: "/leads.csv",
@@ -101,7 +104,7 @@ test("a document carries its own styles and nothing else", () => {
 	expect(isRendered(result)).toBe(true);
 	if (!isRendered(result)) return;
 	expect(result.html.startsWith("<!doctype html>")).toBe(true);
-	expect(result.html).toContain("--atelier-ink");
+	expect(result.html).toContain("--atelier-fg");
 	expect(result.html).toContain('class="atelier-render"');
 	expect(result.html).not.toContain("<script");
 	expect(result.html).not.toContain("<link");
@@ -109,7 +112,7 @@ test("a document carries its own styles and nothing else", () => {
 
 test("the palette is tokens a host can redefine, not literals in rules", () => {
 	const [tokens, ...rules] = RENDER_CSS.split("}\n");
-	expect(tokens).toContain("--atelier-ink");
+	expect(tokens).toContain("--atelier-fg");
 	// Every colour in a rule comes from a token, so a host retints by
 	// redefining one custom property and nothing here has to know.
 	const literals = rules
@@ -224,8 +227,8 @@ test("a host retints by redefining a token on an ancestor", () => {
 	// The tokens are declared on the root, so the nearest ancestor that
 	// redefines one wins. Declared on the render itself they would beat the
 	// host every time, and the override would silently do nothing.
-	expect(RENDER_CSS.startsWith(":root {")).toBe(true);
-	expect(RENDER_CSS).not.toContain(".atelier-render {\n\t--atelier-ink:");
+	expect(RENDER_CSS.startsWith(":root")).toBe(true);
+	expect(RENDER_CSS).not.toContain(".atelier-render {\n\t--atelier-fg:");
 });
 
 test("a script the word differ cannot split is compared whole", () => {

@@ -31,7 +31,13 @@ vi.mock("@dnd-kit/sortable", async () => {
 	};
 });
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { PanelV2, availableExtensionsForPanel } from "./panel-v2";
 import { ExtensionHostRegistryProvider } from "../extension-runtime/extension-host-registry";
 import { ExtensionRegistryProvider } from "../extension-runtime/extension-registry";
@@ -40,10 +46,12 @@ import type {
 	ExtensionDefinition,
 } from "../extension-runtime/types";
 import type { Lix } from "@lix-js/sdk";
+import type { AtelierDiffSession } from "@/extension-api";
 import { Search } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { createExtensionHostContext } from "@/test-utils/extension-host-context";
+import { openLix } from "@/test-utils/node-lix-sdk";
 
 const TEST_SEARCH_EXTENSION_KIND = "test_search";
 
@@ -111,6 +119,15 @@ function StatefulMultiInstancePanel() {
 	);
 }
 
+/** A working review over two files, as the shell hands it to every view. */
+const reviewSession: AtelierDiffSession = {
+	base: { commitId: "commit_before" },
+	target: { working: true },
+	files: [],
+	activePath: null,
+	capabilities: { checkpoint: true, undo: true, restore: false },
+};
+
 const renderWithinProvider = (ui: React.ReactNode) =>
 	render(<ExtensionHostRegistryProvider>{ui}</ExtensionHostRegistryProvider>);
 
@@ -177,6 +194,7 @@ describe("PanelV2", () => {
 			.filter(Boolean);
 
 		const expectedClasses = [
+			"relative",
 			"flex",
 			"min-h-0",
 			"flex-1",
@@ -187,6 +205,223 @@ describe("PanelV2", () => {
 		// Keep the host padding-free so we don't assume what individual views render.
 		expect(classList.some((token) => /^p[trblxy]?-/u.test(token))).toBe(false);
 		expect(classList.some((token) => /^m[trblxy]?-/u.test(token))).toBe(false);
+	});
+
+	test("a review stepping to another file of the same extension keeps the mounted view", async () => {
+		const reads = new Map<string, (data: string) => void>();
+		const documentView: ExtensionDefinition = {
+			kind: "test_document",
+			label: "Document",
+			description: "Test document view",
+			icon: Search,
+			load: ({ location }) =>
+				new Promise<string>((resolve) => {
+					reads.set("path" in location ? location.path : "", resolve);
+				}),
+			Component: ({ data, view }) => (
+				<article data-testid="document">
+					{String(data)} ({String(view.state.filePath)})
+				</article>
+			),
+		};
+		const area = (fileId: string, filePath: string): AreaState => ({
+			views: [
+				{
+					instance: `test_document:${fileId}`,
+					kind: "test_document",
+					state: { fileId, filePath },
+				},
+			],
+			activeInstance: `test_document:${fileId}`,
+		});
+		const lix = await openLix();
+		const viewContext = createExtensionHostContext(lix);
+		const inReview = {
+			...viewContext,
+			atelier: {
+				...viewContext.atelier,
+				diff: { ...viewContext.atelier.diff, session: reviewSession },
+			},
+		};
+		const tree = (state: AreaState) => (
+			<ExtensionHostRegistryProvider>
+				<PanelV2
+					side="main"
+					area={state}
+					isFocused
+					onFocusArea={vi.fn()}
+					onSelectView={vi.fn()}
+					onRemoveView={vi.fn()}
+					viewContext={inReview}
+					viewOverrides={[documentView]}
+				/>
+			</ExtensionHostRegistryProvider>
+		);
+		const rendered = render(tree(area("a", "/a.md")));
+		try {
+			await waitFor(() => expect(reads.has("/a.md")).toBe(true));
+			await act(async () => reads.get("/a.md")!("Document A"));
+			const root = screen.getByTestId("atelier-view:test_document:a");
+			expect(screen.getByTestId("document")).toHaveTextContent(
+				"Document A (/a.md)",
+			);
+
+			rendered.rerender(tree(area("b", "/b.md")));
+			await waitFor(() => expect(reads.has("/b.md")).toBe(true));
+			// Same node, same document on it, no loading state: the view waits
+			// for the next document with the last one still on screen.
+			expect(screen.getByTestId("atelier-view:test_document:b")).toBe(root);
+			expect(screen.getByTestId("document")).toHaveTextContent(
+				"Document A (/a.md)",
+			);
+			expect(screen.queryByRole("status")).toBeNull();
+
+			await act(async () => reads.get("/b.md")!("Document B"));
+			expect(screen.getByTestId("atelier-view:test_document:b")).toBe(root);
+			expect(screen.getByTestId("document")).toHaveTextContent(
+				"Document B (/b.md)",
+			);
+		} finally {
+			await act(async () => rendered.unmount());
+			await lix.close();
+		}
+	});
+
+	test("a review stepping to a file of another extension keeps the leaving view until the arriving one shows", async () => {
+		const reads = new Map<string, (data: string) => void>();
+		const documentView = (kind: string): ExtensionDefinition => ({
+			kind,
+			label: kind,
+			description: `Test ${kind} view`,
+			icon: Search,
+			load: ({ location }) =>
+				new Promise<string>((resolve) => {
+					reads.set("path" in location ? location.path : "", resolve);
+				}),
+			Component: ({ data }) => (
+				<article data-testid={`document-${kind}`}>{String(data)}</article>
+			),
+		});
+		const area = (kind: string, fileId: string, filePath: string) => ({
+			views: [
+				{ instance: `${kind}:${fileId}`, kind, state: { fileId, filePath } },
+			],
+			activeInstance: `${kind}:${fileId}`,
+		});
+		const lix = await openLix();
+		const viewContext = createExtensionHostContext(lix);
+		const inReview = {
+			...viewContext,
+			atelier: {
+				...viewContext.atelier,
+				diff: { ...viewContext.atelier.diff, session: reviewSession },
+			},
+		};
+		const tree = (state: AreaState) => (
+			<ExtensionHostRegistryProvider>
+				<PanelV2
+					side="main"
+					area={state}
+					isFocused
+					onFocusArea={vi.fn()}
+					onSelectView={vi.fn()}
+					onRemoveView={vi.fn()}
+					viewContext={inReview}
+					viewOverrides={[
+						documentView("test_html"),
+						documentView("test_image"),
+					]}
+				/>
+			</ExtensionHostRegistryProvider>
+		);
+		const rendered = render(tree(area("test_html", "a", "/a.html")));
+		try {
+			await waitFor(() => expect(reads.has("/a.html")).toBe(true));
+			await act(async () => reads.get("/a.html")!("Artifact A"));
+			expect(screen.getByTestId("document-test_html")).toHaveTextContent(
+				"Artifact A",
+			);
+
+			rendered.rerender(tree(area("test_image", "b", "/b.png")));
+			await waitFor(() => expect(reads.has("/b.png")).toBe(true));
+			// The artifact stays on screen; the image view reads its file out
+			// of sight. Nothing the shell shows in between is a loading state.
+			expect(screen.getByTestId("document-test_html")).toHaveTextContent(
+				"Artifact A",
+			);
+			expect(screen.getByTestId("document-test_html")).toBeVisible();
+			expect(screen.queryByRole("status")).toBeNull();
+			expect(
+				screen
+					.getByTestId("atelier-view:test_image:b")
+					.closest("[data-atelier-view-arriving]"),
+			).toHaveAttribute("aria-hidden", "true");
+
+			await act(async () => reads.get("/b.png")!("Image B"));
+			expect(screen.queryByTestId("document-test_html")).toBeNull();
+			expect(screen.getByTestId("document-test_image")).toHaveTextContent(
+				"Image B",
+			);
+			expect(
+				screen
+					.getByTestId("atelier-view:test_image:b")
+					.closest("[data-atelier-view-arriving]"),
+			).toBeNull();
+		} finally {
+			await act(async () => rendered.unmount());
+			await lix.close();
+		}
+	});
+
+	test("outside a review, navigating a tab to another document mounts it fresh", async () => {
+		const documentView: ExtensionDefinition = {
+			kind: "test_document",
+			label: "Document",
+			description: "Test document view",
+			icon: Search,
+			load: async ({ location }) =>
+				`Document at ${"path" in location ? location.path : ""}`,
+			Component: ({ data }) => (
+				<article data-testid="document">{String(data)}</article>
+			),
+		};
+		const area = (fileId: string, filePath: string): AreaState => ({
+			views: [
+				{
+					instance: `test_document:${fileId}`,
+					kind: "test_document",
+					state: { fileId, filePath },
+				},
+			],
+			activeInstance: `test_document:${fileId}`,
+		});
+		const lix = await openLix();
+		const viewContext = createExtensionHostContext(lix);
+		const tree = (state: AreaState) => (
+			<ExtensionHostRegistryProvider>
+				<PanelV2
+					side="main"
+					area={state}
+					isFocused
+					onFocusArea={vi.fn()}
+					onSelectView={vi.fn()}
+					onRemoveView={vi.fn()}
+					viewContext={viewContext}
+					viewOverrides={[documentView]}
+				/>
+			</ExtensionHostRegistryProvider>
+		);
+		const rendered = render(tree(area("a", "/a.md")));
+		try {
+			await screen.findByText("Document at /a.md");
+			const root = screen.getByTestId("atelier-view:test_document:a");
+			rendered.rerender(tree(area("b", "/b.md")));
+			expect(screen.getByTestId("atelier-view:test_document:b")).not.toBe(root);
+			await screen.findByText("Document at /b.md");
+		} finally {
+			await act(async () => rendered.unmount());
+			await lix.close();
+		}
 	});
 
 	test("renders the active view content", async () => {

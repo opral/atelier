@@ -33,6 +33,25 @@ mode of the Markdown view from the start.
   assets included. The shell hands both refs to every view and decides nothing
   by file type.
 
+## A view's frame is rendered from props; only the document region may wait
+
+A view's frame — toolbar, gutters, background — is rendered from props that
+are always available; only the document region may wait. A `Suspense`
+boundary, or a branch that returns a loading component, above the toolbar
+replaces the whole view with its fallback on every read, and a review that
+steps from one file to the next reads on every step: the toolbar vanished
+and came back with each file. Keep the reads in headless children under the
+frame, use non-suspending reads (`useQueryResult`, effects) and hold the
+last document until the next one is ready; where the region has nothing yet,
+it stays quiet in the frame. The text view (`src/extensions/text`) is the
+reference: one `TextFrame` owns the toolbar and the one CodeMirror instance,
+and documents are handed to it in place. A view whose editor cannot take
+another document in place — Markdown, CSV — uses the document region
+(`src/extension-runtime/document-region.tsx`): readers hand the frame a
+document element, the region keeps the one on screen and lays the next out
+over it, invisible, until that one says it is ready (`useDocumentReady`),
+and the toolbar reads from, or is rendered into, the frame.
+
 ## The static entry is a promise
 
 `@opral/atelier/render` runs where there is no DOM: a Cloudflare Worker, a node
@@ -47,17 +66,64 @@ import took the closure from 234 kB to 5.4 MB and did not error.
 globals, or size. It reads `dist/`, so `pnpm run ci` builds first and `pnpm
 test` (vitest) does not cover it. Run `pnpm build` before calling it directly.
 
-## Colours come from tokens
+## Design tokens: one vocabulary, plain CSS
 
-`src/render/tokens.generated.ts` is generated from `src/shell/theme.css` by
-`pnpm run tokens`. The build fails if it is stale.
+`src/shell/theme.css` is the design system: ~110 `--atelier-*` custom properties on
+`:root, :host`, each with its dark value in `light-dark()` and a comment saying
+when to use it. It is plain CSS — no build step, no framework — so the shell,
+every extension, the static render, a chat card, and a host page all read the
+same file. `src/shell/tailwind.css` is an optional adapter: `@theme inline`
+points utilities at the same values, so `bg-panel` and `text-fg-muted` exist
+and `bg-red-500` does not.
 
-Static styles take every **colour** from `var(--atelier-*)`. Sizes and fonts
-are still literals. This keeps the app and a chat card from drifting apart.
+The rules, which `pnpm tokens:check` enforces (a failure names the nearest token):
 
-The tokens are declared on `:root` on purpose. On `.atelier-render` they would
-beat anything a host sets on an ancestor, because a declaration on the element
-wins over an inherited value, and every override would silently do nothing.
+- A colour literal (`#hex`, `rgb()`, `oklch()`…) is written in `theme.css` and
+  nowhere else. Canvas code that cannot read `var()` keeps a fallback marked
+  `token-literal: <why>` on the same line, equal to the token's light value.
+- In CSS, say `var(--atelier-…)`. In `className`, say the adapter's name
+  (`bg-panel`, `border-border-subtle`, `text-danger`). Never `bg-[var(…)]`,
+  never a stock palette class.
+- Text and icons share the `fg` scale: `fg`, `fg-muted`, `fg-subtle`, `fg-faint`.
+  Surfaces: `bg` (canvas), `panel` (islands), `bg-subtle`, `bg-hover`,
+  `bg-active`. Edges: `border`, `border-subtle`, `border-strong`, `ring`.
+  Brand: `accent`, `accent-hover`, `accent-on`, `accent-subtle`, `link`.
+  Status: `danger|success|warning` with `-subtle` and `-border`. Diff:
+  `diff-added|removed|modified` with `-subtle`, plus `diff-moved`,
+  `diff-conflict`. Dark chrome over the UI: `overlay-*`.
+- A second name for a role that has one is a bug, not a token. If no token
+  fits, add one to `theme.css` with its "use for" comment — do not restate a
+  value, and do not alias without saying why.
+- A component's own variables (`--markdown-*`, `--csv-*`) are declared on its
+  root and reference tokens; they are never a place to hide a colour.
+- Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else —
+  and it is off for now: `theme.css` pins `color-scheme: light` until the
+  dark palette has been designed. Keep writing dark values in `light-dark()`.
+  A host rebrands by redeclaring tokens on `:root`; it never overrides
+  component classes.
+- Cascade layers are the override contract: `src/index.css` orders
+  `theme, base, components, atelier, utilities`, and every Atelier stylesheet
+  (`theme.css`, `document.css`, each extension's `style.css`, the runtime's
+  sheets) lives in `@layer atelier` — imported with `layer(atelier)` or wrapped
+  in one `@layer atelier { … }` block that starts with
+  `@import "…/shell/layers.css"`, so the order holds whichever sheet a
+  bundler emits first. A host's unlayered CSS and a Tailwind utility on the
+  element beat Atelier's rules by design; extension authors do not declare
+  layers of their own and do not use `!important` (the only one left fights
+  an inline style). The static render (`src/render/styles.ts`) stays
+  unlayered: it lands in someone else's page.
+
+`src/shell/document.css` is the one document stylesheet: how a Markdown
+document looks, scoped to `.atelier-document`, which the editor's ProseMirror
+root and the static render's wrapper both carry. The editor's own sheet never
+restates a rule from it; the card sets its density with one declaration,
+`--atelier-doc-font-size: 14px`, and every size in the sheet is an em of it.
+
+`src/shell/theme.generated.ts` and `document.generated.ts` are verbatim copies
+of `theme.css` and `document.css` for the DOM-free render entry, made by
+`pnpm run tokens`; the build fails if either is stale. The tokens sit on
+`:root` on purpose: declared on `.atelier-render` they would beat anything a
+host sets on an ancestor.
 
 ## One strict reader for "is this text?"
 

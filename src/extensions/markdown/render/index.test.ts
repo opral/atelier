@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { MARKDOWN_CSS } from "../../../render/markdown-css";
+import { RENDER_CSS } from "../../../render/styles";
 import { renderMarkdownDiff, renderMarkdownDocument } from "./index";
 
 const PLAYBOOK = [
@@ -31,12 +31,16 @@ test("an addition is marked, counted, and left renderable on its own", () => {
 
 	expect(diff.unchanged).toBe(false);
 	expect(diff.stats).toEqual({ added: 2, removed: 0, modified: 0 });
-	expect(diff.html).toContain('<li data-task=" " data-review-status="added">');
+	expect(diff.html).toContain(
+		'<li data-task=" " data-review-status="added"><input type="checkbox" disabled>',
+	);
 	expect(diff.html).toContain("AI consultants");
 	// Unchanged neighbours stay plain, so the eye lands on the change.
-	expect(diff.html).toContain('<li data-task=" ">');
+	expect(diff.html).toContain(
+		'<li data-task=" "><input type="checkbox" disabled>',
+	);
 	expect(diff.html).not.toContain("<script");
-	expect(MARKDOWN_CSS).toContain('[data-review-status="added"]');
+	expect(RENDER_CSS).toContain('[data-review-status="added"]');
 });
 
 test("a removal keeps the line, struck, where it stood", () => {
@@ -48,7 +52,7 @@ test("a removal keeps the line, struck, where it stood", () => {
 	expect(diff.stats).toEqual({ added: 0, removed: 2, modified: 0 });
 	expect(diff.html).toContain('data-review-status="removed"');
 	expect(diff.html).toContain("AI consultants");
-	expect(MARKDOWN_CSS).toContain("line-through");
+	expect(RENDER_CSS).toContain("line-through");
 });
 
 test("an edit inside a line marks the words, not the line", () => {
@@ -125,8 +129,10 @@ test("a footnote is a marker and a definition, not raw source", () => {
 	const html = renderMarkdownDocument(
 		"Claim.[^1]\n\n[^1]: Guru. [Knowledge platform](https://www.getguru.com/). Undated.\n",
 	);
-	expect(html).toContain('<sup class="md-footnote-ref">[1]</sup>');
-	expect(html).toContain('<span class="md-footnote-def-label">[1]</span>');
+	expect(html).toContain('<sup class="markdown-footnote-ref">[1]</sup>');
+	expect(html).toContain(
+		'<span class="markdown-footnote-def-label">[1]</span>',
+	);
 	expect(html).toContain("Knowledge platform</a>. Undated.");
 	expect(html).not.toContain("[^1]");
 	expect(html).not.toContain("md-diff-raw");
@@ -183,15 +189,16 @@ test("a checked task keeps its box, and a marked one is not struck twice", () =>
 		afterMarkdown: "- [x] Ship it\n",
 	});
 
-	expect(diff.html).toContain('data-task="x"');
-	// A done task is struck, as in the app; a word the diff marks inside it
-	// takes its own colour, and an added one is never struck.
-	expect(MARKDOWN_CSS).toContain(
-		'li[data-task="x"]:not([data-review-status]) > p',
+	expect(diff.html).toContain(
+		'<li data-task="x" data-review-status="modified"><input type="checkbox" disabled checked>',
 	);
+	// A done task is struck, as in the app — the same rule, since the render
+	// draws the app's own box; a word the diff marks inside it takes its own
+	// colour, and an added one is never struck.
+	expect(RENDER_CSS).toContain('li[data-task="x"] > p');
 	// A line the diff wrote into drops the rule, so an added word is not
 	// rendered as a deleted one.
-	expect(MARKDOWN_CSS).toContain(":has(> p [data-review-status])");
+	expect(RENDER_CSS).toContain(":has(> p [data-review-status])");
 });
 
 test("an image is named, not fetched, unless the caller asks for the tag", () => {
@@ -207,7 +214,7 @@ test("an image is named, not fetched, unless the caller asks for the tag", () =>
 	expect(diff.html).not.toContain("tracker.example/pixel.gif");
 	expect(diff.html).toContain("The funnel");
 	expect(diff.html).toContain("tracker.example");
-	expect(MARKDOWN_CSS).toContain(".md-diff-image");
+	expect(RENDER_CSS).toContain(".md-diff-image");
 
 	// A caller that owns the document can ask for the tag.
 	const embedded = renderMarkdownDiff({

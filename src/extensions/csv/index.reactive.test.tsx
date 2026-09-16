@@ -14,7 +14,9 @@ import {
 } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { qb } from "@/lib/lix-kysely";
+import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { LixProvider } from "@/lib/lix-react";
+import { selectWorkingFileDiffSnapshot } from "@/queries";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { CsvView } from "./index";
@@ -1006,6 +1008,350 @@ test("does not mark unchanged before-to-HEAD CSV files as fully added", async ()
 		await lix.close();
 	}
 });
+
+test("stepping to another table keeps the toolbar mounted and visible", async () => {
+	const lix = await openLix();
+	let utils:
+		| {
+				unmount: () => void;
+				rerender: (ui: Parameters<typeof render>[0]) => void;
+		  }
+		| undefined;
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const first = fakeUuid("file_csv_step_first");
+	const second = fakeUuid("file_csv_step_second");
+	// Every frame from the step until the next table is on screen keeps the
+	// table's frame — the toolbar — in view; only the grid may wait.
+	const frames: { toolbar: boolean; visible: boolean }[] = [];
+	const toolbarVisible = () => {
+		const toolbar = host.querySelector<HTMLElement>(".csv-toolbar");
+		return {
+			toolbar: toolbar !== null,
+			visible:
+				toolbar !== null &&
+				toolbar.closest(".invisible") === null &&
+				toolbar.closest("[hidden]") === null,
+		};
+	};
+	const observer = new MutationObserver(() => {
+		frames.push(toolbarVisible());
+	});
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/step-first.csv",
+					content: new TextEncoder().encode("name,value\nfirst,1"),
+				},
+				{
+					id: second,
+					path: "/step-second.csv",
+					content: new TextEncoder().encode("name,value\nsecond,1"),
+				},
+			])
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nfirst,2") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nsecond,2") })
+			.where("id", "=", second)
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		const workingEpoch = {
+			beforeCommitId: snapshot.beforeCommitId,
+			afterCommitId: snapshot.afterCommitId,
+		};
+		const diffSession = {
+			base: { commitId: checkpoint.commitId },
+			target: { working: true as const },
+			files: [
+				{
+					id: first,
+					path: "/step-first.csv",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-csv-step-first", status: "pending" as const },
+				},
+				{
+					id: second,
+					path: "/step-second.csv",
+					changeKind: "modified" as const,
+					workingEpoch,
+					review: { id: "review-csv-step-second", status: "pending" as const },
+				},
+			],
+			activePath: "/step-first.csv",
+			capabilities: { checkpoint: true, undo: true, restore: false },
+		};
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<CsvView
+						fileId={fileId}
+						filePath={filePath}
+						diffSession={diffSession}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		await act(async () => {
+			utils = render(view(first, "/step-first.csv"), { container: host });
+		});
+		await waitFor(() => {
+			expect(host.querySelector(".csv-review-table")?.textContent).toContain(
+				"first",
+			);
+		});
+		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		const toolbar = host.querySelector(".csv-toolbar");
+		const region = host.querySelector('[data-attr="csv-grid"]');
+
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		await act(async () => {
+			utils!.rerender(view(second, "/step-second.csv"));
+		});
+		// The step: the first table stays until the second one's row lands,
+		// under the same strip, in the same region.
+		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(shownReviewTable(host)?.textContent).toContain("first");
+		await waitFor(() => {
+			expect(shownReviewTable(host)?.textContent).toContain("second");
+		});
+		observer.disconnect();
+		expect(host.querySelector("[data-review-pending]")).toBeNull();
+		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(frames.length).toBeGreaterThan(0);
+		expect(frames.every((frame) => frame.toolbar && frame.visible)).toBe(true);
+	} finally {
+		observer.disconnect();
+		if (utils) {
+			await act(async () => {
+				utils!.unmount();
+			});
+		}
+		host.remove();
+		await lix.close();
+	}
+});
+
+test("stepping a checkpoint review keeps the frame's nodes and the previous table until the next one is in", async () => {
+	const lix = await openLix();
+	let utils:
+		| {
+				unmount: () => void;
+				rerender: (ui: Parameters<typeof render>[0]) => void;
+		  }
+		| undefined;
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const first = fakeUuid("file_csv_checkpoint_step_first");
+	const second = fakeUuid("file_csv_checkpoint_step_second");
+	// Every frame from the step until the second table is on screen keeps a
+	// table in view: the first, then the second, never nothing.
+	const frames: string[] = [];
+	const observer = new MutationObserver(() => {
+		frames.push(shownReviewTable(host)?.textContent ?? "");
+	});
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values([
+				{
+					id: first,
+					path: "/checkpoint-first.csv",
+					content: new TextEncoder().encode("name,value\nfirst,1"),
+				},
+				{
+					id: second,
+					path: "/checkpoint-second.csv",
+					content: new TextEncoder().encode("name,value\nsecond,1"),
+				},
+			])
+			.execute();
+		const base = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nfirst,2") })
+			.where("id", "=", first)
+			.execute();
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nsecond,2") })
+			.where("id", "=", second)
+			.execute();
+		const target = await createCheckpoint(lix);
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<CsvView
+						fileId={fileId}
+						filePath={filePath}
+						beforeCommitId={base.commitId}
+						afterCommitId={target.commitId}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		await act(async () => {
+			utils = render(view(first, "/checkpoint-first.csv"), { container: host });
+		});
+		await waitFor(() => {
+			expect(shownReviewTable(host)?.textContent).toContain("first");
+		});
+		const toolbar = host.querySelector(".csv-toolbar");
+		const region = host.querySelector('[data-attr="csv-grid"]');
+		expect(toolbar).not.toBeNull();
+		expect(toolbar!.querySelector(".csv-row-count")).not.toBeNull();
+
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		await act(async () => {
+			utils!.rerender(view(second, "/checkpoint-second.csv"));
+		});
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(shownReviewTable(host)?.textContent).toContain("first");
+		await waitFor(() => {
+			expect(shownReviewTable(host)?.textContent).toContain("second");
+		});
+		observer.disconnect();
+		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
+		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
+		expect(host.querySelector("[data-review-pending]")).toBeNull();
+		expect(toolbar!.querySelector(".csv-row-count")).not.toBeNull();
+		expect(frames.length).toBeGreaterThan(0);
+		expect(frames.every((text) => /first|second/.test(text))).toBe(true);
+	} finally {
+		observer.disconnect();
+		if (utils) {
+			await act(async () => {
+				utils!.unmount();
+			});
+		}
+		host.remove();
+		await lix.close();
+	}
+});
+
+test("a table opened inside a review never paints as its live self", async () => {
+	const lix = await openLix();
+	let utils: { unmount: () => void } | undefined;
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	// The reviewer stepped to this file: the session already lists it when
+	// the view mounts. Every frame that holds the live grid without the
+	// review table must hold it out of sight.
+	const frames: { pending: boolean; review: boolean }[] = [];
+	const observer = new MutationObserver(() => {
+		if (!host.querySelector("[data-testid=csv-data-grid], .csv-review-table"))
+			return;
+		frames.push({
+			pending: host.querySelector("[data-review-pending]") !== null,
+			review: host.querySelector(".csv-review-table") !== null,
+		});
+	});
+	try {
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("file_csv_stepped"),
+				path: "/stepped.csv",
+				content: new TextEncoder().encode("name,value\nbefore,1"),
+			})
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("name,value\nafter,2") })
+			.where("id", "=", fakeUuid("file_csv_stepped"))
+			.execute();
+		const snapshot = await selectWorkingFileDiffSnapshot(lix);
+		observer.observe(host, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<CsvView
+							fileId={fakeUuid("file_csv_stepped")}
+							filePath="/stepped.csv"
+							diffSession={{
+								base: { commitId: checkpoint.commitId },
+								target: { working: true },
+								files: [
+									{
+										id: fakeUuid("file_csv_stepped"),
+										path: "/stepped.csv",
+										changeKind: "modified",
+										workingEpoch: {
+											beforeCommitId: snapshot.beforeCommitId,
+											afterCommitId: snapshot.afterCommitId,
+										},
+										review: { id: "review-csv-stepped", status: "pending" },
+									},
+								],
+								activePath: "/stepped.csv",
+								capabilities: { checkpoint: true, undo: true, restore: false },
+							}}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+				{ container: host },
+			);
+		});
+		await waitFor(() => {
+			expect(host.querySelector(".csv-review-table")).toBeTruthy();
+		});
+		observer.disconnect();
+		expect(host.querySelector("[data-review-pending]")).toBeNull();
+		expect(frames.some((frame) => frame.pending && !frame.review)).toBe(true);
+		expect(frames.every((frame) => frame.review || frame.pending)).toBe(true);
+	} finally {
+		observer.disconnect();
+		if (utils) {
+			await act(async () => {
+				utils!.unmount();
+			});
+		}
+		host.remove();
+		await lix.close();
+	}
+});
+
+/** The table the frame shows: the one in the slot that is not out of sight. */
+function shownReviewTable(container: HTMLElement): HTMLElement | null {
+	return container.querySelector<HTMLElement>(
+		"[data-csv-document]:not([aria-hidden]) .csv-review-table",
+	);
+}
 
 async function activeCommitId(lix: Awaited<ReturnType<typeof openLix>>) {
 	const result = await lix.execute(
@@ -2544,7 +2890,8 @@ test("pressing the blank surface around the table clears the selection", async (
 		expect(selection().gridSelection.current).toBeUndefined(),
 	);
 
-	// Rows too, via the toolbar background.
+	// Rows too, via the toolbar background: the table's row of controls,
+	// which fills the frame's strip.
 	await act(async () => {
 		selection().onGridSelectionChange?.({
 			columns: CompactSelection.empty(),
@@ -2553,7 +2900,7 @@ test("pressing the blank surface around the table clears the selection", async (
 	});
 	expect(selection().gridSelection.rows.length).toBe(1);
 	await act(async () => {
-		fireEvent.pointerDown(document.querySelector(".csv-toolbar")!, {
+		fireEvent.pointerDown(document.querySelector(".csv-toolbar-content")!, {
 			button: 0,
 		});
 	});

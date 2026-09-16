@@ -36,6 +36,7 @@ export function MarkdownReviewEditor({
 	onCompletionStart,
 	onCompletionSuccess,
 	onCompletionFailure,
+	onDocumentApplied,
 }: {
 	readonly reviewDiff: MarkdownReviewDiff;
 	readonly sourceFilePath: string;
@@ -52,6 +53,11 @@ export function MarkdownReviewEditor({
 	readonly onCompletionStart?: (markdown: string) => void;
 	readonly onCompletionSuccess?: (markdown: string) => void;
 	readonly onCompletionFailure?: () => void;
+	/**
+	 * Called, before the browser paints, once the review document is in the
+	 * editor: the host may hold the editor out of sight until then.
+	 */
+	readonly onDocumentApplied?: () => void;
 }) {
 	const lix = useLix();
 	const { beforeMarkdown, afterMarkdown, beforeBlocks, afterBlocks } =
@@ -200,9 +206,14 @@ export function MarkdownReviewEditor({
 		};
 	}, [externalEditor]);
 
+	const onDocumentAppliedRef = useRef(onDocumentApplied);
+	useLayoutEffect(() => {
+		onDocumentAppliedRef.current = onDocumentApplied;
+	}, [onDocumentApplied]);
 	useLayoutEffect(() => {
 		if (!editor || editor.isDestroyed) return;
 		setReviewEditorDocument(editor, displayDocument);
+		onDocumentAppliedRef.current?.();
 	}, [displayDocument, editor]);
 
 	const [activeChangeElement, setActiveChangeElement] =
@@ -389,7 +400,7 @@ export function MarkdownReviewEditor({
 	return (
 		<>
 			{externalEditor ? null : (
-				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
+				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
 					<EditorContent
 						editor={editor}
 						className="tiptap mx-auto w-full"

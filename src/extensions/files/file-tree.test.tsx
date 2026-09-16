@@ -70,7 +70,7 @@ describe("FileTree", () => {
 		).toBe("2.5px");
 		expect(unsafeStyle).toHaveTextContent("data-item-context-hover");
 		expect(unsafeStyle).toHaveTextContent("width: 12px");
-		expect(unsafeStyle).toHaveTextContent("color: var(--color-icon-tertiary)");
+		expect(unsafeStyle).toHaveTextContent("color: var(--atelier-fg-subtle)");
 	});
 
 	test("expands and collapses directories", async () => {
@@ -868,7 +868,7 @@ describe("FileTree", () => {
 			"true",
 		);
 		expect(host.style.getPropertyValue("--trees-selected-bg-override")).toBe(
-			"var(--color-bg-selection-row)",
+			"var(--atelier-bg-active)",
 		);
 
 		rerender(
@@ -879,7 +879,7 @@ describe("FileTree", () => {
 			/>,
 		);
 		expect(host.style.getPropertyValue("--trees-selected-bg-override")).toBe(
-			"var(--color-bg-hover-canvas)",
+			"var(--atelier-bg-hover-strong)",
 		);
 	});
 
@@ -898,19 +898,19 @@ describe("FileTree", () => {
 		const { container, rerender } = render(<FileTree nodes={nodes} />);
 		const host = getTreeHost(container);
 		expect(host.style.getPropertyValue("--trees-bg-override")).toBe(
-			"var(--color-bg-app)",
+			"var(--atelier-bg)",
 		);
 		expect(host.style.getPropertyValue("--trees-bg-muted-override")).toBe(
-			"var(--color-bg-hover-canvas)",
+			"var(--atelier-bg-hover-strong)",
 		);
 
 		// Spacious runs inside the main white island.
 		rerender(<FileTree nodes={nodes} variant="spacious" />);
 		expect(host.style.getPropertyValue("--trees-bg-override")).toBe(
-			"var(--color-bg-panel)",
+			"var(--atelier-panel)",
 		);
 		expect(host.style.getPropertyValue("--trees-bg-muted-override")).toBe(
-			"var(--color-bg-hover)",
+			"var(--atelier-bg-hover)",
 		);
 	});
 
@@ -980,7 +980,7 @@ describe("FileTree", () => {
 			getTreeHost(container).style.getPropertyValue(
 				"--trees-git-modified-color-override",
 			),
-		).toBe("var(--color-icon-brand)");
+		).toBe("var(--atelier-link)");
 		const reviewRow = getTreeItem(container, "docs/review.md");
 		const reviewDot = reviewRow.querySelector("[data-item-section='git']");
 		const actionLane = reviewRow.querySelector("[data-item-section='action']");

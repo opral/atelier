@@ -21,20 +21,20 @@ body,
 	padding: 0 8px 0 6px;
 	border: 0;
 	border-radius: 7px;
-	background: rgb(236, 234, 229);
-	color: rgb(168, 162, 158);
+	background: var(--atelier-bg-hover-strong);
+	color: var(--atelier-fg-faint);
 	cursor: pointer;
 	font: inherit;
 }
 
 .host-repo__chip:hover {
-	background: rgb(228, 225, 219);
+	background: var(--atelier-bg-active);
 }
 
 .host-repo__name {
 	font-size: 12.5px;
 	font-weight: 600;
-	color: rgb(28, 25, 23);
+	color: var(--atelier-fg);
 }
 
 .host-repo__avatar {
@@ -45,8 +45,8 @@ body,
 	width: 17px;
 	height: 17px;
 	border-radius: 5px;
-	background: rgb(253, 227, 211);
-	color: rgb(194, 65, 12);
+	background: var(--atelier-accent-subtle);
+	color: var(--atelier-accent);
 	font-size: 8px;
 	font-weight: 700;
 	letter-spacing: 0.02em;
@@ -61,10 +61,10 @@ body,
 	flex-direction: column;
 	min-width: 180px;
 	padding: 6px;
-	border: 1px solid rgb(227, 225, 220);
+	border: 1px solid var(--atelier-border);
 	border-radius: 10px;
-	background: #ffffff;
-	box-shadow: 0 16px 40px rgba(28, 25, 23, 0.16);
+	background: var(--atelier-panel);
+	box-shadow: var(--atelier-shadow-lg);
 }
 
 .host-repo__item {
@@ -76,7 +76,7 @@ body,
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: rgb(68, 64, 60);
+	color: var(--atelier-fg-muted);
 	font: inherit;
 	font-size: 12.5px;
 	text-align: left;
@@ -84,13 +84,13 @@ body,
 }
 
 .host-repo__item[aria-checked="true"] {
-	background: rgb(245, 244, 241);
+	background: var(--atelier-bg-hover);
 	font-weight: 600;
-	color: rgb(28, 25, 23);
+	color: var(--atelier-fg);
 }
 
 .host-repo__item:hover {
-	background: rgb(245, 244, 241);
+	background: var(--atelier-bg-hover);
 }
 
 .csv-demo-nav {
@@ -100,17 +100,17 @@ body,
 	flex-shrink: 0;
 }
 .csv-demo-nav a {
-	color: #77746c;
+	color: var(--atelier-fg-subtle);
 	text-decoration: none;
 	font-size: 12px;
 }
 .csv-demo-nav a:first-child {
-	color: #48453e;
+	color: var(--atelier-fg-muted);
 	font-weight: 600;
 	margin-right: 10px;
 }
 .csv-demo-nav a:hover {
-	color: #37352f;
+	color: var(--atelier-fg);
 }
 
 .csv-demo-nav {

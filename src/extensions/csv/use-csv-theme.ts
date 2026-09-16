@@ -4,61 +4,61 @@ const FALLBACK_THEME = {
 	baseFontStyle: "13px",
 	headerFontStyle: "13px",
 	headerIconSize: 16,
-	textDark: "#44403c",
-	textHeader: "#78716c",
+	textDark: "#44403c", // token-literal: canvas fallback for --atelier-fg-muted
+	textHeader: "#78716c", // token-literal: canvas fallback for --atelier-fg-subtle
 	fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-	accentColor: "rgb(194, 65, 12)",
-	accentFg: "rgb(255, 255, 255)",
-	accentLight: "rgb(251, 239, 228)",
-	bgHeader: "rgb(255, 255, 255)",
-	bgHeaderHasFocus: "rgb(255, 255, 255)",
-	bgHeaderHovered: "rgb(255, 255, 255)",
-	borderColor: "rgb(244, 241, 236)",
-	headerBottomBorderColor: "rgb(244, 241, 236)",
-	horizontalBorderColor: "rgb(244, 241, 236)",
-	linkColor: "rgb(194, 65, 12)",
-	resizeIndicatorColor: "rgb(234, 88, 12)",
-	textHeaderSelected: "rgb(124, 45, 18)",
+	accentColor: "rgb(194, 65, 12)", // token-literal: canvas fallback for --atelier-accent
+	accentFg: "rgb(255, 255, 255)", // token-literal: canvas fallback for --atelier-accent-on
+	accentLight: "rgb(251, 239, 228)", // token-literal: canvas fallback for --atelier-accent-subtle
+	bgHeader: "rgb(255, 255, 255)", // token-literal: canvas fallback for --atelier-panel
+	bgHeaderHasFocus: "rgb(255, 255, 255)", // token-literal: canvas fallback for --atelier-panel
+	bgHeaderHovered: "rgb(245, 242, 237)", // token-literal: canvas fallback for --atelier-bg-hover
+	borderColor: "rgb(244, 241, 236)", // token-literal: canvas fallback for --atelier-border-subtle
+	headerBottomBorderColor: "rgb(244, 241, 236)", // token-literal: canvas fallback for --atelier-border-subtle
+	horizontalBorderColor: "rgb(244, 241, 236)", // token-literal: canvas fallback for --atelier-border-subtle
+	linkColor: "rgb(234, 88, 12)", // token-literal: canvas fallback for --atelier-link
+	resizeIndicatorColor: "rgb(234, 88, 12)", // token-literal: canvas fallback for --atelier-link
+	textHeaderSelected: "rgb(194, 65, 12)", // token-literal: canvas fallback for --atelier-accent
 };
 const colorTokens = {
-	textDark: "--color-text-secondary",
-	textMedium: "--color-text-tertiary",
-	textLight: "--color-icon-quaternary",
-	textHeader: "--color-text-tertiary",
-	textHeaderSelected: "--color-action-selection-current",
-	accentColor: "--color-bg-action-primary",
-	accentFg: "--color-text-on-action-primary",
-	accentLight: "--color-bg-selection-current",
-	bgCell: "--color-bg-panel",
-	bgCellMedium: "--color-bg-panel-muted",
-	bgHeader: "--color-bg-panel",
-	bgHeaderHasFocus: "--color-bg-panel",
-	bgHeaderHovered: "--color-bg-hover",
-	bgIconHeader: "--color-bg-panel",
-	fgIconHeader: "--color-icon-tertiary",
-	borderColor: "--color-border-table-grid",
-	headerBottomBorderColor: "--color-border-table-grid",
-	horizontalBorderColor: "--color-border-table-grid",
-	linkColor: "--color-text-link",
-	resizeIndicatorColor: "--color-icon-brand",
+	textDark: "--atelier-fg-muted",
+	textMedium: "--atelier-fg-subtle",
+	textLight: "--atelier-fg-faint",
+	textHeader: "--atelier-fg-subtle",
+	textHeaderSelected: "--atelier-accent",
+	accentColor: "--atelier-accent",
+	accentFg: "--atelier-accent-on",
+	accentLight: "--atelier-accent-subtle",
+	bgCell: "--atelier-panel",
+	bgCellMedium: "--atelier-bg-subtle",
+	bgHeader: "--atelier-panel",
+	bgHeaderHasFocus: "--atelier-panel",
+	bgHeaderHovered: "--atelier-bg-hover",
+	bgIconHeader: "--atelier-panel",
+	fgIconHeader: "--atelier-fg-subtle",
+	borderColor: "--atelier-border-subtle",
+	headerBottomBorderColor: "--atelier-border-subtle",
+	horizontalBorderColor: "--atelier-border-subtle",
+	linkColor: "--atelier-link",
+	resizeIndicatorColor: "--atelier-link",
 } as const;
 
 const DEFAULT_APPEARANCE = {
 	theme: {
 		...FALLBACK_THEME,
-		textMedium: "#78716c",
-		textLight: "#a8a29e",
-		bgCell: "#fff",
-		bgCellMedium: "#fafaf9",
-		bgIconHeader: "#fff",
-		fgIconHeader: "#78716c",
+		textMedium: "#78716c", // token-literal: canvas fallback for --atelier-fg-subtle
+		textLight: "#a8a29e", // token-literal: canvas fallback for --atelier-fg-faint
+		bgCell: "#fff", // token-literal: canvas fallback for --atelier-panel
+		bgCellMedium: "#fafaf9", // token-literal: canvas fallback for --atelier-bg-subtle
+		bgIconHeader: "#fff", // token-literal: canvas fallback for --atelier-panel
+		fgIconHeader: "#78716c", // token-literal: canvas fallback for --atelier-fg-subtle
 	},
 	palette: CSV_COLOR_FALLBACKS as CsvPalette,
-	searchColor: "#fef08a",
+	searchColor: "#fef08a", // token-literal: canvas fallback for --atelier-highlight
 	/** The title column's ink: primary text, the rest of the grid secondary. */
-	titleColor: "#1c1917",
+	titleColor: "#1c1917", // token-literal: canvas fallback for --atelier-fg
 	/** The hovered row's ground. */
-	hoverColor: "#f5f2ed",
+	hoverColor: "#f5f2ed", // token-literal: canvas fallback for --atelier-bg-hover
 };
 
 /** Canvas cannot consume var(). Resolve the owning table's inherited Atelier tokens. */
@@ -67,10 +67,24 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 	useLayoutEffect(() => {
 		const element = ref.current;
 		if (!element) return;
+		// A custom property's computed value is its token stream, so a token
+		// written as `light-dark(a, b)` reads back as that text, which no canvas
+		// fillStyle or gradient stop accepts. Assigning it to a real colour
+		// property on a child of the table resolves it under the table's own
+		// colour scheme, and the computed colour is what the canvas gets.
+		const probe = element.ownerDocument.createElement("span");
+		probe.hidden = true;
+		element.append(probe);
 		const update = () => {
 			const styles = getComputedStyle(element);
-			const read = (token: string, fallback: string) =>
-				styles.getPropertyValue(token).trim() || fallback;
+			const read = (token: string, fallback: string) => {
+				const raw = styles.getPropertyValue(token).trim();
+				if (!raw) return fallback;
+				probe.style.color = "";
+				probe.style.color = raw;
+				if (!probe.style.color) return fallback;
+				return getComputedStyle(probe).color || raw;
+			};
 			setAppearance((previous) => {
 				const theme = { ...DEFAULT_APPEARANCE.theme };
 				for (const [key, token] of Object.entries(colorTokens)) {
@@ -81,8 +95,8 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 					Object.entries(CSV_COLOR_FALLBACKS).map(([name, [bg, fg]]) => [
 						name,
 						[
-							read(`--color-bg-tag-${name}`, bg),
-							read(`--color-text-tag-${name}`, fg),
+							read(`--atelier-tag-${name}`, bg),
+							read(`--atelier-tag-${name}-fg`, fg),
 						],
 					]),
 				) as unknown as CsvPalette;
@@ -90,14 +104,11 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 					theme,
 					palette,
 					searchColor: read(
-						"--color-bg-search-match",
+						"--atelier-highlight",
 						DEFAULT_APPEARANCE.searchColor,
 					),
-					titleColor: read(
-						"--color-text-primary",
-						DEFAULT_APPEARANCE.titleColor,
-					),
-					hoverColor: read("--color-bg-hover", DEFAULT_APPEARANCE.hoverColor),
+					titleColor: read("--atelier-fg", DEFAULT_APPEARANCE.titleColor),
+					hoverColor: read("--atelier-bg-hover", DEFAULT_APPEARANCE.hoverColor),
 				};
 				return JSON.stringify(next) === JSON.stringify(previous)
 					? previous
@@ -123,6 +134,7 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 		return () => {
 			observer.disconnect();
 			scheme.removeEventListener("change", update);
+			probe.remove();
 		};
 	}, [ref]);
 	return appearance;

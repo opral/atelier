@@ -8,6 +8,9 @@ type Element = Record<string, unknown>;
 type Point = [number, number];
 const number = (value: unknown, fallback = 0) =>
 	typeof value === "number" && Number.isFinite(value) ? value : fallback;
+// Excalidraw's own default stroke for an element that names none: document
+// ink, drawn the same as the editor's canvas draws it, not UI chrome.
+const DEFAULT_STROKE = "#222"; // token-literal: the document's ink, not a theme colour
 const color = (value: unknown, fallback: string) =>
 	typeof value === "string" &&
 	/^(?:#[0-9a-f]{3,8}|transparent|none|[a-z]+)$/i.test(value)
@@ -109,7 +112,7 @@ function shapeOf(
 ): ReactNode {
 	const w = Math.abs(number(element.width)),
 		h = Math.abs(number(element.height));
-	const stroke = color(element.strokeColor, "#222"),
+	const stroke = color(element.strokeColor, DEFAULT_STROKE),
 		fill = color(element.backgroundColor, "none");
 	const width = Math.max(0.1, number(element.strokeWidth, 1));
 	// RoughJS falls back to Math.random when a seed collapses to zero during
@@ -371,7 +374,7 @@ export function SceneContent({ content }: { readonly content: string }) {
 					<g
 						key={String(element.id ?? index)}
 						transform={`translate(${number(element.x)} ${number(element.y)}) rotate(${(number(element.angle) * 180) / Math.PI} ${w / 2} ${h / 2})`}
-						stroke={color(element.strokeColor, "#222")}
+						stroke={color(element.strokeColor, DEFAULT_STROKE)}
 						strokeWidth={width}
 						strokeLinecap="round"
 						strokeLinejoin="round"

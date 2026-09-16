@@ -1,0 +1,625 @@
+/*
+ * The document stylesheet: how a Markdown document looks, wherever it is
+ * shown. The editor puts `atelier-document` on the ProseMirror root and the
+ * static render puts it on its wrapper, so a heading in a chat card and the
+ * same heading in the app are one rule here — there is no second copy to
+ * drift. Editor chrome (menus, node views, the caret, the gutter query) lives
+ * in the Markdown extension's own stylesheet and never restates a rule from
+ * this file; it overrides one, when it must, by a selector on its own class.
+ *
+ * Two knobs, declared on the root like the tokens so that any ancestor
+ * a host or a view sets them on wins:
+ *   --atelier-doc-font-size  the body size (16px). Every size below is an em
+ *                            of it, so one declaration — the chat card says
+ *                            14px — sets the whole scale.
+ *   --atelier-doc-gutter     the room a wide table may spend on each side
+ *                            (0). The editor sets it to its column outset.
+ *
+ * Every colour is a token; the sheet reads `theme.css` and nothing else.
+ */
+
+:root,
+:host {
+	--atelier-doc-font-size: 16px;
+	--atelier-doc-gutter: 0px;
+}
+
+.atelier-document {
+	/* The body em as an absolute length, for the places an element's own em
+	   is not the body's: heading margins, table cells, a diff-gap row. */
+	--atelier-doc-em: var(--atelier-doc-font-size, 16px);
+	/* One gap between blocks, so a document reads as a steady rhythm rather
+	   than a set of unrelated margins. */
+	--atelier-doc-gap: calc(var(--atelier-doc-em) * 0.5);
+	--atelier-doc-radius: 4px;
+	/* Full-strength ink: Notion sets body text near-black, not a tint. */
+	color: var(--atelier-fg);
+	font-family: var(--atelier-font-sans);
+	font-size: var(--atelier-doc-font-size, 16px);
+	font-variant-numeric: normal;
+	letter-spacing: 0;
+	line-height: 1.5;
+}
+
+/* A document is written in whatever direction its language runs. */
+.atelier-document :is(p, li, blockquote, td, th, h1, h2, h3, h4, h5, h6) {
+	unicode-bidi: plaintext;
+}
+
+/* ── Headings ─────────────────────────────────────────────────────────── */
+/* Heading scale after Notion: 30/24/20/17 on a 16px body, line-height 1.3,
+   no tracking, a 4px seat below, and room above that grows with the level.
+   h5 and h6 stay body-size and plain; small caps read as labels. */
+.atelier-document :is(h1, h2, h3, h4, h5, h6) {
+	color: var(--atelier-fg);
+	font-weight: 600;
+	letter-spacing: 0;
+	line-height: 1.3;
+	margin-bottom: calc(var(--atelier-doc-em) * 0.25);
+	text-wrap: pretty;
+}
+
+.atelier-document h1 {
+	font-size: 1.875em;
+	margin-top: 2em;
+}
+
+.atelier-document > h1:first-child {
+	margin-top: 0;
+}
+
+.atelier-document h2 {
+	font-size: 1.5em;
+	margin-top: 1.4em;
+}
+
+.atelier-document h3 {
+	font-size: 1.25em;
+	margin-top: 1em;
+}
+
+.atelier-document h4 {
+	font-size: 1.0625em;
+	margin-top: 1em;
+}
+
+.atelier-document h5 {
+	font-size: 1em;
+	margin-top: 0.75em;
+}
+
+.atelier-document h6 {
+	color: var(--atelier-fg-muted);
+	font-size: 1em;
+	margin-top: 0.75em;
+}
+
+/* ── Paragraphs, emphasis, links ──────────────────────────────────────── */
+.atelier-document p {
+	margin-top: var(--atelier-doc-gap);
+	margin-bottom: var(--atelier-doc-gap);
+	text-wrap: pretty;
+}
+
+/* Bold at 600 next to 400 body: emphasis without shouting. */
+.atelier-document strong {
+	font-weight: 600;
+}
+
+/* Links keep the ink and carry a quiet underline, like Notion: prose stays
+   one colour and the underline says "goes somewhere". */
+.atelier-document a {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+	border-radius: 2px;
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		text-decoration-color 120ms ease;
+}
+
+.atelier-document a:hover {
+	background-color: var(--atelier-bg-hover);
+	text-decoration-color: currentColor;
+}
+
+/* ── Lists ────────────────────────────────────────────────────────────── */
+/* One 1.5em column per level, whatever the list kind, so bullets, numbers
+   and task boxes all put their text on the same x. */
+.atelier-document ul,
+.atelier-document ol {
+	padding-left: 1.5em;
+	margin-top: var(--atelier-doc-gap);
+	margin-bottom: var(--atelier-doc-gap);
+	list-style-position: outside;
+}
+
+/* A list inside a task item sits flush under its text. The editor wraps an
+   item's content in a div; the static render does not. */
+.atelier-document li[data-task] > :is(ul, ol),
+.atelier-document li > div > :is(ul, ol) {
+	margin-top: 0;
+	margin-bottom: 0;
+	padding-left: 1.5em;
+}
+
+.atelier-document ul {
+	list-style-type: disc;
+}
+
+.atelier-document ol {
+	list-style-type: decimal;
+}
+
+.atelier-document ul ul {
+	list-style-type: circle;
+}
+
+.atelier-document ul ul ul {
+	list-style-type: square;
+}
+
+.atelier-document ul ul ul ul {
+	list-style-type: disc;
+}
+
+.atelier-document ul ul ul ul ul {
+	list-style-type: circle;
+}
+
+/* Markers in the body ink at body size: the list reads as one voice. */
+.atelier-document li::marker {
+	color: var(--atelier-fg);
+	font-size: 1em;
+}
+
+.atelier-document ol > li::marker {
+	color: var(--atelier-fg);
+	font-size: 1em;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+
+/* Items sit 6px apart (3px each side), Notion's block pitch. */
+.atelier-document li {
+	margin-top: 0;
+	margin-bottom: 0;
+	padding: 0.1875em 0;
+}
+
+.atelier-document li p {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+.atelier-document li p + p {
+	margin-top: 0.35em;
+}
+
+/* ── Task items ───────────────────────────────────────────────────────── */
+/* The box takes the bullet's place: a 1em square, then a 0.5em gap, so the
+   text lands on the same column as bullet text. */
+.atelier-document li[data-task] {
+	display: grid;
+	grid-template-columns: 1em minmax(0, 1fr);
+	column-gap: 0.5em;
+	align-items: start;
+	margin: 0 0 0 -1.5em;
+	padding: 0.1875em 0;
+	list-style: none;
+}
+
+.atelier-document li[data-task] > input[type="checkbox"] {
+	appearance: none;
+	grid-column: 1;
+	width: 1em;
+	height: 1em;
+	font: inherit;
+	color: inherit;
+	/* Centred on the first line box (line-height 1.5). */
+	margin: calc((1.5em - 1em) / 2) 0 0;
+	justify-self: start;
+	border: 1.5px solid var(--atelier-fg-subtle);
+	border-radius: var(--atelier-doc-radius);
+	background-color: var(--atelier-panel);
+	box-shadow: inset 0 1px 0
+		color-mix(in srgb, var(--atelier-panel) 65%, transparent);
+}
+
+.atelier-document li[data-task] > input[type="checkbox"]:checked {
+	border-color: var(--atelier-accent);
+	background-color: var(--atelier-accent);
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6.2 5 8.1 9 3.8' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: 0.75em 0.75em;
+	box-shadow: 0 1px 2px
+		color-mix(in srgb, var(--atelier-accent) 18%, transparent);
+}
+
+/* Everything that is not the box sits in the text column. */
+.atelier-document li[data-task] > :not(input) {
+	grid-column: 2;
+	min-width: 0;
+}
+
+.atelier-document li[data-task] p {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+/* A done task reads as done: dimmed and struck, like Notion. Only its own
+   text: nested tasks carry their own state. */
+.atelier-document li[data-task="x"] > p,
+.atelier-document li[data-task="x"] > div > p {
+	color: var(--atelier-fg-subtle);
+	text-decoration: line-through;
+	text-decoration-color: color-mix(
+		in srgb,
+		var(--atelier-fg-subtle) 60%,
+		transparent
+	);
+}
+
+/* Done text dims with everything in it, code chips included. */
+.atelier-document li[data-task="x"] > p code,
+.atelier-document li[data-task="x"] > div > p code {
+	color: inherit;
+	opacity: 0.7;
+	text-decoration: inherit;
+}
+
+/* ── Blockquotes ──────────────────────────────────────────────────────── */
+/* A quote is a rule and an indent in the same ink, not a tinted box. */
+.atelier-document blockquote {
+	border-left: 3px solid currentColor;
+	border-radius: 0;
+	padding: 0.1875em 0 0.1875em 0.9em;
+	background: transparent;
+	color: inherit;
+	margin: var(--atelier-doc-gap) 0;
+}
+
+/* GitHub alerts (> [!NOTE] …) are Notion-style callouts: a soft tinted box
+   in the alert's hue. The marker line stays in the text, as GitHub keeps it
+   in the source. */
+.atelier-document blockquote[data-alert] {
+	border-left: 0;
+	border-radius: var(--atelier-doc-radius);
+	padding: 1em 1em 1em 0.75em;
+	background: var(--atelier-tag-gray);
+}
+
+.atelier-document blockquote[data-alert="note"] {
+	background: var(--atelier-tag-blue);
+}
+
+.atelier-document blockquote[data-alert="tip"] {
+	background: var(--atelier-tag-green);
+}
+
+.atelier-document blockquote[data-alert="important"] {
+	background: var(--atelier-tag-purple);
+}
+
+.atelier-document blockquote[data-alert="warning"] {
+	background: var(--atelier-tag-yellow);
+}
+
+.atelier-document blockquote[data-alert="caution"] {
+	background: var(--atelier-tag-red);
+}
+
+.atelier-document blockquote p {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+.atelier-document blockquote blockquote {
+	border-left: 3px solid color-mix(in srgb, currentColor 40%, transparent);
+	margin: var(--atelier-doc-gap) 0 0;
+	padding: 0 0 0 0.9em;
+}
+
+.atelier-document blockquote :is(ul, ol) {
+	margin-top: 0.25em;
+	margin-bottom: 0.25em;
+}
+
+/* ── Code ─────────────────────────────────────────────────────────────── */
+/* Inline code: a neutral tint, no border, 85% size, and a line-height that
+   never grows the line box. */
+.atelier-document :not(pre) > code {
+	background-color: color-mix(
+		in srgb,
+		var(--atelier-fg-subtle) 15%,
+		transparent
+	);
+	color: var(--atelier-fg);
+	line-height: 1.25;
+	font-family: var(--atelier-font-mono);
+	font-size: 0.85em;
+	border: 0;
+	border-radius: var(--atelier-doc-radius);
+	padding: 0.2em 0.4em;
+}
+
+/* Code blocks: a flat muted ground, no border, generous padding with room
+   for a language label in the top corner. */
+.atelier-document pre {
+	position: relative;
+	background: var(--atelier-bg-subtle);
+	border: 0;
+	border-radius: var(--atelier-doc-radius);
+	box-shadow: none;
+	padding: 1.25em 1em;
+	overflow-x: auto;
+	margin-top: var(--atelier-doc-gap);
+	margin-bottom: var(--atelier-doc-gap);
+	tab-size: 2;
+}
+
+.atelier-document pre[data-language] {
+	padding-top: 1.5em;
+}
+
+/* 13.5px on a 16px body. */
+.atelier-document pre code {
+	background-color: transparent;
+	padding: 0;
+	font-family: var(--atelier-font-mono);
+	font-size: 0.84375em;
+	font-variant-ligatures: none;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+	line-height: 1.5;
+}
+
+/* ── Footnotes ────────────────────────────────────────────────────────── */
+/* The marker is the label as written, in the link ink, small and raised.
+   The definition is a row: a fixed label and an ordinary body. */
+.atelier-document .markdown-footnote-ref {
+	color: var(--atelier-link);
+	font-size: 0.75em;
+	line-height: 0;
+	vertical-align: super;
+	border-radius: 2px;
+}
+
+.atelier-document .markdown-footnote-def {
+	display: grid;
+	grid-template-columns: 3em minmax(0, 1fr) auto;
+	align-items: baseline;
+	column-gap: 0.5em;
+	margin: var(--atelier-doc-gap) 0;
+	border-radius: var(--atelier-doc-radius);
+}
+
+.atelier-document .markdown-footnote-def-label {
+	color: var(--atelier-link);
+	font-size: 0.9em;
+	user-select: none;
+}
+
+.atelier-document .markdown-footnote-def-body {
+	min-width: 0;
+}
+
+.atelier-document .markdown-footnote-def-body > :first-child {
+	margin-top: 0;
+}
+
+.atelier-document .markdown-footnote-def-body > :last-child {
+	margin-bottom: 0;
+}
+
+/* ── Media and rules ──────────────────────────────────────────────────── */
+/* The image itself, no frame or shadow. */
+.atelier-document img {
+	border: 0;
+	border-radius: var(--atelier-doc-radius);
+	box-shadow: none;
+	height: auto;
+	margin: var(--atelier-doc-gap) auto;
+	max-width: 100%;
+}
+
+/* A divider is a visible hairline in a short block, not 80px of air. */
+.atelier-document hr {
+	border: 0;
+	border-top: 1px solid color-mix(in srgb, var(--atelier-fg) 16%, transparent);
+	margin: 0.75em 0;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+/* A table is read across, not down a measure, so it may take more room than
+   the prose around it — but only the room it needs. The table element is
+   the room: a scroll box as wide as the column and both gutters. Its two
+   pseudo-elements are the gutters, which give way before the table does, so
+   the table proper sits on the column until it needs the gutters and spends
+   them evenly when it does. With no gutter (the default) the room is the
+   column, and a wide table scrolls inside it. Only a table the document
+   holds directly: a table inside a list or a quote stays in its block.
+   Hairlines, 14px cells on a 16px body, a tinted plain-case header row:
+   Notion's simple table. */
+.atelier-document > table {
+	display: flex;
+	align-items: flex-start;
+	width: calc(100% + 2 * var(--atelier-doc-gutter, 0px));
+	margin-top: var(--atelier-doc-gap);
+	margin-bottom: var(--atelier-doc-gap);
+	margin-inline: calc(-1 * var(--atelier-doc-gutter, 0px));
+	border: 0;
+	box-shadow: none;
+	overflow-x: auto;
+	font-size: 0.875em;
+}
+
+.atelier-document > table::before,
+.atelier-document > table::after {
+	content: "";
+	flex: 0 1 var(--atelier-doc-gutter, 0px);
+	min-width: 0;
+}
+
+/* The table proper: its own width, never squeezed below it — the room
+   around it scrolls instead — and the border. */
+.atelier-document table > tbody {
+	display: table;
+	flex: 0 0 auto;
+	width: max-content;
+	border: 1px solid var(--atelier-border);
+	border-collapse: separate;
+	border-radius: var(--atelier-doc-radius);
+	border-spacing: 0;
+}
+
+/* The header row's tint would square off the rounded corners it sits under,
+   since nothing clips it. */
+.atelier-document table tr:first-child :is(th, td):first-child {
+	border-top-left-radius: calc(var(--atelier-doc-radius) - 1px);
+}
+
+.atelier-document table tr:first-child :is(th, td):last-child {
+	border-top-right-radius: calc(var(--atelier-doc-radius) - 1px);
+}
+
+.atelier-document table tr:last-child :is(th, td):first-child {
+	border-bottom-left-radius: calc(var(--atelier-doc-radius) - 1px);
+}
+
+.atelier-document table tr:last-child :is(th, td):last-child {
+	border-bottom-right-radius: calc(var(--atelier-doc-radius) - 1px);
+}
+
+.atelier-document table tr:first-child {
+	background-color: var(--atelier-bg-hover);
+}
+
+/* 7px by 9px on a 16px body. */
+.atelier-document table th,
+.atelier-document table td {
+	border-right: 1px solid var(--atelier-border);
+	border-bottom: 1px solid var(--atelier-border);
+	padding: calc(var(--atelier-doc-em) * 0.4375)
+		calc(var(--atelier-doc-em) * 0.5625);
+	text-align: left;
+	vertical-align: top;
+}
+
+.atelier-document table th {
+	color: var(--atelier-fg);
+	font-weight: 600;
+}
+
+.atelier-document table :is(th, td)[data-align="center"] {
+	text-align: center;
+}
+
+.atelier-document table :is(th, td)[data-align="right"] {
+	text-align: right;
+}
+
+.atelier-document table :is(th, td)[data-align="left"] {
+	text-align: left;
+}
+
+.atelier-document table :is(th, td):last-child {
+	border-right: 0;
+}
+
+.atelier-document table tbody tr:last-child :is(th, td) {
+	border-bottom: 0;
+}
+
+.atelier-document table tbody tr:hover {
+	background: color-mix(in srgb, var(--atelier-bg-hover) 68%, transparent);
+}
+
+/* ── The change itself ────────────────────────────────────────────────── */
+/* A diff marks what arrived, what left and what changed in place, with
+   `data-review-status`, whether the editor's review mode or a static render
+   put it there. */
+.atelier-document [data-review-status="added"] {
+	background-color: var(--atelier-diff-added-subtle);
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+	border-radius: var(--atelier-doc-radius);
+	color: var(--atelier-diff-added);
+	/* Nothing struck through: an arriving word is not a leaving one, whatever
+	   decoration the line around it carries. */
+	text-decoration: none;
+}
+
+.atelier-document [data-review-status="removed"] {
+	background-color: var(--atelier-diff-removed-subtle);
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+	border-radius: var(--atelier-doc-radius);
+	color: var(--atelier-diff-removed);
+	text-decoration: line-through;
+	text-decoration-color: var(--atelier-diff-removed);
+}
+
+/* A node whose attributes changed (a ticked task, a re-levelled heading)
+   stays in place with a soft brand tint; its text is not a diff. */
+.atelier-document [data-review-status="modified"] {
+	background-color: var(--atelier-accent-subtle);
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+	border-radius: var(--atelier-doc-radius);
+}
+
+/* Each inline version is its own run: without isolation, a removed and an
+   added Arabic word reorder into each other, letter by letter. */
+.atelier-document span[data-review-status] {
+	unicode-bidi: isolate;
+}
+
+/* Inside a marked task item the diff colour wins over done-task dimming. */
+.atelier-document li[data-review-status][data-task="x"] > p,
+.atelier-document li[data-review-status][data-task="x"] > div > p {
+	color: inherit;
+	text-decoration: inherit;
+}
+
+/* A done line the diff wrote into keeps the dimming and drops the rule: a
+   descendant cannot undo an inherited strikethrough, and an added word
+   wearing one reads as a word that was deleted. */
+.atelier-document
+	li[data-task="x"]:not([data-review-status]):has(> p [data-review-status])
+	> p,
+.atelier-document
+	li[data-task="x"]:not([data-review-status]):has(
+		> div > p [data-review-status]
+	)
+	> div
+	> p {
+	text-decoration: none;
+}
+
+/* The gap a pruned run leaves in a static render, named rather than silent. */
+.atelier-document .md-diff-gap {
+	display: block;
+	margin: calc(var(--atelier-doc-em) * 0.25) 0;
+	padding: calc(var(--atelier-doc-em) * 0.125) 0;
+	color: var(--atelier-fg-subtle);
+	font-size: calc(var(--atelier-doc-em) * 0.75);
+	list-style: none;
+}
+
+.atelier-document li.md-diff-gap {
+	margin-left: -1.5em;
+}
+
+.atelier-document tr.md-diff-gap {
+	display: table-row;
+}
+
+.atelier-document tr.md-diff-gap > td {
+	color: var(--atelier-fg-subtle);
+	font-size: calc(var(--atelier-doc-em) * 0.75);
+}

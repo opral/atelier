@@ -354,6 +354,23 @@ export function PanelV2({
 		}
 		return map;
 	}, [area.views, makeRuntime]);
+	// A review steps through its files by navigating the tab in place. The
+	// document it lands on keeps the mounted view when the same extension
+	// shows it; otherwise the view leaving stays on screen until the one
+	// arriving has its document.
+	const { keys: viewSlots, handover: pendingHandover } = useViewSlots(
+		area.views,
+		viewContext.atelier.diff?.session != null,
+	);
+	const [shownInstance, setShownInstance] = useState<string | null>(null);
+	const handover =
+		pendingHandover && shownInstance !== pendingHandover.incoming
+			? pendingHandover
+			: null;
+	const outgoingContext = useMemo(
+		() => (handover ? makeRuntime(handover.outgoing) : null),
+		[handover, makeRuntime],
+	);
 
 	const handleInteraction = (event: { target: EventTarget | null }) => {
 		if (!onActiveViewInteraction || !activeInstance) return;
@@ -371,10 +388,7 @@ export function PanelV2({
 
 	const ContainerElement =
 		side === "main" ? ("section" as const) : ("aside" as const);
-	const hostTextClass =
-		side === "main"
-			? "text-[var(--color-text-primary)]"
-			: "text-[var(--color-text-secondary)]";
+	const hostTextClass = side === "main" ? "text-fg" : "text-fg-muted";
 
 	const contentHandlers =
 		onActiveViewInteraction && activeInstance
@@ -550,31 +564,62 @@ export function PanelV2({
 			<div
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
-					side === "main"
-						? "border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)]"
-						: "bg-transparent",
-					isOver && "ring-2 ring-[var(--color-ring-focus-visible)] ring-inset",
+					side === "main" ? "border border-border bg-panel" : "bg-transparent",
+					isOver && "ring-2 ring-ring ring-inset",
 				)}
 			>
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
-						{area.views.map((entry) => {
+						{area.views.flatMap((entry) => {
 							const isActive = activeInstance === entry.instance;
 							if (
 								!(contentVisible && isActive) &&
 								!mountedInstances.has(entry.instance)
 							) {
-								return null;
+								return [];
 							}
 							const view = resolveViewDefinition(entry.kind);
-							if (!view) return null;
+							if (!view) return [];
 							const context = viewContexts.get(entry.instance);
-							if (!context) return null;
-							return (
+							if (!context) return [];
+							// The view arriving in a hand-over is laid out in the same
+							// box as the one leaving, out of sight, so it can read its
+							// document and take its measurements before it is shown.
+							// Both are siblings under their own keys, so the leaving
+							// view's node is the one it always was.
+							const arriving = handover?.incoming === entry.instance;
+							const outgoing =
+								arriving && handover && outgoingContext
+									? resolveViewDefinition(handover.outgoing.kind)
+									: null;
+							return [
+								outgoing && handover && outgoingContext ? (
+									<div
+										key={handover.outgoingKey}
+										className="contents"
+										data-atelier-view-leaving=""
+									>
+										<ViewRenderer
+											view={outgoing}
+											instance={handover.outgoing}
+											atelier={outgoingContext.atelier}
+											extensionView={outgoingContext.view}
+											side={side}
+											isActive={false}
+										/>
+									</div>
+								) : null,
 								<div
-									key={entry.instance}
-									className={isActive ? "contents" : "hidden"}
-									aria-hidden={isActive ? undefined : true}
+									key={viewSlots.get(entry.instance) ?? entry.instance}
+									className={
+										arriving
+											? "pointer-events-none absolute inset-0 flex min-h-0 flex-col opacity-0"
+											: isActive
+												? "contents"
+												: "hidden"
+									}
+									aria-hidden={isActive && !arriving ? undefined : true}
+									data-atelier-view-arriving={arriving || undefined}
 								>
 									<ViewRenderer
 										view={view}
@@ -583,9 +628,10 @@ export function PanelV2({
 										extensionView={context.view}
 										side={side}
 										isActive={isActive}
+										onShown={() => setShownInstance(entry.instance)}
 									/>
-								</div>
-							);
+								</div>,
+							];
 						})}
 					</PanelContent>
 				) : (
@@ -639,8 +685,8 @@ export type PanelV2Props = {
 // Reference rows are regular-weight with muted icons; only the active row is
 // semibold. Anything heavier makes the whole menu read as bold.
 const sectionPickerItemClasses =
-	"h-[30px] rounded-md px-2 text-[12.5px] font-normal text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]";
-const sectionPickerIconClasses = "size-3.25 text-[var(--color-icon-tertiary)]";
+	"h-[30px] rounded-md px-2 text-[12.5px] font-normal text-fg-muted focus:bg-bg-hover focus:text-fg";
+const sectionPickerIconClasses = "size-3.25 text-fg-subtle";
 const EMPTY_EXTENSION_PREFERENCES: AtelierExtensionPreferences = {
 	get: () => undefined,
 	set: () => undefined,
@@ -710,12 +756,12 @@ function SidebarSectionPicker({
 					// while open, which is the whole affordance. px-1.5 puts the label
 					// text on the sidebar's content column — the same x as the tree
 					// rows' icons, whose centers sit under the top bar's mark.
-					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] data-[state=open]:text-[var(--color-neutral-600)]"
+					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-fg-faint transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:text-fg-muted"
 				>
 					<span>{activeLabel}</span>
 					<ChevronDown
 						aria-hidden="true"
-						className="size-2.25 text-[var(--color-icon-quaternary)] transition-[transform,color] group-hover/section:text-[var(--color-icon-secondary)] group-data-[state=open]/section:rotate-180 group-data-[state=open]/section:text-[var(--color-icon-secondary)]"
+						className="size-2.25 text-fg-faint transition-[transform,color] group-hover/section:text-fg-muted group-data-[state=open]/section:rotate-180 group-data-[state=open]/section:text-fg-muted"
 						strokeWidth={2.6}
 					/>
 				</button>
@@ -729,7 +775,7 @@ function SidebarSectionPicker({
 				// programmatic and would paint the keyboard focus ring after any
 				// pointer-driven open/close. Tabbing to the trigger still rings.
 				onCloseAutoFocus={(event) => event.preventDefault()}
-				className="w-[212px] rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1.5 shadow-lg"
+				className="w-[212px] rounded-[10px] border border-border bg-panel p-1.5 shadow-lg"
 			>
 				{/* Open views and openable views read as one list: the picker answers
 				    "what is this sidebar showing?", not "what is already loaded?". */}
@@ -744,23 +790,20 @@ function SidebarSectionPicker({
 							onSelect={() => onSelectView(entry.instance)}
 							className={clsx(
 								sectionPickerItemClasses,
-								isActive &&
-									"bg-[var(--color-bg-hover)] font-semibold text-[var(--color-text-primary)]",
+								isActive && "bg-bg-hover font-semibold text-fg",
 							)}
 						>
 							<definition.icon
 								className={clsx(
 									"size-3.25",
-									isActive
-										? "text-[var(--color-icon-secondary)]"
-										: "text-[var(--color-icon-tertiary)]",
+									isActive ? "text-fg-muted" : "text-fg-subtle",
 								)}
 							/>
 							<span className="truncate">{label}</span>
 							{isActive ? (
 								<Check
 									aria-hidden="true"
-									className="ml-auto size-3 text-[var(--color-icon-brand)]"
+									className="ml-auto size-3 text-link"
 									strokeWidth={2.6}
 								/>
 							) : null}
@@ -781,7 +824,7 @@ function SidebarSectionPicker({
 					: null}
 				{extensionMenuItems.length > 0 ? (
 					<>
-						<div className="my-1.5 mx-1 h-px bg-[var(--color-border-subtle)]" />
+						<div className="my-1.5 mx-1 h-px bg-border-subtle" />
 						<ExtensionDropdownMenuItems
 							items={extensionMenuItems}
 							itemClassName={sectionPickerItemClasses}
@@ -791,14 +834,14 @@ function SidebarSectionPicker({
 				) : null}
 				{onHidePanel ? (
 					<>
-						<div className="my-1.5 mx-1 h-px bg-[var(--color-border-subtle)]" />
+						<div className="my-1.5 mx-1 h-px bg-border-subtle" />
 						<DropdownMenuItem
 							onSelect={() => onHidePanel()}
 							className={sectionPickerItemClasses}
 						>
 							<PanelIcon side={side} className={sectionPickerIconClasses} />
 							<span>Hide sidebar</span>
-							<span className="ml-auto text-[11px] font-medium text-[var(--color-text-quaternary)]">
+							<span className="ml-auto text-[11px] font-medium text-fg-faint">
 								{panelShortcutHint(side)}
 							</span>
 						</DropdownMenuItem>
@@ -1030,7 +1073,7 @@ function AddViewMenu({
 					title="Add view"
 					aria-label="Add view"
 					data-attr="panel-add-view"
-					className="flex size-[26px] flex-none items-center justify-center rounded-md text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-icon-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-panel)]"
+					className="flex size-[26px] flex-none items-center justify-center rounded-md text-fg-faint hover:bg-bg-hover-strong hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
 				>
 					<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
 				</button>
@@ -1046,12 +1089,12 @@ function AddViewMenu({
 						triggerRef.current?.focus({ preventScroll: true });
 					}, 0);
 				}}
-				className="w-44 border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg"
+				className="w-44 border border-border bg-panel p-1 shadow-lg"
 			>
 				{availableViews.length === 0 ? (
 					<DropdownMenuItem
 						disabled
-						className="h-7 rounded-control px-2 text-xs font-medium text-[var(--color-text-tertiary)]"
+						className="h-7 rounded-control px-2 text-xs font-medium text-fg-subtle"
 					>
 						No views available
 					</DropdownMenuItem>
@@ -1063,7 +1106,7 @@ function AddViewMenu({
 								selectedViewRef.current = true;
 								onAddView(ext.kind);
 							}}
-							className="h-7 rounded-control px-2 text-xs font-medium text-[var(--color-text-secondary)] focus:bg-[var(--color-bg-hover)] focus:text-[var(--color-text-primary)]"
+							className="h-7 rounded-control px-2 text-xs font-medium text-fg-muted focus:bg-bg-hover focus:text-fg"
 						>
 							<ext.icon className="h-4 w-4" />
 							<span>{ext.label}</span>
@@ -1121,11 +1164,11 @@ function DefaultPanelEmptyState({
 					/>
 					<h2
 						id={headingId}
-						className="mt-6 text-xl font-bold tracking-[-0.025em] text-[var(--color-text-primary)] @max-[300px]:mt-5 @max-[300px]:text-lg"
+						className="mt-6 text-xl font-bold tracking-[-0.025em] text-fg @max-[300px]:mt-5 @max-[300px]:text-lg"
 					>
 						{hasAvailableViews ? sideLabel : "No views available"}
 					</h2>
-					<p className="mt-2 text-sm leading-5 text-[var(--color-text-tertiary)]">
+					<p className="mt-2 text-sm leading-5 text-fg-subtle">
 						{hasAvailableViews
 							? "Open a view to get started."
 							: "Available views will appear here."}
@@ -1141,9 +1184,9 @@ function DefaultPanelEmptyState({
 									data-attr="panel-empty-open-view"
 									data-view-kind={ext.kind}
 									onClick={() => onAddView(ext.kind)}
-									className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--color-border-action-secondary)] bg-[var(--color-bg-panel)] px-3.5 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]"
+									className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-strong bg-panel px-3.5 text-[12.5px] font-semibold text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
 								>
-									<ext.icon className="size-3.5 text-[var(--color-icon-tertiary)]" />
+									<ext.icon className="size-3.5 text-fg-subtle" />
 									{ext.label}
 								</button>
 							))}
@@ -1183,8 +1226,8 @@ function SidebarIllustration({
 				width="158"
 				height="102"
 				rx="10"
-				fill="var(--color-bg-panel)"
-				stroke="var(--color-border-panel)"
+				fill="var(--atelier-panel)"
+				stroke="var(--atelier-border)"
 				strokeWidth="2"
 			/>
 			<rect
@@ -1193,14 +1236,14 @@ function SidebarIllustration({
 				width="46"
 				height="90"
 				rx="6"
-				fill="var(--color-bg-hover-canvas)"
+				fill="var(--atelier-bg-hover-strong)"
 			/>
 			<line
 				x1={dividerX}
 				y1="7"
 				x2={dividerX}
 				y2="97"
-				stroke="var(--color-border-panel)"
+				stroke="var(--atelier-border)"
 				strokeWidth="1.5"
 			/>
 			{/* Sidebar rows — the top one active. */}
@@ -1210,7 +1253,7 @@ function SidebarIllustration({
 				width="30"
 				height="7"
 				rx="3.5"
-				fill="var(--color-brand-400)"
+				fill="var(--atelier-link)"
 			/>
 			<rect
 				x={rowX}
@@ -1218,7 +1261,7 @@ function SidebarIllustration({
 				width="24"
 				height="7"
 				rx="3.5"
-				fill="var(--color-neutral-300)"
+				fill="var(--atelier-border-strong)"
 			/>
 			<rect
 				x={rowX}
@@ -1226,7 +1269,7 @@ function SidebarIllustration({
 				width="27"
 				height="7"
 				rx="3.5"
-				fill="var(--color-neutral-200)"
+				fill="var(--atelier-border)"
 			/>
 			{/* Document lines in the main area. */}
 			<rect
@@ -1235,7 +1278,7 @@ function SidebarIllustration({
 				width="70"
 				height="8"
 				rx="4"
-				fill="var(--color-neutral-200)"
+				fill="var(--atelier-border)"
 			/>
 			<rect
 				x={contentX}
@@ -1243,7 +1286,7 @@ function SidebarIllustration({
 				width="46"
 				height="8"
 				rx="4"
-				fill="var(--color-neutral-100)"
+				fill="var(--atelier-bg-hover)"
 			/>
 		</svg>
 	);
@@ -1405,6 +1448,93 @@ function TabBar({
 	);
 }
 
+/**
+ * The mounted view each tab renders into, by tab instance.
+ *
+ * A view's identity in an area is its slot, not the document it shows. A tab
+ * that navigates in place — the active tab replaced by another document,
+ * which is how a review steps from one changed file to the next — keeps its
+ * slot when the next document is handled by the same extension, so the
+ * mounted view receives the new document as props instead of being torn
+ * down around the shell's loading state and mounted again: its frame,
+ * toolbar and layout stay where they are. Slot keys are opaque, so a
+ * document reopened in a tab of its own never collides with the slot that
+ * once showed it. The hand-over is limited to a diff session for now; plain
+ * navigation still mounts every document fresh.
+ */
+type ViewHandover = {
+	/** The tab instance arriving in the slot. */
+	readonly incoming: string;
+	/** The view it replaces, kept on screen until the arriving one has shown. */
+	readonly outgoing: ExtensionInstance;
+	readonly outgoingKey: string;
+};
+
+type ViewSlots = {
+	readonly keys: ReadonlyMap<string, string>;
+	/**
+	 * A navigation in place to another extension: the leaving view has no
+	 * successor to hand its document to, so it stays until the arriving one
+	 * has read its own. Null when nothing is being handed over.
+	 */
+	readonly handover: ViewHandover | null;
+};
+
+function useViewSlots(
+	views: readonly ExtensionInstance[],
+	retainAcrossNavigation: boolean,
+): ViewSlots {
+	const memory = useRef<{
+		views: readonly ExtensionInstance[];
+		slots: ViewSlots;
+		next: number;
+	}>({ views: [], slots: { keys: new Map(), handover: null }, next: 0 });
+	return useMemo(() => {
+		const previous = memory.current;
+		if (previous.views === views) return previous.slots;
+		const keys = new Map<string, string>();
+		let next = previous.next;
+		let handover: ViewHandover | null = previous.slots.handover;
+		const stillOpen = (instance: string) =>
+			views.some((candidate) => candidate.instance === instance);
+		if (
+			handover &&
+			(!stillOpen(handover.incoming) || stillOpen(handover.outgoing.instance))
+		) {
+			handover = null;
+		}
+		views.forEach((entry, index) => {
+			const known = previous.slots.keys.get(entry.instance);
+			if (known !== undefined) {
+				keys.set(entry.instance, known);
+				return;
+			}
+			const replaced = previous.views[index];
+			const replacedKey =
+				retainAcrossNavigation &&
+				replaced !== undefined &&
+				!stillOpen(replaced.instance)
+					? previous.slots.keys.get(replaced.instance)
+					: undefined;
+			if (replacedKey !== undefined && replaced?.kind === entry.kind) {
+				keys.set(entry.instance, replacedKey);
+				return;
+			}
+			keys.set(entry.instance, `view-slot-${(next += 1)}`);
+			if (replacedKey !== undefined && replaced) {
+				handover = {
+					incoming: entry.instance,
+					outgoing: replaced,
+					outgoingKey: replacedKey,
+				};
+			}
+		});
+		const slots = { keys, handover };
+		memory.current = { views, slots, next };
+		return slots;
+	}, [retainAcrossNavigation, views]);
+}
+
 interface PanelContentProps extends HTMLAttributes<HTMLDivElement> {
 	readonly children: ReactNode;
 }
@@ -1417,7 +1547,7 @@ function PanelContent({
 	return (
 		<div
 			className={clsx(
-				"flex min-h-0 flex-1 flex-col overflow-hidden",
+				"relative flex min-h-0 flex-1 flex-col overflow-hidden",
 				className,
 			)}
 			{...rest}
@@ -1434,6 +1564,7 @@ function ViewRenderer({
 	extensionView,
 	side,
 	isActive,
+	onShown,
 }: {
 	view: ExtensionDefinition;
 	instance: ExtensionInstance;
@@ -1441,6 +1572,8 @@ function ViewRenderer({
 	extensionView: ExtensionView;
 	side: Area;
 	isActive: boolean;
+	/** The view has its document on screen (or its error): a hand-over may end. */
+	onShown?: () => void;
 }) {
 	const registry = useExtensionHostRegistry();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1483,6 +1616,7 @@ function ViewRenderer({
 					definition={view}
 					atelier={atelier}
 					view={extensionView}
+					onShown={onShown}
 				/>
 			) : null}
 		</div>
@@ -1504,7 +1638,7 @@ interface SortableTabProps extends PanelTabPreviewProps {
 }
 
 const tabMenuItemClasses =
-	"gap-2 rounded-[6px] px-2 py-[5px] text-[12.5px] leading-tight text-[var(--color-text-secondary)] [&_svg]:size-3.25 [&_svg]:text-[var(--color-icon-tertiary)]";
+	"gap-2 rounded-[6px] px-2 py-[5px] text-[12.5px] leading-tight text-fg-muted [&_svg]:size-3.25 [&_svg]:text-fg-subtle";
 
 /**
  * Right-click menu for tab chips. Pinned tabs (no onClose) drop the Close
@@ -1537,7 +1671,7 @@ function TabContextMenu({
 							itemClassName={tabMenuItemClasses}
 							separatorClassName="mx-1.5 my-1"
 						/>
-						<ContextMenuSeparator className="mx-1.5 my-1 bg-[var(--color-border-subtle)]" />
+						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
 					</>
 				) : null}
 				{onClose ? (
@@ -1550,7 +1684,7 @@ function TabContextMenu({
 							<X aria-hidden="true" />
 							Close
 						</ContextMenuItem>
-						<ContextMenuSeparator className="mx-1.5 my-1 bg-[var(--color-border-subtle)]" />
+						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
 					</>
 				) : null}
 				<ContextMenuItem
@@ -1665,16 +1799,16 @@ const fileGlyphForLabel = (label: string): TabIcon | null => {
 };
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center rounded-control border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-app)]";
+	"group relative flex h-7 flex-none max-w-80 items-center rounded-control border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
 	// keyboard focus adds a ring on top of the same look.
 	focused:
-		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
+		"border-border bg-panel font-semibold text-fg [&_[data-tab-icon]]:text-fg-muted",
 	active:
-		"border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)] [&_[data-tab-icon]]:text-[var(--color-icon-secondary)]",
-	idle: "border-transparent bg-transparent text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]",
+		"border-border bg-panel font-semibold text-fg [&_[data-tab-icon]]:text-fg-muted",
+	idle: "border-transparent bg-transparent text-fg-subtle hover:bg-bg-hover-strong hover:text-fg",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {
@@ -1795,7 +1929,7 @@ const TabButtonBase = forwardRef<
 					<span
 						role="button"
 						aria-label={`Close ${label}`}
-						className="absolute -top-1 -right-1 z-10 hidden size-3.5 items-center justify-center rounded-full border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] text-[var(--color-icon-tertiary)] shadow-sm transition-colors group-hover:flex group-focus-visible:flex hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-icon-secondary)]"
+						className="absolute -top-1 -right-1 z-10 hidden size-3.5 items-center justify-center rounded-full border border-border bg-panel text-fg-subtle shadow-sm transition-colors group-hover:flex group-focus-visible:flex hover:bg-bg-hover hover:text-fg-muted"
 						onClick={(event) => {
 							event.stopPropagation();
 							onClose();
@@ -1808,7 +1942,7 @@ const TabButtonBase = forwardRef<
 					<span
 						role="button"
 						aria-label={`Close ${label}`}
-						className="ml-0.5 flex size-4 flex-none items-center justify-center rounded-[4px] text-[var(--color-icon-tertiary)] transition-colors hover:text-[var(--color-icon-secondary)]"
+						className="ml-0.5 flex size-4 flex-none items-center justify-center rounded-[4px] text-fg-subtle transition-colors hover:text-fg-muted"
 						onClick={(event) => {
 							event.stopPropagation();
 							onClose();
@@ -1821,13 +1955,13 @@ const TabButtonBase = forwardRef<
 						<span
 							aria-hidden="true"
 							data-attr="panel-tab-close-fade"
-							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--color-bg-hover-canvas)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover-strong)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
 						/>
 						{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all. */}
 						<span
 							role="button"
 							aria-label={`Close ${label}`}
-							className="pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-[5px] bg-[var(--color-bg-hover-canvas)] text-[var(--color-icon-tertiary)] opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:opacity-100 hover:text-[var(--color-icon-secondary)]"
+							className="pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-[5px] bg-bg-hover-strong text-fg-subtle opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:opacity-100 hover:text-fg-muted"
 							onClick={(event) => {
 								event.stopPropagation();
 								onClose();

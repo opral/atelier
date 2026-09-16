@@ -509,6 +509,14 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				});
 			},
 			...editorProps,
+			attributes: {
+				...(editorProps?.attributes ?? {}),
+				// The document's type comes from document.css, the sheet the
+				// static render inlines, so the two cannot drift.
+				class: ["atelier-document", editorProps?.attributes?.class]
+					.filter(Boolean)
+					.join(" "),
+			},
 			handleDOMEvents: {
 				...(editorProps?.handleDOMEvents ?? {}),
 				cut: (view: any, event: ClipboardEvent) => {

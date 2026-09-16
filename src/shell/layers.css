@@ -1,0 +1,6 @@
+/* The cascade contract. Atelier's own CSS lives in `atelier`, between
+   Tailwind's `components` and `utilities`, so a utility on an element and a
+   host's unlayered CSS both beat it by design. Every Atelier stylesheet starts
+   by importing this file: layers are ordered by first appearance, so whichever
+   sheet the bundler emits first establishes the same order. */
+@layer theme, base, components, atelier, utilities;

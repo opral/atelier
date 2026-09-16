@@ -27,7 +27,7 @@ export function StatusBar({
 	readonly right?: ReactNode;
 }): JSX.Element {
 	return (
-		<footer className="flex h-6 shrink-0 items-center justify-between px-3 text-[11.5px] text-[var(--color-icon-tertiary)]">
+		<footer className="flex h-6 shrink-0 items-center justify-between px-3 text-[11.5px] text-fg-subtle">
 			<div className="flex min-w-0 items-center gap-1.5">{left}</div>
 			<div className="flex min-w-0 items-center gap-1.5">{right}</div>
 		</footer>
@@ -143,7 +143,7 @@ function ReviewBehindNotice({
 			aria-label={`${label}. Refresh the review`}
 			onClick={onRefresh}
 			onMouseDown={(event) => event.preventDefault()}
-			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 text-[var(--color-text-brand)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 text-accent transition-colors hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			<RefreshCw aria-hidden="true" className="h-3 w-3" />
 			<span>{label} · Refresh</span>
@@ -151,7 +151,7 @@ function ReviewBehindNotice({
 	) : (
 		<span
 			data-attr="review-behind-refresh"
-			className="inline-flex h-5 items-center gap-1.5 px-1.5 text-[var(--color-text-brand)]"
+			className="inline-flex h-5 items-center gap-1.5 px-1.5 text-accent"
 		>
 			<RefreshCw aria-hidden="true" className="h-3 w-3" />
 			<span>{label}</span>
@@ -169,9 +169,7 @@ function AutoAcceptToggle({
 	return (
 		<label
 			className={`inline-flex h-5 cursor-pointer select-none items-center gap-1.5 font-semibold transition-colors ${
-				checked
-					? "text-[var(--color-text-brand)]"
-					: "text-[var(--color-text-tertiary)]"
+				checked ? "text-accent" : "text-fg-subtle"
 			}`}
 		>
 			<span>Auto-accept</span>
@@ -186,15 +184,13 @@ function AutoAcceptToggle({
 			/>
 			<span
 				aria-hidden="true"
-				className={`relative h-3 w-5 shrink-0 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-ring-focus-visible)] peer-focus-visible:ring-offset-1 ${
-					checked
-						? "border-[var(--color-bg-control-checked)] bg-[var(--color-bg-control-checked)]"
-						: "border-[var(--color-border-panel)] bg-[var(--color-bg-control)]"
+				className={`relative h-3 w-5 shrink-0 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-1 ${
+					checked ? "border-link bg-link" : "border-border bg-border-strong"
 				}`}
 			>
 				<span
 					aria-hidden="true"
-					className={`absolute top-px left-px size-2 rounded-full bg-white shadow-sm transition-transform ${
+					className={`absolute top-px left-px size-2 rounded-full bg-panel shadow-sm transition-transform ${
 						checked ? "translate-x-2" : "translate-x-0"
 					}`}
 				/>
@@ -227,7 +223,7 @@ function CheckpointStatus({
 			aria-pressed={reviewing}
 			onClick={onActivate}
 			onMouseDown={(event) => event.preventDefault()}
-			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-bg-hover-strong hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			{hasWorkingChanges ? null : (
 				<Flag aria-hidden="true" className="h-3 w-3" />

@@ -14,7 +14,7 @@ export function CsvContent({ content }: { readonly content: string }) {
 							<th
 								key={index}
 								scope="col"
-								className="border border-[var(--color-border-panel)] px-3 py-2 font-medium"
+								className="border border-border px-3 py-2 font-medium"
 							>
 								{column}
 							</th>
@@ -25,10 +25,7 @@ export function CsvContent({ content }: { readonly content: string }) {
 					{table.rows.map((row) => (
 						<tr key={row.rowNumber}>
 							{row.cells.map((cell, index) => (
-								<td
-									key={index}
-									className="border border-[var(--color-border-panel)] px-3 py-2"
-								>
+								<td key={index} className="border border-border px-3 py-2">
 									{cell}
 								</td>
 							))}
