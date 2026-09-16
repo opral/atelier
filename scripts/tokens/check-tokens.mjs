@@ -13,8 +13,10 @@
  *   node scripts/tokens/check-tokens.mjs --report   list, exit 0
  *   node scripts/tokens/check-tokens.mjs --root ../lixray/web-app/src --theme node_modules/@opral/atelier/theme.css
  *
- * Escape hatch, for the few places a literal is the only option (a canvas
- * cannot read var()): a `token-literal:` comment on the same line, saying why.
+ * Escape hatches, both visible in the diff: a `token-literal:` comment on the
+ * same line for the few places a literal is the only option (a canvas cannot
+ * read var()); a `token-literal-file:` comment in a file's first lines for a
+ * page deliberately drawn outside the system. Each says why.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -108,6 +110,9 @@ function localNames(dir) {
 const findings = [];
 for (const file of files) {
 	const text = readFileSync(file, "utf8");
+	// A whole file can stand outside the system — a marketing page drawn in its
+	// own colours — when its first lines say so and why. Rare, and visible.
+	if (/token-literal-file:/.test(text.slice(0, 600))) continue;
 	// A component's own custom properties are legal inside it: declared in its
 	// CSS, or set from a React style object in a sibling file. The directory is
 	// the component's scope.

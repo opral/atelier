@@ -70,10 +70,7 @@ Put the HTML inside an element with class `atelier-render` and load
 `@opral/atelier/render.css`. Or pass `document: true` to get a complete HTML
 file with the styles inlined.
 
-Colours are `--atelier-*` custom properties, generated from the app's theme and
-declared on `:root`. To change them, define your own on any ancestor of the
-render. There is no theming API. Dark mode needs more than an override today,
-because the diff backgrounds are mixed over white when they are generated.
+Colours are `--at-*` custom properties from `@opral/atelier/theme.css`, the same file the app uses; a host that redeclares one on any ancestor retints the render.
 
 ## Entries
 

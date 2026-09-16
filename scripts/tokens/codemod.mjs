@@ -52,6 +52,17 @@ const UTILITIES = {
 	"border-border": "border-border",
 	"bg-border": "bg-border",
 };
+// The old @theme also minted a utility per token (`bg-bg-panel`, `text-text-tertiary`,
+// `border-border-subtle`); a host used those where Atelier used var(). Derive
+// the rename for every colour utility from the token map itself.
+for (const [oldToken, nextToken] of Object.entries(map)) {
+	if (!oldToken.startsWith("--color-")) continue;
+	const oldKey = oldToken.slice("--color-".length);
+	const nextKey = utilityName(nextToken);
+	for (const util of ["bg", "text", "border", "ring", "fill", "stroke", "outline", "from", "to", "via", "divide", "placeholder", "caret", "decoration", "ring-offset", "shadow"]) {
+		UTILITIES[`${util}-${oldKey}`] ??= `${util}-${nextKey}`;
+	}
+}
 const dirs = process.argv.slice(2).length ? process.argv.slice(2) : ["src"];
 const files = [];
 (function walk(dir) {

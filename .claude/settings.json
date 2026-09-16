@@ -1,0 +1,16 @@
+{
+	"hooks": {
+		"PostToolUse": [
+			{
+				"matcher": "Edit|Write|MultiEdit",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node scripts/tokens/check-tokens.mjs >&2 || exit 2",
+						"timeout": 30
+					}
+				]
+			}
+		]
+	}
+}

@@ -47,17 +47,44 @@ import took the closure from 234 kB to 5.4 MB and did not error.
 globals, or size. It reads `dist/`, so `pnpm run ci` builds first and `pnpm
 test` (vitest) does not cover it. Run `pnpm build` before calling it directly.
 
-## Colours come from tokens
+## Design tokens: one vocabulary, plain CSS
 
-`src/render/tokens.generated.ts` is generated from `src/shell/theme.css` by
-`pnpm run tokens`. The build fails if it is stale.
+`src/shell/theme.css` is the design system: ~110 `--at-*` custom properties on
+`:root, :host`, each with its dark value in `light-dark()` and a comment saying
+when to use it. It is plain CSS — no build step, no framework — so the shell,
+every extension, the static render, a chat card, and a host page all read the
+same file. `src/shell/tailwind.css` is an optional adapter: `@theme inline`
+points utilities at the same values, so `bg-panel` and `text-fg-muted` exist
+and `bg-red-500` does not.
 
-Static styles take every **colour** from `var(--atelier-*)`. Sizes and fonts
-are still literals. This keeps the app and a chat card from drifting apart.
+The rules, which `pnpm tokens:check` enforces (a failure names the nearest token):
 
-The tokens are declared on `:root` on purpose. On `.atelier-render` they would
-beat anything a host sets on an ancestor, because a declaration on the element
-wins over an inherited value, and every override would silently do nothing.
+- A colour literal (`#hex`, `rgb()`, `oklch()`…) is written in `theme.css` and
+  nowhere else. Canvas code that cannot read `var()` keeps a fallback marked
+  `token-literal: <why>` on the same line, equal to the token's light value.
+- In CSS, say `var(--at-…)`. In `className`, say the adapter's name
+  (`bg-panel`, `border-border-subtle`, `text-danger`). Never `bg-[var(…)]`,
+  never a stock palette class.
+- Text and icons share the `fg` scale: `fg`, `fg-muted`, `fg-subtle`, `fg-faint`.
+  Surfaces: `bg` (canvas), `panel` (islands), `bg-subtle`, `bg-hover`,
+  `bg-active`. Edges: `border`, `border-subtle`, `border-strong`, `ring`.
+  Brand: `accent`, `accent-hover`, `accent-on`, `accent-subtle`, `link`.
+  Status: `danger|success|warning` with `-subtle` and `-border`. Diff:
+  `diff-added|removed|modified` with `-subtle`, plus `diff-moved`,
+  `diff-conflict`. Dark chrome over the UI: `overlay-*`.
+- A second name for a role that has one is a bug, not a token. If no token
+  fits, add one to `theme.css` with its "use for" comment — do not restate a
+  value, and do not alias without saying why.
+- A component's own variables (`--markdown-*`, `--csv-*`) are declared on its
+  root and reference tokens; they are never a place to hide a colour.
+- Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else.
+  A host rebrands by redeclaring tokens on `:root`; it never overrides
+  component classes.
+
+`src/shell/theme.generated.ts` is a verbatim copy of `theme.css` for the
+DOM-free render entry, made by `pnpm run tokens`; the build fails if it is
+stale. The tokens sit on `:root` on purpose: declared on `.atelier-render`
+they would beat anything a host sets on an ancestor.
 
 ## One strict reader for "is this text?"
 
