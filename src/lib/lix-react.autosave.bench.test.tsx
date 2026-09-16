@@ -64,12 +64,12 @@ test("performs 100 markdown autosaves without duplicate direct reads", async () 
 			});
 			const start = performance.now();
 			await act(async () => {
-				const didPersist = await upsertMarkdownFile({
+				const receipt = await upsertMarkdownFile({
 					lix,
 					fileId,
 					markdown: value,
 				});
-				expect(didPersist).toBe(true);
+				expect(receipt.written).toBe(true);
 				await withTimeout(rendered, 5_000);
 			});
 			return performance.now() - start;

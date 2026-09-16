@@ -1,3 +1,4 @@
+import { DocumentLoading } from "../../components/document-loading";
 import { CsvContent } from "./csv-content";
 import {
 	loadTextFile,
@@ -13,7 +14,10 @@ import {
 } from "./csv-text-wrap";
 import { CsvViewMenu } from "./csv-view-menu";
 import { CsvOverlayScrollbars } from "./csv-overlay-scrollbars";
-import { useEditorOverlayFollowsScroll } from "./csv-editor-overlay";
+import {
+	useEditorClosesOnGridScroll,
+	useGlideOverlayPortal,
+} from "./csv-editor-overlay";
 import {
 	captureCsvView,
 	restoreCsvView,
@@ -139,7 +143,12 @@ import {
 } from "./csv-document";
 import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
 import { buildCsvReviewModel } from "./csv-review-model";
-import { CsvReviewGrid, CsvReviewSummary } from "./csv-review-grid";
+import {
+	CsvReviewFoldAction,
+	CsvReviewGrid,
+	CsvReviewSummary,
+	useCsvReviewFolds,
+} from "./csv-review-grid";
 import "./style.css";
 
 type CsvViewProps = {
@@ -165,11 +174,6 @@ const COLUMN_SAMPLE_ROW_LIMIT = 100;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 40;
 /** The cell editor stays clipped beneath the header and the row markers. */
-const EDITOR_OVERLAY_INSET = {
-	top: HEADER_HEIGHT,
-	left: ROW_MARKER_WIDTH,
-} as const;
-
 type CsvFileRow = {
 	readonly id: string;
 	readonly path: string;
@@ -477,21 +481,31 @@ function EditableCsvView({
 	useEffect(() => {
 		metadataRef.current = metadata;
 	}, [metadata]);
+	// Writing metadata starts from what the table is already showing. A file
+	// with no metadata renders its columns from their values — stages as
+	// pills, dates as dates — and writing "text" for each of them turned all
+	// of that off the moment anything saved: a view, a wrap toggle, one
+	// column's type. The pills, ticks and dates were then gone for good.
 	const materializeColumns = useCallback(() => {
-		const headers = csvDocumentView(documentRef.current).columns.map(
+		const table = csvDocumentView(documentRef.current);
+		const headers = table.columns.map(
 			(_, i) => documentRef.current.records[0]?.cells[i] ?? "",
 		);
 		const resolved = resolveColumnInfo(metadataRef.current, headers);
-		return headers.map(
-			(header, index) =>
-				({
-					...resolved[index],
-					id: resolved[index]?.id ?? crypto.randomUUID(),
-					header,
-					index,
-					type: resolved[index]?.type ?? "text",
-				}) as CsvColumnInfo,
-		);
+		const shown = inferColumnInfo(headers, table.rows, resolved);
+		return headers.map((header, index) => {
+			const known = resolved[index];
+			const seen = known ? undefined : shown[index];
+			return {
+				...(seen?.options ? { options: seen.options } : {}),
+				...(seen?.wrap ? { wrap: seen.wrap } : {}),
+				...known,
+				id: known?.id ?? crypto.randomUUID(),
+				header,
+				index,
+				type: known?.type ?? seen?.type ?? "text",
+			} as CsvColumnInfo;
+		});
 	}, []);
 	const applyDocumentEdit = useCallback(
 		(
@@ -1092,6 +1106,9 @@ function CsvTable({
 		retained?.filter ?? EMPTY_CSV_FILTER,
 	);
 	const activeFilterCount = filter.rules.filter(isActiveCsvFilterRule).length;
+	// The toolbar's "Show all N rows" and the grid's bands are one state: the
+	// count in the sentence is the count the table would show.
+	const reviewFolds = useCsvReviewFolds(reviewModel, { search, filter, sort });
 	const [toolbarMenu, setToolbarMenu] = useState<"sort" | "filter" | null>(
 		null,
 	);
@@ -1107,7 +1124,7 @@ function CsvTable({
 						row.cells.some((c) =>
 							c.toLowerCase().includes(search.toLowerCase()),
 						)) &&
-					matchesCsvFilterGroup(row.cells, filter, columnInfo)
+					matchesCsvFilterGroup(row.cells, filter, displayInfo)
 				);
 			});
 		if (sort)
@@ -1119,13 +1136,13 @@ function CsvTable({
 					compareCsvValues(
 						av,
 						bv,
-						columnInfo[sort.column]?.type,
-						columnInfo[sort.column]?.options,
+						displayInfo[sort.column]?.type,
+						displayInfo[sort.column]?.options,
 					)
 				);
 			});
 		return rows;
-	}, [sourceParsed.rows, search, sort, filter, columnInfo]);
+	}, [sourceParsed.rows, search, sort, filter, displayInfo]);
 	const parsed = {
 		...sourceParsed,
 		rows: rowMap.map((i) => sourceParsed.rows[i]!),
@@ -1136,6 +1153,15 @@ function CsvTable({
 			sourceParsed.rows.length + Math.max(0, row - rowMap.length),
 		[rowMap, sourceParsed.rows.length],
 	);
+	// A row added while a filter or a search is on can match neither, so it
+	// would be written into the file and then be invisible — "Insert row
+	// below" looked like it had done nothing at all. Both are lifted for it.
+	// The sort stays: an empty row sorts somewhere, and throwing away an
+	// ordering the user chose was never part of adding a row.
+	const revealNewRow = useCallback(() => {
+		setSearch("");
+		setFilter(EMPTY_CSV_FILTER);
+	}, []);
 	// Flips a checkbox cell between its own yes/no encoding. Returns false when
 	// the cell is not a boolean-shaped checkbox so callers fall through.
 	const toggleCheckbox = (col: number, row: number): boolean => {
@@ -1255,6 +1281,78 @@ function CsvTable({
 		(row: number) => wrappedLayout?.[row]?.height ?? ROW_HEIGHT,
 		[wrappedLayout],
 	);
+	// The review grid's columns are the union of both sides. Resolve its widths
+	// and wrap flags once: the cells render at these numbers, and the removed
+	// rows below have to be measured against the same ones.
+	const reviewWidths = useMemo(
+		() =>
+			reviewModel?.columns.map((column) =>
+				column.afterIndex !== null
+					? (widthState.overrides[column.afterIndex] ??
+						widthState.initial[column.afterIndex] ??
+						COLUMN_MIN_WIDTH)
+					: (retained?.widths[`id:${column.beforeInfo?.id}`] ??
+						retained?.widths[`header:${column.beforeTitle ?? column.title}`] ??
+						measureColumnWidth(
+							column.title,
+							reviewModel.rows.map((row, index) => ({
+								rowNumber: index + 1,
+								cells: row.cells.map((cell) => cell.value),
+							})),
+							reviewModel.columns.indexOf(column),
+						)),
+			),
+		[reviewModel, retained, widthState],
+	);
+	const reviewWrapped = useMemo(
+		() =>
+			reviewModel?.columns.map((column) =>
+				column.afterIndex !== null
+					? (wrappedColumns[column.afterIndex] ?? false)
+					: (column.beforeInfo?.wrap ?? false),
+			),
+		[reviewModel, wrappedColumns],
+	);
+	// A removed row is gone from the live document, so the wrapped layout above
+	// — which measures what is on screen now — has no height for it. Measure it
+	// from the values the review shows, in the same wrapped columns at the same
+	// widths, or it renders one line tall and hides the rest of its value.
+	const removedRowHeights = useMemo(() => {
+		if (!reviewModel || !reviewWidths || !reviewWrapped?.some(Boolean)) {
+			return null;
+		}
+		const measure = (text: string) =>
+			measureContext?.measureText(text).width ?? text.length * 7;
+		const heights = new Map<string, number>();
+		for (const row of reviewModel.rows) {
+			if (row.afterIndex !== null) continue;
+			let lineCount = 1;
+			reviewWrapped.forEach((wrapped, column) => {
+				if (!wrapped) return;
+				// The title column draws semibold, so it measures semibold.
+				if (measureContext)
+					measureContext.font = `${column === 0 ? "600 " : ""}${gridTheme.baseFontStyle} ${gridTheme.fontFamily}`;
+				lineCount = Math.max(
+					lineCount,
+					wrapCsvText(
+						row.cells[column]?.value ?? "",
+						(reviewWidths[column] ?? COLUMN_MIN_WIDTH) -
+							CSV_TEXT_HORIZONTAL_PADDING * 2,
+						measure,
+					).length,
+				);
+			});
+			heights.set(row.key, csvWrappedRowHeight(lineCount));
+		}
+		return heights;
+	}, [
+		reviewModel,
+		reviewWidths,
+		reviewWrapped,
+		gridTheme.baseFontStyle,
+		gridTheme.fontFamily,
+		measureContext,
+	]);
 	const [activeViewId, setActiveViewId] = useState<string | null>(
 		retained?.activeViewId ?? null,
 	);
@@ -1340,7 +1438,7 @@ function CsvTable({
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [isActiveView]);
-	useEditorOverlayFollowsScroll(containerRef, EDITOR_OVERLAY_INSET, editable);
+	useGlideOverlayPortal();
 	// Apple Numbers-style sizing: the grid canvas is only as large as the
 	// table itself (capped by the container), so no phantom cells or grid
 	// lines render beyond the last column and the trailing row.
@@ -1372,6 +1470,36 @@ function CsvTable({
 			hasMenu: editable,
 		}));
 	}, [editable, parsed.columns, widthState, displayInfo]);
+	// Glide reports a widening drag as a header click too, because the pointer
+	// is back over the header when it lifts — so letting go of a column edge
+	// popped the settings menu open. The resize claims that one click; the
+	// next press on the header is a press of its own and opens the menu.
+	const resizedColumnRef = useRef<number | null>(null);
+	// Whether the press that is ending landed on the cell it started from.
+	// Glide reports the mouse-up that ends a range drag as a click on the
+	// drag's anchor cell, which opened that cell's picker under the row the
+	// pointer was released on — and picking a value then changed the wrong
+	// row. Glide only calls onCellClicked when a press began and ended on one
+	// cell, so that call is the signal; measuring the pointer's travel instead
+	// threw away clicks that merely wobbled a few pixels.
+	const activatesCellRef = useRef(true);
+	useEffect(() => {
+		const press = () => {
+			resizedColumnRef.current = null;
+			// Withheld until Glide confirms the press stayed on its cell.
+			activatesCellRef.current = false;
+		};
+		// A key activates the selected cell with no press to confirm.
+		const key = () => {
+			activatesCellRef.current = true;
+		};
+		document.addEventListener("pointerdown", press, true);
+		document.addEventListener("keydown", key, true);
+		return () => {
+			document.removeEventListener("pointerdown", press, true);
+			document.removeEventListener("keydown", key, true);
+		};
+	}, []);
 	const getCellContent = useCallback(
 		([columnIndex, rowIndex]: Item): GridCell => {
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
@@ -1407,11 +1535,24 @@ function CsvTable({
 			}
 			// Editable cells are plain text so the overlay edits the raw
 			// value; URL/email link affordances stay in read-only views.
+			// A value with a newline draws only its first line in an unwrapped
+			// column, and drew it as if that were all there was. The ellipsis
+			// says the rest is there; the cell's own data keeps every line, so
+			// editing and copying are untouched. Pickers read displayData as
+			// the committed value, so only plain text carries the mark.
+			const hidesLines =
+				!wrappedColumns[columnIndex] &&
+				!["select", "checkbox", "date"].includes(propertyType) &&
+				/[\r\n]/.test(value);
 			return {
 				kind: GridCellKind.Text,
 				data: value,
-				displayData: value,
-				allowOverlay: editable,
+				displayData: hidesLines
+					? `${value.split(/\r\n|\r|\n/, 1)[0] ?? ""} …`
+					: value,
+				// A drag that ends on a cell is not a click on it; only a press
+				// Glide reports as a click on this very cell opens an editor.
+				allowOverlay: editable && activatesCellRef.current,
 				// Plain values edit on press, avoiding a selection-only frame
 				// while the pointer is held. Pickers retain click activation.
 				activationBehaviorOverride: !["select", "checkbox", "date"].includes(
@@ -1449,8 +1590,17 @@ function CsvTable({
 			titleColor,
 		],
 	);
+	// A press on the header of the open menu closes the menu (Radix sees an
+	// outside press) and then reaches Glide as a header click; without this
+	// the click would reopen what it just closed and the menu could never be
+	// toggled from its header.
+	const suppressHeaderOpenRef = useRef<{
+		column: number;
+		until: number;
+	} | null>(null);
 	const onColumnResizeEnd = useCallback(
 		(_column: GridColumn, newSize: number, columnIndex: number) => {
+			resizedColumnRef.current = columnIndex;
 			setColumnWidthState((current) =>
 				current.key === columnsKey
 					? {
@@ -1499,15 +1649,21 @@ function CsvTable({
 		(target: Item, values: readonly (readonly string[])[]) => {
 			if (!editing) return false;
 			const [startColumn, startRow] = target;
+			// A block wider than the table used to lose its overflow columns
+			// without a word — and there is no undo to get them back. The table
+			// grows to hold what was pasted, as a spreadsheet does.
+			const widest = values.reduce(
+				(max, rowValues) => Math.max(max, rowValues.length),
+				0,
+			);
+			for (let column = columnCount; column < startColumn + widest; column++)
+				editing.onInsertColumn(column);
 			const edits: CsvCellEdit[] = [];
 			values.forEach((rowValues, rowOffset) => {
 				rowValues.forEach((value, columnOffset) => {
-					const column = startColumn + columnOffset;
-					// Pasting can extend rows but not add columns (yet).
-					if (column >= columnCount) return;
 					edits.push({
 						row: sourceRowIndex(startRow + rowOffset),
-						column,
+						column: startColumn + columnOffset,
 						value,
 					});
 				});
@@ -1527,6 +1683,36 @@ function CsvTable({
 		selection.current !== undefined ||
 		selection.rows.length > 0 ||
 		selection.columns.length > 0;
+	// Hands the keyboard back to the table. Focusing the bare canvas leaves
+	// the table choosing nothing, but Glide answers no key at all without a
+	// selection — the arrows, Enter and Escape all did nothing, which is worse
+	// than a cell the user did not pick. So it takes a cell: the one the edit
+	// left where the old selection was, clamped to what is still there.
+	const focusGrid = useCallback((anchor?: readonly [number, number]) => {
+		// An anchor names the cell to land on outright. The callers that clear
+		// a selection and hand the keyboard back in the same tick cannot ask
+		// whether a selection remains — the ref they would read is assigned on
+		// render and still holds the one they just cleared, which left Glide
+		// focused with nothing selected and every key dead.
+		if (anchor || !hasSelection(gridSelectionRef.current)) {
+			const cell = anchor ?? [0, 0];
+			setGridSelection({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.empty(),
+				current: {
+					cell: [cell[0], cell[1]],
+					range: { x: cell[0], y: cell[1], width: 1, height: 1 },
+					rangeStack: [],
+				},
+			});
+			// Glide reads the selection as it focuses, and this one has not
+			// been committed yet: focusing now would take the keyboard to a
+			// table that still believes nothing is selected.
+			requestAnimationFrame(() => gridRef.current?.focus());
+			return;
+		}
+		gridRef.current?.focus();
+	}, []);
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => {
 		setMenu(null);
@@ -1536,17 +1722,15 @@ function CsvTable({
 			while (active?.shadowRoot?.activeElement)
 				active = active.shadowRoot.activeElement;
 			// Outside clicks may already have focused another control or opened a
-			// menu. Focusing Glide with nothing selected makes it select the first
-			// cell, so only hand focus back when there is a selection to return to.
+			// menu; those keep the focus they took.
 			if (
-				(!active ||
-					active === doc?.body ||
-					containerRef.current?.contains(active)) &&
-				hasSelection(gridSelectionRef.current)
+				!active ||
+				active === doc?.body ||
+				containerRef.current?.contains(active)
 			)
-				gridRef.current?.focus();
+				focusGrid();
 		});
-	}, []);
+	}, [focusGrid]);
 	const clearSelection = useCallback(() => {
 		setGridSelection({
 			columns: CompactSelection.empty(),
@@ -1590,9 +1774,20 @@ function CsvTable({
 		.toArray()
 		.filter((row) => row < rowMap.length);
 	const deleteSelectedRows = () => {
+		// The row that moves up into the first deleted one's place — or the
+		// last row left, when the deletion ran to the end of the table.
+		const remaining = parsed.rows.length - selectedRows.length;
+		const first = Math.min(
+			selectedRows.length ? Math.min(...selectedRows) : 0,
+			Math.max(0, remaining - 1),
+		);
 		editing?.onDeleteRows(selectedRows.map(sourceRowIndex));
 		clearSelection();
-		gridRef.current?.focus();
+		// Glide answers no key without a selection, so the table takes the row
+		// that moved up into the first deleted one's place.
+		requestAnimationFrame(() =>
+			requestAnimationFrame(() => focusGrid([0, Math.max(0, first)])),
+		);
 	};
 
 	// Preserve view predicates on rename; reset when column identities/positions change.
@@ -1761,17 +1956,10 @@ function CsvTable({
 		},
 		[editing],
 	);
-	// A press on the header of the open menu closes the menu (Radix sees an
-	// outside press) and then reaches Glide as a header click; without this
-	// the click would reopen what it just closed and the menu could never be
-	// toggled from its header.
-	const suppressHeaderOpenRef = useRef<{
-		column: number;
-		until: number;
-	} | null>(null);
 	const handleHeaderMenuClick = useCallback(
 		(columnIndex: number, screenPosition: Rectangle) => {
 			if (!editing) return;
+			if (resizedColumnRef.current === columnIndex) return;
 			const suppress = suppressHeaderOpenRef.current;
 			if (suppress) {
 				suppressHeaderOpenRef.current = null;
@@ -1829,12 +2017,19 @@ function CsvTable({
 	}, [gridSelection.columns, menu]);
 
 	const runStructuralEdit = useCallback(
-		(action: () => void) => {
+		(action: () => void, anchor?: readonly [number, number]) => {
 			closeMenu();
 			clearSelection();
 			action();
+			// The edit rebuilds the table, and Glide replaces its canvas on the
+			// way — one frame too late for closeMenu's own restore, which then
+			// left the keyboard on the body wherever it had started outside the
+			// grid. Take it back once the new canvas is there.
+			requestAnimationFrame(() =>
+				requestAnimationFrame(() => focusGrid(anchor)),
+			);
 		},
-		[clearSelection, closeMenu],
+		[clearSelection, closeMenu, focusGrid],
 	);
 
 	const contentWidth =
@@ -1872,8 +2067,11 @@ function CsvTable({
 
 	return (
 		<>
+			{/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Handles bubbled Escape from child controls. */}
 			<div
 				className="csv-toolbar"
+				role="group"
+				aria-label="Table controls"
 				onPointerDown={deselectOnBlankPress}
 				onKeyDown={(event) => {
 					if (
@@ -1883,7 +2081,15 @@ function CsvTable({
 						(event.target as HTMLElement).closest(".csv-row-actions")
 					) {
 						event.preventDefault();
+						// The row that moves up into the first deleted one's place — or the
+						// last row left, when the deletion ran to the end of the table.
+						const remaining = parsed.rows.length - selectedRows.length;
+						const first = Math.min(
+							selectedRows.length ? Math.min(...selectedRows) : 0,
+							Math.max(0, remaining - 1),
+						);
 						clearSelection();
+						focusGrid([0, Math.max(0, first)]);
 					}
 				}}
 			>
@@ -1917,8 +2123,15 @@ function CsvTable({
 						columnInfo={columnInfo}
 						optionValues={(column) => optionValuesByColumn.get(column) ?? []}
 						onClear={() => {
+							// The row that moves up into the first deleted one's place — or the
+							// last row left, when the deletion ran to the end of the table.
+							const remaining = parsed.rows.length - selectedRows.length;
+							const first = Math.min(
+								selectedRows.length ? Math.min(...selectedRows) : 0,
+								Math.max(0, remaining - 1),
+							);
 							clearSelection();
-							gridRef.current?.focus();
+							focusGrid([0, Math.max(0, first)]);
 						}}
 						onDelete={editing ? deleteSelectedRows : undefined}
 						onEdit={
@@ -1954,7 +2167,10 @@ function CsvTable({
 				)}
 				<span className="csv-row-count">
 					{reviewModel ? (
-						<CsvReviewSummary model={reviewModel} />
+						<>
+							<CsvReviewSummary model={reviewModel} />
+							<CsvReviewFoldAction folds={reviewFolds} />
+						</>
 					) : (
 						<>
 							{rowMap.length}
@@ -2012,6 +2228,7 @@ function CsvTable({
 								else {
 									clearSelection();
 									e.currentTarget.blur();
+									focusGrid();
 								}
 							}}
 						/>
@@ -2052,7 +2269,11 @@ function CsvTable({
 							<CsvFilterRules
 								group={filter}
 								columns={parsed.columns}
-								columnInfo={columnInfo}
+								// A file with no metadata still shows numbers, dates and
+								// pills; a rule on one of those offered only the text
+								// operators, and the column menu called it Text while the
+								// header icon said otherwise.
+								columnInfo={displayInfo}
 								rows={sourceParsed.rows}
 								onChange={setFilter}
 							/>
@@ -2064,7 +2285,7 @@ function CsvTable({
 									options={parsed.columns.map((label, index) => {
 										const Icon = CSV_TYPES.find(
 											(type) =>
-												type.type === (columnInfo[index]?.type ?? "text"),
+												type.type === (displayInfo[index]?.type ?? "text"),
 										)!.icon;
 										return {
 											value: String(index),
@@ -2148,37 +2369,19 @@ function CsvTable({
 					<CsvReviewGrid
 						model={reviewModel}
 						initialScroll={retained?.scroll}
-						widths={reviewModel.columns.map((column) =>
-							column.afterIndex !== null
-								? (widthState.overrides[column.afterIndex] ??
-									widthState.initial[column.afterIndex] ??
-									COLUMN_MIN_WIDTH)
-								: (retained?.widths[`id:${column.beforeInfo?.id}`] ??
-									retained?.widths[
-										`header:${column.beforeTitle ?? column.title}`
-									] ??
-									measureColumnWidth(
-										column.title,
-										reviewModel.rows.map((row, index) => ({
-											rowNumber: index + 1,
-											cells: row.cells.map((cell) => cell.value),
-										})),
-										reviewModel.columns.indexOf(column),
-									)),
-						)}
-						wrapped={reviewModel.columns.map((column) =>
-							column.afterIndex !== null
-								? (wrappedColumns[column.afterIndex] ?? false)
-								: (column.beforeInfo?.wrap ?? false),
-						)}
+						widths={reviewWidths ?? []}
+						wrapped={reviewWrapped ?? []}
 						rowHeight={(row) => {
-							const visibleIndex =
-								row.afterIndex === null ? -1 : rowMap.indexOf(row.afterIndex);
+							if (row.afterIndex === null) {
+								return removedRowHeights?.get(row.key) ?? ROW_HEIGHT;
+							}
+							const visibleIndex = rowMap.indexOf(row.afterIndex);
 							return visibleIndex < 0 ? ROW_HEIGHT : getRowHeight(visibleIndex);
 						}}
 						search={search}
 						filter={filter}
 						sort={sort}
+						folds={reviewFolds}
 					/>
 				) : (
 					<>
@@ -2284,6 +2487,12 @@ function CsvTable({
 											: null;
 									if (target) {
 										event.cancel();
+										// cancel() stops Glide's own handling; the browser
+										// still moves focus off the canvas unless the key
+										// itself is taken, which left the selection on a
+										// row the keyboard could no longer reach.
+										event.preventDefault();
+										event.stopPropagation();
 										setGridSelection({
 											columns: CompactSelection.empty(),
 											rows: CompactSelection.empty(),
@@ -2302,6 +2511,9 @@ function CsvTable({
 								}
 							}}
 							onCellClicked={(cell, event) => {
+								// Glide calls this only when the press began and ended on
+								// the same cell, which is exactly what a click is.
+								activatesCellRef.current = true;
 								if (
 									!editing ||
 									(!event.isTouch &&
@@ -2314,10 +2526,9 @@ function CsvTable({
 								if (toggleCheckbox(cell[0], cell[1])) event.preventDefault();
 							}}
 							cellActivationBehavior="single-click"
-							// The editor sits on its cell, one pixel over its edges so
-							// the focus ring stays under it; the styling in style.css
-							// keeps it the cell's width and lifts it.
-							editorBloom={[1, 1]}
+							// The editor covers exactly its cell — no growth past the
+							// row — and style.css rings it like the selected cell.
+							editorBloom={[0, 0]}
 							headerIcons={{ ...sprites, ...CSV_HEADER_ICONS }}
 							columns={columns}
 							rows={parsed.rows.length}
@@ -2418,9 +2629,7 @@ function CsvTable({
 							title="Add row"
 							aria-label="Add row"
 							onClick={() => {
-								setSearch("");
-								setFilter(EMPTY_CSV_FILTER);
-								setSort(null);
+								revealNewRow();
 								pendingAppend.current = true;
 								editing.onRowAppended();
 							}}
@@ -2455,7 +2664,7 @@ function CsvTable({
 								}
 							}}
 							info={
-								columnInfo[menu.column] ?? {
+								displayInfo[menu.column] ?? {
 									id: "",
 									header: parsed.columns[menu.column] ?? "",
 									index: menu.column,
@@ -2522,14 +2731,25 @@ function CsvTable({
 							menu={menu}
 							menuRows={menuRows}
 							onClose={closeMenu}
-							onInsertRow={(atRow) =>
-								runStructuralEdit(() =>
-									editing.onInsertRow(sourceRowIndex(atRow)),
-								)
-							}
+							onInsertRow={(atRow) => {
+								// "Below" means after the row that was clicked, which under
+								// a filter is not the source line before the next visible
+								// one — that landed four lines further down.
+								const source =
+									atRow > menu.row
+										? sourceRowIndex(menu.row) + 1
+										: sourceRowIndex(atRow);
+								revealNewRow();
+								runStructuralEdit(
+									() => editing.onInsertRow(source),
+									[0, atRow],
+								);
+							}}
 							onDeleteRows={(rows) =>
-								runStructuralEdit(() =>
-									editing.onDeleteRows(rows.map(sourceRowIndex)),
+								runStructuralEdit(
+									() => editing.onDeleteRows(rows.map(sourceRowIndex)),
+									// The row that takes the first deleted one's place.
+									[0, Math.max(0, Math.min(...rows))],
 								)
 							}
 						/>
@@ -2607,6 +2827,26 @@ function CsvGridMenu({
 			window.removeEventListener("resize", update);
 		};
 	}, [menu]);
+	// A press outside dismisses the menu and then lands where it was aimed. A
+	// backdrop would have swallowed it, so every control outside the menu
+	// needed a second click to answer.
+	useEffect(() => {
+		const outside = (event: Event) =>
+			!menuRef.current?.contains(event.target as Node);
+		const dismiss = (event: Event) => {
+			if (outside(event)) onClose();
+		};
+		const doc = document;
+		doc.addEventListener("pointerdown", dismiss, true);
+		doc.addEventListener("contextmenu", dismiss, true);
+		return () => {
+			doc.removeEventListener("pointerdown", dismiss, true);
+			doc.removeEventListener("contextmenu", dismiss, true);
+		};
+	}, [onClose]);
+	// The menu is placed once, against the table as it stood; a scroll moves
+	// the row out from under it.
+	useEditorClosesOnGridScroll(onClose);
 
 	const items = [
 		{
@@ -2630,15 +2870,6 @@ function CsvGridMenu({
 
 	return (
 		<>
-			<div
-				role="presentation"
-				className="csv-grid-menu-backdrop"
-				onMouseDown={onClose}
-				onContextMenu={(event) => {
-					event.preventDefault();
-					onClose();
-				}}
-			/>
 			<div
 				ref={menuRef}
 				onKeyDown={(event) => {
@@ -2708,7 +2939,16 @@ function CsvEmptyState({
 	readonly onCreateTable?: () => void;
 }) {
 	return (
-		<div className="flex h-full items-center justify-center px-6 py-8 text-center">
+		// The shell keeps a file's surface hidden until it renders something it
+		// recognises — a canvas, a review table, or an alert. This state is
+		// none of those, so an empty file opened as a blank, dead pane: the
+		// message and the button were in the DOM at zero opacity, and Create
+		// table could not be clicked. Deleting a table's last column writes an
+		// empty file, so the grid could put a file into that state itself.
+		<div
+			role="alert"
+			className="flex h-full items-center justify-center px-6 py-8 text-center"
+		>
 			<div className="max-w-sm space-y-2 text-sm text-[var(--color-text-secondary)]">
 				<p className="font-medium text-[var(--color-text-primary)]">
 					No CSV rows to display.
@@ -2738,9 +2978,9 @@ function CsvEmptyState({
  *  paint and the grid appears beneath it without the rows moving. */
 function CsvLoadingSpinner() {
 	return (
-		<div className="flex h-full flex-col" role="status">
+		<div className="flex h-full flex-col">
 			<div className="csv-toolbar" aria-hidden="true" />
-			<span className="sr-only">Loading CSV…</span>
+			<DocumentLoading />
 		</div>
 	);
 }

@@ -1,3 +1,4 @@
+import { DocumentLoading } from "../components/document-loading";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
 	AtelierExtensionLoader,
@@ -131,9 +132,8 @@ export function PreparedFileSurface({
 					className="min-h-0 flex-1 overflow-auto"
 					data-atelier-initial-content=""
 					data-atelier-awaiting-diff={diff || undefined}
-					role={diff ? "status" : undefined}
 				>
-					{diff ? null : initial}
+					{diff ? <DocumentLoading /> : initial}
 				</div>
 			) : null}
 			{connected && hydrated ? (

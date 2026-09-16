@@ -17,6 +17,7 @@ import type { AtelierDiffSession } from "@/extension-api";
 import { BUILTIN_HIDDEN_EXTENSION_DEFINITIONS } from "@/extension-runtime/builtin-extension-registry";
 import {
 	HTML_ARTIFACT_CSP,
+	HTML_ARTIFACT_PLACEHOLDER_CSP,
 	HtmlPreview,
 	HtmlView,
 	buildSandboxedHtmlDocument,
@@ -87,6 +88,30 @@ describe("buildSandboxedHtmlDocument", () => {
 		"<template><head>decoy</head></template><html><head><title>Template</title></head><body></body></html>",
 	])("cannot redirect policy injection with decoy markup", (source) => {
 		expectPolicyIsFirstInHead(buildSandboxedHtmlDocument(source));
+	});
+
+	test("the placeholder document carries no scripts and says so", () => {
+		// The placeholder frame is granted nothing at all. Handed the artifact
+		// verbatim, the browser refused each of its scripts out loud — two
+		// console errors for every artifact anyone opened.
+		const result = buildSandboxedHtmlDocument(
+			"<html><head><title>A</title></head><body><p>Hi</p><script>alert(1)</script></body></html>",
+			{ withoutScripts: true },
+		);
+		expect(result).not.toContain("alert(1)");
+		expect(result).not.toContain("<script");
+		expect(result).toContain(HTML_ARTIFACT_PLACEHOLDER_CSP);
+		expect(HTML_ARTIFACT_PLACEHOLDER_CSP).toContain("script-src 'none'");
+		// Everything else the reader sees while it loads is still there.
+		expect(result).toContain("<p>Hi</p>");
+	});
+
+	test("the preview itself still runs the artifact", () => {
+		const result = buildSandboxedHtmlDocument(
+			"<html><body><script>alert(1)</script></body></html>",
+		);
+		expect(result).toContain("alert(1)");
+		expect(result).toContain(HTML_ARTIFACT_CSP);
 	});
 });
 

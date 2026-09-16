@@ -29,7 +29,11 @@ export function wrapCsvText(
 			line += token;
 			continue;
 		}
-		if (line && measure(line + token) > width) push();
+		// A space at a soft break hangs off the end of the line in CSS, so the
+		// editor fits a word the canvas would have pushed down by that space's
+		// width — and the two disagreed about where the line breaks. Measure
+		// the way the browser lays it out.
+		if (line && measure(line.replace(/\s+$/u, "") + token) > width) push();
 		if (measure(token) <= width) {
 			line += token;
 			continue;

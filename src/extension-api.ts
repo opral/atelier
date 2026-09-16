@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { Lix } from "@lix-js/sdk";
+import type { CommitSpan, Lix } from "@lix-js/sdk";
 
 export type AtelierArea = "left" | "main" | "right";
 
@@ -201,6 +201,13 @@ export type AtelierEvent =
 			viewKind: string;
 	  }
 	| {
+			/** The first document data has rendered; excludes subsequent refreshes. */
+			type: "document_loaded";
+			filePath: string;
+			viewKind: string;
+			durationMs: number;
+	  }
+	| {
 			type: "document_closed";
 			filePath: string;
 			nextFilePath: string | null;
@@ -209,6 +216,14 @@ export type AtelierEvent =
 			type: "document_modified";
 			filePath: string;
 			modifiedBy: "user" | "agent";
+			/**
+			 * The durable transition this write produced, when the surface that
+			 * wrote was told one. It is what lets a review that is open over
+			 * this file tell the reviewer's own write apart from anybody
+			 * else's, without asking the workspace a question whose answer has
+			 * already moved on.
+			 */
+			commit?: CommitSpan | null;
 	  }
 	| {
 			type: "extension_opened";

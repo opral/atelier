@@ -4,7 +4,7 @@
  * - Values that already carry a scheme (`https://…`, `mailto:`, `tel:`, …) are
  *   returned untouched.
  * - Anchors (`#section`) and relative paths (`/docs`, `./intro.md`,
- *   `../page`) pass through as-is.
+ *   `../page`, `assets/clip.mp4`) pass through as-is.
  * - Bare email addresses become `mailto:` links.
  * - Everything else is treated as an external link and gets an `https://` prefix.
  *
@@ -32,6 +32,15 @@ export function normalizeUrl(input: string): string | null {
 		value.startsWith("./") ||
 		value.startsWith("../")
 	) {
+		return value;
+	}
+	// A path into a folder of this workspace, written the way a writer writes
+	// it: `assets/clip.mp4`. Its first segment is a folder name, not a host —
+	// no dot in it, and a host must have one. Prefixing these made every such
+	// link a bogus external URL, `https://assets/clip.mp4`, that went nowhere.
+	// `example.com/docs` keeps its prefix: that first segment is a host.
+	const [head, ...rest] = value.split("/");
+	if (rest.length > 0 && head !== undefined && !head.includes(".")) {
 		return value;
 	}
 	// Looks like a bare email address

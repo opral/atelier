@@ -1,12 +1,17 @@
 import {
+	createContext,
 	useCallback,
+	useContext,
 	useEffect,
 	useId,
 	useMemo,
 	useRef,
 	useState,
+	type KeyboardEvent as ReactKeyboardEvent,
+	type RefObject,
 } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import {
 	AlignLeft,
 	Braces,
@@ -24,8 +29,52 @@ import {
 	stringifyFrontmatterValue,
 	type FrontmatterRecord,
 } from "../editor/frontmatter-value";
+import {
+	useMarkdownFrontmatterDisabled,
+	useMarkdownFrontmatterEditing,
+} from "../editor/frontmatter-editing-context";
+import { registerUnsettledEdit } from "@/lib/unsettled-edits";
 
 type FrontmatterMode = "fields" | "yaml";
+
+/** React asks a controlled box for one; this box answers on the click instead. */
+const noChangeHandlerNeeded = () => {};
+
+/**
+ * Records a property in a read-only document without taking the caret out of
+ * the field the reader is typing in.
+ *
+ * A view that is not editable — which is what a review shows — considers the
+ * document's selection its own whenever nothing inside it has focus, and puts
+ * that selection back into the document on every transaction it is given.
+ * Between clicking out of one property and into the next, focus is on nothing
+ * for an instant, and the commit the first field makes as it is left lands in
+ * exactly that instant. The field the reader clicked into came up focused with
+ * no caret in it: every letter typed next went nowhere, and nothing on screen
+ * said why. A second property edited within a moment of the first was simply
+ * never typed.
+ *
+ * So there the document's copy of the property waits until focus has landed
+ * somewhere. The write to the file does not wait — only the projection does,
+ * and only for as long as the click takes. An editable view leaves the
+ * selection where it found it and needs none of this.
+ */
+function recordWhenFocusHasLanded(
+	panel: RefObject<HTMLElement | null>,
+	record: () => void,
+): void {
+	const caret = document.activeElement;
+	if (caret && panel.current?.contains(caret)) {
+		record();
+		return;
+	}
+	window.setTimeout(() => {
+		// The panel can be gone by then — a checkpoint taken from a field
+		// concludes the review the panel was part of. There is no projection
+		// left to record the property in, and the file already has it.
+		if (panel.current) record();
+	}, 0);
+}
 
 function replaceRecordEntry(
 	record: FrontmatterRecord,
@@ -110,6 +159,108 @@ function supportsLosslessFieldsSource(
 	);
 }
 
+/**
+ * How a field hands focus back to the document when Escape leaves it. The node
+ * view is the one that knows the editor; the fields are several components
+ * below it.
+ */
+const LeaveFrontmatterContext = createContext<() => void>(() => {});
+
+/**
+ * Escape leaves the field, and the document it interrupted is where it leaves
+ * to. Blurring alone drops focus on `<body>`, where the next key means nothing
+ * at all and the caret the reader had is nowhere to be seen — and handing the
+ * browser the editor's element is not enough either, because the selection it
+ * would restore is the frontmatter block itself, which the next letter would
+ * replace. The caret goes to the first block of the document instead.
+ */
+function useLeaveForTheDocument(): (field: HTMLElement) => void {
+	const leave = useContext(LeaveFrontmatterContext);
+	return (field) => {
+		field.blur();
+		leave();
+	};
+}
+
+/**
+ * How long a field waits, after the last keystroke, before it writes. The panel
+ * has no save button — an edit lands on its own — but landing every letter is
+ * what let the document re-render under the caret between two of them.
+ */
+const SETTLE_MS = 300;
+
+/**
+ * A field that writes as you type, without writing once per keystroke.
+ *
+ * While the field is being typed in, what it shows is what was typed: the
+ * value arriving from the document cannot replace it. That is the whole point.
+ * The document re-renders the property from whatever revision it is showing,
+ * and with no draft of its own the field put that string back under the caret
+ * between two keystrokes — "Quarterly planning notes" was written to the file
+ * as "Frontmatter fixturee pangte". The draft is handed over when the field is
+ * left, when the typing has settled, when a command asks every surface to
+ * settle what it is holding — and, whatever else happens, when the field goes
+ * away.
+ */
+function useSettlingDraft(
+	value: string,
+	commit: (next: string) => void | PromiseLike<void>,
+): {
+	readonly text: string;
+	readonly type: (next: string) => void;
+	readonly leave: () => string;
+	readonly abandon: () => void;
+} {
+	const [draft, setDraft] = useState<string | null>(null);
+	const pending = useRef<string | null>(null);
+	const timer = useRef<number | undefined>(undefined);
+	const commitRef = useRef(commit);
+	useEffect(() => {
+		commitRef.current = commit;
+	});
+	// Hands over whatever is still being held, without touching the draft on
+	// screen: the value it writes is the value the field is showing, so there
+	// is nothing to put back.
+	const settle = useCallback((): void | PromiseLike<void> => {
+		window.clearTimeout(timer.current);
+		const settled = pending.current;
+		pending.current = null;
+		if (settled === null) return;
+		return commitRef.current(settled);
+	}, []);
+	// A checkpoint taken mid-word unmounts this field. Dropping the timer here
+	// dropped the word with it: the checkpoint closed over a file that never
+	// received the letters the reader had just typed, and they were nowhere
+	// afterwards. Leaving is not abandoning — only Escape abandons.
+	useEffect(() => () => void settle(), [settle]);
+	useEffect(() => registerUnsettledEdit(settle), [settle]);
+
+	const type = useCallback(
+		(next: string) => {
+			setDraft(next);
+			pending.current = next;
+			window.clearTimeout(timer.current);
+			timer.current = window.setTimeout(() => void settle(), SETTLE_MS);
+		},
+		[settle],
+	);
+
+	const leave = useCallback(() => {
+		const settled = pending.current;
+		setDraft(null);
+		void settle();
+		return settled ?? value;
+	}, [settle, value]);
+
+	const abandon = useCallback(() => {
+		window.clearTimeout(timer.current);
+		pending.current = null;
+		setDraft(null);
+	}, []);
+
+	return { text: draft ?? value, type, leave, abandon };
+}
+
 function FieldKeyInput({
 	value,
 	ariaLabel,
@@ -119,8 +270,20 @@ function FieldKeyInput({
 	readonly ariaLabel: string;
 	readonly onCommit: (value: string) => void;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
+	const leaveForTheDocument = useLeaveForTheDocument();
 	const [draft, setDraft] = useState(value);
+	// Escape leaves without committing, so the blur it causes must not commit
+	// the draft it has just thrown away. Putting the draft back is not enough:
+	// the blur runs before React has re-rendered with it, so what `commit`
+	// reads is still the name the reader was abandoning.
+	const reverting = useRef(false);
 	const commit = () => {
+		if (reverting.current) {
+			reverting.current = false;
+			setDraft(value);
+			return;
+		}
 		const requested = draft.trim();
 		if (!requested) {
 			setDraft(value);
@@ -132,6 +295,7 @@ function FieldKeyInput({
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-key"
 			value={draft}
+			disabled={disabled}
 			aria-label={ariaLabel}
 			onChange={(event) => setDraft(event.currentTarget.value)}
 			onBlur={commit}
@@ -142,12 +306,41 @@ function FieldKeyInput({
 				}
 				if (event.key === "Escape") {
 					event.preventDefault();
+					reverting.current = true;
 					setDraft(value);
-					event.currentTarget.blur();
+					leaveForTheDocument(event.currentTarget);
 				}
 			}}
 		/>
 	);
+}
+
+/**
+ * Escape in a frontmatter field puts back the value the field held when it was
+ * entered and hands focus back to the document. Both halves of a row answer it
+ * that way; a value that answered nothing, or a name that kept what Escape
+ * threw away, was one field behaving two ways.
+ */
+function useEscapeRevert<T>(
+	current: T,
+	revert: (entryValue: T) => void,
+): {
+	onFocus: () => void;
+	onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+} {
+	const entryValue = useRef(current);
+	const leaveForTheDocument = useLeaveForTheDocument();
+	return {
+		onFocus: () => {
+			entryValue.current = current;
+		},
+		onKeyDown: (event) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			revert(entryValue.current);
+			leaveForTheDocument(event.currentTarget);
+		},
+	};
 }
 
 function FieldTypeIcon({
@@ -196,22 +389,40 @@ function NumberField({
 }: {
 	readonly label: string;
 	readonly value: number;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
+	const leaveForTheDocument = useLeaveForTheDocument();
 	const [draft, setDraft] = useState(String(value));
 	useEffect(() => setDraft(String(value)), [value]);
 	const parsedDraft = parseEditableNumber(draft);
 	const invalidDraft = draft.trim() !== "" && parsedDraft === null;
+	// Escape leaves without committing, so the blur it causes must not commit
+	// the draft it just threw away.
+	const reverting = useRef(false);
 	return (
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-value"
 			type="number"
 			value={draft}
+			disabled={disabled}
 			placeholder="Empty"
 			aria-label={`${label} value`}
 			aria-invalid={invalidDraft ? "true" : undefined}
 			onChange={(event) => setDraft(event.currentTarget.value)}
+			onKeyDown={(event) => {
+				if (event.key !== "Escape") return;
+				event.preventDefault();
+				reverting.current = true;
+				setDraft(String(value));
+				leaveForTheDocument(event.currentTarget);
+			}}
 			onBlur={() => {
+				if (reverting.current) {
+					reverting.current = false;
+					setDraft(String(value));
+					return;
+				}
 				if (parsedDraft === null) {
 					setDraft(String(value));
 					return;
@@ -230,34 +441,93 @@ function ScalarField({
 }: {
 	readonly label: string;
 	readonly value: unknown;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	if (typeof value === "number") {
 		return <NumberField label={label} value={value} onChange={onChange} />;
 	}
 	if (typeof value === "boolean") {
-		return (
-			<label className="markdown-frontmatter-boolean">
-				<input
-					type="checkbox"
-					aria-label={`${label} value`}
-					checked={value}
-					onChange={(event) => onChange(event.currentTarget.checked)}
-				/>
-			</label>
-		);
+		return <BooleanField label={label} value={value} onChange={onChange} />;
 	}
+	return <TextField label={label} value={value} onChange={onChange} />;
+}
 
+function BooleanField({
+	label,
+	value,
+	onChange,
+}: {
+	readonly label: string;
+	readonly value: boolean;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
+}) {
+	const disabled = useMarkdownFrontmatterDisabled();
+	const escape = useEscapeRevert(value, onChange);
+	return (
+		<label className="markdown-frontmatter-boolean">
+			<input
+				type="checkbox"
+				aria-label={`${label} value`}
+				checked={value}
+				disabled={disabled}
+				onFocus={escape.onFocus}
+				onKeyDown={escape.onKeyDown}
+				// A click on a box means "the other one", and which one that is
+				// comes from the property rather than from the box itself. The
+				// panel re-renders while the click is still being dispatched —
+				// the first click into the editor always does — and that puts
+				// the box back the way it was before React compares it with
+				// what it last saw, so React concludes nothing changed and the
+				// click is lost. Every first click on a property was.
+				onClick={() => onChange(!value)}
+				onChange={noChangeHandlerNeeded}
+			/>
+		</label>
+	);
+}
+
+function TextField({
+	label,
+	value,
+	onChange,
+}: {
+	readonly label: string;
+	readonly value: unknown;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
+}) {
+	const disabled = useMarkdownFrontmatterDisabled();
+	const leaveForTheDocument = useLeaveForTheDocument();
 	const text = value === null || value === undefined ? "" : String(value);
 	const isDate = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+	const field = useSettlingDraft(text, onChange);
+	// What Escape puts back is the value the field held when you got here.
+	const entryValue = useRef(text);
 	return (
 		<input
 			className="markdown-frontmatter-input markdown-frontmatter-value"
 			type={isDate ? "date" : "text"}
-			value={text}
+			value={field.text}
+			disabled={disabled}
 			placeholder="Empty"
 			aria-label={`${label} value`}
-			onChange={(event) => onChange(event.currentTarget.value)}
+			onFocus={() => {
+				entryValue.current = text;
+			}}
+			onChange={(event) => field.type(event.currentTarget.value)}
+			onBlur={field.leave}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") {
+					event.preventDefault();
+					field.leave();
+					event.currentTarget.blur();
+					return;
+				}
+				if (event.key !== "Escape") return;
+				event.preventDefault();
+				field.abandon();
+				onChange(entryValue.current);
+				leaveForTheDocument(event.currentTarget);
+			}}
 		/>
 	);
 }
@@ -269,8 +539,9 @@ function ArrayField({
 }: {
 	readonly label: string;
 	readonly value: unknown[];
-	readonly onChange: (value: unknown[]) => void;
+	readonly onChange: (value: unknown[]) => void | PromiseLike<void>;
 }) {
+	const disabled = useMarkdownFrontmatterDisabled();
 	const [draft, setDraft] = useState("");
 	const [adding, setAdding] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
@@ -292,6 +563,7 @@ function ArrayField({
 					type="button"
 					className="markdown-frontmatter-tag"
 					title="Remove value"
+					disabled={disabled}
 					aria-label={`Remove ${String(item)} from ${label}`}
 					onClick={() =>
 						onChange(value.filter((_, itemIndex) => itemIndex !== index))
@@ -322,7 +594,7 @@ function ArrayField({
 					}}
 					onBlur={addItem}
 				/>
-			) : (
+			) : disabled ? null : (
 				<button
 					type="button"
 					className="markdown-frontmatter-tag-add"
@@ -344,7 +616,7 @@ function ObjectField({
 }: {
 	readonly label: string;
 	readonly value: FrontmatterRecord;
-	readonly onChange: (value: FrontmatterRecord) => void;
+	readonly onChange: (value: FrontmatterRecord) => void | PromiseLike<void>;
 }) {
 	return (
 		<div className="markdown-frontmatter-nested">
@@ -382,7 +654,7 @@ function FieldValue({
 }: {
 	readonly label: string;
 	readonly value: unknown;
-	readonly onChange: (value: unknown) => void;
+	readonly onChange: (value: unknown) => void | PromiseLike<void>;
 }) {
 	if (Array.isArray(value)) {
 		return <ArrayField label={label} value={value} onChange={onChange} />;
@@ -402,10 +674,14 @@ function FieldValue({
 export function FrontmatterEditorNodeView({
 	editor,
 	node,
+	getPos,
 	deleteNode,
 	updateAttributes,
 	selected,
 }: NodeViewProps) {
+	const editing = useMarkdownFrontmatterEditing();
+	const disabled = editing.kind === "readOnly";
+	const [writeError, setWriteError] = useState<string | null>(null);
 	const source = String(node.attrs.value ?? "");
 	const parsed = useMemo(() => parseFrontmatterSource(source), [source]);
 	const entries = parsed.value ? Object.entries(parsed.value) : [];
@@ -413,7 +689,7 @@ export function FrontmatterEditorNodeView({
 	const [mode, setMode] = useState<FrontmatterMode>(
 		parsed.error || !fieldsSupported ? "yaml" : "fields",
 	);
-	const [rawDraft, setRawDraft] = useState(source);
+
 	const [addingField, setAddingField] = useState(
 		Boolean(node.attrs.autofocus && entries.length === 0),
 	);
@@ -430,12 +706,90 @@ export function FrontmatterEditorNodeView({
 		window.requestAnimationFrame(() => editor.commands.focus("start"));
 	}, [editor]);
 
-	const removeFrontmatter = useCallback(() => {
-		deleteNode();
-		focusFirstDocumentBlock();
-	}, [deleteNode, focusFirstDocumentBlock]);
+	// Where Escape in a field puts the caret. Not the document's very start:
+	// that is this block, which ProseMirror selects whole and the next letter
+	// would replace. The first text position after it, so the key that follows
+	// types where the reader can see it.
+	const focusPastFrontmatter = useCallback(() => {
+		window.requestAnimationFrame(() => {
+			if (editor.isDestroyed) return;
+			const { doc } = editor.state;
+			const pos = typeof getPos === "function" ? getPos() : undefined;
+			const after =
+				typeof pos === "number" ? pos + node.nodeSize : doc.content.size;
+			const caret = TextSelection.near(
+				doc.resolve(Math.min(after, doc.content.size)),
+				1,
+			);
+			editor.view.dispatch(editor.state.tr.setSelection(caret));
+			editor.view.focus();
+		});
+	}, [editor, getPos, node.nodeSize]);
 
-	useEffect(() => setRawDraft(source), [source]);
+	// A projection of a diff cannot be serialized back into the file it shows,
+	// so the panel writes the property itself — the edit lands where the same
+	// edit lands outside a review, and nothing on screen is a value the file
+	// does not have.
+	// The write a field has already sent but that has not landed yet. A
+	// command settles what the surfaces are holding before it acts; a property
+	// handed over a moment earlier — by clicking from the field onto the
+	// button — is not being held any more, and would otherwise land after the
+	// decision that was meant to include it.
+	const inFlightWriteRef = useRef<Promise<void> | undefined>(undefined);
+	useEffect(() => registerUnsettledEdit(() => inFlightWriteRef.current), []);
+	const writeThrough = useCallback(
+		(value: string, base: string) => {
+			if (editing.kind !== "file") return;
+			const written = editing.write(value, base).then(
+				() => setWriteError(null),
+				(cause: unknown) =>
+					setWriteError(
+						cause instanceof Error
+							? cause.message
+							: "Could not save this property.",
+					),
+			);
+			inFlightWriteRef.current = written;
+			return written;
+		},
+		[editing],
+	);
+
+	// What the fields were rendered from, which is what this edit is a change
+	// to. The write needs it to tell the properties this edit touched from the
+	// ones it is only carrying along — the latter belong to the file, not to
+	// the projection the panel is showing.
+	const sourceRef = useRef(source);
+	sourceRef.current = source;
+	// A revision keeps nothing, so it is not offered the document either: a
+	// disabled field that still moved the projection would be the same lie in
+	// a quieter place.
+	const commitSource = useCallback(
+		(value: string) => {
+			if (editing.kind === "readOnly") return;
+			const base = sourceRef.current;
+			const record = () => updateAttributes({ value });
+			// Writing through to the file is what a review's panel does, and a
+			// review's document is the read-only one that claims the selection.
+			if (editing.kind === "file") recordWhenFocusHasLanded(wrapperRef, record);
+			else record();
+			return writeThrough(value, base);
+		},
+		[editing.kind, updateAttributes, writeThrough],
+	);
+
+	// The YAML box writes as you type too, and had the same problem: the
+	// document re-rendered the source under the caret mid-word.
+	const rawField = useSettlingDraft(source, commitSource);
+
+	const removeFrontmatter = useCallback(() => {
+		if (editing.kind === "readOnly") return;
+		const base = sourceRef.current;
+		deleteNode();
+		void writeThrough("", base);
+		focusFirstDocumentBlock();
+	}, [deleteNode, editing.kind, focusFirstDocumentBlock, writeThrough]);
+
 	useEffect(() => {
 		if (entries.length > 0) createdEmptyRef.current = false;
 	}, [entries.length]);
@@ -467,9 +821,10 @@ export function FrontmatterEditorNodeView({
 		);
 		return () => window.cancelAnimationFrame(frame);
 	}, [addingField]);
-	const commitRecord = (value: FrontmatterRecord) => {
-		updateAttributes({ value: stringifyFrontmatterValue(value) });
-	};
+	// The promise goes back up to whoever asked for the write: a command that
+	// settles the panel before acting waits for it.
+	const commitRecord = (value: FrontmatterRecord) =>
+		commitSource(stringifyFrontmatterValue(value));
 	const cancelAddingField = () => {
 		setFieldNameDraft("");
 		setAddingField(false);
@@ -506,146 +861,160 @@ export function FrontmatterEditorNodeView({
 	};
 
 	return (
-		<NodeViewWrapper
-			ref={wrapperRef}
-			className="markdown-frontmatter"
-			data-markdown-frontmatter="true"
-			data-selected={selected ? "true" : "false"}
-			contentEditable={false}
-		>
-			<div className="markdown-frontmatter-header">
-				<div className="markdown-frontmatter-title">
-					<strong>Frontmatter</strong>
-				</div>
-				<button
-					type="button"
-					className="markdown-frontmatter-mode"
-					disabled={
-						mode === "yaml" && (Boolean(parsed.error) || !fieldsSupported)
-					}
-					onClick={() => {
-						if (
-							mode === "yaml" &&
-							createdEmptyRef.current &&
-							entries.length === 0 &&
-							!parsed.error
-						) {
-							removeFrontmatter();
-							return;
+		<LeaveFrontmatterContext.Provider value={focusPastFrontmatter}>
+			<NodeViewWrapper
+				ref={wrapperRef}
+				className="markdown-frontmatter"
+				data-markdown-frontmatter="true"
+				data-selected={selected ? "true" : "false"}
+				data-disabled={disabled ? "true" : "false"}
+				contentEditable={false}
+			>
+				<div className="markdown-frontmatter-header">
+					<div className="markdown-frontmatter-title">
+						<strong>Frontmatter</strong>
+						{disabled ? (
+							<span className="markdown-frontmatter-note">
+								{editing.reason}
+							</span>
+						) : null}
+					</div>
+					<button
+						type="button"
+						className="markdown-frontmatter-mode"
+						disabled={
+							mode === "yaml" && (Boolean(parsed.error) || !fieldsSupported)
 						}
-						setMode(mode === "fields" ? "yaml" : "fields");
-					}}
-				>
-					{mode === "fields" ? "YAML" : "Fields"}
-				</button>
-			</div>
+						onClick={() => {
+							if (
+								mode === "yaml" &&
+								createdEmptyRef.current &&
+								entries.length === 0 &&
+								!parsed.error
+							) {
+								removeFrontmatter();
+								return;
+							}
+							setMode(mode === "fields" ? "yaml" : "fields");
+						}}
+					>
+						{mode === "fields" ? "YAML" : "Fields"}
+					</button>
+				</div>
 
-			{mode === "fields" && parsed.value ? (
-				<div className="markdown-frontmatter-fields">
-					{entries.map(([key, value], index) => (
-						<div className="markdown-frontmatter-row" key={key}>
-							<div className="markdown-frontmatter-key-cell">
-								<FieldTypeIcon fieldKey={key} value={value} />
-								<FieldKeyInput
-									value={key}
-									ariaLabel={`Frontmatter field name: ${key}`}
-									onCommit={(requested) =>
+				{mode === "fields" && parsed.value ? (
+					<div className="markdown-frontmatter-fields">
+						{entries.map(([key, value], index) => (
+							<div className="markdown-frontmatter-row" key={key}>
+								<div className="markdown-frontmatter-key-cell">
+									<FieldTypeIcon fieldKey={key} value={value} />
+									<FieldKeyInput
+										value={key}
+										ariaLabel={`Frontmatter field name: ${key}`}
+										onCommit={(requested) =>
+											commitRecord(
+												replaceRecordEntry(parsed.value!, index, [
+													availableRenamedFieldName(
+														parsed.value!,
+														index,
+														requested,
+													),
+													value,
+												]),
+											)
+										}
+									/>
+								</div>
+								<FieldValue
+									label={key}
+									value={value}
+									onChange={(next) =>
 										commitRecord(
-											replaceRecordEntry(parsed.value!, index, [
-												availableRenamedFieldName(
-													parsed.value!,
-													index,
-													requested,
-												),
-												value,
-											]),
+											replaceRecordEntry(parsed.value!, index, [key, next]),
 										)
 									}
 								/>
+								<button
+									type="button"
+									className="markdown-frontmatter-remove"
+									disabled={disabled}
+									aria-label={`Remove ${key || "field"}`}
+									onClick={() => removeField(index)}
+								>
+									<X aria-hidden />
+								</button>
 							</div>
-							<FieldValue
-								label={key}
-								value={value}
-								onChange={(next) =>
-									commitRecord(
-										replaceRecordEntry(parsed.value!, index, [key, next]),
-									)
-								}
-							/>
+						))}
+						{addingField ? (
+							<div className="markdown-frontmatter-row markdown-frontmatter-row-adding">
+								<div className="markdown-frontmatter-key-cell">
+									<AlignLeft aria-hidden />
+									<input
+										ref={fieldNameRef}
+										className="markdown-frontmatter-input markdown-frontmatter-key"
+										value={fieldNameDraft}
+										aria-label="New frontmatter property name"
+										placeholder="Property name"
+										onChange={(event) =>
+											setFieldNameDraft(event.currentTarget.value)
+										}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												event.preventDefault();
+												commitFieldName();
+											}
+											if (event.key === "Escape") {
+												event.preventDefault();
+												cancelAddingField();
+											}
+										}}
+										onBlur={commitFieldName}
+									/>
+								</div>
+								<div className="markdown-frontmatter-empty-value">Empty</div>
+							</div>
+						) : disabled ? null : (
 							<button
 								type="button"
-								className="markdown-frontmatter-remove"
-								aria-label={`Remove ${key || "field"}`}
-								onClick={() => removeField(index)}
+								className="markdown-frontmatter-add"
+								onClick={() => setAddingField(true)}
 							>
-								<X aria-hidden />
+								<Plus aria-hidden />
+								Add property
 							</button>
-						</div>
-					))}
-					{addingField ? (
-						<div className="markdown-frontmatter-row markdown-frontmatter-row-adding">
-							<div className="markdown-frontmatter-key-cell">
-								<AlignLeft aria-hidden />
-								<input
-									ref={fieldNameRef}
-									className="markdown-frontmatter-input markdown-frontmatter-key"
-									value={fieldNameDraft}
-									aria-label="New frontmatter property name"
-									placeholder="Property name"
-									onChange={(event) =>
-										setFieldNameDraft(event.currentTarget.value)
-									}
-									onKeyDown={(event) => {
-										if (event.key === "Enter") {
-											event.preventDefault();
-											commitFieldName();
-										}
-										if (event.key === "Escape") {
-											event.preventDefault();
-											cancelAddingField();
-										}
-									}}
-									onBlur={commitFieldName}
-								/>
-							</div>
-							<div className="markdown-frontmatter-empty-value">Empty</div>
-						</div>
-					) : (
-						<button
-							type="button"
-							className="markdown-frontmatter-add"
-							onClick={() => setAddingField(true)}
-						>
-							<Plus aria-hidden />
-							Add property
-						</button>
-					)}
-				</div>
-			) : (
-				<div className="markdown-frontmatter-raw">
-					<textarea
-						className="markdown-frontmatter-yaml"
-						value={rawDraft}
-						aria-label="Raw YAML frontmatter"
-						aria-invalid={parsed.error ? "true" : undefined}
-						aria-describedby={parsed.error ? rawErrorId : undefined}
-						spellCheck={false}
-						onChange={(event) => {
-							const value = event.currentTarget.value;
-							setRawDraft(value);
-							updateAttributes({ value });
-						}}
-						onBlur={() => {
-							if (rawDraft.trim().length === 0) removeFrontmatter();
-						}}
-					/>
-					{parsed.error ? (
-						<p id={rawErrorId} className="markdown-frontmatter-error">
-							{parsed.error}
-						</p>
-					) : null}
-				</div>
-			)}
-		</NodeViewWrapper>
+						)}
+					</div>
+				) : (
+					<div className="markdown-frontmatter-raw">
+						<textarea
+							className="markdown-frontmatter-yaml"
+							value={rawField.text}
+							aria-label="Raw YAML frontmatter"
+							aria-invalid={parsed.error ? "true" : undefined}
+							aria-describedby={parsed.error ? rawErrorId : undefined}
+							spellCheck={false}
+							readOnly={disabled}
+							onChange={(event) => rawField.type(event.currentTarget.value)}
+							onBlur={() => {
+								const settled = rawField.leave();
+								if (!disabled && settled.trim().length === 0) {
+									removeFrontmatter();
+								}
+							}}
+						/>
+						{parsed.error ? (
+							<p id={rawErrorId} className="markdown-frontmatter-error">
+								{parsed.error}
+							</p>
+						) : null}
+					</div>
+				)}
+				{writeError ? (
+					<p className="markdown-frontmatter-error" role="alert">
+						{writeError}
+					</p>
+				) : null}
+			</NodeViewWrapper>
+		</LeaveFrontmatterContext.Provider>
 	);
 }

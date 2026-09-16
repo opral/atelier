@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { CsvReviewTrigger } from "../extensions/csv/csv-review-popover";
-import { ExternalWriteReviewControls } from "./external-write-review-controls";
+import {
+	ExternalWriteReviewControls,
+	reviewFloatHandlesEscape,
+} from "./external-write-review-controls";
 
 const NAVIGATION = {
 	fileName: "TikTok.md",
@@ -924,5 +928,212 @@ describe("ExternalWriteReviewControls", () => {
 
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(exit).toHaveBeenCalledOnce();
+	});
+
+	test("an open menu takes the keyboard: focus, arrows, Escape back to the trigger", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3 }}
+				files={THREE_FILES}
+				onUndo={vi.fn(async () => {})}
+				onPrimary={vi.fn(async () => {})}
+			/>,
+		);
+		const trigger = screen.getByRole("button", { name: "More undo options" });
+		fireEvent.click(trigger);
+
+		const menu = screen.getByRole("menu", { name: "Undo options" });
+		const items = screen.getAllByRole("menuitem");
+		expect(items).toHaveLength(2);
+		// Opening moves the keyboard in, and Tab cannot wander into the items:
+		// they sit before the whole button row in the DOM.
+		expect(items[0]).toHaveFocus();
+		for (const item of items) expect(item).toHaveAttribute("tabindex", "-1");
+
+		fireEvent.keyDown(menu, { key: "ArrowDown" });
+		expect(items[1]).toHaveFocus();
+		fireEvent.keyDown(menu, { key: "Home" });
+		expect(items[0]).toHaveFocus();
+		fireEvent.keyDown(menu, { key: "End" });
+		expect(items[1]).toHaveFocus();
+		fireEvent.keyDown(menu, { key: "ArrowUp" });
+		expect(items[0]).toHaveFocus();
+
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("menu")).toBeNull();
+		expect(trigger).toHaveFocus();
+	});
+
+	test("focus leaving an open menu closes it", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3 }}
+				files={THREE_FILES}
+				onPrimary={vi.fn(async () => {})}
+			/>,
+		);
+		const trigger = screen.getByRole("button", {
+			name: "More checkpoint options",
+		});
+		fireEvent.click(trigger);
+		const menu = screen.getByRole("menu", { name: "Checkpoint options" });
+		const elsewhere = screen.getByRole("button", { name: "Checkpoint" });
+
+		// Focus landing back on the trigger is the trigger's own click; the
+		// menu must survive it long enough for the toggle to decide.
+		fireEvent.blur(menu, { relatedTarget: trigger });
+		expect(
+			screen.getByRole("menu", { name: "Checkpoint options" }),
+		).toBeVisible();
+
+		fireEvent.blur(menu, { relatedTarget: elsewhere });
+		expect(screen.queryByRole("menu")).toBeNull();
+	});
+
+	test("an open menu follows its trigger when the float is resized", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{ ...NAVIGATION, fileCount: 3 }}
+				files={THREE_FILES}
+				onPrimary={vi.fn(async () => {})}
+			/>,
+		);
+		// jsdom reports zero-sized rects, so drive the geometry directly: the
+		// trigger's split moves 120px right, and the menu must follow.
+		const root = document.querySelector(
+			".external-write-review-actions",
+		) as HTMLElement;
+		const split = document.querySelector(
+			".external-write-review-split-accept",
+		) as HTMLElement;
+		const rect = (left: number, right: number) =>
+			({ left, right, width: right - left }) as DOMRect;
+		root.getBoundingClientRect = () => rect(0, 600);
+		split.getBoundingClientRect = () => rect(400, 500);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "More checkpoint options" }),
+		);
+		const menu = screen.getByRole("menu", { name: "Checkpoint options" });
+		expect(menu.style.marginLeft).toBe("500px");
+
+		split.getBoundingClientRect = () => rect(280, 380);
+		fireEvent(window, new Event("resize"));
+		expect(menu.style.marginLeft).toBe("380px");
+	});
+
+	test("a shell-level Escape fallback stands down while the float owns the key", () => {
+		const exit = vi.fn();
+		const fallback = vi.fn();
+		// The shell's own fallback, wired the way layout-shell wires it: a
+		// window listener registered after the float's, which is what happens
+		// as soon as opening a menu rebuilds the float's listener.
+		function ShellFallback() {
+			useEffect(() => {
+				const handleKeyDown = (event: KeyboardEvent) => {
+					if (event.key !== "Escape" || event.defaultPrevented) return;
+					if (reviewFloatHandlesEscape()) return;
+					fallback();
+				};
+				window.addEventListener("keydown", handleKeyDown);
+				return () => window.removeEventListener("keydown", handleKeyDown);
+			}, []);
+			return null;
+		}
+		const { rerender } = render(
+			<>
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={NAVIGATION}
+					files={FILES}
+					onPrimary={vi.fn(async () => {})}
+					onExit={exit}
+				/>
+				<ShellFallback />
+			</>,
+		);
+
+		fireEvent.click(chip("Working set: 1 of 2 files"));
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("checkbox")).toBeNull();
+		expect(exit).not.toHaveBeenCalled();
+		expect(fallback).not.toHaveBeenCalled();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "More checkpoint options" }),
+		);
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("menu")).toBeNull();
+		expect(exit).not.toHaveBeenCalled();
+		expect(fallback).not.toHaveBeenCalled();
+
+		// No menu left to close: the float ends the session itself, and the
+		// fallback still keeps out of it.
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(exit).toHaveBeenCalledOnce();
+		expect(fallback).not.toHaveBeenCalled();
+
+		// Once the float is gone the fallback is the only listener left.
+		rerender(<ShellFallback />);
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(fallback).toHaveBeenCalledOnce();
+	});
+});
+
+describe("a moved file", () => {
+	const MOVED_FILES = [
+		{
+			id: "file-tiktok",
+			path: "/posts/TikTok.md",
+			movedFromPath: "/drafts/TikTok.md",
+		},
+		{ id: "file-launch", path: "/launch-post.md" },
+	] as const;
+
+	test("says where it moved from, since its content shows no diff", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "TikTok.md",
+					filePath: "/posts/TikTok.md",
+				}}
+				files={MOVED_FILES}
+				onExit={vi.fn()}
+			/>,
+		);
+		// The old directory, as the History list says it.
+		expect(screen.getByTitle("Moved from /drafts/TikTok.md")).toHaveTextContent(
+			"drafts/",
+		);
+		expect(screen.getByLabelText("Moved")).toBeInTheDocument();
+	});
+
+	test("marks the moved file in the list, and leaves the others alone", () => {
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="working-changes"
+				navigation={{
+					...NAVIGATION,
+					fileName: "TikTok.md",
+					filePath: "/posts/TikTok.md",
+				}}
+				files={MOVED_FILES}
+				onExit={vi.fn()}
+			/>,
+		);
+		fireEvent.click(chip("Working set: 1 of 2 files"));
+		expect(scopeRow("file-tiktok")).toHaveTextContent("moved");
+		expect(scopeRow("file-launch")).not.toHaveTextContent("moved");
 	});
 });

@@ -62,6 +62,8 @@ export function FileSnapshotsAtCommits({
 		afterFileId,
 		afterExists,
 		beforeSnapshot,
+		// Render callback, not a ReactNode child argument to createElement.
+		// oxlint-disable-next-line react/no-children-prop
 		children,
 	});
 }

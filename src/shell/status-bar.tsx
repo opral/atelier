@@ -1,8 +1,12 @@
 import { type JSX, type ReactNode } from "react";
-import { Flag } from "lucide-react";
+import { Flag, RefreshCw } from "lucide-react";
 import { WorkingDot } from "@/components/diff-glyph";
 import { useQueryResult } from "@/lib/lix-react";
-import { selectWorkingChangeCount } from "@/queries";
+import { selectWorkingChangeCount, selectWorkingReviewEpoch } from "@/queries";
+import {
+	reviewIsBehindWorkspace,
+	type WorkingReviewEpoch,
+} from "./working-review-epoch";
 
 // Checkpoint titles are not exposed by Lix yet. Keep the placeholder isolated so
 // the status bar can consume the real title without changing its presentation.
@@ -36,6 +40,8 @@ export function CheckpointStatusBar({
 	onAutoAcceptAgentChangesChange,
 	onReviewLatestCheckpoint,
 	onReviewWorkingChanges,
+	onRefreshWorkingReview,
+	reviewedEpoch = null,
 	reviewingWorkingChanges = false,
 	reviewingLatestCheckpoint = false,
 }: {
@@ -45,6 +51,10 @@ export function CheckpointStatusBar({
 	/** With nothing to review since the checkpoint, the pill reviews the checkpoint itself. */
 	readonly onReviewLatestCheckpoint?: () => void;
 	readonly onReviewWorkingChanges?: () => void;
+	/** Reopens the working review at the epoch the workspace is on now. */
+	readonly onRefreshWorkingReview?: () => void;
+	/** The epoch an open working review holds, if one is open. */
+	readonly reviewedEpoch?: WorkingReviewEpoch | null;
 	/** The working review is open; the same control now closes it. */
 	readonly reviewingWorkingChanges?: boolean;
 	/** A checkpoint review is open; the same control now closes it. */
@@ -57,6 +67,24 @@ export function CheckpointStatusBar({
 	const workingRow = workingChangeCount.rows[0];
 	const fileCount = workingRow?.file_count ?? 0;
 	const workingCountLabel = `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`;
+	const liveEpoch = useQueryResult((queryLix) =>
+		selectWorkingReviewEpoch(queryLix),
+	);
+	if (liveEpoch.status === "error") throw liveEpoch.error;
+	const liveEpochRow = liveEpoch.rows[0];
+	// The diff on screen is a past state of the file once somebody else has
+	// written, and every decision the review offers is refused against the
+	// epoch it was taken on — so say so here rather than letting Checkpoint be
+	// the one to break the news.
+	const reviewIsBehind =
+		reviewingWorkingChanges &&
+		reviewedEpoch !== null &&
+		liveEpoch.status !== "pending" &&
+		liveEpochRow !== undefined &&
+		reviewIsBehindWorkspace(reviewedEpoch, {
+			beforeCommitId: liveEpochRow.before_commit_id,
+			afterCommitId: liveEpochRow.after_commit_id,
+		});
 
 	const historyStatus =
 		workingChangeCount.status === "pending" ? null : fileCount === 0 ? (
@@ -76,7 +104,14 @@ export function CheckpointStatusBar({
 
 	return (
 		<StatusBar
-			left={historyStatus}
+			left={
+				<>
+					{historyStatus}
+					{reviewIsBehind ? (
+						<ReviewBehindNotice onRefresh={onRefreshWorkingReview} />
+					) : null}
+				</>
+			}
 			right={
 				readOnly ? undefined : (
 					<div className="flex items-center gap-2">
@@ -88,6 +123,39 @@ export function CheckpointStatusBar({
 				)
 			}
 		/>
+	);
+}
+
+/**
+ * The file changed again while its review was open. The review keeps showing
+ * the change it was opened on — refreshing reopens it on the current one.
+ */
+function ReviewBehindNotice({
+	onRefresh,
+}: {
+	readonly onRefresh?: () => void;
+}): JSX.Element {
+	const label = "This review is behind the file";
+	return onRefresh ? (
+		<button
+			type="button"
+			data-attr="review-behind-refresh"
+			aria-label={`${label}. Refresh the review`}
+			onClick={onRefresh}
+			onMouseDown={(event) => event.preventDefault()}
+			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 text-[var(--color-text-brand)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+		>
+			<RefreshCw aria-hidden="true" className="h-3 w-3" />
+			<span>{label} · Refresh</span>
+		</button>
+	) : (
+		<span
+			data-attr="review-behind-refresh"
+			className="inline-flex h-5 items-center gap-1.5 px-1.5 text-[var(--color-text-brand)]"
+		>
+			<RefreshCw aria-hidden="true" className="h-3 w-3" />
+			<span>{label}</span>
+		</span>
 	);
 }
 

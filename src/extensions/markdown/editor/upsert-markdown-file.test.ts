@@ -11,9 +11,15 @@ test("a genuine later file save uses the current local state without a stale con
 			"INSERT INTO lix_file (id,path,content) VALUES ($1,$2,$3)",
 			[fileId, "/same.md", new TextEncoder().encode("Remote winner\n")],
 		);
-		expect(
-			await upsertMarkdownFile({ lix, fileId, markdown: "New user input\n" }),
-		).toBe(true);
+		const receipt = await upsertMarkdownFile({
+			lix,
+			fileId,
+			markdown: "New user input\n",
+		});
+		expect(receipt.written).toBe(true);
+		// The receipt is what lets a surface recognise its own write later.
+		expect(typeof receipt.commit?.after).toBe("string");
+		expect(receipt.commit?.after).not.toBe(receipt.commit?.before);
 		const result = await lix.execute(
 			"SELECT content FROM lix_file WHERE id=$1",
 			[fileId],
@@ -23,11 +29,13 @@ test("a genuine later file save uses the current local state without a stale con
 		).toBe("New user input\n");
 		await lix.execute("DELETE FROM lix_file WHERE id=$1", [fileId]);
 		expect(
-			await upsertMarkdownFile({
-				lix,
-				fileId,
-				markdown: "Must not recreate\n",
-			}),
+			(
+				await upsertMarkdownFile({
+					lix,
+					fileId,
+					markdown: "Must not recreate\n",
+				})
+			).written,
 		).toBe(false);
 	} finally {
 		await lix.close();

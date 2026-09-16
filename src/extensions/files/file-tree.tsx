@@ -25,6 +25,7 @@ import type {
 	FilesystemTreeNode,
 	FilesystemTreeSource,
 } from "@/extensions/files/build-filesystem-tree";
+import { ariaKeyShortcut, shortcutHint, spokenShortcut } from "@/lib/platform";
 import folderBlueIconUrl from "./assets/folder-blue.svg";
 import folderBlueOpenIconUrl from "./assets/folder-blue-open.svg";
 import fileNewIconUrl from "./assets/file-new.svg";
@@ -955,6 +956,13 @@ export function FileTree({
 	);
 }
 
+/**
+ * The chord the Files extension's own shortcut effect answers: the primary
+ * modifier and Backspace. Written the macOS way; the platform helpers spell it
+ * out where the primary modifier is Ctrl.
+ */
+const DELETE_SHORTCUT = "⌘⌫";
+
 function TreeItemContextMenu({
 	item,
 	context,
@@ -1055,15 +1063,10 @@ function TreeItemContextMenu({
 							strokeWidth={1.7}
 						/>
 					}
-					ariaKeyShortcuts="Meta+Backspace"
+					ariaKeyShortcuts={ariaKeyShortcut(DELETE_SHORTCUT)}
 					onClick={onDelete}
-					shortcut={
-						<>
-							<span>⌘</span>
-							<span>⌫</span>
-						</>
-					}
-					shortcutLabel="Command Backspace"
+					shortcut={shortcutHint(DELETE_SHORTCUT)}
+					shortcutLabel={spokenShortcut(DELETE_SHORTCUT)}
 				>
 					Delete
 				</TreeItemContextMenuButton>

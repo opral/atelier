@@ -66,6 +66,15 @@ export const HTML_ARTIFACT_CSP = [
 	"style-src 'unsafe-inline'",
 ].join("; ");
 
+/**
+ * The same policy for the placeholder frame, which is granted no script
+ * permission at all, so the policy it carries says so too.
+ */
+export const HTML_ARTIFACT_PLACEHOLDER_CSP = HTML_ARTIFACT_CSP.replace(
+	"script-src 'unsafe-inline'",
+	"script-src 'none'",
+);
+
 /** Read-only renderer for an HTML artifact stored in the Lix workspace. */
 
 export function HtmlView({
@@ -336,6 +345,11 @@ export function buildSandboxedHtmlDocument(
 	options: {
 		readonly filePath?: string;
 		readonly workspaceImageUrls?: ReadonlyMap<string, string>;
+		/**
+		 * For the frame that may run nothing: its scripts are taken out rather
+		 * than left for the browser to refuse one by one, out loud.
+		 */
+		readonly withoutScripts?: boolean;
 	} = {},
 ): string {
 	const artifactDocument = new DOMParser().parseFromString(source, "text/html");
@@ -346,9 +360,16 @@ export function buildSandboxedHtmlDocument(
 			options.workspaceImageUrls,
 		);
 	}
+	if (options.withoutScripts) {
+		for (const script of artifactDocument.querySelectorAll("script")) {
+			script.remove();
+		}
+	}
 	const policy = artifactDocument.createElement("meta");
 	policy.httpEquiv = "Content-Security-Policy";
-	policy.content = HTML_ARTIFACT_CSP;
+	policy.content = options.withoutScripts
+		? HTML_ARTIFACT_PLACEHOLDER_CSP
+		: HTML_ARTIFACT_CSP;
 	artifactDocument.head.prepend(policy);
 
 	const doctype = artifactDocument.doctype
@@ -584,11 +605,19 @@ export const extension = createReactExtensionDefinition({
 				})}
 				initial={
 					file ? (
+						// The artifact as it looks before the real preview
+						// mounts, in a frame allowed nothing at all. It used to
+						// be handed the file verbatim: the browser refused each
+						// of its scripts in turn and said so in the console,
+						// twice for every artifact anyone opened, and the
+						// policy the preview carries was missing here.
 						<iframe
 							title={file.path}
 							className="h-full min-h-96 w-full"
 							sandbox=""
-							srcDoc={file.content}
+							srcDoc={buildSandboxedHtmlDocument(file.content, {
+								withoutScripts: true,
+							})}
 						/>
 					) : (
 						<p>File not found in the workspace.</p>

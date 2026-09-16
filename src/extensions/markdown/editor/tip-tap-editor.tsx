@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import { EditorContent, useEditorState } from "@tiptap/react";
+import type { CommitSpan } from "@lix-js/sdk";
 import type { Editor, Extensions } from "@tiptap/core";
 import { qb, sql } from "@/lib/lix-kysely";
 import { useDocumentLinks } from "./document-links-context";
@@ -61,7 +62,12 @@ type TipTapEditorProps = {
 	additionalExtensions?: Extensions;
 	originKey?: string;
 	openWorkspaceFile?: MarkdownWorkspaceFileOpener;
-	onPersist?: (args: { fileId: string; filePath?: string }) => void;
+	onPersist?: (args: {
+		fileId: string;
+		filePath?: string;
+		/** The transition this save produced, for surfaces tracking their own writes. */
+		commit?: CommitSpan | null;
+	}) => void;
 };
 
 export type MarkdownFileDelivery = {
@@ -323,11 +329,6 @@ function TipTapEditorLoadedContent({
 	const [persistenceError, setPersistenceError] = useState<Error | null>(null);
 	const [imagePasteStatus, setImagePasteStatus] =
 		useState<MarkdownImagePasteStatus | null>(null);
-	const notifyImagePasteStatus = useEffectEvent(
-		(status: MarkdownImagePasteStatus) => {
-			setImagePasteStatus(status);
-		},
-	);
 	useLayoutEffect(() => {
 		onPersistRef.current = onPersist;
 		openWorkspaceFileRef.current = openWorkspaceFile;
@@ -354,7 +355,7 @@ function TipTapEditorLoadedContent({
 			openWorkspaceFile: stableOpenWorkspaceFile,
 			documentLinks: stableDocumentLinks,
 			additionalExtensions,
-			onImagePasteStatus: notifyImagePasteStatus,
+			onImagePasteStatus: setImagePasteStatus,
 			onPersistenceError: setPersistenceError,
 			onPersist: (args) => {
 				setPersistenceAcknowledgment((revision) => revision + 1);
@@ -452,7 +453,7 @@ function TipTapEditorLoadedContent({
 				view: editor.view,
 				event: event.nativeEvent,
 				storeImage: storeSurfaceImage,
-				onImagePasteStatus: notifyImagePasteStatus,
+				onImagePasteStatus: setImagePasteStatus,
 			});
 		},
 		[editor, storeSurfaceImage],

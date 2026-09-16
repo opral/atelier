@@ -31,6 +31,16 @@ describe("normalizeUrl", () => {
 		expect(normalizeUrl("/docs/intro")).toBe("/docs/intro");
 		expect(normalizeUrl("./intro.md")).toBe("./intro.md");
 		expect(normalizeUrl("../page")).toBe("../page");
+		// A folder of this workspace, written the way a writer writes it. Its
+		// first segment is a name, not a host, so nothing is prefixed.
+		expect(normalizeUrl("assets/example-clip.mp4")).toBe(
+			"assets/example-clip.mp4",
+		);
+		expect(normalizeUrl("markdown-extension/README.md")).toBe(
+			"markdown-extension/README.md",
+		);
+		// A first segment with a dot in it is a host, and keeps its prefix.
+		expect(normalizeUrl("example.com/docs")).toBe("https://example.com/docs");
 	});
 
 	test("trims surrounding whitespace", () => {

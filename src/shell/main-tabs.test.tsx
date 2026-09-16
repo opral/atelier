@@ -281,7 +281,9 @@ describe("main tabs with a pinned home", () => {
 			await act(async () => {
 				homeTab()?.click();
 			});
-			expect(homeTab()).not.toHaveAttribute("aria-label");
+			// Expanded again: the label shows, and the name still says it
+			// outright, because the close control inside carries one too.
+			expect(homeTab()).toHaveAttribute("aria-label", "Home");
 			expect(homeLabel()).not.toHaveAttribute("aria-hidden");
 			expect(homeLabel()?.className).toContain("max-w-[10rem]");
 		} finally {
@@ -328,6 +330,73 @@ describe("main tabs with a pinned home", () => {
 				'[data-attr="panel-tab-close-fade"]',
 			);
 			expect(activeCloseFade).not.toBeInTheDocument();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("the close affordance is named, and the open document says so", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+
+			// The × was an unlabelled span: announced as nothing at all.
+			const close = screen.getByRole("button", { name: "Close two.md" });
+			expect(
+				close.querySelector('[data-attr="panel-tab-close"]'),
+			).not.toBeNull();
+			// Its label must not fold into the tab's own name.
+			expect(screen.getByRole("button", { name: "two.md" })).toHaveAttribute(
+				"aria-label",
+				"two.md",
+			);
+
+			// Which document is open was carried by colour alone.
+			expect(screen.getByRole("button", { name: "two.md" })).toHaveAttribute(
+				"aria-current",
+				"true",
+			);
+			expect(
+				screen.getByRole("button", { name: "one.md" }),
+			).not.toHaveAttribute("aria-current");
+
+			await act(async () => {
+				fireEvent.click(screen.getByRole("button", { name: "one.md" }));
+			});
+			expect(screen.getByRole("button", { name: "one.md" })).toHaveAttribute(
+				"aria-current",
+				"true",
+			);
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("closing a tab leaves the keyboard on the tab that takes over", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+			const survivor = screen.getByRole("button", { name: "one.md" });
+			const closing = screen.getByRole("button", { name: "two.md" });
+			closing.focus();
+
+			await act(async () => {
+				fireEvent.click(
+					closing.querySelector('[data-attr="panel-tab-close"]')
+						?.parentElement as HTMLElement,
+				);
+			});
+
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
+			// Not <body>: the next Tab carries on from the strip instead of
+			// restarting at the top of the page.
+			expect(survivor).toHaveFocus();
 		} finally {
 			await shell.cleanup();
 		}

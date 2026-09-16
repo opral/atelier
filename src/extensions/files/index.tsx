@@ -24,6 +24,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLix, useQueryResult } from "@/lib/lix-react";
+import { isMacPlatform, shortcutHint } from "@/lib/platform";
 import { isMarkdownFilePath } from "@/extension-runtime/file-handlers";
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import {
@@ -40,8 +41,25 @@ import {
 } from "@/extensions/files/build-filesystem-tree";
 import type {
 	AtelierFilesViewOptions,
+	AtelierJsonValue,
 	AtelierWatchedEntry,
 } from "@/extension-api";
+import {
+	DEFAULT_FOLDERS_PREFERENCE_KEY,
+	defaultFoldersKey,
+	ensureDirectoryPath,
+	parseDefaultFolders,
+	pickerFolders,
+	resolveCreateDirectory as resolveCreateDirectoryForType,
+	withDefaultFolder,
+	type DefaultFolderFileType,
+	type DefaultFolders,
+	type PickerFolder,
+} from "./default-folder";
+import {
+	DefaultFolderSlot,
+	focusRowTrailingControl,
+} from "./default-folder-slot";
 import type { Area } from "../../extension-runtime/types";
 import {
 	FileTree,
@@ -98,6 +116,21 @@ type FilesViewContext = {
 	/** Hides every file mutation affordance for read-only hosts. */
 	readonly readOnly?: boolean;
 	readonly showHiddenFiles?: boolean;
+	/**
+	 * The raw `defaultFolders` preference. It is handed over unparsed — it is
+	 * JSON that outlived a reload and possibly a version of this extension —
+	 * and the view checks it before believing it.
+	 */
+	readonly defaultFolders?: AtelierJsonValue;
+	/**
+	 * Writes one type's default folder, or clears it with `null`. Absent means
+	 * there is nowhere to persist a default, and the New menu stays exactly as
+	 * it is today.
+	 */
+	readonly setDefaultFolder?: (
+		fileType: DefaultFolderFileType,
+		folder: string | null,
+	) => void;
 	/**
 	 * Host data source for un-imported "watched" entries. Resubscribed whenever
 	 * the expanded directory set changes (the root "/" is always included).
@@ -196,8 +229,9 @@ export function FilesView({ context }: FilesViewProps) {
 		viewInstance,
 	]);
 	useEffect(() => {
+		const pendingRequests = pendingDraftRequestsRef.current;
 		return () => {
-			for (const request of pendingDraftRequestsRef.current.splice(0)) {
+			for (const request of pendingRequests.splice(0)) {
 				request.reject(
 					new Error(
 						"Files view unmounted before the new-file draft could start.",
@@ -567,7 +601,9 @@ function FilesViewContent({
 			return changed ? next : prev;
 		});
 	}, [activeSelectionPath, createRequest, hasCurrentSelectionOverride]);
-	const isMacPlatform = useMemo(() => detectMacPlatform(), []);
+	// The hint the New menu prints and the modifier this handler waits
+	// for have to agree on what a Mac is, so both read the same check.
+	const isMac = useMemo(() => isMacPlatform(), []);
 	const isPanelFocused = context?.isPanelFocused ?? false;
 	const registerNewFileDraftHandler = context?.registerNewFileDraftHandler;
 	const area = context?.area;
@@ -604,7 +640,8 @@ function FilesViewContent({
 		},
 		[resolveFileForInteraction],
 	);
-	const resolveCreateDirectory = useCallback(() => {
+	/** "Here": the folder the tree is looking at. */
+	const resolveHereDirectory = useCallback(() => {
 		if (!selectedPath) return "/";
 		if (selectedKind === "directory") {
 			return ensureDirectoryPath(selectedPath);
@@ -620,7 +657,7 @@ function FilesViewContent({
 			directoryOverride?: string,
 		): number | undefined => {
 			if (createRequest) return;
-			const baseDirectory = directoryOverride ?? resolveCreateDirectory();
+			const baseDirectory = directoryOverride ?? resolveHereDirectory();
 			const directoryPath = ensureDirectoryPath(baseDirectory);
 			setLocalSelection(null);
 			if (directoryPath !== "/") {
@@ -647,31 +684,68 @@ function FilesViewContent({
 			});
 			return requestId;
 		},
-		[createRequest, resolveCreateDirectory, setLocalSelection],
+		[createRequest, resolveHereDirectory, setLocalSelection],
+	);
+
+	const defaultFolders = useStableDefaultFolders(context?.defaultFolders);
+	const setDefaultFolder = context?.setDefaultFolder;
+	/**
+	 * The rule, applied. Every file that comes into being without an explicit
+	 * directory goes through here: the menu rows, `⌘ .`, and the host's
+	 * new-document command. `directoryOverride` on `startCreateRequest` stays
+	 * the seam — a caller that knows the directory still wins.
+	 */
+	const startTypedCreate = useCallback(
+		(
+			fileType: FileTreeFileType,
+			options?: { readonly oneOffHere?: boolean },
+		): number | undefined =>
+			startCreateRequest(
+				"file",
+				fileType,
+				resolveCreateDirectoryForType({
+					hereDirectory: resolveHereDirectory(),
+					defaultFolder: defaultFolders[fileType],
+					existingDirectories: existingDirectoryPaths,
+					oneOffHere: options?.oneOffHere,
+				}),
+			),
+		[
+			defaultFolders,
+			existingDirectoryPaths,
+			resolveHereDirectory,
+			startCreateRequest,
+		],
 	);
 
 	const handleNewFile = useCallback(() => {
-		startCreateRequest("file", "generic");
-	}, [startCreateRequest]);
+		startTypedCreate("generic");
+	}, [startTypedCreate]);
 
 	const handleNewMarkdown = useCallback(() => {
-		startCreateRequest("file", "markdown");
-	}, [startCreateRequest]);
+		startTypedCreate("markdown");
+	}, [startTypedCreate]);
 
 	const handleNewCsv = useCallback(() => {
-		startCreateRequest("file", "csv");
-	}, [startCreateRequest]);
+		startTypedCreate("csv");
+	}, [startTypedCreate]);
 
 	const handleNewExcalidraw = useCallback(() => {
-		startCreateRequest("file", "excalidraw");
-	}, [startCreateRequest]);
+		startTypedCreate("excalidraw");
+	}, [startTypedCreate]);
+	const handleCreateHereOnce = useCallback(
+		(fileType: FileTreeFileType) => {
+			startTypedCreate(fileType, { oneOffHere: true });
+		},
+		[startTypedCreate],
+	);
 	const requestNewMarkdownDraft = useCallback((): Promise<void> => {
-		const requestId = startCreateRequest("file", "markdown");
+		const requestId = startTypedCreate("markdown");
 		if (requestId === undefined) return Promise.resolve();
 		return new Promise<void>((resolve, reject) => {
 			createReadyDeferredsRef.current.set(requestId, { resolve, reject });
 		});
-	}, [startCreateRequest]);
+	}, [startTypedCreate]);
 	const handleCreateReady = useCallback((request: FileTreeCreateRequest) => {
 		const deferred = createReadyDeferredsRef.current.get(request.id);
 		if (!deferred) return;
@@ -679,15 +753,16 @@ function FilesViewContent({
 		deferred.resolve();
 	}, []);
 	useEffect(() => {
+		const deferreds = createReadyDeferredsRef.current;
 		return () => {
-			for (const deferred of createReadyDeferredsRef.current.values()) {
+			for (const deferred of deferreds.values()) {
 				deferred.reject(
 					new Error(
 						"Files view unmounted before the new-file draft was ready.",
 					),
 				);
 			}
-			createReadyDeferredsRef.current.clear();
+			deferreds.clear();
 		};
 	}, []);
 
@@ -816,6 +891,43 @@ function FilesViewContent({
 			startCreateRequest(kind, "generic", directoryPath);
 		},
 		[startCreateRequest],
+	);
+
+	/**
+	 * The picker's `New folder…`, and its offer to put back a default folder
+	 * that has since been deleted. Unlike the tree's own New folder this one
+	 * names the folder in a field and commits immediately — the tree is not on
+	 * screen to type into while a menu is open over it.
+	 */
+	const createFolderAtPath = useCallback(
+		async (parentDirectory: string, name: string): Promise<string | null> => {
+			const path = deriveDirectoryPathFromStem(
+				name,
+				ensureDirectoryPath(parentDirectory),
+				existingDirectoryPaths,
+			);
+			if (!path) return null;
+			try {
+				await qb(lix)
+					.insertInto("lix_directory")
+					.values({ path: normalizeFilePath(path) } as any)
+					.execute();
+				setPendingDirectoryPaths((prev) => [...prev, path]);
+				return path;
+			} catch (error) {
+				console.error("Failed to create directory", error);
+				return null;
+			}
+		},
+		[existingDirectoryPaths, lix],
+	);
+	const hereDirectory = resolveHereDirectory();
+	const folderOptions = useMemo(
+		() =>
+			pickerFolders(existingDirectoryPaths, {
+				showHiddenFiles: context?.showHiddenFiles,
+			}),
+		[context?.showHiddenFiles, existingDirectoryPaths],
 	);
 
 	const moveLixTreeItem = useCallback(
@@ -1146,7 +1258,7 @@ function FilesViewContent({
 		if (!shouldHandleGlobalShortcuts) return;
 		const listener = (event: KeyboardEvent) => {
 			if (event.repeat) return;
-			const usesPrimaryModifier = isMacPlatform
+			const usesPrimaryModifier = isMac
 				? event.metaKey && !event.ctrlKey
 				: event.ctrlKey && !event.metaKey;
 			if (!usesPrimaryModifier || event.altKey) return;
@@ -1193,7 +1305,7 @@ function FilesViewContent({
 	}, [
 		handleCreateShortcut,
 		handleDeleteSelection,
-		isMacPlatform,
+		isMac,
 		selectedKind,
 		selectedPath,
 		selectedSource,
@@ -1372,6 +1484,13 @@ function FilesViewContent({
 										onNewFile={handleNewFile}
 										onNewFolder={handleCreateDirectory}
 										onNewMarkdown={handleNewMarkdown}
+										defaultFolders={defaultFolders}
+										folderOptions={folderOptions}
+										hereDirectory={hereDirectory}
+										existingDirectories={existingDirectoryPaths}
+										onSetDefaultFolder={setDefaultFolder}
+										onCreateHereOnce={handleCreateHereOnce}
+										onCreateFolder={createFolderAtPath}
 									>
 										<WideNewButton />
 									</UnifiedNewMenu>
@@ -1402,6 +1521,13 @@ function FilesViewContent({
 							onNewFile={handleNewFile}
 							onNewFolder={handleCreateDirectory}
 							onNewMarkdown={handleNewMarkdown}
+							defaultFolders={defaultFolders}
+							folderOptions={folderOptions}
+							hereDirectory={hereDirectory}
+							existingDirectories={existingDirectoryPaths}
+							onSetDefaultFolder={setDefaultFolder}
+							onCreateHereOnce={handleCreateHereOnce}
+							onCreateFolder={createFolderAtPath}
 						>
 							<CompactNewButton />
 						</UnifiedNewMenu>
@@ -1488,6 +1614,28 @@ const CompactNewButton = forwardRef<
 	);
 });
 
+type UnifiedNewMenuProps = {
+	readonly children: ReactNode;
+	readonly onNewCsv: () => void;
+	readonly onNewExcalidraw: () => void;
+	readonly onNewFile: () => void;
+	readonly onNewFolder: () => void;
+	readonly onNewMarkdown: () => void;
+	readonly defaultFolders: DefaultFolders;
+	readonly folderOptions: readonly PickerFolder[];
+	readonly hereDirectory: string;
+	readonly existingDirectories: ReadonlySet<string>;
+	readonly onSetDefaultFolder?: (
+		fileType: DefaultFolderFileType,
+		folder: string | null,
+	) => void;
+	readonly onCreateHereOnce: (fileType: DefaultFolderFileType) => void;
+	readonly onCreateFolder: (
+		parentDirectory: string,
+		name: string,
+	) => Promise<string | null>;
+};
+
 function UnifiedNewMenu({
 	children,
 	onNewCsv,
@@ -1495,35 +1643,55 @@ function UnifiedNewMenu({
 	onNewFile,
 	onNewFolder,
 	onNewMarkdown,
-}: {
-	readonly children: ReactNode;
-	readonly onNewCsv: () => void;
-	readonly onNewExcalidraw: () => void;
-	readonly onNewFile: () => void;
-	readonly onNewFolder: () => void;
-	readonly onNewMarkdown: () => void;
-}) {
+	defaultFolders,
+	folderOptions,
+	hereDirectory,
+	existingDirectories,
+	onSetDefaultFolder,
+	onCreateHereOnce,
+	onCreateFolder,
+}: UnifiedNewMenuProps) {
+	// A row's disclosure needs somewhere to persist the choice. Without a
+	// preference store the menu is exactly today's menu, slot and all.
+	const slotFor = (fileType: DefaultFolderFileType, dataAttr: string) =>
+		onSetDefaultFolder ? (
+			<DefaultFolderSlot
+				fileType={fileType}
+				dataAttr={dataAttr}
+				folders={folderOptions}
+				hereDirectory={hereDirectory}
+				existingDirectories={existingDirectories}
+				defaultFolder={defaultFolders[fileType]}
+				onPick={(folder) => onSetDefaultFolder(fileType, folder)}
+				onRemove={() => onSetDefaultFolder(fileType, null)}
+				onCreateHereOnce={() => onCreateHereOnce(fileType)}
+				onCreateFolder={onCreateFolder}
+			/>
+		) : null;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"
 				aria-label="Create"
-				className="w-56 p-1.5 text-xs"
+				className="w-72 p-1.5 text-xs"
 				sideOffset={3}
 			>
 				<NewMenuItem
 					dataAttr="file-new-file"
 					iconUrl={fileNewIconUrl}
 					label="New file"
-					shortcut="⌘ ."
+					shortcut={shortcutHint("⌘ .")}
 					onSelect={onNewFile}
+					trailing={slotFor("generic", "file-new-file")}
 				/>
+				{/* No default folder for New folder: a folder is not a file type,
+				    and "always nest one level in" is not a thing anyone wants. */}
 				<NewMenuItem
 					dataAttr="file-new-folder"
 					iconUrl={folderBlueIconUrl}
 					label="New folder"
-					shortcut="⇧⌘ ."
+					shortcut={shortcutHint("⇧⌘ .")}
 					onSelect={onNewFolder}
 				/>
 				<DropdownMenuSeparator className="my-1.5" />
@@ -1532,18 +1700,21 @@ function UnifiedNewMenu({
 					iconUrl={fileMdIconUrl}
 					label="New Markdown (.md)"
 					onSelect={onNewMarkdown}
+					trailing={slotFor("markdown", "file-new-markdown")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
 					label="New CSV (.csv)"
 					onSelect={onNewCsv}
+					trailing={slotFor("csv", "file-new-csv")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-excalidraw"
 					iconUrl={fileExcalidrawIconUrl}
 					label="New Drawing (.excalidraw)"
 					onSelect={onNewExcalidraw}
+					trailing={slotFor("excalidraw", "file-new-excalidraw")}
 				/>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -1556,33 +1727,94 @@ function NewMenuItem({
 	label,
 	shortcut,
 	onSelect,
+	trailing,
 }: {
 	readonly dataAttr: string;
 	readonly iconUrl: string;
 	readonly label: string;
 	readonly shortcut?: string;
 	readonly onSelect: () => void;
+	readonly trailing?: ReactNode;
 }) {
 	return (
-		<DropdownMenuItem
-			className="gap-2 py-1.75 text-xs"
-			data-attr={dataAttr}
-			onSelect={onSelect}
+		// The row's hover fill lives on the wrapper so the row stays lit while
+		// the pointer is on the control at its trailing edge — and so the
+		// control has one colour to sit on rather than two.
+		<div
+			className={`group/row relative rounded-sm${
+				trailing
+					? " hover:bg-[var(--color-bg-hover)] focus-within:bg-[var(--color-bg-hover)]"
+					: ""
+			}`}
+			data-attr={`${dataAttr}-row`}
 		>
-			<img
-				src={iconUrl}
-				alt=""
-				aria-hidden="true"
-				className="size-3.5 shrink-0"
-			/>
-			<span className="min-w-0 flex-1 truncate">{label}</span>
-			{shortcut ? (
-				<kbd className="ml-3 text-[10px] font-semibold text-[var(--color-icon-tertiary)]">
-					{shortcut}
-				</kbd>
+			<DropdownMenuItem
+				className="gap-2 py-1.75 text-xs"
+				data-attr={dataAttr}
+				onSelect={onSelect}
+				{...(trailing ? { onKeyDown: focusRowTrailingControl } : {})}
+			>
+				<img
+					src={iconUrl}
+					alt=""
+					aria-hidden="true"
+					className="size-3.5 shrink-0"
+				/>
+				<span className="min-w-0 flex-1 truncate">{label}</span>
+				{shortcut ? (
+					// The trailing slot is one slot. On a row that has a disclosure
+					// the shortcut hint is what sits in it at rest, and it fades as
+					// the disclosure fades in — neither is in flow beside the other,
+					// so the row's text never shifts.
+					<kbd
+						className={`ml-3 text-[10px] font-semibold text-[var(--color-icon-tertiary)]${
+							trailing
+								? " transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0"
+								: ""
+						}`}
+					>
+						{shortcut}
+					</kbd>
+				) : null}
+			</DropdownMenuItem>
+			{trailing ? (
+				// Out of flow on purpose. At rest the row is exactly today's row,
+				// and nothing in it moves or changes width when the control
+				// appears under the cursor or under the arrow keys.
+				<div
+					className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center rounded-r-sm pl-4 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100"
+					// The label's tail passes under the control rather than being
+					// squeezed by it: the row must not reflow when the control
+					// appears, so the control fades the row's own fill over it.
+					style={{
+						background:
+							"linear-gradient(to right, transparent 0, var(--color-bg-hover) 14px)",
+					}}
+				>
+					{trailing}
+				</div>
 			) : null}
-		</DropdownMenuItem>
+		</div>
 	);
+}
+
+/**
+ * The stored default folders, with an identity that changes only when they do.
+ * The preference value is re-read on every render and the rule is wired into
+ * callbacks and effects, which would otherwise be rebuilt on every render.
+ */
+function useStableDefaultFolders(
+	raw: AtelierJsonValue | undefined,
+): DefaultFolders {
+	const parsed = parseDefaultFolders(raw);
+	const key = defaultFoldersKey(parsed);
+	const stableRef = useRef(parsed);
+	const keyRef = useRef(key);
+	if (keyRef.current !== key) {
+		keyRef.current = key;
+		stableRef.current = parsed;
+	}
+	return stableRef.current;
 }
 
 function sameStringArray(
@@ -1661,6 +1893,20 @@ export const extension = createReactExtensionDefinition({
 					(atelier.diff.session !== null &&
 						"commitId" in atelier.diff.session.target),
 				showHiddenFiles: view.preferences.get("showHiddenFiles") === true,
+				// One default folder per file type per repository, kept in the
+				// same per-extension, per-workspace store as showHiddenFiles.
+				defaultFolders: view.preferences.get(DEFAULT_FOLDERS_PREFERENCE_KEY),
+				setDefaultFolder: (fileType, folder) =>
+					view.preferences.set(
+						DEFAULT_FOLDERS_PREFERENCE_KEY,
+						withDefaultFolder(
+							parseDefaultFolders(
+								view.preferences.get(DEFAULT_FOLDERS_PREFERENCE_KEY),
+							),
+							fileType,
+							folder,
+						),
+					),
 				watchEntries: atelier.filesView?.watchEntries,
 				resolveFileForInteraction: atelier.filesView?.resolveFileForInteraction,
 				registerNewFileDraftHandler: ({ handler }) =>
@@ -1691,17 +1937,6 @@ function isInteractiveEventTarget(event: Event): boolean {
 
 function isExternalFileDrag(dataTransfer: DataTransfer | null): boolean {
 	return dataTransfer?.types.includes("Files") ?? false;
-}
-
-function detectMacPlatform(): boolean {
-	if (typeof navigator === "undefined") return false;
-	const platformCandidates = [
-		((navigator as any).userAgentData?.platform as string | undefined) ?? null,
-		navigator.platform ?? null,
-		navigator.userAgent ?? null,
-	].filter(Boolean) as string[];
-	const combined = platformCandidates.join(" ").toLowerCase();
-	return /mac|iphone|ipad|ipod/.test(combined);
 }
 
 export function deriveMarkdownPathFromStem(
@@ -1861,11 +2096,6 @@ function initialInputValueForCreateRequest(
 	if (fileType === "csv") return ".csv";
 	if (fileType === "excalidraw") return ".excalidraw";
 	return "";
-}
-
-function ensureDirectoryPath(path: string): string {
-	if (path === "/") return "/";
-	return path.endsWith("/") ? path : `${path}/`;
 }
 
 function normalizeFilePath(path: string): string {

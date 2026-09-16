@@ -290,4 +290,31 @@ describe("EmbedFilePickerMenu", () => {
 		});
 		expect(editor.getText()).toBe("");
 	});
+
+	test("a chrome control that swallows mousedown still dismisses the picker", async () => {
+		const { editor } = await setup();
+		// The tab strip's "Add view" trigger stops the bubbling mousedown that
+		// a plain document listener waits for, which left the picker stranded
+		// on screen behind the menu that button opened, with no key left to
+		// dismiss it — its Escape lives on the search field it no longer owns.
+		const trigger = document.createElement("button");
+		trigger.addEventListener("mousedown", (event) => event.stopPropagation());
+		trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+		document.body.appendChild(trigger);
+
+		await act(async () => {
+			editor.commands.openEmbedFileMenu();
+		});
+		await screen.findByRole("dialog", { name: "Embed file picker" });
+
+		await act(async () => {
+			trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+		});
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("dialog", { name: "Embed file picker" }),
+			).toBeNull();
+		});
+		trigger.remove();
+	});
 });

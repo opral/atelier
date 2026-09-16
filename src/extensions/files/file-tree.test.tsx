@@ -642,7 +642,9 @@ describe("FileTree", () => {
 		expect(menu).toHaveTextContent("New folder");
 		expect(menu).toHaveTextContent("Rename");
 		expect(menu).toHaveTextContent("Delete");
-		expect(menu).toHaveTextContent("⌘⌫");
+		// jsdom is not a Mac, so the chord is spelled the way this platform
+		// writes it — and the way the handler actually listens for it.
+		expect(menu).toHaveTextContent("Ctrl+Backspace");
 		expect(
 			menu.querySelector("[data-attr='file-tree-menu-new-file-icon']"),
 		).not.toBeNull();
@@ -681,11 +683,14 @@ describe("FileTree", () => {
 		openTreeContextMenu(container, "README.md");
 		const menu = await getTreeContextMenu(container);
 		const deleteButton = getTreeContextMenuButton(menu, "Delete");
-		expect(deleteButton).toHaveTextContent("⌘⌫");
-		expect(deleteButton).toHaveAttribute("aria-keyshortcuts", "Meta+Backspace");
+		expect(deleteButton).toHaveTextContent("Ctrl+Backspace");
+		expect(deleteButton).toHaveAttribute(
+			"aria-keyshortcuts",
+			"Control+Backspace",
+		);
 		expect(deleteButton.querySelector("kbd")).toHaveAttribute(
 			"aria-label",
-			"Command Backspace",
+			"Control Backspace",
 		);
 		fireEvent.click(deleteButton);
 

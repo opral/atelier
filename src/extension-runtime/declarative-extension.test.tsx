@@ -1,5 +1,5 @@
 /* oxlint-disable react/jsx-no-constructed-context-values -- Test fixtures deliberately replace provider snapshots. */
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { describe, expect, test, vi } from "vitest";
@@ -20,6 +20,175 @@ const view = {
 } as ExtensionView;
 
 describe("declarative extension hydration", () => {
+	test("loads once for the initial observation and shows visible feedback until ready", async () => {
+		const lix = await openLix();
+		let finish!: (data: string) => void;
+		const load = vi.fn(
+			() =>
+				new Promise<string>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const emit = vi.fn();
+		const atelier = {
+			events: { emit },
+			lix,
+			branches: { activeId: await lix.activeBranchId() },
+		} as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			load,
+			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+		};
+		const mounted = render(
+			<AtelierRenderContext.Provider
+				value={{ connected: true, hydrated: true }}
+			>
+				<DeclarativeExtension
+					definition={definition}
+					atelier={atelier}
+					view={{ ...view, state: { filePath: "/private/document.csv" } }}
+				/>
+			</AtelierRenderContext.Provider>,
+		);
+		try {
+			expect(mounted.getByRole("status")).toHaveTextContent(
+				"Opening document…",
+			);
+			expect(mounted.getByText("Opening document…")).not.toHaveClass("sr-only");
+			await waitFor(() => expect(load).toHaveBeenCalled());
+			// Let the observer's initial frame settle while the document fetch is blocked.
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			});
+			expect(load).toHaveBeenCalledTimes(1);
+			expect(emit).not.toHaveBeenCalled();
+			await act(async () => finish("Loaded document"));
+			expect(await mounted.findByRole("heading")).toHaveTextContent(
+				"Loaded document",
+			);
+			expect(mounted.queryByRole("status")).toBeNull();
+			expect(emit).toHaveBeenCalledTimes(1);
+			expect(emit).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "document_loaded",
+					viewKind: "custom",
+					durationMs: expect.any(Number),
+				}),
+			);
+		} finally {
+			await act(async () => mounted.unmount());
+			await lix.close();
+		}
+	});
+
+	test("coalesces changes during a slow read and refreshes after it completes", async () => {
+		const lix = await openLix();
+		const completions: Array<(data: string) => void> = [];
+		const load = vi.fn(
+			() => new Promise<string>((resolve) => completions.push(resolve)),
+		);
+		const atelier = {
+			lix,
+			branches: { activeId: await lix.activeBranchId() },
+		} as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			load,
+			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+		};
+		const mounted = render(
+			<AtelierRenderContext.Provider
+				value={{ connected: true, hydrated: true }}
+			>
+				<DeclarativeExtension
+					definition={definition}
+					atelier={atelier}
+					view={view}
+				/>
+			</AtelierRenderContext.Provider>,
+		);
+		try {
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+			for (let i = 0; i < 3; i++) {
+				await lix.execute(
+					"INSERT INTO lix_file(path, content) VALUES ($1, $2)",
+					[`/change-${i}.txt`, new TextEncoder().encode("changed")],
+				);
+			}
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			});
+			expect(load).toHaveBeenCalledTimes(1);
+			await act(async () => completions[0]!("First result"));
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+			expect(mounted.getByRole("heading")).toHaveTextContent("First result");
+			await act(async () => completions[1]!("Current result"));
+			expect(mounted.getByRole("heading")).toHaveTextContent("Current result");
+		} finally {
+			await act(async () => mounted.unmount());
+			await lix.close();
+		}
+	});
+
+	test("does not report a loaded document while its renderer is suspended", async () => {
+		let ready = false;
+		let resolve!: () => void;
+		const gate = new Promise<void>((done) => {
+			resolve = done;
+		});
+		const emit = vi.fn();
+		const atelier = {
+			lix: {},
+			branches: { activeId: "branch" },
+			events: { emit },
+		} as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			Component: () => {
+				if (!ready) throw gate;
+				return <h1>Ready</h1>;
+			},
+		};
+		const initialState = {
+			views: { view1: { extensionId: "custom", data: "Prepared" } },
+		} as unknown as AtelierInitialState;
+		const mounted = render(
+			<AtelierRenderContext.Provider
+				value={{ initialState, connected: true, hydrated: true }}
+			>
+				<DeclarativeExtension
+					atelier={atelier}
+					definition={definition}
+					view={{ ...view, state: { filePath: "/file.csv" } }}
+				/>
+			</AtelierRenderContext.Provider>,
+		);
+		try {
+			expect(mounted.getByRole("status")).toHaveTextContent(
+				"Opening document…",
+			);
+			expect(emit).not.toHaveBeenCalled();
+			await act(async () => {
+				ready = true;
+				resolve();
+			});
+			expect(mounted.getByRole("heading")).toHaveTextContent("Ready");
+			expect(emit).toHaveBeenCalledTimes(1);
+		} finally {
+			mounted.unmount();
+		}
+	});
+
 	test("surfaces refresh errors while preserving prepared content", async () => {
 		const lix = await openLix();
 		const atelier = {

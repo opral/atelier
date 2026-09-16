@@ -7,6 +7,18 @@ import {
 	type SlashCommandState,
 } from "../editor/extensions/slash-commands";
 import { BLOCK_COMMANDS, type BlockCommand } from "../editor/block-commands";
+import { useMenuDismissal } from "./menu-dismissal";
+import {
+	clampLeft,
+	clampToClipRect,
+	getClipRect,
+	isAnchorClipped,
+} from "./clip-rect";
+
+/** Tallest the palette gets before its list starts scrolling. */
+const MENU_HEIGHT = 420;
+const MENU_WIDTH = 304;
+const MENU_GAP = 8;
 
 const INACTIVE_SLASH_STATE: SlashCommandState = {
 	active: false,
@@ -69,7 +81,10 @@ export function SlashCommandMenu() {
 		top: number | null;
 		bottom: number | null;
 		left: number;
+		maxHeight: number;
 		placement: "above" | "below";
+		/** The caret has scrolled out of the editor's viewport. */
+		hidden: boolean;
 	} | null>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
@@ -113,46 +128,29 @@ export function SlashCommandMenu() {
 			const { view } = editor;
 			const coords = view.coordsAtPos(range.from);
 			const editorRect = view.dom.getBoundingClientRect();
-
-			// Keep the command palette comfortably readable without overwhelming
-			// the writing surface.
-			const menuHeight = 420;
-			const menuWidth = 304;
-			const gap = 8;
-
-			const viewportHeight = window.innerHeight;
-			const viewportWidth = window.innerWidth;
-
-			// Check if there's enough space below
-			const spaceBelow = viewportHeight - coords.bottom - gap;
-			const spaceAbove = coords.top - gap;
-
-			let top: number;
-			let placement: "above" | "below";
-
-			if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
-				// Position below
-				top = coords.bottom + gap;
-				placement = "below";
-			} else {
-				// Position above
-				// Anchored by its bottom edge, the menu hugs the caret line
-				// whatever height the filtered list ends up with.
-				top = coords.top - gap;
-				placement = "above";
-			}
-
-			// Ensure left doesn't go off-screen
-			let left = Math.max(coords.left, editorRect.left);
-			if (left + menuWidth > viewportWidth) {
-				left = viewportWidth - menuWidth - gap;
-			}
+			// The palette belongs to the editor's scroll viewport, not to the
+			// window: outside it are the formatting toolbar and the tab strip,
+			// whose buttons a 420px panel would cover and hit-test above.
+			const clip = getClipRect(view.dom);
+			const placed = clampToClipRect({
+				coords,
+				clip,
+				preferredHeight: MENU_HEIGHT,
+				gap: MENU_GAP,
+			});
 
 			setPosition({
-				top: placement === "below" ? top : null,
-				bottom: placement === "above" ? viewportHeight - top : null,
-				left,
-				placement,
+				top: placed.top,
+				bottom: placed.bottom,
+				left: clampLeft({
+					left: Math.max(coords.left, editorRect.left),
+					width: MENU_WIDTH,
+					clip,
+					gap: MENU_GAP,
+				}),
+				maxHeight: placed.maxHeight,
+				placement: placed.placement,
+				hidden: isAnchorClipped(coords, clip),
 			});
 		};
 
@@ -187,9 +185,14 @@ export function SlashCommandMenu() {
 		[executeCommand],
 	);
 
+	// A menu with no pixels inside the editor's viewport is not a menu the
+	// user can read, so it stops answering the keyboard too. Scrolling the
+	// caret back into view brings it and its keys back together.
+	const suppressed = !position || position.hidden;
+
 	// Handle keyboard navigation
 	useEffect(() => {
-		if (!slashState.active || !editor) return;
+		if (!slashState.active || !editor || suppressed) return;
 
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (filteredCommands.length === 0) return;
@@ -236,6 +239,7 @@ export function SlashCommandMenu() {
 		slashState.active,
 		slashState.query,
 		editor,
+		suppressed,
 		filteredCommands,
 		selectedIndex,
 		executeCommand,
@@ -252,21 +256,25 @@ export function SlashCommandMenu() {
 		}
 	}, [selectedIndex]);
 
-	// Close menu when clicking outside
-	useEffect(() => {
-		if (!slashState.active || !editor) return;
+	// Close the palette when the user goes somewhere else. The caret keeps it
+	// alive, so a click in the prose does not end it — but a click on a video
+	// player or a footnote's way back is a click off the caret, and does.
+	useMenuDismissal({
+		active: slashState.active,
+		editor,
+		menuRef,
+		editorKeepsThePointer: true,
+		close: () => {
+			(editor?.commands as any)?.closeSlashMenu?.();
+		},
+	});
 
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				(editor.commands as any).closeSlashMenu?.();
-			}
-		};
-
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, [slashState.active, editor]);
-
-	if (!slashState.active || !position || filteredCommands.length === 0) {
+	if (
+		!slashState.active ||
+		!position ||
+		suppressed ||
+		filteredCommands.length === 0
+	) {
 		return null;
 	}
 
@@ -286,7 +294,9 @@ export function SlashCommandMenu() {
 				top: position.top ?? undefined,
 				bottom: position.bottom ?? undefined,
 				left: position.left,
+				maxHeight: position.maxHeight,
 			}}
+			data-placement={position.placement}
 			role="listbox"
 			aria-label="Slash commands"
 			aria-activedescendant={selectedOptionId}

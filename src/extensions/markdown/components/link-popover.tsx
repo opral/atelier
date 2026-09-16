@@ -1,5 +1,6 @@
 import {
 	useCallback,
+	useEffect,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -11,6 +12,7 @@ import { Check, Link as LinkIcon, Unlink, X } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import { normalizeUrl } from "../editor/normalize-url";
 import { setLinkTargetRange } from "../editor/extensions/link-target-decoration";
+import { getClipRect, isAnchorClipped } from "./clip-rect";
 import { ToolbarIconButton } from "./toolbar-icon-button";
 
 type SelectionAnchor = {
@@ -21,7 +23,10 @@ type SelectionAnchor = {
 /**
  * A Floating UI virtual element tracking the editor selection, so popups
  * open next to the text they act on rather than next to a toolbar button.
- * The rect spans the first to the last line of the selection.
+ * The rect spans the first to the last line of the selection, clamped to the
+ * editor's scroll viewport: the selection can scroll past the top of that
+ * viewport, but the popup that edits it must not follow it out over the
+ * formatting toolbar and the tab strip.
  */
 export function createSelectionAnchor(editor: Editor): SelectionAnchor {
 	return {
@@ -31,13 +36,26 @@ export function createSelectionAnchor(editor: Editor): SelectionAnchor {
 			const { from, to } = state.selection;
 			const start = view.coordsAtPos(from);
 			const end = to === from ? start : view.coordsAtPos(to);
-			const left = Math.min(start.left, end.left);
-			const top = Math.min(start.top, end.top);
-			const right = Math.max(start.right, end.right, left);
-			const bottom = Math.max(start.bottom, end.bottom, top);
+			const clip = getClipRect(view.dom);
+			const left = clamp(Math.min(start.left, end.left), clip.left, clip.right);
+			const top = clamp(Math.min(start.top, end.top), clip.top, clip.bottom);
+			const right = clamp(
+				Math.max(start.right, end.right, left),
+				left,
+				clip.right,
+			);
+			const bottom = clamp(
+				Math.max(start.bottom, end.bottom, top),
+				top,
+				clip.bottom,
+			);
 			return new DOMRect(left, top, right - left, bottom - top);
 		},
 	};
+}
+
+function clamp(value: number, low: number, high: number): number {
+	return Math.min(Math.max(value, low), Math.max(low, high));
 }
 
 type LinkPopoverProps = {
@@ -91,10 +109,40 @@ export function LinkPopover({
 
 	const close = useCallback(() => {
 		// Closing without applying must not strand focus on the popover: the
-		// caret and selection go back where they were.
-		if (editor && !editor.isDestroyed) editor.chain().focus().run();
+		// caret and selection go back where they were. Only those — focusing
+		// the editor scrolls the caret into view by default, and this is the
+		// close a wheel gesture triggers, so the reader's own scroll was being
+		// rewound to the text they had just scrolled away from.
+		if (editor && !editor.isDestroyed) {
+			editor.chain().focus(null, { scrollIntoView: false }).run();
+		}
 		onOpenChange(false);
 	}, [editor, onOpenChange]);
+
+	// Scrolling the text being linked out of the editor's viewport ends the
+	// edit. The URL field holds keyboard focus while it is open, so a popover
+	// that merely went out of sight left the user typing into a field they
+	// could not see and applying a link to text they could not see either.
+	useEffect(() => {
+		if (!open || !editor || editor.isDestroyed) return;
+		const closeWhenAnchorLeaves = () => {
+			if (editor.isDestroyed) return;
+			const { view, state } = editor;
+			let coords: { top: number; bottom: number };
+			try {
+				coords = view.coordsAtPos(state.selection.from);
+			} catch {
+				return;
+			}
+			if (isAnchorClipped(coords, getClipRect(view.dom))) close();
+		};
+		window.addEventListener("scroll", closeWhenAnchorLeaves, true);
+		window.addEventListener("resize", closeWhenAnchorLeaves);
+		return () => {
+			window.removeEventListener("scroll", closeWhenAnchorLeaves, true);
+			window.removeEventListener("resize", closeWhenAnchorLeaves);
+		};
+	}, [close, editor, open]);
 
 	const handleOpenChange = useCallback(
 		(next: boolean) => {

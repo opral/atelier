@@ -21,6 +21,13 @@ import { qb } from "@/lib/lix-kysely";
 import { fileIconUrl } from "@/extensions/files/file-icons";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { useDocumentLinks } from "../editor/document-links-context";
+import {
+	clampLeft,
+	clampToClipRect,
+	getClipRect,
+	isAnchorClipped,
+} from "./clip-rect";
+import { useMenuDismissal } from "./menu-dismissal";
 
 const INACTIVE_MENTION_STATE: MentionCommandState = {
 	active: false,
@@ -158,6 +165,8 @@ export function MentionMenu({
 		top: number | null;
 		bottom: number | null;
 		left: number;
+		maxHeight: number;
+		hidden: boolean;
 	} | null>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
@@ -173,20 +182,29 @@ export function MentionMenu({
 				Math.min(range.from, editor.state.doc.content.size),
 			);
 			const editorRect = view.dom.getBoundingClientRect();
-			const menuHeight = 420;
 			const menuWidth = 304;
 			const gap = 8;
-			const spaceBelow = window.innerHeight - coords.bottom - gap;
-			const spaceAbove = coords.top - gap;
-			const below = spaceBelow >= menuHeight || spaceBelow >= spaceAbove;
-			let left = Math.max(coords.left, editorRect.left);
-			if (left + menuWidth > window.innerWidth) {
-				left = window.innerWidth - menuWidth - gap;
-			}
+			// The editor's scroll viewport, not the window: above it sit the
+			// formatting toolbar and the tab strip, which this panel would
+			// otherwise cover and take the clicks for.
+			const clip = getClipRect(view.dom);
+			const placed = clampToClipRect({
+				coords,
+				clip,
+				preferredHeight: 420,
+				gap,
+			});
 			setPosition({
-				top: below ? coords.bottom + gap : null,
-				bottom: below ? null : window.innerHeight - (coords.top - gap),
-				left,
+				top: placed.top,
+				bottom: placed.bottom,
+				left: clampLeft({
+					left: Math.max(coords.left, editorRect.left),
+					width: menuWidth,
+					clip,
+					gap,
+				}),
+				maxHeight: placed.maxHeight,
+				hidden: isAnchorClipped(coords, clip),
 			});
 		};
 		updatePosition();
@@ -198,18 +216,19 @@ export function MentionMenu({
 		};
 	}, [mentionState.active, mentionState.range, editor]);
 
-	useEffect(() => {
-		if (!mentionState.active || !editor) return;
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				editor.commands.closeMentionMenu();
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, [mentionState.active, editor]);
+	useMenuDismissal({
+		active: mentionState.active,
+		editor,
+		menuRef,
+		close: () => editor?.commands.closeMentionMenu(),
+	});
 
-	if (!mentionState.active || !position || !editor) return null;
+	// Scrolled out of the editor's viewport it is neither readable nor
+	// clickable, and its list — which owns the arrow keys and Enter — goes
+	// with it rather than running blind.
+	if (!mentionState.active || !position || position.hidden || !editor) {
+		return null;
+	}
 
 	const portalTarget =
 		editor.view.dom.closest(".atelier-root") ?? document.body;
@@ -223,6 +242,7 @@ export function MentionMenu({
 				top: position.top ?? undefined,
 				bottom: position.bottom ?? undefined,
 				left: position.left,
+				maxHeight: position.maxHeight,
 			}}
 			role="listbox"
 			aria-label="Mention a file"
