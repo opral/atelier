@@ -229,8 +229,9 @@ export function FilesView({ context }: FilesViewProps) {
 		viewInstance,
 	]);
 	useEffect(() => {
+		const pendingRequests = pendingDraftRequestsRef.current;
 		return () => {
-			for (const request of pendingDraftRequestsRef.current.splice(0)) {
+			for (const request of pendingRequests.splice(0)) {
 				request.reject(
 					new Error(
 						"Files view unmounted before the new-file draft could start.",
@@ -752,15 +753,16 @@ function FilesViewContent({
 		deferred.resolve();
 	}, []);
 	useEffect(() => {
+		const deferreds = createReadyDeferredsRef.current;
 		return () => {
-			for (const deferred of createReadyDeferredsRef.current.values()) {
+			for (const deferred of deferreds.values()) {
 				deferred.reject(
 					new Error(
 						"Files view unmounted before the new-file draft was ready.",
 					),
 				);
 			}
-			createReadyDeferredsRef.current.clear();
+			deferreds.clear();
 		};
 	}, []);
 

@@ -71,8 +71,11 @@ export function CsvViewMenu({
 		close();
 	};
 	return (
+		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Handles bubbled Escape from child controls.
 		<div
 			className="csv-view-switcher"
+			role="group"
+			aria-label="Table views"
 			onKeyDown={(event) => {
 				// Escape backs out of a form the way its Cancel button does; the
 				// popover itself closes on the next Escape.

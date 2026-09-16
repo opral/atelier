@@ -329,11 +329,6 @@ function TipTapEditorLoadedContent({
 	const [persistenceError, setPersistenceError] = useState<Error | null>(null);
 	const [imagePasteStatus, setImagePasteStatus] =
 		useState<MarkdownImagePasteStatus | null>(null);
-	const notifyImagePasteStatus = useEffectEvent(
-		(status: MarkdownImagePasteStatus) => {
-			setImagePasteStatus(status);
-		},
-	);
 	useLayoutEffect(() => {
 		onPersistRef.current = onPersist;
 		openWorkspaceFileRef.current = openWorkspaceFile;
@@ -360,7 +355,7 @@ function TipTapEditorLoadedContent({
 			openWorkspaceFile: stableOpenWorkspaceFile,
 			documentLinks: stableDocumentLinks,
 			additionalExtensions,
-			onImagePasteStatus: notifyImagePasteStatus,
+			onImagePasteStatus: setImagePasteStatus,
 			onPersistenceError: setPersistenceError,
 			onPersist: (args) => {
 				setPersistenceAcknowledgment((revision) => revision + 1);
@@ -458,7 +453,7 @@ function TipTapEditorLoadedContent({
 				view: editor.view,
 				event: event.nativeEvent,
 				storeImage: storeSurfaceImage,
-				onImagePasteStatus: notifyImagePasteStatus,
+				onImagePasteStatus: setImagePasteStatus,
 			});
 		},
 		[editor, storeSurfaceImage],

@@ -24,6 +24,8 @@ function render(
 		initialState: prepared,
 	};
 	return renderToStaticMarkup(
+		// Static server rendering has no provider rerenders.
+		// oxlint-disable-next-line react/jsx-no-constructed-context-values
 		<AtelierRenderContext.Provider value={value}>
 			<RepositoryMarkdownContent
 				content={content}

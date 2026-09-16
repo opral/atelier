@@ -2067,8 +2067,11 @@ function CsvTable({
 
 	return (
 		<>
+			{/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Handles bubbled Escape from child controls. */}
 			<div
 				className="csv-toolbar"
+				role="group"
+				aria-label="Table controls"
 				onPointerDown={deselectOnBlankPress}
 				onKeyDown={(event) => {
 					if (

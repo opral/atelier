@@ -277,6 +277,10 @@ function EmbedFilePickerContent({
 	const [uploadError, setUploadError] = useState<string | null>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const searchInputRef = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		searchInputRef.current?.focus();
+	}, []);
 
 	const files = useMemo(
 		() =>
@@ -408,7 +412,7 @@ function EmbedFilePickerContent({
 					aria-activedescendant={`markdown-embed-file-option-${clampedIndex}`}
 					aria-controls="markdown-embed-file-options"
 					aria-label="Search repository files"
-					autoFocus
+					ref={searchInputRef}
 					onChange={(event) => {
 						setQuery(event.target.value);
 						setSelectedIndex(0);
@@ -447,6 +451,12 @@ function EmbedFilePickerContent({
 								onMouseDown={(event) => event.preventDefault()}
 								onMouseEnter={() => setSelectedIndex(index)}
 								onClick={() => insertItem(file)}
+								onKeyDown={(event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										insertItem(file);
+									}
+								}}
 								tabIndex={-1}
 							>
 								<span
