@@ -23,7 +23,7 @@ export function drawCsvSearchHighlights(
 	y: number,
 	maxWidth: number,
 	height = 18,
-	color = "#fef08a",
+	color = "#fef08a", // token-literal: canvas fallback for --at-highlight
 ) {
 	if (!query || maxWidth <= 0) return;
 	const matches = csvSearchMatches(text, query);

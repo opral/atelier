@@ -26,11 +26,11 @@ export const DIFF_GLYPH_KNOCKOUT_PATHS = {
 export function diffGlyphMaskDataUri(
 	kind: "added" | "modified" | "removed" | "moved",
 ): string {
-	const knockout = `<path d="${DIFF_GLYPH_KNOCKOUT_PATHS[kind]}" stroke="#000" stroke-width="${DIFF_GLYPH_STROKE}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+	const knockout = `<path d="${DIFF_GLYPH_KNOCKOUT_PATHS[kind]}" stroke="#000" stroke-width="${DIFF_GLYPH_STROKE}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`; // token-literal: mask luminance, not a colour
 	const svg =
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${DIFF_GLYPH_VIEWBOX}">` +
-		`<mask id="k"><circle cx="6" cy="6" r="${DIFF_GLYPH_RADIUS}" fill="#fff"/>${knockout}</mask>` +
-		`<rect width="12" height="12" fill="#000" mask="url(#k)"/>` +
+		`<mask id="k"><circle cx="6" cy="6" r="${DIFF_GLYPH_RADIUS}" fill="#fff"/>${knockout}</mask>` + // token-literal: mask luminance, not a colour
+		`<rect width="12" height="12" fill="#000" mask="url(#k)"/>` + // token-literal: mask luminance, not a colour
 		`</svg>`;
 	return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }

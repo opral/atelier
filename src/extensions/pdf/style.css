@@ -37,7 +37,7 @@
 		height: auto;
 		margin: 0 auto;
 		background: white;
-		box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 28%);
+		box-shadow: var(--at-shadow-lg);
 	}
 
 	@media (max-width: 767px) {
@@ -58,7 +58,7 @@
 		background: color-mix(in srgb, var(--at-panel) 94%, transparent);
 		border: 1px solid var(--at-border);
 		border-radius: 0.5rem;
-		box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 20%);
+		box-shadow: var(--at-shadow-md);
 		transform: translateX(-50%);
 	}
 

@@ -418,7 +418,8 @@
 			max-width: 100%;
 			z-index: 5;
 			background: var(--at-panel);
-			box-shadow: 4px 0 16px #00000014;
+			box-shadow: 4px 0 16px
+				color-mix(in srgb, var(--at-overlay) 8%, transparent);
 			border-right: 1px solid var(--at-border);
 		}
 		.atelier-sql-schema-close {

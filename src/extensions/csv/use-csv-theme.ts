@@ -4,21 +4,21 @@ const FALLBACK_THEME = {
 	baseFontStyle: "13px",
 	headerFontStyle: "13px",
 	headerIconSize: 16,
-	textDark: "#44403c",
-	textHeader: "#78716c",
+	textDark: "#44403c", // token-literal: canvas fallback for --at-fg-muted
+	textHeader: "#78716c", // token-literal: canvas fallback for --at-fg-subtle
 	fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-	accentColor: "rgb(194, 65, 12)",
-	accentFg: "rgb(255, 255, 255)",
-	accentLight: "rgb(251, 239, 228)",
-	bgHeader: "rgb(255, 255, 255)",
-	bgHeaderHasFocus: "rgb(255, 255, 255)",
-	bgHeaderHovered: "rgb(255, 255, 255)",
-	borderColor: "rgb(244, 241, 236)",
-	headerBottomBorderColor: "rgb(244, 241, 236)",
-	horizontalBorderColor: "rgb(244, 241, 236)",
-	linkColor: "rgb(194, 65, 12)",
-	resizeIndicatorColor: "rgb(234, 88, 12)",
-	textHeaderSelected: "rgb(124, 45, 18)",
+	accentColor: "rgb(194, 65, 12)", // token-literal: canvas fallback for --at-accent
+	accentFg: "rgb(255, 255, 255)", // token-literal: canvas fallback for --at-accent-on
+	accentLight: "rgb(251, 239, 228)", // token-literal: canvas fallback for --at-accent-subtle
+	bgHeader: "rgb(255, 255, 255)", // token-literal: canvas fallback for --at-panel
+	bgHeaderHasFocus: "rgb(255, 255, 255)", // token-literal: canvas fallback for --at-panel
+	bgHeaderHovered: "rgb(245, 242, 237)", // token-literal: canvas fallback for --at-bg-hover
+	borderColor: "rgb(244, 241, 236)", // token-literal: canvas fallback for --at-border-subtle
+	headerBottomBorderColor: "rgb(244, 241, 236)", // token-literal: canvas fallback for --at-border-subtle
+	horizontalBorderColor: "rgb(244, 241, 236)", // token-literal: canvas fallback for --at-border-subtle
+	linkColor: "rgb(234, 88, 12)", // token-literal: canvas fallback for --at-link
+	resizeIndicatorColor: "rgb(234, 88, 12)", // token-literal: canvas fallback for --at-link
+	textHeaderSelected: "rgb(194, 65, 12)", // token-literal: canvas fallback for --at-accent
 };
 const colorTokens = {
 	textDark: "--at-fg-muted",
@@ -46,19 +46,19 @@ const colorTokens = {
 const DEFAULT_APPEARANCE = {
 	theme: {
 		...FALLBACK_THEME,
-		textMedium: "#78716c",
-		textLight: "#a8a29e",
-		bgCell: "#fff",
-		bgCellMedium: "#fafaf9",
-		bgIconHeader: "#fff",
-		fgIconHeader: "#78716c",
+		textMedium: "#78716c", // token-literal: canvas fallback for --at-fg-subtle
+		textLight: "#a8a29e", // token-literal: canvas fallback for --at-fg-faint
+		bgCell: "#fff", // token-literal: canvas fallback for --at-panel
+		bgCellMedium: "#fafaf9", // token-literal: canvas fallback for --at-bg-subtle
+		bgIconHeader: "#fff", // token-literal: canvas fallback for --at-panel
+		fgIconHeader: "#78716c", // token-literal: canvas fallback for --at-fg-subtle
 	},
 	palette: CSV_COLOR_FALLBACKS as CsvPalette,
-	searchColor: "#fef08a",
+	searchColor: "#fef08a", // token-literal: canvas fallback for --at-highlight
 	/** The title column's ink: primary text, the rest of the grid secondary. */
-	titleColor: "#1c1917",
+	titleColor: "#1c1917", // token-literal: canvas fallback for --at-fg
 	/** The hovered row's ground. */
-	hoverColor: "#f5f2ed",
+	hoverColor: "#f5f2ed", // token-literal: canvas fallback for --at-bg-hover
 };
 
 /** Canvas cannot consume var(). Resolve the owning table's inherited Atelier tokens. */

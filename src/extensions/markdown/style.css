@@ -8,7 +8,7 @@
 		border-radius: 10px;
 		background: var(--at-panel);
 		color: var(--at-fg-muted);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+		box-shadow: var(--at-shadow-md);
 		font-size: 12px;
 		line-height: 1.5;
 		pointer-events: auto;
@@ -1414,7 +1414,7 @@
 		) {
 		box-shadow:
 			0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
-			0 12px 30px rgba(28, 25, 23, 0.09);
+			var(--at-shadow-lg);
 	}
 
 	.markdown-view
@@ -1423,7 +1423,7 @@
 		> .markdown-image-block-content {
 		box-shadow:
 			0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
-			0 12px 30px rgba(28, 25, 23, 0.09);
+			var(--at-shadow-lg);
 	}
 
 	.markdown-view
@@ -1661,7 +1661,7 @@
 		height: auto;
 		margin: 0 auto;
 		background: white;
-		box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 28%);
+		box-shadow: var(--at-shadow-lg);
 	}
 
 	.markdown-view .ProseMirror .atelier-pdf-sr-page-text {
@@ -1688,7 +1688,7 @@
 		background: color-mix(in srgb, var(--at-panel) 94%, transparent);
 		border: 1px solid var(--at-border);
 		border-radius: 0.5rem;
-		box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 20%);
+		box-shadow: var(--at-shadow-md);
 		transform: translateX(-50%);
 	}
 
@@ -1837,7 +1837,7 @@
 		> .markdown-video-frame {
 		box-shadow:
 			0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
-			0 12px 30px rgba(28, 25, 23, 0.09);
+			var(--at-shadow-lg);
 	}
 
 	.markdown-view
@@ -2117,7 +2117,8 @@
 		border: 1.5px solid var(--at-fg-subtle);
 		border-radius: var(--markdown-radius);
 		background-color: var(--at-panel);
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+		box-shadow: inset 0 1px 0
+			color-mix(in srgb, var(--at-panel) 65%, transparent);
 		cursor: pointer;
 		transition:
 			background-color 120ms ease,
@@ -2148,7 +2149,7 @@
 		background-position: center;
 		background-repeat: no-repeat;
 		background-size: 0.75rem 0.75rem;
-		box-shadow: 0 1px 2px rgba(194, 65, 12, 0.18);
+		box-shadow: 0 1px 2px color-mix(in srgb, var(--at-accent) 18%, transparent);
 	}
 
 	.markdown-view .ProseMirror li[data-task] > div {
@@ -2181,10 +2182,7 @@
 			BlinkMacSystemFont,
 			"Segoe UI",
 			sans-serif;
-		box-shadow:
-			0 18px 50px rgba(28, 25, 23, 0.14),
-			0 5px 16px rgba(28, 25, 23, 0.08),
-			0 1px 2px rgba(28, 25, 23, 0.08);
+		box-shadow: var(--at-shadow-lg);
 		backdrop-filter: blur(16px);
 	}
 
@@ -2581,10 +2579,7 @@
 			BlinkMacSystemFont,
 			"Segoe UI",
 			sans-serif;
-		box-shadow:
-			0 18px 50px rgba(28, 25, 23, 0.14),
-			0 5px 16px rgba(28, 25, 23, 0.08),
-			0 1px 2px rgba(28, 25, 23, 0.08);
+		box-shadow: var(--at-shadow-lg);
 		/* Fades in on appearance and out from where it stood on dismissal. */
 		animation: markdown-selection-toolbar-in 140ms ease;
 		transition:
@@ -2689,7 +2684,7 @@
 	border-radius: 0.5rem;
 	background: var(--at-overlay);
 	box-shadow:
-		0 6px 16px rgba(28, 25, 23, 0.35),
+		var(--at-shadow-overlay),
 		0 1px 0 var(--at-overlay-hairline) inset;
 	font-size: 0.66rem;
 	font-weight: 620;

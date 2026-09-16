@@ -84,11 +84,11 @@
 	inset: 0;
 	border: 0;
 	box-shadow:
-		inset 8px 0 26px rgba(251, 146, 60, 0.24),
-		inset -8px 0 28px rgba(244, 92, 67, 0.2),
-		inset 0 8px 28px rgba(251, 191, 36, 0.18),
-		inset 0 -8px 30px rgba(234, 88, 12, 0.2),
-		inset 0 0 68px rgba(249, 115, 22, 0.1);
+		inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
+		inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
+		inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
+		inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+		inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
 	content: "";
 	pointer-events: none;
 	animation:
@@ -97,34 +97,34 @@
 }
 
 .atelier-root [data-review-mode="true"] .atelier-panel-group {
-	box-shadow: 0 0 38px rgba(249, 115, 22, 0.12);
+	box-shadow: 0 0 38px color-mix(in srgb, var(--at-accent) 12%, transparent);
 }
 
 @keyframes atelier-review-edge-glow {
 	0%,
 	100% {
 		box-shadow:
-			inset 8px 0 26px rgba(251, 146, 60, 0.24),
-			inset -8px 0 28px rgba(244, 92, 67, 0.2),
-			inset 0 8px 28px rgba(251, 191, 36, 0.18),
-			inset 0 -8px 30px rgba(234, 88, 12, 0.2),
-			inset 0 0 68px rgba(249, 115, 22, 0.1);
+			inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
+			inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
+			inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
+			inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+			inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
 	}
 	33% {
 		box-shadow:
-			inset 8px 0 30px rgba(245, 112, 58, 0.2),
-			inset -8px 0 24px rgba(251, 146, 60, 0.22),
-			inset 0 8px 30px rgba(234, 88, 12, 0.2),
-			inset 0 -8px 26px rgba(251, 191, 36, 0.17),
-			inset 0 0 72px rgba(244, 92, 67, 0.09);
+			inset 8px 0 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+			inset -8px 0 24px color-mix(in srgb, var(--at-accent) 22%, transparent),
+			inset 0 8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+			inset 0 -8px 26px color-mix(in srgb, var(--at-accent) 17%, transparent),
+			inset 0 0 72px color-mix(in srgb, var(--at-accent) 9%, transparent);
 	}
 	66% {
 		box-shadow:
-			inset 8px 0 24px rgba(251, 191, 36, 0.18),
-			inset -8px 0 30px rgba(234, 88, 12, 0.22),
-			inset 0 8px 26px rgba(251, 146, 60, 0.22),
-			inset 0 -8px 30px rgba(245, 112, 58, 0.18),
-			inset 0 0 70px rgba(249, 115, 22, 0.1);
+			inset 8px 0 24px color-mix(in srgb, var(--at-accent) 18%, transparent),
+			inset -8px 0 30px color-mix(in srgb, var(--at-accent) 22%, transparent),
+			inset 0 8px 26px color-mix(in srgb, var(--at-accent) 22%, transparent),
+			inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 18%, transparent),
+			inset 0 0 70px color-mix(in srgb, var(--at-accent) 10%, transparent);
 	}
 }
 
