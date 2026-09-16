@@ -80,6 +80,17 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
 - Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else.
   A host rebrands by redeclaring tokens on `:root`; it never overrides
   component classes.
+- Cascade layers are the override contract: `src/index.css` orders
+  `theme, base, components, atelier, utilities`, and every Atelier stylesheet
+  (`theme.css`, `document.css`, each extension's `style.css`, the runtime's
+  sheets) lives in `@layer atelier` — imported with `layer(atelier)` or wrapped
+  in one `@layer atelier { … }` block that starts with
+  `@import "…/shell/layers.css"`, so the order holds whichever sheet a
+  bundler emits first. A host's unlayered CSS and a Tailwind utility on the
+  element beat Atelier's rules by design; extension authors do not declare
+  layers of their own and do not use `!important` (the only one left fights
+  an inline style). The static render (`src/render/styles.ts`) stays
+  unlayered: it lands in someone else's page.
 
 `src/shell/document.css` is the one document stylesheet: how a Markdown
 document looks, scoped to `.atelier-document`, which the editor's ProseMirror

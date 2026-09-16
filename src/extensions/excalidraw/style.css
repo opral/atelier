@@ -1,71 +1,75 @@
-.atelier-excalidraw-view {
-	position: relative;
-	display: flex;
-	min-height: 0;
-	flex: 1;
-	flex-direction: column;
-	height: 100%;
-	background: var(--at-panel);
-	isolation: isolate;
-}
+@import "../../shell/layers.css";
 
-.atelier-excalidraw-view .excalidraw-wrapper {
-	min-height: 0;
-	flex: 1;
-}
+@layer atelier {
+	.atelier-excalidraw-view {
+		position: relative;
+		display: flex;
+		min-height: 0;
+		flex: 1;
+		flex-direction: column;
+		height: 100%;
+		background: var(--at-panel);
+		isolation: isolate;
+	}
 
-/*
- * Re-tint Excalidraw's UI chrome with Atelier's warm neutral + orange
- * brand tokens so the canvas feels native to the workspace. Canvas
- * *content* colors (stroke palettes, backgrounds) are left untouched —
- * those belong to the document, not the chrome.
- */
-.atelier-excalidraw-view .excalidraw {
-	--color-primary: var(--at-link);
-	--color-primary-darker: var(--at-accent);
-	--color-primary-darkest: var(--at-accent-hover);
-	--color-primary-hover: var(--at-accent);
-	--color-primary-light: var(--at-accent-border);
-	--color-primary-light-darker: var(--at-accent-border);
-	--color-surface-primary-container: var(--at-accent-border);
-	--color-on-primary-container: var(--at-accent-hover);
-	--color-brand-hover: var(--at-accent);
-	--color-brand-active: var(--at-accent-hover);
-	--color-promo: var(--at-accent);
-	--color-logo-icon: var(--at-accent);
+	.atelier-excalidraw-view .excalidraw-wrapper {
+		min-height: 0;
+		flex: 1;
+	}
 
-	--island-bg-color: var(--at-panel);
-	--default-bg-color: var(--at-panel);
-	--color-surface-lowest: var(--at-panel);
-	--color-surface-low: var(--at-bg-hover);
-	--color-surface-mid: var(--at-bg-hover);
-	--color-surface-high: var(--at-bg-hover-strong);
-	--color-on-surface: var(--at-fg);
-	--text-primary-color: var(--at-fg);
+	/*
+	 * Re-tint Excalidraw's UI chrome with Atelier's warm neutral + orange
+	 * brand tokens so the canvas feels native to the workspace. Canvas
+	 * *content* colors (stroke palettes, backgrounds) are left untouched —
+	 * those belong to the document, not the chrome.
+	 */
+	.atelier-excalidraw-view .excalidraw {
+		--color-primary: var(--at-link);
+		--color-primary-darker: var(--at-accent);
+		--color-primary-darkest: var(--at-accent-hover);
+		--color-primary-hover: var(--at-accent);
+		--color-primary-light: var(--at-accent-border);
+		--color-primary-light-darker: var(--at-accent-border);
+		--color-surface-primary-container: var(--at-accent-border);
+		--color-on-primary-container: var(--at-accent-hover);
+		--color-brand-hover: var(--at-accent);
+		--color-brand-active: var(--at-accent-hover);
+		--color-promo: var(--at-accent);
+		--color-logo-icon: var(--at-accent);
 
-	--color-border-outline: var(--at-fg-faint);
-	--color-border-outline-variant: var(--at-border-strong);
-	--link-color: var(--at-accent);
+		--island-bg-color: var(--at-panel);
+		--default-bg-color: var(--at-panel);
+		--color-surface-lowest: var(--at-panel);
+		--color-surface-low: var(--at-bg-hover);
+		--color-surface-mid: var(--at-bg-hover);
+		--color-surface-high: var(--at-bg-hover-strong);
+		--color-on-surface: var(--at-fg);
+		--text-primary-color: var(--at-fg);
 
-	--shadow-island: 0 0 0 1px var(--at-border-subtle), var(--at-shadow-md);
-}
+		--color-border-outline: var(--at-fg-faint);
+		--color-border-outline-variant: var(--at-border-strong);
+		--link-color: var(--at-accent);
 
-.atelier-excalidraw-save-error {
-	position: absolute;
-	z-index: 20;
-	bottom: 14px;
-	left: 50%;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 12px;
-	border: 1px solid var(--at-warning-border);
-	border-radius: 999px;
-	background: var(--at-warning-subtle);
-	color: var(--at-warning);
-	font-size: 12px;
-	line-height: 1.2;
-	transform: translateX(-50%);
-	box-shadow: var(--at-shadow-md);
-	pointer-events: none;
+		--shadow-island: 0 0 0 1px var(--at-border-subtle), var(--at-shadow-md);
+	}
+
+	.atelier-excalidraw-save-error {
+		position: absolute;
+		z-index: 20;
+		bottom: 14px;
+		left: 50%;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 12px;
+		border: 1px solid var(--at-warning-border);
+		border-radius: 999px;
+		background: var(--at-warning-subtle);
+		color: var(--at-warning);
+		font-size: 12px;
+		line-height: 1.2;
+		transform: translateX(-50%);
+		box-shadow: var(--at-shadow-md);
+		pointer-events: none;
+	}
 }

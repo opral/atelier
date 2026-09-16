@@ -1,368 +1,372 @@
-@scope (.atelier-root) {
-	.csv-review-scroll {
-		position: absolute;
-		inset: 0;
-		overflow: auto;
-		overscroll-behavior: contain;
-		background: var(--at-panel);
-		/* A fold reveals by changing the height of rows on screen. Let the grid
-		   keep the scroll offset it was given: where a fold above the viewport
-		   opens, the review moves the offset itself, by exactly the height the
-		   fold gained, so the reader's place never shifts twice. */
-		overflow-anchor: none;
-	}
-	.csv-review-table {
-		border-collapse: separate;
-		border-spacing: 0;
-		table-layout: fixed;
-		font-size: 13px;
-		font-weight: 400;
-		color: var(--at-fg-muted);
-	}
-	.csv-review-table th,
-	.csv-review-table td {
-		padding: 0;
-		border: 0;
-		border-right: 1px solid var(--at-border-subtle);
-		border-bottom: 1px solid var(--at-border-subtle);
-		box-sizing: border-box;
-		vertical-align: middle;
-		text-align: left;
-		background: var(--at-panel);
-		font-weight: 400;
-	}
-	.csv-review-table thead th {
-		position: sticky;
-		top: 0;
-		z-index: 2;
-		height: 40px;
-		color: var(--at-fg-subtle);
-		font-weight: 500;
-	}
-	/* A row's height is the height of a box inside each of its cells, never the
-	   cell itself: a table cell is at least as tall as what it holds, so a fold
-	   can only close a row by closing the box. The rule between rows travels
-	   with that box, or a row shut to nothing would still be a pixel tall — ten
-	   of them, a visible ledge. The vertical rule beside it paints the one pixel
-	   the box gives up at the column edge, so the line stays unbroken. */
-	.csv-review-table tbody th,
-	.csv-review-table tbody td {
-		border-bottom: 0;
-	}
-	.csv-review-cell-box {
-		display: block;
-		height: var(--csv-review-cell-height);
-		overflow: hidden;
-		/* Painted, not laid out. A border cannot be compressed below its own
-		   width, so a row shut to nothing would keep a pixel, and a run of
-		   thirty-five of them would collapse to a grey ledge instead of to
-		   nothing. */
-		box-shadow: inset 0 -1px var(--at-border-subtle);
-	}
-	.csv-review-table .csv-review-gutter {
-		position: sticky;
-		left: 0;
-		width: 44px;
-		text-align: center;
-		z-index: 1;
-		color: var(--at-fg-faint);
-		font-size: 10px;
-	}
-	.csv-review-table thead .csv-review-gutter {
-		z-index: 3;
-	}
-	.csv-review-header-content {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		height: 39px;
-		padding: 0 8px;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: inherit;
-		font: inherit;
-		text-align: left;
-	}
-	.csv-review-header-name {
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-	.csv-review-type-icon {
-		flex: none;
-		color: var(--at-fg-subtle);
-	}
-	.csv-review-cell-content {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		/* Fixed, not a percentage: while a fold is in flight the box above this
-		   is shrinking, and the value has to hold its size and be uncovered
-		   rather than squashed. */
-		height: calc(var(--csv-review-cell-height) - 1px);
-		padding: 0 8px;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: inherit;
-		font: inherit;
-		text-align: left;
-	}
-	.csv-review-clipped-value {
-		display: block;
-		position: relative;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		overflow-wrap: anywhere;
-		line-height: 20px;
-	}
-	.csv-review-cell-content:has(.csv-review-mark) .csv-review-clipped-value {
-		padding-right: 14px;
-	}
-	.csv-review-cell-content .csv-review-mark {
-		position: absolute;
-		right: 1px;
-		top: 7px;
-	}
-	.csv-review-table button {
-		cursor: pointer;
-	}
-	.csv-review-table button:hover {
-		box-shadow: inset 0 0 0 1px var(--at-accent-border);
-	}
-	.csv-review-table button:focus-visible {
-		outline: 2px solid var(--at-ring);
-		outline-offset: -2px;
-	}
-	.csv-review-table tr[data-diff-status="added"] > *,
-	.csv-review-table td[data-diff-status="added"],
-	.csv-review-table th[data-diff-status="added"] {
-		background-color: var(--at-panel);
-		background-image: linear-gradient(
-			var(--at-diff-added-subtle),
-			var(--at-diff-added-subtle)
-		);
-	}
-	.csv-review-table tr[data-diff-status="removed"] > *,
-	.csv-review-table td[data-diff-status="removed"],
-	.csv-review-table th[data-diff-status="removed"] {
-		background-color: var(--at-panel);
-		background-image: linear-gradient(
-			var(--at-diff-removed-subtle),
-			var(--at-diff-removed-subtle)
-		);
-	}
-	.csv-review-table td[data-diff-status="modified"],
-	.csv-review-table thead th[data-diff-status="modified"] {
-		background: var(--at-accent-subtle);
-	}
-	.csv-review-table thead th[data-diff-status="modified"] {
-		box-shadow: inset 0 -2px var(--at-accent);
-	}
-	.csv-review-mark {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		flex: none;
-	}
-	.csv-review-mark.is-added {
-		color: var(--at-diff-added);
-	}
-	.csv-review-mark.is-removed {
-		color: var(--at-diff-removed);
-	}
-	.csv-review-mark.is-modified {
-		color: var(--at-accent);
-	}
-	.csv-review-row-number {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		height: calc(var(--csv-review-cell-height) - 1px);
-	}
-	.csv-review-pill {
-		display: inline-block;
-		max-width: 100%;
-		padding: 0 6px;
-		border-radius: var(--at-radius-tag);
-		line-height: 20px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		vertical-align: middle;
-	}
-	.csv-review-checkbox {
-		display: inline-flex;
-		width: 14px;
-		height: 14px;
-		align-items: center;
-		justify-content: center;
-		vertical-align: middle;
-	}
-	.csv-review-checkbox.is-checked {
-		border-radius: var(--at-radius-tag);
-		background: var(--at-accent);
-		color: var(--at-accent-on);
-	}
-	.csv-review-table mark {
-		background: var(--at-highlight);
-		color: inherit;
-		border-radius: 2px;
-	}
-	.csv-review-empty {
-		padding: 20px 52px;
-		font-size: 13px;
-		color: var(--at-fg-subtle);
-	}
-	/* A band is a row like any other: one row tall, on the grid's rhythm, so
-	   opening it moves what is below by the height of the rows and nothing
-	   more. */
-	.csv-review-table .csv-review-band-cell {
-		background: var(--at-bg-subtle);
-		border-bottom: 1px solid var(--at-border-subtle);
-	}
-	.csv-review-band-button {
-		display: flex;
-		align-items: center;
-		width: 100%;
-		height: calc(var(--csv-review-cell-height) - 1px);
-		padding: 0;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: var(--at-fg-subtle);
-		font: inherit;
-		font-size: 12px;
-		text-align: left;
-	}
-	.csv-review-table .csv-review-band-button:hover {
-		box-shadow: none;
-		background: var(--at-bg-hover);
-	}
-	.csv-review-band-label {
-		/* The label holds its place when the table is scrolled sideways: the
-		   chevron stays over the number gutter it stands in for. */
-		position: sticky;
-		left: 0;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: none;
-		padding-right: 12px;
-	}
-	.csv-review-band-chevron {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex: none;
-		width: 43px;
-		height: calc(var(--csv-review-cell-height) - 1px);
-		margin-right: 8px;
-		border-right: 1px solid var(--at-border-subtle);
-		color: var(--at-fg-subtle);
-	}
-	.csv-review-band-range {
-		color: var(--at-fg-faint);
-		font-variant-numeric: tabular-nums;
-	}
-	.csv-review-band-action {
-		/* Held against the right edge of what is on screen, so a wide table
-		   scrolled sideways still offers the band its verb. */
-		position: sticky;
-		right: 0;
-		margin-left: auto;
-		padding: 0 12px;
-		opacity: 0;
-		transition: opacity var(--at-duration) ease-out;
-	}
-	.csv-review-band:hover .csv-review-band-action,
-	.csv-review-band-button:focus-visible .csv-review-band-action {
-		opacity: 1;
-	}
-	.csv-toolbar .csv-review-summary {
-		display: inline-flex;
-		/* The count and the word are separate flex items, so the space between
-		   them in the markup collapses away. The changed label is a button and
-		   takes the toolbar's button gap; the zero label is a span and would
-		   take nothing, which paints it as "0changes". Space both here. */
-		gap: 6px;
-		padding: 0;
-		font-size: 12px;
-		line-height: 20px;
-		white-space: nowrap;
-		color: var(--at-fg-subtle);
-	}
-	.csv-toolbar button.csv-review-summary:hover {
-		background: transparent;
-		color: var(--at-accent);
-	}
-	/* Part of the sentence, not a control: no border, no background, no box of
-	   its own, so entering review adds the count and a quiet link and no
-	   chrome. */
-	.csv-toolbar .csv-review-fold-separator {
-		padding: 0 5px;
-		color: var(--at-fg-subtle);
-	}
-	.csv-toolbar button.csv-review-fold-action {
-		display: inline;
-		min-height: 0;
-		padding: 0;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: var(--at-fg-subtle);
-		font: inherit;
-		font-weight: 400;
-		line-height: 20px;
-		white-space: nowrap;
-	}
-	.csv-toolbar button.csv-review-fold-action:hover {
-		background: transparent;
-		color: var(--at-accent);
-	}
-	.csv-toolbar button.csv-review-fold-action:focus-visible {
-		outline: 2px solid var(--at-ring);
-		outline-offset: 2px;
-		border-radius: 3px;
-	}
-}
+@import "../../shell/layers.css";
 
-@scope (.atelier-root) {
-	.csv-review-row-moved {
-		display: grid;
-		place-items: center;
-		width: 100%;
-		height: calc(var(--csv-review-cell-height) - 1px);
-		padding: 0;
-		border: 0;
-		background: transparent;
-	}
-	@container (max-width: 540px) {
-		.csv-review-summary-word,
-		.csv-review-fold-action-word {
-			display: none;
+@layer atelier {
+	@scope (.atelier-root) {
+		.csv-review-scroll {
+			position: absolute;
+			inset: 0;
+			overflow: auto;
+			overscroll-behavior: contain;
+			background: var(--at-panel);
+			/* A fold reveals by changing the height of rows on screen. Let the grid
+			   keep the scroll offset it was given: where a fold above the viewport
+			   opens, the review moves the offset itself, by exactly the height the
+			   fold gained, so the reader's place never shifts twice. */
+			overflow-anchor: none;
+		}
+		.csv-review-table {
+			border-collapse: separate;
+			border-spacing: 0;
+			table-layout: fixed;
+			font-size: 13px;
+			font-weight: 400;
+			color: var(--at-fg-muted);
+		}
+		.csv-review-table th,
+		.csv-review-table td {
+			padding: 0;
+			border: 0;
+			border-right: 1px solid var(--at-border-subtle);
+			border-bottom: 1px solid var(--at-border-subtle);
+			box-sizing: border-box;
+			vertical-align: middle;
+			text-align: left;
+			background: var(--at-panel);
+			font-weight: 400;
+		}
+		.csv-review-table thead th {
+			position: sticky;
+			top: 0;
+			z-index: 2;
+			height: 40px;
+			color: var(--at-fg-subtle);
+			font-weight: 500;
+		}
+		/* A row's height is the height of a box inside each of its cells, never the
+		   cell itself: a table cell is at least as tall as what it holds, so a fold
+		   can only close a row by closing the box. The rule between rows travels
+		   with that box, or a row shut to nothing would still be a pixel tall — ten
+		   of them, a visible ledge. The vertical rule beside it paints the one pixel
+		   the box gives up at the column edge, so the line stays unbroken. */
+		.csv-review-table tbody th,
+		.csv-review-table tbody td {
+			border-bottom: 0;
+		}
+		.csv-review-cell-box {
+			display: block;
+			height: var(--csv-review-cell-height);
+			overflow: hidden;
+			/* Painted, not laid out. A border cannot be compressed below its own
+			   width, so a row shut to nothing would keep a pixel, and a run of
+			   thirty-five of them would collapse to a grey ledge instead of to
+			   nothing. */
+			box-shadow: inset 0 -1px var(--at-border-subtle);
+		}
+		.csv-review-table .csv-review-gutter {
+			position: sticky;
+			left: 0;
+			width: 44px;
+			text-align: center;
+			z-index: 1;
+			color: var(--at-fg-faint);
+			font-size: 10px;
+		}
+		.csv-review-table thead .csv-review-gutter {
+			z-index: 3;
+		}
+		.csv-review-header-content {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			width: 100%;
+			height: 39px;
+			padding: 0 8px;
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			color: inherit;
+			font: inherit;
+			text-align: left;
+		}
+		.csv-review-header-name {
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+		}
+		.csv-review-type-icon {
+			flex: none;
+			color: var(--at-fg-subtle);
+		}
+		.csv-review-cell-content {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			width: 100%;
+			/* Fixed, not a percentage: while a fold is in flight the box above this
+			   is shrinking, and the value has to hold its size and be uncovered
+			   rather than squashed. */
+			height: calc(var(--csv-review-cell-height) - 1px);
+			padding: 0 8px;
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			color: inherit;
+			font: inherit;
+			text-align: left;
+		}
+		.csv-review-clipped-value {
+			display: block;
+			position: relative;
+			max-width: 100%;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			overflow-wrap: anywhere;
+			line-height: 20px;
+		}
+		.csv-review-cell-content:has(.csv-review-mark) .csv-review-clipped-value {
+			padding-right: 14px;
+		}
+		.csv-review-cell-content .csv-review-mark {
+			position: absolute;
+			right: 1px;
+			top: 7px;
+		}
+		.csv-review-table button {
+			cursor: pointer;
+		}
+		.csv-review-table button:hover {
+			box-shadow: inset 0 0 0 1px var(--at-accent-border);
+		}
+		.csv-review-table button:focus-visible {
+			outline: 2px solid var(--at-ring);
+			outline-offset: -2px;
+		}
+		.csv-review-table tr[data-diff-status="added"] > *,
+		.csv-review-table td[data-diff-status="added"],
+		.csv-review-table th[data-diff-status="added"] {
+			background-color: var(--at-panel);
+			background-image: linear-gradient(
+				var(--at-diff-added-subtle),
+				var(--at-diff-added-subtle)
+			);
+		}
+		.csv-review-table tr[data-diff-status="removed"] > *,
+		.csv-review-table td[data-diff-status="removed"],
+		.csv-review-table th[data-diff-status="removed"] {
+			background-color: var(--at-panel);
+			background-image: linear-gradient(
+				var(--at-diff-removed-subtle),
+				var(--at-diff-removed-subtle)
+			);
+		}
+		.csv-review-table td[data-diff-status="modified"],
+		.csv-review-table thead th[data-diff-status="modified"] {
+			background: var(--at-accent-subtle);
+		}
+		.csv-review-table thead th[data-diff-status="modified"] {
+			box-shadow: inset 0 -2px var(--at-accent);
+		}
+		.csv-review-mark {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			flex: none;
+		}
+		.csv-review-mark.is-added {
+			color: var(--at-diff-added);
+		}
+		.csv-review-mark.is-removed {
+			color: var(--at-diff-removed);
+		}
+		.csv-review-mark.is-modified {
+			color: var(--at-accent);
+		}
+		.csv-review-row-number {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			height: calc(var(--csv-review-cell-height) - 1px);
+		}
+		.csv-review-pill {
+			display: inline-block;
+			max-width: 100%;
+			padding: 0 6px;
+			border-radius: var(--at-radius-tag);
+			line-height: 20px;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			vertical-align: middle;
+		}
+		.csv-review-checkbox {
+			display: inline-flex;
+			width: 14px;
+			height: 14px;
+			align-items: center;
+			justify-content: center;
+			vertical-align: middle;
+		}
+		.csv-review-checkbox.is-checked {
+			border-radius: var(--at-radius-tag);
+			background: var(--at-accent);
+			color: var(--at-accent-on);
+		}
+		.csv-review-table mark {
+			background: var(--at-highlight);
+			color: inherit;
+			border-radius: 2px;
+		}
+		.csv-review-empty {
+			padding: 20px 52px;
+			font-size: 13px;
+			color: var(--at-fg-subtle);
+		}
+		/* A band is a row like any other: one row tall, on the grid's rhythm, so
+		   opening it moves what is below by the height of the rows and nothing
+		   more. */
+		.csv-review-table .csv-review-band-cell {
+			background: var(--at-bg-subtle);
+			border-bottom: 1px solid var(--at-border-subtle);
+		}
+		.csv-review-band-button {
+			display: flex;
+			align-items: center;
+			width: 100%;
+			height: calc(var(--csv-review-cell-height) - 1px);
+			padding: 0;
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			color: var(--at-fg-subtle);
+			font: inherit;
+			font-size: 12px;
+			text-align: left;
+		}
+		.csv-review-table .csv-review-band-button:hover {
+			box-shadow: none;
+			background: var(--at-bg-hover);
+		}
+		.csv-review-band-label {
+			/* The label holds its place when the table is scrolled sideways: the
+			   chevron stays over the number gutter it stands in for. */
+			position: sticky;
+			left: 0;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			flex: none;
+			padding-right: 12px;
+		}
+		.csv-review-band-chevron {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex: none;
+			width: 43px;
+			height: calc(var(--csv-review-cell-height) - 1px);
+			margin-right: 8px;
+			border-right: 1px solid var(--at-border-subtle);
+			color: var(--at-fg-subtle);
+		}
+		.csv-review-band-range {
+			color: var(--at-fg-faint);
+			font-variant-numeric: tabular-nums;
+		}
+		.csv-review-band-action {
+			/* Held against the right edge of what is on screen, so a wide table
+			   scrolled sideways still offers the band its verb. */
+			position: sticky;
+			right: 0;
+			margin-left: auto;
+			padding: 0 12px;
+			opacity: 0;
+			transition: opacity var(--at-duration) ease-out;
+		}
+		.csv-review-band:hover .csv-review-band-action,
+		.csv-review-band-button:focus-visible .csv-review-band-action {
+			opacity: 1;
 		}
 		.csv-toolbar .csv-review-summary {
-			min-width: 20px;
-			justify-content: center;
+			display: inline-flex;
+			/* The count and the word are separate flex items, so the space between
+			   them in the markup collapses away. The changed label is a button and
+			   takes the toolbar's button gap; the zero label is a span and would
+			   take nothing, which paints it as "0changes". Space both here. */
+			gap: 6px;
+			padding: 0;
+			font-size: 12px;
+			line-height: 20px;
+			white-space: nowrap;
+			color: var(--at-fg-subtle);
+		}
+		.csv-toolbar button.csv-review-summary:hover {
+			background: transparent;
+			color: var(--at-accent);
+		}
+		/* Part of the sentence, not a control: no border, no background, no box of
+		   its own, so entering review adds the count and a quiet link and no
+		   chrome. */
+		.csv-toolbar .csv-review-fold-separator {
+			padding: 0 5px;
+			color: var(--at-fg-subtle);
+		}
+		.csv-toolbar button.csv-review-fold-action {
+			display: inline;
+			min-height: 0;
+			padding: 0;
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			color: var(--at-fg-subtle);
+			font: inherit;
+			font-weight: 400;
+			line-height: 20px;
+			white-space: nowrap;
+		}
+		.csv-toolbar button.csv-review-fold-action:hover {
+			background: transparent;
+			color: var(--at-accent);
+		}
+		.csv-toolbar button.csv-review-fold-action:focus-visible {
+			outline: 2px solid var(--at-ring);
+			outline-offset: 2px;
+			border-radius: 3px;
 		}
 	}
-	/* Below 700px the toolbar is allowed to wrap onto a second row, and the
-	   review sentence must not be what tips it over — entering review would
-	   then cost the grid 31px of height. The tail of the sentence goes first:
-	   "Show all" still says what the link does. */
-	@media (max-width: 700px) {
-		.csv-review-fold-action-word {
-			display: none;
+
+	@scope (.atelier-root) {
+		.csv-review-row-moved {
+			display: grid;
+			place-items: center;
+			width: 100%;
+			height: calc(var(--csv-review-cell-height) - 1px);
+			padding: 0;
+			border: 0;
+			background: transparent;
 		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.csv-review-band-action {
-			transition: none;
+		@container (max-width: 540px) {
+			.csv-review-summary-word,
+			.csv-review-fold-action-word {
+				display: none;
+			}
+			.csv-toolbar .csv-review-summary {
+				min-width: 20px;
+				justify-content: center;
+			}
+		}
+		/* Below 700px the toolbar is allowed to wrap onto a second row, and the
+		   review sentence must not be what tips it over — entering review would
+		   then cost the grid 31px of height. The tail of the sentence goes first:
+		   "Show all" still says what the link does. */
+		@media (max-width: 700px) {
+			.csv-review-fold-action-word {
+				display: none;
+			}
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.csv-review-band-action {
+				transition: none;
+			}
 		}
 	}
 }

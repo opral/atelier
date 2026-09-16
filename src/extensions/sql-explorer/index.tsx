@@ -437,7 +437,7 @@ function QueryView({
 				onQueryChange={onQueryChange}
 				onRun={() => void runQuery(query)}
 			/>
-			<div className="atelier-sql-runbar flex h-11 shrink-0 items-center gap-3 border-y border-border-subtle bg-bg-subtle px-6">
+			<div className="atelier-sql-runbar flex shrink-0 items-center gap-3">
 				<button
 					type="button"
 					onClick={() => void runQuery(query)}

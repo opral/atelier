@@ -1,9 +1,9 @@
-@layer theme, base, components, utilities;
+@import "./shell/layers.css";
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
-@import "./shell/theme.css";
-@import "./shell/document.css";
+@import "./shell/theme.css" layer(atelier);
+@import "./shell/document.css" layer(atelier);
 @import "./shell/tailwind.css";
 
 @source "./";
@@ -11,407 +11,409 @@
 @custom-variant dark (&:is(.dark *));
 
 /* Every token carries its dark value in light-dark(); the scheme is the switch. */
-.dark {
-	color-scheme: dark;
-}
-
-.atelier-autosave-hint {
-	position: absolute;
-	right: 1rem;
-	bottom: 2.25rem;
-	z-index: 40;
-	display: inline-flex;
-	max-width: min(24rem, calc(100% - 2rem));
-	min-height: 2.25rem;
-	align-items: center;
-	gap: 0.5rem;
-	padding: 0.5rem 0.625rem;
-	border: 1px solid var(--at-border);
-	border-radius: 8px;
-	background: var(--at-panel);
-	box-shadow: var(--at-shadow-md);
-	color: var(--at-fg-muted);
-	font-size: 0.75rem;
-	font-weight: 500;
-	line-height: 1rem;
-	pointer-events: none;
-	transform: translateY(0);
-	animation: atelier-autosave-hint-in 160ms ease-out;
-}
-
-.atelier-autosave-hint strong {
-	color: var(--at-fg);
-	font-weight: 650;
-}
-
-.atelier-autosave-hint-icon {
-	display: inline-flex;
-	flex: 0 0 auto;
-	align-items: center;
-	justify-content: center;
-	width: 1.125rem;
-	height: 1.125rem;
-	border-radius: var(--at-radius-full);
-	background: var(--at-success-subtle);
-	color: var(--at-success-border);
-}
-
-.atelier-autosave-hint-icon svg {
-	width: 0.6875rem;
-	height: 0.6875rem;
-	stroke-width: 2;
-}
-
-@keyframes atelier-autosave-hint-in {
-	from {
-		opacity: 0;
-		transform: translateY(0.35rem);
+@layer atelier {
+	.dark {
+		color-scheme: dark;
 	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
 
-@media (prefers-reduced-motion: reduce) {
 	.atelier-autosave-hint {
-		animation: none;
+		position: absolute;
+		right: 1rem;
+		bottom: 2.25rem;
+		z-index: 40;
+		display: inline-flex;
+		max-width: min(24rem, calc(100% - 2rem));
+		min-height: 2.25rem;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.625rem;
+		border: 1px solid var(--at-border);
+		border-radius: 8px;
+		background: var(--at-panel);
+		box-shadow: var(--at-shadow-md);
+		color: var(--at-fg-muted);
+		font-size: 0.75rem;
+		font-weight: 500;
+		line-height: 1rem;
+		pointer-events: none;
+		transform: translateY(0);
+		animation: atelier-autosave-hint-in 160ms ease-out;
 	}
-}
 
-.atelier-root [data-review-mode="true"]::after {
-	position: absolute;
-	z-index: 30;
-	inset: 0;
-	border: 0;
-	box-shadow:
-		inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
-		inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
-		inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
-		inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-		inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
-	content: "";
-	pointer-events: none;
-	animation:
-		atelier-review-glow-enter 320ms ease-out both,
-		atelier-review-edge-glow 5.5s ease-in-out 320ms infinite;
-}
+	.atelier-autosave-hint strong {
+		color: var(--at-fg);
+		font-weight: 650;
+	}
 
-.atelier-root [data-review-mode="true"] .atelier-panel-group {
-	box-shadow: 0 0 38px color-mix(in srgb, var(--at-accent) 12%, transparent);
-}
+	.atelier-autosave-hint-icon {
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		width: 1.125rem;
+		height: 1.125rem;
+		border-radius: var(--at-radius-full);
+		background: var(--at-success-subtle);
+		color: var(--at-success-border);
+	}
 
-@keyframes atelier-review-edge-glow {
-	0%,
-	100% {
+	.atelier-autosave-hint-icon svg {
+		width: 0.6875rem;
+		height: 0.6875rem;
+		stroke-width: 2;
+	}
+
+	@keyframes atelier-autosave-hint-in {
+		from {
+			opacity: 0;
+			transform: translateY(0.35rem);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.atelier-autosave-hint {
+			animation: none;
+		}
+	}
+
+	.atelier-root [data-review-mode="true"]::after {
+		position: absolute;
+		z-index: 30;
+		inset: 0;
+		border: 0;
 		box-shadow:
 			inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
 			inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
 			inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
 			inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
 			inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
+		content: "";
+		pointer-events: none;
+		animation:
+			atelier-review-glow-enter 320ms ease-out both,
+			atelier-review-edge-glow 5.5s ease-in-out 320ms infinite;
 	}
-	33% {
-		box-shadow:
-			inset 8px 0 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-			inset -8px 0 24px color-mix(in srgb, var(--at-accent) 22%, transparent),
-			inset 0 8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-			inset 0 -8px 26px color-mix(in srgb, var(--at-accent) 17%, transparent),
-			inset 0 0 72px color-mix(in srgb, var(--at-accent) 9%, transparent);
-	}
-	66% {
-		box-shadow:
-			inset 8px 0 24px color-mix(in srgb, var(--at-accent) 18%, transparent),
-			inset -8px 0 30px color-mix(in srgb, var(--at-accent) 22%, transparent),
-			inset 0 8px 26px color-mix(in srgb, var(--at-accent) 22%, transparent),
-			inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 18%, transparent),
-			inset 0 0 70px color-mix(in srgb, var(--at-accent) 10%, transparent);
-	}
-}
 
-@keyframes atelier-review-glow-enter {
-	from {
-		opacity: 0;
+	.atelier-root [data-review-mode="true"] .atelier-panel-group {
+		box-shadow: 0 0 38px color-mix(in srgb, var(--at-accent) 12%, transparent);
 	}
-	to {
-		opacity: 1;
-	}
-}
 
-@media (prefers-reduced-motion: reduce) {
-	.atelier-root [data-review-mode="true"]::after {
-		animation: none;
+	@keyframes atelier-review-edge-glow {
+		0%,
+		100% {
+			box-shadow:
+				inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
+				inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
+				inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
+				inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+				inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
+		}
+		33% {
+			box-shadow:
+				inset 8px 0 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+				inset -8px 0 24px color-mix(in srgb, var(--at-accent) 22%, transparent),
+				inset 0 8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
+				inset 0 -8px 26px color-mix(in srgb, var(--at-accent) 17%, transparent),
+				inset 0 0 72px color-mix(in srgb, var(--at-accent) 9%, transparent);
+		}
+		66% {
+			box-shadow:
+				inset 8px 0 24px color-mix(in srgb, var(--at-accent) 18%, transparent),
+				inset -8px 0 30px color-mix(in srgb, var(--at-accent) 22%, transparent),
+				inset 0 8px 26px color-mix(in srgb, var(--at-accent) 22%, transparent),
+				inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 18%, transparent),
+				inset 0 0 70px color-mix(in srgb, var(--at-accent) 10%, transparent);
+		}
 	}
-}
 
-@keyframes atelier-zap-wipe-top {
-	0% {
-		transform: scaleY(0);
+	@keyframes atelier-review-glow-enter {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
 	}
-	30% {
-		transform: scaleY(1);
-	}
-	97.5% {
-		transform: scaleY(1);
-	}
-	98% {
-		transform: scaleY(0);
-	}
-	100% {
-		transform: scaleY(0);
-	}
-}
 
-@keyframes atelier-zap-wipe-middle {
-	0%,
-	24% {
-		transform: translateX(-62%);
+	@media (prefers-reduced-motion: reduce) {
+		.atelier-root [data-review-mode="true"]::after {
+			animation: none;
+		}
 	}
-	52% {
-		transform: translateX(0);
+
+	@keyframes atelier-zap-wipe-top {
+		0% {
+			transform: scaleY(0);
+		}
+		30% {
+			transform: scaleY(1);
+		}
+		97.5% {
+			transform: scaleY(1);
+		}
+		98% {
+			transform: scaleY(0);
+		}
+		100% {
+			transform: scaleY(0);
+		}
 	}
-	97.5% {
-		transform: translateX(0);
+
+	@keyframes atelier-zap-wipe-middle {
+		0%,
+		24% {
+			transform: translateX(-62%);
+		}
+		52% {
+			transform: translateX(0);
+		}
+		97.5% {
+			transform: translateX(0);
+		}
+		98% {
+			transform: translateX(-62%);
+		}
+		100% {
+			transform: translateX(-62%);
+		}
 	}
-	98% {
-		transform: translateX(-62%);
+
+	@keyframes atelier-zap-wipe-bottom {
+		0%,
+		44% {
+			transform: scaleY(0);
+		}
+		78% {
+			transform: scaleY(1);
+		}
+		97.5% {
+			transform: scaleY(1);
+		}
+		98% {
+			transform: scaleY(0);
+		}
+		100% {
+			transform: scaleY(0);
+		}
 	}
-	100% {
-		transform: translateX(-62%);
+
+	@keyframes atelier-zap-fade {
+		0%,
+		82% {
+			opacity: 1;
+		}
+		96%,
+		100% {
+			opacity: 0;
+		}
 	}
-}
 
-@keyframes atelier-zap-wipe-bottom {
-	0%,
-	44% {
-		transform: scaleY(0);
+	@keyframes atelier-zap-base-fade {
+		0%,
+		74% {
+			opacity: 0;
+		}
+		84% {
+			opacity: 1;
+		}
+		96% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+		}
 	}
-	78% {
-		transform: scaleY(1);
+
+	@keyframes atelier-zap-outline-draw {
+		0% {
+			stroke-dashoffset: 100;
+		}
+		74% {
+			stroke-dashoffset: 0;
+		}
+		100% {
+			stroke-dashoffset: 0;
+		}
 	}
-	97.5% {
-		transform: scaleY(1);
+
+	.atelier-zap-build {
+		position: relative;
+		width: var(--zap-width, 72px);
+		aspect-ratio: 3 / 4;
+		color: var(--zap-color, currentColor);
+		--zap-duration: 1.45s;
+		--zap-draw-ease: cubic-bezier(0.45, 0, 0.18, 1);
+		clip-path: polygon(
+			56.7% 0%,
+			0% 57.5%,
+			43.3% 57.5%,
+			33.3% 100%,
+			100% 37.5%,
+			53.3% 37.5%
+		);
+		animation: atelier-zap-fade var(--zap-duration) ease-out infinite;
+		will-change: opacity;
 	}
-	98% {
-		transform: scaleY(0);
-	}
-	100% {
-		transform: scaleY(0);
-	}
-}
 
-@keyframes atelier-zap-fade {
-	0%,
-	82% {
-		opacity: 1;
-	}
-	96%,
-	100% {
-		opacity: 0;
-	}
-}
-
-@keyframes atelier-zap-base-fade {
-	0%,
-	74% {
-		opacity: 0;
-	}
-	84% {
-		opacity: 1;
-	}
-	96% {
-		opacity: 1;
-	}
-	100% {
-		opacity: 0;
-	}
-}
-
-@keyframes atelier-zap-outline-draw {
-	0% {
-		stroke-dashoffset: 100;
-	}
-	74% {
-		stroke-dashoffset: 0;
-	}
-	100% {
-		stroke-dashoffset: 0;
-	}
-}
-
-.atelier-zap-build {
-	position: relative;
-	width: var(--zap-width, 72px);
-	aspect-ratio: 3 / 4;
-	color: var(--zap-color, currentColor);
-	--zap-duration: 1.45s;
-	--zap-draw-ease: cubic-bezier(0.45, 0, 0.18, 1);
-	clip-path: polygon(
-		56.7% 0%,
-		0% 57.5%,
-		43.3% 57.5%,
-		33.3% 100%,
-		100% 37.5%,
-		53.3% 37.5%
-	);
-	animation: atelier-zap-fade var(--zap-duration) ease-out infinite;
-	will-change: opacity;
-}
-
-.atelier-zap-build--outline {
-	display: block;
-	overflow: visible;
-	clip-path: none;
-}
-
-.atelier-zap-build__base,
-.atelier-zap-build__segment,
-.atelier-zap-build__wipe {
-	position: absolute;
-}
-
-.atelier-zap-build__base,
-.atelier-zap-build__segment {
-	inset: 0;
-}
-
-.atelier-zap-build__base,
-.atelier-zap-build__wipe {
-	background: currentColor;
-	backface-visibility: hidden;
-}
-
-.atelier-zap-build__base {
-	opacity: 0;
-	animation: atelier-zap-base-fade var(--zap-duration) linear infinite;
-}
-
-.atelier-zap-build__segment--top {
-	clip-path: polygon(56.7% 0%, 0% 57.5%, 43.3% 57.5%, 53.3% 37.5%);
-}
-
-.atelier-zap-build__segment--middle {
-	clip-path: polygon(43.3% 57.5%, 100% 37.5%, 53.3% 37.5%);
-}
-
-.atelier-zap-build__segment--bottom {
-	clip-path: polygon(43.3% 57.5%, 33.3% 100%, 100% 37.5%);
-}
-
-.atelier-zap-build__wipe--top {
-	top: 0;
-	right: 0;
-	left: 0;
-	height: 57.5%;
-	transform: scaleY(0);
-	transform-origin: 50% 0%;
-	animation: atelier-zap-wipe-top var(--zap-duration) var(--zap-draw-ease)
-		infinite;
-	will-change: transform;
-}
-
-.atelier-zap-build__wipe--middle {
-	inset: 0;
-	transform: translateX(-62%);
-	animation: atelier-zap-wipe-middle var(--zap-duration) var(--zap-draw-ease)
-		infinite;
-	will-change: transform;
-}
-
-.atelier-zap-build__wipe--bottom {
-	top: 37.5%;
-	right: 0;
-	left: 0;
-	height: 62.5%;
-	transform: scaleY(0);
-	transform-origin: 50% 0%;
-	animation: atelier-zap-wipe-bottom var(--zap-duration) var(--zap-draw-ease)
-		infinite;
-	will-change: transform;
-}
-
-.atelier-zap-build__outline-base {
-	opacity: 0;
-	animation: atelier-zap-base-fade var(--zap-duration) linear infinite;
-}
-
-.atelier-zap-build__outline-draw {
-	stroke-dasharray: 100;
-	stroke-dashoffset: 100;
-	animation: atelier-zap-outline-draw var(--zap-duration) var(--zap-draw-ease)
-		infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.atelier-zap-build,
-	.atelier-zap-build__base,
-	.atelier-zap-build__wipe,
-	.atelier-zap-build__outline-base,
-	.atelier-zap-build__outline-draw {
-		animation: none;
+	.atelier-zap-build--outline {
+		display: block;
+		overflow: visible;
+		clip-path: none;
 	}
 
 	.atelier-zap-build__base,
+	.atelier-zap-build__segment,
+	.atelier-zap-build__wipe {
+		position: absolute;
+	}
+
+	.atelier-zap-build__base,
+	.atelier-zap-build__segment {
+		inset: 0;
+	}
+
+	.atelier-zap-build__base,
+	.atelier-zap-build__wipe {
+		background: currentColor;
+		backface-visibility: hidden;
+	}
+
+	.atelier-zap-build__base {
+		opacity: 0;
+		animation: atelier-zap-base-fade var(--zap-duration) linear infinite;
+	}
+
+	.atelier-zap-build__segment--top {
+		clip-path: polygon(56.7% 0%, 0% 57.5%, 43.3% 57.5%, 53.3% 37.5%);
+	}
+
+	.atelier-zap-build__segment--middle {
+		clip-path: polygon(43.3% 57.5%, 100% 37.5%, 53.3% 37.5%);
+	}
+
+	.atelier-zap-build__segment--bottom {
+		clip-path: polygon(43.3% 57.5%, 33.3% 100%, 100% 37.5%);
+	}
+
+	.atelier-zap-build__wipe--top {
+		top: 0;
+		right: 0;
+		left: 0;
+		height: 57.5%;
+		transform: scaleY(0);
+		transform-origin: 50% 0%;
+		animation: atelier-zap-wipe-top var(--zap-duration) var(--zap-draw-ease)
+			infinite;
+		will-change: transform;
+	}
+
+	.atelier-zap-build__wipe--middle {
+		inset: 0;
+		transform: translateX(-62%);
+		animation: atelier-zap-wipe-middle var(--zap-duration) var(--zap-draw-ease)
+			infinite;
+		will-change: transform;
+	}
+
+	.atelier-zap-build__wipe--bottom {
+		top: 37.5%;
+		right: 0;
+		left: 0;
+		height: 62.5%;
+		transform: scaleY(0);
+		transform-origin: 50% 0%;
+		animation: atelier-zap-wipe-bottom var(--zap-duration) var(--zap-draw-ease)
+			infinite;
+		will-change: transform;
+	}
+
 	.atelier-zap-build__outline-base {
-		opacity: 1;
+		opacity: 0;
+		animation: atelier-zap-base-fade var(--zap-duration) linear infinite;
 	}
 
 	.atelier-zap-build__outline-draw {
-		stroke-dashoffset: 0;
+		stroke-dasharray: 100;
+		stroke-dashoffset: 100;
+		animation: atelier-zap-outline-draw var(--zap-duration) var(--zap-draw-ease)
+			infinite;
 	}
-}
 
-/* Diff rendering helpers */
-.atelier-root .lix-diff-content [data-diff-status="added"] {
-	color: var(--at-diff-added);
-	text-decoration: none;
-	outline: none;
-}
+	@media (prefers-reduced-motion: reduce) {
+		.atelier-zap-build,
+		.atelier-zap-build__base,
+		.atelier-zap-build__wipe,
+		.atelier-zap-build__outline-base,
+		.atelier-zap-build__outline-draw {
+			animation: none;
+		}
 
-.atelier-root .lix-diff-content [data-diff-status="modified"] {
-	color: var(--at-diff-modified);
-	text-decoration: none;
-	outline: none;
-}
+		.atelier-zap-build__base,
+		.atelier-zap-build__outline-base {
+			opacity: 1;
+		}
 
-.atelier-root .lix-diff-content [data-diff-status="removed"] {
-	color: var(--at-diff-removed);
-	text-decoration: line-through;
-	text-decoration-color: currentColor;
-}
+		.atelier-zap-build__outline-draw {
+			stroke-dashoffset: 0;
+		}
+	}
 
-.atelier-root .lix-diff-content input[data-diff-status="added"],
-.atelier-root .lix-diff-content input[data-diff-status="removed"],
-.atelier-root .lix-diff-content input[data-diff-status="modified"] {
-	margin-right: 4px;
-	border-radius: 4px;
-}
+	/* Diff rendering helpers */
+	.atelier-root .lix-diff-content [data-diff-status="added"] {
+		color: var(--at-diff-added);
+		text-decoration: none;
+		outline: none;
+	}
 
-.atelier-root .lix-diff-content input[data-diff-status="added"] {
-	outline: 2px solid var(--at-diff-added);
-	outline-offset: 2px;
-}
+	.atelier-root .lix-diff-content [data-diff-status="modified"] {
+		color: var(--at-diff-modified);
+		text-decoration: none;
+		outline: none;
+	}
 
-.atelier-root .lix-diff-content input[data-diff-status="removed"] {
-	outline: 2px solid var(--at-diff-removed);
-	outline-offset: 2px;
-	opacity: 0.6;
-}
+	.atelier-root .lix-diff-content [data-diff-status="removed"] {
+		color: var(--at-diff-removed);
+		text-decoration: line-through;
+		text-decoration-color: currentColor;
+	}
 
-.atelier-root .lix-diff-content input[data-diff-status="modified"] {
-	outline: 2px solid var(--at-diff-modified);
-	outline-offset: 2px;
-}
+	.atelier-root .lix-diff-content input[data-diff-status="added"],
+	.atelier-root .lix-diff-content input[data-diff-status="removed"],
+	.atelier-root .lix-diff-content input[data-diff-status="modified"] {
+		margin-right: 4px;
+		border-radius: 4px;
+	}
 
-.atelier-root
-	.lix-diff-content
-	input[data-diff-status="removed"]
-	+ input[data-diff-status="added"],
-.atelier-root
-	.lix-diff-content
-	input[data-diff-status="added"]
-	+ input[data-diff-status="removed"] {
-	margin-left: 6px;
+	.atelier-root .lix-diff-content input[data-diff-status="added"] {
+		outline: 2px solid var(--at-diff-added);
+		outline-offset: 2px;
+	}
+
+	.atelier-root .lix-diff-content input[data-diff-status="removed"] {
+		outline: 2px solid var(--at-diff-removed);
+		outline-offset: 2px;
+		opacity: 0.6;
+	}
+
+	.atelier-root .lix-diff-content input[data-diff-status="modified"] {
+		outline: 2px solid var(--at-diff-modified);
+		outline-offset: 2px;
+	}
+
+	.atelier-root
+		.lix-diff-content
+		input[data-diff-status="removed"]
+		+ input[data-diff-status="added"],
+	.atelier-root
+		.lix-diff-content
+		input[data-diff-status="added"]
+		+ input[data-diff-status="removed"] {
+		margin-left: 6px;
+	}
 }
 
 @layer base {
@@ -475,35 +477,38 @@
 	}
 }
 
-/* Utility to temporarily hide scrollbars (e.g., during programmatic scroll) */
-.atelier-root .scrollbar-hidden {
-	scrollbar-width: none; /* Firefox */
-	-ms-overflow-style: none; /* IE/Edge */
-}
-.atelier-root .scrollbar-hidden::-webkit-scrollbar {
-	width: 0;
-	height: 0;
+@layer atelier {
+	/* Utility to temporarily hide scrollbars (e.g., during programmatic scroll) */
+	.atelier-root .scrollbar-hidden {
+		scrollbar-width: none; /* Firefox */
+		-ms-overflow-style: none; /* IE/Edge */
+	}
+	.atelier-root .scrollbar-hidden::-webkit-scrollbar {
+		width: 0;
+		height: 0;
+	}
+
+	/* react-resizable-panels v4 applies Panel className/style to an inner wrapper.
+	 * Animate the outer flex items, where the library updates panel dimensions. */
+	.atelier-root .atelier-panel-group > [data-panel] {
+		transition-property: flex-grow, flex-basis;
+		transition-duration: 200ms;
+		transition-timing-function: ease-in-out;
+	}
+
+	/* Pointer resizing should track the cursor directly, without transition lag. */
+	.atelier-root
+		.atelier-panel-group:has(> [data-separator="active"])
+		> [data-panel],
+	.atelier-root
+		.atelier-panel-group:has(> [data-separator="focus"])
+		> [data-panel] {
+		transition: none;
+	}
+
+	/* TipTap / ProseMirror base styles */
 }
 
-/* react-resizable-panels v4 applies Panel className/style to an inner wrapper.
- * Animate the outer flex items, where the library updates panel dimensions. */
-.atelier-root .atelier-panel-group > [data-panel] {
-	transition-property: flex-grow, flex-basis;
-	transition-duration: 200ms;
-	transition-timing-function: ease-in-out;
-}
-
-/* Pointer resizing should track the cursor directly, without transition lag. */
-.atelier-root
-	.atelier-panel-group:has(> [data-separator="active"])
-	> [data-panel],
-.atelier-root
-	.atelier-panel-group:has(> [data-separator="focus"])
-	> [data-panel] {
-	transition: none;
-}
-
-/* TipTap / ProseMirror base styles */
 @layer components {
 	.atelier-root
 		.tiptap-container[data-editor-focused="true"]

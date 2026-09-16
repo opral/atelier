@@ -541,7 +541,7 @@ export function GridFooter({
 	const format = (n: number) => n.toLocaleString("en-US");
 
 	return (
-		<div className="atelier-sql-grid-footer flex h-9 shrink-0 items-center gap-3 border-t border-border-subtle bg-bg-subtle px-3.5">
+		<div className="atelier-sql-grid-footer flex shrink-0 items-center gap-3">
 			<span
 				data-attr="sql-grid-row-range"
 				className="font-mono text-ui-sm text-fg-subtle"

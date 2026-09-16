@@ -1,650 +1,656 @@
-@scope (.atelier-root) {
-	/* Values mirror the diff-mode mocks: #1C1917 pill, 12px radius, 7px pad. */
-	/* The float spans the review area so the pill can use all of it. It was
-	   once anchored at left: 50%, which capped its shrink-to-fit width at
-	   half the panel and squeezed the chip and verbs; now only the file name
-	   gives way (see the container query at the end). The wrapper itself is
-	   pointer-inert so it never shadows the page around the pill. */
-	.external-write-review-actions {
-		position: absolute;
-		left: 1rem;
-		right: 1rem;
-		bottom: 3rem;
-		z-index: 20;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.55rem;
-		container-type: inline-size;
-		pointer-events: none;
-		/* Entering and leaving review fade symmetrically with the page's
-		   review-focus dimming (150ms): a keyframe covers the mount, the
-		   transition covers the presence-managed exit. */
-		animation: external-write-review-float-in 0.15s ease;
-		transition:
-			opacity 0.15s ease,
-			transform 0.15s ease;
-	}
+@import "../shell/layers.css";
 
-	.external-write-review-actions > * {
-		pointer-events: auto;
-	}
+@layer atelier {
+	@scope (.atelier-root) {
+		/* Values mirror the diff-mode mocks: #1C1917 pill, 12px radius, 7px pad. */
+		/* The float spans the review area so the pill can use all of it. It was
+		   once anchored at left: 50%, which capped its shrink-to-fit width at
+		   half the panel and squeezed the chip and verbs; now only the file name
+		   gives way (see the container query at the end). The wrapper itself is
+		   pointer-inert so it never shadows the page around the pill. */
+		.external-write-review-actions {
+			position: absolute;
+			left: 1rem;
+			right: 1rem;
+			bottom: 3rem;
+			z-index: 20;
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.55rem;
+			container-type: inline-size;
+			pointer-events: none;
+			/* Entering and leaving review fade symmetrically with the page's
+			   review-focus dimming (150ms): a keyframe covers the mount, the
+			   transition covers the presence-managed exit. */
+			animation: external-write-review-float-in 0.15s ease;
+			transition:
+				opacity 0.15s ease,
+				transform 0.15s ease;
+		}
 
-	/* The float takes keyboard focus when review opens (← → step files);
-	   the buttons inside keep their own focus rings. */
-	.external-write-review-actions:focus {
-		outline: none;
-	}
+		.external-write-review-actions > * {
+			pointer-events: auto;
+		}
 
-	/* A slot that keeps one width while its text changes: the hidden sizer
-	   holds the widest value, the visible text sits on top of it. */
-	.external-write-review-stable {
-		display: inline-grid;
-	}
+		/* The float takes keyboard focus when review opens (← → step files);
+		   the buttons inside keep their own focus rings. */
+		.external-write-review-actions:focus {
+			outline: none;
+		}
 
-	.external-write-review-stable > * {
-		grid-area: 1 / 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
+		/* A slot that keeps one width while its text changes: the hidden sizer
+		   holds the widest value, the visible text sits on top of it. */
+		.external-write-review-stable {
+			display: inline-grid;
+		}
 
-	.external-write-review-sizer {
-		visibility: hidden;
-	}
+		.external-write-review-stable > * {
+			grid-area: 1 / 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
 
-	.external-write-review-actions[data-presence="closing"] {
-		opacity: 0;
-		transform: translateY(0.5rem);
-	}
+		.external-write-review-sizer {
+			visibility: hidden;
+		}
 
-	.external-write-review-actions[data-presence="closing"] > * {
-		pointer-events: none;
-	}
-
-	@keyframes external-write-review-float-in {
-		from {
+		.external-write-review-actions[data-presence="closing"] {
 			opacity: 0;
 			transform: translateY(0.5rem);
 		}
-	}
 
-	/* One muted parent folder before a file name (design 12b), on dark chrome. */
-	.external-write-review-path-parent {
-		color: var(--at-overlay-fg-subtle);
-		font-weight: 500;
-	}
+		.external-write-review-actions[data-presence="closing"] > * {
+			pointer-events: none;
+		}
 
-	.external-write-review-scope {
-		display: flex;
-		align-self: center;
-		max-width: 100%;
-		align-items: center;
-		gap: 0.125rem;
-		padding: 0.4375rem;
-		border-radius: 0.75rem;
-		background: var(--at-overlay);
-		box-shadow: var(--at-shadow-overlay);
-	}
+		@keyframes external-write-review-float-in {
+			from {
+				opacity: 0;
+				transform: translateY(0.5rem);
+			}
+		}
 
-	.external-write-review-button-exit {
-		display: inline-flex;
-		align-self: stretch;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0 0.5rem;
-		border-radius: 0.5rem;
-		background: transparent;
-		color: var(--at-overlay-fg);
-		font-size: 0.75rem;
-		font-weight: 600;
-		line-height: 1;
-		white-space: nowrap;
-		transition:
-			background-color 120ms ease,
-			color 120ms ease;
-	}
+		/* One muted parent folder before a file name (design 12b), on dark chrome. */
+		.external-write-review-path-parent {
+			color: var(--at-overlay-fg-subtle);
+			font-weight: 500;
+		}
 
-	.external-write-review-button-exit:hover {
-		background: var(--at-overlay-hairline);
-		color: var(--at-overlay-fg);
-	}
+		.external-write-review-scope {
+			display: flex;
+			align-self: center;
+			max-width: 100%;
+			align-items: center;
+			gap: 0.125rem;
+			padding: 0.4375rem;
+			border-radius: 0.75rem;
+			background: var(--at-overlay);
+			box-shadow: var(--at-shadow-overlay);
+		}
 
-	.external-write-review-button-exit > kbd {
-		border: 1px solid var(--at-overlay-border-strong);
-		border-radius: 0.25rem;
-		background: var(--at-overlay-raised);
-		padding: 0.125rem 0.25rem;
-		color: var(--at-overlay-fg-muted);
-		font-family:
-			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-		font-size: 0.59rem;
-		font-weight: 700;
-		line-height: 1;
-	}
+		.external-write-review-button-exit {
+			display: inline-flex;
+			align-self: stretch;
+			align-items: center;
+			gap: 0.375rem;
+			padding: 0 0.5rem;
+			border-radius: 0.5rem;
+			background: transparent;
+			color: var(--at-overlay-fg);
+			font-size: 0.75rem;
+			font-weight: 600;
+			line-height: 1;
+			white-space: nowrap;
+			transition:
+				background-color 120ms ease,
+				color 120ms ease;
+		}
 
-	.external-write-review-exit-divider {
-		width: 1px;
-		height: 1.25rem;
-		margin: 0 0.25rem;
-		background: var(--at-overlay-border);
-	}
+		.external-write-review-button-exit:hover {
+			background: var(--at-overlay-hairline);
+			color: var(--at-overlay-fg);
+		}
 
-	/* The ▾ file checklist: every changed file, all ticked by default.
-	   Rendered above the bottom-anchored pill, right edges aligned. */
-	.external-write-review-menu {
-		/* Keep the top controls reachable as the retained working set grows. */
-		max-height: min(24rem, calc(100dvh - 10rem));
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		min-width: 13.125rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-		padding: 0.375rem;
-		border: 1px solid var(--at-overlay-border);
-		border-radius: 0.625rem;
-		background: var(--at-overlay);
-		box-shadow: var(--at-shadow-overlay);
-	}
+		.external-write-review-button-exit > kbd {
+			border: 1px solid var(--at-overlay-border-strong);
+			border-radius: 0.25rem;
+			background: var(--at-overlay-raised);
+			padding: 0.125rem 0.25rem;
+			color: var(--at-overlay-fg-muted);
+			font-family:
+				-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+			font-size: 0.59rem;
+			font-weight: 700;
+			line-height: 1;
+		}
 
-	.external-write-review-menu > button {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.4375rem 0.625rem;
-		border-radius: 0.375rem;
-		color: var(--at-overlay-fg-muted);
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-align: left;
-		white-space: nowrap;
-	}
+		.external-write-review-exit-divider {
+			width: 1px;
+			height: 1.25rem;
+			margin: 0 0.25rem;
+			background: var(--at-overlay-border);
+		}
 
-	.external-write-review-menu > button[data-ticked] {
-		color: var(--at-overlay-fg);
-		font-weight: 700;
-	}
+		/* The ▾ file checklist: every changed file, all ticked by default.
+		   Rendered above the bottom-anchored pill, right edges aligned. */
+		.external-write-review-menu {
+			/* Keep the top controls reachable as the retained working set grows. */
+			max-height: min(24rem, calc(100dvh - 10rem));
+			overflow-y: auto;
+			overscroll-behavior: contain;
+			min-width: 13.125rem;
+			display: flex;
+			flex-direction: column;
+			gap: 1px;
+			padding: 0.375rem;
+			border: 1px solid var(--at-overlay-border);
+			border-radius: 0.625rem;
+			background: var(--at-overlay);
+			box-shadow: var(--at-shadow-overlay);
+		}
 
-	.external-write-review-menu > button:hover {
-		background: var(--at-overlay-raised);
-	}
+		.external-write-review-menu > button {
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			padding: 0.4375rem 0.625rem;
+			border-radius: 0.375rem;
+			color: var(--at-overlay-fg-muted);
+			font-size: 0.75rem;
+			font-weight: 600;
+			text-align: left;
+			white-space: nowrap;
+		}
 
-	.external-write-review-menu-tick {
-		display: flex;
-		width: 0.875rem;
-		height: 0.875rem;
-		flex: none;
-		align-items: center;
-		justify-content: center;
-		border: 1.5px solid var(--at-overlay-border-strong);
-		border-radius: 0.25rem;
-		box-sizing: border-box;
-	}
+		.external-write-review-menu > button[data-ticked] {
+			color: var(--at-overlay-fg);
+			font-weight: 700;
+		}
 
-	.external-write-review-menu-tick[data-ticked] {
-		border-color: var(--at-accent);
-		background: var(--at-accent);
-	}
+		.external-write-review-menu > button:hover {
+			background: var(--at-overlay-raised);
+		}
 
-	.external-write-review-menu-tick > svg {
-		width: 0.5625rem;
-		height: 0.5625rem;
-		color: var(--at-accent-on);
-		stroke-width: 3.2;
-	}
+		.external-write-review-menu-tick {
+			display: flex;
+			width: 0.875rem;
+			height: 0.875rem;
+			flex: none;
+			align-items: center;
+			justify-content: center;
+			border: 1.5px solid var(--at-overlay-border-strong);
+			border-radius: 0.25rem;
+			box-sizing: border-box;
+		}
 
-	/* Same box as the tick beside it — the glyph's inner padding otherwise
-	   makes it read smaller. */
-	.external-write-review-menu-file-icon {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex: none;
-	}
+		.external-write-review-menu-tick[data-ticked] {
+			border-color: var(--at-accent);
+			background: var(--at-accent);
+		}
 
-	.external-write-review-menu
-		> button:not([data-ticked])
+		.external-write-review-menu-tick > svg {
+			width: 0.5625rem;
+			height: 0.5625rem;
+			color: var(--at-accent-on);
+			stroke-width: 3.2;
+		}
+
+		/* Same box as the tick beside it — the glyph's inner padding otherwise
+		   makes it read smaller. */
 		.external-write-review-menu-file-icon {
-		opacity: 0.6;
-	}
-
-	.external-write-review-menu-name {
-		overflow: hidden;
-		max-width: 13rem;
-		text-overflow: ellipsis;
-	}
-
-	.external-write-review-menu-divider {
-		height: 1px;
-		margin: 0.25rem 0.125rem;
-		background: var(--at-overlay-border);
-	}
-
-	/* Row state, right-aligned: "viewing". */
-	.external-write-review-menu-tag {
-		margin-left: auto;
-		padding-left: 0.75rem;
-		color: var(--at-overlay-fg-subtle);
-		font-size: 0.625rem;
-		font-weight: 500;
-	}
-
-	.external-write-review-menu > button[data-viewing] {
-		background: var(--at-overlay-raised);
-	}
-
-	/* A verb's arrow menu: "{Verb} all N files", "Undo only {file}". */
-	.external-write-review-verb-menu {
-		min-width: 11rem;
-	}
-
-	/* Each item carries its verb's icon, like the big half beside it; the
-	   shortcut sits at the far right. */
-	.external-write-review-verb-menu > button {
-		gap: 0.5rem;
-	}
-
-	.external-write-review-verb-menu > button > svg {
-		width: 0.75rem;
-		height: 0.75rem;
-		flex: none;
-	}
-
-	.external-write-review-verb-menu > button:disabled > svg {
-		opacity: 0.6;
-	}
-
-	.external-write-review-verb-menu kbd {
-		margin-left: auto;
-		padding-left: 0.875rem;
-	}
-
-	.external-write-review-verb-menu > button:disabled {
-		color: var(--at-overlay-fg-subtle);
-		cursor: default;
-	}
-
-	.external-write-review-verb-menu > button:disabled:hover {
-		background: transparent;
-	}
-
-	.external-write-review-verb-menu kbd {
-		color: var(--at-overlay-fg-subtle);
-		font-family:
-			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-		font-size: 0.59rem;
-		font-weight: 700;
-	}
-
-	/* The scope chip: the working set, visible even with the list closed.
-	   Stretches to the row height so its box matches the orange verb beside
-	   it, border included. */
-	.external-write-review-scope-chip {
-		display: inline-flex;
-		align-self: stretch;
-		align-items: center;
-		gap: 0.375rem;
-		margin: 0 0.25rem 0 0.0625rem;
-		padding: 0 0.5rem;
-		border: 1px solid var(--at-overlay-border);
-		border-radius: 0.5rem;
-		background: var(--at-overlay-raised);
-		color: var(--at-overlay-fg);
-		font-size: 0.75rem;
-		font-weight: 600;
-		line-height: 1;
-		white-space: nowrap;
-		transition: background-color 120ms ease;
-	}
-
-	.external-write-review-scope-chip:hover:not(:disabled) {
-		background: var(--at-overlay-hover);
-	}
-
-	.external-write-review-scope-chip:disabled {
-		cursor: default;
-		opacity: 0.7;
-	}
-
-	.external-write-review-scope-chip > svg {
-		width: 0.625rem;
-		height: 0.625rem;
-		color: var(--at-overlay-fg-muted);
-	}
-
-	/* The progress ring: orange = will be acted on, the rest not. The wedge
-	   comes from the chip's counts. */
-	.external-write-review-ring {
-		width: 0.8125rem;
-		height: 0.8125rem;
-		flex: none;
-		border-radius: 50%;
-		background: conic-gradient(
-			var(--at-accent) 0deg var(--ring-ticked, 0deg),
-			var(--at-overlay-border-strong) var(--ring-ticked, 0deg) 360deg
-		);
-	}
-
-	/* Only the file navigation gives way when the pill runs out of room;
-	   the chip and the verbs keep their full labels. */
-	.external-write-review-scope > * {
-		flex: none;
-	}
-
-	.external-write-review-navigation {
-		display: flex;
-		flex: 0 1 auto;
-		min-width: 0;
-		align-items: center;
-		gap: 0.42rem;
-		padding: 0 0.55rem 0 0.12rem;
-		color: var(--at-overlay-fg);
-	}
-
-	.external-write-review-navigation > button {
-		display: inline-flex;
-		width: 1.5rem;
-		height: 1.5rem;
-		align-items: center;
-		justify-content: center;
-		border-radius: 0.4375rem;
-		color: var(--at-overlay-fg-muted);
-	}
-
-	.external-write-review-navigation > button:hover:not(:disabled) {
-		background: var(--at-overlay-hairline);
-		color: var(--at-overlay-fg);
-	}
-
-	.external-write-review-navigation svg {
-		width: 0.875rem;
-		height: 0.875rem;
-	}
-
-	/* A moved file takes the icon's slot: the glyph says what happened and the
-	   hint says where from, because the document itself shows no diff. */
-	.external-write-review-navigation .external-write-review-moved {
-		display: inline-flex;
-		flex: none;
-		align-items: center;
-		gap: 0.25rem;
-		color: var(--at-overlay-fg-subtle);
-		font-size: 0.625rem;
-		font-weight: 500;
-	}
-
-	.external-write-review-navigation .external-write-review-moved small {
-		max-width: 8rem;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-
-	.external-write-review-navigation .external-write-review-file-icon {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex: none;
-		color: color-mix(in srgb, var(--at-overlay-fg) 72%, transparent);
-	}
-
-	.external-write-review-navigation > span {
-		display: flex;
-		min-width: 0;
-		align-items: baseline;
-		gap: 0.42rem;
-		/* The name slot clips for its ellipsis; the line box needs room for
-		   descenders ("gtm/") or they are cut off. */
-		line-height: 1.3;
-	}
-
-	.external-write-review-navigation strong {
-		min-width: 0;
-		max-width: 12rem;
-		font-size: 0.75rem;
-		font-weight: 700;
-	}
-
-	.external-write-review-pager {
-		display: inline-flex;
-		flex: none;
-		align-items: center;
-		gap: 0.24rem;
-		align-self: center;
-	}
-
-	.external-write-review-pager i {
-		width: 0.3rem;
-		height: 0.3rem;
-		border-radius: 50%;
-		background: var(--at-overlay-fg-subtle);
-		opacity: 0.55;
-	}
-
-	.external-write-review-pager i[data-active] {
-		background: var(--at-overlay-fg);
-		opacity: 1;
-	}
-
-	.external-write-review-pager-index {
-		flex: none;
-		color: var(--at-overlay-fg-subtle);
-		font-size: 0.72rem;
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
-	}
-
-	.external-write-review-navigation small {
-		flex: none;
-		color: var(--at-overlay-fg-subtle);
-		font-size: 0.72rem;
-		white-space: nowrap;
-	}
-
-	.external-write-review-navigation-placeholder {
-		color: var(--at-overlay-fg-muted);
-		font-weight: 600;
-	}
-
-	.external-write-review-button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.6875rem;
-		border-radius: 0.5rem;
-		font-size: 0.75rem;
-		font-weight: 700;
-		line-height: 1;
-		white-space: nowrap;
-		transition:
-			background-color 120ms ease,
-			color 120ms ease;
-	}
-
-	.external-write-review-button > svg {
-		width: 0.75rem;
-		height: 0.75rem;
-	}
-
-	.external-write-review-button:disabled {
-		cursor: default;
-		opacity: 0.7;
-	}
-
-	.external-write-review-button-accept {
-		background: var(--at-accent);
-		color: var(--at-accent-on);
-	}
-
-	.external-write-review-button-accept:hover:not(:disabled) {
-		background: var(--at-accent-hover);
-	}
-
-	.external-write-review-button-reject {
-		padding: 0.3125rem 0.5625rem;
-		background: transparent;
-		/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
-		color: var(--at-overlay-danger);
-		font-weight: 600;
-	}
-
-	.external-write-review-button-reject:hover:not(:disabled) {
-		background: var(--at-overlay-hairline);
-		color: var(--at-overlay-danger);
-	}
-
-	/* A verb is a split button: the big half acts on the ticked set, the
-	   arrow opens its menu ("all N files"). One rounded box, one border. */
-	.external-write-review-split {
-		display: inline-flex;
-		align-items: stretch;
-		border-radius: 0.5rem;
-		overflow: hidden;
-	}
-
-	.external-write-review-split > .external-write-review-button {
-		border-radius: 0;
-	}
-
-	.external-write-review-split-reject {
-		margin-right: 0.125rem;
-		border: 1px solid transparent;
-	}
-
-	.external-write-review-split-reject:has(.external-write-review-split-arrow) {
-		border-color: var(--at-overlay-danger-border);
-	}
-
-	.external-write-review-split-arrow {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.4375rem;
-		transition:
-			background-color 120ms ease,
-			color 120ms ease;
-	}
-
-	.external-write-review-split-arrow > svg {
-		width: 0.625rem;
-		height: 0.625rem;
-		stroke-width: 2.6;
-	}
-
-	.external-write-review-split-arrow:disabled {
-		cursor: default;
-		opacity: 0.7;
-	}
-
-	.external-write-review-split-accept .external-write-review-split-arrow {
-		border-left: 1px solid
-			color-mix(in srgb, var(--at-overlay) 25%, transparent);
-		background: var(--at-accent-hover);
-		color: var(--at-overlay-danger);
-	}
-
-	.external-write-review-split-accept
-		.external-write-review-split-arrow:hover:not(:disabled) {
-		color: var(--at-accent-on);
-	}
-
-	.external-write-review-split-reject .external-write-review-split-arrow {
-		border-left: 1px solid var(--at-overlay-danger-border);
-		background: var(--at-overlay-raised);
-		color: var(--at-overlay-danger);
-	}
-
-	.external-write-review-split-reject
-		.external-write-review-split-arrow:hover:not(:disabled) {
-		background: var(--at-overlay-hairline);
-		color: var(--at-overlay-danger);
-	}
-
-	/* The pill divider between the stepper and the verbs. */
-	.external-write-review-navigation::after {
-		content: "";
-		width: 1px;
-		height: 1rem;
-		margin-left: 0.125rem;
-		background: var(--at-overlay-border);
-	}
-
-	.external-write-review-shortcut {
-		border-radius: 0.25rem;
-		background: var(--at-overlay-hairline-strong);
-		padding: 0.125rem 0.3125rem;
-		color: var(--at-overlay-danger);
-		font-family:
-			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-		font-size: 0.59rem;
-		font-weight: 700;
-		line-height: 1;
-	}
-
-	.external-write-review-error {
-		border-radius: 0.45rem;
-		background: var(--at-danger-subtle);
-		padding: 0.3rem 0.5rem;
-		color: var(--at-danger);
-		font-size: 0.68rem;
-	}
-
-	/* Narrow review areas (side panels open on a small window): the labels
-	   that only repeat what the glyphs say go first — "Exit", the ⌘⏎ hint —
-	   and the parent folder, before the file name has to ellipsise. The
-	   threshold is the pill's natural width with every label on, so nothing
-	   truncates while a label could still be dropped. */
-	@container (max-width: 54rem) {
-		.external-write-review-button-exit > span,
-		.external-write-review-button-accept > .external-write-review-shortcut {
-			display: none;
-		}
-
-		.external-write-review-navigation strong {
-			max-width: 6rem;
-		}
-
-		/* The name alone; the muted parent folder is the first to go. */
-		.external-write-review-navigation .external-write-review-path-parent {
-			display: none;
-		}
-	}
-
-	/* Tighter still: the file name goes, the stepper keeps its arrows and
-	   "n of m" counter so the position stays readable and steppable. */
-	@container (max-width: 36rem) {
-		.external-write-review-navigation {
+			width: 0.875rem;
+			height: 0.875rem;
 			flex: none;
 		}
 
-		.external-write-review-navigation strong,
+		.external-write-review-menu
+			> button:not([data-ticked])
+			.external-write-review-menu-file-icon {
+			opacity: 0.6;
+		}
+
+		.external-write-review-menu-name {
+			overflow: hidden;
+			max-width: 13rem;
+			text-overflow: ellipsis;
+		}
+
+		.external-write-review-menu-divider {
+			height: 1px;
+			margin: 0.25rem 0.125rem;
+			background: var(--at-overlay-border);
+		}
+
+		/* Row state, right-aligned: "viewing". */
+		.external-write-review-menu-tag {
+			margin-left: auto;
+			padding-left: 0.75rem;
+			color: var(--at-overlay-fg-subtle);
+			font-size: 0.625rem;
+			font-weight: 500;
+		}
+
+		.external-write-review-menu > button[data-viewing] {
+			background: var(--at-overlay-raised);
+		}
+
+		/* A verb's arrow menu: "{Verb} all N files", "Undo only {file}". */
+		.external-write-review-verb-menu {
+			min-width: 11rem;
+		}
+
+		/* Each item carries its verb's icon, like the big half beside it; the
+		   shortcut sits at the far right. */
+		.external-write-review-verb-menu > button {
+			gap: 0.5rem;
+		}
+
+		.external-write-review-verb-menu > button > svg {
+			width: 0.75rem;
+			height: 0.75rem;
+			flex: none;
+		}
+
+		.external-write-review-verb-menu > button:disabled > svg {
+			opacity: 0.6;
+		}
+
+		.external-write-review-verb-menu kbd {
+			margin-left: auto;
+			padding-left: 0.875rem;
+		}
+
+		.external-write-review-verb-menu > button:disabled {
+			color: var(--at-overlay-fg-subtle);
+			cursor: default;
+		}
+
+		.external-write-review-verb-menu > button:disabled:hover {
+			background: transparent;
+		}
+
+		.external-write-review-verb-menu kbd {
+			color: var(--at-overlay-fg-subtle);
+			font-family:
+				-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+			font-size: 0.59rem;
+			font-weight: 700;
+		}
+
+		/* The scope chip: the working set, visible even with the list closed.
+		   Stretches to the row height so its box matches the orange verb beside
+		   it, border included. */
+		.external-write-review-scope-chip {
+			display: inline-flex;
+			align-self: stretch;
+			align-items: center;
+			gap: 0.375rem;
+			margin: 0 0.25rem 0 0.0625rem;
+			padding: 0 0.5rem;
+			border: 1px solid var(--at-overlay-border);
+			border-radius: 0.5rem;
+			background: var(--at-overlay-raised);
+			color: var(--at-overlay-fg);
+			font-size: 0.75rem;
+			font-weight: 600;
+			line-height: 1;
+			white-space: nowrap;
+			transition: background-color 120ms ease;
+		}
+
+		.external-write-review-scope-chip:hover:not(:disabled) {
+			background: var(--at-overlay-hover);
+		}
+
+		.external-write-review-scope-chip:disabled {
+			cursor: default;
+			opacity: 0.7;
+		}
+
+		.external-write-review-scope-chip > svg {
+			width: 0.625rem;
+			height: 0.625rem;
+			color: var(--at-overlay-fg-muted);
+		}
+
+		/* The progress ring: orange = will be acted on, the rest not. The wedge
+		   comes from the chip's counts. */
+		.external-write-review-ring {
+			width: 0.8125rem;
+			height: 0.8125rem;
+			flex: none;
+			border-radius: 50%;
+			background: conic-gradient(
+				var(--at-accent) 0deg var(--ring-ticked, 0deg),
+				var(--at-overlay-border-strong) var(--ring-ticked, 0deg) 360deg
+			);
+		}
+
+		/* Only the file navigation gives way when the pill runs out of room;
+		   the chip and the verbs keep their full labels. */
+		.external-write-review-scope > * {
+			flex: none;
+		}
+
+		.external-write-review-navigation {
+			display: flex;
+			flex: 0 1 auto;
+			min-width: 0;
+			align-items: center;
+			gap: 0.42rem;
+			padding: 0 0.55rem 0 0.12rem;
+			color: var(--at-overlay-fg);
+		}
+
+		.external-write-review-navigation > button {
+			display: inline-flex;
+			width: 1.5rem;
+			height: 1.5rem;
+			align-items: center;
+			justify-content: center;
+			border-radius: 0.4375rem;
+			color: var(--at-overlay-fg-muted);
+		}
+
+		.external-write-review-navigation > button:hover:not(:disabled) {
+			background: var(--at-overlay-hairline);
+			color: var(--at-overlay-fg);
+		}
+
+		.external-write-review-navigation svg {
+			width: 0.875rem;
+			height: 0.875rem;
+		}
+
+		/* A moved file takes the icon's slot: the glyph says what happened and the
+		   hint says where from, because the document itself shows no diff. */
+		.external-write-review-navigation .external-write-review-moved {
+			display: inline-flex;
+			flex: none;
+			align-items: center;
+			gap: 0.25rem;
+			color: var(--at-overlay-fg-subtle);
+			font-size: 0.625rem;
+			font-weight: 500;
+		}
+
 		.external-write-review-navigation .external-write-review-moved small {
-			display: none;
+			max-width: 8rem;
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
 		}
 
 		.external-write-review-navigation .external-write-review-file-icon {
-			display: none;
+			width: 0.875rem;
+			height: 0.875rem;
+			flex: none;
+			color: color-mix(in srgb, var(--at-overlay-fg) 72%, transparent);
 		}
-	}
 
-	/* Phone-narrow: the stepper is arrows only and Undo is its icon. The
-	   primary verb keeps its word — it is the one thing the pill is for. */
-	@container (max-width: 32rem) {
-		.external-write-review-navigation small,
-		.external-write-review-button-reject > span {
-			display: none;
+		.external-write-review-navigation > span {
+			display: flex;
+			min-width: 0;
+			align-items: baseline;
+			gap: 0.42rem;
+			/* The name slot clips for its ellipsis; the line box needs room for
+			   descenders ("gtm/") or they are cut off. */
+			line-height: 1.3;
 		}
-	}
 
-	/* Below that the stepper and the Exit button go: Esc still exits, and
-	   every file is reachable from the chip's list. */
-	@container (max-width: 27rem) {
-		.external-write-review-button-exit,
-		.external-write-review-exit-divider,
-		.external-write-review-navigation {
-			display: none;
+		.external-write-review-navigation strong {
+			min-width: 0;
+			max-width: 12rem;
+			font-size: 0.75rem;
+			font-weight: 700;
+		}
+
+		.external-write-review-pager {
+			display: inline-flex;
+			flex: none;
+			align-items: center;
+			gap: 0.24rem;
+			align-self: center;
+		}
+
+		.external-write-review-pager i {
+			width: 0.3rem;
+			height: 0.3rem;
+			border-radius: 50%;
+			background: var(--at-overlay-fg-subtle);
+			opacity: 0.55;
+		}
+
+		.external-write-review-pager i[data-active] {
+			background: var(--at-overlay-fg);
+			opacity: 1;
+		}
+
+		.external-write-review-pager-index {
+			flex: none;
+			color: var(--at-overlay-fg-subtle);
+			font-size: 0.72rem;
+			font-variant-numeric: tabular-nums;
+			white-space: nowrap;
+		}
+
+		.external-write-review-navigation small {
+			flex: none;
+			color: var(--at-overlay-fg-subtle);
+			font-size: 0.72rem;
+			white-space: nowrap;
+		}
+
+		.external-write-review-navigation-placeholder {
+			color: var(--at-overlay-fg-muted);
+			font-weight: 600;
+		}
+
+		.external-write-review-button {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.375rem;
+			padding: 0.375rem 0.6875rem;
+			border-radius: 0.5rem;
+			font-size: 0.75rem;
+			font-weight: 700;
+			line-height: 1;
+			white-space: nowrap;
+			transition:
+				background-color 120ms ease,
+				color 120ms ease;
+		}
+
+		.external-write-review-button > svg {
+			width: 0.75rem;
+			height: 0.75rem;
+		}
+
+		.external-write-review-button:disabled {
+			cursor: default;
+			opacity: 0.7;
+		}
+
+		.external-write-review-button-accept {
+			background: var(--at-accent);
+			color: var(--at-accent-on);
+		}
+
+		.external-write-review-button-accept:hover:not(:disabled) {
+			background: var(--at-accent-hover);
+		}
+
+		.external-write-review-button-reject {
+			padding: 0.3125rem 0.5625rem;
+			background: transparent;
+			/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
+			color: var(--at-overlay-danger);
+			font-weight: 600;
+		}
+
+		.external-write-review-button-reject:hover:not(:disabled) {
+			background: var(--at-overlay-hairline);
+			color: var(--at-overlay-danger);
+		}
+
+		/* A verb is a split button: the big half acts on the ticked set, the
+		   arrow opens its menu ("all N files"). One rounded box, one border. */
+		.external-write-review-split {
+			display: inline-flex;
+			align-items: stretch;
+			border-radius: 0.5rem;
+			overflow: hidden;
+		}
+
+		.external-write-review-split > .external-write-review-button {
+			border-radius: 0;
+		}
+
+		.external-write-review-split-reject {
+			margin-right: 0.125rem;
+			border: 1px solid transparent;
+		}
+
+		.external-write-review-split-reject:has(
+			.external-write-review-split-arrow
+		) {
+			border-color: var(--at-overlay-danger-border);
+		}
+
+		.external-write-review-split-arrow {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0 0.4375rem;
+			transition:
+				background-color 120ms ease,
+				color 120ms ease;
+		}
+
+		.external-write-review-split-arrow > svg {
+			width: 0.625rem;
+			height: 0.625rem;
+			stroke-width: 2.6;
+		}
+
+		.external-write-review-split-arrow:disabled {
+			cursor: default;
+			opacity: 0.7;
+		}
+
+		.external-write-review-split-accept .external-write-review-split-arrow {
+			border-left: 1px solid
+				color-mix(in srgb, var(--at-overlay) 25%, transparent);
+			background: var(--at-accent-hover);
+			color: var(--at-overlay-danger);
+		}
+
+		.external-write-review-split-accept
+			.external-write-review-split-arrow:hover:not(:disabled) {
+			color: var(--at-accent-on);
+		}
+
+		.external-write-review-split-reject .external-write-review-split-arrow {
+			border-left: 1px solid var(--at-overlay-danger-border);
+			background: var(--at-overlay-raised);
+			color: var(--at-overlay-danger);
+		}
+
+		.external-write-review-split-reject
+			.external-write-review-split-arrow:hover:not(:disabled) {
+			background: var(--at-overlay-hairline);
+			color: var(--at-overlay-danger);
+		}
+
+		/* The pill divider between the stepper and the verbs. */
+		.external-write-review-navigation::after {
+			content: "";
+			width: 1px;
+			height: 1rem;
+			margin-left: 0.125rem;
+			background: var(--at-overlay-border);
+		}
+
+		.external-write-review-shortcut {
+			border-radius: 0.25rem;
+			background: var(--at-overlay-hairline-strong);
+			padding: 0.125rem 0.3125rem;
+			color: var(--at-overlay-danger);
+			font-family:
+				-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+			font-size: 0.59rem;
+			font-weight: 700;
+			line-height: 1;
+		}
+
+		.external-write-review-error {
+			border-radius: 0.45rem;
+			background: var(--at-danger-subtle);
+			padding: 0.3rem 0.5rem;
+			color: var(--at-danger);
+			font-size: 0.68rem;
+		}
+
+		/* Narrow review areas (side panels open on a small window): the labels
+		   that only repeat what the glyphs say go first — "Exit", the ⌘⏎ hint —
+		   and the parent folder, before the file name has to ellipsise. The
+		   threshold is the pill's natural width with every label on, so nothing
+		   truncates while a label could still be dropped. */
+		@container (max-width: 54rem) {
+			.external-write-review-button-exit > span,
+			.external-write-review-button-accept > .external-write-review-shortcut {
+				display: none;
+			}
+
+			.external-write-review-navigation strong {
+				max-width: 6rem;
+			}
+
+			/* The name alone; the muted parent folder is the first to go. */
+			.external-write-review-navigation .external-write-review-path-parent {
+				display: none;
+			}
+		}
+
+		/* Tighter still: the file name goes, the stepper keeps its arrows and
+		   "n of m" counter so the position stays readable and steppable. */
+		@container (max-width: 36rem) {
+			.external-write-review-navigation {
+				flex: none;
+			}
+
+			.external-write-review-navigation strong,
+			.external-write-review-navigation .external-write-review-moved small {
+				display: none;
+			}
+
+			.external-write-review-navigation .external-write-review-file-icon {
+				display: none;
+			}
+		}
+
+		/* Phone-narrow: the stepper is arrows only and Undo is its icon. The
+		   primary verb keeps its word — it is the one thing the pill is for. */
+		@container (max-width: 32rem) {
+			.external-write-review-navigation small,
+			.external-write-review-button-reject > span {
+				display: none;
+			}
+		}
+
+		/* Below that the stepper and the Exit button go: Esc still exits, and
+		   every file is reachable from the chip's list. */
+		@container (max-width: 27rem) {
+			.external-write-review-button-exit,
+			.external-write-review-exit-divider,
+			.external-write-review-navigation {
+				display: none;
+			}
 		}
 	}
 }

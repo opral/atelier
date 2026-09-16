@@ -1,366 +1,371 @@
-/*
- * Player chrome is deliberately theme-independent: the stage is always a dark
- * surface (like a paused frame), so the glass controls keep the design's fixed
- * dark palette in both light and dark app themes.
- */
-@scope (.atelier-root) {
-	.atelier-video-view {
-		position: relative;
-		display: block;
-		height: 100%;
-		min-height: 0;
-		flex: 1 1 auto;
-		overflow: hidden;
-		background: var(--at-overlay);
-	}
+@import "../../shell/layers.css";
 
-	.atelier-video-player {
-		position: relative;
-		display: block;
-		width: 100%;
-		height: 100%;
-		background: var(--at-overlay);
-		outline: none;
-	}
-
+@layer atelier {
 	/*
-	 * The player takes focus — from a click on its controls as much as from
-	 * Tab — and while it holds it the keyboard is the player's, not the
-	 * document's. A focused player that looks exactly like an unfocused one is
-	 * what makes that silent: keys pressed at the video go nowhere the reader
-	 * can see, and nothing on screen says why.
-	 *
-	 * `:focus-within` covers the frame and its buttons alike. The ring is
-	 * drawn inside, because both the standalone view and the Markdown embed
-	 * clip their overflow, and it is laid over a dark band so that a hairline
-	 * of it survives on either side — a brand-coloured ring on its own
-	 * disappears into a bright frame of video.
+	 * Player chrome is deliberately theme-independent: the stage is always a dark
+	 * surface (like a paused frame), so the glass controls keep the design's fixed
+	 * dark palette in both light and dark app themes.
 	 */
-	.atelier-video-player:focus-within {
-		outline: 2px solid var(--at-ring);
-		outline-offset: -3px;
-	}
+	@scope (.atelier-root) {
+		.atelier-video-view {
+			position: relative;
+			display: block;
+			height: 100%;
+			min-height: 0;
+			flex: 1 1 auto;
+			overflow: hidden;
+			background: var(--at-overlay);
+		}
 
-	.atelier-video-player:focus-within::after {
-		content: "";
-		position: absolute;
-		z-index: 2;
-		inset: 0;
-		box-shadow: inset 0 0 0 4px
-			color-mix(in srgb, var(--at-overlay) 60%, transparent);
-		pointer-events: none;
-	}
+		.atelier-video-player {
+			position: relative;
+			display: block;
+			width: 100%;
+			height: 100%;
+			background: var(--at-overlay);
+			outline: none;
+		}
 
-	/* Inside the ring, which control has the keyboard. */
-	.atelier-video-player button:focus-visible {
-		outline: 2px solid var(--at-ring);
-		outline-offset: 2px;
-	}
+		/*
+		 * The player takes focus — from a click on its controls as much as from
+		 * Tab — and while it holds it the keyboard is the player's, not the
+		 * document's. A focused player that looks exactly like an unfocused one is
+		 * what makes that silent: keys pressed at the video go nowhere the reader
+		 * can see, and nothing on screen says why.
+		 *
+		 * `:focus-within` covers the frame and its buttons alike. The ring is
+		 * drawn inside, because both the standalone view and the Markdown embed
+		 * clip their overflow, and it is laid over a dark band so that a hairline
+		 * of it survives on either side — a brand-coloured ring on its own
+		 * disappears into a bright frame of video.
+		 */
+		.atelier-video-player:focus-within {
+			outline: 2px solid var(--at-ring);
+			outline-offset: -3px;
+		}
 
-	.atelier-video-player[data-idle="true"] {
-		cursor: none;
-	}
+		.atelier-video-player:focus-within::after {
+			content: "";
+			position: absolute;
+			z-index: 2;
+			inset: 0;
+			box-shadow: inset 0 0 0 4px
+				color-mix(in srgb, var(--at-overlay) 60%, transparent);
+			pointer-events: none;
+		}
 
-	.atelier-video-surface {
-		display: block;
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-	}
+		/* Inside the ring, which control has the keyboard. */
+		.atelier-video-player button:focus-visible {
+			outline: 2px solid var(--at-ring);
+			outline-offset: 2px;
+		}
 
-	/* ── floating chips (standalone) ── */
+		.atelier-video-player[data-idle="true"] {
+			cursor: none;
+		}
 
-	.atelier-video-chip {
-		position: absolute;
-		top: 12px;
-		display: inline-flex;
-		align-items: center;
-		gap: 7px;
-		padding: 5px 12px 5px 9px;
-		border: 1px solid var(--at-overlay-hairline);
-		border-radius: 999px;
-		background: var(--at-scrim);
-		backdrop-filter: blur(10px);
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--at-overlay-fg);
-		transition: opacity 0.3s ease;
-	}
+		.atelier-video-surface {
+			display: block;
+			width: 100%;
+			height: 100%;
+			object-fit: contain;
+		}
 
-	.atelier-video-chip--file {
-		left: 12px;
-	}
+		/* ── floating chips (standalone) ── */
 
-	.atelier-video-chip--specs {
-		right: 12px;
-		padding: 5px 12px;
-		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
-		font-size: 10px;
-		font-weight: 500;
-		color: var(--at-overlay-fg-subtle);
-	}
+		.atelier-video-chip {
+			position: absolute;
+			top: 12px;
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			padding: 5px 12px 5px 9px;
+			border: 1px solid var(--at-overlay-hairline);
+			border-radius: 999px;
+			background: var(--at-scrim);
+			backdrop-filter: blur(10px);
+			font-size: 11px;
+			font-weight: 600;
+			color: var(--at-overlay-fg);
+			transition: opacity 0.3s ease;
+		}
 
-	.atelier-video-chip-icon {
-		width: 12px;
-		height: 12px;
-		color: var(--at-overlay-accent);
-	}
+		.atelier-video-chip--file {
+			left: 12px;
+		}
 
-	.atelier-video-chip-label {
-		white-space: nowrap;
-	}
+		.atelier-video-chip--specs {
+			right: 12px;
+			padding: 5px 12px;
+			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+			font-size: 10px;
+			font-weight: 500;
+			color: var(--at-overlay-fg-subtle);
+		}
 
-	.atelier-video-chip-divider {
-		width: 1px;
-		height: 10px;
-		background: var(--at-overlay-hairline);
-	}
+		.atelier-video-chip-icon {
+			width: 12px;
+			height: 12px;
+			color: var(--at-overlay-accent);
+		}
 
-	.atelier-video-chip-muted {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		color: var(--at-overlay-fg-subtle);
-		font-weight: 500;
-	}
+		.atelier-video-chip-label {
+			white-space: nowrap;
+		}
 
-	.atelier-video-chip-muted svg {
-		width: 10px;
-		height: 10px;
-	}
+		.atelier-video-chip-divider {
+			width: 1px;
+			height: 10px;
+			background: var(--at-overlay-hairline);
+		}
 
-	/* ── center play puck ── */
+		.atelier-video-chip-muted {
+			display: inline-flex;
+			align-items: center;
+			gap: 4px;
+			color: var(--at-overlay-fg-subtle);
+			font-weight: 500;
+		}
 
-	.atelier-video-puck {
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 68px;
-		height: 68px;
-		padding: 0;
-		border: 1px solid var(--at-overlay-hairline);
-		border-radius: 50%;
-		background: var(--at-scrim);
-		backdrop-filter: blur(10px);
-		box-shadow: var(--at-shadow-overlay);
-		color: var(--at-overlay-fg);
-		cursor: pointer;
-		transform: translate(-50%, -50%);
-		transition:
-			background 0.15s ease,
-			opacity 0.2s ease;
-	}
+		.atelier-video-chip-muted svg {
+			width: 10px;
+			height: 10px;
+		}
 
-	.atelier-video-puck:hover {
-		background: color-mix(in srgb, var(--at-accent) 75%, transparent);
-	}
+		/* ── center play puck ── */
 
-	.atelier-video-puck svg {
-		width: 24px;
-		height: 24px;
-		margin-left: 3px;
-	}
+		.atelier-video-puck {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 68px;
+			height: 68px;
+			padding: 0;
+			border: 1px solid var(--at-overlay-hairline);
+			border-radius: 50%;
+			background: var(--at-scrim);
+			backdrop-filter: blur(10px);
+			box-shadow: var(--at-shadow-overlay);
+			color: var(--at-overlay-fg);
+			cursor: pointer;
+			transform: translate(-50%, -50%);
+			transition:
+				background 0.15s ease,
+				opacity 0.2s ease;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-puck {
-		width: 48px;
-		height: 48px;
-		box-shadow: var(--at-shadow-overlay);
-	}
+		.atelier-video-puck:hover {
+			background: color-mix(in srgb, var(--at-accent) 75%, transparent);
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-puck svg {
-		width: 17px;
-		height: 17px;
-		margin-left: 2px;
-	}
+		.atelier-video-puck svg {
+			width: 24px;
+			height: 24px;
+			margin-left: 3px;
+		}
 
-	.atelier-video-player[data-playing="true"] .atelier-video-puck,
-	.atelier-video-player[data-video-state="error"] .atelier-video-puck {
-		opacity: 0;
-		pointer-events: none;
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-puck {
+			width: 48px;
+			height: 48px;
+			box-shadow: var(--at-shadow-overlay);
+		}
 
-	/* ── glass control pill ── */
+		.atelier-video-player[data-variant="embed"] .atelier-video-puck svg {
+			width: 17px;
+			height: 17px;
+			margin-left: 2px;
+		}
 
-	.atelier-video-pill {
-		position: absolute;
-		right: 12px;
-		bottom: 12px;
-		left: 12px;
-		display: flex;
-		align-items: center;
-		gap: 11px;
-		padding: 9px 16px 9px 11px;
-		border: 1px solid var(--at-overlay-hairline);
-		border-radius: 999px;
-		background: var(--at-scrim);
-		backdrop-filter: blur(14px);
-		transition: opacity 0.3s ease;
-	}
+		.atelier-video-player[data-playing="true"] .atelier-video-puck,
+		.atelier-video-player[data-video-state="error"] .atelier-video-puck {
+			opacity: 0;
+			pointer-events: none;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-pill {
-		right: 8px;
-		bottom: 8px;
-		left: 8px;
-		gap: 9px;
-		padding: 6px 12px 6px 9px;
-	}
+		/* ── glass control pill ── */
 
-	.atelier-video-player[data-idle="true"] .atelier-video-pill,
-	.atelier-video-player[data-idle="true"] .atelier-video-chip {
-		opacity: 0;
-		pointer-events: none;
-	}
+		.atelier-video-pill {
+			position: absolute;
+			right: 12px;
+			bottom: 12px;
+			left: 12px;
+			display: flex;
+			align-items: center;
+			gap: 11px;
+			padding: 9px 16px 9px 11px;
+			border: 1px solid var(--at-overlay-hairline);
+			border-radius: 999px;
+			background: var(--at-scrim);
+			backdrop-filter: blur(14px);
+			transition: opacity 0.3s ease;
+		}
 
-	.atelier-video-player[data-video-state="error"] .atelier-video-pill {
-		opacity: 0;
-		pointer-events: none;
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-pill {
+			right: 8px;
+			bottom: 8px;
+			left: 8px;
+			gap: 9px;
+			padding: 6px 12px 6px 9px;
+		}
 
-	.atelier-video-pill button {
-		display: flex;
-		flex-shrink: 0;
-		align-items: center;
-		justify-content: center;
-		padding: 0;
-		border: none;
-		background: none;
-		color: var(--at-overlay-fg);
-		cursor: pointer;
-	}
+		.atelier-video-player[data-idle="true"] .atelier-video-pill,
+		.atelier-video-player[data-idle="true"] .atelier-video-chip {
+			opacity: 0;
+			pointer-events: none;
+		}
 
-	.atelier-video-toggle {
-		width: 26px;
-		height: 26px;
-	}
+		.atelier-video-player[data-video-state="error"] .atelier-video-pill {
+			opacity: 0;
+			pointer-events: none;
+		}
 
-	.atelier-video-toggle svg {
-		width: 15px;
-		height: 15px;
-	}
+		.atelier-video-pill button {
+			display: flex;
+			flex-shrink: 0;
+			align-items: center;
+			justify-content: center;
+			padding: 0;
+			border: none;
+			background: none;
+			color: var(--at-overlay-fg);
+			cursor: pointer;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-toggle {
-		width: 18px;
-		height: 18px;
-	}
+		.atelier-video-toggle {
+			width: 26px;
+			height: 26px;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-toggle svg {
-		width: 12px;
-		height: 12px;
-	}
+		.atelier-video-toggle svg {
+			width: 15px;
+			height: 15px;
+		}
 
-	.atelier-video-icon-pause,
-	.atelier-video-player[data-playing="true"] .atelier-video-icon-play {
-		display: none;
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-toggle {
+			width: 18px;
+			height: 18px;
+		}
 
-	.atelier-video-player[data-playing="true"] .atelier-video-icon-pause {
-		display: block;
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-toggle svg {
+			width: 12px;
+			height: 12px;
+		}
 
-	.atelier-video-timecode {
-		flex-shrink: 0;
-		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
-		font-size: 11px;
-		color: var(--at-overlay-fg);
-		white-space: nowrap;
-	}
+		.atelier-video-icon-pause,
+		.atelier-video-player[data-playing="true"] .atelier-video-icon-play {
+			display: none;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-timecode {
-		font-size: 10px;
-		color: var(--at-overlay-fg);
-	}
+		.atelier-video-player[data-playing="true"] .atelier-video-icon-pause {
+			display: block;
+		}
 
-	.atelier-video-track {
-		position: relative;
-		display: block;
-		flex: 1;
-		height: 4px;
-		border-radius: 2px;
-		background: var(--at-overlay-hairline-strong);
-		cursor: pointer;
-		touch-action: none;
-	}
+		.atelier-video-timecode {
+			flex-shrink: 0;
+			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+			font-size: 11px;
+			color: var(--at-overlay-fg);
+			white-space: nowrap;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-track {
-		height: 3px;
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-timecode {
+			font-size: 10px;
+			color: var(--at-overlay-fg);
+		}
 
-	.atelier-video-track-fill {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		display: block;
-		width: 0%;
-		border-radius: 2px;
-		background: linear-gradient(90deg, var(--at-link), var(--at-link));
-	}
+		.atelier-video-track {
+			position: relative;
+			display: block;
+			flex: 1;
+			height: 4px;
+			border-radius: 2px;
+			background: var(--at-overlay-hairline-strong);
+			cursor: pointer;
+			touch-action: none;
+		}
 
-	.atelier-video-track-knob {
-		position: absolute;
-		top: -3px;
-		left: -5px;
-		display: block;
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: var(--at-panel);
-		box-shadow: 0 1px 6px color-mix(in srgb, var(--at-overlay) 50%, transparent);
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-track {
+			height: 3px;
+		}
 
-	.atelier-video-rate {
-		font-size: 10.5px;
-		font-weight: 700;
-		color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
-	}
+		.atelier-video-track-fill {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			display: block;
+			width: 0%;
+			border-radius: 2px;
+			background: linear-gradient(90deg, var(--at-link), var(--at-link));
+		}
 
-	.atelier-video-mute svg {
-		width: 14px;
-		height: 14px;
-		color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
-	}
+		.atelier-video-track-knob {
+			position: absolute;
+			top: -3px;
+			left: -5px;
+			display: block;
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			background: var(--at-panel);
+			box-shadow: 0 1px 6px
+				color-mix(in srgb, var(--at-overlay) 50%, transparent);
+		}
 
-	.atelier-video-icon-muted,
-	.atelier-video-player[data-muted="true"] .atelier-video-icon-volume {
-		display: none;
-	}
+		.atelier-video-rate {
+			font-size: 10.5px;
+			font-weight: 700;
+			color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
+		}
 
-	.atelier-video-player[data-muted="true"] .atelier-video-icon-muted {
-		display: block;
-	}
+		.atelier-video-mute svg {
+			width: 14px;
+			height: 14px;
+			color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
+		}
 
-	.atelier-video-fullscreen svg {
-		width: 13px;
-		height: 13px;
-		color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
-	}
+		.atelier-video-icon-muted,
+		.atelier-video-player[data-muted="true"] .atelier-video-icon-volume {
+			display: none;
+		}
 
-	.atelier-video-player[data-variant="embed"] .atelier-video-fullscreen svg {
-		width: 12px;
-		color: var(--at-overlay-fg);
-	}
+		.atelier-video-player[data-muted="true"] .atelier-video-icon-muted {
+			display: block;
+		}
 
-	/* ── error state ── */
+		.atelier-video-fullscreen svg {
+			width: 13px;
+			height: 13px;
+			color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
+		}
 
-	.atelier-video-error[hidden] {
-		display: none;
-	}
+		.atelier-video-player[data-variant="embed"] .atelier-video-fullscreen svg {
+			width: 12px;
+			color: var(--at-overlay-fg);
+		}
 
-	.atelier-video-error {
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		display: block;
-		padding: 8px 14px;
-		border: 1px solid var(--at-overlay-hairline);
-		border-radius: 8px;
-		background: var(--at-scrim);
-		font-size: 12.5px;
-		color: var(--at-overlay-fg);
-		transform: translate(-50%, -50%);
-		white-space: nowrap;
+		/* ── error state ── */
+
+		.atelier-video-error[hidden] {
+			display: none;
+		}
+
+		.atelier-video-error {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			display: block;
+			padding: 8px 14px;
+			border: 1px solid var(--at-overlay-hairline);
+			border-radius: 8px;
+			background: var(--at-scrim);
+			font-size: 12.5px;
+			color: var(--at-overlay-fg);
+			transform: translate(-50%, -50%);
+			white-space: nowrap;
+		}
 	}
 }
