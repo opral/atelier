@@ -194,7 +194,7 @@ function ImageViewContent({
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -211,7 +211,7 @@ function ImageViewContent({
 function ImageReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			The working image changed while it was being reviewed. Reopen the review.
@@ -361,7 +361,7 @@ function ImagePreviewSource({
 					</ImageToolbarButton>
 					<output
 						aria-label="Zoom level"
-						className="min-w-13 px-1 text-center text-[11.5px] font-semibold text-[var(--color-text-tertiary)] tabular-nums"
+						className="min-w-13 px-1 text-center text-[11.5px] font-semibold text-fg-subtle tabular-nums"
 					>
 						{Math.round(displayedZoom * 100)}%
 					</output>
@@ -419,7 +419,7 @@ function ImageToolbarButton({
 				<Button
 					aria-label={ariaLabel}
 					aria-pressed={isPressed}
-					className="h-7 min-w-7 gap-1.5 rounded-control px-2 text-[11.5px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-35 [&_svg]:size-3.75"
+					className="h-7 min-w-7 gap-1.5 rounded-md px-2 text-[11.5px] font-semibold text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-35 [&_svg]:size-3.75"
 					disabled={disabled}
 					onClick={onClick}
 					size="sm"
@@ -439,13 +439,13 @@ function ImageErrorState({ filePath }: { readonly filePath: string }) {
 		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
 			<ImageOff
 				aria-hidden="true"
-				className="size-7 text-[var(--color-icon-tertiary)]"
+				className="size-7 text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-[var(--color-text-primary)]">
+			<p className="mt-3 text-sm font-medium text-fg">
 				This image could not be displayed.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} may be damaged or use an
 				unsupported image format.
 			</p>
@@ -455,7 +455,7 @@ function ImageErrorState({ filePath }: { readonly filePath: string }) {
 
 function ImageLoadingState() {
 	return (
-		<div className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-[var(--color-text-tertiary)]">
+		<div className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle">
 			<div className="flex items-center gap-2 text-sm">
 				<AnimatedZap size={13} tone="muted" className="shrink-0" />
 				<span>Loading image…</span>

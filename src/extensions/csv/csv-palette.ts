@@ -16,9 +16,6 @@ export type CsvPalette = Record<
 export const CSV_COLORS = Object.fromEntries(
 	Object.entries(CSV_COLOR_FALLBACKS).map(([name, [bg, fg]]) => [
 		name,
-		[
-			`var(--color-bg-tag-${name}, ${bg})`,
-			`var(--color-text-tag-${name}, ${fg})`,
-		],
+		[`var(--at-tag-${name}, ${bg})`, `var(--at-tag-${name}-fg, ${fg})`],
 	]),
 ) as unknown as CsvPalette;

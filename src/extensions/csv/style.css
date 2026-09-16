@@ -28,14 +28,14 @@
 		align-items: center;
 		gap: 6px;
 		padding: 6px 12px;
-		border: 1px solid var(--color-border-notice-warning);
+		border: 1px solid var(--at-warning-border);
 		border-radius: 999px;
-		background: var(--color-bg-notice-warning);
-		color: var(--color-text-notice-warning);
+		background: var(--at-warning-subtle);
+		color: var(--at-warning);
 		font-size: 12px;
 		line-height: 1.2;
 		transform: translateX(-50%);
-		box-shadow: var(--shadow-md);
+		box-shadow: var(--at-shadow-md);
 		pointer-events: none;
 	}
 
@@ -45,10 +45,10 @@
 		gap: 6px;
 		margin-top: 8px;
 		padding: 6px 14px;
-		border: 1px solid var(--color-bg-action-primary);
-		border-radius: var(--radius-control);
-		background: var(--color-bg-action-primary);
-		color: var(--color-text-on-action-primary);
+		border: 1px solid var(--at-accent);
+		border-radius: var(--at-radius-md);
+		background: var(--at-accent);
+		color: var(--at-accent-on);
 		font-size: 13px;
 		font-weight: 500;
 		line-height: 1.2;
@@ -56,7 +56,7 @@
 	}
 
 	.csv-create-table-button:hover {
-		background: var(--color-bg-action-primary-hover);
+		background: var(--at-accent-hover);
 	}
 
 	/* Append controls continue the grid geometry and use quiet table states. */
@@ -69,16 +69,16 @@
 		height: 40px;
 		padding: 0;
 		border: 0;
-		border-bottom: 1px solid var(--color-border-table-grid);
+		border-bottom: 1px solid var(--at-border-subtle);
 		border-radius: 0;
-		background: var(--color-bg-panel);
-		color: var(--color-text-tertiary);
+		background: var(--at-panel);
+		color: var(--at-fg-subtle);
 		font-size: 13px;
 		font-weight: 400;
 		cursor: pointer;
 		transition:
-			background-color var(--duration-base) ease,
-			color var(--duration-base) ease;
+			background-color var(--at-duration) ease,
+			color var(--at-duration) ease;
 	}
 	.csv-append-column-strip {
 		top: 0;
@@ -98,12 +98,12 @@
 	}
 	.csv-append-column-strip:hover,
 	.csv-append-row-strip:hover {
-		background: var(--color-bg-table-row-hover);
-		color: var(--color-text-secondary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg-muted);
 	}
 	.csv-append-column-strip:focus-visible,
 	.csv-append-row-strip:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: -2px;
 	}
 
@@ -138,12 +138,12 @@
 		position: absolute;
 		pointer-events: auto;
 		border-radius: 3px;
-		background: color-mix(in srgb, var(--color-text-primary) 32%, transparent);
+		background: color-mix(in srgb, var(--at-fg) 32%, transparent);
 		transition: background-color 160ms ease;
 	}
 	.csv-overlay-thumb:hover,
 	.csv-overlay-thumb:active {
-		background: color-mix(in srgb, var(--color-text-primary) 52%, transparent);
+		background: color-mix(in srgb, var(--at-fg) 52%, transparent);
 	}
 	.csv-overlay-thumb-horizontal {
 		left: 3px;
@@ -169,10 +169,10 @@
 		min-width: 180px;
 		flex-direction: column;
 		padding: 4px;
-		border: 1px solid var(--color-border-panel);
-		border-radius: var(--radius-panel);
-		background: var(--background);
-		box-shadow: var(--shadow-lg);
+		border: 1px solid var(--at-border);
+		border-radius: var(--at-radius-lg);
+		background: var(--at-panel);
+		box-shadow: var(--at-shadow-lg);
 	}
 
 	.csv-grid-menu-item {
@@ -180,9 +180,9 @@
 		align-items: center;
 		gap: 8px;
 		min-height: 30px;
-		border-radius: var(--radius-control);
+		border-radius: var(--at-radius-md);
 		padding: 5px 8px;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 12.5px;
 		line-height: 1.2;
 		text-align: left;
@@ -191,7 +191,7 @@
 
 	.csv-grid-menu-item-icon {
 		flex-shrink: 0;
-		color: var(--color-icon-secondary);
+		color: var(--at-fg-muted);
 	}
 
 	.csv-grid-menu-item-destructive .csv-grid-menu-item-icon {
@@ -199,15 +199,15 @@
 	}
 
 	.csv-grid-menu-item:hover {
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 
 	.csv-grid-menu-item-destructive {
-		color: var(--color-text-status-danger);
+		color: var(--at-danger);
 	}
 
 	.csv-grid-menu-item-destructive:hover {
-		background: var(--color-bg-status-danger);
+		background: var(--at-danger-subtle);
 	}
 }
 

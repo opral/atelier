@@ -119,14 +119,11 @@ function EmptyStateContent({
 			className="flex h-full flex-col items-center justify-center p-10 text-center"
 			data-testid="main-panel-empty-state"
 		>
-			<FilePlus
-				className="size-8 text-[var(--color-icon-tertiary)]"
-				strokeWidth={1.5}
-			/>
-			<h1 className="mt-4 text-2xl font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">
+			<FilePlus className="size-8 text-fg-subtle" strokeWidth={1.5} />
+			<h1 className="mt-4 text-2xl font-bold tracking-[-0.02em] text-fg">
 				Start writing
 			</h1>
-			<p className="mt-1.5 max-w-90 text-sm leading-relaxed text-[var(--color-text-secondary)] text-pretty">
+			<p className="mt-1.5 max-w-90 text-sm leading-relaxed text-fg-muted text-pretty">
 				Open a file from the left, or create a new document — saved as plain
 				markdown in this folder.
 			</p>
@@ -135,7 +132,7 @@ function EmptyStateContent({
 					type="button"
 					onClick={() => void onCreateNewFile()}
 					data-attr="main-empty-new-document"
-					className="mt-6 flex items-center gap-2 rounded-[10px] bg-[var(--color-bg-action-primary)] px-6 py-2.75 text-sm font-bold text-[var(--color-text-on-action-primary)] shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[var(--color-bg-action-primary-hover)]"
+					className="mt-6 flex items-center gap-2 rounded-[10px] bg-bg-hover px-6 py-2.75 text-sm font-bold text-accent-on shadow-[0_6px_18px_rgba(154,52,18,0.24),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover"
 				>
 					New document
 					<span className="text-[11.5px] font-semibold opacity-75">

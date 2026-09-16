@@ -1,6 +1,6 @@
 .tabBar {
 	position: relative;
-	height: var(--atelier-panel-header-height);
+	height: var(--at-panel-header-height);
 	flex-shrink: 0;
 }
 
@@ -32,12 +32,12 @@
 
 .tabBar::before {
 	left: 0;
-	background: linear-gradient(to right, var(--color-bg-app), transparent);
+	background: linear-gradient(to right, var(--at-bg), transparent);
 }
 
 .tabBar::after {
 	right: 0;
-	background: linear-gradient(to left, var(--color-bg-app), transparent);
+	background: linear-gradient(to left, var(--at-bg), transparent);
 }
 
 .tabBar[data-overflow-left="true"]::before {
@@ -63,7 +63,7 @@
 	top: 0;
 	height: 100%;
 	border-radius: 999px;
-	background: var(--color-scrollbar-thumb);
+	background: var(--at-scrollbar);
 	opacity: 0;
 }
 

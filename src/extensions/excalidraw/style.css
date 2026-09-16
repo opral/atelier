@@ -5,7 +5,7 @@
 	flex: 1;
 	flex-direction: column;
 	height: 100%;
-	background: var(--color-bg-panel);
+	background: var(--at-panel);
 	isolation: isolate;
 }
 
@@ -21,34 +21,34 @@
  * those belong to the document, not the chrome.
  */
 .atelier-excalidraw-view .excalidraw {
-	--color-primary: var(--color-brand-600);
-	--color-primary-darker: var(--color-brand-700);
-	--color-primary-darkest: var(--color-brand-800);
-	--color-primary-hover: var(--color-brand-700);
-	--color-primary-light: var(--color-brand-100);
-	--color-primary-light-darker: var(--color-brand-200);
-	--color-surface-primary-container: var(--color-brand-100);
-	--color-on-primary-container: var(--color-brand-900);
-	--color-brand-hover: var(--color-brand-700);
-	--color-brand-active: var(--color-brand-800);
-	--color-promo: var(--color-brand-700);
-	--color-logo-icon: var(--color-brand-700);
+	--color-primary: var(--at-link);
+	--color-primary-darker: var(--at-accent);
+	--color-primary-darkest: var(--at-accent-hover);
+	--color-primary-hover: var(--at-accent);
+	--color-primary-light: var(--at-accent-border);
+	--color-primary-light-darker: var(--at-accent-border);
+	--color-surface-primary-container: var(--at-accent-border);
+	--color-on-primary-container: var(--at-accent-hover);
+	--color-brand-hover: var(--at-accent);
+	--color-brand-active: var(--at-accent-hover);
+	--color-promo: var(--at-accent);
+	--color-logo-icon: var(--at-accent);
 
-	--island-bg-color: var(--color-bg-panel);
-	--default-bg-color: var(--color-bg-panel);
-	--color-surface-lowest: var(--color-bg-panel);
-	--color-surface-low: var(--color-bg-hover);
-	--color-surface-mid: var(--color-bg-hover);
+	--island-bg-color: var(--at-panel);
+	--default-bg-color: var(--at-panel);
+	--color-surface-lowest: var(--at-panel);
+	--color-surface-low: var(--at-bg-hover);
+	--color-surface-mid: var(--at-bg-hover);
 	--color-surface-high: rgb(240, 236, 230);
-	--color-on-surface: var(--color-text-primary);
-	--text-primary-color: var(--color-text-primary);
+	--color-on-surface: var(--at-fg);
+	--text-primary-color: var(--at-fg);
 
-	--color-border-outline: var(--color-neutral-400);
-	--color-border-outline-variant: var(--color-neutral-300);
-	--link-color: var(--color-brand-700);
+	--color-border-outline: var(--at-fg-faint);
+	--color-border-outline-variant: var(--at-border-strong);
+	--link-color: var(--at-accent);
 
 	--shadow-island:
-		0 0 0 1px var(--color-border-subtle), 0 1px 2px rgba(28, 25, 23, 0.05),
+		0 0 0 1px var(--at-border-subtle), 0 1px 2px rgba(28, 25, 23, 0.05),
 		0 7px 14px rgba(28, 25, 23, 0.05);
 }
 
@@ -61,10 +61,10 @@
 	align-items: center;
 	gap: 6px;
 	padding: 6px 12px;
-	border: 1px solid var(--color-border-notice-warning);
+	border: 1px solid var(--at-warning-border);
 	border-radius: 999px;
-	background: var(--color-bg-notice-warning);
-	color: var(--color-text-notice-warning);
+	background: var(--at-warning-subtle);
+	color: var(--at-warning);
 	font-size: 12px;
 	line-height: 1.2;
 	transform: translateX(-50%);

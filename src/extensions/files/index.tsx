@@ -284,7 +284,7 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		return (
 			<div
 				role="status"
-				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-[var(--color-text-tertiary)]"
+				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-fg-subtle"
 				data-atelier-extension-suspended=""
 			>
 				Loading Files…
@@ -1518,12 +1518,12 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{isDraggingOver && (
-				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-border-notice-warning)] bg-[color-mix(in_srgb,var(--color-bg-notice-warning)_50%,transparent)] backdrop-blur-sm pointer-events-none">
-					<FileUp className="h-12 w-12 text-foreground" />
-					<p className="mt-3 text-center text-sm font-medium text-foreground">
+				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-warning-border bg-[color-mix(in_srgb,var(--at-warning-subtle)_50%,transparent)] backdrop-blur-sm pointer-events-none">
+					<FileUp className="h-12 w-12 text-fg" />
+					<p className="mt-3 text-center text-sm font-medium text-fg">
 						Drop markdown files here
 					</p>
-					<p className="mt-1 text-center text-xs text-muted-foreground">
+					<p className="mt-1 text-center text-xs text-fg-subtle">
 						Only .md and .markdown files supported
 					</p>
 				</div>
@@ -1578,7 +1578,7 @@ const CompactNewButton = forwardRef<
 		<button
 			ref={ref}
 			type="button"
-			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-control px-1.5 text-left text-[13px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-md px-1.5 text-left text-[13px] text-fg-muted transition-colors hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			data-attr="file-new"
 			onMouseDown={(event) => event.preventDefault()}
 			disabled={disabled}

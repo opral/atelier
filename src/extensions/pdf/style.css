@@ -5,7 +5,7 @@
 		min-height: 0;
 		flex: 1 1 auto;
 		overflow: hidden;
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 	}
 
 	.atelier-pdf-preview {
@@ -54,9 +54,9 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.25rem;
-		color: var(--color-text-primary);
-		background: color-mix(in srgb, var(--color-bg-panel) 94%, transparent);
-		border: 1px solid var(--color-border-panel);
+		color: var(--at-fg);
+		background: color-mix(in srgb, var(--at-panel) 94%, transparent);
+		border: 1px solid var(--at-border);
 		border-radius: 0.5rem;
 		box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 20%);
 		transform: translateX(-50%);
@@ -67,7 +67,7 @@
 		height: 1.75rem;
 		align-items: center;
 		padding: 0 0.625rem;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font: inherit;
 		font-size: 0.6875rem;
 		font-weight: 600;
@@ -78,24 +78,24 @@
 	}
 
 	.atelier-pdf-document .atelier-pdf-page-button:hover:not(:disabled) {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
+		color: var(--at-fg);
+		background: var(--at-bg-hover);
 	}
 
 	.atelier-pdf-document .atelier-pdf-page-button:disabled {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		cursor: default;
 		opacity: 0.55;
 	}
 
 	.atelier-pdf-document .atelier-pdf-page-button:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 1px;
 	}
 
 	.atelier-pdf-document .atelier-pdf-page-label {
 		min-width: 3.5rem;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 0.6875rem;
 		font-variant-numeric: tabular-nums;
 		font-weight: 600;
@@ -122,8 +122,8 @@
 		align-items: center;
 		justify-content: center;
 		padding: 2rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		text-align: center;
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 	}
 }

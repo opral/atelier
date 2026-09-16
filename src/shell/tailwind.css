@@ -1,0 +1,127 @@
+/*
+ * Tailwind v4 adapter for the Atelier tokens. Optional: a host that writes
+ * plain CSS never needs it. `@theme inline` emits no variables of its own —
+ * every utility below reads the `--at-*` value from theme.css, so there is one
+ * source and nothing to keep in step. The stock palette is hidden, so
+ * `bg-red-500` is not a class here and `bg-danger` is.
+ *
+ * Utilities carry the token's name without its prefix: `bg-panel`, `text-fg-muted`,
+ * `border-border-strong`, `rounded-md`, `text-sm`, `shadow-md`, `duration-fast`.
+ */
+@theme inline {
+	--color-*: initial;
+	--color-bg: var(--at-bg);
+	--color-panel: var(--at-panel);
+	--color-bg-subtle: var(--at-bg-subtle);
+	--color-bg-hover: var(--at-bg-hover);
+	--color-bg-hover-strong: var(--at-bg-hover-strong);
+	--color-bg-active: var(--at-bg-active);
+	--color-bg-selection: var(--at-bg-selection);
+	--color-highlight: var(--at-highlight);
+	--color-scrollbar: var(--at-scrollbar);
+	--color-fg: var(--at-fg);
+	--color-fg-muted: var(--at-fg-muted);
+	--color-fg-subtle: var(--at-fg-subtle);
+	--color-fg-faint: var(--at-fg-faint);
+	--color-border: var(--at-border);
+	--color-border-subtle: var(--at-border-subtle);
+	--color-border-strong: var(--at-border-strong);
+	--color-ring: var(--at-ring);
+	--color-accent: var(--at-accent);
+	--color-accent-hover: var(--at-accent-hover);
+	--color-accent-on: var(--at-accent-on);
+	--color-accent-subtle: var(--at-accent-subtle);
+	--color-accent-border: var(--at-accent-border);
+	--color-link: var(--at-link);
+	--color-link-hover: var(--at-link-hover);
+	--color-danger: var(--at-danger);
+	--color-danger-subtle: var(--at-danger-subtle);
+	--color-danger-border: var(--at-danger-border);
+	--color-success: var(--at-success);
+	--color-success-subtle: var(--at-success-subtle);
+	--color-success-border: var(--at-success-border);
+	--color-warning: var(--at-warning);
+	--color-warning-subtle: var(--at-warning-subtle);
+	--color-warning-border: var(--at-warning-border);
+	--color-diff-added: var(--at-diff-added);
+	--color-diff-added-subtle: var(--at-diff-added-subtle);
+	--color-diff-removed: var(--at-diff-removed);
+	--color-diff-removed-subtle: var(--at-diff-removed-subtle);
+	--color-diff-modified: var(--at-diff-modified);
+	--color-diff-modified-subtle: var(--at-diff-modified-subtle);
+	--color-diff-moved: var(--at-diff-moved);
+	--color-diff-conflict: var(--at-diff-conflict);
+	--color-overlay: var(--at-overlay);
+	--color-overlay-raised: var(--at-overlay-raised);
+	--color-overlay-hover: var(--at-overlay-hover);
+	--color-overlay-hairline: var(--at-overlay-hairline);
+	--color-overlay-hairline-strong: var(--at-overlay-hairline-strong);
+	--color-overlay-border: var(--at-overlay-border);
+	--color-overlay-border-strong: var(--at-overlay-border-strong);
+	--color-overlay-fg: var(--at-overlay-fg);
+	--color-overlay-fg-muted: var(--at-overlay-fg-muted);
+	--color-overlay-fg-subtle: var(--at-overlay-fg-subtle);
+	--color-overlay-accent: var(--at-overlay-accent);
+	--color-overlay-danger: var(--at-overlay-danger);
+	--color-overlay-danger-border: var(--at-overlay-danger-border);
+	--color-overlay-success: var(--at-overlay-success);
+	--color-scrim: var(--at-scrim);
+	--color-syntax-keyword: var(--at-syntax-keyword);
+	--color-syntax-string: var(--at-syntax-string);
+	--color-syntax-number: var(--at-syntax-number);
+	--color-syntax-constant: var(--at-syntax-constant);
+	--color-syntax-comment: var(--at-syntax-comment);
+	--color-syntax-type: var(--at-syntax-type);
+	--color-syntax-property: var(--at-syntax-property);
+	--color-syntax-invalid: var(--at-syntax-invalid);
+	--color-tag-gray: var(--at-tag-gray);
+	--color-tag-gray-fg: var(--at-tag-gray-fg);
+	--color-tag-brown: var(--at-tag-brown);
+	--color-tag-brown-fg: var(--at-tag-brown-fg);
+	--color-tag-orange: var(--at-tag-orange);
+	--color-tag-orange-fg: var(--at-tag-orange-fg);
+	--color-tag-yellow: var(--at-tag-yellow);
+	--color-tag-yellow-fg: var(--at-tag-yellow-fg);
+	--color-tag-green: var(--at-tag-green);
+	--color-tag-green-fg: var(--at-tag-green-fg);
+	--color-tag-blue: var(--at-tag-blue);
+	--color-tag-blue-fg: var(--at-tag-blue-fg);
+	--color-tag-purple: var(--at-tag-purple);
+	--color-tag-purple-fg: var(--at-tag-purple-fg);
+	--color-tag-pink: var(--at-tag-pink);
+	--color-tag-pink-fg: var(--at-tag-pink-fg);
+	--color-tag-red: var(--at-tag-red);
+	--color-tag-red-fg: var(--at-tag-red-fg);
+	--color-folder: var(--at-folder);
+
+	--radius-*: initial;
+	--radius-sm: var(--at-radius-sm);
+	--radius-md: var(--at-radius-md);
+	--radius-lg: var(--at-radius-lg);
+	--radius-full: var(--at-radius-full);
+
+	--text-*: initial;
+	--text-xs: var(--at-text-xs);
+	--text-xs--line-height: var(--at-text-xs-lh);
+	--text-sm: var(--at-text-sm);
+	--text-sm--line-height: var(--at-text-sm-lh);
+	--text-md: var(--at-text-md);
+	--text-md--line-height: var(--at-text-md-lh);
+	--text-lg: var(--at-text-lg);
+	--text-lg--line-height: var(--at-text-lg-lh);
+	--font-sans: var(--at-font-sans);
+	--font-mono: var(--at-font-mono);
+
+	--shadow-*: initial;
+	--shadow-sm: var(--at-shadow-sm);
+	--shadow-md: var(--at-shadow-md);
+	--shadow-lg: var(--at-shadow-lg);
+	--shadow-overlay: var(--at-shadow-overlay);
+	--shadow-accent: var(--at-shadow-accent);
+
+	--duration-fast: var(--at-duration-fast);
+	--duration: var(--at-duration);
+	--duration-slow: var(--at-duration-slow);
+}
+
+@custom-variant mobile (@media (max-width: 767px));

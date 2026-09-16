@@ -437,13 +437,13 @@ function QueryView({
 				onQueryChange={onQueryChange}
 				onRun={() => void runQuery(query)}
 			/>
-			<div className="atelier-sql-runbar flex h-11 shrink-0 items-center gap-3 border-y border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-6">
+			<div className="atelier-sql-runbar flex h-11 shrink-0 items-center gap-3 border-y border-border-subtle bg-bg-subtle px-6">
 				<button
 					type="button"
 					onClick={() => void runQuery(query)}
 					disabled={isRunning}
 					data-attr="sql-run-query"
-					className="inline-flex items-center gap-1.5 rounded-[8px] bg-[var(--color-bg-action-primary)] px-3.5 py-1.5 text-ui font-bold text-[var(--color-text-on-action-primary)] shadow-[var(--shadow-action-primary)] hover:bg-[var(--color-bg-action-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:opacity-60"
+					className="inline-flex items-center gap-1.5 rounded-[8px] bg-bg-hover px-3.5 py-1.5 text-md font-bold text-accent-on shadow-shadow-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
 				>
 					<Play aria-hidden="true" className="h-2.5 w-2.5 fill-current" />
 					Run
@@ -466,20 +466,18 @@ function QueryView({
 				</span>
 				<span className="flex-1" />
 				{isRunning ? (
-					<span className="font-mono text-ui-sm text-[var(--color-text-tertiary)]">
-						Running…
-					</span>
+					<span className="font-mono text-sm text-fg-subtle">Running…</span>
 				) : run === null ? null : (
 					<span
 						data-attr="sql-run-status"
-						className="font-mono text-ui-sm text-[var(--color-text-tertiary)]"
+						className="font-mono text-sm text-fg-subtle"
 					>
 						{run.hasResultColumns
 							? `${run.rows.length} ${run.rows.length === 1 ? "row" : "rows"}`
 							: `${run.rowsAffected} ${run.rowsAffected === 1 ? "row" : "rows"} affected`}{" "}
 						·{" "}
 						<span
-							className="font-semibold text-[var(--color-text-status-success)]"
+							className="font-semibold text-success"
 							title={formatQueryTimingDetails(
 								run.clientDurationMs,
 								run.serverTimings,
@@ -493,14 +491,14 @@ function QueryView({
 			{error === null ? null : (
 				<div
 					role="alert"
-					className="shrink-0 border-b border-[var(--color-border-subtle)] px-4 py-2 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-[var(--color-text-status-danger)]"
+					className="shrink-0 border-b border-border-subtle px-4 py-2 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-danger"
 				>
 					{error}
 				</div>
 			)}
 			<div className="atelier-sql-results min-h-0 flex-1 overflow-auto">
 				{run === null || !run.hasResultColumns ? (
-					<div className="flex h-full items-center justify-center p-6 text-ui text-[var(--color-text-quaternary)]">
+					<div className="flex h-full items-center justify-center p-6 text-md text-fg-faint">
 						{run === null
 							? "Run a query to see results."
 							: "Statement finished without result rows."}

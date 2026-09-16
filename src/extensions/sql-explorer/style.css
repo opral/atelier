@@ -33,8 +33,8 @@
 		background: linear-gradient(
 			to right,
 			transparent 3px,
-			var(--color-border-subtle) 3px,
-			var(--color-border-subtle) 4px,
+			var(--at-border-subtle) 3px,
+			var(--at-border-subtle) 4px,
 			transparent 4px
 		);
 	}
@@ -45,8 +45,8 @@
 		background: linear-gradient(
 			to right,
 			transparent 2px,
-			var(--color-brand-300) 2px,
-			var(--color-brand-300) 5px,
+			var(--at-link) 2px,
+			var(--at-link) 5px,
 			transparent 5px
 		);
 	}
@@ -72,10 +72,10 @@
 		width: 236px;
 		max-height: 320px;
 		overflow-y: auto;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
+		background: var(--at-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 8px;
-		box-shadow: var(--shadow-lg);
+		box-shadow: var(--at-shadow-lg);
 		padding: 4px;
 	}
 
@@ -93,9 +93,9 @@
 		 * island — while the run row sits quietly on the canvas between them. */
 		.atelier-sql-editor-shell {
 			margin: 2px 8px 0;
-			border: 1px solid var(--color-border-panel);
+			border: 1px solid var(--at-border);
 			border-radius: 9px;
-			background: var(--color-bg-panel);
+			background: var(--at-panel);
 		}
 
 		.atelier-sql-runbar {
@@ -110,9 +110,9 @@
 
 		.atelier-sql-results {
 			margin: 0 8px 8px;
-			border: 1px solid var(--color-border-panel);
+			border: 1px solid var(--at-border);
 			border-radius: 9px;
-			background: var(--color-bg-panel);
+			background: var(--at-panel);
 		}
 
 		/* When a pager follows, it closes the results card instead of the
@@ -128,8 +128,8 @@
 			min-height: 36px;
 			flex-wrap: wrap;
 			margin: 0 8px 8px;
-			border: 1px solid var(--color-border-panel);
-			border-top-color: var(--color-border-subtle);
+			border: 1px solid var(--at-border);
+			border-top-color: var(--at-border-subtle);
 			border-radius: 0 0 9px 9px;
 			padding: 2px 10px;
 		}
@@ -166,25 +166,25 @@
 		font-weight: 650;
 		letter-spacing: 0.065em;
 		text-transform: uppercase;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.atelier-sql-quiet-button {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
 		font-size: 11.5px;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		padding: 3px;
 		border-radius: 4px;
 	}
 	.atelier-sql-quiet-button:hover,
 	.atelier-sql-insert:hover {
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 	.atelier-sql-sidebar button:focus-visible,
 	.atelier-sql-recent summary:focus-visible,
 	.atelier-sql-schema-toggle:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 1px;
 	}
 	.atelier-sql-schema-search {
@@ -194,12 +194,12 @@
 		min-height: 32px;
 		padding: 0 8px;
 		margin: 0 4px 6px;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 6px;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.atelier-sql-schema-search:focus-within {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 1px;
 	}
 	.atelier-sql-schema-search input {
@@ -207,14 +207,14 @@
 		width: 100%;
 		outline: 0;
 		font-size: 12px;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		background: transparent;
 	}
 	.atelier-sql-schema-search button {
 		display: flex;
 	}
 	.atelier-sql-schema-section {
-		border-top: 1px solid var(--color-border-subtle);
+		border-top: 1px solid var(--at-border-subtle);
 		padding-top: 14px;
 		margin-top: 12px;
 		flex-shrink: 0;
@@ -231,11 +231,11 @@
 		padding: 5px 8px;
 		text-align: left;
 		border-radius: 5px;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 	}
 	.atelier-sql-schema-row > svg {
 		flex-shrink: 0;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.atelier-sql-schema-row > span {
 		overflow: hidden;
@@ -248,22 +248,22 @@
 			monospace;
 	}
 	.atelier-sql-schema-row:hover {
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 	.atelier-sql-schema-row[aria-current="true"],
 	.atelier-sql-schema-row[aria-expanded="true"] {
-		background: var(--color-bg-brand-soft);
-		color: var(--color-text-primary);
+		background: var(--at-accent-subtle);
+		color: var(--at-fg);
 	}
 	.atelier-sql-schema-row[aria-expanded="true"] > svg {
-		color: var(--color-icon-brand);
+		color: var(--at-link);
 	}
 	.atelier-sql-function-detail {
 		margin: 8px;
 		padding-top: 10px;
-		border-top: 1px solid var(--color-border-subtle);
+		border-top: 1px solid var(--at-border-subtle);
 		font-size: 12px;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 	}
 	.atelier-sql-function-detail strong {
 		display: block;
@@ -282,27 +282,27 @@
 		margin: 8px 0;
 	}
 	.atelier-sql-insert {
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		padding: 4px 8px;
 		border-radius: 5px;
 		font-size: 11.5px;
 	}
 	.atelier-sql-recent {
-		border-top: 1px solid var(--color-border-subtle);
+		border-top: 1px solid var(--at-border-subtle);
 		margin-top: 16px;
 		padding-top: 12px;
 	}
 	.atelier-sql-recent summary {
 		cursor: pointer;
 		padding: 4px 8px;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 12px;
 	}
 	.atelier-sql-schema-note,
 	.atelier-sql-schema-error {
 		padding: 8px;
 		font-size: 12px;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.atelier-sql-schema-error button {
 		margin-left: 6px;
@@ -319,7 +319,7 @@
 		height: 100%;
 	}
 	.atelier-sql-codemirror:focus-within {
-		box-shadow: inset 2px 0 var(--color-border-subtle);
+		box-shadow: inset 2px 0 var(--at-border-subtle);
 	}
 	.atelier-sql-runbar {
 		height: 40px;
@@ -327,10 +327,10 @@
 	}
 	.atelier-sql-results-label {
 		font-size: 11.5px;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 	}
 	.atelier-sql-results-label > span {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.atelier-sql-schema-toggle,
 	.atelier-sql-schema-close {
@@ -338,16 +338,16 @@
 	}
 	.cm-tooltip {
 		z-index: 100;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 6px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
+		background: var(--at-panel);
+		color: var(--at-fg);
 		font:
 			12px ui-monospace,
 			"SF Mono",
 			Menlo,
 			monospace;
-		box-shadow: var(--shadow-md);
+		box-shadow: var(--at-shadow-md);
 	}
 	.cm-tooltip-autocomplete > ul {
 		font:
@@ -364,15 +364,15 @@
 		border-radius: 4px;
 	}
 	.cm-tooltip-autocomplete > ul > li[aria-selected] {
-		background: var(--color-bg-brand-soft);
-		color: var(--color-text-primary);
+		background: var(--at-accent-subtle);
+		color: var(--at-fg);
 	}
 	.cm-completionDetail {
 		font:
 			11px system-ui,
 			sans-serif;
 		margin-left: 18px;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.cm-completionInfo {
 		padding: 10px 12px;
@@ -393,7 +393,7 @@
 		white-space: normal;
 	}
 	.atelier-sql-argument-hint strong {
-		color: var(--color-text-brand);
+		color: var(--at-accent);
 	}
 	@container (max-width:559px) {
 		.atelier-sql-schema-toggle {
@@ -405,7 +405,7 @@
 			top: 6px;
 			left: 12px;
 			font-size: 12px;
-			color: var(--color-text-secondary);
+			color: var(--at-fg-muted);
 		}
 		.atelier-sql-query-view {
 			padding-top: 30px;
@@ -417,9 +417,9 @@
 			width: min(300px, 100%) !important;
 			max-width: 100%;
 			z-index: 5;
-			background: var(--color-bg-panel);
+			background: var(--at-panel);
 			box-shadow: 4px 0 16px #00000014;
-			border-right: 1px solid var(--color-border-panel);
+			border-right: 1px solid var(--at-border);
 		}
 		.atelier-sql-schema-close {
 			display: flex;
@@ -436,11 +436,11 @@
 @scope (.atelier-root) {
 	/* Match CodeMirror's theme specificity, including its portalled tooltip wrapper. */
 	.cm-tooltip.cm-tooltip {
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 6px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
-		box-shadow: var(--shadow-md);
+		background: var(--at-panel);
+		color: var(--at-fg);
+		box-shadow: var(--at-shadow-md);
 	}
 	.atelier-sql-completion.cm-tooltip.cm-tooltip-autocomplete > ul {
 		font:
@@ -459,15 +459,15 @@
 	.atelier-sql-completion.cm-tooltip.cm-tooltip-autocomplete
 		> ul
 		> li[aria-selected] {
-		background: var(--color-bg-brand-soft);
-		color: var(--color-text-primary);
+		background: var(--at-accent-subtle);
+		color: var(--at-fg);
 	}
 	.atelier-sql-completion.cm-tooltip .cm-completionDetail {
 		font:
 			11px/1.6 system-ui,
 			sans-serif;
 		margin-left: 18px;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		float: right;
 	}
 	.atelier-sql-completion.cm-tooltip .cm-completionMatchedText {
@@ -478,11 +478,11 @@
 		content: "↑↓ navigate   ·   Tab insert   ·   Esc close";
 		display: block;
 		padding: 7px 12px;
-		border-top: 1px solid var(--color-border-subtle);
+		border-top: 1px solid var(--at-border-subtle);
 		font:
 			10.5px/1.5 system-ui,
 			sans-serif;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.cm-tooltip.cm-completionInfo {
 		padding: 10px 12px;

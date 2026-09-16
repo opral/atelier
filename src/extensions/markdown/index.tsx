@@ -485,7 +485,7 @@ function MarkdownLiveViewLoaded({
 		);
 	} else if (!effectiveFileRow) {
 		content = (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -496,7 +496,7 @@ function MarkdownLiveViewLoaded({
 			<MarkdownFrontmatterEditingContext.Provider value={frontmatterEditing}>
 				<EditorProvider>
 					<div
-						className={`markdown-view flex h-full flex-col bg-background ${
+						className={`markdown-view flex h-full flex-col bg-panel ${
 							reviewLocked ? "markdown-review" : ""
 						}`}
 					>
@@ -596,7 +596,7 @@ function WorkingMarkdownReviewUnavailable({
 }) {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			{message}
@@ -830,7 +830,7 @@ function MarkdownHistoricalViewResolved({
 	} else {
 		content = (
 			<EditorProvider>
-				<div className="markdown-view markdown-review flex h-full flex-col bg-background">
+				<div className="markdown-view markdown-review flex h-full flex-col bg-panel">
 					<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
 						{reviewDiff && review ? (
 							<MarkdownReviewOverlay
@@ -909,9 +909,9 @@ function MarkdownSnapshotEditor({ editor }: { readonly editor: Editor }) {
 	}, [editor, setEditor]);
 
 	return (
-		<div className="markdown-view flex h-full flex-col bg-background">
+		<div className="markdown-view flex h-full flex-col bg-panel">
 			<div className="relative min-h-0 flex-1" data-attr="markdown-editor">
-				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
+				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
 					<EditorContent editor={editor} className="tiptap mx-auto w-full" />
 				</div>
 			</div>
@@ -1005,7 +1005,7 @@ function createCompleteMarkdownReview({
 function MarkdownReviewOverlayFallback() {
 	return (
 		<div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
-			<div className="inline-flex items-center rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] px-2.5 py-1.5 text-xs text-[var(--color-text-secondary)] shadow-sm">
+			<div className="inline-flex items-center rounded-md border border-border bg-panel px-2.5 py-1.5 text-xs text-fg-muted shadow-sm">
 				<Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" aria-hidden />
 				<span>Loading review…</span>
 			</div>
@@ -1101,15 +1101,13 @@ function UnsupportedFilePlaceholder({
 }): ReactNode {
 	return (
 		<div className="flex h-full items-center justify-center px-6 py-8 text-center">
-			<div className="max-w-sm space-y-2 text-sm text-[var(--color-text-secondary)]">
-				<p className="font-medium text-[var(--color-text-primary)]">
+			<div className="max-w-sm space-y-2 text-sm text-fg-muted">
+				<p className="font-medium text-fg">
 					This file type is not supported yet.
 				</p>
 				<p>
 					Atelier only opens markdown files in this editor, so{" "}
-					<span className="font-mono text-xs text-[var(--color-text-secondary)]">
-						{filePath}
-					</span>{" "}
+					<span className="font-mono text-xs text-fg-muted">{filePath}</span>{" "}
 					was left blank to avoid damaging its formatting.
 				</p>
 			</div>
@@ -1130,10 +1128,10 @@ function assertFileId(fileId: unknown): asserts fileId is string {
  */
 function MarkdownLoadingSpinner(): ReactNode {
 	return (
-		<div className="markdown-view flex h-full flex-col bg-background">
+		<div className="markdown-view flex h-full flex-col bg-panel">
 			<div
 				aria-hidden="true"
-				className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
+				className="h-10 shrink-0 border-b border-border-subtle"
 			/>
 			<DocumentLoading />
 		</div>
@@ -1165,14 +1163,14 @@ export const extension = createReactExtensionDefinition({
 						// Laid out exactly like the editor that replaces it (toolbar
 						// strip, container, the ProseMirror column), so the swap to
 						// the live editor moves nothing on screen.
-						<div className="markdown-view flex h-full flex-col bg-background">
+						<div className="markdown-view flex h-full flex-col bg-panel">
 							{atelier.readOnly ? null : (
 								<div
 									aria-hidden="true"
-									className="h-10 shrink-0 border-b border-[var(--color-border-subtle)]"
+									className="h-10 shrink-0 border-b border-border-subtle"
 								/>
 							)}
-							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-background">
+							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-panel">
 								<RepositoryMarkdownContent
 									className="ProseMirror"
 									content={file.content}

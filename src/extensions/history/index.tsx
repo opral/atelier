@@ -137,7 +137,7 @@ export function HistoryScopeSwitch({
 			<span
 				data-attr="history-scope-label"
 				aria-label="Showing the repository"
-				className="mr-1.5 flex h-6 shrink-0 items-center self-start px-1.5 text-[11.5px] font-medium text-[var(--color-text-quaternary)]"
+				className="mr-1.5 flex h-6 shrink-0 items-center self-start px-1.5 text-[11.5px] font-medium text-fg-faint"
 			>
 				Repository
 			</span>
@@ -152,12 +152,12 @@ export function HistoryScopeSwitch({
 			title={`Switch to ${other === "file" ? "this file" : "the repository"}`}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={() => setScope(other)}
-			className="group/scope mr-1.5 flex h-6 shrink-0 items-center gap-1 self-start rounded-[5px] px-1.5 text-[11.5px] font-medium text-[var(--color-text-quaternary)] transition-colors hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+			className="group/scope mr-1.5 flex h-6 shrink-0 items-center gap-1 self-start rounded-[5px] px-1.5 text-[11.5px] font-medium text-fg-faint transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			<span>{scope === "file" ? "This file" : "Repository"}</span>
 			<ArrowLeftRight
 				aria-hidden="true"
-				className="size-2.5 text-[var(--color-icon-quaternary)] transition-colors group-hover/scope:text-[var(--color-icon-secondary)]"
+				className="size-2.5 text-fg-faint transition-colors group-hover/scope:text-fg-muted"
 				strokeWidth={2}
 			/>
 		</button>
@@ -299,9 +299,9 @@ function WorkingChangesRow({
 	return (
 		<div
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`rounded-lg border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
-					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
+					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
 			}`}
 		>
@@ -313,18 +313,18 @@ function WorkingChangesRow({
 					onClick={toggleWorkingChanges}
 					onMouseDown={(event) => event.preventDefault()}
 					data-attr="history-working-changes"
-					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"}`}
+					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-lg py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
 				>
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-						<WorkingDot className="ring-3 ring-[var(--color-bg-brand-soft)]" />
+						<WorkingDot className="ring-3 ring-accent-subtle" />
 					</span>
 					<span
 						className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
 					>
-						<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
+						<span className="block truncate text-[13px] leading-4 font-semibold text-fg">
 							Working changes
 						</span>
-						<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
+						<span className="block text-[11.5px] leading-4 text-fg-subtle">
 							{`now · ${workingCountLabel}`}
 						</span>
 					</span>
@@ -378,7 +378,7 @@ function WorkingChangeFileList({
 						data-attr="history-open-working-change-file"
 						title={file.path}
 						onMouseDown={(event) => event.preventDefault()}
-						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-fg-muted hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<img
 							src={atelier.icons.fileUrl(file.path)}
@@ -387,7 +387,7 @@ function WorkingChangeFileList({
 						/>
 						<HistoryFilePath path={file.path} />
 						{file.movedFromPath ? (
-							<span className="truncate text-[var(--color-text-quaternary)]">
+							<span className="truncate text-fg-faint">
 								· {movedFromHint(file.movedFromPath, file.path)}
 							</span>
 						) : null}
@@ -433,7 +433,7 @@ function CheckpointList({
 		return (
 			<p
 				role="status"
-				className="px-1.5 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+				className="px-1.5 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
 				No checkpoint includes this file yet.
 			</p>
@@ -572,9 +572,9 @@ function CheckpointItem({
 	return (
 		<li
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`rounded-lg border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
-					? "border-[var(--color-border-brand-soft)] bg-[var(--color-bg-brand-soft)]"
+					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
 			}`}
 		>
@@ -598,15 +598,13 @@ function CheckpointItem({
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
-					isViewing ? "" : "hover:bg-[var(--color-bg-hover-canvas)]"
+				className={`flex w-full min-h-10 gap-0.5 rounded-lg py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
+					isViewing ? "" : "hover:bg-bg-hover-strong"
 				}`}
 			>
 				<span
 					className={`flex h-5 w-4 shrink-0 items-center justify-center ${
-						isViewing
-							? "text-[var(--color-icon-brand)]"
-							: "text-[var(--color-icon-quaternary)]"
+						isViewing ? "text-link" : "text-fg-faint"
 					}`}
 				>
 					<FilledFlag />
@@ -614,10 +612,10 @@ function CheckpointItem({
 				<span
 					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
 				>
-					<span className="block truncate text-[13px] leading-4 font-semibold text-[var(--color-text-primary)]">
+					<span className="block truncate text-[13px] leading-4 font-semibold text-fg">
 						{label}
 					</span>
-					<span className="block text-[11.5px] leading-4 text-[var(--color-text-tertiary)]">
+					<span className="block text-[11.5px] leading-4 text-fg-subtle">
 						<time
 							dateTime={checkpoint.created_at}
 							title={checkpoint.created_at}
@@ -730,7 +728,7 @@ function InlineFilePreview({
 		return (
 			<span
 				id={descriptionId}
-				className="ml-auto truncate pl-4 text-[11.5px] text-[var(--color-text-tertiary)]"
+				className="ml-auto truncate pl-4 text-[11.5px] text-fg-subtle"
 			>
 				{result.status === "error" ? "Files unavailable" : "Loading files…"}
 			</span>
@@ -750,7 +748,7 @@ function InlineFilePreview({
 				data-attr="history-inline-files"
 				aria-hidden="true"
 				title={files.map((file) => file.path).join("\n")}
-				className="ml-auto flex min-w-0 items-center justify-end gap-4 pl-4 text-[11.5px] text-[var(--color-text-tertiary)]"
+				className="ml-auto flex min-w-0 items-center justify-end gap-4 pl-4 text-[11.5px] text-fg-subtle"
 			>
 				{files.slice(0, 2).map((file) => (
 					<span key={file.id} className="flex min-w-0 items-center gap-1.5">
@@ -864,7 +862,7 @@ function CheckpointFileList({
 						data-attr="history-open-checkpoint-file"
 						title={file.path}
 						onMouseDown={(event) => event.preventDefault()}
-						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+						className="flex h-6.5 w-full items-center gap-1.5 rounded-[6px] px-1.5 text-left text-[11.5px] font-medium text-fg-muted hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<img
 							src={atelier.icons.fileUrl(file.path)}
@@ -873,7 +871,7 @@ function CheckpointFileList({
 						/>
 						<HistoryFilePath path={file.path} />
 						{file.movedFromPath ? (
-							<span className="truncate text-[var(--color-text-quaternary)]">
+							<span className="truncate text-fg-faint">
 								· {movedFromHint(file.movedFromPath, file.path)}
 							</span>
 						) : null}

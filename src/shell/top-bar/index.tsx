@@ -69,7 +69,7 @@ export function TopBar({
 		<header
 			{...rootProps}
 			className={cn(
-				"relative grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[var(--color-text-secondary)]",
+				"relative grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-fg-muted",
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
@@ -90,7 +90,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-control text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-md text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -101,7 +101,7 @@ export function TopBar({
 							<PanelToggleIcon side="left" isActive={isLeftSidebarVisible} />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent className="bg-[var(--color-bg-tooltip)] text-[var(--color-text-tooltip)] [&_[class*='bg-secondary']]:bg-[var(--color-bg-tooltip)] [&_[class*='fill-secondary']]:fill-[var(--color-bg-tooltip)]">
+					<TooltipContent className="bg-overlay text-overlay-fg [&_[class*='bg-bg-subtle']]:bg-overlay [&_[class*='fill-secondary']]:fill-overlay">
 						Toggle left area ({leftShortcut})
 					</TooltipContent>
 				</Tooltip>
@@ -119,7 +119,7 @@ export function TopBar({
 					<span
 						aria-hidden="true"
 						data-atelier-part="top-bar-divider"
-						className="mx-1 h-4 w-px shrink-0 bg-[var(--color-border-action-secondary)]"
+						className="mx-1 h-4 w-px shrink-0 bg-border-strong"
 					/>
 				) : null}
 			</div>
@@ -137,7 +137,7 @@ export function TopBar({
 					<span
 						aria-hidden="true"
 						data-atelier-part="top-bar-divider-end"
-						className="ml-3 mr-1 h-4 w-px shrink-0 bg-[var(--color-border-action-secondary)] opacity-0 transition-opacity duration-150 [[data-overflow-right=true]+&]:opacity-100"
+						className="ml-3 mr-1 h-4 w-px shrink-0 bg-border-strong opacity-0 transition-opacity duration-150 [[data-overflow-right=true]+&]:opacity-100"
 					/>
 				</div>
 			) : navbarCenter !== undefined && navbarCenter !== null ? (
@@ -148,7 +148,7 @@ export function TopBar({
 					{navbarCenter}
 					{isReadOnly ? (
 						<span
-							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-bg-hover)] px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]"
+							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-bg-hover px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-fg-subtle"
 							data-attr="workspace-read-only-chip"
 						>
 							<Eye aria-hidden="true" className="size-3" strokeWidth={2.2} />
@@ -160,7 +160,7 @@ export function TopBar({
 				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
 					{reviewTitle ? (
 						<span
-							className="max-w-80 truncate px-1 font-bold text-[var(--color-text-brand)]"
+							className="max-w-80 truncate px-1 font-bold text-accent"
 							data-attr="diff-mode-title"
 						>
 							{reviewTitle}
@@ -168,9 +168,7 @@ export function TopBar({
 					) : activeFileName ? (
 						<span
 							className={`ph-mask max-w-60 truncate px-1 font-semibold ${
-								isReviewing
-									? "text-[var(--color-text-status-warning)]"
-									: "text-[var(--color-text-primary)]"
+								isReviewing ? "text-warning" : "text-fg"
 							}`}
 						>
 							{isReviewing ? `Reviewing ${activeFileName}` : activeFileName}
@@ -178,7 +176,7 @@ export function TopBar({
 					) : null}
 					{isReadOnly ? (
 						<span
-							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-bg-hover)] px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-[var(--color-text-tertiary)]"
+							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-bg-hover px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-fg-subtle"
 							data-attr="workspace-read-only-chip"
 						>
 							<Eye aria-hidden="true" className="size-3" strokeWidth={2.2} />
@@ -200,7 +198,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-control text-[var(--color-icon-quaternary)] hover:bg-[var(--color-bg-hover-canvas)] hover:text-[var(--color-text-primary)]"
+							className="h-7 w-7 justify-center rounded-md text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"
@@ -211,7 +209,7 @@ export function TopBar({
 							<PanelToggleIcon side="right" isActive={isRightSidebarVisible} />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent className="bg-[var(--color-bg-tooltip)] text-[var(--color-text-tooltip)] [&_[class*='bg-secondary']]:bg-[var(--color-bg-tooltip)] [&_[class*='fill-secondary']]:fill-[var(--color-bg-tooltip)]">
+					<TooltipContent className="bg-overlay text-overlay-fg [&_[class*='bg-bg-subtle']]:bg-overlay [&_[class*='fill-secondary']]:fill-overlay">
 						Toggle right area ({rightShortcut})
 					</TooltipContent>
 				</Tooltip>

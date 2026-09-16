@@ -4,7 +4,7 @@
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		background: var(--color-bg-panel);
+		background: var(--at-panel);
 	}
 
 	.atelier-html-frame-shell {
@@ -12,7 +12,7 @@
 		inset: 0;
 		min-height: 0;
 		overflow: hidden;
-		background: var(--color-bg-panel);
+		background: var(--at-panel);
 	}
 
 	.atelier-html-frame {
@@ -27,7 +27,7 @@
 		position: absolute;
 		inset: 0;
 		z-index: 1;
-		background: var(--color-bg-panel);
+		background: var(--at-panel);
 		pointer-events: none;
 	}
 }

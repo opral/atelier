@@ -811,7 +811,7 @@ function CsvWorkingReviewUnavailable({
 }) {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			{message}
@@ -994,9 +994,9 @@ function CsvViewLoaded({
 	}, [fileRow.content, fileRow.lixcol_metadata, parsed.columns]);
 
 	return (
-		<div className="csv-view flex min-h-0 flex-1 flex-col bg-background">
+		<div className="csv-view flex min-h-0 flex-1 flex-col bg-panel">
 			{parsed.warnings.length > 0 ? (
-				<div className="mx-5 mt-3 flex shrink-0 items-start gap-2 rounded-[8px] border border-[var(--color-border-notice-warning)] bg-[var(--color-bg-notice-warning)] px-3 py-2 text-xs text-[var(--color-text-notice-warning)]">
+				<div className="mx-5 mt-3 flex shrink-0 items-start gap-2 rounded-[8px] border border-warning-border bg-warning-subtle px-3 py-2 text-xs text-warning">
 					<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
 					<span className="min-w-0 truncate">{parsed.warnings[0]}</span>
 				</div>
@@ -2359,7 +2359,7 @@ function CsvTable({
 								? "columns"
 								: "none"
 				}
-				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-background"
+				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-panel"
 			>
 				<CsvOverlayScrollbars
 					containerRef={containerRef}
@@ -2949,12 +2949,10 @@ function CsvEmptyState({
 			role="alert"
 			className="flex h-full items-center justify-center px-6 py-8 text-center"
 		>
-			<div className="max-w-sm space-y-2 text-sm text-[var(--color-text-secondary)]">
-				<p className="font-medium text-[var(--color-text-primary)]">
-					No CSV rows to display.
-				</p>
+			<div className="max-w-sm space-y-2 text-sm text-fg-muted">
+				<p className="font-medium text-fg">No CSV rows to display.</p>
 				<p>
-					<span className="ph-mask font-mono text-xs text-[var(--color-text-secondary)]">
+					<span className="ph-mask font-mono text-xs text-fg-muted">
 						{filePath}
 					</span>{" "}
 					is empty or does not contain a header row.

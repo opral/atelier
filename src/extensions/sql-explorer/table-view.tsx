@@ -181,18 +181,18 @@ export function TableView({
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-			<div className="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5">
+			<div className="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border-subtle bg-bg-subtle px-3.5">
 				<Table
 					aria-hidden="true"
-					className="h-[13px] w-[13px] shrink-0 text-[var(--color-icon-secondary)]"
+					className="h-[13px] w-[13px] shrink-0 text-fg-muted"
 				/>
-				<span className="font-mono text-ui font-semibold text-[var(--color-text-primary)]">
+				<span className="font-mono text-md font-semibold text-fg">
 					{baseTable}
 				</span>
 				{description ? (
 					<span
 						data-attr="sql-table-description"
-						className="min-w-0 max-w-[38ch] truncate text-ui-sm text-[var(--color-text-tertiary)]"
+						className="min-w-0 max-w-[38ch] truncate text-sm text-fg-subtle"
 						title={description}
 					>
 						{description}
@@ -202,7 +202,7 @@ export function TableView({
 					<span
 						role="tablist"
 						aria-label="Table surface"
-						className="inline-flex gap-0.5 rounded-[7px] bg-[var(--color-bg-hover)] p-0.5"
+						className="inline-flex gap-0.5 rounded-[7px] bg-bg-hover p-0.5"
 					>
 						{availableSurfaces.map((candidate) => (
 							<button
@@ -217,10 +217,10 @@ export function TableView({
 									setFilters([]);
 									setPage(0);
 								}}
-								className={`inline-flex h-5 items-center rounded-[5px] px-2 font-mono text-[10.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+								className={`inline-flex h-5 items-center rounded-[5px] px-2 font-mono text-[10.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 									surface === candidate
-										? "border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] font-semibold text-[var(--color-text-primary)]"
-										: "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover-canvas)]"
+										? "border border-border bg-panel font-semibold text-fg"
+										: "text-fg-muted hover:bg-bg-hover-strong"
 								}`}
 							>
 								{candidate}
@@ -238,9 +238,9 @@ export function TableView({
 				/>
 				<span className="flex-1" />
 				{data === null ? null : (
-					<span className="font-mono text-ui-sm whitespace-nowrap">
+					<span className="font-mono text-sm whitespace-nowrap">
 						<span
-							className="font-semibold text-[var(--color-text-status-success)]"
+							className="font-semibold text-success"
 							title={formatQueryTimingDetails(
 								data.clientDurationMs,
 								data.serverTimings,
@@ -254,7 +254,7 @@ export function TableView({
 			{error === null ? null : (
 				<div
 					role="alert"
-					className="shrink-0 border-b border-[var(--color-border-subtle)] px-4 py-2 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-[var(--color-text-status-danger)]"
+					className="shrink-0 border-b border-border-subtle px-4 py-2 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-danger"
 				>
 					{error}
 				</div>
@@ -343,16 +343,13 @@ function FilterBar({
 	return (
 		<div
 			ref={containerRef}
-			className="relative ml-2 flex h-7 min-w-0 flex-[0_1_380px] items-center gap-2 rounded-[7px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel)] px-2.5 focus-within:border-[var(--color-border-brand-soft)] focus-within:ring-1 focus-within:ring-[var(--color-border-brand-soft)]"
+			className="relative ml-2 flex h-7 min-w-0 flex-[0_1_380px] items-center gap-2 rounded-[7px] border border-border-subtle bg-panel px-2.5 focus-within:border-accent-border focus-within:ring-1 focus-within:ring-accent-border"
 		>
-			<Search
-				aria-hidden="true"
-				className="h-3 w-3 shrink-0 text-[var(--color-icon-quaternary)]"
-			/>
+			<Search aria-hidden="true" className="h-3 w-3 shrink-0 text-fg-faint" />
 			{filters.map((filter, index) => (
 				<span
 					key={`${filter.column}-${index}`}
-					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 font-mono text-ui-xs text-[var(--color-text-primary)]"
+					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-xs text-fg"
 				>
 					{filter.column} {operatorSymbol(filter.operator)} {filter.value}
 					<button
@@ -361,7 +358,7 @@ function FilterBar({
 						onClick={() =>
 							onFiltersChange(filters.filter((_, i) => i !== index))
 						}
-						className="text-[var(--color-icon-quaternary)] hover:text-[var(--color-text-primary)] focus-visible:outline-none"
+						className="text-fg-faint hover:text-fg focus-visible:outline-none"
 					>
 						<X aria-hidden="true" className="h-2.5 w-2.5" />
 					</button>
@@ -391,10 +388,10 @@ function FilterBar({
 							setIsColumnListOpen(false);
 						}
 					}}
-					className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-quaternary)] focus-visible:outline-none"
+					className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-fg placeholder:text-fg-faint focus-visible:outline-none"
 				/>
 			) : (
-				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 font-mono text-ui-xs text-[var(--color-text-primary)]">
+				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-xs text-fg">
 					{pending.column}
 					{pending.operator === null ? null : (
 						<>
@@ -417,7 +414,7 @@ function FilterBar({
 										setPending(null);
 									}
 								}}
-								className="w-24 bg-transparent font-mono text-ui-xs focus-visible:outline-none"
+								className="w-24 bg-transparent font-mono text-xs focus-visible:outline-none"
 							/>
 						</>
 					)}
@@ -425,7 +422,7 @@ function FilterBar({
 						type="button"
 						aria-label="Cancel filter"
 						onClick={() => setPending(null)}
-						className="text-[var(--color-icon-quaternary)] hover:text-[var(--color-text-primary)] focus-visible:outline-none"
+						className="text-fg-faint hover:text-fg focus-visible:outline-none"
 					>
 						<X aria-hidden="true" className="h-2.5 w-2.5" />
 					</button>
@@ -437,7 +434,7 @@ function FilterBar({
 					role="listbox"
 					aria-label="Columns"
 				>
-					<div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-semibold tracking-[0.1em] text-[var(--color-text-quaternary)]">
+					<div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-semibold tracking-[0.1em] text-fg-faint">
 						COLUMNS
 					</div>
 					{suggestions.slice(0, 12).map((column) => (
@@ -452,13 +449,13 @@ function FilterBar({
 								setInput("");
 								setIsColumnListOpen(false);
 							}}
-							className="flex h-7 w-full items-center justify-between rounded-[5px] px-2.5 text-left hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+							className="flex h-7 w-full items-center justify-between rounded-[5px] px-2.5 text-left hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						>
-							<span className="font-mono text-[12px] text-[var(--color-text-secondary)]">
+							<span className="font-mono text-[12px] text-fg-muted">
 								{column.name}
 							</span>
 							{column.type === "" ? null : (
-								<span className="font-mono text-[9.5px] text-[var(--color-text-quaternary)]">
+								<span className="font-mono text-[9.5px] text-fg-faint">
 									{column.type}
 								</span>
 							)}
@@ -474,7 +471,7 @@ function FilterBar({
 				>
 					{(["COMPARISON", "PATTERN MATCHING"] as const).map((group) => (
 						<div key={group}>
-							<div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-semibold tracking-[0.1em] text-[var(--color-text-quaternary)]">
+							<div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-semibold tracking-[0.1em] text-fg-faint">
 								{group}
 							</div>
 							{FILTER_OPERATORS.filter((entry) => entry.group === group).map(
@@ -488,12 +485,12 @@ function FilterBar({
 										onClick={() =>
 											setPending({ ...pending, operator: entry.operator })
 										}
-										className="flex h-7 w-full items-center justify-between rounded-[5px] px-2.5 text-left hover:bg-[var(--color-bg-hover-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+										className="flex h-7 w-full items-center justify-between rounded-[5px] px-2.5 text-left hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
-										<span className="text-[12px] text-[var(--color-text-secondary)]">
+										<span className="text-[12px] text-fg-muted">
 											{entry.label}
 										</span>
-										<span className="rounded-[4px] border border-[var(--color-border-panel)] bg-[var(--color-bg-hover)] px-1.5 py-px font-mono text-[10px] text-[var(--color-text-secondary)]">
+										<span className="rounded-[4px] border border-border bg-bg-hover px-1.5 py-px font-mono text-[10px] text-fg-muted">
 											{entry.symbol}
 										</span>
 									</button>

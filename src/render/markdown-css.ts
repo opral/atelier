@@ -9,10 +9,10 @@
  */
 export const MARKDOWN_CSS = `
 .md-diff {
-	font-family: var(--atelier-font-sans);
+	font-family: var(--at-font-sans);
 	font-size: 14px;
 	line-height: 1.62;
-	color: var(--atelier-ink);
+	color: var(--at-fg);
 	overflow-wrap: anywhere;
 }
 
@@ -55,13 +55,13 @@ export const MARKDOWN_CSS = `
 	height: 13px;
 	margin-inline-end: 6px;
 	vertical-align: -2px;
-	border: 1.5px solid var(--atelier-ink-subtle);
+	border: 1.5px solid var(--at-fg-subtle);
 	border-radius: 3px;
 	box-sizing: border-box;
 }
 .md-diff li[data-task="x"] > p::before {
-	border-color: var(--atelier-action);
-	background-color: var(--atelier-action);
+	border-color: var(--at-accent);
+	background-color: var(--at-accent);
 	/* The tick, drawn rather than positioned: no second pseudo to place. */
 	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.2l2.2 2.2 4.6-4.6' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
@@ -70,9 +70,9 @@ export const MARKDOWN_CSS = `
 }
 /* A done task reads as done, as in the app: dimmed, struck, box filled. */
 .md-diff li[data-task="x"]:not([data-review-status]) > p {
-	color: var(--atelier-ink-subtle);
+	color: var(--at-fg-subtle);
 	text-decoration: line-through;
-	text-decoration-color: var(--atelier-ink-subtle);
+	text-decoration-color: var(--at-fg-subtle);
 }
 /* A line the diff wrote into keeps the dimming and drops the rule: a
    descendant cannot undo an inherited strikethrough, and an added word
@@ -87,25 +87,25 @@ export const MARKDOWN_CSS = `
 .md-diff blockquote {
 	margin: 0 0 8px;
 	padding: 3px 0 3px 14px;
-	border-left: 3px solid var(--atelier-border);
+	border-left: 3px solid var(--at-border);
 }
 
 .md-diff pre {
 	margin: 0 0 8px;
 	padding: 10px 12px;
 	border-radius: 8px;
-	background: var(--atelier-bg-muted);
-	border: 1px solid var(--atelier-border-subtle);
+	background: var(--at-bg-subtle);
+	border: 1px solid var(--at-border-subtle);
 	overflow-x: auto;
 }
 .md-diff pre, .md-diff code {
-	font-family: var(--atelier-font-mono);
+	font-family: var(--at-font-mono);
 	font-size: 12.5px;
 }
 .md-diff :not(pre) > code {
 	padding: 1px 4px;
 	border-radius: 4px;
-	background: color-mix(in srgb, var(--atelier-ink-subtle) 15%, transparent);
+	background: color-mix(in srgb, var(--at-fg-subtle) 15%, transparent);
 }
 .md-diff pre [data-review-status="removed"] { text-decoration: none; }
 .md-diff pre code {
@@ -114,13 +114,13 @@ export const MARKDOWN_CSS = `
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
-.md-diff .md-diff-raw { color: var(--atelier-ink-subtle); white-space: pre-wrap; }
-.md-diff .md-footnote-ref { font-size: 0.75em; line-height: 0; vertical-align: super; color: var(--atelier-accent); }
+.md-diff .md-diff-raw { color: var(--at-fg-subtle); white-space: pre-wrap; }
+.md-diff .md-footnote-ref { font-size: 0.75em; line-height: 0; vertical-align: super; color: var(--at-link); }
 .md-diff .md-footnote-def { display: grid; grid-template-columns: 3rem minmax(0, 1fr); column-gap: 0.5rem; align-items: baseline; margin: 0.5em 0; }
-.md-diff .md-footnote-def-label { color: var(--atelier-accent); font-size: 0.9em; }
+.md-diff .md-footnote-def-label { color: var(--at-link); font-size: 0.9em; }
 .md-diff .md-footnote-def-body > :first-child { margin-top: 0; }
 .md-diff .md-footnote-def-body > :last-child { margin-bottom: 0; }
-.md-diff .md-diff-missing { color: var(--atelier-ink-subtle); font-style: italic; }
+.md-diff .md-diff-missing { color: var(--at-fg-subtle); font-style: italic; }
 
 /* An image, named rather than loaded. */
 .md-diff .md-diff-image {
@@ -128,17 +128,17 @@ export const MARKDOWN_CSS = `
 	align-items: baseline;
 	gap: 5px;
 	padding: 1px 7px 1px 6px;
-	border: 1px solid var(--atelier-border);
+	border: 1px solid var(--at-border);
 	border-radius: 6px;
-	color: var(--atelier-ink-muted);
+	color: var(--at-fg-muted);
 	font-size: 13px;
 }
 .md-diff .md-diff-image::before {
 	content: "▨";
-	color: var(--atelier-ink-subtle);
+	color: var(--at-fg-subtle);
 }
 .md-diff .md-diff-image { margin: 0 4px 6px 0; }
-.md-diff .md-diff-image-src { color: var(--atelier-ink-subtle); font-size: 12px; }
+.md-diff .md-diff-image-src { color: var(--at-fg-subtle); font-size: 12px; }
 
 .md-diff a {
 	color: inherit;
@@ -147,7 +147,7 @@ export const MARKDOWN_CSS = `
 	text-underline-offset: 2px;
 }
 .md-diff img { max-width: 100%; height: auto; border-radius: 6px; }
-.md-diff hr { margin: 12px 0; border: 0; border-top: 1px solid var(--atelier-border); }
+.md-diff hr { margin: 12px 0; border: 0; border-top: 1px solid var(--at-border); }
 
 /* Its own width — a table with two short columns is not a banner — and a
    scroll past the card's edge rather than a squeeze. */
@@ -156,7 +156,7 @@ export const MARKDOWN_CSS = `
 	width: fit-content;
 	max-width: 100%;
 	margin: 0 0 8px;
-	border: 1px solid var(--atelier-border);
+	border: 1px solid var(--at-border);
 	border-radius: 8px;
 	border-collapse: collapse;
 	overflow-x: auto;
@@ -164,12 +164,12 @@ export const MARKDOWN_CSS = `
 .md-diff table > tbody { display: table; width: max-content; }
 .md-diff th, .md-diff td {
 	padding: 7px 9px;
-	border-bottom: 1px solid var(--atelier-border-subtle);
+	border-bottom: 1px solid var(--at-border-subtle);
 	text-align: left;
 	vertical-align: top;
 }
 .md-diff tr:first-child > th, .md-diff tr:first-child > td {
-	background: var(--atelier-bg-muted);
+	background: var(--at-bg-subtle);
 }
 .md-diff tr:last-child > th, .md-diff tr:last-child > td { border-bottom: 0; }
 .md-diff th { font-weight: 600; }
@@ -179,8 +179,8 @@ export const MARKDOWN_CSS = `
 /* ── The change itself ───────────────────────────────────────────────── */
 
 .md-diff [data-review-status="added"] {
-	background: var(--atelier-added-bg);
-	color: var(--atelier-added-ink);
+	background: var(--at-diff-added-subtle);
+	color: var(--at-diff-added);
 	border-radius: 4px;
 	/* Nothing struck through: an arriving word is not a leaving one, whatever
 	   decoration the line around it carries. */
@@ -190,11 +190,11 @@ export const MARKDOWN_CSS = `
 }
 
 .md-diff [data-review-status="removed"] {
-	background: var(--atelier-removed-bg);
-	color: var(--atelier-removed-ink);
+	background: var(--at-diff-removed-subtle);
+	color: var(--at-diff-removed);
 	border-radius: 4px;
 	text-decoration: line-through;
-	text-decoration-color: var(--atelier-removed-edge);
+	text-decoration-color: var(--at-diff-removed);
 	box-decoration-break: clone;
 	-webkit-box-decoration-break: clone;
 }
@@ -211,7 +211,7 @@ export const MARKDOWN_CSS = `
    colour of the change. */
 .md-diff [data-review-status] code { background: none; color: inherit; }
 
-.md-diff [data-review-status="modified"] { background: var(--atelier-modified-bg); border-radius: 4px; }
+.md-diff [data-review-status="modified"] { background: var(--at-accent-subtle); border-radius: 4px; }
 
 /* Block-level marks take the row, so the colour reads as the line's. */
 .md-diff p[data-review-status],
@@ -229,14 +229,14 @@ export const MARKDOWN_CSS = `
 /* A code block keeps its own inset and its own ground; the change shows on
    the edge, where it does not turn code into something else. */
 .md-diff pre[data-review-status] {
-	background: var(--atelier-bg-muted);
-	box-shadow: inset 3px 0 0 var(--atelier-accent);
+	background: var(--at-bg-subtle);
+	box-shadow: inset 3px 0 0 var(--at-link);
 }
 .md-diff pre[data-review-status="added"] {
-	box-shadow: inset 3px 0 0 var(--atelier-added-edge);
+	box-shadow: inset 3px 0 0 var(--at-diff-added);
 }
 .md-diff pre[data-review-status="removed"] {
-	box-shadow: inset 3px 0 0 var(--atelier-removed-edge);
+	box-shadow: inset 3px 0 0 var(--at-diff-removed);
 }
 .md-diff li[data-task="x"][data-review-status="added"] > p::before,
 .md-diff li[data-task="x"][data-review-status="removed"] > p::before {
@@ -250,11 +250,11 @@ export const MARKDOWN_CSS = `
 	display: block;
 	margin: 4px 0;
 	padding: 2px 0;
-	color: var(--atelier-ink-subtle);
+	color: var(--at-fg-subtle);
 	font-size: 12px;
 	list-style: none;
 }
 .md-diff li.md-diff-gap { margin-left: -22px; }
 .md-diff tr.md-diff-gap { display: table-row; }
-.md-diff tr.md-diff-gap > td { color: var(--atelier-ink-subtle); font-size: 12px; }
+.md-diff tr.md-diff-gap > td { color: var(--at-fg-subtle); font-size: 12px; }
 `;

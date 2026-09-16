@@ -118,31 +118,31 @@ export function formatGridCell(
 	if (value === null || value === undefined) {
 		return {
 			text: "null",
-			className: "font-mono text-ui-sm text-[var(--color-text-quaternary)]",
+			className: "font-mono text-sm text-fg-faint",
 		};
 	}
 	if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
 		return {
 			text: formatByteSize(value.byteLength),
-			className: "font-mono text-ui-sm text-[var(--color-text-tertiary)]",
+			className: "font-mono text-sm text-fg-subtle",
 		};
 	}
 	if (typeof value === "number" || typeof value === "bigint") {
 		return {
 			text: String(value),
-			className: "font-mono text-[12px] text-[var(--color-text-secondary)]",
+			className: "font-mono text-[12px] text-fg-muted",
 		};
 	}
 	if (typeof value === "boolean") {
 		return {
 			text: value ? "true" : "false",
-			className: "font-mono text-[12px] text-[var(--color-text-secondary)]",
+			className: "font-mono text-[12px] text-fg-muted",
 		};
 	}
 	if (typeof value === "object") {
 		return {
 			text: Array.isArray(value) ? "[…]" : "{…}",
-			className: "font-mono text-ui-sm text-[var(--color-text-quaternary)]",
+			className: "font-mono text-sm text-fg-faint",
 		};
 	}
 	const text = String(value);
@@ -150,18 +150,18 @@ export function formatGridCell(
 	if (name === "id" || name.endsWith("_id") || name.endsWith("_pk")) {
 		return {
 			text,
-			className: "font-mono text-[12px] text-[var(--color-text-quaternary)]",
+			className: "font-mono text-[12px] text-fg-faint",
 		};
 	}
 	if (name.endsWith("_at") || /^\d{4}-\d{2}-\d{2}[ T]/.test(text)) {
 		return {
 			text,
-			className: "font-mono text-ui-sm text-[var(--color-text-quaternary)]",
+			className: "font-mono text-sm text-fg-faint",
 		};
 	}
 	return {
 		text,
-		className: "text-ui font-medium text-[var(--color-text-primary)]",
+		className: "text-md font-medium text-fg",
 	};
 }
 
@@ -188,18 +188,18 @@ export function DataGrid({
 						const isSorted = sort?.column === column.name;
 						const header = (
 							<>
-								<span className="text-[10.5px] font-bold tracking-[0.05em] text-[var(--color-text-secondary)] uppercase">
+								<span className="text-[10.5px] font-bold tracking-[0.05em] text-fg-muted uppercase">
 									{column.name}
 								</span>
 								{column.type === "" ? null : (
-									<span className="ml-1 font-mono text-[9px] text-[var(--color-icon-quaternary)]">
+									<span className="ml-1 font-mono text-[9px] text-fg-faint">
 										{column.type}
 									</span>
 								)}
 								{column.description ? (
 									<Info
 										aria-hidden="true"
-										className="ml-1 inline-block h-[11px] w-[11px] align-[-1.5px] text-[var(--color-icon-quaternary)]"
+										className="ml-1 inline-block h-[11px] w-[11px] align-[-1.5px] text-fg-faint"
 									/>
 								) : null}
 								<SortChevron
@@ -218,7 +218,7 @@ export function DataGrid({
 											: "descending"
 										: undefined
 								}
-								className={`sticky top-0 h-[34px] border-b border-[var(--color-border-panel)] bg-[var(--color-bg-panel-muted)] px-3.5 whitespace-nowrap ${
+								className={`sticky top-0 h-[34px] border-b border-border bg-bg-subtle px-3.5 whitespace-nowrap ${
 									columnAlign(column.type) === "right"
 										? "text-right"
 										: "text-left"
@@ -237,7 +237,7 @@ export function DataGrid({
 													isSorted && sort.direction === "asc" ? "desc" : "asc",
 											})
 										}
-										className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+										className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
 										{header}
 									</button>
@@ -249,10 +249,7 @@ export function DataGrid({
 			</thead>
 			<tbody>
 				{rows.map((row, rowIndex) => (
-					<tr
-						key={rowIndex}
-						className="hover:bg-[var(--color-bg-hover-canvas)]"
-					>
+					<tr key={rowIndex} className="hover:bg-bg-hover-strong">
 						{columns.map((column) => {
 							const rawValue = row[column.name];
 							const isRowRef =
@@ -262,7 +259,7 @@ export function DataGrid({
 								return (
 									<td
 										key={column.name}
-										className="h-8 border-b border-[var(--color-border-subtle)] px-3.5 text-left whitespace-nowrap"
+										className="h-8 border-b border-border-subtle px-3.5 text-left whitespace-nowrap"
 									>
 										<JsonCell
 											columnName={column.name}
@@ -278,7 +275,7 @@ export function DataGrid({
 								<td
 									key={column.name}
 									title={isTruncated ? cell.text : undefined}
-									className={`h-8 border-b border-[var(--color-border-subtle)] px-3.5 whitespace-nowrap ${
+									className={`h-8 border-b border-border-subtle px-3.5 whitespace-nowrap ${
 										columnAlign(column.type) === "right"
 											? "text-right"
 											: "text-left"
@@ -383,10 +380,10 @@ function JsonCell({
 				aria-expanded={isOpen}
 				data-attr={kind === "row_ref" ? "sql-row-ref-cell" : "sql-json-cell"}
 				onClick={toggle}
-				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
+				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 					isOpen
-						? "border-[var(--color-icon-brand)] text-[var(--color-text-secondary)]"
-						: "border-transparent text-[var(--color-text-quaternary)] hover:border-[var(--color-border-panel)] hover:text-[var(--color-text-secondary)]"
+						? "border-link text-fg-muted"
+						: "border-transparent text-fg-faint hover:border-border hover:text-fg-muted"
 				}`}
 			>
 				{kind === "row_ref" ? "row_ref" : Array.isArray(value) ? "[…]" : "{…}"}
@@ -405,10 +402,10 @@ function JsonCell({
 						maxWidth: "calc(100vw - 24px)",
 						zIndex: 30,
 					}}
-					className="rounded-[10px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-3 shadow-lg"
+					className="rounded-[10px] border border-border bg-panel p-3 shadow-lg"
 				>
 					<div className="flex items-center justify-between pb-2">
-						<span className="font-mono text-[12px] font-semibold text-[var(--color-text-primary)]">
+						<span className="font-mono text-[12px] font-semibold text-fg">
 							{columnName}
 						</span>
 						<button
@@ -424,7 +421,7 @@ function JsonCell({
 									.then(() => setHasCopied(true))
 									.catch(() => undefined);
 							}}
-							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-ui-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]"
+							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-sm font-medium text-fg-muted hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						>
 							<Copy aria-hidden="true" className="h-3 w-3" />
 							{hasCopied ? "Copied" : "Copy"}
@@ -432,7 +429,7 @@ function JsonCell({
 					</div>
 					<div
 						style={{ maxHeight: JSON_POPOVER_MAX_HEIGHT - 60 }}
-						className="overflow-auto rounded-[8px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5 py-2.5 font-mono text-[12px] leading-[1.8] break-words whitespace-pre-wrap text-[var(--color-text-secondary)]"
+						className="overflow-auto rounded-[8px] border border-border-subtle bg-bg-subtle px-3.5 py-2.5 font-mono text-[12px] leading-[1.8] break-words whitespace-pre-wrap text-fg-muted"
 					>
 						{kind === "row_ref" ? String(value) : renderJson(value, "")}
 					</div>
@@ -446,17 +443,13 @@ function JsonCell({
  * amber — matching the SQL editor's token palette. */
 function renderJson(value: unknown, indent: string): ReactNode {
 	if (value === null) {
-		return <span className="text-[var(--color-text-quaternary)]">null</span>;
+		return <span className="text-fg-faint">null</span>;
 	}
 	if (typeof value === "number" || typeof value === "bigint") {
 		return <span className="atelier-sql-tok-number">{String(value)}</span>;
 	}
 	if (typeof value === "boolean") {
-		return (
-			<span className="text-[var(--color-text-secondary)]">
-				{value ? "true" : "false"}
-			</span>
-		);
+		return <span className="text-fg-muted">{value ? "true" : "false"}</span>;
 	}
 	if (typeof value === "string") {
 		const truncated =
@@ -497,9 +490,7 @@ function renderJson(value: unknown, indent: string): ReactNode {
 			{entries.map(([key, entryValue], index) => (
 				<span key={key}>
 					{childIndent}
-					<span className="text-[var(--color-text-primary)]">
-						{JSON.stringify(key)}
-					</span>
+					<span className="text-fg">{JSON.stringify(key)}</span>
 					{": "}
 					{renderJson(entryValue, childIndent)}
 					{index < entries.length - 1 ? "," : ""}
@@ -523,9 +514,7 @@ function SortChevron({ direction }: { readonly direction?: "asc" | "desc" }) {
 			stroke="currentColor"
 			strokeWidth="2"
 			className={`ml-0.5 inline-block align-[-1px] ${
-				direction === undefined
-					? "text-[var(--color-icon-quaternary)]"
-					: "text-[var(--color-icon-secondary)]"
+				direction === undefined ? "text-fg-faint" : "text-fg-muted"
 			} ${direction === "asc" ? "rotate-180" : ""}`}
 		>
 			<path d="m6 9 6 6 6-6" />
@@ -552,15 +541,14 @@ export function GridFooter({
 	const format = (n: number) => n.toLocaleString("en-US");
 
 	return (
-		<div className="atelier-sql-grid-footer flex h-9 shrink-0 items-center gap-3 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-panel-muted)] px-3.5">
+		<div className="atelier-sql-grid-footer flex h-9 shrink-0 items-center gap-3 border-t border-border-subtle bg-bg-subtle px-3.5">
 			<span
 				data-attr="sql-grid-row-range"
-				className="font-mono text-ui-sm text-[var(--color-text-tertiary)]"
+				className="font-mono text-sm text-fg-subtle"
 			>
-				{format(start)}–{format(end)}{" "}
-				<span className="text-[var(--color-text-quaternary)]">of</span>{" "}
+				{format(start)}–{format(end)} <span className="text-fg-faint">of</span>{" "}
 				{format(totalRows)}{" "}
-				<span className="text-[var(--color-text-quaternary)]">
+				<span className="text-fg-faint">
 					{totalRows === 1 ? "row" : "rows"}
 				</span>
 			</span>
@@ -572,7 +560,7 @@ export function GridFooter({
 					pageSize={pageSize}
 					onPageSizeChange={onPageSizeChange}
 				/>
-				<span className="h-4 w-px bg-[var(--color-border-panel)]" />
+				<span className="h-4 w-px bg-border" />
 			</span>
 			<span className="inline-flex items-center gap-1">
 				<PagerButton
@@ -581,11 +569,9 @@ export function GridFooter({
 					onClick={() => onPageChange(page - 1)}
 					path="m15 18-6-6 6-6"
 				/>
-				<span className="px-1 text-ui-sm text-[var(--color-text-secondary)]">
+				<span className="px-1 text-sm text-fg-muted">
 					Page {format(page + 1)}{" "}
-					<span className="text-[var(--color-text-quaternary)]">
-						of {format(pageCount)}
-					</span>
+					<span className="text-fg-faint">of {format(pageCount)}</span>
 				</span>
 				<PagerButton
 					label="Next page"
@@ -615,10 +601,8 @@ function PagerButton({
 			aria-label={label}
 			disabled={disabled}
 			onClick={onClick}
-			className={`flex h-[26px] w-[26px] items-center justify-center rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] ${
-				disabled
-					? "text-[var(--color-icon-quaternary)]"
-					: "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+			className={`flex h-[26px] w-[26px] items-center justify-center rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+				disabled ? "text-fg-faint" : "text-fg-muted hover:bg-bg-hover"
 			}`}
 		>
 			<svg
@@ -644,7 +628,7 @@ function PageSizeSelect({
 	readonly onPageSizeChange: (pageSize: number) => void;
 }) {
 	return (
-		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-ui-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]">
+		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-sm text-fg-muted hover:bg-bg-hover">
 			<select
 				aria-label="Rows per page"
 				value={pageSize}
@@ -665,7 +649,7 @@ function PageSizeSelect({
 				fill="none"
 				stroke="currentColor"
 				strokeWidth="2"
-				className="text-[var(--color-icon-quaternary)]"
+				className="text-fg-faint"
 			>
 				<path d="m6 9 6 6 6-6" />
 			</svg>

@@ -58,7 +58,7 @@ type FormatState = {
 };
 
 const ToolbarSeparator = () => (
-	<Toolbar.Separator className="mx-1.5 h-3.5 w-px bg-[var(--color-border-subtle)]" />
+	<Toolbar.Separator className="mx-1.5 h-3.5 w-px bg-border-subtle" />
 );
 
 const initialFormatState: FormatState = {
@@ -336,7 +336,7 @@ export function FormattingToolbar({
 		<Tooltip.Provider delay={TOOLBAR_TOOLTIP_DELAY}>
 			<Toolbar.Root
 				className={clsx(
-					"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-[var(--color-border-subtle)] px-2.5 text-foreground",
+					"flex h-[var(--at-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-border-subtle px-2.5 text-fg",
 					className,
 				)}
 				aria-label="Formatting toolbar"
@@ -374,20 +374,20 @@ export function FormattingToolbar({
 									render={<Select.Trigger />}
 									data-attr="markdown-block-selector"
 									className={clsx(
-										"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)]",
+										"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-fg-muted transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 										// While the menu is open the trigger stays completely
 										// unfilled — the cursor is usually still on it, so even
 										// the hover tint reads as a stuck pill.
 										blockMenuOpen
-											? "text-[var(--color-text-primary)]"
-											: "hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]",
+											? "text-fg"
+											: "hover:bg-bg-hover hover:text-fg",
 									)}
 									onMouseDown={suppressMouseDown}
 								>
 									<Select.Value className="block w-[5.25rem] truncate">
 										{activeBlockLabel}
 									</Select.Value>
-									<Select.Icon className="text-[var(--color-icon-tertiary)] transition-transform duration-100 data-[popup-open]:rotate-180">
+									<Select.Icon className="text-fg-subtle transition-transform duration-100 data-[popup-open]:rotate-180">
 										<ChevronDown
 											className="size-[13px] stroke-[2]"
 											aria-hidden
@@ -402,28 +402,28 @@ export function FormattingToolbar({
 										sideOffset={6}
 										alignItemWithTrigger={false}
 									>
-										<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
-											<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-[var(--color-icon-tertiary)]">
+										<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
+											<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-fg-subtle">
 												Turn into
 											</div>
 											{TOOLBAR_BLOCK_OPTIONS.map((option) => (
 												<Select.Item
 													key={option.value}
 													value={option.value}
-													className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-[var(--color-bg-hover)] data-[highlighted]:text-[var(--color-text-primary)]"
+													className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-bg-hover data-[highlighted]:text-fg"
 												>
-													<span className="flex size-4.5 items-center justify-center text-[12px] text-[var(--color-icon-tertiary)] group-data-[highlighted]:text-[var(--color-text-secondary)] [&_svg]:stroke-[1.8]">
+													<span className="flex size-4.5 items-center justify-center text-[12px] text-fg-subtle group-data-[highlighted]:text-fg-muted [&_svg]:stroke-[1.8]">
 														<option.icon className="h-3.5 w-3.5" aria-hidden />
 													</span>
 													<div className="flex flex-1 flex-col">
-														<span className="text-[12.5px] font-semibold leading-4 text-[var(--color-text-primary)]">
+														<span className="text-[12.5px] font-semibold leading-4 text-fg">
 															{option.label}
 														</span>
-														<span className="text-[11.5px] font-normal leading-4 text-[var(--color-text-tertiary)]">
+														<span className="text-[11.5px] font-normal leading-4 text-fg-subtle">
 															{option.description}
 														</span>
 													</div>
-													<Select.ItemIndicator className="text-[var(--color-text-link-hover)]">
+													<Select.ItemIndicator className="text-link-hover">
 														<Check
 															className="h-3.5 w-3.5 stroke-[2]"
 															aria-hidden
@@ -551,7 +551,7 @@ export function FormattingToolbar({
 					/>
 				</div>
 
-				<div className="flex shrink-0 items-center bg-[var(--color-bg-panel)] pl-0.5">
+				<div className="flex shrink-0 items-center bg-panel pl-0.5">
 					<ToolbarSeparator />
 					<ToolbarIconButton
 						label={
@@ -561,11 +561,7 @@ export function FormattingToolbar({
 							copyStatus === "success" ? "Copied Markdown" : "Copy Markdown"
 						}
 						pressable={false}
-						className={clsx(
-							"ml-auto",
-							copyStatus === "error" &&
-								"text-[var(--color-text-status-danger)]",
-						)}
+						className={clsx("ml-auto", copyStatus === "error" && "text-danger")}
 						onClick={handleCopyMarkdown}
 						portalContainer={portalContainer}
 						data-attr="markdown-copy-markdown"
@@ -582,7 +578,7 @@ export function FormattingToolbar({
 							/>
 							<Check
 								className={clsx(
-									"absolute size-3.5 text-[var(--color-text-status-success)] transition-all duration-150",
+									"absolute size-3.5 text-success transition-all duration-150",
 									copyStatus === "success"
 										? "scale-100 opacity-100"
 										: "scale-75 opacity-0",

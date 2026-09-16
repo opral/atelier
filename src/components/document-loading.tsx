@@ -10,7 +10,7 @@ export function DocumentLoading({
 		<div
 			role="status"
 			aria-live="polite"
-			className="flex min-h-32 flex-1 items-center justify-center gap-2 p-6 text-sm text-muted-foreground"
+			className="flex min-h-32 flex-1 items-center justify-center gap-2 p-6 text-sm text-fg-subtle"
 			data-atelier-document-loading=""
 		>
 			<LoaderCircle

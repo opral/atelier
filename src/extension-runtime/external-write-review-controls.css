@@ -84,8 +84,8 @@
 		gap: 0.125rem;
 		padding: 0.4375rem;
 		border-radius: 0.75rem;
-		background: var(--color-bg-inverse);
-		box-shadow: var(--shadow-inverse);
+		background: var(--at-overlay);
+		box-shadow: var(--at-shadow-overlay);
 	}
 
 	.external-write-review-button-exit {
@@ -96,7 +96,7 @@
 		padding: 0 0.5rem;
 		border-radius: 0.5rem;
 		background: transparent;
-		color: var(--color-text-inverse-primary);
+		color: var(--at-overlay-fg);
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
@@ -107,16 +107,16 @@
 	}
 
 	.external-write-review-button-exit:hover {
-		background: var(--color-bg-inverse-overlay);
-		color: var(--color-text-inverse-primary);
+		background: var(--at-overlay-hairline);
+		color: var(--at-overlay-fg);
 	}
 
 	.external-write-review-button-exit > kbd {
-		border: 1px solid var(--color-border-inverse-strong);
+		border: 1px solid var(--at-overlay-border-strong);
 		border-radius: 0.25rem;
-		background: var(--color-bg-inverse-raised);
+		background: var(--at-overlay-raised);
 		padding: 0.125rem 0.25rem;
-		color: var(--color-text-inverse-secondary);
+		color: var(--at-overlay-fg-muted);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 0.59rem;
@@ -128,7 +128,7 @@
 		width: 1px;
 		height: 1.25rem;
 		margin: 0 0.25rem;
-		background: var(--color-border-inverse);
+		background: var(--at-overlay-border);
 	}
 
 	/* The ▾ file checklist: every changed file, all ticked by default.
@@ -143,10 +143,10 @@
 		flex-direction: column;
 		gap: 1px;
 		padding: 0.375rem;
-		border: 1px solid var(--color-border-inverse);
+		border: 1px solid var(--at-overlay-border);
 		border-radius: 0.625rem;
-		background: var(--color-bg-inverse);
-		box-shadow: var(--shadow-inverse);
+		background: var(--at-overlay);
+		box-shadow: var(--at-shadow-overlay);
 	}
 
 	.external-write-review-menu > button {
@@ -156,7 +156,7 @@
 		gap: 0.5rem;
 		padding: 0.4375rem 0.625rem;
 		border-radius: 0.375rem;
-		color: var(--color-text-inverse-secondary);
+		color: var(--at-overlay-fg-muted);
 		font-size: 0.75rem;
 		font-weight: 600;
 		text-align: left;
@@ -164,12 +164,12 @@
 	}
 
 	.external-write-review-menu > button[data-ticked] {
-		color: var(--color-text-inverse-primary);
+		color: var(--at-overlay-fg);
 		font-weight: 700;
 	}
 
 	.external-write-review-menu > button:hover {
-		background: var(--color-bg-inverse-raised);
+		background: var(--at-overlay-raised);
 	}
 
 	.external-write-review-menu-tick {
@@ -179,20 +179,20 @@
 		flex: none;
 		align-items: center;
 		justify-content: center;
-		border: 1.5px solid var(--color-border-inverse-strong);
+		border: 1.5px solid var(--at-overlay-border-strong);
 		border-radius: 0.25rem;
 		box-sizing: border-box;
 	}
 
 	.external-write-review-menu-tick[data-ticked] {
-		border-color: var(--color-bg-action-primary);
-		background: var(--color-bg-action-primary);
+		border-color: var(--at-accent);
+		background: var(--at-accent);
 	}
 
 	.external-write-review-menu-tick > svg {
 		width: 0.5625rem;
 		height: 0.5625rem;
-		color: var(--color-text-on-action-primary);
+		color: var(--at-accent-on);
 		stroke-width: 3.2;
 	}
 
@@ -219,20 +219,20 @@
 	.external-write-review-menu-divider {
 		height: 1px;
 		margin: 0.25rem 0.125rem;
-		background: var(--color-border-inverse);
+		background: var(--at-overlay-border);
 	}
 
 	/* Row state, right-aligned: "viewing". */
 	.external-write-review-menu-tag {
 		margin-left: auto;
 		padding-left: 0.75rem;
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		font-size: 0.625rem;
 		font-weight: 500;
 	}
 
 	.external-write-review-menu > button[data-viewing] {
-		background: var(--color-bg-inverse-raised);
+		background: var(--at-overlay-raised);
 	}
 
 	/* A verb's arrow menu: "{Verb} all N files", "Undo only {file}". */
@@ -262,7 +262,7 @@
 	}
 
 	.external-write-review-verb-menu > button:disabled {
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		cursor: default;
 	}
 
@@ -271,7 +271,7 @@
 	}
 
 	.external-write-review-verb-menu kbd {
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 0.59rem;
@@ -288,10 +288,10 @@
 		gap: 0.375rem;
 		margin: 0 0.25rem 0 0.0625rem;
 		padding: 0 0.5rem;
-		border: 1px solid var(--color-border-inverse);
+		border: 1px solid var(--at-overlay-border);
 		border-radius: 0.5rem;
-		background: var(--color-bg-inverse-raised);
-		color: var(--color-text-inverse-primary);
+		background: var(--at-overlay-raised);
+		color: var(--at-overlay-fg);
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
@@ -300,7 +300,7 @@
 	}
 
 	.external-write-review-scope-chip:hover:not(:disabled) {
-		background: var(--color-bg-inverse-hover);
+		background: var(--at-overlay-hover);
 	}
 
 	.external-write-review-scope-chip:disabled {
@@ -311,7 +311,7 @@
 	.external-write-review-scope-chip > svg {
 		width: 0.625rem;
 		height: 0.625rem;
-		color: var(--color-text-inverse-secondary);
+		color: var(--at-overlay-fg-muted);
 	}
 
 	/* The progress ring: orange = will be acted on, the rest not. The wedge
@@ -322,8 +322,8 @@
 		flex: none;
 		border-radius: 50%;
 		background: conic-gradient(
-			var(--color-bg-action-primary) 0deg var(--ring-ticked, 0deg),
-			var(--color-border-inverse-strong) var(--ring-ticked, 0deg) 360deg
+			var(--at-accent) 0deg var(--ring-ticked, 0deg),
+			var(--at-overlay-border-strong) var(--ring-ticked, 0deg) 360deg
 		);
 	}
 
@@ -340,7 +340,7 @@
 		align-items: center;
 		gap: 0.42rem;
 		padding: 0 0.55rem 0 0.12rem;
-		color: var(--color-text-inverse-primary);
+		color: var(--at-overlay-fg);
 	}
 
 	.external-write-review-navigation > button {
@@ -350,12 +350,12 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 0.4375rem;
-		color: var(--color-text-inverse-secondary);
+		color: var(--at-overlay-fg-muted);
 	}
 
 	.external-write-review-navigation > button:hover:not(:disabled) {
-		background: var(--color-bg-inverse-overlay);
-		color: var(--color-text-inverse-primary);
+		background: var(--at-overlay-hairline);
+		color: var(--at-overlay-fg);
 	}
 
 	.external-write-review-navigation svg {
@@ -370,7 +370,7 @@
 		flex: none;
 		align-items: center;
 		gap: 0.25rem;
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		font-size: 0.625rem;
 		font-weight: 500;
 	}
@@ -386,11 +386,7 @@
 		width: 0.875rem;
 		height: 0.875rem;
 		flex: none;
-		color: color-mix(
-			in srgb,
-			var(--color-text-inverse-primary) 72%,
-			transparent
-		);
+		color: color-mix(in srgb, var(--at-overlay-fg) 72%, transparent);
 	}
 
 	.external-write-review-navigation > span {
@@ -422,18 +418,18 @@
 		width: 0.3rem;
 		height: 0.3rem;
 		border-radius: 50%;
-		background: var(--color-text-inverse-tertiary);
+		background: var(--at-overlay-fg-subtle);
 		opacity: 0.55;
 	}
 
 	.external-write-review-pager i[data-active] {
-		background: var(--color-text-inverse-primary);
+		background: var(--at-overlay-fg);
 		opacity: 1;
 	}
 
 	.external-write-review-pager-index {
 		flex: none;
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		font-size: 0.72rem;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
@@ -441,13 +437,13 @@
 
 	.external-write-review-navigation small {
 		flex: none;
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		font-size: 0.72rem;
 		white-space: nowrap;
 	}
 
 	.external-write-review-navigation-placeholder {
-		color: var(--color-text-inverse-secondary);
+		color: var(--at-overlay-fg-muted);
 		font-weight: 600;
 	}
 
@@ -478,25 +474,25 @@
 	}
 
 	.external-write-review-button-accept {
-		background: var(--color-bg-action-primary);
-		color: var(--color-text-on-action-primary);
+		background: var(--at-accent);
+		color: var(--at-accent-on);
 	}
 
 	.external-write-review-button-accept:hover:not(:disabled) {
-		background: var(--color-bg-action-primary-hover);
+		background: var(--at-accent-hover);
 	}
 
 	.external-write-review-button-reject {
 		padding: 0.3125rem 0.5625rem;
 		background: transparent;
 		/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
-		color: var(--color-text-inverse-danger);
+		color: var(--at-overlay-danger);
 		font-weight: 600;
 	}
 
 	.external-write-review-button-reject:hover:not(:disabled) {
-		background: var(--color-bg-inverse-overlay);
-		color: var(--color-text-inverse-danger-hover);
+		background: var(--at-overlay-hairline);
+		color: var(--at-overlay-danger);
 	}
 
 	/* A verb is a split button: the big half acts on the ticked set, the
@@ -518,7 +514,7 @@
 	}
 
 	.external-write-review-split-reject:has(.external-write-review-split-arrow) {
-		border-color: var(--color-border-inverse-danger);
+		border-color: var(--at-overlay-danger-border);
 	}
 
 	.external-write-review-split-arrow {
@@ -544,25 +540,25 @@
 
 	.external-write-review-split-accept .external-write-review-split-arrow {
 		border-left: 1px solid rgba(0, 0, 0, 0.25);
-		background: var(--color-bg-action-primary-hover);
-		color: var(--color-text-inverse-danger-hover);
+		background: var(--at-accent-hover);
+		color: var(--at-overlay-danger);
 	}
 
 	.external-write-review-split-accept
 		.external-write-review-split-arrow:hover:not(:disabled) {
-		color: var(--color-text-on-action-primary);
+		color: var(--at-accent-on);
 	}
 
 	.external-write-review-split-reject .external-write-review-split-arrow {
-		border-left: 1px solid var(--color-border-inverse-danger);
-		background: var(--color-bg-inverse-raised);
-		color: var(--color-text-inverse-danger);
+		border-left: 1px solid var(--at-overlay-danger-border);
+		background: var(--at-overlay-raised);
+		color: var(--at-overlay-danger);
 	}
 
 	.external-write-review-split-reject
 		.external-write-review-split-arrow:hover:not(:disabled) {
-		background: var(--color-bg-inverse-overlay);
-		color: var(--color-text-inverse-danger-hover);
+		background: var(--at-overlay-hairline);
+		color: var(--at-overlay-danger);
 	}
 
 	/* The pill divider between the stepper and the verbs. */
@@ -571,14 +567,14 @@
 		width: 1px;
 		height: 1rem;
 		margin-left: 0.125rem;
-		background: var(--color-border-inverse);
+		background: var(--at-overlay-border);
 	}
 
 	.external-write-review-shortcut {
 		border-radius: 0.25rem;
-		background: var(--color-bg-inverse-overlay-strong);
+		background: var(--at-overlay-hairline-strong);
 		padding: 0.125rem 0.3125rem;
-		color: var(--color-text-inverse-danger-hover);
+		color: var(--at-overlay-danger);
 		font-family:
 			-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 0.59rem;
@@ -588,9 +584,9 @@
 
 	.external-write-review-error {
 		border-radius: 0.45rem;
-		background: var(--color-bg-status-danger);
+		background: var(--at-danger-subtle);
 		padding: 0.3rem 0.5rem;
-		color: var(--color-text-status-danger);
+		color: var(--at-danger);
 		font-size: 0.68rem;
 	}
 

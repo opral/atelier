@@ -11,15 +11,15 @@ import { isMacPlatform } from "@/lib/platform";
 
 /** 28px square icon button, matching the panel-header chips in the islands UI. */
 export const iconButtonClass =
-	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-[var(--color-icon-secondary)] transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring-focus-visible)] disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
+	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-fg-muted transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
 
 /** Pressed state for a formatting toggle. */
 export const iconButtonActiveClass =
-	"bg-[var(--color-bg-control-selected)] text-[var(--color-text-primary)] [&_svg]:text-[var(--color-icon-control-selected)]";
+	"bg-bg-hover text-fg [&_svg]:text-fg-muted";
 
 /** Tooltip popup shared by every toolbar button. */
 export const toolbarTooltipPopupClass =
-	"rounded-md border border-[var(--color-border-panel)] bg-[var(--color-bg-panel)] px-2 py-1 text-xs text-[var(--color-text-primary)] shadow-md transition-opacity duration-150 data-[state=closed]:opacity-0 data-[state=open]:opacity-100";
+	"rounded-md border border-border bg-panel px-2 py-1 text-xs text-fg shadow-md transition-opacity duration-150 data-[state=closed]:opacity-0 data-[state=open]:opacity-100";
 
 /** Delay before a toolbar tooltip opens, shared through `Tooltip.Provider`. */
 export const TOOLBAR_TOOLTIP_DELAY = 400;
@@ -126,9 +126,7 @@ export function ToolbarIconButton({
 					<Tooltip.Popup className={toolbarTooltipPopupClass}>
 						<span className="font-medium">{tooltip ?? label}</span>
 						{shortcutLabel ? (
-							<span className="ml-1.5 text-[var(--color-text-tertiary)]">
-								{shortcutLabel}
-							</span>
+							<span className="ml-1.5 text-fg-subtle">{shortcutLabel}</span>
 						) : null}
 					</Tooltip.Popup>
 				</Tooltip.Positioner>

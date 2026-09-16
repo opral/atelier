@@ -29,7 +29,7 @@ export function pathLabelText(path: string): string {
 
 export function PathLabel({
 	path,
-	parentClassName = "text-[var(--color-text-quaternary)]",
+	parentClassName = "text-fg-faint",
 	layout = "inline",
 	className = "",
 }: {

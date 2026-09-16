@@ -164,9 +164,7 @@ function NewMenuItem({
 		// control has one colour to sit on rather than two.
 		<div
 			className={`group/row relative rounded-sm${
-				trailing
-					? " hover:bg-[var(--color-bg-hover)] focus-within:bg-[var(--color-bg-hover)]"
-					: ""
+				trailing ? " hover:bg-bg-hover focus-within:bg-bg-hover" : ""
 			}`}
 			data-attr={`${dataAttr}-row`}
 		>
@@ -189,7 +187,7 @@ function NewMenuItem({
 					// the disclosure fades in — neither is in flow beside the other,
 					// so the row's text never shifts.
 					<kbd
-						className={`ml-3 text-[10px] font-semibold text-[var(--color-icon-tertiary)]${
+						className={`ml-3 text-[10px] font-semibold text-fg-subtle${
 							trailing
 								? " transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0"
 								: ""
@@ -210,7 +208,7 @@ function NewMenuItem({
 					// appears, so the control fades the row's own fill over it.
 					style={{
 						background:
-							"linear-gradient(to right, transparent 0, var(--color-bg-hover) 14px)",
+							"linear-gradient(to right, transparent 0, var(--at-bg-hover) 14px)",
 					}}
 				>
 					{trailing}

@@ -21,26 +21,26 @@ const FALLBACK_THEME = {
 	textHeaderSelected: "rgb(124, 45, 18)",
 };
 const colorTokens = {
-	textDark: "--color-text-secondary",
-	textMedium: "--color-text-tertiary",
-	textLight: "--color-icon-quaternary",
-	textHeader: "--color-text-tertiary",
-	textHeaderSelected: "--color-action-selection-current",
-	accentColor: "--color-bg-action-primary",
-	accentFg: "--color-text-on-action-primary",
-	accentLight: "--color-bg-selection-current",
-	bgCell: "--color-bg-panel",
-	bgCellMedium: "--color-bg-panel-muted",
-	bgHeader: "--color-bg-panel",
-	bgHeaderHasFocus: "--color-bg-panel",
-	bgHeaderHovered: "--color-bg-hover",
-	bgIconHeader: "--color-bg-panel",
-	fgIconHeader: "--color-icon-tertiary",
-	borderColor: "--color-border-table-grid",
-	headerBottomBorderColor: "--color-border-table-grid",
-	horizontalBorderColor: "--color-border-table-grid",
-	linkColor: "--color-text-link",
-	resizeIndicatorColor: "--color-icon-brand",
+	textDark: "--at-fg-muted",
+	textMedium: "--at-fg-subtle",
+	textLight: "--at-fg-faint",
+	textHeader: "--at-fg-subtle",
+	textHeaderSelected: "--at-accent",
+	accentColor: "--at-accent",
+	accentFg: "--at-accent-on",
+	accentLight: "--at-accent-subtle",
+	bgCell: "--at-panel",
+	bgCellMedium: "--at-bg-subtle",
+	bgHeader: "--at-panel",
+	bgHeaderHasFocus: "--at-panel",
+	bgHeaderHovered: "--at-bg-hover",
+	bgIconHeader: "--at-panel",
+	fgIconHeader: "--at-fg-subtle",
+	borderColor: "--at-border-subtle",
+	headerBottomBorderColor: "--at-border-subtle",
+	horizontalBorderColor: "--at-border-subtle",
+	linkColor: "--at-link",
+	resizeIndicatorColor: "--at-link",
 } as const;
 
 const DEFAULT_APPEARANCE = {
@@ -80,24 +80,15 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 				const palette = Object.fromEntries(
 					Object.entries(CSV_COLOR_FALLBACKS).map(([name, [bg, fg]]) => [
 						name,
-						[
-							read(`--color-bg-tag-${name}`, bg),
-							read(`--color-text-tag-${name}`, fg),
-						],
+						[read(`--at-tag-${name}`, bg), read(`--at-tag-${name}-fg`, fg)],
 					]),
 				) as unknown as CsvPalette;
 				const next = {
 					theme,
 					palette,
-					searchColor: read(
-						"--color-bg-search-match",
-						DEFAULT_APPEARANCE.searchColor,
-					),
-					titleColor: read(
-						"--color-text-primary",
-						DEFAULT_APPEARANCE.titleColor,
-					),
-					hoverColor: read("--color-bg-hover", DEFAULT_APPEARANCE.hoverColor),
+					searchColor: read("--at-highlight", DEFAULT_APPEARANCE.searchColor),
+					titleColor: read("--at-fg", DEFAULT_APPEARANCE.titleColor),
+					hoverColor: read("--at-bg-hover", DEFAULT_APPEARANCE.hoverColor),
 				};
 				return JSON.stringify(next) === JSON.stringify(previous)
 					? previous

@@ -151,7 +151,7 @@ function PdfViewContent({
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -169,7 +169,7 @@ function PdfViewContent({
 function PdfReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			The working PDF changed while it was being reviewed. Reopen the review.
@@ -284,13 +284,13 @@ function PdfErrorState({ filePath }: { readonly filePath: string }) {
 		<div className="atelier-pdf-state" role="alert">
 			<FileWarning
 				aria-hidden="true"
-				className="size-7 text-[var(--color-icon-tertiary)]"
+				className="size-7 text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-[var(--color-text-primary)]">
+			<p className="mt-3 text-sm font-medium text-fg">
 				This PDF could not be displayed.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} may be damaged or not contain a
 				valid PDF document.
 			</p>

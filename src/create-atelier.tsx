@@ -476,7 +476,7 @@ function AtelierContent({
 }
 
 function AtelierLoadingPlaceholder() {
-	return <div className="h-full w-full bg-[var(--color-bg-app)]" />;
+	return <div className="h-full w-full bg-bg" />;
 }
 
 export type AtelierSkeletonProps = {
@@ -504,7 +504,7 @@ export function AtelierSkeleton({
 }: AtelierSkeletonProps) {
 	return (
 		<div className="atelier-root h-full w-full overflow-hidden">
-			<div className="relative flex h-full min-h-0 flex-col bg-[var(--color-bg-app)] text-[var(--color-text-primary)]">
+			<div className="relative flex h-full min-h-0 flex-col bg-bg text-fg">
 				<TopBar
 					isLeftSidebarVisible={false}
 					isRightSidebarVisible={false}
@@ -515,7 +515,7 @@ export function AtelierSkeleton({
 					rootProps={topBarProps}
 				/>
 				<main className="flex min-h-0 flex-1 overflow-hidden px-2 pb-2">
-					<div className="grid min-h-0 flex-1 place-content-center overflow-hidden rounded-[10px] bg-[var(--color-bg-panel)] p-6 text-center text-[var(--color-text-tertiary)]">
+					<div className="grid min-h-0 flex-1 place-content-center overflow-hidden rounded-[10px] bg-panel p-6 text-center text-fg-subtle">
 						{children}
 					</div>
 				</main>

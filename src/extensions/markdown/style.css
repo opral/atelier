@@ -4,17 +4,17 @@
 		z-index: 100;
 		max-width: min(360px, calc(100vw - 16px));
 		padding: 12px 14px;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 10px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-secondary);
+		background: var(--at-panel);
+		color: var(--at-fg-muted);
 		box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 		font-size: 12px;
 		line-height: 1.5;
 		pointer-events: auto;
 	}
 	.atelier-markdown-link-card strong {
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 	}
 	.atelier-markdown-link-path {
 		margin: 4px 0;
@@ -74,20 +74,12 @@
 
 	.markdown-format-toolbar-overflow-indicator-left {
 		left: 0;
-		background: linear-gradient(
-			to right,
-			var(--color-bg-panel) 20%,
-			transparent
-		);
+		background: linear-gradient(to right, var(--at-panel) 20%, transparent);
 	}
 
 	.markdown-format-toolbar-overflow-indicator-right {
 		right: 0;
-		background: linear-gradient(
-			to left,
-			var(--color-bg-panel) 20%,
-			transparent
-		);
+		background: linear-gradient(to left, var(--at-panel) 20%, transparent);
 	}
 
 	/* Hide the native scrollbar; a lightweight overlay thumb mirrors scroll
@@ -108,7 +100,7 @@
 		z-index: 10;
 		width: 6px;
 		min-height: 36px;
-		background-color: var(--color-scrollbar-thumb);
+		background-color: var(--at-scrollbar);
 		border-radius: 9999px;
 		opacity: 0;
 		pointer-events: none;
@@ -139,9 +131,9 @@
 		padding: 0.375rem 0.5625rem;
 		border: 0;
 		border-radius: 7px;
-		background: var(--color-bg-notice-neutral);
-		box-shadow: inset 0 0 0 1px var(--color-border-notice-neutral);
-		color: var(--color-text-notice-neutral);
+		background: var(--at-bg-hover);
+		box-shadow: inset 0 0 0 1px var(--at-border);
+		color: var(--at-fg);
 		font-size: 0.75rem;
 		font-weight: 500;
 		line-height: 1rem;
@@ -150,9 +142,9 @@
 	}
 
 	.markdown-image-paste-hint[data-state="error"] {
-		background: var(--color-bg-status-danger);
-		box-shadow: inset 0 0 0 1px var(--color-error-200);
-		color: var(--color-error-800);
+		background: var(--at-danger-subtle);
+		box-shadow: inset 0 0 0 1px var(--at-danger-subtle);
+		color: var(--at-diff-removed);
 	}
 
 	.markdown-image-paste-hint strong {
@@ -164,12 +156,12 @@
 		flex: 0 0 auto;
 		align-items: center;
 		justify-content: center;
-		color: var(--color-icon-notice-neutral);
+		color: var(--at-fg-muted);
 	}
 
 	.markdown-image-paste-hint[data-state="error"]
 		.markdown-image-paste-hint-icon {
-		color: var(--color-error-500);
+		color: var(--at-danger);
 	}
 
 	.markdown-image-paste-hint-icon svg {
@@ -205,7 +197,7 @@
 	.markdown-view .ProseMirror {
 		box-sizing: border-box;
 		/* Full-strength ink: Notion sets body text near-black, not a tint. */
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-family:
 			ui-sans-serif,
 			-apple-system,
@@ -230,7 +222,7 @@
 
 	/* Selection tints; the text keeps its colour instead of turning white. */
 	.markdown-view .ProseMirror ::selection {
-		background-color: var(--color-bg-selection-text);
+		background-color: var(--at-bg-selection);
 		color: inherit;
 	}
 
@@ -239,7 +231,7 @@
 	   tracking, a 4px seat below, and room above that grows with the level.
 	   h5 and h6 stay body-size and plain; small caps read as labels. */
 	.markdown-view .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-weight: 600;
 		letter-spacing: 0;
 		line-height: 1.3;
@@ -278,7 +270,7 @@
 	}
 
 	.markdown-view .ProseMirror h6 {
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 16px;
 		margin-top: 0.75em;
 	}
@@ -306,7 +298,7 @@
 		border: 0;
 		border-radius: 7px;
 		background: transparent;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.78rem;
 		font-weight: 600;
 		line-height: 1;
@@ -330,8 +322,8 @@
 
 	.markdown-frontmatter-disclosure:hover,
 	.markdown-frontmatter-disclosure:focus-visible {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 		outline: none;
 	}
 
@@ -339,7 +331,7 @@
 		opacity: 1;
 		pointer-events: auto;
 		transform: translateY(0);
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 2px var(--at-ring);
 	}
 
 	.markdown-frontmatter-disclosure svg {
@@ -370,7 +362,7 @@
 			.markdown-frontmatter.ProseMirror-selectednode
 		) {
 		border-radius: var(--markdown-radius);
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 2px var(--at-ring);
 	}
 
 	.markdown-frontmatter-header {
@@ -393,19 +385,19 @@
 		width: 0.95rem;
 		height: 0.95rem;
 		flex: 0 0 auto;
-		color: var(--color-icon-secondary);
+		color: var(--at-fg-muted);
 		stroke-width: 1.8;
 	}
 
 	.markdown-frontmatter-title strong {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.78rem;
 		font-weight: 600;
 	}
 
 	.markdown-frontmatter-title span {
 		overflow: hidden;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.73rem;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -419,7 +411,7 @@
 		border: 0;
 		border-radius: 5px;
 		background: transparent;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.71rem;
 		font-weight: 550;
 		opacity: 0;
@@ -437,12 +429,12 @@
 	}
 
 	.markdown-frontmatter-mode:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 	}
 
 	.markdown-frontmatter-mode:focus-visible {
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 2px var(--at-ring);
 		outline: none;
 	}
 
@@ -478,7 +470,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		border-radius: 6px;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 		margin-left: -0.5rem;
 		padding: 0 0.5rem;
 	}
@@ -486,8 +478,8 @@
 	.markdown-frontmatter-key-cell:hover,
 	.markdown-frontmatter-key-cell:focus-within,
 	.markdown-frontmatter-row-adding .markdown-frontmatter-key-cell {
-		background: var(--color-bg-control-selected);
-		color: var(--color-text-secondary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg-muted);
 	}
 
 	.markdown-frontmatter-key-cell > svg {
@@ -505,7 +497,7 @@
 		border: 0;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-family: inherit;
 		font-size: 0.84rem;
 		line-height: 1.25rem;
@@ -524,7 +516,7 @@
 	.markdown-frontmatter-key {
 		height: auto;
 		border-radius: 0;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 0.83rem;
 		font-weight: 500;
 		padding: 0;
@@ -538,7 +530,7 @@
 	.markdown-frontmatter-tags:focus-within,
 	.markdown-frontmatter-nested:hover,
 	.markdown-frontmatter-nested:focus-within {
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 	}
 
 	.markdown-frontmatter-boolean {
@@ -546,7 +538,7 @@
 		min-height: 2rem;
 		align-items: center;
 		gap: 0.5rem;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-size: 0.84rem;
 		border-radius: 6px;
 		padding-inline: 0.5rem;
@@ -555,7 +547,7 @@
 	.markdown-frontmatter-boolean input {
 		width: 1rem;
 		height: 1rem;
-		accent-color: var(--color-text-secondary);
+		accent-color: var(--at-fg-muted);
 	}
 
 	.markdown-frontmatter-value[type="date"]::-webkit-calendar-picker-indicator {
@@ -585,12 +577,8 @@
 		gap: 0.2rem;
 		border: 0;
 		border-radius: 5px;
-		background: color-mix(
-			in srgb,
-			var(--color-bg-control-selected) 70%,
-			var(--color-bg-panel)
-		);
-		color: var(--color-text-secondary);
+		background: color-mix(in srgb, var(--at-bg-hover) 70%, var(--at-panel));
+		color: var(--at-fg-muted);
 		font-size: 0.72rem;
 		padding: 0 0.38rem;
 	}
@@ -617,7 +605,7 @@
 		height: 1.65rem;
 		border: 0;
 		background: transparent;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font: inherit;
 		font-size: 0.78rem;
 		outline: none;
@@ -631,7 +619,7 @@
 		border: 0;
 		border-radius: 5px;
 		background: transparent;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.72rem;
 		opacity: 0;
 		padding: 0 0.4rem;
@@ -644,8 +632,8 @@
 	}
 
 	.markdown-frontmatter-tag-add:hover {
-		background: var(--color-bg-control-selected);
-		color: var(--color-text-secondary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg-muted);
 	}
 
 	.markdown-frontmatter-tag-add svg {
@@ -676,7 +664,7 @@
 		border: 0;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 		margin-top: 0.175rem;
 		opacity: 0;
 	}
@@ -687,8 +675,8 @@
 	}
 
 	.markdown-frontmatter-remove:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 	}
 
 	.markdown-frontmatter-remove svg {
@@ -705,7 +693,7 @@
 		border: 0;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.75rem;
 		font-weight: 500;
 		margin: 0.15rem 0 0 -0.5rem;
@@ -713,12 +701,12 @@
 	}
 
 	.markdown-frontmatter-add:hover {
-		background: var(--color-bg-control-selected);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 	}
 
 	.markdown-frontmatter-add:focus-visible {
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 2px var(--at-ring);
 		outline: none;
 	}
 
@@ -730,7 +718,7 @@
 
 	.markdown-frontmatter-empty-value {
 		height: 2rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.84rem;
 		line-height: 1.25rem;
 		padding: 0.36rem 0.5rem;
@@ -746,8 +734,8 @@
 		resize: vertical;
 		border: 0;
 		border-radius: 5px;
-		background: var(--color-bg-panel-muted);
-		color: var(--color-text-primary);
+		background: var(--at-bg-subtle);
+		color: var(--at-fg);
 		font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 		font-size: 0.78rem;
 		line-height: 1.55;
@@ -756,12 +744,12 @@
 	}
 
 	.markdown-frontmatter-yaml:focus {
-		box-shadow: inset 0 0 0 1px var(--color-text-secondary);
+		box-shadow: inset 0 0 0 1px var(--at-fg-muted);
 	}
 
 	.markdown-frontmatter-error {
 		margin: 0.4rem 0 0;
-		color: var(--color-text-status-danger);
+		color: var(--at-danger);
 		font-size: 0.72rem;
 		line-height: 1.35;
 	}
@@ -772,8 +760,8 @@
 		.markdown-frontmatter-input:disabled,
 	.markdown-frontmatter[data-disabled="true"]
 		.markdown-frontmatter-tag:disabled {
-		color: var(--color-text-secondary);
-		-webkit-text-fill-color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
+		-webkit-text-fill-color: var(--at-fg-muted);
 		cursor: default;
 		opacity: 1;
 	}
@@ -865,7 +853,7 @@
 	}
 
 	.markdown-view .ProseMirror a:hover {
-		background-color: var(--color-bg-hover);
+		background-color: var(--at-bg-hover);
 		text-decoration-color: currentColor;
 	}
 
@@ -912,12 +900,12 @@
 
 	/* Markers in the body ink at body size: the list reads as one voice. */
 	.markdown-view .ProseMirror li::marker {
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-size: 1em;
 	}
 
 	.markdown-view .ProseMirror ol > li::marker {
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-size: 1em;
 		font-variant-numeric: tabular-nums;
 		font-weight: 400;
@@ -994,7 +982,7 @@
 		display: table;
 		flex: 0 0 auto;
 		width: max-content;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-collapse: separate;
 		border-radius: var(--markdown-radius);
 		border-spacing: 0;
@@ -1019,20 +1007,20 @@
 	}
 
 	.markdown-view .ProseMirror table tr:first-child {
-		background-color: var(--color-neutral-100);
+		background-color: var(--at-bg-hover);
 	}
 
 	.markdown-view .ProseMirror table th,
 	.markdown-view .ProseMirror table td {
-		border-right: 1px solid var(--color-border-panel);
-		border-bottom: 1px solid var(--color-border-panel);
+		border-right: 1px solid var(--at-border);
+		border-bottom: 1px solid var(--at-border);
 		padding: 7px 9px;
 		text-align: left;
 		vertical-align: top;
 	}
 
 	.markdown-view .ProseMirror table th {
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-weight: 600;
 	}
 
@@ -1057,7 +1045,7 @@
 	}
 
 	.markdown-view .ProseMirror table tbody tr:hover {
-		background: color-mix(in srgb, var(--color-bg-hover) 68%, transparent);
+		background: color-mix(in srgb, var(--at-bg-hover) 68%, transparent);
 	}
 
 	/* Blockquote */
@@ -1078,27 +1066,27 @@
 		border-left: 0;
 		border-radius: var(--markdown-radius);
 		padding: 1rem 1rem 1rem 0.75rem;
-		background: var(--color-bg-tag-gray);
+		background: var(--at-tag-gray);
 	}
 
 	.markdown-view .ProseMirror blockquote[data-alert="note"] {
-		background: var(--color-bg-tag-blue);
+		background: var(--at-tag-blue);
 	}
 
 	.markdown-view .ProseMirror blockquote[data-alert="tip"] {
-		background: var(--color-bg-tag-green);
+		background: var(--at-tag-green);
 	}
 
 	.markdown-view .ProseMirror blockquote[data-alert="important"] {
-		background: var(--color-bg-tag-purple);
+		background: var(--at-tag-purple);
 	}
 
 	.markdown-view .ProseMirror blockquote[data-alert="warning"] {
-		background: var(--color-bg-tag-yellow);
+		background: var(--at-tag-yellow);
 	}
 
 	.markdown-view .ProseMirror blockquote[data-alert="caution"] {
-		background: var(--color-bg-tag-red);
+		background: var(--at-tag-red);
 	}
 
 	.markdown-view .ProseMirror blockquote p {
@@ -1121,12 +1109,8 @@
 	/* Inline code: a neutral tint, no border, 85% size, and a line-height
 	   that never grows the line box. */
 	.markdown-view .ProseMirror :not(pre) > code {
-		background-color: color-mix(
-			in srgb,
-			var(--color-text-tertiary) 15%,
-			transparent
-		);
-		color: var(--color-text-primary);
+		background-color: color-mix(in srgb, var(--at-fg-subtle) 15%, transparent);
+		color: var(--at-fg);
 		line-height: 1.25;
 		font-family:
 			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
@@ -1141,7 +1125,7 @@
 	   code chip that looks like real code. */
 	.markdown-view .ProseMirror .markdown-wc-inline-html > code {
 		background: transparent;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		padding: 0;
 		font-size: 0.8em;
 	}
@@ -1159,13 +1143,13 @@
 	}
 
 	.markdown-view .ProseMirror .markdown-footnote-ref-link {
-		color: var(--color-text-link);
+		color: var(--at-link);
 		text-decoration: none;
 		cursor: pointer;
 	}
 
 	.markdown-view .ProseMirror .markdown-footnote-ref-link:hover {
-		color: var(--color-text-link-hover);
+		color: var(--at-link-hover);
 		text-decoration: underline;
 		text-underline-offset: 2px;
 	}
@@ -1174,7 +1158,7 @@
 		.ProseMirror
 		.markdown-footnote-ref--orphan
 		.markdown-footnote-ref-link {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		text-decoration: underline dashed;
 		text-underline-offset: 2px;
 		cursor: default;
@@ -1191,7 +1175,7 @@
 	}
 
 	.markdown-view .ProseMirror .markdown-footnote-def-label {
-		color: var(--color-text-link);
+		color: var(--at-link);
 		font-size: 0.9em;
 		user-select: none;
 	}
@@ -1212,15 +1196,15 @@
 		border: 0;
 		background: transparent;
 		padding: 0 0.25rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font: inherit;
 		cursor: pointer;
 		border-radius: 2px;
 	}
 
 	.markdown-view .ProseMirror .markdown-footnote-backref:hover {
-		color: var(--color-text-link);
-		background: var(--color-bg-hover);
+		color: var(--at-link);
+		background: var(--at-bg-hover);
 	}
 
 	/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
@@ -1228,11 +1212,7 @@
 	   deepening as the scroll came to rest, which cost most of the moment the
 	   tint exists for. */
 	.markdown-view .ProseMirror .markdown-footnote-target {
-		background-color: color-mix(
-			in srgb,
-			var(--color-text-link) 14%,
-			transparent
-		);
+		background-color: color-mix(in srgb, var(--at-link) 14%, transparent);
 		transition-duration: 120ms;
 		transition-timing-function: ease-out;
 	}
@@ -1241,7 +1221,7 @@
 	   as source, sized like a note. */
 	.markdown-view .ProseMirror .markdown-wc-unsupported-block {
 		margin: var(--markdown-block-gap) 0;
-		border: 1px dashed var(--color-border-strong);
+		border: 1px dashed var(--at-border-strong);
 		border-radius: var(--markdown-radius);
 		padding: 0.5rem 0.75rem;
 	}
@@ -1249,7 +1229,7 @@
 	.markdown-view .ProseMirror .markdown-wc-unsupported-block > strong {
 		display: block;
 		margin-bottom: 0.25rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 11px;
 		font-weight: 600;
 		letter-spacing: 0.04em;
@@ -1273,7 +1253,7 @@
 	   room for the language label in the top corner. */
 	.markdown-view .ProseMirror pre {
 		position: relative;
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 		border: 0;
 		border-radius: var(--markdown-radius);
 		box-shadow: none;
@@ -1293,10 +1273,10 @@
 		top: 0.5rem;
 		right: 0.5rem;
 		z-index: 1;
-		border: 1px solid var(--color-border-subtle);
+		border: 1px solid var(--at-border-subtle);
 		border-radius: var(--markdown-radius);
-		background: color-mix(in srgb, var(--color-bg-panel) 88%, transparent);
-		color: var(--color-text-tertiary);
+		background: color-mix(in srgb, var(--at-panel) 88%, transparent);
+		color: var(--at-fg-subtle);
 		font-family:
 			ui-sans-serif,
 			-apple-system,
@@ -1332,22 +1312,22 @@
 	}
 
 	.markdown-view .ProseMirror .syntax-comment {
-		color: var(--color-syntax-comment);
+		color: var(--at-syntax-comment);
 		font-style: italic;
 	}
 
 	.markdown-view .ProseMirror .syntax-keyword {
-		color: var(--color-syntax-keyword);
+		color: var(--at-syntax-keyword);
 		font-weight: 400;
 	}
 
 	.markdown-view .ProseMirror .syntax-literal,
 	.markdown-view .ProseMirror .syntax-number {
-		color: var(--color-syntax-number);
+		color: var(--at-syntax-number);
 	}
 
 	.markdown-view .ProseMirror .syntax-string {
-		color: var(--color-syntax-string);
+		color: var(--at-syntax-string);
 	}
 
 	.markdown-view .ProseMirror .syntax-property {
@@ -1372,8 +1352,7 @@
 	/* A divider is a visible hairline in a short block, not 80px of air. */
 	.markdown-view .ProseMirror hr {
 		border: 0;
-		border-top: 1px solid
-			color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+		border-top: 1px solid color-mix(in srgb, var(--at-fg) 16%, transparent);
 		margin: 0.75rem 0;
 	}
 
@@ -1382,8 +1361,8 @@
 	   previews exactly where an image, PDF, or later embed will land. */
 	.markdown-view .atelier-markdown-drop-indicator {
 		border-radius: 999px;
-		background: var(--color-border-drop-target);
-		box-shadow: 0 0 0 1px var(--color-bg-panel);
+		background: var(--at-accent);
+		box-shadow: 0 0 0 1px var(--at-panel);
 		animation: markdown-drop-indicator-in 100ms ease-out;
 	}
 
@@ -1434,8 +1413,7 @@
 			.ProseMirror-selectednode
 		) {
 		box-shadow:
-			0 0 0 2px
-				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
+			0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
 			0 12px 30px rgba(28, 25, 23, 0.09);
 	}
 
@@ -1444,8 +1422,7 @@
 		.markdown-image-embed:hover:not(.ProseMirror-selectednode)
 		> .markdown-image-block-content {
 		box-shadow:
-			0 0 0 2px
-				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
+			0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
 			0 12px 30px rgba(28, 25, 23, 0.09);
 	}
 
@@ -1461,14 +1438,14 @@
 			img,
 			.markdown-pdf-embed
 		) {
-		border-color: var(--color-ring-focus-visible);
+		border-color: var(--at-ring);
 	}
 
 	.markdown-view
 		.ProseMirror
 		.markdown-image-embed.ProseMirror-selectednode
 		> .markdown-image-block-content {
-		border-color: var(--color-ring-focus-visible);
+		border-color: var(--at-ring);
 	}
 
 	.markdown-view
@@ -1485,10 +1462,10 @@
 		align-items: center;
 		justify-content: center;
 		padding: 0;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		cursor: pointer;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
+		background: var(--at-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 0.375rem;
 		opacity: 0;
 		pointer-events: none;
@@ -1522,12 +1499,12 @@
 	}
 
 	.markdown-view .ProseMirror .markdown-asset-delete:hover {
-		color: var(--color-text-status-danger);
-		background: var(--color-bg-hover);
+		color: var(--at-danger);
+		background: var(--at-bg-hover);
 	}
 
 	.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 1px;
 	}
 
@@ -1536,8 +1513,7 @@
 		top: 0.5rem;
 		right: 0.5rem;
 		z-index: 2;
-		box-shadow: 0 1px 2px
-			color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+		box-shadow: 0 1px 2px color-mix(in srgb, var(--at-fg) 10%, transparent);
 	}
 
 	.markdown-view
@@ -1555,11 +1531,10 @@
 		margin: 1.25rem 0;
 		overflow: hidden;
 		vertical-align: top;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
+		background: var(--at-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 0.5rem;
-		box-shadow: 0 1px 2px
-			color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+		box-shadow: 0 1px 2px color-mix(in srgb, var(--at-fg) 6%, transparent);
 	}
 
 	.markdown-view
@@ -1579,8 +1554,8 @@
 		align-items: center;
 		gap: 0.625rem;
 		padding: 0 0.75rem;
-		background: var(--color-bg-panel-muted);
-		border-bottom: 1px solid var(--color-border-panel);
+		background: var(--at-bg-subtle);
+		border-bottom: 1px solid var(--at-border);
 	}
 
 	.markdown-view .ProseMirror .markdown-pdf-icon {
@@ -1590,9 +1565,9 @@
 		flex: 0 0 auto;
 		align-items: center;
 		justify-content: center;
-		color: var(--color-icon-brand);
-		background: var(--color-bg-brand-subtle);
-		border: 1px solid var(--color-border-brand-soft);
+		color: var(--at-link);
+		background: var(--at-accent-subtle);
+		border: 1px solid var(--at-accent-border);
 		border-radius: 0.25rem;
 	}
 
@@ -1608,7 +1583,7 @@
 		min-width: 0;
 		flex: 1 1 auto;
 		overflow: hidden;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-size: 0.8125rem;
 		font-weight: 600;
 		line-height: 1.25rem;
@@ -1623,19 +1598,19 @@
 		align-items: center;
 		justify-content: center;
 		padding: 0 0.625rem;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
 		text-decoration: none;
-		background: var(--color-bg-panel);
-		border: 1px solid var(--color-border-panel);
+		background: var(--at-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 0.375rem;
 	}
 
 	.markdown-view .ProseMirror a.markdown-pdf-open:hover {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
+		color: var(--at-fg);
+		background: var(--at-bg-hover);
 	}
 
 	.markdown-view
@@ -1646,7 +1621,7 @@
 		.ProseMirror
 		.markdown-pdf-embed[data-asset-state="unavailable"]
 		a.markdown-pdf-open {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		pointer-events: none;
 	}
 
@@ -1655,7 +1630,7 @@
 		display: flex;
 		min-height: 7.5rem;
 		flex: 1 1 auto;
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 	}
 
 	.markdown-view .ProseMirror .markdown-pdf-preview {
@@ -1664,11 +1639,7 @@
 		width: 100%;
 		height: 100%;
 		overflow: hidden;
-		background: color-mix(
-			in srgb,
-			var(--color-text-primary) 72%,
-			var(--color-bg-panel)
-		);
+		background: color-mix(in srgb, var(--at-fg) 72%, var(--at-panel));
 	}
 
 	.markdown-view .ProseMirror .atelier-pdf-canvas-scroll {
@@ -1713,9 +1684,9 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.25rem;
-		color: var(--color-text-primary);
-		background: color-mix(in srgb, var(--color-bg-panel) 94%, transparent);
-		border: 1px solid var(--color-border-panel);
+		color: var(--at-fg);
+		background: color-mix(in srgb, var(--at-panel) 94%, transparent);
+		border: 1px solid var(--at-border);
 		border-radius: 0.5rem;
 		box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 20%);
 		transform: translateX(-50%);
@@ -1726,7 +1697,7 @@
 		height: 1.75rem;
 		align-items: center;
 		padding: 0 0.625rem;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font: inherit;
 		font-size: 0.6875rem;
 		font-weight: 600;
@@ -1737,24 +1708,24 @@
 	}
 
 	.markdown-view .ProseMirror .atelier-pdf-page-button:hover:not(:disabled) {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
+		color: var(--at-fg);
+		background: var(--at-bg-hover);
 	}
 
 	.markdown-view .ProseMirror .atelier-pdf-page-button:disabled {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		cursor: default;
 		opacity: 0.55;
 	}
 
 	.markdown-view .ProseMirror .atelier-pdf-page-button:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 1px;
 	}
 
 	.markdown-view .ProseMirror .atelier-pdf-page-label {
 		min-width: 3.5rem;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 0.6875rem;
 		font-variant-numeric: tabular-nums;
 		font-weight: 600;
@@ -1770,10 +1741,10 @@
 		justify-content: center;
 		flex-direction: column;
 		gap: 0.75rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.8125rem;
 		line-height: 1.25rem;
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 	}
 
 	.markdown-view
@@ -1801,12 +1772,12 @@
 		align-items: center;
 		justify-content: center;
 		padding: 0 0.75rem;
-		color: var(--color-text-on-action-primary);
+		color: var(--at-accent-on);
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
-		background: var(--color-bg-action-primary);
+		background: var(--at-accent);
 		border: 0;
 		border-radius: 0.375rem;
 		cursor: pointer;
@@ -1820,11 +1791,11 @@
 	}
 
 	.markdown-view .ProseMirror .markdown-pdf-preview-action:hover {
-		background: var(--color-bg-action-primary-hover);
+		background: var(--at-accent-hover);
 	}
 
 	.markdown-view .ProseMirror .markdown-pdf-preview-action:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 2px;
 	}
 
@@ -1855,7 +1826,7 @@
 		width: 100%;
 		aspect-ratio: 16 / 9;
 		overflow: hidden;
-		background: var(--color-bg-inverse-media);
+		background: var(--at-overlay);
 		border-radius: 0.625rem;
 		transition: box-shadow 120ms ease-out;
 	}
@@ -1865,8 +1836,7 @@
 		.markdown-video-embed:hover:not(.ProseMirror-selectednode)
 		> .markdown-video-frame {
 		box-shadow:
-			0 0 0 2px
-				color-mix(in srgb, var(--color-ring-focus-visible) 36%, transparent),
+			0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
 			0 12px 30px rgba(28, 25, 23, 0.09);
 	}
 
@@ -1874,7 +1844,7 @@
 		.ProseMirror
 		.markdown-video-embed.ProseMirror-selectednode
 		> .markdown-video-frame {
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 2px var(--at-ring);
 	}
 
 	.markdown-view .ProseMirror .markdown-video-frame .atelier-video-player {
@@ -1887,7 +1857,7 @@
 		display: block;
 		width: 100%;
 		height: 100%;
-		background: var(--color-bg-inverse-media);
+		background: var(--at-overlay);
 	}
 
 	.markdown-view .ProseMirror .markdown-video-toolbar {
@@ -1899,7 +1869,7 @@
 		align-items: center;
 		gap: 0.125rem;
 		padding: 0.1875rem 0.25rem;
-		background: color-mix(in srgb, var(--color-bg-inverse) 82%, transparent);
+		background: color-mix(in srgb, var(--at-overlay) 82%, transparent);
 		border-radius: 0.5rem;
 		font-size: 0.6563rem;
 		font-weight: 600;
@@ -1927,19 +1897,19 @@
 
 	.markdown-view .ProseMirror .markdown-video-open {
 		padding: 0.25rem 0.4375rem;
-		color: var(--color-text-inverse-primary);
+		color: var(--at-overlay-fg);
 		cursor: pointer;
 		text-decoration: none;
 	}
 
 	.markdown-view .ProseMirror .markdown-video-open:hover {
-		color: var(--color-text-inverse-primary);
+		color: var(--at-overlay-fg);
 	}
 
 	.markdown-view .ProseMirror .markdown-video-toolbar-divider {
 		width: 1px;
 		height: 0.75rem;
-		background: var(--color-border-inverse);
+		background: var(--at-overlay-border);
 	}
 
 	/* The shared delete button sits inside the dark toolbar chip — restyle it
@@ -1948,7 +1918,7 @@
 		width: auto;
 		height: auto;
 		padding: 0.25rem 0.4375rem;
-		color: var(--color-text-inverse-secondary);
+		color: var(--at-overlay-fg-muted);
 		background: none;
 		border: none;
 		opacity: 1;
@@ -1960,7 +1930,7 @@
 		.ProseMirror
 		.markdown-video-toolbar
 		.markdown-asset-delete:hover {
-		color: var(--color-text-inverse-danger);
+		color: var(--at-overlay-danger);
 		background: none;
 	}
 
@@ -1970,7 +1940,7 @@
 		left: 50%;
 		display: none;
 		padding: 0.375rem 0.75rem;
-		color: var(--color-text-inverse-tertiary);
+		color: var(--at-overlay-fg-subtle);
 		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
 		font-size: 0.6875rem;
 		transform: translate(-50%, -50%);
@@ -1999,7 +1969,7 @@
 
 	.markdown-view .ProseMirror .markdown-video-caption {
 		display: block;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.75rem;
 		line-height: 1.4;
 	}
@@ -2014,8 +1984,8 @@
 		display: flex;
 		justify-content: center;
 		padding: 0.75rem;
-		background-color: var(--muted);
-		border: 1px solid var(--border);
+		background-color: var(--at-bg-subtle);
+		border: 1px solid var(--at-border);
 		border-radius: 0.375rem;
 		overflow-x: auto;
 	}
@@ -2026,11 +1996,15 @@
 	}
 
 	.markdown-view .ProseMirror .markdown-mermaid-error {
-		background-color: color-mix(in srgb, var(--destructive) 8%, var(--muted));
-		border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--border));
+		background-color: color-mix(
+			in srgb,
+			var(--at-danger) 8%,
+			var(--at-bg-subtle)
+		);
+		border: 1px solid color-mix(in srgb, var(--at-danger) 30%, var(--at-border));
 		border-radius: 0.375rem;
 		padding: 0.75rem;
-		color: var(--destructive);
+		color: var(--at-danger);
 		font-family:
 			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
 			"Courier New", monospace;
@@ -2039,8 +2013,8 @@
 	}
 
 	.markdown-view .ProseMirror .markdown-mermaid-source {
-		background-color: var(--muted);
-		border: 1px solid var(--border);
+		background-color: var(--at-bg-subtle);
+		border: 1px solid var(--at-border);
 		border-radius: 0.375rem;
 		padding: 0.75rem;
 		overflow-x: auto;
@@ -2123,11 +2097,11 @@
 	/* A done task reads as done: dimmed and struck, like Notion. Only its
 	   own text: nested tasks carry their own state. */
 	.markdown-view .ProseMirror li[data-task="x"] > div > p {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		text-decoration: line-through;
 		text-decoration-color: color-mix(
 			in srgb,
-			var(--color-text-tertiary) 60%,
+			var(--at-fg-subtle) 60%,
 			transparent
 		);
 	}
@@ -2140,9 +2114,9 @@
 		/* Centred on the first line box (line-height 1.5). */
 		margin: calc((1.5em - 1rem) / 2) 0 0;
 		justify-self: start;
-		border: 1.5px solid var(--color-icon-tertiary);
+		border: 1.5px solid var(--at-fg-subtle);
 		border-radius: var(--markdown-radius);
-		background-color: var(--color-bg-panel);
+		background-color: var(--at-panel);
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 		cursor: pointer;
 		transition:
@@ -2155,21 +2129,21 @@
 		.ProseMirror
 		li[data-task]
 		> input[type="checkbox"]:hover:not(:checked) {
-		border-color: var(--color-text-secondary);
-		background-color: var(--color-bg-hover);
+		border-color: var(--at-fg-muted);
+		background-color: var(--at-bg-hover);
 	}
 
 	.markdown-view
 		.ProseMirror
 		li[data-task]
 		> input[type="checkbox"]:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 2px;
 	}
 
 	.markdown-view .ProseMirror li[data-task] > input[type="checkbox"]:checked {
-		border-color: var(--color-bg-action-primary);
-		background-color: var(--color-bg-action-primary);
+		border-color: var(--at-accent);
+		background-color: var(--at-accent);
 		background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6.2 5 8.1 9 3.8' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 		background-position: center;
 		background-repeat: no-repeat;
@@ -2197,11 +2171,10 @@
 		max-height: min(26.25rem, calc(100vh - 1.5rem));
 		flex-direction: column;
 		overflow: hidden;
-		border: 1px solid
-			color-mix(in srgb, var(--color-border-panel) 92%, transparent);
+		border: 1px solid color-mix(in srgb, var(--at-border) 92%, transparent);
 		border-radius: 10px;
-		background: color-mix(in srgb, var(--color-bg-panel) 97%, transparent);
-		color: var(--color-text-primary);
+		background: color-mix(in srgb, var(--at-panel) 97%, transparent);
+		color: var(--at-fg);
 		font-family:
 			ui-sans-serif,
 			-apple-system,
@@ -2219,19 +2192,19 @@
 		min-height: 0;
 		overflow-y: auto;
 		padding: 0.38rem;
-		scrollbar-color: var(--color-border-panel) transparent;
+		scrollbar-color: var(--at-border) transparent;
 		scrollbar-width: thin;
 	}
 
 	.markdown-slash-group + .markdown-slash-group {
 		margin-top: 0.28rem;
 		padding-top: 0.28rem;
-		border-top: 1px solid var(--color-border-subtle);
+		border-top: 1px solid var(--at-border-subtle);
 	}
 
 	.markdown-slash-group-label {
 		padding: 0.42rem 0.55rem 0.26rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.66rem;
 		font-weight: 650;
 		letter-spacing: 0.075em;
@@ -2255,12 +2228,12 @@
 	}
 
 	.markdown-slash-option:hover {
-		background: color-mix(in srgb, var(--color-bg-hover) 72%, transparent);
+		background: color-mix(in srgb, var(--at-bg-hover) 72%, transparent);
 	}
 
 	.markdown-slash-option[data-selected="true"] {
-		background: var(--color-bg-selection-current);
-		box-shadow: inset 0 0 0 1px var(--color-border-selection-current);
+		background: var(--at-accent-subtle);
+		box-shadow: inset 0 0 0 1px var(--at-accent-border);
 	}
 
 	.markdown-slash-option-icon {
@@ -2269,14 +2242,10 @@
 		height: 2rem;
 		align-items: center;
 		justify-content: center;
-		border: 1px solid var(--color-border-subtle);
+		border: 1px solid var(--at-border-subtle);
 		border-radius: 7px;
-		background: color-mix(
-			in srgb,
-			var(--color-bg-panel-muted) 72%,
-			transparent
-		);
-		color: var(--color-icon-secondary);
+		background: color-mix(in srgb, var(--at-bg-subtle) 72%, transparent);
+		color: var(--at-fg-muted);
 	}
 
 	.markdown-slash-option-icon svg {
@@ -2288,11 +2257,11 @@
 	.markdown-slash-option[data-selected="true"] .markdown-slash-option-icon {
 		border-color: color-mix(
 			in srgb,
-			var(--color-border-selection-current) 82%,
-			var(--color-bg-panel)
+			var(--at-accent-border) 82%,
+			var(--at-panel)
 		);
-		background: color-mix(in srgb, var(--color-bg-panel) 82%, transparent);
-		color: var(--color-icon-brand);
+		background: color-mix(in srgb, var(--at-panel) 82%, transparent);
+		color: var(--at-link);
 	}
 
 	.markdown-slash-option-copy {
@@ -2304,7 +2273,7 @@
 
 	.markdown-slash-option-label {
 		overflow: hidden;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-size: 0.84rem;
 		font-weight: 600;
 		letter-spacing: -0.005em;
@@ -2315,7 +2284,7 @@
 
 	.markdown-slash-option-description {
 		overflow: hidden;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.71rem;
 		font-weight: 450;
 		line-height: 1.25;
@@ -2328,14 +2297,10 @@
 		flex: 0 0 auto;
 		align-items: center;
 		gap: 0.72rem;
-		border-top: 1px solid var(--color-border-subtle);
-		background: color-mix(
-			in srgb,
-			var(--color-bg-panel-muted) 52%,
-			transparent
-		);
+		border-top: 1px solid var(--at-border-subtle);
+		background: color-mix(in srgb, var(--at-bg-subtle) 52%, transparent);
 		padding: 0.46rem 0.8rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.64rem;
 		font-weight: 550;
 		line-height: 1;
@@ -2360,7 +2325,7 @@
 
 	.markdown-emoji-empty {
 		padding: 1.35rem 0.75rem 1.55rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.78rem;
 		line-height: 1.35;
 		text-align: center;
@@ -2372,16 +2337,16 @@
 		gap: 0.5rem;
 		margin: 0.5rem 0.5rem 0.25rem;
 		padding: 0 0.625rem;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 0.5rem;
-		background: var(--color-bg-panel-muted);
+		background: var(--at-bg-subtle);
 	}
 
 	.markdown-embed-file-search svg {
 		width: 0.875rem;
 		height: 0.875rem;
 		flex-shrink: 0;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 	}
 
 	.markdown-embed-file-search input {
@@ -2389,14 +2354,14 @@
 		height: 2rem;
 		border: none;
 		background: none;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font: inherit;
 		font-size: 0.8125rem;
 		outline: none;
 	}
 
 	.markdown-embed-file-search input::placeholder {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 
 	.markdown-embed-file-option-icon img {
@@ -2415,7 +2380,7 @@
 	.markdown-embed-file-upload-section {
 		flex-shrink: 0;
 		padding: 0.375rem 0.5rem;
-		border-top: 1px solid var(--color-border-panel);
+		border-top: 1px solid var(--at-border);
 	}
 
 	.markdown-embed-file-upload {
@@ -2437,7 +2402,7 @@
 
 	.markdown-embed-file-error {
 		padding: 0.375rem 0.75rem 0.5rem;
-		color: var(--color-text-status-danger);
+		color: var(--at-danger);
 		font-size: 0.75rem;
 		line-height: 1.35;
 	}
@@ -2446,19 +2411,19 @@
 	   "more results" hint are its own. */
 	.markdown-mention-match {
 		background: transparent;
-		color: var(--color-text-brand);
+		color: var(--at-accent);
 	}
 
 	.markdown-mention-more {
 		padding: 0.3rem 0.55rem 0.4rem 3.12rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.71rem;
 		font-weight: 450;
 	}
 
 	.markdown-embed-file-empty {
 		padding: 1.35rem 0.75rem 1.55rem;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 0.78rem;
 		line-height: 1.35;
 		text-align: center;
@@ -2476,7 +2441,7 @@
 		display: flex;
 		min-height: 0;
 		flex-direction: column;
-		background: var(--background);
+		background: var(--at-panel);
 	}
 
 	.markdown-review .markdown-review-surface {
@@ -2492,22 +2457,22 @@
 	}
 
 	.markdown-review .ProseMirror [data-review-status="added"] {
-		background-color: var(--color-bg-diff-added);
+		background-color: var(--at-diff-added-subtle);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
 		border-radius: 0.25rem;
-		color: var(--color-text-diff-added);
+		color: var(--at-diff-added);
 		text-decoration: none;
 	}
 
 	.markdown-review .ProseMirror [data-review-status="removed"] {
-		background-color: var(--color-bg-diff-removed);
+		background-color: var(--at-diff-removed-subtle);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
 		border-radius: 0.25rem;
-		color: var(--color-text-diff-removed);
+		color: var(--at-diff-removed);
 		text-decoration: line-through;
-		text-decoration-color: var(--color-border-diff-removed);
+		text-decoration-color: var(--at-diff-removed);
 	}
 
 	/* Formatting-only changes sit in the sentence as small monospace glyphs:
@@ -2518,8 +2483,8 @@
 		margin: 0 1px;
 		padding: 1px 3px;
 		border-radius: 3px;
-		background: var(--color-bg-hover-canvas);
-		color: var(--color-text-secondary);
+		background: var(--at-bg-hover-strong);
+		color: var(--at-fg-muted);
 		font-family:
 			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		font-size: 0.72em;
@@ -2530,7 +2495,7 @@
 	}
 
 	.markdown-review .ProseMirror .markdown-review-format-glyph > s {
-		color: var(--color-text-diff-removed);
+		color: var(--at-diff-removed);
 		text-decoration: line-through;
 		text-decoration-color: currentColor;
 	}
@@ -2540,20 +2505,20 @@
 	}
 
 	.markdown-review .ProseMirror .markdown-review-format-glyph > b {
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-weight: 700;
 	}
 
 	.markdown-review
 		.ProseMirror
 		.markdown-review-format-glyph[data-review-active="true"] {
-		box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 1px var(--at-ring);
 	}
 
 	/* A node whose attributes changed (a ticked task, a re-levelled heading)
 	   stays in place with a soft brand tint; its text is not a diff. */
 	.markdown-review .ProseMirror [data-review-status="modified"] {
-		background-color: var(--color-bg-selection-current);
+		background-color: var(--at-accent-subtle);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
 		border-radius: 0.25rem;
@@ -2586,7 +2551,7 @@
 	}
 
 	.markdown-review .ProseMirror [data-review-active="true"] {
-		box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 1px var(--at-ring);
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
 	}
@@ -2606,10 +2571,10 @@
 		width: 13rem;
 		flex-direction: column;
 		padding: 4px;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 10px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
+		background: var(--at-panel);
+		color: var(--at-fg);
 		font-family:
 			ui-sans-serif,
 			-apple-system,
@@ -2648,7 +2613,7 @@
 		gap: 6px;
 		padding: 0 6px 0 8px;
 		border-radius: 7px;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font-size: 12.5px;
 		font-weight: 600;
 		line-height: 1;
@@ -2660,19 +2625,19 @@
 
 	.markdown-selection-toolbar-trigger:hover,
 	.markdown-selection-toolbar-trigger-open {
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 
 	.markdown-selection-toolbar-trigger:focus-visible {
 		outline: none;
-		box-shadow: 0 0 0 2px var(--color-ring-focus-visible);
+		box-shadow: 0 0 0 2px var(--at-ring);
 	}
 
 	.markdown-selection-toolbar-trigger-icon {
 		width: 14px;
 		height: 14px;
 		flex: 0 0 auto;
-		color: var(--color-icon-secondary);
+		color: var(--at-fg-muted);
 		stroke-width: 1.9;
 	}
 
@@ -2688,13 +2653,13 @@
 	.markdown-selection-toolbar-trigger-chevron {
 		display: inline-flex;
 		flex: 0 0 auto;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 	}
 
 	.markdown-selection-toolbar-divider {
 		height: 1px;
 		margin: 4px 2px;
-		background: var(--color-border-subtle);
+		background: var(--at-border-subtle);
 	}
 
 	.markdown-selection-toolbar-row {
@@ -2706,11 +2671,7 @@
 	/* Pending link target: the native selection paint disappears once the
 	   link popover's input takes focus, so the range keeps its own tint. */
 	.ProseMirror .markdown-link-target {
-		background: color-mix(
-			in srgb,
-			var(--color-ring-focus-visible) 18%,
-			transparent
-		);
+		background: color-mix(in srgb, var(--at-ring) 18%, transparent);
 		border-radius: 2px;
 	}
 }
@@ -2724,12 +2685,12 @@
 	align-items: center;
 	gap: 0.1rem;
 	padding: 0.18rem 0.24rem;
-	border: 1px solid var(--color-border-inverse-hairline);
+	border: 1px solid var(--at-overlay-hairline);
 	border-radius: 0.5rem;
-	background: var(--color-bg-inverse);
+	background: var(--at-overlay);
 	box-shadow:
 		0 6px 16px rgba(28, 25, 23, 0.35),
-		0 1px 0 var(--color-border-inverse-hairline) inset;
+		0 1px 0 var(--at-overlay-hairline) inset;
 	font-size: 0.66rem;
 	font-weight: 620;
 	line-height: 1;
@@ -2741,12 +2702,12 @@
 	gap: 0.26rem;
 	padding: 0.26rem 0.45rem;
 	border-radius: 0.34rem;
-	color: var(--color-text-inverse-danger);
+	color: var(--at-overlay-danger);
 	cursor: pointer;
 }
 
 .markdown-inline-review-chip > button:hover:not(:disabled) {
-	background: var(--color-bg-inverse-overlay);
+	background: var(--at-overlay-hairline);
 }
 
 .markdown-inline-review-chip > button:disabled {
@@ -2755,7 +2716,7 @@
 }
 
 .markdown-inline-review-chip > button:focus-visible {
-	outline: 2px solid var(--color-text-inverse-primary);
+	outline: 2px solid var(--at-overlay-fg);
 	outline-offset: 1px;
 }
 
@@ -2765,13 +2726,13 @@
 }
 
 .markdown-inline-review-chip-keep {
-	color: var(--color-text-inverse-success) !important;
+	color: var(--at-overlay-success) !important;
 }
 
 .markdown-inline-review-chip-divider {
 	width: 1px;
 	height: 0.75rem;
-	background: var(--color-border-inverse-hairline);
+	background: var(--at-overlay-hairline);
 }
 
 .markdown-inline-review-chip-error {
@@ -2781,8 +2742,8 @@
 	width: max-content;
 	max-width: 16rem;
 	border-radius: 0.4rem;
-	background: var(--color-error-900);
-	color: var(--color-error-100);
+	background: var(--at-diff-removed);
+	color: var(--at-danger-subtle);
 	padding: 0.28rem 0.45rem;
 	font-size: 0.66rem;
 	font-weight: 500;

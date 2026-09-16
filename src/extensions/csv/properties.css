@@ -7,11 +7,11 @@
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
-	border: 1px solid var(--color-border-panel);
-	border-radius: var(--radius-panel);
-	background: var(--color-bg-panel);
-	color: var(--color-text-secondary);
-	box-shadow: var(--shadow-lg);
+	border: 1px solid var(--at-border);
+	border-radius: var(--at-radius-lg);
+	background: var(--at-panel);
+	color: var(--at-fg-muted);
+	box-shadow: var(--at-shadow-lg);
 	font: 12.5px/1.5
 		var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
 }
@@ -34,7 +34,7 @@
 	min-width: 0;
 	max-width: 100%;
 	padding: 0 6px;
-	border-radius: var(--radius-tag);
+	border-radius: var(--at-radius-sm);
 	line-height: 20px;
 	font-size: 13px;
 	overflow: hidden;
@@ -47,14 +47,14 @@
 	height: 40px;
 	padding: 10px 12px;
 	border: 0;
-	border-bottom: 1px solid var(--color-border-panel);
-	background: var(--color-bg-panel-muted);
+	border-bottom: 1px solid var(--at-border);
+	background: var(--at-bg-subtle);
 	color: inherit;
 	font: inherit;
 	outline: none;
 }
 .csv-option-search::placeholder {
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 	opacity: 1;
 }
 .csv-popover-label {
@@ -62,7 +62,7 @@
 	align-items: center;
 	gap: 8px;
 	padding: 8px 12px 4px;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 	font-size: 11px;
 	font-weight: 500;
 	line-height: 16px;
@@ -91,16 +91,16 @@
 	width: 100%;
 	min-height: 32px;
 	padding: 4px 8px;
-	border-radius: var(--radius-control);
+	border-radius: var(--at-radius-md);
 	text-align: left;
 }
 .csv-option-row .lucide-check {
 	margin-left: auto;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-option-row:hover,
 .csv-option-row.is-active {
-	background: var(--color-bg-hover);
+	background: var(--at-bg-hover);
 }
 .csv-option-clear {
 	display: flex;
@@ -108,12 +108,12 @@
 	gap: 7px;
 	width: 100%;
 	padding: 9px 12px;
-	border-top: 1px solid var(--color-border-panel) !important;
-	color: var(--color-text-secondary) !important;
+	border-top: 1px solid var(--at-border) !important;
+	color: var(--at-fg-muted) !important;
 	text-align: left;
 }
 .csv-option-clear:hover {
-	background: var(--color-bg-hover);
+	background: var(--at-bg-hover);
 }
 .csv-value-form {
 	padding: 14px;
@@ -124,17 +124,17 @@
 .csv-value-form label {
 	font-size: 11px;
 	font-weight: 500;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-value-form input {
 	font: inherit;
 	padding: 7px 8px;
-	border: 1px solid var(--color-border-action-secondary);
-	border-radius: var(--radius-control);
+	border: 1px solid var(--at-border-strong);
+	border-radius: var(--at-radius-md);
 }
 .csv-value-form button {
-	background: var(--color-bg-hover);
-	border-radius: var(--radius-control);
+	background: var(--at-bg-hover);
+	border-radius: var(--at-radius-md);
 	padding: 6px;
 }
 @scope (.atelier-root) {
@@ -146,10 +146,10 @@
 		justify-content: space-between;
 		gap: 16px;
 		position: relative;
-		min-height: var(--atelier-panel-header-height);
+		min-height: var(--at-panel-header-height);
 		padding: 0 var(--csv-toolbar-inset);
-		border-bottom: 1px solid var(--color-border-panel);
-		color: var(--color-text-tertiary);
+		border-bottom: 1px solid var(--at-border);
+		color: var(--at-fg-subtle);
 		flex-shrink: 0;
 		font-size: 12.5px;
 		line-height: 16px;
@@ -171,19 +171,19 @@
 		gap: 6px;
 		min-height: 28px;
 		padding: 0 8px;
-		border-radius: var(--radius-control);
-		color: var(--color-text-secondary);
+		border-radius: var(--at-radius-md);
+		color: var(--at-fg-muted);
 		font-weight: 500;
 		cursor: pointer;
 		white-space: nowrap;
 	}
 	.csv-toolbar button:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 	}
 	.csv-toolbar button.is-active {
-		color: var(--color-bg-action-primary);
-		background: var(--color-bg-brand-soft);
+		color: var(--at-accent);
+		background: var(--at-accent-subtle);
 	}
 	.csv-toolbar-dot {
 		height: 4px;
@@ -198,18 +198,18 @@
 		min-height: 28px;
 		margin-left: 2px;
 		padding: 0 8px;
-		border-radius: var(--radius-control);
-		color: var(--color-text-secondary);
+		border-radius: var(--at-radius-md);
+		color: var(--at-fg-muted);
 	}
 	.csv-table-search input {
 		width: 80px;
 		border: 0;
 		background: transparent;
 		outline: none;
-		color: var(--color-text-primary);
+		color: var(--at-fg);
 		font: inherit;
 		font-weight: 400;
-		transition: width var(--duration-base);
+		transition: width var(--at-duration);
 	}
 	.csv-table-search input:placeholder-shown:not(:focus) {
 		width: 46px;
@@ -218,7 +218,7 @@
 		width: 140px;
 	}
 	.csv-table-search input::placeholder {
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.csv-toolbar-popover {
 		position: absolute;
@@ -240,16 +240,16 @@
 		align-items: center;
 		font-size: 12.5px;
 		font-weight: 500;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 	}
 	.csv-toolbar-popover input {
 		width: 100%;
 		min-height: 32px;
 		padding: 7px 8px;
-		border: 1px solid var(--color-border-action-secondary);
-		border-radius: var(--radius-control);
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
+		border: 1px solid var(--at-border-strong);
+		border-radius: var(--at-radius-md);
+		background: var(--at-panel);
+		color: var(--at-fg);
 		font: inherit;
 		font-weight: 400;
 	}
@@ -257,11 +257,11 @@
 		width: 100%;
 		min-height: 32px;
 		padding: 6px 8px;
-		border: 1px solid var(--color-border-action-secondary);
-		border-radius: var(--radius-control);
+		border: 1px solid var(--at-border-strong);
+		border-radius: var(--at-radius-md);
 		font-weight: 400;
-		background: var(--color-bg-panel);
-		color: var(--color-text-secondary);
+		background: var(--at-panel);
+		color: var(--at-fg-muted);
 		gap: 8px;
 		font-size: 12.5px;
 		text-align: left;
@@ -275,11 +275,11 @@
 	}
 	.csv-toolbar-select > svg {
 		flex-shrink: 0;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 	}
 
 	.csv-grid-menu {
-		border-radius: var(--radius-panel);
+		border-radius: var(--at-radius-lg);
 		width: 280px;
 		max-width: calc(100vw - 16px);
 		max-height: calc(100vh - 16px);
@@ -287,14 +287,14 @@
 	}
 	.csv-menu-divider {
 		height: 1px;
-		background: var(--color-border-panel);
+		background: var(--at-border);
 		margin: 5px;
 	}
 	.csv-grid-menu-item:focus-visible,
 	.csv-toolbar button:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: -2px;
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 	@media (max-width: 600px) {
 		.csv-toolbar {
@@ -313,7 +313,7 @@
 	}
 }
 .csv-property-popover button:focus-visible {
-	outline: 2px solid var(--color-ring-focus-visible);
+	outline: 2px solid var(--at-ring);
 	outline-offset: -2px;
 }
 
@@ -332,11 +332,11 @@
 	overflow-y: auto;
 	box-sizing: border-box;
 	padding: 4px;
-	border: 1px solid var(--color-border-panel);
-	border-radius: var(--radius-panel);
-	background: var(--color-bg-panel);
-	color: var(--color-text-secondary);
-	box-shadow: var(--shadow-lg);
+	border: 1px solid var(--at-border);
+	border-radius: var(--at-radius-lg);
+	background: var(--at-panel);
+	color: var(--at-fg-muted);
+	box-shadow: var(--at-shadow-lg);
 	outline: none;
 	font:
 		12.5px/1.25 -apple-system,
@@ -355,7 +355,7 @@
 	align-items: center;
 	gap: 8px;
 	padding: 4px 8px 7px;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-column-name > svg {
 	flex-shrink: 0;
@@ -366,19 +366,19 @@
 	width: 100%;
 	min-width: 0;
 	height: 32px;
-	border: 1px solid var(--color-border-action-secondary);
-	border-radius: var(--radius-control);
+	border: 1px solid var(--at-border-strong);
+	border-radius: var(--at-radius-md);
 	padding: 4px 8px;
-	background: var(--color-bg-panel-muted);
-	color: var(--color-text-secondary);
+	background: var(--at-bg-subtle);
+	color: var(--at-fg-muted);
 	font: inherit;
 	outline: none;
 	font-weight: 500;
 }
 .csv-column-name input:focus {
-	border-color: var(--color-ring-focus-visible);
-	background: var(--color-bg-panel);
-	box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+	border-color: var(--at-ring);
+	background: var(--at-panel);
+	box-shadow: 0 0 0 1px var(--at-ring);
 }
 .csv-column-action {
 	display: flex;
@@ -386,7 +386,7 @@
 	gap: 8px;
 	min-height: 30px;
 	padding: 5px 8px;
-	border-radius: var(--radius-control);
+	border-radius: var(--at-radius-md);
 	outline: none;
 	cursor: pointer;
 	user-select: none;
@@ -395,11 +395,11 @@
 	flex-shrink: 0;
 	width: 13px;
 	height: 13px;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-column-action[data-highlighted],
 .csv-column-action[data-state="open"] {
-	background: var(--color-bg-hover);
+	background: var(--at-bg-hover);
 }
 
 .csv-submenu-chevron,
@@ -408,15 +408,15 @@
 	margin-left: auto;
 }
 .csv-current-type {
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 	font-size: 11.5px;
 }
 .csv-column-action > .csv-option-pencil {
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-column-separator {
 	height: 1px;
-	background: var(--color-border-panel);
+	background: var(--at-border);
 	margin: 4px;
 }
 .csv-option-edit {
@@ -426,13 +426,13 @@
 	font-size: 12.5px;
 }
 .csv-column-destructive {
-	color: var(--color-text-status-danger);
+	color: var(--at-danger);
 }
 .csv-column-destructive > svg {
 	color: inherit;
 }
 .csv-column-destructive[data-highlighted] {
-	background: var(--color-bg-status-danger);
+	background: var(--at-danger-subtle);
 }
 .csv-add-option-form {
 	display: flex;
@@ -440,7 +440,7 @@
 	gap: 7px;
 	padding: 5px 8px;
 	min-height: 28px;
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-add-option-form input {
 	min-width: 0;
@@ -449,10 +449,10 @@
 	border: 0;
 	background: transparent;
 	outline: none;
-	color: var(--color-text-secondary);
+	color: var(--at-fg-muted);
 }
 .csv-add-option-form input::placeholder {
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-add-option-form button {
 	display: grid;
@@ -463,15 +463,15 @@
 	border: 0;
 	border-radius: 4px;
 	background: transparent;
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 	cursor: pointer;
 }
 .csv-add-option-form button:hover {
-	background: var(--color-border-panel);
+	background: var(--at-border);
 }
 .csv-add-option-form input:focus-visible,
 .csv-add-option-form button:focus-visible {
-	outline: 2px solid var(--color-ring-focus-visible);
+	outline: 2px solid var(--at-ring);
 	outline-offset: 2px;
 }
 .csv-color-menu {
@@ -496,7 +496,7 @@
 	outline: none;
 }
 .csv-color-swatch[data-highlighted] {
-	outline: 2px solid var(--color-ring-focus-visible);
+	outline: 2px solid var(--at-ring);
 	outline-offset: 1px;
 }
 .csv-color-swatch[data-state="checked"] {
@@ -513,15 +513,15 @@
 		align-items: center;
 		flex-shrink: 0;
 		height: 32px;
-		border: 1px solid var(--color-border-panel);
-		border-radius: var(--radius-control);
-		background: var(--color-bg-panel);
-		box-shadow: var(--shadow-md);
-		color: var(--color-text-secondary);
+		border: 1px solid var(--at-border);
+		border-radius: var(--at-radius-md);
+		background: var(--at-panel);
+		box-shadow: var(--at-shadow-md);
+		color: var(--at-fg-muted);
 	}
 	.csv-selected-count {
 		padding: 0 10px;
-		color: var(--color-bg-action-primary);
+		color: var(--at-accent);
 		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
@@ -532,18 +532,18 @@
 		height: 30px;
 		min-width: 32px;
 		padding: 0 10px;
-		border-left: 1px solid var(--color-border-panel);
+		border-left: 1px solid var(--at-border);
 		border-radius: 0;
 	}
 	.csv-row-actions > button:last-child {
 		border-radius: 0 6px 6px 0;
 	}
 	.csv-row-actions > button[data-state="open"] {
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 	.csv-row-actions > .csv-bulk-delete:hover {
-		color: var(--color-text-status-danger);
-		background: var(--color-bg-status-danger);
+		color: var(--at-danger);
+		background: var(--at-danger-subtle);
 	}
 	.csv-toolbar:has(.csv-row-actions) > .csv-view-switcher,
 	.csv-toolbar:has(.csv-row-actions) > .csv-row-count {
@@ -560,7 +560,7 @@
 }
 .csv-bulk-label {
 	padding: 7px 9px;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 	font-size: 11px;
 	font-weight: 500;
 }
@@ -575,23 +575,23 @@
 	width: calc(100% - 12px);
 	margin: 4px 6px 7px;
 	padding: 7px 8px;
-	border: 1px solid var(--color-border-action-secondary);
-	border-radius: var(--radius-control);
-	background: var(--color-bg-panel-muted);
-	color: var(--color-text-secondary);
+	border: 1px solid var(--at-border-strong);
+	border-radius: var(--at-radius-md);
+	background: var(--at-bg-subtle);
+	color: var(--at-fg-muted);
 	font: inherit;
 	outline: none;
 }
 .csv-bulk-input:focus {
-	border-color: var(--color-ring-focus-visible);
-	box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+	border-color: var(--at-ring);
+	box-shadow: 0 0 0 1px var(--at-ring);
 }
 .csv-bulk-form {
 	padding: 4px 6px 7px;
 }
 .csv-bulk-form label {
 	display: block;
-	color: var(--color-icon-tertiary);
+	color: var(--at-fg-subtle);
 	font-size: 11px;
 	font-weight: 500;
 	margin-bottom: 5px;
@@ -603,18 +603,18 @@
 .csv-bulk-form button {
 	width: 100%;
 	padding: 7px 10px;
-	border: 1px solid var(--color-border-selection-current);
-	border-radius: var(--radius-control);
-	background: var(--color-bg-brand-soft);
-	color: var(--color-bg-action-primary);
+	border: 1px solid var(--at-accent-border);
+	border-radius: var(--at-radius-md);
+	background: var(--at-accent-subtle);
+	color: var(--at-accent);
 	font: inherit;
 	cursor: pointer;
 }
 .csv-bulk-form button:hover {
-	background: var(--color-bg-selection-current);
+	background: var(--at-accent-subtle);
 }
 .csv-bulk-form button:focus-visible {
-	outline: 2px solid var(--color-ring-focus-visible);
+	outline: 2px solid var(--at-ring);
 	outline-offset: 2px;
 }
 @scope (.atelier-root) {
@@ -627,19 +627,19 @@
 		place-items: center;
 		width: 44px;
 		height: 40px;
-		background: var(--color-bg-panel);
-		border-bottom: 1px solid var(--color-border-table-grid);
+		background: var(--at-panel);
+		border-bottom: 1px solid var(--at-border-subtle);
 		cursor: pointer;
 	}
 	.csv-select-all input {
 		width: 14px;
 		height: 14px;
 		margin: 0;
-		accent-color: var(--color-bg-action-primary);
+		accent-color: var(--at-accent);
 		cursor: pointer;
 	}
 	.csv-select-all input:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 3px;
 	}
 	.csv-select-all:has(input:disabled) {
@@ -659,25 +659,25 @@
 .csv-toolbar-option-check {
 	margin-left: auto;
 	display: flex;
-	color: var(--color-icon-brand);
+	color: var(--at-link);
 }
 
 /* Full-width picker search shares the panel edge; a rectangular focus ring
    would collide with its rounded corners. Keep focus on the existing divider. */
 .csv-option-search:focus {
 	outline: none;
-	border-bottom-color: var(--color-ring-focus-visible);
-	caret-color: var(--color-bg-action-primary);
+	border-bottom-color: var(--at-ring);
+	caret-color: var(--at-accent);
 }
 /* Standalone fields have their own rounded border and room for a focus ring. */
 .csv-property-popover input:not(.csv-option-search):focus-visible {
 	outline: none;
-	border-color: var(--color-ring-focus-visible);
-	box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+	border-color: var(--at-ring);
+	box-shadow: 0 0 0 1px var(--at-ring);
 }
 @scope (.atelier-root) {
 	.csv-table-search:focus-within {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: -2px;
 	}
 }
@@ -687,18 +687,18 @@
 	width: calc(100% - 8px);
 	margin: 4px 4px 6px;
 	padding: 7px 8px;
-	border: 1px solid var(--color-border-action-secondary);
-	border-radius: var(--radius-control);
-	background: var(--color-bg-panel);
-	color: var(--color-text-secondary);
+	border: 1px solid var(--at-border-strong);
+	border-radius: var(--at-radius-md);
+	background: var(--at-panel);
+	color: var(--at-fg-muted);
 	font: inherit;
 	outline: none;
 }
 .csv-filter-option-search::placeholder {
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-filter-option-search:focus-visible {
-	border-color: var(--color-ring-focus-visible);
+	border-color: var(--at-ring);
 }
 
 .csv-toolbar-select > .csv-filter-selected-values {
@@ -719,13 +719,13 @@
 }
 .csv-filter-selected-values > .csv-filter-more {
 	flex-shrink: 0;
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-filter-match-hint {
 	padding: 4px 8px 6px;
 	font-size: 11px;
 	line-height: 16px;
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-filter-selection-footer {
 	display: flex;
@@ -733,7 +733,7 @@
 	justify-content: space-between;
 	padding: 2px 0 0 8px;
 	font-size: 11px;
-	color: var(--color-text-tertiary);
+	color: var(--at-fg-subtle);
 }
 .csv-filter-selection-footer [data-disabled] {
 	opacity: 0.45;
@@ -767,30 +767,30 @@
 	flex: 1;
 	height: 28px;
 	padding: 4px 7px;
-	border: 1px solid var(--color-border-action-secondary);
-	border-radius: var(--radius-control);
-	background: var(--color-bg-panel-muted);
-	color: var(--color-text-secondary);
+	border: 1px solid var(--at-border-strong);
+	border-radius: var(--at-radius-md);
+	background: var(--at-bg-subtle);
+	color: var(--at-fg-muted);
 	font: inherit;
 	outline: none;
 }
 .csv-option-name-form input:focus-visible {
-	border-color: var(--color-ring-focus-visible);
-	box-shadow: 0 0 0 1px var(--color-ring-focus-visible);
+	border-color: var(--at-ring);
+	box-shadow: 0 0 0 1px var(--at-ring);
 }
 .csv-option-name-form button,
 .csv-option-delete-confirm button {
 	padding: 4px 7px;
-	border: 1px solid var(--color-border-action-secondary);
-	border-radius: var(--radius-control);
-	color: var(--color-text-secondary);
-	background: var(--color-bg-panel);
+	border: 1px solid var(--at-border-strong);
+	border-radius: var(--at-radius-md);
+	color: var(--at-fg-muted);
+	background: var(--at-panel);
 	font: inherit;
 	cursor: pointer;
 }
 .csv-option-name-form button:hover,
 .csv-option-delete-confirm button:hover {
-	background: var(--color-bg-hover);
+	background: var(--at-bg-hover);
 }
 .csv-option-name-form button:disabled,
 .csv-option-details [data-disabled] {
@@ -799,7 +799,7 @@
 }
 .csv-option-name-form > span {
 	width: 100%;
-	color: var(--color-text-status-danger);
+	color: var(--at-danger);
 	font-size: 11px;
 }
 .csv-option-delete-confirm {
@@ -807,7 +807,7 @@
 }
 .csv-option-delete-confirm p {
 	margin: 0 0 8px;
-	color: var(--color-text-secondary);
+	color: var(--at-fg-muted);
 	font-size: 12px;
 	line-height: 1.5;
 }
@@ -817,21 +817,21 @@
 	gap: 6px;
 }
 .csv-option-delete-confirm .csv-column-destructive {
-	color: var(--color-text-status-danger);
+	color: var(--at-danger);
 }
 .csv-option-details button:focus-visible {
-	outline: 2px solid var(--color-ring-focus-visible);
+	outline: 2px solid var(--at-ring);
 	outline-offset: 1px;
 }
 .csv-option-edit .csv-option-grip {
-	color: var(--color-icon-quaternary);
+	color: var(--at-fg-faint);
 	cursor: grab;
 }
 .csv-option-edit[data-drop-edge="top"] {
-	box-shadow: inset 0 2px var(--color-ring-focus-visible);
+	box-shadow: inset 0 2px var(--at-ring);
 }
 .csv-option-edit[data-drop-edge="bottom"] {
-	box-shadow: inset 0 -2px var(--color-ring-focus-visible);
+	box-shadow: inset 0 -2px var(--at-ring);
 }
 
 @scope (.atelier-root) {
@@ -844,7 +844,7 @@
 		display: flex;
 		align-items: center;
 		gap: 7px;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 12px;
 	}
 	.csv-filter-mode .csv-toolbar-select {
@@ -884,14 +884,14 @@
 		width: auto;
 	}
 	.csv-filter-rule + .csv-filter-rule {
-		border-top: 1px solid var(--color-border-panel);
+		border-top: 1px solid var(--at-border);
 		padding-top: 7px;
 	}
 	.csv-filter-rule-heading {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 11px;
 		font-weight: 500;
 	}
@@ -899,7 +899,7 @@
 		padding: 3px;
 	}
 	.csv-toolbar .csv-add-filter-rule {
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		align-self: flex-start;
 		margin-left: -8px;
 	}
@@ -918,7 +918,7 @@
 		align-items: center;
 		gap: 4px;
 		min-width: 0;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 	}
 	.csv-view-switcher > button:first-child {
 		/* Center the 14px view icon over the 44px row-selector gutter. */
@@ -938,10 +938,10 @@
 		height: 5px;
 		border-radius: 50%;
 		flex-shrink: 0;
-		background: var(--color-bg-action-primary);
+		background: var(--at-accent);
 	}
 	.csv-toolbar .csv-save-view {
-		color: var(--color-bg-action-primary);
+		color: var(--at-accent);
 	}
 	.csv-toolbar button:disabled {
 		opacity: 0.45;
@@ -969,10 +969,10 @@
 		text-overflow: ellipsis;
 	}
 	.csv-view-list > button[aria-pressed="true"] {
-		background: var(--color-bg-hover);
+		background: var(--at-bg-hover);
 	}
 	.csv-view-menu-actions {
-		border-top: 1px solid var(--color-border-panel);
+		border-top: 1px solid var(--at-border);
 		padding-top: 6px;
 	}
 	.csv-view-menu-actions > button {
@@ -986,7 +986,7 @@
 		gap: 8px;
 	}
 	.csv-views-popover label {
-		color: var(--color-icon-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 11px;
 		font-weight: 500;
 	}
@@ -999,13 +999,13 @@
 		margin: 4px 0;
 		font-size: 12px;
 		line-height: 1.5;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		white-space: normal;
 		overflow-wrap: anywhere;
 	}
 	.csv-toolbar .csv-view-delete,
 	.csv-view-error {
-		color: var(--color-text-status-danger);
+		color: var(--at-danger);
 	}
 	.csv-view-error {
 		font-size: 12px;

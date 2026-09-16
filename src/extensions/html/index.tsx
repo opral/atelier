@@ -208,7 +208,7 @@ function HtmlViewContent({ fileId, filePath, sourceCommitId }: HtmlViewProps) {
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -226,7 +226,7 @@ function HtmlViewContent({ fileId, filePath, sourceCommitId }: HtmlViewProps) {
 function HtmlReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			The working artifact changed while it was being reviewed. Reopen the
@@ -548,13 +548,13 @@ function UnsupportedHtmlState({ filePath }: { readonly filePath: string }) {
 		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
 			<FileCode2
 				aria-hidden="true"
-				className="size-7 text-[var(--color-icon-tertiary)]"
+				className="size-7 text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-[var(--color-text-primary)]">
+			<p className="mt-3 text-sm font-medium text-fg">
 				This file cannot be displayed as HTML.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} does not use an HTML file
 				extension.
 			</p>
@@ -566,7 +566,7 @@ function HtmlLoadingState({ overlay = false }: { readonly overlay?: boolean }) {
 	return (
 		<div
 			aria-live="polite"
-			className={`flex h-full min-h-48 items-center justify-center px-3 py-2 text-[var(--color-text-tertiary)]${
+			className={`flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle${
 				overlay ? " atelier-html-loading-overlay" : ""
 			}`}
 			role="status"

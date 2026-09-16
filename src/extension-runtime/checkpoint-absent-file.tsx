@@ -41,7 +41,7 @@ export function CheckpointAbsentFile({
 				strokeWidth="1.5"
 				strokeLinecap="round"
 				strokeLinejoin="round"
-				className="mb-2 text-[var(--color-text-tertiary)]"
+				className="mb-2 text-fg-subtle"
 				aria-hidden="true"
 			>
 				<path
@@ -49,13 +49,13 @@ export function CheckpointAbsentFile({
 					strokeDasharray="3 3"
 				/>
 			</svg>
-			<div className="text-sm font-medium text-[var(--color-text-primary)]">
+			<div className="text-sm font-medium text-fg">
 				{fileName
 					? `${fileName} did not exist at this point in time`
 					: "This file did not exist at this point in time"}
 			</div>
 			{checkpoint ? (
-				<div className="max-w-95 text-[13px] leading-snug text-[var(--color-text-secondary)]">
+				<div className="max-w-95 text-[13px] leading-snug text-fg-muted">
 					{`Checkpoint from ${formatCheckpointCreatedAt(checkpoint.created_at)}.`}
 				</div>
 			) : null}

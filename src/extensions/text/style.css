@@ -1,31 +1,31 @@
 @scope (.atelier-root) {
 	.atelier-text-view,
 	.atelier-text-surface {
-		--atelier-text-selection-bg: var(--color-bg-selection-text);
-		--atelier-text-selection-fg: var(--color-text-primary);
+		--at-bg-selection: var(--at-bg-selection);
+		--at-fg: var(--at-fg);
 		position: relative;
 		display: flex;
 		min-height: 0;
 		flex: 1 1 auto;
 		flex-direction: column;
-		background: var(--color-bg-panel);
+		background: var(--at-panel);
 	}
 
 	.atelier-text-toolbar-status {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		color: var(--color-text-tertiary);
+		color: var(--at-fg-subtle);
 		font-size: 11px;
 	}
 
 	.atelier-text-toolbar {
 		display: flex;
-		height: var(--atelier-panel-header-height);
-		flex: 0 0 var(--atelier-panel-header-height);
+		height: var(--at-panel-header-height);
+		flex: 0 0 var(--at-panel-header-height);
 		align-items: center;
 		gap: 4px;
-		border-bottom: 1px solid var(--color-border-subtle);
+		border-bottom: 1px solid var(--at-border-subtle);
 		padding: 0 10px;
 	}
 
@@ -39,7 +39,7 @@
 		border: 0;
 		border-radius: 7px;
 		background: transparent;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		font-size: 13px;
 		font-weight: 500;
 		line-height: 1;
@@ -59,13 +59,13 @@
 
 	.atelier-text-toolbar-button:hover,
 	.atelier-text-toolbar-icon-button:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 	}
 
 	.atelier-text-toolbar-button:focus-visible,
 	.atelier-text-toolbar-icon-button:focus-visible {
-		outline: 2px solid var(--color-ring-focus-visible);
+		outline: 2px solid var(--at-ring);
 		outline-offset: 1px;
 	}
 
@@ -84,7 +84,7 @@
 	}
 
 	.atelier-text-editor-host .cm-scroller {
-		scrollbar-color: var(--color-bg-control) transparent;
+		scrollbar-color: var(--at-border-strong) transparent;
 		scrollbar-width: thin;
 	}
 
@@ -105,15 +105,15 @@
 
 	.atelier-text-editor-host .cm-panel.cm-search input {
 		height: 28px;
-		border: 1px solid var(--color-border-panel);
+		border: 1px solid var(--at-border);
 		border-radius: 6px;
-		background: var(--color-bg-panel);
-		color: var(--color-text-primary);
+		background: var(--at-panel);
+		color: var(--at-fg);
 		padding: 0 8px;
 	}
 
 	.atelier-text-editor-host .cm-panel.cm-search input:focus {
-		border-color: var(--color-ring-focus-visible);
+		border-color: var(--at-ring);
 		outline: none;
 	}
 
@@ -122,13 +122,13 @@
 		border: 0;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--color-text-secondary);
+		color: var(--at-fg-muted);
 		padding: 0 8px;
 	}
 
 	.atelier-text-editor-host .cm-panel.cm-search button:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--at-bg-hover);
+		color: var(--at-fg);
 	}
 
 	.atelier-text-editor-host .cm-panel.cm-search button[name="close"] {
@@ -152,7 +152,7 @@
 		min-height: 0;
 		flex: 1 1 auto;
 		overflow: auto;
-		background: var(--color-bg-panel);
+		background: var(--at-panel);
 		font-size: 12px;
 	}
 }

@@ -228,7 +228,7 @@ function LiveTextViewContent({ fileId, ...props }: TextViewProps) {
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]">
+			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -322,7 +322,7 @@ function textDiffSides(
 function TextReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
 			role="alert"
 		>
 			The working diff changed while it was being reviewed. Reopen the review.
@@ -375,7 +375,7 @@ function HistoricalTextView({
 	if (loadError) {
 		return (
 			<div
-				className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]"
+				className="flex h-full items-center justify-center text-sm text-fg-subtle"
 				role="alert"
 			>
 				Could not load this file revision.
@@ -541,7 +541,7 @@ function TextEditorSurface({
 function TextLoadingState() {
 	return (
 		<div
-			className="flex h-full items-center justify-center text-sm text-[var(--color-text-tertiary)]"
+			className="flex h-full items-center justify-center text-sm text-fg-subtle"
 			role="status"
 		>
 			Loading text…

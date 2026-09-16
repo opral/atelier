@@ -67,7 +67,7 @@ export function ExtensionDropdownMenuItems({
 					{Icon ? (
 						<Icon
 							aria-hidden={true}
-							className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+							className="size-3.25 shrink-0 text-fg-subtle"
 						/>
 					) : (
 						<span aria-hidden="true" className="size-3.25 shrink-0" />
@@ -87,7 +87,7 @@ export function ExtensionDropdownMenuItems({
 				{item.icon ? (
 					<item.icon
 						aria-hidden={true}
-						className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+						className="size-3.25 shrink-0 text-fg-subtle"
 					/>
 				) : (
 					<span aria-hidden="true" className="size-3.25 shrink-0" />
@@ -127,7 +127,7 @@ export function ExtensionContextMenuItems({
 					{Icon ? (
 						<Icon
 							aria-hidden={true}
-							className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+							className="size-3.25 shrink-0 text-fg-subtle"
 						/>
 					) : (
 						<span aria-hidden="true" className="size-3.25 shrink-0" />
@@ -147,7 +147,7 @@ export function ExtensionContextMenuItems({
 				{item.icon ? (
 					<item.icon
 						aria-hidden={true}
-						className="size-3.25 shrink-0 text-[var(--color-icon-tertiary)]"
+						className="size-3.25 shrink-0 text-fg-subtle"
 					/>
 				) : (
 					<span aria-hidden="true" className="size-3.25 shrink-0" />

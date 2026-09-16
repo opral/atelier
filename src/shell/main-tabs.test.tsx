@@ -310,14 +310,14 @@ describe("main tabs with a pinned home", () => {
 				"group-hover:opacity-100",
 			);
 			expect(inactiveClose?.parentElement?.className).toContain(
-				"bg-[var(--color-bg-hover-canvas)]",
+				"bg-bg-hover-strong",
 			);
 			const closeFade = inactiveTab.querySelector(
 				'[data-attr="panel-tab-close-fade"]',
 			);
 			expect(closeFade).toBeInTheDocument();
 			expect(closeFade?.className).toContain("w-12");
-			expect(closeFade?.className).toContain("var(--color-bg-hover-canvas)");
+			expect(closeFade?.className).toContain("var(--at-bg-hover-strong)");
 			const activeClose = activeTab.querySelector(
 				'[data-attr="panel-tab-close"]',
 			);

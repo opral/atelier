@@ -19,9 +19,9 @@ test("canvas colors follow token overrides and return to defaults when overrides
 		const table = screen.getByTestId("table");
 		const read = () => JSON.parse(table.querySelector("output")!.textContent!);
 		const original = read();
-		table.style.setProperty("--color-bg-action-primary", "rgb(170, 60, 10)");
-		table.style.setProperty("--color-bg-tag-green", "rgb(210, 230, 210)");
-		table.style.setProperty("--color-bg-search-match", "rgb(250, 230, 130)");
+		table.style.setProperty("--at-accent", "rgb(170, 60, 10)");
+		table.style.setProperty("--at-tag-green", "rgb(210, 230, 210)");
+		table.style.setProperty("--at-highlight", "rgb(250, 230, 130)");
 		await waitFor(() =>
 			expect(read().theme.accentColor).toBe("rgb(170, 60, 10)"),
 		);

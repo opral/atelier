@@ -193,16 +193,14 @@ export function DefaultFolderSlot({
 					// A broken default gets the room to say so; the folder's name is
 					// the half of that sentence the user needs.
 					(state.kind === "missing" ? "max-w-[176px] " : "max-w-[128px] ") +
-					"flex h-5 cursor-default items-center gap-1 rounded-control border border-transparent px-1.5 text-[11px] outline-hidden select-none " +
+					"flex h-5 cursor-default items-center gap-1 rounded-md border border-transparent px-1.5 text-[11px] outline-hidden select-none " +
 					// At rest it is a caption on the row: it says where the row
 					// creates. It draws its boundary once the pointer or the arrow
 					// keys reach it, which is the same moment it can be pressed —
 					// so a thing that looks pressable always is.
-					"data-[highlighted]:border-[var(--color-border-subtle)] data-[highlighted]:bg-[var(--color-bg-control)] " +
-					"data-[state=open]:border-[var(--color-border-strong)] data-[state=open]:bg-[var(--color-bg-control)] " +
-					(state.kind === "missing"
-						? "text-[var(--color-text-status-warning)]"
-						: "text-[var(--color-text-tertiary)]")
+					"data-[highlighted]:border-border-subtle data-[highlighted]:bg-border-strong " +
+					"data-[state=open]:border-border-strong data-[state=open]:bg-border-strong " +
+					(state.kind === "missing" ? "text-warning" : "text-fg-subtle")
 				}
 				onPointerDown={() => {
 					intentRef.current = true;
@@ -370,7 +368,7 @@ function SlotTooltip({
 		<div
 			role="tooltip"
 			data-attr="default-folder-tooltip"
-			className="atelier-portal pointer-events-none fixed z-50 max-w-64 -translate-x-1/2 rounded-md bg-[var(--color-bg-tooltip)] px-3 py-1.5 font-sans text-xs text-balance text-[var(--color-text-tooltip)] shadow-md"
+			className="atelier-portal pointer-events-none fixed z-50 max-w-64 -translate-x-1/2 rounded-md bg-overlay px-3 py-1.5 font-sans text-xs text-balance text-overlay-fg shadow-md"
 			style={{ left: at.left, top: at.top }}
 		>
 			{label}
@@ -389,7 +387,7 @@ function triggerTitle(state: DefaultFolderState, noun: string): string {
 
 function PanelHeading({ children }: { readonly children: ReactNode }) {
 	return (
-		<div className="px-1.5 pt-0.5 pb-1.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]">
+		<div className="px-1.5 pt-0.5 pb-1.5 text-[11px] font-semibold text-fg-subtle">
 			{children}
 		</div>
 	);
@@ -453,7 +451,7 @@ function LabelMenu({
 			)}
 			<DropdownMenuSeparator className="my-1" />
 			<DropdownMenuItem
-				className="gap-2 py-1.5 text-xs text-[var(--color-text-status-danger)] focus:text-[var(--color-text-status-danger)] [&_svg:not([class*='text-'])]:text-[var(--color-text-status-danger)]"
+				className="gap-2 py-1.5 text-xs text-danger focus:text-danger [&_svg:not([class*='text-'])]:text-danger"
 				data-attr="default-folder-remove"
 				onSelect={(event) => {
 					event.preventDefault();
@@ -506,7 +504,7 @@ function FolderPicker({
 			<div className="relative px-0.5 pb-1.5">
 				<Search
 					aria-hidden="true"
-					className="pointer-events-none absolute top-3.5 left-2.5 size-3 -translate-y-1/2 text-[var(--color-icon-tertiary)]"
+					className="pointer-events-none absolute top-3.5 left-2.5 size-3 -translate-y-1/2 text-fg-subtle"
 				/>
 				<input
 					ref={searchRef}
@@ -515,7 +513,7 @@ function FolderPicker({
 					placeholder="Search folders"
 					aria-label="Search folders"
 					data-attr="default-folder-search"
-					className="h-7 w-full rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-control)] pr-2 pl-7 text-xs text-[var(--color-text-primary)] outline-hidden placeholder:text-[var(--color-text-quaternary)] focus-visible:border-[var(--color-border-strong)]"
+					className="h-7 w-full rounded-md border border-border-subtle bg-border-strong pr-2 pl-7 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={(event) => {
 						// Radix runs typeahead on every character typed inside its
@@ -541,7 +539,7 @@ function FolderPicker({
 				data-attr="default-folder-list"
 			>
 				{visible.length === 0 ? (
-					<div className="px-2 py-3 text-center text-[11px] text-[var(--color-text-tertiary)]">
+					<div className="px-2 py-3 text-center text-[11px] text-fg-subtle">
 						No folder matches “{query.trim()}”.
 					</div>
 				) : (
@@ -585,14 +583,14 @@ function FolderPicker({
 								className={`size-3.5 shrink-0${folder.context ? " opacity-40" : ""}`}
 							/>
 							<span
-								className={`min-w-0 flex-1 truncate${folder.context ? " text-[var(--color-text-tertiary)]" : ""}`}
+								className={`min-w-0 flex-1 truncate${folder.context ? " text-fg-subtle" : ""}`}
 							>
 								{folder.name}
 							</span>
 							{selected === folder.path ? (
 								<Check
 									aria-hidden="true"
-									className="size-3.5 shrink-0 text-[var(--color-icon-brand)]"
+									className="size-3.5 shrink-0 text-link"
 								/>
 							) : null}
 						</DropdownMenuItem>
@@ -650,7 +648,7 @@ function NewFolderField({
 					placeholder="Folder name"
 					aria-label={`New folder in ${parent}`}
 					data-attr="default-folder-new-folder-name"
-					className="h-7 w-full rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-control)] px-2 text-xs text-[var(--color-text-primary)] outline-hidden placeholder:text-[var(--color-text-quaternary)] focus-visible:border-[var(--color-border-strong)]"
+					className="h-7 w-full rounded-md border border-border-subtle bg-border-strong px-2 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
 					onChange={(event) => setName(event.target.value)}
 					onKeyDown={(event) => {
 						event.stopPropagation();
@@ -665,7 +663,7 @@ function NewFolderField({
 					}}
 				/>
 			</div>
-			<div className="px-1.5 pb-1 text-[11px] text-[var(--color-text-tertiary)]">
+			<div className="px-1.5 pb-1 text-[11px] text-fg-subtle">
 				Enter creates it and sets it as the default. Escape goes back.
 			</div>
 		</>

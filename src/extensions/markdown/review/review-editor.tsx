@@ -389,7 +389,7 @@ export function MarkdownReviewEditor({
 	return (
 		<>
 			{externalEditor ? null : (
-				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-background">
+				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
 					<EditorContent
 						editor={editor}
 						className="tiptap mx-auto w-full"
