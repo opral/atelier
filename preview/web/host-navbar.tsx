@@ -17,10 +17,10 @@ export function HostBrandMark() {
 			role="img"
 			aria-label="Atelier preview"
 		>
-			<rect width="24" height="24" rx="6" fill="#EA580C" />
+			<rect width="24" height="24" rx="6" fill="var(--at-link)" />
 			<path
 				d="M7.5 16.5 12 7l4.5 9.5"
-				stroke="#FFF7ED"
+				stroke="var(--at-accent-on)"
 				strokeWidth="2.1"
 				strokeLinecap="round"
 				strokeLinejoin="round"
@@ -28,7 +28,7 @@ export function HostBrandMark() {
 			/>
 			<path
 				d="M9.5 13.5h5"
-				stroke="#FFF7ED"
+				stroke="var(--at-accent-on)"
 				strokeWidth="2.1"
 				strokeLinecap="round"
 			/>
